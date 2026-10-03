@@ -19,6 +19,8 @@ export interface MaintenanceInvoiceCertificateSource {
       id: string;
       displayName: string;
       taxNumber: string | null;
+      /** Napban; `null` = az alapérték (`DEFAULT_PAYMENT_DUE_DAYS`). */
+      paymentDueDays: number | null;
       addresses: readonly {
         line1: string;
         line2: string | null;
@@ -102,16 +104,14 @@ export interface MaintenanceInvoiceXmlInput {
 }
 
 /**
- * A FIZETÉSI FELTÉTELEK MA FELTÉTELEZETT ÉRTÉKEK, NEM MÉRT ÜZLETI SZABÁLY.
+ * A FIZETÉSI FELTÉTELEK, BALÁZS MEGERŐSÍTÉSÉVEL (2026-10-03).
  *
  * A teljesítés dátuma a bizonylat kiállításának napja (ez a "teljesítés"
- * ténye maga). A fizetési határidő +8 nap és a fizetési mód "Átutalás" --
- * mindkettő ÉSZSZERŰ B2B alapérték, de Balázzsal NINCS megerősítve. Ez a
- * kör (ADR-014) csak ELŐNÉZETET készít (`elonezetpdf=true`), tehát a
- * feltétel ma nem hordoz jogi következményt -- VALÓS kiállítás előtt
- * (`MAINTENANCE_INVOICE_ISSUE_ENABLED`) ezt meg kell erősíteni.
+ * ténye maga), a fizetési mód "Átutalás". A fizetési határidő PARTNERENKÉNT
+ * állítható (a Partnerek képernyőn, a vevő-tükörre másolva), mert van, aki 8,
+ * és van, aki 30 nap alatt fizet. Ahol nincs megadva, ott 8 nap.
  */
-const PAYMENT_DUE_DAYS = 8;
+export const DEFAULT_PAYMENT_DUE_DAYS = 8;
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -129,7 +129,11 @@ export function maintenanceInvoiceXmlInputFrom(
   const mapped = certificate.items.map(mapItem);
   const fulfillmentDate = certificate.issuedAt;
   const dueDate = new Date(fulfillmentDate);
-  dueDate.setDate(dueDate.getDate() + PAYMENT_DUE_DAYS);
+  dueDate.setDate(
+    dueDate.getDate() +
+      (certificate.serviceJob.customer.paymentDueDays ??
+        DEFAULT_PAYMENT_DUE_DAYS),
+  );
 
   return {
     totals: mapped.reduce<CertificateAmounts>(

@@ -17,6 +17,7 @@ const baseCertificate: MaintenanceInvoiceCertificateSource = {
       id: "customer-1",
       displayName: "Fővárosi Állatkert",
       taxNumber: "12345678-2-42",
+      paymentDueDays: null,
       addresses: [
         {
           line1: "Állatkerti körút 6-12.",
@@ -118,5 +119,33 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     const { xmlInput } = maintenanceInvoiceXmlInputFrom(baseCertificate);
     assert.equal(xmlInput.fulfillmentDate, "2026-09-24");
     assert.equal(xmlInput.paymentDueDate, "2026-10-02");
+  });
+
+  /** Balazs, 2026-10-03: some partners pay in 8 days, some in 30. The term set
+   * on the partner wins; the 8 days above is only what an unset one gets. */
+  it("uses the partner's own payment term when it is set", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom({
+      ...baseCertificate,
+      serviceJob: {
+        customer: {
+          ...baseCertificate.serviceJob.customer,
+          paymentDueDays: 30,
+        },
+      },
+    });
+    assert.equal(xmlInput.fulfillmentDate, "2026-09-24");
+    assert.equal(xmlInput.paymentDueDate, "2026-10-24");
+  });
+
+  /** Zero is a real term (due on the day), not "unset": `||` would turn it
+   * into 8 days. */
+  it("keeps a zero-day term instead of falling back to the default", () => {
+    const { xmlInput } = maintenanceInvoiceXmlInputFrom({
+      ...baseCertificate,
+      serviceJob: {
+        customer: { ...baseCertificate.serviceJob.customer, paymentDueDays: 0 },
+      },
+    });
+    assert.equal(xmlInput.paymentDueDate, "2026-09-24");
   });
 });

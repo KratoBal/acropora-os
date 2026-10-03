@@ -34,6 +34,7 @@ const certificate = {
       id: "customer-1",
       displayName: "Fővárosi Állatkert",
       taxNumber: "12345678-2-42",
+      paymentDueDays: null,
       addresses: [
         {
           line1: "Állatkerti körút 6-12.",
