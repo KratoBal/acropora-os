@@ -48,6 +48,7 @@ function toSummary(supplier: Supplier): SupplierSummary {
     email: supplier.email ?? undefined,
     phone: supplier.phone ?? undefined,
     websiteUrl: supplier.websiteUrl ?? undefined,
+    paymentDueDays: supplier.paymentDueDays ?? undefined,
     iban: supplier.iban ?? undefined,
     swiftCode: supplier.swiftCode ?? undefined,
     bankAccountNumber: supplier.bankAccountNumber ?? undefined,
@@ -166,6 +167,7 @@ export async function syncWorksheetMirror(
     isService: boolean;
     customerId: string | null;
     worksheetPartnerCode?: string | null;
+    paymentDueDays?: number | null;
   },
 ) {
   if (!supplier.isService) {
@@ -181,6 +183,9 @@ export async function syncWorksheetMirror(
     displayName: supplier.name,
     companyName: supplier.name,
     worksheetPartnerCode: supplier.worksheetPartnerCode ?? null,
+    // The invoice is written to this row, so the term set on the partner
+    // screen has to reach it.
+    paymentDueDays: supplier.paymentDueDays ?? null,
   };
   if (supplier.customerId) {
     await tx.customer.update({
@@ -622,6 +627,7 @@ export class SuppliersRepository extends Repository {
                 email: input.email?.trim() || undefined,
                 phone: input.phone?.trim() || undefined,
                 websiteUrl: input.websiteUrl?.trim() || undefined,
+                paymentDueDays: input.paymentDueDays,
                 iban: input.iban?.trim() || undefined,
                 swiftCode: input.swiftCode?.trim() || undefined,
                 bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
@@ -642,6 +648,7 @@ export class SuppliersRepository extends Repository {
               isService: supplier.isService,
               customerId: supplier.customerId,
               worksheetPartnerCode: supplier.worksheetPartnerCode,
+              paymentDueDays: supplier.paymentDueDays,
             });
             await tx.domainEvent.create({
               data: {
@@ -730,6 +737,7 @@ export class SuppliersRepository extends Repository {
               phone: input.phone === null ? null : input.phone?.trim(),
               websiteUrl:
                 input.websiteUrl === null ? null : input.websiteUrl?.trim(),
+              paymentDueDays: input.paymentDueDays,
               iban: input.iban === null ? null : input.iban?.trim(),
               swiftCode:
                 input.swiftCode === null ? null : input.swiftCode?.trim(),
@@ -767,6 +775,7 @@ export class SuppliersRepository extends Repository {
               isService: true,
               customerId: true,
               worksheetPartnerCode: true,
+              paymentDueDays: true,
             },
           });
           await syncWorksheetMirror(tx, saved);

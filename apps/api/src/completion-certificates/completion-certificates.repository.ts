@@ -13,6 +13,7 @@ const certificateInclude = {
           id: true,
           displayName: true,
           taxNumber: true,
+          paymentDueDays: true,
           addresses: {
             where: { isDefault: true },
             take: 1,
