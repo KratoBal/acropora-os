@@ -327,9 +327,13 @@ export type ProjectionOutcome =
        */
       cim: MedusaHandleParositas | null;
     }
-  /** Volt leképezés, a meglévő terméket módosítottuk. */
+  /**
+   * A meglévő terméket módosítottuk: `updated`, ha volt leképezés,
+   * `relinked`, ha nem volt, de a külső azonosító megtalálta az ÉLŐ terméket
+   * (és a leképezés ebből állt helyre). A kettő UGYANAZT írja odaát.
+   */
   | {
-      action: "updated";
+      action: "updated" | "relinked";
       medusaProductId: string;
       publication: ProjectionPublicationReport;
       cim: MedusaHandleParositas | null;
@@ -356,13 +360,6 @@ export type ProjectionOutcome =
        * egy lejart kulcs meg egy halozati hiba ket kulonbozo teendo.
        */
       metadataError?: string;
-    }
-  /** Nem volt leképezés, de a külső azonosító megtalálta az ÉLŐ terméket. */
-  | {
-      action: "relinked";
-      medusaProductId: string;
-      publication: ProjectionPublicationReport;
-      cim: MedusaHandleParositas | null;
     }
   /** Nem lehet folytatni, és megmondjuk, miért. */
   | { action: "stopped"; reason: ProjectionStopReason; details: string };
@@ -798,8 +795,16 @@ export class MedusaProductProjectionService {
           }
         : {};
 
-    const existingLink = await this.links.findByProductId(product.id);
-    if (existingLink) {
+    /**
+     * THE WRITE TO A PRODUCT WE ARE LINKED TO, used by the `updated` AND the
+     * `relinked` path. KZ Amino stage run (#1431 comment 5972125293, finding
+     * 3): a `relinked` run used to stop at the link, so the description, the
+     * metadata and everything else waited for a second run. A run that finds
+     * the product writes it, whichever way it found it.
+     */
+    const updateLinked = async (
+      medusaProductId: string,
+    ): Promise<ProjectionOutcome> => {
       /**
        * A CEL OLDALI METAADAT LEKERDEZESE, MIELOTT IRUNK.
        *
@@ -816,9 +821,7 @@ export class MedusaProductProjectionService {
       let metadataReadable = true;
       let metadataError: string | null = null;
       try {
-        existingMetadata = await this.medusa.fetchMetadata(
-          existingLink.medusaProductId,
-        );
+        existingMetadata = await this.medusa.fetchMetadata(medusaProductId);
       } catch (error) {
         /**
          * A HIBA NEM VESZ EL, DE NEM IS ITT SZOL: az eredmeny `metadata`
@@ -841,7 +844,7 @@ export class MedusaProductProjectionService {
        * állapot pont úgy néz ki, mint egy sikeres váltás.
        */
       try {
-        await this.medusa.update(existingLink.medusaProductId, {
+        await this.medusa.update(medusaProductId, {
           title: product.name,
           description: descriptions.description,
           external_id: product.id,
@@ -871,7 +874,7 @@ export class MedusaProductProjectionService {
           try {
             mark = await this.links.markOrphaned(
               product.id,
-              existingLink.medusaProductId,
+              medusaProductId,
               now,
             );
           } catch {
@@ -882,7 +885,7 @@ export class MedusaProductProjectionService {
             reason: "orphaned-link",
             details:
               `${product.id}: a leképezés ÁRVA -- a Medusa-termék ` +
-              `(${existingLink.medusaProductId}) a bolt szerint NEM LÉTEZIK ` +
+              `(${medusaProductId}) a bolt szerint NEM LÉTEZIK ` +
               `(HTTP 404), tehát odaát biztosan nem változott semmi. ` +
               `A leképezést NEM töröltük és új terméket sem hoztunk létre: ` +
               `egy 404 mögött rendszerint SZÁNDÉKOS bolti törlés áll, amit az ` +
@@ -899,16 +902,16 @@ export class MedusaProductProjectionService {
           reason: "medusa-write-failed",
           details:
             `${product.id}: a meglévő Medusa-termék ` +
-            `(${existingLink.medusaProductId}) módosítása elhasalt ` +
+            `(${medusaProductId}) módosítása elhasalt ` +
             `(${describeMedusaFailure(error)}). A cél oldali állapot ` +
             `BIZONYTALAN, ezért a leképezést sem frissítettük.`,
         };
       }
-      await this.links.link(product.id, existingLink.medusaProductId, now);
+      await this.links.link(product.id, medusaProductId, now);
       return {
         action: "updated",
         cim,
-        medusaProductId: existingLink.medusaProductId,
+        medusaProductId,
         publication: report,
         metadata: !metadataReadable
           ? "unreadable"
@@ -918,7 +921,10 @@ export class MedusaProductProjectionService {
         metadataRemovedKeys: metadataReadable ? merged.removedKeys : [],
         ...(metadataError ? { metadataError } : {}),
       };
-    }
+    };
+
+    const existingLink = await this.links.findByProductId(product.id);
+    if (existingLink) return updateLinked(existingLink.medusaProductId);
 
     /**
      * Nincs leképezés. Ez NEM hibaállapot: az első éles betöltés normál
@@ -974,15 +980,15 @@ export class MedusaProductProjectionService {
           .join(", ")}`,
       };
 
+    /**
+     * THE SAME WRITE AS `updated`, and it writes the link after a successful
+     * update, as there. A failed update leaves no link, so its report ("the
+     * mapping was not refreshed") stays true and the next run searches again.
+     */
     if (live.length === 1) {
-      const medusaProductId = live[0]!.id;
-      await this.links.link(product.id, medusaProductId, now);
-      return {
-        action: "relinked",
-        cim,
-        medusaProductId,
-        publication: report,
-      };
+      const written = await updateLinked(live[0]!.id);
+      if (written.action !== "updated") return written;
+      return { ...written, action: "relinked" };
     }
 
     /**
