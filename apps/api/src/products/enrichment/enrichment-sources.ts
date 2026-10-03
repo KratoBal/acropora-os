@@ -9,6 +9,9 @@ import type { ProductEvidenceSourceType } from "@acropora/types";
  *
  *   BULK_REEF_SUPPLY   bulkreefsupply.com (and its subdomains)
  *   MARINE_AQUATICS    marine-aquatics.eu (and its subdomains)
+ *   OLIBETTA           olibetta.hu (and its subdomains); added 2026-10-03 for
+ *                      its barcode and data, not its text (Balázs 14:09 UTC,
+ *                      "Mehet"). It is a shop, not our supplier.
  *   MANUFACTURER       the brand's own site (`Brand.websiteUrl`) or the
  *                      manufacturer link UNAS holds for the product
  *                      (`UnasProductSnapshot.manufacturerUrl`)
@@ -17,7 +20,7 @@ import type { ProductEvidenceSourceType } from "@acropora/types";
  * Anything else is REFUSED and never requested. Our own data (OS, UNAS) is not
  * a source here: it is the current value, and it cannot verify itself.
  *
- * Provenance class (owner, 2026-10-02): the two retailers count as supplier
+ * Provenance class (owner, 2026-10-02): the retailers count as supplier
  * pages, so like a supplier's own page they can verify a value; a
  * manufacturer's page is the manufacturer page of the V0 model.
  */
@@ -26,6 +29,7 @@ export const ENRICHMENT_SOURCE_KINDS = [
   "SUPPLIER",
   "BULK_REEF_SUPPLY",
   "MARINE_AQUATICS",
+  "OLIBETTA",
 ] as const;
 export type EnrichmentSourceKind = (typeof ENRICHMENT_SOURCE_KINDS)[number];
 
@@ -37,10 +41,11 @@ export function isEnrichmentSourceKind(
 
 /** The retailers' own domains, fixed. */
 export const RETAILER_DOMAINS: Readonly<
-  Record<"BULK_REEF_SUPPLY" | "MARINE_AQUATICS", string>
+  Record<"BULK_REEF_SUPPLY" | "MARINE_AQUATICS" | "OLIBETTA", string>
 > = {
   BULK_REEF_SUPPLY: "bulkreefsupply.com",
   MARINE_AQUATICS: "marine-aquatics.eu",
+  OLIBETTA: "olibetta.hu",
 };
 
 export const SOURCE_EVIDENCE_TYPE: Readonly<
@@ -50,6 +55,7 @@ export const SOURCE_EVIDENCE_TYPE: Readonly<
   SUPPLIER: "SUPPLIER_PAGE",
   BULK_REEF_SUPPLY: "SUPPLIER_PAGE",
   MARINE_AQUATICS: "SUPPLIER_PAGE",
+  OLIBETTA: "SUPPLIER_PAGE",
 };
 
 /**
@@ -120,6 +126,7 @@ export function sourceUrlProblem(
   switch (kind) {
     case "BULK_REEF_SUPPLY":
     case "MARINE_AQUATICS":
+    case "OLIBETTA":
       return hostBelongsTo(host, RETAILER_DOMAINS[kind])
         ? null
         : "HOST_NOT_ALLOWED";

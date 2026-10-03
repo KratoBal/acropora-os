@@ -40,6 +40,7 @@ import type { EnrichmentFetch } from "./polite-fetcher.js";
  *   { "products": [ { "productId": "...", "sources": [
  *       { "kind": "BULK_REEF_SUPPLY", "url": "https://www.bulkreefsupply.com/..." },
  *       { "kind": "MARINE_AQUATICS",  "url": "https://marine-aquatics.eu/..." },
+ *       { "kind": "OLIBETTA",         "url": "https://www.olibetta.hu/..." },
  *       { "kind": "MANUFACTURER",     "url": "https://<the brand's site>/..." },
  *       { "kind": "SUPPLIER", "supplierId": "...", "url": "https://<its site>/..." }
  *   ] } ] }

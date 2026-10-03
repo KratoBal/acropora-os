@@ -39,6 +39,10 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       ),
       null,
     );
+    assert.equal(
+      sourceUrlProblem("OLIBETTA", "https://www.olibetta.hu/nyos/x", SITES),
+      null,
+    );
   });
 
   it("más hoszt, hasonló név, vagy rossz fajta: elutasítva", () => {
@@ -47,6 +51,8 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       ["BULK_REEF_SUPPLY", "https://notbulkreefsupply.com/p"],
       ["BULK_REEF_SUPPLY", "https://marine-aquatics.eu/p"],
       ["MARINE_AQUATICS", "https://marine-aquatics.eu.example/p"],
+      ["OLIBETTA", "https://olibetta.hu.example/p"],
+      ["OLIBETTA", "https://www.invitalpet.hu/p"],
       ["MANUFACTURER", "https://www.bulkreefsupply.com/p"],
       ["SUPPLIER", "https://gyarto.example.invalid/p"],
     ] as const)
