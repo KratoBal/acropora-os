@@ -7,6 +7,7 @@ import {
   copyToHtml,
   earlierStatements,
   factFromResult,
+  factSource,
   knowledgeProjection,
   knowledgeProjectionDiffers,
   manualEvidenceCheck,
@@ -231,12 +232,130 @@ describe("resolving a conflict", () => {
     assert.match(invented.ok ? "" : invented.reason, /not one of/);
   });
 
+  // The reconciler groups case-insensitively for a text field, so the group
+  // holds one spelling; a human typing the other must still find it.
+  it("a text value picked in another letter case resolves to the group's spelling", () => {
+    const r = resolvedFact(
+      {
+        field: "packageContents",
+        status: "CONFLICTING_SOURCES",
+        value: null,
+        conflicts: [
+          {
+            value: "Üvegpalack pipettával",
+            sources: [{ sourceType: "MANUFACTURER_PAGE" }],
+          },
+          { value: "Flakon", sources: [{ sourceType: "SUPPLIER_PAGE" }] },
+        ],
+      },
+      "üvegpalack pipettával",
+    );
+    assert.deepEqual(r, {
+      ok: true,
+      status: "VERIFIED",
+      value: "Üvegpalack pipettával",
+      unit: null,
+    });
+  });
+
   it("only a conflict can be resolved", () => {
     const r = resolvedFact(
       { ...conflict, status: "VERIFIED" },
       "1 drop/100 L/day",
     );
     assert.equal(r.ok, false);
+  });
+});
+
+describe("the source of an accepted fact", () => {
+  const pointer = {
+    status: "CONFLICTING_SOURCES",
+    sourceType: null,
+    sourceRef: null,
+    retrievedAt: null,
+    conflicts: [
+      {
+        value: "1 drop/100 L/day",
+        sources: [
+          {
+            sourceType: "OS_PRODUCT_MASTER",
+            sourceRef: "os:p-kz",
+            retrievedAt: "2026-10-03T18:00:00.000Z",
+          },
+          {
+            sourceType: "SUPPLIER_PAGE",
+            sourceRef: "https://beszallito.example/kz",
+            retrievedAt: "2026-10-03T18:01:00.000Z",
+          },
+        ],
+      },
+      {
+        value: "1 drop/100 L, 1-2/week",
+        sources: [{ sourceType: "MANUFACTURER_DOCUMENT", sourceRef: "doc" }],
+      },
+    ],
+  };
+
+  /** WHAT TURNS IT RED: returning the conflict result's own (null) source. */
+  it("a resolved fact names the first independent source of the chosen group", () => {
+    assert.deepEqual(
+      factSource(
+        {
+          field: "dosing",
+          status: "VERIFIED",
+          value: "1 drop/100 L/day",
+          unit: null,
+        },
+        pointer,
+      ),
+      {
+        sourceType: "SUPPLIER_PAGE",
+        sourceRef: "https://beszallito.example/kz",
+        retrievedAt: "2026-10-03T18:01:00.000Z",
+      },
+    );
+  });
+
+  it("a quantity is matched with its unit put back", () => {
+    const source = factSource(
+      { field: "volume", status: "VERIFIED", value: "100", unit: "ml" },
+      {
+        ...pointer,
+        conflicts: [
+          { value: "100 ml", sources: [{ sourceType: "MANUFACTURER_PAGE" }] },
+          { value: "50 ml", sources: [{ sourceType: "SUPPLIER_PAGE" }] },
+        ],
+      },
+    );
+    assert.equal(source.sourceType, "MANUFACTURER_PAGE");
+  });
+
+  it("a conflict accepted as a conflict, and an ordinary result, keep the pointer's own source", () => {
+    assert.equal(
+      factSource(
+        {
+          field: "dosing",
+          status: "CONFLICTING_SOURCES",
+          value: null,
+          unit: null,
+        },
+        pointer,
+      ).sourceType,
+      null,
+    );
+    assert.equal(
+      factSource(
+        { field: "packSize", status: "VERIFIED", value: "100 ml", unit: null },
+        {
+          status: "VERIFIED",
+          sourceType: "MANUFACTURER_PAGE",
+          sourceRef: "https://gyarto.example",
+          retrievedAt: null,
+          conflicts: null,
+        },
+      ).sourceType,
+      "MANUFACTURER_PAGE",
+    );
   });
 });
 

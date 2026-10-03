@@ -1,5 +1,6 @@
 import {
   INDEPENDENT_SOURCES,
+  comparisonKey,
   fieldSpec,
   isFieldKey,
   isSourceType,
@@ -281,9 +282,45 @@ function splitUnit(result: { field: string; value: string | null }): {
 
 interface StoredConflictEntry {
   value: string | null;
-  sources?: { sourceType?: string }[];
+  sources?: {
+    sourceType?: string;
+    sourceRef?: string | null;
+    retrievedAt?: string | null;
+  }[];
   invalidReason?: string;
   unsupportedReason?: string;
+}
+
+/** The conflict group a human may pick: stated by a source, valid, supported. */
+function pickableEntry(
+  field: FieldKey,
+  conflicts: unknown,
+  normalized: string,
+): StoredConflictEntry | null {
+  const entries = Array.isArray(conflicts)
+    ? (conflicts as StoredConflictEntry[])
+    : [];
+  const key = comparisonKey(field, normalized);
+  return (
+    entries.find(
+      (e) =>
+        typeof e.value === "string" &&
+        comparisonKey(field, e.value) === key &&
+        !e.invalidReason &&
+        !e.unsupportedReason,
+    ) ?? null
+  );
+}
+
+/** The reconciler's primary source: the first independent one, in precedence order. */
+function firstIndependent(entry: StoredConflictEntry) {
+  return (
+    (entry.sources ?? []).find(
+      (source) =>
+        isSourceType(source.sourceType) &&
+        INDEPENDENT_SOURCES.has(source.sourceType),
+    ) ?? null
+  );
 }
 
 /**
@@ -311,32 +348,83 @@ export function resolvedFact(
   if (!normal.ok)
     return { ok: false, reason: `value: not a valid ${result.field}` };
 
-  const entries = Array.isArray(result.conflicts)
-    ? (result.conflicts as StoredConflictEntry[])
-    : [];
-  const entry = entries.find(
-    (e) => e.value === normal.value && !e.invalidReason && !e.unsupportedReason,
-  );
-  if (!entry)
+  const entry = pickableEntry(result.field, result.conflicts, normal.value);
+  if (!entry || entry.value === null)
     return {
       ok: false,
       reason: "value: not one of the values the sources state",
     };
-  const independent = (entry.sources ?? []).some(
-    (source) =>
-      isSourceType(source.sourceType) &&
-      INDEPENDENT_SOURCES.has(source.sourceType),
-  );
-  if (!independent)
+  if (!firstIndependent(entry))
     return {
       ok: false,
       reason:
         "value: no independent source states it, so it cannot be verified",
     };
+  // The group's own spelling, as the reconciler stores it: a value picked in
+  // another letter case is the same value (`comparisonKey`).
   return {
     ok: true,
     status: "VERIFIED",
-    ...splitUnit({ field: result.field, value: normal.value }),
+    ...splitUnit({ field: result.field, value: entry.value }),
+  };
+}
+
+export interface FactSource {
+  sourceType: string | null;
+  sourceRef: string | null;
+  retrievedAt: string | null;
+}
+
+/**
+ * WHERE AN ACCEPTED FACT'S VALUE CAME FROM, READ THROUGH ITS POINTER.
+ *
+ * Accepted from a VERIFIED / SUGGESTED result (or as a conflict): the
+ * result's own primary source, as before. RESOLVED from a conflict: the
+ * result the fact points at is the conflict, whose own source is null
+ * (`reconcileField` names no source for a conflict). The source is then the
+ * one the reconciler would have named for the chosen group: its first
+ * independent source, the same one `resolvedFact` required. KZ Amino stage
+ * run (#1431 comment 5972125293, finding 4): `application` and
+ * `packageContents` projected with `source_type: null`.
+ *
+ * Derived on read, like the rest of the source, so nothing about the
+ * conflict is copied onto the fact.
+ */
+export function factSource(
+  fact: {
+    field: string;
+    status: string;
+    value: string | null;
+    unit: string | null;
+  },
+  pointer: {
+    status: string;
+    sourceType: string | null;
+    sourceRef: string | null;
+    retrievedAt: string | null;
+    conflicts: unknown;
+  },
+): FactSource {
+  const own: FactSource = {
+    sourceType: pointer.sourceType,
+    sourceRef: pointer.sourceRef,
+    retrievedAt: pointer.retrievedAt,
+  };
+  if (
+    pointer.status !== "CONFLICTING_SOURCES" ||
+    fact.status === "CONFLICTING_SOURCES" ||
+    fact.value === null ||
+    !isFieldKey(fact.field)
+  )
+    return own;
+  const whole = fact.unit ? `${fact.value} ${fact.unit}` : fact.value;
+  const entry = pickableEntry(fact.field, pointer.conflicts, whole);
+  const source = entry ? firstIndependent(entry) : null;
+  if (!source) return own;
+  return {
+    sourceType: source.sourceType ?? null,
+    sourceRef: source.sourceRef ?? null,
+    retrievedAt: source.retrievedAt ?? null,
   };
 }
 
