@@ -16,7 +16,12 @@ import {
  *   it disallows is never requested. A robots.txt that answers 401/403 means
  *   "everything is disallowed"; one that cannot be read at all (network
  *   error, 429, 5xx) makes the host unavailable for this run. A missing one
- *   (404 and the other 4xx) allows everything, as the RFC says.
+ *   (404 and the other 4xx) allows everything, as the RFC says. A redirect is
+ *   followed (up to `MAX_REDIRECTS` hops, RFC 9309 2.3.1.2) only when it stays
+ *   on the same site: https, and the same host give or take `www.`. Tunze
+ *   (www -> bare) and marine-aquatics.eu (bare -> www) both answer this way,
+ *   and without it their every page was ROBOTS_UNREADABLE (first live round,
+ *   2026-10-03). A redirect anywhere else leaves the host unreadable.
  * - **Pace:** at least `HOST_DELAY_MS` between two requests to the same host,
  *   or the robots.txt `Crawl-delay` when that is longer (capped).
  * - **Cache:** one run asks for a URL once; the second ask gets the first
@@ -84,6 +89,18 @@ const CHALLENGE =
 
 export function looksLikeChallenge(html: string): boolean {
   return CHALLENGE.test(html.slice(0, 50_000));
+}
+
+/** https, and the same host as `origin` give or take a leading `www.`. */
+function sameSite(url: URL, origin: URL): boolean {
+  const bare = (host: string) => host.toLowerCase().replace(/^www\./, "");
+  return (
+    url.protocol === "https:" &&
+    !url.username &&
+    !url.password &&
+    url.port === origin.port &&
+    bare(url.hostname) === bare(origin.hostname)
+  );
 }
 
 export interface PoliteFetcherDeps {
@@ -196,21 +213,25 @@ export class PoliteFetcher {
   }
 
   private async readRobots(target: URL): Promise<RobotsRules | "UNREADABLE"> {
+    let url = new URL("/robots.txt", target);
     let response: Response;
-    try {
-      response = await this.request(
-        new URL("/robots.txt", target),
-        "text/plain",
-        HOST_DELAY_MS,
-      );
-    } catch (error) {
-      if (error instanceof RequestLimitReached) throw error;
-      return "UNREADABLE";
+    for (let hops = 0; ; hops += 1) {
+      try {
+        response = await this.request(url, "text/plain", HOST_DELAY_MS);
+      } catch (error) {
+        if (error instanceof RequestLimitReached) throw error;
+        return "UNREADABLE";
+      }
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers.get("location");
+      if (!location || hops >= MAX_REDIRECTS) return "UNREADABLE";
+      const next = new URL(location, url);
+      if (!sameSite(next, target)) return "UNREADABLE";
+      url = next;
     }
     const status = response.status;
     if (status === 401 || status === 403) return DISALLOW_ALL;
-    if (status === 429 || status >= 500 || (status >= 300 && status < 400))
-      return "UNREADABLE";
+    if (status === 429 || status >= 500) return "UNREADABLE";
     if (status >= 400) return ALLOW_ALL;
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > MAX_ROBOTS_BYTES) return "UNREADABLE";
