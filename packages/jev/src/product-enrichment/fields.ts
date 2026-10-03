@@ -49,9 +49,17 @@ export interface FieldSpec {
   /**
    * Two values that differ only in letter case are the same value (a brand:
    * "TUNZE" and "Tunze"). The stored value keeps the spelling of the
-   * highest-precedence source.
+   * highest-precedence source. Every `text` field compares this way already
+   * (`comparisonKey`); the flag is for a field of another kind.
    */
   caseInsensitive?: true;
+  /**
+   * A `text` field where letter case carries meaning, so it stays a
+   * case-sensitive compare: a chemical symbol ("Co" cobalt, "CO" carbon
+   * monoxide) must not agree with another one by losing its case, and a
+   * title keeps the #1427 rule.
+   */
+  caseSensitive?: true;
 }
 
 const text = { kind: "text" } as const;
@@ -97,7 +105,15 @@ export const FIELD_SPECS = {
     tierFromDecision: true,
   },
   // Tier B
-  title: { tier: "B", kind: text, claims: "none", tierFromDecision: true },
+  // Case-sensitive on purpose: #1427 kept "Comline DOC Skimmer" against
+  // "COMLINE DOC SKIMMER" a conflict, and that test pins it.
+  title: {
+    tier: "B",
+    kind: text,
+    claims: "none",
+    tierFromDecision: true,
+    caseSensitive: true,
+  },
   category: { tier: "B", kind: text, claims: "none", tierFromDecision: true },
   compatibility: {
     tier: "B",
@@ -195,6 +211,7 @@ export const FIELD_SPECS = {
     kind: text,
     claims: "value",
     tierFromDecision: true,
+    caseSensitive: true,
   },
   warranty: { tier: "C", kind: text, claims: "value", tierFromDecision: true },
   safetyInformation: {
@@ -351,11 +368,18 @@ export function normalizeFieldValue(
  * lower-case form for a case-insensitive field (first live round, 2026-10-03:
  * "TUNZE" from the manufacturer and "Tunze" from a retailer came out as a
  * conflict).
+ *
+ * EVERY `text` FIELD IS CASE-INSENSITIVE unless it says otherwise (KZ Amino
+ * stage run, #1431 comment 5972125293, finding 5): "Üvegpalack pipettával"
+ * and "üvegpalack pipettával" came out as CONFLICTING_SOURCES. In prose a
+ * capital letter is where the sentence starts, not part of the value.
  */
 export function comparisonKey(field: FieldKey, normalized: string): string {
-  return fieldSpec(field).caseInsensitive
-    ? normalized.toLocaleLowerCase("hu")
-    : normalized;
+  const spec: FieldSpec = fieldSpec(field);
+  const insensitive =
+    spec.caseInsensitive === true ||
+    (spec.kind.kind === "text" && spec.caseSensitive !== true);
+  return insensitive ? normalized.toLocaleLowerCase("hu") : normalized;
 }
 
 function collapse(raw: string): string {

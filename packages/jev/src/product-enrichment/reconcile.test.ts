@@ -71,6 +71,40 @@ describe("reconcileField: letter case", () => {
     assert.equal(result.evidence.length, 2);
   });
 
+  // KZ Amino stage run (#1431 comment 5972125293, finding 5): the same
+  // package contents, once with a capital at the start of the sentence.
+  it("szöveges mezőben a magyar kis- és nagybetű (Ü/ü, Ő/ő) ugyanaz az érték", () => {
+    const result = reconcileField("packageContents", [
+      src("üvegpalack pipettával", "SUPPLIER_PAGE"),
+      src("Üvegpalack pipettával", "MANUFACTURER_PAGE"),
+    ]);
+    assert.equal(result.status, "VERIFIED");
+    assert.equal(result.value, "Üvegpalack pipettával");
+    assert.equal(result.evidence.length, 2);
+
+    const o = reconcileField("application", [
+      src("ŐSZI ETETÉS", "MANUFACTURER_PAGE"),
+      src("őszi etetés", "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(o.status, "VERIFIED");
+  });
+
+  it("a betűn túli eltérés szöveges mezőben is ütközés marad", () => {
+    const result = reconcileField("packageContents", [
+      src("Üvegpalack pipettával", "MANUFACTURER_PAGE"),
+      src("Üvegpalack pipetta nélkül", "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(result.status, "CONFLICTING_SOURCES");
+  });
+
+  it("az összetételben a betűméret jelentés (Co és CO), ott ütközés marad", () => {
+    const result = reconcileField("composition", [
+      src("Co", "MANUFACTURER_PAGE"),
+      src("CO", "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(result.status, "CONFLICTING_SOURCES");
+  });
+
   it("ahol a betűméret számít, ott ugyanez továbbra is ütközés", () => {
     const result = reconcileField("title", [
       src("Comline DOC Skimmer 9004", "MANUFACTURER_PAGE"),
