@@ -343,6 +343,32 @@ describe("the projection payload (the PR A / PR B contract)", () => {
     ]);
   });
 
+  /**
+   * The guard on the way out: even a conflict row that carries a value and a
+   * source (written by hand, or by a future bug) leaves without them. WHAT
+   * TURNS IT RED: a payload that copies the row's value or source for a
+   * conflict.
+   */
+  it("a conflict row never leaves with a value or a source, whatever the row holds", () => {
+    const payload = knowledgeProjection(
+      [
+        {
+          field: "dosing",
+          value: "1 drop/100 L/day",
+          unit: "x",
+          status: "CONFLICTING_SOURCES",
+          revision: 1,
+          sourceType: "MANUFACTURER_PAGE",
+        },
+      ],
+      [],
+    );
+    assert.deepEqual(
+      payload.facts.map((f) => [f.value, f.unit, f.source_type]),
+      [[null, null, null]],
+    );
+  });
+
   it("copy: approved and not stale lead/body only; SEO never travels here", () => {
     const fresh = { packSize: 1, dosing: 2 };
     const payload = knowledgeProjection(facts, [
