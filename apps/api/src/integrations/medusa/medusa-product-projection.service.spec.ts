@@ -1108,11 +1108,69 @@ describe("MedusaProductProjectionService", () => {
         reason: "értékesíthető a webshopban",
         salesChannelName: "Acropora Webshop",
       },
+      metadata: "merged",
+      metadataRemovedKeys: [],
     });
     assert.ok(!calls.includes("create"));
     assert.deepEqual(linked, [
       { productId: "prod-os-1", medusaProductId: "prod_elo" },
     ]);
+  });
+
+  /**
+   * KZ Amino stage run (#1431 comment 5972125293, finding 3): the first run
+   * after a relink set the link and nothing else, so the approved description
+   * waited for a second run. WHAT TURNS IT RED: a `relinked` branch that
+   * links and returns without the update.
+   */
+  it("a relinked run writes the product in the same run, the knowledge copy included", async () => {
+    const { service, calls, updatedWith } = fakes({
+      link: null,
+      found: [{ id: "prod_elo", deleted_at: null }],
+    });
+
+    const outcome = await service.project(
+      {
+        ...product,
+        knowledgeCopy: {
+          description: "<p>Jóváhagyott leírás.</p>",
+          seoTitle: null,
+          seoDescription: null,
+        },
+      },
+      now,
+    );
+
+    assert.equal(outcome.action, "relinked");
+    assert.deepEqual(calls, [
+      "findSalesChannel",
+      "findLink",
+      "search",
+      "fetchMetadata",
+      "update",
+      "link",
+    ]);
+    assert.equal(updatedWith.length, 1);
+    assert.equal(updatedWith[0]!.description, "<p>Jóváhagyott leírás.</p>");
+    assert.equal(updatedWith[0]!.external_id, "prod-os-1");
+  });
+
+  it("a relinked run whose write fails stops, and leaves no link behind", async () => {
+    const f = fakes({
+      link: null,
+      found: [{ id: "prod_elo", deleted_at: null }],
+    });
+    (f.medusa as unknown as { update: () => Promise<never> }).update =
+      async () => {
+        throw new Error("kitalált hálózati hiba");
+      };
+
+    const outcome = await f.service.project(product, now);
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "medusa-write-failed");
+    assert.deepEqual(f.linked, []);
   });
 
   /**
@@ -1140,6 +1198,8 @@ describe("MedusaProductProjectionService", () => {
         reason: "értékesíthető a webshopban",
         salesChannelName: "Acropora Webshop",
       },
+      metadata: "merged",
+      metadataRemovedKeys: [],
     });
   });
 

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import {
+  factSource,
   knowledgeProjection,
   knowledgeProjectionDiffers,
   type CopyRow,
@@ -106,7 +107,11 @@ export interface KnowledgeRowsDatabase {
         unit: string | null;
         status: string;
         revision: number;
-        fieldResult: { sourceType: string | null };
+        fieldResult: {
+          status: string;
+          sourceType: string | null;
+          conflicts: unknown;
+        };
       }[]
     >;
   };
@@ -135,7 +140,9 @@ export async function knowledgeRowsFor(
         unit: true,
         status: true,
         revision: true,
-        fieldResult: { select: { sourceType: true } },
+        fieldResult: {
+          select: { status: true, sourceType: true, conflicts: true },
+        },
       },
     }),
     tables.productCopy.findMany({
@@ -157,7 +164,12 @@ export async function knowledgeRowsFor(
       unit: fact.unit,
       status: fact.status,
       revision: fact.revision,
-      sourceType: fact.fieldResult.sourceType,
+      // A resolved fact names the chosen group's source, not the conflict's null.
+      sourceType: factSource(fact, {
+        ...fact.fieldResult,
+        sourceRef: null,
+        retrievedAt: null,
+      }).sourceType,
     })),
     copy,
   };

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type {
-  CopyRow,
-  FactRow,
-  KnowledgeProjection,
+import {
+  knowledgeProjection,
+  type CopyRow,
+  type FactRow,
+  type KnowledgeProjection,
 } from "../../products/knowledge/knowledge.policy.js";
 import {
   MedusaProductKnowledgeService,
@@ -173,7 +174,11 @@ describe("the knowledge rows the runner reads", () => {
                 unit: null,
                 status: "VERIFIED",
                 revision: 1,
-                fieldResult: { sourceType: "SUPPLIER_PAGE" },
+                fieldResult: {
+                  status: "VERIFIED",
+                  sourceType: "SUPPLIER_PAGE",
+                  conflicts: null,
+                },
               },
             ];
           },
@@ -186,5 +191,53 @@ describe("the knowledge rows the runner reads", () => {
     assert.deepEqual((asked[0] as { where: unknown }).where, {
       productId: "p-kz",
     });
+  });
+
+  /**
+   * KZ Amino stage run (#1431 comment 5972125293, finding 4): a fact resolved
+   * from a conflict points at the conflict result, whose own source is null,
+   * and it projected with `source_type: null`. WHAT TURNS IT RED: reading the
+   * pointer's own `sourceType` for a resolved fact.
+   */
+  it("a resolved fact projects the chosen value's source, not the conflict's null", async () => {
+    const rows = await knowledgeRowsFor(
+      {
+        productKnowledgeFact: {
+          findMany: async () => [
+            {
+              field: "packageContents",
+              value: "Üvegpalack pipettával",
+              unit: null,
+              status: "VERIFIED",
+              revision: 2,
+              fieldResult: {
+                status: "CONFLICTING_SOURCES",
+                sourceType: null,
+                conflicts: [
+                  {
+                    value: "Üvegpalack pipettával",
+                    sources: [
+                      { sourceType: "OS_PRODUCT_MASTER" },
+                      { sourceType: "MANUFACTURER_PAGE" },
+                    ],
+                  },
+                  {
+                    value: "Műanyag flakon",
+                    sources: [{ sourceType: "SUPPLIER_PAGE" }],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        productCopy: { findMany: async () => [] },
+      },
+      "p-kz",
+    );
+    assert.equal(rows.facts[0]!.sourceType, "MANUFACTURER_PAGE");
+    assert.equal(
+      knowledgeProjection(rows.facts, []).facts[0]!.source_type,
+      "MANUFACTURER_PAGE",
+    );
   });
 });

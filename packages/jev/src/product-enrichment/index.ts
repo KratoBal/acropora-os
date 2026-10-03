@@ -43,6 +43,7 @@ export {
 export {
   FIELD_SPECS,
   RESTRICTED_CIRCULATION_GTIN,
+  comparisonKey,
   containsFactualClaims,
   fieldSpec,
   UnknownFieldError,

@@ -3,6 +3,7 @@ import { Prisma, prisma } from "@acropora/database";
 import type { ProductCopyBlock } from "@acropora/types";
 
 import type { StoredCheck } from "../enrichment/enrichment-run.js";
+import { factSource } from "./knowledge.policy.js";
 
 export const KNOWLEDGE_STORE = Symbol("KNOWLEDGE_STORE");
 
@@ -213,21 +214,37 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
         fieldResultId: true,
         acceptedBy: { select: { id: true, displayName: true } },
         fieldResult: {
-          select: { sourceType: true, sourceRef: true, retrievedAt: true },
+          select: {
+            status: true,
+            sourceType: true,
+            sourceRef: true,
+            retrievedAt: true,
+            conflicts: true,
+          },
         },
       },
     });
-    return rows.map((row) => ({
-      field: row.field,
-      value: row.value,
-      unit: row.unit,
-      status: row.status,
-      revision: row.revision,
-      acceptedAt: row.acceptedAt,
-      acceptedBy: row.acceptedBy,
-      fieldResultId: row.fieldResultId,
-      source: row.fieldResult,
-    }));
+    return rows.map((row) => {
+      const source = factSource(row, {
+        ...row.fieldResult,
+        retrievedAt: row.fieldResult.retrievedAt?.toISOString() ?? null,
+      });
+      return {
+        field: row.field,
+        value: row.value,
+        unit: row.unit,
+        status: row.status,
+        revision: row.revision,
+        acceptedAt: row.acceptedAt,
+        acceptedBy: row.acceptedBy,
+        fieldResultId: row.fieldResultId,
+        source: {
+          sourceType: source.sourceType,
+          sourceRef: source.sourceRef,
+          retrievedAt: source.retrievedAt ? new Date(source.retrievedAt) : null,
+        },
+      };
+    });
   }
 
   async upsertFact(input: Parameters<KnowledgeStore["upsertFact"]>[0]) {
