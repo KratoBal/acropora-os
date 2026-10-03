@@ -53,6 +53,7 @@ const review = (
 });
 
 const field = (over: Partial<ProductFieldReview>): ProductFieldReview => ({
+  fieldResultId: "fr-category",
   field: "category",
   tier: "B",
   status: "SUGGESTED",

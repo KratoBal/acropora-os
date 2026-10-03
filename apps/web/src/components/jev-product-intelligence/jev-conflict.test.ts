@@ -15,6 +15,7 @@ import type { ReviewLoad } from "./jev-product-review";
 
 /** Invented readings only. */
 const conflict: ProductFieldReview = {
+  fieldResultId: "fr-flow",
   field: "flowRate",
   tier: "C",
   status: "CONFLICTING_SOURCES",
