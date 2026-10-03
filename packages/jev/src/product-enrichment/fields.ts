@@ -26,7 +26,7 @@
  */
 
 import { validateGtin } from "./gtin.js";
-import { parseQuantity, type Dimension } from "./units.js";
+import { parseDose, parseQuantity, type Dimension } from "./units.js";
 
 export type Tier = "A" | "B" | "C";
 
@@ -34,6 +34,8 @@ export type FieldKind =
   | { kind: "gtin" }
   | { kind: "identifier" }
   | { kind: "quantity"; dimension: Dimension }
+  /** An amount per water volume per period (`units.ts` `parseDose`). */
+  | { kind: "dose" }
   | { kind: "text" };
 
 export type ClaimPolicy = "none" | "value" | "prose";
@@ -222,6 +224,39 @@ export const FIELD_SPECS = {
     claims: "value",
     tierFromDecision: false,
   },
+  // The KZ Amino Product Knowledge slice (owner approval on #1431,
+  // 2026-10-03; PD-014 proposed). Not placed by ACD-021: Tier C, the
+  // strictest, as every unplaced field.
+  /**
+   * The dosing instruction as a structured value. `dosingText` (Tier B) is
+   * the free-text form and `dosingAmount` the bare amount; this one is
+   * comparable across sources, so two manufacturer documents that state
+   * different regimes come out as CONFLICTING_SOURCES instead of two facts.
+   */
+  dosing: {
+    tier: "C",
+    kind: { kind: "dose" },
+    claims: "value",
+    tierFromDecision: false,
+  },
+  /**
+   * What the manufacturer states about the effect. A claim, never a fact:
+   * VERIFIED here means "the manufacturer does say this", and it is shown as
+   * "a gyártó szerint", never as a property of the product.
+   */
+  manufacturerClaims: {
+    tier: "C",
+    kind: text,
+    claims: "prose",
+    tierFromDecision: false,
+  },
+  /** The GPSR manufacturer block: name, postal address, email. */
+  manufacturerInfo: {
+    tier: "C",
+    kind: text,
+    claims: "value",
+    tierFromDecision: false,
+  },
 } as const satisfies Record<string, FieldSpec>;
 
 export type FieldKey = keyof typeof FIELD_SPECS;
@@ -299,6 +334,10 @@ export function normalizeFieldValue(
       if (v.length > 64)
         return { ok: false, reason: "longer than 64 characters" };
       return { ok: true, value: v };
+    }
+    case "dose": {
+      const r = parseDose(raw);
+      return r.ok ? { ok: true, value: r.canonical } : r;
     }
     case "text": {
       const v = collapse(raw);

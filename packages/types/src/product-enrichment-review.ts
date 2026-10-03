@@ -78,6 +78,9 @@ export const PRODUCT_ENRICHMENT_FIELDS = {
   capacity: "C",
   packSize: "C",
   packageContents: "C",
+  dosing: "C",
+  manufacturerClaims: "C",
+  manufacturerInfo: "C",
 } as const satisfies Record<string, ProductFieldTier>;
 export type ProductEnrichmentFieldKey = keyof typeof PRODUCT_ENRICHMENT_FIELDS;
 

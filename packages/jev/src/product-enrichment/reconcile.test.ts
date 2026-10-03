@@ -54,6 +54,7 @@ function validValue(field: FieldKey): string {
       length: "25 cm",
       mass: "1 kg",
     }[kind.dimension];
+  if (kind.kind === "dose") return "1 drop/100 L/day";
   return "SYNTH-VALUE-1";
 }
 
@@ -541,5 +542,44 @@ describe("guardFieldResult: a result from elsewhere", () => {
       guardFieldResult("ean", verified({ status: "MISSING", value: null })).ok,
       true,
     );
+  });
+});
+
+/**
+ * THE KZ AMINO DOSING CASE (#1431 Step 0, 2026-10-03): the manufacturer page
+ * and the supplier say once a day; the manufacturer's 2013 dosage table says
+ * 1-2 times a week. One `dosing` field with all three sources must come out
+ * as a conflict with no value, both regimes kept with their sources. Two
+ * separate fields could never conflict: the reconciler decides per field.
+ */
+describe("reconcileField: dosing regimes", () => {
+  it("daily on the page and the supplier, 1-2/week in the PDF: CONFLICTING_SOURCES, no value", () => {
+    const result = reconcileField("dosing", [
+      src("1 drop/100 L/day", "MANUFACTURER_PAGE", "https://kz.example/amino"),
+      src("1 drops / 100 L / day", "SUPPLIER_PAGE", "https://ma.example/amino"),
+      src(
+        "1 drop/100 L, 1-2/week",
+        "MANUFACTURER_DOCUMENT",
+        "https://kz.example/dosage-2013.pdf",
+      ),
+    ]);
+    assert.equal(result.status, "CONFLICTING_SOURCES");
+    assert.equal(result.value, null);
+    assert.deepEqual(
+      result.conflicts?.map((c) => [c.value, c.sources.length]),
+      [
+        ["1 drop/100 L/day", 2],
+        ["1 drop/100 L, 1-2/week", 1],
+      ],
+    );
+  });
+
+  it("the same regime spelled two ways agrees: VERIFIED", () => {
+    const result = reconcileField("dosing", [
+      src("1 drop/100 L/day", "MANUFACTURER_PAGE"),
+      src("1 drop/100000 ml, 1/day", "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(result.status, "VERIFIED");
+    assert.equal(result.value, "1 drop/100 L/day");
   });
 });

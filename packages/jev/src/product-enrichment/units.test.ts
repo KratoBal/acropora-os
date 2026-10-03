@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseQuantity, type Dimension } from "./units.js";
+import { parseDose, parseQuantity, type Dimension } from "./units.js";
 
 function canonical(raw: string, dimension: Dimension): string {
   const r = parseQuantity(raw, dimension);
@@ -108,5 +108,60 @@ describe("unit normalization (Tier C)", () => {
     rejected("", "power");
     rejected("24 W (nominal)", "power");
     rejected("24 W 30 W", "power");
+  });
+});
+
+function dose(raw: string): string {
+  const r = parseDose(raw);
+  assert.ok(r.ok, `${raw}: ${r.ok ? "" : r.reason}`);
+  return r.canonical;
+}
+
+function doseRejected(raw: string): string {
+  const r = parseDose(raw);
+  assert.equal(
+    r.ok,
+    false,
+    `${raw} should be rejected, got ${r.ok ? r.canonical : ""}`,
+  );
+  return r.ok ? "" : r.reason;
+}
+
+describe("dose normalization", () => {
+  it("drops per litres per period, in one canonical spelling", () => {
+    assert.equal(dose("1 drop/100 L/day"), "1 drop/100 L/day");
+    assert.equal(dose("1 drops / 100 l / d"), "1 drop/100 L/day");
+    assert.equal(dose("2 drop/100000 ml/week"), "2 drop/100 L/week");
+    assert.equal(dose("1 drop/50 L/day"), "1 drop/50 L/day");
+  });
+
+  it("a volume amount lands in ml, a water volume in L", () => {
+    assert.equal(dose("5 ml/100 L/week"), "5 ml/100 L/week");
+    assert.equal(dose("0,5 l/1000 L/day"), "500 ml/1000 L/day");
+    assert.equal(dose("1 ml/500 ml/day"), "1 ml/0.5 L/day");
+  });
+
+  it("a frequency or a frequency range per period; a frequency of 1 is the plain form", () => {
+    assert.equal(dose("1 drop/100 L, 1-2/week"), "1 drop/100 L, 1-2/week");
+    assert.equal(dose("1 drop/100 L, 3/week"), "1 drop/100 L, 3/week");
+    assert.equal(dose("1 drop/100 L, 1/day"), "1 drop/100 L/day");
+    assert.equal(dose("1 drop/100 L, 1-1/day"), "1 drop/100 L/day");
+    assert.notEqual(dose("1 drop/100 L/week"), dose("1 drop/100 L, 1-2/week"));
+  });
+
+  it("rejects what a human would have to interpret", () => {
+    assert.match(doseRejected("1-2 drop/100 L/day"), /not a dose/);
+    assert.match(doseRejected("max. 1 drop/100 L/day"), /qualified/);
+    assert.match(doseRejected("1 drop/100 L"), /not a dose/);
+    assert.match(doseRejected("1 drop/100 L/month"), /unknown period/);
+    assert.match(doseRejected("1 cup/100 L/day"), /unknown dose unit/);
+    assert.match(doseRejected("1 drop/100 W/day"), /volume unit/);
+    assert.match(doseRejected("1,5 drop/100 L/day"), /whole number/);
+    assert.match(doseRejected("1 drop/1.000 L/day"), /ambiguous/);
+    assert.match(doseRejected("0 drop/100 L/day"), /zero/);
+    assert.match(doseRejected("1 drop/100 L, 2-1/week"), /reversed/);
+    assert.match(doseRejected("1 drop/100 L, 0/week"), /starts at 1/);
+    assert.match(doseRejected("1 Tropfen je 100 Liter /Tag"), /not a dose/);
+    assert.match(doseRejected(""), /empty/);
   });
 });
