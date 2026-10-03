@@ -57,6 +57,28 @@ function validValue(field: FieldKey): string {
   return "SYNTH-VALUE-1";
 }
 
+describe("reconcileField: letter case", () => {
+  // First live round, 2026-10-03: the manufacturer said "TUNZE", a retailer
+  // "Tunze", and the brand came out as a conflict.
+  it("a márka kis- és nagybetűs alakja ugyanaz az érték; a magasabb rangú forrás írásmódja marad", () => {
+    const result = reconcileField("brand", [
+      src("Tunze", "SUPPLIER_PAGE"),
+      src("TUNZE", "MANUFACTURER_PAGE"),
+    ]);
+    assert.equal(result.status, "VERIFIED");
+    assert.equal(result.value, "TUNZE");
+    assert.equal(result.evidence.length, 2);
+  });
+
+  it("ahol a betűméret számít, ott ugyanez továbbra is ütközés", () => {
+    const result = reconcileField("title", [
+      src("Comline DOC Skimmer 9004", "MANUFACTURER_PAGE"),
+      src("COMLINE DOC SKIMMER 9004", "SUPPLIER_PAGE"),
+    ]);
+    assert.equal(result.status, "CONFLICTING_SOURCES");
+  });
+});
+
 describe("reconcileField: agreement and conflict", () => {
   it("VERIFIED when independent sources agree after normalization", () => {
     const r = reconcileField(
