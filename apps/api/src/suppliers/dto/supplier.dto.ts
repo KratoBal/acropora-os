@@ -62,6 +62,9 @@ export class CreateSupplierDto {
   @MaxLength(300)
   @IsOptional()
   websiteUrl?: string;
+  /** Payment term in days for the invoices we issue to this partner. Omitted
+   * means the invoice default (8 days). */
+  @IsInt() @Min(0) @Max(365) @IsOptional() paymentDueDays?: number;
   @IsString() @IsOptional() iban?: string;
   @IsString() @IsOptional() swiftCode?: string;
   @IsString() @IsOptional() bankAccountNumber?: string;
@@ -93,6 +96,8 @@ export class UpdateSupplierDto {
   @MaxLength(300)
   @IsOptional()
   websiteUrl?: string | null;
+  /** `null` clears it, and the invoice falls back to 8 days. */
+  @IsInt() @Min(0) @Max(365) @IsOptional() paymentDueDays?: number | null;
   @IsString() @IsOptional() iban?: string | null;
   @IsString() @IsOptional() swiftCode?: string | null;
   @IsString() @IsOptional() bankAccountNumber?: string | null;

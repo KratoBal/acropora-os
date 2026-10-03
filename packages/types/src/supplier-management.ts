@@ -20,6 +20,9 @@ export interface SupplierSummary {
   /** A beszállító saját weboldala (PD-013): a JEV termékellenőrzés csak ezen
    * a hoszton olvas beszállítói oldalt. */
   websiteUrl?: string;
+  /** Fizetési határidő napban az általunk kiállított számlán. Hiányzik, ha
+   * nincs megadva: ilyenkor a számla 8 napot ír. */
+  paymentDueDays?: number;
   /** EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám. */
   iban?: string;
   /** EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja. */
@@ -61,6 +64,7 @@ export interface CreateSupplierInput {
   email?: string;
   phone?: string;
   websiteUrl?: string;
+  paymentDueDays?: number;
   iban?: string;
   swiftCode?: string;
   bankAccountNumber?: string;
@@ -83,6 +87,7 @@ export interface UpdateSupplierInput {
   email?: string | null;
   phone?: string | null;
   websiteUrl?: string | null;
+  paymentDueDays?: number | null;
   iban?: string | null;
   swiftCode?: string | null;
   bankAccountNumber?: string | null;

@@ -66,6 +66,7 @@ export function PilotSupplierEditorPage({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [paymentDueDays, setPaymentDueDays] = useState("");
   /** A new record starts as a supplier, the same way the column defaults, so
    * that recording a supplier stays a matter of typing the name. */
   const [isSupplier, setIsSupplier] = useState(true);
@@ -125,6 +126,9 @@ export function PilotSupplierEditorPage({
         setEmail(next.email ?? "");
         setPhone(next.phone ?? "");
         setWebsiteUrl(next.websiteUrl ?? "");
+        setPaymentDueDays(
+          next.paymentDueDays === undefined ? "" : String(next.paymentDueDays),
+        );
         setIsSupplier(next.isSupplier);
         setIsService(next.isService);
         setWorksheetPartnerCode(next.worksheetPartnerCode ?? "");
@@ -234,6 +238,16 @@ export function PilotSupplierEditorPage({
       setError("A név megadása kötelező.");
       return;
     }
+    const dueDaysText = paymentDueDays.trim();
+    if (dueDaysText && !/^\d{1,3}$/.test(dueDaysText)) {
+      setError("A fizetési határidő 0 és 365 közötti egész szám (nap).");
+      return;
+    }
+    const dueDays = dueDaysText ? Number(dueDaysText) : undefined;
+    if (dueDays !== undefined && dueDays > 365) {
+      setError("A fizetési határidő 0 és 365 közötti egész szám (nap).");
+      return;
+    }
     setBusy(true);
     setError(null);
     const payload = {
@@ -248,6 +262,7 @@ export function PilotSupplierEditorPage({
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
       websiteUrl: websiteUrl.trim() || undefined,
+      paymentDueDays: dueDays,
       iban: isEu ? iban.trim() || undefined : undefined,
       swiftCode: isEu ? swiftCode.trim() || undefined : undefined,
       bankAccountNumber: isEu
@@ -288,6 +303,7 @@ export function PilotSupplierEditorPage({
             email: payload.email ?? null,
             phone: payload.phone ?? null,
             websiteUrl: payload.websiteUrl ?? null,
+            paymentDueDays: payload.paymentDueDays ?? null,
             iban: payload.iban ?? null,
             swiftCode: payload.swiftCode ?? null,
             bankAccountNumber: payload.bankAccountNumber ?? null,
@@ -555,6 +571,15 @@ export function PilotSupplierEditorPage({
                     placeholder="https://"
                     value={websiteUrl}
                     onChange={setWebsiteUrl}
+                  />
+                </PilotFormField>
+                <PilotFormField label="Fizetési határidő (nap)">
+                  <PilotInput
+                    inputMode="numeric"
+                    aria-label="Fizetési határidő (nap)"
+                    placeholder="8"
+                    value={paymentDueDays}
+                    onChange={setPaymentDueDays}
                   />
                 </PilotFormField>
               </div>

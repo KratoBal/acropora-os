@@ -54,6 +54,7 @@ describe("the service partner's mirror customer", () => {
       isService: true,
       customerId: "customer-7",
       worksheetPartnerCode: "UJNV",
+      paymentDueDays: 30,
     });
 
     assert.deepEqual(calls, [
@@ -68,6 +69,9 @@ describe("the service partner's mirror customer", () => {
             // The worksheet number is built from this copy, so a code left
             // behind here would number new sheets after the old abbreviation.
             worksheetPartnerCode: "UJNV",
+            // The invoice is written to the mirror, so the partner's payment
+            // term has to arrive here too.
+            paymentDueDays: 30,
           },
         },
       },

@@ -1449,6 +1449,11 @@ model Supplier {
   /// töltött, opcionális.
   websiteUrl           String?
   phone                String?
+  /// Payment term in days for invoices we issue to this partner (maintenance
+  /// invoice). Null means the invoice default (8 days). Copied onto the
+  /// partner's customer mirror on every save, because the invoice is written
+  /// to that row.
+  paymentDueDays       Int?
   /// What kind of partner this is. The two are independent, because one
   /// company can be both: we order from it AND we do service work for it.
   ///
@@ -2254,6 +2259,11 @@ model Customer {
   phone                 String?
   marketingEmailConsent Boolean      @default(false)
   marketingSmsConsent   Boolean      @default(false)
+  /// Payment term in days for an invoice we issue to this customer. Null means
+  /// the invoice default (8 days). A service partner's mirror row carries the
+  /// value from the partner screen (`Supplier.paymentDueDays`), so it is set
+  /// there, not here. Balazs, 2026-10-03: some partners pay in 8 days, some in 30.
+  paymentDueDays        Int?
   isActive              Boolean      @default(true)
   archivedAt            DateTime?
   createdAt             DateTime     @default(now())
