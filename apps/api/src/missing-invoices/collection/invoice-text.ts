@@ -297,6 +297,19 @@ export function bankReference(
   );
 }
 
+/**
+ * A SAJÁT KIMENŐ SZÁMLÁNK: a szövegben a saját bankszámlánk áll (a kiállító
+ * jele; #1315). A begyűjtés ezért nem tárolja (OWN_INVOICE), és a régebben
+ * tárolt sorokat ugyanez a próba jelöli meg (`own-invoice-mark`).
+ */
+export function isOwnInvoiceText(
+  text: string,
+  ownAccounts: readonly string[],
+): boolean {
+  const digits = text.replace(/\D/g, "");
+  return ownAccounts.some((account) => digits.includes(account));
+}
+
 export function looksLikeInvoice(text: string): boolean {
   return INVOICE_WORD.test(text);
 }
