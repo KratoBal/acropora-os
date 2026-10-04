@@ -41,6 +41,8 @@ import {
   looksLikeReminder,
   bankReference,
   cardPaymentMatch,
+  compactNumber,
+  customerIds,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -548,14 +550,21 @@ export class InvoiceCollectionService {
             cardPayment: payment,
           };
         } else
-          textReading = textReading.invoiceNumber
-            ? { ...textReading, bankReference: reference }
-            : {
-                ...textReading,
-                invoiceNumber: reference,
-                numberFrom: "BANK",
-                bankReference: reference,
-              };
+          /*
+            AZ ÜGYFÉL-AZONOSÍTÓ BANKI HIVATKOZÁS LEHET, SZÁMLASZÁM NEM
+            (FleetCor, 2026-10-04: a terhelés közleménye a HU00008659
+            ügyfél-azonosítót hordozza, és ez minden havi számlán ugyanaz).
+          */
+          textReading =
+            textReading.invoiceNumber ||
+            customerIds(lines).has(compactNumber(reference))
+              ? { ...textReading, bankReference: reference }
+              : {
+                  ...textReading,
+                  invoiceNumber: reference,
+                  numberFrom: "BANK",
+                  bankReference: reference,
+                };
       }
     }
     const proforma = importResult

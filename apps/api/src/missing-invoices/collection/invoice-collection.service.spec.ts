@@ -310,6 +310,39 @@ describe("InvoiceCollectionService", () => {
     assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
   });
 
+  // FleetCor (acrobot 26153, 2026-10-04): the debit narrative carries our
+  // customer id, the same every month. MI PIROSIT: ha a banki hivatkozas aga a
+  // cimkezett ugyfel-azonositot szamlaszamnak irja (BANK).
+  it("a customer id the debit quotes stays a bank reference, never the invoice number", async () => {
+    const fleetcor = await pdf([
+      "Számla - Eredeti példány",
+      "Ügyfélazonosító szám: HU00008659",
+      "FleetCor Hungary Kft. Adószám: 25103272-2-42",
+      "Vevő: Acropora Kft. Adószám: 23916229-2-42",
+    ]);
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          { fileName: "1328810_HU0000865961148_2026.pdf", buffer: fleetcor },
+        ],
+      },
+      debits: ["67.803,00 HUF FLEETCOR HUNGARY KFT HU00008659"],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => d.textReading),
+      [
+        {
+          invoiceNumber: null,
+          numberFrom: null,
+          supplierTaxNumber: "25103272-2-42",
+          bankReference: "HU00008659",
+        },
+      ],
+    );
+  });
+
   it("keeps our own invoice out even when a refund debit quotes its number", async () => {
     // a vevoi visszautalas terhelese a SAJAT kimeno szamlank szamat idezi: a
     // banki hivatkozas aga nem tarolhatja el szallitoi szamlakent

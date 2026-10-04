@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { normalizeName } from "../missing-invoice-matching.js";
 import {
   cardPaymentMatch,
+  customerIds,
   largestMoney,
   type CardDebit,
   looksLikeBankAccount,
@@ -492,5 +493,77 @@ describe("payment reminders and bank accounts (acrobot 25664)", () => {
       "4042P0000640463",
     ])
       assert.equal(looksLikeBankAccount(number), false, number);
+  });
+});
+
+/**
+ * A FLEETCOR SZÁMLÁI (acrobot 26153, Balázs 2026-10-04: az októberi
+ * E0401374511-et a rendszer nem látta). A sorok alakja a PDF-olvasó valódi
+ * kimenete az exchange augusztusi mintáján (1328810_HU0000865961148_2026.pdf),
+ * az összegek és a címek nélkül: a cellákat `|` választja el.
+ *
+ * MI PIROSÍT: ha a címke a `|` miatt nem talál (ekkor a fájlnév-tartalék a
+ * tárgyból az ügyfél-azonosítót vinné, minden hónapban ugyanazt); ha az
+ * ügyfél-azonosító számlaszám lehet; ha egy szétvágott vagy bankszámla-cella
+ * számlaszámnak olvasódik.
+ */
+describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
+  const FLEETCOR = [
+    "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számla - Eredeti példány",
+    "Számlakiállítás napja | 01.08.2026 | PESTI GÁBOR UTCA 35.",
+    "Számla száma | E0401352892 | 1106 BUDAPEST | Számla kiállító",
+    "Közvetlen terhelési hivatkozás | HU | FleetCor Hungary Kft.",
+    "FleetCor Hungary Kft. | Ügyfél adószáma | 23916229-2-42 | Dózsa György út 84/B Budapest H-1068 HU",
+    "Dózsa György út 84/B H-1068 Budapest | Cégjegyzékszám | 01 09 984032 | Adószám | 25103272-2-42",
+  ];
+  const HINTS = {
+    fileName: "1328810_HU0000865961148_2026.pdf",
+    subject:
+      "Az Ön üzemanyagkártya számlája elkészült, ügyfélazonosítószám: HU00008659",
+  };
+
+  it("reads the number after a label even when a cell separator stands between", () => {
+    assert.deepEqual(readInvoiceText(FLEETCOR, HINTS), {
+      invoiceNumber: "E0401352892",
+      numberFrom: "LABEL",
+      supplierTaxNumber: "25103272-2-42",
+    });
+  });
+
+  it("the NAV number wins once NAV has it, the labelled one agrees", () => {
+    const reading = readInvoiceText(FLEETCOR, {
+      ...HINTS,
+      navNumbers: (base) => (base === "25103272" ? ["E0401352892"] : []),
+    });
+    assert.equal(reading.numberFrom, "NAV");
+    assert.equal(reading.invoiceNumber, "E0401352892");
+  });
+
+  it("a customer id from the subject is never the invoice number", () => {
+    const withoutLabel = FLEETCOR.filter(
+      (line) => !line.startsWith("Számla száma"),
+    );
+    assert.deepEqual(customerIds(withoutLabel), new Set(["HU00008659"]));
+    assert.equal(readInvoiceText(withoutLabel, HINTS).invoiceNumber, null);
+  });
+
+  it("a value the reader split into cells is not a number (Stripe)", () => {
+    // the hyphen of 53AEF736-256060 comes through as a NUL character
+    assert.equal(
+      readInvoiceText(["Invoice number | 53AEF736 | \u0000 | 256060"], {
+        fileName: "Invoice.pdf",
+      }).invoiceNumber,
+      null,
+    );
+  });
+
+  it("a bank account with spaces in its cell is not a number (OTP)", () => {
+    assert.equal(
+      readInvoiceText([
+        "számla",
+        "Ellenoldali számlaszám | 50453331 -10000843 -00000000",
+      ]).invoiceNumber,
+      null,
+    );
   });
 });
