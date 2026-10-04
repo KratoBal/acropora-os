@@ -7,8 +7,14 @@ import type { ServiceJobListItem } from "./types";
 import {
   cachedItemsForScope,
   DEFAULT_SERVICE_JOB_SCOPE,
+  itemsForScope,
   SERVICE_JOB_SCOPES,
+  serverScopeOf,
 } from "./list-scope";
+
+function felelos(userId: string) {
+  return { userId, name: userId, assignedAt: "2026-10-04T08:00:00.000Z" };
+}
 
 function item(
   jobNumber: string,
@@ -43,16 +49,64 @@ describe("a hibajegy-lista szűrői a telefonon", () => {
    * változás NÉMA lenne: a lista rövidebb, és pontosan úgy néz ki, mintha
    * kevesebb jegy lenne.
    */
-  it("az alapértelmezés az összes, és mind a négy szűrő szerepel", () => {
+  /*
+    THE SERVICE REDESIGN (Figma 423:876, 2026-10-04) puts the chips in the
+    order Nyitott, Várakozik, Lezárt, Összes and adds "Várakozik"; "Rám
+    kiosztva" stays (decision 5). The DEFAULT does not move: still "Összes".
+  */
+  it("az alapértelmezés az összes, és mind az öt szűrő szerepel", () => {
     assert.equal(DEFAULT_SERVICE_JOB_SCOPE, "all");
     assert.deepEqual(
       SERVICE_JOB_SCOPES.map((option) => option.id),
-      ["all", "open", "closed", "mine"],
+      ["open", "waiting", "closed", "all", "mine"],
     );
     assert.deepEqual(
       SERVICE_JOB_SCOPES.map((option) => option.label),
-      ["Összes", "Nyitott", "Lezárt", "Rám kiosztva"],
+      ["Nyitott", "Várakozik", "Lezárt", "Összes", "Rám kiosztva"],
     );
+  });
+
+  it("a várakozik a nyitott választ szűkíti, a többi szűrő a szerverre megy", () => {
+    assert.equal(serverScopeOf("waiting"), "open");
+    for (const scope of ["all", "open", "closed", "mine"] as const)
+      assert.equal(serverScopeOf(scope), scope);
+    assert.deepEqual(
+      itemsForScope(MINTA, "waiting").map((row) => row.jobNumber),
+      ["HJ-4"],
+    );
+    assert.equal(itemsForScope(MINTA, "open").length, MINTA.length);
+    const mentett = cachedItemsForScope(MINTA, "waiting");
+    assert.ok(mentett.kind === "items");
+    assert.deepEqual(
+      mentett.items.map((row) => row.jobNumber),
+      ["HJ-4"],
+    );
+  });
+
+  /**
+   * "RÁM KIOSZTVA" FROM THE SAVED COPY WHEN EVERY ROW CARRIES ITS ASSIGNEES
+   * (decision 5): filtered by the user; one old row without the field turns
+   * it back into "needs a connection", never a guess.
+   */
+  it("a rám kiosztva a mentett másolatból is szűr, ha minden soron ott a felelős", () => {
+    const friss = [
+      { ...item("HJ-1", "NEW"), assignees: [felelos("u-1")] },
+      { ...item("HJ-2", "NEW"), assignees: [] },
+      { ...item("HJ-3", "NEW"), assignees: [felelos("u-2")] },
+    ];
+    const enyem = cachedItemsForScope(friss, "mine", "u-1");
+    assert.ok(enyem.kind === "items");
+    assert.deepEqual(
+      enyem.items.map((row) => row.jobNumber),
+      ["HJ-1"],
+    );
+    assert.deepEqual(
+      cachedItemsForScope([...friss, item("HJ-9", "NEW")], "mine", "u-1"),
+      { kind: "needs-connection" },
+    );
+    assert.deepEqual(cachedItemsForScope(friss, "mine"), {
+      kind: "needs-connection",
+    });
   });
 
   /**
@@ -134,7 +188,7 @@ describe("a hibajegy-lista szűrői a telefonon", () => {
     );
     assert.deepEqual(
       hivasok,
-      ['scope, "ALL"'],
+      ['serverScope, "ALL"'],
       `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Egyetlen hívást várok, a kiválasztott szűrővel és a teljes munkafajta-halmazzal.`,
     );
   });

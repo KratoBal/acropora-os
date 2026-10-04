@@ -17,7 +17,16 @@ import { ModuleIcon } from "./ModuleIcon";
  * every route and deep link stays where it is (discovery §5). `navigate`
  * returns to a screen already in the stack rather than stacking a copy.
  */
-export function BottomNav({ active }: { active: BottomNavItem["key"] }) {
+export function BottomNav({
+  active,
+}: {
+  /**
+   * `null` ON THE SERVICE SCREENS (decision E9, 2026-10-04): the jobs and
+   * worksheets belong under "Feladatok", which comes with the Home's phase
+   * 2; until then no item is lit there.
+   */
+  active: BottomNavItem["key"] | null;
+}) {
   const router = useRouter();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);

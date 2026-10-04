@@ -19,6 +19,13 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
 import { DocumentImage } from "@/components/documents/DocumentImage";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { SectionTitle } from "@/components/SectionTitle";
+import { BottomNav } from "@/components/home/BottomNav";
+import { serviceJobAssigneeLine } from "@/lib/service-jobs/list-card";
+import { timelineRows } from "@/lib/service-jobs/timeline-rows";
+import {
+  formatWorksheetQuantity,
+  worksheetDisplayLabel,
+} from "@/lib/worksheets/worksheet-presentation";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
   pickPhotosFromLibrary,
@@ -373,22 +380,38 @@ export default function ServiceJobDetailScreen() {
    */
   const fejlec = jegyFejlec(detail, masolatbol, serviceJobStatusLabel);
   const lephet = masolatbol || partnerAlak(detail) ? [] : detail.allowedSteps;
+  const naplo = timelineRows(detail.timeline, new Date());
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <ScrollView contentContainerStyle={styles.page}>
         {offlineNotice ? <OfflineNoticeCard notice={offlineNotice} /> : null}
 
-        <View style={styles.block}>
+        {/*
+          THE HEADER AND THE CASE CARD OF THE SERVICE REDESIGN (Figma
+          423:890): number, title, the status, and for the internal shape the
+          partner's status as its own badge; then partner, place, the report
+          and, for the internal shape only, who it is assigned to.
+        */}
+        <View style={styles.headerBlock}>
           <Text style={styles.number}>{detail.jobNumber}</Text>
           <Text style={styles.title}>{detail.title}</Text>
-          <Text style={styles.status}>{fejlec.allapotFelirat}</Text>
+          <View style={styles.badges}>
+            <Text style={styles.status}>{fejlec.allapotFelirat}</Text>
+            {!partnerAlak(detail) ? (
+              <Text style={styles.partnerBadge}>
+                Partner: {detail.partnerStatusLabel}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.block}>
           {/*
             A VEVO NEVE CSAK BELSO ALAKNAL. Partnernel a vevo MAGA a nezo: a
             sajat nevet kiirni zaj, es a szerver nem is kuldi.
           */}
           {fejlec.ugyfelNeve ? (
-            <Text style={styles.meta}>{fejlec.ugyfelNeve}</Text>
+            <Text style={styles.partner}>{fejlec.ugyfelNeve}</Text>
           ) : null}
           {shortPath(detail.departmentPath) ? (
             <Text style={styles.meta}>{shortPath(detail.departmentPath)}</Text>
@@ -396,89 +419,11 @@ export default function ServiceJobDetailScreen() {
           {detail.description ? (
             <Text style={styles.description}>{detail.description}</Text>
           ) : null}
-        </View>
-
-        {detail.assets.length > 0 ? (
-          <View style={styles.block}>
-            <SectionTitle>Érintett eszközök</SectionTitle>
-            {detail.assets.map((asset) => (
-              <Pressable
-                key={asset.id}
-                accessibilityRole="button"
-                accessibilityLabel={`${asset.assetNumber} ${asset.assetName}`}
-                // AZ `assetId`, NEM AZ `id`: az utobbi a CSATOLAS sora, es egy
-                // nem letezo eszkoz-lapra vinne.
-                onPress={() => router.push(`/assets/${asset.assetId}`)}
-                style={styles.row}
-              >
-                <Text style={styles.rowText}>
-                  {asset.assetNumber} -- {asset.assetName}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        <View style={styles.block}>
-          <SectionTitle>Munkalapok</SectionTitle>
-          {/*
-            A MUNKALAPOK AZ IDOVONALBOL JONNEK, nem egy `worksheets` mezobol: a
-            valaszban olyan kulcs NINCS. Az elso alakom azt olvasta, es a lap
-            `undefined.length`-en omlott ossze, MEGNYITASKOR.
-          */}
-          {worksheetsOf(detail.timeline).length === 0 ? (
-            <Text style={styles.meta}>Még nincs munkalap ezen a jegyen.</Text>
-          ) : (
-            worksheetsOf(detail.timeline).map((sheet) => (
-              <Pressable
-                key={sheet.id}
-                accessibilityRole="button"
-                accessibilityLabel={`Munkalap: ${worksheetLineLabel(sheet)}`}
-                onPress={() => router.push(`/worksheets/${sheet.id}`)}
-                style={styles.row}
-              >
-                <Text style={styles.rowText}>{worksheetLineLabel(sheet)}</Text>
-              </Pressable>
-            ))
-          )}
-          {/*
-            AZ ÚJ MUNKALAP A MEGLÉVŐ KÉPERNYŐRE VISZ, nem ide épül újra: a
-            felvitel ott már kész, offline sorral együtt. Egy második űrlap
-            KÜLÖN romlana el.
-
-            A JEGY AZONOSÍTÓJA MOSTANTÓL ÁTMEGY, és ez egy néma hiányt zár be:
-            a gomb címkéje eddig is azt ígérte, hogy „ehhez a jegyhez", a
-            navigáció viszont üres űrlapot nyitott, és a lap a jegy NÉLKÜL jött
-            létre. A hiba nem hibázott: a lap felkerült, csak sehol nem
-            hivatkozott a bejelentésre.
-          */}
-          {/*
-            A MASODIK KAPU: a HATOKOR, nem a jog (2026-09-22).
-
-            A `PARTNER_SERVICE` szerep viseli a `worksheetsManage` jogot, a
-            szerver viszont a munkalap LETREHOZASAT a hatokorhoz koti
-            (`requireInternalWriter`), es partnernek `Forbidden`-t ad. A gomb
-            ezert a hatokortol fugg, es helyette egy mondat all.
-          */}
-          {user && belsosIrasEngedett(user) ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Új munkalap ehhez a jegyhez"
-              onPress={() =>
-                router.push({
-                  pathname: "/worksheets/new",
-                  params: { serviceJobId: id },
-                })
-              }
-              style={styles.action}
-            >
-              <Text style={styles.actionText}>Új munkalap</Text>
-            </Pressable>
-          ) : (
+          {!partnerAlak(detail) ? (
             <Text style={styles.meta}>
-              A munkalapot a szerviz készíti ehhez a hibajegyhez.
+              {serviceJobAssigneeLine({ assignees: detail.assignees }, false)}
             </Text>
-          )}
+          ) : null}
         </View>
 
         {/*
@@ -558,55 +503,6 @@ export default function ServiceJobDetailScreen() {
           ))}
         </View>
 
-        {/*
-          A LEPTETES AZ ADATBOL DOL EL, NEM A SZEREPBOL.
-
-          A `serviceJobsManage` MA IGAZAT MOND partnerre is: a szerver tenyleg
-          megadja neki a `service.manage` jogot. A leptetest nem a JOG tiltja,
-          hanem az ALAK -- a kiszolgalo nem ad lepeslistat partner-hatokorben.
-          Ezert all itt a `partnerAlak` is: a blokk csak akkor rajzolodik ki,
-          ha van mit kinalni.
-        */}
-        {capabilities?.serviceJobsManage && !partnerAlak(detail) ? (
-          <View style={styles.block}>
-            <SectionTitle>Állapot léptetése</SectionTitle>
-            {masolatbol ? (
-              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.step}</Text>
-            ) : lephet.length === 0 ? (
-              <Text style={styles.meta}>
-                Ebből az állapotból nincs több lépés.
-              </Text>
-            ) : (
-              <>
-                <TextInput
-                  accessibilityLabel="Megjegyzés a lépéshez"
-                  value={note}
-                  onChangeText={setNote}
-                  style={styles.input}
-                  placeholder="Megjegyzés (elhagyható)"
-                  placeholderTextColor={tokens.textMuted}
-                  multiline
-                  editable={!step.isPending}
-                />
-                {lephet.map((to) => (
-                  <Pressable
-                    key={to}
-                    accessibilityRole="button"
-                    accessibilityLabel={serviceJobStatusLabel(to)}
-                    disabled={step.isPending}
-                    onPress={() => step.mutate(to)}
-                    style={styles.action}
-                  >
-                    <Text style={styles.actionText}>
-                      {serviceJobStatusLabel(to)}
-                    </Text>
-                  </Pressable>
-                ))}
-              </>
-            )}
-          </View>
-        ) : null}
-
         {capabilities?.serviceJobsManage ? (
           /*
             A SZAKASZ OFFLINE IS ITT ALL, A GOMBOK TILTVA -- NEM TUNIK EL.
@@ -644,6 +540,197 @@ export default function ServiceJobDetailScreen() {
           </View>
         ) : null}
 
+        <View style={styles.block}>
+          <SectionTitle>Munkalapok</SectionTitle>
+          {/*
+            A MUNKALAPOK AZ IDOVONALBOL JONNEK, nem egy `worksheets` mezobol: a
+            valaszban olyan kulcs NINCS. Az elso alakom azt olvasta, es a lap
+            `undefined.length`-en omlott ossze, MEGNYITASKOR.
+          */}
+          {worksheetsOf(detail.timeline).length === 0 ? (
+            <Text style={styles.meta}>Még nincs munkalap ezen a jegyen.</Text>
+          ) : (
+            worksheetsOf(detail.timeline).map((sheet) => (
+              <Pressable
+                key={sheet.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Munkalap: ${worksheetLineLabel(sheet)}`}
+                onPress={() => router.push(`/worksheets/${sheet.id}`)}
+                style={({ pressed }) => [
+                  styles.sheetCard,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.sheetTop}>
+                  <Text style={styles.sheetNumber}>
+                    {sheet.number ?? "Még nincs száma"}
+                  </Text>
+                  {/*
+                    THE SHEET'S STATE AND HOURS (redesign E3), only when the
+                    answer carries them: a detail saved before, or the partner
+                    shape, has neither, and then nothing is guessed.
+                  */}
+                  {sheet.status ? (
+                    <Text style={styles.status}>
+                      {worksheetDisplayLabel(sheet.status, sheet.lineCount)}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={styles.meta}>
+                  {sheet.subject}
+                  {sheet.laborHours !== undefined
+                    ? ` · ${formatWorksheetQuantity(sheet.laborHours)} munkaóra`
+                    : ""}
+                </Text>
+              </Pressable>
+            ))
+          )}
+          {/*
+            AZ ÚJ MUNKALAP A MEGLÉVŐ KÉPERNYŐRE VISZ, nem ide épül újra: a
+            felvitel ott már kész, offline sorral együtt. Egy második űrlap
+            KÜLÖN romlana el.
+
+            A JEGY AZONOSÍTÓJA MOSTANTÓL ÁTMEGY, és ez egy néma hiányt zár be:
+            a gomb címkéje eddig is azt ígérte, hogy „ehhez a jegyhez", a
+            navigáció viszont üres űrlapot nyitott, és a lap a jegy NÉLKÜL jött
+            létre. A hiba nem hibázott: a lap felkerült, csak sehol nem
+            hivatkozott a bejelentésre.
+          */}
+          {/*
+            A MASODIK KAPU: a HATOKOR, nem a jog (2026-09-22).
+
+            A `PARTNER_SERVICE` szerep viseli a `worksheetsManage` jogot, a
+            szerver viszont a munkalap LETREHOZASAT a hatokorhoz koti
+            (`requireInternalWriter`), es partnernek `Forbidden`-t ad. A gomb
+            ezert a hatokortol fugg, es helyette egy mondat all.
+          */}
+          {user && belsosIrasEngedett(user) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Új munkalap ehhez a jegyhez"
+              onPress={() =>
+                router.push({
+                  pathname: "/worksheets/new",
+                  params: { serviceJobId: id },
+                })
+              }
+              style={({ pressed }) => [
+                styles.action,
+                styles.actionLarge,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.actionText}>Új munkalap</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.meta}>
+              A munkalapot a szerviz készíti ehhez a hibajegyhez.
+            </Text>
+          )}
+        </View>
+
+        {/*
+          "AMI TÖRTÉNT": the job's log, newest first, from the same answer;
+          the rows are built by `timelineRows`, which never invents a status.
+        */}
+        <View style={styles.block}>
+          <SectionTitle>Ami történt</SectionTitle>
+          {naplo.length === 0 ? (
+            <Text style={styles.meta}>
+              Ezen a jegyen még nem történt semmi.
+            </Text>
+          ) : (
+            naplo.map((row) => (
+              <View key={row.key} style={styles.logRow}>
+                <Text style={styles.logWhen}>{row.when}</Text>
+                <View style={styles.logBody}>
+                  <Text style={styles.logTitle}>{row.title}</Text>
+                  {row.detail ? (
+                    <Text style={styles.meta}>{row.detail}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/*
+          A LEPTETES AZ ADATBOL DOL EL, NEM A SZEREPBOL.
+
+          A `serviceJobsManage` MA IGAZAT MOND partnerre is: a szerver tenyleg
+          megadja neki a `service.manage` jogot. A leptetest nem a JOG tiltja,
+          hanem az ALAK -- a kiszolgalo nem ad lepeslistat partner-hatokorben.
+          Ezert all itt a `partnerAlak` is: a blokk csak akkor rajzolodik ki,
+          ha van mit kinalni.
+        */}
+        {capabilities?.serviceJobsManage && !partnerAlak(detail) ? (
+          <View style={[styles.block, styles.nextStep]}>
+            <SectionTitle>Következő lépés</SectionTitle>
+            <Text style={styles.meta}>
+              Csak az engedélyezett állapotváltás jelenik meg.
+            </Text>
+            {masolatbol ? (
+              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.step}</Text>
+            ) : lephet.length === 0 ? (
+              <Text style={styles.meta}>
+                Ebből az állapotból nincs több lépés.
+              </Text>
+            ) : (
+              <>
+                <TextInput
+                  accessibilityLabel="Megjegyzés a lépéshez"
+                  value={note}
+                  onChangeText={setNote}
+                  style={styles.input}
+                  placeholder="Megjegyzés (elhagyható)"
+                  placeholderTextColor={tokens.textMuted}
+                  multiline
+                  editable={!step.isPending}
+                />
+                {lephet.map((to) => (
+                  <Pressable
+                    key={to}
+                    accessibilityRole="button"
+                    accessibilityLabel={serviceJobStatusLabel(to)}
+                    disabled={step.isPending}
+                    onPress={() => step.mutate(to)}
+                    style={({ pressed }) => [
+                      styles.action,
+                      styles.actionLarge,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.actionText}>
+                      Tovább → {serviceJobStatusLabel(to)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </>
+            )}
+          </View>
+        ) : null}
+
+        {detail.assets.length > 0 ? (
+          <View style={styles.block}>
+            <SectionTitle>Érintett eszközök</SectionTitle>
+            {detail.assets.map((asset) => (
+              <Pressable
+                key={asset.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${asset.assetNumber} ${asset.assetName}`}
+                // AZ `assetId`, NEM AZ `id`: az utobbi a CSATOLAS sora, es egy
+                // nem letezo eszkoz-lapra vinne.
+                onPress={() => router.push(`/assets/${asset.assetId}`)}
+                style={styles.row}
+              >
+                <Text style={styles.rowText}>
+                  {asset.assetNumber} -- {asset.assetName}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
         {/*
@@ -655,6 +742,8 @@ export default function ServiceJobDetailScreen() {
           leválasztani a webes felületen lehet.
         </Text>
       </ScrollView>
+      {/* the shared bar, with no item lit until "Feladatok" exists (E9) */}
+      <BottomNav active={null} />
 
       {/*
         RATETKENT NYILIK, NEM MASIK KEPERNYON: masik lapra navigalva a
@@ -775,7 +864,45 @@ function createStyles(t: ThemeTokens) {
       padding: 14,
     },
     number: { color: t.textSecondary, fontSize: 13 },
-    title: { color: t.textPrimary, fontSize: 18, fontWeight: "600" },
+    title: { color: t.textPrimary, fontSize: 26, fontWeight: "700" },
+    headerBlock: { gap: 6 },
+    badges: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    partnerBadge: {
+      ...statusBadgeStyle(t),
+      alignSelf: "flex-start",
+      backgroundColor: t.infoSoft,
+      color: t.info,
+    },
+    partner: { color: t.textPrimary, fontSize: 15, fontWeight: "600" },
+    sheetCard: {
+      borderColor: t.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      gap: 4,
+      padding: 12,
+    },
+    sheetTop: {
+      alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    sheetNumber: { color: t.textPrimary, fontWeight: "700" },
+    logRow: {
+      borderBottomColor: t.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      paddingVertical: 10,
+    },
+    logWhen: { color: t.textMuted, fontSize: 13, width: 72 },
+    logBody: { flex: 1, gap: 2 },
+    logTitle: { color: t.textPrimary, fontSize: 14, fontWeight: "600" },
+    nextStep: {
+      backgroundColor: t.accentSoft,
+      borderColor: t.accent,
+      borderWidth: 1,
+    },
+    actionLarge: { minHeight: 52, justifyContent: "center" },
     status: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
     meta: { color: t.textSecondary, fontSize: 13 },
     description: { color: t.textPrimary, lineHeight: 20 },
