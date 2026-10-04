@@ -10,6 +10,7 @@ import {
 import { isNavigationEntryVisible, personDisplayName } from "@acropora/types";
 import { useState } from "react";
 
+import { ProfileMonogram } from "../shell-profile";
 import { useAuth } from "./auth-provider";
 
 const themeOptions: { label: string; value: ThemePreference }[] = [
@@ -37,35 +38,34 @@ export function UserMenu({
 
   return (
     <div className="relative">
+      {/*
+        ONE COMPACT LINE (Figma "Header user", 441:72): the name, 14px semi
+        bold, with no avatar block beside it. Below `sm` the name has no room,
+        so the monogram stands in as the trigger.
+      */}
       <Button
         variant="ghost"
-        className="h-auto gap-2 rounded-xl p-1.5 text-left font-normal hover:bg-pilot-grey-100"
+        className="h-8 gap-2 rounded-none px-2 text-left font-normal hover:bg-pilot-grey-100"
         aria-label="Felhasználói menü"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <Avatar
-          name={personDisplayName(user)}
-          src={user.avatarUrl ?? undefined}
-          size="sm"
-        />
-        <span className="hidden sm:block">
-          <span className="block text-xs font-semibold text-pilot-grey-900">
-            {personDisplayName(user)}
-          </span>
-          <span className="block text-[10px] text-pilot-grey-500">
-            {user.role}
-          </span>
+        <span className="sm:hidden">
+          <ProfileMonogram
+            name={personDisplayName(user)}
+            src={user.avatarUrl}
+          />
         </span>
-        <Icon
-          name="chevron-down"
-          size={14}
-          className="hidden text-pilot-grey-500 sm:block"
-        />
+        <span
+          className="hidden max-w-[240px] truncate text-sm font-semibold leading-5 text-pilot-grey-900 sm:block"
+          title={personDisplayName(user)}
+        >
+          {personDisplayName(user)}
+        </span>
       </Button>
 
       {open ? (
-        <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-pilot-grey-200 bg-white p-3 shadow-xl">
+        <div className="absolute right-0 top-10 z-50 w-72 rounded-2xl border border-pilot-grey-200 bg-white p-3 shadow-xl">
           <div className="flex items-start gap-3 border-b border-pilot-grey-200 px-1 pb-3">
             <Avatar
               name={personDisplayName(user)}

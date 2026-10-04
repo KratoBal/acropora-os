@@ -27,6 +27,11 @@ import {
 import { useAuth } from "./auth/auth-provider";
 import { UserMenu } from "./auth/user-menu";
 import { GlobalSearch } from "./global-search";
+import {
+  HeaderMessages,
+  SidebarProfile,
+  type HeaderMessagesProps,
+} from "./shell-profile";
 import { dashboardApi } from "@/lib/api/dashboard";
 
 interface NavigationGroupProps {
@@ -124,7 +129,17 @@ function NavigationItem({
 /** All destinations are needed to resolve overlapping active paths. */
 const ALL_NAVIGATION_ITEMS = allNavigationPages;
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  messages,
+}: {
+  children: ReactNode;
+  /**
+   * The Üzenetek icon in the header. OFF unless given: no caller passes it
+   * until the module exists (Figma 441:67 keeps its place).
+   */
+  messages?: HeaderMessagesProps;
+}) {
   const pathname = usePathname();
   const { session } = useAuth();
   const { effectiveTheme, preference, setPreference } = useThemePreference();
@@ -320,6 +335,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </span>
       </a>
       {navigation}
+      {session ? <SidebarProfile user={session.user} /> : null}
     </aside>
   );
 
@@ -385,7 +401,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               {session ? <GlobalSearch token={session.token ?? ""} /> : null}
             </div>
 
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              {messages ? <HeaderMessages {...messages} /> : null}
               <UserMenu
                 preference={preference}
                 onPreferenceChange={setPreference}

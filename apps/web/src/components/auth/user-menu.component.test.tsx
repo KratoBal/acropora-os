@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -62,5 +62,51 @@ describe("UserMenu lenyíló háttere", () => {
     expect(dropdown).not.toBeNull();
     expect(dropdown).toHaveClass("bg-white");
     expect(dropdown?.className).not.toMatch(/\bbg-pilot-white\b/);
+  });
+});
+
+/**
+ * THE TRIGGER IS ONE COMPACT LINE (Figma "Header user", 441:72): the name,
+ * no avatar block, no role code. The menu behind it is unchanged.
+ */
+describe("UserMenu kompakt fejléc-sor", () => {
+  beforeEach(() => {
+    auth.session = {
+      ...ownerSession,
+      user: {
+        ...ownerSession.user,
+        displayName: "Kitaláltné Hosszúnevű Erzsébet",
+      },
+    };
+    auth.logout.mockReset();
+  });
+
+  it("a gomb a nevet egy sorban mutatja, szerepkör-kód és nagy avatar nélkül", () => {
+    render(
+      <UserMenu preference="system" onPreferenceChange={() => undefined} />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Felhasználói menü" });
+    expect(trigger).toHaveClass("h-8");
+    const name = within(trigger).getByText("Kitaláltné Hosszúnevű Erzsébet");
+    expect(name).toHaveClass("truncate", "text-sm", "font-semibold");
+    expect(name).toHaveAttribute("title", "Kitaláltné Hosszúnevű Erzsébet");
+    expect(within(trigger).queryByText("OWNER")).toBeNull();
+    expect(within(trigger).queryByLabelText(/Kitaláltné/)).toBeNull();
+  });
+
+  it("a menü, a beállítások és a kijelentkezés ugyanúgy működik", () => {
+    render(
+      <UserMenu preference="system" onPreferenceChange={() => undefined} />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Kijelentkezés" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Felhasználói menü" }));
+    expect(screen.getByRole("link", { name: "Beállítások" })).toHaveAttribute(
+      "href",
+      "/beallitasok",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Kijelentkezés" }));
+    expect(auth.logout).toHaveBeenCalledTimes(1);
   });
 });
