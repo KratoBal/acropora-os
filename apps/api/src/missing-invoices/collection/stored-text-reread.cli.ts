@@ -18,6 +18,7 @@ import {
  *   pnpm --filter @acropora/api invoice-text:reread -- --number HU00008659
  *   pnpm --filter @acropora/api invoice-text:reread -- --ids id1,id2
  *   ... ugyanez `--apply`-jal: csak ekkor ír
+ *   ... és `--allow-clear`-rel: csak ekkor írhat meglévő számot üresre
  *
  * ALAPBÓL SZÁRAZ: kiírja, melyik dokumentum olvasata mi lenne, és nem ír. Az
  * `--apply` CSAK a megváltozott `textReading` mezőt írja. Kiválasztás nélkül
@@ -40,6 +41,7 @@ export function parseSelector(
 
 async function main(argv: readonly string[]): Promise<number> {
   const apply = argv.includes("--apply");
+  const allowClear = argv.includes("--allow-clear");
   const selector = parseSelector(argv);
   if (!selector) {
     process.stderr.write(
@@ -75,19 +77,25 @@ async function main(argv: readonly string[]): Promise<number> {
             content: true,
             textReading: true,
             importResult: true,
+            kind: true,
+            origin: true,
           },
         }),
       lines: (content) => pdfTextLines(content),
       navNumbers: (base) => repository.navNumbers(base),
-      save: async (id, reading) => {
+      save: async (id, reading, kind) => {
         await prisma.incomingSupplierDocument.update({
           where: { id },
-          data: { textReading: reading as unknown as Prisma.InputJsonValue },
+          data: {
+            textReading: reading as unknown as Prisma.InputJsonValue,
+            ...(kind === "INVOICE" || kind === "PROFORMA" ? { kind } : {}),
+          },
         });
       },
     },
     selector,
     apply,
+    allowClear,
   );
   process.stdout.write(
     `${apply ? "ÉLES" : "SZÁRAZ"} szöveg-újraolvasás\n${rereadReport(rows, apply)}`,

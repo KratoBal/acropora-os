@@ -33,7 +33,11 @@ const OLD: InvoiceTextReading = {
 function deps(
   documents: (Partial<StoredTextDocument> & { lines: string[] })[],
 ) {
-  const saved: { id: string; reading: InvoiceTextReading }[] = [];
+  const saved: {
+    id: string;
+    reading: InvoiceTextReading;
+    kind?: string | null;
+  }[] = [];
   const byContent = new Map<Uint8Array, string[]>();
   const rows: StoredTextDocument[] = documents.map((d, i) => {
     const content = new Uint8Array([i]);
@@ -47,6 +51,8 @@ function deps(
       content,
       textReading: d.textReading === undefined ? OLD : d.textReading,
       importResult: d.importResult ?? null,
+      kind: d.kind === undefined ? "INVOICE" : d.kind,
+      origin: d.origin ?? "COLLECTED_MAIL",
     };
   });
   return {
@@ -56,8 +62,16 @@ function deps(
       lines: async (content: Uint8Array) => byContent.get(content)!,
       navNumbers: async (base: string) =>
         base === "25103272" ? ["E0401374511"] : [],
-      save: async (id: string, reading: InvoiceTextReading) =>
-        void saved.push({ id, reading }),
+      save: async (
+        id: string,
+        reading: InvoiceTextReading,
+        kind: string | null,
+      ) =>
+        void saved.push({
+          id,
+          reading,
+          ...(kind !== "INVOICE" ? { kind } : {}),
+        }),
     },
   };
 }
@@ -72,6 +86,7 @@ describe("re-reading a stored document's text", () => {
       invoiceNumber: "E0401374511",
       numberFrom: "NAV",
       supplierTaxNumber: "25103272-2-42",
+      kind: "INVOICE",
     });
     assert.equal(rows[0]!.changed, true);
     assert.deepEqual(saved, [
@@ -131,6 +146,108 @@ describe("re-reading a stored document's text", () => {
         ["F2602896", "BANK"],
         [null, null],
       ],
+    );
+  });
+
+  /*
+    acrobot 26157: a FleetCor SZAMLA-ATTEKINTES (info@, PDF_1307442_...) a
+    tarolt BANK:HU00008659 olvasatot uresre irta volna a szaraz korben. MI
+    PIROSIT: ha egy meglevo szam engedely nelkul uresre irodik, vagy ha az
+    engedellyel sem.
+  */
+  it("a number is never cleared without --allow-clear (FleetCor overview)", async () => {
+    const overview = [
+      "Hivatkozási szám | E0401328435 | Fizetési határidő | 08.06.2026 | Számla kiállító | FleetCor Hungary Kft.",
+      "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számlaáttekintés",
+      "Dokumentumszám | 1307442 | 1106 BUDAPEST",
+    ];
+    const bank = { ...OLD, numberFrom: "BANK" as const };
+    const held = deps([{ lines: overview, textReading: bank }]);
+    const rows = await rereadStoredText(held.deps, SELECT, true);
+    assert.equal(rows[0]!.skipped, "WOULD_CLEAR");
+    assert.deepEqual(rows[0]!.after, {
+      invoiceNumber: null,
+      numberFrom: null,
+      supplierTaxNumber: null,
+      kind: "INVOICE",
+    });
+    assert.deepEqual(held.saved, []);
+
+    const allowed = deps([{ lines: overview, textReading: bank }]);
+    await rereadStoredText(allowed.deps, SELECT, true, true);
+    assert.deepEqual(allowed.saved, [
+      {
+        id: "doc-1",
+        reading: {
+          invoiceNumber: null,
+          numberFrom: null,
+          supplierTaxNumber: null,
+          bankReference: "HU00008659",
+        },
+      },
+    ]);
+  });
+
+  /*
+    acrobot 26158: az UNAS havi dijbekeroje a VEVO (sajat) adoszamat kapta
+    szamnak a banki agon, es szamlakent allhat. A sorok a PDF-olvaso valodi
+    kimenete (exchange, 054517_2026-08-17.pdf). MI PIROSIT: ha a sajat
+    adoszam szam vagy banki hivatkozas marad, vagy ha a dijbekero fajtaja nem
+    lesz PROFORMA.
+  */
+  it("an UNAS pro forma gets its Sorszám, PROFORMA, and loses our tax number", async () => {
+    const unas = [
+      "Díjbekérő",
+      "Sorszám: | DN-1853781",
+      "Eladó: | Vevő:",
+      "UNAS Online Kft. | Acropora Kft.",
+      "Adószám: | 14114113-2-08 | Adószám: | 23916229-2-42",
+      "Kelt | Fizetési határidő | Oldal | Ügyfélazonosító",
+      "2026.08.17 | 2026.08.31 | 1/1 | 054517",
+    ];
+    const ours: InvoiceTextReading = {
+      invoiceNumber: "23916229-2-42",
+      numberFrom: "BANK",
+      supplierTaxNumber: "14114113-2-08",
+      bankReference: "23916229-2-42",
+    };
+    const { deps: d, saved } = deps([
+      { lines: unas, textReading: ours, fileName: "054517_2026-08-17.pdf" },
+    ]);
+    const rows = await rereadStoredText(d, SELECT, true);
+    assert.deepEqual(rows[0]!.after, {
+      invoiceNumber: "DN-1853781",
+      numberFrom: "LABEL",
+      supplierTaxNumber: "14114113-2-08",
+      kind: "PROFORMA",
+    });
+    assert.deepEqual(saved, [
+      {
+        id: "doc-1",
+        reading: {
+          invoiceNumber: "DN-1853781",
+          numberFrom: "LABEL",
+          supplierTaxNumber: "14114113-2-08",
+        },
+        kind: "PROFORMA",
+      },
+    ]);
+  });
+
+  it("an upload's kind is never changed, and a pro forma never goes back", async () => {
+    const lines = ["Díjbekérő", "Sorszám: | DN-1", "Adószám: | 14114113-2-08"];
+    const { deps: d } = deps([
+      { lines, origin: "UPLOAD", textReading: null },
+      {
+        lines: ["Számla", "Számla száma: | X-12345"],
+        kind: "PROFORMA",
+        textReading: null,
+      },
+    ]);
+    const rows = await rereadStoredText(d, SELECT, false);
+    assert.deepEqual(
+      rows.map((r) => r.after!.kind),
+      ["INVOICE", "PROFORMA"],
     );
   });
 

@@ -118,6 +118,21 @@ export const looksLikeBankAccount = (value: string): boolean =>
   BANK_ACCOUNT.test(value) || IBAN.test(compactNumber(value));
 
 /**
+ * MAGYAR ADÓSZÁM, VAGY A MIÉNK BÁRMILYEN ALAKBAN: egy céget azonosít, nem egy
+ * dokumentumot, tehát sem számlaszám, sem banki hivatkozás nem lehet (acrobot
+ * 26158, UNAS díjbekérők: a banki ág a VEVŐ, vagyis a saját adószámunkat
+ * vette számlaszámnak, mert egy terhelés közleménye is hordozta).
+ */
+export const looksLikeTaxNumber = (value: string): boolean => {
+  const digits = value.replace(/^HU/i, "").replace(/\D/g, "");
+  return (
+    HU_TAX_NUMBER.test(value.trim()) ||
+    ((digits.length === 8 || digits.length === 11) &&
+      digits.slice(0, 8) === ACROPORA_COMPANY.taxNumberBase)
+  );
+};
+
+/**
  * Egy számlaszám alakja: betűvel vagy számmal kezdődik, legalább 3 jel. Előtte
  * a `|` is állhat: a PDF-olvasó (`pdfTextLines`) így választja el a táblázat
  * celláit. Mérve 2026-10-04 a FleetCor számláin: a „Számla száma |
@@ -255,7 +270,7 @@ export function bankReference(
   const loose = [reading.invoiceNumber, ...fromName]
     .filter((n): n is string => n !== null)
     .filter((n) => compactNumber(n).length >= 5 && /\d/.test(n))
-    .filter((n) => !looksLikeBankAccount(n))
+    .filter((n) => !looksLikeBankAccount(n) && !looksLikeTaxNumber(n))
     .find((n) =>
       compactNarratives.some((narrative) =>
         narrative.includes(compactNumber(n)),
@@ -275,7 +290,8 @@ export function bankReference(
         (word) =>
           compactNumber(word).length >= 6 &&
           (word.match(/\d/g) ?? []).length >= 5 &&
-          !looksLikeBankAccount(word),
+          !looksLikeBankAccount(word) &&
+          !looksLikeTaxNumber(word),
       )
       .find((word) => narrativeWords.has(compactNumber(word))) ?? null
   );
@@ -425,9 +441,13 @@ export function readInvoiceText(
     `25103272-2-42` adószáma, és EU-s adószámnak látszott; a NAV-kulcs így
     elment a számla mellett.
   */
+  // az ügyfél-azonosító EU-s adószámnak is látszhat (FleetCor: HU00008659 a
+  // számla-áttekintésen, ahol a szállító adószáma nem is áll); az nem adószám
+  const customers = customerIds(lines);
   const taxNumbers = [...text.matchAll(TAX_NUMBER)]
     .map((m) => m[1] as string)
-    .filter((tax) => taxBase(tax) !== ours);
+    .filter((tax) => taxBase(tax) !== ours)
+    .filter((tax) => !customers.has(compactNumber(tax)));
   const supplierTaxNumber =
     taxNumbers.find((tax) => HU_TAX_NUMBER.test(tax)) ?? taxNumbers[0] ?? null;
   const reading = (
@@ -475,7 +495,6 @@ export function readInvoiceText(
     if (found) return reading(found, "NAV");
   }
   if (labelled) return reading(labelled, "LABEL");
-  const customers = customerIds(lines);
   const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
@@ -484,6 +503,7 @@ export function readInvoiceText(
         token.length >= 5 &&
         /\d/.test(token) &&
         !BANK_ACCOUNT.test(token) &&
+        !looksLikeTaxNumber(token) &&
         !customers.has(compactNumber(token)) &&
         compactText.includes(compactNumber(token)),
     );
