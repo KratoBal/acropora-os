@@ -26,6 +26,7 @@ export interface PosProductSearchDatabase extends WarehouseLookupDatabase {
             grossPrice: Prisma.Decimal | null;
             vatRate: Prisma.Decimal | null;
             reportedStock: Prisma.Decimal | null;
+            isPackageProduct: boolean;
           } | null;
         };
       }>
@@ -95,6 +96,7 @@ export class PosProductSearchRepository extends Repository {
                 grossPrice: true,
                 vatRate: true,
                 reportedStock: true,
+                isPackageProduct: true,
               },
             },
           },
@@ -135,6 +137,11 @@ export class PosProductSearchRepository extends Repository {
         grossPrice:
           variant.product.unasSnapshot?.grossPrice?.toString() ?? null,
         currentStock: currentStock.toString(),
+        // Exactly the flag used by PosSaleRepository.currentStock when
+        // resolving stockComponents; do not infer packages from SKU/name.
+        isPackageProduct: Boolean(
+          variant.product.unasSnapshot?.isPackageProduct,
+        ),
       };
     });
   }

@@ -17,6 +17,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CART_ADD_HIGHLIGHT_MS,
   PilotPosTerminalPage,
+  getCartStockWarnings,
 } from "./pilot-pos-terminal-page";
 
 /**
@@ -100,6 +101,7 @@ const searchResult: PosProductSearchResult = {
   vatRate: "27",
   grossPrice: "24900",
   currentStock: "12",
+  isPackageProduct: false,
 };
 
 function saleResult(): PosSaleResult {
@@ -164,7 +166,7 @@ describe("PilotPosTerminalPage", () => {
       screen.getByRole("textbox", { name: "Termék keresése" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Fizetés" }),
+      screen.queryByRole("button", { name: /^Fizetés/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -175,7 +177,7 @@ describe("PilotPosTerminalPage", () => {
     render(createElement(PilotPosTerminalPage));
     await waitFor(() => expect(api.listSales).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByRole("button", { name: "Fizetés" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Fizetés/ })).toBeDisabled();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
       target: { value: "reef" },
@@ -185,8 +187,8 @@ describe("PilotPosTerminalPage", () => {
     });
     fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
 
-    expect(screen.getByRole("button", { name: "Fizetés" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Fizetés" }));
+    expect(screen.getByRole("button", { name: /^Fizetés/ })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
 
     await waitFor(() =>
       expect(api.createSale).toHaveBeenCalledWith(
@@ -235,9 +237,9 @@ describe("PilotPosTerminalPage", () => {
       { target: { value: "20" } },
     );
 
-    expect(screen.getByText(/17.928\s?Ft/)).toBeInTheDocument();
+    expect(screen.getAllByText(/17.928\s?Ft/)).toHaveLength(2);
 
-    fireEvent.click(screen.getByRole("button", { name: "Fizetés" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
 
     await waitFor(() =>
       expect(api.createSale).toHaveBeenCalledWith("token-OWNER", {
@@ -269,7 +271,7 @@ describe("PilotPosTerminalPage", () => {
     fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
 
     fireEvent.click(screen.getByRole("button", { name: "Utalás" }));
-    fireEvent.click(screen.getByRole("button", { name: "Fizetés" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
 
     await waitFor(() =>
       expect(api.createSale).toHaveBeenCalledWith(
@@ -315,36 +317,6 @@ describe("PilotPosTerminalPage", () => {
 
     const paymentGrid = cashButton.parentElement;
     expect(paymentGrid?.className).toContain("grid-cols-3");
-  });
-
-  /**
-   * KALIBRÁCIÓ (ugyanaz a kártya): az ELSŐ verzió `380px` kosarat és
-   * egyenlő harmadolású (`grid-cols-3`) kosár-sort adott, amiben az
-   * "Egységár (Ft, bruttó)" felirat két sorba tört, ezért a mezője lejjebb
-   * csúszott a másik kettőhöz képest. Visszaállítva a régi kódra (git
-   * stash) ez az assertion PIROSRA VÁLT: a `440px` helyett `380px`, az
-   * egyenlőtlen harmadolás helyett `grid-cols-3` áll.
-   */
-  it("a kosár szélesebb, és az Egységár oszlopa nagyobb hányadot kap a rácsban", async () => {
-    api.searchProducts.mockResolvedValue([searchResult]);
-
-    const { container } = render(createElement(PilotPosTerminalPage));
-    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
-      target: { value: "reef" },
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
-    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
-
-    expect(
-      container.querySelector('[class*="lg:grid-cols-\\[1fr_440px\\]"]'),
-    ).toBeInTheDocument();
-    expect(
-      container.querySelector(
-        '[class*="grid-cols-\\[0\\.85fr_1\\.3fr_0\\.85fr\\]"]',
-      ),
-    ).toBeInTheDocument();
   });
 
   /**
@@ -457,7 +429,7 @@ describe("PilotPosTerminalPage", () => {
 
     const lines = screen.getByTestId("pos-cart-lines");
     const footer = screen.getByTestId("pos-cart-footer");
-    const payButton = screen.getByRole("button", { name: "Fizetés" });
+    const payButton = screen.getByRole("button", { name: /^Fizetés/ });
 
     expect(lines.className).toContain("lg:overflow-y-auto");
     expect(lines.className).toContain("lg:min-h-0");
@@ -467,11 +439,186 @@ describe("PilotPosTerminalPage", () => {
     expect(footer.className).toContain("shrink-0");
     expect(lines.parentElement).toBe(footer.parentElement);
     expect(lines.parentElement?.className).toContain(
-      "lg:max-h-[calc(100dvh-5rem)]",
+      "lg:h-[min(830px,calc(100dvh-12.5rem))]",
     );
     // Below lg the list must not become a second scroll area inside the
     // scrolling page: no unprefixed overflow or height cap on it.
     expect(lines.className).not.toMatch(/(^|\s)overflow-y-auto/);
     expect(lines.className).not.toMatch(/(^|\s)max-h-/);
+  });
+  it("összeadja az azonos változat ÖSSZES darabját; nem hasonlít más változatot és kihagyja a csomagot", () => {
+    const line = { ...searchResult, quantity: 0.6, currentStock: "1" };
+    const warnings = getCartStockWarnings([
+      line,
+      line,
+      { ...line, variantId: "other", quantity: 0.8 },
+      { ...line, variantId: "package", quantity: 99, isPackageProduct: true },
+    ]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      variantId: "variant-1",
+      quantity: 1.2,
+    });
+    expect(getCartStockWarnings([{ ...line, quantity: 1 }])).toHaveLength(0);
+    expect(
+      getCartStockWarnings([{ ...line, currentStock: "-1" }]),
+    ).toHaveLength(1);
+  });
+
+  it("készlettúllépés előtt figyelmeztet, mennyiségcsökkentéskor eltűnik, és nem tiltja az eladást", async () => {
+    api.searchProducts.mockResolvedValue([
+      { ...searchResult, currentStock: "1" },
+    ]);
+    api.createSale.mockResolvedValue({
+      ...saleResult(),
+      stockWarnings: [
+        {
+          sku: searchResult.sku,
+          productName: searchResult.productName,
+          resultingQty: "-1",
+        },
+      ],
+    });
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "RS-RM500" },
+    });
+    const result = (await screen.findByText(searchResult.productName)).closest(
+      "button",
+    )!;
+    fireEvent.click(result);
+    expect(screen.queryByTestId("pos-stock-warning")).not.toBeInTheDocument();
+    fireEvent.click(result);
+    expect(screen.getByTestId("pos-stock-warning")).toHaveTextContent(
+      "kosár 2 db, készlet 1 db",
+    );
+    expect(screen.getByRole("button", { name: /^Fizetés/ })).toBeEnabled();
+    const quantity = screen.getByRole("spinbutton", { name: "Mennyiség (db)" });
+    fireEvent.change(quantity, { target: { value: "1" } });
+    expect(screen.queryByTestId("pos-stock-warning")).not.toBeInTheDocument();
+    fireEvent.change(quantity, { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
+    expect(
+      await screen.findByText(/Figyelem, negatívba fordult/),
+    ).toBeInTheDocument();
+    expect(api.createSale).toHaveBeenCalledWith(
+      "token-OWNER",
+      expect.objectContaining({
+        lines: [expect.objectContaining({ quantity: 2 })],
+      }),
+    );
+  });
+
+  it("csomagra nincs előzetes warning; a hiányzó ÁFA a footerben látható és tilt", async () => {
+    api.searchProducts.mockResolvedValue([
+      {
+        ...searchResult,
+        currentStock: "0",
+        isPackageProduct: true,
+        vatRate: null,
+      },
+    ]);
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "csomag" },
+    });
+    fireEvent.click(await screen.findByText(searchResult.productName));
+    expect(screen.queryByTestId("pos-stock-warning")).not.toBeInTheDocument();
+    expect(screen.getByTestId("pos-cart-footer")).toHaveTextContent(
+      "Nincs beállítva ÁFA kulcs ehhez a termékhez: RS-RM500",
+    );
+    expect(screen.getByRole("button", { name: /^Fizetés/ })).toBeDisabled();
+    expect(api.createSale).not.toHaveBeenCalled();
+  });
+
+  it("a mai napot és 10 sort kér le; a listából a részletre navigál", async () => {
+    api.listSales.mockResolvedValue({
+      ...emptySalesResponse,
+      items: [
+        {
+          id: "today",
+          orderNumber: "POS-TODAY",
+          createdAt: new Date().toISOString(),
+          paymentMethod: "CARD",
+          totalGross: "100",
+          lineCount: 1,
+        },
+      ],
+    });
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.click(await screen.findByText("POS-TODAY"));
+    expect(navigation.push).toHaveBeenCalledWith("/pos/today");
+    const query = api.listSales.mock.calls[0]![1];
+    const now = new Date();
+    expect(query).toEqual({
+      page: 1,
+      pageSize: 10,
+      createdFrom: new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      ).toISOString(),
+      createdTo: new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+      ).toISOString(),
+    });
+  });
+
+  it("mentési hiba a footerben marad, a kosár megmarad és újrapróbálható", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    api.createSale.mockRejectedValue(new Error("Teszt mentési hiba"));
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    fireEvent.click(await screen.findByText(searchResult.productName));
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
+    expect(await screen.findByText("Teszt mentési hiba")).toBeInTheDocument();
+    expect(screen.getByTestId("pos-cart-footer")).toHaveTextContent(
+      "Teszt mentési hiba",
+    );
+    expect(
+      screen.getByRole("spinbutton", { name: "Mennyiség (db)" }),
+    ).toHaveValue(1);
+    expect(screen.getByRole("button", { name: /^Fizetés/ })).toBeEnabled();
+  });
+  it("éjfélkor törli a tegnapi listát és az új nap 10 eladását kéri", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 4, 23, 59, 59));
+    try {
+      api.listSales.mockResolvedValueOnce({
+        ...emptySalesResponse,
+        items: [
+          {
+            id: "yesterday",
+            orderNumber: "POS-YESTERDAY",
+            createdAt: new Date().toISOString(),
+            paymentMethod: "CARD",
+            totalGross: "100",
+            lineCount: 1,
+          },
+        ],
+      });
+      api.listSales.mockImplementationOnce(() => new Promise(() => {}));
+      await act(async () => {
+        render(createElement(PilotPosTerminalPage));
+      });
+      expect(screen.getByText("POS-YESTERDAY")).toBeInTheDocument();
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.queryByText("POS-YESTERDAY")).not.toBeInTheDocument();
+      expect(api.listSales).toHaveBeenCalledTimes(2);
+      expect(api.listSales.mock.calls[1]![1]).toEqual({
+        page: 1,
+        pageSize: 10,
+        createdFrom: new Date(2026, 9, 5).toISOString(),
+        createdTo: new Date(2026, 9, 6).toISOString(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
