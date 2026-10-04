@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { normalizeName } from "../missing-invoice-matching.js";
 import {
+  bankReference,
   cardPaymentMatch,
   customerIds,
   largestMoney,
@@ -558,6 +559,23 @@ describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
       null,
     );
     assert.equal(readInvoiceText(FLEETCOR).supplierTaxNumber, "25103272-2-42");
+  });
+
+  // acrobot 26158: the UNAS pro forma's bank branch took OUR tax number
+  it("a tax number, ours above all, is never a bank reference", () => {
+    const lines = [
+      "Díjbekérő",
+      "Adószám: | 14114113-2-08 | Adószám: | 23916229-2-42",
+    ];
+    const reading = readInvoiceText(lines);
+    assert.equal(
+      bankReference(lines, reading, {}, ["NAV ADO 23916229-2-42 ACROPORA"]),
+      null,
+    );
+    assert.equal(
+      bankReference(lines, reading, {}, ["UNAS 14114113-2-08"]),
+      null,
+    );
   });
 
   it("a value the reader split into cells is not a number (Stripe)", () => {

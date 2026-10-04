@@ -118,6 +118,21 @@ export const looksLikeBankAccount = (value: string): boolean =>
   BANK_ACCOUNT.test(value) || IBAN.test(compactNumber(value));
 
 /**
+ * MAGYAR ADÓSZÁM, VAGY A MIÉNK BÁRMILYEN ALAKBAN: egy céget azonosít, nem egy
+ * dokumentumot, tehát sem számlaszám, sem banki hivatkozás nem lehet (acrobot
+ * 26158, UNAS díjbekérők: a banki ág a VEVŐ, vagyis a saját adószámunkat
+ * vette számlaszámnak, mert egy terhelés közleménye is hordozta).
+ */
+export const looksLikeTaxNumber = (value: string): boolean => {
+  const digits = value.replace(/^HU/i, "").replace(/\D/g, "");
+  return (
+    HU_TAX_NUMBER.test(value.trim()) ||
+    ((digits.length === 8 || digits.length === 11) &&
+      digits.slice(0, 8) === ACROPORA_COMPANY.taxNumberBase)
+  );
+};
+
+/**
  * Egy számlaszám alakja: betűvel vagy számmal kezdődik, legalább 3 jel. Előtte
  * a `|` is állhat: a PDF-olvasó (`pdfTextLines`) így választja el a táblázat
  * celláit. Mérve 2026-10-04 a FleetCor számláin: a „Számla száma |
@@ -255,7 +270,7 @@ export function bankReference(
   const loose = [reading.invoiceNumber, ...fromName]
     .filter((n): n is string => n !== null)
     .filter((n) => compactNumber(n).length >= 5 && /\d/.test(n))
-    .filter((n) => !looksLikeBankAccount(n))
+    .filter((n) => !looksLikeBankAccount(n) && !looksLikeTaxNumber(n))
     .find((n) =>
       compactNarratives.some((narrative) =>
         narrative.includes(compactNumber(n)),
@@ -275,7 +290,8 @@ export function bankReference(
         (word) =>
           compactNumber(word).length >= 6 &&
           (word.match(/\d/g) ?? []).length >= 5 &&
-          !looksLikeBankAccount(word),
+          !looksLikeBankAccount(word) &&
+          !looksLikeTaxNumber(word),
       )
       .find((word) => narrativeWords.has(compactNumber(word))) ?? null
   );
@@ -487,6 +503,7 @@ export function readInvoiceText(
         token.length >= 5 &&
         /\d/.test(token) &&
         !BANK_ACCOUNT.test(token) &&
+        !looksLikeTaxNumber(token) &&
         !customers.has(compactNumber(token)) &&
         compactText.includes(compactNumber(token)),
     );

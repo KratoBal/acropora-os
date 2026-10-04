@@ -77,14 +77,19 @@ async function main(argv: readonly string[]): Promise<number> {
             content: true,
             textReading: true,
             importResult: true,
+            kind: true,
+            origin: true,
           },
         }),
       lines: (content) => pdfTextLines(content),
       navNumbers: (base) => repository.navNumbers(base),
-      save: async (id, reading) => {
+      save: async (id, reading, kind) => {
         await prisma.incomingSupplierDocument.update({
           where: { id },
-          data: { textReading: reading as unknown as Prisma.InputJsonValue },
+          data: {
+            textReading: reading as unknown as Prisma.InputJsonValue,
+            ...(kind === "INVOICE" || kind === "PROFORMA" ? { kind } : {}),
+          },
         });
       },
     },
