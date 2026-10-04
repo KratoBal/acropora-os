@@ -128,6 +128,24 @@ describe("a hibajegy részletlapja", () => {
   });
 
   /**
+   * THE LINKED SHEET'S STATE AND HOURS (service redesign E3, 2026-10-04): the
+   * job's "Munkalapok a jegy mögött" card shows them. The hours follow the
+   * shared rule: the 1.5 h labour line done by two people counts 3 h, the
+   * material line counts nothing.
+   */
+  it("a munkalap állapotát, tételszámát és munkaóráját is kiadja", async () => {
+    const detail = belsoReszletlap(
+      await serviceWith(row()).detail("job-1", BELSOS),
+    );
+
+    const sor = detail.timeline.find((entry) => entry.kind === "worksheet");
+    assert.ok(sor?.kind === "worksheet");
+    assert.equal(sor.worksheet.status, "DRAFT");
+    assert.equal(sor.worksheet.lineCount, 2);
+    assert.equal(sor.worksheet.laborHours, "3");
+  });
+
+  /**
    * A `scheduledAt` NEM SZÁRMAZTATOTT, a másik kettő az - de mindhárom
    * MEGJELENIK a válaszban. Ha kimaradnának, a felület a naplóból kezdené
    * visszafejteni őket, és a szabály két helyen állna.
@@ -229,6 +247,26 @@ describe("a partner hivo SAJAT alakot kap", () => {
     const szoveg = JSON.stringify(detail);
     assert.ok(!szoveg.includes("belső megjegyzés"), "a megjegyzes kiment");
     assert.ok(szoveg.includes("Kiss Márta"), "a nevnek meg kell maradnia");
+  });
+
+  /**
+   * DECISION 2 (Balázs, 2026-10-04): a partner gets none of the new fields
+   * it does not see today. The linked sheet keeps exactly its old five
+   * fields in the partner's timeline; the status, line count and hours added
+   * for the internal card stay internal.
+   */
+  it("a munkalap-sorban nem kapja meg az új belső mezőket", async () => {
+    const detail = await serviceWith(row()).detail("job-1", PARTNER);
+    assert.ok(isPartnerServiceJobDetail(detail));
+    const sor = detail.timeline.find((entry) => entry.kind === "worksheet");
+    assert.ok(sor?.kind === "worksheet");
+    assert.deepEqual(Object.keys(sor.worksheet).sort(), [
+      "createdAt",
+      "handedOverAt",
+      "id",
+      "number",
+      "subject",
+    ]);
   });
 
   /** KONTROLL: ugyanaz a sor BELSO hivonak TELJES alakban megy. */

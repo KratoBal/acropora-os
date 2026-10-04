@@ -1221,6 +1221,63 @@ describe(
     });
 
     /**
+     * THE LIST ROW CARRIES THE SHEET'S JOB AND HOURS (service redesign E4,
+     * 2026-10-04), and only a real database shows the list query selects
+     * them: a missing relation in the include does not fail, it reads as
+     * `null` or as zero hours. The hours are compared with the sheet's own
+     * detail, so the list and the sheet cannot disagree.
+     */
+    it("lists the sheet's service job and its labour hours", async () => {
+      const job = await prisma.serviceJob.create({
+        data: {
+          jobNumber: `${TEST_JOB_PREFIX}L${suffix}`,
+          title: "Cápasuli szivattyú",
+          customerId,
+          departmentId: bioDepartmentId,
+        },
+        select: { id: true, jobNumber: true },
+      });
+      const worksheetId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content({
+          lines: [
+            {
+              description: "Szerelés",
+              quantity: 1.5,
+              unit: "óra",
+              unitNet: 0,
+              vatRatePercent: 27,
+              kind: "LABOR",
+              workerCount: 2,
+            },
+          ],
+        } as Partial<WorksheetContentDto>),
+        actorUserId,
+        serviceJobId: job.id,
+      });
+
+      const { items } = await repository.list(
+        { page: 1, pageSize: 100 },
+        { kind: "internal" },
+        [],
+      );
+      const item = items.find((row) => row.id === worksheetId);
+      assert.ok(item, "the new sheet is not on the list");
+      assert.deepEqual(item.serviceJob, {
+        id: job.id,
+        jobNumber: job.jobNumber,
+      });
+      const detailRow = await repository.detail(worksheetId, {
+        kind: "internal",
+      });
+      assert.ok(detailRow);
+      const detail = toWorksheetDetail(detailRow);
+      assert.equal(item.laborHours, detail.currentVersion.laborHours);
+      assert.equal(Number(item.laborHours), 3);
+    });
+
+    /**
      * TESTVER-KONTROLL: JEGY NELKUL A MEZO `null` MARAD, es a lap letrejon. Ha
      * egy rontas MINDKETTOT pirosra dontene, akkor nem a jegy beirasat mernenk,
      * hanem a letrehozast magat.

@@ -35,6 +35,9 @@ function worksheet(id: string, createdAt: string): ServiceJobWorksheetLink {
     subject: `targy-${id}`,
     createdAt,
     handedOverAt: null,
+    status: "DRAFT",
+    lineCount: 0,
+    laborHours: "0",
   };
 }
 
