@@ -396,6 +396,10 @@ describe("navigation", () => {
     // kategoriaknal: aki csak nez, azt nem kell terhelni egy olyan
     // menuponttal, ami neki ugyis "nincs jogod" uzenetet adna.
     "/szerviz/anyagigenyek": "service.manage",
+    // A Capasuli jegy-piszkozatok (2026-10-04), a bevezetes UTAN: a menupont
+    // szerep-szabaly (OWNER, ADMIN), es a regi kulcsok kozul a
+    // `settings.manage` adja pontosan ezt a ket szerepet.
+    "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
     "/pos": "orders.view",
     "/webshop": "orders.view",
