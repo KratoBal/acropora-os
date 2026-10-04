@@ -20,15 +20,18 @@ import {
   type WorksheetVersionStatus,
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { BottomNav } from "@/components/home/BottomNav";
+import {
+  worksheetCardMeta,
+  worksheetStatTiles,
+} from "@/lib/worksheets/worksheet-list-card";
 import { belsosIrasEngedett } from "@/lib/auth/hatokor";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { statusToneColors } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
-  worksheetAssigneeLine,
   worksheetFilterSummary,
-  worksheetLabelOrDraft,
   worksheetListStartsMineOnly,
   worksheetListSubtitle,
   worksheetDisplayLabel,
@@ -172,7 +175,7 @@ export default function WorksheetsScreen() {
   const totalPages = worksheets.data?.pagination.totalPages ?? 1;
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -201,6 +204,21 @@ export default function WorksheetsScreen() {
             ? `${total.toLocaleString("hu-HU")} munkalap${mineOnly ? ", rád kiosztva" : ""}`
             : "Munkalapok a helyszíni munkához"}
         </Text>
+        {/*
+          THE THREE TILES (Figma 423:904) from the server's counts, one
+          "Új és folyamatban" tile (decision E5). Without counts (an older
+          server) there are no tiles rather than zeros.
+        */}
+        {worksheetStatTiles(worksheets.data?.counts) ? (
+          <View style={styles.tiles} accessibilityLabel="Összesítés">
+            {worksheetStatTiles(worksheets.data?.counts)!.map((tile) => (
+              <View key={tile.key} style={styles.tile}>
+                <Text style={styles.tileValue}>{tile.value}</Text>
+                <Text style={styles.tileLabel}>{tile.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {/*
           ÚJ LAP A HELYSZÍNRŐL. Két kapu, és a MÁSODIK 2026-09-22-én került ide.
@@ -453,8 +471,15 @@ export default function WorksheetsScreen() {
                 mai mobil (szám a cím) ELLENTÉTES sorrendet mutatott. A cím és
                 a jelvény EGY sorban áll -- Figma 8. kör, telefonos átültetés.
               */}
+              {/*
+                THE CARD OF THE SERVICE REDESIGN (Figma 423:904): the number
+                and the status in the first row, the subject as the title,
+                partner and place, then "Felelős: … · 4 óra" and the job.
+              */}
               <View style={styles.rowHeader}>
-                <Text style={styles.rowTitle}>{item.subject}</Text>
+                <Text style={styles.rowNumber}>
+                  {item.number ?? "Még nincs száma"}
+                </Text>
                 <View
                   style={[
                     styles.statusChip,
@@ -466,19 +491,35 @@ export default function WorksheetsScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.rowNumber}>
-                {worksheetLabelOrDraft(item.label)}
-              </Text>
+              <Text style={styles.rowTitle}>{item.subject}</Text>
               <View style={styles.rowFooter}>
-                <Text style={styles.rowMeta} numberOfLines={1}>
+                <Text style={styles.rowMeta} numberOfLines={2}>
                   {worksheetListSubtitle(item)}
                 </Text>
                 <Text style={styles.rowAssignee}>
-                  {worksheetAssigneeLine(item.assigneeNames)}
+                  {worksheetCardMeta(item)}
                 </Text>
                 {/* A brutto osszeg 2026-09-17-en kikerult a listabol:
                     Balazs dontese ("B") szerint az ar sehol nem jelenik meg. */}
               </View>
+              {item.serviceJob ? (
+                <Pressable
+                  accessibilityRole="link"
+                  accessibilityLabel={`Hibajegy: ${item.serviceJob.jobNumber}`}
+                  hitSlop={8}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/service-jobs/[id]",
+                      params: { id: item.serviceJob!.id },
+                    })
+                  }
+                  style={styles.jobLink}
+                >
+                  <Text style={styles.jobLinkText}>
+                    {item.serviceJob.jobNumber}
+                  </Text>
+                </Pressable>
+              ) : null}
               {versionNote ? (
                 <Text style={styles.rowVersion}>{versionNote}</Text>
               ) : null}
@@ -513,6 +554,8 @@ export default function WorksheetsScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {/* the shared bar, with no item lit until "Feladatok" exists (E9) */}
+      <BottomNav active={null} />
     </SafeAreaView>
   );
 }
@@ -613,7 +656,7 @@ function createStyles(t: ThemeTokens) {
     rowTitle: {
       color: t.textPrimary,
       flex: 1,
-      fontSize: 16,
+      fontSize: 17,
       fontWeight: "800",
     },
     statusChip: {
@@ -628,15 +671,30 @@ function createStyles(t: ThemeTokens) {
      * A SZÁM MOST A MÁSODLAGOS SOR (acrobot döntése, 2026-09-25): monospace,
      * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
      */
-    rowNumber: { color: t.textMuted, fontFamily: "monospace", fontSize: 12 },
-    rowFooter: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: 10,
-      justifyContent: "space-between",
-      marginTop: 2,
+    /** `flex: 1`: the status chip beside it must never be pushed out. */
+    rowNumber: {
+      color: t.textPrimary,
+      flex: 1,
+      fontFamily: "monospace",
+      fontSize: 14,
+      fontWeight: "700",
     },
-    rowAssignee: { color: t.textSecondary, fontSize: 12 },
+    rowFooter: { gap: 4, marginTop: 2 },
+    rowAssignee: { color: t.textSecondary, fontSize: 13 },
+    jobLink: { alignSelf: "flex-end", paddingVertical: 4 },
+    jobLinkText: { color: t.accent, fontSize: 13, fontWeight: "700" },
+    tiles: { flexDirection: "row", gap: 8 },
+    tile: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      gap: 4,
+      padding: 12,
+    },
+    tileValue: { color: t.textPrimary, fontSize: 24, fontWeight: "700" },
+    tileLabel: { color: t.textSecondary, fontSize: 12 },
     rowVersion: { color: t.warning, fontSize: 11, fontWeight: "700" },
     empty: { color: t.textSecondary },
     newButton: {

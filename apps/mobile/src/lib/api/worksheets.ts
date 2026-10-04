@@ -82,6 +82,14 @@ export interface WorksheetListItem {
   grossAmount: string;
   /** A felelősök neve. Üres tömb, ha a lap még nincs kiosztva. */
   assigneeNames: string[];
+  /**
+   * THE SHEET'S TOTAL LABOUR HOURS AND ITS SERVICE JOB (service redesign E4,
+   * 2026-10-04), for "Felelős: … · 4 óra" and the job link on the card.
+   * OPTIONAL: an older server does not send them, and then nothing is shown
+   * rather than "0 óra" or "no job".
+   */
+  laborHours?: string;
+  serviceJob?: { id: string; jobNumber: string } | null;
   updatedAt: string;
 }
 
@@ -93,6 +101,11 @@ export interface WorksheetListResponse {
     totalItems: number;
     totalPages: number;
   };
+  /**
+   * HOW MANY SHEETS ARE IN EACH STATUS (the latest version's), for the list's
+   * tiles. Optional, like every field added to this mirror.
+   */
+  counts?: Record<WorksheetVersionStatus, number>;
 }
 
 export interface WorksheetAssignee {
