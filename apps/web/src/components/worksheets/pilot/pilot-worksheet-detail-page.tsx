@@ -10,7 +10,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
@@ -24,6 +24,7 @@ import { WorksheetDocuments } from "../worksheet-documents";
 import {
   formatDate,
   formatDateTime,
+  formatLaborHours,
   worksheetDisplayLabel,
   worksheetDisplayPilotVariant,
   worksheetStatusLabel,
@@ -34,6 +35,7 @@ import {
   PilotButton,
   PilotCard,
   PilotCardHeader,
+  PilotDataRow,
   PilotFormField,
   PilotInput,
   PilotSelect,
@@ -54,52 +56,24 @@ import {
  * adja (mint az Eszközök körnél), a kártyák tartalma és feltételei a mai
  * `worksheet-detail-page.tsx`-ből jönnek.
  *
- * === A BAL/JOBB OSZLOP PONTOSAN A FIGMA FORRÁSÁT KÖVETI ===
+ * === THE SERVICE REDESIGN (Figma 423:662, Balázs, 2026-10-04) ===
  *
- * `MunkalapDetail` (506-867. sor) BAL oszlopa (576-768. sor): Munkalap
- * adatai, A munka leírása, Elvégzett munka és anyagok, Érintett eszközök,
- * Bejegyzések, Anyagigények, Csatolmányok, Verziók. JOBB oszlopa
- * (770-863. sor): Kiküldés aláírásra, Ügyfél döntésének rögzítése, A
- * kiadott munkalap.
+ * The page follows the redesign's two columns, every existing action kept.
  *
- * === AZ ÖSSZESÍTÉS ÉS A FELELŐSÖK A JOBB OSZLOP TETEJÉN ÁLL ===
- *
- * acrobot szó szerint: a tervben nem szereplő két valódi kártya
- * (Összesítés, Felelősök) "a jobb oszlopba" kerüljön, "a Munkalap adatai
- * közelébe", Felelősök "közvetlenül alá". A Figma forrásban (506-867. sor)
- * a Munkalap adatai kártya a BAL oszlop első eleme (579. sor) -- a "jobb
- * oszlop" tehát nem ugyanaz a hasáb, ahol Munkalap adatai áll. A két
- * utasítást (jobb oszlop; Munkalap adatai közelében) csak úgy lehet
- * EGYSZERRE igazzá tenni, ha "közel" nem oszlopot jelent, hanem MAGASSÁGOT:
- * Összesítés és Felelősök a JOBB oszlop LEGTETEJÉN áll, a Munkalap adatai
- * kártyával egy vonalban (az a bal oszlop teteje), Felelősök közvetlenül az
- * Összesítés alatt -- ez egyszerre elégíti ki mindkét mondatot.
- *
- * MEGJEGYZÉS A "MUNKALAP ADATAI" KÁRTYA MEZŐIRŐL: a Figma saját "Munkalap
- * adatai" kártyája tartalmaz egy "Felelősök" MEZŐT is (nevek vesszővel
- * felsorolva, 586. sor) -- ez ITT NEM ismétlődik meg, mert a valódi
- * `WorksheetAssigneeEditor` widget (szerkeszthető, jogosultság-függő) a
- * jobb oszlopban áll, és egy második, csak-olvasható felsorolás
- * ugyanarról az adatról zajt jelentene, nem információt. Hasonlóan, a
- * Figma "Tárgy" mezőjét (581. sor) a mai kód SOHA nem ismétli a Munkalap
- * adatai kártyán belül -- a tárgy a lap FEJLÉCÉBEN áll címként
- * (`worksheet-detail-page.tsx:808`), és ez itt is így marad: a kód nyer a
- * mezőlistán, a terv az elrendezésen.
- *
- * === A KIADOTT MUNKALAP NEM BONTHATÓ KÜLÖN A CSATOLMÁNYOKTÓL ===
- *
- * acrobot 3. pontja: ha "A kiadott munkalap" a `WorksheetDocuments`-en
- * belül él, ne bontsam külön komponensbe. Ellenőriztem
- * (`worksheet-documents.tsx:143` körül): TÉNYLEG ott van, egy `PilotCard`
- * blokkban a Csatolmányok kártya ELŐTT, ugyanabban a komponensben. A két
- * kártya emiatt EGYÜTT mozog -- a `WorksheetDocuments` egyetlen JSX-hívás,
- * a kettő fizikailag nem választható szét két oszlopra kódmódosítás
- * nélkül. Mivel acrobot kifejezetten kérte, hogy NE bontsam szét, a teljes
- * (kiadott munkalap + csatolmányok) egység oda kerül, ahol Figma "A
- * kiadott munkalap" kártyája áll: a JOBB oszlop legalja, a Kiküldés/Döntés
- * kártyák alatt. A Csatolmányok emiatt a JOBB oszlopban jelenik meg, nem a
- * balban, ahogy a terv saját, önálló Csatolmányok-kártyája mutatná -- ez
- * egyetlen sorban eltér a tervtől, és itt van kimondva.
+ * - LEFT: A munka leírása, Tételek (no price: quantity, how many people,
+ *   hours, and the total), the work log (`WorksheetEntries`), the material
+ *   requests, the issued sheet with the attachments, and the versions.
+ * - RIGHT: Összesítés, Munkalap adatai (now with the assignees' names, as
+ *   the design lists them), the assignees' editor, the affected assets,
+ *   "Helyszíni lezárás", and the two signature cards.
+ * - "HELYSZÍNI LEZÁRÁS" holds the hand-over and the close, which used to sit
+ *   in the header. The lines above its buttons are facts, not gates
+ *   (decision E7): the close needs a draft and `service.manage`, nothing
+ *   else, exactly as the server checks it.
+ * - THE ISSUED SHEET AND THE ATTACHMENTS still move together (one
+ *   component, see below); the design's place for files is the left column,
+ *   so both are there now.
+ * - "2 fő dolgozott" is left out (decision E8).
  *
  * === AZ ÖT BEÁGYAZOTT WIDGET KERETE FIGMA-STÍLUST KAPOTT, A BELSEJE NEM
  *     (acrobot 4. pontja) ===
@@ -116,14 +90,12 @@ import {
  * társai) mostantól szintén Figma-keretes widgeteket mutatna, HA valaha
  * routolnák -- ma nem routolt, tehát ez nem látszik sehol.
  *
- * === A FEJLÉC-AKCIÓK MIND MEGMARADTAK, FIGMA GOMB-STÍLUSSAL (acrobot 2.
- *     pontja) ===
+ * === EVERY ACTION STAYS, SOME MOVED ===
  *
- * Rejtés/Visszaállítás (`canHide`), Átadás rögzítése/visszavonása
- * (`canManage`), Szerkesztés (`canManage && isDraft`, külön szerkesztő
- * oldalra visz), Kiállítás és lezárás (`canManage && isDraft`),
- * állapot-mondat nem-piszkozatnál, Folytatás új munkalapon (`canManage &&
- * isSigned`) -- mind a mai logikával, `PilotButton`-nal.
+ * Rejtés/Visszaállítás (`canHide`), Szerkesztés (`canManage && isDraft`) and
+ * Folytatás új munkalapon (`canManage && isSigned`) stay in the header; the
+ * hand-over (`canManage`) and Kiállítás és lezárás (`canManage && isDraft`)
+ * are in "Helyszíni lezárás"; the conditions are unchanged.
  *
  * === A MEGJEGYZÉS MINDIG LÁTHATÓ (Balázs döntése, 2026-09-25 11:09) ===
  *
@@ -132,16 +104,6 @@ import {
  * "Indoklás" mezője sugallná) -- a mai web viselkedése marad, ahogy
  * Balázs kimondta.
  */
-
-function Field({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
-  return (
-    <div>
-      <p className="mb-0.5 text-[11px] text-pilot-grey-400">{label}</p>
-      <p className="text-sm text-pilot-grey-800">{value}</p>
-    </div>
-  );
-}
 
 export function PilotWorksheetDetailPage({
   worksheetId,
@@ -262,251 +224,162 @@ export function PilotWorksheetDetailPage({
   const isSigned = current.status === "SIGNED";
   const osszMunkaorak = current.laborHours;
 
+  const fieldRow = (label: string, value: ReactNode) => (
+    <PilotDataRow label={label} labelWidth="96px" value={value} />
+  );
+
   return (
-    <PilotThemeRoot className="-m-6 min-h-screen bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
-        <Link
-          href={backToList.href}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
-        >
-          <Icon name="chevron-left" size={12} />
-          {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
-        </Link>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-1.5 flex items-center gap-2.5">
-              <h1 className="text-xl font-semibold text-pilot-grey-900">
-                {current.label ?? (
-                  <span className="text-base italic text-pilot-grey-400">
-                    Piszkozat
-                  </span>
-                )}
-              </h1>
-              <PilotBadge
-                variant={worksheetDisplayPilotVariant(
-                  current.status,
-                  current.lines.length,
-                )}
-              >
-                {worksheetDisplayLabel(current.status, current.lines.length)}
-              </PilotBadge>
-            </div>
-            <p className="text-sm text-pilot-grey-500">
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+      {/*
+        THE HEADER OF THE SERVICE REDESIGN (Figma 423:662): back, the sheet's
+        number, the subject as the title, the display status and where the
+        work is. Hiding and continuing stay here; handing over and closing
+        moved to the "Helyszíni lezárás" panel, where the design puts them.
+      */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <Link
+            href={backToList.href}
+            className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
+          >
+            <span aria-hidden="true">← </span>
+            {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
+          </Link>
+          <p className="mt-4 font-mono text-sm text-pilot-grey-500">
+            {current.label ?? "Piszkozat"}
+          </p>
+          <h1 className="mt-1 break-words text-3xl font-semibold text-pilot-grey-900">
+            {current.subject}
+          </h1>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <PilotBadge
+              variant={worksheetDisplayPilotVariant(
+                current.status,
+                current.lines.length,
+              )}
+            >
+              {worksheetDisplayLabel(current.status, current.lines.length)}
+            </PilotBadge>
+            <span className="break-words text-sm text-pilot-grey-500">
+              {worksheet.customer.displayName}
+              {worksheet.department.path?.length
+                ? ` · ${worksheet.department.path.join(" / ")}`
+                : ""}
               {current.sentForSignatureAt
-                ? `${worksheet.customer.displayName} · kiküldve aláírásra${
+                ? ` · kiküldve aláírásra${
                     current.sentForSignatureToName
                       ? `: ${current.sentForSignatureToName}`
                       : ""
                   }`
-                : worksheet.customer.displayName}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {canHide ? (
-              <PilotButton
-                variant="secondary"
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    worksheetsApi.setHidden(
-                      token,
-                      worksheet.id,
-                      !worksheet.hidden,
-                    ),
-                  )
-                }
-              >
-                {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
-              </PilotButton>
-            ) : null}
-            {canManage ? (
-              <PilotButton
-                variant="secondary"
-                disabled={busy}
-                onClick={() =>
-                  void run(() =>
-                    worksheetsApi.setHandedOver(
-                      token,
-                      worksheet.id,
-                      !worksheet.handedOverAt,
-                    ),
-                  )
-                }
-              >
-                {worksheet.handedOverAt
-                  ? "Átadás visszavonása"
-                  : "Átadás rögzítése"}
-              </PilotButton>
-            ) : null}
-            {canManage && isDraft ? (
-              <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
-                <PilotButton variant="primary">
-                  <Icon name="pencil" size={12} />
-                  Szerkesztés
-                </PilotButton>
-              </Link>
-            ) : null}
-            {canManage && isDraft ? (
-              <PilotButton
-                variant="primary"
-                disabled={busy}
-                onClick={() =>
-                  void run(() => worksheetsApi.close(token, worksheet.id))
-                }
-              >
-                Kiállítás és lezárás
-              </PilotButton>
-            ) : null}
-            {canManage && isSigned ? (
-              <PilotButton
-                variant="primary"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    const created = await worksheetsApi.continueFrom(
-                      token,
-                      worksheet.id,
-                    );
-                    router.push(
-                      `/szerviz/munkalapok/${created.id}/szerkesztes`,
-                    );
-                    return created;
-                  })
-                }
-              >
-                Folytatás új munkalapon
-              </PilotButton>
+                : ""}
+            </span>
+            {worksheet.hidden ? (
+              <PilotBadge variant="amber">Rejtett</PilotBadge>
             ) : null}
           </div>
         </div>
-        {canManage && !isDraft ? (
-          <p className="mt-2 text-xs text-pilot-grey-400">
-            Ez a lap már ki van állítva (
-            {worksheetStatusLabel[current.status].toLowerCase()}
-            ). Kiállítani csak piszkozatot lehet.
-          </p>
-        ) : null}
-      </div>
-
-      <div className="px-8 pt-4">
-        <ServiceOfflineNotice
-          state={worksheet ? { kind: "loaded" } : { kind: "empty" }}
-          pilot
-        />
-        {error ? (
-          <Alert
-            className="mb-4"
-            variant="danger"
-            title="Hiba"
-            description={error}
-          />
-        ) : null}
-        {/*
-          KÉT SÁV, HA RELEVÁNS -- Figma szerint amber (előzmény) és teal
-          (folytatás), a pilot tokenekre fordítva.
-        */}
-        {worksheet.continues ? (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-pilot-amber-50 px-4 py-3 text-sm ring-1 ring-pilot-amber-100">
-            <span className="text-pilot-amber-700">
-              Ez a lap egy korábbi munkalap folytatása.
-            </span>
-            <Link href={`/szerviz/munkalapok/${worksheet.continues.id}`}>
-              <PilotButton variant="secondary">
-                Előzmény megnyitása →
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {canHide ? (
+            <PilotButton
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                void run(() =>
+                  worksheetsApi.setHidden(
+                    token,
+                    worksheet.id,
+                    !worksheet.hidden,
+                  ),
+                )
+              }
+            >
+              {worksheet.hidden ? "Visszaállítás" : "Elrejtés"}
+            </PilotButton>
+          ) : null}
+          {canManage && isDraft ? (
+            <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
+              <PilotButton variant="primary">
+                <Icon name="pencil" size={12} />
+                Szerkesztés
               </PilotButton>
             </Link>
-          </div>
-        ) : null}
-        {worksheet.continuedBy.length ? (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-pilot-aqua-50 px-4 py-3 text-sm ring-1 ring-pilot-aqua-200">
-            <span className="text-pilot-aqua-700">
-              Ennek a lapnak van folytatása.
-            </span>
-            <Link href={`/szerviz/munkalapok/${worksheet.continuedBy[0]!.id}`}>
-              <PilotButton variant="secondary">
-                Folytatás megnyitása →
-              </PilotButton>
-            </Link>
-          </div>
-        ) : null}
+          ) : null}
+          {canManage && isSigned ? (
+            <PilotButton
+              variant="primary"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const created = await worksheetsApi.continueFrom(
+                    token,
+                    worksheet.id,
+                  );
+                  router.push(`/szerviz/munkalapok/${created.id}/szerkesztes`);
+                  return created;
+                })
+              }
+            >
+              Folytatás új munkalapon
+            </PilotButton>
+          ) : null}
+        </div>
       </div>
 
-      <div className="grid items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_320px]">
-        <div className="flex flex-col gap-5">
+      <ServiceOfflineNotice
+        state={worksheet ? { kind: "loaded" } : { kind: "empty" }}
+        pilot
+      />
+      {error ? (
+        <Alert variant="danger" title="Hiba" description={error} />
+      ) : null}
+      {worksheet.continues ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-pilot-amber-50 px-4 py-3 text-sm ring-1 ring-pilot-amber-100">
+          <span className="text-pilot-amber-700">
+            Ez a lap egy korábbi munkalap folytatása.
+          </span>
+          <Link href={`/szerviz/munkalapok/${worksheet.continues.id}`}>
+            <PilotButton variant="secondary">Előzmény megnyitása →</PilotButton>
+          </Link>
+        </div>
+      ) : null}
+      {worksheet.continuedBy.length ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-pilot-aqua-50 px-4 py-3 text-sm ring-1 ring-pilot-aqua-200">
+          <span className="text-pilot-aqua-700">
+            Ennek a lapnak van folytatása.
+          </span>
+          <Link href={`/szerviz/munkalapok/${worksheet.continuedBy[0]!.id}`}>
+            <PilotButton variant="secondary">
+              Folytatás megnyitása →
+            </PilotButton>
+          </Link>
+        </div>
+      ) : null}
+
+      <div className="grid items-start gap-6 lg:grid-cols-[1fr_368px]">
+        <div className="flex min-w-0 flex-col gap-5">
           <PilotCard>
-            <PilotCardHeader title="Munkalap adatai" />
-            <div className="grid grid-cols-1 gap-x-8 gap-y-4 p-5 sm:grid-cols-2">
-              <Field label="Partner" value={worksheet.customer.displayName} />
-              <Field
-                label="Alegység"
-                value={
-                  worksheet.department.path?.length
-                    ? worksheet.department.path.join(" / ")
-                    : `${worksheet.department.code} — ${current.unitName ?? "—"}`
-                }
-              />
-              {worksheet.serviceJob ? (
-                <div>
-                  <p className="mb-0.5 text-[11px] text-pilot-grey-400">
-                    Hibajegy
-                  </p>
-                  <Link
-                    href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
-                    className="text-sm text-pilot-aqua-600 hover:text-pilot-aqua-800"
-                  >
-                    {worksheet.serviceJob.jobNumber}
-                  </Link>
-                </div>
-              ) : (
-                <Field label="Hibajegy" value="Nincs mögötte hibajegy" />
-              )}
-              <Field label="Keltezés" value={formatDate(current.issueDate)} />
-              <Field
-                label="Teljesítés"
-                value={formatDate(current.fulfillmentDate)}
-              />
-              <Field label="Határidő" value={formatDate(current.dueDate)} />
-              <Field label="Felvette" value={worksheet.createdByName ?? "—"} />
-              <div>
-                <p className="mb-0.5 text-[11px] text-pilot-grey-400">Átadás</p>
-                <p
-                  className="text-sm text-pilot-grey-800"
-                  data-testid="munkalap-atadas"
-                >
-                  {worksheet.handedOverAt
-                    ? `${formatDateTime(worksheet.handedOverAt)}${
-                        worksheet.handedOverByName
-                          ? ` · ${worksheet.handedOverByName}`
-                          : ""
-                      }`
-                    : "Átadás nincs rögzítve"}
+            <PilotCardHeader title="A munka leírása" />
+            <div className="p-5">
+              {current.description ? (
+                <p className="whitespace-pre-line break-words text-sm leading-relaxed text-pilot-grey-800">
+                  {current.description}
                 </p>
-              </div>
-              <Field
-                label="Verzió"
-                value={`${current.version}. verzió${
-                  worksheet.versions.length > 1
-                    ? ` · összesen ${worksheet.versions.length}`
-                    : ""
-                }`}
-              />
+              ) : (
+                <p className="text-sm italic text-pilot-grey-400">
+                  A munkához nem írtak leírást.
+                </p>
+              )}
             </div>
           </PilotCard>
 
-          {current.description ? (
-            <PilotCard>
-              <PilotCardHeader title="A munka leírása" />
-              <div className="p-5">
-                <p className="whitespace-pre-line text-sm leading-relaxed text-pilot-grey-700">
-                  {current.description}
-                </p>
-              </div>
-            </PilotCard>
-          ) : null}
-
+          {/*
+            TÉTELEK, ÁR NÉLKÜL. The price stays the office's (Balázs,
+            2026-09-17: net, gross and VAT are shown nowhere here); the sheet
+            shows what was done, how much, by how many, and the hours.
+          */}
           <PilotCard>
             <PilotCardHeader
-              title="Elvégzett munka és anyagok"
+              title="Tételek"
               action={
                 canManage && isDraft ? (
                   <Link
@@ -520,25 +393,28 @@ export function PilotWorksheetDetailPage({
                 ) : undefined
               }
             />
+            <p className="px-5 pt-3 text-xs text-pilot-grey-500">
+              A szerelő a munkát és a mennyiséget rögzíti; az ár az irodáé.
+            </p>
             {current.lines.length === 0 ? (
-              <p className="px-5 py-6 text-sm italic text-pilot-grey-300">
+              <p className="px-5 py-6 text-sm italic text-pilot-grey-400">
                 Nincs tétel. Tétel nélküli munkalap nem zárható le.
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse text-sm">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
                   <thead>
                     <tr className="border-b border-pilot-grey-100">
                       {[
                         "#",
                         "Megnevezés",
                         "Mennyiség",
-                        "Egység",
+                        "Hányan",
                         "Munkaóra",
                       ].map((col) => (
                         <th
                           key={col}
-                          className="px-5 py-2.5 text-left text-xs font-medium text-pilot-grey-400"
+                          className="px-5 py-2.5 text-left text-xs font-medium text-pilot-grey-500"
                         >
                           {col}
                         </th>
@@ -551,23 +427,25 @@ export function PilotWorksheetDetailPage({
                         key={line.id}
                         className="border-b border-pilot-grey-50"
                       >
-                        <td className="px-5 py-2.5 text-xs text-pilot-grey-400">
+                        <td className="px-5 py-3 text-xs text-pilot-grey-400">
                           {line.position}
                         </td>
-                        <td className="px-5 py-2.5 text-pilot-grey-800">
-                          <div className="font-medium">{line.description}</div>
+                        <td className="px-5 py-3 text-pilot-grey-900">
+                          <div className="break-words font-semibold">
+                            {line.description}
+                          </div>
                           {line.detail ? (
-                            <div className="text-xs text-pilot-grey-400">
+                            <div className="text-xs text-pilot-grey-500">
                               {line.detail}
                             </div>
                           ) : null}
                           {line.assetNumber ? (
-                            <div className="font-mono text-xs text-pilot-grey-400">
+                            <div className="font-mono text-xs text-pilot-grey-500">
                               {line.assetNumber}
                             </div>
                           ) : null}
                           {line.partnerInternalCode ? (
-                            <div className="text-xs text-pilot-grey-400">
+                            <div className="text-xs text-pilot-grey-500">
                               Partner belső kódja:{" "}
                               <span className="font-mono">
                                 {line.partnerInternalCode}
@@ -575,48 +453,52 @@ export function PilotWorksheetDetailPage({
                             </div>
                           ) : null}
                         </td>
-                        <td className="px-5 py-2.5 font-mono text-pilot-grey-600">
-                          {line.quantity}
+                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
+                          {formatLaborHours(line.quantity)} {line.unit}
                         </td>
-                        <td className="px-5 py-2.5 text-pilot-grey-500">
-                          {line.unit}
+                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
+                          {line.kind === "LABOR"
+                            ? `${line.workerCount} fő`
+                            : "–"}
                         </td>
-                        <td className="px-5 py-2.5 font-mono text-pilot-grey-600">
-                          {line.kind === "LABOR" ? line.laborHours : "–"}
+                        <td className="whitespace-nowrap px-5 py-3 text-pilot-grey-700">
+                          {line.kind === "LABOR"
+                            ? `${formatLaborHours(line.laborHours)} munkaóra`
+                            : "–"}
                         </td>
                       </tr>
                     ))}
-                    <tr className="bg-pilot-grey-50">
-                      <td
-                        className="px-5 py-2.5 text-sm font-semibold text-pilot-grey-800"
-                        colSpan={4}
-                      >
-                        Összesítés
-                      </td>
-                      <td className="px-5 py-2.5 font-mono text-sm font-semibold text-pilot-grey-800">
-                        {osszMunkaorak} ó
-                      </td>
-                    </tr>
                   </tbody>
                 </table>
               </div>
             )}
+            <div className="flex items-baseline justify-between border-t border-pilot-grey-100 px-5 py-3">
+              <span className="text-xs text-pilot-grey-600">
+                Összes munkaóra
+              </span>
+              <span className="text-lg font-semibold text-pilot-grey-900">
+                {formatLaborHours(osszMunkaorak)} óra
+              </span>
+            </div>
           </PilotCard>
 
-          <WorksheetAssetEditor
-            worksheetId={worksheet.id}
-            token={token}
-            departmentId={worksheet.department.id}
-            assets={worksheet.assets}
-            canManage={canManage}
-            onSaved={setWorksheet}
-          />
-
+          {/* the work log ("Munkanapló" in the design): who wrote what, when */}
           <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
 
           <WorksheetMaterialRequests
             worksheetId={worksheet.id}
             canWrite={canManage}
+          />
+
+          {/*
+            A KIADOTT MUNKALAP ÉS A CSATOLMÁNYOK: one component, so they move
+            together (see the file header); the redesign puts photos and
+            files in the left column, under the material requests.
+          */}
+          <WorksheetDocuments
+            worksheetId={worksheet.id}
+            token={token}
+            canView={canView}
           />
 
           <PilotCard>
@@ -701,15 +583,76 @@ export function PilotWorksheetDetailPage({
 
         <div className="flex flex-col gap-5">
           {/*
-            ÖSSZESÍTÉS ÉS FELELŐSÖK A JOBB OSZLOP TETEJÉN -- a fájl fejlécében
-            megindokolva: a terv ezt a két kártyát nem adja önállóan, acrobot
-            döntése szerint itt, a Munkalap adatai kártyával egy magasságban
-            állnak.
+            ÖSSZESÍTÉS: the hours and the line count. The design's "2 fő
+            dolgozott" is left out (decision E8): the assignees are not the
+            people who worked, and the sheet has no other count of them.
           */}
           <PilotCard>
             <PilotCardHeader title="Összesítés" />
             <div className="p-5">
-              <Field label="Összes munkaóra" value={`${osszMunkaorak} óra`} />
+              <p className="text-xs text-pilot-grey-500">Összes munkaóra</p>
+              <p className="mt-1 text-3xl font-semibold text-pilot-grey-900">
+                {formatLaborHours(osszMunkaorak)} óra
+              </p>
+              <p className="mt-2 text-xs text-pilot-grey-500">
+                {current.lines.length} tétel
+              </p>
+            </div>
+          </PilotCard>
+
+          <PilotCard>
+            <PilotCardHeader title="Munkalap adatai" />
+            <div className="px-5 py-2">
+              {fieldRow("Partner", worksheet.customer.displayName)}
+              {fieldRow(
+                "Alegység",
+                worksheet.department.path?.length
+                  ? worksheet.department.path.join(" / ")
+                  : `${worksheet.department.code} — ${current.unitName ?? "—"}`,
+              )}
+              {fieldRow(
+                "Hibajegy",
+                worksheet.serviceJob ? (
+                  <Link
+                    href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+                    className="text-pilot-aqua-700 hover:text-pilot-aqua-800"
+                  >
+                    {worksheet.serviceJob.jobNumber}
+                  </Link>
+                ) : (
+                  "Nincs mögötte hibajegy"
+                ),
+              )}
+              {fieldRow(
+                "Felelősök",
+                worksheet.assignees.length
+                  ? worksheet.assignees.map((person) => person.name).join(", ")
+                  : "Nincs kiosztva",
+              )}
+              {fieldRow("Keltezés", formatDate(current.issueDate))}
+              {fieldRow("Teljesítés", formatDate(current.fulfillmentDate))}
+              {fieldRow("Határidő", formatDate(current.dueDate))}
+              {fieldRow("Felvette", worksheet.createdByName ?? "—")}
+              {fieldRow(
+                "Átadás",
+                <span data-testid="munkalap-atadas">
+                  {worksheet.handedOverAt
+                    ? `${formatDateTime(worksheet.handedOverAt)}${
+                        worksheet.handedOverByName
+                          ? ` · ${worksheet.handedOverByName}`
+                          : ""
+                      }`
+                    : "Átadás nincs rögzítve"}
+                </span>,
+              )}
+              {fieldRow(
+                "Verzió",
+                `${current.version}. verzió${
+                  worksheet.versions.length > 1
+                    ? ` · összesen ${worksheet.versions.length}`
+                    : ""
+                }`,
+              )}
             </div>
           </PilotCard>
 
@@ -721,6 +664,88 @@ export function PilotWorksheetDetailPage({
             onSaved={setWorksheet}
           />
 
+          <WorksheetAssetEditor
+            worksheetId={worksheet.id}
+            token={token}
+            departmentId={worksheet.department.id}
+            assets={worksheet.assets}
+            canManage={canManage}
+            onSaved={setWorksheet}
+          />
+
+          {/*
+            HELYSZÍNI LEZÁRÁS (Figma 423:662): handing over and closing, kept
+            next to each other. The facts above the buttons are facts, not
+            gates (decision E7): closing needs a draft and the permission,
+            exactly as the server checks, and the hand-over does not block it.
+          */}
+          {canManage ? (
+            <section
+              aria-label="Helyszíni lezárás"
+              className="rounded-xl bg-pilot-aqua-50 px-5 py-5 ring-1 ring-pilot-aqua-200"
+            >
+              <h2 className="text-base font-semibold text-pilot-grey-900">
+                Helyszíni lezárás
+              </h2>
+              <p className="mt-1 text-xs text-pilot-grey-600">
+                {isDraft
+                  ? "A lezárás után következik az aláírás."
+                  : `Ez a lap már ki van állítva (${worksheetStatusLabel[
+                      current.status
+                    ].toLowerCase()}). Kiállítani csak piszkozatot lehet.`}
+              </p>
+              <ul className="mt-3 space-y-1 text-sm text-pilot-grey-800">
+                <li>
+                  Tételek:{" "}
+                  {current.lines.length
+                    ? `${current.lines.length} rögzítve`
+                    : "még nincs"}
+                </li>
+                <li>
+                  Felelősök:{" "}
+                  {worksheet.assignees.length ? "megadva" : "nincs kiosztva"}
+                </li>
+                <li>
+                  Átadás:{" "}
+                  {worksheet.handedOverAt ? "rögzítve" : "még nincs rögzítve"}
+                </li>
+              </ul>
+              <div className="mt-4 flex flex-col gap-2">
+                <PilotButton
+                  variant="secondary"
+                  size="regular"
+                  fullWidth
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() =>
+                      worksheetsApi.setHandedOver(
+                        token,
+                        worksheet.id,
+                        !worksheet.handedOverAt,
+                      ),
+                    )
+                  }
+                >
+                  {worksheet.handedOverAt
+                    ? "Átadás visszavonása"
+                    : "Átadás rögzítése"}
+                </PilotButton>
+                {isDraft ? (
+                  <PilotButton
+                    variant="primary"
+                    size="regular"
+                    fullWidth
+                    disabled={busy}
+                    onClick={() =>
+                      void run(() => worksheetsApi.close(token, worksheet.id))
+                    }
+                  >
+                    Kiállítás és lezárás
+                  </PilotButton>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           {/* the block stays after the first send: a mail that did not arrive
               can be sent again (see `worksheet-detail-page.tsx`) */}
           {canManage && current.status === "AWAITING_SIGNATURE" ? (
@@ -918,17 +943,6 @@ export function PilotWorksheetDetailPage({
               </div>
             </PilotCard>
           ) : null}
-
-          {/*
-            A KIADOTT MUNKALAP -- a fájl fejlécében megindokolva, miért áll
-            itt a Csatolmányokkal EGYÜTT: a WorksheetDocuments egy hívás,
-            nem bontható a két Figma-kártya közé.
-          */}
-          <WorksheetDocuments
-            worksheetId={worksheet.id}
-            token={token}
-            canView={canView}
-          />
         </div>
       </div>
     </PilotThemeRoot>
