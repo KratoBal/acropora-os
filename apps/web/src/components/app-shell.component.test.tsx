@@ -527,3 +527,100 @@ describe("AppShell catalogue data-quality entry", () => {
     );
   });
 });
+
+/**
+ * THE COMPACT PROFILE (Figma 441:2, "Profile" 441:58 and "Header actions"
+ * 441:66). Display only: what is measured is what the shell draws, never
+ * who may see what.
+ */
+describe("AppShell kompakt profil", () => {
+  const longSession: Session = {
+    ...ownerSession,
+    user: {
+      ...ownerSession.user,
+      displayName: "Kitaláltné Hosszúnevű Erzsébet",
+      role: "ADMIN",
+    },
+  };
+
+  beforeEach(() => {
+    auth.session = longSession;
+    navigation.pathname = "/";
+  });
+
+  it("a sidebar alján 32px-es monogram, név és a szerepkör magyarul, finom felső borderrel", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const profile = screen.getByRole("region", {
+      name: "Bejelentkezett felhasználó",
+    });
+    expect(profile.closest("aside")).not.toBeNull();
+    expect(profile).toHaveClass("border-t", "border-pilot-grey-200");
+
+    const monogram = within(profile).getByTestId("profile-monogram");
+    expect(monogram).toHaveClass("size-8");
+    expect(monogram).toHaveTextContent(/^KH$/);
+
+    const name = within(profile).getByText("Kitaláltné Hosszúnevű Erzsébet");
+    expect(name).toHaveClass("truncate", "text-sm");
+    const role = within(profile).getByText("Admin");
+    expect(role).toHaveClass("truncate", "text-xs", "text-pilot-grey-500");
+    expect(within(profile).queryByText("ADMIN")).toBeNull();
+  });
+
+  it("munkamenet nélkül nincs profil (kontroll)", () => {
+    auth.session = null;
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(
+      screen.queryByRole("region", { name: "Bejelentkezett felhasználó" }),
+    ).toBeNull();
+  });
+
+  it("az Üzenetek ikon alapból nem jelenik meg", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.queryByRole("link", { name: /Üzenetek/ })).toBeNull();
+  });
+
+  it("POZITÍV KONTROLL: a helye kész, prop-pal 32px-es ikon és olvasatlan-jelvény a fejlécben", () => {
+    render(
+      <AppShell
+        messages={{
+          href: "/uzenetek",
+          icon: <svg data-testid="glyph" />,
+          unreadCount: 3,
+        }}
+      >
+        Oldaltartalom
+      </AppShell>,
+    );
+
+    const link = screen.getByRole("link", { name: "Üzenetek, 3 olvasatlan" });
+    expect(link.closest("header")).not.toBeNull();
+    expect(link).toHaveAttribute("href", "/uzenetek");
+    expect(link).toHaveClass("size-8");
+    expect(within(link).getByTestId("glyph")).toBeInTheDocument();
+    expect(link).toHaveTextContent(/^3$/);
+  });
+
+  it("olvasatlan nélkül nincs jelvény, kilenc fölött 9+", () => {
+    const { rerender } = render(
+      <AppShell messages={{ href: "/uzenetek", icon: null, unreadCount: 0 }}>
+        Oldaltartalom
+      </AppShell>,
+    );
+    expect(screen.getByRole("link", { name: "Üzenetek" })).toHaveTextContent(
+      /^$/,
+    );
+
+    rerender(
+      <AppShell messages={{ href: "/uzenetek", icon: null, unreadCount: 12 }}>
+        Oldaltartalom
+      </AppShell>,
+    );
+    expect(
+      screen.getByRole("link", { name: "Üzenetek, 12 olvasatlan" }),
+    ).toHaveTextContent(/^9\+$/);
+  });
+});
