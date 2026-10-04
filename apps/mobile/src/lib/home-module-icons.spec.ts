@@ -3,167 +3,138 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
+import { BOTTOM_NAV_ITEMS } from "./home/bottom-nav";
+import { HOME_MODULES } from "./home/modules";
+
 /**
- * A KEZDŐLAP MODUL-CSEMPÉI IKONT VISELNEK, NEM BETŰKÓDOT (Balázs kérése,
- * 2026-09-25 18:23, `exchange/figma-telefon-make-12/src/MobileAppScreen.tsx`
- * 264-269. sor). A HAT megnevezett modul emojija onnan jön BETŰRE EGYEZŐEN --
- * ez az állítás ezt a hat sort méri, nem a saját ízlésemet.
+ * THE HOME'S ICONS ARE IONICONS OUTLINE GLYPHS (mobile Home V1, owner's
+ * answer 6, 2026-10-02): no emoji and no letter marks.
  *
- * A `code` prop VÁLTOZATLAN MARADT (lásd `nav-tile-roles.spec.ts`, ami a
- * `code="NAV"` alakra illeszkedik): a kód a szerver menütételéhez kötött
- * azonosító, az `icon` egy ÚJ, KIZÁRÓLAG megjelenítési prop mellette.
+ * This replaces the earlier pin on the emoji per module
+ * (`exchange/figma-telefon-make-12`), which the V1 design retires.
+ *
+ * WHY THE GLYPH MAP IS READ: `Ionicons` takes any string as `name` at runtime
+ * and draws a "?" box for an unknown one, and the type only helps where the
+ * name is a literal. The names live in tables, so this spec checks each one
+ * against the map the installed package ships.
  */
-const HOME_SCREEN = join("src", "app", "index.tsx");
+const GLYPH_MAP = join(
+  "node_modules",
+  "@expo",
+  "vector-icons",
+  "build",
+  "vendor",
+  "react-native-vector-icons",
+  "glyphmaps",
+  "Ionicons.json",
+);
 
-const FIGMA_IKONOK: Record<string, string> = {
-  HJ: "🎫",
-  MU: "📋",
-  AI: "📦",
-  ES: "🔧",
-  AK: "🐟",
-  PA: "🤝",
-};
+/** Every Ionicons name the Home, the launcher and the bottom bar draw. */
+function usedIcons(): string[] {
+  const tileChevron = readFileSync(
+    join("src", "components", "home", "ModuleTile.tsx"),
+    "utf8",
+  ).match(/name="([a-z-]+)"/g);
+  return [
+    ...Object.values(HOME_MODULES).map((module) => module.icon),
+    ...BOTTOM_NAV_ITEMS.map((item) => item.icon),
+    ...(tileChevron ?? []).map((match) => match.slice(6, -1)),
+  ];
+}
 
-/** A NÉGY TOVÁBBI MODUL, AMI NEM SZEREPEL A FIGMA-TERVBEN: csak azt mérjük,
- * hogy van SAJÁT, NEM ÜRES ikonjuk, nem a konkrét emojit -- azt Balázs
- * kifejezetten "illő ikonnak" nevezte, nem előírt értéknek. */
-const TOVABBI_KODOK = ["RE", "BE", "TE", "NAV"];
-
-function kodSzoveg(forras: string): string {
-  return forras
+/** Source with comments removed, so a comment cannot satisfy a check. */
+function code(path: string): string {
+  return readFileSync(path, "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/(^|[^:])\/\/.*$/gm, "$1 ");
 }
 
-function iconFor(forras: string, code: string): string | undefined {
-  const match = new RegExp(`code="${code}"[\\s\\S]*?icon="([^"]+)"`).exec(
-    forras,
-  );
-  return match?.[1];
-}
+const SCREENS = [
+  join("src", "app", "index.tsx"),
+  join("src", "app", "modulok.tsx"),
+  join("src", "app", "settings.tsx"),
+  join("src", "app", "_layout.tsx"),
+  join("src", "components", "home", "ModuleTile.tsx"),
+  join("src", "components", "home", "BottomNav.tsx"),
+];
 
-describe("a kezdőlap modul-csempéi a terv szerinti ikont viselik", () => {
-  const forras = kodSzoveg(readFileSync(HOME_SCREEN, "utf8"));
+describe("a kezdőlap ikonjai", () => {
+  const glyphs = JSON.parse(readFileSync(GLYPH_MAP, "utf8")) as Record<
+    string,
+    number
+  >;
 
-  it("ISMERT POZITÍV KONTROLL: a Figma-lista tényleg nem üres", () => {
-    assert.ok(Object.keys(FIGMA_IKONOK).length >= 6);
+  it("POZITÍV KONTROLL: a glyph-térkép és a használt nevek nem üresek", () => {
+    assert.ok(Object.keys(glyphs).length > 1000);
+    // Ten modules, three bottom-bar items and the tile's chevron.
+    assert.equal(usedIcons().length, 14);
   });
 
-  for (const [code, ikon] of Object.entries(FIGMA_IKONOK)) {
-    it(`${code}: az ikon betűre egyezik a Figma tervvel (${ikon})`, () => {
-      assert.equal(
-        iconFor(forras, code),
-        ikon,
-        `a ${code} csempe ikonja nem a tervezett ${ikon}`,
-      );
-    });
-  }
-
-  for (const code of TOVABBI_KODOK) {
-    it(`${code}: van saját, nem üres ikonja (a terv ezt a modult nem nevezi meg)`, () => {
-      const ikon = iconFor(forras, code);
-      assert.ok(ikon && ikon.trim().length > 0, `${code}: nincs icon prop`);
-    });
-  }
-
-  it("a régi betűkód-szöveg nem jelenik meg többé a csempén", () => {
-    assert.doesNotMatch(
-      forras,
-      /\{code\}/,
-      "a ModuleCard még mindig a code prop szövegét jeleníti meg",
+  it("minden használt ikonnév létezik az Ionicons készletben", () => {
+    assert.deepEqual(
+      usedIcons().filter((name) => !(name in glyphs)),
+      [],
+      "ismeretlen Ionicons név: a telefon egy kérdőjeles dobozt rajzolna",
     );
+  });
+
+  it("minden ikon körvonalas (outline), a nyíl kivételével", () => {
+    assert.deepEqual(
+      usedIcons().filter(
+        (name) => !name.endsWith("-outline") && name !== "chevron-forward",
+      ),
+      [],
+    );
+  });
+
+  it("nincs emoji a kezdőlap képernyőin", () => {
+    for (const path of SCREENS)
+      assert.doesNotMatch(
+        code(path),
+        /\p{Extended_Pictographic}/u,
+        `${path}: emoji a forrásban`,
+      );
   });
 });
 
 /**
- * KÉT OSZLOP, A TERV SZERINT (Balázs kérdése, 2026-09-25 18:25, ugyanaz a
- * kör, mint az ikonoké): a modul-csempék rácsa két oszlopban álljon, a
- * csempe maga függőleges elrendezésű (ikon felül, alatta cím/leírás,
- * legalul a nyíl), és páratlan darabszámnál az utolsó csempe fél
- * szélességű marad, nem nyúlik ki.
- *
- * A FORRÁS-OLVASÓ ÁLLÍTÁS HATÁRA (lásd `forras-olvaso-allitas-hatara`
- * emlék): ez a spec a STÍLUS-SZÖVEGET méri, nem a renderelt képernyőt --
- * renderelő ehhez a csomaghoz ma nincs. Amit méri: a `modules` konténer
- * `flexWrap: "wrap"`-ot visel (két oszlop, nem egy), a `moduleCard`
- * `width: "48%"`-ot (rögzített fél szélesség, nem `flex: 1`, ami az
- * utolsó, pár nélküli csempét kinyújtaná), és a `moduleText` `flex: 1`-et
- * (ez tolja a nyilat a kártya aljára).
+ * TWO TILES TO A ROW (Balázs, 2026-09-25 18:25, kept by the V1 tile): the
+ * grid wraps, and the tile has a fixed half width, not `flex: 1`, so the last
+ * tile of an odd count does not stretch across the row.
  */
-describe("a modul-csempék két oszlopban, függőleges elrendezésben állnak", () => {
-  const forras = kodSzoveg(readFileSync(HOME_SCREEN, "utf8"));
-
-  it("a modulok konténere sortörő rácsot ad, nem egy oszlopot", () => {
-    const blokk = forras.match(/modules:\s*\{[^}]*\}/)?.[0];
-    assert.ok(blokk, "nem találom a `modules` stílust");
-    assert.match(blokk!, /flexWrap:\s*"wrap"/);
+describe("a modul-csempék két oszlopban állnak", () => {
+  it("a kezdőlap és a Modulok rácsa sortörő", () => {
+    for (const path of [SCREENS[0]!, SCREENS[1]!]) {
+      const block = code(path).match(/modules:\s*\{[^}]*\}/)?.[0];
+      assert.ok(block, `${path}: nem találom a \`modules\` stílust`);
+      assert.match(block!, /flexWrap:\s*"wrap"/);
+    }
   });
 
   it("a csempe rögzített fél szélességű, nem `flex: 1`", () => {
-    const blokk = forras.match(/moduleCard:\s*\{[^}]*\}/)?.[0];
-    assert.ok(blokk, "nem találom a `moduleCard` stílust");
-    assert.match(blokk!, /width:\s*"48%"/);
-    assert.doesNotMatch(
-      blokk!,
-      /flex:\s*1/,
-      "a moduleCard flex: 1-et visel, ami az utolsó, pár nélküli csempét kinyújtaná",
-    );
-  });
-
-  it("a szöveg-blokk `flex: 1`-et visel, ami a nyilat a kártya aljára tolja", () => {
-    const blokk = forras.match(/moduleText:\s*\{[^}]*\}/)?.[0];
-    assert.ok(blokk, "nem találom a `moduleText` stílust");
-    assert.match(blokk!, /flex:\s*1/);
+    const block = code(SCREENS[4]!).match(/tile:\s*\{[^}]*\}/)?.[0];
+    assert.ok(block, "nem találom a `tile` stílust");
+    assert.match(block!, /width:\s*"48%"/);
+    assert.doesNotMatch(block!, /flex:\s*1/);
   });
 });
 
 /**
- * BALÁZS MÁSODIK KÉPE, 2026-09-25 18:51 -- kilenc elemenkénti eltérés a
- * kiment kezdőlap és a terv között (exchange/kezdolap-telefon-2026-09-25-1851.png
- * kontra exchange/kezdolap-terv-2026-09-25.png). Ez a blokk azokat az
- * állításokat méri, amik forrás-szövegből ellenőrizhetők: a doboz nélküli
- * ikon, a jelvény külön sora, a szürke nyíl/címke színek.
+ * THE HOME DRAWS ITS OWN HEADER (Figma 412:3): the navigator's header is
+ * hidden for the index screen, and the gear button it carried is gone; the
+ * profile opens from the initials and from the bottom bar.
  */
-describe("a kezdőlap a második képernyőfotó-kör elemenkénti javításait viseli", () => {
-  const forras = kodSzoveg(readFileSync(HOME_SCREEN, "utf8"));
+describe("a kezdőlap fejléce a tartalomban áll", () => {
+  const layout = code(SCREENS[3]!);
 
-  it("a modul-ikonnak nincs saját (moduleCode) doboza többé", () => {
-    assert.doesNotMatch(
-      forras,
-      /moduleCode:\s*\{/,
-      "a moduleCode stílus még mindig létezik: az ikon dobozban áll, a terv puszta emojit ad",
-    );
+  it("az index képernyő navigátor-fejléce rejtett", () => {
+    const block = layout.match(/<Stack\.Screen\s+name="index"[\s\S]*?\/>/)?.[0];
+    assert.ok(block, "nem találom az index Stack.Screen-t");
+    assert.match(block!, /headerShown:\s*false/);
+    assert.doesNotMatch(block!, /headerRight:/);
   });
 
-  it("a szerepkör-jelvény saját sorban, balra igazítva áll", () => {
-    const blokk = forras.match(/roleBadge:\s*\{[^}]*\}/)?.[0];
-    assert.ok(blokk, "nem találom a `roleBadge` stílust");
-    assert.match(
-      blokk!,
-      /alignSelf:\s*"flex-start"/,
-      "a roleBadge nem flex-start, tehát nem saját tartalom-szélességű sorban áll",
-    );
-  });
-
-  it("a nyíl és a szerepkör-jelvény nem az akcent-színt viseli", () => {
-    const nyilBlokk = forras.match(/moduleArrow:\s*\{[^}]*\}/)?.[0];
-    assert.ok(nyilBlokk, "nem találom a `moduleArrow` stílust");
-    assert.doesNotMatch(nyilBlokk!, /t\.accent\b/);
-    const jelvenyBlokk = forras.match(/roleBadgeText:\s*\{[^}]*\}/)?.[0];
-    assert.ok(jelvenyBlokk, "nem találom a `roleBadgeText` stílust");
-    assert.doesNotMatch(jelvenyBlokk!, /t\.accentSoftText\b/);
-  });
-});
-
-describe("a kezdőlap fejléce balra igazított címet és beállítás-gombot visel", () => {
-  const forras = kodSzoveg(
-    readFileSync(join("src", "app", "_layout.tsx"), "utf8"),
-  );
-
-  it("az index képernyő fejléce balra igazított és headerRight-ot ad", () => {
-    const blokk = forras.match(/<Stack\.Screen\s+name="index"[\s\S]*?\/>/)?.[0];
-    assert.ok(blokk, "nem találom az index Stack.Screen-t");
-    assert.match(blokk!, /headerTitleAlign:\s*"left"/);
-    assert.match(blokk!, /headerRight:/);
+  it("a Modulok képernyő be van jegyezve", () => {
+    assert.match(layout, /<Stack\.Screen\s+name="modulok"/);
   });
 });

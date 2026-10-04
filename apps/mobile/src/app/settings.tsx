@@ -1,4 +1,4 @@
-import { Redirect, useRouter } from "expo-router";
+import { Redirect } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,8 +15,11 @@ import {
   forgetDeviceToken,
   registerDeviceToken,
 } from "@/lib/api/notifications";
+import { BottomNav } from "@/components/home/BottomNav";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { personDisplayName } from "@/lib/auth/person-name";
+import { userRoleLabel } from "@/lib/auth/webshop-authorization";
+import { defaultPresetFor, HOME_PRESETS } from "@/lib/home/presets";
 import {
   currentBundleId,
   obtainDeviceToken,
@@ -47,17 +50,27 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
  * épültek rá (`useAppTheme`). A Figma 12. kör (2026-09-25) ezt a lapot IS
  * ráépíti, és a lenti magyarázó szöveg innentől azt mondja, ami igaz: a
  * választás az EGÉSZ appra hat.
+ *
+ * THE PROFILE TAB OF THE BOTTOM BAR (mobile Home V1, phase 1). The sign-out
+ * button moved here from the bottom of the Home, which the new Home no longer
+ * has. The view row names the Home's view; in phase 1 it follows the role and
+ * cannot be changed, so it is a line of text, not a control.
  */
 export default function SettingsScreen() {
-  const router = useRouter();
-  const { status, user } = useAuth();
+  const { status, user, signOut } = useAuth();
   const push = usePushPreference();
   const theme = useAppTheme();
   const styles = useMemo(() => createStyles(theme.tokens), [theme.tokens]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (status !== "authenticated" || !user) return <Redirect href="/login" />;
+  // `signingOut` keeps the screen up while the sign-out runs, as the Home
+  // did when the button lived there; the Home's redirect then takes over.
+  if ((status !== "authenticated" && status !== "signingOut") || !user)
+    return <Redirect href="/login" />;
+
+  const signingOut = status === "signingOut";
+  const preset = HOME_PRESETS[defaultPresetFor(user.role)];
 
   const enabled = push.preference !== "off";
 
@@ -109,11 +122,22 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.eyebrow}>BEÁLLÍTÁSOK</Text>
+        <Text style={styles.eyebrow}>PROFIL</Text>
         <Text style={styles.title}>{personDisplayName(user)}</Text>
         <Text style={styles.subtitle}>{user.email}</Text>
+
+        <View style={styles.card}>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Szerepkör</Text>
+            <Text style={styles.infoValue}>{userRoleLabel(user.role)}</Text>
+          </View>
+          <View style={[styles.infoRow, styles.infoRowDivided]}>
+            <Text style={styles.infoLabel}>Kezdőlap nézet</Text>
+            <Text style={styles.infoValue}>{preset.label}</Text>
+          </View>
+        </View>
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -162,12 +186,23 @@ export default function SettingsScreen() {
 
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.back()}
-          style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          accessibilityLabel="Kijelentkezés"
+          accessibilityState={{ disabled: signingOut }}
+          disabled={signingOut}
+          onPress={() => void signOut()}
+          style={({ pressed }) => [
+            styles.signOutButton,
+            (pressed || signingOut) && styles.pressed,
+          ]}
         >
-          <Text style={styles.backText}>Vissza</Text>
+          {signingOut ? (
+            <ActivityIndicator color={theme.tokens.danger} />
+          ) : (
+            <Text style={styles.signOutText}>Kijelentkezés</Text>
+          )}
         </Pressable>
       </ScrollView>
+      <BottomNav active="profile" />
     </SafeAreaView>
   );
 }
@@ -224,7 +259,7 @@ function ThemeChoice({
 function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.background },
-    container: { gap: 12, padding: 18, paddingBottom: 48 },
+    container: { gap: 12, padding: 18, paddingBottom: 28 },
     eyebrow: {
       color: t.accent,
       fontSize: 11,
@@ -253,16 +288,31 @@ function createStyles(t: ThemeTokens) {
       lineHeight: 18,
       padding: 12,
     },
-    back: {
-      alignSelf: "flex-start",
-      borderColor: t.border,
+    infoRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingVertical: 4,
+    },
+    infoRowDivided: {
+      borderTopColor: t.border,
+      borderTopWidth: 1,
+      marginTop: 8,
+      paddingTop: 12,
+    },
+    infoLabel: { color: t.textSecondary, fontSize: 14 },
+    infoValue: { color: t.textPrimary, fontSize: 14, fontWeight: "700" },
+    signOutButton: {
+      alignItems: "center",
+      borderColor: t.danger,
       borderRadius: 10,
       borderWidth: 1,
-      marginTop: 6,
-      paddingHorizontal: 14,
+      justifyContent: "center",
+      marginTop: 8,
+      minHeight: 44,
       paddingVertical: 10,
     },
-    backText: { color: t.textSecondary, fontSize: 13, fontWeight: "700" },
+    signOutText: { color: t.danger, fontSize: 14, fontWeight: "800" },
     pressed: { opacity: 0.75 },
     themeLoading: { marginTop: 10, alignSelf: "flex-start" },
     themeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
