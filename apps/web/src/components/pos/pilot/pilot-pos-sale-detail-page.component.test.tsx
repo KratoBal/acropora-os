@@ -146,4 +146,29 @@ describe("PilotPosSaleDetailPage", () => {
       await screen.findByText("Az eladás betöltése nem sikerült."),
     ).toBeInTheDocument();
   });
+  it("függő és hibás UNAS-szinkron mellett az eladás és összegei érvényesek maradnak", async () => {
+    api.getSale.mockResolvedValue({
+      ...saleDetail,
+      lines: [
+        { ...saleDetail.lines[0], syncStatus: "PENDING" },
+        {
+          ...saleDetail.lines[0],
+          id: "failed",
+          sku: "FAIL",
+          syncStatus: "FAILED",
+          syncError: "UNAS nem elérhető",
+        },
+      ],
+    });
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+    expect(await screen.findByText("UNAS nem elérhető")).toBeInTheDocument();
+    expect(screen.getByText("Függőben")).toBeInTheDocument();
+    expect(screen.getByText("Hiba")).toBeInTheDocument();
+    expect(
+      screen.getByText(/0 tétel szinkronizálva · 1 függőben · 1 hiba/),
+    ).toHaveTextContent("A POS eladás ettől függetlenül érvényes.");
+    expect(
+      screen.getByRole("heading", { name: "POS-0001" }),
+    ).toBeInTheDocument();
+  });
 });

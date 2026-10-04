@@ -91,6 +91,7 @@ const searchResult: PosProductSearchResult = {
   vatRate: "27",
   grossPrice: "24900",
   currentStock: "12",
+  isPackageProduct: false,
 };
 
 function saleResult(): PosSaleResult {

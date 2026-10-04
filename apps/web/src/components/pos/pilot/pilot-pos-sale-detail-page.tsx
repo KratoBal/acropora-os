@@ -20,27 +20,7 @@ import {
   type PilotBadgeVariant,
 } from "@/components/pilot/pilot-ui";
 
-/**
- * A FIGMA MAKE TERV ÁTÜLTETÉSE -- POS ELADÁS ADATLAPJA, 11. KÖR.
- *
- * Lásd `pilot-pos-terminal-page.tsx` fejlécét: a régi `../pos-sale-detail-
- * page.tsx` VÁLTOZATLAN marad, csak a route áll át erre a fájlra. Az
- * állapot- és hívás-logika szó szerint onnan jön.
- *
- * === KÜLÖNBSÉGEK A TERVHEZ KÉPEST, KIMONDVA ===
- *
- * A terv saját demo-adatot rajzol (fix "Tóth Gábor" pénztáros, fix
- * összegek) -- a mai kód a `posApi.getSale()` valódi válaszát mutatja,
- * `detail.soldByName`/`detail.totalGross` stb., nem talál ki adatot.
- *
- * A "Vissza a pénztárhoz" a tervben is szöveges link (nem gomb), tehát ez
- * nem tér el -- de a terv KÜLÖN hiba-ágat rajzol (`SaleDetailProps.error`,
- * teljes képernyős üzenet, saját "Vissza" gombbal), a mai kód viszont a
- * hibát a fejléc ALATT, a lista helyén mutatja (lásd a régi
- * `pos-sale-detail-page.tsx` VÁLTOZATLAN viselkedését) -- a fejléc, és
- * benne a "Vissza" link, hiba esetén is látszik, tehát nem hiányzik semmi,
- * csak máshol áll.
- */
+/** Canonical Figma sale detail 434:797; API and sync state semantics retained. */
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
   CASH: "Készpénz",
@@ -55,7 +35,7 @@ function formatHuf(value: string): string {
 function syncBadgeVariant(
   status: "OK" | "FAILED" | "PENDING",
 ): PilotBadgeVariant {
-  if (status === "OK") return "teal";
+  if (status === "OK") return "success";
   if (status === "FAILED") return "danger";
   return "amber";
 }
@@ -97,7 +77,7 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
 
   if (!canView) {
     return (
-      <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+      <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
         <div className="p-8">
           <Alert
             variant="danger"
@@ -109,23 +89,31 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
     );
   }
 
+  const syncCounts = detail?.lines.reduce(
+    (counts, line) => {
+      counts[line.syncStatus] += 1;
+      return counts;
+    },
+    { OK: 0, PENDING: 0, FAILED: 0 },
+  );
+
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
+      <div className="px-8 pb-5 pt-6">
         <button
           type="button"
           onClick={backTo.goBack}
-          className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400 transition-colors hover:text-pilot-grey-700"
+          className="mb-3 flex items-center gap-1.5 text-[11px] text-pilot-aqua-700 hover:underline"
         >
           <Icon name="chevron-left" size={12} />
           {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
         </button>
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="font-mono text-xl font-semibold text-pilot-grey-900">
+            <h1 className="text-[28px] font-semibold leading-tight text-pilot-grey-900">
               {detail ? detail.orderNumber : "Eladás"}
             </h1>
-            <p className="mt-0.5 text-sm text-pilot-grey-400">
+            <p className="mt-1.5 text-xs text-pilot-grey-600">
               POS eladás részletei
             </p>
           </div>
@@ -136,88 +124,86 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
           ) : null}
         </div>
       </div>
-
-      <div className="flex max-w-5xl flex-col gap-5 px-8 py-6">
+      <div className="flex min-w-0 flex-col gap-5 px-8 pb-8">
         {loading ? (
           <PilotCard className="p-5">
             <Skeleton className="h-4 w-1/3" />
           </PilotCard>
         ) : null}
-
         {error ? (
           <Alert variant="danger" title="Hiba történt" description={error} />
         ) : null}
-
         {detail ? (
           <>
             <PilotCard>
               <PilotCardHeader title="Áttekintés" />
-              <div className="grid grid-cols-1 gap-6 px-5 py-5 sm:grid-cols-[1fr_auto]">
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+              <div className="grid grid-cols-[minmax(0,1fr)_280px] gap-8 p-4">
+                <dl className="grid grid-cols-2 gap-x-8 gap-y-6 text-xs">
                   <div>
-                    <p className="mb-1 text-xs text-pilot-grey-400">
+                    <dt className="mb-2 text-[10px] text-pilot-grey-500">
                       Fizetési mód
-                    </p>
-                    <PilotBadge variant="grey">
+                    </dt>
+                    <dd className="text-pilot-grey-900">
                       {detail.paymentMethod
                         ? PAYMENT_METHOD_LABEL[detail.paymentMethod]
                         : "—"}
-                    </PilotBadge>
+                    </dd>
                   </div>
                   <div>
-                    <p className="mb-1 text-xs text-pilot-grey-400">Vevő</p>
-                    <p className="text-sm italic text-pilot-grey-500">
+                    <dt className="mb-2 text-[10px] text-pilot-grey-500">
+                      Vevő
+                    </dt>
+                    <dd className="text-pilot-grey-900">
                       {detail.customerName ?? "Anonim vásárló"}
-                    </p>
+                    </dd>
                   </div>
                   <div>
-                    <p className="mb-1 text-xs text-pilot-grey-400">
+                    <dt className="mb-2 text-[10px] text-pilot-grey-500">
                       Pénztáros
-                    </p>
-                    <p className="text-sm text-pilot-grey-800">
+                    </dt>
+                    <dd className="text-pilot-grey-900">
                       {detail.soldByName ?? "—"}
-                    </p>
+                    </dd>
                   </div>
                   <div>
-                    <p className="mb-1 text-xs text-pilot-grey-400">Időpont</p>
-                    <p className="text-sm text-pilot-grey-800">
+                    <dt className="mb-2 text-[10px] text-pilot-grey-500">
+                      Időpont
+                    </dt>
+                    <dd className="text-pilot-grey-900">
                       {new Date(detail.createdAt).toLocaleString("hu-HU")}
-                    </p>
+                    </dd>
                   </div>
-                </div>
-                <div className="flex min-w-[160px] flex-col gap-2 sm:border-l sm:border-pilot-grey-100 sm:pl-6 sm:text-right">
-                  {detail.discountPercent ? (
-                    <div>
-                      <p className="text-xs text-pilot-grey-400">
-                        Végösszeg kedvezmény
-                      </p>
-                      <p className="font-mono text-sm text-pilot-grey-700">
-                        {detail.discountPercent}%
-                      </p>
-                    </div>
-                  ) : null}
-                  <div>
-                    <p className="text-xs text-pilot-grey-400">Nettó</p>
-                    <p className="font-mono text-sm text-pilot-grey-700">
+                </dl>
+                <dl className="flex flex-col gap-4 text-xs tabular-nums">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-pilot-grey-500">
+                      Végösszeg kedvezmény
+                    </dt>
+                    <dd className="text-pilot-grey-900">
+                      {detail.discountPercent ?? "0"}%
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-pilot-grey-500">Nettó</dt>
+                    <dd className="text-pilot-grey-900">
                       {formatHuf(detail.totalNet)}
-                    </p>
+                    </dd>
                   </div>
-                  <div>
-                    <p className="text-xs text-pilot-grey-400">ÁFA</p>
-                    <p className="font-mono text-sm text-pilot-grey-700">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-pilot-grey-500">ÁFA</dt>
+                    <dd className="text-pilot-grey-900">
                       {formatHuf(detail.totalTax)}
-                    </p>
+                    </dd>
                   </div>
-                  <div className="border-t border-pilot-grey-100 pt-2">
-                    <p className="text-xs text-pilot-grey-400">Bruttó</p>
-                    <p className="font-mono text-2xl font-bold leading-tight text-pilot-grey-900">
+                  <div className="flex items-center justify-between gap-3 border-t border-pilot-grey-200 pt-3">
+                    <dt className="text-pilot-grey-600">Bruttó</dt>
+                    <dd className="text-[22px] font-semibold text-pilot-grey-900">
                       {formatHuf(detail.totalGross)}
-                    </p>
+                    </dd>
                   </div>
-                </div>
+                </dl>
               </div>
             </PilotCard>
-
             <PilotCard>
               <PilotCardHeader
                 title="Tételek"
@@ -227,85 +213,116 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
                   </PilotBadge>
                 }
               />
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
+              <div className="overflow-x-auto px-4">
+                <table className="w-full table-fixed border-collapse text-left text-xs">
+                  <colgroup>
+                    <col className="w-[14%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[5%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
+                  </colgroup>
                   <thead>
-                    <tr className="border-b border-pilot-grey-100">
-                      <th className="whitespace-nowrap bg-white px-5 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                    <tr className="border-b border-pilot-grey-200 text-[10px] font-medium uppercase text-pilot-grey-600">
+                      <th scope="col" className="py-4 pr-2 font-medium">
                         Cikkszám
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th scope="col" className="px-2 py-4 font-medium">
                         Termék
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th
+                        scope="col"
+                        className="px-2 py-4 text-right font-medium"
+                      >
                         Menny.
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th
+                        scope="col"
+                        className="px-2 py-4 text-right font-medium"
+                      >
                         Nettó egységár
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th scope="col" className="px-2 py-4 font-medium">
                         ÁFA
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th
+                        scope="col"
+                        className="px-2 py-4 text-right font-medium"
+                      >
                         Kedvezmény
                       </th>
-                      <th className="whitespace-nowrap bg-white px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th
+                        scope="col"
+                        className="px-2 py-4 text-right font-medium"
+                      >
                         Bruttó
                       </th>
-                      <th className="whitespace-nowrap bg-white px-5 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400">
+                      <th scope="col" className="py-4 pl-2 font-medium">
                         UNAS szinkron
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detail.lines.map((line, index) => (
+                    {detail.lines.map((line) => (
                       <tr
                         key={line.id}
-                        className={`border-b border-pilot-grey-50 last:border-0 ${
-                          index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/40"
-                        }`}
+                        className="border-b border-pilot-grey-100 text-pilot-grey-900"
                       >
-                        <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-pilot-grey-500">
+                        <td className="break-all py-7 pr-2 text-[10px] text-pilot-grey-500">
                           {line.sku}
                         </td>
-                        <td className="px-4 py-3 font-medium text-pilot-grey-800">
+                        <td className="break-words px-2 py-7 font-medium">
                           {line.productName}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-pilot-grey-700">
+                        <td className="px-2 py-7 text-right tabular-nums">
                           {line.quantity} {line.unit}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-pilot-grey-700">
+                        <td className="px-2 py-7 text-right tabular-nums">
                           {formatHuf(line.unitNet)}
                         </td>
-                        <td className="px-4 py-3 text-pilot-grey-500">
+                        <td className="px-2 py-7 text-pilot-grey-600">
                           {line.taxRate}%
                         </td>
-                        <td className="px-4 py-3 text-right font-mono text-pilot-grey-700">
+                        <td className="px-2 py-7 text-right text-pilot-grey-600">
                           {line.discountPercent
                             ? `${line.discountPercent}%`
                             : "—"}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-semibold text-pilot-grey-900">
+                        <td className="px-2 py-7 text-right font-semibold tabular-nums">
                           {formatHuf(line.lineGross)}
                         </td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-col gap-1">
-                            <PilotBadge
-                              variant={syncBadgeVariant(line.syncStatus)}
-                            >
-                              {syncBadgeLabel(line.syncStatus)}
-                            </PilotBadge>
-                            {line.syncError ? (
-                              <p className="max-w-[180px] text-[10px] leading-tight text-red-500">
-                                {line.syncError}
-                              </p>
-                            ) : null}
-                          </div>
+                        <td className="py-7 pl-2">
+                          <PilotBadge
+                            variant={syncBadgeVariant(line.syncStatus)}
+                          >
+                            {syncBadgeLabel(line.syncStatus)}
+                          </PilotBadge>
+                          {line.syncError ? (
+                            <p className="mt-1 break-words text-[10px] text-red-500">
+                              {line.syncError}
+                            </p>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="p-4">
+                <div className="rounded-[10px] bg-pilot-grey-100 p-3">
+                  <p className="text-xs font-semibold text-pilot-grey-900">
+                    Készletszinkron
+                  </p>
+                  <p className="mt-1 text-[10px] text-pilot-grey-600">
+                    {syncCounts?.OK ?? 0} tétel szinkronizálva ·{" "}
+                    {syncCounts?.PENDING ?? 0} függőben ·{" "}
+                    {syncCounts?.FAILED ?? 0} hiba. A POS eladás ettől
+                    függetlenül érvényes.
+                  </p>
+                </div>
               </div>
             </PilotCard>
           </>

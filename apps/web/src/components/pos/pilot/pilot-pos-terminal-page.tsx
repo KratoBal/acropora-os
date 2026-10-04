@@ -25,87 +25,9 @@ import {
 
 import { scrollRowIntoContainer } from "./cart-scroll";
 
-/**
- * A FIGMA MAKE TERV ÁTÜLTETÉSE -- PÉNZTÁR (POS), 11. KÖR.
- *
- * Forrás: `exchange/figma-penztar-make-11/src/PosScreen.tsx`
- * (`PosTerminalPage`). A brief (`exchange/figma-penztar-atultetes-brief-
- * 2026-09-25.md`) szerint a régi `../pos-terminal-page.tsx` MŰKÖDÉSE
- * (adat, jogosultság, feliratok, API-hívások) VÁLTOZATLAN -- ez a fájl a
- * teljes állapot- és hívás-logikát SZÓ SZERINT átveszi onnan, csak a
- * megjelenítő réteg (JSX, osztályok) a Figma pilot-tokenjeire vált. A régi
- * fájl ÉRINTETLEN marad (ugyanaz a minta, mint az Akváriumok/Hibajegyek/
- * Eszközök/Munkalapok köröknél: a route erre a pilot verzióra áll át, a
- * régi fájl a helyén marad).
- *
- * === KÜLÖNBSÉGEK A TERVHEZ KÉPEST, KIMONDVA ===
- *
- * 1. A terv demo-adatai (termékkatalógus, mai eladások) KIMARADTAK -- a mai
- *    kód valódi API-hívást ad (`posApi.searchProducts`/`listSales`), nem
- *    talál ki terméket vagy eladást.
- * 2. A terv `Btn` "lg" mérete és `fullWidth`-je a megosztott `PilotButton`-
- *    ba került fel (opcionális `size`/`fullWidth` prop, alapértelmezetten
- *    kikapcsolva) -- ez az ELSŐ hívó, ami ezt kéri, lásd a komponens saját
- *    fejlécét a `packages/ui/src/pilot-ui.tsx`-ben.
- * 3. A `PilotCardHeader` nem ismer `subtitle` propot (csak `title`/
- *    `action`) -- a "Kosár" tételszáma ezért az `action` foglalóban áll,
- *    JOBB oldalon, nem a cím mellett balra, ahogy a terv rajzolja. Kis
- *    eltérés, a meglévő komponens megtartása mellett.
- * 4. A fizetési mód VÁLASZTÓJA a terv szerint épült: három gomb egy
- *    `grid-cols-3` rácsban, kiválasztva teli aqua háttérrel, egyébként
- *    fehér+szegély -- a régi lap dropdownja NEM marad meg ezen az oldalon,
- *    mert a leírás 3. pontja kifejezetten engedi ezt a cserét, ugyanazzal
- *    az értékkészlettel (CASH/CARD/TRANSFER). JAVÍTVA 2026-09-25 (kártya
- *    5bf263a2, Balázs képe): az ELSŐ verzió tévedésből a `PilotSegmentedControl`-t
- *    használta (kis, tömör pill-váltó), holott a terv három NAGY gombot ad
- *    -- ez a fejléc korábban is "három nagy gombot" állított, de a kód
- *    mást csinált. Most a kettő fedi egymást.
- * 5. Blokknyomtatás, vevőválasztó, vonalkód-kamera: NINCS a mai kódban,
- *    NEM épült meg -- a terv egyik képernyőjén sem szerepelnek ezek, ez a
- *    pont csak a brief 4. pontjának megfelelését dokumentálja.
- * 6. A kosár-sor "Egységár (Ft, bruttó)" felirata a terv EGYENLŐ
- *    harmadolású rácsán (és az eredeti 380px kosár-szélességen) két
- *    sorba tört, és emiatt a mezője lejjebb csúszott a másik kettőhöz
- *    képest -- ez MAGÁBAN A TERVBEN is megvan (`exchange/figma-penztar-
- *    make-11/src/PosScreen.tsx`, azonos felirat, azonos harmadolás),
- *    tehát nem az átültetés hibája, hanem a terv rá nem ért figyelni.
- *    JAVÍTVA 2026-09-25: a kosár 380px helyett 440px, és a három mező
- *    aránya `0.85fr 1.3fr 0.85fr` (nem egyenlő harmadok) -- az Egységár
- *    oszlopa kap több helyet, a Mennyiség és a Kedvezmény felirata
- *    változatlanul elfér a szűkebb hányadban is.
- * 7. JAVÍTVA 2026-09-26 (audit, frissen mérve): két hiány, amit ez a
- *    lista eddig nem nevezett meg.
- *    (a) A terv `Banner`-je (163-207. sor) minden állapotban ikont AD a
- *    szöveg elé, és egy záró (X) gombot a jobb szélen, ami eltünteti a
- *    sávot -- a mai kód se ikont, se bezárás-gombot nem adott, és a sáv
- *    a KÖVETKEZŐ fizetésig NEM volt eltüntethető. A bezárás-gomb most
- *    megvan (`setLastResult(null)`/`setError(null)`); az ikon szándékosan
- *    NEM pótolt -- a terv kerek pipa/kereszt ikonjának (`CheckCircleIcon`/
- *    `XCircleIcon`) nincs megfelelője a megosztott `Icon`-készletben
- *    (`packages/ui/src/icon.tsx`), és egy nem-pontos ikon rosszabb lenne,
- *    mint a hiánya.
- *    (b) A terv `NumberInput`-ja (92-112. sor) egy "suffix" propot ad,
- *    ami a mező jobb szélén mutatja a mértékegységet (itt: "%") -- a
- *    kedvezmény-mezők (soronkénti és végösszeg) ezt eddig nem kapták meg.
- *    Pótolva, a terv `suffix` mintáját követve (abszolút pozicionált
- *    span, jobbra).
- * 8. JAVÍTVA 2026-10-02 (kártya 18c5f3a3, Balázs): több tételnél az új
- *    sor a kosár ALJÁRA került, a látótéren kívül, és semmi nem jelezte,
- *    hogy a kattintás hatott -- a kolléga újra kattintott, és azonos
- *    terméknél így mindig eggyel több darab lett. Három változás:
- *    (a) `lg` felett a kosár kártyája a látótér magasságára korlátozott
- *    (`lg:max-h-[calc(100dvh-5rem)]`), a tétel-lista a kártyán BELÜL
- *    görget, az összesítő, a fizetési mód és a Fizetés gomb alatta fix
- *    helyen marad. A ragadás `lg:top-6` helyett `lg:top-16`: a héj fejléce
- *    48px magas és szintén ragad, a régi érték alá csúsztatta a kosár
- *    tetejét.
- *    (b) Hozzáadáskor (új sor VAGY darabszám-növelés) az érintett sor a
- *    listán belül a látótérbe görget, és 2 másodpercre kiemelést kap.
- *    (c) A kereső alatt egy állandóan helyet foglaló sor kiírja, mi került
- *    a kosárba és hány darab van belőle; a fókusz visszakerül a keresőre.
- *    `lg` ALATT a lista NEM görget külön (különben két egymásba ágyazott
- *    görgetés lenne), és a lap sem ugrik le a kosárhoz: a visszajelző sor
- *    a kereső alatt mutatja a hozzáadást, ott, ahová a kolléga néz.
+/** POS redesign: canonical Figma 434:41 and 434:419.
+ * Sale calculations, permissions, API payload and cart-scroll are retained.
+ * Pre-sale stock warnings are estimates only; server stockWarnings remain authoritative.
  */
 
 /** How long an added cart line stays highlighted (and the status line shows). */
@@ -126,6 +48,36 @@ interface CartLine {
   quantity: number;
   unitGross: number;
   discountPercent: number;
+  currentStock: string;
+  isPackageProduct: boolean;
+  vatRate: string | null;
+}
+
+/** Aggregate by variant, matching the server's duplicate-line merge. */
+export function getCartStockWarnings(
+  lines: ReadonlyArray<{
+    variantId: string;
+    sku: string;
+    quantity: number;
+    currentStock: string;
+    isPackageProduct: boolean;
+    unit: string;
+  }>,
+) {
+  const byVariant = new Map<string, (typeof lines)[number]>();
+  for (const line of lines) {
+    const previous = byVariant.get(line.variantId);
+    byVariant.set(line.variantId, {
+      ...line,
+      quantity: (previous?.quantity ?? 0) + line.quantity,
+    });
+  }
+  return [...byVariant.values()].filter(
+    (line) =>
+      line.isPackageProduct === false &&
+      Number.isFinite(Number(line.currentStock)) &&
+      line.quantity > Number(line.currentStock),
+  );
 }
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
@@ -181,8 +133,8 @@ function NumberInput({
   suffix?: string;
 }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-pilot-grey-400">
+    <label className="flex min-w-0 flex-col gap-1 text-xs">
+      <span className="text-[10px] font-medium text-pilot-grey-500">
         {label}
       </span>
       <div className="relative">
@@ -193,7 +145,7 @@ function NumberInput({
           value={value}
           aria-label={ariaLabel}
           onChange={(event) => onChange(Number(event.target.value))}
-          className={`w-full rounded-md px-3 py-2 text-right text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
+          className={`h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-right text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500 ${
             suffix ? "pr-7" : ""
           }`}
         />
@@ -242,9 +194,15 @@ export function PilotPosTerminalPage() {
     // the cookie when no Bearer token is given.
     if (!canView) return;
     setLoadingRecent(true);
+    const dayRange = localDayRange();
     void posApi
-      .listSales(token, { page: 1, pageSize: 10, ...localDayRange() })
-      .then((response) => setRecentSales(response.items))
+      .listSales(token, { page: 1, pageSize: 10, ...dayRange })
+      .then((response) => {
+        // A response from yesterday must not repopulate the list after midnight.
+        if (dayRange.createdFrom === localDayRange().createdFrom) {
+          setRecentSales(response.items);
+        }
+      })
       .catch(() => undefined)
       .finally(() => setLoadingRecent(false));
   }, [canView, token]);
@@ -252,6 +210,32 @@ export function PilotPosTerminalPage() {
   useEffect(() => {
     if (!canView) return;
     loadRecentSales();
+    let currentDay = localDayRange().createdFrom;
+    let timer: ReturnType<typeof setTimeout>;
+    const refreshDay = () => {
+      const day = localDayRange().createdFrom;
+      if (day !== currentDay) {
+        currentDay = day;
+        setRecentSales([]);
+        loadRecentSales();
+      }
+    };
+    const scheduleMidnight = () => {
+      timer = setTimeout(
+        () => {
+          refreshDay();
+          scheduleMidnight();
+        },
+        Math.max(1, new Date(localDayRange().createdTo).getTime() - Date.now()),
+      );
+    };
+    scheduleMidnight();
+    // Catch a date change while the browser's background timers were suspended.
+    document.addEventListener("visibilitychange", refreshDay);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshDay);
+    };
   }, [canView, loadRecentSales]);
 
   useEffect(() => {
@@ -307,7 +291,13 @@ export function PilotPosTerminalPage() {
       if (existing) {
         return previous.map((line) =>
           line.variantId === product.variantId
-            ? { ...line, quantity: line.quantity + 1 }
+            ? {
+                ...line,
+                quantity: line.quantity + 1,
+                currentStock: product.currentStock,
+                isPackageProduct: product.isPackageProduct,
+                vatRate: product.vatRate,
+              }
             : line,
         );
       }
@@ -321,6 +311,9 @@ export function PilotPosTerminalPage() {
           quantity: 1,
           unitGross: product.grossPrice ? Number(product.grossPrice) : 0,
           discountPercent: 0,
+          currentStock: product.currentStock,
+          isPackageProduct: product.isPackageProduct,
+          vatRate: product.vatRate,
         },
       ];
     });
@@ -370,13 +363,17 @@ export function PilotPosTerminalPage() {
   );
   const totalGross = subtotalGross * (1 - discountPercent / 100);
 
+  const stockWarnings = useMemo(() => getCartStockWarnings(cart), [cart]);
+  const missingVat = cart.filter((line) => line.vatRate === null);
+
   const checkout = () => {
     // Mirrors the button's own `canManage ? ... : null` rendering guard -
     // reasserted here so this can't silently no-op or (worse) proceed if
     // ever called from anywhere else. Not a token check: apiRequest
     // relies on the session cookie in production, same as everywhere
     // else in this component.
-    if (!canManage || cart.length === 0 || checkingOut) return;
+    if (!canManage || cart.length === 0 || checkingOut || missingVat.length > 0)
+      return;
     setCheckingOut(true);
     setError(null);
     void posApi
@@ -411,7 +408,7 @@ export function PilotPosTerminalPage() {
 
   if (!canView) {
     return (
-      <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+      <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
         <div className="p-8">
           <Alert
             variant="danger"
@@ -424,26 +421,40 @@ export function PilotPosTerminalPage() {
   }
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
-        <p className="mb-0.5 text-xs text-pilot-grey-400">Pénztár</p>
-        <h1 className="text-xl font-semibold text-pilot-grey-900">
-          Bolti eladások rögzítése
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50 lg:-m-8 [&_h1]:![font-family:inherit] [&_h2]:![font-family:inherit] [&_h3]:![font-family:inherit]">
+      <div className="px-8 pb-5 pt-6">
+        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-pilot-aqua-700">
+          Pénztár
+        </p>
+        <h1 className="text-[28px] font-semibold leading-tight text-pilot-grey-900">
+          Bolti eladás
         </h1>
+        <p className="mt-1.5 text-xs text-pilot-grey-600">
+          Keresés, kosár és fizetés egy képernyőn. A készlet az Acropora OS-ből
+          jön.
+        </p>
       </div>
 
-      {error ? (
-        <div className="mx-8 mt-5">
+      {lastResult ? (
+        <div className="mx-8 mb-5">
           <Alert
-            variant="danger"
-            title="Hiba történt"
-            description={error}
+            variant="info"
+            className={
+              lastResult.stockWarnings.length > 0
+                ? "!border-pilot-amber-100 !bg-pilot-amber-50 !text-pilot-amber-700"
+                : "!border-pilot-aqua-200 !bg-pilot-aqua-50 !text-pilot-aqua-700"
+            }
+            title={`Eladás rögzítve: ${lastResult.detail.orderNumber}`}
+            description={
+              lastResult.stockWarnings.length > 0
+                ? `Figyelem, negatívba fordult a nyilvántartott készlet: ${lastResult.stockWarnings.map((warning) => `${warning.productName} (${warning.resultingQty})`).join(", ")}. Ez nem akadályozta meg az eladás rögzítését.`
+                : "A készlet helyileg lekönyvelve. A UNAS-szinkron a háttérben, ettől függetlenül fut."
+            }
             action={
               <button
                 type="button"
-                onClick={() => setError(null)}
+                onClick={() => setLastResult(null)}
                 aria-label="Bezárás"
-                className="shrink-0 text-rose-400 transition hover:text-rose-700"
               >
                 <Icon name="x" size={14} />
               </button>
@@ -452,67 +463,17 @@ export function PilotPosTerminalPage() {
         </div>
       ) : null}
 
-      {lastResult ? (
-        <div className="mx-8 mt-5">
-          {lastResult.stockWarnings.length > 0 ? (
-            <div className="flex items-start justify-between gap-4 rounded-xl bg-pilot-amber-50 px-5 py-4 ring-1 ring-pilot-amber-100">
-              <div>
-                <p className="text-sm font-semibold text-pilot-grey-900">
-                  Eladás rögzítve: {lastResult.detail.orderNumber}
-                </p>
-                <p className="mt-0.5 text-xs text-pilot-grey-600">
-                  Figyelem, negatívba fordult a nyilvántartott készlet:{" "}
-                  {lastResult.stockWarnings
-                    .map(
-                      (warning) =>
-                        `${warning.productName} (${warning.resultingQty})`,
-                    )
-                    .join(", ")}
-                  . Ez nem akadályozta meg az eladás rögzítését.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLastResult(null)}
-                aria-label="Bezárás"
-                className="shrink-0 text-pilot-amber-400 transition hover:text-pilot-amber-700"
-              >
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-start justify-between gap-4 rounded-xl bg-pilot-aqua-50 px-5 py-4 ring-1 ring-pilot-aqua-200">
-              <div>
-                <p className="text-sm font-semibold text-pilot-aqua-800">
-                  Eladás rögzítve: {lastResult.detail.orderNumber}
-                </p>
-                <p className="mt-0.5 text-xs text-pilot-aqua-600">
-                  A készlet helyileg lekönyvelve. A UNAS-szinkron a háttérben,
-                  ettől függetlenül fut.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLastResult(null)}
-                aria-label="Bezárás"
-                className="shrink-0 text-pilot-aqua-400 transition hover:text-pilot-aqua-700"
-              >
-                <Icon name="x" size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_440px]">
-        {/* Left column */}
-        <div className="flex flex-col gap-5">
-          <div>
+      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 pb-8 lg:grid-cols-[minmax(0,1fr)_424px]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <PilotCard className="px-5 py-6">
+            <h2 className="mb-3 text-sm font-semibold text-pilot-grey-900">
+              Termék keresése
+            </h2>
             <div className="relative">
               <Icon
                 name="search"
                 size={16}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-pilot-grey-300"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-500"
               />
               <input
                 ref={searchInputRef}
@@ -520,117 +481,131 @@ export function PilotPosTerminalPage() {
                 autoFocus
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Keresés cikkszám, terméknév vagy vonalkód alapján…"
+                placeholder="Cikkszám, terméknév vagy vonalkód…"
                 aria-label="Termék keresése"
-                className="w-full rounded-xl py-3.5 pl-11 pr-4 text-sm text-pilot-grey-900 shadow-sm ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                className="h-[50px] w-full min-w-0 rounded-lg bg-white pl-10 pr-3 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-500 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
               />
             </div>
-            {/*
-              Always rendered with a fixed height: a line that appeared only
-              on add would push the result list down under the cursor, and
-              the next click would land on a different product.
-            */}
+            {/* Reserve feedback space so result buttons never move on add. */}
             <p
               role="status"
               aria-live="polite"
-              className="mt-1.5 h-5 truncate px-1 text-xs font-medium text-pilot-aqua-700"
+              className="mt-3 flex h-[50px] items-center rounded-lg bg-pilot-aqua-50 px-3 text-[11px] text-pilot-aqua-700"
             >
-              {lastAdded
-                ? `Hozzáadva: ${lastAdded.productName}. A kosárban: ${lastAdded.quantity} ${lastAdded.unit}`
-                : ""}
+              <span className="truncate" title={lastAdded?.productName}>
+                {lastAdded
+                  ? `Hozzáadva: ${lastAdded.productName}. A kosárban: ${lastAdded.quantity} ${lastAdded.unit}`
+                  : ""}
+              </span>
             </p>
-          </div>
+          </PilotCard>
 
-          {searching ? (
-            <PilotCard className="p-5">
-              <Skeleton className="h-4 w-1/2" />
-            </PilotCard>
-          ) : null}
-
-          {!searching && searchTerm.trim() && searchResults.length === 0 ? (
-            <PilotCard className="p-5 text-sm italic text-pilot-grey-400">
-              Nincs találat.
-            </PilotCard>
-          ) : null}
-
-          {searchResults.length > 0 ? (
-            <PilotCard className="divide-y divide-pilot-grey-50 overflow-hidden">
-              {searchResults.map((product) => (
+          <PilotCard className="overflow-hidden">
+            <PilotCardHeader
+              title="Találatok"
+              action={
+                <PilotBadge variant="grey">
+                  {searchResults.length} találat
+                </PilotBadge>
+              }
+            />
+            {searching ? (
+              <div className="p-5" aria-label="Keresés folyamatban">
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ) : searchResults.length === 0 ? (
+              <p className="px-5 py-8 text-xs text-pilot-grey-500">
+                {searchTerm.trim()
+                  ? "Nincs találat."
+                  : "Keress cikkszám, terméknév vagy vonalkód alapján."}
+              </p>
+            ) : (
+              searchResults.map((product) => (
                 <button
                   key={product.variantId}
                   type="button"
                   onClick={() => addToCart(product)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-pilot-aqua-50/40"
+                  className="grid w-full grid-cols-[minmax(0,1fr)_auto_18px] items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-pilot-aqua-50"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-pilot-grey-900">
+                  <span className="min-w-0">
+                    <span className="block break-words text-[13px] font-semibold text-pilot-grey-900">
                       {product.productName}
-                    </p>
-                    <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                    </span>
+                    <span className="mt-1 block break-all text-[10px] text-pilot-grey-500">
                       {product.sku}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {product.grossPrice ? (
-                      <p className="font-mono text-sm font-semibold text-pilot-grey-900">
-                        {formatHuf(Number(product.grossPrice))}
-                      </p>
-                    ) : (
-                      <p className="text-sm italic text-pilot-grey-400">
-                        Nincs ár
-                      </p>
-                    )}
-                    <p
-                      className={`mt-0.5 font-mono text-xs ${
-                        Number(product.currentStock) === 0
-                          ? "text-red-400"
-                          : "text-pilot-grey-400"
-                      }`}
+                    </span>
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap text-right">
+                    <span className="block text-[13px] font-semibold tabular-nums text-pilot-grey-900">
+                      {product.grossPrice
+                        ? formatHuf(Number(product.grossPrice))
+                        : "Nincs ár"}
+                    </span>
+                    <span
+                      className={`mt-1 block text-[10px] tabular-nums ${Number(product.currentStock) <= 0 ? "text-pilot-amber-700" : "text-pilot-grey-600"}`}
                     >
                       Készlet: {product.currentStock} {product.unit}
-                    </p>
-                  </div>
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="text-center text-lg font-semibold text-pilot-aqua-700"
+                  >
+                    +
+                  </span>
                 </button>
-              ))}
-            </PilotCard>
-          ) : null}
+              ))
+            )}
+          </PilotCard>
 
           <PilotCard>
-            <PilotCardHeader title="Mai eladások" />
+            <PilotCardHeader
+              title="Mai eladások"
+              action={
+                <span className="text-[10px] text-pilot-grey-500">
+                  Csak a mai nap · legfeljebb 10
+                </span>
+              }
+            />
             {loadingRecent ? (
               <div className="p-5">
                 <Skeleton className="h-4 w-1/3" />
               </div>
             ) : recentSales.length === 0 ? (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm italic text-pilot-grey-400">
-                  Ma még nem történt eladás.
-                </p>
-              </div>
+              <p className="px-5 py-8 text-center text-xs text-pilot-grey-500">
+                Ma még nem történt eladás.
+              </p>
             ) : (
-              <div className="divide-y divide-pilot-grey-50">
+              <div className="px-4">
                 {recentSales.map((sale) => (
                   <button
                     key={sale.id}
                     type="button"
                     onClick={() => router.push(`/pos/${sale.id}`)}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors hover:bg-pilot-grey-50"
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto_12px] items-center gap-3 border-b border-pilot-grey-100 py-4 text-left last:border-0 hover:bg-pilot-grey-50"
                   >
-                    <div className="min-w-0">
-                      <p className="font-mono text-sm font-semibold text-pilot-grey-800">
+                    <span className="min-w-0">
+                      <span className="block break-all text-xs font-semibold text-pilot-grey-900">
                         {sale.orderNumber}
-                      </p>
-                      <p className="mt-0.5 text-xs text-pilot-grey-400">
-                        {new Date(sale.createdAt).toLocaleTimeString("hu-HU")} ·{" "}
+                      </span>
+                      <span className="mt-1 block text-[10px] text-pilot-grey-500">
+                        {new Date(sale.createdAt).toLocaleTimeString("hu-HU", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}{" "}
+                        ·{" "}
                         {sale.paymentMethod
                           ? PAYMENT_METHOD_LABEL[sale.paymentMethod]
                           : "—"}{" "}
                         · {sale.lineCount} tétel
-                      </p>
-                    </div>
-                    <p className="shrink-0 font-mono text-sm font-semibold text-pilot-grey-900">
+                      </span>
+                    </span>
+                    <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-pilot-grey-900">
                       {formatHuf(Number(sale.totalGross))}
-                    </p>
+                    </span>
+                    <span aria-hidden="true" className="text-pilot-grey-600">
+                      ›
+                    </span>
                   </button>
                 ))}
               </div>
@@ -638,66 +613,59 @@ export function PilotPosTerminalPage() {
           </PilotCard>
         </div>
 
-        {/* Right column (cart) */}
-        <div className="lg:sticky lg:top-16">
-          <PilotCard className="flex flex-col lg:max-h-[calc(100dvh-5rem)]">
-            <PilotCardHeader
-              title="Kosár"
-              action={
-                cart.length > 0 ? (
-                  <PilotBadge variant="grey">
-                    {cart.reduce((sum, line) => sum + line.quantity, 0)} tétel
-                  </PilotBadge>
-                ) : undefined
-              }
-            />
-
-            {cart.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pilot-grey-100">
-                  <Icon name="cart" size={18} className="text-pilot-grey-400" />
+        <div className="min-w-0 lg:sticky lg:top-16">
+          <PilotCard className="flex flex-col overflow-hidden lg:h-[min(830px,calc(100dvh-12.5rem))]">
+            <div className="flex shrink-0 items-center justify-between px-4 py-3">
+              <h2 className="text-sm font-semibold text-pilot-grey-900">
+                Kosár
+              </h2>
+              <PilotBadge variant="grey">{cart.length} tétel</PilotBadge>
+            </div>
+            <div
+              ref={cartListRef}
+              data-testid="pos-cart-lines"
+              className="space-y-2 px-2 pb-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
+            >
+              {cart.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
+                  <Icon name="cart" size={24} className="text-pilot-grey-500" />
+                  <p className="text-xs text-pilot-grey-500">
+                    A kosár üres. Keress rá egy termékre a hozzáadáshoz.
+                  </p>
                 </div>
-                <p className="text-sm text-pilot-grey-400">
-                  A kosár üres. Keress rá egy termékre a hozzáadáshoz.
-                </p>
-              </div>
-            ) : (
-              <div
-                ref={cartListRef}
-                data-testid="pos-cart-lines"
-                className="divide-y divide-pilot-grey-50 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain"
-              >
-                {cart.map((line) => {
+              ) : (
+                cart.map((line) => {
                   const justAdded = lastAdded?.variantId === line.variantId;
                   return (
                     <div
                       key={line.variantId}
                       data-variant-id={line.variantId}
                       data-just-added={justAdded ? "true" : undefined}
-                      className={`flex flex-col gap-3 px-5 py-4 transition-colors duration-500 ${
-                        justAdded ? "bg-pilot-aqua-50" : "bg-white"
-                      }`}
+                      className={`rounded-[10px] border border-pilot-grey-200 p-3 transition-colors duration-500 ${justAdded ? "bg-pilot-aqua-50" : "bg-white"}`}
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="mb-2 flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium leading-snug text-pilot-grey-900">
+                          <p className="break-words text-[13px] font-semibold leading-4 text-pilot-grey-900">
                             {line.productName}
                           </p>
-                          <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                          <p className="mt-0.5 break-all text-[10px] leading-[14px] text-pilot-grey-500">
                             {line.sku}
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeLine(line.variantId)}
-                          className="shrink-0 whitespace-nowrap text-xs font-medium text-red-500 transition hover:text-red-700"
+                          aria-label={`${line.productName} eltávolítása`}
+                          className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-pilot-grey-600 hover:bg-pilot-grey-100"
                         >
-                          Eltávolítás
+                          <Icon name="x" size={14} />
                         </button>
                       </div>
-                      <div className="grid grid-cols-[0.85fr_1.3fr_0.85fr] gap-2">
+                      <div className="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)_minmax(0,0.85fr)] gap-2">
                         <NumberInput
-                          label={`Mennyiség (${line.unit})`}
+                          label="Mennyiség"
+                          ariaLabel={`Mennyiség (${line.unit})`}
+                          suffix={line.unit}
                           value={line.quantity}
                           min={0.001}
                           onChange={(value) =>
@@ -705,7 +673,9 @@ export function PilotPosTerminalPage() {
                           }
                         />
                         <NumberInput
-                          label="Egységár (Ft, bruttó)"
+                          label="Egységár"
+                          ariaLabel="Egységár (Ft, bruttó)"
+                          suffix="Ft"
                           value={line.unitGross}
                           min={0}
                           onChange={(value) =>
@@ -713,17 +683,17 @@ export function PilotPosTerminalPage() {
                           }
                         />
                         <NumberInput
-                          label="Kedvezmény (%)"
-                          value={line.discountPercent}
-                          min={0}
+                          label="Kedvezmény"
                           suffix="%"
                           ariaLabel={`${line.productName} kedvezmény`}
+                          value={line.discountPercent}
+                          min={0}
                           onChange={(value) =>
                             updateLineDiscount(line.variantId, value)
                           }
                         />
                       </div>
-                      <p className="text-right font-mono text-sm font-semibold text-pilot-grey-900">
+                      <p className="mt-1 text-right text-xs font-semibold leading-4 tabular-nums text-pilot-grey-900">
                         {formatHuf(
                           line.unitGross *
                             line.quantity *
@@ -732,42 +702,41 @@ export function PilotPosTerminalPage() {
                       </p>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
 
             <div
               data-testid="pos-cart-footer"
-              className="flex shrink-0 flex-col gap-4 border-t border-pilot-grey-100 px-5 py-5"
+              className="flex shrink-0 flex-col gap-3 border-t border-pilot-grey-200 bg-white p-4"
             >
-              <div className="flex items-end gap-3">
-                <div className="flex-1">
-                  <NumberInput
-                    label="Végösszeg kedvezmény (%)"
-                    value={discountPercent}
-                    min={0}
-                    suffix="%"
-                    ariaLabel="Végösszeg kedvezmény"
-                    onChange={(value) =>
-                      setDiscountPercent(clampDiscount(value))
-                    }
-                  />
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-[11px] font-medium text-pilot-grey-400">
-                    Fizetendő
-                  </p>
-                  <p className="mt-0.5 font-mono text-2xl font-bold leading-tight tabular-nums text-pilot-grey-900">
-                    {formatHuf(totalGross)}
-                  </p>
+              <div className="grid grid-cols-[160px_minmax(0,1fr)] items-center gap-3">
+                <NumberInput
+                  label="Végösszeg kedvezmény"
+                  ariaLabel="Végösszeg kedvezmény"
+                  suffix="%"
+                  value={discountPercent}
+                  min={0}
+                  onChange={(value) => setDiscountPercent(clampDiscount(value))}
+                />
+                <div className="flex items-center justify-end gap-2 text-[11px]">
+                  <span className="text-pilot-grey-600">Részösszeg</span>
+                  <span className="whitespace-nowrap font-medium tabular-nums text-pilot-grey-900">
+                    {formatHuf(subtotalGross)}
+                  </span>
                 </div>
               </div>
-
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-pilot-grey-600">Fizetendő</span>
+                <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
+                  {formatHuf(totalGross)}
+                </p>
+              </div>
               <div>
-                <p className="mb-2 text-[11px] font-medium text-pilot-grey-400">
+                <p className="mb-2 text-[11px] text-pilot-grey-600">
                   Fizetési mód
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2 text-[11px] font-semibold">
                   {PAYMENT_METHOD_OPTIONS.map((label) => {
                     const selected =
                       LABEL_TO_PAYMENT_METHOD[label] === paymentMethod;
@@ -775,16 +744,13 @@ export function PilotPosTerminalPage() {
                       <button
                         key={label}
                         type="button"
+                        aria-pressed={selected}
                         onClick={() =>
                           setPaymentMethod(
                             LABEL_TO_PAYMENT_METHOD[label] ?? "CASH",
                           )
                         }
-                        className={`cursor-pointer rounded-lg py-2.5 text-sm font-medium ring-1 transition-all duration-100 ${
-                          selected
-                            ? "bg-pilot-aqua-600 text-white shadow-sm ring-pilot-aqua-600"
-                            : "bg-white text-pilot-grey-600 ring-pilot-grey-200 hover:bg-pilot-grey-50 hover:ring-pilot-grey-300"
-                        }`}
+                        className={`h-12 cursor-pointer rounded-lg py-2.5 text-[11px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
                       >
                         {label}
                       </button>
@@ -792,17 +758,62 @@ export function PilotPosTerminalPage() {
                   })}
                 </div>
               </div>
-
+              {stockWarnings.length > 0 ? (
+                <div data-testid="pos-stock-warning">
+                  <Alert
+                    variant="info"
+                    role="alert"
+                    className="!border-pilot-amber-100 !bg-pilot-amber-50 !text-pilot-amber-700 !px-3 !py-2 [&_p]:!text-[10px]"
+                    title="A mennyiség meghaladja a készletet"
+                    description={`${stockWarnings[0]!.sku}: kosár ${stockWarnings[0]!.quantity} ${stockWarnings[0]!.unit}, készlet ${stockWarnings[0]!.currentStock} ${stockWarnings[0]!.unit}${stockWarnings.length > 1 ? `; további ${stockWarnings.length - 1} termék` : ""}. Eladás engedélyezett; keresési készlet alapján becslés.`}
+                  />
+                </div>
+              ) : (
+                <p className="rounded-lg bg-pilot-grey-100 px-3 py-4 text-[10px] text-pilot-grey-600">
+                  Negatív készlet engedélyezett, figyelmeztetéssel.
+                </p>
+              )}
+              {missingVat.length > 0 ? (
+                <Alert
+                  variant="danger"
+                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  title="Hiányzó ÁFA kulcs"
+                  description={`Nincs beállítva ÁFA kulcs ehhez a termékhez: ${missingVat[0]!.sku}${missingVat.length > 1 ? ` (+${missingVat.length - 1} termék)` : ""}.`}
+                />
+              ) : null}
+              {error ? (
+                <Alert
+                  variant="danger"
+                  className="!px-3 !py-2 [&_p]:!text-[10px]"
+                  title="Hiba történt"
+                  description={error}
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      aria-label="Bezárás"
+                    >
+                      <Icon name="x" size={14} />
+                    </button>
+                  }
+                />
+              ) : null}
               {canManage ? (
-                <PilotButton
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  onClick={checkout}
-                  disabled={cart.length === 0 || checkingOut}
-                >
-                  {checkingOut ? "Fizetés folyamatban…" : "Fizetés"}
-                </PilotButton>
+                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                  <PilotButton
+                    variant="primary"
+                    size="regular"
+                    fullWidth
+                    onClick={checkout}
+                    disabled={
+                      cart.length === 0 || checkingOut || missingVat.length > 0
+                    }
+                  >
+                    {checkingOut
+                      ? "Fizetés folyamatban…"
+                      : `Fizetés · ${formatHuf(totalGross)}`}
+                  </PilotButton>
+                </div>
               ) : null}
             </div>
           </PilotCard>

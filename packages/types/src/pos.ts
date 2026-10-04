@@ -14,6 +14,8 @@ export interface PosProductSearchResult {
   grossPrice: string | null;
   /** Best known current quantity (StockItem, falling back to the UNAS snapshot). */
   currentStock: string;
+  /** Same UNAS snapshot flag used by POS sale stock-component resolution. */
+  isPackageProduct: boolean;
 }
 
 export interface CreatePosSaleLineInput {
