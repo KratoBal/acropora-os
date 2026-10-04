@@ -5,6 +5,8 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
+  assigneeNames,
+  pilotStatTiles,
   pilotItemsForTab,
   pilotTabCounts,
   pilotTabDef,
@@ -139,5 +141,34 @@ describe("pilotTabCounts", () => {
     );
     expect(summary.open).toBe(1);
     expect(summary.waiting).toBe(18);
+  });
+});
+
+describe("a redesign listájának segédjei", () => {
+  it("a fülek sorrendje és felirata a terv szerint", () => {
+    expect(PILOT_TABS.map((tab) => tab.label)).toEqual([
+      "Nyitott",
+      "Összes",
+      "Várakozik",
+      "Lezárt",
+    ]);
+  });
+
+  it("a felelősök nevei vesszővel, üres listán null", () => {
+    expect(assigneeNames([{ name: "Ádám" }, { name: "Péter" }])).toBe(
+      "Ádám, Péter",
+    );
+    expect(assigneeNames([])).toBeNull();
+  });
+
+  it("a csempék a számlálóból jönnek, kitalált szám nélkül", () => {
+    const tiles = pilotStatTiles(
+      counts({ NEW: 0, SCHEDULED: 3, WAITING_FOR_PARTS: 2, COMPLETED: 4 }),
+    );
+    expect(tiles.map((tile) => [tile.label, tile.value, tile.detail])).toEqual([
+      ["Nyitott hibajegy", 3, null],
+      ["Várakozik", 2, "2 alkatrészre"],
+      ["Lezárt ügy", 4, null],
+    ]);
   });
 });

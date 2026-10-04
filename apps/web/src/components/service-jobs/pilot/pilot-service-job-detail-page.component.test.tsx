@@ -360,3 +360,154 @@ describe("PilotServiceJobDetailPage -- Figma-igazítás (Mi a baj?, Eszköz)", (
     );
   });
 });
+
+/**
+ * THE SERVICE REDESIGN'S DETAIL (Figma 423:234, Balázs, 2026-10-04): the
+ * internal and the partner's status as two badges, the next step drawn only
+ * from the server's `allowedSteps`, the linked sheets with their state and
+ * hours (E3), and the assignees by name in the case data.
+ */
+describe("PilotServiceJobDetailPage -- redesign", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset();
+    api.documents.mockReset().mockResolvedValue({ items: [] });
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    sheets.attachable.mockReset().mockResolvedValue({ items: [] });
+    sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    sheets.departments.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  const sheet = {
+    kind: "worksheet" as const,
+    at: "2026-10-04T09:14:00.000Z",
+    sortKey: "ws-1",
+    worksheet: {
+      id: "ws-1",
+      number: "ML-2026-00814",
+      subject: "Tömítéscsere",
+      createdAt: "2026-10-04T09:14:00.000Z",
+      handedOverAt: null,
+      status: "DRAFT" as const,
+      lineCount: 3,
+      laborHours: "2.5",
+    },
+  };
+
+  it("keeps the internal and the partner's status as two badges", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(
+      await screen.findByText("Partner: Feldolgozás alatt"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Felmérve").length).toBeGreaterThan(0);
+  });
+
+  it("draws one button per step the server allows, and no other", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const panel = await screen.findByRole("region", {
+      name: "Következő lépés",
+    });
+    const buttons = Array.from(panel.querySelectorAll("button")).map(
+      (button) => button.textContent,
+    );
+    expect(buttons).toEqual(["Tovább → Ütemezve", "Tovább → Meghiúsult"]);
+  });
+
+  it("says there is no further step when the server allows none", async () => {
+    api.detail.mockResolvedValue(
+      detail({ status: "COMPLETED", allowedSteps: [] }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const panel = await screen.findByRole("region", {
+      name: "Következő lépés",
+    });
+    expect(panel.querySelectorAll("button")).toHaveLength(0);
+    expect(panel.textContent).toContain("nincs több lépése");
+  });
+
+  it("does not offer a step to a reader without the manage permission", async () => {
+    auth.session = sessionAs("VIEWER");
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(
+      await screen.findByText("Negyedéves ellenőrzés"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Következő lépés" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Új munkalap")).not.toBeInTheDocument();
+  });
+
+  it("shows each linked sheet with its state and hours", async () => {
+    api.detail.mockResolvedValue(detail({ timeline: [sheet] }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(await screen.findByText("ML-2026-00814")).toBeInTheDocument();
+    expect(screen.getByText("Folyamatban")).toBeInTheDocument();
+    expect(screen.getByText("2,5 munkaóra")).toBeInTheDocument();
+  });
+
+  it("names the assignees in the case data, or says nobody is assigned", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "u-1",
+            name: "Ádám",
+            assignedAt: "2026-10-04T08:00:00.000Z",
+            assignedByName: null,
+          },
+          {
+            userId: "u-2",
+            name: "Péter",
+            assignedAt: "2026-10-04T08:05:00.000Z",
+            assignedByName: null,
+          },
+        ],
+      }),
+    );
+    const { unmount } = render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(await screen.findByText("Ádám, Péter")).toBeInTheDocument();
+    unmount();
+
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(await screen.findByText("Nincs kiosztva")).toBeInTheDocument();
+  });
+
+  it("names who reported the job, from the job's own log", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        timeline: [
+          {
+            kind: "status",
+            at: "2026-10-04T08:14:00.000Z",
+            sortKey: "e-1",
+            event: {
+              id: "e-1",
+              fromStatus: null,
+              toStatus: "NEW",
+              note: null,
+              actorName: "Kovács Anna",
+              createdAt: "2026-10-04T08:14:00.000Z",
+            },
+          },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(
+      await screen.findByText(/Bejelentette: Kovács Anna/),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the location editor from Kezelés", async () => {
+    const user = userEvent.setup();
+    api.detail.mockResolvedValue(detail());
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Ehhez a jegyhez nincs eszköz rendelve.");
+    await user.click(screen.getByRole("button", { name: "Helyszín" }));
+    expect(screen.getByTestId("placement-editor-stub")).toBeInTheDocument();
+  });
+});

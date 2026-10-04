@@ -178,3 +178,14 @@ export function worksheetDisplayPilotVariant(
 ): PilotBadgeVariant {
   return TONE_TO_PILOT_VARIANT[worksheetDisplayTone(status, lineCount)];
 }
+
+/**
+ * LABOUR HOURS AS PEOPLE READ THEM: the API's decimal string ("2.5", "4")
+ * in Hungarian form ("2,5", "4"), at most two decimals. Used wherever a
+ * sheet's hours are shown next to it (the job's worksheet card, the list).
+ */
+export function formatLaborHours(hours: string): string {
+  const value = Number(hours);
+  if (!Number.isFinite(value)) return hours;
+  return value.toLocaleString("hu-HU", { maximumFractionDigits: 2 });
+}
