@@ -409,6 +409,16 @@ const shapeOf = (number: string) =>
  * a kötőjel a szám része. Ezzel a szabállyal a 158-ból 156 marad, és a kieső
  * kettő pontosan a két rossz.
  */
+/**
+ * MAGYAR ADÓSZÁM ALAKÚ SZÓ (NNNNNNNN-N-NN): egy céget nevez meg, nem egy
+ * számlát. Mérve 2026-10-04, éles (acrobot 26163): öt szeptemberi NAV-utalás
+ * közleménye pontosan „23916229-2-42”, a saját adószámunk, és kb. 151 régen
+ * tárolt saját kimenő számla ezt viselte számként; az első ilyen terhelés
+ * mind a 151-et megkaphatta. Ilyen szám sem a dokumentum, sem a közlemény
+ * oldalán nem nevez meg számlát.
+ */
+const TAX_NUMBER_SHAPE = /^\d{8}-\d-\d{2}$/;
+
 function spanNaming(
   debit: MatchableDebit,
   document: CandidateDocument,
@@ -418,7 +428,7 @@ function spanNaming(
   // rendelésszámot nevezi meg), ugyanazzal az egész-szó szabállyal
   for (const raw of [document.number, ...(document.references ?? [])]) {
     const number = compact(raw);
-    if (number.length < 5) continue;
+    if (number.length < 5 || TAX_NUMBER_SHAPE.test(number)) continue;
     for (const span of spans) {
       if (span.text !== number) continue;
       const joined = span.end - span.start > 1;

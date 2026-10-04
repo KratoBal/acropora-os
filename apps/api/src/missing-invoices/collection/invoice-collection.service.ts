@@ -43,6 +43,7 @@ import {
   cardPaymentMatch,
   compactNumber,
   customerIds,
+  isOwnInvoiceText,
   readInvoiceText,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -484,11 +485,8 @@ export class InvoiceCollectionService {
         navNumbers: () => navNumbers,
       });
       if (textReading.numberFrom !== "NAV") {
-        const digits = text.replace(/\D/g, "");
-        const own = (await this.ownAccounts()).some((account) =>
-          digits.includes(account),
-        );
-        if (own) return skip("OWN_INVOICE");
+        if (isOwnInvoiceText(text, await this.ownAccounts()))
+          return skip("OWN_INVOICE");
         const reference = bankReference(
           lines,
           textReading,

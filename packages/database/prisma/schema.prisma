@@ -7300,7 +7300,8 @@ model IncomingSupplierDocument {
   /// látta. SUGGESTED, amíg ember nem döntött róla: addig NEM jelölt a Hiányzó
   /// számlák között (Balázs keretdöntése: a Jev csak javasol). Elfogadva NULL lesz
   /// (rendes begyűjtött dokumentum); elvetve a dokumentum törlődik. NULL: nem
-  /// javaslatból jött.
+  /// javaslatból jött. OWN_INVOICE: a régen tárolt SAJÁT kimenő számlánk
+  /// (`own-invoice-mark`, acrobot 26163); nem jelölt, `--undo`-val visszavonható.
   reviewState             String?
   /// A Jev bizonyossága (0..1) és a döntés futása (DecisionRun), a javaslat
   /// visszakereshetőségéhez.

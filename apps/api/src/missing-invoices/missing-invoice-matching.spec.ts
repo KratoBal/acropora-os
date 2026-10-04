@@ -895,6 +895,46 @@ describe("matchMonth", () => {
     );
   });
 
+  /*
+    acrobot 26163, eles: ot szeptemberi NAV-utalas kozlemenye pontosan a sajat
+    adoszamunk, es kb. 151 regen tarolt sajat kimeno szamla ezt viselte szamkent
+    es hivatkozaskent. MI PIROSIT: ha az elso ilyen terheles az osszeset
+    megkapja, vagy egy adoszam-alaku szo barmelyik oldalon szamlat nevez meg.
+  */
+  it("a tax-number-shaped word never names an invoice (NAV transfers, our own tax number)", () => {
+    const nav = debit({
+      narrative: "23916229-2-42",
+      counterpartyName: "NAV",
+      amount: D(232000),
+    });
+    const own = [1, 2, 3].map((i) =>
+      doc({
+        source: "MAILBOX",
+        number: "23916229-2-42",
+        references: ["23916229-2-42"],
+        gross: null,
+        supplierName: "",
+        date: `2026-09-0${i}`,
+      }),
+    );
+    assert.notEqual(
+      run([nav], own).get(nav.id)?.reason,
+      "a számla száma a közleményben",
+    );
+    assert.deepEqual(run([nav], own).get(nav.id)?.documents ?? [], []);
+    // egy rendes szám ugyanabban a közleményben tovább is megnevez
+    const named = debit({ narrative: "23916229-2-42 SZ-2026-4242" });
+    const real = doc({ number: "SZ-2026-4242" });
+    assert.equal(
+      run([named], [...own, real]).get(named.id)?.documents[0]?.id,
+      real.id,
+    );
+    assert.equal(
+      run([named], [...own, real]).get(named.id)?.documents.length,
+      1,
+    );
+  });
+
   it("needs the partner too for a short number, and never takes a number under 5 characters", () => {
     const d = debit({
       narrative: "Számla 26/88",
