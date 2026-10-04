@@ -17,15 +17,19 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { serviceJobStatusLabel } from "../service-job-labels";
 import {
-  PilotAvatarStack,
   PilotBadge,
   PilotButton,
+  PilotCard,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import {
+  assigneeNames,
+  NO_ASSIGNEE,
   pilotItemsForTab,
+  pilotStatTiles,
   pilotTabCounts,
   pilotTabDef,
+  PILOT_TAB_NOUN,
   PILOT_TABS,
   STATUS_BADGE_VARIANT,
   type PilotTab,
@@ -301,20 +305,27 @@ export function PilotServiceJobListPage() {
     );
 
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
-      <div className="flex items-center justify-between border-b border-pilot-grey-200 bg-white px-8 py-5">
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
+      {/*
+        THE HEADER OF THE SERVICE REDESIGN (Figma 423:20): eyebrow, title, one
+        sentence on what the list is for, and the primary action at the right.
+      */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="mb-1 text-xs text-pilot-grey-400">
-            Szerviz /{" "}
-            <span className="font-medium text-pilot-grey-700">Hibajegyek</span>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
+            Szerviz / Munkatér
           </p>
-          <h1 className="text-xl font-semibold text-pilot-grey-900">
+          <h1 className="text-3xl font-semibold text-pilot-grey-900">
             Hibajegyek
           </h1>
+          <p className="mt-2 text-sm text-pilot-grey-500">
+            Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első
+            eleme; mögötte állnak a munkalapok.
+          </p>
         </div>
         {canManage ? (
           <Link href="/szerviz/hibajegyek/uj">
-            <PilotButton variant="primary">
+            <PilotButton variant="primary" size="regular">
               <Icon name="plus" size={14} />
               Új hibajegy
             </PilotButton>
@@ -322,126 +333,137 @@ export function PilotServiceJobListPage() {
         ) : null}
       </div>
 
-      <div className="border-b border-pilot-grey-100 bg-white px-8">
-        <div className="flex gap-0">
-          {PILOT_TABS.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              onClick={() => selectTab(entry.id)}
-              className={`flex cursor-pointer items-center gap-2 border-b-2 px-4 py-3.5 text-sm font-medium transition-colors ${
-                tab === entry.id
-                  ? "border-pilot-aqua-600 text-pilot-aqua-700"
-                  : "border-transparent text-pilot-grey-500 hover:text-pilot-grey-800"
-              }`}
-            >
-              {entry.label}
+      {/*
+        THE STAT TILES come back (the redesign brief keeps them), from the
+        server's counts only; see `pilotStatTiles` for what is left out.
+      */}
+      <div
+        aria-label="Összesítés"
+        className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:max-w-[780px]"
+      >
+        {(data ? pilotStatTiles(data.counts) : []).map((tile) => (
+          <PilotCard key={tile.key} className="px-4 py-4">
+            <p className="text-sm text-pilot-grey-600">{tile.label}</p>
+            <p className="mt-2 flex items-baseline gap-4">
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                  tab === entry.id
-                    ? "bg-pilot-aqua-100 text-pilot-aqua-700"
-                    : "bg-pilot-grey-100 text-pilot-grey-500"
+                className={`text-2xl font-semibold ${
+                  tile.tone === "amber"
+                    ? "text-pilot-amber-700"
+                    : tile.tone === "teal"
+                      ? "text-pilot-aqua-700"
+                      : "text-pilot-grey-900"
                 }`}
               >
-                {counts ? counts[entry.id] : "…"}
+                {tile.value}
               </span>
-            </button>
-          ))}
-        </div>
+              {tile.detail ? (
+                <span className="text-xs text-pilot-grey-500">
+                  {tile.detail}
+                </span>
+              ) : null}
+            </p>
+          </PilotCard>
+        ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-4 border-b border-pilot-grey-100 bg-white px-8 py-3">
-        <div className="relative">
-          <Icon
-            name="search"
-            size={14}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-pilot-grey-300"
-          />
-          <input
-            type="text"
-            aria-label="Hibajegy keresése"
-            placeholder="Hibajegy keresése…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="w-60 rounded-md py-1.5 pl-8 pr-3 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-300 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-pilot-grey-400">Partner:</span>
-          <select
-            aria-label="Partner szűrő"
-            value={partner}
-            onChange={(event) => setPartner(event.target.value)}
-            className="cursor-pointer appearance-none rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+      <div className="flex flex-wrap gap-1" role="tablist">
+        {PILOT_TABS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.id}
+            onClick={() => selectTab(entry.id)}
+            className={`cursor-pointer rounded-md px-4 py-2 text-sm transition-colors ${
+              tab === entry.id
+                ? "bg-pilot-aqua-50 font-semibold text-pilot-aqua-700"
+                : "text-pilot-grey-600 hover:text-pilot-grey-900"
+            }`}
           >
-            <option>{ALL_PARTNERS}</option>
-            {partnerOptions.map((name) => (
-              <option key={name}>{name}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-pilot-grey-400">Helyszín:</span>
-          <select
-            aria-label="Helyszín szűrő"
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-            className="cursor-pointer appearance-none rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
-          >
-            <option>{ALL_LOCATIONS}</option>
-            {locationOptions.map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+            {entry.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          aria-label="Hibajegy keresése"
+          placeholder="Hibajegyszám, partner vagy hiba"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="w-full max-w-[390px] rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-900 ring-1 ring-pilot-grey-200 placeholder:text-pilot-grey-400 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+        />
+        {/*
+          THE PARTNER AND LOCATION FILTERS are not in the design, but they
+          exist today and stay (the brief: nothing working is lost).
+        */}
+        <select
+          aria-label="Partner szűrő"
+          value={partner}
+          onChange={(event) => setPartner(event.target.value)}
+          className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+        >
+          <option value={ALL_PARTNERS}>Minden partner</option>
+          {partnerOptions.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Helyszín szűrő"
+          value={location}
+          onChange={(event) => setLocation(event.target.value)}
+          className="max-w-[240px] cursor-pointer rounded-md bg-white px-3 py-2.5 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+        >
+          <option value={ALL_LOCATIONS}>Minden helyszín</option>
+          {locationOptions.map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
         {/* A JELÖLŐ CSAK ANNAK LÁTSZIK, aki vissza is tudja állítani a
             rejtett jegyeket -- ugyanaz a szabály, mint a mai listán. */}
         {canHide ? (
-          <label className="ml-auto flex cursor-pointer items-center gap-2 text-sm text-pilot-grey-600">
-            <button
-              type="button"
-              onClick={() => setIncludeHidden((current) => !current)}
-              className={`relative h-4 w-8 cursor-pointer rounded-full transition-colors ${
-                includeHidden ? "bg-pilot-aqua-600" : "bg-pilot-grey-200"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
-                  includeHidden ? "left-4" : "left-0.5"
-                }`}
-              />
-            </button>
+          <button
+            type="button"
+            aria-pressed={includeHidden}
+            onClick={() => setIncludeHidden((current) => !current)}
+            className={`h-10 shrink-0 cursor-pointer whitespace-nowrap rounded-md px-4 text-sm font-semibold ring-1 transition-colors ${
+              includeHidden
+                ? "bg-pilot-aqua-50 text-pilot-aqua-700 ring-pilot-aqua-200"
+                : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+            }`}
+          >
             Rejtettek is
-          </label>
+          </button>
         ) : null}
       </div>
 
       {error ? (
-        <div className="px-8 py-4">
-          <Alert
-            variant="danger"
-            title="Betöltési hiba"
-            description={error}
-            action={
-              <PilotButton variant="secondary" onClick={() => void load()}>
-                Újrapróbálás
-              </PilotButton>
-            }
-          />
-        </div>
+        <Alert
+          variant="danger"
+          title="Betöltési hiba"
+          description={error}
+          action={
+            <PilotButton variant="secondary" onClick={() => void load()}>
+              Újrapróbálás
+            </PilotButton>
+          }
+        />
       ) : null}
 
       {loading && !data ? (
-        <div aria-label="Hibajegyek betöltése" className="space-y-3 px-8 py-6">
+        <div aria-label="Hibajegyek betöltése" className="space-y-3">
           <Skeleton className="h-16" />
           <Skeleton className="h-64" />
         </div>
       ) : null}
 
       {data && filtered.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 py-24">
+        <PilotCard className="flex flex-col items-center justify-center gap-4 py-20">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pilot-aqua-50">
             <Icon name="clipboard" size={24} className="text-pilot-aqua-600" />
           </div>
@@ -465,106 +487,136 @@ export function PilotServiceJobListPage() {
               </PilotButton>
             </Link>
           ) : null}
-        </div>
+        </PilotCard>
       ) : null}
 
       {data && filtered.length > 0 ? (
-        <div className="flex-1 overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-pilot-grey-100 bg-white">
-                {[
-                  "Hibajegy",
-                  "Partner",
-                  "Helyszín",
-                  "Állapot",
-                  "Delegálva",
-                  "Munkalap",
-                  "Létrehozva",
-                ].map((col) => (
-                  <th
-                    key={col}
-                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
-                  >
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item, index) => (
-                <tr
-                  key={item.id}
-                  onClick={() => router.push(`/szerviz/hibajegyek/${item.id}`)}
-                  className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
-                    index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
-                  } ${item.hidden ? "opacity-50" : ""}`}
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-mono text-xs text-pilot-grey-400">
-                      {item.jobNumber}
-                    </p>
-                    <p className="mt-0.5 max-w-[260px] truncate text-sm font-medium text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                      {item.title}
-                    </p>
-                    {item.hidden ? (
-                      <PilotBadge variant="amber">Rejtett</PilotBadge>
-                    ) : null}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-600">
-                    {item.customerName ?? "Nincs megadva"}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {item.departmentPath?.length ? (
-                      <>
-                        {item.departmentCode ? (
-                          <span className="font-mono text-xs text-pilot-grey-400">
-                            {item.departmentCode}
+        <PilotCard className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-pilot-grey-100">
+                  {[
+                    "Hibajegy",
+                    "Partner / helyszín",
+                    "Felelős",
+                    "Állapot",
+                    "Munkalap",
+                    "Létrehozva",
+                  ].map((col) => (
+                    <th
+                      key={col}
+                      className="whitespace-nowrap px-4 py-4 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-500"
+                    >
+                      {col}
+                    </th>
+                  ))}
+                  <th className="w-10" aria-hidden="true" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((item) => {
+                  const names = assigneeNames(item.assignees);
+                  return (
+                    <tr
+                      key={item.id}
+                      onClick={() =>
+                        router.push(`/szerviz/hibajegyek/${item.id}`)
+                      }
+                      className={`group cursor-pointer border-b border-pilot-grey-100 align-top transition-colors last:border-0 hover:bg-pilot-aqua-50/40 ${
+                        item.hidden ? "opacity-50" : ""
+                      }`}
+                    >
+                      {/*
+                        THE TITLE WRAPS AND THE NUMBER STANDS UNDER IT. The
+                        design draws a two-line title over the number; here
+                        each is its own line, so a long title pushes the
+                        number down instead of covering it.
+                      */}
+                      <td className="max-w-[280px] px-4 py-5">
+                        <p className="break-words font-semibold text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
+                          {item.title}
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-pilot-grey-500">
+                          {item.jobNumber}
+                        </p>
+                        {item.hidden ? (
+                          <span className="mt-1 inline-block">
+                            <PilotBadge variant="amber">Rejtett</PilotBadge>
                           </span>
                         ) : null}
-                        <span className="ml-1 text-xs text-pilot-grey-500">
-                          {item.departmentCode ? "· " : ""}
-                          {item.departmentPath[item.departmentPath.length - 1]}
+                      </td>
+                      <td className="max-w-[280px] px-4 py-5">
+                        <p className="break-words text-pilot-grey-900">
+                          {item.customerName ?? "Nincs megadva"}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-pilot-grey-500">
+                          {item.departmentPath?.length
+                            ? item.departmentPath.join(" / ")
+                            : "—"}
+                        </p>
+                      </td>
+                      <td className="px-4 py-5">
+                        {names ? (
+                          <span className="text-pilot-grey-900">{names}</span>
+                        ) : (
+                          <span className="text-xs text-pilot-grey-400">
+                            {NO_ASSIGNEE}
+                          </span>
+                        )}
+                      </td>
+                      {/*
+                        THE PARTNER'S STATUS STAYS UNDER THE INTERNAL ONE, as
+                        a separate fact (the brief, point 1).
+                      */}
+                      <td className="px-4 py-5">
+                        <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
+                          {serviceJobStatusLabel[item.status]}
+                        </PilotBadge>
+                        <p className="mt-2 text-xs text-pilot-grey-500">
+                          A partner ezt látja: {item.partnerStatusLabel}
+                        </p>
+                      </td>
+                      <td className="px-4 py-5">
+                        <span className="whitespace-nowrap rounded-full bg-pilot-grey-100 px-3 py-1 text-xs text-pilot-grey-700">
+                          {item.worksheetCount} munkalap
                         </span>
-                      </>
-                    ) : (
-                      <span className="text-pilot-grey-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
-                      {serviceJobStatusLabel[item.status]}
-                    </PilotBadge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <PilotAvatarStack people={item.assignees} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-pilot-grey-500">
-                    {item.worksheetCount > 0 ? (
-                      `${item.worksheetCount} munkalap`
-                    ) : (
-                      <span className="text-pilot-grey-300">—</span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs text-pilot-grey-500">
-                    {formatDateTime(item.createdAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {/*
-            A VÁGÁS JELZÉSE MEGMARAD -- a mai lista is megmondja, ha van
-            több sor, mint amennyit a szerver egy körben ad
-            (`ServiceListFooter`, `LIST_LIMIT` a repository-ban).
-          */}
-          {data.truncated ? (
-            <p className="border-t border-pilot-grey-100 bg-white px-4 py-2 text-xs text-pilot-grey-400">
-              Csak az első 200 hibajegy látszik ezen a fülön. Szűkítsd a
-              keresést a további sorokhoz.
-            </p>
-          ) : null}
-        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-5 text-xs text-pilot-grey-600">
+                        {formatDateTime(item.createdAt)}
+                      </td>
+                      <td className="px-2 py-5 text-pilot-grey-500">
+                        <Icon
+                          name="chevron-left"
+                          size={16}
+                          className="rotate-180"
+                          aria-hidden="true"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 px-4 py-3 text-xs text-pilot-grey-500">
+            <span>
+              {filtered.length} / {counts ? counts[tab] : filtered.length}{" "}
+              {PILOT_TAB_NOUN[tab]}
+            </span>
+            {/*
+              A VÁGÁS JELZÉSE MEGMARAD -- a lista nem lapoz (decision E10), és
+              kimondja, ha több sor van, mint amennyit a szerver egy körben ad
+              (`LIST_LIMIT` a repository-ban).
+            */}
+            {data.truncated ? (
+              <span>
+                Csak az első 200 hibajegy látszik ezen a fülön. Szűkítsd a
+                keresést a további sorokhoz.
+              </span>
+            ) : null}
+          </div>
+        </PilotCard>
       ) : null}
     </PilotThemeRoot>
   );

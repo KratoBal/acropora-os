@@ -19,7 +19,12 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useListHref } from "@/components/navigation-history";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
-import { formatDateTime } from "@/components/worksheets/worksheet-labels";
+import {
+  formatDateTime,
+  formatLaborHours,
+  worksheetDisplayLabel,
+  worksheetDisplayPilotVariant,
+} from "@/components/worksheets/worksheet-labels";
 import { megjegyzesKuldheto } from "../megjegyzes-celja";
 import { HandoverMailDialog } from "../handover-mail-dialog";
 import { KULDES_KIHAGYAS_OKA } from "../handover-mail-skip-reason";
@@ -36,12 +41,17 @@ import {
   serviceJobStatusLabel,
   serviceJobWorksheetLabel,
 } from "../service-job-labels";
-import { STATUS_BADGE_VARIANT } from "./pilot-service-job-list-view";
+import {
+  assigneeNames,
+  NO_ASSIGNEE,
+  STATUS_BADGE_VARIANT,
+} from "./pilot-service-job-list-view";
 import {
   PilotBadge,
   PilotButton,
   PilotCard,
   PilotCardHeader,
+  PilotDataRow,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
@@ -78,16 +88,16 @@ import {
  * alrendszer (helyszín+eszköz, galéria, átadás, partner, törlés) marad a
  * varrat alatt, régi stílusban.
  *
- * === A DELEGÁLÁS ÁTKERÜLT A JOBB HASÁBBÓL A LAP TETEJÉRE ===
+ * === THE SERVICE REDESIGN (Figma 423:234, Balázs, 2026-10-04) ===
  *
- * A mai (nem-pilot) adatlapon a delegálás-szerkesztő a jobb hasábban áll,
- * a "Következő lépés" alatt -- ez egy KIMONDOTT döntés volt (acrobot,
- * 2026-09-15, lásd a régi `service-job-detail-page.tsx` kommentjét). A
- * Figma-terv (és Balázs 5b kiegészítése) viszont a bal hasáb TETEJÉRE
- * teszi, "Mi a baj?" fölé. Mivel ez a kör kifejezetten a Figma-elrendezést
- * viszi át, és a kiegészítést maga Balázs kérte (acrobot közvetítésével,
- * msg 23138/23139/23168), az ÚJ helyet követjük -- ez nem ellentmond a
- * régi döntésnek, hanem Balázs frissebb, kimondott elrendezése.
+ * The page follows the redesign's two columns. Left: the report, photos and
+ * files, the worksheets behind the job, the asset card and "Ami történt".
+ * Right: the next step as its own strong panel, the case data, the
+ * assignees' card and "Kezelés". The assignees' card moved from the top of
+ * the left column (its 2026-09-24 place) to the right, where the design keeps
+ * the people; it is the same card inside. Nothing the page did before is
+ * gone: the duplicate "Lezárás és átadás" card was dropped because its two
+ * buttons stay in the header, where they already were.
  *
  * === "DELEGÁLTA: X" -- ÚJ MEZŐ, MEGLÉVŐ ADATBÓL ===
  *
@@ -96,14 +106,12 @@ import {
  * felvéve (2026-09-24), a részletlap lekérdezése kibővítve -- lásd
  * `pilot-delegated-colleagues-card.tsx` fejlécét.
  *
- * === MUNKALAP-SOR: A FIGMA TÖBBET MUTAT, MINT AMIT MA TUDUNK ===
+ * === MUNKALAP-SOR: ÁLLAPOT ÉS MUNKAÓRA, 2026-10-04 ÓTA ===
  *
- * A terv soronként technikust és állapot-jelvényt is ígér. A valódi
- * `ServiceJobWorksheetLink` típus ezt NEM hordozza (csak szám, cím,
- * létrehozás és átadás dátuma) -- a részletlap a lapok STÁTUSZÁT és
- * technikusát sosem kérte le, mert a lista ma sem mutatta. Kitalált adatot
- * a ház szabálya szerint nem viszünk fel: a sor a VALÓS mezőket mutatja
- * (szám, cím, létrehozva, átadva), jelvény és technikus nélkül.
+ * The link carries the sheet's current status, line count and labour hours
+ * since the redesign's API change (E3), so each row shows the same display
+ * status as the worksheet list and its hours. A technician per sheet is
+ * still not shown: the link does not carry one, and nothing is invented.
  *
  * === AZ IDŐVONAL NÉGY VALÓS FORRÁSBÓL ÁLL, NEM ÖTBŐL ===
  *
@@ -585,104 +593,96 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   );
   const finished = isFinishedServiceJob(job.status);
 
+  const creation = job.timeline.find(
+    (entry) => entry.kind === "status" && entry.event.fromStatus === null,
+  );
+  const reporter =
+    creation?.kind === "status" ? creation.event.actorName : null;
+  const photoCount = documents.filter((item) => item.type === "PHOTO").length;
+  const fileCount = documents.length - photoCount;
+  const names = assigneeNames(job.assignees);
+
   return (
-    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col bg-pilot-grey-50">
+    <PilotThemeRoot className="-m-6 flex min-h-screen flex-col gap-6 bg-pilot-grey-50 px-8 py-8">
       {offlineSav}
-      <div className="border-b border-pilot-grey-200 bg-white px-8 py-5">
-        <nav className="mb-3 flex items-center gap-1.5 text-xs text-pilot-grey-400">
-          <Link
-            href="/szerviz/hibajegyek"
-            className="transition-colors hover:text-pilot-aqua-600"
-          >
-            Szerviz
-          </Link>
-          <span>/</span>
+      {/*
+        THE HEADER OF THE SERVICE REDESIGN (Figma 423:234): back to the list
+        (with its last filters), the number, the title, and the internal and
+        the partner's status as two separate badges (the brief, point 3).
+      */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <Link
             href={listHref}
-            className="transition-colors hover:text-pilot-aqua-600"
+            className="text-sm text-pilot-aqua-700 transition-colors hover:text-pilot-aqua-800"
           >
+            <span aria-hidden="true">← </span>
             Hibajegyek
           </Link>
-          <span>/</span>
-          <span className="font-medium text-pilot-grey-700">
+          <p className="mt-4 font-mono text-sm text-pilot-grey-500">
             {job.jobNumber}
-          </span>
-        </nav>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="font-mono text-xs text-pilot-grey-400">
-                {job.jobNumber}
-              </span>
-              <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
-                {serviceJobStatusLabel[job.status]}
-              </PilotBadge>
-              {job.hidden ? (
-                <PilotBadge variant="amber">Rejtett</PilotBadge>
-              ) : null}
-            </div>
-            <h1 className="text-xl font-semibold text-pilot-grey-900">
-              {job.title}
-            </h1>
-            <p className="mt-2 text-xs text-pilot-grey-400">
-              {job.customerName ?? "Nincs megadva"}
-              {job.departmentPath?.length
-                ? ` · ${job.departmentPath.join(" / ")}`
-                : ""}{" "}
-              · Létrehozva: {formatDateTime(job.createdAt)}
-            </p>
+          </p>
+          <h1 className="mt-1 break-words text-3xl font-semibold text-pilot-grey-900">
+            {job.title}
+          </h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <PilotBadge variant={STATUS_BADGE_VARIANT[job.status]}>
+              {serviceJobStatusLabel[job.status]}
+            </PilotBadge>
+            <PilotBadge variant="blue">
+              Partner: {job.partnerStatusLabel}
+            </PilotBadge>
+            {job.hidden ? (
+              <PilotBadge variant="amber">Rejtett</PilotBadge>
+            ) : null}
           </div>
-          {job.partnerStatus === "COMPLETED" ? (
-            <div className="flex flex-wrap gap-2">
-              <PilotButton
-                variant="secondary"
-                onClick={() => void downloadPackage()}
-                disabled={downloadingPackage}
-              >
-                {downloadingPackage
-                  ? "Dokumentumcsomag letöltése…"
-                  : "Csomag letöltése (.zip)"}
-              </PilotButton>
-              {canManage ? (
-                <PilotButton
-                  variant="primary"
-                  onClick={() => void openHandoverMail()}
-                >
-                  Küldés e-mailben
-                </PilotButton>
-              ) : null}
-            </div>
-          ) : null}
         </div>
+        {job.partnerStatus === "COMPLETED" ? (
+          <div className="flex flex-wrap gap-2">
+            <PilotButton
+              variant="secondary"
+              size="regular"
+              onClick={() => void downloadPackage()}
+              disabled={downloadingPackage}
+            >
+              {downloadingPackage
+                ? "Dokumentumcsomag letöltése…"
+                : "Csomag letöltése (.zip)"}
+            </PilotButton>
+            {canManage ? (
+              <PilotButton
+                variant="primary"
+                size="regular"
+                onClick={() => void openHandoverMail()}
+              >
+                Küldés e-mailben
+              </PilotButton>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {packageError ? (
-        <div className="px-8 pt-4">
-          <Alert
-            variant="danger"
-            title="Letöltési hiba"
-            description={packageError}
-          />
-        </div>
+        <Alert
+          variant="danger"
+          title="Letöltési hiba"
+          description={packageError}
+        />
       ) : null}
       {mailResult ? (
-        <div className="px-8 pt-4">
-          <Alert variant="info" title="Kiküldés" description={mailResult} />
-        </div>
+        <Alert variant="info" title="Kiküldés" description={mailResult} />
       ) : null}
       {error ? (
-        <div className="px-8 pt-4">
-          <Alert
-            variant="danger"
-            title="Betöltési hiba"
-            description={error}
-            action={
-              <PilotButton variant="secondary" onClick={() => void load()}>
-                Újrapróbálás
-              </PilotButton>
-            }
-          />
-        </div>
+        <Alert
+          variant="danger"
+          title="Betöltési hiba"
+          description={error}
+          action={
+            <PilotButton variant="secondary" onClick={() => void load()}>
+              Újrapróbálás
+            </PilotButton>
+          }
+        />
       ) : null}
 
       <HandoverMailDialog
@@ -696,25 +696,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         onCancel={() => setMailOpen(false)}
       />
 
-      <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 py-6 lg:grid-cols-[1fr_320px]">
-        <div className="flex flex-col gap-5">
-          {/*
-            A DELEGÁLÁS ITT, A TETEJÉN -- lásd a fejléc "A DELEGÁLÁS
-            ÁTKERÜLT" szakaszát. EZ A KÁRTYA FIGMA-STÍLUSÚ (nem a varrat
-            része) -- Balázs kifejezetten kérte, lásd a fejléc "A
-            DELEGÁLÁS KÁRTYÁJA KIVÉTEL A VARRAT ALÓL" szakaszát.
-          */}
-          <PilotDelegatedColleaguesCard
-            jobId={jobId}
-            token={token}
-            assignees={job.assignees}
-            canManage={canManage}
-            onSaved={setJob}
-          />
-
+      <div className="grid flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_368px]">
+        <div className="flex min-w-0 flex-col gap-5">
           <PilotCard>
             <PilotCardHeader
-              title="Mi a baj?"
+              title="A bejelentés"
               action={
                 finished ? (
                   <span className="text-xs italic text-pilot-grey-400">
@@ -733,7 +719,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             />
             <div className="space-y-3 px-5 py-4">
               {job.description ? (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-pilot-grey-700">
+                <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-pilot-grey-800">
                   {job.description}
                 </p>
               ) : (
@@ -742,10 +728,14 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 </p>
               )}
               {/*
-                A SZERKESZTŐ MOST IRANYITOTT: a sajat inditó gombja helyett a
-                fenti fejlec-hivatkozas nyitja/zarja -- lasd a komponens sajat
-                "IRANYITOTT NYITVA-ALLAPOT" fejlecet.
+                WHO REPORTED IT AND WHEN: the creation entry of the job's own
+                log, not a new field. The design's "Sürgős" badge is left out
+                (decision E1): a job has no priority.
               */}
+              <p className="text-xs text-pilot-grey-500">
+                Bejelentette: {reporter ?? "ismeretlen"} ·{" "}
+                {formatDateTime(job.createdAt)}
+              </p>
               {canManage && !finished ? (
                 <ServiceJobFieldsEditor
                   jobId={jobId}
@@ -758,15 +748,14 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 />
               ) : null}
             </div>
-            {/*
-              A FÉNYKÉPEK/FÁJLOK IDE KÖLTÖZTEK, A "MI A BAJ?" KÁRTYÁBA -- a
-              Figma-terv is így csoportosítja, és a mai kód komment is ezt
-              mondja ("a fénykép a BEJELENTETT hibáról szól").
-            */}
-            <div className="space-y-3 border-t border-pilot-grey-100 px-5 py-4">
-              <p className="text-xs text-pilot-grey-400">
-                A bejelentett hibáról. JPEG, PNG vagy PDF, fájlonként legfeljebb
-                10 MB.
+          </PilotCard>
+
+          <PilotCard>
+            <PilotCardHeader title="Fényképek és fájlok" />
+            <div className="space-y-3 px-5 py-4">
+              <p className="text-xs text-pilot-grey-500">
+                {photoCount} fénykép · {fileCount} fájl. JPEG, PNG vagy PDF,
+                fájlonként legfeljebb 10 MB.
               </p>
               {documentsError ? (
                 <Alert
@@ -802,23 +791,10 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 emptyText="Ehhez a jegyhez még nincs fénykép vagy fájl csatolva."
               />
               {/*
-                A "+ FOTÓ" CSEMPE A FELTÖLTÉS TRIGGERE (Figma-igazítás,
-                2026-09-25, Balázs kérése) -- a raw fájlválasztó+felirat+gomb
-                sor helyett. Kattintásra AZONNAL feltölt, felirat nélkül: a
-                felirat a feltöltés UTÁNI lépés, a galéria már meglévő,
-                soronkénti "Felirat"/"Felirat átírása" gombjával
-                (`onSaveCaption` fent) -- ezt nem kellett újraépíteni, csak
-                idekapcsolni. A galéria saját rácsát (`service-document-
-                gallery.tsx`) szándékosan nem bántottuk: öt hívóhelye van,
-                ez a kör csak erre az oldalra szól.
-
-                A MERET, A KERET ES A SZOVEG-MERET A FIGMA FORRAS SZO SZERINTI
-                MASOLATA (`w-20 h-20 rounded-lg border-2 border-dashed
-                border-grey-200 ... text-xs`, HibajegyekScreen.tsx, a "+ fotó"
-                gomb) -- csak a szincsalad valt `grey`->`pilot-grey`,
-                `teal`->`pilot-aqua`-ra. Balazs kifejezett kerese (2026-09-25
-                18:47): a meret, a keret-vastagsag es a betumeret NE
-                kozelitsen, hanem pontosan egyezzen.
+                THE "+ FOTÓ" TILE STAYS THE UPLOAD TRIGGER (Balázs, 2026-09-25:
+                its size, border and type are the design's, exactly): a click
+                uploads at once, and the caption is the gallery's own later
+                step (`onSaveCaption` above).
               */}
               {canManage ? (
                 <label
@@ -845,88 +821,7 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
 
           <PilotCard>
             <PilotCardHeader
-              title="Eszköz"
-              action={
-                canManage ? (
-                  <button
-                    type="button"
-                    onClick={() => setEditingPlacement((v) => !v)}
-                    className="cursor-pointer text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
-                  >
-                    {editingPlacement ? "Bezárás" : "Szerkesztés"}
-                  </button>
-                ) : undefined
-              }
-            />
-            {editingPlacement ? (
-              /*
-                A VALODI (helyszin+eszkoz) SZERKESZTO VALTOZATLANUL -- lasd a
-                sajat fejleceet arrol, miert egy doboz a kettore, es hogyan
-                vedi a helyszin-valtaskor leeso eszkozoket. A "Szerkesztés"
-                hivatkozas csak MEGJELENITI, a belseje nem valtozott.
-              */
-              <div className="px-5 py-4">
-                <ServiceJobPlacementEditor
-                  jobId={jobId}
-                  token={token}
-                  customerId={job.customerId}
-                  departmentId={job.departmentId}
-                  departmentPath={job.departmentPath}
-                  assets={job.assets}
-                  worksheets={worksheets}
-                  canManage={canManage}
-                  onSaved={(updated) => {
-                    setJob(updated);
-                    setEditingPlacement(false);
-                  }}
-                />
-              </div>
-            ) : job.assets.length === 0 ? (
-              <p className="px-5 py-4 text-sm italic text-pilot-grey-400">
-                Ehhez a jegyhez nincs eszköz rendelve.
-              </p>
-            ) : (
-              <div className="divide-y divide-pilot-grey-50">
-                {job.assets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="flex items-center gap-4 px-5 py-4"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pilot-grey-100">
-                      <Icon
-                        name="box"
-                        size={18}
-                        className="text-pilot-grey-500"
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-pilot-grey-800">
-                        {asset.assetName}
-                      </p>
-                      <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
-                        {asset.assetNumber}
-                      </p>
-                      {/*
-                        A KATEGÓRIA-SOR CSAK AKKOR JELENIK MEG, HA VAN ÉRTÉKE
-                        -- lásd a `ServiceJobAssetLink.assetCategoryName`
-                        fejlécét: `null`, ha az eszköznek nincs kategóriája,
-                        nem azt, hogy nem kértük le.
-                      */}
-                      {asset.assetCategoryName ? (
-                        <p className="text-xs text-pilot-grey-400">
-                          {asset.assetCategoryName}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </PilotCard>
-
-          <PilotCard>
-            <PilotCardHeader
-              title="Munkalapok"
+              title="Munkalapok a jegy mögött"
               action={
                 canManage && job.customerId !== null ? (
                   <Link
@@ -946,26 +841,44 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                 {worksheets.map((worksheet) => (
                   <div
                     key={worksheet.id}
-                    className="flex items-center justify-between px-5 py-3 transition-colors hover:bg-pilot-grey-50"
+                    className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3"
                   >
-                    <div>
-                      <p className="font-mono text-xs text-pilot-grey-400">
-                        {worksheet.number ?? "Piszkozat"}
-                      </p>
+                    <div className="min-w-0 flex-1">
                       <Link
                         href={`/szerviz/munkalapok/${worksheet.id}`}
-                        className="text-sm font-medium text-pilot-grey-800 hover:text-pilot-aqua-700"
+                        className="font-mono text-sm font-semibold text-pilot-grey-900 hover:text-pilot-aqua-700"
                       >
-                        {serviceJobWorksheetLabel(worksheet)}
+                        {worksheet.number ?? "Még nincs száma"}
                       </Link>
+                      <p className="break-words text-xs text-pilot-grey-500">
+                        {serviceJobWorksheetLabel(worksheet)}
+                      </p>
                     </div>
+                    {/*
+                      THE SHEET'S STATE AND HOURS (redesign E3): the same
+                      display status as the worksheet list, from the
+                      server's status and line count, and its total hours.
+                    */}
+                    <PilotBadge
+                      variant={worksheetDisplayPilotVariant(
+                        worksheet.status,
+                        worksheet.lineCount,
+                      )}
+                    >
+                      {worksheetDisplayLabel(
+                        worksheet.status,
+                        worksheet.lineCount,
+                      )}
+                    </PilotBadge>
+                    <span className="text-xs text-pilot-grey-600">
+                      {formatLaborHours(worksheet.laborHours)} munkaóra
+                    </span>
                     <div className="flex items-center gap-3 text-xs text-pilot-grey-400">
                       {worksheet.handedOverAt ? (
                         <span>
                           Átadva: {formatDateTime(worksheet.handedOverAt)}
                         </span>
                       ) : null}
-                      <span>{formatDateTime(worksheet.createdAt)}</span>
                       {canManage ? (
                         <button
                           type="button"
@@ -1030,99 +943,160 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             ) : null}
           </PilotCard>
 
-          {job.partnerStatus === "COMPLETED" ? (
+          <div id="hibajegy-eszkoz" className="scroll-mt-6">
             <PilotCard>
-              <PilotCardHeader title="Lezárás és átadás" />
-              <div className="flex flex-col gap-3 px-5 py-4">
-                <p className="text-xs text-pilot-grey-400">
-                  A dokumentumcsomag letölthető, vagy kiküldhető e-mailben -- a
-                  fenti gombokkal.
-                </p>
-                <div className="flex items-center gap-3">
-                  <PilotButton
-                    variant="secondary"
-                    onClick={() => void downloadPackage()}
-                    disabled={downloadingPackage}
-                  >
-                    {downloadingPackage
-                      ? "Letöltés…"
-                      : "Csomag letöltése (.zip)"}
-                  </PilotButton>
-                  {canManage ? (
-                    <PilotButton
-                      variant="primary"
-                      onClick={() => void openHandoverMail()}
+              <PilotCardHeader
+                title="Eszköz"
+                action={
+                  canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingPlacement((v) => !v)}
+                      className="cursor-pointer text-xs font-medium text-pilot-aqua-600 transition-colors hover:text-pilot-aqua-800"
                     >
-                      Küldés e-mailben
-                    </PilotButton>
-                  ) : null}
-                </div>
-              </div>
-            </PilotCard>
-          ) : null}
-
-          {canHide ? (
-            <PilotCard>
-              <div className="space-y-2 px-5 py-4">
-                <PilotButton
-                  variant="secondary"
-                  onClick={() =>
-                    void serviceJobsApi
-                      .setHidden(token, jobId, !job.hidden)
-                      .then(() => load())
-                  }
-                >
-                  {job.hidden ? "Visszaállítás" : "Elrejtés"}
-                </PilotButton>
-                <p className="text-xs text-pilot-grey-400">
-                  {job.hidden
-                    ? "Ez a jegy nincs benne a listákban. A visszaállítás után újra megjelenik."
-                    : "A jegy kikerül a listákból, de megmarad, és a munkalapjai változatlanul látszanak."}
-                </p>
-              </div>
-            </PilotCard>
-          ) : null}
-
-          {canManage && job.customerName === null ? (
-            <PilotCard>
-              <div className="space-y-2 px-5 py-4">
-                <label
-                  className="block text-sm font-semibold text-pilot-grey-900"
-                  htmlFor="pilot-jegy-partner"
-                >
-                  Partner beállítása
-                </label>
-                <p className="text-xs text-pilot-grey-400">
-                  Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem
-                  lehet alá csatolni.
-                </p>
-                {partnerError ? (
-                  <Alert
-                    variant="danger"
-                    title="Nem sikerült"
-                    description={partnerError}
+                      {editingPlacement ? "Bezárás" : "Szerkesztés"}
+                    </button>
+                  ) : undefined
+                }
+              />
+              {editingPlacement ? (
+                <div className="px-5 py-4">
+                  <ServiceJobPlacementEditor
+                    jobId={jobId}
+                    token={token}
+                    customerId={job.customerId}
+                    departmentId={job.departmentId}
+                    departmentPath={job.departmentPath}
+                    assets={job.assets}
+                    worksheets={worksheets}
+                    canManage={canManage}
+                    onSaved={(updated) => {
+                      setJob(updated);
+                      setEditingPlacement(false);
+                    }}
                   />
-                ) : null}
-                <PartnerPicker
-                  id="pilot-jegy-partner"
-                  onPick={(picked) => void setPartner(picked.customerId)}
-                />
-              </div>
+                </div>
+              ) : job.assets.length === 0 ? (
+                <p className="px-5 py-4 text-sm italic text-pilot-grey-400">
+                  Ehhez a jegyhez nincs eszköz rendelve.
+                </p>
+              ) : (
+                <div className="divide-y divide-pilot-grey-50">
+                  {job.assets.map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="flex items-center gap-4 px-5 py-4"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pilot-grey-100">
+                        <Icon
+                          name="box"
+                          size={18}
+                          className="text-pilot-grey-500"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-pilot-grey-800">
+                          {asset.assetName}
+                        </p>
+                        <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
+                          {asset.assetNumber}
+                        </p>
+                        {asset.assetCategoryName ? (
+                          <p className="text-xs text-pilot-grey-400">
+                            {asset.assetCategoryName}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </PilotCard>
-          ) : null}
+          </div>
+
+          {/*
+            "AMI TÖRTÉNT": the job's log, newest first, as the server orders
+            it. It holds the four real sources (status steps with their note,
+            worksheets, assets, removed attachments); the design's e-mail and
+            comment rows have no source and are not drawn.
+          */}
+          <PilotCard>
+            <PilotCardHeader title="Ami történt" />
+            <div className="px-5 py-4">
+              <p className="mb-2 text-xs text-pilot-grey-500">
+                A jegy, a munkalapok és a csatolmányok közös naplója.
+              </p>
+              {job.timeline.length ? (
+                <ol className="flex flex-col">
+                  {job.timeline.map((entry) => (
+                    <li
+                      key={`${entry.kind}-${entry.sortKey}`}
+                      className="grid grid-cols-[24px_96px_minmax(0,1fr)] gap-x-3 border-b border-pilot-grey-50 py-3 last:border-0 xl:grid-cols-[24px_96px_minmax(0,1fr)_minmax(0,1fr)]"
+                    >
+                      <TimelineIcon kind={entry.kind} />
+                      <span className="pt-1 text-xs text-pilot-grey-500">
+                        {formatDateTime(entry.at)}
+                      </span>
+                      <span className="text-sm font-medium text-pilot-grey-900">
+                        {timelineLine(entry)}
+                      </span>
+                      <span className="col-start-3 text-xs text-pilot-grey-600 xl:col-start-4">
+                        {entry.kind === "status" && entry.event.actorName
+                          ? entry.event.actorName
+                          : ""}
+                        {entry.kind === "status" && entry.event.note ? (
+                          <span className="block whitespace-pre-wrap break-words text-sm text-pilot-grey-700">
+                            {entry.event.note}
+                          </span>
+                        ) : null}
+                        {entry.kind === "document" &&
+                        entry.removal.uploadedAt !== null ? (
+                          <span className="block">
+                            Feltöltve:{" "}
+                            {formatDateTime(entry.removal.uploadedAt)}
+                            {entry.removal.uploadedByName
+                              ? ` · ${entry.removal.uploadedByName}`
+                              : ""}
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <EmptyState
+                  title="Nincs bejegyzés"
+                  description="Ezen a jegyen még nem történt semmi."
+                />
+              )}
+            </div>
+          </PilotCard>
         </div>
 
         <div className="flex flex-col gap-5">
+          {/*
+            THE NEXT STEP, AS ITS OWN STRONG PANEL (the brief, point 3). Only
+            the steps the server allows are drawn (`allowedSteps`); the page
+            decides nothing about which step comes next.
+          */}
           {canManage ? (
-            <PilotCard>
-              <PilotCardHeader
-                title={
-                  job.allowedSteps.length
-                    ? "Hova lép a jegy?"
-                    : "Nincs több lépés"
-                }
-              />
-              <div className="space-y-3 px-5 py-4">
+            <section
+              aria-label="Következő lépés"
+              className="rounded-xl bg-pilot-aqua-50 px-5 py-5 ring-1 ring-pilot-aqua-200"
+            >
+              <h2 className="text-base font-semibold text-pilot-grey-900">
+                Következő lépés
+              </h2>
+              <p className="mt-1 text-xs text-pilot-grey-600">
+                Csak a megengedett átmenetek jelennek meg.
+              </p>
+              <p className="mt-3 text-sm text-pilot-grey-900">
+                Jelenleg:{" "}
+                <span className="font-semibold">
+                  {serviceJobStatusLabel[job.status]}
+                </span>
+              </p>
+              <div className="mt-4 space-y-3">
                 {stepError ? (
                   <Alert
                     variant="danger"
@@ -1144,75 +1118,166 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                         aria-label="Megjegyzés a lépéshez"
                         rows={3}
                         value={note}
+                        placeholder="Mi érkezett meg, mi változott?"
                         onChange={(event) => setNote(event.target.value)}
                         maxLength={2000}
-                        className="w-full resize-none rounded-md px-3 py-2 text-sm text-pilot-grey-800 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                        className="w-full resize-none rounded-md bg-white px-3 py-2 text-sm text-pilot-grey-800 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
                       />
-                      <p className="text-xs text-pilot-grey-400">
+                      <p className="text-xs text-pilot-grey-500">
                         {serviceJobNoteDescription(job.allowedSteps)}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-2">
                       {job.allowedSteps.map((to) => (
                         <PilotButton
                           key={to}
-                          variant="secondary"
+                          variant="primary"
+                          size="regular"
+                          fullWidth
                           disabled={stepping}
                           onClick={() => void step(to)}
                         >
-                          {serviceJobStatusLabel[to]}
+                          Tovább → {serviceJobStatusLabel[to]}
                         </PilotButton>
                       ))}
                     </div>
                   </>
                 ) : (
-                  <p className="text-xs text-pilot-grey-400">
+                  <p className="text-sm text-pilot-grey-600">
                     Ez a hibajegy lezárult, nincs több lépése.
                   </p>
                 )}
               </div>
-            </PilotCard>
+            </section>
           ) : null}
 
           <PilotCard>
             <PilotCardHeader title="Az ügy adatai" />
-            <div className="space-y-2 px-5 py-4 text-sm">
-              <div>
-                <p className="text-xs text-pilot-grey-400">Partner</p>
-                <p className="text-pilot-grey-800">
-                  {job.customerName ?? "Nincs megadva"}
-                </p>
-              </div>
-              {job.departmentName ? (
-                <div>
-                  <p className="text-xs text-pilot-grey-400">Helyszín</p>
-                  <p className="text-pilot-grey-800">
-                    {job.departmentPath?.length
-                      ? job.departmentPath.join(" / ")
-                      : job.departmentName}
-                  </p>
-                </div>
-              ) : null}
-              <div>
-                <p className="text-xs text-pilot-grey-400">Létrehozva</p>
-                <p className="text-pilot-grey-800">
-                  {formatDateTime(job.createdAt)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-pilot-grey-400">
-                  A partner ezt látja
-                </p>
-                <PilotBadge variant="grey">{job.partnerStatusLabel}</PilotBadge>
-              </div>
+            <div className="px-5 py-2">
+              <PilotDataRow
+                label="Partner"
+                labelWidth="110px"
+                value={job.customerName}
+              />
+              <PilotDataRow
+                label="Helyszín"
+                labelWidth="110px"
+                value={
+                  job.departmentPath?.length
+                    ? job.departmentPath.join(" / ")
+                    : job.departmentName
+                }
+              />
+              <PilotDataRow
+                label="Felelősök"
+                labelWidth="110px"
+                value={names ?? NO_ASSIGNEE}
+              />
+              <PilotDataRow
+                label="Létrehozva"
+                labelWidth="110px"
+                value={formatDateTime(job.createdAt)}
+              />
+              <PilotDataRow
+                label="A partner ezt látja"
+                labelWidth="110px"
+                value={job.partnerStatusLabel}
+              />
             </div>
           </PilotCard>
 
           {/*
+            THE ASSIGNEES' OWN CARD, unchanged inside (Balázs asked for it in
+            the pilot style, 2026-09-24): it moved from the top of the left
+            column to the right, under the case data, where the design keeps
+            the people.
+          */}
+          <PilotDelegatedColleaguesCard
+            jobId={jobId}
+            token={token}
+            assignees={job.assignees}
+            canManage={canManage}
+            onSaved={setJob}
+          />
+
+          {/*
+            KEZELÉS: what the design folds under "Helyszín" and "…": the
+            location and assets editor, hiding and restoring, and setting a
+            partner on a job without one. Each keeps its own permission.
+          */}
+          {canManage || canHide ? (
+            <PilotCard>
+              <PilotCardHeader title="Kezelés" />
+              <div className="space-y-4 px-5 py-4">
+                <div className="flex flex-wrap gap-2">
+                  {canManage ? (
+                    <PilotButton
+                      variant="secondary"
+                      size="regular"
+                      onClick={() => {
+                        setEditingPlacement(true);
+                        document
+                          .getElementById("hibajegy-eszkoz")
+                          ?.scrollIntoView?.({ behavior: "smooth" });
+                      }}
+                    >
+                      Helyszín
+                    </PilotButton>
+                  ) : null}
+                  {canHide ? (
+                    <PilotButton
+                      variant="secondary"
+                      size="regular"
+                      onClick={() =>
+                        void serviceJobsApi
+                          .setHidden(token, jobId, !job.hidden)
+                          .then(() => load())
+                      }
+                    >
+                      {job.hidden ? "Visszaállítás" : "Elrejtés"}
+                    </PilotButton>
+                  ) : null}
+                </div>
+                {canHide ? (
+                  <p className="text-xs text-pilot-grey-400">
+                    {job.hidden
+                      ? "Ez a jegy nincs benne a listákban. A visszaállítás után újra megjelenik."
+                      : "Az elrejtett jegy kikerül a listákból, de megmarad, és a munkalapjai változatlanul látszanak."}
+                  </p>
+                ) : null}
+                {canManage && job.customerName === null ? (
+                  <div className="space-y-2 border-t border-pilot-grey-100 pt-4">
+                    <label
+                      className="block text-sm font-semibold text-pilot-grey-900"
+                      htmlFor="pilot-jegy-partner"
+                    >
+                      Partner beállítása
+                    </label>
+                    <p className="text-xs text-pilot-grey-400">
+                      Ehhez a hibajegyhez még nincs partner, ezért munkalapot
+                      sem lehet alá csatolni.
+                    </p>
+                    {partnerError ? (
+                      <Alert
+                        variant="danger"
+                        title="Nem sikerült"
+                        description={partnerError}
+                      />
+                    ) : null}
+                    <PartnerPicker
+                      id="pilot-jegy-partner"
+                      onPick={(picked) => void setPartner(picked.customerId)}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </PilotCard>
+          ) : null}
+
+          {/*
             A KARBANTARTÁS-PANELEK, MERT EZ A ROUTE MAINTENANCE JEGYET IS
             KISZOLGÁL -- lásd a fejléc "A ROUTE MAINTENANCE JEGYET IS
-            KISZOLGÁL" szakaszát. Régi stílusban maradnak (mindkettő saját
-            `ServicePanel`-t rajzol), a varrat része.
+            KISZOLGÁL" szakaszát.
           */}
           {job.kind === "MAINTENANCE" ? (
             <CompletionCertificatePanel serviceJobId={job.id} />
@@ -1223,63 +1288,6 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
               jobNumber={job.jobNumber}
             />
           ) : null}
-
-          <PilotCard>
-            <PilotCardHeader title="Előzmények" />
-            <div className="px-5 py-4">
-              {job.timeline.length ? (
-                <div className="flex flex-col">
-                  {job.timeline
-                    .slice()
-                    .reverse()
-                    .map((entry, index, arr) => (
-                      <div
-                        key={`${entry.kind}-${entry.sortKey}`}
-                        className="flex gap-3"
-                      >
-                        <div className="flex flex-col items-center">
-                          <TimelineIcon kind={entry.kind} />
-                          {index < arr.length - 1 ? (
-                            <div className="my-1 w-px flex-1 bg-pilot-grey-100" />
-                          ) : null}
-                        </div>
-                        <div className="pb-4">
-                          <p className="text-xs font-medium text-pilot-grey-700">
-                            {timelineLine(entry)}
-                          </p>
-                          <p className="mt-0.5 text-[10px] text-pilot-grey-400">
-                            {formatDateTime(entry.at)}
-                            {entry.kind === "status" && entry.event.actorName
-                              ? ` · ${entry.event.actorName}`
-                              : ""}
-                          </p>
-                          {entry.kind === "document" &&
-                          entry.removal.uploadedAt !== null ? (
-                            <p className="mt-0.5 text-[10px] text-pilot-grey-400">
-                              Feltöltve:{" "}
-                              {formatDateTime(entry.removal.uploadedAt)}
-                              {entry.removal.uploadedByName
-                                ? ` · ${entry.removal.uploadedByName}`
-                                : ""}
-                            </p>
-                          ) : null}
-                          {entry.kind === "status" && entry.event.note ? (
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-pilot-grey-700">
-                              {entry.event.note}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <EmptyState
-                  title="Nincs bejegyzés"
-                  description="Ezen a jegyen még nem történt semmi."
-                />
-              )}
-            </div>
-          </PilotCard>
         </div>
       </div>
 
