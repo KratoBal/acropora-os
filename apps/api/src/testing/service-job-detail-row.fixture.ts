@@ -1,3 +1,5 @@
+import { Prisma } from "@acropora/database";
+
 import type { ServiceJobsRepository } from "../service-jobs/service-jobs.repository.js";
 
 /**
@@ -72,7 +74,28 @@ export function serviceJobDetailRow(
         handedOverAt: null,
         // A NEV A LEGFRISSEBB VERZION LAKIK, ezert all itt tombkent: a
         // lekerdezes `take: 1`-gyel a legmagasabb verziot huzza le.
-        versions: [{ subject: "Szivattyú csere" }],
+        versions: [
+          {
+            subject: "Szivattyú csere",
+            // THE CARD'S STATE AND HOURS (service redesign E3): a draft with
+            // two lines, one labour line of 1.5 h done by two people (3 h)
+            // and one material line that adds no hours.
+            status: "DRAFT" as const,
+            _count: { lines: 2 },
+            lines: [
+              {
+                kind: "LABOR" as const,
+                quantity: new Prisma.Decimal("1.5"),
+                workerCount: 2,
+              },
+              {
+                kind: "OTHER" as const,
+                quantity: new Prisma.Decimal("4"),
+                workerCount: 1,
+              },
+            ],
+          },
+        ],
       },
     ],
     assets: [

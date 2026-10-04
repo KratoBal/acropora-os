@@ -178,6 +178,7 @@ export type {
   ServiceJobPartnerStatus,
   ServiceJobPartnerStatusEvent,
   ServiceJobPartnerTimelineEntry,
+  ServiceJobPartnerWorksheetLink,
   ServiceJobStatusEvent,
   ServiceJobStatusValue,
   ServiceJobTimelineEntry,

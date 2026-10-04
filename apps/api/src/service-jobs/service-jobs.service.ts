@@ -53,6 +53,7 @@ import {
   partnerVisibleStatus,
 } from "./service-job-status.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
+import { sumWorksheetLaborHours } from "../worksheets/worksheet-labor.js";
 import {
   worksheetsBlockingTicketClose,
   type TicketCloseBlockReason,
@@ -1241,6 +1242,17 @@ export class ServiceJobsService {
           subject: worksheet.versions[0]?.subject ?? "",
           createdAt: worksheet.createdAt.toISOString(),
           handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
+          /*
+            A SHEET WITHOUT A VERSION cannot occur through the service (a sheet
+            is created with its first version), but the read must not throw
+            on one: it reads as an empty draft, the same fallback the subject
+            takes above.
+          */
+          status: worksheet.versions[0]?.status ?? "DRAFT",
+          lineCount: worksheet.versions[0]?._count.lines ?? 0,
+          laborHours: sumWorksheetLaborHours(
+            worksheet.versions[0]?.lines ?? [],
+          ).toString(),
         })),
         assets: row.assets.map((link) => ({
           id: link.id,
