@@ -1,133 +1,87 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, it } from "node:test";
 
+import { launcherModules, MODULE_ORDER } from "../home/modules";
+import { HOME_PRESETS, homeModules } from "../home/presets";
 import { TILE_ENTRY, type TileCode } from "./tile-visibility";
 
 /**
- * A SZERVIZES SORRENDJE BALÁZS KÉRÉSE, ÉS MA SEMMI NEM MÉRTE.
+ * A SZERVIZES SORRENDJE BALÁZS KÉRÉSE (2026-09-16, Discord): "A sorrend ugy
+ * legyen szervizes jogosultsaggal, hogy Hibajegyek, Munkalapok, Eszkozok,
+ * Partnerek".
  *
- * Szó szerint (2026-09-16, Discord): "A sorrend ugy legyen szervizes
- * jogosultsaggal, hogy Hibajegyek, Munkalapok, Eszkozok, Partnerek".
+ * WHERE THE ORDER LIVES SINCE THE MOBILE HOME V1 (phase 1). The tiles are no
+ * longer ten `ModuleCard` lines in `app/index.tsx`, so the order is no longer
+ * read from the screen's source. It lives in two lists, and both keep the
+ * request:
  *
- * === MIÉRT NEM SZEREPKÖRÖNKÉNTI SORREND, ÉS MIT KELL EZÉRT MÉRNI ===
+ * - `MODULE_ORDER`, the Modulok screen's order, for every module;
+ * - the service view's `modules`, the order the Home leads with.
  *
- * A csempék sora RÖGZÍTETT; a szervizes azért kapja a kért sorrendet, mert csak
- * ezt a négyet LÁTJA. Ez az állítás tehát két dolog EGYÜTTESÉN áll: a képernyőn
- * álló sorrenden, és azon, hogy a szervizes mit lát. Ha bármelyik elmozdul --
- * valaki beszúr egy csempét a Hibajegyek elé, vagy a szervizes egyszer meglátja
- * a Rendeléseket --, a kért sorrend CSENDBEN elromlik.
- *
- * === MIÉRT A FORRÁS SZÖVEGÉBŐL ===
- *
- * Ebben a csomagban nincs komponens-teszt eszköz, tehát a kezdőképernyőt nem
- * lehet renderelni. Amit meg lehet mérni: a `code="XX"` sorok SORRENDJE a
- * forrásban. A határa kimondva: azt állítja, hogy a JSX ebben a sorrendben
- * sorolja fel a csempéket, nem azt, hogy a felhasználó így LÁTJA őket -- egy
- * `flexDirection: "row-reverse"` például átfordítaná, és ezt nem venné észre.
+ * The request is kept by the same two things as before: the order of the list
+ * and what the SERVICE role is served. If either moves, the request breaks
+ * silently, so both are measured here.
  */
-const GYOKER = join(__dirname, "..", "..", "..", "src");
-
-function olvas(ut: string): string {
-  const teljes = join(GYOKER, ut);
-  try {
-    return readFileSync(teljes, "utf8");
-  } catch {
-    throw new Error(
-      `Nem tudtam elolvasni: ${teljes}. Ez a KERESÉS hibája, nem a lefedettségé.`,
-    );
-  }
-}
-
-/** A csempék kódja abban a sorrendben, ahogy a kezdőképernyő felsorolja őket. */
-function kepernyoSorrend(): TileCode[] {
-  const forras = olvas(join("app", "index.tsx"));
-  return [...forras.matchAll(/code="([A-Z]+)"/g)].map(
-    (talalat) => talalat[1] as TileCode,
-  );
-}
-
-/** Egy csempe akkor látszik, ha a menütétele a mobilra szól és a szerep látja. */
 function lathato(kod: TileCode, ertekek: readonly string[]): boolean {
   return ertekek.includes(TILE_ENTRY[kod]);
 }
 
+/**
+ * A SZERVIZES MENÜJE: the entries Balázs's request named. The service role is
+ * also served `material-requests-pending` and `aquariums` since then; this
+ * list measures the stated request, not the full menu (that is pinned by the
+ * full order below).
+ */
+const SZERVIZES_MENU = [
+  "service-jobs",
+  "service-assets",
+  "worksheets",
+  "partners",
+];
+
 describe("a csempék sorrendje", () => {
-  it("POZITÍV KONTROLL: a képernyőről tényleg kiolvashatók a csempék", () => {
-    const sorrend = kepernyoSorrend();
-    // Enélkül minden alábbi állítás ÜRES listán menne végig, és zölden mondaná,
-    // hogy a sorrend rendben van.
-    assert.ok(
-      sorrend.length >= 8,
-      `gyanúsan kevés csempét találtam: ${sorrend.join(", ")}`,
-    );
+  it("POZITÍV KONTROLL: minden csempe pontosan egyszer szerepel a sorban", () => {
+    // Without this, an empty or partial list would pass every check below.
     assert.deepEqual(
-      [...new Set(sorrend)],
-      sorrend,
-      "ugyanaz a csempe kétszer szerepel a képernyőn",
+      [...MODULE_ORDER].sort(),
+      (Object.keys(TILE_ENTRY) as TileCode[]).sort(),
     );
   });
 
-  it("a szervizes ezt a négyet látja, EBBEN a sorrendben", () => {
-    /**
-     * A SZERVIZES MENÜJE, MÉRVE (nem feltételezve): a `service-jobs`,
-     * `service-assets`, `worksheets` és `partners` tételek azok, amiket a
-     * SERVICE szerep mobil felületen lát -- Balázs kérése, 2026-09-16, KIZÁRÓLAG
-     * erre a négyre szólt, tehát az állítás is csak ezt méri.
-     *
-     * A `material-requests-pending` NEM KERÜL EBBE A LISTÁBA, holott a
-     * SERVICE szerep 2026-09-23 óta AZT IS látja (a `SERVICE_MANAGE` jogon,
-     * lásd `packages/types/src/navigation.ts`). Ez a lista Balázs KIMONDOTT
-     * kérését méri, nem a szervizes TELJES menüjét -- azt a lenti "a teljes
-     * sorrend rögzített" állítás fedi, minden szerepre együtt.
-     */
-    const szervizesMenu = [
-      "service-jobs",
-      "service-assets",
-      "worksheets",
-      "partners",
-    ];
-
-    const latott = kepernyoSorrend().filter((kod) =>
-      lathato(kod, szervizesMenu),
-    );
-
+  it("a szervizes ezt a négyet látja a Modulok alatt, EBBEN a sorrendben", () => {
     assert.deepEqual(
-      latott,
+      launcherModules((kod) => lathato(kod, SZERVIZES_MENU)),
+      ["HJ", "MU", "ES", "PA"],
+      "Balázs kérése: Hibajegyek, Munkalapok, Eszközök, Partnerek",
+    );
+  });
+
+  it("és a kezdőlap szerviz nézete is ebben a sorrendben vezet", () => {
+    assert.deepEqual(
+      homeModules(HOME_PRESETS.service, (kod) => lathato(kod, SZERVIZES_MENU)),
       ["HJ", "MU", "ES", "PA"],
       "Balázs kérése: Hibajegyek, Munkalapok, Eszközök, Partnerek",
     );
   });
 
   /**
-   * TESTVÉR-KONTROLL: A TÖBBI SZEREP KÉPERNYŐJE SEM ESIK SZÉT.
-   *
-   * A fenti állítás akkor is zöld maradna, ha valaki a négy szervizes csempét
-   * a lista elejére emelné, a többit pedig összekeverné. A tulajdonos kilenc
-   * csempét lát, és azok sorrendje is számít -- csak nem Balázs kérése köti,
-   * hanem az, hogy ne mozduljon el szó nélkül.
-   *
-   * 2026-09-23: nyolcról kilencre nőtt a `material-requests-pending` mobil
-   * felülettel ("AI"), a Munkalapok és az Eszközök közé beszúrva. Ez az
-   * állítás ELSÜLT, és ez a helyes viselkedés -- ugyanaz a minta, mint a
-   * `HJ` felvételénél (lásd `tile-visibility.spec.ts`).
-   *
-   * 2026-09-24: kilencről tízre nőtt az akvárium-csempével ("AK"), az
-   * Eszközök és a Rendelések közé beszúrva -- ugyanaz a minta, harmadszor.
+   * TESTVÉR-KONTROLL: the launcher's full order is pinned, so a module moved
+   * without a word turns this red. The modules with no screen (BE, TE, NAV)
+   * stand last: they are never drawn (`route: null`), so their place is only
+   * where they will appear the day they get a screen.
    */
   it("a teljes sorrend rögzített", () => {
-    assert.deepEqual(kepernyoSorrend(), [
+    assert.deepEqual(MODULE_ORDER, [
       "HJ",
       "MU",
       "AI",
       "ES",
       "AK",
       "RE",
+      "PA",
       "BE",
       "TE",
       "NAV",
-      "PA",
     ]);
   });
 });

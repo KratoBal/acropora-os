@@ -2,9 +2,8 @@ import "react-native-gesture-handler";
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Pressable, Text } from "react-native";
 
 import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
@@ -82,37 +81,6 @@ export default function RootLayout() {
  * state doesn't match what they require, so the Stack itself always
  * declares both routes once mounted.
  */
-/**
- * A KEZDŐLAP FEJLÉCÉNEK FOGASKEREKE, A TERV SZERINT (Balázs második képe,
- * 2026-09-25 18:51): a `MobileHeader` a fejléc jobb szélén egy
- * beállítás-gombot ad, bal oldalon balra igazított címmel -- az első kör
- * ezt egyáltalán nem adta hozzá, a natív fejléc középre igazított címmel
- * és akció nélkül maradt.
- *
- * NINCS VEKTOR-IKON KÖNYVTÁR EBBEN AZ APPBAN (mérve: `@expo/vector-icons`
- * sehol nincs importálva) -- a fogaskerék ezért ugyanaz az emoji-alapú
- * minta, mint a modul-csempék ikonjai, nem egy új függőség.
- */
-function HomeSettingsButton() {
-  const router = useRouter();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Beállítások megnyitása"
-      hitSlop={8}
-      onPress={() => router.push("/settings")}
-      style={{
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        width: 44,
-      }}
-    >
-      <Text style={{ fontSize: 20 }}>⚙️</Text>
-    </Pressable>
-  );
-}
-
 function RootNavigator() {
   const {
     status,
@@ -172,21 +140,23 @@ function RootNavigator() {
         headerShadowVisible: false,
       }}
     >
+      {/*
+        THE HOME DRAWS ITS OWN HEADER (mobile Home V1, Figma 412:3): the
+        greeting and the initials that open the profile. The title stays for
+        the back button of the screens opened from it.
+      */}
       <Stack.Screen
         name="index"
-        options={{
-          title: "Acropora OS",
-          headerTitleAlign: "left",
-          headerRight: () => <HomeSettingsButton />,
-        }}
+        options={{ title: "Kezdőlap", headerShown: false }}
       />
+      <Stack.Screen name="modulok" options={{ title: "Modulok" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="orders/index" options={{ title: "Rendelések" }} />
       <Stack.Screen
         name="orders/[id]"
         options={{ title: "Rendelés részletei" }}
       />
-      <Stack.Screen name="settings" options={{ title: "Beállítások" }} />
+      <Stack.Screen name="settings" options={{ title: "Profil" }} />
       <Stack.Screen name="queue" options={{ title: "Feltöltésre várók" }} />
       <Stack.Screen
         name="queue-fix/[id]"

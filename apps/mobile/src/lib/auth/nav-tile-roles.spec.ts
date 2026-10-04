@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+
+import { HOME_MODULES, launcherModules } from "../home/modules";
+import { TILE_ENTRY, type TileCode } from "./tile-visibility";
 
 /**
  * A KÉZZEL ÍRT SZEREPKÖR-LISTA NE TUDJA TÚLÉLNI A CSEMPE MEGNYITÁSÁT.
@@ -38,54 +40,40 @@ import { describe, it } from "node:test";
  * EZ A FÁJL MÉGSEM VÁLT FÖLÖSLEGESSÉ, és pontosan egy okból: az `enabled` jelzőt
  * CSAK ITT lehet látni. A szerver nem tudja, hogy a csempe megnyit-e valamit --
  * az a telefon tulajdonsága. Az alábbi állítás tehát az egyetlen hely, ahol a
- * `retiredBy` feltételének a BEKÖVETKEZÉSE észrevehető.
+ * `retiredBy` feltételének a BEKÖVETKEZÉSE észrevehető. *
+ * ===================================================================
+ * MOBILE HOME V1 (phase 1)
+ * ===================================================================
+ *
+ * The `enabled` flag became `route` in `lib/home/modules.ts`: a module with no
+ * screen has `route: null`, and it is no longer drawn at all (owner's answer
+ * 4, 2026-10-02: "Olyan csempe ne legyen, ami sehova nem visz"). The decision
+ * this file guards is unchanged; it is read from the table instead of from
+ * the `<ModuleCard code="NAV" …/>` line that no longer exists.
  */
-
-const HOME_SCREEN = "src/app/index.tsx";
-
-/** A NAV `ModuleCard` blokkja, ahogy a képernyőn áll. */
-function navTileBlock(source: string): string {
-  const match = /<ModuleCard\s+code="NAV"([\s\S]*?)\/>/.exec(source);
-  assert.ok(
-    match,
-    'Nem találtam a code="NAV" csempét a kezdőképernyőn. Ez a keresés hibája, ' +
-      "nem a képernyőé -- egy nem talált csempéről ez a fájl semmit nem állít.",
-  );
-  return match![1]!;
-}
 
 describe("a NAV csempe láthatóságának forrása", () => {
   /**
-   * A KONTROLL A KERESÉSRE. Enélkül a lenti állítás egy üres szövegen menne
-   * végig, és zölden mondaná, hogy minden rendben.
+   * A KONTROLL A KERESÉSRE: the module this file is about exists in the table
+   * and is still tied to its served navigation entry.
    */
-  it("megtalálja a csempét, amiről állít valamit", () => {
-    const tile = navTileBlock(homeScreen());
-
-    assert.match(tile, /title="NAV-szinkron"/);
-    // A MINTA TORDELES-TURO. A prettier a hosszu sort tobbe tori, es egy
-    // egysoros minta ettol elveszti a talalatot -- a kimenete pedig ugyanaz
-    // lenne, mint egy VALODI elteresé: "nem talaltam". Merve 2026-09-02: a
-    // formazas utan elbukott, holott a kod helyes volt.
-    assert.match(tile, /available=\{\s*tileVisible\("NAV"\)\s*\}/);
+  it("megtalálja a modult, amiről állít valamit", () => {
+    assert.equal(HOME_MODULES.NAV.title, "NAV-szinkron");
+    assert.equal(TILE_ENTRY.NAV, "nav-integration-mobile");
   });
 
-  it("a csempe addig áll szerepkör-listán, amíg nem nyit meg semmit", () => {
-    const tile = navTileBlock(homeScreen());
-
-    assert.match(
-      tile,
-      /enabled=\{false\}/,
+  it("a csempe addig nem jelenik meg, amíg nem nyit meg semmit", () => {
+    assert.equal(
+      HOME_MODULES.NAV.route,
+      null,
       "A NAV csempe már megnyit valamit, tehát a szerep-listás ág indoka " +
         "elévült. A döntés a KÖZÖS FORRÁSBAN lakik " +
         "(`packages/types/src/navigation.ts`, a `nav-integration-mobile` tétel " +
         "`retiredBy` mezője): a láthatóság mostantól a hívásához tartozó " +
-        "jogosultságból jöjjön, és ezzel a szerep-listás ág kiesik. Az itteni " +
-        "`NAV_TILE_ROLES` visszaesés is vele megy.",
+        "jogosultságból jöjjön, és ezzel a szerep-listás ág kiesik.",
     );
+    // And while it has no screen, not even a served entry draws it.
+    const mindenKiszolgalva = (_kod: TileCode) => true;
+    assert.ok(!launcherModules(mindenKiszolgalva).includes("NAV"));
   });
 });
-
-function homeScreen(): string {
-  return readFileSync(HOME_SCREEN, "utf8");
-}
