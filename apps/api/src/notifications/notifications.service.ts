@@ -574,6 +574,25 @@ export class NotificationsService {
    * AMI ELTER, AZ A PARAMETEREKBEN ALL, es pontosan negy dolog: a cim, a
    * torzs, a `data` celpont, es hogy melyik naplo-bejegyzes keszul.
    */
+  deliverServiceDraftsArrived(notice: {
+    mailId: string;
+    userIds: readonly string[];
+    count: number;
+  }) {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új Cápasuli piszkozatok",
+      body: `${notice.count} kérés vár elbírálásra a Szerviz / Piszkozatok oldalon.`,
+      data: {},
+      record: (attempts) =>
+        this.log.recordServiceDraftsArrived({
+          mailId: notice.mailId,
+          attempts,
+        }),
+      failureLine: () => "Cápasuli piszkozat értesítése sikertelen.",
+    });
+  }
+
   private async deliver(input: {
     userIds: readonly string[];
     title: string;

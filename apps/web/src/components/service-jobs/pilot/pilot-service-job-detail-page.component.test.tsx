@@ -502,6 +502,18 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the partner and report author from the shared API label", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        reporterPersonName: "Szilveszter Roland",
+        reporterName: "Cápasuli (Szilveszter Roland)",
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(
+      await screen.findByText(/Bejelentette: Cápasuli \(Szilveszter Roland\)/),
+    ).toBeInTheDocument();
+  });
   it("opens the location editor from Kezelés", async () => {
     const user = userEvent.setup();
     api.detail.mockResolvedValue(detail());

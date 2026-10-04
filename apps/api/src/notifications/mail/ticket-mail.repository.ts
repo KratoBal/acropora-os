@@ -7,6 +7,7 @@ export interface TicketMailContext {
   readonly jobNumber: string;
   readonly title: string;
   readonly description: string | null;
+  readonly reporterPersonName?: string | null;
   readonly openedById: string | null;
   readonly opener: TicketOpener | null;
   /**
@@ -52,6 +53,7 @@ export class TicketMailRepository {
         title: true,
         description: true,
         openedById: true,
+        reporterPersonName: true,
         customer: { select: { worksheetPartnerCode: true } },
       },
     });

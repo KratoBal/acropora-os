@@ -1,3 +1,4 @@
+import { serviceJobReporterName } from "@acropora/types";
 import {
   BadRequestException,
   ConflictException,
@@ -395,6 +396,9 @@ export class ServiceJobsService {
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
       title,
       description: input.description?.trim() || null,
+      ...(input.reporterPersonName !== undefined
+        ? { reporterPersonName: input.reporterPersonName?.trim() || null }
+        : {}),
       customerId,
       departmentId,
       assetIds,
@@ -454,6 +458,15 @@ export class ServiceJobsService {
    * nem megy a levelezo) nem teheti meg nem tortentte a bejelentest -- a
    * bejelento ilyenkor ujra bekuldene, es ket jegy lenne ugyanarrol.
    */
+  /** After draft acceptance commits, fire the existing customer-opened notification path. */
+  notifyAcceptedDraft(
+    serviceJobId: string,
+    subject: string,
+    openedById: string,
+  ) {
+    return this.ertesitsUgyfelBejelentesrol(serviceJobId, subject, openedById);
+  }
+
   private async ertesitsUgyfelBejelentesrol(
     serviceJobId: string,
     subject: string,
@@ -1099,6 +1112,8 @@ export class ServiceJobsService {
         partnerStatus: partnerVisibleStatus(row.status),
         partnerStatusLabel: partnerStatusLabel(row.status),
         customerName: row.customerName,
+        reporterPersonName: row.reporterPersonName ?? null,
+        reporterName: row.reporterName ?? null,
         departmentPath: row.departmentPath,
         departmentCode: row.departmentCode,
         // UGYANAZ A NEV-FORDITAS, MINT A RESZLETLAPON (`detail()`): a
@@ -1174,6 +1189,13 @@ export class ServiceJobsService {
       kind: row.kind,
       title: row.title,
       description: row.description,
+      reporterPersonName: row.reporterPersonName ?? null,
+      reporterName: serviceJobReporterName(
+        row.openedById
+          ? await this.repository.openerDisplayName(row.openedById)
+          : null,
+        row.reporterPersonName,
+      ),
       /**
        * A RESZLETLAP REJTETT JEGYNEL IS ELERHETO, tehat itt mind a ket ertek
        * elofordulhat -- a lista-elemen alapbol mindig hamis.

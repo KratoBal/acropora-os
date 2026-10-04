@@ -1263,3 +1263,22 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
     );
   });
 });
+
+for (const [person, expected] of [
+  [null, "Nyitó Nóra"],
+  ["Szilveszter Roland", "Nyitó Nóra (Szilveszter Roland)"],
+] as const)
+  it(`formats the reporter variable with ${person ?? "no person"}`, async () => {
+    const { service, kuldott } = szolgaltatas({
+      mode: "live",
+      context: { ...JEGY, reporterPersonName: person },
+      template: { subject: "Jegy", body: "{{bejelento}}" },
+    });
+    await service.deliverServiceJobOpened({
+      serviceJobId: "job-1",
+      actorUserId: "user-2",
+      recipients: [{ email: "test@example.invalid" }],
+    });
+    assert.equal(kuldott.length, 1);
+    assert.ok(kuldott[0]!.text.includes(expected));
+  });

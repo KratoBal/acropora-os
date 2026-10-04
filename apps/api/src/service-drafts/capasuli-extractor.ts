@@ -1,0 +1,186 @@
+import { createHash } from "node:crypto";
+
+export interface ExtractedProblem {
+  text: string;
+  title: string;
+  fingerprint: string;
+  repeatKey: string | null;
+  attachmentNames: string[];
+}
+export interface ExtractedReport {
+  reportDate: Date;
+  problems: ExtractedProblem[];
+}
+const months = [
+  "januar",
+  "februar",
+  "marcius",
+  "aprilis",
+  "majus",
+  "junius",
+  "julius",
+  "augusztus",
+  "szeptember",
+  "oktober",
+  "november",
+  "december",
+];
+export const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+export function problemFingerprint(text: string): string {
+  return createHash("sha256")
+    .update(
+      fold(text)
+        .replace(/\([^)]*\)/g, "")
+        .replace(/[^a-z0-9]/g, ""),
+    )
+    .digest("hex");
+}
+function repeatKey(text: string): string | null {
+  const t = fold(text);
+  if (/elkulonito/.test(t) && /bio.?szuro/.test(t) && /motor|felnyomo/.test(t))
+    return "elkulonito-bioszuro-felnyomo-motor";
+  if (/lehabzo/.test(t) && /venturi/.test(t)) return "lehabzo-venturi";
+  if (/korallos/.test(t) && /lcd|kijelzo/.test(t)) return "korallos-lcd";
+  return null;
+}
+/** Local template parser: no staff names or report text leave the application for a model. */
+export function extractCapasuliReports(body: string): ExtractedReport[] {
+  const clean = body.replace(/\r/g, "").replace(/^(?:[ \t]*>[ \t]*)+/gm, "");
+  const starts = [
+    ...clean.matchAll(
+      /C[áa]pasuli\s*:\s*(\d{4})[.\s]+([\p{L}]+|\d{1,2})[.\s]+(\d{1,2})\.?/giu,
+    ),
+  ];
+  return starts.flatMap((m, index) => {
+    const month = /^\d+$/.test(m[2]!)
+      ? Number(m[2]) - 1
+      : months.indexOf(fold(m[2]!));
+    const year = Number(m[1]),
+      day = Number(m[3]);
+    const date = new Date(Date.UTC(year, month, day));
+    if (
+      month < 0 ||
+      month > 11 ||
+      date.getUTCDate() !== day ||
+      date.getUTCMonth() !== month
+    )
+      return [];
+    const block = clean.slice(
+      m.index!,
+      starts[index + 1]?.index ?? clean.length,
+    );
+    let section = "other";
+    const items: { text: string; attachmentNames: string[] }[] = [];
+    let current: (typeof items)[number] | undefined;
+    let workCandidate: (typeof items)[number] | undefined;
+    for (const original of block.split("\n")) {
+      let line = original.trim();
+      const f = fold(line);
+      if (/^(a\(z\) ios outlook|sent from|felado:|from:|---)/.test(f)) break;
+      if (/^nap folyam(an|a)n felmerulo hibak/.test(f)) {
+        section = "faults";
+        current = undefined;
+        workCandidate = undefined;
+        line = line
+          .slice(line.indexOf(":") + 1)
+          .replace(/^\s*(nem volt|volt)[, .–-]*/i, "")
+          .trim();
+      } else if (/^nap soran tortent fontosabb/.test(f)) {
+        section = "work";
+        current = undefined;
+        workCandidate = undefined;
+        line = line
+          .slice(line.indexOf(":") + 1)
+          .replace(/^\s*volt[, .–-]*/i, "")
+          .trim();
+      } else if (/^(dolgozok|allatallomany|allategeszsegugyi)/.test(f)) {
+        section = "other";
+        current = undefined;
+        workCandidate = undefined;
+        continue;
+      }
+      if (section === "other" || !line) continue;
+      const names = [
+        ...line.matchAll(/\[([^\]]+\.(?:jpe?g|png|webp|gif|mov|mp4))\]/gi),
+      ].map((m) => m[1]!);
+      const content = line
+        .replace(/\[[^\]]+\.(?:jpe?g|png|webp|gif|mov|mp4)\]/gi, "")
+        .trim();
+      if (!content) {
+        if (current) current.attachmentNames.push(...names);
+        else if (workCandidate) workCandidate.attachmentNames.push(...names);
+        continue;
+      }
+      if (/^(nem volt\.?|volt[, .–-]*|\(napi rutin\))$/i.test(content))
+        continue;
+      if (section === "work") {
+        const technical = /szivattyu|motor|szuro|kijelzo|csov|lehabzo/.test(
+          fold(content),
+        );
+        const request = /csere|javit|ker|igeny|hiba|raferne/.test(
+          fold(content),
+        );
+        if (technical && !request) {
+          workCandidate = { text: content, attachmentNames: names };
+          current = undefined;
+          continue;
+        }
+        if (
+          !technical &&
+          request &&
+          workCandidate &&
+          /^(lehet|ez|erre|arra|es|surgos)\b/.test(fold(content))
+        ) {
+          current = {
+            text: workCandidate.text + "\n" + content,
+            attachmentNames: [...workCandidate.attachmentNames, ...names],
+          };
+          items.push(current);
+          workCandidate = undefined;
+          continue;
+        }
+        workCandidate = undefined;
+        if (!technical || !request) {
+          current = undefined;
+          continue;
+        }
+      }
+      // Explicit bullets start a new issue; continuation conjunctions stay with the previous issue.
+      if (
+        current &&
+        /^(es\b|illetve\b|valamint\b|a fent|ez\b|surgos\b)/.test(
+          fold(content),
+        ) &&
+        !/^[-•]/.test(content)
+      ) {
+        current.text += "\n" + content;
+        current.attachmentNames.push(...names);
+      } else {
+        current = { text: content, attachmentNames: names };
+        items.push(current);
+      }
+    }
+    const seen = new Set<string>();
+    return [
+      {
+        reportDate: date,
+        problems: items
+          .map((i) => ({
+            ...i,
+            title: i.text
+              .split("\n")[0]!
+              .replace(/\s*\([^)]*\)\s*$/, " ")
+              .trim()
+              .slice(0, 300),
+            fingerprint: problemFingerprint(i.text),
+            repeatKey: repeatKey(i.text),
+          }))
+          .filter((i) => !seen.has(i.fingerprint) && !!seen.add(i.fingerprint)),
+      },
+    ];
+  });
+}

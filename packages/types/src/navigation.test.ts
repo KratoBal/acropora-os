@@ -37,26 +37,17 @@ describe("a menü közös forrása", () => {
     );
   });
 
-  /**
-   * A SZEREP-LISTÁS ÁG EGYETLEN TÉTELÉ, ÉS EZT A SZÁM ŐRZI.
-   *
-   * A második szabály-fajta azért fért be, mert a NAV-csempe mai viselkedését
-   * másképp nem lehetett megőrizni (a szerep-listája ma pontosan azoké, akiknek
-   * `purchasing.view` joguk van, de a két szabály nem ugyanaz). Egy kivétel,
-   * amit senki nem számol, terjedni fog: a következő olvasó tervezett
-   * képességnek látja, és a jog-alapú ág lassan kiürül.
-   *
-   * MI PIROSÍT: egy második szerep-listás tétel. Az nem tilos, de nem lehet
-   * csendes -- aki felveszi, ezt a sort is átírja, és akkor leírja, miért.
-   */
-  it("egyetlen szerep-listás tételt tart, és az megnevezi, mi szünteti meg", () => {
+  // Draft review is deliberately OWNER/ADMIN-only: SERVICE_MANAGE also belongs
+  // to managers and partner accounts, who must not read original staff reports.
+  // Keep both role exceptions explicit until a dedicated review permission exists.
+  it("a két szerep-listás kivétel megnevezi, mi szünteti meg", () => {
     const szereplistasak = NAVIGATION_ENTRIES.filter(
       (entry) => entry.visibility.kind === "roles",
     );
 
     assert.deepEqual(
       szereplistasak.map((entry) => entry.id),
-      ["nav-integration-mobile"],
+      ["service-drafts", "nav-integration-mobile"],
     );
 
     for (const entry of szereplistasak) {

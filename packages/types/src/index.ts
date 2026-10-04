@@ -1059,3 +1059,12 @@ export type {
   ProductManualEvidenceResult,
   ProductManualEvidenceSourceType,
 } from "./product-knowledge.js";
+
+export type {
+  ServiceDraftItem,
+  ServiceDraftListResponse,
+  ServiceDraftStatus,
+  ServiceDraftSyncStatus,
+} from "./service-drafts.js";
+
+export { serviceJobReporterName } from "./service-job-reporter.js";

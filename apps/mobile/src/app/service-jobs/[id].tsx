@@ -416,6 +416,9 @@ export default function ServiceJobDetailScreen() {
           {shortPath(detail.departmentPath) ? (
             <Text style={styles.meta}>{shortPath(detail.departmentPath)}</Text>
           ) : null}
+          {detail.reporterPersonName && detail.reporterName ? (
+            <Text style={styles.meta}>Bejelentő: {detail.reporterName}</Text>
+          ) : null}
           {detail.description ? (
             <Text style={styles.description}>{detail.description}</Text>
           ) : null}

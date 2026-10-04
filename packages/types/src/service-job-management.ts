@@ -61,6 +61,9 @@ export type ServiceJobPartnerStatus =
   "NEW" | "IN_PROGRESS" | "COMPLETED" | "CLOSED";
 
 export interface ServiceJobListItem {
+  reporterPersonName?: string | null;
+  /** Shared formatted label, including the partner-side person. */
+  reporterName?: string | null;
   id: string;
   jobNumber: string;
   title: string;
@@ -303,6 +306,9 @@ export interface ServiceJobDocumentSummary {
  * kliens-oldali válogatás.
  */
 export interface ServiceJobDetail {
+  reporterPersonName?: string | null;
+  /** Shared formatted label, including the partner-side person. */
+  reporterName?: string | null;
   id: string;
   /**
    * EL VAN-E REJTVE. A RÉSZLETLAP REJTETT SORNÁL IS ELÉRHETŐ -- egy rejtett
@@ -744,6 +750,9 @@ export function partnerStatusTone(
  * megy ki -- pontosan ezert letezik a ket partner-mezo.
  */
 export interface ServiceJobPartnerDetail {
+  reporterPersonName?: string | null;
+  /** Shared formatted label, including the partner-side person. */
+  reporterName?: string | null;
   id: string;
   jobNumber: string;
   title: string;
@@ -857,6 +866,12 @@ export function partnerServiceJobDetail(
     jobNumber: detail.jobNumber,
     title: detail.title,
     description: detail.description,
+    ...(detail.reporterPersonName
+      ? {
+          reporterPersonName: detail.reporterPersonName,
+          reporterName: detail.reporterName ?? null,
+        }
+      : {}),
     partnerStatus: detail.partnerStatus,
     partnerStatusLabel: detail.partnerStatusLabel,
     departmentPath: detail.departmentPath,

@@ -540,6 +540,11 @@ export function PilotServiceJobListPage() {
                         <p className="mt-1 font-mono text-xs text-pilot-grey-500">
                           {item.jobNumber}
                         </p>
+                        {item.reporterPersonName && item.reporterName ? (
+                          <p className="mt-1 text-xs text-pilot-grey-600">
+                            Bejelentő: {item.reporterName}
+                          </p>
+                        ) : null}
                         {item.hidden ? (
                           <span className="mt-1 inline-block">
                             <PilotBadge variant="amber">Rejtett</PilotBadge>

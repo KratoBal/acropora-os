@@ -39,9 +39,10 @@ const PARTNER = {
 function serviceWith(detailRow: ServiceJobDetailRow) {
   const repository: Pick<
     ServiceJobsRepository,
-    "detail" | "documentRemovals" | "assignedUnitIds"
+    "detail" | "documentRemovals" | "assignedUnitIds" | "openerDisplayName"
   > = {
     detail: async () => detailRow,
+    openerDisplayName: async () => "Cápasuli",
     /*
         A PARTNER HATOKOR EZT IS HIVJA. A `visibilityFor` nem-belso hivonal a
         kero egysegeit keri le -- a belsos agon ez a hivas NEM fut le, ezert
@@ -274,4 +275,15 @@ describe("a partner hivo SAJAT alakot kap", () => {
     const detail = await serviceWith(row()).detail("job-1", BELSOS);
     assert.ok(!isPartnerServiceJobDetail(detail));
   });
+});
+
+it("exposes the shared reporter label in internal and partner details", async () => {
+  const service = serviceWith(
+    row({ openedById: "opener", reporterPersonName: "Szilveszter Roland" }),
+  );
+  for (const user of [BELSOS, PARTNER]) {
+    const detail = await service.detail("job-1", user);
+    assert.equal(detail.reporterName, "Cápasuli (Szilveszter Roland)");
+    assert.equal(detail.reporterPersonName, "Szilveszter Roland");
+  }
 });
