@@ -427,6 +427,9 @@ export default function ServiceJobListScreen() {
                 {serviceJobStatusLabel(item.status)}
               </Text>
             </View>
+            {item.reporterPersonName && item.reporterName ? (
+              <Text style={styles.meta}>Bejelentő: {item.reporterName}</Text>
+            ) : null}
             {item.kind === "MAINTENANCE" ? (
               <Text style={styles.maintenance}>Karbantartás</Text>
             ) : null}

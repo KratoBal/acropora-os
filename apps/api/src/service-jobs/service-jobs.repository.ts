@@ -1,3 +1,4 @@
+import { serviceJobReporterName } from "@acropora/types";
 import { Injectable } from "@nestjs/common";
 import type { NamedPerson } from "@acropora/types";
 
@@ -62,6 +63,8 @@ export interface ServiceJobRow {
   kind: "REPAIR" | "MAINTENANCE";
   status: ServiceJobStatus;
   customerName: string | null;
+  reporterPersonName?: string | null;
+  reporterName?: string | null;
   /** A helyszin TELJES utja, a gyokertol lefele. `null`, ha nincs vagy nem epithető. */
   departmentPath: string[] | null;
   /**
@@ -87,6 +90,16 @@ export interface ServiceJobRow {
 @Injectable()
 export class ServiceJobsRepository {
   private readonly database = prisma;
+  async openerDisplayName(id: string) {
+    return (
+      (
+        await this.database.user.findUnique({
+          where: { id },
+          select: { displayName: true },
+        })
+      )?.displayName ?? null
+    );
+  }
 
   /**
    * A JEGY REJTESE VAGY VISSZAALLITASA -- ES A LAPJAIT NEM VISZI MAGAVAL.
@@ -224,6 +237,7 @@ export class ServiceJobsRepository {
     jobNumber: string;
     title: string;
     description: string | null;
+    reporterPersonName?: string | null;
     customerId: string | null;
     departmentId: string | null;
     assetIds: readonly string[];
@@ -263,20 +277,31 @@ export class ServiceJobsRepository {
     }
   }
 
-  private insert(input: {
-    jobNumber: string;
-    title: string;
-    description: string | null;
-    customerId: string | null;
-    departmentId: string | null;
-    assetIds: readonly string[];
-    actorUserId: string;
-    assigneeIds: readonly string[];
-    kind: "REPAIR" | "MAINTENANCE";
-    contractId: string | null;
-    clientOperationId?: string | null;
-  }) {
-    return this.database.serviceJob.create({
+  createInTransaction(
+    input: Parameters<ServiceJobsRepository["create"]>[0],
+    transaction: Prisma.TransactionClient,
+  ) {
+    return this.insert(input, transaction);
+  }
+
+  private insert(
+    input: {
+      jobNumber: string;
+      title: string;
+      description: string | null;
+      reporterPersonName?: string | null;
+      customerId: string | null;
+      departmentId: string | null;
+      assetIds: readonly string[];
+      actorUserId: string;
+      assigneeIds: readonly string[];
+      kind: "REPAIR" | "MAINTENANCE";
+      contractId: string | null;
+      clientOperationId?: string | null;
+    },
+    database: Pick<Prisma.TransactionClient, "serviceJob"> = this.database,
+  ) {
+    return database.serviceJob.create({
       data: {
         jobNumber: input.jobNumber,
         clientOperationId: input.clientOperationId ?? null,
@@ -314,6 +339,7 @@ export class ServiceJobsRepository {
         // felhasznalo-torlesnel, ez a mezo pedig megmarad. A ketto tehat nem
         // duplikacio: mas a feladatuk es mas a sorsuk.
         openedById: input.actorUserId,
+        reporterPersonName: input.reporterPersonName?.trim() || null,
         events: {
           create: {
             // `fromStatus` nincs: a keletkezésnek nincs előzménye.
@@ -975,6 +1001,8 @@ export class ServiceJobsRepository {
         status: true,
         createdAt: true,
         hiddenAt: true,
+        openedById: true,
+        reporterPersonName: true,
         customer: { select: { displayName: true } },
         // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
         // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
@@ -1045,6 +1073,16 @@ export class ServiceJobsRepository {
       delegaltTerkep.set(sor.serviceJobId, lista);
     }
 
+    const openerIds = [
+      ...new Set(
+        lap.map((r) => r.openedById).filter((id): id is string => !!id),
+      ),
+    ];
+    const openers = await this.database.user.findMany({
+      where: { id: { in: openerIds } },
+      select: { id: true, displayName: true },
+    });
+    const openerNames = new Map(openers.map((u) => [u.id, u.displayName]));
     return {
       rows: lap.map((row) => ({
         id: row.id,
@@ -1052,6 +1090,11 @@ export class ServiceJobsRepository {
         title: row.title,
         kind: row.kind,
         status: row.status,
+        reporterPersonName: row.reporterPersonName,
+        reporterName: serviceJobReporterName(
+          row.openedById ? openerNames.get(row.openedById) : null,
+          row.reporterPersonName,
+        ),
         customerName: row.customer?.displayName ?? null,
         departmentPath: row.departmentId
           ? (utak.get(row.departmentId) ?? null)
@@ -1241,6 +1284,8 @@ export class ServiceJobsRepository {
         kind: true,
         title: true,
         description: true,
+        openedById: true,
+        reporterPersonName: true,
         status: true,
         createdAt: true,
         scheduledAt: true,

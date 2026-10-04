@@ -343,6 +343,9 @@ export function TicketDetail({ id }: { id: string }) {
           <PilotCard>
             <PilotCardHeader title="Az ügy adatai" />
             <div className="px-5 py-4">
+              {ticket.reporterPersonName && ticket.reporterName ? (
+                <PilotDataRow label="Bejelentő" value={ticket.reporterName} />
+              ) : null}
               <PilotDataRow
                 label="Bejelentés ideje"
                 value={date.format(new Date(ticket.createdAt))}

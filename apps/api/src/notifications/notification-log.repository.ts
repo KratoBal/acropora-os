@@ -153,6 +153,18 @@ export class NotificationLogRepository extends Repository {
    * nelkul. Egy masodik alak ugyanarra a tenyre csak azt jelentene, hogy az
    * egyik olvasot elfelejtettuk karbantartani.
    */
+  recordServiceDraftsArrived(outcome: {
+    mailId: string;
+    attempts: NotificationAttempt[];
+  }) {
+    return this.record({
+      eventType: "serviceDraft.arrived.notified",
+      aggregateType: "ServiceDraftMail",
+      aggregateId: outcome.mailId,
+      attempts: outcome.attempts,
+    });
+  }
+
   private async record(input: {
     eventType: string;
     aggregateType: string;

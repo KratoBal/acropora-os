@@ -1,3 +1,4 @@
+import { serviceJobReporterName } from "@acropora/types";
 import { renderMailTemplate } from "@acropora/types";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 
@@ -494,7 +495,11 @@ export class TicketMailService {
       jegyszam: context.jobNumber,
       jegy_targya: context.title,
       jegy_leirasa: context.description ?? "",
-      bejelento: context.opener?.displayName ?? "",
+      bejelento:
+        serviceJobReporterName(
+          context.opener?.displayName,
+          context.reporterPersonName,
+        ) ?? "",
       ugyfelkod: context.partnerCode ?? "",
       jegy_linkje: link,
     };

@@ -45,6 +45,7 @@ import {
  * megérkezik, ez a komment (és a két `@IsOptional()`) törlendő.
  */
 export class CreateServiceJobDto {
+  @IsString() @MaxLength(200) @IsOptional() reporterPersonName?: string | null;
   @IsString() @MinLength(1) @MaxLength(300) title!: string;
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   /**

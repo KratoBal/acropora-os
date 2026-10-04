@@ -181,6 +181,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {
+    id: "service-drafts",
+    surfaces: ["web"],
+    visibility: {
+      kind: "roles",
+      roles: ["OWNER", "ADMIN"],
+      retiredBy:
+        "A piszkozatokhoz külön felülvizsgálói jogosultság bevezetése.",
+    },
+  },
+  {
     /** A karbantartás a szervizmunka külön listája, nem új technikusi jog. */
     id: "maintenance",
     surfaces: ["web"],

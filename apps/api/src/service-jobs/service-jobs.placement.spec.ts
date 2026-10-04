@@ -45,6 +45,8 @@ const RESZLETLAP: DetailRow = {
   kind: "REPAIR",
   title: "Szivattyú leállt",
   description: null,
+  reporterPersonName: null,
+  openedById: null,
   status: "NEW",
   createdAt: new Date("2026-09-16T08:00:00.000Z"),
   scheduledAt: null,

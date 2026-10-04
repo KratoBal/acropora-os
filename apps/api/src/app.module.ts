@@ -59,6 +59,8 @@ import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invo
 import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { SearchModule } from "./search/search.module.js";
 
+import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
+
 @Module({
   imports: [
     AssistantModule,
@@ -94,6 +96,7 @@ import { SearchModule } from "./search/search.module.js";
     ContentModule,
     ServiceAssetsModule,
     ServiceJobsModule,
+    ServiceDraftsModule,
     ContractsModule,
     MaintenanceOrdersModule,
     CompletionCertificatesModule,

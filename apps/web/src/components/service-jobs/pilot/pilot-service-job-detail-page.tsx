@@ -596,8 +596,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
   const creation = job.timeline.find(
     (entry) => entry.kind === "status" && entry.event.fromStatus === null,
   );
-  const reporter =
-    creation?.kind === "status" ? creation.event.actorName : null;
+  const reporter = job.reporterPersonName
+    ? job.reporterName
+    : creation?.kind === "status"
+      ? creation.event.actorName
+      : null;
   const photoCount = documents.filter((item) => item.type === "PHOTO").length;
   const fileCount = documents.length - photoCount;
   const names = assigneeNames(job.assignees);

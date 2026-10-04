@@ -28,6 +28,9 @@ export type ServiceJobStatusValue =
   | "CANCELLED";
 
 export interface ServiceJobListItem {
+  reporterPersonName?: string | null;
+  /** Formatted once by the shared server formatter; no Expo copy. */
+  reporterName?: string | null;
   id: string;
   jobNumber: string;
   title: string;
@@ -215,6 +218,9 @@ export interface ServiceJobDocumentSummary {
  * `hidden`. Helyettuk `partnerStatus` es `partnerStatusLabel` all.
  */
 export interface ServiceJobPartnerDetail {
+  reporterPersonName?: string | null;
+  /** Formatted once by the shared server formatter; no Expo copy. */
+  reporterName?: string | null;
   id: string;
   jobNumber: string;
   title: string;

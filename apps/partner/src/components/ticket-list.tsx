@@ -212,6 +212,11 @@ export function TicketList() {
                     <p className="mt-0.5 font-mono text-xs text-pilot-grey-400">
                       {ticket.jobNumber}
                     </p>
+                    {ticket.reporterPersonName && ticket.reporterName ? (
+                      <p className="mt-1 text-xs text-pilot-grey-500">
+                        Bejelentő: {ticket.reporterName}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3 text-pilot-grey-500">
                     {ticket.departmentPath?.join(" / ") ??
