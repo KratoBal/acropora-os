@@ -33,6 +33,28 @@ describe("Cápasuli template extraction", () => {
     assert.equal(items[1]!.attachmentNames.length, 0);
     assert(!items.some((i) => /tojás|MgCl2|Merülés/.test(i.text)));
   });
+  it("an Android Outlook mail: no draft from the bullet lines or the client footer", () => {
+    const android = readFileSync(
+      new URL(
+        "../../src/service-drafts/fixtures/capasuli-2026-09-24-android.txt",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const items = extractCapasuliReports(android)[0]!.problems;
+    assert.deepEqual(
+      items.map((i) => i.text.slice(0, 20)),
+      ["Az elkülönítő bioszű", "A szokásos helyeken "],
+    );
+    assert(!items.some((i) => /Outlook|^\W*$/u.test(i.text)));
+  });
+  it("links the biofilter lift reported again without the tank name", () => {
+    const later = extractCapasuliReports(
+      "Cápasuli: 2026. szeptember 26.\nNap folyamán felmerülő hibák, intézkedések:  volt.\nPlusz a bioszűrő felnyomója lassan beleesik a rájamedence technikai tartályába.\nAndroidos Outlookból<https://aka.ms/AAb9ysg> küldve",
+    )[0]!.problems;
+    assert.equal(later.length, 1);
+    assert.equal(later[0]!.repeatKey, "elkulonito-bioszuro-felnyomo-motor");
+  });
   it("recognises quoted reports and stable deduplication independent of names", () => {
     const a = extractCapasuliReports(fixture)[0]!;
     const b = extractCapasuliReports(

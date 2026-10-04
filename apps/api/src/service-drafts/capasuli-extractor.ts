@@ -41,7 +41,9 @@ export function problemFingerprint(text: string): string {
 }
 function repeatKey(text: string): string | null {
   const t = fold(text);
-  if (/elkulonito/.test(t) && /bio.?szuro/.test(t) && /motor|felnyomo/.test(t))
+  // 09.24 named it "the isolation tank's biofilter lift motor", 09.26 "the biofilter
+  // lift"; the tank name is not always written, so it is not part of the key.
+  if (/bio.?szuro/.test(t) && /felnyomo/.test(t))
     return "elkulonito-bioszuro-felnyomo-motor";
   if (/lehabzo/.test(t) && /venturi/.test(t)) return "lehabzo-venturi";
   if (/korallos/.test(t) && /lcd|kijelzo/.test(t)) return "korallos-lcd";
@@ -80,7 +82,15 @@ export function extractCapasuliReports(body: string): ExtractedReport[] {
     for (const original of block.split("\n")) {
       let line = original.trim();
       const f = fold(line);
-      if (/^(a\(z\) ios outlook|sent from|felado:|from:|---)/.test(f)) break;
+      // Mail-client signatures end the report. Android Outlook writes
+      // "Androidos Outlookból<https://aka.ms/...> küldve", iOS "A(z) iOS Outlook appból küldve".
+      if (
+        /^(a\(z\) ios outlook|androidos outlook|ios-es outlook|get outlook|sent from|felado:|from:|---)/.test(
+          f,
+        ) ||
+        /outlook.*kuldve$/.test(f)
+      )
+        break;
       if (/^nap folyam(an|a)n felmerulo hibak/.test(f)) {
         section = "faults";
         current = undefined;
@@ -113,6 +123,13 @@ export function extractCapasuliReports(body: string): ExtractedReport[] {
       if (!content) {
         if (current) current.attachmentNames.push(...names);
         else if (workCandidate) workCandidate.attachmentNames.push(...names);
+        continue;
+      }
+      // Android Outlook renders a list bullet as a line of its own ("  *"); it
+      // carries no text, only says that the next line starts a new item.
+      if (!/[\p{L}\p{N}]/u.test(content)) {
+        current = undefined;
+        workCandidate = undefined;
         continue;
       }
       if (/^(nem volt\.?|volt[, .–-]*|\(napi rutin\))$/i.test(content))
