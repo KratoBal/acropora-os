@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { SectionTitle } from "@/components/SectionTitle";
+import { BottomNav } from "@/components/home/BottomNav";
 import {
   addWorksheetEntry,
   addWorksheetLine,
@@ -120,6 +121,7 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
   formatWorksheetDate,
+  formatWorksheetQuantity,
   worksheetAssigneeLine,
   worksheetDetailRows,
   worksheetLabelOrDraft,
@@ -925,7 +927,7 @@ export default function WorksheetDetailScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.eyebrow}>MUNKALAP</Text>
         <View style={styles.titleRow}>
@@ -991,6 +993,34 @@ export default function WorksheetDetailScreen() {
             {kikuldesSora ? (
               <Text style={styles.subject}>{kikuldesSora}</Text>
             ) : null}
+
+            {/*
+              THE SUMMARY OF THE SERVICE REDESIGN (Figma 423:918): the sheet's
+              hours, lines, assets and material requests at a glance, from
+              the same answers the sections below draw. No price, and no
+              "people who worked" count (decision E8).
+            */}
+            <View style={styles.summary} accessibilityLabel="Összesítés">
+              <View style={styles.summaryMain}>
+                <Text style={styles.summaryHours}>
+                  {formatWorksheetQuantity(current.laborHours)}
+                </Text>
+                <Text style={styles.summaryLabel}>munkaóra</Text>
+              </View>
+              <View style={styles.summarySide}>
+                <Text style={styles.summaryValue}>
+                  {current.lines.length} tétel
+                </Text>
+                <Text style={styles.summaryValue}>
+                  {data.assets.length} eszköz
+                </Text>
+                {materialRequests.data ? (
+                  <Text style={styles.summaryValue}>
+                    {materialRequests.data.items.length} anyagigény
+                  </Text>
+                ) : null}
+              </View>
+            </View>
 
             {/*
               A LÁNC MINDKÉT IRÁNYA, A FEJLÉC ALATT, A LAP TETEJÉN -- Balázs
@@ -1113,6 +1143,9 @@ export default function WorksheetDetailScreen() {
             <SectionTitle style={{ marginTop: 6 }}>
               Tételek ({current.lines.length})
             </SectionTitle>
+            <Text style={styles.sectionHint}>
+              Ár nélkül, helyszíni rögzítés: az ár az irodáé.
+            </Text>
 
             {/*
               AMI MEG NEM MENT FEL, AZ NEM LATSZIK A LISTAN -- ES EZT KI KELL
@@ -1959,6 +1992,32 @@ export default function WorksheetDetailScreen() {
             ) : null}
 
             {/*
+              HELYSZÍNI LEZÁRÁS (Figma 423:918): the close, the hand-over and
+              the signature steps, kept in one highlighted panel at the end
+              of the work. The buttons inside are unchanged, with their own
+              conditions; the lines above them are facts, not gates
+              (decision E7): the close still needs only a draft and the
+              permission, exactly as the server checks it.
+            */}
+            <View
+              style={styles.closingPanel}
+              accessibilityLabel="Helyszíni lezárás"
+            >
+              <SectionTitle>Helyszíni lezárás</SectionTitle>
+              <Text style={styles.closingFact}>
+                Tételek:{" "}
+                {current.lines.length
+                  ? `${current.lines.length} rögzítve`
+                  : "még nincs"}
+              </Text>
+              <Text style={styles.closingFact}>
+                Felelősök:{" "}
+                {data.assignees.length ? "megadva" : "nincs kiosztva"}
+              </Text>
+              <Text style={styles.closingFact}>
+                Átadás: {data.handedOverAt ? "rögzítve" : "még nincs rögzítve"}
+              </Text>
+              {/*
               AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren
               (`AWAITING_SIGNATURE` allapot es `service.manage` jog), es a
               dontes a `worksheet-signature.ts`-ben all -- ott merheto.
@@ -1967,7 +2026,7 @@ export default function WorksheetDetailScreen() {
               szerelo ODAADJA az ugyfelnek, tehat a tetel-felvitel es a torles
               nem lehet rajta.
             */}
-            {/*
+              {/*
               A LEZARO GOMB AZ ALAIRAS ELOTT ALL, es ez nem elrendezesi izles: a
               ketto EGY folyamat ket lepese, es a masodik csak az elso utan
               letezik. Egymas alatt a szerelo latja, hova tart -- kulon
@@ -1992,20 +2051,20 @@ export default function WorksheetDetailScreen() {
               lepesre mutatott ("alairasra"); az uj azt mondja meg, mi tortenik
               MOST -- szam, dokumentum, lezaras.
             */}
-            {canCloseWorksheetVersion({
-              status: current.status,
-              worksheetsManage: capabilities.worksheetsManage,
-            }) ? (
-              <>
-                <Pressable
-                  disabled={lezaras.isPending}
-                  onPress={() => lezaras.mutate()}
-                  style={({ pressed }) => [
-                    styles.signButton,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  {/*
+              {canCloseWorksheetVersion({
+                status: current.status,
+                worksheetsManage: capabilities.worksheetsManage,
+              }) ? (
+                <>
+                  <Pressable
+                    disabled={lezaras.isPending}
+                    onPress={() => lezaras.mutate()}
+                    style={({ pressed }) => [
+                      styles.signButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    {/*
                     A FELIRAT MEGMONDJA, MIT CSINAL -- UGYANAZ A SZOVEG, MINT A
                     WEBEN (Balazs dontese, 2026-09-21 12:10:42 UTC, message_id
                     1551566340169539655).
@@ -2018,23 +2077,25 @@ export default function WorksheetDetailScreen() {
                     KET FELULET, EGY FELIRAT: ha csak az egyik mondana meg, mit
                     csinal, ugyanarra a muveletre mast igernenk.
                   */}
-                  <Text style={styles.signButtonText}>
-                    {lezaras.isPending ? "Kiállítás…" : "Kiállítás és lezárás"}
-                  </Text>
-                </Pressable>
-                {/*
+                    <Text style={styles.signButtonText}>
+                      {lezaras.isPending
+                        ? "Kiállítás…"
+                        : "Kiállítás és lezárás"}
+                    </Text>
+                  </Pressable>
+                  {/*
                   A SZERVER MONDATA MEGY KI, nem sajat masolat. A harom akadaly
                   (nincs tetel, nem piszkozat, hianyzo lapszam-elem) mindegyike
                   sajat mondatot kap a szervertol -- egy masolat itt egyszer
                   elcsuszna, es a telefon MAST mondana, mint a web.
                 */}
-                {lezarasHiba ? (
-                  <Text style={styles.error}>{lezarasHiba}</Text>
-                ) : null}
-              </>
-            ) : null}
+                  {lezarasHiba ? (
+                    <Text style={styles.error}>{lezarasHiba}</Text>
+                  ) : null}
+                </>
+              ) : null}
 
-            {/*
+              {/*
               AZ ATADAS GOMBJA -- ES A LAP ALLAPOTA ITT SZANDEKOSAN NEM KAPU.
 
               A lezarasnal `DRAFT` kell, az alairasnal `AWAITING_SIGNATURE`.
@@ -2046,51 +2107,51 @@ export default function WorksheetDetailScreen() {
               "Atadas" felirat mellett a szerelo nem tudja, mit csinal a
               koppintas -- es ket kezelonel csendben az ellenkezojet tenne.
             */}
-            {canMarkWorksheetHandover({
-              worksheetsManage: capabilities.worksheetsManage,
-            }) ? (
-              <>
+              {canMarkWorksheetHandover({
+                worksheetsManage: capabilities.worksheetsManage,
+              }) ? (
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={handoverGombFelirata(data.handedOverAt)}
+                    disabled={atadas.isPending}
+                    onPress={() =>
+                      atadas.mutate(handoverKuldendoErtek(data.handedOverAt))
+                    }
+                    style={({ pressed }) => [
+                      styles.signButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.signButtonText}>
+                      {atadas.isPending
+                        ? "Mentés…"
+                        : handoverGombFelirata(data.handedOverAt)}
+                    </Text>
+                  </Pressable>
+                  {atadasHiba ? (
+                    <Text style={styles.error}>{atadasHiba}</Text>
+                  ) : null}
+                </>
+              ) : null}
+
+              {canSignWorksheetVersion({
+                status: current.status,
+                worksheetsManage: capabilities.worksheetsManage,
+              }) ? (
                 <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={handoverGombFelirata(data.handedOverAt)}
-                  disabled={atadas.isPending}
                   onPress={() =>
-                    atadas.mutate(handoverKuldendoErtek(data.handedOverAt))
+                    router.push({
+                      pathname: "/worksheets/sign/[id]",
+                      params: { id },
+                    })
                   }
                   style={({ pressed }) => [
                     styles.signButton,
                     pressed && styles.pressed,
                   ]}
                 >
-                  <Text style={styles.signButtonText}>
-                    {atadas.isPending
-                      ? "Mentés…"
-                      : handoverGombFelirata(data.handedOverAt)}
-                  </Text>
-                </Pressable>
-                {atadasHiba ? (
-                  <Text style={styles.error}>{atadasHiba}</Text>
-                ) : null}
-              </>
-            ) : null}
-
-            {canSignWorksheetVersion({
-              status: current.status,
-              worksheetsManage: capabilities.worksheetsManage,
-            }) ? (
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: "/worksheets/sign/[id]",
-                    params: { id },
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.signButton,
-                  pressed && styles.pressed,
-                ]}
-              >
-                {/*
+                  {/*
                   A FELIRAT "Aláírás", Balazs kerese (2026-09-18 07:01 UTC):
                   "Szeretnek egy Alairas gombot az aljara."
 
@@ -2100,11 +2161,11 @@ export default function WorksheetDetailScreen() {
                   sajat szervizesunk irja ala. A szukebb felirat a masik ket
                   agnak nem hagyna helyet.
                 */}
-                <Text style={styles.signButtonText}>Aláírás</Text>
-              </Pressable>
-            ) : null}
+                  <Text style={styles.signButtonText}>Aláírás</Text>
+                </Pressable>
+              ) : null}
 
-            {/*
+              {/*
               AZ "ELKULDOM ALAIRASRA" GOMB -- BALAZS SPECJE SZERINT AZ ALAIRAS
               GOMB ALATT (2026-09-18 07:01 UTC): "Az elozo oldalon az a Alairas
               gomb ala Elkuldom alairasra gomb."
@@ -2117,28 +2178,29 @@ export default function WorksheetDetailScreen() {
               A VEGPONT 2026-09-21 OTA ALL A SZERVEREN, es eddig CSAK a web
               hivta: a kepesseg megvolt, a telefonrol nem volt bekotve.
             */}
-            {kikuldhetoAlairasra({
-              status: current.status,
-              sentForSignatureAt: current.sentForSignatureAt,
-              worksheetsManage: capabilities.worksheetsManage,
-            }) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Elküldöm aláírásra"
-                onPress={() =>
-                  router.push({
-                    pathname: "/worksheets/send-for-signature/[id]",
-                    params: { id },
-                  })
-                }
-                style={({ pressed }) => [
-                  styles.signButton,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Text style={styles.signButtonText}>Elküldöm aláírásra</Text>
-              </Pressable>
-            ) : null}
+              {kikuldhetoAlairasra({
+                status: current.status,
+                sentForSignatureAt: current.sentForSignatureAt,
+                worksheetsManage: capabilities.worksheetsManage,
+              }) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Elküldöm aláírásra"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/worksheets/send-for-signature/[id]",
+                      params: { id },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.signButton,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.signButtonText}>Elküldöm aláírásra</Text>
+                </Pressable>
+              ) : null}
+            </View>
 
             {/*
               ANYAGIGENYLES. Balazs kerese, 2026-09-22 12:15:46 UTC: a
@@ -2390,6 +2452,8 @@ export default function WorksheetDetailScreen() {
           </>
         ) : null}
       </ScrollView>
+      {/* the shared bar, with no item lit until "Feladatok" exists (E9) */}
+      <BottomNav active={null} />
 
       {/*
         A NAGY KEP RATETKENT, NEM `Modal`-kent es nem masik kepernyokent.
@@ -2448,7 +2512,31 @@ export default function WorksheetDetailScreen() {
 function createStyles(t: ThemeTokens) {
   return StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: t.background },
-    container: { padding: 18, paddingBottom: 48, gap: 12 },
+    container: { padding: 18, paddingBottom: 32, gap: 12 },
+    summary: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 16,
+      padding: 16,
+    },
+    summaryMain: { minWidth: 96 },
+    summaryHours: { color: t.textPrimary, fontSize: 30, fontWeight: "700" },
+    summaryLabel: { color: t.textSecondary, fontSize: 13 },
+    summarySide: { flex: 1, gap: 4, justifyContent: "center" },
+    summaryValue: { color: t.textPrimary, fontSize: 15, fontWeight: "600" },
+    sectionHint: { color: t.textSecondary, fontSize: 13, marginTop: -6 },
+    closingPanel: {
+      backgroundColor: t.accentSoft,
+      borderColor: t.accent,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 10,
+      padding: 16,
+    },
+    closingFact: { color: t.textPrimary, fontSize: 14 },
     /*
       A SZÍN A TERV SZÜRKÉJE (grey-400 -> t.textMuted), NEM AZ AKCENT --
       ugyanaz a rendszerszintű minta, mint amit acrobot kérésére (2026-09-25,
