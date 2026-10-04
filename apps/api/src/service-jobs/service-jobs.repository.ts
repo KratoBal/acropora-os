@@ -1304,7 +1304,17 @@ export class ServiceJobsRepository {
             versions: {
               orderBy: { version: "desc" },
               take: 1,
-              select: { subject: true },
+              select: {
+                subject: true,
+                // The card's state and hours (service redesign E3): the
+                // status, the line count for the draft's "Új"/"Folyamatban",
+                // and only the three inputs of the shared labour rule.
+                status: true,
+                _count: { select: { lines: true } },
+                lines: {
+                  select: { kind: true, quantity: true, workerCount: true },
+                },
+              },
             },
           },
         },

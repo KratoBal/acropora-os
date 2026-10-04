@@ -640,6 +640,20 @@ export interface WorksheetListItem {
   grossAmount: string;
   /** A felelősök neve, ahogy a listán megjelenik. Üres, ha még nincs kiosztva. */
   assigneeNames: string[];
+  /**
+   * THE CURRENT VERSION'S TOTAL LABOUR HOURS, as a decimal string (service
+   * redesign E4, Balázs, 2026-10-04): the list's "Munkaóra" column and the
+   * phone's "Felelős: … · 4,0 óra" line. The same rule as the detail's
+   * `laborHours` (`sumWorksheetLaborHours`), so the list and the sheet agree.
+   */
+  laborHours: string;
+  /**
+   * THE SERVICE JOB THE SHEET BELONGS TO, or `null` when it has none: the
+   * list's "Hibajegy" column. The same pair the detail carries in its own
+   * `serviceJob`, so a partner sees nothing here that its sheet detail does
+   * not already show.
+   */
+  serviceJob: { id: string; jobNumber: string } | null;
   updatedAt: string;
   /**
    * EL VAN-E REJTVE. Alapból egyetlen listán sem szerepel rejtett sor, tehát

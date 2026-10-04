@@ -74,6 +74,18 @@ export interface ServiceJobWorksheetLink {
   subject: string;
   createdAt: string;
   handedOverAt: string | null;
+  /**
+   * THE CURRENT VERSION'S STATUS, LINE COUNT AND LABOUR HOURS (service
+   * redesign E3, 2026-10-04), for the job's worksheet card.
+   *
+   * OPTIONAL ON PURPOSE, and for two different reasons: a job detail cached
+   * on the phone before the server sent them has no such keys, and the
+   * partner shape never carries them (decision 2). A missing value is
+   * "unknown", never "no lines" or "0 hours".
+   */
+  status?: "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED";
+  lineCount?: number;
+  laborHours?: string;
 }
 
 /**

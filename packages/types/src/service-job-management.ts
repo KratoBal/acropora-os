@@ -1,3 +1,5 @@
+import type { WorksheetVersionStatus } from "./worksheet-management.js";
+
 /**
  * A HIBAJEGY, AHOGY A FELÜLET LÁTJA.
  *
@@ -174,7 +176,33 @@ export interface ServiceJobWorksheetLink {
   subject: string;
   createdAt: string;
   handedOverAt: string | null;
+  /**
+   * THE CURRENT VERSION'S STATUS AND LINE COUNT (service redesign E3,
+   * Balázs, 2026-10-04): the job's "Munkalapok a jegy mögött" card shows each
+   * sheet's state. The two together give the display status ("Új" or
+   * "Folyamatban" for a draft) through the shared `worksheetDisplayStatus`,
+   * exactly as the worksheet list does; neither is computed anew here.
+   */
+  status: WorksheetVersionStatus;
+  lineCount: number;
+  /**
+   * THE CURRENT VERSION'S TOTAL LABOUR HOURS, as a decimal string, from the
+   * same rule as the worksheet's own "Összes munkaóra" (`sumWorksheetLaborHours`).
+   */
+  laborHours: string;
 }
+
+/**
+ * WHAT A PARTNER SEES OF A LINKED WORKSHEET: exactly the fields it saw before
+ * the redesign. The status and labour hours added for the internal card stay
+ * internal (decision 2, 2026-10-04: a partner gets none of the new fields it
+ * does not see today). `partnerServiceJobDetail` copies field by field, so a
+ * field added to the internal link never passes through by itself.
+ */
+export type ServiceJobPartnerWorksheetLink = Pick<
+  ServiceJobWorksheetLink,
+  "id" | "number" | "subject" | "createdAt" | "handedOverAt"
+>;
 
 /** Egy eszköz, amit a jegy érint. */
 export interface ServiceJobAssetLink {
@@ -801,7 +829,7 @@ export type ServiceJobPartnerTimelineEntry =
       kind: "worksheet";
       at: string;
       sortKey: string;
-      worksheet: ServiceJobWorksheetLink;
+      worksheet: ServiceJobPartnerWorksheetLink;
     }
   | { kind: "asset"; at: string; sortKey: string; asset: ServiceJobAssetLink }
   | {
@@ -854,7 +882,20 @@ export function partnerServiceJobDetail(
               createdAt: entry.event.createdAt,
             },
           }
-        : entry,
+        : entry.kind === "worksheet"
+          ? {
+              kind: "worksheet" as const,
+              at: entry.at,
+              sortKey: entry.sortKey,
+              worksheet: {
+                id: entry.worksheet.id,
+                number: entry.worksheet.number,
+                subject: entry.worksheet.subject,
+                createdAt: entry.worksheet.createdAt,
+                handedOverAt: entry.worksheet.handedOverAt,
+              },
+            }
+          : entry,
     ),
   };
 }

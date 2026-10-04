@@ -155,10 +155,15 @@ export const worksheetSummaryInclude = {
       grossAmount: true,
       // a megjelenített állapothoz (Új vagy Folyamatban): van-e már tétel
       _count: { select: { lines: true } },
+      // the list's labour hours: only the three inputs of the shared rule
+      // (`sumWorksheetLaborHours`), never the line prices
+      lines: { select: { kind: true, quantity: true, workerCount: true } },
     },
     orderBy: { version: "desc" as const },
     take: 1,
   },
+  // the list's "Hibajegy" column: the same pair the detail returns
+  serviceJob: { select: { id: true, jobNumber: true } },
   _count: { select: { versions: true } },
 } satisfies Prisma.WorksheetInclude;
 
@@ -442,6 +447,10 @@ export function toWorksheetListItem(
     assigneeNames: row.assignees.map((assignee) =>
       personDisplayName(assignee.user),
     ),
+    laborHours: sumWorksheetLaborHours(current.lines).toString(),
+    serviceJob: row.serviceJob
+      ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
+      : null,
     updatedAt: row.updatedAt.toISOString(),
     /**
      * A JELOLO AZ IDOBELYEGBOL, NEM MAGA AZ IDOBELYEG. A felulet arra
