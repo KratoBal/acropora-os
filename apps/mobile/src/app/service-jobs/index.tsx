@@ -36,6 +36,7 @@ import {
   cachedItemsForScope,
   DEFAULT_SERVICE_JOB_SCOPE,
   itemsForScope,
+  OFFLINE_COPY_SCOPE,
   SERVICE_JOB_SCOPES,
   serverScopeOf,
   type ServiceJobScope,
@@ -54,13 +55,18 @@ import {
   valaszthatoEszkozok,
 } from "@/lib/service-jobs/uj-jegy-eszkoz";
 import { readCachedAssets } from "@/lib/offline/asset-cache";
+import { sessionKey } from "@/lib/session/session-memory";
+import { useSessionState } from "@/lib/session/useSessionState";
 
 const CACHE_KEY = ["offline-service-jobs"] as const;
 
 /**
  * A HIBAJEGYEK LISTÁJA A TELEFONON.
  *
- * NÉGY SZŰRŐ, ÉS AZ ÖSSZES AZ ALAPÉRTELMEZÉS (Balázs kérése, 2026-09-17).
+ * NÉGY SZŰRŐ (Balázs kérése, 2026-09-17), és 2026-10-04 óta a NYITOTT az
+ * alapértelmezés (`DEFAULT_SERVICE_JOB_SCOPE`). A választott szűrés a
+ * munkamenet idejére megmarad: egy jegy megnyitása és a visszalépés nem
+ * nullázza (`useSessionState`).
  *
  * 2026-09-17-ig ez a képernyő FIXEN a nyitott jegyeket kérte. Az a szűkítés
  * szándékos volt és ki is volt mondva a fejlécben -- de a helyszínen úgy
@@ -85,7 +91,8 @@ export default function ServiceJobListScreen() {
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const online = useIsOnline();
-  const [scope, setScope] = useState<ServiceJobScope>(
+  const [scope, setScope] = useSessionState<ServiceJobScope>(
+    sessionKey(user?.id, "service-jobs", "scope"),
     DEFAULT_SERVICE_JOB_SCOPE,
   );
 
@@ -150,10 +157,28 @@ export default function ServiceJobListScreen() {
     kereses: eszkozKereses,
   });
 
+  /*
+    A TELJES LISTA A MASOLATNAK, HA A FUL NEM AZ (2026-10-04): a nyitott
+    alapertelmezessel az Osszes valasza mar nem jon magatol, a masolat pedig
+    csak abbol irhato (`OFFLINE_COPY_SCOPE`). Ugyanaz a kulcs, mint az Osszes
+    fule, tehat arra valtva nincs uj kor; a `staleTime` miatt egy lap
+    megnyitasa es a visszalepes sem ker ujra.
+  */
+  const fullList = useQuery({
+    queryKey: ["service-jobs", OFFLINE_COPY_SCOPE, "ALL"],
+    queryFn: () => listServiceJobs(OFFLINE_COPY_SCOPE, "ALL"),
+    enabled:
+      serverScope !== OFFLINE_COPY_SCOPE &&
+      status === "authenticated" &&
+      Boolean(capabilities?.serviceJobsView),
+    staleTime: 60_000,
+  });
+  const copySource =
+    serverScope === OFFLINE_COPY_SCOPE ? query.data : fullList.data;
   useEffect(() => {
-    if (!query.data || serverScope !== DEFAULT_SERVICE_JOB_SCOPE) return;
-    void rememberServiceJobs(query.data.items);
-  }, [query.data, serverScope]);
+    if (!copySource) return;
+    void rememberServiceJobs(copySource.items);
+  }, [copySource]);
 
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsView)

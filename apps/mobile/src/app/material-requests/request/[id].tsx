@@ -5,10 +5,13 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -89,6 +92,25 @@ export default function MaterialRequestDetailScreen() {
   const [partialOpen, setPartialOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  /*
+    A MEGJEGYZÉS-MEZŐ LÁTSZIK GÉPELÉS KÖZBEN (kártya e45e1dda, Balázs
+    2026-10-04): a mező a lap ALJÁN áll, és a billentyűzet ráült. Két rész,
+    és mindkettő kell:
+      - iOS-en a `KeyboardAvoidingView` (padding) és a ScrollView beszúrása
+        húzza fel a tartalmat a billentyűzet fölé (a `worksheets/new` mintája);
+      - mindkét rendszeren, amikor a billentyűzet a megjegyzés-mezőhöz nyílt,
+        a lap a végére görget: a mező az utolsó elem. Androidon az ablak
+        átméreteződik, de a ScrollView magától nem görget a fókuszhoz.
+  */
+  const scrollRef = useRef<ScrollView>(null);
+  const commentFocused = useRef(false);
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", () => {
+      if (commentFocused.current)
+        scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => shown.remove();
+  }, []);
   const queryKey = ["material-requests", "detail", id];
 
   const detail = useQuery({
@@ -197,244 +219,259 @@ export default function MaterialRequestDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        refreshControl={
-          <RefreshControl
-            refreshing={detail.isRefetching}
-            onRefresh={() => {
-              setNow(new Date());
-              void refetch();
-            }}
-            tintColor={tokens.accent}
-          />
-        }
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Anyagigény</Text>
-          <Text style={styles.muted}>
-            {request.worksheetNumber ?? "piszkozat munkalap"} ·{" "}
-            {request.customerDisplayName}
-          </Text>
-        </View>
-
-        {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
-
-        <Card>
-          <View style={styles.row}>
-            <View style={styles.flex}>
-              <Text style={styles.cardTitle}>
-                {request.departmentName} · anyagigény
-              </Text>
-              <Text style={styles.muted}>{requestedLine(request, now)}</Text>
-            </View>
-            <StatusPill status={request.status} />
-          </View>
-        </Card>
-
-        <Card>
-          <Text style={styles.cardTitle}>Beszerzés</Text>
-          <View style={styles.row}>
-            <Text
-              style={[
-                styles.flex,
-                sentence.tone === "warning" ? styles.warning : styles.body,
-              ]}
-            >
-              {sentence.text}
-            </Text>
-            {request.handlerId &&
-            request.status !== "CANCELLED" &&
-            request.status !== "RECEIVED" ? (
-              <RequestPill tone="accent">Ő INTÉZI</RequestPill>
-            ) : null}
-          </View>
-          {actions.claim ? (
-            <ActionButton
-              label={PRIMARY_ACTION_LABEL.claim}
-              busy={busy}
-              onPress={() => runPrimary("claim")}
-              styles={styles}
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          refreshControl={
+            <RefreshControl
+              refreshing={detail.isRefetching}
+              onRefresh={() => {
+                setNow(new Date());
+                void refetch();
+              }}
+              tintColor={tokens.accent}
             />
-          ) : null}
-          {hasSecondary ? (
-            <View style={styles.buttonColumn}>
-              {secondary.order ? (
-                <ActionButton
-                  label="Megrendeltem"
-                  variant="secondary"
-                  busy={busy}
-                  onPress={() => runPrimary("order")}
-                  styles={styles}
-                />
-              ) : null}
-              {secondary.receiveItems ? (
-                <ActionButton
-                  label="Részben beérkezett"
-                  variant="secondary"
-                  busy={busy}
-                  onPress={() => setPartialOpen((open) => !open)}
-                  styles={styles}
-                />
-              ) : null}
-              {secondary.receive ? (
-                <ActionButton
-                  label="Beérkezett"
-                  variant="secondary"
-                  busy={busy}
-                  onPress={() => runPrimary("receive")}
-                  styles={styles}
-                />
-              ) : null}
-              {secondary.reassign ? (
-                <ActionButton
-                  label="Felelős módosítása"
-                  variant="secondary"
-                  busy={busy}
-                  onPress={() => setReassignOpen((open) => !open)}
-                  styles={styles}
-                />
-              ) : null}
-              {secondary.cancel ? (
-                <ActionButton
-                  label="Visszavonás"
-                  variant="danger"
-                  busy={busy}
-                  onPress={confirmCancel}
-                  styles={styles}
-                />
-              ) : null}
-            </View>
-          ) : null}
-          {partialOpen && actions.receiveItems ? (
-            <PartialReceipt
-              request={request}
-              busy={busy}
-              styles={styles}
-              onSubmit={(input) =>
-                void run(() =>
-                  receiveMaterialRequestItems(request.id, input),
-                ).then((ok) => (ok ? setPartialOpen(false) : undefined))
-              }
-            />
-          ) : null}
-          {reassignOpen && actions.reassign ? (
-            <Reassign
-              request={request}
-              busy={busy}
-              styles={styles}
-              onPick={(handlerId) =>
-                void run(() =>
-                  reassignMaterialRequest(request.id, { handlerId }),
-                ).then((ok) => (ok ? setReassignOpen(false) : undefined))
-              }
-            />
-          ) : null}
-        </Card>
-
-        <Card>
-          <Text style={styles.cardTitle}>Tételek</Text>
-          {request.items.map((item) => (
-            <View key={item.id} style={styles.itemRow}>
-              <View style={styles.flex}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.muted}>
-                  {itemState(request.status, item)}
-                </Text>
-              </View>
-              <Text style={styles.itemQuantity}>{itemQuantity(item)}</Text>
-            </View>
-          ))}
-        </Card>
-
-        <Card>
-          <MetaRow
-            label="Szükséges"
-            value={request.neededBy ? formatNeededBy(request.neededBy) : "—"}
-            styles={styles}
-          />
-          <MetaRow
-            label="Prioritás"
-            value={request.priority ? PRIORITY_LABEL[request.priority] : "—"}
-            styles={styles}
-          />
-          <View style={styles.metaRow}>
-            <Text style={styles.metaLabel}>Munkalap</Text>
-            <Pressable
-              accessibilityRole="link"
-              onPress={() =>
-                router.push({
-                  pathname: "/worksheets/[id]",
-                  params: { id: request.worksheetId },
-                })
-              }
-            >
-              <Text style={styles.link}>
-                {request.worksheetNumber ?? "Megnyitás"}
-              </Text>
-            </Pressable>
-          </View>
-        </Card>
-
-        {request.note ? (
-          <Card>
-            <Text style={styles.cardTitle}>Megjegyzés</Text>
-            <Text style={styles.body}>{request.note}</Text>
-          </Card>
-        ) : null}
-
-        <Card>
-          <Text style={styles.cardTitle}>Státusztörténet</Text>
-          {steps.map((step) => (
-            <View key={step.key} style={styles.stepRow}>
-              <View
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor:
-                      step.kind === "done"
-                        ? tokens.accent
-                        : step.kind === "current"
-                          ? tokens.info
-                          : tokens.border,
-                  },
-                ]}
-              />
-              <View style={styles.flex}>
-                <Text
-                  style={
-                    step.kind === "current" ? styles.stepCurrent : styles.body
-                  }
-                >
-                  {step.label}
-                </Text>
-                <Text style={styles.muted}>{step.detail}</Text>
-              </View>
-            </View>
-          ))}
-        </Card>
-
-        <Comments
-          request={request}
-          busy={busy}
-          now={now}
-          styles={styles}
-          onAdd={(body) =>
-            run(() => commentOnMaterialRequest(request.id, { body }))
           }
-        />
-      </ScrollView>
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Anyagigény</Text>
+            <Text style={styles.muted}>
+              {request.worksheetNumber ?? "piszkozat munkalap"} ·{" "}
+              {request.customerDisplayName}
+            </Text>
+          </View>
 
-      {primary ? (
-        <View style={styles.stickyBar}>
-          <ActionButton
-            label={PRIMARY_ACTION_LABEL[primary]}
+          {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+
+          <Card>
+            <View style={styles.row}>
+              <View style={styles.flex}>
+                <Text style={styles.cardTitle}>
+                  {request.departmentName} · anyagigény
+                </Text>
+                <Text style={styles.muted}>{requestedLine(request, now)}</Text>
+              </View>
+              <StatusPill status={request.status} />
+            </View>
+          </Card>
+
+          <Card>
+            <Text style={styles.cardTitle}>Beszerzés</Text>
+            <View style={styles.row}>
+              <Text
+                style={[
+                  styles.flex,
+                  sentence.tone === "warning" ? styles.warning : styles.body,
+                ]}
+              >
+                {sentence.text}
+              </Text>
+              {request.handlerId &&
+              request.status !== "CANCELLED" &&
+              request.status !== "RECEIVED" ? (
+                <RequestPill tone="accent">Ő INTÉZI</RequestPill>
+              ) : null}
+            </View>
+            {actions.claim ? (
+              <ActionButton
+                label={PRIMARY_ACTION_LABEL.claim}
+                busy={busy}
+                onPress={() => runPrimary("claim")}
+                styles={styles}
+              />
+            ) : null}
+            {hasSecondary ? (
+              <View style={styles.buttonColumn}>
+                {secondary.order ? (
+                  <ActionButton
+                    label="Megrendeltem"
+                    variant="secondary"
+                    busy={busy}
+                    onPress={() => runPrimary("order")}
+                    styles={styles}
+                  />
+                ) : null}
+                {secondary.receiveItems ? (
+                  <ActionButton
+                    label="Részben beérkezett"
+                    variant="secondary"
+                    busy={busy}
+                    onPress={() => setPartialOpen((open) => !open)}
+                    styles={styles}
+                  />
+                ) : null}
+                {secondary.receive ? (
+                  <ActionButton
+                    label="Beérkezett"
+                    variant="secondary"
+                    busy={busy}
+                    onPress={() => runPrimary("receive")}
+                    styles={styles}
+                  />
+                ) : null}
+                {secondary.reassign ? (
+                  <ActionButton
+                    label="Felelős módosítása"
+                    variant="secondary"
+                    busy={busy}
+                    onPress={() => setReassignOpen((open) => !open)}
+                    styles={styles}
+                  />
+                ) : null}
+                {secondary.cancel ? (
+                  <ActionButton
+                    label="Visszavonás"
+                    variant="danger"
+                    busy={busy}
+                    onPress={confirmCancel}
+                    styles={styles}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            {partialOpen && actions.receiveItems ? (
+              <PartialReceipt
+                request={request}
+                busy={busy}
+                styles={styles}
+                onSubmit={(input) =>
+                  void run(() =>
+                    receiveMaterialRequestItems(request.id, input),
+                  ).then((ok) => (ok ? setPartialOpen(false) : undefined))
+                }
+              />
+            ) : null}
+            {reassignOpen && actions.reassign ? (
+              <Reassign
+                request={request}
+                busy={busy}
+                styles={styles}
+                onPick={(handlerId) =>
+                  void run(() =>
+                    reassignMaterialRequest(request.id, { handlerId }),
+                  ).then((ok) => (ok ? setReassignOpen(false) : undefined))
+                }
+              />
+            ) : null}
+          </Card>
+
+          <Card>
+            <Text style={styles.cardTitle}>Tételek</Text>
+            {request.items.map((item) => (
+              <View key={item.id} style={styles.itemRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.muted}>
+                    {itemState(request.status, item)}
+                  </Text>
+                </View>
+                <Text style={styles.itemQuantity}>{itemQuantity(item)}</Text>
+              </View>
+            ))}
+          </Card>
+
+          <Card>
+            <MetaRow
+              label="Szükséges"
+              value={request.neededBy ? formatNeededBy(request.neededBy) : "—"}
+              styles={styles}
+            />
+            <MetaRow
+              label="Prioritás"
+              value={request.priority ? PRIORITY_LABEL[request.priority] : "—"}
+              styles={styles}
+            />
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Munkalap</Text>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() =>
+                  router.push({
+                    pathname: "/worksheets/[id]",
+                    params: { id: request.worksheetId },
+                  })
+                }
+              >
+                <Text style={styles.link}>
+                  {request.worksheetNumber ?? "Megnyitás"}
+                </Text>
+              </Pressable>
+            </View>
+          </Card>
+
+          {request.note ? (
+            <Card>
+              <Text style={styles.cardTitle}>Megjegyzés</Text>
+              <Text style={styles.body}>{request.note}</Text>
+            </Card>
+          ) : null}
+
+          <Card>
+            <Text style={styles.cardTitle}>Státusztörténet</Text>
+            {steps.map((step) => (
+              <View key={step.key} style={styles.stepRow}>
+                <View
+                  style={[
+                    styles.dot,
+                    {
+                      backgroundColor:
+                        step.kind === "done"
+                          ? tokens.accent
+                          : step.kind === "current"
+                            ? tokens.info
+                            : tokens.border,
+                    },
+                  ]}
+                />
+                <View style={styles.flex}>
+                  <Text
+                    style={
+                      step.kind === "current" ? styles.stepCurrent : styles.body
+                    }
+                  >
+                    {step.label}
+                  </Text>
+                  <Text style={styles.muted}>{step.detail}</Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+
+          <Comments
+            request={request}
             busy={busy}
-            onPress={() => runPrimary(primary)}
+            now={now}
             styles={styles}
+            onAdd={(body) =>
+              run(() => commentOnMaterialRequest(request.id, { body }))
+            }
+            onFocusChange={(focused) => {
+              commentFocused.current = focused;
+              // ha a billentyűzet már nyitva volt (egy másik mezőből), nincs
+              // újabb keyboardDidShow: a görgetés itt is elindul
+              if (focused && Keyboard.isVisible())
+                scrollRef.current?.scrollToEnd({ animated: true });
+            }}
           />
-        </View>
-      ) : null}
+        </ScrollView>
+
+        {primary ? (
+          <View style={styles.stickyBar}>
+            <ActionButton
+              label={PRIMARY_ACTION_LABEL[primary]}
+              busy={busy}
+              onPress={() => runPrimary(primary)}
+              styles={styles}
+            />
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -617,12 +654,14 @@ function Comments({
   now,
   styles,
   onAdd,
+  onFocusChange,
 }: {
   request: MaterialRequestFullDetail;
   busy: boolean;
   now: Date;
   styles: Styles;
   onAdd: (body: string) => Promise<boolean>;
+  onFocusChange: (focused: boolean) => void;
 }) {
   const [draft, setDraft] = useState("");
   return (
@@ -655,6 +694,8 @@ function Comments({
             maxLength={2000}
             multiline
             onChangeText={setDraft}
+            onFocus={() => onFocusChange(true)}
+            onBlur={() => onFocusChange(false)}
             style={styles.textArea}
           />
           <ActionButton

@@ -31,6 +31,7 @@ import { statusToneColors } from "@/lib/theme/label-styles";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
+  DEFAULT_WORKSHEET_STATUS_FILTER,
   worksheetFilterSummary,
   worksheetListStartsMineOnly,
   worksheetListSubtitle,
@@ -39,8 +40,11 @@ import {
   worksheetVersionNote,
   WORKSHEET_STATUS_FILTERS,
 } from "@/lib/worksheets/worksheet-presentation";
+import { sessionKey } from "@/lib/session/session-memory";
+import { useSessionState } from "@/lib/session/useSessionState";
 
 const PAGE_SIZE = 25;
+const LIST = "worksheets";
 
 /**
  * MUNKALAPOK, telefonon.
@@ -103,17 +107,28 @@ export default function WorksheetsScreen() {
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [mineOnly, setMineOnly] = useState(
+  /*
+    A SZŰRÉS A MUNKAMENET IDEJÉRE MEGMARAD (2026-10-04, acrobot 26167): a
+    keresés, a lap, a „Csak az enyém”, a partner és az állapot-fül. Egy lap
+    megnyitása és a visszalépés nem nullázza, akkor sem, ha a lista újra
+    felépül (`useSessionState`). A partner-választó nyitottsága nem szűrés,
+    az a képernyőé marad.
+  */
+  const key = (field: string) => sessionKey(user?.id, LIST, field);
+  const [search, setSearch] = useSessionState(key("search"), "");
+  const [page, setPage] = useSessionState(key("page"), 1);
+  const [mineOnly, setMineOnly] = useSessionState(
+    key("mineOnly"),
     worksheetListStartsMineOnly(user?.role),
   );
-  const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
-    null,
-  );
+  const [partner, setPartner] =
+    useSessionState<WorksheetSelectablePartner | null>(key("partner"), null);
   const [partnerPickerOpen, setPartnerPickerOpen] = useState(false);
   const [statusFilter, setStatusFilter] =
-    useState<WorksheetVersionStatus | null>(null);
+    useSessionState<WorksheetVersionStatus | null>(
+      key("status"),
+      DEFAULT_WORKSHEET_STATUS_FILTER,
+    );
 
   /*
    * A PARTNEREK CSAK AKKOR TÖLTŐDNEK BE, AMIKOR A VÁLASZTÓ KINYÍLIK. A lista a

@@ -18,6 +18,7 @@ import {
   worksheetFilterSummary,
   worksheetListStartsMineOnly,
   worksheetVersionNote,
+  DEFAULT_WORKSHEET_STATUS_FILTER,
   WORKSHEET_STATUS_FILTERS,
 } from "./worksheet-presentation";
 import type {
@@ -627,5 +628,20 @@ describe("worksheetDetailRows és az átadás", () => {
     );
     assert.ok(!sor?.value.includes("nincs rögzítve"));
     assert.ok(sor?.value.includes("2026"));
+  });
+});
+
+/*
+  A MUNKALAP-LISTA ALAPSZŰRÉSE (Balázs, 2026-10-04 13:51 UTC, acrobot 26167).
+  MI PIROSÍT: ha a lista ismét az Összessel nyílna, vagy ha az alapérték egy
+  olyan fül lenne, ami nincs a sávon (akkor egyik fül sem látszana kijelöltnek).
+*/
+describe("a munkalap-lista alapszűrése", () => {
+  it("az „Új és folyamatban” fül, és az a sávon áll", () => {
+    assert.equal(DEFAULT_WORKSHEET_STATUS_FILTER, "DRAFT");
+    const fül = WORKSHEET_STATUS_FILTERS.find(
+      (filter) => filter.value === DEFAULT_WORKSHEET_STATUS_FILTER,
+    );
+    assert.equal(fül?.label, "Új és folyamatban");
   });
 });

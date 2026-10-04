@@ -441,9 +441,18 @@ export function worksheetLineSummary(
 }
 
 /**
+ * AZ ÁLLAPOT-SZŰRŐ ALAPHELYZETE: „Új és folyamatban” (Balázs, 2026-10-04
+ * 13:51 UTC, acrobot 26167). A szerelő a még nyitott lapjaival dolgozik; az
+ * „Összes” egy koppintásra marad, és a választott szűrés a munkamenet idejére
+ * megmarad (`useSessionState`).
+ */
+export const DEFAULT_WORKSHEET_STATUS_FILTER: WorksheetStatus | null = "DRAFT";
+
+/**
  * AZ ÁLLAPOT-SZŰRŐ VÁLASZTHATÓ ÉRTÉKEI, sorrendben.
  *
- * A „Mind" ELSŐ, és nem véletlenül: a szűrő alaphelyzete az, hogy nem szűr.
+ * Az „Összes” ELSŐ, mert ez a nem szűrt halmaz; az ALAPHELYZET viszont 2026-10-04
+ * óta az „Új és folyamatban” (`DEFAULT_WORKSHEET_STATUS_FILTER`).
  * A sorrend a munka menetét követi (piszkozat, aláírásra vár, aláírva,
  * elutasítva), mert a szerelő ebben a sorrendben gondol rájuk.
  *
