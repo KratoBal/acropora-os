@@ -143,6 +143,11 @@ export function incomingPaymentOf(
 export function toIncomingListItem(
   row: IncomingBillingDocument,
   pairings: ReadonlyMap<string, DocumentPairing>,
+  /**
+   * Van-e a számlához begyűjtött PDF (`incoming-collected-pdf.ts`). A feed
+   * PDF-je nélkül is igaz lehet: a `hasPdf` bármelyik forrásra igaz.
+   */
+  collectedPdf = false,
 ): IncomingDocumentListItem {
   const bankMatch = bankMatchOf(row, pairings);
   return {
@@ -171,17 +176,18 @@ export function toIncomingListItem(
         : undefined) ?? false,
     ),
     bankMatch,
-    hasPdf: row.hasPdf,
+    hasPdf: row.hasPdf || collectedPdf,
   };
 }
 
 export function toIncomingDetail(
   row: IncomingBillingDocument,
   pairings: ReadonlyMap<string, DocumentPairing>,
+  collectedPdf = false,
 ): IncomingDocumentDetail {
   const payments = row.payments as unknown as IncomingPayment[];
   return {
-    ...toIncomingListItem(row, pairings),
+    ...toIncomingListItem(row, pairings, collectedPdf),
     exchangeBank: row.exchangeBank,
     supplier: {
       name: row.supplierName,

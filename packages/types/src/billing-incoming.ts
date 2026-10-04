@@ -120,6 +120,10 @@ export interface IncomingDocumentListItem {
    */
   paymentConflict: boolean;
   bankMatch: IncomingBankMatch;
+  /**
+   * Letölthető-e a számla PDF-je: a Számlázz.hu küldte, vagy a begyűjtés hozta
+   * (számlaszám és szállítói adószám-törzs szerint párosítva).
+   */
   hasPdf: boolean;
 }
 
