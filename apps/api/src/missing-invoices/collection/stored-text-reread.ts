@@ -54,8 +54,11 @@ type Brief = Pick<
 export interface StoredTextRereadRow {
   id: string;
   fileName: string;
-  /** `null`: nem olvasta újra (és miért) */
-  skipped: "ADAPTER_READ" | "UNREADABLE" | null;
+  /**
+   * Nem írja (és miért): illesztő olvasta, olvashatatlan, vagy egy meglévő
+   * számot ÜRESRE írna `--allow-clear` nélkül. `null`: írja, ha változott.
+   */
+  skipped: "ADAPTER_READ" | "UNREADABLE" | "WOULD_CLEAR" | null;
   before: Brief | null;
   after: Brief | null;
   changed: boolean;
@@ -77,6 +80,14 @@ export async function rereadStoredText(
   deps: StoredTextRereadDeps,
   selector: StoredTextSelector,
   apply: boolean,
+  /**
+   * Egy meglévő számot üresre írhat-e. Alapból NEM (acrobot 26157): a FleetCor
+   * számla-áttekintésének `BANK:HU00008659` olvasata a száraz körben üresre
+   * váltott volna. Ott ez helyes (az ügyfél-azonosító nem szám), de egy szám
+   * eltűnése nem történhet csendben: a sor `WOULD_CLEAR`, és csak kifejezett
+   * engedéllyel íródik.
+   */
+  allowClear = false,
 ): Promise<StoredTextRereadRow[]> {
   const rows: StoredTextRereadRow[] = [];
   for (const document of await deps.documents(selector)) {
@@ -132,6 +143,16 @@ export async function rereadStoredText(
       ...(old?.cardPayment ? { cardPayment: old.cardPayment } : {}),
     };
     const changed = JSON.stringify(brief(old)) !== JSON.stringify(brief(next));
+    const clears = oldNumber !== null && next.invoiceNumber === null;
+    if (clears && !allowClear) {
+      rows.push({
+        ...base,
+        skipped: "WOULD_CLEAR",
+        after: brief(next),
+        changed,
+      });
+      continue;
+    }
     if (apply && changed) await deps.save(document.id, next);
     rows.push({ ...base, skipped: null, after: brief(next), changed });
   }
@@ -147,15 +168,17 @@ export function rereadReport(
     b
       ? `${b.numberFrom ?? "-"}:${b.invoiceNumber ?? "-"} (${b.supplierTaxNumber ?? "-"})`
       : "-";
-  const changed = rows.filter((row) => row.changed).length;
+  const changed = rows.filter((row) => row.changed && !row.skipped).length;
   return [
     `${apply ? "átírva" : "átírná"}: ${changed} / ${rows.length} dokumentum\n`,
     ...rows.map(
       (row) =>
         `  ${row.id}\t${row.fileName}\t${
-          row.skipped
-            ? `kihagyva (${row.skipped})`
-            : `${show(row.before)} -> ${show(row.after)}${row.changed ? "" : "  (változatlan)"}`
+          row.skipped === "WOULD_CLEAR"
+            ? `kihagyva (a számot üresre írná, csak --allow-clear-rel): ${show(row.before)} -> ${show(row.after)}`
+            : row.skipped
+              ? `kihagyva (${row.skipped})`
+              : `${show(row.before)} -> ${show(row.after)}${row.changed ? "" : "  (változatlan)"}`
         }\n`,
     ),
   ].join("");

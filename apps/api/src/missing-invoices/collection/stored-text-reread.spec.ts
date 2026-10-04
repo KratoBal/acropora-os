@@ -134,6 +134,44 @@ describe("re-reading a stored document's text", () => {
     );
   });
 
+  /*
+    acrobot 26157: a FleetCor SZAMLA-ATTEKINTES (info@, PDF_1307442_...) a
+    tarolt BANK:HU00008659 olvasatot uresre irta volna a szaraz korben. MI
+    PIROSIT: ha egy meglevo szam engedely nelkul uresre irodik, vagy ha az
+    engedellyel sem.
+  */
+  it("a number is never cleared without --allow-clear (FleetCor overview)", async () => {
+    const overview = [
+      "Hivatkozási szám | E0401328435 | Fizetési határidő | 08.06.2026 | Számla kiállító | FleetCor Hungary Kft.",
+      "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számlaáttekintés",
+      "Dokumentumszám | 1307442 | 1106 BUDAPEST",
+    ];
+    const bank = { ...OLD, numberFrom: "BANK" as const };
+    const held = deps([{ lines: overview, textReading: bank }]);
+    const rows = await rereadStoredText(held.deps, SELECT, true);
+    assert.equal(rows[0]!.skipped, "WOULD_CLEAR");
+    assert.deepEqual(rows[0]!.after, {
+      invoiceNumber: null,
+      numberFrom: null,
+      supplierTaxNumber: null,
+    });
+    assert.deepEqual(held.saved, []);
+
+    const allowed = deps([{ lines: overview, textReading: bank }]);
+    await rereadStoredText(allowed.deps, SELECT, true, true);
+    assert.deepEqual(allowed.saved, [
+      {
+        id: "doc-1",
+        reading: {
+          invoiceNumber: null,
+          numberFrom: null,
+          supplierTaxNumber: null,
+          bankReference: "HU00008659",
+        },
+      },
+    ]);
+  });
+
   it("the command needs an explicit selection", () => {
     assert.equal(parseSelector(["--apply"]), null);
     assert.deepEqual(parseSelector(["--ids", "a, b", "--apply"]), {

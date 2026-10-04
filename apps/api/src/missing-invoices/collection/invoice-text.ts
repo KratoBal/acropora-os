@@ -425,9 +425,13 @@ export function readInvoiceText(
     `25103272-2-42` adószáma, és EU-s adószámnak látszott; a NAV-kulcs így
     elment a számla mellett.
   */
+  // az ügyfél-azonosító EU-s adószámnak is látszhat (FleetCor: HU00008659 a
+  // számla-áttekintésen, ahol a szállító adószáma nem is áll); az nem adószám
+  const customers = customerIds(lines);
   const taxNumbers = [...text.matchAll(TAX_NUMBER)]
     .map((m) => m[1] as string)
-    .filter((tax) => taxBase(tax) !== ours);
+    .filter((tax) => taxBase(tax) !== ours)
+    .filter((tax) => !customers.has(compactNumber(tax)));
   const supplierTaxNumber =
     taxNumbers.find((tax) => HU_TAX_NUMBER.test(tax)) ?? taxNumbers[0] ?? null;
   const reading = (
@@ -475,7 +479,6 @@ export function readInvoiceText(
     if (found) return reading(found, "NAV");
   }
   if (labelled) return reading(labelled, "LABEL");
-  const customers = customerIds(lines);
   const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))

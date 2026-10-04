@@ -547,6 +547,19 @@ describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
     assert.equal(readInvoiceText(withoutLabel, HINTS).invoiceNumber, null);
   });
 
+  // acrobot 26157: the FleetCor overview names no supplier tax number at all,
+  // and the customer id looked European
+  it("a customer id is not a tax number either", () => {
+    assert.equal(
+      readInvoiceText([
+        "Számlaáttekintés",
+        "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT.",
+      ]).supplierTaxNumber,
+      null,
+    );
+    assert.equal(readInvoiceText(FLEETCOR).supplierTaxNumber, "25103272-2-42");
+  });
+
   it("a value the reader split into cells is not a number (Stripe)", () => {
     // the hyphen of 53AEF736-256060 comes through as a NUL character
     assert.equal(
