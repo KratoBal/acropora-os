@@ -23,6 +23,11 @@ import {
   toIncomingDetail,
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
+import {
+  collectedPdfIds,
+  collectedPdfIndex,
+  type CollectedDocument,
+} from "./incoming-collected-pdf.js";
 
 const PDF_MAGIC = Buffer.from("%PDF-");
 
@@ -43,12 +48,19 @@ export class IncomingBillingDocumentsController {
   async list(
     @Query() query: IncomingDocumentListQueryDto,
   ): Promise<IncomingDocumentListResponse> {
-    const [rows, pairings] = await Promise.all([
+    const [rows, pairings, collected] = await Promise.all([
       this.database.incomingBillingDocument.findMany(),
       this.missing.documentPairings(),
+      this.collectedIndex(),
     ]);
     return incomingListResponse(
-      rows.map((row) => toIncomingListItem(row, pairings)),
+      rows.map((row) =>
+        toIncomingListItem(
+          row,
+          pairings,
+          collectedPdfIds(row, collected).length > 0,
+        ),
+      ),
       query,
     );
   }
@@ -59,30 +71,53 @@ export class IncomingBillingDocumentsController {
       where: { id },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    return toIncomingDetail(row, await this.missing.documentPairings());
+    const [pairings, collected] = await Promise.all([
+      this.missing.documentPairings(),
+      this.collectedIndex(),
+    ]);
+    return toIncomingDetail(
+      row,
+      pairings,
+      collectedPdfIds(row, collected).length > 0,
+    );
   }
 
   /**
-   * A számla PDF-je, ha a Számlázz.hu valódi PDF-et küldött (a `pdfszamlabe`
-   * regisztrációnál). Élesen 2026-10-01-én 73-ból 5 ilyen; a többinél 404, és a
-   * felület a `hasPdf` alapján gombot sem mutat.
+   * A számla PDF-je. ELŐSZÖR a Számlázz.hu-é, ha valódi PDF-et küldött (a
+   * `pdfszamlabe` regisztrációnál; élesen 2026-10-04-én 85-ből 5). Ha nem, a
+   * BEGYŰJTÖTT PDF, számlaszám és adószám-törzs szerint párosítva
+   * (`incoming-collected-pdf.ts`). Egyik sem: 404, és a felület a `hasPdf`
+   * alapján gombot sem mutat.
    */
   @Get("incoming-documents/:id/pdf")
   @Header("Cache-Control", "private, no-store")
   async pdf(@Param("id") id: string) {
     const row = await this.database.incomingBillingDocument.findUnique({
       where: { id },
-      select: { documentNumber: true, sourceDocumentId: true },
+      select: {
+        documentNumber: true,
+        supplierTaxNumber: true,
+        sourceDocumentId: true,
+      },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    const source = row.sourceDocumentId
-      ? await this.database.incomingSupplierDocument.findUnique({
-          where: { id: row.sourceDocumentId },
-          select: { content: true },
-        })
-      : null;
-    const content = source ? Buffer.from(source.content) : null;
-    if (!content || !content.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC))
+    const candidates = [
+      ...(row.sourceDocumentId ? [row.sourceDocumentId] : []),
+      ...collectedPdfIds(row, await this.collectedIndex()),
+    ];
+    let content: Buffer | null = null;
+    for (const documentId of candidates) {
+      const document = await this.database.incomingSupplierDocument.findUnique({
+        where: { id: documentId },
+        select: { content: true },
+      });
+      const bytes = document ? Buffer.from(document.content) : null;
+      if (bytes && bytes.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC)) {
+        content = bytes;
+        break;
+      }
+    }
+    if (!content)
       throw new NotFoundException("Ehhez a számlához nem érkezett PDF.");
     const fileName = `${row.documentNumber.replace(/[^\w.-]+/g, "_")}.pdf`;
     return new StreamableFile(content, {
@@ -90,6 +125,25 @@ export class IncomingBillingDocumentsController {
       length: content.length,
       disposition: `inline; filename="${fileName}"`,
     });
+  }
+
+  /**
+   * A begyűjtött PDF-ek párosítási indexe, a tartalmuk nélkül: csak a kulcsok
+   * (számlaszám, adószám) kellenek hozzá. A listánál egy lekérdezés az egész.
+   */
+  private async collectedIndex() {
+    const documents: CollectedDocument[] =
+      await this.database.incomingSupplierDocument.findMany({
+        where: { fileName: { endsWith: ".pdf", mode: "insensitive" } },
+        select: {
+          id: true,
+          fileName: true,
+          createdAt: true,
+          textReading: true,
+          importResult: true,
+        },
+      });
+    return collectedPdfIndex(documents);
   }
 
   /**

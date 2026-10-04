@@ -86,7 +86,10 @@ export const billingDocumentsApi = {
       { signal },
     );
   },
-  /** CSAK ott, ahol a Számlázz.hu valódi PDF-et küldött (`hasPdf`); máshol 404. */
+  /**
+   * Ahol `hasPdf` igaz: a Számlázz.hu PDF-je, vagy ha az nincs, a begyűjtött
+   * PDF (számlaszám és adószám-törzs szerint). Máshol 404.
+   */
   async incomingPdf(token: string, id: string): Promise<Blob> {
     const response = await fetch(
       `${API_PREFIX}/billing/incoming-documents/${encodeURIComponent(id)}/pdf`,
