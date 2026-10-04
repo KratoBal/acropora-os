@@ -8,6 +8,7 @@ import {
   cachedItemsForScope,
   DEFAULT_SERVICE_JOB_SCOPE,
   itemsForScope,
+  OFFLINE_COPY_SCOPE,
   SERVICE_JOB_SCOPES,
   serverScopeOf,
 } from "./list-scope";
@@ -43,19 +44,18 @@ const MINTA = [
 
 describe("a hibajegy-lista szűrői a telefonon", () => {
   /**
-   * AZ ALAPÉRTELMEZÉS AZ ÖSSZES (Balázs kérése, 2026-09-17).
+   * AZ ALAPÉRTELMEZÉS A NYITOTT (Balázs, 2026-10-04 13:51 UTC, acrobot 26167).
+   * Ez felülírja a 2026-09-17-es „az összes legyen az alapértelmezett” kérést;
+   * az Összes fül megmarad, és a választott fül a munkamenet idejére is.
    *
-   * MI PIROSÍT: ha valaki visszaállítaná a korábbi `open` alapértelmezést. Az a
-   * változás NÉMA lenne: a lista rövidebb, és pontosan úgy néz ki, mintha
-   * kevesebb jegy lenne.
+   * MI PIROSÍT: ha az alapértelmezés visszacsúszna az Összesre (a lezárt
+   * jegyek ismét az első képernyőn állnának), vagy ha a mentett másolatot
+   * író hatókör az alapértelmezéssel együtt szűkülne: akkor a térerő nélküli
+   * Összes fül csak a nyitottakat mutatná.
    */
-  /*
-    THE SERVICE REDESIGN (Figma 423:876, 2026-10-04) puts the chips in the
-    order Nyitott, Várakozik, Lezárt, Összes and adds "Várakozik"; "Rám
-    kiosztva" stays (decision 5). The DEFAULT does not move: still "Összes".
-  */
-  it("az alapértelmezés az összes, és mind az öt szűrő szerepel", () => {
-    assert.equal(DEFAULT_SERVICE_JOB_SCOPE, "all");
+  it("az alapértelmezés a nyitott, a másolatot az összes írja, és mind az öt szűrő szerepel", () => {
+    assert.equal(DEFAULT_SERVICE_JOB_SCOPE, "open");
+    assert.equal(OFFLINE_COPY_SCOPE, "all");
     assert.deepEqual(
       SERVICE_JOB_SCOPES.map((option) => option.id),
       ["open", "waiting", "closed", "all", "mine"],
@@ -186,10 +186,16 @@ describe("a hibajegy-lista szűrői a telefonon", () => {
     const hivasok = [...forras.matchAll(/listServiceJobs\(([^)]*)\)/g)].map(
       (talalat) => talalat[1]!.trim(),
     );
+    /*
+      KÉT HÍVÁS 2026-10-04 ÓTA, és a második nem kliens-oldali szűrő: a
+      nyitott alapértelmezés mellett a mentett másolat a TELJES listából
+      íródik (`OFFLINE_COPY_SCOPE`), külön lekérdezéssel. A szűrt lista
+      továbbra is a kiválasztott hatókört kéri a szervertől.
+    */
     assert.deepEqual(
-      hivasok,
-      ['serverScope, "ALL"'],
-      `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Egyetlen hívást várok, a kiválasztott szűrővel és a teljes munkafajta-halmazzal.`,
+      [...hivasok].sort(),
+      ['OFFLINE_COPY_SCOPE, "ALL"', 'serverScope, "ALL"'],
+      `A képernyő ${hivasok.length} helyen hívja a listát, ezekkel: ${hivasok.join(", ")}. Két hívást várok: a kiválasztott szűrővel és a másolat teljes listájával.`,
     );
   });
 });

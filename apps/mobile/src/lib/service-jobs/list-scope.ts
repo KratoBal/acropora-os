@@ -47,7 +47,7 @@ export interface ServiceJobScopeOption {
  * THE ORDER AND THE "VÁRAKOZIK" FILTER OF THE SERVICE REDESIGN (Figma
  * 423:876, 2026-10-04): Nyitott, Várakozik, Lezárt, Összes, and "Rám
  * kiosztva", which the design does not draw but which stays (decision 5).
- * The default is still "Összes" (Balázs, 2026-09-17).
+ * The default is "Nyitott" since 2026-10-04 (`DEFAULT_SERVICE_JOB_SCOPE`).
  *
  * "Rám kiosztva" works from the saved copy too when every saved row carries
  * its assignees (`cachedItemsForScope`); `offline: false` says it may not.
@@ -81,13 +81,25 @@ export function itemsForScope(
 }
 
 /**
- * AZ ALAPERTELMEZES AZ OSSZES, ES A TELEFON KULDI KI MAGABOL.
+ * AZ ALAPERTELMEZES A NYITOTT (Balazs, 2026-10-04 13:51 UTC, acrobot 26167).
  *
- * A szerver alapertelmezese `open` maradt: Balazs kerese a MOBIL alkalmazasra
- * szolt, es a szerveren atallitva a WEBES lista is elmozdulna, amirol senki nem
- * kert semmit.
+ * Ez FELULIRJA a 2026-09-17-es "az osszes legyen az alapertelmezett" kerest.
+ * Ami abbol megmarad: a negy szuro, es hogy a lezart jegy egy fullel elerheto
+ * -- csak mar nem az az elso, amit a szerelo lat. A valasztott szures a
+ * munkamenet idejere megmarad (`useSessionState`), tehat aki Osszesre valt,
+ * annal az marad, amig az app fut.
  */
-export const DEFAULT_SERVICE_JOB_SCOPE: ServiceJobScope = "all";
+export const DEFAULT_SERVICE_JOB_SCOPE: ServiceJobScope = "open";
+
+/**
+ * A MENTETT MASOLATOT IRO HATOKOR: mindig az OSSZES, az alapertelmezestol
+ * fuggetlenul. A masolat jelentese "a legutobb latott TELJES lista"; ha egy
+ * szukebb hatokor irna, a terero nelkuli Osszes fulon a szukebb lista allna.
+ * Eddig az alapertelmezes es ez egybeesett, ezert a kepernyo az
+ * alapertelmezesre kototte az irast -- a nyitott alapertelmezessel a ketto
+ * szetvalik.
+ */
+export const OFFLINE_COPY_SCOPE: ServiceJobServerScope = "all";
 
 /** A ket vegallapot. Ugyanaz a ketto, amit a szerver `closed` hatokore ad. */
 const FINISHED: ServiceJobListItem["status"][] = ["COMPLETED", "CANCELLED"];
