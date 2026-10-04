@@ -39,6 +39,15 @@ export interface ServiceJobListItem {
   departmentPath: string[] | null;
   worksheetCount: number;
   createdAt: string;
+  /**
+   * WHO THE JOB IS ASSIGNED TO (service redesign, 2026-10-04): the server has
+   * sent it on every list row since 2026-09-24; the phone now reads it.
+   *
+   * OPTIONAL ON PURPOSE. A row saved on the phone before then has no such
+   * key, and that is "unknown", never "nobody": a missing field must not
+   * read as "Nincs kiosztva" (`serviceJobAssigneeLine`).
+   */
+  assignees?: ServiceJobAssignee[];
 }
 
 export interface ServiceJobListResponse {
@@ -56,6 +65,12 @@ export interface ServiceJobListResponse {
    * mentett torzsek), es egy kotelezo mezo azokat forditaskor vagna el.
    */
   truncated?: boolean;
+  /**
+   * HOW MANY JOBS ARE IN EACH STATUS, over everything this user may see, not
+   * only the returned rows: the list's stat tiles. Optional for the same
+   * reason as `truncated`: a saved or older answer may not carry it.
+   */
+  counts?: Record<ServiceJobStatusValue, number>;
 }
 
 /**
@@ -117,8 +132,36 @@ export interface ServiceJobAssetLink {
  * sor a `serviceJobTimeline()` FUGGVENY parametere, nem a valasz tipusa; egy
  * grep-talalatot vettem a valasz alakjanak.
  */
+/**
+ * THE STATUS ROW'S EVENT AND THE REMOVAL'S DETAILS (service redesign,
+ * 2026-10-04): the server has always sent them; the phone now draws "Ami
+ * történt" and reads them. OPTIONAL, like every field added to this mirror:
+ * a detail saved on the phone before may lack them, and the two shapes
+ * differ (the internal one names the statuses and the note, the partner one
+ * only the partner's label and whether it was the creation).
+ */
+export interface ServiceJobTimelineEvent {
+  fromStatus?: ServiceJobStatusValue | null;
+  toStatus?: ServiceJobStatusValue;
+  note?: string | null;
+  partnerStatusLabel?: string;
+  isCreation?: boolean;
+  actorName: string | null;
+}
+
+export interface ServiceJobTimelineRemoval {
+  fileName: string;
+  documentType: string;
+  actorName: string | null;
+}
+
 export type ServiceJobTimelineEntry =
-  | { kind: "status"; at: string; sortKey: string }
+  | {
+      kind: "status";
+      at: string;
+      sortKey: string;
+      event?: ServiceJobTimelineEvent;
+    }
   | {
       kind: "worksheet";
       at: string;
@@ -126,7 +169,12 @@ export type ServiceJobTimelineEntry =
       worksheet: ServiceJobWorksheetLink;
     }
   | { kind: "asset"; at: string; sortKey: string; asset: ServiceJobAssetLink }
-  | { kind: "document"; at: string; sortKey: string };
+  | {
+      kind: "document";
+      at: string;
+      sortKey: string;
+      removal?: ServiceJobTimelineRemoval;
+    };
 
 export interface ServiceJobDocumentSummary {
   id: string;

@@ -35,9 +35,16 @@ import {
 import {
   cachedItemsForScope,
   DEFAULT_SERVICE_JOB_SCOPE,
+  itemsForScope,
   SERVICE_JOB_SCOPES,
+  serverScopeOf,
   type ServiceJobScope,
 } from "@/lib/service-jobs/list-scope";
+import {
+  serviceJobCardMeta,
+  serviceJobStatTiles,
+} from "@/lib/service-jobs/list-card";
+import { BottomNav } from "@/components/home/BottomNav";
 import {
   serviceJobStatusLabel,
   shortPath,
@@ -82,13 +89,16 @@ export default function ServiceJobListScreen() {
     DEFAULT_SERVICE_JOB_SCOPE,
   );
 
+  const serverScope = serverScopeOf(scope);
   const query = useQuery({
     // A HATOKOR RESZE A KULCSNAK. Enelkul a valaszto atkapcsolasa a REGI
     // halmazt mutatna a masik felirat alatt, amig az uj lekerdezes befut.
-    queryKey: ["service-jobs", scope, "ALL"],
+    // "Várakozik" asks for the open list and narrows it, so the two share
+    // one answer (`serverScopeOf`).
+    queryKey: ["service-jobs", serverScope, "ALL"],
     // A hívás akkor is elindul, ha a készülék offline-nak mondja magát: a
     // jelzése tévedhet, és egy működő lekérdezést nem tarthat vissza.
-    queryFn: () => listServiceJobs(scope, "ALL"),
+    queryFn: () => listServiceJobs(serverScope, "ALL"),
     enabled:
       status === "authenticated" && Boolean(capabilities?.serviceJobsView),
     placeholderData: keepPreviousData,
@@ -141,9 +151,9 @@ export default function ServiceJobListScreen() {
   });
 
   useEffect(() => {
-    if (!query.data || scope !== DEFAULT_SERVICE_JOB_SCOPE) return;
+    if (!query.data || serverScope !== DEFAULT_SERVICE_JOB_SCOPE) return;
     void rememberServiceJobs(query.data.items);
-  }, [query.data, scope]);
+  }, [query.data, serverScope]);
 
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsView)
@@ -171,9 +181,19 @@ export default function ServiceJobListScreen() {
    * listat adja helyette: az tagabb lenne, mint a felirata, ami ugyanolyan
    * hazugsag, mint a szukebb.
    */
-  const fromCache = cachedItemsForScope(cachedItems, scope);
+  const fromCache = cachedItemsForScope(cachedItems, scope, user?.id);
   const cachedForScope = fromCache.kind === "items" ? fromCache.items : [];
-  const items: ServiceJobListItem[] = query.data?.items ?? cachedForScope;
+  const items: ServiceJobListItem[] = query.data
+    ? itemsForScope(query.data.items, scope)
+    : cachedForScope;
+  /*
+    A PARTNER DOES NOT SEE THE ASSIGNEE LINE (decision of 2026-10-04). The
+    scope comes from the session, the same two fields the server reads
+    (`partnerScopeOf`).
+  */
+  const viewerIsPartner = Boolean(user?.customerId || user?.supplierId);
+  const tiles = serviceJobStatTiles(query.data?.counts);
+  const now = new Date();
   const scopeNeedsConnection =
     !query.data && fromCache.kind === "needs-connection";
   const notice = describeOfflineNotice({
@@ -185,14 +205,40 @@ export default function ServiceJobListScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={styles.header}>
+            <Text style={styles.subtitle}>
+              A mai helyszíni ügyek és a következő lépések.
+            </Text>
             {notice ? <OfflineNoticeCard notice={notice} /> : null}
+            {/*
+              THE THREE TILES (Figma 423:876) from the server's counts. A
+              saved list has no counts, so offline there are no tiles rather
+              than zeros that would look like an empty day.
+            */}
+            {tiles ? (
+              <View style={styles.tiles} accessibilityLabel="Összesítés">
+                {tiles.map((tile) => (
+                  <View key={tile.key} style={styles.tile}>
+                    <Text
+                      style={[
+                        styles.tileValue,
+                        tile.key === "waiting" && styles.tileValueWaiting,
+                        tile.key === "closed" && styles.tileValueClosed,
+                      ]}
+                    >
+                      {tile.value}
+                    </Text>
+                    <Text style={styles.tileLabel}>{tile.label}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             {/*
               A SZŰRŐ-SÁV. A KIVÁLASZTOTT ÁLLAPOT IS LÁTSZIK, nem csak a négy
               felirat: egy szűrt lista, ami nem mondja meg, hogy szűrt, épp az
@@ -224,8 +270,9 @@ export default function ServiceJobListScreen() {
             </View>
             {scopeNeedsConnection ? (
               <Text style={styles.hint}>
-                Ehhez a szűréshez kapcsolat kell: a mentett másolat nem tudja,
-                kire van kiosztva egy jegy. A többi szűrő offline is működik.
+                Ehhez a szűréshez kapcsolat kell: a mentett másolat egy része
+                még nem tudja, kire van kiosztva egy jegy. A többi szűrő offline
+                is működik.
               </Text>
             ) : null}
             {/*
@@ -339,32 +386,39 @@ export default function ServiceJobListScreen() {
             accessibilityRole="button"
             accessibilityLabel={`${item.jobNumber} ${item.title}`}
             onPress={() => router.push(`/service-jobs/${item.id}`)}
-            style={styles.card}
+            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
           >
+            {/*
+              THE CARD OF THE SERVICE REDESIGN (Figma 423:876): title and
+              number, the status at the right, partner and place, and one
+              line with who it is assigned to, its sheets and when it came.
+            */}
             <View style={styles.cardTop}>
-              <Text style={styles.number}>{item.jobNumber}</Text>
+              <View style={styles.cardTitleBlock}>
+                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.number}>{item.jobNumber}</Text>
+              </View>
               <Text style={styles.status}>
                 {serviceJobStatusLabel(item.status)}
               </Text>
             </View>
-            <Text style={styles.title}>{item.title}</Text>
             {item.kind === "MAINTENANCE" ? (
               <Text style={styles.maintenance}>Karbantartás</Text>
             ) : null}
             {item.customerName ? (
-              <Text style={styles.meta}>{item.customerName}</Text>
+              <Text style={styles.partner}>{item.customerName}</Text>
             ) : null}
             {shortPath(item.departmentPath) ? (
               <Text style={styles.meta}>{shortPath(item.departmentPath)}</Text>
             ) : null}
-            {item.worksheetCount > 0 ? (
-              <Text style={styles.meta}>
-                {item.worksheetCount} munkalap tartozik hozzá
-              </Text>
-            ) : null}
+            <Text style={styles.meta}>
+              {serviceJobCardMeta(item, viewerIsPartner, now)}
+            </Text>
           </Pressable>
         )}
       />
+      {/* the shared bar, with no item lit until "Feladatok" exists (E9) */}
+      <BottomNav active={null} />
     </SafeAreaView>
   );
 }
@@ -423,12 +477,41 @@ function createStyles(t: ThemeTokens) {
     assetMeta: { color: t.textSecondary, fontSize: 13 },
     loading: { marginTop: 32 },
     empty: { color: t.textSecondary, marginTop: 32, textAlign: "center" },
-    card: { backgroundColor: t.surface, borderRadius: 12, gap: 4, padding: 14 },
-    cardTop: { flexDirection: "row", justifyContent: "space-between" },
-    number: { color: t.textPrimary, fontWeight: "600" },
+    subtitle: { color: t.textSecondary, fontSize: 14 },
+    tiles: { flexDirection: "row", gap: 8 },
+    tile: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      gap: 4,
+      padding: 12,
+    },
+    tileValue: { color: t.textPrimary, fontSize: 24, fontWeight: "700" },
+    tileValueWaiting: { color: t.warning },
+    tileValueClosed: { color: t.accent },
+    tileLabel: { color: t.textSecondary, fontSize: 13 },
+    card: {
+      backgroundColor: t.surface,
+      borderColor: t.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      gap: 4,
+      padding: 16,
+    },
+    cardTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    cardTitleBlock: { flex: 1, gap: 2 },
+    number: { color: t.textSecondary, fontSize: 13 },
     status: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
-    title: { color: t.textPrimary, fontSize: 16 },
+    title: { color: t.textPrimary, fontSize: 17, fontWeight: "700" },
     maintenance: { ...statusBadgeStyle(t), alignSelf: "flex-start" },
+    partner: { color: t.textPrimary, fontSize: 14, marginTop: 6 },
     meta: { color: t.textSecondary, fontSize: 13 },
   });
 }

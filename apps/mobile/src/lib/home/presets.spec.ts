@@ -178,7 +178,8 @@ describe("az alsó sáv minden nézetben ugyanaz", () => {
     );
     assert.match(
       source,
-      /export function BottomNav\(\{ active \}: \{ active: BottomNavItem\["key"\] \}\)/,
+      // its only input is which item is lit, or none on the service screens
+      /export function BottomNav\(\{\s*active,?\s*\}:\s*\{\s*active: BottomNavItem\["key"\] \| null;\s*\}\)/,
     );
   });
 
