@@ -117,8 +117,44 @@ const IBAN = /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/;
 export const looksLikeBankAccount = (value: string): boolean =>
   BANK_ACCOUNT.test(value) || IBAN.test(compactNumber(value));
 
-/** Egy számlaszám alakja: betűvel vagy számmal kezdődik, legalább 3 jel. */
-const NUMBER_TOKEN = /^[#:.\s]*([A-Za-z0-9][A-Za-z0-9\-/_.]{2,39})/;
+/**
+ * Egy számlaszám alakja: betűvel vagy számmal kezdődik, legalább 3 jel. Előtte
+ * a `|` is állhat: a PDF-olvasó (`pdfTextLines`) így választja el a táblázat
+ * celláit. Mérve 2026-10-04 a FleetCor számláin: a „Számla száma |
+ * E0401352892” sorban a címke ezen akadt el, és a szám helyett a fájlnév
+ * tartaléka vitte az ügyfél-azonosítót.
+ */
+const NUMBER_TOKEN = /^[#:.|\s]*([A-Za-z0-9][A-Za-z0-9\-/_.]{2,39})/;
+
+/**
+ * AZ ÜGYFÉL-AZONOSÍTÓ CÍMKÉI. Ami a szövegben ilyen címke után áll, az a MI
+ * azonosítónk a szállítónál, nem a számla száma, akkor sem, ha a levél tárgya
+ * vagy a fájlneve is hordozza (FleetCor: „ügyfélazonosítószám: HU00008659” a
+ * tárgyban, „Ügyfélazonosító szám | HU00008659” a számlán, minden hónapban
+ * ugyanaz).
+ */
+const CUSTOMER_ID_LABELS = [
+  "ügyfélazonosító szám",
+  "ügyfélazonosítószám",
+  "ügyfélazonosító",
+  "ügyfélszám",
+  "vevőkód",
+  "vevőazonosító",
+  "customer number",
+  "customer no",
+  "customer id",
+  "kundennummer",
+];
+
+/** A szövegben ügyfél-azonosítóként címkézett értékek, tömörített alakban. */
+export function customerIds(lines: readonly string[]): Set<string> {
+  const ids = new Set<string>();
+  for (const label of CUSTOMER_ID_LABELS) {
+    const value = labelledValue(lines, label);
+    if (value) ids.add(compactNumber(value));
+  }
+  return ids;
+}
 
 /**
  * Magyar adószám (`12345678-1-12`), vagy EU-s közösségi adószám. Az EU-s alak
@@ -137,6 +173,29 @@ const usable = (value: string | undefined): string | null => {
     : null;
 };
 
+/**
+ * A CÍMKE UTÁNI ÉRTÉK, A CELLÁJÁVAL EGYÜTT MEGÍTÉLVE (2026-10-04, a `|` előtag
+ * bekapcsolásakor az exchange 517 számlaszerű PDF-jén mérve):
+ *
+ *   - ha a cella szóközök nélkül bankszámlaszám, nem számlaszám (OTP: „Ellen-
+ *     oldali számlaszám | 50453331 -10000843 -00000000”);
+ *   - ha az értéket egy ÜRES cella követi, a PDF-olvasó egy értéket vágott
+ *     szét (Stripe: „Invoice number | 53AEF736 |   | 256060”, a számla száma
+ *     53AEF736-256060; a kötőjel helyén NUL karakter áll). A darab nem a szám: minden számlán ugyanaz az előtag
+ *     állna, tehát két különböző számla egy számot kapna. Ilyenkor nincs
+ *     címkézett érték, és a régi út (fájlnév) dönt.
+ */
+function cellValue(text: string): string | null {
+  const match = NUMBER_TOKEN.exec(text);
+  if (!match) return null;
+  const after = text.slice(match[0].length);
+  const cell = `${match[1]}${after.split("|")[0]}`.replace(/\s+/g, "");
+  if (BANK_ACCOUNT.test(cell)) return null;
+  // üres: szóköz vagy vezérlőjel (a Stripe-PDF kötőjele NUL-ként jön át)
+  if (/^[^|]*\|[\s\u0000-\u001f]*\|/.test(after)) return null;
+  return usable(match[1]);
+}
+
 function labelledValue(lines: readonly string[], label: string): string | null {
   for (let i = 0; i < lines.length; i++) {
     const lower = lines[i]!.toLowerCase();
@@ -146,10 +205,10 @@ function labelledValue(lines: readonly string[], label: string): string | null {
       at = lower.indexOf(label, at + 1);
     if (at < 0) continue;
     const rest = lines[i]!.slice(at + label.length);
-    const sameLine = usable(NUMBER_TOKEN.exec(rest)?.[1]);
+    const sameLine = cellValue(rest);
     if (sameLine) return sameLine;
     // a címke alatti sorban áll az érték (táblázatos fejléc)
-    const next = usable(NUMBER_TOKEN.exec(lines[i + 1] ?? "")?.[1]);
+    const next = cellValue(lines[i + 1] ?? "");
     if (!rest.trim() && next) return next;
   }
   return null;
@@ -416,6 +475,7 @@ export function readInvoiceText(
     if (found) return reading(found, "NAV");
   }
   if (labelled) return reading(labelled, "LABEL");
+  const customers = customerIds(lines);
   const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
@@ -424,6 +484,7 @@ export function readInvoiceText(
         token.length >= 5 &&
         /\d/.test(token) &&
         !BANK_ACCOUNT.test(token) &&
+        !customers.has(compactNumber(token)) &&
         compactText.includes(compactNumber(token)),
     );
   return fromName ? reading(fromName, "FILE_NAME") : reading(null, null);
