@@ -161,4 +161,13 @@ describe("file upload authentication", () => {
     FakeXmlHttpRequest.instances[1]!.responseText = "";
     await expect(empty).rejects.toThrow("A szerver válasza nem olvasható.");
   });
+  it("an inventory upload whose success body is unreadable is an error, not an empty result", async () => {
+    const upload = inventoryApi.uploadCounts(
+      "",
+      "count-1",
+      new File(["xlsx"], "inventory.xlsx"),
+    );
+    FakeXmlHttpRequest.instances[0]!.responseText = "";
+    await expect(upload).rejects.toThrow("A szerver válasza nem olvasható.");
+  });
 });
