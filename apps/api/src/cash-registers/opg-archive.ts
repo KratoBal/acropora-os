@@ -51,9 +51,13 @@ export function cmsPayload(input: Buffer): Buffer {
       throw new Error();
     const signed = root.children[1]?.children[0],
       encap = signed?.children[2];
+    // The NAV log files carry the payload under id-digestedData (…010705), not
+    // id-data (…010701): measured on production file 11542, 2026-10-05. The
+    // content is the same OCTET STRING either way; nothing else is accepted.
+    const encapType = encap?.children[0]?.body.toString("hex");
     if (
       encap?.tag !== 48 ||
-      encap.children[0]?.body.toString("hex") !== "2a864886f70d010701"
+      (encapType !== "2a864886f70d010701" && encapType !== "2a864886f70d010705")
     )
       throw new Error();
     const content = encap.children[1];
