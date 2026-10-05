@@ -77,8 +77,11 @@ import { cn } from "./utils";
 export interface RichTextVariable {
   readonly name: string;
   readonly description?: string;
-  /** `"link"`: link celjakent is beilleszheto. */
-  readonly kind?: "link";
+  /**
+   * `"link"`: link celjakent is beilleszheto. `"block"`: a system-built block
+   * that stands alone in its paragraph; the editor inserts it like any other.
+   */
+  readonly kind?: "link" | "block";
 }
 
 export type RichTextToolbarItem =

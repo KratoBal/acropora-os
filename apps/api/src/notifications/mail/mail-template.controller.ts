@@ -17,6 +17,7 @@ import {
   ValidateIf,
 } from "class-validator";
 import {
+  plainTextToRichHtml,
   richHtmlToText,
   richImageIds,
   sanitizeRichHtml,
@@ -24,6 +25,7 @@ import {
 import {
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
+  misplacedBlockVariables,
   mailTemplateEventVariables,
   PERMISSIONS,
   splitTemplateVariables,
@@ -49,6 +51,7 @@ import { MailImageRepository } from "./mail-image.repository.js";
 import { partnerWorksheetLink } from "./partner-portal-link.js";
 import { internalTicketLink } from "./ticket-link.js";
 import { TicketMailRepository } from "./ticket-mail.repository.js";
+import { webshopDefaultTemplate } from "./webshop-mail.content.js";
 import {
   DEFAULT_MATERIAL_REQUEST_CREATED_TEMPLATE,
   DEFAULT_MATERIAL_REQUEST_RECEIVED_TEMPLATE,
@@ -146,7 +149,14 @@ export function sampleLinks(environment: NodeJS.ProcessEnv) {
  * csendben a MASIK esemeny sablonjat adna vissza -- es az a fajta hiba, ami
  * csak akkor derul ki, amikor valaki mar at is irta.
  */
-function alapertelmezes(id: string) {
+function alapertelmezes(id: string): {
+  subject: string;
+  body: string;
+  bodyHtml?: string;
+} {
+  /* the webshop's defaults are HTML, kept with their key (webshop-mail.content.ts) */
+  const webshop = webshopDefaultTemplate(id);
+  if (webshop) return webshop;
   switch (id) {
     case WORKSHEET_SIGNED:
       return DEFAULT_WORKSHEET_SIGNED_TEMPLATE;
@@ -222,6 +232,7 @@ export class MailTemplateController {
     if (!isMailTemplateEvent(id))
       throw new NotFoundException("Nincs ilyen levélsablon.");
     const tarolt = await this.repository.template(id);
+    const alap = alapertelmezes(id);
     return {
       id,
       /*
@@ -231,13 +242,13 @@ export class MailTemplateController {
         olvas, azt meg senki nem irta.
       */
       source: tarolt ? "stored" : "default",
-      ...(tarolt ?? alapertelmezes(id)),
+      ...(tarolt ?? alap),
       /*
         KIFEJEZETTEN `null`, HA NINCS. Az alapertelmezesnek nincs HTML-je, es a
         szerkesztonek tudnia kell, hogy a `body`-t kell-e atalakitania -- egy
         hianyzo kulcs es egy `null` itt ugyanazt jelenti, de a `null` kiirva all.
       */
-      bodyHtml: tarolt?.bodyHtml ?? null,
+      bodyHtml: tarolt ? (tarolt.bodyHtml ?? null) : (alap.bodyHtml ?? null),
       /*
         AZ ALAPERTELMEZES A TAROLT ERTEK MELLE MEGY, NEM HELYETTE.
 
@@ -255,7 +266,7 @@ export class MailTemplateController {
         marad: lathato, szerzos, visszakereseheto -- es a szerkeszto latja, mit
         ment, mielott megnyomja.
       */
-      defaultTemplate: alapertelmezes(id),
+      defaultTemplate: alap,
       /** A link-valtozok mintaja: a valodi level webcimevel es utvonalaval. */
       sampleLinks: sampleLinks(this.environment),
       // only what THIS event's send path fills in (2026-09-29)
@@ -305,7 +316,8 @@ export class MailTemplateController {
       alairasi es az "anyag beerkezett" sablon menteSEN, es mindket level
       kimaradt elesen: a kuldesi ut nem adta.
     */
-    const hasznalhato = mailTemplateEventVariables(id).map((v) => v.name);
+    const esemenyValtozok = mailTemplateEventVariables(id);
+    const hasznalhato = esemenyValtozok.map((v) => v.name);
     const ismeretlen = [
       ...unknownTemplateVariables(input.subject, hasznalhato),
       ...unknownTemplateVariables(torzs.bodyHtml ?? torzs.body, hasznalhato),
@@ -313,6 +325,31 @@ export class MailTemplateController {
     if (ismeretlen.length)
       throw new BadRequestException(
         `Ebben a levélben nem használható változó: ${[...new Set(ismeretlen)].join(", ")}. Ennél a levélnél használható: ${hasznalhato.join(", ")}.`,
+      );
+
+    /*
+      A BLOCK IS SYSTEM-BUILT MARKUP: it stands alone in a paragraph, and never
+      in the subject (a header line). Checked here, so the webshop's mail is
+      not the place it turns out.
+    */
+    const blokkok = esemenyValtozok
+      .filter((v) => v.kind === "block")
+      .map((v) => v.name);
+    const targyBlokk = blokkok.filter((n) =>
+      new RegExp(`\\{\\{\\s*${n}\\s*\\}\\}`).test(input.subject),
+    );
+    if (targyBlokk.length)
+      throw new BadRequestException(
+        `A tárgyban nem állhat blokk: ${targyBlokk.map((n) => `{{${n}}}`).join(", ")}.`,
+      );
+    const rosszHelyen = misplacedBlockVariables(
+      torzs.bodyHtml ??
+        plainTextToRichHtml(torzs.body, { variables: hasznalhato }),
+      blokkok,
+    );
+    if (rosszHelyen.length)
+      throw new BadRequestException(
+        `A blokk csak külön bekezdésben állhat: ${rosszHelyen.map((n) => `{{${n}}}`).join(", ")}. Tedd egy üres sorba, szöveg nélkül.`,
       );
 
     await this.repository.saveTemplate({
