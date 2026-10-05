@@ -205,7 +205,7 @@ export function WebshopOrdersPage() {
     return (
       <Alert
         variant="danger"
-        title="Nincs hozzáférésed a webshop rendelésekhez"
+        title="Nincs hozzáférésed az UNAS megrendelésekhez"
         description="A megnyitáshoz orders.view jogosultság szükséges."
       />
     );
@@ -218,7 +218,7 @@ export function WebshopOrdersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Webshop rendelések"
+        title="UNAS Megrendelések"
         description="A UNAS-ból automatikusan (5 percenként) szinkronizált rendelések"
         actions={
           canManage ? (
