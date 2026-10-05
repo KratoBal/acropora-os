@@ -676,6 +676,14 @@ export interface MedusaOrderBusinessStatus {
   }[];
 }
 
+/** Egy változat a cseréhez (`GET /admin/product-variants`). */
+export interface MedusaVariantSearchRow {
+  id: string;
+  title: string | null;
+  sku: string | null;
+  product?: { title: string | null } | null;
+}
+
 /** A státuszlevél sorsa a webshop válaszában (commerce #479). */
 export type MedusaStatusNotification =
   { sent: true } | { sent: false; reason: string };
@@ -763,6 +771,28 @@ export interface MedusaAdminClient {
    * commerce #479), új kulccsal.
    */
   resendStatusNotification(id: string): Promise<MedusaStatusNotification>;
+  /**
+   * A RENDELÉS SZERKESZTÉSE a Medusa saját útján (`/admin/order-edits`, a
+   * `:id` a RENDELÉS azonosítója): megnyitás, tétel-mennyiség (0 = törlés),
+   * új tétel, kérés, megerősítés, és visszavonás. A megerősítés előtt a
+   * commerce őre áll (#482: a kártyás zárolás megmarad).
+   */
+  beginOrderEdit(orderId: string, description: string): Promise<void>;
+  setOrderEditItemQuantity(
+    orderId: string,
+    itemId: string,
+    quantity: number,
+  ): Promise<void>;
+  addOrderEditItem(
+    orderId: string,
+    variantId: string,
+    quantity: number,
+  ): Promise<void>;
+  requestOrderEdit(orderId: string): Promise<void>;
+  confirmOrderEdit(orderId: string): Promise<void>;
+  cancelOrderEdit(orderId: string): Promise<void>;
+  /** Termékváltozat keresése név vagy cikkszám szerint (a tétel cseréjéhez). */
+  searchVariants(query: string): Promise<MedusaVariantSearchRow[]>;
   /**
    * A „FELADTUK A CSOMAGODAT” LEVÉL (`POST /admin/order-shipping-notice/:id`,
    * commerce #477). A webshop küldi, rendelés és csomagszám párra egyszer
@@ -1515,6 +1545,71 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify({ status, notify_customer: notifyCustomer }),
     });
     return body.notification ?? { sent: false, reason: "unknown" };
+  }
+
+  async beginOrderEdit(orderId: string, description: string): Promise<void> {
+    await this.request<unknown>("/admin/order-edits", {
+      method: "POST",
+      body: JSON.stringify({ order_id: orderId, description }),
+    });
+  }
+
+  async setOrderEditItemQuantity(
+    orderId: string,
+    itemId: string,
+    quantity: number,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-edits/${encodeURIComponent(orderId)}/items/item/${encodeURIComponent(itemId)}`,
+      { method: "POST", body: JSON.stringify({ quantity }) },
+    );
+  }
+
+  async addOrderEditItem(
+    orderId: string,
+    variantId: string,
+    quantity: number,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-edits/${encodeURIComponent(orderId)}/items`,
+      {
+        method: "POST",
+        body: JSON.stringify({ items: [{ variant_id: variantId, quantity }] }),
+      },
+    );
+  }
+
+  async requestOrderEdit(orderId: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-edits/${encodeURIComponent(orderId)}/request`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+  }
+
+  async confirmOrderEdit(orderId: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-edits/${encodeURIComponent(orderId)}/confirm`,
+      { method: "POST", body: JSON.stringify({}) },
+    );
+  }
+
+  async cancelOrderEdit(orderId: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-edits/${encodeURIComponent(orderId)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  async searchVariants(query: string): Promise<MedusaVariantSearchRow[]> {
+    const params = new URLSearchParams({
+      q: query,
+      fields: "id,title,sku,product.title",
+      limit: "20",
+    });
+    const body = await this.request<{ variants?: MedusaVariantSearchRow[] }>(
+      `/admin/product-variants?${params.toString()}`,
+    );
+    return body.variants ?? [];
   }
 
   async resendStatusNotification(

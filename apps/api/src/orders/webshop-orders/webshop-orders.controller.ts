@@ -15,7 +15,12 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { WebshopOrderStatusChangeDto } from "./dto/webshop-order-status-change.dto.js";
 import { WebshopOrderListQueryDto } from "./dto/webshop-order-list-query.dto.js";
+import {
+  WebshopOrderLineEditDto,
+  lineEditOf,
+} from "./dto/webshop-order-line-edit.dto.js";
 import { WebshopOrderParcelCreateDto } from "./dto/webshop-order-parcel-create.dto.js";
+import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -27,7 +32,31 @@ export class WebshopOrdersController {
     private readonly orders: WebshopOrdersService,
     private readonly invoices: WebshopOrderInvoiceService,
     private readonly parcels: WebshopOrderParcelService,
+    private readonly lines: WebshopOrderLinesService,
   ) {}
+
+  /**
+   * TÉTELMŰVELET (mennyiség, csere, törlés) a webshop szerkesztési útján, a
+   * Kiszállítás előtt. A válasz a friss adatlap.
+   */
+  @Post(":id/lines/:itemId")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  editLine(
+    @Param("id") id: string,
+    @Param("itemId") itemId: string,
+    @Body() body: WebshopOrderLineEditDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.lines.edit(id, itemId, lineEditOf(body), user);
+  }
+
+  /** Termékváltozatok a tétel cseréjéhez (név vagy cikkszám). */
+  @Get(":id/replacement-variants")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  replacementVariants(@Query("q") query = "") {
+    return this.lines.variants(query);
+  }
 
   @Get()
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)

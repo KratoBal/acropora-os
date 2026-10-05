@@ -13,6 +13,7 @@ import type {
   MedusaOrderBusinessStatus,
   MedusaOrderDetailRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
+import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
   STORE_PICKUP_METHOD,
   isStale,
@@ -350,6 +351,14 @@ export function toDetail(input: {
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
     parcel: facts.parcel,
+    lineEdit: (() => {
+      const reason = lineEditRefusal({
+        status: code,
+        invoice: facts.invoice,
+        parcel: facts.parcel,
+      });
+      return { allowed: reason === null, reason };
+    })(),
     steps: stepsOf(
       code,
       shipping.storePickup,

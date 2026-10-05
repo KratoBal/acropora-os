@@ -288,6 +288,11 @@ export interface WebshopOrderDetail {
   } | null;
   /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
   parcel: WebshopOrderParcel | null;
+  /**
+   * Módosíthatók-e most a tételek (mennyiség, csere, törlés), és ha nem,
+   * miért (Rendelések, 6. PR).
+   */
+  lineEdit: { allowed: boolean; reason: string | null };
   steps: WebshopOrderStep[];
   relatedOrder: {
     id: string;
@@ -339,4 +344,17 @@ export interface WebshopOrderParcelResult {
 export interface WebshopOrderParcelCreate {
   /** Csak Foxpostnál; ha nincs, a szállító alapértéke. */
   size?: WebshopParcelSize;
+}
+
+/** Egy tételművelet (Rendelések, 6. PR). */
+export type WebshopOrderLineEdit =
+  | { kind: "quantity"; quantity: number }
+  | { kind: "remove" }
+  | { kind: "replace"; variantId: string; quantity: number };
+
+/** Egy termékváltozat a cseréhez. */
+export interface WebshopVariantOption {
+  variantId: string;
+  title: string;
+  sku: string | null;
 }

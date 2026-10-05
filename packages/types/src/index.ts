@@ -1147,6 +1147,8 @@ export type {
   WebshopOrderParcelCreate,
   WebshopOrderParcelResult,
   WebshopOrderMailState,
+  WebshopOrderLineEdit,
+  WebshopVariantOption,
   WebshopOrderStatusChangeResult,
   WebshopStatusMailOutcome,
   WebshopParcelSize,
