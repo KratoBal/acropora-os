@@ -3,6 +3,7 @@
 import type { ConversationListItem, ConversationPerson } from "@acropora/types";
 
 import { conversationTimeLabel, previewText } from "./outbox";
+import { contextSubtitle } from "./phase4";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
 export function conversationName(
@@ -85,6 +86,11 @@ export function ConversationRow({
             </span>
           ) : null}
         </span>
+        {item.contextType ? (
+          <span className="block truncate text-xs text-pilot-accent-warm-text">
+            {contextSubtitle(item.contextType)}
+          </span>
+        ) : null}
         <span className="block truncate text-xs text-pilot-grey-600">
           {lastMessagePreview(item)}
         </span>

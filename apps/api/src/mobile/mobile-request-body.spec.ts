@@ -391,6 +391,27 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  /** A 4. fázis (2026-10-05): kapcsolás munkalaphoz vagy hibajegyhez, és tag felvétele. */
+  {
+    mit: "kapcsolás",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "LinkContextInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "LinkContextDto",
+    kontroll: ["type", "id"],
+    mobilMinimum: 2,
+    dtoMinimum: 2,
+  },
+  {
+    mit: "tag felvétele",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "AddMembersInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "AddMembersDto",
+    kontroll: ["userIds"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -509,7 +530,8 @@ const PAROK: readonly Par[] = [
  */
 // 2026-10-05: 28 -> 30, az Üzenetek 2. fázisa: szerkesztés és reakció, mindkettő párral
 // 2026-10-05: 30 -> 32, az Üzenetek 3. fázisa: továbbítás és értesítési beállítás, mindkettő párral
-const IRAS_HIVASOK_MA = 32;
+// 2026-10-05: 32 -> 34, az Üzenetek 4. fázisa: kapcsolás és tag felvétele, mindkettő párral
+const IRAS_HIVASOK_MA = 34;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

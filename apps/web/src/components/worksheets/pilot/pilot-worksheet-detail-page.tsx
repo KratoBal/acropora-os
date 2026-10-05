@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
+import { ContextConversationButton } from "@/components/messages/context-conversation-button";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "../worksheet-entries";
 import { WorksheetMaterialRequests } from "../worksheet-material-requests";
@@ -279,6 +280,7 @@ export function PilotWorksheetDetailPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <ContextConversationButton kind="worksheet" objectId={worksheet.id} />
           {canHide ? (
             <PilotButton
               variant="secondary"
