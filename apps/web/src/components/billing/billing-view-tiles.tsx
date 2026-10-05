@@ -21,7 +21,7 @@ const TILES: Record<BillingView, { title: string; subtitle: string }> = {
   },
   nyugtak: {
     title: "Nyugták",
-    subtitle: "Számlázz.hu-ból naponta, kötegelve érkező nyugták",
+    subtitle: "Pénztárgépes és Számlázz.hu nyugták",
   },
 };
 

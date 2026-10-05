@@ -66,7 +66,7 @@ const VIEW_DESCRIPTIONS: Record<BillingView, string> = {
     "Kiállított és előkészítés alatt lévő számlák, díjbekérők, előlegszámlák és szállítólevelek.",
   bejovo:
     "Beszállítói számlák a Számlázz.hu pénzügyi adatkapcsolatból, banki párosítási és fizetési állapotokkal.",
-  nyugtak: "A Számlázz.hu-ból naponta, kötegelve érkező nyugták.",
+  nyugtak: "Pénztárgépes és Számlázz.hu-ból érkező nyugták.",
 };
 
 /**

@@ -7974,3 +7974,105 @@ model ServiceDraftAttachment {
 
   @@unique([draftId, sha256])
 }
+
+/// NAV OPG imports are separate from invoices and POS stock movements.
+enum CashRegisterReceiptKind {
+  SALE
+  STORNO
+  RETURN
+}
+
+enum CashRegisterSyncStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model CashRegister {
+  apNumber       String             @id
+  lastFileNumber Int?
+  lastSeenAt     DateTime?
+  files          CashRegisterFile[]
+  gaps           CashRegisterGap[]
+}
+
+model CashRegisterFile {
+  id             String                @id @default(cuid())
+  apNumber       String
+  fileNumber     Int
+  fileName       String
+  validationCode String
+  fetchedAt      DateTime              @default(now())
+  /// Original extracted OPGN XML, gzipped for deterministic local re-parsing.
+  payloadGzip    Bytes
+  payloadSha256  String                @db.VarChar(64)
+  register       CashRegister          @relation(fields: [apNumber], references: [apNumber], onDelete: Restrict)
+  receipts       CashRegisterReceipt[]
+
+  @@unique([apNumber, fileNumber])
+}
+
+model CashRegisterReceipt {
+  id            String                    @id @default(cuid())
+  apNumber      String
+  fileId        String
+  receiptNumber String
+  issuedAt      DateTime                  @db.Timestamptz(3)
+  /// Hungarian business day, derived from the receipt timestamp.
+  businessDay   DateTime                  @db.Date
+  total         Decimal                   @db.Decimal(20, 4)
+  paymentMeans  String
+  /// Exact category/amount pairs; no product or POS reconciliation.
+  payments      Json
+  cancelled     Boolean                   @default(false)
+  kind          CashRegisterReceiptKind
+  navCheckCode  String?
+  file          CashRegisterFile          @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  lines         CashRegisterReceiptLine[]
+
+  @@unique([apNumber, receiptNumber, fileId])
+  @@index([businessDay, issuedAt, id])
+}
+
+model CashRegisterReceiptLine {
+  id        String              @id @default(cuid())
+  receiptId String
+  position  Int
+  name      String
+  unitPrice Decimal             @db.Decimal(20, 4)
+  quantity  Decimal             @db.Decimal(20, 6)
+  sum       Decimal             @db.Decimal(20, 4)
+  vatCode   String
+  receipt   CashRegisterReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@unique([receiptId, position])
+}
+
+/// Permanent missing ranges are displayed, never hidden by advancing a cursor.
+model CashRegisterGap {
+  id             String       @id @default(cuid())
+  apNumber       String
+  fromFileNumber Int
+  toFileNumber   Int
+  detectedAt     DateTime     @default(now())
+  reason         String
+  register       CashRegister @relation(fields: [apNumber], references: [apNumber], onDelete: Restrict)
+
+  @@unique([apNumber, fromFileNumber, toFileNumber])
+}
+
+model CashRegisterSyncRun {
+  id              String                 @id @default(cuid())
+  activeKey       String?                @unique
+  status          CashRegisterSyncStatus @default(RUNNING)
+  startedAt       DateTime               @default(now())
+  completedAt     DateTime?
+  trigger         String
+  filesFetched    Int                    @default(0)
+  receiptsCreated Int                    @default(0)
+  gapsRecorded    Int                    @default(0)
+  errorCode       String?
+  updatedAt       DateTime               @updatedAt
+
+  @@index([startedAt])
+}

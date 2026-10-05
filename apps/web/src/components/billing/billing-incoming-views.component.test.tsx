@@ -33,6 +33,16 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   incomingList: vi.fn(),
   receipts: vi.fn(),
+  cashRegisterReceipts: vi.fn().mockResolvedValue({
+    day: "2026-10-03",
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    items: [],
+    summary: { count: 0, total: "0", payments: [] },
+    gaps: [],
+    lastRun: null,
+  }),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -284,6 +294,7 @@ describe("the receipts view", () => {
   it("says no receipt has arrived yet, or how many arrived and why they are not shown", async () => {
     urlNavigation.reset("/penzugy/szamlazas", "nezet=nyugtak");
     const { unmount } = render(<BillingDocumentListPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Számlázz.hu" }));
     expect(
       await screen.findByText("Még nem érkezett nyugta az adatkapcsolaton"),
     ).toBeInTheDocument();
@@ -292,6 +303,7 @@ describe("the receipts view", () => {
 
     api.receipts.mockResolvedValue({ received: 3, items: [] });
     render(<BillingDocumentListPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Számlázz.hu" }));
     expect(
       await screen.findByText("3 nyugta érkezett az adatkapcsolaton"),
     ).toBeInTheDocument();

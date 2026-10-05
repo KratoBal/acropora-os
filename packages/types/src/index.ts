@@ -1069,3 +1069,4 @@ export type {
 } from "./service-drafts.js";
 
 export { serviceJobReporterName } from "./service-job-reporter.js";
+export type { CashRegisterReceiptListResponse } from "./cash-registers.js";

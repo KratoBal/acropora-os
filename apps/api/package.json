@@ -51,7 +51,8 @@
     "billing:external-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/external-billing-backfill.cli.js",
     "worksheets:sheets": "tsc -p tsconfig.json && node --env-file=../../.env dist/worksheets/worksheet-sheet-backfill.cli.js",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist test-dist"
+    "clean": "rm -rf dist test-dist",
+    "nav:opg-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/cash-registers/cash-register-backfill.cli.js"
   },
   "dependencies": {
     "@acropora/database": "workspace:*",
