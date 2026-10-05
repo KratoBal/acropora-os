@@ -79,23 +79,28 @@ export interface WebshopOrderFacts {
   /** CSAK a kiállított számla száma: a vázlat még nem számla. */
   invoiceNumber: string | null;
   invoice: WebshopOrderDetail["invoice"];
+  /** CSAK a létrejött csomag (van csomagszáma): a foglalás még nem csomag. */
   hasParcel: boolean;
+  parcel: WebshopOrderDetail["parcel"];
 }
 export const NO_FACTS: WebshopOrderFacts = {
   invoiceNumber: null,
   invoice: null,
   hasParcel: false,
+  parcel: null,
 };
 
-/** A tények a rendelés számlájából (a küldemény a csomagfeladással jön). */
+/** A tények a rendelés számlájából és aktív csomagjából. */
 export function factsOf(
   invoice: WebshopOrderDetail["invoice"] | undefined,
+  parcel: WebshopOrderDetail["parcel"] = null,
 ): WebshopOrderFacts {
   return {
     invoiceNumber:
       invoice?.status === "ISSUED" ? (invoice.number ?? null) : null,
     invoice: invoice ?? null,
-    hasParcel: false,
+    hasParcel: !!parcel?.parcelNumber,
+    parcel,
   };
 }
 

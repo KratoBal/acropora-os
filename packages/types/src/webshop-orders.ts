@@ -260,6 +260,8 @@ export interface WebshopOrderDetail {
     status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
     number: string | null;
   } | null;
+  /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
+  parcel: WebshopOrderParcel | null;
   steps: WebshopOrderStep[];
   relatedOrder: {
     id: string;
@@ -267,4 +269,48 @@ export interface WebshopOrderDetail {
     role: "pickup" | "parent";
   } | null;
   history: WebshopOrderHistoryEntry[];
+}
+
+/** Foxpost csomagméret (a szállító OpenAPI-ja szerint); GLS-nél nincs. */
+export const WEBSHOP_PARCEL_SIZES = ["xs", "s", "m", "l", "xl"] as const;
+export type WebshopParcelSize = (typeof WEBSHOP_PARCEL_SIZES)[number];
+
+/**
+ * A RENDELÉS CSOMAGJA, ahogy az adatlap látja. A `parcelNumber` `null`, amíg a
+ * létrehozás fut, vagy ha a kimenete bizonytalan (a szállítónál létrejöhetett):
+ * ilyenkor új csomag csak kifejezett feloldás után indítható.
+ */
+export interface WebshopOrderParcel {
+  carrier: "FOXPOST" | "GLS";
+  /** A fuvarozói referencia: a rendelésszám. */
+  reference: string;
+  parcelNumber: string | null;
+  /** Alszolgáltatói (`STUB-`) csomag: nem valódi, levél nem megy róla. */
+  stub: boolean;
+  size: string | null;
+  codHuf: number | null;
+  createdAt: string;
+}
+
+/**
+ * A „Feladtuk a csomagodat” levél sorsa a csomag létrehozása után. A webshop
+ * okai mellé az OS kettőt tesz: `stub` (teszt-csomagszámról nem megy levél)
+ * és `failed` (a webshop nem volt elérhető; a csomag ettől még létrejött).
+ */
+export type WebshopShippingNoticeOutcome =
+  | { sent: true }
+  | {
+      sent: false;
+      reason:
+        "mail_off" | "no_email" | "already_sent" | "stub" | "failed" | string;
+    };
+
+export interface WebshopOrderParcelResult {
+  order: WebshopOrderDetail;
+  notice: WebshopShippingNoticeOutcome;
+}
+
+export interface WebshopOrderParcelCreate {
+  /** Csak Foxpostnál; ha nincs, a szállító alapértéke. */
+  size?: WebshopParcelSize;
 }

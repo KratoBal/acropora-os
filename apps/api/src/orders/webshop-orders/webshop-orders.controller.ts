@@ -2,10 +2,12 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Param,
   Post,
   Query,
+  StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -13,7 +15,9 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { WebshopOrderStatusChangeDto } from "./dto/webshop-order-status-change.dto.js";
 import { WebshopOrderListQueryDto } from "./dto/webshop-order-list-query.dto.js";
+import { WebshopOrderParcelCreateDto } from "./dto/webshop-order-parcel-create.dto.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
+import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 
 /** Webshop / Rendelések: az új webshop rendelései (nem a UNAS-é, az a `integrations/unas/orders`). */
@@ -22,6 +26,7 @@ export class WebshopOrdersController {
   constructor(
     private readonly orders: WebshopOrdersService,
     private readonly invoices: WebshopOrderInvoiceService,
+    private readonly parcels: WebshopOrderParcelService,
   ) {}
 
   @Get()
@@ -60,5 +65,45 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.invoices.issue(id, user);
+  }
+
+  /**
+   * CSOMAGFELADÁS: a szállítónál létrejön a csomag (a számla után), és a
+   * webshop elküldi a „Feladtuk” levelet. A válasz a friss adatlap és a levél
+   * sorsa.
+   */
+  @Post(":id/parcel")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  createParcel(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderParcelCreateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.parcels.create(id, body.size, user);
+  }
+
+  /** A címke: a meglévő csomagé, újranyomtatáshoz is. */
+  @Get(":id/parcel/label")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  @Header("Cache-Control", "private, no-store")
+  async parcelLabel(@Param("id") id: string) {
+    const bytes = await this.parcels.label(id);
+    return new StreamableFile(bytes, {
+      type: "application/pdf",
+      length: bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(`cimke-${id}.pdf`)}`,
+    });
+  }
+
+  /** A bizonytalan foglalás feloldása, miután a szállító felületén megnézték. */
+  @Post(":id/parcel/release")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  releaseParcel(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.parcels.release(id, user);
   }
 }
