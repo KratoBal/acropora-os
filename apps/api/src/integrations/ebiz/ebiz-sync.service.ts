@@ -20,6 +20,7 @@ import {
   EbizError,
   type EbizInvoiceListItem,
 } from "./ebiz.client.js";
+import { invoiceNumberKey } from "../../billing/external-billing-one-row.js";
 import {
   ebizListFields,
   ebizNewRow,
@@ -65,11 +66,16 @@ export interface EbizSyncStore {
   startRun(trigger: SyncRunTrigger): Promise<string>;
   finishRun(id: string, counts: EbizSyncCounts): Promise<void>;
   failRun(id: string, counts: EbizSyncCounts, errorCode: string): Promise<void>;
+  /**
+   * The rows these eBIZ ids already have, keyed by the eBIZ id: their own
+   * EBIZ rows, and the Számlázz.hu rows they were linked to (`ebizExternalId`).
+   */
   existing(externalIds: string[]): Promise<
     Map<
       string,
       {
         id: string;
+        source: string;
         pdfStorageKey: string | null;
         cancelled: boolean;
         externalPaymentStatus: string | null;
@@ -77,6 +83,15 @@ export interface EbizSyncStore {
       }
     >
   >;
+  /**
+   * The Számlázz.hu rows of these invoice numbers that no eBIZ id is linked to
+   * yet, keyed by `invoiceNumberKey` (one own invoice number, one row).
+   */
+  szamlazzTwins(
+    invoiceNumbers: string[],
+  ): Promise<Map<string, { id: string; pdfStorageKey: string | null }>>;
+  /** Records on a Számlázz.hu row the eBIZ id of the same invoice. */
+  linkEbiz(id: string, ebizExternalId: string): Promise<void>;
   create(data: ReturnType<typeof ebizNewRow>): Promise<{ id: string }>;
   update(id: string, data: Record<string, unknown>): Promise<void>;
   setPdf(
@@ -146,8 +161,24 @@ export class EbizSyncService {
       const known = await this.store.existing(
         invoices.map((invoice) => String(invoice.id)),
       );
+      const twins = await this.store.szamlazzTwins(
+        invoices
+          .filter((invoice) => !known.has(String(invoice.id)))
+          .map((invoice) => invoice.invoiceNumber),
+      );
       for (const invoice of invoices) {
         const row = known.get(String(invoice.id));
+        const twin = row
+          ? undefined
+          : twins.get(invoiceNumberKey(invoice.invoiceNumber));
+        if (twin) {
+          // Számlázz.hu already has this invoice: no second row, only the PDF
+          await this.store.linkEbiz(twin.id, String(invoice.id));
+          counts.updatedCount++;
+          if (!twin.pdfStorageKey)
+            await this.storePdf(twin.id, invoice, counts);
+          continue;
+        }
         if (!row) {
           let detail = null;
           try {
@@ -165,7 +196,8 @@ export class EbizSyncService {
           await this.storePdf(created.id, invoice, counts);
           continue;
         }
-        if (this.changed(invoice, row)) {
+        // a Számlázz.hu row keeps Számlázz.hu's data and payments
+        if (row.source === "EBIZ" && this.changed(invoice, row)) {
           const payment = ebizPayment(invoice, null);
           await this.store.update(row.id, {
             ...ebizListFields(invoice),
@@ -320,10 +352,17 @@ export class PrismaEbizSyncStore implements EbizSyncStore {
 
   async existing(externalIds: string[]) {
     const rows = await prisma.externalBillingDocument.findMany({
-      where: { source: "EBIZ", externalId: { in: externalIds } },
+      where: {
+        OR: [
+          { source: "EBIZ", externalId: { in: externalIds } },
+          { ebizExternalId: { in: externalIds } },
+        ],
+      },
       select: {
         id: true,
+        source: true,
         externalId: true,
+        ebizExternalId: true,
         pdfStorageKey: true,
         cancelled: true,
         externalPaymentStatus: true,
@@ -331,11 +370,41 @@ export class PrismaEbizSyncStore implements EbizSyncStore {
       },
     });
     return new Map(
-      rows.map((row) => [
-        row.externalId,
+      rows.map(({ ebizExternalId, externalId, ...row }) => [
+        row.source === "EBIZ" ? externalId : ebizExternalId!,
         { ...row, grossAmount: row.grossAmount.toFixed(2) },
       ]),
     );
+  }
+
+  async szamlazzTwins(invoiceNumbers: string[]) {
+    if (invoiceNumbers.length === 0) return new Map();
+    const rows = await prisma.externalBillingDocument.findMany({
+      where: {
+        source: "SZAMLAZZ",
+        ebizExternalId: null,
+        documentNumber: { in: invoiceNumbers },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, documentNumber: true, pdfStorageKey: true },
+    });
+    const twins = new Map<
+      string,
+      { id: string; pdfStorageKey: string | null }
+    >();
+    for (const row of rows) {
+      const key = invoiceNumberKey(row.documentNumber);
+      if (!twins.has(key))
+        twins.set(key, { id: row.id, pdfStorageKey: row.pdfStorageKey });
+    }
+    return twins;
+  }
+
+  async linkEbiz(id: string, ebizExternalId: string): Promise<void> {
+    await prisma.externalBillingDocument.update({
+      where: { id },
+      data: { ebizExternalId },
+    });
   }
 
   async create(data: ReturnType<typeof ebizNewRow>) {

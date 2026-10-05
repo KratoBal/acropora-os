@@ -7551,11 +7551,18 @@ model ExternalBillingDocument {
   /// EBIZ: a forrás saját fizetési állapota (`paymentStatus`: PAID,
   /// WAITING_FOR_PAYMENT, EXPIRED, NONE), nyersen; a lista ebből vetít.
   externalPaymentStatus String?
+  /// EGY SZÁMLASZÁM EGY SOR (acrobot 26208, 2026-10-05): ha a Számlázz.hu és az
+  /// eBIZ ugyanazt a saját számlát hozza, a sor a Számlázz.hu-é (`source`
+  /// SZAMLAZZ, a fizetési adatok onnan), és ez az eBIZ azonosítója, amiből a PDF
+  /// jött. Ezen találja meg a következő eBIZ-szinkron, hogy ne hozzon létre
+  /// második sort. `null`: az eBIZ nem hozta, vagy a sor maga EBIZ forrású.
+  ebizExternalId        String?   @unique
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
   @@unique([source, externalId])
   @@index([issueDate])
+  @@index([documentNumber])
 }
 
 enum EbizSyncRunStatus {
