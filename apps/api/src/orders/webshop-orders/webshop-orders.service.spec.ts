@@ -12,6 +12,7 @@ import {
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { MedusaConnectionError } from "../../integrations/medusa/medusa-connection.types.js";
 import type { MedusaCredentialProvider } from "../../integrations/medusa/medusa-credential.provider.js";
+import type { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   OVERVIEW_MAX_PAGES,
   OVERVIEW_PAGE_SIZE,
@@ -26,6 +27,9 @@ import {
   számolódnak; a lap nem a kért szelet.
 */
 const NOW = new Date("2026-10-05T12:00:00.000Z");
+const NO_AUDIT = {
+  recordStatusChange: async () => undefined,
+} as unknown as WebshopOrdersRepository;
 const order = (n: number, status = "confirmed"): MedusaOrderOverviewRow => ({
   id: `order_${n}`,
   display_id: n,
@@ -79,7 +83,10 @@ function service(
       return { apiKey: "sk_test", source: "database", revision: "r1" };
     },
   } as unknown as MedusaCredentialProvider;
-  return { orders: new WebshopOrdersService(credentials, () => client), asked };
+  return {
+    orders: new WebshopOrdersService(credentials, NO_AUDIT, () => client),
+    asked,
+  };
 }
 
 describe("WebshopOrdersService.list", () => {
@@ -234,7 +241,7 @@ describe("WebshopOrdersService.detail", () => {
       resolve: async () => ({ apiKey: "k", source: "database", revision: "r" }),
     } as unknown as MedusaCredentialProvider;
     return {
-      orders: new WebshopOrdersService(credentials, () => client),
+      orders: new WebshopOrdersService(credentials, NO_AUDIT, () => client),
       counted,
     };
   }
@@ -280,6 +287,165 @@ describe("WebshopOrdersService.detail", () => {
     assert.deepEqual(
       [guest.counted, result.customer.guest, result.customer.isNew],
       [[], true, false],
+    );
+  });
+});
+
+/*
+  A STÁTUSZVÁLTÁS. MI PIROSÍT: egy nem megengedett cél eljut a webshopig
+  (egy elavult lapról); a webshop levonási hibája elvész, vagy angolul,
+  mondat nélkül jön; a sikertelen váltás is auditsort ír; a sikeres nem írja
+  le, KI és honnan hová léptette.
+*/
+describe("WebshopOrdersService.changeStatus", () => {
+  function statusService(
+    options: {
+      transitionError?: MedusaAdminHttpError;
+      noStatus?: boolean;
+    } = {},
+  ) {
+    const sent: { id: string; status: string }[] = [];
+    const audited: unknown[] = [];
+    const client = {
+      order: async () => ({
+        id: "order_38",
+        display_id: 38,
+        created_at: "2026-10-05T10:00:00.000Z",
+        email: "x@example.hu",
+        currency_code: "huf",
+        customer_id: null,
+        metadata: null,
+        total: 1000,
+        subtotal: 1000,
+        discount_total: 0,
+        shipping_total: 0,
+        shipping_address: null,
+        billing_address: null,
+        items: [],
+        shipping_methods: [],
+        payment_collections: [],
+      }),
+      orderBusinessStatus: async () =>
+        options.noStatus
+          ? null
+          : {
+              order_id: "order_38",
+              status: "stocking",
+              label: "Készletezés alatt",
+              changed_at: "2026-10-05T10:00:00.000Z",
+              next_statuses: [
+                { status: "out_for_delivery", label: "Kiszállítás" },
+                {
+                  status: "closed_unsuccessfully",
+                  label: "Sikertelenül lezárt rendelés",
+                },
+              ],
+              history: [],
+            },
+      transitionBusinessStatus: async (id: string, status: string) => {
+        if (options.transitionError) throw options.transitionError;
+        sent.push({ id, status });
+      },
+      countCustomerOrders: async () => 0,
+    } as unknown as MedusaAdminClient;
+    const credentials = {
+      resolve: async () => ({ apiKey: "k", source: "database", revision: "r" }),
+    } as unknown as MedusaCredentialProvider;
+    const repository = {
+      recordStatusChange: async (input: unknown) => void audited.push(input),
+    } as unknown as WebshopOrdersRepository;
+    return {
+      orders: new WebshopOrdersService(credentials, repository, () => client),
+      sent,
+      audited,
+    };
+  }
+
+  it("an allowed step goes to the webshop and the OS records who moved it, from where to where", async () => {
+    const { orders, sent, audited } = statusService();
+    const detail = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      NOW,
+    );
+    assert.deepEqual(sent, [{ id: "order_38", status: "out_for_delivery" }]);
+    assert.deepEqual(audited, [
+      {
+        userId: "user_1",
+        orderId: "order_38",
+        from: "stocking",
+        to: "out_for_delivery",
+      },
+    ]);
+    assert.equal(detail.id, "order_38");
+  });
+
+  it("a step the table does not allow is 409 and never reaches the webshop", async () => {
+    const { orders, sent, audited } = statusService();
+    await assert.rejects(
+      orders.changeStatus("order_38", "closed", "user_1", NOW),
+      (error: unknown) => {
+        assert.equal((error as Error).constructor.name, "ConflictException");
+        assert.match(
+          (error as Error).message,
+          /Készletezés alatt.*Megrendelés lezárva/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual([sent, audited], [[], []]);
+  });
+
+  it("a refused capture is 422 with the webshop's own sentence, and nothing is audited", async () => {
+    const refusal = new MedusaAdminHttpError(
+      400,
+      JSON.stringify({
+        type: "not_allowed",
+        message:
+          "The shared card payment cannot be captured for 21950 (authorized 17000)",
+      }),
+    );
+    const { orders, audited } = statusService({ transitionError: refusal });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", NOW),
+      (error: unknown) => {
+        assert.equal(
+          (error as Error).constructor.name,
+          "UnprocessableEntityException",
+        );
+        assert.match(
+          (error as Error).message,
+          /A státusz nem változott\. A webshop válasza: The shared card payment cannot be captured/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(audited, []);
+  });
+
+  it("a webshop 5xx is 503; an order without status is 404", async () => {
+    const { orders } = statusService({
+      transitionError: new MedusaAdminHttpError(502, "bad gateway"),
+    });
+    await assert.rejects(
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", NOW),
+      (error: unknown) => {
+        assert.ok(error instanceof ServiceUnavailableException);
+        return true;
+      },
+    );
+    await assert.rejects(
+      statusService({ noStatus: true }).orders.changeStatus(
+        "order_38",
+        "out_for_delivery",
+        "u",
+        NOW,
+      ),
+      (error: unknown) => {
+        assert.equal((error as Error).constructor.name, "NotFoundException");
+        return true;
+      },
     );
   });
 });
