@@ -39,6 +39,10 @@ import {
 } from "@/components/messages/MessageBubble";
 import { conversationName } from "@/components/messages/MessageParts";
 import { useMessageStream } from "@/components/messages/MessageStream";
+import {
+  ContextCard,
+  SystemMessageLine,
+} from "@/components/messages/Phase4Parts";
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import {
   addReaction,
@@ -83,6 +87,7 @@ import {
   type MessageReactionValue,
 } from "@/lib/messages/types";
 import { setOpenConversation } from "@/lib/messages/open-conversation";
+import { contextSubtitle, isSystemMessage } from "@/lib/messages/phase4";
 import {
   pickPhotosFromLibrary,
   takePhotoFromCamera,
@@ -565,9 +570,20 @@ export default function ConversationScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={tokens.textPrimary} />
         </Pressable>
-        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
-          {name}
-        </Text>
+        <View style={styles.flex}>
+          <Text
+            style={styles.title}
+            numberOfLines={1}
+            accessibilityRole="header"
+          >
+            {name}
+          </Text>
+          {conversation?.context ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {contextSubtitle(conversation.context.type)}
+            </Text>
+          ) : null}
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Továbbiak"
@@ -581,6 +597,9 @@ export default function ConversationScreen() {
           />
         </Pressable>
       </View>
+      {conversation?.context ? (
+        <ContextCard card={conversation.context} tokens={tokens} />
+      ) : null}
       {menuOpen && id ? (
         <View style={styles.menu} accessibilityLabel="A beszélgetés menüje">
           {(
@@ -646,6 +665,11 @@ export default function ConversationScreen() {
               return <Text style={styles.divider}>{row.label}</Text>;
             if (row.kind === "message") {
               const message = row.message;
+              // a rendszer-esemény (csatolás, tag, kilépés): középen, menü nélkül
+              if (isSystemMessage(message))
+                return (
+                  <SystemMessageLine text={message.text} tokens={tokens} />
+                );
               const own = message.senderUserId === user?.id;
               return (
                 <MessageBubble
@@ -903,6 +927,7 @@ const createStyles = (t: ThemeTokens) =>
       backgroundColor: t.background,
     },
     title: { flex: 1, color: t.textPrimary, fontSize: 24, fontWeight: "700" },
+    subtitle: { color: t.textMuted, fontSize: 12 },
     notice: {
       color: t.warning,
       backgroundColor: t.warningSoft,

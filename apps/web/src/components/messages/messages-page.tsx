@@ -157,6 +157,10 @@ export function MessagesPage() {
               outbox={outbox}
               dispatch={dispatch}
               onChanged={scheduleReload}
+              onLeft={() => {
+                router.replace(pathname);
+                void reload();
+              }}
             />
           </div>
         ) : (

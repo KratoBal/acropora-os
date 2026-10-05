@@ -82,10 +82,12 @@ const BASE = "/service/jobs";
 export function listServiceJobs(
   scope: ServiceJobScope,
   kind: "REPAIR" | "MAINTENANCE" | "ALL" = "ALL",
+  /** A szerver keres (szám, cím, partner); az Üzenetek kapcsolása szám szerint keres. */
+  search?: string,
 ) {
-  return apiRequest<ServiceJobListResponse>(
-    `${BASE}?${new URLSearchParams({ scope, kind })}`,
-  );
+  const query = new URLSearchParams({ scope, kind });
+  if (search?.trim()) query.set("search", search.trim());
+  return apiRequest<ServiceJobListResponse>(`${BASE}?${query}`);
 }
 
 /**

@@ -29,6 +29,13 @@ export interface CreateParcelInput {
   size?: ParcelSize;
   /** Utanvet osszege egesz forintban; ha nincs, nincs utanvet. */
   codHuf?: number;
+  /**
+   * Az utanvet hivatkozasa: a SZAMLA sorszama (Balazs GLS-beallitasa, emlek
+   * 2109). Ha nincs megadva, a referencia (rendelesszam). A Foxpost nem kéri.
+   */
+  codReference?: string;
+  /** A cimken allo szoveg: a rendelesazonosito (es kesobb a vevo megjegyzese). GLS: `Content`. */
+  labelContent?: string;
 }
 
 export interface TrackingEvent {

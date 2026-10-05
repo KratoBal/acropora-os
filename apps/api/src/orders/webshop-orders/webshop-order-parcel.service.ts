@@ -128,6 +128,11 @@ export class WebshopOrderParcelService {
         destination: input.destination,
         ...(parcelSize ? { size: parcelSize } : {}),
         ...(input.codHuf ? { codHuf: input.codHuf } : {}),
+        // az utánvét hivatkozása a számla sorszáma, a címkén a rendelésszám (Balázs, emlék 2109)
+        ...(input.codHuf && invoice?.number
+          ? { codReference: invoice.number }
+          : {}),
+        labelContent: `Rendelés #${order.display_id}`,
         createdByUserId: user.id,
       }),
     );

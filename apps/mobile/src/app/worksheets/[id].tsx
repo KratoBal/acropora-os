@@ -117,6 +117,7 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { statusToneColors } from "@/lib/theme/label-styles";
+import { ContextConversationButton } from "@/components/messages/ContextConversationButton";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import {
@@ -958,6 +959,13 @@ export default function WorksheetDetailScreen() {
               })()
             : null}
         </View>
+        {id ? (
+          <ContextConversationButton
+            kind="worksheet"
+            objectId={id}
+            tokens={tokens}
+          />
+        ) : null}
 
         {cacheNotice ? <OfflineNoticeCard notice={cacheNotice} /> : null}
 

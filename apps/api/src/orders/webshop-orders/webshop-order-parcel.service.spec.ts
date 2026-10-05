@@ -65,6 +65,7 @@ function setup(
     noticeError?: Error;
     releaseError?: CarrierError;
     orderPayment?: MedusaOrderPayment | null;
+    order?: MedusaOrderDetailRow;
   } = {},
 ) {
   const calls: string[] = [];
@@ -72,7 +73,7 @@ function setup(
   const notices: MedusaShippingNotice[] = [];
   const orders = {
     source: async () => ({
-      order: ORDER,
+      order: over.order ?? ORDER,
       status: { status: "stocking" } as MedusaOrderBusinessStatus,
     }),
     detail: async (id: string) => ({ id }) as WebshopOrderDetail,
@@ -139,6 +140,7 @@ describe("WebshopOrderParcelService", () => {
         },
         destination: { kind: "point", pointId: "HU12345" },
         size: "m",
+        labelContent: "Rendelés #38",
         createdByUserId: "user_1",
       },
     ]);
@@ -150,6 +152,25 @@ describe("WebshopOrderParcelService", () => {
       },
     ]);
     assert.deepEqual(result.notice, { sent: true });
+  });
+
+  it("cash on delivery: the invoice number goes as the COD reference (Balázs, emlék 2109)", async () => {
+    const { created, service } = setup({
+      invoice: ISSUED,
+      order: {
+        ...ORDER,
+        payment_collections: [
+          {
+            payments: [{ id: "p", provider_id: "pp_acropora_cod", data: null }],
+          },
+        ],
+      } as unknown as MedusaOrderDetailRow,
+    });
+    await service.create("order_38", undefined, USER);
+    assert.deepEqual(
+      [created[0]!.codHuf, created[0]!.codReference, created[0]!.labelContent],
+      [20840, "E-1", "Rendelés #38"],
+    );
   });
 
   it("a stub parcel number never reaches the webshop's mail", async () => {
