@@ -24,6 +24,7 @@ export {
   partnerStatusTone,
   isPartnerServiceJobDetail,
   partnerServiceJobDetail,
+  partnerServiceJobListItem,
   partnerVisibleStatus,
   serviceJobTimeline,
   serviceJobWorksheetLabel,

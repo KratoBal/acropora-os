@@ -516,7 +516,7 @@ export function PilotServiceJobListPage() {
               </thead>
               <tbody>
                 {filtered.map((item) => {
-                  const names = assigneeNames(item.assignees);
+                  const names = assigneeNames(item.assignees ?? []);
                   return (
                     <tr
                       key={item.id}

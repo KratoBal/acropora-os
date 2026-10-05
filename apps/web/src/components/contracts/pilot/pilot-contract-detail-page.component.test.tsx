@@ -311,3 +311,228 @@ describe("PilotContractDetailPage -- duplikált szerződésszám (409)", () => {
     expect(screen.getByText("VALAMI MÁS HIBA")).toBeTruthy();
   });
 });
+
+/*
+  A MEGLÉVŐ TÉTEL TÖRLÉSE AZ ADATLAPON (kártya c014db6f). A szerver a listából
+  kimaradó tételt törli, a megmaradók azonosítója marad
+  (`contracts.repository.ts` `update()`); a megrendelőlap-tétel `Restrict`-tel
+  mutat rá, tehat egy megrendelőlapban szereplő tétel törlése 409-et adna. MI
+  PIROSÍT: ha a törölt tétel mégis elmegy, vagy a megmaradó más azonosítóval;
+  ha egy megrendelőlapban szereplő tétel törölhető; ha a betöltés alatt is az.
+*/
+describe("PilotContractDetailPage -- tétel törlése", () => {
+  const item = (id: string, position: number, description: string) => ({
+    id,
+    position,
+    description,
+    unitNet: `${position}000`,
+    quantity: "1",
+    occasionsPerYear: 1,
+    vatRatePercent: "27",
+    departmentId: null,
+    assets: [],
+  });
+  const twoItems = (): ContractSummary => ({
+    ...contract(),
+    items: [item("item-1", 1, "Szűrőcsere"), item("item-2", 2, "Vízcsere")],
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(twoItems());
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a törölt tétel nem megy a mentéskor, a megmaradó a saját azonosítójával megy, és utána eltűnik", async () => {
+    api.update.mockResolvedValue({
+      ...contract(),
+      items: [item("item-1", 1, "Szűrőcsere")],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const torles = await screen.findByRole("button", {
+      name: "2. tétel törlése",
+    });
+    await waitFor(() => expect(torles.hasAttribute("disabled")).toBe(false));
+
+    fireEvent.click(torles);
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    const items = api.update.mock.calls[0]![2].items as { id: string }[];
+    expect(items.map((sent) => sent.id)).toEqual(["item-1"]);
+    await waitFor(() => expect(screen.queryByText(/2000 Ft/)).toBeNull());
+    expect(screen.getByText(/1000 Ft/)).toBeTruthy();
+  });
+
+  it("megrendelőlapban szereplő tétel nem törölhető, és ki van írva, miért", async () => {
+    orderApi.list.mockResolvedValue([
+      {
+        id: "order-1",
+        number: "MR-1",
+        status: "REVOKED",
+        occasionYear: 2026,
+        issuedAt: "2026-10-01T00:00:00.000Z",
+        issuedByName: null,
+        signedAt: null,
+        revokedAt: "2026-10-02T00:00:00.000Z",
+        revokedByName: null,
+        revokeReason: null,
+        contract: { id: "contract-1", number: "SZ", title: "T" },
+        items: [
+          {
+            id: "order-item-1",
+            description: "Vízcsere",
+            unitNet: "2000",
+            quantity: "1",
+            vatRatePercent: "27",
+            contractItem: { id: "item-2", position: 2, departmentId: null },
+          },
+        ],
+        documents: [],
+      },
+    ]);
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const zart = await screen.findByRole("button", {
+      name: "2. tétel törlése",
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          "Ehhez a tételhez már készült megrendelőlap, ezért nem törölhető.",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(zart.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "1. tétel törlése" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
+  it("amíg a megrendelőlapok nem töltődtek be, nem törölhető", async () => {
+    orderApi.list.mockReturnValue(new Promise(() => {}));
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const gomb = await screen.findByRole("button", {
+      name: "1. tétel törlése",
+    });
+    expect(gomb.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+/*
+  A TÉTEL SZERKESZTÉSE ÉS FELVÉTELE AZ ADATLAPON (kártya c014db6f, Ág Luca,
+  2026-10-05 07:47 UTC: mentés és újranyitás után is szerkeszthetők legyenek).
+  Mérve előtte: az újranyitott szerződés tételei csak olvashatók voltak, csak a
+  helyszín és az eszközök változtak. MI PIROSÍT: ha a módosítás nem megy el,
+  vagy más azonosítóval; ha az új tétel azonosítót kap a kliensen; ha egy
+  kiürített mezővel menteni lehet; ha a még el nem mentett tétel
+  megrendelőlapra kijelölhető.
+*/
+describe("PilotContractDetailPage -- tétel szerkesztése és felvétele", () => {
+  const item = (id: string, position: number, description: string) => ({
+    id,
+    position,
+    description,
+    unitNet: `${position}000`,
+    quantity: "1",
+    occasionsPerYear: 1,
+    vatRatePercent: "27",
+    departmentId: null,
+    assets: [],
+  });
+  const twoItems = (): ContractSummary => ({
+    ...contract(),
+    items: [item("item-1", 1, "Szűrőcsere"), item("item-2", 2, "Vízcsere")],
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(twoItems());
+    api.update.mockReset().mockResolvedValue(twoItems());
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a módosított tétel a saját azonosítójával, az új értékekkel megy", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(await screen.findByLabelText("1. tétel leírása"), {
+      target: { value: "Szűrőcsere és mosás" },
+    });
+    fireEvent.change(screen.getByLabelText("1. tétel nettó egységára"), {
+      target: { value: "1500" },
+    });
+    fireEvent.change(screen.getByLabelText("1. tétel alkalma évente"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    const items = api.update.mock.calls[0]![2].items as Record<
+      string,
+      unknown
+    >[];
+    expect(items[0]).toMatchObject({
+      id: "item-1",
+      description: "Szűrőcsere és mosás",
+      unitNet: "1500",
+      occasionsPerYear: 4,
+    });
+    expect(items[1]).toMatchObject({ id: "item-2", description: "Vízcsere" });
+  });
+
+  it("az új tétel azonosító nélkül, a végére kerül; a meglévők azonosítója marad", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel leírása");
+    fireEvent.click(screen.getByText("Tétel hozzáadása"));
+    fireEvent.change(screen.getByLabelText("3. tétel leírása"), {
+      target: { value: "Pumpacsere" },
+    });
+    fireEvent.change(screen.getByLabelText("3. tétel nettó egységára"), {
+      target: { value: "9000" },
+    });
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    const items = api.update.mock.calls[0]![2].items as Record<
+      string,
+      unknown
+    >[];
+    expect(items.map((sent) => sent.id)).toEqual([
+      "item-1",
+      "item-2",
+      undefined,
+    ]);
+    expect("id" in items[2]!).toBe(false);
+    expect(items[2]).toMatchObject({
+      description: "Pumpacsere",
+      unitNet: "9000",
+    });
+  });
+
+  it("kiürített leírással nem menthető, és kiírja, mi hiányzik", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(await screen.findByLabelText("2. tétel leírása"), {
+      target: { value: "  " },
+    });
+    expect(screen.getByText(/minden tétel kitöltése/)).toBeTruthy();
+    expect(
+      screen
+        .getByText("Módosítások mentése")
+        .closest("button")!
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("a még el nem mentett tétel nem jelölhető ki megrendelőlapra", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText("1. tétel leírása");
+    const before = screen.getAllByRole("checkbox").length;
+    fireEvent.click(screen.getByText("Tétel hozzáadása"));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(before);
+  });
+});
