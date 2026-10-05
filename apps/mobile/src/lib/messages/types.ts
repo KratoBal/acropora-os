@@ -92,11 +92,66 @@ export interface ConversationDetail extends ConversationListItem {
   description: string | null;
   createdByUserId: string;
   lastReadMessageId: string | null;
+  /** 3. fázis: a saját értesítési beállítás ebben a beszélgetésben. */
+  notification?: ConversationNotificationState;
 }
 
 export interface MessagePage {
   items: MessageItem[];
   olderCursor: string | null;
+  /** 3. fázis, „Ugrás”: van-e még újabb oldal a köré nyitott oldal után. */
+  newerCursor?: string | null;
+}
+
+/** 3. fázis: keresés a megnyitott beszélgetésben (a közös csomag tükre). */
+export const MESSAGE_SEARCH_MIN_LENGTH = 2;
+
+export interface MessageSearchHit {
+  messageId: string;
+  senderName: string;
+  createdAt: string;
+  snippet: string;
+}
+
+export interface MessageSearchResponse {
+  total: number;
+  totalCapped: boolean;
+  items: MessageSearchHit[];
+}
+
+/** 3. fázis: egy kitűzött elem. */
+export interface PinnedItem {
+  messageId: string;
+  title: string;
+  senderName: string;
+  messageCreatedAt: string;
+  pinnedByName: string;
+  pinnedAt: string;
+}
+
+export interface PinnedItemsResponse {
+  items: PinnedItem[];
+}
+
+/** 3. fázis: a megosztott média és fájlok. */
+export interface SharedAttachmentItem extends MessageAttachmentItem {
+  messageId: string;
+  senderName: string;
+  createdAt: string;
+}
+
+export interface SharedAttachmentPage {
+  items: SharedAttachmentItem[];
+  olderCursor: string | null;
+}
+
+/** 3. fázis: az értesítési beállítás módjai és állapota. */
+export type ConversationNotifyMode =
+  "ALL" | "MUTE_1H" | "MUTE_UNTIL_MORNING" | "UNMUTE";
+
+export interface ConversationNotificationState {
+  notify: "ALL" | "MENTIONS" | "NONE";
+  mutedUntil: string | null;
 }
 
 export interface MessagesUnreadResponse {
