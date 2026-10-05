@@ -1,8 +1,20 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  Redirect,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import type * as ImagePicker from "expo-image-picker";
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   AppState,
@@ -35,7 +47,11 @@ import {
   getConversation,
   getMessage,
   getMessagePage,
+  getMessagesAfter,
+  getMessagesAround,
   markConversationRead,
+  pinMessage,
+  unpinMessage,
   removeReaction,
   sendMessage,
   uploadMessageAttachment,
@@ -66,6 +82,7 @@ import {
   type MessageItem,
   type MessageReactionValue,
 } from "@/lib/messages/types";
+import { setOpenConversation } from "@/lib/messages/open-conversation";
 import {
   pickPhotosFromLibrary,
   takePhotoFromCamera,
@@ -78,6 +95,9 @@ type Row =
   | { kind: "message"; key: string; message: MessageItem }
   | { kind: "pending"; key: string; message: OutgoingMessage }
   | { kind: "divider"; key: string; label: string };
+
+/** Az „Ugrás” után ennyi ideig marad kiemelve a megtalált üzenet. */
+const HIGHLIGHT_MS = 2500;
 
 /** Egy feltöltés hibájának mondata a sorban. */
 function uploadErrorText(error: unknown): string {
@@ -98,7 +118,7 @@ function uploadErrorText(error: unknown): string {
  * kerül, mert az felülírja a lapok régebbi példányát (`mergeMessages`).
  */
 export default function ConversationScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, jump } = useLocalSearchParams<{ id: string; jump?: string }>();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
@@ -139,12 +159,38 @@ export default function ConversationScreen() {
   const [bigImage, setBigImage] = useState<MessageAttachmentItem | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const lastMarked = useRef<string | null>(null);
+  // --- a 3. fázis: fejléc-menü, ugrás
+  const [menuOpen, setMenuOpen] = useState(false);
+  // az ugrás célja addig kiemelt, amíg az időzítő le nem jár
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const highlight = jump && dismissed !== jump ? jump : null;
+  /**
+   * AZ UGRÁS-MÓD: egy régebbi üzenet köré nyitott oldal. Amíg az újabb oldalak
+   * nincsenek betöltve, a legújabb oldal NEM kerül a listába (az lyukat hagyna
+   * a közepén); lefelé görgetve jönnek az újabbak, és az utolsó után a mód véget ér.
+   */
+  const [around, setAround] = useState<MessageItem[] | null>(null);
+  const [newerCursor, setNewerCursor] = useState<string | null>(null);
+  const list = useRef<FlatList<Row>>(null);
+  // célonként egyszer görgetünk oda: utána a kolléga szabadon görget
+  const scrolledTo = useRef<string | null>(null);
+
+  // a nyitott beszélgetésről nem jön külön értesítés-sáv (a prompt 21. pontja)
+  useFocusEffect(
+    useCallback(() => {
+      setOpenConversation(id ?? null);
+      return () => setOpenConversation(null);
+    }, [id]),
+  );
 
   const conversation: ConversationDetail | null = detail.data ?? null;
   const items = useMemo(
     () =>
-      mergeMessages(mergeMessages(older, latestPage.data?.items ?? []), sent),
-    [older, latestPage.data, sent],
+      mergeMessages(
+        mergeMessages(older, around ?? latestPage.data?.items ?? []),
+        sent,
+      ),
+    [around, older, latestPage.data, sent],
   );
   const cursor =
     olderCursor === undefined
@@ -201,6 +247,74 @@ export default function ConversationScreen() {
         lastMarked.current = null;
       });
   }, [id, items, queryClient, user?.id]);
+
+  // „Ugrás” (keresés vagy kitűzött elem): ha már betöltve, csak odagörget
+  useEffect(() => {
+    if (!id || !jump) return;
+    if (items.some((message) => message.id === jump)) return;
+    let cancelled = false;
+    void getMessagesAround(id, jump)
+      .then((page) => {
+        if (cancelled) return;
+        setOlder([]);
+        setOlderCursor(page.olderCursor);
+        setAround(page.items);
+        setNewerCursor(page.newerCursor ?? null);
+      })
+      .catch(() => setActionNotice("Az üzenet nem érhető el."));
+    return () => {
+      cancelled = true;
+    };
+    // csak az ugrás célja indítja; a lista változása nem
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, jump]);
+
+  // a kiemelés rövid ideig tart
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = setTimeout(() => setDismissed(highlight), HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [highlight]);
+
+  const loadNewer = async () => {
+    if (!id || !newerCursor) return;
+    const cursor = newerCursor;
+    setNewerCursor(null);
+    try {
+      const page = await getMessagesAfter(id, cursor);
+      setAround((current) => mergeMessages(current ?? [], page.items));
+      const next = page.newerCursor ?? null;
+      setNewerCursor(next);
+      if (!next) {
+        // elértük a jelent: a köré nyitott oldal a régebbiek közé kerül, és
+        // innentől a legújabb oldal és az élő események újra hozzáfűznek
+        setOlder((current) =>
+          mergeMessages(current, mergeMessages(around ?? [], page.items)),
+        );
+        setAround(null);
+        void queryClient.invalidateQueries({
+          queryKey: ["messages", "page", id],
+        });
+      }
+    } catch {
+      setNewerCursor(cursor);
+    }
+  };
+
+  const togglePin = async (message: MessageItem) => {
+    setActionsFor(null);
+    try {
+      const fresh = message.pinned
+        ? await unpinMessage(message.id)
+        : await pinMessage(message.id);
+      setSent((current) => mergeMessages(current, [fresh]));
+      void queryClient.invalidateQueries({
+        queryKey: ["messages", "pins", id],
+      });
+    } catch {
+      setActionNotice("A kitűzés nem mentődött el.");
+    }
+  };
 
   const loadOlder = async () => {
     if (!id || !cursor) return;
@@ -404,21 +518,37 @@ export default function ConversationScreen() {
     setDraft("");
   };
 
+  // a fordított lista sorai: napelválasztó, üzenet, és a még küldés alatt állók
+  const reversedRows = useMemo(() => {
+    const now = new Date();
+    const pending = id ? visibleOutgoing(outbox, id, items) : [];
+    const rows: Row[] = [];
+    items.forEach((message, index) => {
+      const label = dayDividerLabel(message.createdAt, now);
+      const previous = items[index - 1];
+      if (!previous || dayDividerLabel(previous.createdAt, now) !== label)
+        rows.push({ kind: "divider", key: `d-${message.id}`, label });
+      rows.push({ kind: "message", key: message.id, message });
+    });
+    pending.forEach((message) =>
+      rows.push({ kind: "pending", key: message.clientMessageId, message }),
+    );
+    return rows.reverse();
+  }, [id, items, outbox]);
+
+  // az ugrás célja középre kerül, célonként egyszer
+  useEffect(() => {
+    if (!highlight || scrolledTo.current === highlight) return;
+    const index = reversedRows.findIndex(
+      (row) => row.kind === "message" && row.message.id === highlight,
+    );
+    if (index < 0) return;
+    scrolledTo.current = highlight;
+    list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+  }, [highlight, reversedRows]);
+
   if (status !== "authenticated") return <Redirect href="/login" />;
 
-  const now = new Date();
-  const pending = id ? visibleOutgoing(outbox, id, items) : [];
-  const rows: Row[] = [];
-  items.forEach((message, index) => {
-    const label = dayDividerLabel(message.createdAt, now);
-    const previous = items[index - 1];
-    if (!previous || dayDividerLabel(previous.createdAt, now) !== label)
-      rows.push({ kind: "divider", key: `d-${message.id}`, label });
-    rows.push({ kind: "message", key: message.id, message });
-  });
-  pending.forEach((message) =>
-    rows.push({ kind: "pending", key: message.clientMessageId, message }),
-  );
   const name = conversation ? conversationName(conversation) : "Beszélgetés";
   const sendable = editing
     ? Boolean(draft.trim()) || editing.attachments.length > 0
@@ -438,18 +568,78 @@ export default function ConversationScreen() {
         <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
           {name}
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Továbbiak"
+          onPress={() => setMenuOpen((open) => !open)}
+          style={styles.back}
+        >
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={22}
+            color={tokens.textPrimary}
+          />
+        </Pressable>
       </View>
+      {menuOpen && id ? (
+        <View style={styles.menu} accessibilityLabel="A beszélgetés menüje">
+          {(
+            [
+              ["Keresés", "search-outline", "/uzenetek/kereses"],
+              ["Kitűzött elemek", "pin-outline", "/uzenetek/kituzott"],
+              [
+                "Beszélgetés adatai",
+                "information-circle-outline",
+                "/uzenetek/adatok",
+              ],
+            ] as const
+          ).map(([label, icon, pathname]) => (
+            <Pressable
+              key={pathname}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                router.push({ pathname, params: { id } });
+              }}
+            >
+              <Ionicons name={icon} size={20} color={tokens.textPrimary} />
+              <Text style={styles.menuText}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <FlatList
+          ref={list}
           inverted
-          data={[...rows].reverse()}
+          data={reversedRows}
           keyExtractor={(row) => row.key}
           onEndReached={() => void loadOlder()}
           onEndReachedThreshold={0.2}
+          // fordított listán a „kezdet” a legújabb vége: ugrás után itt jönnek az újabbak
+          onStartReached={() => void loadNewer()}
+          onStartReachedThreshold={0.2}
+          onScrollToIndexFailed={(info) => {
+            list.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: false,
+            });
+            setTimeout(
+              () =>
+                list.current?.scrollToIndex({
+                  index: info.index,
+                  viewPosition: 0.5,
+                  animated: true,
+                }),
+              100,
+            );
+          }}
           contentContainerStyle={styles.list}
           renderItem={({ item: row }) => {
             if (row.kind === "divider")
@@ -479,6 +669,7 @@ export default function ConversationScreen() {
                     void react(message, reaction, mine)
                   }
                   onOpenImage={setBigImage}
+                  highlighted={highlight === message.id}
                 />
               );
             }
@@ -546,6 +737,15 @@ export default function ConversationScreen() {
               setReplyTo(actionsFor);
               setActionsFor(null);
             }}
+            onForward={() => {
+              const message = actionsFor;
+              setActionsFor(null);
+              router.push({
+                pathname: "/uzenetek/tovabbitas",
+                params: { messageId: message.id, from: id ?? "" },
+              });
+            }}
+            onTogglePin={() => void togglePin(actionsFor)}
             onEdit={() => startEdit(actionsFor)}
             onDelete={() => confirmRemove(actionsFor)}
             onClose={() => setActionsFor(null)}
@@ -774,4 +974,17 @@ const createStyles = (t: ThemeTokens) =>
       backgroundColor: t.accent,
     },
     sendDisabled: { opacity: 0.4 },
+    menu: {
+      backgroundColor: t.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: t.border,
+    },
+    menuItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    menuText: { color: t.textPrimary, fontSize: 15 },
   });

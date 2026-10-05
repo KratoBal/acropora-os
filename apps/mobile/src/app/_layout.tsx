@@ -10,7 +10,7 @@ import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 import { MessageStreamProvider } from "@/components/messages/MessageStream";
-import { foregroundNotificationBehavior } from "@/lib/notifications/push-foreground";
+import { foregroundNotificationFor } from "@/lib/notifications/push-foreground";
 import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
@@ -30,7 +30,8 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
  * amig az appot hasznalja.
  */
 Notifications.setNotificationHandler({
-  handleNotification: async () => foregroundNotificationBehavior(),
+  handleNotification: async (notification) =>
+    foregroundNotificationFor(notification.request.content.data),
 });
 
 export default function RootLayout() {

@@ -7,7 +7,12 @@ import type {
   MessageItem,
   MessagePage,
   MessagePeopleResponse,
+  MessageSearchResponse,
   MessagesUnreadResponse,
+  ConversationNotificationState,
+  ConversationNotifyMode,
+  PinnedItemsResponse,
+  SharedAttachmentPage,
 } from "@/lib/messages/types";
 
 /** Az Üzenetek modul (kártya 51d7aba0) hívásai. A jogot a tagság adja, a szerver dönt. */
@@ -139,6 +144,82 @@ export function removeReaction(id: string, reaction: string) {
   return apiRequest<MessageItem>(
     `${MESSAGES}/${encodeURIComponent(id)}/reactions/${encodeURIComponent(reaction)}`,
     { method: "DELETE" },
+  );
+}
+
+/** Továbbítás; a szerver `ForwardMessageDto`-jával azonos (3. fázis). */
+export interface ForwardMessageInput {
+  conversationId: string;
+  /** Egy újrapróbálás ezzel nem továbbít kétszer. */
+  clientMessageId: string;
+}
+
+/** Az értesítési beállítás; a szerver `NotificationSettingDto`-jával azonos (3. fázis). */
+export interface NotificationSettingInput {
+  mode: ConversationNotifyMode;
+}
+
+/** 3. fázis, „Ugrás”: az üzenet köré nyíló oldal. */
+export function getMessagesAround(id: string, messageId: string) {
+  return apiRequest<MessagePage>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/messages?around=${encodeURIComponent(messageId)}`,
+  );
+}
+
+/** 3. fázis: az ugrás utáni újabb oldal. */
+export function getMessagesAfter(id: string, after: string) {
+  return apiRequest<MessagePage>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/messages?after=${encodeURIComponent(after)}`,
+  );
+}
+
+/** 3. fázis: keresés a megnyitott beszélgetésben. */
+export function searchConversation(id: string, q: string) {
+  return apiRequest<MessageSearchResponse>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
+/** 3. fázis: a megosztott média vagy fájlok. */
+export function getSharedAttachments(id: string, kind: "IMAGE" | "FILE") {
+  return apiRequest<SharedAttachmentPage>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/attachments?kind=${kind}`,
+  );
+}
+
+/** 3. fázis: a kitűzött elemek. */
+export function getPins(id: string) {
+  return apiRequest<PinnedItemsResponse>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/pins`,
+  );
+}
+
+export function pinMessage(id: string) {
+  return apiRequest<MessageItem>(`${MESSAGES}/${encodeURIComponent(id)}/pin`, {
+    method: "POST",
+  });
+}
+
+export function unpinMessage(id: string) {
+  return apiRequest<MessageItem>(`${MESSAGES}/${encodeURIComponent(id)}/pin`, {
+    method: "DELETE",
+  });
+}
+
+export function forwardMessage(id: string, input: ForwardMessageInput) {
+  return apiRequest<MessageItem>(
+    `${MESSAGES}/${encodeURIComponent(id)}/forward`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function setConversationNotification(
+  id: string,
+  input: NotificationSettingInput,
+) {
+  return apiRequest<ConversationNotificationState>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/notifications`,
+    { method: "PUT", body: JSON.stringify(input) },
   );
 }
 
