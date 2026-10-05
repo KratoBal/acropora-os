@@ -12,7 +12,9 @@ import type {
   MedusaOrderAddressRow,
   MedusaOrderBusinessStatus,
   MedusaOrderDetailRow,
+  MedusaOrderPayment,
 } from "../../integrations/medusa/medusa-admin.client.js";
+import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
   STORE_PICKUP_METHOD,
@@ -302,6 +304,8 @@ export function toDetail(input: {
   customerOrderCount: number | null;
   relatedDisplayId: number | null;
   now: Date;
+  /** A kártyás fizetés útja a webshopból; `null` vagy hiányzó: nincs ilyen (vagy nem olvasható). */
+  orderPayment?: MedusaOrderPayment | null;
 }): WebshopOrderDetail {
   const { order, status, facts, now } = input;
   const code = isStatus(status?.status) ? status!.status : null;
@@ -351,6 +355,7 @@ export function toDetail(input: {
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
     parcel: facts.parcel,
+    cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
     lineEdit: (() => {
       const reason = lineEditRefusal({
         status: code,

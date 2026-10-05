@@ -398,6 +398,15 @@ export function WebshopOrdersListPage() {
       cell: (item) => (
         <span className="text-[13px] text-pilot-grey-700">
           {paymentText(item)}
+          {item.payment.holdWarning ? (
+            <span
+              className={`block text-xs font-medium ${item.payment.holdWarning === "expired" ? "text-pilot-red-700" : "text-pilot-amber-700"}`}
+            >
+              {item.payment.holdWarning === "expired"
+                ? "A zárolás lejárt"
+                : "A zárolás 2 napon belül lejár"}
+            </span>
+          ) : null}
         </span>
       ),
     },

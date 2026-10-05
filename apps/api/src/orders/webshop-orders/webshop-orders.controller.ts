@@ -21,6 +21,8 @@ import {
 } from "./dto/webshop-order-line-edit.dto.js";
 import { WebshopOrderParcelCreateDto } from "./dto/webshop-order-parcel-create.dto.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
+import { WebshopOrderNotifyDto } from "./dto/webshop-order-notify.dto.js";
+import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -33,7 +35,32 @@ export class WebshopOrdersController {
     private readonly invoices: WebshopOrderInvoiceService,
     private readonly parcels: WebshopOrderParcelService,
     private readonly lines: WebshopOrderLinesService,
+    private readonly payments: WebshopOrderPaymentService,
   ) {}
+
+  /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */
+  @Post(":id/payment/release-hold")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  releaseHold(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderNotifyDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.payments.releaseHold(id, body.notifyCustomer ?? true, user);
+  }
+
+  /** „Fizetési link küldése”: a rendelés mostani végösszegére. */
+  @Post(":id/payment/link")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  sendPaymentLink(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderNotifyDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.payments.sendPaymentLink(id, body.notifyCustomer ?? true, user);
+  }
 
   /**
    * TÉTELMŰVELET (mennyiség, csere, törlés) a webshop szerkesztési útján, a

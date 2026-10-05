@@ -20,6 +20,10 @@ import {
   type CarrierErrorCode,
 } from "../../integrations/carriers/carrier.types.js";
 import { WebshopParcelService } from "../../integrations/carriers/webshop-parcel.service.js";
+import {
+  cardPaymentOf,
+  parcelPaymentRefusal,
+} from "./webshop-order-card-payment.rules.js";
 import { shippingOf } from "./webshop-order-detail.rules.js";
 import {
   parcelInputOf,
@@ -102,6 +106,15 @@ export class WebshopOrderParcelService {
       invoiceIssued: invoice?.status === "ISSUED",
     });
     if (refusal) throw new ConflictException(refusal);
+    // a fizetés útja: feloldott zárolásnál csak a link kifizetése után (a webshop 5xx-e itt NEM nyelődik el)
+    const paymentRefusal = parcelPaymentRefusal(
+      cardPaymentOf(
+        await (await this.orders.adminClient()).orderPayment(order.id),
+        statusOf(status?.status),
+        now,
+      ),
+    );
+    if (paymentRefusal) throw new ConflictException(paymentRefusal);
     const input = parcelInputOf(order);
     if (!input.ok) throw new UnprocessableEntityException(input.message);
 

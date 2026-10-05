@@ -12,6 +12,7 @@ import {
   type WebshopOrderStatus,
 } from "@acropora/types";
 
+import { holdWarningOf } from "./webshop-order-card-payment.rules.js";
 import type { MedusaOrderOverviewRow } from "../../integrations/medusa/medusa-admin.client.js";
 
 /**
@@ -157,6 +158,8 @@ export function toListItem(
     payment: {
       method: paymentMethodLabel(row.payment?.provider_id ?? null),
       state: paymentStateOf(row.payment),
+      holdExpiresAt: row.payment?.hold_expires_at ?? null,
+      holdWarning: holdWarningOf(row.payment?.hold_expires_at, code, now),
     },
     invoiceNumber: facts.invoiceNumber,
     status: {

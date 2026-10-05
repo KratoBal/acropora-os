@@ -5,10 +5,12 @@ import {
   PERMISSIONS,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PARCEL_SIZES,
+  WEBSHOP_CARD_PAYMENT_STATE_LABELS,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderHistoryEntry,
   type WebshopOrderLineEdit,
+  type WebshopOrderCardPayment,
   type WebshopVariantOption,
   type WebshopOrderStatus,
   type WebshopOrderStep,
@@ -347,6 +349,26 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
   };
+  const releaseHold = async (notifyCustomer: boolean) => {
+    const result = await webshopOrdersApi.releaseHold(
+      token,
+      id,
+      notifyCustomer,
+    );
+    setOrder(result.order);
+    setNow(Date.now());
+    return statusMailText(result.mail);
+  };
+  const sendPaymentLink = async (notifyCustomer: boolean) => {
+    const result = await webshopOrdersApi.sendPaymentLink(
+      token,
+      id,
+      notifyCustomer,
+    );
+    setOrder(result.order);
+    setNow(Date.now());
+    return statusMailText(result.mail);
+  };
   const searchVariants = (query: string) =>
     webshopOrdersApi.replacementVariants(token, id, query);
   const createParcel = async (size: WebshopParcelSize | undefined) => {
@@ -447,6 +469,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onReleaseParcel={releaseParcel}
           onEditLine={editLine}
           onSearchVariants={searchVariants}
+          onReleaseHold={releaseHold}
+          onSendPaymentLink={sendPaymentLink}
         />
       ) : null}
     </PilotThemeRoot>
@@ -639,6 +663,229 @@ function ResendStatusMail({ onResend }: { onResend: () => Promise<void> }) {
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A KÁRTYÁS FIZETÉS ÚTJA A FIZETÉS KÁRTYÁN (lejáró zárolás, Balázs döntése
+ * 2026-10-05): az állapot, a zárolás lejáratának jelzése az 5. naptól, a
+ * „Csúszik a szállítás” (a zárolás feloldása) és a „Fizetési link küldése”.
+ * Mindkét gomb párbeszédet nyit, a „Vevő értesítése” jelölővel.
+ */
+function CardPaymentSection({
+  order,
+  card,
+  canManage,
+  money,
+  onRelease,
+  onSendLink,
+}: {
+  order: WebshopOrderDetail;
+  card: WebshopOrderCardPayment;
+  canManage: boolean;
+  money: (value: number) => string;
+  onRelease: (notifyCustomer: boolean) => Promise<string>;
+  onSendLink: (notifyCustomer: boolean) => Promise<string>;
+}) {
+  const [open, setOpen] = useState<"release" | "link" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const when = (iso: string) => LONG_DATE.format(new Date(iso));
+  return (
+    <div className="space-y-3 border-t border-pilot-grey-100 pt-3">
+      <Field label="Kártyás fizetés">
+        {WEBSHOP_CARD_PAYMENT_STATE_LABELS[card.state]}
+      </Field>
+      {card.holdWarning && card.holdExpiresAt ? (
+        <p
+          role="alert"
+          className={`rounded-lg p-3 text-sm ${card.holdWarning === "expired" ? "bg-pilot-red-50 text-pilot-red-700" : "bg-pilot-amber-50 text-pilot-amber-700"}`}
+        >
+          {card.holdWarning === "expired"
+            ? `A kártyás zárolás lejárt (${when(card.holdExpiresAt)}). Küldj fizetési linket, ha az áru megérkezett.`
+            : `A kártyás zárolás 2 napon belül lejár (${when(card.holdExpiresAt)}). Ha a szállítás csúszik, oldd fel, és áruérkezéskor küldj fizetési linket.`}
+        </p>
+      ) : card.holdExpiresAt ? (
+        <Field label="Zárolás lejár">{when(card.holdExpiresAt)}</Field>
+      ) : null}
+      {card.link ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Link elküldve">{when(card.link.sentAt)}</Field>
+          <Field label="Link lejár">{when(card.link.expiresAt)}</Field>
+          <Field label="Link összege">{money(card.link.amount)}</Field>
+          {card.link.remindedAt ? (
+            <Field label="Emlékeztető">{when(card.link.remindedAt)}</Field>
+          ) : null}
+          <Field
+            label="Fizetési link"
+            action={
+              <CopyButton
+                value={card.link.url}
+                label="Fizetési link másolása"
+              />
+            }
+          >
+            <span className="break-all text-xs text-pilot-grey-600">
+              {card.link.url}
+            </span>
+          </Field>
+        </div>
+      ) : null}
+      {card.due ? (
+        <Field
+          label={
+            card.due.reason === "difference"
+              ? "Különbözet, fizetendő"
+              : "Fizetendő linken"
+          }
+        >
+          {money(card.due.amount)}
+        </Field>
+      ) : null}
+      {card.paidAt ? (
+        <Field label="Kifizetve">{when(card.paidAt)}</Field>
+      ) : null}
+      {canManage && (card.canRelease || card.canSendLink) ? (
+        <div className="flex flex-wrap gap-2">
+          {card.canRelease ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              onClick={() => setOpen("release")}
+            >
+              Csúszik a szállítás
+            </PilotButton>
+          ) : null}
+          {card.canSendLink ? (
+            <PilotButton
+              size="regular"
+              variant="primary"
+              onClick={() => setOpen("link")}
+            >
+              Fizetési link küldése
+            </PilotButton>
+          ) : null}
+        </div>
+      ) : null}
+      {notice ? (
+        <p role="status" className="text-sm text-pilot-grey-700">
+          {notice}
+        </p>
+      ) : null}
+      {open ? (
+        <PaymentActionDialog
+          title={
+            open === "release" ? "Csúszik a szállítás" : "Fizetési link küldése"
+          }
+          confirmLabel={
+            open === "release" ? "Zárolás feloldása" : "Link küldése"
+          }
+          danger={open === "release"}
+          text={
+            open === "release"
+              ? `A kártyás zárolás (${payment(order, money)}) feloldódik, a vevő kártyáját nem terheljük. Áruérkezéskor fizetési linket küldünk.`
+              : card.due?.reason === "difference"
+                ? `A link az utólag hozzáadott tétel különbözetére szól: ${money(card.due.amount)}. A kártyás zárolás megmarad, a Kiszállításkor vonódik le.`
+                : `A link a rendelés mostani végösszegére szól: ${money(card.due?.amount ?? order.totals.total)}. Ha tétel kiesett, előbb azt módosítsd.`
+          }
+          onClose={() => setOpen(null)}
+          onConfirm={async (notify) => {
+            setNotice(
+              await (open === "release"
+                ? onRelease(notify)
+                : onSendLink(notify)),
+            );
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const payment = (
+  order: WebshopOrderDetail,
+  money: (value: number) => string,
+) =>
+  order.payment?.authorized != null
+    ? money(order.payment.authorized)
+    : "a zárolt összeg";
+
+function PaymentActionDialog({
+  title,
+  confirmLabel,
+  danger,
+  text,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  confirmLabel: string;
+  danger: boolean;
+  text: string;
+  onClose: () => void;
+  onConfirm: (notifyCustomer: boolean) => Promise<void>;
+}) {
+  const [notify, setNotify] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <PilotDialog open onClose={busy ? () => undefined : onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="space-y-4 p-5"
+      >
+        <h2 className="text-base font-semibold text-pilot-grey-900">{title}</h2>
+        <p className="text-sm text-pilot-grey-700">{text}</p>
+        <label className="flex items-center gap-2 text-sm text-pilot-grey-700">
+          <input
+            type="checkbox"
+            checked={notify}
+            onChange={(event) => setNotify(event.target.checked)}
+          />
+          Vevő értesítése
+        </label>
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+          >
+            {error}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <PilotButton
+            size="regular"
+            variant="secondary"
+            disabled={busy}
+            onClick={onClose}
+          >
+            Mégse
+          </PilotButton>
+          <PilotButton
+            size="regular"
+            variant={danger ? "danger" : "primary"}
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              setError(null);
+              void onConfirm(notify)
+                .then(onClose)
+                .catch((cause: unknown) =>
+                  setError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "A művelet nem sikerült.",
+                  ),
+                )
+                .finally(() => setBusy(false));
+            }}
+          >
+            {confirmLabel}
+          </PilotButton>
+        </div>
+      </div>
+    </PilotDialog>
   );
 }
 
@@ -843,6 +1090,8 @@ function OrderBody({
   onReleaseParcel,
   onEditLine,
   onSearchVariants,
+  onReleaseHold,
+  onSendPaymentLink,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -863,6 +1112,8 @@ function OrderBody({
   onReleaseParcel: () => Promise<void>;
   onEditLine: (itemId: string, edit: WebshopOrderLineEdit) => Promise<void>;
   onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
+  onReleaseHold: (notifyCustomer: boolean) => Promise<string>;
+  onSendPaymentLink: (notifyCustomer: boolean) => Promise<string>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
@@ -1186,6 +1437,16 @@ function OrderBody({
                       {payment.stripePaymentIntentId}
                     </span>
                   </Field>
+                ) : null}
+                {order.cardPayment ? (
+                  <CardPaymentSection
+                    order={order}
+                    card={order.cardPayment}
+                    canManage={canManage}
+                    money={money}
+                    onRelease={onReleaseHold}
+                    onSendLink={onSendPaymentLink}
+                  />
                 ) : null}
               </div>
             ) : (

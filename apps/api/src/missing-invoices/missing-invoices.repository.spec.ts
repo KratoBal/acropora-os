@@ -131,3 +131,80 @@ describe("normalizeAccount", () => {
     );
   });
 });
+
+/*
+  AZ ÁFA-CSOPORT TAGJA (barracuda 26429, éles mérés: Euroleasing 2, OTP EBIZ 1).
+  MI PIROSÍT: a csoport-azonosítós NAV-sor és a tag adószámos Számlázz.hu-sor
+  külön jelölt marad; vagy épp fordítva, két különböző szállító azonos
+  számlaszáma összevonódik, mert csak a szám egyezik; vagy több lehetséges
+  társ közül a szabály választ.
+*/
+describe("a VAT group member's two tax numbers", () => {
+  const euroleasingNav = () =>
+    doc({
+      id: "nav-1",
+      number: "2026/01212920",
+      gross: new Prisma.Decimal(48260),
+      date: "2026-09-05",
+    });
+  const euroleasingSzamlazz = (over: Partial<CandidateDocument> = {}) =>
+    doc({
+      id: "szlz-1",
+      source: "SZAMLAZZ",
+      number: "2026/01212920",
+      gross: new Prisma.Decimal(48260),
+      date: "2026-09-05",
+      ...over,
+    });
+
+  it("the NAV row's group id and the member's own number make one invoice", () => {
+    const merged = mergeSameInvoice(
+      [euroleasingNav(), euroleasingSzamlazz()],
+      new Map([
+        ["nav-1", "2026/01212920|17782672"],
+        ["szlz-1", "2026/01212920|12238972"],
+      ]),
+    );
+    assert.deepEqual(
+      merged.map((d) => [d.id, d.aliasIds ?? []]),
+      [["nav-1", ["szlz-1"]]],
+    );
+  });
+
+  it("a different gross or day, or a NAV row without a group id, stays apart", () => {
+    for (const [szamlazz, navKey] of [
+      [
+        euroleasingSzamlazz({ gross: new Prisma.Decimal(48261) }),
+        "2026/01212920|17782672",
+      ],
+      [euroleasingSzamlazz({ date: "2026-09-06" }), "2026/01212920|17782672"],
+      [euroleasingSzamlazz(), "2026/01212920|11111111"],
+    ] as const)
+      assert.equal(
+        mergeSameInvoice(
+          [euroleasingNav(), szamlazz],
+          new Map([
+            ["nav-1", navKey],
+            ["szlz-1", "2026/01212920|12238972"],
+          ]),
+        ).length,
+        2,
+      );
+  });
+
+  it("two possible partners with different keys: the rule does not choose", () => {
+    const merged = mergeSameInvoice(
+      [
+        euroleasingNav(),
+        euroleasingSzamlazz(),
+        euroleasingSzamlazz({ id: "mb-1", source: "MAILBOX" }),
+      ],
+      new Map([
+        ["nav-1", "2026/01212920|17782672"],
+        ["szlz-1", "2026/01212920|12238972"],
+        ["mb-1", "2026/01212920|99999999"],
+      ]),
+    );
+    assert.equal(merged.find((d) => d.id === "nav-1")?.aliasIds, undefined);
+  });
+});
