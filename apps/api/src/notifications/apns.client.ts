@@ -26,6 +26,11 @@ export interface ApnsMessage {
   body: string;
   /** Travels with the notification so a tap can open the right screen. */
   data?: Record<string, string>;
+  /**
+   * The app icon's number (`aps.badge`): the recipient's unread messages. Only
+   * the message push sets it; without it iOS keeps the number it shows.
+   */
+  badge?: number;
 }
 
 export type ApnsResult =
@@ -66,12 +71,17 @@ export type ApnsResult =
  * (pl. Apple sajat eszkozeivel), ott is lassa.
  */
 export function buildApnsPayload(
-  message: Pick<ApnsMessage, "title" | "body" | "data">,
+  message: Pick<ApnsMessage, "title" | "body" | "data" | "badge">,
 ): Record<string, unknown> {
+  const badge =
+    message.badge !== undefined && Number.isFinite(message.badge)
+      ? Math.max(0, Math.floor(message.badge))
+      : undefined;
   return {
     aps: {
       alert: { title: message.title, body: message.body },
       sound: "default",
+      ...(badge !== undefined ? { badge } : {}),
     },
     body: message.data,
     ...message.data,

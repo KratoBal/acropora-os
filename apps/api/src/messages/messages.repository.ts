@@ -661,6 +661,39 @@ export class MessagesRepository extends Repository {
     });
   }
 
+  /**
+   * AZ OLVASATLAN ÖSSZESEN, CÍMZETTENKÉNT, egy lekérdezéssel: a push törzsébe
+   * az app ikonjának száma (iOS `badge`). Ugyanaz a szabály, mint az
+   * `unreadCounts`: más élő üzenete, az olvasási jel vagy a belépés után, élő
+   * tagság, nem archivált beszélgetés.
+   */
+  async unreadTotals(
+    userIds: readonly string[],
+  ): Promise<Record<string, number>> {
+    if (userIds.length === 0) return {};
+    const rows = await this.database.$queryRaw<
+      { userId: string; unread: number }[]
+    >`
+      SELECT cm."userId", COUNT(*)::int AS unread
+      FROM "Message" m
+      JOIN "ConversationMember" cm
+        ON cm."conversationId" = m."conversationId"
+       AND cm."leftAt" IS NULL
+      JOIN "Conversation" c
+        ON c."id" = m."conversationId"
+       AND c."archivedAt" IS NULL
+      WHERE cm."userId" IN (${Prisma.join([...userIds])})
+        AND m."senderUserId" <> cm."userId"
+        AND m."deletedAt" IS NULL
+        AND m."createdAt" > COALESCE(cm."lastReadAt", cm."joinedAt")
+      GROUP BY cm."userId"
+    `;
+    return Object.fromEntries([
+      ...userIds.map((id) => [id, 0] as const),
+      ...rows.map((row) => [row.userId, row.unread] as const),
+    ]);
+  }
+
   /** A tag értesítési beállítása ebben a beszélgetésben (3. fázis, prompt 17. pont). */
   async setNotification(
     conversationId: string,
