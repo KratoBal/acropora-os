@@ -1307,10 +1307,27 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     };
   }
 
+  /**
+   * A FEJLÉCEK KIS- ÉS NAGYBETŰ NÉLKÜL OLVADNAK ÖSSZE. Egy sima objektumban a
+   * `content-type` és a `Content-Type` két kulcs, és a fetch a kettőt
+   * „application/json, application/json” értékké fűzi; ezt a Medusa
+   * JSON-olvasója nem ismeri fel, és a törzset üresnek veszi (stage,
+   * 2026-10-05: az OS státuszváltása „Field 'status' is required” választ
+   * kapott, miközben a törzs ott volt). A `Headers` kisbetűsít, a hívó értéke
+   * így felülírja az alapot, nem mellé kerül.
+   */
+  private requestHeaders(extra?: HeadersInit): Record<string, string> {
+    const headers: Record<string, string> = { ...this.headers() };
+    new Headers(extra).forEach((value, key) => {
+      headers[key] = value;
+    });
+    return headers;
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
       ...init,
-      headers: { ...this.headers(), ...(init?.headers ?? {}) },
+      headers: this.requestHeaders(init?.headers),
     });
     if (!response.ok) {
       // A törzs hasznos: a Medusa a hibát magyarázza (például hiányzó opció).
@@ -1431,7 +1448,6 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/order-business-status/${encodeURIComponent(id)}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       },
     );
