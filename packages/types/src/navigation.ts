@@ -141,6 +141,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.TASKS_VIEW),
   },
   {
+    /** Az Üzenetek modul (kártya 51d7aba0). A telefon a mobil PR-ral (1c) kapja meg. */
+    id: "messages",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.MESSAGES_USE),
+  },
+  {
     /**
      * A HIBAJEGY A LANC ELSO ELEME (hibajegy, munkalap, teljesitesi igazolas,
      * szamla), ezert all a munkalap ELOTT.

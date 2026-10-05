@@ -27,10 +27,12 @@ export type IconName =
   | "key"
   | "lightbulb"
   | "menu"
+  | "message"
   | "package"
   | "pencil"
   | "plus"
   | "search"
+  | "send"
   | "service"
   | "settings"
   | "shield"
@@ -69,6 +71,10 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </>
       )}
+      {name === "message" && (
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4V5.5Z" />
+      )}
+      {name === "send" && <path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z" />}
       {name === "clipboard" && (
         <>
           <rect x="5" y="4" width="14" height="17" rx="2" />
