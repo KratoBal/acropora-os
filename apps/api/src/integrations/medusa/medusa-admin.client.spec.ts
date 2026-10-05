@@ -537,3 +537,76 @@ describe("HttpMedusaAdminClient.listOrders", () => {
     assert.equal(eredmeny.truncated, false);
   });
 });
+
+/**
+ * A TÖRZS VALÓDI FETCH-CSEL, VALÓDI SZERVERIG (stage, 2026-10-05, acrobot
+ * 26450). Az OS státuszváltása a webshoptól „Field 'status' is required”
+ * választ kapott: a kliens két content-type kulcsot küldött (`content-type` és
+ * `Content-Type`), a fetch ezeket „application/json, application/json”
+ * értékké fűzte, és a Medusa JSON-olvasója a törzset üresnek vette.
+ *
+ * Hamis fetch-csel ez nem látszik (az a sima objektumot kapja, két kulccsal),
+ * ezért itt egy helyi HTTP-szerver a vevő, és azt nézzük, amit TÉNYLEG kapott.
+ */
+describe("a kérés fejléce és törzse valódi fetch-csel", () => {
+  const receiving = async (
+    work: (client: HttpMedusaAdminClient) => Promise<unknown>,
+  ) => {
+    const { createServer } = await import("node:http");
+    const seen: { contentType: string | undefined; body: string }[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        seen.push({ contentType: req.headers["content-type"], body });
+        res.setHeader("content-type", "application/json");
+        res.end("{}");
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as { port: number };
+    try {
+      await work(
+        new HttpMedusaAdminClient({
+          baseUrl: `http://127.0.0.1:${port}`,
+          apiKey: "sk_teszt",
+        }),
+      );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    return seen;
+  };
+
+  it("a státuszváltás EGY application/json fejléccel és a státusszal érkezik", async () => {
+    const seen = await receiving((client) =>
+      client.transitionBusinessStatus("order_1", "confirmed"),
+    );
+    assert.deepEqual(seen, [
+      {
+        contentType: "application/json",
+        body: JSON.stringify({ status: "confirmed" }),
+      },
+    ]);
+  });
+
+  it("a hívó fejléce felülírja az alapot, nem mellé kerül", async () => {
+    const client = new HttpMedusaAdminClient({
+      baseUrl: "https://példa.invalid",
+      apiKey: "sk_teszt",
+    });
+    const headers = (
+      client as unknown as {
+        requestHeaders(extra?: HeadersInit): Record<string, string>;
+      }
+    ).requestHeaders({ "Content-Type": "application/json; charset=utf-8" });
+    assert.equal(headers["content-type"], "application/json; charset=utf-8");
+    assert.equal(
+      Object.keys(headers).filter((key) => key.toLowerCase() === "content-type")
+        .length,
+      1,
+    );
+  });
+});
