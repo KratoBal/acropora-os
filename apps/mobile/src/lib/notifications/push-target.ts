@@ -67,12 +67,17 @@ export interface PushResponseLike {
  * mert az akvarium-adatlap kepernyo akkor meg nem letezett. A #1054
  * PR-ben elkeszult (`app/aquariums/[id].tsx`), tehat a feltetel most
  * teljesult, es a ket oldal EGYUTT bovul, egy PR-ben.
+ *
+ * AZ OTODIK ERTEK, `conversation`, 2026-10-05-EN KERULT FEL (Uzenetek, kartya
+ * 51d7aba0), UGYANAZZAL A SZABALLYAL: a szerver `deliverNewMessage`-e kuldi, es a
+ * beszelgetes kepernyoje ugyanabban a PR-ban keszult.
  */
 export const PUSH_TARGET_TYPES = [
   "worksheet",
   "serviceJob",
   "materialRequest",
   "aquarium",
+  "conversation",
 ] as const;
 
 export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
@@ -132,6 +137,7 @@ export const PUSH_TARGET_ROUTES = {
   serviceJob: "/service-jobs/[id]",
   materialRequest: "/material-requests/[id]",
   aquarium: "/aquariums/[id]",
+  conversation: "/uzenetek/[id]",
 } as const satisfies Record<PushTargetType, string>;
 
 export interface PushTarget {

@@ -75,3 +75,50 @@ export function decodeCursor(
   const id = raw.slice(bar + 1);
   return Number.isNaN(createdAt.getTime()) || !id ? null : { createdAt, id };
 }
+
+const PUSH_BODY_MAX = 140;
+
+/**
+ * A PUSH SZÖVEGE. DIRECT-nél a küldő neve a cím és az üzenet a törzs (a prompt
+ * 20. pontjának példája); csoportnál a csoport neve a cím, és a törzs elé kerül
+ * a küldő neve.
+ */
+export function messagePushText(input: {
+  conversationTitle: string | null;
+  senderName: string;
+  text: string;
+}): { title: string; body: string } {
+  const text =
+    input.text.length > PUSH_BODY_MAX
+      ? `${input.text.slice(0, PUSH_BODY_MAX - 1)}…`
+      : input.text;
+  return input.conversationTitle
+    ? { title: input.conversationTitle, body: `${input.senderName}: ${text}` }
+    : { title: input.senderName, body: text };
+}
+
+/**
+ * KI KAP PUSHT egy új üzenetről: a beszélgetés aktív tagjai, a küldőn kívül,
+ * és aki nincs elnémítva. A beállítás felülete a 3. fázisban jön, az oszlop és a
+ * szabály már most él.
+ */
+export function pushRecipients(input: {
+  senderUserId: string;
+  now: Date;
+  members: readonly {
+    userId: string;
+    leftAt: Date | null;
+    notify: "ALL" | "MENTIONS" | "NONE";
+    mutedUntil: Date | null;
+  }[];
+}): string[] {
+  return input.members
+    .filter(
+      (m) =>
+        m.userId !== input.senderUserId &&
+        m.leftAt === null &&
+        m.notify === "ALL" &&
+        !(m.mutedUntil && m.mutedUntil > input.now),
+    )
+    .map((m) => m.userId);
+}

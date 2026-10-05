@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 
+import { NotificationsModule } from "../notifications/notifications.module.js";
+
 import {
   InMemoryMessageEventBus,
   MESSAGE_EVENT_BUS,
@@ -13,6 +15,7 @@ import { MessagesService } from "./messages.service.js";
  * API-konténer fut. Több példánynál ugyanez a jelző kap Redis-megvalósítást.
  */
 @Module({
+  imports: [NotificationsModule],
   controllers: [MessagesController],
   providers: [
     MessagesRepository,

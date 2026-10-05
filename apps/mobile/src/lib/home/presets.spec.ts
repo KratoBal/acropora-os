@@ -153,12 +153,15 @@ describe("a nézet sorrendet ad, láthatóságot nem", () => {
 });
 
 describe("az alsó sáv minden nézetben ugyanaz", () => {
-  it("három elem, rögzített sorrendben, létező képernyőkre", () => {
+  // NÉGY ELEM 2026-10-05 óta: az Üzenetek a Profil elé került (kártya 51d7aba0,
+  // Figma 443:235). A sáv továbbra is mindenkinek ugyanaz, szűrés nélkül.
+  it("négy elem, rögzített sorrendben, létező képernyőkre", () => {
     assert.deepEqual(
       BOTTOM_NAV_ITEMS.map((item) => [item.key, item.label, item.route]),
       [
         ["home", "Kezdőlap", "/"],
         ["modules", "Modulok", "/modulok"],
+        ["messages", "Üzenetek", "/uzenetek"],
         ["profile", "Profil", "/settings"],
       ],
     );
