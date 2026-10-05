@@ -40,6 +40,8 @@ const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
   staleThresholds: async () => thresholdsNow.list,
+  osCustomerByKey: async () => null,
+  internalNote: async () => null,
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -429,6 +431,8 @@ describe("WebshopOrdersService.changeStatus", () => {
         void audited.push(input),
       invoices: async () => new Map(),
       staleThresholds: async () => thresholdsNow.list,
+      osCustomerByKey: async () => null,
+      internalNote: async () => null,
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(

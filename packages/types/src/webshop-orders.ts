@@ -219,6 +219,8 @@ export interface WebshopOrderAddress {
   line: string | null;
   countryCode: string | null;
   phone: string | null;
+  /** A cím mezőnként, a szerkesztő párbeszédhez (a webshop saját alakjából). */
+  fields: Omit<WebshopOrderAddressInput, "kind">;
 }
 
 export interface WebshopOrderLine {
@@ -329,6 +331,19 @@ export interface WebshopOrderDetail {
     status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
     number: string | null;
   } | null;
+  /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */
+  osCustomer: {
+    id: string;
+    customerNumber: string;
+    displayName: string;
+  } | null;
+  /** A belső megjegyzés: csak az OS-é, a vevő nem látja. */
+  internalNote: { text: string; updatedAt: string } | null;
+  /** Szerkeszthető-e most a számlázási, illetve a szállítási cím, és ha nem, miért. */
+  addressEdit: {
+    billing: { allowed: boolean; reason: string | null };
+    shipping: { allowed: boolean; reason: string | null };
+  };
   /** A kártyás fizetés útja (zárolás, feloldás, fizetési link); más fizetésnél `null`. */
   cardPayment: WebshopOrderCardPayment | null;
   /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
@@ -457,4 +472,20 @@ export interface WebshopOrderCardPayment {
   canRelease: boolean;
   /** „Fizetési link küldése” (újraküldés is: ugyanarra az összegre ugyanaz a link). */
   canSendLink: boolean;
+}
+
+/** Egy cím szerkesztése az adatlapról (a webshop beépített rendelés-frissítésén át). */
+export interface WebshopOrderAddressInput {
+  kind: "billing" | "shipping";
+  lastName: string;
+  firstName: string;
+  company: string | null;
+  /** Csak a számlázási címen: a cég adószáma (a webshop `metadata.tax_id`). */
+  taxNumber: string | null;
+  postalCode: string;
+  city: string;
+  line1: string;
+  line2: string | null;
+  phone: string | null;
+  countryCode: string;
 }

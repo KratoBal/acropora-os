@@ -14,6 +14,7 @@ import type {
   MedusaOrderDetailRow,
   MedusaOrderPayment,
 } from "../../integrations/medusa/medusa-admin.client.js";
+import { addressEditOf } from "./webshop-order-address.rules.js";
 import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
@@ -58,12 +59,26 @@ export function addressOf(
     .filter(Boolean)
     .join(" ");
   const line = [place, street].filter(Boolean).join(", ") || null;
+  const taxId = address.metadata?.tax_id;
   const result = {
     name: nameOf(address),
     company: address.company?.trim() || null,
     line,
     countryCode: address.country_code?.toUpperCase() ?? null,
     phone: address.phone?.trim() || null,
+    fields: {
+      lastName: address.last_name?.trim() ?? "",
+      firstName: address.first_name?.trim() ?? "",
+      company: address.company?.trim() || null,
+      taxNumber:
+        typeof taxId === "string" && taxId.trim() ? taxId.trim() : null,
+      postalCode: address.postal_code?.trim() ?? "",
+      city: address.city?.trim() ?? "",
+      line1: address.address_1?.trim() ?? "",
+      line2: address.address_2?.trim() || null,
+      phone: address.phone?.trim() || null,
+      countryCode: (address.country_code ?? "hu").toUpperCase(),
+    },
   };
   return result.name || result.company || result.line ? result : null;
 }
@@ -274,7 +289,7 @@ export function historyOf(
     text:
       entry.from_status === null
         ? `Rendelés létrejött · ${entry.to_label}`
-        : `${entry.from_label} → ${entry.to_label}${entry.actor === "carrier" ? " (futár)" : ""}`,
+        : `${entry.from_label} → ${entry.to_label}${entry.actor === "carrier" ? " (futár)" : entry.source === "payment_deadline" ? " (fizetési határidő lejárt, rendszer)" : ""}`,
     mail: entry.notification
       ? {
           status: entry.notification.status,
@@ -304,6 +319,10 @@ export function toDetail(input: {
   customerOrderCount: number | null;
   relatedDisplayId: number | null;
   now: Date;
+  /** A vevő OS-partnere, ha a számlázás bekötötte. */
+  osCustomer?: WebshopOrderDetail["osCustomer"];
+  /** A belső megjegyzés (csak OS). */
+  internalNote?: WebshopOrderDetail["internalNote"];
   /** Az elavulási küszöbök órában (a beállított; ha hiányzik, az alapérték). */
   staleHours?: Partial<Record<WebshopOrderStatus, { hours: number }>>;
   /** A kártyás fizetés útja a webshopból; `null` vagy hiányzó: nincs ilyen (vagy nem olvasható). */
@@ -358,6 +377,13 @@ export function toDetail(input: {
     invoice: facts.invoice,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
+    osCustomer: input.osCustomer ?? null,
+    internalNote: input.internalNote ?? null,
+    addressEdit: addressEditOf({
+      status: code,
+      invoice: facts.invoice,
+      parcel: facts.parcel,
+    }),
     lineEdit: (() => {
       const reason = lineEditRefusal({
         status: code,

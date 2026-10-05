@@ -11,6 +11,7 @@ import {
   type WebshopOrderHistoryEntry,
   type WebshopOrderLineEdit,
   type WebshopOrderCardPayment,
+  type WebshopOrderAddressInput,
   type WebshopVariantOption,
   type WebshopOrderStatus,
   type WebshopOrderStep,
@@ -31,6 +32,7 @@ import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
 import { useLineSelection } from "./line-selection";
+import { AddressDialog, EditPencil, NoteDialog } from "./webshop-order-edits";
 import {
   OrderLinesTable,
   ScissorsIcon,
@@ -349,6 +351,14 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
   };
+  const updateAddress = async (input: WebshopOrderAddressInput) => {
+    setOrder(await webshopOrdersApi.updateAddress(token, id, input));
+    setNow(Date.now());
+  };
+  const saveNote = async (text: string) => {
+    setOrder(await webshopOrdersApi.saveInternalNote(token, id, text));
+    setNow(Date.now());
+  };
   const releaseHold = async (notifyCustomer: boolean) => {
     const result = await webshopOrdersApi.releaseHold(
       token,
@@ -471,6 +481,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onSearchVariants={searchVariants}
           onReleaseHold={releaseHold}
           onSendPaymentLink={sendPaymentLink}
+          onUpdateAddress={updateAddress}
+          onSaveNote={saveNote}
         />
       ) : null}
     </PilotThemeRoot>
@@ -889,6 +901,19 @@ function PaymentActionDialog({
   );
 }
 
+const EMPTY_ADDRESS: Omit<WebshopOrderAddressInput, "kind"> = {
+  lastName: "",
+  firstName: "",
+  company: null,
+  taxNumber: null,
+  postalCode: "",
+  city: "",
+  line1: "",
+  line2: null,
+  phone: null,
+  countryCode: "HU",
+};
+
 /** Ezekben az állapotokban adható fel csomag (a szerver is így dönt). */
 const PARCEL_STATUSES: readonly (WebshopOrderStatus | null)[] = [
   "confirmed",
@@ -1092,6 +1117,8 @@ function OrderBody({
   onSearchVariants,
   onReleaseHold,
   onSendPaymentLink,
+  onUpdateAddress,
+  onSaveNote,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -1114,9 +1141,14 @@ function OrderBody({
   onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
   onReleaseHold: (notifyCustomer: boolean) => Promise<string>;
   onSendPaymentLink: (notifyCustomer: boolean) => Promise<string>;
+  onUpdateAddress: (input: WebshopOrderAddressInput) => Promise<void>;
+  onSaveNote: (text: string) => Promise<void>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [editing, setEditing] = useState<
+    "billing" | "shipping" | "note" | null
+  >(null);
   const selection = useLineSelection(order.lines.map((line) => line.id));
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
   const tile = order.status.code ? STATUS_TILE[order.status.code] : null;
@@ -1244,7 +1276,20 @@ function OrderBody({
         <div className="min-w-0 space-y-6">
           <Card title="Vevő">
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Név">{order.customer.name ?? "—"}</Field>
+              <Field
+                label="Név"
+                action={
+                  canManage ? (
+                    <EditPencil
+                      label="Név szerkesztése"
+                      reason={order.addressEdit.shipping.reason}
+                      onClick={() => setEditing("shipping")}
+                    />
+                  ) : null
+                }
+              >
+                {order.customer.name ?? "—"}
+              </Field>
               <Field
                 label="E-mail"
                 action={
@@ -1291,12 +1336,31 @@ function OrderBody({
                   ⊘ regisztráció nélkül
                 </span>
               ) : null}
+              {order.osCustomer ? (
+                <Link
+                  href={`/vevok?search=${encodeURIComponent(order.osCustomer.customerNumber)}`}
+                  className="ml-auto rounded-lg border border-pilot-grey-200 bg-white px-3 py-1.5 text-sm font-medium text-pilot-grey-900 hover:border-pilot-accent-warm"
+                >
+                  Vevő adatlapja
+                </Link>
+              ) : null}
             </div>
           </Card>
 
           <Card title="Számlázási és szállítási adatok">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Számlázási cím">
+              <Field
+                label="Számlázási cím"
+                action={
+                  canManage ? (
+                    <EditPencil
+                      label="Számlázási cím szerkesztése"
+                      reason={order.addressEdit.billing.reason}
+                      onClick={() => setEditing("billing")}
+                    />
+                  ) : null
+                }
+              >
                 <Address address={order.billingAddress} />
               </Field>
               <Field label="Szállítás">{order.shipping.method ?? "—"}</Field>
@@ -1325,7 +1389,18 @@ function OrderBody({
                   </Field>
                 </>
               ) : !order.shipping.storePickup ? (
-                <Field label="Szállítási cím">
+                <Field
+                  label="Szállítási cím"
+                  action={
+                    canManage ? (
+                      <EditPencil
+                        label="Szállítási cím szerkesztése"
+                        reason={order.addressEdit.shipping.reason}
+                        onClick={() => setEditing("shipping")}
+                      />
+                    ) : null
+                  }
+                >
                   <Address address={order.shippingAddress} />
                 </Field>
               ) : null}
@@ -1459,9 +1534,20 @@ function OrderBody({
           <Card title="Szállítás">
             <div className="space-y-4">
               <Field label="Fuvarozó">
-                {order.shipping.storePickup
-                  ? "Bolti átvétel"
-                  : (order.shipping.carrier ?? order.shipping.method ?? "—")}
+                {order.shipping.carrier === "FOXPOST" ? (
+                  // a hivatalos logó (FOXPOST - Packeta Group, Balázs döntése 2081), a kirakatéval azonos fájl
+                  // eslint-disable-next-line @next/next/no-img-element -- static PNG
+                  <img
+                    src="/images/foxpost-packeta-group.png"
+                    alt="FOXPOST"
+                    height={28}
+                    className="h-7 w-auto"
+                  />
+                ) : order.shipping.storePickup ? (
+                  "Bolti átvétel"
+                ) : (
+                  (order.shipping.carrier ?? order.shipping.method ?? "—")
+                )}
               </Field>
               {order.shipping.storePickup ? null : (
                 <ParcelSection
@@ -1483,11 +1569,57 @@ function OrderBody({
           />
 
           <Card title="Megjegyzések">
-            <p className="text-sm text-pilot-grey-500">
-              A webshop pénztára ma nem kér be megjegyzést (sem a vevőtől, sem a
-              szállítónak). A belső megjegyzés a következő körben kerül ide.
-            </p>
+            <div className="space-y-4">
+              <p className="text-sm text-pilot-grey-500">
+                A webshop pénztára ma nem kér be megjegyzést (sem a vevőtől, sem
+                a szállítónak).
+              </p>
+              <Field
+                label="Belső megjegyzés"
+                action={
+                  canManage ? (
+                    <EditPencil
+                      label="Belső megjegyzés szerkesztése"
+                      reason={null}
+                      onClick={() => setEditing("note")}
+                    />
+                  ) : null
+                }
+              >
+                {order.internalNote ? (
+                  <span className="whitespace-pre-wrap">
+                    {order.internalNote.text}
+                  </span>
+                ) : (
+                  <span className="text-pilot-grey-500">Nincs.</span>
+                )}
+              </Field>
+            </div>
           </Card>
+          {editing === "billing" || editing === "shipping" ? (
+            <AddressDialog
+              kind={editing}
+              initial={
+                (editing === "billing"
+                  ? order.billingAddress
+                  : order.shippingAddress
+                )?.fields ??
+                (editing === "shipping"
+                  ? order.billingAddress?.fields
+                  : null) ??
+                EMPTY_ADDRESS
+              }
+              onClose={() => setEditing(null)}
+              onSave={onUpdateAddress}
+            />
+          ) : null}
+          {editing === "note" ? (
+            <NoteDialog
+              initial={order.internalNote?.text ?? ""}
+              onClose={() => setEditing(null)}
+              onSave={onSaveNote}
+            />
+          ) : null}
 
           <Card title="Hűségpontok">
             <p className="text-sm text-pilot-grey-500">

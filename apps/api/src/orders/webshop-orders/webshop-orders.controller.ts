@@ -23,6 +23,11 @@ import {
 import { WebshopOrderParcelCreateDto } from "./dto/webshop-order-parcel-create.dto.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderNotifyDto } from "./dto/webshop-order-notify.dto.js";
+import {
+  WebshopOrderAddressDto,
+  WebshopOrderNoteDto,
+} from "./dto/webshop-order-edits.dto.js";
+import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
@@ -38,7 +43,30 @@ export class WebshopOrdersController {
     private readonly parcels: WebshopOrderParcelService,
     private readonly lines: WebshopOrderLinesService,
     private readonly payments: WebshopOrderPaymentService,
+    private readonly edits: WebshopOrderEditsService,
   ) {}
+
+  /** A számlázási vagy a szállítási cím (a név is) szerkesztése. */
+  @Put(":id/address")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  updateAddress(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderAddressDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.updateAddress(id, body, user);
+  }
+
+  /** A belső megjegyzés (csak OS); üres szöveg törli. */
+  @Put(":id/internal-note")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  saveInternalNote(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderNoteDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.saveInternalNote(id, body.text, user);
+  }
 
   /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */
   @Post(":id/payment/release-hold")

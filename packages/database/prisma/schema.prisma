@@ -8338,6 +8338,16 @@ model WebshopOrderStaleThreshold {
   updatedAt       DateTime         @updatedAt
 }
 
+/// A WEBSHOP RENDELÉS BELSŐ MEGJEGYZÉSE (a Figma 494:386 Megjegyzések kártyája).
+/// Csak az OS-é: a webshopnak és a vevőnek nem kell tudnia róla. Rendelésenként
+/// egy szöveg; a webshop rendelés-azonosítója a kulcs.
+model WebshopOrderNote {
+  orderId         String   @id @db.VarChar(64)
+  text            String
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+}
+
 enum WebshopStaleUnit {
   HOUR
   DAY

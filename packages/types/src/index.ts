@@ -1207,6 +1207,7 @@ export type {
   WebshopOrderCardPayment,
   WebshopStaleStatus,
   WebshopStaleThreshold,
+  WebshopOrderAddressInput,
   WebshopStaleUnit,
   WebshopVariantOption,
   WebshopOrderStatusChangeResult,

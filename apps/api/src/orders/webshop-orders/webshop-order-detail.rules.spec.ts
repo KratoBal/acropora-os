@@ -374,3 +374,28 @@ describe("the history's mail", () => {
     );
   });
 });
+
+/* A FIZETÉSI HATÁRIDŐ (murena L4): a rendszer zárja le, és az előzmény ezt mondja. */
+describe("a payment deadline in the history", () => {
+  it("names the system's closing", () => {
+    const history = historyOf(
+      status("closed_unsuccessfully", {
+        history: [
+          {
+            from_status: "stocking",
+            from_label: "Készletezés alatt",
+            to_status: "closed_unsuccessfully",
+            to_label: "Sikertelenül lezárt rendelés",
+            actor: "system",
+            source: "payment_deadline",
+            created_at: "2026-10-11T10:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    assert.equal(
+      history[0]!.text,
+      "Készletezés alatt → Sikertelenül lezárt rendelés (fizetési határidő lejárt, rendszer)",
+    );
+  });
+});
