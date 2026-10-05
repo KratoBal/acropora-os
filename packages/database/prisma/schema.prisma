@@ -911,6 +911,12 @@ model User {
   materialRequestEvents      MaterialRequestEvent[]        @relation("MaterialRequestEventActor")
   materialRequestComments    MaterialRequestComment[]      @relation("MaterialRequestCommentAuthor")
   deviceTokens               DeviceToken[]
+  /// Az Üzenetek modul (1. fázis, kártya 51d7aba0): az általa indított
+  /// beszélgetések, a tagságai, az elküldött és az általa törölt üzenetek.
+  createdConversations       Conversation[]                @relation("ConversationCreatedBy")
+  conversationMemberships    ConversationMember[]
+  sentMessages               Message[]                     @relation("MessageSender")
+  deletedMessages            Message[]                     @relation("MessageDeletedBy")
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
   /// vagyis egy takaritasi muvelet TAGITANA a hozzaferest. Restrict mellett a
@@ -7973,6 +7979,121 @@ model ServiceDraftAttachment {
   draft       ServiceTicketDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
 
   @@unique([draftId, sha256])
+}
+
+/// AZ ÜZENETEK MODUL (1. fázis, kártya 51d7aba0; terv:
+/// agents/nautilus/megosztas/uzenetek-modul-felmeres.md, acrobot döntései 26174).
+///
+/// Belső dolgozók beszélgetései. A felhasználó a meglévő `User`: nincs külön
+/// üzenetküldő fiók.
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+/// KI LEHET TAG. Ma csak `INTERNAL` beszélgetés van; a `PARTNER` a jövő
+/// partner-beszélgetéseinek helye. A szabály a szolgáltatásban áll: `INTERNAL`
+/// beszélgetésnek partnerfiók SOHA nem tagja, és a mező létrehozás után nem
+/// írható át, így régi belső üzenet nem válhat láthatóvá egy partnernek.
+enum ConversationAudience {
+  INTERNAL
+  PARTNER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+}
+
+/// Tagonkénti értesítés-beállítás. Az 1. fázisban csak az oszlop van meg, a
+/// felület a 3. fázisban jön; a `MENTIONS` az említés-funkcióval együtt él.
+enum MessageNotify {
+  ALL
+  MENTIONS
+  NONE
+}
+
+model Conversation {
+  id              String               @id @default(cuid())
+  type            ConversationType
+  audience        ConversationAudience @default(INTERNAL)
+  title           String?
+  description     String?
+  createdByUserId String
+  /// KÉT EMBER KÖZÖTT EGY DIRECT BESZÉLGETÉS: a két userId rendezve, `:`-tal
+  /// összefűzve. Az egyediség az adatbázisban áll, tehát két egyszerre induló
+  /// "új üzenet" sem hoz létre kettőt. GROUP-nál `null`.
+  directKey       String?              @unique
+  /// Későbbi OS-objektum (munkalap, megrendelés, ...), 4. fázis. Nincs
+  /// beégetve egyetlen fajta sem.
+  contextType     String?
+  contextId       String?
+  /// A lista előnézete egy lekérdezésből: az utolsó üzenet azonosítója és ideje.
+  lastMessageId   String?
+  lastMessageAt   DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  archivedAt      DateTime?
+
+  createdBy User                 @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+  members   ConversationMember[]
+  messages  Message[]
+
+  @@index([lastMessageAt])
+  @@index([contextType, contextId])
+}
+
+model ConversationMember {
+  id                String        @id @default(cuid())
+  conversationId    String
+  userId            String
+  joinedAt          DateTime      @default(now())
+  leftAt            DateTime?
+  /// AZ OLVASOTTSÁG EGY MUTATÓ, nem üzenetenkénti rekord: olvasatlan minden más
+  /// által küldött, nem törölt üzenet, ami ennél később keletkezett (ha nincs,
+  /// a csatlakozásnál).
+  lastReadAt        DateTime?
+  lastReadMessageId String?
+  notify            MessageNotify @default(ALL)
+  mutedUntil        DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId, leftAt])
+}
+
+model Message {
+  id               String      @id @default(cuid())
+  conversationId   String
+  senderUserId     String
+  type             MessageType @default(TEXT)
+  text             String?
+  /// A KLIENS SAJÁT AZONOSÍTÓJA. Egy újraküldés (hálózati hiba után) ugyanezzel
+  /// érkezik, és nem hoz létre második üzenetet.
+  clientMessageId  String?
+  /// A válasz (2. fázis felülete). Az eredeti üzenet soft delete-tel törlődik,
+  /// tehát a kapcsolat nem szakad el.
+  replyToMessageId String?
+  createdAt        DateTime    @default(now())
+  editedAt         DateTime?
+  /// SOFT DELETE: a szöveg az adatbázisban marad, a felületen és az API-n senki
+  /// nem látja, automatikus végleges törlés nincs (acrobot döntése, 26174).
+  deletedAt        DateTime?
+  deletedByUserId  String?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderUserId], references: [id])
+  deletedBy    User?        @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  replyTo      Message?     @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReply")
+
+  @@unique([senderUserId, clientMessageId])
+  @@index([conversationId, createdAt, id])
+  @@index([senderUserId])
 }
 
 /// NAV OPG imports are separate from invoices and POS stock movements.

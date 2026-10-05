@@ -50,6 +50,7 @@ import { UsersModule } from "./users/users.module.js";
 import { ServiceJobsModule } from "./service-jobs/service-jobs.module.js";
 import { WorksheetsModule } from "./worksheets/worksheets.module.js";
 import { MaterialRequestsModule } from "./material-requests/material-requests.module.js";
+import { MessagesModule } from "./messages/messages.module.js";
 import { ContractsModule } from "./contracts/contracts.module.js";
 import { MaintenanceOrdersModule } from "./maintenance-orders/maintenance-orders.module.js";
 import { CompletionCertificatesModule } from "./completion-certificates/completion-certificates.module.js";
@@ -110,6 +111,7 @@ import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
     SearchModule,
     WorksheetsModule,
     MaterialRequestsModule,
+    MessagesModule,
     TasksModule,
     UsersModule,
     HealthModule,

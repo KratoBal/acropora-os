@@ -385,6 +385,8 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "icp.view",
         "inventory.manage",
         "inventory.view",
+        // az Üzenetek modul: minden belső emberi szerepkör (acrobot 26174)
+        "messages.use",
         "orders.manage",
         "orders.view",
         "partners.manage",
