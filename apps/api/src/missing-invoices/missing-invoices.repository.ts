@@ -50,6 +50,56 @@ function invoiceKey(
   return `${number.replace(/\s/g, "").toLowerCase()}|${who}`;
 }
 
+/** Az ÁFA-csoport azonosítója 17-tel kezdődik; a NAV a csoportot adja szállítóként. */
+const VAT_GROUP_TAX_BASE = /^17\d{6}$/;
+
+/**
+ * AZ ÁFA-CSOPORT TAGJA KÉT ADÓSZÁMMAL ÉRKEZIK (barracuda mérése, 2026-10-05:
+ * osszevonas-kulcs-meres-2026-10-05.md). A NAV-sor a csoport azonosítóját adja
+ * szállítóként (17-tel kezdődik), a Számlázz.hu-továbbítás a tag saját
+ * adószámát; a számlaszám, a bruttó és a kelte azonos. Élesben 80 NAV- és
+ * Számlázz-párból 3 maradt így külön (Euroleasing 2, OTP EBIZ 1), és minden új
+ * számlájuk így maradna.
+ *
+ * A NAV-sor ilyenkor a társa kulcsát veszi át, de CSAK ha ugyanazzal a
+ * számmal, bruttóval és keltével pontosan EGY másik kulcs létezik. Két
+ * különböző szállító véletlenül azonos számlaszáma nem vonódik így össze: a
+ * NAV-oldalon csoport-azonosító kell, és az összeg és a nap is egyezik.
+ */
+export function alignVatGroupKeys(
+  documents: readonly CandidateDocument[],
+  keys: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const aligned = new Map(keys);
+  const parts = (key: string | undefined) => {
+    const at = key?.lastIndexOf("|") ?? -1;
+    return key && at > 0
+      ? { number: key.slice(0, at), who: key.slice(at + 1) }
+      : null;
+  };
+  for (const nav of documents) {
+    if (nav.source !== "NAV" || !nav.gross) continue;
+    const own = parts(keys.get(nav.id));
+    if (!own || !VAT_GROUP_TAX_BASE.test(own.who)) continue;
+    const partners = new Set<string>();
+    for (const other of documents) {
+      if (other === nav || !other.gross) continue;
+      const key = keys.get(other.id);
+      const theirs = parts(key);
+      if (
+        theirs &&
+        theirs.number === own.number &&
+        theirs.who !== own.who &&
+        other.date === nav.date &&
+        other.gross.equals(nav.gross)
+      )
+        partners.add(key!);
+    }
+    if (partners.size === 1) aligned.set(nav.id, [...partners][0]!);
+  }
+  return aligned;
+}
+
 /**
  * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
  * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
@@ -60,8 +110,9 @@ function invoiceKey(
  */
 export function mergeSameInvoice(
   documents: readonly CandidateDocument[],
-  keys: ReadonlyMap<string, string>,
+  given: ReadonlyMap<string, string>,
 ): CandidateDocument[] {
+  const keys = alignVatGroupKeys(documents, given);
   const groups = new Map<string, CandidateDocument[]>();
   const alone: CandidateDocument[] = [];
   for (const document of documents) {
