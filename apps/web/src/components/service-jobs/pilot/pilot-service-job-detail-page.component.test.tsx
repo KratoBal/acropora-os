@@ -88,6 +88,22 @@ const auth = vi.hoisted(() => ({ session: null as Session | null }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
+// Üzenetek 4. fázis: a „Beszélgetés” gombnak saját tesztje van; itt csak a helye és a tárgya
+vi.mock("@/components/messages/context-conversation-button", () => ({
+  ContextConversationButton: ({
+    kind,
+    objectId,
+  }: {
+    kind: string;
+    objectId: string;
+  }) => (
+    <span
+      data-testid="context-conversation-button"
+      data-kind={kind}
+      data-object={objectId}
+    />
+  ),
+}));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 // The list's latest query, as the navigation trail would hand it over.
 vi.mock("@/components/navigation-history", () => ({
@@ -164,6 +180,14 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(
       screen.getByTestId("maintenance-package-panel-stub"),
     ).toBeInTheDocument();
+  });
+
+  it("a hibajegyen áll a „Beszélgetés” gomb, a jegy azonosítójával", async () => {
+    api.detail.mockResolvedValue(detail({ kind: "REPAIR" }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const button = await screen.findByTestId("context-conversation-button");
+    expect(button.getAttribute("data-kind")).toBe("service-job");
+    expect(button.getAttribute("data-object")).toBe("job-1");
   });
 
   /*
