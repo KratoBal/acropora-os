@@ -198,6 +198,9 @@ function fakeRepository(users: MessagingUserRow[]) {
         editedAt: null,
         deletedAt: null,
         sender: { displayName: sender.displayName, nickname: sender.nickname },
+        attachments: [],
+        reactions: [],
+        replyTo: null,
       } as MessageRow;
       messages.push(row);
       const c = conversations.get(input.conversationId)!;

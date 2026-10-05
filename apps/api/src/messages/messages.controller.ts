@@ -1,20 +1,33 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  Header,
   Param,
+  Patch,
   Post,
   Query,
   Sse,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
   type MessageEvent,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { Observable, interval, map, merge } from "rxjs";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import {
+  AttachmentQueryDto,
   CreateConversationDto,
+  EditMessageDto,
+  ReactionDto,
   MarkReadDto,
   MessagePageQueryDto,
   MessagePeopleQueryDto,
@@ -116,5 +129,89 @@ export class MessagesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.messages.markRead(user, id, body.messageId);
+  }
+
+  /**
+   * CSATOLMÁNY FELTÖLTÉSE, üzenet nélkül; a küldés köti az üzenethez. Egy fájl
+   * kérésenként, a közös 10 MB-os kerettel (`DOCUMENT_UPLOAD_LIMITS`).
+   */
+  @Post("conversations/:id/attachments")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
+    }),
+  )
+  upload(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A feltöltendő fájl kötelező.");
+    return this.messages.uploadAttachment(user, id, file);
+  }
+
+  /** A csatolmány bájtjai; a `no-store` ugyanaz a döntés, mint a szerviz-képeknél. */
+  @Get("attachments/:id")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  @Header("Cache-Control", "private, no-store")
+  async attachment(
+    @Param("id") id: string,
+    @Query() query: AttachmentQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const file = await this.messages.attachmentBytes(user, id, query.variant);
+    return new StreamableFile(file.bytes, {
+      type: file.contentType,
+      length: file.bytes.length,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    });
+  }
+
+  /*
+    AZ `:id` ÚTVONALAK A VÉGÉN ÁLLNAK: a Nest a deklarálás sorrendjében illeszt,
+    és egy korábbi `:id` elnyelné a `people`, az `unread` és a `stream` kérést.
+  */
+  @Get(":id")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  message(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.message(user, id);
+  }
+
+  @Patch(":id")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  edit(
+    @Param("id") id: string,
+    @Body() body: EditMessageDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.edit(user, id, body.text);
+  }
+
+  @Delete(":id")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  remove(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.remove(user, id);
+  }
+
+  @Post(":id/reactions")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  react(
+    @Param("id") id: string,
+    @Body() body: ReactionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.react(user, id, body.reaction, true);
+  }
+
+  @Delete(":id/reactions/:reaction")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  unreact(
+    @Param("id") id: string,
+    @Param("reaction") reaction: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.react(user, id, reaction, false);
   }
 }

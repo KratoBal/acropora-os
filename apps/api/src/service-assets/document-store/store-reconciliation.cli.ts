@@ -191,6 +191,42 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
       },
       sizeBytes: null,
     })),
+  /**
+   * AZ ÜZENETEK CSATOLMÁNYA (2. fázis): az eredeti a mérettel, és képnél a
+   * bélyegkép (`<id>-thumb`) méret nélkül -- a tábla annak a méretét nem tartja.
+   */
+  message: async () =>
+    (
+      await prisma.messageAttachment.findMany({
+        select: {
+          id: true,
+          conversationId: true,
+          sizeBytes: true,
+          thumbnailKey: true,
+        },
+      })
+    ).flatMap((sor) => [
+      {
+        key: {
+          owner: "message" as const,
+          ownerId: sor.conversationId,
+          documentId: sor.id,
+        },
+        sizeBytes: sor.sizeBytes,
+      },
+      ...(sor.thumbnailKey
+        ? [
+            {
+              key: {
+                owner: "message" as const,
+                ownerId: sor.conversationId,
+                documentId: `${sor.id}-thumb`,
+              },
+              sizeBytes: null,
+            },
+          ]
+        : []),
+    ]),
 };
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {

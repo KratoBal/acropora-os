@@ -122,3 +122,23 @@ export function pushRecipients(input: {
     )
     .map((m) => m.userId);
 }
+
+/** A szöveg nélküli csatolmány előnézete (a prompt 20. pontja): a listában és a pushban. */
+export function attachmentPreview(kind: "IMAGE" | "FILE"): string {
+  return kind === "IMAGE" ? "📷 Képet küldött" : "📎 Fájlt küldött";
+}
+
+/** Az üzenet típusa a csatolmányokból: kép, ha mind kép; fájl, ha bármelyik nem az. */
+export function messageTypeFor(
+  kinds: readonly ("IMAGE" | "FILE")[],
+): "TEXT" | "IMAGE" | "FILE" {
+  if (kinds.length === 0) return "TEXT";
+  return kinds.every((kind) => kind === "IMAGE") ? "IMAGE" : "FILE";
+}
+
+/** A gazdátlan feltöltés ennyi idő után törölhető (acrobot 26242, emlék 2076). */
+export const ORPHAN_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** A bélyegkép dokumentum-azonosítója a tárolóban, az eredeti mellett. */
+export const thumbnailDocumentId = (attachmentId: string) =>
+  `${attachmentId}-thumb`;

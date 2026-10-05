@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type { UserRole } from "@acropora/types";
 
+import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
+
 /**
  * AZ ÜZENETEK ADATELÉRÉSE (kártya 51d7aba0). A jogosultságot nem ez dönti el:
  * a szolgáltatás minden hívás előtt megnézi a tagságot.
@@ -41,6 +43,28 @@ const MESSAGE_SELECT = {
   editedAt: true,
   deletedAt: true,
   sender: { select: { displayName: true, nickname: true } },
+  // a 2. fázis: csatolmányok, reakciók és a válasz előnézete, egy lekérdezésben
+  attachments: {
+    select: {
+      id: true,
+      kind: true,
+      fileName: true,
+      contentType: true,
+      sizeBytes: true,
+      thumbnailKey: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+  reactions: { select: { reaction: true, userId: true } },
+  replyTo: {
+    select: {
+      id: true,
+      text: true,
+      deletedAt: true,
+      sender: { select: { displayName: true, nickname: true } },
+      attachments: { select: { kind: true }, take: 1 },
+    },
+  },
 } as const;
 
 export type MessageRow = Prisma.MessageGetPayload<{
@@ -76,6 +100,9 @@ export interface MemberRow {
   notify: "ALL" | "MENTIONS" | "NONE";
   mutedUntil: Date | null;
 }
+
+/** A küldés olyan csatolmányra mutatott, ami nem köthető (másé, másik beszélgetésé vagy már elküldött). */
+export class AttachmentBindingError extends Error {}
 
 @Injectable()
 export class MessagesRepository extends Repository {
@@ -295,18 +322,44 @@ export class MessagesRepository extends Repository {
   createMessage(input: {
     conversationId: string;
     senderUserId: string;
-    text: string;
+    text: string | null;
     clientMessageId: string;
+    type?: "TEXT" | "IMAGE" | "FILE";
+    replyToMessageId?: string | null;
+    attachmentIds?: readonly string[];
   }): Promise<MessageRow> {
     return this.database.$transaction(async (tx) => {
-      const message = await tx.message.create({
+      const created = await tx.message.create({
         data: {
           conversationId: input.conversationId,
           senderUserId: input.senderUserId,
-          type: "TEXT",
+          type: input.type ?? "TEXT",
           text: input.text,
           clientMessageId: input.clientMessageId,
+          replyToMessageId: input.replyToMessageId ?? null,
         },
+        select: { id: true },
+      });
+      /*
+        A CSATOLMÁNY KÖTÉSE A TRANZAKCIÓN BELÜL: csak a küldő SAJÁT, ugyanebben a
+        beszélgetésben feltöltött, még gazdátlan csatolmánya köthető. Ha a
+        szám nem egyezik, az egész küldés visszagördül.
+      */
+      if (input.attachmentIds?.length) {
+        const bound = await tx.messageAttachment.updateMany({
+          where: {
+            id: { in: [...input.attachmentIds] },
+            conversationId: input.conversationId,
+            uploadedByUserId: input.senderUserId,
+            messageId: null,
+          },
+          data: { messageId: created.id },
+        });
+        if (bound.count !== input.attachmentIds.length)
+          throw new AttachmentBindingError();
+      }
+      const message = await tx.message.findUniqueOrThrow({
+        where: { id: created.id },
         select: MESSAGE_SELECT,
       });
       await tx.conversation.update({
@@ -322,6 +375,120 @@ export class MessagesRepository extends Repository {
       });
       return message;
     });
+  }
+
+  message(id: string): Promise<MessageRow | null> {
+    return this.database.message.findUnique({
+      where: { id },
+      select: MESSAGE_SELECT,
+    });
+  }
+
+  /** A szerkesztés: csak a szöveg és az időpont változik. */
+  async editMessage(id: string, text: string): Promise<void> {
+    await this.database.message.update({
+      where: { id },
+      data: { text, editedAt: new Date() },
+    });
+  }
+
+  /** SOFT DELETE: a szöveg és a csatolmány-sor marad, csak senkinek nem megy ki. */
+  async deleteMessage(id: string, userId: string): Promise<void> {
+    await this.database.message.update({
+      where: { id },
+      data: { deletedAt: new Date(), deletedByUserId: userId },
+    });
+  }
+
+  /** Reakció: az egyedi index miatt a második ugyanilyen nem jön létre. */
+  async addReaction(messageId: string, userId: string, reaction: string) {
+    await this.database.messageReaction.createMany({
+      data: [{ messageId, userId, reaction }],
+      skipDuplicates: true,
+    });
+  }
+
+  async removeReaction(messageId: string, userId: string, reaction: string) {
+    await this.database.messageReaction.deleteMany({
+      where: { messageId, userId, reaction },
+    });
+  }
+
+  createAttachment(input: {
+    id: string;
+    conversationId: string;
+    uploadedByUserId: string;
+    kind: "IMAGE" | "FILE";
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+    storageKey: string;
+    thumbnailKey: string | null;
+  }) {
+    return this.database.messageAttachment.create({
+      data: input,
+      select: {
+        id: true,
+        kind: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        thumbnailKey: true,
+      },
+    });
+  }
+
+  /** A küldés előtti ellenőrzéshez: kié, melyik beszélgetésé, kötött-e már. */
+  attachmentsForSend(ids: readonly string[]) {
+    return this.database.messageAttachment.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        kind: true,
+        conversationId: true,
+        uploadedByUserId: true,
+        messageId: true,
+      },
+    });
+  }
+
+  attachment(id: string) {
+    return this.database.messageAttachment.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        conversationId: true,
+        uploadedByUserId: true,
+        messageId: true,
+        fileName: true,
+        contentType: true,
+        storageKey: true,
+        thumbnailKey: true,
+        message: { select: { deletedAt: true } },
+      },
+    });
+  }
+
+  /** A gazdátlan feltöltések, amik a határnál régebbiek (a takarításhoz). */
+  orphanAttachments(olderThan: Date) {
+    return this.database.messageAttachment.findMany({
+      where: { messageId: null, createdAt: { lt: olderThan } },
+      select: { id: true, conversationId: true, thumbnailKey: true },
+      take: 500,
+    });
+  }
+
+  /** CSAK gazdátlant töröl: egy közben elküldött csatolmányt nem. */
+  async deleteOrphanAttachment(id: string): Promise<boolean> {
+    const result = await this.database.messageAttachment.deleteMany({
+      where: { id, messageId: null },
+    });
+    return result.count > 0;
+  }
+
+  documentBytesInUse(): Promise<number> {
+    return sumDocumentBytesInUse();
   }
 
   messageInConversation(conversationId: string, messageId: string) {

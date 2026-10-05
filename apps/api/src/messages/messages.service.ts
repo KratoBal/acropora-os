@@ -1,15 +1,22 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import {
   CONVERSATION_MAX_MEMBERS,
+  MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_PAGE_DEFAULT,
+  MESSAGE_REACTIONS,
   MESSAGE_PAGE_MAX,
   PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -19,30 +26,47 @@ import {
   type ConversationDetail,
   type ConversationListItem,
   type ConversationPerson,
+  type MessageAttachmentItem,
   type MessageItem,
   type MessagePage,
   type MessagesUnreadResponse,
 } from "@acropora/types";
 
+import {
+  DocumentOverQuota,
+  DocumentRejected,
+  discardStoredDocument,
+  prepareDocument,
+} from "../documents/document-intake.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
+import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import {
+  DOCUMENT_STORE,
+  documentStoreEnabled,
+} from "../service-assets/document-store/document-store.provider.js";
 import {
   MESSAGE_EVENT_BUS,
   type MessageEventBus,
 } from "./message-event-bus.js";
 import {
+  AttachmentBindingError,
   MessagesRepository,
   type ConversationRow,
   type MessageRow,
   type MessagingUserRow,
 } from "./messages.repository.js";
 import {
+  attachmentPreview,
   cleanMessageText,
   decodeCursor,
   directKeyOf,
   encodeCursor,
   mayJoinInternal,
   messagePushText,
+  messageTypeFor,
   pushRecipients,
+  thumbnailDocumentId,
 } from "./messages.rules.js";
 
 /**
@@ -59,7 +83,12 @@ export class MessagesService {
     private readonly repository: MessagesRepository,
     @Inject(MESSAGE_EVENT_BUS) private readonly bus: MessageEventBus,
     private readonly notifications: NotificationsService,
+    @Optional()
+    @Inject(DOCUMENT_STORE)
+    private readonly store?: DocumentStore,
   ) {}
+
+  private readonly logger = new Logger(MessagesService.name);
 
   /** A szerepkörök, amelyek a `messages.use` jogot megkapják. */
   private static readonly MESSAGING_ROLES = USER_ROLES.filter((role) =>
@@ -204,21 +233,60 @@ export class MessagesService {
    * KÜLDÉS. A `clientMessageId` miatt egy újraküldés (hálózati hiba, újra
    * gomb) a MÁR MEGLÉVŐ üzenetet adja vissza, nem hoz létre másodikat. A
    * kliens csak a szerver válasza után jelöli elküldöttnek (prompt 22. pont).
+   *
+   * A 2. FÁZIS ÓTA: csatolmánnyal szöveg nélkül is mehet (prompt 7. pont), és
+   * válaszolhat egy ugyanebben a beszélgetésben álló üzenetre.
    */
   async send(
     user: AuthenticatedUser,
     id: string,
-    input: { text: string; clientMessageId: string },
+    input: {
+      text?: string;
+      clientMessageId: string;
+      attachmentIds?: string[];
+      replyToMessageId?: string;
+    },
   ): Promise<MessageItem> {
     await this.membershipOr404(id, user.id);
-    const text = cleanMessageText(input.text);
-    if (!text) throw new BadRequestException("Üres üzenet nem küldhető.");
+    const text = cleanMessageText(input.text ?? "");
+    const attachmentIds = [...new Set(input.attachmentIds ?? [])];
+    if (!text && attachmentIds.length === 0)
+      throw new BadRequestException("Üres üzenet nem küldhető.");
+    if (attachmentIds.length > MESSAGE_ATTACHMENTS_MAX)
+      throw new BadRequestException(
+        `Egy üzenettel legfeljebb ${MESSAGE_ATTACHMENTS_MAX} csatolmány mehet.`,
+      );
 
     const existing = await this.repository.messageByClientId(
       user.id,
       input.clientMessageId,
     );
     if (existing) return this.sameConversationOr409(existing, id, user.id);
+
+    if (
+      input.replyToMessageId &&
+      !(await this.repository.messageInConversation(id, input.replyToMessageId))
+    )
+      throw new BadRequestException(
+        "Csak ugyanebben a beszélgetésben álló üzenetre lehet válaszolni.",
+      );
+
+    // A csatolmány a küldő SAJÁT, ide feltöltött, még el nem küldött fájlja.
+    const attachments = attachmentIds.length
+      ? await this.repository.attachmentsForSend(attachmentIds)
+      : [];
+    if (
+      attachments.length !== attachmentIds.length ||
+      attachments.some(
+        (a) =>
+          a.conversationId !== id ||
+          a.uploadedByUserId !== user.id ||
+          a.messageId !== null,
+      )
+    )
+      throw new BadRequestException(
+        "A csatolmány nem küldhető ezzel az üzenettel.",
+      );
 
     let row: MessageRow;
     try {
@@ -227,8 +295,15 @@ export class MessagesService {
         senderUserId: user.id,
         text,
         clientMessageId: input.clientMessageId,
+        type: messageTypeFor(attachments.map((a) => a.kind)),
+        replyToMessageId: input.replyToMessageId ?? null,
+        attachmentIds,
       });
     } catch (error) {
+      if (error instanceof AttachmentBindingError)
+        throw new BadRequestException(
+          "A csatolmány nem küldhető ezzel az üzenettel.",
+        );
       // két egyszerre érkező újraküldés: a második az elsőt kapja vissza
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -245,6 +320,184 @@ export class MessagesService {
 
     await this.announce(row, user);
     return toMessage(row, user.id);
+  }
+
+  /**
+   * CSATOLMÁNY FELTÖLTÉSE, üzenet nélkül (a terv 2.2 pontja). Fájlonként egy
+   * kérés, hogy a kliens fájlonként mutathassa a haladást, és újrapróbálhassa.
+   * A bájtok CSAK a tárolóba mehetnek: kikapcsolt vagy nem használható
+   * tárolónál a feltöltés elutasítva, nem esik vissza az adatbázisba.
+   */
+  async uploadAttachment(
+    user: AuthenticatedUser,
+    conversationId: string,
+    file: { originalname: string; mimetype: string; buffer: Buffer },
+  ): Promise<MessageAttachmentItem> {
+    await this.membershipOr404(conversationId, user.id);
+    const store = this.store;
+    if (!store || !documentStoreEnabled())
+      throw new ServiceUnavailableException(
+        "A csatolmány most nem tölthető fel: a dokumentum-tároló nincs beállítva.",
+      );
+    const documentId = randomUUID();
+    const owner = "message" as const;
+    let prepared;
+    try {
+      prepared = await prepareDocument(
+        { owner, ownerId: conversationId, documentId, file },
+        {
+          store,
+          usedBytes: () => this.repository.documentBytesInUse(),
+          logger: this.logger,
+        },
+      );
+    } catch (error) {
+      if (error instanceof DocumentRejected)
+        throw new BadRequestException(error.message);
+      if (error instanceof DocumentOverQuota)
+        throw new ConflictException(error.message);
+      throw error;
+    }
+    if (prepared.placement !== "store")
+      throw new ServiceUnavailableException(
+        "A csatolmány most nem tölthető fel: a dokumentum-tároló nem használható.",
+      );
+
+    const thumbnailKey = prepared.common.thumbnail
+      ? {
+          owner,
+          ownerId: conversationId,
+          documentId: thumbnailDocumentId(documentId),
+        }
+      : null;
+    try {
+      if (thumbnailKey)
+        await store.put(thumbnailKey, prepared.common.thumbnail!);
+      const row = await this.repository.createAttachment({
+        id: documentId,
+        conversationId,
+        uploadedByUserId: user.id,
+        kind: prepared.common.contentType.startsWith("image/")
+          ? "IMAGE"
+          : "FILE",
+        fileName: prepared.common.fileName,
+        contentType: prepared.common.contentType,
+        sizeBytes: prepared.common.sizeBytes,
+        sha256: prepared.common.sha256,
+        storageKey: prepared.storageKey,
+        thumbnailKey: thumbnailKey ? storageKeyFor(thumbnailKey) : null,
+      });
+      return toAttachment(row);
+    } catch (error) {
+      // A SOR NEM JÖTT LÉTRE, TEHÁT A FÁJL SEM MARADHAT.
+      await discardStoredDocument(
+        { owner, ownerId: conversationId, documentId },
+        { store },
+      );
+      if (thumbnailKey) await discardStoredDocument(thumbnailKey, { store });
+      throw error;
+    }
+  }
+
+  /**
+   * A CSATOLMÁNY BÁJTJAI. Tagság a csatolmány beszélgetésében; egy még el nem
+   * küldött feltöltést csak a feltöltője láthat; egy törölt üzenet csatolmányát
+   * senki. Minden más esetben 404, nem 403.
+   */
+  async attachmentBytes(
+    user: AuthenticatedUser,
+    attachmentId: string,
+    variant?: string,
+  ): Promise<{ bytes: Uint8Array; contentType: string; fileName: string }> {
+    const row = await this.repository.attachment(attachmentId);
+    if (!row) throw attachmentNotFound();
+    if (!(await this.repository.activeMembership(row.conversationId, user.id)))
+      throw attachmentNotFound();
+    if (row.messageId === null && row.uploadedByUserId !== user.id)
+      throw attachmentNotFound();
+    if (row.message?.deletedAt) throw attachmentNotFound();
+    if (!this.store) throw attachmentNotFound();
+    const thumbnail = variant === "thumbnail" && row.thumbnailKey !== null;
+    const bytes = await this.store.get({
+      owner: "message",
+      ownerId: row.conversationId,
+      documentId: thumbnail ? thumbnailDocumentId(row.id) : row.id,
+    });
+    if (!bytes) throw attachmentNotFound();
+    return {
+      bytes,
+      contentType: thumbnail ? "image/jpeg" : row.contentType,
+      fileName: row.fileName,
+    };
+  }
+
+  /** Egy üzenet a tagnak (a `message.updated` után ezt olvassa újra a kliens). */
+  async message(
+    user: AuthenticatedUser,
+    messageId: string,
+  ): Promise<MessageItem> {
+    return toMessage(await this.messageOr404(messageId, user.id), user.id);
+  }
+
+  /** SZERKESZTÉS: csak a saját, nem törölt üzenet; admin sem (acrobot 26174). */
+  async edit(
+    user: AuthenticatedUser,
+    messageId: string,
+    rawText: string,
+  ): Promise<MessageItem> {
+    const row = await this.messageOr404(messageId, user.id);
+    if (row.senderUserId !== user.id)
+      throw new ForbiddenException("Csak a saját üzeneted szerkesztheted.");
+    if (row.deletedAt)
+      throw new ConflictException("A törölt üzenet nem szerkeszthető.");
+    const text = cleanMessageText(rawText);
+    if (!text && row.attachments.length === 0)
+      throw new BadRequestException("Üres üzenet nem menthető.");
+    await this.repository.editMessage(messageId, text ?? "");
+    await this.updated(row);
+    return toMessage((await this.repository.message(messageId))!, user.id);
+  }
+
+  /**
+   * TÖRLÉS: csak a saját üzenet. SOFT DELETE: a szöveg és a csatolmány az
+   * adatbázisban és a tárolóban marad, de senkinek nem megy ki; automatikus
+   * végleges törlés nincs (acrobot 26174). A törlés auditálva, szöveg nélkül.
+   */
+  async remove(
+    user: AuthenticatedUser,
+    messageId: string,
+  ): Promise<{ deleted: true }> {
+    const row = await this.messageOr404(messageId, user.id);
+    if (row.senderUserId !== user.id)
+      throw new ForbiddenException("Csak a saját üzeneted törölheted.");
+    if (!row.deletedAt) {
+      await this.repository.deleteMessage(messageId, user.id);
+      await this.repository.audit({
+        userId: user.id,
+        action: "message.deleted",
+        conversationId: row.conversationId,
+        metadata: { messageId },
+      });
+      await this.updated(row);
+    }
+    return { deleted: true };
+  }
+
+  async react(
+    user: AuthenticatedUser,
+    messageId: string,
+    reaction: string,
+    on: boolean,
+  ): Promise<MessageItem> {
+    if (!(MESSAGE_REACTIONS as readonly string[]).includes(reaction))
+      throw new BadRequestException("Ez a reakció nem támogatott.");
+    const row = await this.messageOr404(messageId, user.id);
+    if (row.deletedAt)
+      throw new ConflictException("Törölt üzenetre nem lehet reagálni.");
+    if (on) await this.repository.addReaction(messageId, user.id, reaction);
+    else await this.repository.removeReaction(messageId, user.id, reaction);
+    await this.updated(row);
+    return toMessage((await this.repository.message(messageId))!, user.id);
   }
 
   async markRead(
@@ -302,7 +555,10 @@ export class MessagesService {
       now: new Date(),
       members,
     });
-    if (userIds.length === 0 || !row.text) return;
+    const pushText =
+      row.text ||
+      (row.attachments[0] ? attachmentPreview(row.attachments[0].kind) : "");
+    if (userIds.length === 0 || !pushText) return;
     const conversation = await this.repository.conversation(row.conversationId);
     const { title, body } = messagePushText({
       conversationTitle:
@@ -310,7 +566,7 @@ export class MessagesService {
           ? (conversation.title ?? "Csoport")
           : null,
       senderName: personDisplayName(sender),
-      text: row.text,
+      text: pushText,
     });
     this.notifications.notifyNewMessage({
       messageId: row.id,
@@ -331,6 +587,30 @@ export class MessagesService {
         "Ez az ügyfél-azonosító már egy másik beszélgetés üzenetéé.",
       );
     return toMessage(row, viewerId);
+  }
+
+  /** Az üzenet, ha a kérdező tagja a beszélgetésének; különben 404. */
+  private async messageOr404(messageId: string, userId: string) {
+    const row = await this.repository.message(messageId);
+    if (
+      !row ||
+      !(await this.repository.activeMembership(row.conversationId, userId))
+    )
+      throw new NotFoundException("Az üzenet nem található.");
+    return row;
+  }
+
+  /** A változásról a beszélgetés minden aktív tagja tudjon. */
+  private async updated(row: { id: string; conversationId: string }) {
+    const members = await this.repository.members(row.conversationId);
+    this.bus.publish(
+      members.filter((m) => m.leftAt === null).map((m) => m.userId),
+      {
+        type: "message.updated",
+        conversationId: row.conversationId,
+        messageId: row.id,
+      },
+    );
   }
 
   private async membershipOr404(conversationId: string, userId: string) {
@@ -381,9 +661,62 @@ function toMessage(row: MessageRow, viewerId: string): MessageItem {
     createdAt: row.createdAt.toISOString(),
     editedAt: row.editedAt?.toISOString() ?? null,
     replyToMessageId: row.replyToMessageId,
+    replyTo: row.replyTo
+      ? {
+          id: row.replyTo.id,
+          senderName: personDisplayName(row.replyTo.sender),
+          // az eredeti törlése után sem szakad el, de a szövege nem megy ki
+          text: row.replyTo.deletedAt ? null : row.replyTo.text,
+          deleted: row.replyTo.deletedAt !== null,
+          attachmentKind: row.replyTo.attachments[0]?.kind ?? null,
+        }
+      : null,
+    // a törölt üzenet csatolmánya és reakciói sem mennek ki
+    attachments: deleted ? [] : row.attachments.map(toAttachment),
+    reactions: deleted ? [] : reactionSummary(row.reactions, viewerId),
     clientMessageId: row.senderUserId === viewerId ? row.clientMessageId : null,
   };
 }
+
+function toAttachment(row: {
+  id: string;
+  kind: "IMAGE" | "FILE";
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  thumbnailKey: string | null;
+}): MessageAttachmentItem {
+  return {
+    id: row.id,
+    kind: row.kind,
+    fileName: row.fileName,
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+    hasThumbnail: row.thumbnailKey !== null,
+  };
+}
+
+/** A reakciók összesítve, a négy támogatott jel sorrendjében. */
+function reactionSummary(
+  rows: readonly { reaction: string; userId: string }[],
+  viewerId: string,
+): MessageItem["reactions"] {
+  return MESSAGE_REACTIONS.flatMap((reaction) => {
+    const mine = rows.filter((r) => r.reaction === reaction);
+    return mine.length
+      ? [
+          {
+            reaction,
+            count: mine.length,
+            mine: mine.some((r) => r.userId === viewerId),
+          },
+        ]
+      : [];
+  });
+}
+
+const attachmentNotFound = () =>
+  new NotFoundException("A csatolmány nem található.");
 
 function toListItem(
   row: ConversationRow,

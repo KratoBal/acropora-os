@@ -96,6 +96,9 @@ const message = (
   createdAt: "2026-10-05T10:00:00.000Z",
   editedAt: null,
   replyToMessageId: null,
+  replyTo: null,
+  attachments: [],
+  reactions: [],
   clientMessageId: null,
   ...over,
 });
