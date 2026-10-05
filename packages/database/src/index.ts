@@ -72,6 +72,8 @@ export type {
   UserRole,
   Warehouse,
   WarehouseLocation,
+  WebshopParcel,
+  WebshopParcelStatus,
   Worksheet,
   NotificationRole,
   ServiceJobStatus,

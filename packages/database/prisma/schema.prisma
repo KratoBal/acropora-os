@@ -8292,3 +8292,42 @@ model MessageReaction {
   @@unique([messageId, userId, reaction])
   @@index([messageId])
 }
+
+/// A webshop (commerce) rendelés csomagjának állapota az OS-ben.
+enum WebshopParcelStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// EGY WEBSHOP RENDELÉS CSOMAGJA A SZÁLLÍTÓNÁL (Foxpost prompt 13-16. pont;
+/// nautilus 26359). A webshop rendelést az OS nem tárolja, élőben olvassa a
+/// commerce-ből, ezért a kötés a commerce rendelés azonosítója. A címke PDF-et
+/// nem tároljuk: újranyomtatáskor a szállítótól kérünk újat ugyanarra a
+/// csomagra. Egy rendeléshez legfeljebb EGY ACTIVE csomag lehet: ezt a
+/// migráció részleges egyedi indexe őrzi (a Prisma séma nem tudja kifejezni).
+/// A CarrierShipment ettől független: az a UNAS SalesOrder eseménynaplója.
+model WebshopParcel {
+  id              String              @id @default(cuid())
+  commerceOrderId String
+  carrier         String
+  /// A fuvarozói referencia (`shipmentReference`), ahogy a szállítóhoz ment.
+  reference       String
+  /// A szállító csomagszáma (FOXPOST: CLFOX vonalkód, GLS: ParcelNumber;
+  /// álszolgáltatónál STUB- előtagú). ÜRES, amíg a szállító hívása tart: a sor
+  /// a hívás ELŐTT foglalódik le, így egy dupla kattintásból nem lesz két
+  /// valódi csomag a szállítónál. Ha a hívás kimenete bizonytalan (időtúllépés),
+  /// a foglalás ÜRESEN marad, és csak kifejezett feloldás engedi az új próbát.
+  parcelNumber    String?
+  /// A szállító belső azonosítója, ha a címkéhez vagy a törléshez kell (GLS ParcelId).
+  carrierParcelId String?
+  size            String?
+  codHuf          Int?
+  status          WebshopParcelStatus @default(ACTIVE)
+  createdByUserId String?
+  cancelledAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([commerceOrderId, status])
+  @@index([carrier, parcelNumber])
+}
