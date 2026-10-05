@@ -211,11 +211,14 @@ export function PilotDataTable<Row>({
   rowKey,
   onRowActivate,
   rowLabel,
+  rowClassName,
   minWidth = 960,
 }: {
   columns: readonly PilotTableColumn<Row>[];
   rows: readonly Row[];
   rowKey: (row: Row) => string;
+  /** Egy sor kiemelése (például az elavult rendelésé); a hover és a fókusz megmarad. */
+  rowClassName?: (row: Row) => string;
   /** A sor kattintásra és Enter/Szóköz billentyűre is ezt hívja. */
   onRowActivate?: (row: Row) => void;
   /** A sor akadálymentes neve, ha a sor kattintható. */
@@ -266,11 +269,11 @@ export function PilotDataTable<Row>({
               aria-label={onRowActivate && rowLabel ? rowLabel(row) : undefined}
               onClick={onRowActivate ? () => onRowActivate(row) : undefined}
               onKeyDown={onRowActivate ? onKeyDown(row) : undefined}
-              className={
+              className={`${
                 onRowActivate
                   ? "h-[72px] cursor-pointer bg-white transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600"
                   : "h-[72px] bg-white"
-              }
+              } ${rowClassName?.(row) ?? ""}`}
             >
               {columns.map((column) => (
                 <td

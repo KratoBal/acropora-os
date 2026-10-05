@@ -82,6 +82,8 @@ describe("navigation", () => {
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
       ["/webshop", "UNAS Megrendelések"],
+      // 2026-10-05: az új webshop rendelései, a UNAS lista mellett
+      ["/webshop/rendelesek", "Rendelések"],
       ["/vevok", "Webshop vásárlók"],
       ["/webshop/termekek", "Webshop termékek"],
     ]);
@@ -247,6 +249,14 @@ describe("navigation", () => {
       expect(active("/webshop/termekek", "/webshop/termekek")).toBe(true);
       expect(active("/webshop/termekek", "/webshop")).toBe(false);
     });
+
+    it("hands the new orders and their detail pages to Rendelések, not to the UNAS list", () => {
+      expect(active("/webshop/rendelesek", "/webshop/rendelesek")).toBe(true);
+      expect(active("/webshop/rendelesek/order_1", "/webshop/rendelesek")).toBe(
+        true,
+      );
+      expect(active("/webshop/rendelesek/order_1", "/webshop")).toBe(false);
+    });
   });
 
   it("opens groups out into their pages, each resolving in the shared source", () => {
@@ -407,6 +417,9 @@ describe("navigation", () => {
     "/tartalom": "content.view",
     "/pos": "orders.view",
     "/webshop": "orders.view",
+    // Az új webshop rendelései (2026-10-05), a bevezetés UTÁN; a jog a UNAS
+    // listáé (`orders.view`).
+    "/webshop/rendelesek": "orders.view",
     "/vevok": "customers.view",
     "/webshop/termekek": "products.view",
     "/products": "products.view",

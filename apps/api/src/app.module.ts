@@ -18,6 +18,7 @@ import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
 import { CustomersModule } from "./customers/customers.module.js";
 import { UnasCustomerSyncModule } from "./customers/unas-customer-sync/unas-customer-sync.module.js";
+import { WebshopOrdersModule } from "./orders/webshop-orders/webshop-orders.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { UnasImportModule } from "./imports/unas/unas-import.module.js";
 import { AiChatModule } from "./integrations/ai-chat/ai-chat.module.js";
@@ -80,6 +81,7 @@ import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
     CarrierShipmentModule,
     CustomersModule,
     UnasCustomerSyncModule,
+    WebshopOrdersModule,
     AiUserContextModule,
     AiProductSearchModule,
     AiChatModule,
