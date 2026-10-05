@@ -29,8 +29,10 @@ import {
   personDisplayName,
   serviceJobTimeline,
   type ServiceJobDetail,
+  type ServiceJobListItem,
   type ServiceJobListResponse,
   partnerServiceJobDetail,
+  partnerServiceJobListItem,
   type ServiceJobPartnerDetail,
 } from "@acropora/types";
 
@@ -1100,33 +1102,39 @@ export class ServiceJobsService {
       ),
       this.repository.countsByStatus(visibility, query.search, kind),
     ]);
+    /*
+      A PARTNER SAJAT ALAKOT KAP (kartya a0660885): ugyanaz a `!== "internal"`
+      elagazas, mint a reszletlapon, tehat a szallito is a szukebb iranyba esik.
+    */
+    const partner = partnerScopeOf(user).kind !== "internal";
+    const items: ServiceJobListItem[] = rows.map((row) => ({
+      id: row.id,
+      jobNumber: row.jobNumber,
+      title: row.title,
+      kind: row.kind,
+      status: row.status,
+      partnerStatus: partnerVisibleStatus(row.status),
+      partnerStatusLabel: partnerStatusLabel(row.status),
+      customerName: row.customerName,
+      reporterPersonName: row.reporterPersonName ?? null,
+      reporterName: row.reporterName ?? null,
+      departmentPath: row.departmentPath,
+      departmentCode: row.departmentCode,
+      // UGYANAZ A NEV-FORDITAS, MINT A RESZLETLAPON (`detail()`): a
+      // becenev, ha van -- lasd `personDisplayName` fejleceet.
+      assignees: row.assignees.map((assignee) => ({
+        userId: assignee.userId,
+        name: personDisplayName(assignee.user),
+        assignedAt: assignee.assignedAt.toISOString(),
+      })),
+      worksheetCount: row.worksheetCount,
+      createdAt: row.createdAt.toISOString(),
+      hidden: row.hiddenAt !== null,
+    }));
     return {
       counts,
       truncated,
-      items: rows.map((row) => ({
-        id: row.id,
-        jobNumber: row.jobNumber,
-        title: row.title,
-        kind: row.kind,
-        status: row.status,
-        partnerStatus: partnerVisibleStatus(row.status),
-        partnerStatusLabel: partnerStatusLabel(row.status),
-        customerName: row.customerName,
-        reporterPersonName: row.reporterPersonName ?? null,
-        reporterName: row.reporterName ?? null,
-        departmentPath: row.departmentPath,
-        departmentCode: row.departmentCode,
-        // UGYANAZ A NEV-FORDITAS, MINT A RESZLETLAPON (`detail()`): a
-        // becenev, ha van -- lasd `personDisplayName` fejleceet.
-        assignees: row.assignees.map((assignee) => ({
-          userId: assignee.userId,
-          name: personDisplayName(assignee.user),
-          assignedAt: assignee.assignedAt.toISOString(),
-        })),
-        worksheetCount: row.worksheetCount,
-        createdAt: row.createdAt.toISOString(),
-        hidden: row.hiddenAt !== null,
-      })),
+      items: partner ? items.map(partnerServiceJobListItem) : items,
     };
   }
 

@@ -103,8 +103,14 @@ export interface ServiceJobListItem {
    * (`ServiceJobDetail.assignees`). Felvéve a Figma-lista "Delegálva"
    * oszlopahoz (2026-09-24): a mai adat MAR letezik a jegyen, a listaba
    * eddig csak nem jutott el.
+   *
+   * PARTNERNEK NEM JAR, ES A KULCS HIANYZIK, NEM URES (kartya a0660885,
+   * 2026-10-05): a belso munkaszervezes, ugyanugy, mint a reszletlap partner
+   * alakjaban (`partnerServiceJobDetail`). Egy ures tomb azt allitana, hogy
+   * nincs delegalt; a hiany azt, hogy ez nem a partnerre tartozik. A
+   * vetites: `partnerServiceJobListItem`.
    */
-  assignees: ServiceJobAssignee[];
+  assignees?: ServiceJobAssignee[];
   worksheetCount: number;
   createdAt: string;
   /**
@@ -858,6 +864,27 @@ export type ServiceJobPartnerTimelineEntry =
  * pontosan azt az alapertelmezest venne el, amiert ez a tipus letezik -- egy
  * holnap felvett belso mezo magatol atmenne rajta.
  */
+/**
+ * A LISTA-SOR PARTNER ALAKJA (kartya a0660885, 2026-10-05).
+ *
+ * A 10-04-i szerviz-felmeres merte: a `GET /service/jobs` lista partnernek is
+ * kiadta a belso felelosok nevet (es azonositojat, a delegalas idejet), mig a
+ * reszletlap partner alakja nem. Ugyanaz az elv, mint ott (Balazs dontese,
+ * 2026-09-21 12:07:32 UTC): a partner SAJAT ALAKOT kap, mert a "nem latja" nem
+ * vedelem -- a bongeszo fejlesztoi ablaka elolvassa a valaszt.
+ *
+ * MA CSAK A DELEGALTAK MARADNAK KI. A belso allapot (`status`) es a
+ * szamlalo-kulcsok maradnak: a partner portal a `counts`-ot a belso allapotok
+ * szerint osszegzi (`apps/partner/src/lib/ticket-scope-counts.ts`), tehat
+ * annak a kivetele a portal atirasat is kivanna. Szemelyes adat nincs bennuk.
+ */
+export function partnerServiceJobListItem(
+  item: ServiceJobListItem,
+): ServiceJobListItem {
+  const { assignees: _internal, ...partner } = item;
+  return partner;
+}
+
 export function partnerServiceJobDetail(
   detail: ServiceJobDetail,
 ): ServiceJobPartnerDetail {
