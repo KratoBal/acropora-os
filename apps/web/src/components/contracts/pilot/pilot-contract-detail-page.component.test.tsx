@@ -152,6 +152,11 @@ describe("PilotContractDetailPage -- tétel helyszíne és eszközei", () => {
           vatRatePercent: "27",
           departmentId: null,
           assets: [],
+          repairFeeWorkdayHours: null,
+          repairFeeWorkdayOffHours: null,
+          repairFeeHoliday: null,
+          repairWeight: null,
+          repairTotal: null,
         },
       ],
     };
@@ -230,6 +235,11 @@ describe("PilotContractDetailPage -- tétel helyszíne és eszközei", () => {
           vatRatePercent: "27",
           departmentId: null,
           assets: [],
+          repairFeeWorkdayHours: null,
+          repairFeeWorkdayOffHours: null,
+          repairFeeHoliday: null,
+          repairWeight: null,
+          repairTotal: null,
         },
       ],
     });
@@ -331,6 +341,11 @@ describe("PilotContractDetailPage -- tétel törlése", () => {
     vatRatePercent: "27",
     departmentId: null,
     assets: [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
   });
   const twoItems = (): ContractSummary => ({
     ...contract(),
@@ -443,6 +458,11 @@ describe("PilotContractDetailPage -- tétel szerkesztése és felvétele", () =>
     vatRatePercent: "27",
     departmentId: null,
     assets: [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
   });
   const twoItems = (): ContractSummary => ({
     ...contract(),
@@ -534,5 +554,71 @@ describe("PilotContractDetailPage -- tétel szerkesztése és felvétele", () =>
     const before = screen.getAllByRole("checkbox").length;
     fireEvent.click(screen.getByText("Tétel hozzáadása"));
     expect(screen.getAllByRole("checkbox")).toHaveLength(before);
+  });
+});
+
+/*
+  A JAVÍTÁSI DÍJAK AZ ADATLAPON (kártya 3d80a18d): ha ki vannak töltve,
+  látszanak, és szerkeszthetők. MI PIROSÍT: ha a kitöltött díj nem látszik; ha
+  a módosítás vagy a törlés (üres mező -> null) nem megy el.
+*/
+describe("PilotContractDetailPage -- javítási díjak", () => {
+  const withFees = (): ContractSummary => ({
+    ...contract(),
+    items: [
+      {
+        id: "item-1",
+        position: 1,
+        description: "Óradíj - technikus",
+        unitNet: "0",
+        quantity: "1",
+        occasionsPerYear: 1,
+        vatRatePercent: "27",
+        departmentId: null,
+        assets: [],
+        repairFeeWorkdayHours: "9000",
+        repairFeeWorkdayOffHours: "13000",
+        repairFeeHoliday: "14500",
+        repairWeight: "90",
+        repairTotal: "10125000",
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(withFees());
+    api.update.mockReset().mockResolvedValue(withFees());
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a kitöltött díjak látszanak a tétel alatt", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    expect(
+      await screen.findByText(
+        /Javítási díjak: munkaidőben 9000 Ft · munkaidőn kívül 13\s000 Ft · munkaszüneti és ünnepnapon 14\s500 Ft · súlyszám 90 · összesen 10\s125\s000 Ft/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("a módosított díj elmegy, a kiürített nullként", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.change(
+      await screen.findByLabelText("1. tétel Munkanapon, munkaidőben (Ft)"),
+      { target: { value: "9500" } },
+    );
+    fireEvent.change(screen.getByLabelText("1. tétel Összesen (Ft)"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    expect(api.update.mock.calls[0]![2].items[0]).toMatchObject({
+      id: "item-1",
+      repairFeeWorkdayHours: "9500",
+      repairFeeWorkdayOffHours: "13000",
+      repairTotal: null,
+    });
   });
 });

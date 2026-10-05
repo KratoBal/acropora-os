@@ -19,6 +19,15 @@ export type ContractItemInput = {
   vatRatePercent: string;
   departmentId?: string | null;
   assetIds?: string[];
+  /**
+   * A JAVÍTÁSI DÍJAK (kártya 3d80a18d): hiányzó mező = a tárolt érték marad,
+   * `null` = törlés. Számolás nincs.
+   */
+  repairFeeWorkdayHours?: string | null;
+  repairFeeWorkdayOffHours?: string | null;
+  repairFeeHoliday?: string | null;
+  repairWeight?: string | null;
+  repairTotal?: string | null;
 };
 
 export type ContractInput = {
@@ -60,6 +69,11 @@ export type ContractItemSummary = {
   vatRatePercent: string;
   departmentId: string | null;
   assets: Array<{ assetId: string }>;
+  repairFeeWorkdayHours: string | null;
+  repairFeeWorkdayOffHours: string | null;
+  repairFeeHoliday: string | null;
+  repairWeight: string | null;
+  repairTotal: string | null;
 };
 
 export type ContractSummary = Omit<ContractInput, "items"> & {
