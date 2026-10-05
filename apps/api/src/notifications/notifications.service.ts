@@ -93,6 +93,8 @@ export interface NewMessageNotice {
   userIds: readonly string[];
   title: string;
   body: string;
+  /** Each recipient's unread total, for the iOS app icon (`aps.badge`). */
+  badges?: Readonly<Record<string, number>>;
 }
 
 export interface MaterialRequestCreatedNotice {
@@ -615,6 +617,7 @@ export class NotificationsService {
       title: notice.title,
       body: notice.body,
       data: { targetType: "conversation", targetId: notice.conversationId },
+      badgeOf: (userId) => notice.badges?.[userId],
       record: (attempts) =>
         this.log.recordNewMessage({ messageId: notice.messageId, attempts }),
       failureLine: (summary) =>
@@ -638,6 +641,8 @@ export class NotificationsService {
     title: string;
     body: string;
     data: Record<string, string>;
+    /** The app icon's number for one recipient (iOS only); none: unchanged. */
+    badgeOf?: (userId: string) => number | undefined;
     record: (attempts: NotificationAttempt[]) => Promise<void>;
     failureLine: (summary: AssignmentSummary) => string;
   }): Promise<AssignmentSummary> {
@@ -699,6 +704,7 @@ export class NotificationsService {
             title: input.title,
             body: input.body,
             data: input.data,
+            badge: input.badgeOf?.(recipient.userId),
           }),
       });
     if (this.fcm.configured())

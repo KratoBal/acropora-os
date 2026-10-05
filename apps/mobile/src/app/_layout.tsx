@@ -11,6 +11,7 @@ import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 import { MessageStreamProvider } from "@/components/messages/MessageStream";
 import { foregroundNotificationFor } from "@/lib/notifications/push-foreground";
+import { MessagesBadgeSync } from "@/components/messages/MessagesBadge";
 import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
@@ -70,6 +71,8 @@ export default function RootLayout() {
       <AuthProvider>
         {/* egy üzenet-folyam az egész appnak (Üzenetek modul) */}
         <MessageStreamProvider>
+          {/* az app ikonjának olvasatlan-száma (láthatatlan, csak szinkronizál) */}
+          <MessagesBadgeSync />
           <StatusBar style={statusBarStyle} />
           <RootNavigator />
         </MessageStreamProvider>

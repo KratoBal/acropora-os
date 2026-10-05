@@ -76,3 +76,43 @@ describe("az APNs payload alakja", () => {
     );
   });
 });
+
+describe("az app ikonjanak szama (aps.badge)", () => {
+  /*
+    MI PIROSIT: a badge nem az `aps` alatt all (iOS akkor nem frissiti az
+    ikont); badge nelkuli pushban is megjelenik (a tobbi push nullazna a
+    szamot); negativ vagy tort szam megy ki.
+  */
+  it("az aps alatt all, egesz es nem negativ; nelkule nincs kulcs", () => {
+    const base = {
+      title: "Kovács Anna",
+      body: "Szia",
+      data: { targetType: "conversation", targetId: "c1" },
+    };
+    assert.equal(
+      (buildApnsPayload({ ...base, badge: 3 }).aps as { badge?: number }).badge,
+      3,
+    );
+    assert.equal(
+      (buildApnsPayload({ ...base, badge: 2.7 }).aps as { badge?: number })
+        .badge,
+      2,
+    );
+    assert.equal(
+      (buildApnsPayload({ ...base, badge: -1 }).aps as { badge?: number })
+        .badge,
+      0,
+    );
+    assert.equal("badge" in (buildApnsPayload(base).aps as object), false);
+    assert.equal(
+      "badge" in
+        (buildApnsPayload({ ...base, badge: Number.NaN }).aps as object),
+      false,
+    );
+    assert.equal(
+      "badge" in buildApnsPayload({ ...base, badge: 3 }),
+      false,
+      "a gyokerbe nem kerul",
+    );
+  });
+});

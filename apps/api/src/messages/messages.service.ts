@@ -612,12 +612,20 @@ export class MessagesService {
       senderName: personDisplayName(sender),
       text: pushText,
     });
+    // az app ikonjának száma címzettenként (iOS `badge`); ha nem jön, a push megy nélküle
+    let badges: Record<string, number> | undefined;
+    try {
+      badges = await this.repository.unreadTotals(userIds);
+    } catch {
+      badges = undefined;
+    }
     this.notifications.notifyNewMessage({
       messageId: row.id,
       conversationId: row.conversationId,
       userIds,
       title,
       body,
+      ...(badges ? { badges } : {}),
     });
   }
 

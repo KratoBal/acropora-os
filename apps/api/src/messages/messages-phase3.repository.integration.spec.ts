@@ -234,6 +234,26 @@ describe(
       );
     });
 
+    it("the unread totals per recipient (the iOS badge): others' live messages after the read mark, zero for nobody's", async () => {
+      const before = await repository.unreadTotals([ids.a, ids.b]);
+      await send(ids.a, "jelvény egy");
+      await send(ids.a, "jelvény kettő");
+      const deleted = await send(ids.a, "jelvény törölt");
+      await repository.deleteMessage(deleted.id, ids.a);
+      const after = await repository.unreadTotals([ids.a, ids.b]);
+      assert.equal(
+        after[ids.b]! - before[ids.b]!,
+        2,
+        "b: két új, a törölt nem számít",
+      );
+      assert.equal(
+        after[ids.a],
+        before[ids.a],
+        "a saját üzenete a küldőnek nem olvasatlan",
+      );
+      assert.deepEqual(await repository.unreadTotals([]), {});
+    });
+
     it("the notification setting changes only the asker's row; a forward stores its origin", async () => {
       await repository.setNotification(conversationId, ids.a, {
         mutedUntil: new Date("2030-01-01T07:00:00.000Z"),
