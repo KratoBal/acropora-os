@@ -81,7 +81,7 @@ describe("navigation", () => {
     expect(
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
-      ["/webshop", "Megrendelések"],
+      ["/webshop", "UNAS Megrendelések"],
       ["/vevok", "Webshop vásárlók"],
       ["/webshop/termekek", "Webshop termékek"],
     ]);

@@ -196,7 +196,9 @@ export const businessNavigation: AppNavigationEntry[] = [
         // The page behind /webshop is the order list, and that is what it is
         // called here. "Webshop" is the heading above it now.
         href: "/webshop",
-        label: "Megrendelések",
+        // Balázs, 2026-10-05 11:31 UTC: a mai lista UNAS-adat, csak megtekintő;
+        // az új bolt rendeléseitől így különül el. Az útvonal nem változik.
+        label: "UNAS Megrendelések",
         icon: "cart",
         entryId: "webshop-orders",
       },
