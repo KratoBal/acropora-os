@@ -286,3 +286,36 @@ export function notificationUpdate(
     }
   }
 }
+
+/**
+ * A kapcsolt objektum neve a mondatokban (4. fázis), a ragos alakok KIÍRVA: a
+ * hangrend miatt a „munkalap” „-hoz”, „-ról”, a „hibajegy” „-hez”, „-ről”.
+ */
+export const CONTEXT_NOUN = {
+  WORKSHEET: { to: "munkalaphoz", from: "munkalapról" },
+  SERVICE_JOB: { to: "hibajegyhez", from: "hibajegyről" },
+} as const;
+
+/**
+ * A 4. FÁZIS RENDSZERÜZENETEI (Figma 450:710). A neveket NEM ragozzuk: a
+ * „Dánielt”, „Annát” alakot gépi úton nem lehet biztonságosan előállítani, és
+ * egy rossz rag rosszabb, mint egy kettőspont. Ezért a név a mondat alanya,
+ * vagy kettőspont után áll.
+ */
+export const systemText = {
+  started: (actor: string, type: keyof typeof CONTEXT_NOUN, ref: string) =>
+    `${actor} beszélgetést indított ehhez a ${CONTEXT_NOUN[type].to}: ${ref}.`,
+  linked: (actor: string, type: keyof typeof CONTEXT_NOUN, ref: string) =>
+    `${actor} ehhez a ${CONTEXT_NOUN[type].to} kapcsolta a beszélgetést: ${ref}.`,
+  unlinked: (actor: string, type: keyof typeof CONTEXT_NOUN, ref: string) =>
+    `${actor} leválasztotta a beszélgetést erről a ${CONTEXT_NOUN[type].from}: ${ref}.`,
+  added: (actor: string, names: readonly string[]) =>
+    `${actor} új ${names.length > 1 ? "tagokat" : "tagot"} adott hozzá: ${names.join(", ")}.`,
+  joined: (actor: string) => `${actor} csatlakozott a beszélgetéshez.`,
+  left: (actor: string) => `${actor} kilépett a beszélgetésből.`,
+};
+
+/** A kapcsolt objektum hivatkozása a mondatban: a száma, vagy szám nélkül a fajtája. */
+export function contextRef(number: string | null | undefined): string {
+  return number?.trim() || "szám nélküli";
+}
