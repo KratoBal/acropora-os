@@ -35,6 +35,13 @@ export const serviceDraftsApi = {
         body: JSON.stringify({ departmentId, reporterPersonName }),
       },
     ),
+  /** "Mégis piszkozat": egy kiszűrt tétel vissza a listára. */
+  promote: (token: string, id: string) =>
+    apiRequest<{ id: string }>(
+      `/service/drafts/${encodeURIComponent(id)}/promote`,
+      token,
+      { method: "POST" },
+    ),
   reject: (token: string, id: string) =>
     apiRequest<{ serviceJobId: null }>(
       `/service/drafts/${encodeURIComponent(id)}/reject`,

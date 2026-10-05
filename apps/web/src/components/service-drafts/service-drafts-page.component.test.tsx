@@ -8,6 +8,7 @@ const mock = vi.hoisted(() => ({
   status: vi.fn(),
   accept: vi.fn(),
   reject: vi.fn(),
+  promote: vi.fn(),
   attachment: vi.fn(),
   push: vi.fn(),
   session: null as Session | null,
@@ -37,6 +38,9 @@ function data(): ServiceDraftListResponse {
           mailbox: "balazs@acropora.hu",
         },
         attachments: [],
+        filterState: "PASSED",
+        jevClass: "OUR_TECHNICAL_FAULT",
+        jevConfidence: 0.93,
         occurrence: 2,
         earlier: [
           {
@@ -53,6 +57,8 @@ function data(): ServiceDraftListResponse {
       { id: "dep", parentId: null, name: "Cápasuli", customerId: "zoo" },
     ],
     openedBy: { id: "opener", name: "Cápasuli" },
+    filterEnabled: true,
+    filtered: [],
   };
 }
 beforeEach(() => {
@@ -185,5 +191,83 @@ describe("Service draft review", () => {
         expect.any(AbortSignal),
       ),
     );
+  });
+});
+
+/*
+  A JEV-SZŰRÉS A PISZKOZATOK LAPJÁN (Cápasuli, Balázs 2026-10-05; brief
+  4-5. pont). MI PIROSÍT: ha a kiszűrt tétel eltűnik ahelyett, hogy a
+  "Kiszűrve" szakaszban álljon; ha a "Mégis piszkozat" nem hívja a
+  visszahozást vagy nem tölti újra a listát; ha a bizonytalan jel hiányzik;
+  ha a "nem szűrt" jel kikapcsolt szűrésnél is zajt csap.
+*/
+describe("Service draft review -- Jev filter", () => {
+  it("lists filtered items collapsed at the bottom and promotes one", async () => {
+    mock.list.mockResolvedValue({
+      ...data(),
+      filtered: [
+        {
+          id: "f1",
+          title: "Biodóm ajtó beragad",
+          originalProblem: "Biodóm ajtó beragad",
+          reportDate: "2026-10-02",
+          jevClass: "NOT_OURS",
+          jevConfidence: 0.91,
+        },
+      ],
+    });
+    mock.promote.mockResolvedValue({ id: "f1" });
+    render(<ServiceDraftsPage />);
+    expect(await screen.findByText("Kiszűrve (1)")).toBeTruthy();
+    expect(screen.getByText(/Nem nekünk szól · 91%/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Biodóm ajtó beragad: mégis piszkozat",
+      }),
+    );
+    await waitFor(() =>
+      expect(mock.promote).toHaveBeenCalledWith("token", "f1"),
+    );
+    await waitFor(() => expect(mock.list).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText("A tétel visszakerült a piszkozatok közé."),
+    ).toBeTruthy();
+  });
+
+  it("marks an uncertain item, and an unfiltered one only while the filter is on", async () => {
+    const base = data().items[0]!;
+    mock.list.mockResolvedValue({
+      ...data(),
+      items: [
+        {
+          ...base,
+          id: "u",
+          title: "Bizonytalan tétel",
+          filterState: "UNCERTAIN",
+        },
+        {
+          ...base,
+          id: "n",
+          title: "Szűretlen tétel",
+          filterState: "UNFILTERED",
+        },
+      ],
+    });
+    render(<ServiceDraftsPage />);
+    expect(await screen.findByText("Bizonytalan")).toBeTruthy();
+    expect(screen.getByText("Nem szűrt")).toBeTruthy();
+  });
+
+  it("no 'nem szűrt' noise while the filter is off", async () => {
+    const base = data().items[0]!;
+    mock.list.mockResolvedValue({
+      ...data(),
+      filterEnabled: false,
+      items: [{ ...base, filterState: "UNFILTERED" }],
+    });
+    render(<ServiceDraftsPage />);
+    await screen.findByText("Venturi szivattyú");
+    expect(screen.queryByText("Nem szűrt")).toBeNull();
+    expect(screen.queryByText(/Kiszűrve/)).toBeNull();
   });
 });

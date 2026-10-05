@@ -137,3 +137,16 @@ export {
   type Letter,
   type LetterRequest,
 } from "./letter-class.js";
+export {
+  CAPASULI_ITEM_CLASSES,
+  CAPASULI_ITEM_INSTRUCTIONS,
+  CAPASULI_ITEM_POLICY,
+  CAPASULI_ITEM_QUESTION_KEY,
+  CapasuliItemBlocked,
+  EMAIL_PLACEHOLDER,
+  MAX_CAPASULI_ITEM_CHARS,
+  buildCapasuliItemRequest,
+  capasuliFilterEnabled,
+  maskEmails,
+  type CapasuliItemRequest,
+} from "./capasuli-item.js";

@@ -5,7 +5,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { prisma, Prisma } from "@acropora/database";
+import {
+  prisma,
+  Prisma,
+  type ServiceDraftFilterState,
+} from "@acropora/database";
 import { ServiceJobsRepository } from "../service-jobs/service-jobs.repository.js";
 import {
   nextServiceJobNumber,
@@ -14,6 +18,19 @@ import {
 import { extractCapasuliReports } from "./capasuli-extractor.js";
 import type { CapasuliGmailMessage } from "./capasuli-gmail.client.js";
 import { capasuliConfig } from "./capasuli-gmail.config.js";
+import { OUR_TECHNICAL_FAULT } from "./capasuli-filter.js";
+
+/** Egy tétel szűrési eredménye, ahogy a piszkozatra kerül. */
+export interface DraftFilter {
+  filterState: ServiceDraftFilterState;
+  jevClass: string | null;
+  jevConfidence: number | null;
+  decisionRunId: string | null;
+}
+
+/** A szűrő-térkép kulcsa: a jelentés napja és a tétel ujjlenyomata. */
+export const draftFilterKey = (reportDate: string, fingerprint: string) =>
+  `${reportDate}:${fingerprint}`;
 
 @Injectable()
 export class ServiceDraftsRepository {
@@ -49,7 +66,16 @@ export class ServiceDraftsRepository {
       select: { id: true },
     });
   }
-  async ingest(message: CapasuliGmailMessage, config = capasuliConfig()) {
+  /**
+   * A `filters` a tételek Jev-szűrése, a tranzakció ELŐTT kiszámolva (a hívás
+   * hálózati, a tranzakció zárat tart). Ami nincs benne, az UNFILTERED: látszik,
+   * ahogy eddig.
+   */
+  async ingest(
+    message: CapasuliGmailMessage,
+    config = capasuliConfig(),
+    filters: ReadonlyMap<string, DraftFilter> = new Map(),
+  ) {
     const source = "CAPASULI_DAILY_REPORT",
       mailbox = config.user;
     const reports = extractCapasuliReports(message.text);
@@ -111,9 +137,16 @@ export class ServiceDraftsRepository {
                 a,
               ]),
             );
+            const filter = filters.get(
+              draftFilterKey(
+                report.reportDate.toISOString().slice(0, 10),
+                problem.fingerprint,
+              ),
+            );
             await tx.serviceTicketDraft.create({
               data: {
                 ...where,
+                ...(filter ?? {}),
                 mailId: mail.id,
                 originalProblem: problem.text,
                 title: problem.title,
@@ -139,9 +172,17 @@ export class ServiceDraftsRepository {
       { timeout: 30_000 },
     );
   }
+  /**
+   * A KISZŰRT TÉTELEK NEM A FŐ LISTÁBAN ÁLLNAK (brief 4. pont): a függőben lévő
+   * listából kimaradnak, és a `filtered()` adja őket a "Kiszűrve" szakasznak.
+   * Az elfogadott és az elutasított fül változatlan.
+   */
   async list(status: "PENDING" | "ACCEPTED" | "REJECTED", cursor?: string) {
     const rows = await prisma.serviceTicketDraft.findMany({
-      where: { status },
+      where: {
+        status,
+        ...(status === "PENDING" ? { filterState: { not: "FILTERED" } } : {}),
+      },
       orderBy: [{ reportDate: "desc" }, { id: "desc" }],
       take: 51,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -354,6 +395,96 @@ export class ServiceDraftsRepository {
   attachment(id: string) {
     return prisma.serviceDraftAttachment.findUnique({ where: { id } });
   }
+  /** A "Kiszűrve" szakasz: a függő, kiszűrt tételek, a legújabb elöl. */
+  async filtered() {
+    const rows = await prisma.serviceTicketDraft.findMany({
+      where: { status: "PENDING", filterState: "FILTERED" },
+      orderBy: [{ reportDate: "desc" }, { id: "desc" }],
+      take: 200,
+      select: {
+        id: true,
+        title: true,
+        originalProblem: true,
+        reportDate: true,
+        jevClass: true,
+        jevConfidence: true,
+      },
+    });
+    return rows.map((r) => ({
+      ...r,
+      reportDate: r.reportDate.toISOString().slice(0, 10),
+    }));
+  }
+
+  /**
+   * "MÉGIS PISZKOZAT": a kiszűrt tétel visszakerül a listára, és a döntés
+   * futása ezt kapja feloldásként (OVERRIDDEN, nekünk szóló hiba) -- Balázs
+   * javításai így a tanító jel (brief 4. pont). Csak függő, kiszűrt tételre.
+   */
+  async promote(id: string, now = new Date()) {
+    return prisma.$transaction(async (tx) => {
+      const draft = await tx.serviceTicketDraft.findUnique({
+        where: { id },
+        select: { status: true, filterState: true, decisionRunId: true },
+      });
+      if (!draft) throw new NotFoundException("A piszkozat nem található.");
+      if (draft.status !== "PENDING" || draft.filterState !== "FILTERED")
+        throw new ConflictException(
+          "Csak függőben lévő, kiszűrt tétel hozható vissza.",
+        );
+      await tx.serviceTicketDraft.update({
+        where: { id },
+        data: { filterState: "PROMOTED" },
+      });
+      if (draft.decisionRunId)
+        await tx.decisionRun.updateMany({
+          where: { id: draft.decisionRunId, resolution: null },
+          data: {
+            resolution: "OVERRIDDEN",
+            resolvedValue: OUR_TECHNICAL_FAULT,
+            resolvedAt: now,
+            exposure: "SHOWN",
+          },
+        });
+      return { id };
+    });
+  }
+
+  /** A megjelenő tételek futása SHOWN: a Jev javaslata ember elé került. */
+  async markRunsShown(runIds: readonly string[]) {
+    if (!runIds.length) return;
+    await prisma.decisionRun.updateMany({
+      where: { id: { in: [...runIds] } },
+      data: { exposure: "SHOWN" },
+    });
+  }
+
+  /** Az egyszeri utólagos szűrés jelöltjei: a még szűretlen függő tételek. */
+  unfilteredPending() {
+    return prisma.serviceTicketDraft.findMany({
+      where: { status: "PENDING", filterState: "UNFILTERED", jevClass: null },
+      orderBy: [{ reportDate: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        source: true,
+        mailbox: true,
+        reportDate: true,
+        fingerprint: true,
+        title: true,
+        originalProblem: true,
+      },
+    });
+  }
+
+  /** Egy tétel szűrési eredménye; csak akkor ír, ha még szűretlen és függő. */
+  async applyFilter(id: string, filter: DraftFilter) {
+    const { count } = await prisma.serviceTicketDraft.updateMany({
+      where: { id, status: "PENDING", filterState: "UNFILTERED" },
+      data: filter,
+    });
+    return count;
+  }
+
   async reviewSettings(c = capasuliConfig()) {
     const locations = await this.locations(c.departmentId);
     const opener = c.openedById
