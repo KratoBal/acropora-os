@@ -4,10 +4,13 @@ import {
   hasPermission,
   PERMISSIONS,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_PARCEL_SIZES,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderStatus,
   type WebshopOrderStep,
+  type WebshopParcelSize,
+  type WebshopShippingNoticeOutcome,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -296,6 +299,20 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueInvoice(token, id));
     setNow(Date.now());
   };
+  const createParcel = async (size: WebshopParcelSize | undefined) => {
+    const result = await webshopOrdersApi.createParcel(token, id, size);
+    setOrder(result.order);
+    setNow(Date.now());
+    return result.notice;
+  };
+  const parcelLabel = async () => {
+    const blob = await webshopOrdersApi.parcelLabel(token, id);
+    window.open(URL.createObjectURL(blob), "_blank");
+  };
+  const releaseParcel = async () => {
+    setOrder(await webshopOrdersApi.releaseParcel(token, id));
+    setNow(Date.now());
+  };
   const openPdf = async (documentId: string) => {
     const blob = await billingDocumentsApi.pdf(token, documentId);
     window.open(URL.createObjectURL(blob), "_blank");
@@ -373,6 +390,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onChangeStatus={changeStatus}
           onIssueInvoice={issueInvoice}
           onOpenPdf={openPdf}
+          onCreateParcel={createParcel}
+          onParcelLabel={parcelLabel}
+          onReleaseParcel={releaseParcel}
         />
       ) : null}
     </PilotThemeRoot>
@@ -497,6 +517,192 @@ function InvoiceCard({
   );
 }
 
+/** Ezekben az állapotokban adható fel csomag (a szerver is így dönt). */
+const PARCEL_STATUSES: readonly (WebshopOrderStatus | null)[] = [
+  "confirmed",
+  "stocking",
+  "out_for_delivery",
+];
+
+/** A „Feladtuk” levél sorsa egy mondatban. */
+export function noticeText(notice: WebshopShippingNoticeOutcome): string {
+  if (notice.sent) return "A vevő megkapta a „Feladtuk a csomagodat” levelet.";
+  switch (notice.reason) {
+    case "stub":
+      return "Teszt-csomag: a vevő nem kap levelet róla.";
+    case "mail_off":
+      return "A webshop levélküldése ki van kapcsolva, a vevő nem kapott levelet.";
+    case "no_email":
+      return "A rendelésen nincs e-mail cím, a vevő nem kapott levelet.";
+    case "already_sent":
+      return "A „Feladtuk” levél már korábban kiment.";
+    case "failed":
+      return "A csomag létrejött, de a webshop nem volt elérhető, a levél nem ment ki.";
+    default:
+      return `A levél nem ment ki (${notice.reason}).`;
+  }
+}
+
+/**
+ * A CSOMAG A SZÁLLÍTÁS KÁRTYÁN (Rendelések, 5. PR). Előbb a számla; utána
+ * „Csomag feladása” (Foxpostnál mérettel), majd a csomagszám és a címke. Ha a
+ * létrehozás kimenete bizonytalan, új csomag csak kifejezett feloldás után
+ * indítható, és a gomb megmondja, mit kell előtte megnézni.
+ */
+function ParcelSection({
+  order,
+  canManage,
+  onCreate,
+  onLabel,
+  onRelease,
+}: {
+  order: WebshopOrderDetail;
+  canManage: boolean;
+  onCreate: (
+    size: WebshopParcelSize | undefined,
+  ) => Promise<WebshopShippingNoticeOutcome>;
+  onLabel: () => Promise<void>;
+  onRelease: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [size, setSize] = useState("");
+  const parcel = order.parcel;
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const canCreate =
+    canManage &&
+    !parcel &&
+    !!order.invoiceNumber &&
+    PARCEL_STATUSES.includes(order.status.code);
+  return (
+    <div className="space-y-3">
+      {parcel?.parcelNumber ? (
+        <>
+          <Field
+            label="Csomagszám"
+            action={
+              <CopyButton
+                value={parcel.parcelNumber}
+                label="Csomagszám másolása"
+              />
+            }
+          >
+            {parcel.parcelNumber}
+            {parcel.stub ? (
+              <span className="ml-2 rounded-full bg-pilot-amber-50 px-2 py-0.5 text-xs font-medium text-pilot-amber-700">
+                Teszt-csomag
+              </span>
+            ) : null}
+          </Field>
+          {parcel.codHuf ? (
+            <Field label="Utánvét">{formatMoney(parcel.codHuf, "HUF")}</Field>
+          ) : null}
+          {canManage ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void run(onLabel)}
+            >
+              Címke nyomtatása
+            </PilotButton>
+          ) : null}
+        </>
+      ) : parcel ? (
+        <>
+          <p className="text-sm text-pilot-amber-700">
+            A csomag létrehozása folyamatban van, vagy az eredménye bizonytalan:
+            a szállítónál létrejöhetett. Frissítsd az oldalt egy perc múlva.
+          </p>
+          {canManage ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => void run(onRelease)}
+            >
+              Létrehozás újraengedése
+            </PilotButton>
+          ) : null}
+          {canManage ? (
+            <p className="text-xs text-pilot-grey-500">
+              Csak akkor engedd újra, ha a szállító felületén megnézted, hogy
+              nem jött létre csomag.
+            </p>
+          ) : null}
+        </>
+      ) : !order.invoiceNumber ? (
+        <p className="text-xs text-pilot-grey-500">
+          Előbb állítsd ki a számlát, utána adható fel a csomag.
+        </p>
+      ) : canCreate ? (
+        <div className="flex flex-wrap items-end gap-2">
+          {order.shipping.carrier === "FOXPOST" ? (
+            <label className="text-xs text-pilot-grey-600">
+              Méret
+              <PilotSelect
+                chevron
+                aria-label="Csomagméret"
+                value={size}
+                onChange={setSize}
+                className="mt-1 [&_select]:h-10"
+              >
+                <option value="">Alapértelmezett</option>
+                {WEBSHOP_PARCEL_SIZES.map((option) => (
+                  <option key={option} value={option}>
+                    {option.toUpperCase()}
+                  </option>
+                ))}
+              </PilotSelect>
+            </label>
+          ) : null}
+          <PilotButton
+            size="regular"
+            variant="primary"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                const outcome = await onCreate(
+                  (size || undefined) as WebshopParcelSize | undefined,
+                );
+                setNotice(noticeText(outcome));
+              })
+            }
+          >
+            {busy ? "Feladás…" : "Csomag feladása"}
+          </PilotButton>
+        </div>
+      ) : null}
+      {notice ? (
+        <p role="status" className="text-sm text-pilot-grey-700">
+          {notice}
+        </p>
+      ) : null}
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+        >
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function OrderBody({
   order,
   now,
@@ -505,6 +711,9 @@ function OrderBody({
   onChangeStatus,
   onIssueInvoice,
   onOpenPdf,
+  onCreateParcel,
+  onParcelLabel,
+  onReleaseParcel,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -513,6 +722,11 @@ function OrderBody({
   onChangeStatus: (status: WebshopOrderStatus) => Promise<void>;
   onIssueInvoice: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
+  onCreateParcel: (
+    size: WebshopParcelSize | undefined,
+  ) => Promise<WebshopShippingNoticeOutcome>;
+  onParcelLabel: () => Promise<void>;
+  onReleaseParcel: () => Promise<void>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
@@ -862,11 +1076,13 @@ function OrderBody({
                   : (order.shipping.carrier ?? order.shipping.method ?? "—")}
               </Field>
               {order.shipping.storePickup ? null : (
-                <p className="text-xs text-pilot-grey-500">
-                  {order.invoiceNumber
-                    ? "A csomagfeladás a következő körben kerül ide."
-                    : "Előbb állítsd ki a számlát, utána adható fel a csomag."}
-                </p>
+                <ParcelSection
+                  order={order}
+                  canManage={canManage}
+                  onCreate={onCreateParcel}
+                  onLabel={onParcelLabel}
+                  onRelease={onReleaseParcel}
+                />
               )}
             </div>
           </Card>

@@ -16,6 +16,9 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   changeStatus: vi.fn(),
   issueInvoice: vi.fn(),
+  createParcel: vi.fn(),
+  parcelLabel: vi.fn(),
+  releaseParcel: vi.fn(),
 }));
 const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -117,6 +120,7 @@ const detail: WebshopOrderDetail = {
   },
   invoiceNumber: null,
   invoice: null,
+  parcel: null,
   steps: [
     {
       key: "confirm",
@@ -163,6 +167,9 @@ beforeEach(() => {
   api.detail.mockReset();
   api.changeStatus.mockReset();
   api.issueInvoice.mockReset();
+  api.createParcel.mockReset();
+  api.parcelLabel.mockReset();
+  api.releaseParcel.mockReset();
   billing.pdf.mockReset();
 });
 
@@ -451,5 +458,133 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       within(card).getByRole("link", { name: "Megnyitás a Számlázásban" }),
     ).toBeTruthy();
+  });
+
+  /**
+   * A CSOMAG (Rendelések, 5. PR). MI PIROSÍT: számla előtt gomb áll; a méret
+   * nem megy a kéréssel; a levél sorsa nem látszik; a csomagszám vagy a címke
+   * nem jelenik meg; a teszt-csomag valódinak látszik; a bizonytalan
+   * foglalásnál új „Csomag feladása” gomb áll a feloldás helyett; a szállító
+   * hibája elveszik; kezelési jog nélkül gomb áll.
+   */
+  const invoiced: WebshopOrderDetail = {
+    ...detail,
+    invoiceNumber: "E-1",
+    invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+  };
+  const withParcel = (
+    parcel: Partial<NonNullable<WebshopOrderDetail["parcel"]>>,
+  ) => ({
+    ...invoiced,
+    parcel: {
+      carrier: "FOXPOST" as const,
+      reference: "38",
+      parcelNumber: "CLFOX0000012345",
+      stub: false,
+      size: "m",
+      codHuf: null,
+      createdAt: "2026-10-05T12:00:00.000Z",
+      ...parcel,
+    },
+  });
+
+  it("before the invoice there is no parcel button", async () => {
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(
+      within(card).getByText(
+        "Előbb állítsd ki a számlát, utána adható fel a csomag.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(card).queryByRole("button", { name: "Csomag feladása" }),
+    ).toBeNull();
+  });
+
+  it("creates the parcel with the chosen size, then shows its number, the mail and the label", async () => {
+    api.detail.mockResolvedValue(invoiced);
+    api.createParcel.mockResolvedValue({
+      order: withParcel({}),
+      notice: { sent: true },
+    });
+    api.parcelLabel.mockResolvedValue(new Blob(["%PDF"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(URL, "createObjectURL", {
+      value: vi.fn(() => "blob:label"),
+      configurable: true,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    fireEvent.change(
+      within(card).getByRole("combobox", { name: "Csomagméret" }),
+      {
+        target: { value: "m" },
+      },
+    );
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Csomag feladása" }),
+    );
+    expect(await within(card).findByText("CLFOX0000012345")).toBeTruthy();
+    expect(api.createParcel).toHaveBeenCalledWith("token", "order_38", "m");
+    expect(within(card).getByRole("status").textContent).toMatch(
+      /Feladtuk a csomagodat/,
+    );
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Címke nyomtatása" }),
+    );
+    await vi.waitFor(() =>
+      expect(open).toHaveBeenCalledWith("blob:label", "_blank"),
+    );
+    expect(api.parcelLabel).toHaveBeenCalledWith("token", "order_38");
+    open.mockRestore();
+  });
+
+  it("a carrier refusal stays in the card", async () => {
+    api.detail.mockResolvedValue(invoiced);
+    api.createParcel.mockRejectedValue(
+      new Error(
+        "Érvénytelen átvételi pont. Frissítsd a pontot és próbáld újra.",
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Csomag feladása" }),
+    );
+    expect((await within(card).findByRole("alert")).textContent).toMatch(
+      /Érvénytelen átvételi pont/,
+    );
+  });
+
+  it("an uncertain parcel offers the release, not a new parcel", async () => {
+    api.detail.mockResolvedValue(withParcel({ parcelNumber: null }));
+    api.releaseParcel.mockResolvedValue(invoiced);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(within(card).getByText(/eredménye bizonytalan/)).toBeTruthy();
+    expect(
+      within(card).queryByRole("button", { name: "Csomag feladása" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Létrehozás újraengedése" }),
+    );
+    expect(
+      await within(card).findByRole("button", { name: "Csomag feladása" }),
+    ).toBeTruthy();
+    expect(api.releaseParcel).toHaveBeenCalledWith("token", "order_38");
+  });
+
+  it("a stub parcel says so; without orders.manage there is no parcel button", async () => {
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(
+      withParcel({ parcelNumber: "STUB-FOXPOST-1", stub: true }),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(within(card).getByText("Teszt-csomag")).toBeTruthy();
+    expect(
+      within(card).queryByRole("button", { name: /Címke|Csomag feladása/ }),
+    ).toBeNull();
   });
 });

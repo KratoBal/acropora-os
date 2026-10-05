@@ -1124,6 +1124,7 @@ export {
   WEBSHOP_ORDER_STALE_DEFAULTS,
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  WEBSHOP_PARCEL_SIZES,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1139,4 +1140,9 @@ export type {
   WebshopOrderStage,
   WebshopOrderStatus,
   WebshopOrderView,
+  WebshopOrderParcel,
+  WebshopOrderParcelCreate,
+  WebshopOrderParcelResult,
+  WebshopParcelSize,
+  WebshopShippingNoticeOutcome,
 } from "./webshop-orders.js";

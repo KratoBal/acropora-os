@@ -224,7 +224,11 @@ export function stepsOf(
       detail: "Végállapot",
     });
   } else {
-    draft.push({ key: "parcel", label: "Csomag", detail: "Csomagfeladás" });
+    draft.push({
+      key: "parcel",
+      label: "Csomag",
+      detail: facts.parcel?.parcelNumber ?? "Csomagfeladás",
+    });
     if (facts.hasParcel) done.add("parcel");
     else if (!facts.invoiceNumber)
       blocked.set("parcel", "Előbb állítsd ki a számlát");
@@ -338,6 +342,7 @@ export function toDetail(input: {
     payment,
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
+    parcel: facts.parcel,
     steps: stepsOf(
       code,
       shipping.storePickup,

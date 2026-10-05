@@ -142,11 +142,13 @@ describe("stage", () => {
       invoiceNumber: "ACR-2026-1",
       invoice: null,
       hasParcel: false,
+      parcel: null,
     };
     const shipped = {
       invoiceNumber: "ACR-2026-1",
       invoice: null,
       hasParcel: true,
+      parcel: null,
     };
     assert.deepEqual(
       [

@@ -35,7 +35,11 @@ export interface BillingEmailTemplateDraft {
  * Az útvonal SZÁNDÉKOSAN a hívó `fetch`-jében áll, literálként: az útvonal-őr
  * (`mobile-api-routes.spec`) csak a hívás helyén álló szöveget látja.
  */
-async function pdfBlob(response: Response, fallback: string): Promise<Blob> {
+/** A PDF-válasz Blob-ként, vagy a szerver mondatával `ApiError` (a webshop csomagcímke is ezt használja). */
+export async function pdfBlob(
+  response: Response,
+  fallback: string,
+): Promise<Blob> {
   if (!response.ok) {
     let message: string | undefined;
     try {
