@@ -63,6 +63,8 @@ function setup() {
     candidates: async () => [],
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
+    navNumbers: async (base: string) =>
+      base === "27045364" ? ["4042V0000011711", "4042V0000010763"] : [],
     uploadAndPair: async (input: Record<string, unknown>) => {
       uploads.push(input);
       return "doc-1";
@@ -178,5 +180,38 @@ describe("uploading an invoice from the drawer", () => {
       USER,
     );
     assert.equal(uploads[0]!.payee, "NOT_COMPANY");
+  });
+
+  /*
+    AZ ÁLTALÁNOS OLVASÓ A FELTÖLTÉSRE IS (barracuda mérése, 2026-10-05: élesben
+    19 feltöltésből 19 olvasatlan). MI PIROSÍT: az ismeretlen szállítói
+    formátumú feltöltés számlaszám nélkül tárolódik, ezért soha nem vonódik
+    össze a NAV- vagy Számlázz.hu-sorával.
+  */
+  it("an unknown supplier format is read by the general reader: number and supplier", async () => {
+    const { missing, uploads } = setup();
+    await missing.upload(
+      "debit-1",
+      {
+        originalname: "tesla_invoice.pdf",
+        buffer: await pdf([
+          "Tesla Hungary Kft.",
+          "Adószám: 27045364-2-44",
+          "Számla",
+          "Számla sorszáma: 4042V0000011711",
+          "Kelt: 2026.09.10.",
+          "Fizetendő: 4 400 Ft",
+        ]),
+      },
+      "INVOICE",
+      USER,
+    );
+    const reading = uploads[0]!.textReading as {
+      invoiceNumber: string | null;
+      supplierTaxNumber: string | null;
+    } | null;
+    assert.equal(uploads[0]!.importResult, null);
+    assert.equal(reading?.invoiceNumber, "4042V0000011711");
+    assert.match(reading?.supplierTaxNumber ?? "", /27045364/);
   });
 });

@@ -1,4 +1,8 @@
 import {
+  readInvoiceText,
+  type InvoiceTextReading,
+} from "./collection/invoice-text.js";
+import {
   BadRequestException,
   ConflictException,
   Inject,
@@ -577,11 +581,34 @@ export class MissingInvoicesService {
         `A feltöltött ${file.originalname} beszállítói formátuma ismeretlen; adat nélkül tárolva.`,
       );
     }
-    let text = "";
+    let lines: string[] = [];
     try {
-      text = (await pdfTextLines(new Uint8Array(file.buffer))).join("\n");
+      lines = await pdfTextLines(new Uint8Array(file.buffer));
     } catch {
       throw new BadRequestException("A PDF nem olvasható.");
+    }
+    const text = lines.join("\n");
+    /*
+      AZ ÁLTALÁNOS OLVASÓ IS LEFUT, ha a szállítói minta nem ismerte fel
+      (barracuda mérése, 2026-10-05: élesben 19 feltöltésből 19 olvasatlan
+      maradt, mert csak a minta-olvasón ment át). Ugyanaz az út, mint a
+      postafiók begyűjtésénél: előbb a szállító adószáma, utána a NAV-számai
+      alapján a számlaszám. A jelölt-összerakó ebből vonja össze a feltöltést a
+      NAV- vagy Számlázz.hu-sorral.
+    */
+    let textReading: InvoiceTextReading | null = null;
+    if (!importResult) {
+      const hints = { fileName: file.originalname };
+      const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
+      const navNumbers = supplier
+        ? await this.repository.navNumbers(
+            supplier.replace(/^HU/, "").replace(/\D/g, "").slice(0, 8),
+          )
+        : [];
+      textReading = readInvoiceText(lines, {
+        ...hints,
+        navNumbers: () => navNumbers,
+      });
     }
     const documentId = await this.repository.uploadAndPair({
       bankTransactionId: id,
@@ -590,6 +617,7 @@ export class MissingInvoicesService {
       sha256: createHash("sha256").update(file.buffer).digest("hex"),
       kind,
       importResult,
+      textReading,
       payee: payeeFromText(text),
       userId: user.id,
     });
