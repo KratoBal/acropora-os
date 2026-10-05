@@ -39,6 +39,21 @@ export class WebshopOrdersRepository {
     });
   }
 
+  /** A bizonytalan csomag-foglalás feloldása: ki engedte újra a létrehozást. */
+  async recordParcelReleased(input: {
+    userId: string;
+    orderId: string;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.parcel-reservation-released",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+      },
+    });
+  }
+
   /**
    * A RENDELÉSEK SZÁMLÁI. Rendelésenként a legutóbbi `WEBSHOP_ORDER` forrású
    * számla (a vázlat azonosítója rendelésenként egy, tehát a gyakorlatban

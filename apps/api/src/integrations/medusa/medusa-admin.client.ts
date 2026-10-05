@@ -639,6 +639,18 @@ export interface MedusaOrderDetailRow {
   }[];
 }
 
+/** A csomag-értesítő törzse (commerce `AdminOrderShippingNotice`, szigorú: más mező 400). */
+export interface MedusaShippingNotice {
+  carrier: "foxpost" | "gls";
+  tracking_number: string;
+  /** Csak napló a webshopban: az OS csomag-sorának azonosítója. */
+  parcel_id?: string;
+}
+
+export type MedusaShippingNoticeResult =
+  | { sent: true }
+  | { sent: false; reason: "mail_off" | "no_email" | "already_sent" | string };
+
 /** A webshop üzleti státusza egy rendelésre (`GET /admin/order-business-status/:id`, #472). */
 export interface MedusaOrderBusinessStatus {
   order_id: string;
@@ -731,6 +743,16 @@ export interface MedusaAdminClient {
    * hibája `MedusaAdminHttpError`, a törzsében a webshop mondatával.
    */
   transitionBusinessStatus(id: string, status: string): Promise<void>;
+  /**
+   * A „FELADTUK A CSOMAGODAT” LEVÉL (`POST /admin/order-shipping-notice/:id`,
+   * commerce #477). A webshop küldi, rendelés és csomagszám párra egyszer
+   * (idempotens). Alszolgáltatói (`STUB-`) csomagszám NEM mehet ide: a webshop
+   * nem szűri, a vevő levélben kapná.
+   */
+  sendShippingNotice(
+    id: string,
+    notice: MedusaShippingNotice,
+  ): Promise<MedusaShippingNoticeResult>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1467,6 +1489,19 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       {
         method: "POST",
         body: JSON.stringify({ status }),
+      },
+    );
+  }
+
+  async sendShippingNotice(
+    id: string,
+    notice: MedusaShippingNotice,
+  ): Promise<MedusaShippingNoticeResult> {
+    return this.request<MedusaShippingNoticeResult>(
+      `/admin/order-shipping-notice/${encodeURIComponent(id)}`,
+      {
+        method: "POST",
+        body: JSON.stringify(notice),
       },
     );
   }

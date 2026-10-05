@@ -269,7 +269,12 @@ describe("the processing bar", () => {
         stepsOf(
           "stocking",
           false,
-          { invoiceNumber: "ACR-1", invoice: null, hasParcel: false },
+          {
+            invoiceNumber: "ACR-1",
+            invoice: null,
+            hasParcel: false,
+            parcel: null,
+          },
           false,
         ),
       ),
@@ -286,7 +291,12 @@ describe("the processing bar", () => {
         stepsOf(
           "closed",
           false,
-          { invoiceNumber: "ACR-1", invoice: null, hasParcel: true },
+          {
+            invoiceNumber: "ACR-1",
+            invoice: null,
+            hasParcel: true,
+            parcel: null,
+          },
           true,
         ),
       ).every((s) => s.endsWith(":done")),
@@ -300,7 +310,12 @@ describe("the processing bar", () => {
         stepsOf(
           "ready_for_pickup",
           true,
-          { invoiceNumber: "ACR-1", invoice: null, hasParcel: false },
+          {
+            invoiceNumber: "ACR-1",
+            invoice: null,
+            hasParcel: false,
+            parcel: null,
+          },
           false,
         ),
       ),

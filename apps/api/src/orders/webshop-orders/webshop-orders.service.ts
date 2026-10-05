@@ -24,9 +24,12 @@ import {
   type MedusaOrderBusinessStatus,
   type MedusaOrderDetailRow,
   type MedusaOrderOverviewRow,
+  type MedusaShippingNotice,
+  type MedusaShippingNoticeResult,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { MedusaConnectionError } from "../../integrations/medusa/medusa-connection.types.js";
 import { MedusaCredentialProvider } from "../../integrations/medusa/medusa-credential.provider.js";
+import { WebshopParcelService } from "../../integrations/carriers/webshop-parcel.service.js";
 import {
   applyFilters,
   countersOf,
@@ -37,6 +40,7 @@ import {
   toListItem,
 } from "./webshop-orders.rules.js";
 import { toDetail } from "./webshop-order-detail.rules.js";
+import { parcelOf } from "./webshop-order-parcel.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 
 /** A webshop hibaüzenete a törzsből (`{type, message}`); ha nem olvasható, `null`. */
@@ -69,6 +73,7 @@ export class WebshopOrdersService {
   constructor(
     private readonly credentials: MedusaCredentialProvider,
     private readonly repository: WebshopOrdersRepository,
+    private readonly parcels: WebshopParcelService,
     @Optional()
     private readonly clientFactory: (
       apiKey: string,
@@ -157,15 +162,30 @@ export class WebshopOrdersService {
         })(),
       ]),
     );
-    const invoice = (await this.repository.invoices([id])).get(id);
+    const [invoices, parcels] = await Promise.all([
+      this.repository.invoices([id]),
+      this.parcels.activeParcelsFor([id]),
+    ]);
     return toDetail({
       order,
       status,
-      facts: factsOf(invoice),
+      facts: factsOf(invoices.get(id), parcelOf(parcels[id])),
       customerOrderCount,
       relatedDisplayId: related?.display_id ?? null,
       now,
     });
+  }
+
+  /**
+   * A „FELADTUK” LEVÉL KÉRÉSE A WEBSHOPTÓL (commerce #477). A webshop
+   * elérhetetlensége itt nem hiba, hanem kimenet: a csomag ekkor már létezik.
+   */
+  async sendShippingNotice(
+    id: string,
+    notice: MedusaShippingNotice,
+  ): Promise<MedusaShippingNoticeResult> {
+    const client = await this.client();
+    return client.sendShippingNotice(id, notice);
   }
 
   /** A rendelés és az üzleti státusza a webshopból, nyersen (a számla ebből készül). */
@@ -239,9 +259,17 @@ export class WebshopOrdersService {
     now = new Date(),
   ): Promise<WebshopOrderListResponse> {
     const { rows, truncated } = await this.readAll();
-    const invoices = await this.repository.invoices(rows.map((row) => row.id));
+    const ids = rows.map((row) => row.id);
+    const [invoices, parcels] = await Promise.all([
+      this.repository.invoices(ids),
+      this.parcels.activeParcelsFor(ids),
+    ]);
     const items = rows.map((row) =>
-      toListItem(row, factsOf(invoices.get(row.id)), now),
+      toListItem(
+        row,
+        factsOf(invoices.get(row.id), parcelOf(parcels[row.id])),
+        now,
+      ),
     );
     const viewed = inView(items, query.view);
     const filtered = sortItems(

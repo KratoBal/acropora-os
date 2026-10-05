@@ -12,6 +12,7 @@ import {
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { MedusaConnectionError } from "../../integrations/medusa/medusa-connection.types.js";
 import type { MedusaCredentialProvider } from "../../integrations/medusa/medusa-credential.provider.js";
+import type { WebshopParcelService } from "../../integrations/carriers/webshop-parcel.service.js";
 import type { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   OVERVIEW_MAX_PAGES,
@@ -31,6 +32,9 @@ const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
 } as unknown as WebshopOrdersRepository;
+const NO_PARCELS = {
+  activeParcelsFor: async () => ({}),
+} as unknown as WebshopParcelService;
 const order = (n: number, status = "confirmed"): MedusaOrderOverviewRow => ({
   id: `order_${n}`,
   display_id: n,
@@ -85,7 +89,12 @@ function service(
     },
   } as unknown as MedusaCredentialProvider;
   return {
-    orders: new WebshopOrdersService(credentials, NO_AUDIT, () => client),
+    orders: new WebshopOrdersService(
+      credentials,
+      NO_AUDIT,
+      NO_PARCELS,
+      () => client,
+    ),
     asked,
   };
 }
@@ -242,7 +251,12 @@ describe("WebshopOrdersService.detail", () => {
       resolve: async () => ({ apiKey: "k", source: "database", revision: "r" }),
     } as unknown as MedusaCredentialProvider;
     return {
-      orders: new WebshopOrdersService(credentials, NO_AUDIT, () => client),
+      orders: new WebshopOrdersService(
+        credentials,
+        NO_AUDIT,
+        NO_PARCELS,
+        () => client,
+      ),
       counted,
     };
   }
@@ -357,7 +371,12 @@ describe("WebshopOrdersService.changeStatus", () => {
       invoices: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
-      orders: new WebshopOrdersService(credentials, repository, () => client),
+      orders: new WebshopOrdersService(
+        credentials,
+        repository,
+        NO_PARCELS,
+        () => client,
+      ),
       sent,
       audited,
     };
