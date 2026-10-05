@@ -8072,8 +8072,10 @@ model Conversation {
   /// összefűzve. Az egyediség az adatbázisban áll, tehát két egyszerre induló
   /// "új üzenet" sem hoz létre kettőt. GROUP-nál `null`.
   directKey       String?              @unique
-  /// Későbbi OS-objektum (munkalap, megrendelés, ...), 4. fázis. Nincs
-  /// beégetve egyetlen fajta sem.
+  /// A kapcsolt OS-objektum (4. fázis): `WORKSHEET` vagy `SERVICE_JOB`
+  /// (`CONVERSATION_CONTEXT_TYPES`). Egy élő beszélgetés objektumonként: a
+  /// migráció részleges egyedi indexe tartja
+  /// (`Conversation_one_live_per_context_key`), a Prisma séma nem látja.
   contextType     String?
   contextId       String?
   /// A lista előnézete egy lekérdezésből: az utolsó üzenet azonosítója és ideje.

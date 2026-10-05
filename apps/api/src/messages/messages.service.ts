@@ -26,6 +26,9 @@ import {
   USER_ROLES,
   personDisplayName,
   type AuthenticatedUser,
+  worksheetDisplayStatus,
+  type ConversationContextCard,
+  type ConversationContextType,
   type ConversationDetail,
   type ConversationListItem,
   type ConversationNotificationState,
@@ -71,8 +74,10 @@ import {
   directKeyOf,
   encodeCursor,
   mayJoinInternal,
+  contextRef,
   messagePushText,
   messageSearchPattern,
+  systemText,
   messageTypeFor,
   notificationUpdate,
   pushRecipients,
@@ -213,6 +218,7 @@ export class MessagesService {
       createdByUserId: row.createdByUserId,
       lastReadMessageId: membership.lastReadMessageId,
       notification: notificationState(membership),
+      context: await this.contextCard(user, row),
     };
   }
 
@@ -918,6 +924,352 @@ export class MessagesService {
     );
   }
 
+  // --- 4. fázis: munkalaphoz és hibajegyhez kötött beszélgetés, tagság
+
+  /**
+   * „BESZÉLGETÉS” A MUNKALAPRÓL VAGY A HIBAJEGYRŐL (4. fázis, prompt 23. pont;
+   * Balázs, 2026-10-05). Objektumonként EGY élő beszélgetés: ha van, azt adja
+   * (és a kérdezőt felveszi, ha még nem tag); ha nincs, létrehozza az indítóval
+   * és a munkalap szerelőivel (hibajegynél a felelőssel). Szervizjog kell hozzá.
+   */
+  async openContextConversation(
+    user: AuthenticatedUser,
+    type: ConversationContextType,
+    id: string,
+  ): Promise<ConversationDetail> {
+    this.assertInternal(user);
+    this.assertSeesService(user);
+    const subject = await this.contextSubject(type, id);
+    if (!subject)
+      throw new NotFoundException(
+        `A ${type === "WORKSHEET" ? "munkalap" : "hibajegy"} nem található.`,
+      );
+
+    const existing = await this.repository.conversationByContext(type, id);
+    if (existing) return this.joinContextConversation(user, existing);
+
+    const people = (await this.repository.users(subject.memberIds)).filter(
+      (row) => row.id !== user.id && mayJoinInternal(row),
+    );
+    const memberIds = [user.id, ...people.map((row) => row.id)].slice(
+      0,
+      CONVERSATION_MAX_MEMBERS,
+    );
+    const { id: conversationId, created } =
+      await this.repository.createConversation({
+        type: "GROUP",
+        title: subject.title,
+        description: null,
+        createdByUserId: user.id,
+        directKey: null,
+        memberIds,
+        context: { type, id },
+      });
+    if (!created) return this.joinContextConversation(user, conversationId);
+
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.created",
+      conversationId,
+      metadata: { type: "GROUP", memberIds, context: { type, id } },
+    });
+    this.bus.publish(memberIds, {
+      type: "conversation.created",
+      conversationId,
+    });
+    await this.systemEvent(
+      conversationId,
+      user,
+      systemText.started(
+        personDisplayName(user),
+        type,
+        contextRef(subject.number),
+      ),
+    );
+    return this.detail(user, conversationId);
+  }
+
+  /** Egy MEGLÉVŐ csoport kötése munkalaphoz vagy hibajegyhez (Balázs: utólag is). */
+  async linkContext(
+    user: AuthenticatedUser,
+    conversationId: string,
+    input: { type: ConversationContextType; id: string },
+  ): Promise<ConversationDetail> {
+    this.assertSeesService(user);
+    await this.membershipOr404(conversationId, user.id);
+    const row = await this.repository.conversation(conversationId);
+    if (!row) throw notFound();
+    if (row.type !== "GROUP")
+      throw new BadRequestException(
+        "Csak csoportos beszélgetés köthető munkalaphoz vagy hibajegyhez.",
+      );
+    if (row.contextId) {
+      if (row.contextType === input.type && row.contextId === input.id)
+        return this.detail(user, conversationId);
+      throw new ConflictException(
+        "Ez a beszélgetés már egy másikhoz kapcsolódik. Előbb válaszd le.",
+      );
+    }
+    const subject = await this.contextSubject(input.type, input.id);
+    if (!subject)
+      throw new NotFoundException("A munkalap vagy a hibajegy nem található.");
+    if (!(await this.repository.setContext(conversationId, input)))
+      throw new ConflictException(
+        `Ehhez a ${input.type === "WORKSHEET" ? "munkalaphoz" : "hibajegyhez"} már tartozik beszélgetés.`,
+      );
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.linked",
+      conversationId,
+      metadata: { context: input },
+    });
+    await this.systemEvent(
+      conversationId,
+      user,
+      systemText.linked(
+        personDisplayName(user),
+        input.type,
+        contextRef(subject.number),
+      ),
+    );
+    return this.detail(user, conversationId);
+  }
+
+  /** A kötés leválasztása; a beszélgetés megmarad. Kötés nélkül nem hiba. */
+  async unlinkContext(
+    user: AuthenticatedUser,
+    conversationId: string,
+  ): Promise<ConversationDetail> {
+    this.assertSeesService(user);
+    await this.membershipOr404(conversationId, user.id);
+    const row = await this.repository.conversation(conversationId);
+    if (!row) throw notFound();
+    if (!isContextType(row.contextType) || !row.contextId)
+      return this.detail(user, conversationId);
+    const type = row.contextType;
+    const subject = await this.contextSubject(type, row.contextId);
+    await this.repository.setContext(conversationId, null);
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.unlinked",
+      conversationId,
+      metadata: { context: { type, id: row.contextId } },
+    });
+    await this.systemEvent(
+      conversationId,
+      user,
+      systemText.unlinked(
+        personDisplayName(user),
+        type,
+        contextRef(subject?.number),
+      ),
+    );
+    return this.detail(user, conversationId);
+  }
+
+  /**
+   * TAG HOZZÁADÁSA (4. fázis; Balázs, 2026-10-05: bármelyik tag, és látszik).
+   * Csak csoportba, csak aktív belső kolléga, a felső határig. Aki már tag, az
+   * kimarad, nem hiba.
+   */
+  async addMembers(
+    user: AuthenticatedUser,
+    conversationId: string,
+    userIds: readonly string[],
+  ): Promise<ConversationDetail> {
+    this.assertInternal(user);
+    await this.membershipOr404(conversationId, user.id);
+    const row = await this.repository.conversation(conversationId);
+    if (!row) throw notFound();
+    if (row.type !== "GROUP")
+      throw new BadRequestException(
+        "Közvetlen beszélgetéshez nem adható tag; indíts csoportot.",
+      );
+    const current = new Set(row.members.map((member) => member.userId));
+    const wanted = [...new Set(userIds)].filter((id) => !current.has(id));
+    if (wanted.length === 0) return this.detail(user, conversationId);
+    if (current.size + wanted.length > CONVERSATION_MAX_MEMBERS)
+      throw new BadRequestException(
+        `Egy beszélgetésnek legfeljebb ${CONVERSATION_MAX_MEMBERS} tagja lehet.`,
+      );
+    const found = new Map(
+      (await this.repository.users(wanted)).map((u) => [u.id, u]),
+    );
+    const refused = wanted.filter((id) => {
+      const person = found.get(id);
+      return !person || !mayJoinInternal(person);
+    });
+    if (refused.length > 0)
+      throw new BadRequestException(
+        "A kiválasztottak között van, aki nem vehető fel (inaktív, partnerfiók vagy nem létező felhasználó).",
+      );
+    await this.repository.addMembers(conversationId, wanted);
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.members_added",
+      conversationId,
+      metadata: { userIds: wanted },
+    });
+    this.bus.publish(wanted, { type: "conversation.created", conversationId });
+    await this.systemEvent(
+      conversationId,
+      user,
+      systemText.added(
+        personDisplayName(user),
+        wanted.map((id) => personDisplayName(found.get(id)!)),
+      ),
+    );
+    return this.detail(user, conversationId);
+  }
+
+  /**
+   * KILÉPÉS (4. fázis). Csak csoportból. A rendszerüzenet még tagként megy ki,
+   * utána a tagság zárul; az utolsó kilépő után a beszélgetés archív.
+   */
+  async leave(
+    user: AuthenticatedUser,
+    conversationId: string,
+  ): Promise<{ left: true; archived: boolean }> {
+    await this.membershipOr404(conversationId, user.id);
+    const row = await this.repository.conversation(conversationId);
+    if (!row) throw notFound();
+    if (row.type !== "GROUP")
+      throw new BadRequestException(
+        "Közvetlen beszélgetésből nem lehet kilépni.",
+      );
+    await this.systemEvent(
+      conversationId,
+      user,
+      systemText.left(personDisplayName(user)),
+    );
+    const remaining = await this.repository.leave(conversationId, user.id);
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.member_left",
+      conversationId,
+      metadata: { remaining },
+    });
+    return { left: true, archived: remaining === 0 };
+  }
+
+  /** A meglévő kötött beszélgetés: a kérdező, ha még nem tag, belép (szervizjoggal látja a tárgyat). */
+  private async joinContextConversation(
+    user: AuthenticatedUser,
+    conversationId: string,
+  ): Promise<ConversationDetail> {
+    if (!(await this.repository.activeMembership(conversationId, user.id))) {
+      await this.repository.addMembers(conversationId, [user.id]);
+      await this.repository.audit({
+        userId: user.id,
+        action: "conversation.members_added",
+        conversationId,
+        metadata: { userIds: [user.id], joinedFromContext: true },
+      });
+      this.bus.publish([user.id], {
+        type: "conversation.created",
+        conversationId,
+      });
+      await this.systemEvent(
+        conversationId,
+        user,
+        systemText.joined(personDisplayName(user)),
+      );
+    }
+    return this.detail(user, conversationId);
+  }
+
+  /**
+   * A kötés tárgya: a beszélgetés neve, a szám, és akik automatikusan bekerülnek
+   * (munkalapnál a szerelői, hibajegynél a felelőse). A rejtett munkalap nincs.
+   */
+  private async contextSubject(type: ConversationContextType, id: string) {
+    if (type === "WORKSHEET") {
+      const sheet = await this.repository.worksheetForContext(id);
+      if (!sheet || sheet.hiddenAt) return null;
+      return {
+        number: sheet.number,
+        title: [sheet.number ?? "Munkalap", sheet.customer.displayName].join(
+          " · ",
+        ),
+        memberIds: sheet.assignees.map((a) => a.userId),
+      };
+    }
+    const job = await this.repository.serviceJobForContext(id);
+    if (!job) return null;
+    return {
+      number: job.jobNumber,
+      title: [job.jobNumber, job.customer?.displayName]
+        .filter(Boolean)
+        .join(" · "),
+      memberIds: job.assignedUserId ? [job.assignedUserId] : [],
+    };
+  }
+
+  /**
+   * A KAPCSOLT OBJEKTUM KÁRTYÁJA. Aki a szervizt nem látja, annak csak a típus
+   * és a szám megy ki (`restricted`): a beszélgetés nem kiskapu a szerviz-adatokhoz.
+   */
+  private async contextCard(
+    user: AuthenticatedUser,
+    row: { contextType: string | null; contextId: string | null },
+  ): Promise<ConversationContextCard | null> {
+    if (!isContextType(row.contextType) || !row.contextId) return null;
+    const type = row.contextType;
+    const id = row.contextId;
+    const sees = ROLE_PERMISSIONS[user.role].includes(PERMISSIONS.SERVICE_VIEW);
+    if (type === "WORKSHEET") {
+      const sheet = await this.repository.worksheetForContext(id);
+      const version = sheet?.versions[0];
+      return {
+        type,
+        id,
+        number: sheet?.number ?? null,
+        restricted: !sees,
+        partnerName: sees ? (sheet?.customer.displayName ?? null) : null,
+        status:
+          sees && version
+            ? worksheetDisplayStatus(version.status, version._count.lines)
+            : null,
+        createdAt: sees && sheet ? sheet.createdAt.toISOString() : null,
+      };
+    }
+    const job = await this.repository.serviceJobForContext(id);
+    return {
+      type,
+      id,
+      number: job?.jobNumber ?? null,
+      restricted: !sees,
+      partnerName: sees ? (job?.customer?.displayName ?? null) : null,
+      status: sees ? (job?.status ?? null) : null,
+      createdAt: sees && job ? job.createdAt.toISOString() : null,
+    };
+  }
+
+  /** Rendszerüzenet a folyamba; PUSH NEM megy, mert esemény, nem üzenet. */
+  private async systemEvent(
+    conversationId: string,
+    actor: AuthenticatedUser,
+    text: string,
+  ): Promise<void> {
+    const row = await this.repository.createSystemMessage({
+      conversationId,
+      actorUserId: actor.id,
+      text,
+    });
+    const members = await this.repository.members(conversationId);
+    this.bus.publish(
+      members.filter((m) => m.leftAt === null).map((m) => m.userId),
+      { type: "message.created", conversationId, messageId: row.id },
+    );
+  }
+
+  private assertSeesService(user: AuthenticatedUser) {
+    if (!ROLE_PERMISSIONS[user.role].includes(PERMISSIONS.SERVICE_VIEW))
+      throw new ForbiddenException(
+        "A szervizt nem látod, ezért ezt nem teheted meg.",
+      );
+  }
+
   /** Az üzenet, ha a kérdező tagja a beszélgetésének; különben 404. */
   private async messageOr404(messageId: string, userId: string) {
     const row = await this.repository.message(messageId);
@@ -1103,5 +1455,11 @@ function toListItem(
     lastMessage: last ? toMessage(last, viewerId) : null,
     lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
     unreadCount,
+    contextType: isContextType(row.contextType) ? row.contextType : null,
   };
 }
+
+const isContextType = (
+  value: string | null,
+): value is ConversationContextType =>
+  value === "WORKSHEET" || value === "SERVICE_JOB";

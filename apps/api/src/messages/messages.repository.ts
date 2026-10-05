@@ -85,6 +85,8 @@ const CONVERSATION_SELECT = {
   createdByUserId: true,
   lastMessageId: true,
   lastMessageAt: true,
+  contextType: true,
+  contextId: true,
   members: {
     where: { leftAt: null },
     select: {
@@ -175,6 +177,8 @@ export class MessagesRepository extends Repository {
     createdByUserId: string;
     directKey: string | null;
     memberIds: readonly string[];
+    /** 4. fázis: a kapcsolt munkalap vagy hibajegy. */
+    context?: { type: string; id: string } | null;
   }): Promise<{ id: string; created: boolean }> {
     try {
       const row = await this.database.conversation.create({
@@ -185,6 +189,8 @@ export class MessagesRepository extends Repository {
           description: input.description,
           createdByUserId: input.createdByUserId,
           directKey: input.directKey,
+          contextType: input.context?.type ?? null,
+          contextId: input.context?.id ?? null,
           members: {
             create: input.memberIds.map((userId) => ({ userId })),
           },
@@ -194,15 +200,174 @@ export class MessagesRepository extends Repository {
       return { id: row.id, created: true };
     } catch (error) {
       if (
-        input.directKey &&
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        const existing = await this.directConversationId(input.directKey);
+        const existing = input.directKey
+          ? await this.directConversationId(input.directKey)
+          : input.context
+            ? await this.conversationByContext(
+                input.context.type,
+                input.context.id,
+              )
+            : null;
         if (existing) return { id: existing, created: false };
       }
       throw error;
     }
+  }
+
+  /** A munkalap vagy a hibajegy ÉLŐ beszélgetése (4. fázis), vagy `null`. */
+  async conversationByContext(
+    type: string,
+    id: string,
+  ): Promise<string | null> {
+    const row = await this.database.conversation.findFirst({
+      where: { contextType: type, contextId: id, archivedAt: null },
+      select: { id: true },
+    });
+    return row?.id ?? null;
+  }
+
+  /**
+   * A kötés írása vagy törlése (`null`). Ha az objektumnak már van élő
+   * beszélgetése, a részleges egyedi index elutasítja: `false`.
+   */
+  async setContext(
+    conversationId: string,
+    context: { type: string; id: string } | null,
+  ): Promise<boolean> {
+    try {
+      await this.database.conversation.update({
+        where: { id: conversationId },
+        data: {
+          contextType: context?.type ?? null,
+          contextId: context?.id ?? null,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        return false;
+      throw error;
+    }
+  }
+
+  /**
+   * TAGOK FELVÉTELE (4. fázis). Egy korábban kilépett tag visszatér: a
+   * `leftAt` törlődik, a `joinedAt` most lesz, az olvasási mutatója üres, így
+   * a távolléte alatti üzenetek nem számítanak olvasatlannak.
+   */
+  async addMembers(conversationId: string, userIds: readonly string[]) {
+    const now = new Date();
+    await this.database.$transaction(
+      userIds.map((userId) =>
+        this.database.conversationMember.upsert({
+          where: { conversationId_userId: { conversationId, userId } },
+          create: { conversationId, userId, joinedAt: now },
+          update: {
+            leftAt: null,
+            joinedAt: now,
+            lastReadAt: null,
+            lastReadMessageId: null,
+          },
+        }),
+      ),
+    );
+  }
+
+  /**
+   * KILÉPÉS (4. fázis). A tagság sora marad (`leftAt`), és ha senki nem maradt,
+   * a beszélgetés archív lesz, nem törlődik. A maradó aktív tagok számát adja.
+   */
+  async leave(conversationId: string, userId: string): Promise<number> {
+    return this.database.$transaction(async (tx) => {
+      await tx.conversationMember.updateMany({
+        where: { conversationId, userId, leftAt: null },
+        data: { leftAt: new Date() },
+      });
+      const remaining = await tx.conversationMember.count({
+        where: { conversationId, leftAt: null },
+      });
+      if (remaining === 0)
+        await tx.conversation.update({
+          where: { id: conversationId },
+          data: { archivedAt: new Date() },
+        });
+      return remaining;
+    });
+  }
+
+  /**
+   * RENDSZERÜZENET (4. fázis, Figma 450:710): a cselekvő nevében, `SYSTEM`
+   * típussal. A beszélgetés előnézetébe kerül, és a cselekvőnek nem olvasatlan.
+   */
+  createSystemMessage(input: {
+    conversationId: string;
+    actorUserId: string;
+    text: string;
+  }): Promise<MessageRow> {
+    return this.database.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          conversationId: input.conversationId,
+          senderUserId: input.actorUserId,
+          type: "SYSTEM",
+          text: input.text,
+        },
+        select: MESSAGE_SELECT,
+      });
+      await tx.conversation.update({
+        where: { id: input.conversationId },
+        data: { lastMessageId: message.id, lastMessageAt: message.createdAt },
+      });
+      await tx.conversationMember.updateMany({
+        where: {
+          conversationId: input.conversationId,
+          userId: input.actorUserId,
+        },
+        data: { lastReadAt: message.createdAt, lastReadMessageId: message.id },
+      });
+      return message;
+    });
+  }
+
+  /** A munkalap a kártyához és az automatikus tagsághoz (4. fázis). */
+  worksheetForContext(id: string) {
+    return this.database.worksheet.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        number: true,
+        createdAt: true,
+        hiddenAt: true,
+        customer: { select: { displayName: true } },
+        assignees: { select: { userId: true } },
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { status: true, _count: { select: { lines: true } } },
+        },
+      },
+    });
+  }
+
+  /** A hibajegy a kártyához és az automatikus tagsághoz (4. fázis). */
+  serviceJobForContext(id: string) {
+    return this.database.serviceJob.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        jobNumber: true,
+        status: true,
+        createdAt: true,
+        assignedUserId: true,
+        customer: { select: { displayName: true } },
+      },
+    });
   }
 
   /** A kérdező AKTÍV tagsága, vagy `null`. Minden `:id` útvonal ezzel kezd. */
