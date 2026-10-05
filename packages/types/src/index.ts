@@ -1064,6 +1064,9 @@ export type {
 export type {
   ServiceDraftItem,
   ServiceDraftListResponse,
+  ServiceDraftFilterState,
+  ServiceDraftFilteredItem,
+  ServiceDraftJevClass,
   ServiceDraftStatus,
   ServiceDraftSyncStatus,
 } from "./service-drafts.js";

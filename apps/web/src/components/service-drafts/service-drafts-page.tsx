@@ -74,6 +74,31 @@ function DraftAttachment({
     </div>
   );
 }
+/**
+ * A JEV-SZŰRÉS JELE A KÁRTYÁN (Cápasuli, Balázs 2026-10-05): a bizonytalan és
+ * a vissza hozott tétel mindig jelölt; a "nem szűrt" csak akkor, ha a szűrés be
+ * van kapcsolva (kikapcsolva minden tétel szűretlen, és a jel csak zaj lenne).
+ */
+export function draftFilterBadge(
+  item: Pick<ServiceDraftItem, "filterState">,
+  filterEnabled: boolean,
+): { label: string; variant: "amber" | "grey" } | null {
+  if (item.filterState === "UNCERTAIN")
+    return { label: "Bizonytalan", variant: "amber" };
+  if (item.filterState === "PROMOTED")
+    return { label: "Kiszűrtből visszahozva", variant: "grey" };
+  if (item.filterState === "UNFILTERED" && filterEnabled)
+    return { label: "Nem szűrt", variant: "grey" };
+  return null;
+}
+
+/** A kiszűrés oka a "Kiszűrve" szakaszban. */
+export function jevClassLabel(jevClass: string | null): string {
+  if (jevClass === "NOT_OURS") return "Nem nekünk szól";
+  if (jevClass === "NOT_A_FAULT") return "Nem hiba";
+  return "Kiszűrve";
+}
+
 function DraftCard({
   item,
   data,
@@ -103,6 +128,13 @@ function DraftCard({
         <p className="text-xs text-pilot-grey-600">
           Cápasuli · {item.reportDate} · {item.mail.subject ?? "Napi jelentő"}
         </p>
+        {draftFilterBadge(item, data.filterEnabled) && (
+          <PilotBadge
+            variant={draftFilterBadge(item, data.filterEnabled)!.variant}
+          >
+            {draftFilterBadge(item, data.filterEnabled)!.label}
+          </PilotBadge>
+        )}
         {item.occurrence > 1 && (
           <div className="space-y-2">
             <PilotBadge variant="amber">
@@ -318,6 +350,20 @@ export function ServiceDraftsPage() {
       setBusy(undefined);
     }
   }
+  async function promote(id: string) {
+    if (!session || busy) return;
+    setBusy(id);
+    setError(undefined);
+    try {
+      await serviceDraftsApi.promote(session.token ?? "", id);
+      setNotice("A tétel visszakerült a piszkozatok közé.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "A tétel nem hozható vissza.");
+    } finally {
+      setBusy(undefined);
+    }
+  }
   if (!admin)
     return (
       <Alert variant="danger" title="Hiba">
@@ -428,6 +474,45 @@ export function ServiceDraftsPage() {
         <PilotButton variant="secondary" onClick={() => void load()}>
           Újrapróbálás
         </PilotButton>
+      )}
+      {/*
+        A KISZŰRT TÉTELEK NEM TŰNNEK EL (brief 4. pont): a lap alján, csukva,
+        egyenként visszahozhatók. A visszahozás a Jev döntését felülírja, és ez
+        a javítás a tanító jel.
+      */}
+      {status === "PENDING" && data && data.filtered.length > 0 && (
+        <details className="rounded-lg bg-white ring-1 ring-pilot-grey-100">
+          <summary className="cursor-pointer px-6 py-4 text-sm font-semibold text-pilot-grey-700">
+            Kiszűrve ({data.filtered.length})
+          </summary>
+          <ul className="divide-y divide-pilot-grey-100">
+            {data.filtered.map((f) => (
+              <li
+                key={f.id}
+                className="flex flex-wrap items-start justify-between gap-3 px-6 py-3"
+              >
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm text-pilot-grey-900">{f.title}</p>
+                  <p className="text-xs text-pilot-grey-500">
+                    {f.reportDate} · {jevClassLabel(f.jevClass)}
+                    {f.jevConfidence !== null
+                      ? ` · ${Math.round(f.jevConfidence * 100)}%`
+                      : ""}
+                  </p>
+                </div>
+                <PilotButton
+                  variant="secondary"
+                  size="action"
+                  aria-label={`${f.title}: mégis piszkozat`}
+                  disabled={!!busy}
+                  onClick={() => void promote(f.id)}
+                >
+                  Mégis piszkozat
+                </PilotButton>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {data?.nextCursor && (
         <PilotButton
