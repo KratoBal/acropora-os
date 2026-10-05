@@ -29,6 +29,24 @@ import {
 } from "./szamlazz-feeds.repository.js";
 
 /**
+ * A BEJÖVŐ SZÁMLA TÁROLT TARTALMA: a PDF, ha az üzenet hozza, különben maga az
+ * XML. A lenyomata dönti el, hogy a fájl megvan-e már, és ha megvan, a vetítés
+ * erre a már meglévő dokumentumra mutat (`projectIncoming`).
+ */
+export function feedInvoiceContent(
+  message: Pick<SzamlabeMessage, "pdf">,
+  body: string,
+): { content: Buffer; sha256: string; pdf: boolean } {
+  const pdf = pdfFromField(message.pdf);
+  const content = pdf ?? Buffer.from(body, "utf8");
+  return {
+    content,
+    sha256: createHash("sha256").update(content).digest("hex"),
+    pdf: pdf !== null,
+  };
+}
+
+/**
  * A SZÁMLÁZZ.HU SZÁMLA- ÉS NYUGTA-TOVÁBBÍTÁS FOGADÁSA (acrobot 25686; a minta a
  * banki tranzakcióé, #1333, `szamlazz-banktranz.service.ts`).
  *
@@ -256,7 +274,20 @@ export class SzamlazzFeedsService {
       );
       return "UNREADABLE";
     }
-    return this.repository.projectIncoming({ externalId, sha256, projection });
+    // a tárolt tartalom lenyomata: ha a feed a fájlt nem tárolta, mert már
+    // megvolt, a vetítés a meglévő dokumentumra mutat (7ff26bc9)
+    let contentSha256: string | null = null;
+    try {
+      contentSha256 = feedInvoiceContent(parseSzamlabe(body), body).sha256;
+    } catch (error) {
+      if (!(error instanceof SzamlazzFeedParseError)) throw error;
+    }
+    return this.repository.projectIncoming({
+      externalId,
+      sha256,
+      contentSha256,
+      projection,
+    });
   }
 
   /** A bejövő számla a Hiányzó számlák forrásai közé, ha valódi és még nincs meg. */
@@ -271,13 +302,11 @@ export class SzamlazzFeedsService {
       );
       return;
     }
-    const pdf = pdfFromField(message.pdf);
+    const { content, sha256, pdf } = feedInvoiceContent(message, body);
     if (message.pdf && !pdf)
       this.logger.warn(
         `${label}: a pdf mező nem base64 PDF; az XML a tartalom (a nyers üzenet tárolva).`,
       );
-    const content = pdf ?? Buffer.from(body, "utf8");
-    const sha256 = createHash("sha256").update(content).digest("hex");
     if (await this.repository.hasContent(sha256)) {
       this.logger.log(
         `${label}: ez a fájl már megvan, nem kerül be másodszor.`,

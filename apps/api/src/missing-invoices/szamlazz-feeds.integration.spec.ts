@@ -371,6 +371,85 @@ describe(
       );
     });
 
+    /**
+     * A FEED NEM TÁROLTA A FÁJLT, MERT MÁR MEGVOLT (7ff26bc9): a sor az azonos
+     * tartalmú dokumentumra mutat. MI PIROSÍT: ha a sor forrás nélkül marad
+     * (akkor a kézzel párosított feltöltés fizetése nem ér el hozzá), vagy ha
+     * lenyomat nélkül is találna valamit.
+     */
+    it("without its own stored file, an incoming invoice points to the document with the same content", async () => {
+      const externalId = `${PREFIX}be-same`;
+      await repository.storeRaw({
+        kind: "SZAMLABE",
+        externalId,
+        sha256: "egyetlen",
+        body: "<szamlabe/>",
+      });
+      // a már meglévő fájl: egy másik út hozta be, ugyanazzal a tartalommal
+      const { id: existingId } = await repository.storeInvoice({
+        externalId: `${PREFIX}masik-ut`,
+        fileName: "E-SI-2026-51598.pdf",
+        content: Buffer.from("%PDF-1.4 ugyanaz"),
+        sha256: `${PREFIX}sha-same`,
+        receivedAt: new Date("2026-09-28T00:00:00Z"),
+        payee: "COMPANY",
+        textReading: { invoiceNumber: null },
+      });
+      const projection = {
+        externalId,
+        kindCode: "SZ",
+        documentNumber: "E-SI-2026-51598",
+        electronic: true,
+        issueDate: "2026-09-27",
+        fulfillmentDate: null,
+        dueDate: null,
+        paymentMethod: "Bankkártya",
+        currency: "HUF",
+        exchangeRate: null,
+        exchangeBank: null,
+        supplierName: "TEA MOBILITÁS Kft.",
+        supplierTaxNumber: null,
+        supplierEuTaxNumber: null,
+        supplierAddress: null,
+        supplierBankAccount: null,
+        buyerName: "Acropora Kft.",
+        buyerTaxNumber: "23916229-2-42",
+        netAmount: "15748",
+        vatAmount: "4252",
+        grossAmount: "20000",
+        lines: [],
+        vatSummary: [],
+        paymentsKnown: false,
+        payments: [],
+        note: null,
+        orderNumber: null,
+        referencedInvoiceNumber: null,
+        referencedProformaNumber: null,
+        cancelled: false,
+      };
+      const source = async () =>
+        (
+          await prisma.incomingBillingDocument.findUniqueOrThrow({
+            where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+          })
+        ).sourceDocumentId;
+
+      await repository.projectIncoming({
+        externalId,
+        sha256: "egyetlen",
+        contentSha256: null,
+        projection,
+      });
+      assert.equal(await source(), null);
+      await repository.projectIncoming({
+        externalId,
+        sha256: "egyetlen",
+        contentSha256: `${PREFIX}sha-same`,
+        projection,
+      });
+      assert.equal(await source(), existingId);
+    });
+
     it("a forwarded invoice is a candidate, with its source, gross and supplier", async () => {
       const { id } = await repository.storeInvoice({
         externalId: `${PREFIX}2`,

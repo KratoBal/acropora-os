@@ -159,10 +159,18 @@ export class SzamlazzFeedsRepository {
    * (`szamlazz:szamlabe:<id>` kulccsal, `storeInvoice`): a sor arra mutat, és a
    * fájlnév kiterjesztése mondja meg, PDF-e (a fogadó `.pdf`-et csak valódi,
    * `%PDF-` kezdetű tartalomnak ad).
+   *
+   * HA A FEED NEM TÁROLTA A FÁJLT, mert ugyanaz a tartalom már megvolt
+   * (`hasContent`: feltöltve vagy a postafiókból begyűjtve), a sor arra az
+   * AZONOS TARTALMÚ dokumentumra mutat (7ff26bc9, acrobot 26292). Enélkül a
+   * sornak nincs forrása, és a kézzel párosított feltöltés fizetése nem ér el
+   * hozzá (mérve 2026-10-02: TEA E-SI-2026-51598).
    */
   async projectIncoming(input: {
     externalId: string;
     sha256: string;
+    /** A tárolt tartalom (PDF vagy XML) lenyomata; `null`, ha nem olvasható. */
+    contentSha256?: string | null;
     projection: IncomingInvoiceProjection;
   }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
     return this.database.$transaction(async (transaction) => {
@@ -186,11 +194,19 @@ export class SzamlazzFeedsRepository {
       const versionCount = await transaction.szamlazzFeedMessage.count({
         where: { kind: "SZAMLABE", externalId: input.externalId },
       });
-      const source = await transaction.incomingSupplierDocument.findFirst({
-        where: { gmailMessageId: `szamlazz:szamlabe:${input.externalId}` },
-        orderBy: { createdAt: "asc" },
-        select: { id: true, fileName: true },
-      });
+      const source =
+        (await transaction.incomingSupplierDocument.findFirst({
+          where: { gmailMessageId: `szamlazz:szamlabe:${input.externalId}` },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, fileName: true },
+        })) ??
+        (input.contentSha256
+          ? await transaction.incomingSupplierDocument.findFirst({
+              where: { sha256: input.contentSha256 },
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              select: { id: true, fileName: true },
+            })
+          : null);
       const {
         externalId,
         issueDate,

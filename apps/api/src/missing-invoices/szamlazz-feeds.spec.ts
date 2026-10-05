@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 
 import {
@@ -194,13 +195,16 @@ function setup(
   const invoices: FeedInvoiceInput[] = [];
   const projected: { externalId: string; documentNumber: string }[] = [];
   const incoming: { externalId: string; documentNumber: string }[] = [];
+  const contentShas: (string | null | undefined)[] = [];
   const order: string[] = [];
   const repository = {
     projectIncoming: async (input: {
       externalId: string;
+      contentSha256?: string | null;
       projection: { documentNumber: string };
     }) => {
       order.push("projectIncoming");
+      contentShas.push(input.contentSha256);
       incoming.push({
         externalId: input.externalId,
         documentNumber: input.projection.documentNumber,
@@ -234,6 +238,7 @@ function setup(
     invoices,
     projected,
     incoming,
+    contentShas,
     order,
   };
 }
@@ -433,6 +438,23 @@ describe("SzamlazzFeedsService", () => {
       [other.invoices[0]?.payee, byName.invoices[0]?.payee],
       ["NOT_COMPANY", "COMPANY"],
     );
+  });
+
+  /**
+   * A MÁR MEGLÉVŐ FÁJL (7ff26bc9): a feed nem tárolja másodszor, de a vetítés
+   * megkapja a tartalom lenyomatát, és arra a meglévő dokumentumra mutat. MI
+   * PIROSÍT: ha a lenyomat nem a TÁROLT tartalomé (a PDF-é), hanem az egész
+   * üzeneté, vagy egyáltalán nem megy át: akkor a sornak nincs forrása.
+   */
+  it("a file we already have is not stored again, and the projection gets its content hash", async () => {
+    const pdfSha = createHash("sha256").update(PDF).digest("hex");
+    for (const known of [false, true]) {
+      const { service, invoices, contentShas } = setup(live, { known });
+      await service.receive("SZAMLABE", KEY, szamlabe());
+      assert.equal(invoices.length, known ? 0 : 1);
+      assert.deepEqual(contentShas, [pdfSha]);
+      if (!known) assert.equal(invoices[0]!.sha256, pdfSha);
+    }
   });
 
   it("a resent, a test or a storno invoice, or a file we have, does not go in", async () => {
