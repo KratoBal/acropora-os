@@ -74,7 +74,12 @@ const order = (
     pickupPoint: "FOXPOST Allee",
     storePickup: false,
   },
-  payment: { method: "Stripe", state: "AUTHORIZED" },
+  payment: {
+    method: "Stripe",
+    state: "AUTHORIZED",
+    holdExpiresAt: null,
+    holdWarning: null,
+  },
   invoiceNumber: null,
   status: {
     code: "confirmed",
@@ -158,6 +163,36 @@ describe("WebshopOrdersListPage", () => {
     expect(
       within(counters).getByRole("button", { name: /Számlára vár\s*5/ }),
     ).toBeTruthy();
+  });
+
+  it("an expiring card hold is named in the payment column (lejáró zárolás)", async () => {
+    api.list.mockResolvedValue(
+      response([
+        order({
+          payment: {
+            method: "Stripe",
+            state: "AUTHORIZED",
+            holdExpiresAt: "2026-10-07T10:00:00.000Z",
+            holdWarning: "soon",
+          },
+        }),
+        order({
+          id: "order_39",
+          displayId: 39,
+          payment: {
+            method: "Stripe",
+            state: "AUTHORIZED",
+            holdExpiresAt: "2026-10-04T10:00:00.000Z",
+            holdWarning: "expired",
+          },
+        }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    expect(
+      await screen.findByText("A zárolás 2 napon belül lejár"),
+    ).toBeTruthy();
+    expect(screen.getByText("A zárolás lejárt")).toBeTruthy();
   });
 
   it("a counter filters, and the same counter clicked again clears it", async () => {

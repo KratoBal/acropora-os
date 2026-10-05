@@ -6,6 +6,7 @@ import { CarriersModule } from "../../integrations/carriers/carriers.module.js";
 import { MedusaModule } from "../../integrations/medusa/medusa.module.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
+import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -20,6 +21,7 @@ import { WebshopOrdersService } from "./webshop-orders.service.js";
     WebshopOrderInvoiceService,
     WebshopOrderParcelService,
     WebshopOrderLinesService,
+    WebshopOrderPaymentService,
   ],
 })
 export class WebshopOrdersModule {}

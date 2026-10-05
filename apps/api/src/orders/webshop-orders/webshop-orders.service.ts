@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -72,6 +73,8 @@ export const OVERVIEW_MAX_PAGES = 10;
  */
 @Injectable()
 export class WebshopOrdersService {
+  private readonly logger = new Logger(WebshopOrdersService.name);
+
   constructor(
     private readonly credentials: MedusaCredentialProvider,
     private readonly repository: WebshopOrdersRepository,
@@ -169,11 +172,19 @@ export class WebshopOrdersService {
         })(),
       ]),
     );
-    const [invoices, parcels] = await Promise.all([
+    const [invoices, parcels, orderPayment] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
+      // csak megjelenítés: ha a webshop ezt nem adja, az adatlap nélküle áll
+      client.orderPayment(id).catch((error: unknown) => {
+        this.logger.warn(
+          `order payment of ${id} unreadable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return null;
+      }),
     ]);
     return toDetail({
+      orderPayment,
       order,
       status,
       facts: factsOf(invoices.get(id), parcelOf(parcels[id])),
