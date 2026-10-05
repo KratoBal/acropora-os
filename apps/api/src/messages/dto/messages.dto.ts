@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  CONVERSATION_CONTEXT_TYPES,
   CONVERSATION_MAX_MEMBERS,
   CONVERSATION_NOTIFY_MODES,
   MESSAGE_ATTACHMENTS_MAX,
@@ -7,6 +8,7 @@ import {
   MESSAGE_SEARCH_MAX_LENGTH,
   MESSAGE_SEARCH_MIN_LENGTH,
   MESSAGE_TEXT_MAX_LENGTH,
+  type ConversationContextType,
   type ConversationNotifyMode,
 } from "@acropora/types";
 import {
@@ -118,4 +120,19 @@ export class ForwardMessageDto {
   @IsString() @MinLength(1) @MaxLength(64) conversationId!: string;
   /** Mint a küldésnél: egy újraküldés ezzel nem duplikál. */
   @IsString() @MinLength(8) @MaxLength(64) clientMessageId!: string;
+}
+
+/** Egy meglévő csoport kötése munkalaphoz vagy hibajegyhez (4. fázis). */
+export class LinkContextDto {
+  @IsIn([...CONVERSATION_CONTEXT_TYPES]) type!: ConversationContextType;
+  @IsString() @MinLength(1) @MaxLength(64) id!: string;
+}
+
+/** Tagok felvétele egy csoportba (4. fázis). */
+export class AddMembersDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(CONVERSATION_MAX_MEMBERS)
+  @IsString({ each: true })
+  userIds!: string[];
 }

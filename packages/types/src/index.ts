@@ -1085,11 +1085,14 @@ export {
   MESSAGE_SEARCH_LIMIT,
   MESSAGE_SEARCH_COUNT_CAP,
   CONVERSATION_NOTIFY_MODES,
+  CONVERSATION_CONTEXT_TYPES,
 } from "./messages.js";
 export type {
   ConversationAudienceValue,
   ConversationDetail,
   ConversationListItem,
+  ConversationContextCard,
+  ConversationContextType,
   ConversationListResponse,
   ConversationNotificationState,
   ConversationNotifyMode,
