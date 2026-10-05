@@ -1,9 +1,15 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
+import {
+  WEBSHOP_ORDER_STATUS_LABELS,
+  type WebshopOrderStatus,
+} from "@acropora/types";
 import type {
   WebshopOrderDetail,
   WebshopOrderListQuery,
@@ -29,6 +35,19 @@ import {
   toListItem,
 } from "./webshop-orders.rules.js";
 import { toDetail } from "./webshop-order-detail.rules.js";
+import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
+
+/** A webshop hibaüzenete a törzsből (`{type, message}`); ha nem olvasható, `null`. */
+export function webshopErrorMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown };
+    return typeof parsed.message === "string" && parsed.message
+      ? parsed.message
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Egy lap a webshopból; ennyi lapot olvasunk egy körben. */
 export const OVERVIEW_PAGE_SIZE = 100;
@@ -47,6 +66,7 @@ export const OVERVIEW_MAX_PAGES = 10;
 export class WebshopOrdersService {
   constructor(
     private readonly credentials: MedusaCredentialProvider,
+    private readonly repository: WebshopOrdersRepository,
     @Optional()
     private readonly clientFactory: (
       apiKey: string,
@@ -143,6 +163,59 @@ export class WebshopOrdersService {
       relatedDisplayId: related?.display_id ?? null,
       now,
     });
+  }
+
+  /**
+   * STÁTUSZVÁLTÁS A WEBSHOPBAN (a prompt 9. pontja). Csak a webshop
+   * átmenet-táblája szerinti következő státusz kérhető: ezt a friss állapotból
+   * itt is megnézzük, hogy egy elavult lapról küldött kérés érthető 409-et
+   * kapjon, ne a webshop angol mondatát.
+   *
+   * A KISZÁLLÍTÁS LEVONÁST INDÍT (a vegyes kosárnál ma, a sima kártyásnál a
+   * commerce C2 után). Ha a levonás nem sikerül, a webshop a státuszt NEM
+   * váltja, és a hibát 422-ként adjuk tovább a webshop saját mondatával: a
+   * kezelőnek konkrét ok kell (a prompt 8. pontja).
+   */
+  async changeStatus(
+    id: string,
+    to: WebshopOrderStatus,
+    userId: string,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const client = await this.client();
+    const current = await this.fromWebshop(() =>
+      client.orderBusinessStatus(id),
+    );
+    if (!current)
+      throw new NotFoundException("A rendelésnek nincs státusza a webshopban.");
+    if (!current.next_statuses.some((next) => next.status === to))
+      throw new ConflictException(
+        `A rendelés „${current.label}” állapotból nem léptethető „${WEBSHOP_ORDER_STATUS_LABELS[to]}” állapotba. Frissítsd az oldalt.`,
+      );
+    try {
+      await client.transitionBusinessStatus(id, to);
+    } catch (error) {
+      if (
+        error instanceof MedusaAdminHttpError &&
+        error.status >= 400 &&
+        error.status < 500
+      )
+        throw new UnprocessableEntityException(
+          `A státusz nem változott. A webshop válasza: ${webshopErrorMessage(error.body) ?? `HTTP ${error.status}`}`,
+        );
+      if (error instanceof MedusaAdminHttpError)
+        throw new ServiceUnavailableException(
+          `A webshop nem érhető el, a státusz nem változott (HTTP ${error.status}).`,
+        );
+      throw error;
+    }
+    await this.repository.recordStatusChange({
+      userId,
+      orderId: id,
+      from: current.status,
+      to,
+    });
+    return this.detail(id, now);
   }
 
   async list(
