@@ -712,6 +712,12 @@ export interface MedusaAdminClient {
   orderBusinessStatus(id: string): Promise<MedusaOrderBusinessStatus | null>;
   /** Hány rendelése van a vásárlónak (az „új vásárló” jelhez). */
   countCustomerOrders(customerId: string): Promise<number>;
+  /**
+   * AZ ÜZLETI STÁTUSZ VÁLTÁSA A WEBSHOPBAN (`POST /admin/order-business-status/:id`).
+   * A szabályt és a Kiszállításkori levonást a webshop workflow-ja viszi; a
+   * hibája `MedusaAdminHttpError`, a törzsében a webshop mondatával.
+   */
+  transitionBusinessStatus(id: string, status: string): Promise<void>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1418,6 +1424,17 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         return null;
       throw error;
     }
+  }
+
+  async transitionBusinessStatus(id: string, status: string): Promise<void> {
+    await this.request<unknown>(
+      `/admin/order-business-status/${encodeURIComponent(id)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      },
+    );
   }
 
   async countCustomerOrders(customerId: string): Promise<number> {
