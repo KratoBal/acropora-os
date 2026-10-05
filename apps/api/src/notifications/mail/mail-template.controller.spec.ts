@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import {
+  MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
   type AuthenticatedUser,
 } from "@acropora/types";
@@ -465,12 +466,133 @@ describe("MailTemplateController.read: a link-változók mintája", () => {
     });
   });
 
-  it("a minta minden link fajtájú változót lefed, és csak azokat", () => {
+  /*
+    The service mails' link variables. The webshop's (`tracking_link`,
+    `fizetesi_link`) come with the webshop's sample facts, not from this
+    server's addresses.
+  */
+  it("a minta a szerviz-levelek minden link fajtájú változóját lefedi, és csak azokat", () => {
+    const szerviz = new Set(
+      MAIL_TEMPLATE_EVENTS.filter((e) => e.group === "SERVICE").flatMap(
+        (e) => e.variables,
+      ),
+    );
     assert.deepEqual(
       Object.keys(sampleLinks({})).sort(),
-      MAIL_TEMPLATE_VARIABLES.filter((v) => v.kind === "link")
+      MAIL_TEMPLATE_VARIABLES.filter(
+        (v) => v.kind === "link" && szerviz.has(v.name),
+      )
         .map((v) => v.name)
         .sort(),
+    );
+  });
+});
+
+/*
+  THE WEBSHOP KEYS ON THE SAME ENDPOINTS (2026-10-05). The service mails must
+  not notice; the webshop's defaults are HTML, and a block has a place.
+*/
+describe("MailTemplateController: a webshop sablonjai", () => {
+  it("az alapértelmezés HTML, és a szerkesztő ezt kapja", async () => {
+    const valasz = await new MailTemplateController(tarolo(null), KEPEK).read(
+      "WEBSHOP_ORDER_SHIPPED",
+    );
+    assert.equal(valasz.source, "default");
+    assert.equal(valasz.subject, "Feladtuk a csomagodat (#{{rendeles_szam}})");
+    assert.match(
+      valasz.bodyHtml ?? "",
+      /<p><span data-variable="szallitas_doboz">\{\{szallitas_doboz\}\}<\/span><\/p>/,
+    );
+    assert.equal(valasz.defaultTemplate.bodyHtml, valasz.bodyHtml);
+    assert.ok(
+      valasz.variables.some(
+        (v) => v.name === "csomag_tartalma" && v.kind === "block",
+      ),
+    );
+  });
+
+  it("a mondat közepén álló blokkot 400-zal utasítja el", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          "WEBSHOP_ORDER_CONFIRMED",
+          {
+            subject: "x",
+            body: "x",
+            bodyHtml: "<p>Tételek: {{rendeles_tetelek}}</p>",
+          },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        hiba.message ===
+          "A blokk csak külön bekezdésben állhat: {{rendeles_tetelek}}. Tedd egy üres sorba, szöveg nélkül.",
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("a tárgyban álló blokkot 400-zal utasítja el", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await assert.rejects(
+      () =>
+        controller.save(
+          "WEBSHOP_ORDER_CONFIRMED",
+          {
+            subject: "{{rendeles_tetelek}}",
+            body: "x",
+            bodyHtml: "<p>{{rendeles_tetelek}}</p>",
+          },
+          SZERKESZTO,
+        ),
+      (hiba: unknown) =>
+        hiba instanceof BadRequestException &&
+        hiba.message === "A tárgyban nem állhat blokk: {{rendeles_tetelek}}.",
+    );
+    assert.deepEqual(mentett, []);
+  });
+
+  it("a külön bekezdésben álló blokk menthető", async () => {
+    const { mentett, controller } = rogzitoTarolo();
+    await controller.save(
+      "WEBSHOP_ORDER_CONFIRMED",
+      {
+        subject: "Visszaigazoltuk (#{{rendeles_szam}})",
+        body: "x",
+        bodyHtml:
+          '<p>Szia!</p><p><span data-variable="rendeles_tetelek">{{rendeles_tetelek}}</span></p>',
+      },
+      SZERKESZTO,
+    );
+    assert.equal(mentett.length, 1);
+  });
+});
+
+describe("MailTemplateController.list", () => {
+  it("minden eseményt felsorol, a tárolt mentési idejével, a többit alapértelmezettként", async () => {
+    const lista = await new MailTemplateController(
+      {
+        templateStates: async () => [
+          {
+            id: "WEBSHOP_ORDER_SHIPPED",
+            updatedAt: new Date("2026-10-05T16:42:00.000Z"),
+          },
+        ],
+      } as unknown as TicketMailRepository,
+      KEPEK,
+    ).list();
+    assert.equal(lista.length, MAIL_TEMPLATE_EVENTS.length);
+    assert.deepEqual(
+      lista.find((s) => s.id === "WEBSHOP_ORDER_SHIPPED"),
+      {
+        id: "WEBSHOP_ORDER_SHIPPED",
+        source: "stored",
+        updatedAt: "2026-10-05T16:42:00.000Z",
+      },
+    );
+    assert.deepEqual(
+      lista.find((s) => s.id === WORKSHEET_SIGNED),
+      { id: WORKSHEET_SIGNED, source: "default", updatedAt: null },
     );
   });
 });

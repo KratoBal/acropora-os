@@ -133,6 +133,7 @@ export type {
 } from "./billing-szamlazz-amounts.js";
 export {
   MAIL_TEMPLATE_EVENTS,
+  MAIL_TEMPLATE_GROUPS,
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
   renderMailTemplate,
@@ -145,8 +146,56 @@ export type {
   MailTemplateRender,
   MailTemplateValues,
   MailTemplateEvent,
+  MailTemplateGroup,
   MailTemplateVariable,
 } from "./mail-template.js";
+export {
+  misplacedBlockVariables,
+  renderMailTemplateWithBlocks,
+} from "./mail-blocks.js";
+export type {
+  MailBlock,
+  MailBlockRender,
+  MailBlocks,
+  MailRenderSteps,
+} from "./mail-blocks.js";
+export {
+  SHOP_CONTACT,
+  SHOP_NAME,
+  WEBSHOP_MAIL_KEYS,
+  WEBSHOP_MAIL_SAMPLE_FACTS,
+  WEBSHOP_STATUS_TEMPLATES,
+  mailForint,
+  hungarianDay,
+  isWebshopMailTemplate,
+  parseWebshopMailFacts,
+  webshopMailContent,
+  webshopMailTemplateOf,
+} from "./webshop-mail.js";
+export {
+  renderWebshopMail,
+  webshopMailDocument,
+} from "./webshop-mail-render.js";
+export type {
+  WebshopMailRender,
+  WebshopRenderSteps,
+  WebshopTemplateText,
+} from "./webshop-mail-render.js";
+export type {
+  WebshopFactsParse,
+  WebshopMailCommonFacts,
+  WebshopMailContent,
+  WebshopMailFacts,
+  WebshopMailLine,
+  WebshopMailOrder,
+  WebshopMailTemplate,
+  WebshopPaymentRole,
+  WebshopPlacedOrder,
+  WebshopRefundFacts,
+  WebshopShippedFacts,
+  WebshopStuckMail,
+  WebshopStuckMailList,
+} from "./webshop-mail.js";
 export {
   worksheetStatusLabel,
   worksheetStatusTone,

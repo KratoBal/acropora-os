@@ -12,9 +12,11 @@ import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 
+import { WebshopMailOutboxController } from "./webshop-mail-outbox.controller.js";
+import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
 @Module({
   imports: [MedusaModule, BillingModule, CustomersModule, CarriersModule],
-  controllers: [WebshopOrdersController],
+  controllers: [WebshopOrdersController, WebshopMailOutboxController],
   providers: [
     WebshopOrdersService,
     WebshopOrdersRepository,
@@ -22,6 +24,7 @@ import { WebshopOrdersService } from "./webshop-orders.service.js";
     WebshopOrderParcelService,
     WebshopOrderLinesService,
     WebshopOrderPaymentService,
+    WebshopMailOutboxService,
   ],
 })
 export class WebshopOrdersModule {}

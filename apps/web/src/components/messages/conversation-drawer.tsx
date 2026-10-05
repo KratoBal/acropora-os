@@ -2,6 +2,7 @@
 
 import {
   MESSAGE_SEARCH_MIN_LENGTH,
+  type ConversationContextCard,
   type ConversationListItem,
   type ConversationNotificationState,
   type ConversationNotifyMode,
@@ -17,6 +18,7 @@ import { attachmentUrl, messagesApi } from "@/lib/api/messages";
 
 import { Monogram, conversationName } from "./conversation-parts";
 import { fileSizeLabel } from "./outbox";
+import { MembershipSection } from "./phase4-dialogs";
 import {
   fileTypeLabel,
   notificationLabel,
@@ -204,17 +206,27 @@ type DetailsTab = "members" | "files" | "settings";
 
 /**
  * A BESZÉLGETÉS ADATAI (Figma 450:260): tagok, megosztott fájlok, értesítési
- * beállítás. Kilépés és tag hozzáadása NINCS (Balázs, 2026-10-05: egy
- * következő lépés). Direkt beszélgetésnél csak a másik fél áll a listán.
+ * beállítás, és a 4. fázistól csoportban a tag hozzáadása, a kilépés és a
+ * kötés munkalaphoz vagy hibajegyhez (`MembershipSection`). Direkt
+ * beszélgetésnél csak a másik fél áll a listán.
  */
 export function ConversationDetailsPanel({
   token,
   conversation,
+  context = null,
   onClose,
+  onChanged = () => undefined,
+  onLeft = () => undefined,
 }: {
   token: string;
   conversation: ConversationListItem;
+  /** 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája. */
+  context?: ConversationContextCard | null;
   onClose: () => void;
+  /** 4. fázis: tag, kötés vagy leválasztás után a nézet újraolvas. */
+  onChanged?: () => void;
+  /** 4. fázis: a néző kilépett. */
+  onLeft?: () => void;
 }) {
   const [tab, setTab] = useState<DetailsTab>("members");
   const [media, setMedia] = useState<SharedAttachmentItem[] | null>(null);
@@ -348,6 +360,13 @@ export function ConversationDetailsPanel({
               {notificationLabel(notification, now)}
             </p>
           </div>
+          <MembershipSection
+            token={token}
+            conversation={conversation}
+            context={context}
+            onChanged={onChanged}
+            onLeft={onLeft}
+          />
         </div>
       ) : null}
 

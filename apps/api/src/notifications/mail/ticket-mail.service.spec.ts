@@ -1240,16 +1240,19 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
 
   it("a lista minden esemenyt lefed, ami ebben a szolgaltatasban kuld", () => {
     // the aquarium and the billing events are sent by their own services,
-    // and tested there
+    // and tested there; the webshop's are rendered for the webshop
+    // (webshop-mail.render.spec.ts)
     assert.deepEqual(
-      MAIL_TEMPLATE_EVENTS.map((e) => e.id).filter(
-        (id) =>
-          ![
-            "AQUARIUM_MEASUREMENT_RESULT",
-            "BILLING_DOCUMENT_MANUAL",
-            "BILLING_DOCUMENT_WEBSHOP_ORDER",
-          ].includes(id),
-      ),
+      MAIL_TEMPLATE_EVENTS.filter((e) => e.group === "SERVICE")
+        .map((e) => e.id)
+        .filter(
+          (id) =>
+            ![
+              "AQUARIUM_MEASUREMENT_RESULT",
+              "BILLING_DOCUMENT_MANUAL",
+              "BILLING_DOCUMENT_WEBSHOP_ORDER",
+            ].includes(id),
+        ),
       [
         "WORKSHEET_SIGNED",
         "SERVICE_JOB_OPENED_BY_CUSTOMER",

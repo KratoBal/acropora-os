@@ -11,9 +11,14 @@ import {
 } from "./foxpost-api.client.js";
 import {
   GLS_API_URL,
+  GLS_DEFAULT_PICKUP,
+  GLS_LABEL_CONTENT_MAX,
+  glsLabelContent,
   GlsApiClient,
   type GlsApiConfig,
   glsPasswordBytes,
+  glsPickupAddress,
+  splitStreet,
   wcfDate,
 } from "./gls-api.client.js";
 import {
@@ -352,6 +357,110 @@ describe("GlsApiClient", () => {
     assert.deepEqual(sent.ServiceList, [
       { Code: "PSD", PSDParameter: { StringValue: "TESZTPONT01" } },
     ]);
+  });
+
+  /*
+    BALÁZS GLS-BEÁLLÍTÁSA (emlék 2109) és a MÉRT címke alakja (acrobot 26533,
+    3422774543). MI PIROSÍT: a felvételi cím kimarad a törzsből (élesben ezen
+    akadna el, és eddig néma volt; murena 26523 kérése); az utánvét
+    hivatkozása nem a számla sorszáma; a címke szövege nem megy; házhoz nem
+    FDS megy a vevő e-mailjével; az utca és a házszám egy mezőben marad.
+  */
+  it("sends the pickup address, the label text and the invoice number as the COD reference", async () => {
+    const fetch = fakeFetch(
+      json({
+        PrintLabelsInfoList: [{ ParcelId: 77, ParcelNumber: 5000000001 }],
+        PrintLabelsErrorList: [],
+      }),
+    );
+    await new GlsApiClient(GLS, fetch.impl).createParcel({
+      reference: "1042",
+      recipient: RECIPIENT,
+      destination: POINT,
+      codHuf: 9990,
+      codReference: "ACR-2026-00042",
+      labelContent: "Rendelés #1042",
+    });
+    const [sent] = JSON.parse(String(fetch.calls[0]!.init.body)).ParcelList;
+    assert.deepEqual(sent.PickupAddress, GLS_DEFAULT_PICKUP);
+    assert.match(sent.PickupDate, /^\/Date\(\d+\)\/$/);
+    assert.equal(sent.Content, "Rendelés #1042");
+    assert.equal(sent.CODReference, "ACR-2026-00042");
+  });
+
+  /*
+    THE CUT IS UNMEASURED (acrobot 26572): MyGLS's own limit is not known, so
+    the text is cut to 40 characters rather than risk a refused label.
+  */
+  it("cuts the label text to 40 characters, never inside an accented letter", async () => {
+    const fetch = fakeFetch(
+      json({
+        PrintLabelsInfoList: [{ ParcelId: 79, ParcelNumber: 5000000003 }],
+        PrintLabelsErrorList: [],
+      }),
+    );
+    await new GlsApiClient(GLS, fetch.impl).createParcel({
+      reference: "1044",
+      recipient: RECIPIENT,
+      destination: POINT,
+      labelContent: "Rendelés #1044 · csengessen kétszer, a kapu nyitva van",
+    });
+    const [sent] = JSON.parse(String(fetch.calls[0]!.init.body)).ParcelList;
+    assert.equal(sent.Content, "Rendelés #1044 · csengessen kétszer, a k");
+    assert.equal(
+      Array.from(sent.Content as string).length,
+      GLS_LABEL_CONTENT_MAX,
+    );
+    assert.equal(glsLabelContent("  Rendelés #1  "), "Rendelés #1");
+  });
+
+  it("home delivery: FDS with the buyer's e-mail, street and house number apart", async () => {
+    const fetch = fakeFetch(
+      json({
+        PrintLabelsInfoList: [{ ParcelId: 78, ParcelNumber: 5000000002 }],
+        PrintLabelsErrorList: [],
+      }),
+    );
+    await new GlsApiClient(GLS, fetch.impl).createParcel({
+      reference: "1043",
+      recipient: RECIPIENT,
+      destination: {
+        kind: "home",
+        zip: "1117",
+        city: "Budapest",
+        address: "Fehérvári út 24.",
+      },
+    });
+    const [sent] = JSON.parse(String(fetch.calls[0]!.init.body)).ParcelList;
+    assert.deepEqual(sent.ServiceList, [
+      { Code: "FDS", FDSParameter: { Value: "cimzett@example.test" } },
+    ]);
+    assert.deepEqual(
+      [
+        sent.DeliveryAddress.Street,
+        sent.DeliveryAddress.HouseNumber,
+        sent.DeliveryAddress.ZipCode,
+      ],
+      ["Fehérvári út", "24", "1117"],
+    );
+    assert.equal("CODAmount" in sent, false);
+  });
+
+  it("splits the house number off the end only; the pickup address follows the environment", () => {
+    assert.deepEqual(splitStreet("Október huszonharmadika u. 8-10."), {
+      Street: "Október huszonharmadika u.",
+      HouseNumber: "8-10",
+    });
+    assert.deepEqual(splitStreet("Fő tér"), {
+      Street: "Fő tér",
+      HouseNumber: "",
+    });
+    assert.deepEqual(glsPickupAddress({}), GLS_DEFAULT_PICKUP);
+    assert.equal(
+      glsPickupAddress({ GLS_PICKUP_ZIP: "1111", GLS_PICKUP_EMAIL: "x@y.hu" })
+        .ZipCode,
+      "1111",
+    );
   });
 
   it("reads the error list of a 200 answer (MyGLS rejects with HTTP 200)", async () => {
