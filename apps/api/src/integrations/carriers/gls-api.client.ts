@@ -174,6 +174,25 @@ export const wcfDate = (value: unknown): Date | null => {
   return match ? new Date(Number(match[1])) : null;
 };
 
+/**
+ * THE LABEL TEXT'S CEILING: 40 CHARACTERS, AND IT IS NOT MEASURED.
+ *
+ * MyGLS's own limit on `Content` is unknown here: its documentation
+ * (api.mygls.hu) is not on the quarantine reader's allowlist, and acrobot
+ * decided not to widen it (26572). 40 is a safe cut: the order number is
+ * short, and the courier note the webshop may add is capped at 50 there. A
+ * cut is better than a refusal, which would stop the parcel at the counter.
+ */
+export const GLS_LABEL_CONTENT_MAX = 40;
+
+/** Cut by characters, not UTF-16 units, so an accent is never split. */
+export function glsLabelContent(text: string): string {
+  return Array.from(text.trim())
+    .slice(0, GLS_LABEL_CONTENT_MAX)
+    .join("")
+    .trimEnd();
+}
+
 export class GlsApiClient implements CarrierClient {
   readonly carrier = "gls" as const;
 
@@ -283,7 +302,9 @@ export class GlsApiClient implements CarrierClient {
       ClientNumber: config.clientNumber,
       ClientReference: input.reference,
       Count: 1,
-      ...(input.labelContent ? { Content: input.labelContent } : {}),
+      ...(input.labelContent
+        ? { Content: glsLabelContent(input.labelContent) }
+        : {}),
       PickupDate: wcfNow(new Date()),
       PickupAddress: config.pickup ?? GLS_DEFAULT_PICKUP,
       ...(input.codHuf

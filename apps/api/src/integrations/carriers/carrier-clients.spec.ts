@@ -12,6 +12,8 @@ import {
 import {
   GLS_API_URL,
   GLS_DEFAULT_PICKUP,
+  GLS_LABEL_CONTENT_MAX,
+  glsLabelContent,
   GlsApiClient,
   type GlsApiConfig,
   glsPasswordBytes,
@@ -384,6 +386,32 @@ describe("GlsApiClient", () => {
     assert.match(sent.PickupDate, /^\/Date\(\d+\)\/$/);
     assert.equal(sent.Content, "Rendelés #1042");
     assert.equal(sent.CODReference, "ACR-2026-00042");
+  });
+
+  /*
+    THE CUT IS UNMEASURED (acrobot 26572): MyGLS's own limit is not known, so
+    the text is cut to 40 characters rather than risk a refused label.
+  */
+  it("cuts the label text to 40 characters, never inside an accented letter", async () => {
+    const fetch = fakeFetch(
+      json({
+        PrintLabelsInfoList: [{ ParcelId: 79, ParcelNumber: 5000000003 }],
+        PrintLabelsErrorList: [],
+      }),
+    );
+    await new GlsApiClient(GLS, fetch.impl).createParcel({
+      reference: "1044",
+      recipient: RECIPIENT,
+      destination: POINT,
+      labelContent: "Rendelés #1044 · csengessen kétszer, a kapu nyitva van",
+    });
+    const [sent] = JSON.parse(String(fetch.calls[0]!.init.body)).ParcelList;
+    assert.equal(sent.Content, "Rendelés #1044 · csengessen kétszer, a k");
+    assert.equal(
+      Array.from(sent.Content as string).length,
+      GLS_LABEL_CONTENT_MAX,
+    );
+    assert.equal(glsLabelContent("  Rendelés #1  "), "Rendelés #1");
   });
 
   it("home delivery: FDS with the buyer's e-mail, street and house number apart", async () => {
