@@ -115,6 +115,10 @@ export interface WebshopOrderListItem {
     /** A felületen álló név: „Stripe”, „Utánvét”, vagy „Egyéb (<azonosító>)”. */
     method: string | null;
     state: WebshopOrderPaymentState | null;
+    /** A kártyás zárolás lejárata (a webshop számolja); `null`, ha nincs zárolás. */
+    holdExpiresAt: string | null;
+    /** A zárolás két napon belül lejár, vagy lejárt, és a rendelés még nincs kiszállítva. */
+    holdWarning: WebshopHoldWarning;
   };
   /** A kiállított számla száma; az OS saját rekordja (`WEBSHOP_ORDER` forrású bizonylat). */
   invoiceNumber: string | null;
@@ -286,6 +290,8 @@ export interface WebshopOrderDetail {
     status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
     number: string | null;
   } | null;
+  /** A kártyás fizetés útja (zárolás, feloldás, fizetési link); más fizetésnél `null`. */
+  cardPayment: WebshopOrderCardPayment | null;
   /** A rendelés aktív csomagja az OS-ben (Rendelések, 5. PR), ha van. */
   parcel: WebshopOrderParcel | null;
   /**
@@ -357,4 +363,53 @@ export interface WebshopVariantOption {
   variantId: string;
   title: string;
   sku: string | null;
+}
+
+/**
+ * A KÁRTYÁS FIZETÉS ÚTJA (lejáró zárolás, Balázs 2026-10-05; commerce
+ * `GET /admin/order-payment`). A zárolás 7 nap után lejár; ha a szállítás
+ * csúszik, a zárolást feloldjuk, és áruérkezéskor fizetési linket küldünk.
+ */
+export const WEBSHOP_CARD_PAYMENT_STATES = [
+  "hold",
+  "awaiting_payment",
+  "link_sent",
+  "reminded",
+  "paid",
+  "expired",
+] as const;
+export type WebshopCardPaymentState =
+  (typeof WEBSHOP_CARD_PAYMENT_STATES)[number];
+
+export const WEBSHOP_CARD_PAYMENT_STATE_LABELS: Record<
+  WebshopCardPaymentState,
+  string
+> = {
+  hold: "Zárolva",
+  awaiting_payment: "Fizetésre vár",
+  link_sent: "Fizetési link elküldve",
+  reminded: "Emlékeztető elküldve",
+  paid: "Linken fizetve",
+  expired: "A fizetési link lejárt",
+};
+
+/** A zárolás lejáratának jelzése: két napon belül (`soon`) vagy már lejárt (`expired`). */
+export type WebshopHoldWarning = "soon" | "expired" | null;
+
+export interface WebshopOrderCardPayment {
+  state: WebshopCardPaymentState;
+  holdExpiresAt: string | null;
+  holdWarning: WebshopHoldWarning;
+  link: {
+    sentAt: string;
+    expiresAt: string;
+    remindedAt: string | null;
+    amount: number;
+    url: string;
+  } | null;
+  paidAt: string | null;
+  /** „Csúszik a szállítás”: a zárolás feloldása, levél a vevőnek. */
+  canRelease: boolean;
+  /** „Fizetési link küldése” (újraküldés is: ugyanarra az összegre ugyanaz a link). */
+  canSendLink: boolean;
 }

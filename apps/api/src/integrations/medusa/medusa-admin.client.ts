@@ -547,6 +547,8 @@ export interface MedusaOrderOverviewRow {
     amount: number | null;
     captured_amount: number | null;
     refunded_amount: number | null;
+    /** A kártyás zárolás lejárata (murena, lejáró zárolás); régi webshopnál hiányzik. */
+    hold_expires_at?: string | null;
   } | null;
   related_order: { id: string; role: "pickup" | "parent" } | null;
   customer_signals: {
@@ -676,6 +678,20 @@ export interface MedusaOrderBusinessStatus {
   }[];
 }
 
+/** A kártyás fizetés útja (`GET /admin/order-payment/:id`, murena). */
+export interface MedusaOrderPayment {
+  state: string;
+  hold: { authorized_at: string; expires_at: string; amount: number } | null;
+  link: {
+    sent_at: string;
+    expires_at: string;
+    reminded_at: string | null;
+    amount: number;
+    url: string;
+  } | null;
+  paid_at: string | null;
+}
+
 /** Egy változat a cseréhez (`GET /admin/product-variants`). */
 export interface MedusaVariantSearchRow {
   id: string;
@@ -791,6 +807,20 @@ export interface MedusaAdminClient {
   requestOrderEdit(orderId: string): Promise<void>;
   confirmOrderEdit(orderId: string): Promise<void>;
   cancelOrderEdit(orderId: string): Promise<void>;
+  /**
+   * A KÁRTYÁS FIZETÉS ÚTJA (murena, lejáró zárolás): az állapot (`null`, ha a
+   * rendelésnek nincs ilyen útja), a zárolás feloldása („Csúszik a
+   * szállítás”) és a fizetési link küldése.
+   */
+  orderPayment(orderId: string): Promise<MedusaOrderPayment | null>;
+  releaseHold(
+    orderId: string,
+    notifyCustomer: boolean,
+  ): Promise<MedusaStatusNotification>;
+  sendPaymentLink(
+    orderId: string,
+    notifyCustomer: boolean,
+  ): Promise<MedusaStatusNotification>;
   /** Termékváltozat keresése név vagy cikkszám szerint (a tétel cseréjéhez). */
   searchVariants(query: string): Promise<MedusaVariantSearchRow[]>;
   /**
@@ -1598,6 +1628,44 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/order-edits/${encodeURIComponent(orderId)}`,
       { method: "DELETE" },
     );
+  }
+
+  async orderPayment(orderId: string): Promise<MedusaOrderPayment | null> {
+    try {
+      return await this.request<MedusaOrderPayment>(
+        `/admin/order-payment/${encodeURIComponent(orderId)}`,
+      );
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async releaseHold(
+    orderId: string,
+    notifyCustomer: boolean,
+  ): Promise<MedusaStatusNotification> {
+    const body = await this.request<{
+      notification?: MedusaStatusNotification;
+    }>(`/admin/order-payment/${encodeURIComponent(orderId)}/release-hold`, {
+      method: "POST",
+      body: JSON.stringify({ notify_customer: notifyCustomer }),
+    });
+    return body.notification ?? { sent: false, reason: "unknown" };
+  }
+
+  async sendPaymentLink(
+    orderId: string,
+    notifyCustomer: boolean,
+  ): Promise<MedusaStatusNotification> {
+    const body = await this.request<{
+      notification?: MedusaStatusNotification;
+    }>(`/admin/order-payment/${encodeURIComponent(orderId)}/payment-link`, {
+      method: "POST",
+      body: JSON.stringify({ notify_customer: notifyCustomer }),
+    });
+    return body.notification ?? { sent: false, reason: "unknown" };
   }
 
   async searchVariants(query: string): Promise<MedusaVariantSearchRow[]> {

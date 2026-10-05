@@ -85,6 +85,22 @@ export const webshopOrdersApi = {
       token,
     );
   },
+  /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */
+  releaseHold(token: string, id: string, notifyCustomer: boolean) {
+    return apiRequest<WebshopOrderStatusChangeResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/payment/release-hold`,
+      token,
+      { method: "POST", body: JSON.stringify({ notifyCustomer }) },
+    );
+  },
+  /** „Fizetési link küldése” a rendelés mostani végösszegére. */
+  sendPaymentLink(token: string, id: string, notifyCustomer: boolean) {
+    return apiRequest<WebshopOrderStatusChangeResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/payment/link`,
+      token,
+      { method: "POST", body: JSON.stringify({ notifyCustomer }) },
+    );
+  },
   /** A legutóbbi státuszlevél újraküldése. */
   resendStatusMail(token: string, id: string) {
     return apiRequest<WebshopOrderStatusChangeResult>(

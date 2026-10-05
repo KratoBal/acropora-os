@@ -121,6 +121,29 @@ describe("payment", () => {
   });
 });
 
+describe("the hold's expiry on the list", () => {
+  it("carries the webshop's expiry and warns within two days; an old webshop without it does not", () => {
+    const soon = item({
+      id: "o1",
+      payment: {
+        ...row({ id: "x" }).payment!,
+        hold_expires_at: "2026-10-06T12:00:00.000Z",
+      },
+    });
+    assert.deepEqual(soon.payment, {
+      method: "Stripe",
+      state: "AUTHORIZED",
+      holdExpiresAt: "2026-10-06T12:00:00.000Z",
+      holdWarning: "soon",
+    });
+    const old = item({ id: "o2" });
+    assert.deepEqual(
+      [old.payment.holdExpiresAt, old.payment.holdWarning],
+      [null, null],
+    );
+  });
+});
+
 describe("stale", () => {
   it("at the threshold, not a minute before; never for a status without one", () => {
     assert.equal(isStale("pending_processing", hoursAgo(4), NOW), true);

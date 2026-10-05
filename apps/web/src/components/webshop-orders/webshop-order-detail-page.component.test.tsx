@@ -17,6 +17,8 @@ const api = vi.hoisted(() => ({
   changeStatus: vi.fn(),
   resendStatusMail: vi.fn(),
   editLine: vi.fn(),
+  releaseHold: vi.fn(),
+  sendPaymentLink: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   createParcel: vi.fn(),
@@ -124,6 +126,7 @@ const detail: WebshopOrderDetail = {
   invoiceNumber: null,
   invoice: null,
   parcel: null,
+  cardPayment: null,
   lineEdit: { allowed: true, reason: null },
   steps: [
     {
@@ -173,6 +176,8 @@ beforeEach(() => {
   api.changeStatus.mockReset();
   api.resendStatusMail.mockReset();
   api.editLine.mockReset();
+  api.releaseHold.mockReset();
+  api.sendPaymentLink.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.createParcel.mockReset();
@@ -856,6 +861,124 @@ describe("WebshopOrderDetailPage", () => {
       within(items).queryByRole("button", {
         name: /Mennyiség|cseréje|törlése/,
       }),
+    ).toBeNull();
+  });
+
+  /**
+   * A LEJÁRÓ KÁRTYÁS ZÁROLÁS (Balázs döntése, 2026-10-05). MI PIROSÍT: az 5.
+   * naptól nincs jelzés; a „Csúszik a szállítás” nem a jelölő szerint értesít,
+   * vagy kérdés nélkül old fel; a link nem a rendelés mostani összegét mondja;
+   * a link adatai nem látszanak; kezelési jog nélkül gomb áll.
+   */
+  const card = (
+    over: Partial<NonNullable<WebshopOrderDetail["cardPayment"]>>,
+  ): WebshopOrderDetail => ({
+    ...detail,
+    cardPayment: {
+      state: "hold",
+      holdExpiresAt: "2026-10-07T10:00:00.000Z",
+      holdWarning: "soon",
+      link: null,
+      paidAt: null,
+      canRelease: true,
+      canSendLink: false,
+      ...over,
+    },
+  });
+
+  it("warns from the 5th day, and Csúszik a szállítás asks first, then releases with the notify choice", async () => {
+    api.detail.mockResolvedValue(card({}));
+    api.releaseHold.mockResolvedValue({
+      order: card({
+        state: "awaiting_payment",
+        holdWarning: null,
+        holdExpiresAt: null,
+        canRelease: false,
+        canSendLink: true,
+      }),
+      mail: { sent: false, reason: "not_requested" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    expect(within(pay).getByRole("alert").textContent).toMatch(
+      /2 napon belül lejár/,
+    );
+    fireEvent.click(
+      within(pay).getByRole("button", { name: "Csúszik a szállítás" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Csúszik a szállítás" });
+    expect(within(dialog).getByText(/kártyáját nem terheljük/)).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Vevő értesítése" }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Zárolás feloldása" }),
+    );
+    expect(await within(pay).findByText("Fizetésre vár")).toBeTruthy();
+    expect(api.releaseHold).toHaveBeenCalledWith("token", "order_38", false);
+    expect(within(pay).getByRole("status").textContent).toMatch(/nem kérted/);
+  });
+
+  it("the payment link names the order's current total, sends, and shows the link", async () => {
+    // egy tétel kiesett: a végösszeg (18 500) kisebb, mint a zárolt összeg (20 840)
+    api.detail.mockResolvedValue({
+      ...card({
+        state: "awaiting_payment",
+        holdWarning: null,
+        holdExpiresAt: null,
+        canRelease: false,
+        canSendLink: true,
+      }),
+      totals: { ...detail.totals, total: 18500 },
+    });
+    api.sendPaymentLink.mockResolvedValue({
+      order: card({
+        state: "link_sent",
+        holdWarning: null,
+        holdExpiresAt: null,
+        canRelease: false,
+        canSendLink: true,
+        link: {
+          sentAt: "2026-10-09T08:00:00.000Z",
+          expiresAt: "2026-10-12T08:00:00.000Z",
+          remindedAt: null,
+          amount: 20840,
+          url: "https://shop.example/fizetes/tok",
+        },
+      }),
+      mail: { sent: true },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    fireEvent.click(
+      within(pay).getByRole("button", { name: "Fizetési link küldése" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Fizetési link küldése",
+    });
+    expect(
+      within(dialog).getByText(/mostani végösszegére szól: 18 500 Ft/),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Link küldése" }),
+    );
+    expect(
+      await within(pay).findByText("https://shop.example/fizetes/tok"),
+    ).toBeTruthy();
+    expect(api.sendPaymentLink).toHaveBeenCalledWith("token", "order_38", true);
+  });
+
+  it("without orders.manage the state shows, the buttons do not", async () => {
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(card({}));
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    expect(within(pay).getByText("Kártyás fizetés")).toBeTruthy();
+    expect(within(pay).getByRole("alert").textContent).toMatch(
+      /2 napon belül lejár/,
+    );
+    expect(
+      within(pay).queryByRole("button", { name: /Csúszik|Fizetési link/ }),
     ).toBeNull();
   });
 });

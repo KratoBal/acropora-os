@@ -242,6 +242,7 @@ describe("WebshopOrdersService.detail", () => {
         );
       },
       orderBusinessStatus: async () => null,
+      orderPayment: async () => null,
       countCustomerOrders: async (customerId: string) => {
         counted.push(customerId);
         return 1;
@@ -374,6 +375,7 @@ describe("WebshopOrdersService.changeStatus", () => {
         sent.push({ id, resend: true });
         return { sent: true };
       },
+      orderPayment: async () => null,
       countCustomerOrders: async () => 0,
     } as unknown as MedusaAdminClient;
     const credentials = {

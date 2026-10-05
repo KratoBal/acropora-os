@@ -1128,6 +1128,8 @@ export {
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
   WEBSHOP_PARCEL_SIZES,
+  WEBSHOP_CARD_PAYMENT_STATES,
+  WEBSHOP_CARD_PAYMENT_STATE_LABELS,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1148,6 +1150,9 @@ export type {
   WebshopOrderParcelResult,
   WebshopOrderMailState,
   WebshopOrderLineEdit,
+  WebshopCardPaymentState,
+  WebshopHoldWarning,
+  WebshopOrderCardPayment,
   WebshopVariantOption,
   WebshopOrderStatusChangeResult,
   WebshopStatusMailOutcome,
