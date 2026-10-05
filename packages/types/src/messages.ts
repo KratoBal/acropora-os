@@ -84,6 +84,13 @@ export interface MessageItem {
   reactions: MessageReactionSummary[];
   /** Csak a saját üzenetnél: ezzel ismeri fel a kliens a függő példányát. */
   clientMessageId: string | null;
+  /** KITŰZÖTT-E (3. fázis). A régebbi kliensek tesztjei miatt opcionális. */
+  pinned?: boolean;
+  /**
+   * TOVÁBBÍTOTT ÜZENET (3. fázis): az eredeti szerző neve, Balázs döntése
+   * szerint látszik („Továbbítva · Kovács Anna”). Nem továbbítottnál `null`.
+   */
+  forwardedFrom?: { senderName: string } | null;
 }
 
 export interface ConversationListItem {
@@ -107,6 +114,11 @@ export interface ConversationDetail extends ConversationListItem {
   description: string | null;
   createdByUserId: string;
   lastReadMessageId: string | null;
+  /**
+   * A KÉRDEZŐ SAJÁT értesítési beállítása ebben a beszélgetésben (3. fázis).
+   * Opcionális, hogy a régebbi kliensek tesztjei ne törjenek el.
+   */
+  notification?: ConversationNotificationState;
 }
 
 export interface MessagePage {
@@ -114,6 +126,82 @@ export interface MessagePage {
   items: MessageItem[];
   /** A régebbi oldal kurzora, vagy `null`, ha nincs korábbi üzenet. */
   olderCursor: string | null;
+  /**
+   * AZ ÚJABB OLDAL KURZORA (3. fázis, „Ugrás”): egy régebbi üzenet köré nyitott
+   * oldal után még újabb üzenetek jönnek. A sima, legújabbtól induló oldalon
+   * nincs (`undefined`), mert ott nincs újabb.
+   */
+  newerCursor?: string | null;
+}
+
+/** KERESÉS EGY BESZÉLGETÉSEN BELÜL (prompt 13. pont, Figma 453:491, 454:533). */
+export const MESSAGE_SEARCH_MIN_LENGTH = 2;
+export const MESSAGE_SEARCH_MAX_LENGTH = 100;
+export const MESSAGE_SEARCH_LIMIT = 50;
+/** A számolás itt megáll („1000+ találat”): egy pontos szám nem ér meg egy teljes átfésülést. */
+export const MESSAGE_SEARCH_COUNT_CAP = 1000;
+
+export interface MessageSearchHit {
+  messageId: string;
+  senderName: string;
+  createdAt: string;
+  /** A szöveg a találat körül, „…” jellel, ahol vágtunk. */
+  snippet: string;
+}
+
+export interface MessageSearchResponse {
+  total: number;
+  /** Igaz, ha a `total` a MESSAGE_SEARCH_COUNT_CAP-nél megállt. */
+  totalCapped: boolean;
+  items: MessageSearchHit[];
+}
+
+/**
+ * KITŰZÖTT ELEM (3. fázis, prompt 14. pont, Figma 453:274, 454:636): „Üzenet ·
+ * Balázs · tegnap”. A `title` a szöveg eleje, vagy szöveg nélkül a csatolmány
+ * neve. Később fájl és link is lehet kitűzött elem, ezért általános alak.
+ */
+export interface PinnedItem {
+  messageId: string;
+  title: string;
+  senderName: string;
+  messageCreatedAt: string;
+  pinnedByName: string;
+  pinnedAt: string;
+}
+
+export interface PinnedItemsResponse {
+  items: PinnedItem[];
+}
+
+/** A BESZÉLGETÉS MEGOSZTOTT MÉDIÁJA ÉS FÁJLJAI (prompt 15. pont, Figma 450:549). */
+export interface SharedAttachmentItem extends MessageAttachmentItem {
+  messageId: string;
+  senderName: string;
+  createdAt: string;
+}
+
+export interface SharedAttachmentPage {
+  items: SharedAttachmentItem[];
+  olderCursor: string | null;
+}
+
+/**
+ * AZ ÉRTESÍTÉSI BEÁLLÍTÁS MÓDJAI (prompt 17. pont, Figma 450:630). A „Csak
+ * említések” addig nem választható, amíg nincs említés (3. fázis terve, 2.6).
+ */
+export const CONVERSATION_NOTIFY_MODES = [
+  "ALL",
+  "MUTE_1H",
+  "MUTE_UNTIL_MORNING",
+  "UNMUTE",
+] as const;
+export type ConversationNotifyMode = (typeof CONVERSATION_NOTIFY_MODES)[number];
+
+export interface ConversationNotificationState {
+  notify: "ALL" | "MENTIONS" | "NONE";
+  /** ISO idő; `null` vagy múltbeli: nincs némítva. */
+  mutedUntil: string | null;
 }
 
 export interface MessagesUnreadResponse {

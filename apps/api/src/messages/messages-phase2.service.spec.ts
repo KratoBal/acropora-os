@@ -73,6 +73,9 @@ function fake() {
       sender: { displayName: `Teljes ${m.senderUserId}`, nickname: null },
       attachments: attachments.filter((a) => a.messageId === id),
       reactions: reactions.filter((r) => r.messageId === id),
+      // a 3. fázis mezői: itt nincs kitűzés és továbbítás
+      pins: [],
+      forwardedFromUser: null,
       replyTo: reply
         ? {
             id: reply.id,

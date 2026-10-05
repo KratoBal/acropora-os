@@ -1080,18 +1080,29 @@ export {
   MESSAGE_PAGE_DEFAULT,
   MESSAGE_PAGE_MAX,
   MESSAGE_TEXT_MAX_LENGTH,
+  MESSAGE_SEARCH_MIN_LENGTH,
+  MESSAGE_SEARCH_MAX_LENGTH,
+  MESSAGE_SEARCH_LIMIT,
+  MESSAGE_SEARCH_COUNT_CAP,
+  CONVERSATION_NOTIFY_MODES,
 } from "./messages.js";
 export type {
   ConversationAudienceValue,
   ConversationDetail,
   ConversationListItem,
   ConversationListResponse,
+  ConversationNotificationState,
+  ConversationNotifyMode,
   ConversationPerson,
   ConversationTypeValue,
   MessageAttachmentItem,
   MessageAttachmentKindValue,
   MessageItem,
   MessagePage,
+  MessageSearchHit,
+  MessageSearchResponse,
+  PinnedItem,
+  PinnedItemsResponse,
   MessageReactionSummary,
   MessageReactionValue,
   MessageReplyPreview,
@@ -1099,6 +1110,8 @@ export type {
   MessageStreamEvent,
   MessageTypeValue,
   MessagesUnreadResponse,
+  SharedAttachmentItem,
+  SharedAttachmentPage,
 } from "./messages.js";
 
 export type { CashRegisterReceiptListResponse } from "./cash-registers.js";

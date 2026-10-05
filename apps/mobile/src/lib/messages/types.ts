@@ -67,6 +67,10 @@ export interface MessageItem {
   attachments: MessageAttachmentItem[];
   reactions: MessageReactionSummary[];
   clientMessageId: string | null;
+  /** 3. fázis: kitűzött-e; a felület a 3c-ben jön. */
+  pinned?: boolean;
+  /** 3. fázis: továbbításnál az eredeti szerző neve. */
+  forwardedFrom?: { senderName: string } | null;
 }
 
 export interface ConversationListItem {

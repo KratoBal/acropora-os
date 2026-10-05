@@ -18,6 +18,9 @@ import {
   MESSAGE_PAGE_DEFAULT,
   MESSAGE_REACTIONS,
   MESSAGE_PAGE_MAX,
+  MESSAGE_SEARCH_COUNT_CAP,
+  MESSAGE_SEARCH_LIMIT,
+  MESSAGE_SEARCH_MIN_LENGTH,
   PERMISSIONS,
   ROLE_PERMISSIONS,
   USER_ROLES,
@@ -25,10 +28,15 @@ import {
   type AuthenticatedUser,
   type ConversationDetail,
   type ConversationListItem,
+  type ConversationNotificationState,
+  type ConversationNotifyMode,
   type ConversationPerson,
   type MessageAttachmentItem,
   type MessageItem,
   type MessagePage,
+  type MessageSearchResponse,
+  type PinnedItemsResponse,
+  type SharedAttachmentPage,
   type MessagesUnreadResponse,
 } from "@acropora/types";
 
@@ -64,8 +72,11 @@ import {
   encodeCursor,
   mayJoinInternal,
   messagePushText,
+  messageSearchPattern,
   messageTypeFor,
+  notificationUpdate,
   pushRecipients,
+  searchSnippet,
   thumbnailDocumentId,
 } from "./messages.rules.js";
 
@@ -201,15 +212,23 @@ export class MessagesService {
       description: row.description,
       createdByUserId: row.createdByUserId,
       lastReadMessageId: membership.lastReadMessageId,
+      notification: notificationState(membership),
     };
   }
 
   async messages(
     user: AuthenticatedUser,
     id: string,
-    query: { before?: string; limit?: number },
+    query: { before?: string; after?: string; around?: string; limit?: number },
   ): Promise<MessagePage> {
     await this.membershipOr404(id, user.id);
+    if ([query.before, query.after, query.around].filter(Boolean).length > 1)
+      throw new BadRequestException(
+        "Egyszerre csak egy lapozási irány adható meg.",
+      );
+    if (query.around)
+      return this.pageAround(user, id, query.around, query.limit);
+    if (query.after) return this.pageAfter(user, id, query.after, query.limit);
     const before = query.before ? decodeCursor(query.before) : null;
     if (query.before && !before)
       throw new BadRequestException("Érvénytelen lapozási kurzor.");
@@ -246,6 +265,24 @@ export class MessagesService {
       attachmentIds?: string[];
       replyToMessageId?: string;
     },
+  ): Promise<MessageItem> {
+    return this.deliver(user, id, input, null);
+  }
+
+  /**
+   * A KÜLDÉS MAGJA, a sima küldésé és a továbbításé is: ugyanaz a tagság-,
+   * csatolmány- és újraküldés-szabály, a továbbítás csak az eredetet teszi hozzá.
+   */
+  private async deliver(
+    user: AuthenticatedUser,
+    id: string,
+    input: {
+      text?: string;
+      clientMessageId: string;
+      attachmentIds?: string[];
+      replyToMessageId?: string;
+    },
+    forwardedFrom: { messageId: string; userId: string } | null,
   ): Promise<MessageItem> {
     await this.membershipOr404(id, user.id);
     const text = cleanMessageText(input.text ?? "");
@@ -298,6 +335,7 @@ export class MessagesService {
         type: messageTypeFor(attachments.map((a) => a.kind)),
         replyToMessageId: input.replyToMessageId ?? null,
         attachmentIds,
+        forwardedFrom,
       });
     } catch (error) {
       if (error instanceof AttachmentBindingError)
@@ -589,6 +627,297 @@ export class MessagesService {
     return toMessage(row, viewerId);
   }
 
+  /**
+   * „UGRÁS” EGY RÉGEBBI ÜZENETHEZ (3. fázis, prompt 13. pont): az oldal a cél
+   * körül nyílik, előtte és utána nagyjából fele-fele, és mindkét irányba
+   * lapozható tovább. A cél ugyanebben a beszélgetésben álljon, különben 404.
+   */
+  private async pageAround(
+    user: AuthenticatedUser,
+    conversationId: string,
+    messageId: string,
+    requested?: number,
+  ): Promise<MessagePage> {
+    const target = await this.repository.messageInConversation(
+      conversationId,
+      messageId,
+    );
+    if (!target) throw new NotFoundException("Az üzenet nem található.");
+    const limit = Math.min(requested ?? MESSAGE_PAGE_DEFAULT, MESSAGE_PAGE_MAX);
+    const olderLimit = Math.max(0, Math.floor((limit - 1) / 2));
+    const newerLimit = Math.max(0, limit - 1 - olderLimit);
+    const [older, newer, [targetRow]] = await Promise.all([
+      this.repository.messagesPage({
+        conversationId,
+        before: target,
+        limit: Math.max(olderLimit, 1),
+      }),
+      this.repository.messagesAfter({
+        conversationId,
+        after: target,
+        limit: Math.max(newerLimit, 1),
+      }),
+      this.repository.messagesByIds([target.id]),
+    ]);
+    const olderRows = older.rows.slice(0, olderLimit);
+    const newerRows = newer.rows.slice(0, newerLimit);
+    const oldest = olderRows.at(-1) ?? target;
+    const newest = newerRows.at(-1) ?? target;
+    return {
+      items: [...olderRows.reverse(), targetRow!, ...newerRows].map((row) =>
+        toMessage(row, user.id),
+      ),
+      olderCursor:
+        older.rows.length > olderRows.length || older.hasOlder
+          ? encodeCursor(oldest)
+          : null,
+      newerCursor:
+        newer.rows.length > newerRows.length || newer.hasNewer
+          ? encodeCursor(newest)
+          : null,
+    };
+  }
+
+  /** Az ugrás utáni ÚJABB oldal, időrendben. */
+  private async pageAfter(
+    user: AuthenticatedUser,
+    conversationId: string,
+    cursor: string,
+    requested?: number,
+  ): Promise<MessagePage> {
+    const after = decodeCursor(cursor);
+    if (!after) throw new BadRequestException("Érvénytelen lapozási kurzor.");
+    const limit = Math.min(requested ?? MESSAGE_PAGE_DEFAULT, MESSAGE_PAGE_MAX);
+    const { rows, hasNewer } = await this.repository.messagesAfter({
+      conversationId,
+      after,
+      limit,
+    });
+    const newest = rows.at(-1);
+    return {
+      items: rows.map((row) => toMessage(row, user.id)),
+      olderCursor: null,
+      newerCursor: hasNewer && newest ? encodeCursor(newest) : null,
+    };
+  }
+
+  /**
+   * KERESÉS A MEGNYITOTT BESZÉLGETÉSBEN (3. fázis, prompt 13. pont; Balázs,
+   * 2026-10-05: csak a megnyitottban). Ékezet- és kisbetű-független, törölt
+   * üzenet nem jön, a legújabb találat elöl.
+   */
+  async search(
+    user: AuthenticatedUser,
+    conversationId: string,
+    q: string,
+  ): Promise<MessageSearchResponse> {
+    await this.membershipOr404(conversationId, user.id);
+    const query = q.trim();
+    if ([...query].length < MESSAGE_SEARCH_MIN_LENGTH)
+      throw new BadRequestException(
+        `Legalább ${MESSAGE_SEARCH_MIN_LENGTH} karaktert írj a kereséshez.`,
+      );
+    const { ids, total } = await this.repository.searchMessages({
+      conversationId,
+      pattern: messageSearchPattern(query),
+      limit: MESSAGE_SEARCH_LIMIT,
+      cap: MESSAGE_SEARCH_COUNT_CAP,
+    });
+    const rows = new Map(
+      (await this.repository.messagesByIds(ids)).map((row) => [row.id, row]),
+    );
+    return {
+      total,
+      totalCapped: total >= MESSAGE_SEARCH_COUNT_CAP,
+      items: ids.flatMap((id) => {
+        const row = rows.get(id);
+        return row
+          ? [
+              {
+                messageId: row.id,
+                senderName: personDisplayName(row.sender),
+                createdAt: row.createdAt.toISOString(),
+                snippet: searchSnippet(row.text ?? "", query),
+              },
+            ]
+          : [];
+      }),
+    };
+  }
+
+  /** A MEGOSZTOTT MÉDIA ÉS FÁJLOK (3. fázis, prompt 15. pont), a legújabb elöl. */
+  async sharedAttachments(
+    user: AuthenticatedUser,
+    conversationId: string,
+    query: { kind: "IMAGE" | "FILE"; before?: string; limit?: number },
+  ): Promise<SharedAttachmentPage> {
+    await this.membershipOr404(conversationId, user.id);
+    const before = query.before ? decodeCursor(query.before) : null;
+    if (query.before && !before)
+      throw new BadRequestException("Érvénytelen lapozási kurzor.");
+    const { rows, hasOlder } = await this.repository.sharedAttachments({
+      conversationId,
+      kind: query.kind,
+      before,
+      limit: Math.min(query.limit ?? MESSAGE_PAGE_DEFAULT, MESSAGE_PAGE_MAX),
+    });
+    const oldest = rows.at(-1);
+    return {
+      items: rows.map((row) => ({
+        ...toAttachment(row),
+        messageId: row.message!.id,
+        senderName: personDisplayName(row.message!.sender),
+        createdAt: row.message!.createdAt.toISOString(),
+      })),
+      olderCursor: hasOlder && oldest ? encodeCursor(oldest) : null,
+    };
+  }
+
+  /**
+   * AZ ÉRTESÍTÉSI BEÁLLÍTÁS (3. fázis, prompt 17. pont), a tagé, ebben a
+   * beszélgetésben. A némítás vége a szerver órájából jön.
+   */
+  async setNotification(
+    user: AuthenticatedUser,
+    conversationId: string,
+    mode: ConversationNotifyMode,
+  ): Promise<ConversationNotificationState> {
+    await this.membershipOr404(conversationId, user.id);
+    const saved = await this.repository.setNotification(
+      conversationId,
+      user.id,
+      notificationUpdate(mode, new Date()),
+    );
+    return notificationState(saved);
+  }
+
+  /**
+   * KITŰZÉS ÉS LEVÉTEL (3. fázis, prompt 14. pont). Bármelyik tag kitűzhet és
+   * levehet (Balázs, 2026-10-05), és mindkettő auditálva, szöveg nélkül. A
+   * kétszeri kitűzés nem hiba, és nem naplóz kétszer.
+   */
+  async pin(
+    user: AuthenticatedUser,
+    messageId: string,
+    on: boolean,
+  ): Promise<MessageItem> {
+    const row = await this.messageOr404(messageId, user.id);
+    if (on && row.deletedAt)
+      throw new BadRequestException("Törölt üzenet nem tűzhető ki.");
+    const changed = on
+      ? await this.repository.pin({
+          conversationId: row.conversationId,
+          messageId,
+          userId: user.id,
+        })
+      : await this.repository.unpin(row.conversationId, messageId);
+    if (changed) {
+      await this.repository.audit({
+        userId: user.id,
+        action: on ? "message.pinned" : "message.unpinned",
+        conversationId: row.conversationId,
+        metadata: { messageId },
+      });
+      await this.updated(row);
+    }
+    return this.message(user, messageId);
+  }
+
+  /** A beszélgetés kitűzött elemei, a legutóbbi kitűzés elöl (Figma 454:596). */
+  async pins(
+    user: AuthenticatedUser,
+    conversationId: string,
+  ): Promise<PinnedItemsResponse> {
+    await this.membershipOr404(conversationId, user.id);
+    const rows = await this.repository.pins(conversationId);
+    return {
+      items: rows.map((row) => ({
+        messageId: row.message.id,
+        title: pinnedTitle(
+          row.message.text,
+          row.message.attachments[0]?.fileName,
+        ),
+        senderName: personDisplayName(row.message.sender),
+        messageCreatedAt: row.message.createdAt.toISOString(),
+        pinnedByName: personDisplayName(row.pinnedBy),
+        pinnedAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * TOVÁBBÍTÁS (3. fázis; prompt 9. pont; Balázs, 2026-10-05: az eredeti szerző
+   * látszik). A továbbító tagja a forrás- és a célbeszélgetésnek is. Egy új
+   * üzenet a célban, a továbbító nevében; a `clientMessageId` miatt egy
+   * újraküldés nem duplikál.
+   *
+   * A CSATOLMÁNY BÁJTRA MÁSOLÓDIK, és ez mérés, nem kényelem: a tároló a fájlt a
+   * beszélgetés és a csatolmány azonosítójából címzi (`storageKeyFor`), és a
+   * tároló-egyeztetés soronként egy fájlt vár. Egy közös kulcsra mutató második
+   * sor mindkettőt megsértené. A másolat ugyanazon a feltöltési úton megy, mint
+   * egy új fájl (típus, keret, bélyegkép).
+   *
+   * Egy már továbbított üzenet továbbításánál az EREDETI szerző marad.
+   */
+  async forward(
+    user: AuthenticatedUser,
+    messageId: string,
+    input: { conversationId: string; clientMessageId: string },
+  ): Promise<MessageItem> {
+    const source = await this.messageOr404(messageId, user.id);
+    if (source.deletedAt)
+      throw new BadRequestException("Törölt üzenet nem továbbítható.");
+    if (source.type === "SYSTEM")
+      throw new BadRequestException("Rendszerüzenet nem továbbítható.");
+    await this.membershipOr404(input.conversationId, user.id);
+
+    const existing = await this.repository.messageByClientId(
+      user.id,
+      input.clientMessageId,
+    );
+    if (existing)
+      return this.sameConversationOr409(
+        existing,
+        input.conversationId,
+        user.id,
+      );
+
+    const attachmentIds: string[] = [];
+    for (const attachment of source.attachments) {
+      const bytes = this.store
+        ? await this.store.get({
+            owner: "message",
+            ownerId: source.conversationId,
+            documentId: attachment.id,
+          })
+        : null;
+      if (!bytes)
+        throw new NotFoundException(
+          "A továbbítandó csatolmány most nem érhető el.",
+        );
+      const copy = await this.uploadAttachment(user, input.conversationId, {
+        originalname: attachment.fileName,
+        mimetype: attachment.contentType,
+        buffer: Buffer.from(bytes),
+      });
+      attachmentIds.push(copy.id);
+    }
+
+    return this.deliver(
+      user,
+      input.conversationId,
+      {
+        text: source.text ?? undefined,
+        clientMessageId: input.clientMessageId,
+        attachmentIds,
+      },
+      {
+        messageId: source.id,
+        userId: source.forwardedFromUserId ?? source.senderUserId,
+      },
+    );
+  }
+
   /** Az üzenet, ha a kérdező tagja a beszélgetésének; különben 404. */
   private async messageOr404(messageId: string, userId: string) {
     const row = await this.repository.message(messageId);
@@ -675,7 +1004,43 @@ function toMessage(row: MessageRow, viewerId: string): MessageItem {
     attachments: deleted ? [] : row.attachments.map(toAttachment),
     reactions: deleted ? [] : reactionSummary(row.reactions, viewerId),
     clientMessageId: row.senderUserId === viewerId ? row.clientMessageId : null,
+    pinned: !deleted && row.pins.length > 0,
+    forwardedFrom: row.forwardedFromUser
+      ? { senderName: personDisplayName(row.forwardedFromUser) }
+      : null,
   };
+}
+
+/** A tag értesítési beállítása a kliensnek: a lejárt némítás nem némítás. */
+function notificationState(row: {
+  notify: "ALL" | "MENTIONS" | "NONE";
+  mutedUntil: Date | null;
+}): ConversationNotificationState {
+  return {
+    notify: row.notify,
+    mutedUntil:
+      row.mutedUntil && row.mutedUntil.getTime() > Date.now()
+        ? row.mutedUntil.toISOString()
+        : null,
+  };
+}
+
+const PINNED_TITLE_MAX = 120;
+
+/** A kitűzött elem címe: a szöveg első sora, vagy szöveg nélkül a csatolmány neve. */
+export function pinnedTitle(
+  text: string | null,
+  fileName: string | undefined,
+): string {
+  const line = (text ?? "")
+    .split("\n")
+    .map((part) => part.trim())
+    .find(Boolean);
+  if (!line) return fileName ?? "Üzenet";
+  const chars = [...line];
+  return chars.length > PINNED_TITLE_MAX
+    ? `${chars.slice(0, PINNED_TITLE_MAX - 1).join("")}…`
+    : line;
 }
 
 function toAttachment(row: {
