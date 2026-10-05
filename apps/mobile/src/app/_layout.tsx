@@ -9,6 +9,7 @@ import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
+import { MessageStreamProvider } from "@/components/messages/MessageStream";
 import { foregroundNotificationBehavior } from "@/lib/notifications/push-foreground";
 import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
@@ -66,8 +67,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <StatusBar style={statusBarStyle} />
-        <RootNavigator />
+        {/* egy üzenet-folyam az egész appnak (Üzenetek modul) */}
+        <MessageStreamProvider>
+          <StatusBar style={statusBarStyle} />
+          <RootNavigator />
+        </MessageStreamProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
@@ -151,6 +155,19 @@ function RootNavigator() {
       />
       <Stack.Screen name="modulok" options={{ title: "Modulok" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      {/* AZ ÜZENETEK (kártya 51d7aba0): a három képernyő a saját fejlécét rajzolja */}
+      <Stack.Screen
+        name="uzenetek/index"
+        options={{ title: "Üzenetek", headerShown: false }}
+      />
+      <Stack.Screen
+        name="uzenetek/[id]"
+        options={{ title: "Beszélgetés", headerShown: false }}
+      />
+      <Stack.Screen
+        name="uzenetek/uj"
+        options={{ title: "Új üzenet", headerShown: false }}
+      />
       <Stack.Screen name="orders/index" options={{ title: "Rendelések" }} />
       <Stack.Screen
         name="orders/[id]"

@@ -24,6 +24,7 @@ import {
   type MessagesUnreadResponse,
 } from "@acropora/types";
 
+import { NotificationsService } from "../notifications/notifications.service.js";
 import {
   MESSAGE_EVENT_BUS,
   type MessageEventBus,
@@ -40,6 +41,8 @@ import {
   directKeyOf,
   encodeCursor,
   mayJoinInternal,
+  messagePushText,
+  pushRecipients,
 } from "./messages.rules.js";
 
 /**
@@ -55,6 +58,7 @@ export class MessagesService {
   constructor(
     private readonly repository: MessagesRepository,
     @Inject(MESSAGE_EVENT_BUS) private readonly bus: MessageEventBus,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** A szerepkörök, amelyek a `messages.use` jogot megkapják. */
@@ -239,7 +243,7 @@ export class MessagesService {
       throw error;
     }
 
-    await this.announce(row);
+    await this.announce(row, user);
     return toMessage(row, user.id);
   }
 
@@ -279,12 +283,11 @@ export class MessagesService {
   }
 
   /**
-   * AZ ÚJ ÜZENET A BESZÉLGETÉS MINDEN AKTÍV TAGJÁNAK, a küldőnek is (a többi
-   * eszköze is lássa). A telefonos push a mobil PR-ral (1c) jön: a szerver csak
-   * olyan célpontot küldhet, amit a telefon meg tud nyitni
-   * (`apps/api/src/mobile/push-targets.spec.ts`).
+   * AZ ÚJ ÜZENET A BESZÉLGETÉS MINDEN AKTÍV TAGJÁNAK a folyamon (a küldőnek is:
+   * a többi eszköze is lássa), és PUSH a többieknek, akik nincsenek elnémítva
+   * (acrobot 26174: a push már az 1. fázisban megy).
    */
-  private async announce(row: MessageRow) {
+  private async announce(row: MessageRow, sender: AuthenticatedUser) {
     const members = await this.repository.members(row.conversationId);
     this.bus.publish(
       members.filter((m) => m.leftAt === null).map((m) => m.userId),
@@ -294,6 +297,28 @@ export class MessagesService {
         messageId: row.id,
       },
     );
+    const userIds = pushRecipients({
+      senderUserId: sender.id,
+      now: new Date(),
+      members,
+    });
+    if (userIds.length === 0 || !row.text) return;
+    const conversation = await this.repository.conversation(row.conversationId);
+    const { title, body } = messagePushText({
+      conversationTitle:
+        conversation?.type === "GROUP"
+          ? (conversation.title ?? "Csoport")
+          : null,
+      senderName: personDisplayName(sender),
+      text: row.text,
+    });
+    this.notifications.notifyNewMessage({
+      messageId: row.id,
+      conversationId: row.conversationId,
+      userIds,
+      title,
+      body,
+    });
   }
 
   private sameConversationOr409(

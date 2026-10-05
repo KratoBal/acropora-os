@@ -66,8 +66,9 @@ describe("a kezdőlap ikonjai", () => {
 
   it("POZITÍV KONTROLL: a glyph-térkép és a használt nevek nem üresek", () => {
     assert.ok(Object.keys(glyphs).length > 1000);
-    // Ten modules, three bottom-bar items and the tile's chevron.
-    assert.equal(usedIcons().length, 14);
+    // Ten modules, four bottom-bar items and the tile's chevron.
+    // 15 since the Üzenetek item joined the bottom bar (card 51d7aba0)
+    assert.equal(usedIcons().length, 15);
   });
 
   it("minden használt ikonnév létezik az Ionicons készletben", () => {

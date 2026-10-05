@@ -315,7 +315,8 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
  * neighbouring `mobile-request-body.spec.ts`; all named, so none of them is
  * a call site here.
  */
-const IRAS_HIVASOK_A_FAN = 26;
+// 2026-10-05: 26 -> 29, az Üzenetek három nevesített típusú írása (a szomszéd őr párjai)
+const IRAS_HIVASOK_A_FAN = 29;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

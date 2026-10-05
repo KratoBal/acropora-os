@@ -87,6 +87,14 @@ export interface ServiceJobAssignmentNotice {
  * `ServiceJobOpenedNotice`: a cimzett a SZEREPE miatt kap ertesitest, nem
  * mert hozzarendeltek.
  */
+export interface NewMessageNotice {
+  messageId: string;
+  conversationId: string;
+  userIds: readonly string[];
+  title: string;
+  body: string;
+}
+
 export interface MaterialRequestCreatedNotice {
   materialRequestId: string;
   worksheetId: string;
@@ -590,6 +598,38 @@ export class NotificationsService {
           attempts,
         }),
       failureLine: () => "Cápasuli piszkozat értesítése sikertelen.",
+    });
+  }
+
+  /**
+   * ÚJ ÜZENET (Üzenetek modul, kártya 51d7aba0). A push már az 1. fázisban megy
+   * (acrobot döntése, 26174). A célpont a beszélgetés: egy régebbi telefon-köteg
+   * a `conversation` típust nem ismeri, és ilyenkor nem navigál sehova -- nincs
+   * `worksheetId`, amire visszaeshetne, és ez helyes, mert nincs is munkalap.
+   */
+  async deliverNewMessage(
+    notice: NewMessageNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: notice.title,
+      body: notice.body,
+      data: { targetType: "conversation", targetId: notice.conversationId },
+      record: (attempts) =>
+        this.log.recordNewMessage({ messageId: notice.messageId, attempts }),
+      failureLine: (summary) =>
+        `Üzenet értesítése: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.messageId}).`,
+    });
+  }
+
+  /** A nem-váró alak: a küldés válasza nem vár a pushra. */
+  notifyNewMessage(notice: NewMessageNotice): void {
+    void this.deliverNewMessage(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az üzenet értesítése nem sikerült (${notice.messageId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
     });
   }
 

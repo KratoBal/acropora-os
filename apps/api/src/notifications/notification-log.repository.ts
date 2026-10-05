@@ -153,6 +153,19 @@ export class NotificationLogRepository extends Repository {
    * nelkul. Egy masodik alak ugyanarra a tenyre csak azt jelentene, hogy az
    * egyik olvasot elfelejtettuk karbantartani.
    */
+  /** Az Üzenetek modul pushja (kártya 51d7aba0): üzenetenként egy bejegyzés, szöveg nélkül. */
+  recordNewMessage(outcome: {
+    messageId: string;
+    attempts: NotificationAttempt[];
+  }) {
+    return this.record({
+      eventType: "message.created.notified",
+      aggregateType: "Message",
+      aggregateId: outcome.messageId,
+      attempts: outcome.attempts,
+    });
+  }
+
   recordServiceDraftsArrived(outcome: {
     mailId: string;
     attempts: NotificationAttempt[];

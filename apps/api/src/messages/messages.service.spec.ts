@@ -20,6 +20,8 @@ import type {
 } from "./messages.repository.js";
 import {
   decodeCursor,
+  messagePushText,
+  pushRecipients,
   directKeyOf,
   encodeCursor,
   mayJoinInternal,
@@ -235,8 +237,21 @@ function setup(users: MessagingUserRow[]) {
     published.push(`${event.type} -> ${[...userIds].sort().join(",")}`);
     realPublish(userIds, event);
   };
-  const service = new MessagesService(repo as never, bus);
-  return { service, repo, bus, published };
+  const pushes: { userIds: readonly string[]; title: string; body: string }[] =
+    [];
+  const notifications = {
+    notifyNewMessage: (notice: {
+      userIds: readonly string[];
+      title: string;
+      body: string;
+    }) => void pushes.push(notice),
+  };
+  const service = new MessagesService(
+    repo as never,
+    bus,
+    notifications as never,
+  );
+  return { service, repo, bus, published, pushes };
 }
 
 const status = async (promise: Promise<unknown>) => {
@@ -415,8 +430,8 @@ describe("conversations", () => {
 describe("messages", () => {
   const users = [person("a", { nickname: "Anna" }), person("b"), person("c")];
 
-  it("sends, and announces to every member, the sender included", async () => {
-    const { service, published } = setup(users);
+  it("sends, announces to every member, and pushes to the others only", async () => {
+    const { service, published, pushes } = setup(users);
     const { id } = await service.createConversation(
       viewer("a", { nickname: "Anna" }),
       {
@@ -433,6 +448,10 @@ describe("messages", () => {
       `conversation.created -> a,b`,
       `message.created -> a,b`,
     ]);
+    assert.deepEqual(
+      pushes.map((p) => [p.userIds, p.title, p.body]),
+      [[["b"], "Anna", "Megérkezett már a pumpa?"]],
+    );
   });
 
   it("an empty message is refused; a resend returns the same message, never a second one", async () => {
@@ -541,6 +560,54 @@ describe("the rules", () => {
     const row = { createdAt: new Date("2026-10-05T09:00:00.123Z"), id: "m1" };
     assert.deepEqual(decodeCursor(encodeCursor(row)), row);
     assert.equal(decodeCursor("semmi"), null);
+  });
+});
+
+describe("the push", () => {
+  it("goes to active, unmuted others who want every message", () => {
+    const now = new Date("2026-10-05T10:00:00Z");
+    const m = (userId: string, over: Partial<MemberRow> = {}): MemberRow => ({
+      userId,
+      leftAt: null,
+      notify: "ALL",
+      mutedUntil: null,
+      ...over,
+    });
+    assert.deepEqual(
+      pushRecipients({
+        senderUserId: "a",
+        now,
+        members: [
+          m("a"),
+          m("b"),
+          m("left", { leftAt: new Date() }),
+          m("muted", { mutedUntil: new Date("2026-10-05T11:00:00Z") }),
+          m("unmuted", { mutedUntil: new Date("2026-10-05T09:00:00Z") }),
+          m("none", { notify: "NONE" }),
+          m("mentions", { notify: "MENTIONS" }),
+        ],
+      }),
+      ["b", "unmuted"],
+    );
+  });
+
+  it("names the sender in a direct chat, the group in a group, and is cut at 140", () => {
+    assert.deepEqual(
+      messagePushText({
+        conversationTitle: null,
+        senderName: "Kovács Anna",
+        text: "Szia",
+      }),
+      { title: "Kovács Anna", body: "Szia" },
+    );
+    assert.equal(
+      messagePushText({
+        conversationTitle: "Webshop",
+        senderName: "Anna",
+        text: "x".repeat(200),
+      }).body.length,
+      "Anna: ".length + 140,
+    );
   });
 });
 

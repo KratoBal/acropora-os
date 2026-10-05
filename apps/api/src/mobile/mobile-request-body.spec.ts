@@ -317,6 +317,38 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  /**
+   * AZ ÜZENETEK A TELEFONON (2026-10-05, kártya 51d7aba0): a küldés, az új
+   * beszélgetés és az olvasottnak jelölés. Mindhárom nevesített típussal megy.
+   */
+  {
+    mit: "üzenet küldése",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "SendMessageInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "SendMessageDto",
+    kontroll: ["text", "clientMessageId"],
+    /* KÉT MEZŐS TÖRZS mindkét oldalon: a szöveg és a kliens-azonosító. */
+    dtoMinimum: 2,
+  },
+  {
+    mit: "új beszélgetés",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "CreateConversationInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "CreateConversationDto",
+    kontroll: ["memberIds"],
+  },
+  {
+    mit: "olvasottnak jelölés",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "MarkReadInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "MarkReadDto",
+    kontroll: ["messageId"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -428,7 +460,12 @@ const PAROK: readonly Par[] = [
  * `reassignMaterialRequest`, `commentOnMaterialRequest`. All three go with a
  * named type, all three are PAIRS above.
  */
-const IRAS_HIVASOK_MA = 25;
+/**
+ * 2026-10-05: 25 -> 28. Az Üzenetek a telefonon: `sendMessage`,
+ * `createConversation`, `markConversationRead`. Mind a három nevesített
+ * típussal megy, mind a három PÁR fent.
+ */
+const IRAS_HIVASOK_MA = 28;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
