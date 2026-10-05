@@ -6,6 +6,7 @@ import {
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PARCEL_SIZES,
   WEBSHOP_CARD_PAYMENT_STATE_LABELS,
+  glsDeliveryLabel,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderHistoryEntry,
@@ -1363,7 +1364,16 @@ function OrderBody({
               >
                 <Address address={order.billingAddress} />
               </Field>
-              <Field label="Szállítás">{order.shipping.method ?? "—"}</Field>
+              <Field label="Szállítás">
+                {glsDeliveryLabel({
+                  method: order.shipping.method,
+                  pointKind: order.shipping.pickupPoint?.kind ?? null,
+                  hasPoint: !!order.shipping.pickupPoint,
+                  storePickup: order.shipping.storePickup,
+                }) ??
+                  order.shipping.method ??
+                  "—"}
+              </Field>
               {order.shipping.pickupPoint ? (
                 <>
                   <Field

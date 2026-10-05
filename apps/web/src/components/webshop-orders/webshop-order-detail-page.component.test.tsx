@@ -108,6 +108,7 @@ const detail: WebshopOrderDetail = {
       id: "HU12345",
       name: "FOXPOST Allee",
       address: "1117 Budapest, Október huszonharmadika u. 8–10.",
+      kind: null,
     },
   },
   lines: [
@@ -1133,6 +1134,28 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       within(card).getByRole("img", { name: "FOXPOST" }).getAttribute("src"),
     ).toBe("/images/foxpost-packeta-group.png");
+  });
+
+  it("a GLS ParcelShop order names the kind of its point (GLS prompt, point 11)", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      shipping: {
+        method: "GLS csomagpont",
+        storePickup: false,
+        carrier: "GLS",
+        pickupPoint: {
+          id: "2351-CSOMAGPONT",
+          name: "Mammut",
+          address: null,
+          kind: "parcel-shop",
+        },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", {
+      name: "Számlázási és szállítási adatok",
+    });
+    expect(within(card).getByText("GLS ParcelShop")).toBeTruthy();
   });
 
   it("without orders.manage there are no pencils", async () => {

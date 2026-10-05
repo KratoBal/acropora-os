@@ -147,6 +147,8 @@ export interface WebshopOrderListItem {
   shipping: {
     method: string | null;
     pickupPoint: string | null;
+    /** A GLS-pont fajtája (a webshop mentett pont-adatából); más szállítónál `null`. */
+    pointKind: WebshopPointKind | null;
     /** „Bolti átvétel”: a feldolgozási sáv és a „Feladásra vár” ettől függ. */
     storePickup: boolean;
   };
@@ -297,6 +299,8 @@ export interface WebshopOrderDetail {
       id: string | null;
       name: string;
       address: string | null;
+      /** A GLS-pont fajtája; Foxpostnál `null`. */
+      kind: WebshopPointKind | null;
     } | null;
   };
   lines: WebshopOrderLine[];
@@ -488,4 +492,31 @@ export interface WebshopOrderAddressInput {
   line2: string | null;
   phone: string | null;
   countryCode: string;
+}
+
+/**
+ * A GLS-PONT FAJTÁJA (a webshop `gls_pickup_point.type`, a GLS saját értékei;
+ * murena 26523): `parcel-shop` = ParcelShop (csomagpont), `parcel-locker` =
+ * automata.
+ */
+export type WebshopPointKind = "parcel-shop" | "parcel-locker";
+
+export const pointKindOf = (value: unknown): WebshopPointKind | null =>
+  value === "parcel-shop" || value === "parcel-locker" ? value : null;
+
+/**
+ * A GLS SZÁLLÍTÁS NEVE a listán és az adatlapon (a GLS prompt 11. pontja):
+ * GLS ParcelShop, GLS automata, GLS házhoz. Más szállítónál `null`.
+ */
+export function glsDeliveryLabel(input: {
+  method: string | null;
+  pointKind: WebshopPointKind | null;
+  hasPoint: boolean;
+  storePickup: boolean;
+}): string | null {
+  if (input.pointKind === "parcel-shop") return "GLS ParcelShop";
+  if (input.pointKind === "parcel-locker") return "GLS automata";
+  if (!input.storePickup && !input.hasPoint && /^gls/i.test(input.method ?? ""))
+    return "GLS házhoz";
+  return null;
 }

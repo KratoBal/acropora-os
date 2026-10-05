@@ -217,6 +217,7 @@ describe("the detail", () => {
         id: "HU12345",
         name: "FOXPOST Allee",
         address: "1117 Budapest, Október huszonharmadika u. 8–10.",
+        kind: null,
       },
     });
     assert.deepEqual(result.relatedOrder, {
@@ -396,6 +397,36 @@ describe("a payment deadline in the history", () => {
     assert.equal(
       history[0]!.text,
       "Készletezés alatt → Sikertelenül lezárt rendelés (fizetési határidő lejárt, rendszer)",
+    );
+  });
+});
+
+/* A GLS-PONT FAJTÁJA (murena 26523): a webshop `type` mezője; Foxpostnál nincs. */
+describe("the GLS point's kind", () => {
+  it("parcel-shop and parcel-locker are kept; anything else, or a Foxpost point, is no kind", () => {
+    const point = (data: Record<string, unknown>) =>
+      shippingOf([{ name: "GLS csomagpont", data }]).pickupPoint?.kind;
+    assert.equal(
+      point({
+        gls_pickup_point: { id: "1", name: "Mammut", type: "parcel-shop" },
+      }),
+      "parcel-shop",
+    );
+    assert.equal(
+      point({
+        gls_pickup_point: { id: "1", name: "Allee", type: "parcel-locker" },
+      }),
+      "parcel-locker",
+    );
+    assert.equal(
+      point({ gls_pickup_point: { id: "1", name: "X", type: "kiosk" } }),
+      null,
+    );
+    assert.equal(
+      point({
+        foxpost_pickup_point: { id: "1", name: "Y", type: "parcel-shop" },
+      }),
+      null,
     );
   });
 });

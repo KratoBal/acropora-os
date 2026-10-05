@@ -121,6 +121,19 @@ describe("payment", () => {
   });
 });
 
+describe("the GLS point's kind on the list", () => {
+  it("comes from the overview's pickup point type", () => {
+    assert.equal(
+      item({
+        id: "g1",
+        pickup_point: { id: "1", name: "Mammut", type: "parcel-locker" },
+      }).shipping.pointKind,
+      "parcel-locker",
+    );
+    assert.equal(item({ id: "g2" }).shipping.pointKind, null);
+  });
+});
+
 describe("the hold's expiry on the list", () => {
   it("carries the webshop's expiry and warns within two days; an old webshop without it does not", () => {
     const soon = item({

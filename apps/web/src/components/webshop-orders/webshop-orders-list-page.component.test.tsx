@@ -72,6 +72,7 @@ const order = (
   shipping: {
     method: "Foxpost csomagpont",
     pickupPoint: "FOXPOST Allee",
+    pointKind: null,
     storePickup: false,
   },
   payment: {
@@ -193,6 +194,45 @@ describe("WebshopOrdersListPage", () => {
       await screen.findByText("A zárolás 2 napon belül lejár"),
     ).toBeTruthy();
     expect(screen.getByText("A zárolás lejárt")).toBeTruthy();
+  });
+
+  it("a GLS order names its kind: ParcelShop, automata, házhoz (GLS prompt, point 11)", async () => {
+    api.list.mockResolvedValue(
+      response([
+        order({
+          shipping: {
+            method: "GLS csomagpont",
+            pickupPoint: "Mammut",
+            pointKind: "parcel-shop",
+            storePickup: false,
+          },
+        }),
+        order({
+          id: "order_39",
+          displayId: 39,
+          shipping: {
+            method: "GLS csomagpont",
+            pickupPoint: "Allee automata",
+            pointKind: "parcel-locker",
+            storePickup: false,
+          },
+        }),
+        order({
+          id: "order_40",
+          displayId: 40,
+          shipping: {
+            method: "GLS házhozszállítás",
+            pickupPoint: null,
+            pointKind: null,
+            storePickup: false,
+          },
+        }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    expect(await screen.findByText("GLS ParcelShop · Mammut")).toBeTruthy();
+    expect(screen.getByText("GLS automata · Allee automata")).toBeTruthy();
+    expect(screen.getByText("GLS házhoz")).toBeTruthy();
   });
 
   it("a counter filters, and the same counter clicked again clears it", async () => {

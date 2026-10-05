@@ -4,6 +4,7 @@ import {
   WEBSHOP_ORDER_STALE_DEFAULTS,
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  pointKindOf,
   type WebshopOrderDetail,
   type WebshopOrderListItem,
   type WebshopOrderListQuery,
@@ -154,6 +155,7 @@ export function toListItem(
     shipping: {
       method: row.shipping_method,
       pickupPoint: row.pickup_point?.name ?? null,
+      pointKind: pointKindOf(row.pickup_point?.type),
       storePickup,
     },
     payment: {
