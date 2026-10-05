@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
+import { takeOverEbizRow } from "../billing/external-billing-one-row.js";
 import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
 import type { IncomingInvoiceProjection } from "../billing/incoming-szamlazz-invoice.js";
 
@@ -116,6 +117,30 @@ export class SzamlazzFeedsRepository {
         feedReceivedAt: message.receivedAt,
         versionCount,
       };
+      // EGY SZÁMLASZÁM EGY SOR (acrobot 26208): ha az eBIZ már hozta ezt a
+      // számlát, a Számlázz.hu azt a sort veszi át (az azonosítója és a PDF-je
+      // marad), nem nyit mellé másodikat (`external-billing-one-row.ts`)
+      const own = await transaction.externalBillingDocument.findUnique({
+        where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+        select: { id: true },
+      });
+      const ebizTwin = own
+        ? null
+        : await transaction.externalBillingDocument.findFirst({
+            where: {
+              source: "EBIZ",
+              documentNumber: data.documentNumber,
+            },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, externalId: true },
+          });
+      if (ebizTwin) {
+        await transaction.externalBillingDocument.update({
+          where: { id: ebizTwin.id },
+          data: takeOverEbizRow(ebizTwin, { externalId, ...data }),
+        });
+        return "PROJECTED";
+      }
       await transaction.externalBillingDocument.upsert({
         where: { source_externalId: { source: "SZAMLAZZ", externalId } },
         create: { source: "SZAMLAZZ", externalId, ...data },

@@ -53,6 +53,7 @@ class FakeClient {
 
 type Row = {
   id: string;
+  source?: string;
   pdfStorageKey: string | null;
   pdfMissingReason?: string | null;
   cancelled: boolean;
@@ -70,6 +71,8 @@ class FakeStore implements EbizSyncStore {
     errorCode?: string;
   }[] = [];
   readonly updates: string[] = [];
+  /** Számlázz.hu rows, by invoice number; `ebizExternalId` once linked. */
+  readonly szamlazz = new Map<string, Row & { ebizExternalId?: string }>();
   async startRun() {
     const id = `run-${this.runs.length + 1}`;
     this.runs.push({ id, status: "RUNNING" });
@@ -88,11 +91,30 @@ class FakeStore implements EbizSyncStore {
     );
   }
   async existing(externalIds: string[]) {
-    return new Map(
-      externalIds
-        .filter((id) => this.rows.has(id))
-        .map((id) => [id, this.rows.get(id)!]),
+    const linked = [...this.szamlazz.values()].filter(
+      (row) => row.ebizExternalId && externalIds.includes(row.ebizExternalId),
     );
+    return new Map(
+      [
+        ...externalIds
+          .filter((id) => this.rows.has(id))
+          .map(
+            (id) => [id, { source: "EBIZ", ...this.rows.get(id)! }] as const,
+          ),
+        ...linked.map((row) => [row.ebizExternalId!, row] as const),
+      ].map(([id, row]) => [id, { ...row, source: row.source ?? "EBIZ" }]),
+    );
+  }
+  async szamlazzTwins(numbers: string[]) {
+    return new Map(
+      [...this.szamlazz.entries()]
+        .filter(([n, row]) => numbers.includes(n) && !row.ebizExternalId)
+        .map(([n, row]) => [n, row]),
+    );
+  }
+  async linkEbiz(id: string, ebizExternalId: string) {
+    const row = [...this.szamlazz.values()].find((r) => r.id === id)!;
+    row.ebizExternalId = ebizExternalId;
   }
   async create(data: {
     externalId: string;
@@ -111,13 +133,18 @@ class FakeStore implements EbizSyncStore {
     this.rows.set(data.externalId, row);
     return { id: row.id };
   }
+  private any(id: string): Row {
+    return [...this.rows.values(), ...this.szamlazz.values()].find(
+      (r) => r.id === id,
+    )!;
+  }
   async update(id: string, data: Record<string, unknown>) {
     this.updates.push(id);
-    const row = [...this.rows.values()].find((r) => r.id === id)!;
+    const row = this.any(id);
     Object.assign(row, data);
   }
   async setPdf(id: string, key: string | null, reason: string | null) {
-    const row = [...this.rows.values()].find((r) => r.id === id)!;
+    const row = this.any(id);
     row.pdfStorageKey = key;
     row.pdfMissingReason = reason;
   }
@@ -300,6 +327,55 @@ describe("the October 1 cutoff (owner, 2026-10-02 19:44 UTC)", () => {
     assert.equal(result.state, "APPLIED");
     assert.deepEqual([...store.rows.keys()].sort(), ["2", "3"]);
     assert.equal(store.runs[0]!.counts!.fetchedCount, 2);
+  });
+
+  it("an invoice Számlázz.hu already has gets no second row: eBIZ links it and adds the PDF", async () => {
+    const store = new FakeStore();
+    store.szamlazz.set("EINV000000812", {
+      id: "szamlazz-row",
+      source: "SZAMLAZZ",
+      pdfStorageKey: null,
+      cancelled: false,
+      externalPaymentStatus: null,
+      grossAmount: "127.00",
+    });
+    const documents = new FakeDocuments();
+    const invoice = ebizItem({ id: 6121422, invoiceNumber: "EINV000000812" });
+    const first = await service(
+      new FakeClient([invoice]),
+      store,
+      documents,
+    ).run("SCHEDULED");
+    assert.equal(store.rows.size, 0);
+    assert.equal(
+      store.szamlazz.get("EINV000000812")!.ebizExternalId,
+      "6121422",
+    );
+    assert.equal(
+      store.szamlazz.get("EINV000000812")!.pdfStorageKey,
+      "external-invoices/szamlazz-row/ebiz.pdf",
+    );
+    assert.deepEqual(
+      first.state === "APPLIED" && [first.createdCount, first.updatedCount],
+      [0, 1],
+    );
+
+    // the next run finds the linked row: no new row, and eBIZ's payment
+    // status does not overwrite Számlázz.hu's data on it
+    const paid = { ...invoice, paymentStatus: "PAID" };
+    const second = await service(new FakeClient([paid]), store, documents).run(
+      "SCHEDULED",
+    );
+    assert.equal(store.rows.size, 0);
+    assert.deepEqual(store.updates, []);
+    assert.equal(
+      store.szamlazz.get("EINV000000812")!.externalPaymentStatus,
+      null,
+    );
+    assert.deepEqual(
+      second.state === "APPLIED" && [second.createdCount, second.updatedCount],
+      [0, 0],
+    );
   });
 
   it("reads OTP_EBIZ_SINCE, and falls back to the owner's date on anything malformed", () => {
