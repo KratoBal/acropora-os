@@ -3211,17 +3211,26 @@ model Contract {
 }
 
 model ContractItem {
-  id               String   @id @default(cuid())
-  contractId       String
-  position         Int
-  description      String
-  unitNet          Decimal  @db.Decimal(19, 4)
-  quantity         Decimal  @db.Decimal(19, 6)
-  occasionsPerYear Int
-  vatRatePercent   Decimal  @db.Decimal(5, 2)
-  departmentId     String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                       String   @id @default(cuid())
+  contractId               String
+  position                 Int
+  description              String
+  unitNet                  Decimal  @db.Decimal(19, 4)
+  quantity                 Decimal  @db.Decimal(19, 6)
+  occasionsPerYear         Int
+  vatRatePercent           Decimal  @db.Decimal(5, 2)
+  departmentId             String?
+  /// JAVÍTÁSI DÍJAK (kártya 3d80a18d, Balázs 2026-10-05 08:42 UTC; minta:
+  /// exchange/szerzodes-javitasi-dijak-minta-2026-10-05.png). Mind nem kötelező,
+  /// és NINCS automatikus számolás: a szorzó szerződésenként más, kézzel töltik
+  /// (Luca). Nettó forint, illetve a súlyszám egy szám.
+  repairFeeWorkdayHours    Decimal? @db.Decimal(19, 4)
+  repairFeeWorkdayOffHours Decimal? @db.Decimal(19, 4)
+  repairFeeHoliday         Decimal? @db.Decimal(19, 4)
+  repairWeight             Decimal? @db.Decimal(19, 4)
+  repairTotal              Decimal? @db.Decimal(19, 4)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   contract              Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
   department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)

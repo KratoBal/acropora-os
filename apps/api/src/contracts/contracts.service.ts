@@ -14,10 +14,34 @@ import {
 import {
   ContractsRepository,
   type ContractInput,
+  REPAIR_FEE_FIELDS,
+  type RepairFees,
 } from "./contracts.repository.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
+
+/**
+ * A JAVÍTÁSI DÍJAK A KÉRÉSBŐL (kártya 3d80a18d): a hiányzó mező `undefined`
+ * marad (a tárolt érték nem változik), a `null` törlődik, a szám Decimal lesz.
+ */
+function repairFeesInput(
+  item: Partial<Record<(typeof REPAIR_FEE_FIELDS)[number], string | null>>,
+): RepairFees {
+  return Object.fromEntries(
+    REPAIR_FEE_FIELDS.map((field) => {
+      const value = item[field];
+      return [
+        field,
+        value === undefined
+          ? undefined
+          : value === null || value.trim() === ""
+            ? null
+            : new Prisma.Decimal(value),
+      ];
+    }),
+  );
+}
 
 @Injectable()
 export class ContractsService {
@@ -77,6 +101,12 @@ export class ContractsService {
           vatRatePercent: item.vatRatePercent.toString(),
           departmentId: item.departmentId,
           assetIds: item.assets.map((asset) => asset.assetId),
+          ...Object.fromEntries(
+            REPAIR_FEE_FIELDS.map((field) => [
+              field,
+              item[field]?.toString() ?? null,
+            ]),
+          ),
         })),
     });
     try {
@@ -227,6 +257,7 @@ export class ContractsService {
           vatRatePercent: new Prisma.Decimal(item.vatRatePercent),
           departmentId,
           assetIds,
+          ...repairFeesInput(item),
         };
       }),
     );

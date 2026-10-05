@@ -36,23 +36,43 @@ export type ContractInput = {
   notes: string | null;
   organizationalUnitName: string | null;
   contactPersonName: string | null;
-  items: Array<{
-    /**
-     * MEGLÉVŐ TÉTEL AZONOSÍTÓJA -- ha adott ÉS a szerződésen valóban létezik,
-     * az `update()` a SOROT frissíti (`ContractItem.id` állandó marad).
-     * Hiányzó vagy ismeretlen id: ÚJ tétel jön létre. Lásd `dto.ts`
-     * `ContractItemDto.id` jegyzetét a MIÉRT-hez.
-     */
-    id?: string;
-    description: string;
-    unitNet: Prisma.Decimal;
-    quantity: Prisma.Decimal;
-    occasionsPerYear: number;
-    vatRatePercent: Prisma.Decimal;
-    departmentId: string | null;
-    assetIds: string[];
-  }>;
+  items: Array<
+    {
+      /**
+       * MEGLÉVŐ TÉTEL AZONOSÍTÓJA -- ha adott ÉS a szerződésen valóban létezik,
+       * az `update()` a SOROT frissíti (`ContractItem.id` állandó marad).
+       * Hiányzó vagy ismeretlen id: ÚJ tétel jön létre. Lásd `dto.ts`
+       * `ContractItemDto.id` jegyzetét a MIÉRT-hez.
+       */
+      id?: string;
+      description: string;
+      unitNet: Prisma.Decimal;
+      quantity: Prisma.Decimal;
+      occasionsPerYear: number;
+      vatRatePercent: Prisma.Decimal;
+      departmentId: string | null;
+      assetIds: string[];
+    } & RepairFees
+  >;
 };
+
+/** A javítási díjak öt mezője (kártya 3d80a18d), sorrendben. */
+export const REPAIR_FEE_FIELDS = [
+  "repairFeeWorkdayHours",
+  "repairFeeWorkdayOffHours",
+  "repairFeeHoliday",
+  "repairWeight",
+  "repairTotal",
+] as const;
+export type RepairFeeField = (typeof REPAIR_FEE_FIELDS)[number];
+/**
+ * `undefined`: a tárolt érték marad (a Prisma frissítésben a hiányzó mező nem
+ * változik); `null`: törlődik; szám: beíródik.
+ */
+export type RepairFees = Partial<Record<RepairFeeField, Prisma.Decimal | null>>;
+
+const repairFeesOf = (item: RepairFees): RepairFees =>
+  Object.fromEntries(REPAIR_FEE_FIELDS.map((field) => [field, item[field]]));
 
 @Injectable()
 export class ContractsRepository {
@@ -182,6 +202,7 @@ export class ContractsRepository {
           occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent,
           departmentId: item.departmentId,
+          ...repairFeesOf(item),
         };
         if (item.id && keepIds.has(item.id)) {
           await tx.contractItem.update({
@@ -270,6 +291,7 @@ export class ContractsRepository {
           occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent,
           departmentId: item.departmentId,
+          ...repairFeesOf(item),
           assets: { create: item.assetIds.map((assetId) => ({ assetId })) },
         })),
       },
