@@ -130,7 +130,11 @@ const MOBILE: ClientSet = {
   root: "../mobile/src",
   label: "mobil",
   recursive: true,
-  wrappers: new Set(["lib/api/client.ts", "lib/api/request-auth.ts"]),
+  wrappers: new Set([
+    "lib/api/client.ts",
+    "lib/api/request-auth.ts",
+    "lib/api/upload-with-progress.ts",
+  ]),
 };
 
 /**
@@ -279,6 +283,12 @@ function constantsOf(source: string): Map<string, string> {
 const CHANNELS: readonly RegExp[] = [
   /apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g,
   /(?<![.\w])fetch\s*\(\s*/g,
+  /*
+    A TELEFON HALADASOS FELTOLTESE (Uzenetek, 2026-10-05): XHR, tehat sem
+    `apiRequest`, sem `fetch`. A nevesitett burkolo nelkul ez az ut az orzo
+    elol rejtve maradna.
+  */
+  /(?<![.\w])uploadWithProgress\s*(?:<[^>]*>)?\s*\(\s*/g,
 ];
 
 /** Külső címre menő hívás: nem a mi szerverünk, tehát nem is a mi dolgunk. */
@@ -455,7 +465,12 @@ function clientCalls(set: ClientSet): ClientCall[] {
   const calls: ClientCall[] = [];
   for (const file of sourceFiles(set)) {
     const source = readFileSync(join(set.root, file), "utf8");
-    if (!source.includes("apiRequest") && !source.includes("fetch")) continue;
+    if (
+      !source.includes("apiRequest") &&
+      !source.includes("fetch") &&
+      !source.includes("uploadWithProgress")
+    )
+      continue;
     calls.push(
       ...callsInSource(
         source,
@@ -596,6 +611,8 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
       "integrations/foxpost/reports/:param/:param/download",
       "inventory/counts/:param/template.xlsx",
       "service/assets/:param/documents/:param",
+      // a harmadik csatorna: a telefon haladásos feltöltése
+      "messages/conversations/:param/attachments",
     ])
       assert.ok(
         calls.some((call) => call.pattern === pattern),

@@ -110,15 +110,24 @@ export const DOCUMENT_THUMBNAIL_VARIANT = "thumbnail";
  */
 export type DocumentImageVariant = "thumbnail" | "original";
 
+/**
+ * A GYŰJTEMÉNY a gazda alatt: a munkalap, az eszköz és a hibajegy
+ * `documents`, az Üzenetek csatolmánya `attachments`
+ * (`/messages/attachments/:id`). Alapból `documents`, így a meglévő hívók
+ * változatlanok.
+ */
+export type DocumentCollection = "documents" | "attachments";
+
 export function documentImageSource(input: {
   apiUrl: string;
   token: string;
   ownerPath: string;
   documentId: string;
   variant: DocumentImageVariant;
+  collection?: DocumentCollection;
 }): { uri: string; headers: Record<string, string> } {
   const alap = input.apiUrl.replace(/\/+$/, "");
-  const cim = `${alap}${input.ownerPath}/documents/${encodeURIComponent(input.documentId)}`;
+  const cim = `${alap}${input.ownerPath}/${input.collection ?? "documents"}/${encodeURIComponent(input.documentId)}`;
   return {
     uri:
       input.variant === "thumbnail"

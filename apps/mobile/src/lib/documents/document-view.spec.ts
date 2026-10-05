@@ -66,6 +66,21 @@ describe("documentImageSource", () => {
     assert.deepEqual(forras.headers, { Authorization: "Bearer abc" });
   });
 
+  it("the message attachment lives under /messages/attachments, not /documents", () => {
+    const forras = documentImageSource({
+      apiUrl: "https://api.acropora.hu",
+      token: "abc",
+      ownerPath: "/messages",
+      documentId: "att-1",
+      variant: "thumbnail",
+      collection: "attachments",
+    });
+    assert.equal(
+      forras.uri,
+      "https://api.acropora.hu/messages/attachments/att-1?variant=thumbnail",
+    );
+  });
+
   /**
    * A ZÁRÓ PERJEL NEM AD DUPLÁT. A beállított cím mindkét alakban érkezhet, és
    * egy `//documents` út a szerveren 404-et adna -- a képernyőn pedig ugyanúgy

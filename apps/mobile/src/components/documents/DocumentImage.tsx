@@ -10,7 +10,10 @@ import {
 } from "react-native";
 
 import { kepHibaSzovege } from "@/lib/documents/kep-hiba";
-import type { DocumentImageVariant } from "@/lib/documents/document-view";
+import type {
+  DocumentCollection,
+  DocumentImageVariant,
+} from "@/lib/documents/document-view";
 import { useDocumentImageFile } from "@/lib/documents/use-document-image-file";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 
@@ -43,6 +46,7 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
  */
 export function DocumentImage({
   ownerPath,
+  collection,
   documentId,
   variant,
   style,
@@ -52,6 +56,7 @@ export function DocumentImage({
   enabled,
 }: {
   ownerPath: string | null;
+  collection?: DocumentCollection;
   documentId: string;
   variant: DocumentImageVariant;
   style: StyleProp<ImageStyle>;
@@ -64,6 +69,7 @@ export function DocumentImage({
   const [hiba, setHiba] = useState<string | null>(null);
   const letoltes = useDocumentImageFile({
     ownerPath,
+    collection,
     documentId,
     variant,
     enabled,
