@@ -116,6 +116,12 @@ export const primaryNavigation: AppNavigationItem[] = [
     icon: "clipboard",
     entryId: "my-tasks",
   },
+  {
+    href: "/uzenetek",
+    label: "Üzenetek",
+    icon: "message",
+    entryId: "messages",
+  },
 ];
 
 export const serviceNavigation: AppNavigationItem[] = [

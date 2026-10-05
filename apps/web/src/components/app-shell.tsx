@@ -25,6 +25,10 @@ import {
   type AppNavigationItem,
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
+import {
+  useMessagesEnabled,
+  useMessagesUnread,
+} from "./messages/message-stream";
 import { UserMenu } from "./auth/user-menu";
 import { GlobalSearch } from "./global-search";
 import {
@@ -142,6 +146,21 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const { session } = useAuth();
+  const messagesEnabled = useMessagesEnabled();
+  const messagesUnread = useMessagesUnread(
+    session?.token ?? "",
+    messagesEnabled,
+  );
+  // a fejléc ikonja: ha a hívó nem ad sajátot, a modul a sajátját mutatja
+  const headerMessages: HeaderMessagesProps | undefined =
+    messages ??
+    (messagesEnabled
+      ? {
+          href: "/uzenetek",
+          icon: <Icon name="message" size={16} />,
+          unreadCount: messagesUnread,
+        }
+      : undefined);
   const { effectiveTheme, preference, setPreference } = useThemePreference();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
@@ -229,6 +248,14 @@ export function AppShell({
               item.href === "/feladataim" ? (
                 <Badge className="px-1.5" variant="neutral">
                   {myTaskCount ?? "–"}
+                </Badge>
+              ) : item.href === "/uzenetek" && messagesUnread > 0 ? (
+                <Badge
+                  className="px-1.5"
+                  variant="warning"
+                  aria-label={`${messagesUnread} olvasatlan üzenet`}
+                >
+                  {messagesUnread}
                 </Badge>
               ) : undefined
             }
@@ -402,7 +429,7 @@ export function AppShell({
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              {messages ? <HeaderMessages {...messages} /> : null}
+              {headerMessages ? <HeaderMessages {...headerMessages} /> : null}
               <UserMenu
                 preference={preference}
                 onPreferenceChange={setPreference}

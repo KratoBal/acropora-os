@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { AuthGate } from "@/components/auth/auth-gate";
+import { MessageStreamProvider } from "@/components/messages/message-stream";
 import { NavigationHistoryProvider } from "@/components/navigation-history";
 
 export default function ShellLayout({ children }: { children: ReactNode }) {
@@ -13,7 +14,10 @@ export default function ShellLayout({ children }: { children: ReactNode }) {
         bejelentkezés utáni első lapról a "vissza" nem a login oldalra visz.
       */}
       <NavigationHistoryProvider>
-        <AppShell>{children}</AppShell>
+        {/* egy üzenet-folyam a héjnak és a lapoknak (Üzenetek modul) */}
+        <MessageStreamProvider>
+          <AppShell>{children}</AppShell>
+        </MessageStreamProvider>
       </NavigationHistoryProvider>
     </AuthGate>
   );
