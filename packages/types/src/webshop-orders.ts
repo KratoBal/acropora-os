@@ -116,7 +116,7 @@ export interface WebshopOrderListItem {
     method: string | null;
     state: WebshopOrderPaymentState | null;
   };
-  /** A számla az OS saját rekordja; amíg a számlázás nincs bekötve, `null`. */
+  /** A kiállított számla száma; az OS saját rekordja (`WEBSHOP_ORDER` forrású bizonylat). */
   invoiceNumber: string | null;
   status: {
     code: WebshopOrderStatus | null;
@@ -250,6 +250,16 @@ export interface WebshopOrderDetail {
     stripePaymentIntentId: string | null;
   } | null;
   invoiceNumber: string | null;
+  /**
+   * A rendelés bizonylata a Számlázásban, ha van: a vázlat, a kiállítás alatti
+   * és az elutasított is (az adatlap ebből linkel, és ebből mondja meg, miért
+   * nincs még szám).
+   */
+  invoice: {
+    id: string;
+    status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+    number: string | null;
+  } | null;
   steps: WebshopOrderStep[];
   relatedOrder: {
     id: string;

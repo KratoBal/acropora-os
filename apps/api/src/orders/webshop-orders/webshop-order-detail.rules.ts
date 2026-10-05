@@ -31,8 +31,13 @@ const isStatus = (
 ): code is WebshopOrderStatus =>
   !!code && (WEBSHOP_ORDER_STATUSES as readonly string[]).includes(code);
 
+/**
+ * A NÉV MAGYAR SORRENDBEN: vezetéknév, keresztnév. A kirakat `last_name`
+ * mezője a vezetéknév (a címűrlapon „Vezetéknév”, `family-name`), tehát az
+ * elöl áll; ugyanez kerül a számlára is (`webshop-order-invoice.rules.ts`).
+ */
 const nameOf = (address: MedusaOrderAddressRow | null | undefined) =>
-  [address?.first_name, address?.last_name]
+  [address?.last_name, address?.first_name]
     .map((part) => part?.trim())
     .filter(Boolean)
     .join(" ") || null;
@@ -332,6 +337,7 @@ export function toDetail(input: {
     },
     payment,
     invoiceNumber: facts.invoiceNumber,
+    invoice: facts.invoice,
     steps: stepsOf(
       code,
       shipping.storePickup,

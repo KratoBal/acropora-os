@@ -50,6 +50,7 @@ const SOURCE_LABELS: Record<string, string> = {
   PROJECT: "Projekt",
   SALES_ORDER: "Webshop rendelés",
   POS_TRANSACTION: "POS tranzakció",
+  WEBSHOP_ORDER: "Webshop rendelés",
   SERVICE_JOB: "Szerviz munka",
   MANUAL: "Manuális",
 };

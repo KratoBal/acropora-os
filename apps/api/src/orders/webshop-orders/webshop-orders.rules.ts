@@ -4,6 +4,7 @@ import {
   WEBSHOP_ORDER_STALE_DEFAULTS,
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  type WebshopOrderDetail,
   type WebshopOrderListItem,
   type WebshopOrderListQuery,
   type WebshopOrderPaymentState,
@@ -73,15 +74,30 @@ export function isStale(
   );
 }
 
-/** Az OS saját tényei egy rendelésről (számla, küldemény); amíg nincs, üres. */
+/** Az OS saját tényei egy rendelésről (számla, küldemény). */
 export interface WebshopOrderFacts {
+  /** CSAK a kiállított számla száma: a vázlat még nem számla. */
   invoiceNumber: string | null;
+  invoice: WebshopOrderDetail["invoice"];
   hasParcel: boolean;
 }
 export const NO_FACTS: WebshopOrderFacts = {
   invoiceNumber: null,
+  invoice: null,
   hasParcel: false,
 };
+
+/** A tények a rendelés számlájából (a küldemény a csomagfeladással jön). */
+export function factsOf(
+  invoice: WebshopOrderDetail["invoice"] | undefined,
+): WebshopOrderFacts {
+  return {
+    invoiceNumber:
+      invoice?.status === "ISSUED" ? (invoice.number ?? null) : null,
+    invoice: invoice ?? null,
+    hasParcel: false,
+  };
+}
 
 /**
  * MELYIK SZÁMLÁLÓBA ESIK. Előbb számla, utána csomag (Balázs, 2026-10-05

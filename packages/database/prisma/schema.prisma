@@ -730,6 +730,8 @@ enum BillingSourceType {
   POS_TRANSACTION
   SERVICE_JOB
   MANUAL
+  /// Az új webshop (Medusa) rendelése; a `sourceId` a webshop rendelés-azonosítója.
+  WEBSHOP_ORDER
 }
 
 /// Egy bizonylat-sor fajtája. A kedvezmény KÜLÖN, NEGATÍV sor, közvetlenül az

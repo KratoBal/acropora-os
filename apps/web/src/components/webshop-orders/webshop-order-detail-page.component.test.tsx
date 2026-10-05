@@ -12,12 +12,20 @@ import { WebshopOrderDetailPage } from "./webshop-order-detail-page";
   rendelés nem nyitható; egy még be nem kötött művelet gombként áll
   (Státusz módosítása, ceruza); hibánál nincs „Újra”; jog nélkül betölt.
 */
-const api = vi.hoisted(() => ({ detail: vi.fn(), changeStatus: vi.fn() }));
+const api = vi.hoisted(() => ({
+  detail: vi.fn(),
+  changeStatus: vi.fn(),
+  issueInvoice: vi.fn(),
+}));
+const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
 vi.mock("@/lib/api/webshop-orders", () => ({ webshopOrdersApi: api }));
+vi.mock("@/lib/api/billing-documents", () => ({
+  billingDocumentsApi: billing,
+}));
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "font-pilot" }),
 }));
@@ -27,7 +35,9 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const session = (role: "OWNER" | "SERVICE" | "WAREHOUSE"): Session => ({
+const session = (
+  role: "OWNER" | "SERVICE" | "WAREHOUSE" | "SALES",
+): Session => ({
   id: "s",
   token: "token",
   expiresAt: "2099-01-01T00:00:00.000Z",
@@ -106,6 +116,7 @@ const detail: WebshopOrderDetail = {
     stripePaymentIntentId: "pi_3QX8fJ",
   },
   invoiceNumber: null,
+  invoice: null,
   steps: [
     {
       key: "confirm",
@@ -151,6 +162,8 @@ beforeEach(() => {
   auth.session = session("OWNER");
   api.detail.mockReset();
   api.changeStatus.mockReset();
+  api.issueInvoice.mockReset();
+  billing.pdf.mockReset();
 });
 
 describe("WebshopOrderDetailPage", () => {
@@ -333,5 +346,110 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       screen.queryByRole("button", { name: "Státusz módosítása" }),
     ).toBeNull();
+  });
+
+  /**
+   * A SZÁMLA (Rendelések, 4. PR). MI PIROSÍT: a gomb nem a rendelés
+   * kiállítását hívja; a kiállított számla száma, PDF-je vagy a Számlázás
+   * linkje nem látszik; a hiba elveszik; visszaigazolás előtt, vagy a
+   * kiállítás joga nélkül (értékesítő) gomb áll; a kiállítás alatti számla
+   * mellé új kiállítás-gomb kerül.
+   */
+  it("issues the invoice, then shows its number, the PDF and the Számlázás link", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.issueInvoice.mockResolvedValue({
+      ...detail,
+      invoiceNumber: "TESZT-2026-1A2B3C4D",
+      invoice: {
+        id: "webshop-order_38",
+        status: "ISSUED",
+        number: "TESZT-2026-1A2B3C4D",
+      },
+    });
+    billing.pdf.mockResolvedValue(new Blob(["%PDF"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(URL, "createObjectURL", {
+      value: vi.fn(() => "blob:pdf"),
+      configurable: true,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).getByText("Még nincs kiállított számla.")).toBeTruthy();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    expect(await within(card).findByText("TESZT-2026-1A2B3C4D")).toBeTruthy();
+    expect(api.issueInvoice).toHaveBeenCalledWith("token", "order_38");
+    expect(
+      within(card)
+        .getByRole("link", { name: "Megnyitás a Számlázásban" })
+        .getAttribute("href"),
+    ).toBe("/penzugy/szamlazas/webshop-order_38");
+    expect(
+      within(card).queryByRole("button", { name: "Számla kiállítása" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "PDF megnyitása" }),
+    );
+    await vi.waitFor(() =>
+      expect(open).toHaveBeenCalledWith("blob:pdf", "_blank"),
+    );
+    expect(billing.pdf).toHaveBeenCalledWith("token", "webshop-order_38");
+    open.mockRestore();
+  });
+
+  it("a refused issue keeps the reason in the card", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.issueInvoice.mockRejectedValue(
+      new Error(
+        "Az OS-partner adatai eltérnek a rendelés számlázási adataitól (cím).",
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    expect((await within(card).findByRole("alert")).textContent).toMatch(
+      /eltérnek/,
+    );
+  });
+
+  it("no button before confirmation, without billing.issue, or while issuing", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      status: { ...detail.status, code: "pending_processing" },
+    });
+    const first = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    let card = await screen.findByRole("region", { name: "Számla" });
+    expect(
+      within(card).getByText("A számla a visszaigazolás után állítható ki."),
+    ).toBeTruthy();
+    expect(within(card).queryByRole("button")).toBeNull();
+    first.unmount();
+
+    auth.session = session("SALES");
+    api.detail.mockResolvedValue(detail);
+    const second = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).queryByRole("button")).toBeNull();
+    second.unmount();
+
+    auth.session = session("OWNER");
+    api.detail.mockResolvedValue({
+      ...detail,
+      invoice: { id: "webshop-order_38", status: "ISSUING", number: null },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).getByText(/ellenőrzésre vár/)).toBeTruthy();
+    expect(within(card).queryByRole("button")).toBeNull();
+    expect(
+      within(card).getByRole("link", { name: "Megnyitás a Számlázásban" }),
+    ).toBeTruthy();
   });
 });

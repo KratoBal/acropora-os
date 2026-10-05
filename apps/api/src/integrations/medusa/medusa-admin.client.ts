@@ -575,6 +575,8 @@ export interface MedusaOrderAddressRow {
   postal_code?: string | null;
   country_code?: string | null;
   phone?: string | null;
+  /** A számlázási címen a cég adószáma: `metadata.tax_id` (commerce `szamlazas.ts`). */
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -607,10 +609,14 @@ export interface MedusaOrderDetailRow {
     unit_price: number;
     total: number;
     metadata: Record<string, unknown> | null;
+    /** Az ÁFA-kulcs a webshop adóterületéből; a számla ebből veszi a kulcsot. */
+    tax_lines?: { rate: number }[] | null;
   }[];
   shipping_methods: {
     name: string;
     data: Record<string, unknown> | null;
+    total?: number | null;
+    tax_lines?: { rate: number }[] | null;
   }[];
   payment_collections: {
     status: string | null;
@@ -1211,8 +1217,11 @@ export const ORDER_DETAIL_FIELDS = [
   "items.unit_price",
   "items.total",
   "items.metadata",
+  "items.tax_lines.rate",
   "shipping_methods.name",
   "shipping_methods.data",
+  "shipping_methods.total",
+  "shipping_methods.tax_lines.rate",
   "payment_collections.status",
   "payment_collections.amount",
   "payment_collections.authorized_amount",
