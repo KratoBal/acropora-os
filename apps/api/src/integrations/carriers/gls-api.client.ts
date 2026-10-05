@@ -47,12 +47,87 @@ export const GLS_API_URL: Record<Exclude<CarrierMode, "stub">, string> = {
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
+/**
+ * A FELADÁSI CÍM (Balázs GLS-beállítása, emlék 2109: 1106 Budapest, Pesti
+ * Gábor utca 35.). Az alak MÉRT: acrobot élő próbacímkéje (3422774543,
+ * 2026-10-05) pontosan ezzel ment át (acrobot 26533). Felülírható a
+ * `GLS_PICKUP_*` környezeti változókkal.
+ */
+export interface GlsPickupAddress {
+  Name: string;
+  Street: string;
+  HouseNumber: string;
+  City: string;
+  ZipCode: string;
+  CountryIsoCode: string;
+  ContactName: string;
+  ContactPhone: string;
+  ContactEmail: string;
+}
+
+export const GLS_DEFAULT_PICKUP: GlsPickupAddress = {
+  Name: "Acropora Kft.",
+  Street: "Pesti Gábor utca",
+  HouseNumber: "35",
+  City: "Budapest",
+  ZipCode: "1106",
+  CountryIsoCode: "HU",
+  ContactName: "Acropora Webshop",
+  ContactPhone: "+36305427184",
+  ContactEmail: "webshop@acropora.hu",
+};
+
+export function glsPickupAddress(
+  environment: NodeJS.ProcessEnv = process.env,
+): GlsPickupAddress {
+  const value = (key: string, fallback: string) =>
+    environment[key]?.trim() || fallback;
+  return {
+    Name: value("GLS_PICKUP_NAME", GLS_DEFAULT_PICKUP.Name),
+    Street: value("GLS_PICKUP_STREET", GLS_DEFAULT_PICKUP.Street),
+    HouseNumber: value(
+      "GLS_PICKUP_HOUSE_NUMBER",
+      GLS_DEFAULT_PICKUP.HouseNumber,
+    ),
+    City: value("GLS_PICKUP_CITY", GLS_DEFAULT_PICKUP.City),
+    ZipCode: value("GLS_PICKUP_ZIP", GLS_DEFAULT_PICKUP.ZipCode),
+    CountryIsoCode: "HU",
+    ContactName: value(
+      "GLS_PICKUP_CONTACT_NAME",
+      GLS_DEFAULT_PICKUP.ContactName,
+    ),
+    ContactPhone: value("GLS_PICKUP_PHONE", GLS_DEFAULT_PICKUP.ContactPhone),
+    ContactEmail: value("GLS_PICKUP_EMAIL", GLS_DEFAULT_PICKUP.ContactEmail),
+  };
+}
+
 export interface GlsApiConfig {
   baseUrl: string;
   username: string;
   password: string;
   clientNumber: number;
+  /** Ha nincs megadva, a `GLS_DEFAULT_PICKUP`. */
+  pickup?: GlsPickupAddress;
 }
+
+/**
+ * Az utca és a házszám külön mezőben (a mért címke így ment). A „Fehérvári út
+ * 24.” alakból a VÉGÉN álló számot választja le; ha nincs ilyen, az egész
+ * utca marad, és a házszám üres.
+ */
+export function splitStreet(address: string): {
+  Street: string;
+  HouseNumber: string;
+} {
+  const trimmed = address.trim();
+  const match = /^(.*\S)\s+(\d+[\w/.-]*)\.?$/u.exec(trimmed);
+  return match
+    ? { Street: match[1]!, HouseNumber: match[2]!.replace(/\.$/, "") }
+    : { Street: trimmed, HouseNumber: "" };
+}
+
+/** WCF JSON dátum a mostani időből. */
+const wcfNow = (now: Date) => `/Date(${now.getTime()})/`;
 
 export function glsApiConfig(
   mode: Exclude<CarrierMode, "stub">,
@@ -68,7 +143,13 @@ export function glsApiConfig(
     clientNumber <= 0
   )
     return null;
-  return { baseUrl: GLS_API_URL[mode], username, password, clientNumber };
+  return {
+    baseUrl: GLS_API_URL[mode],
+    username,
+    password,
+    clientNumber,
+    pickup: glsPickupAddress(environment),
+  };
 }
 
 /** A jelszo SHA512 lenyomata bajt-tombkent (a JSON-ban szamok tombje). */
@@ -190,12 +271,26 @@ export class GlsApiClient implements CarrierClient {
       ContactEmail: input.recipient.email,
       CountryIsoCode: "HU",
     };
+    /*
+      A BALÁZS-BEÁLLÍTÁS (emlék 2109, UNAS-minta): házhoz CSAK FDS (rugalmas
+      egyeztetés e-mailben, a vevő címével); csomagpontra PSD a ponttal (az
+      UNAS-ban azért nem volt PSD, mert ott nem volt GLS-csomagpont; acrobot
+      26519). Az utánvét hivatkozása a számla sorszáma, a címkén a
+      rendelésazonosító (`Content`). A felvételi cím és dátum a mért címke
+      alakja (acrobot 26533).
+    */
     const parcel: Record<string, unknown> = {
       ClientNumber: config.clientNumber,
       ClientReference: input.reference,
       Count: 1,
+      ...(input.labelContent ? { Content: input.labelContent } : {}),
+      PickupDate: wcfNow(new Date()),
+      PickupAddress: config.pickup ?? GLS_DEFAULT_PICKUP,
       ...(input.codHuf
-        ? { CODAmount: Math.round(input.codHuf), CODReference: input.reference }
+        ? {
+            CODAmount: Math.round(input.codHuf),
+            CODReference: input.codReference ?? input.reference,
+          }
         : {}),
       DeliveryAddress:
         input.destination.kind === "home"
@@ -203,7 +298,7 @@ export class GlsApiClient implements CarrierClient {
               ...recipient,
               ZipCode: input.destination.zip,
               City: input.destination.city,
-              Street: input.destination.address,
+              ...splitStreet(input.destination.address),
             }
           : recipient,
       ServiceList:
@@ -214,7 +309,7 @@ export class GlsApiClient implements CarrierClient {
                 PSDParameter: { StringValue: input.destination.pointId },
               },
             ]
-          : [],
+          : [{ Code: "FDS", FDSParameter: { Value: input.recipient.email } }],
     };
     const answer = await this.call<{
       PrintLabelsInfoList?: { ParcelId?: number; ParcelNumber?: number }[];
