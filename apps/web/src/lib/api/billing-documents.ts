@@ -8,6 +8,7 @@ import type {
   IncomingDocumentListResponse,
   MailTemplateVariable,
   ReceiptsResponse,
+  CashRegisterReceiptListResponse,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -53,6 +54,18 @@ async function pdfBlob(response: Response, fallback: string): Promise<Blob> {
 }
 
 export const billingDocumentsApi = {
+  cashRegisterReceipts(
+    token: string,
+    day: string,
+    page: number,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<CashRegisterReceiptListResponse>(
+      `/billing/cash-register-receipts?${new URLSearchParams({ day, page: String(page) })}`,
+      token,
+      { signal },
+    );
+  },
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<BillingDocumentListResponse>(
       `/billing/documents?${query}`,

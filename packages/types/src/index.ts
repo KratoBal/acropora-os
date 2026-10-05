@@ -1093,3 +1093,5 @@ export type {
   MessageTypeValue,
   MessagesUnreadResponse,
 } from "./messages.js";
+
+export type { CashRegisterReceiptListResponse } from "./cash-registers.js";

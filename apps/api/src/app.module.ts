@@ -1,3 +1,4 @@
+import { CashRegisterModule } from "./cash-registers/cash-register.module.js";
 import {
   Module,
   type MiddlewareConsumer,
@@ -103,6 +104,7 @@ import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
     CompletionCertificatesModule,
     MaintenancePackageModule,
     BillingModule,
+    CashRegisterModule,
     MissingInvoicesModule,
     MaintenanceInvoiceModule,
     DashboardModule,
