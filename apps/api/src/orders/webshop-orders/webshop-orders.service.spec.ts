@@ -316,10 +316,11 @@ describe("WebshopOrdersService.changeStatus", () => {
   function statusService(
     options: {
       transitionError?: MedusaAdminHttpError;
+      resendError?: MedusaAdminHttpError;
       noStatus?: boolean;
     } = {},
   ) {
-    const sent: { id: string; status: string }[] = [];
+    const sent: Record<string, unknown>[] = [];
     const audited: unknown[] = [];
     const client = {
       order: async () => ({
@@ -357,9 +358,21 @@ describe("WebshopOrdersService.changeStatus", () => {
               ],
               history: [],
             },
-      transitionBusinessStatus: async (id: string, status: string) => {
+      transitionBusinessStatus: async (
+        id: string,
+        status: string,
+        notify: boolean,
+      ) => {
         if (options.transitionError) throw options.transitionError;
-        sent.push({ id, status });
+        sent.push({ id, status, notify });
+        return notify
+          ? { sent: false, reason: "mail_off" }
+          : { sent: false, reason: "not_requested" };
+      },
+      resendStatusNotification: async (id: string) => {
+        if (options.resendError) throw options.resendError;
+        sent.push({ id, resend: true });
+        return { sent: true };
       },
       countCustomerOrders: async () => 0,
     } as unknown as MedusaAdminClient;
@@ -368,6 +381,8 @@ describe("WebshopOrdersService.changeStatus", () => {
     } as unknown as MedusaCredentialProvider;
     const repository = {
       recordStatusChange: async (input: unknown) => void audited.push(input),
+      recordStatusMailResent: async (input: unknown) =>
+        void audited.push(input),
       invoices: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
@@ -384,13 +399,16 @@ describe("WebshopOrdersService.changeStatus", () => {
 
   it("an allowed step goes to the webshop and the OS records who moved it, from where to where", async () => {
     const { orders, sent, audited } = statusService();
-    const detail = await orders.changeStatus(
+    const result = await orders.changeStatus(
       "order_38",
       "out_for_delivery",
       "user_1",
+      true,
       NOW,
     );
-    assert.deepEqual(sent, [{ id: "order_38", status: "out_for_delivery" }]);
+    assert.deepEqual(sent, [
+      { id: "order_38", status: "out_for_delivery", notify: true },
+    ]);
     assert.deepEqual(audited, [
       {
         userId: "user_1",
@@ -399,13 +417,56 @@ describe("WebshopOrdersService.changeStatus", () => {
         to: "out_for_delivery",
       },
     ]);
-    assert.equal(detail.id, "order_38");
+    assert.equal(result.order.id, "order_38");
+    assert.deepEqual(result.mail, { sent: false, reason: "mail_off" });
+  });
+
+  /**
+   * A STÁTUSZLEVÉL (commerce #479). MI PIROSÍT: a „Vevő értesítése” jelölő
+   * kikapcsolása nem jut el a webshopig; az újraküldés nem kerül auditba,
+   * vagy a webshop hibája 500.
+   */
+  it("an unticked „Vevő értesítése” reaches the webshop as no mail", async () => {
+    const { orders, sent } = statusService();
+    const result = await orders.changeStatus(
+      "order_38",
+      "out_for_delivery",
+      "user_1",
+      false,
+      NOW,
+    );
+    assert.deepEqual(sent, [
+      { id: "order_38", status: "out_for_delivery", notify: false },
+    ]);
+    assert.deepEqual(result.mail, { sent: false, reason: "not_requested" });
+  });
+
+  it("a resend goes to the webshop, and who asked is audited with the outcome", async () => {
+    const { orders, sent, audited } = statusService();
+    const result = await orders.resendStatusMail("order_38", "user_1", NOW);
+    assert.deepEqual(sent, [{ id: "order_38", resend: true }]);
+    assert.deepEqual(audited, [
+      { userId: "user_1", orderId: "order_38", mail: { sent: true } },
+    ]);
+    assert.deepEqual(result.mail, { sent: true });
+
+    const missing = statusService({
+      resendError: new MedusaAdminHttpError(404, "no history"),
+    });
+    await assert.rejects(
+      missing.orders.resendStatusMail("order_38", "user_1", NOW),
+      (error: unknown) => {
+        assert.equal((error as Error).constructor.name, "NotFoundException");
+        return true;
+      },
+    );
+    assert.deepEqual(missing.audited, []);
   });
 
   it("a step the table does not allow is 409 and never reaches the webshop", async () => {
     const { orders, sent, audited } = statusService();
     await assert.rejects(
-      orders.changeStatus("order_38", "closed", "user_1", NOW),
+      orders.changeStatus("order_38", "closed", "user_1", true, NOW),
       (error: unknown) => {
         assert.equal((error as Error).constructor.name, "ConflictException");
         assert.match(
@@ -429,7 +490,7 @@ describe("WebshopOrdersService.changeStatus", () => {
     );
     const { orders, audited } = statusService({ transitionError: refusal });
     await assert.rejects(
-      orders.changeStatus("order_38", "out_for_delivery", "user_1", NOW),
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW),
       (error: unknown) => {
         assert.equal(
           (error as Error).constructor.name,
@@ -450,7 +511,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       transitionError: new MedusaAdminHttpError(502, "bad gateway"),
     });
     await assert.rejects(
-      orders.changeStatus("order_38", "out_for_delivery", "user_1", NOW),
+      orders.changeStatus("order_38", "out_for_delivery", "user_1", true, NOW),
       (error: unknown) => {
         assert.ok(error instanceof ServiceUnavailableException);
         return true;
@@ -461,6 +522,7 @@ describe("WebshopOrdersService.changeStatus", () => {
         "order_38",
         "out_for_delivery",
         "u",
+        true,
         NOW,
       ),
       (error: unknown) => {

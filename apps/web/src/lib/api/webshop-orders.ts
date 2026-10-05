@@ -4,6 +4,7 @@ import type {
   WebshopOrderListResponse,
   WebshopOrderParcelResult,
   WebshopOrderStatus,
+  WebshopOrderStatusChangeResult,
   WebshopParcelSize,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -43,15 +44,31 @@ export const webshopOrdersApi = {
       { signal },
     );
   },
-  /** Státuszváltás a webshopban; a válasz a friss adatlap. */
-  changeStatus(token: string, id: string, status: WebshopOrderStatus) {
-    return apiRequest<WebshopOrderDetail>(
+  /**
+   * Státuszváltás a webshopban, a „Vevő értesítése” jelölővel; a válasz a
+   * friss adatlap és a státuszlevél sorsa.
+   */
+  changeStatus(
+    token: string,
+    id: string,
+    status: WebshopOrderStatus,
+    notifyCustomer = true,
+  ) {
+    return apiRequest<WebshopOrderStatusChangeResult>(
       `/webshop-orders/${encodeURIComponent(id)}/status`,
       token,
       {
         method: "POST",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, notifyCustomer }),
       },
+    );
+  },
+  /** A legutóbbi státuszlevél újraküldése. */
+  resendStatusMail(token: string, id: string) {
+    return apiRequest<WebshopOrderStatusChangeResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/status-mail/resend`,
+      token,
+      { method: "POST" },
     );
   },
   /**

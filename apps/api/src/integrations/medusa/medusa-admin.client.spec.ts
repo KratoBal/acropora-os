@@ -587,8 +587,22 @@ describe("a kérés fejléce és törzse valódi fetch-csel", () => {
     assert.deepEqual(seen, [
       {
         contentType: "application/json",
-        body: JSON.stringify({ status: "confirmed" }),
+        body: JSON.stringify({ status: "confirmed", notify_customer: true }),
       },
+    ]);
+  });
+
+  it("a kikapcsolt értesítés és az újraküldés is a törzzsel érkezik", async () => {
+    const seen = await receiving(async (client) => {
+      await client.transitionBusinessStatus("order_1", "stocking", false);
+      await client.resendStatusNotification("order_1");
+    });
+    assert.deepEqual(seen, [
+      {
+        contentType: "application/json",
+        body: JSON.stringify({ status: "stocking", notify_customer: false }),
+      },
+      { contentType: "application/json", body: "{}" },
     ]);
   });
 

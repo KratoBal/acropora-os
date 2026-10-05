@@ -7,10 +7,12 @@ import {
   WEBSHOP_PARCEL_SIZES,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
+  type WebshopOrderHistoryEntry,
   type WebshopOrderStatus,
   type WebshopOrderStep,
   type WebshopParcelSize,
   type WebshopShippingNoticeOutcome,
+  type WebshopStatusMailOutcome,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -180,14 +182,19 @@ function StatusDialog({
   order: WebshopOrderDetail;
   open: boolean;
   onClose: () => void;
-  onSubmit: (status: WebshopOrderStatus) => Promise<void>;
+  onSubmit: (
+    status: WebshopOrderStatus,
+    notifyCustomer: boolean,
+  ) => Promise<void>;
 }) {
   const [next, setNext] = useState<string>("");
+  const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (open) {
       setNext(order.nextStatuses[0]?.status ?? "");
+      setNotify(true);
       setError(null);
     }
   }, [open, order.nextStatuses]);
@@ -196,7 +203,7 @@ function StatusDialog({
     setBusy(true);
     setError(null);
     try {
-      await onSubmit(next as WebshopOrderStatus);
+      await onSubmit(next as WebshopOrderStatus, notify);
       onClose();
     } catch (cause) {
       setError(
@@ -241,6 +248,14 @@ function StatusDialog({
               </option>
             ))}
           </PilotSelect>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-pilot-grey-700">
+          <input
+            type="checkbox"
+            checked={notify}
+            onChange={(event) => setNotify(event.target.checked)}
+          />
+          Vevő értesítése
         </label>
         {error ? (
           <p
@@ -291,8 +306,25 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
   );
   const token = session?.token ?? "";
-  const changeStatus = async (status: WebshopOrderStatus) => {
-    setOrder(await webshopOrdersApi.changeStatus(token, id, status));
+  const [mailNotice, setMailNotice] = useState<string | null>(null);
+  const changeStatus = async (
+    status: WebshopOrderStatus,
+    notifyCustomer: boolean,
+  ) => {
+    const result = await webshopOrdersApi.changeStatus(
+      token,
+      id,
+      status,
+      notifyCustomer,
+    );
+    setOrder(result.order);
+    setMailNotice(statusMailText(result.mail));
+    setNow(Date.now());
+  };
+  const resendStatusMail = async () => {
+    const result = await webshopOrdersApi.resendStatusMail(token, id);
+    setOrder(result.order);
+    setMailNotice(statusMailText(result.mail));
     setNow(Date.now());
   };
   const issueInvoice = async () => {
@@ -388,6 +420,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canManage={canManage}
           canIssue={canIssue}
           onChangeStatus={changeStatus}
+          mailNotice={mailNotice}
+          onResendStatusMail={resendStatusMail}
           onIssueInvoice={issueInvoice}
           onOpenPdf={openPdf}
           onCreateParcel={createParcel}
@@ -514,6 +548,77 @@ function InvoiceCard({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/** Egy előzmény-sor levelének állapota. */
+const MAIL_STATE: Record<
+  NonNullable<WebshopOrderHistoryEntry["mail"]>["status"],
+  { label: string; className: string }
+> = {
+  sent: { label: "Értesítő elküldve", className: "text-pilot-green-700" },
+  failed: { label: "Értesítő nem ment ki", className: "text-pilot-red-700" },
+  pending: { label: "Értesítő küldés alatt", className: "text-pilot-grey-500" },
+};
+
+/** A státuszlevél sorsa egy mondatban (commerce #479 okai). */
+export function statusMailText(mail: WebshopStatusMailOutcome): string {
+  if (mail.sent) return "A vevő megkapta a státuszlevelet.";
+  switch (mail.reason) {
+    case "not_requested":
+      return "A vevő nem kapott levelet (nem kérted).";
+    case "mail_off":
+      return "A webshop levélküldése ki van kapcsolva, a vevő nem kapott levelet.";
+    case "no_mail_for_status":
+      return "Ehhez az állapothoz nem tartozik levél.";
+    case "no_email":
+      return "A rendelésen nincs e-mail cím, a vevő nem kapott levelet.";
+    case "already_sent":
+      return "Ez a levél már korábban kiment.";
+    case "shipped_mail_sent":
+      return "A „Feladtuk” levél már kiment, ezért státuszlevél nem ment.";
+    case "failed":
+      return "A levél küldése nem sikerült. Az „Értesítő újraküldése” gombbal megismételheted.";
+    default:
+      return `A levél nem ment ki (${mail.reason}).`;
+  }
+}
+
+/** Az „Értesítő újraküldése”: a legutóbbi státusz levelét küldi újra. */
+function ResendStatusMail({ onResend }: { onResend: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="mt-3 space-y-2">
+      <PilotButton
+        size="regular"
+        variant="secondary"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          void onResend()
+            .catch((cause: unknown) =>
+              setError(
+                cause instanceof Error
+                  ? cause.message
+                  : "Az újraküldés nem sikerült.",
+              ),
+            )
+            .finally(() => setBusy(false));
+        }}
+      >
+        Értesítő újraküldése
+      </PilotButton>
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+        >
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -709,6 +814,8 @@ function OrderBody({
   canManage,
   canIssue,
   onChangeStatus,
+  mailNotice,
+  onResendStatusMail,
   onIssueInvoice,
   onOpenPdf,
   onCreateParcel,
@@ -719,7 +826,12 @@ function OrderBody({
   now: number;
   canManage: boolean;
   canIssue: boolean;
-  onChangeStatus: (status: WebshopOrderStatus) => Promise<void>;
+  onChangeStatus: (
+    status: WebshopOrderStatus,
+    notifyCustomer: boolean,
+  ) => Promise<void>;
+  mailNotice: string | null;
+  onResendStatusMail: () => Promise<void>;
   onIssueInvoice: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
   onCreateParcel: (
@@ -1115,12 +1227,22 @@ function OrderBody({
             {order.history.map((entry) => (
               <li
                 key={`${entry.at}-${entry.text}`}
-                className="flex gap-3 text-sm"
+                className="flex flex-wrap gap-3 text-sm"
               >
                 <span className="shrink-0 rounded-md bg-pilot-grey-100 px-2 py-0.5 text-xs text-pilot-grey-600">
                   {TIME.format(new Date(entry.at))}
                 </span>
                 <span className="text-pilot-grey-800">{entry.text}</span>
+                {entry.mail ? (
+                  <span
+                    className={`text-xs ${MAIL_STATE[entry.mail.status].className}`}
+                  >
+                    {MAIL_STATE[entry.mail.status].label}
+                    {entry.mail.resent
+                      ? ` (újraküldve ${entry.mail.resent}×)`
+                      : ""}
+                  </span>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -1129,6 +1251,14 @@ function OrderBody({
             Nincs rögzített előzmény.
           </p>
         )}
+        {mailNotice ? (
+          <p role="status" className="mt-3 text-sm text-pilot-grey-700">
+            {mailNotice}
+          </p>
+        ) : null}
+        {canManage && order.history.length ? (
+          <ResendStatusMail onResend={onResendStatusMail} />
+        ) : null}
       </Card>
     </>
   );

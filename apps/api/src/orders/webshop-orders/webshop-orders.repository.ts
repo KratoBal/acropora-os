@@ -39,6 +39,23 @@ export class WebshopOrdersRepository {
     });
   }
 
+  /** A státuszlevél újraküldése: ki kérte, és mi lett a sorsa. */
+  async recordStatusMailResent(input: {
+    userId: string;
+    orderId: string;
+    mail: { sent: boolean; reason?: string };
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.status-mail-resent",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: input.mail,
+      },
+    });
+  }
+
   /** A bizonytalan csomag-foglalás feloldása: ki engedte újra a létrehozást. */
   async recordParcelReleased(input: {
     userId: string;
