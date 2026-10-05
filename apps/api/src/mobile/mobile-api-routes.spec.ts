@@ -155,7 +155,11 @@ const WEB: ClientSet = {
   root: "../web/src",
   label: "web",
   recursive: true,
-  wrappers: new Set(["lib/api/client.ts", "lib/api/request-auth.ts"]),
+  wrappers: new Set([
+    "lib/api/client.ts",
+    "lib/api/request-auth.ts",
+    "lib/api/upload-with-progress.ts",
+  ]),
   apiPrefix: "/api",
 };
 
@@ -617,6 +621,27 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
       assert.ok(
         calls.some((call) => call.pattern === pattern),
         `a(z) ${pattern} útvonal nem olvasódott ki: a közvetlen fetch csatorna nem mér`,
+      );
+    /*
+      A HARMADIK CSATORNA A WEBEN IS (2026-10-05, acrobot 26286/26290): a leltár
+      és az üzenetek XHR-feltöltése a `lib/api/upload-with-progress.ts`
+      burkolón megy. Kliensenként kell nevesíteni, mert az üzenet-útvonal
+      mindkét oldalon áll, és a telefoné egymagában zöldre festené ezt a sort.
+
+      AMI SZÁNDÉKOSAN KIMARADT: a UNAS katalógus-import (`imports.ts`,
+      `/imports/unas/catalog/dry-run`) XHR-je változatlan, tehát ez az őrző
+      nem látja. A UNAS befagyasztott terület (Balázs, 2026-09-22), egy
+      mechanikus átírás is érintené.
+    */
+    for (const pattern of [
+      "inventory/counts/:param/upload",
+      "messages/conversations/:param/attachments",
+    ])
+      assert.ok(
+        calls.some(
+          (call) => call.file.startsWith("web/") && call.pattern === pattern,
+        ),
+        `a webes ${pattern} feltöltés nem olvasódott ki: a feltöltő csatorna a weben nem mér`,
       );
   });
 

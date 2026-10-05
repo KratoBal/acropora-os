@@ -9,6 +9,7 @@ import type {
 
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
+import { uploadWithProgress } from "./upload-with-progress";
 
 export interface InventoryCountListQuery {
   page?: number;
@@ -29,45 +30,17 @@ function uploadCounts(
   id: string,
   file: File,
 ): Promise<InventoryCountUploadResult> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open(
-      "POST",
-      `${API_PREFIX}/inventory/counts/${encodeURIComponent(id)}/upload`,
-    );
-    request.setRequestHeader("Accept", "application/json");
-    for (const [name, value] of Object.entries(apiAuthHeaders(token, "POST"))) {
-      request.setRequestHeader(name, value);
-    }
-    request.addEventListener("error", () =>
-      reject(
-        new ApiError("A szerver nem érhető el. Ellenőrizd a kapcsolatot.", 0),
-      ),
-    );
-    request.addEventListener("load", () => {
-      let payload: unknown;
-      try {
-        payload = JSON.parse(request.responseText) as unknown;
-      } catch {
-        payload = null;
-      }
-      if (request.status >= 200 && request.status < 300) {
-        resolve(payload as InventoryCountUploadResult);
-        return;
-      }
-      const message =
-        payload &&
-        typeof payload === "object" &&
-        "message" in payload &&
-        typeof payload.message === "string"
-          ? payload.message
-          : "Az XLSX feldolgozása nem sikerült.";
-      reject(new ApiError(message, request.status));
-    });
-    const form = new FormData();
-    form.append("file", file);
-    request.send(form);
-  });
+  const form = new FormData();
+  form.append("file", file);
+  return uploadWithProgress<InventoryCountUploadResult>(
+    `${API_PREFIX}/inventory/counts/${encodeURIComponent(id)}/upload`,
+    token,
+    form,
+    {
+      networkError: "A szerver nem érhető el. Ellenőrizd a kapcsolatot.",
+      failure: "Az XLSX feldolgozása nem sikerült.",
+    },
+  );
 }
 
 async function downloadTemplate(
