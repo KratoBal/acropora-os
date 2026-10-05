@@ -18,6 +18,7 @@ const KNOWN = new Set([
   "message.created",
   "conversation.created",
   "conversation.read",
+  "message.updated",
 ]);
 
 export function parseSseChunk(buffer: string): {

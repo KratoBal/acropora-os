@@ -4,6 +4,7 @@
  */
 import {
   documentImageSource,
+  type DocumentCollection,
   type DocumentImageVariant,
 } from "./document-view";
 
@@ -98,6 +99,7 @@ export async function kepLetoltese(
   input: {
     apiUrl: string | null;
     ownerPath: string | null;
+    collection?: DocumentCollection;
     documentId: string;
     variant: DocumentImageVariant;
   },
@@ -122,6 +124,7 @@ export async function kepLetoltese(
     apiUrl: input.apiUrl,
     token,
     ownerPath: input.ownerPath,
+    collection: input.collection,
     documentId: input.documentId,
     variant: input.variant,
   });

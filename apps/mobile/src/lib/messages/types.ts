@@ -20,6 +20,38 @@ export interface ConversationPerson {
   isActive: boolean;
 }
 
+/** A négy reakció (acrobot döntése, 26242); a szerver ezen kívül mást nem fogad el. */
+export const MESSAGE_REACTIONS = ["👍", "❤️", "✅", "👀"] as const;
+export type MessageReactionValue = (typeof MESSAGE_REACTIONS)[number];
+
+/** Egy üzenethez legfeljebb ennyi csatolmány köthető. */
+export const MESSAGE_ATTACHMENTS_MAX = 10;
+
+export type MessageAttachmentKindValue = "IMAGE" | "FILE";
+
+export interface MessageAttachmentItem {
+  id: string;
+  kind: MessageAttachmentKindValue;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  hasThumbnail: boolean;
+}
+
+export interface MessageReactionSummary {
+  reaction: MessageReactionValue;
+  count: number;
+  mine: boolean;
+}
+
+export interface MessageReplyPreview {
+  id: string;
+  senderName: string;
+  text: string | null;
+  deleted: boolean;
+  attachmentKind: MessageAttachmentKindValue | null;
+}
+
 export interface MessageItem {
   id: string;
   conversationId: string;
@@ -31,6 +63,9 @@ export interface MessageItem {
   createdAt: string;
   editedAt: string | null;
   replyToMessageId: string | null;
+  replyTo: MessageReplyPreview | null;
+  attachments: MessageAttachmentItem[];
+  reactions: MessageReactionSummary[];
   clientMessageId: string | null;
 }
 
@@ -72,4 +107,5 @@ export interface MessagePeopleResponse {
 export type MessageStreamEvent =
   | { type: "message.created"; conversationId: string; messageId: string }
   | { type: "conversation.created"; conversationId: string }
-  | { type: "conversation.read"; conversationId: string };
+  | { type: "conversation.read"; conversationId: string }
+  | { type: "message.updated"; conversationId: string; messageId: string };

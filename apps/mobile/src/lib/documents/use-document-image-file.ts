@@ -4,7 +4,7 @@ import { environment } from "@/config/env";
 
 import { kepLetoltese, type KepLetoltesEredmeny } from "./document-image-file";
 import { kepFajlFuggosegek } from "./kep-fajl-deps";
-import type { DocumentImageVariant } from "./document-view";
+import type { DocumentCollection, DocumentImageVariant } from "./document-view";
 
 /**
  * A HITELESÍTETT KÉP LEHÍVÁSA -- a futásidőhöz kötött fele.
@@ -26,6 +26,7 @@ import type { DocumentImageVariant } from "./document-view";
  */
 export function useDocumentImageFile(input: {
   ownerPath: string | null;
+  collection?: DocumentCollection;
   documentId: string;
   variant: DocumentImageVariant;
   /** `false`, amíg a képre nincs szükség (be nem nyitott nagy nézet). */
@@ -37,6 +38,7 @@ export function useDocumentImageFile(input: {
     queryKey: [
       "document-image-file",
       input.ownerPath,
+      input.collection ?? "documents",
       input.documentId,
       input.variant,
     ],
@@ -51,6 +53,7 @@ export function useDocumentImageFile(input: {
         {
           apiUrl,
           ownerPath: input.ownerPath,
+          collection: input.collection,
           documentId: input.documentId,
           variant: input.variant,
         },
