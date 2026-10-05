@@ -203,13 +203,24 @@ const detailOf = (item: ConversationListItem, context: unknown) => ({
   notification: { notify: "ALL", mutedUntil: null },
   context,
 });
+/*
+  A LASSÚ CI-FUTÁS NEM IDŐZÍTÉSEN BUKIK (acrobot 26521: egy futás piros, egy
+  zöld, 1130 ms): a fiók csak akkor nyílik, amikor a beszélgetés már betöltött,
+  és minden várakozás a MEGJELENÉSRE vár, bő felső határral. Rögzített
+  késleltetés nincs.
+*/
+const SLOW = { timeout: 5000 };
+const DETAILS = { name: "Beszélgetés adatai" };
+
 const openDetails = async () => {
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Beszélgetés adatai" }),
+  // a beszélgetés betöltött: a „Betöltés…” eltűnt a folyamból
+  const list = await screen.findByTestId("message-list", {}, SLOW);
+  await waitFor(
+    () => expect(within(list).queryByText("Betöltés…")).toBeNull(),
+    SLOW,
   );
-  return within(
-    await screen.findByRole("complementary", { name: "Beszélgetés adatai" }),
-  );
+  fireEvent.click(await screen.findByRole("button", DETAILS, SLOW));
+  return within(await screen.findByRole("complementary", DETAILS, SLOW));
 };
 
 describe("the linked worksheet", () => {
@@ -332,11 +343,21 @@ describe("members and leaving", () => {
     );
     expect(api.leave).not.toHaveBeenCalled();
     const confirm = within(
-      await screen.findByRole("dialog", { name: "Kilépsz a beszélgetésből?" }),
+      await screen.findByRole(
+        "dialog",
+        { name: "Kilépsz a beszélgetésből?" },
+        SLOW,
+      ),
     );
     fireEvent.click(confirm.getByRole("button", { name: "Kilépés" }));
-    await waitFor(() => expect(api.leave).toHaveBeenCalledWith("t1", "c1"));
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith("/uzenetek"));
+    await waitFor(
+      () => expect(api.leave).toHaveBeenCalledWith("t1", "c1"),
+      SLOW,
+    );
+    await waitFor(
+      () => expect(nav.replace).toHaveBeenCalledWith("/uzenetek"),
+      SLOW,
+    );
   });
 });
 
