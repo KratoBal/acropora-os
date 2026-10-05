@@ -64,6 +64,27 @@ export class WebshopOrdersRepository {
     });
   }
 
+  /** A lejáró zárolás gombjai: ki nyomta meg, melyiket, és mi lett a levéllel. */
+  async recordPaymentAction(input: {
+    userId: string;
+    orderId: string;
+    action: "release-hold" | "payment-link";
+    mail: { sent: boolean; reason?: string };
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action:
+          input.action === "release-hold"
+            ? "webshop-order.hold-released"
+            : "webshop-order.payment-link-sent",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: input.mail,
+      },
+    });
+  }
+
   /** A státuszlevél újraküldése: ki kérte, és mi lett a sorsa. */
   async recordStatusMailResent(input: {
     userId: string;
