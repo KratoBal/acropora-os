@@ -9,6 +9,7 @@ import type { CapasuliGmailClient } from "./capasuli-gmail.client.js";
 import type { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import type { NotificationsService } from "../notifications/notifications.service.js";
 import type { AuthenticatedUser } from "@acropora/types";
+import { CapasuliItemJevService } from "./capasuli-item-jev.service.js";
 const admin: AuthenticatedUser = {
   id: "admin",
   email: "admin@example.test",
@@ -55,6 +56,7 @@ describe("Draft review service authorization and notifications", () => {
       {} as CapasuliGmailClient,
       jobs,
       {} as NotificationsService,
+      new CapasuliItemJevService({}),
     );
     await s.decide("draft", admin, "accept", "dep");
     created = false;
@@ -72,6 +74,7 @@ describe("Draft review service authorization and notifications", () => {
       {} as CapasuliGmailClient,
       {} as ServiceJobsService,
       {} as NotificationsService,
+      new CapasuliItemJevService({}),
     );
     await assert.rejects(() =>
       s.decide("draft", { ...admin, role: "MANAGER" }, "accept", "dep"),
@@ -134,6 +137,7 @@ it("sends one review notification per new mail, not per item or rerun", async ()
       gmail as CapasuliGmailClient,
       {} as ServiceJobsService,
       notification as unknown as NotificationsService,
+      new CapasuliItemJevService({}),
     );
     assert.deepEqual(await s.sync(), { added: 2, processed: 1 });
     assert.deepEqual(await s.sync(), { added: 0, processed: 0 });

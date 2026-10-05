@@ -6,6 +6,7 @@ import { ServiceDraftsService } from "./service-drafts.service.js";
 import { ServiceDraftsController } from "./service-drafts.controller.js";
 import { CapasuliGmailClient } from "./capasuli-gmail.client.js";
 import { CapasuliGmailSyncScheduler } from "./capasuli-gmail-sync.scheduler.js";
+import { CapasuliItemJevService } from "./capasuli-item-jev.service.js";
 @Module({
   imports: [ServiceJobsModule, NotificationsModule],
   controllers: [ServiceDraftsController],
@@ -14,6 +15,7 @@ import { CapasuliGmailSyncScheduler } from "./capasuli-gmail-sync.scheduler.js";
     ServiceDraftsService,
     CapasuliGmailClient,
     CapasuliGmailSyncScheduler,
+    CapasuliItemJevService,
   ],
 })
 export class ServiceDraftsModule {}
