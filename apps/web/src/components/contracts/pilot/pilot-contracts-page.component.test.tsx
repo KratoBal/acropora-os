@@ -220,3 +220,69 @@ describe("PilotContractsPage -- új szerződés, duplikált szerződésszám (40
     expect(screen.queryByText("Műveleti hiba")).toBeNull();
   });
 });
+
+/*
+  A FELVETT TÉTEL TÖRÖLHETŐ (kártya c014db6f, Ág Luca bejelentése,
+  2026-10-05: "a felvett tételt nem lehet törölni, csak hozzáadni"). MI
+  PIROSÍT: ha nincs soronkénti törlés; ha a törlés rossz sort visz el; ha a
+  felületi sorkulcs a szerverre is elmegy; ha az utolsó sor is törölhető.
+*/
+describe("PilotContractsPage -- új szerződés, tétel törlése", () => {
+  beforeEach(() => {
+    auth.session = session();
+    api.list.mockReset().mockResolvedValue([]);
+    api.customers
+      .mockReset()
+      .mockResolvedValue([
+        { id: "customer-1", displayName: "Fővárosi Állatkert" },
+      ]);
+    api.create.mockReset().mockResolvedValue({ id: "contract-1" });
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("a középső sor törlése után a másik kettő megy a mentéskor, sorkulcs nélkül", async () => {
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fireEvent.click(screen.getByText("Új szerződés"));
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "customer-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
+      target: { value: "SZ2026/0000020" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződés címe *"), {
+      target: { value: "Éves karbantartás" },
+    });
+    fireEvent.change(screen.getByLabelText("Érvényesség kezdete *"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.click(screen.getByText("Tétel hozzáadása"));
+    fireEvent.click(screen.getByText("Tétel hozzáadása"));
+    const leirasok = screen.getAllByLabelText("Tétel leírása");
+    const arak = screen.getAllByLabelText("Nettó egységár");
+    ["Első", "Második", "Harmadik"].forEach((szoveg, i) => {
+      fireEvent.change(leirasok[i]!, { target: { value: szoveg } });
+      fireEvent.change(arak[i]!, { target: { value: String((i + 1) * 1000) } });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "2. tétel törlése" }));
+    expect(screen.getAllByLabelText("Tétel leírása")).toHaveLength(2);
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+
+    await waitFor(() => expect(api.create).toHaveBeenCalled());
+    const items = api.create.mock.calls[0]![1].items as Record<
+      string,
+      unknown
+    >[];
+    expect(items.map((item) => item.description)).toEqual(["Első", "Harmadik"]);
+    expect(items.some((item) => "rowKey" in item)).toBe(false);
+  });
+
+  it("egyetlen sornál nincs törlés", async () => {
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fireEvent.click(screen.getByText("Új szerződés"));
+    expect(screen.queryByRole("button", { name: /tétel törlése/ })).toBeNull();
+  });
+});
