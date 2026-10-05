@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
   StreamableFile,
 } from "@nestjs/common";
@@ -22,6 +23,7 @@ import {
 import { WebshopOrderParcelCreateDto } from "./dto/webshop-order-parcel-create.dto.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderNotifyDto } from "./dto/webshop-order-notify.dto.js";
+import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
@@ -89,6 +91,23 @@ export class WebshopOrdersController {
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   list(@Query() query: WebshopOrderListQueryDto) {
     return this.orders.list(query);
+  }
+
+  /** Az elavulási küszöbök státuszonként (Beállítások; a lista is ezekkel jelez). */
+  @Get("settings/stale-thresholds")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  staleThresholds() {
+    return this.orders.staleThresholds();
+  }
+
+  /** A küszöbök mentése; ugyanaz a jog, ami a rendelést kezeli. */
+  @Put("settings/stale-thresholds")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  saveStaleThresholds(
+    @Body() body: WebshopStaleThresholdsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.orders.saveStaleThresholds(body.thresholds, user.id);
   }
 
   @Get(":id")

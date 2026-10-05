@@ -1130,6 +1130,9 @@ export {
   WEBSHOP_PARCEL_SIZES,
   WEBSHOP_CARD_PAYMENT_STATES,
   WEBSHOP_CARD_PAYMENT_STATE_LABELS,
+  WEBSHOP_STALE_STATUSES,
+  WEBSHOP_STALE_THRESHOLD_DEFAULTS,
+  staleHoursOf,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1153,6 +1156,9 @@ export type {
   WebshopCardPaymentState,
   WebshopHoldWarning,
   WebshopOrderCardPayment,
+  WebshopStaleStatus,
+  WebshopStaleThreshold,
+  WebshopStaleUnit,
   WebshopVariantOption,
   WebshopOrderStatusChangeResult,
   WebshopStatusMailOutcome,
