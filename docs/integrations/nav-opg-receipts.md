@@ -4,7 +4,7 @@ A pénztárgépes forrás a Számlázás → Nyugták nézetben, `billing.view` 
 
 ## Üzembe helyezés
 
-1. Alkalmazd a `20261005110000_cash_register_receipts` migrációt a szokásos kiadási folyamatban.
+1. Alkalmazd a `20261005140000_cash_register_receipts` migrációt a szokásos kiadási folyamatban.
 2. A már tárolt `NavConnectionSetting` / `NavCredentialsService` technikai felhasználó szükséges, OPG naplólekérdezési jogosultsággal. Nincs új hitelesítési kulcs vagy AP-szám konfiguráció: a státuszlekérdezés felsorolja az elérhető pénztárgépeket.
 3. Először száraz visszatöltési terv: `pnpm --filter @acropora/api nav:opg-backfill`. Csak státuszt kérdez és adatbázist olvas; kiírja az összes aktuálisan elérhető, még nem tárolt fájlsorszámot.
 4. Jóváhagyott környezetben a `pnpm --filter @acropora/api nav:opg-backfill -- --apply` menti az összes elérhető, még hiányzó fájlt. A NAV felé mindkét mód kizárólag lekérdezést küld.
