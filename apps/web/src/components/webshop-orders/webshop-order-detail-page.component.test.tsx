@@ -12,7 +12,7 @@ import { WebshopOrderDetailPage } from "./webshop-order-detail-page";
   rendelés nem nyitható; egy még be nem kötött művelet gombként áll
   (Státusz módosítása, ceruza); hibánál nincs „Újra”; jog nélkül betölt.
 */
-const api = vi.hoisted(() => ({ detail: vi.fn() }));
+const api = vi.hoisted(() => ({ detail: vi.fn(), changeStatus: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
@@ -27,7 +27,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const session = (role: "OWNER" | "SERVICE"): Session => ({
+const session = (role: "OWNER" | "SERVICE" | "WAREHOUSE"): Session => ({
   id: "s",
   token: "token",
   expiresAt: "2099-01-01T00:00:00.000Z",
@@ -150,6 +150,7 @@ const detail: WebshopOrderDetail = {
 beforeEach(() => {
   auth.session = session("OWNER");
   api.detail.mockReset();
+  api.changeStatus.mockReset();
 });
 
 describe("WebshopOrderDetailPage", () => {
@@ -205,7 +206,7 @@ describe("WebshopOrderDetailPage", () => {
     expect(writeText).toHaveBeenCalledWith("pi_3QX8fJ");
     expect(
       screen.queryByRole("button", {
-        name: /Státusz módosítása|Csomagfeladás|Visszatérítés|Műveletek/,
+        name: /Csomagfeladás|Visszatérítés|Műveletek/,
       }),
     ).toBeNull();
   });
@@ -232,5 +233,105 @@ describe("WebshopOrderDetailPage", () => {
       await screen.findByText("Nincs hozzáférésed a rendelésekhez"),
     ).toBeTruthy();
     expect(api.detail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * STÁTUSZ MÓDOSÍTÁSA (a prompt 9. pontja). MI PIROSÍT: a lista nem csak a
+   * megengedett célokat kínálja; a kérés nem a választott céllal megy; a
+   * webshop elutasítása (például a levonás hibája) bezárja a párbeszédet, és
+   * a kezelő nem látja az okát; végállapotnál vagy kezelési jog nélkül gomb áll.
+   */
+  it("offers only the allowed next statuses and sends the chosen one", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.changeStatus.mockResolvedValue({
+      ...detail,
+      status: {
+        ...detail.status,
+        code: "stocking",
+        label: "Készletezés alatt",
+      },
+      nextStatuses: [],
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Státusz módosítása" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Státusz módosítása" });
+    expect(within(dialog).getByText("Visszaigazolva")).toBeTruthy();
+    const select = within(dialog).getByRole("combobox", {
+      name: "Következő státusz",
+    });
+    expect(
+      Array.from(select.querySelectorAll("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Készletezés alatt"]);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+    );
+    expect(
+      await screen.findByText("Készletezés alatt", {
+        selector: "span.rounded-full",
+      }),
+    ).toBeTruthy();
+    expect(api.changeStatus).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      "stocking",
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a refusal stays in the dialog with the webshop's reason", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.changeStatus.mockRejectedValue(
+      new Error(
+        "A státusz nem változott. A webshop válasza: The shared card payment cannot be captured for 21950 (authorized 17000)",
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Státusz módosítása" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Státusz módosítása" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+    );
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(
+      /cannot be captured/,
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Státusz módosítása" }),
+    ).toBeTruthy();
+  });
+
+  it("a final status shows Végállapot, not a button; without orders.manage there is no button", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      status: {
+        ...detail.status,
+        code: "closed",
+        label: "Megrendelés lezárva",
+      },
+      nextStatuses: [],
+    });
+    const { unmount } = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    expect(
+      await screen.findByText("Végállapot", { selector: "header > span" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Státusz módosítása" }),
+    ).toBeNull();
+    unmount();
+
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(await screen.findByRole("heading", { name: "#38" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Státusz módosítása" }),
+    ).toBeNull();
   });
 });

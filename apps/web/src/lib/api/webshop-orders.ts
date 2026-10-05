@@ -2,6 +2,7 @@ import type {
   WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
+  WebshopOrderStatus,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
@@ -36,6 +37,17 @@ export const webshopOrdersApi = {
       `/webshop-orders?${query.toString()}`,
       token,
       { signal },
+    );
+  },
+  /** Státuszváltás a webshopban; a válasz a friss adatlap. */
+  changeStatus(token: string, id: string, status: WebshopOrderStatus) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/status`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      },
     );
   },
   detail(token: string, id: string, signal?: AbortSignal) {

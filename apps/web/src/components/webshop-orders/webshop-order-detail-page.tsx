@@ -6,12 +6,18 @@ import {
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
+  type WebshopOrderStatus,
   type WebshopOrderStep,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
+import {
+  PilotButton,
+  PilotDialog,
+  PilotSelect,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
 import {
@@ -147,6 +153,121 @@ function Address({ address }: { address: WebshopOrderAddress | null }) {
   );
 }
 
+/** A két végállapot: nincs „Státusz módosítása”, csak a végállapot szövege (a prompt 9. pontja). */
+const TERMINAL: readonly WebshopOrderStatus[] = [
+  "closed",
+  "closed_unsuccessfully",
+];
+
+/**
+ * STÁTUSZ MÓDOSÍTÁSA (a prompt 9. pontja): csak a webshop átmenet-táblája
+ * szerinti következő státuszok. A hiba (például a Kiszállításkori levonás
+ * elutasítása) a párbeszédben marad, a kezelő a konkrét okot látja.
+ *
+ * A „Vevő értesítése” jelölő a webshop statuszlevele (C4, murena) után kerül
+ * ide: addig nem lenne mit kapcsolnia.
+ */
+function StatusDialog({
+  order,
+  open,
+  onClose,
+  onSubmit,
+}: {
+  order: WebshopOrderDetail;
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (status: WebshopOrderStatus) => Promise<void>;
+}) {
+  const [next, setNext] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (open) {
+      setNext(order.nextStatuses[0]?.status ?? "");
+      setError(null);
+    }
+  }, [open, order.nextStatuses]);
+  const submit = async () => {
+    if (!next) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onSubmit(next as WebshopOrderStatus);
+      onClose();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A státusz nem változott.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <PilotDialog open={open} onClose={busy ? () => undefined : onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="status-dialog-title"
+        className="space-y-4 p-5"
+      >
+        <h2
+          id="status-dialog-title"
+          className="text-base font-semibold text-pilot-grey-900"
+        >
+          Státusz módosítása
+        </h2>
+        <p className="text-sm text-pilot-grey-600">
+          Jelenlegi státusz:{" "}
+          <span className="font-medium text-pilot-grey-900">
+            {order.status.label ?? "—"}
+          </span>
+        </p>
+        <label className="block text-xs text-pilot-grey-500">
+          Következő státusz
+          <PilotSelect
+            chevron
+            aria-label="Következő státusz"
+            value={next}
+            onChange={setNext}
+            className="mt-1 [&_select]:h-10"
+          >
+            {order.nextStatuses.map((option) => (
+              <option key={option.status} value={option.status}>
+                {option.label}
+              </option>
+            ))}
+          </PilotSelect>
+        </label>
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+          >
+            {error}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <PilotButton
+            size="regular"
+            variant="secondary"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Mégse
+          </PilotButton>
+          <PilotButton
+            size="regular"
+            onClick={() => void submit()}
+            disabled={busy || !next}
+          >
+            {busy ? "Folyamatban…" : "Státusz módosítása"}
+          </PilotButton>
+        </div>
+      </div>
+    </PilotDialog>
+  );
+}
+
 export function WebshopOrderDetailPage({ id }: { id: string }) {
   const { session } = useAuth();
   const [order, setOrder] = useState<WebshopOrderDetail | null>(null);
@@ -156,7 +277,14 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_VIEW),
   );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE),
+  );
   const token = session?.token ?? "";
+  const changeStatus = async (status: WebshopOrderStatus) => {
+    setOrder(await webshopOrdersApi.changeStatus(token, id, status));
+    setNow(Date.now());
+  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -221,54 +349,98 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           <Skeleton className="h-64" />
         </div>
       ) : null}
-      {order && !error ? <OrderBody order={order} now={now} /> : null}
+      {order && !error ? (
+        <OrderBody
+          order={order}
+          now={now}
+          canManage={canManage}
+          onChangeStatus={changeStatus}
+        />
+      ) : null}
     </PilotThemeRoot>
   );
 }
 
-function OrderBody({ order, now }: { order: WebshopOrderDetail; now: number }) {
+function OrderBody({
+  order,
+  now,
+  canManage,
+  onChangeStatus,
+}: {
+  order: WebshopOrderDetail;
+  now: number;
+  canManage: boolean;
+  onChangeStatus: (status: WebshopOrderStatus) => Promise<void>;
+}) {
+  const [statusOpen, setStatusOpen] = useState(false);
+  const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
   const tile = order.status.code ? STATUS_TILE[order.status.code] : null;
   const money = (value: number) => formatMoney(value, order.currency);
   const payment = order.payment;
   return (
     <>
-      <header className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
-            {orderNumber(order.displayId)}
-          </h1>
-          <CopyButton
-            value={String(order.displayId)}
-            label="Rendelésszám másolása"
-          />
-          {order.status.label ? (
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${tile?.className ?? ""}`}
-            >
-              {order.status.label}
-            </span>
-          ) : (
-            <span className="text-xs text-pilot-grey-500">Nincs státusz</span>
-          )}
-        </div>
-        <p className="text-sm text-pilot-grey-600">
-          Leadva: {LONG_DATE.format(new Date(order.createdAt))}
-          {order.status.changedAt ? (
-            <>
-              {" · "}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
+              {orderNumber(order.displayId)}
+            </h1>
+            <CopyButton
+              value={String(order.displayId)}
+              label="Rendelésszám másolása"
+            />
+            {order.status.label ? (
               <span
-                className={
-                  order.status.stale ? "font-medium text-pilot-amber-700" : ""
-                }
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${tile?.className ?? ""}`}
               >
-                ebben a státuszban:{" "}
-                {formatStatusAge(order.status.changedAt, now)}
-                {order.status.stale ? " (elavult)" : ""}
+                {order.status.label}
               </span>
-            </>
-          ) : null}
-        </p>
+            ) : (
+              <span className="text-xs text-pilot-grey-500">Nincs státusz</span>
+            )}
+          </div>
+          <p className="text-sm text-pilot-grey-600">
+            Leadva: {LONG_DATE.format(new Date(order.createdAt))}
+            {order.status.changedAt ? (
+              <>
+                {" · "}
+                <span
+                  className={
+                    order.status.stale ? "font-medium text-pilot-amber-700" : ""
+                  }
+                >
+                  ebben a státuszban:{" "}
+                  {formatStatusAge(order.status.changedAt, now)}
+                  {order.status.stale ? " (elavult)" : ""}
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        {terminal ? (
+          <span className="text-sm font-medium text-pilot-grey-600">
+            Végállapot
+          </span>
+        ) : canManage && order.nextStatuses.length ? (
+          <PilotButton
+            size="regular"
+            variant="secondary"
+            onClick={() => setStatusOpen(true)}
+          >
+            Státusz módosítása
+          </PilotButton>
+        ) : null}
       </header>
+      {/* csak nyitva van a DOM-ban: a PilotDialog zárva is renderel, és egy
+          láthatatlan párbeszéd a képernyőolvasónak ott maradna */}
+      {canManage && !terminal && statusOpen ? (
+        <StatusDialog
+          order={order}
+          open={statusOpen}
+          onClose={() => setStatusOpen(false)}
+          onSubmit={onChangeStatus}
+        />
+      ) : null}
 
       <Card title="Feldolgozás">
         <ol
