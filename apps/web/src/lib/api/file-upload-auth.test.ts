@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { importApi } from "./imports";
 import { inventoryApi } from "./inventory";
+import { uploadMessageAttachment } from "./messages";
 
 const originalXmlHttpRequest = globalThis.XMLHttpRequest;
 
@@ -130,5 +131,34 @@ describe("file upload authentication", () => {
     });
     expect(request?.headers).not.toHaveProperty("X-CSRF-Token");
     await expect(upload).resolves.toEqual({});
+  });
+  it("a message attachment upload carries the CSRF cookie, and an unreadable success is an error", async () => {
+    document.cookie = "acropora_csrf=messages-csrf";
+    const progress = vi.fn();
+
+    const ok = uploadMessageAttachment(
+      "",
+      "c1",
+      new File(["jpg"], "kep.jpg", { type: "image/jpeg" }),
+      progress,
+    );
+    const first = FakeXmlHttpRequest.instances[0];
+    first!.responseText = '{"id":"att-1"}';
+    expect(first?.open).toHaveBeenCalledWith(
+      "POST",
+      "/api/messages/conversations/c1/attachments",
+    );
+    expect(first?.headers).toMatchObject({ "X-CSRF-Token": "messages-csrf" });
+    await expect(ok).resolves.toEqual({ id: "att-1" });
+    expect(progress).toHaveBeenLastCalledWith(100);
+
+    const empty = uploadMessageAttachment(
+      "",
+      "c1",
+      new File(["jpg"], "kep.jpg", { type: "image/jpeg" }),
+      progress,
+    );
+    FakeXmlHttpRequest.instances[1]!.responseText = "";
+    await expect(empty).rejects.toThrow("A szerver válasza nem olvasható.");
   });
 });

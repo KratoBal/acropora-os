@@ -2,7 +2,7 @@
 
 import type { ConversationListItem, ConversationPerson } from "@acropora/types";
 
-import { conversationTimeLabel } from "./outbox";
+import { conversationTimeLabel, previewText } from "./outbox";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
 export function conversationName(
@@ -47,7 +47,7 @@ export function lastMessagePreview(item: ConversationListItem): string {
   const last = item.lastMessage;
   if (!last) return "Még nincs üzenet";
   if (last.deleted) return "Az üzenetet törölték.";
-  const text = last.text ?? "";
+  const text = previewText(last);
   return item.type === "GROUP" ? `${last.senderName}: ${text}` : text;
 }
 

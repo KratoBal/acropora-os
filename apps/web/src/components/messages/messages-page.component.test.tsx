@@ -153,10 +153,18 @@ describe("MessagesPage", () => {
     nav.query = "c=c1";
     let answer: (m: MessageItem) => void = () => {};
     api.send.mockImplementation(
-      (_t: string, _c: string, text: string, clientMessageId: string) =>
+      (
+        _t: string,
+        _c: string,
+        input: { text?: string; clientMessageId: string },
+      ) =>
         new Promise<MessageItem>((resolve) => {
           answer = () =>
-            resolve(message("m2", "me", text, { clientMessageId }));
+            resolve(
+              message("m2", "me", input.text ?? "", {
+                clientMessageId: input.clientMessageId,
+              }),
+            );
         }),
     );
     render(<MessagesPage />);
@@ -186,15 +194,21 @@ describe("MessagesPage", () => {
     fireEvent.change(box, { target: { value: "Hálózat nélkül" } });
     fireEvent.keyDown(box, { key: "Enter" });
     expect(await screen.findByText("Nem sikerült elküldeni.")).toBeTruthy();
-    const firstId = api.send.mock.calls[0]![3];
+    const firstId = api.send.mock.calls[0]![2].clientMessageId;
 
     api.send.mockImplementationOnce(
-      async (_t: string, _c: string, text: string, clientMessageId: string) =>
-        message("m3", "me", text, { clientMessageId }),
+      async (
+        _t: string,
+        _c: string,
+        input: { text?: string; clientMessageId: string },
+      ) =>
+        message("m3", "me", input.text ?? "", {
+          clientMessageId: input.clientMessageId,
+        }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Újra" }));
     await waitFor(() => expect(api.send).toHaveBeenCalledTimes(2));
-    expect(api.send.mock.calls[1]![3]).toBe(firstId);
+    expect(api.send.mock.calls[1]![2].clientMessageId).toBe(firstId);
     await waitFor(() =>
       expect(screen.queryByText("Nem sikerült elküldeni.")).toBeNull(),
     );
