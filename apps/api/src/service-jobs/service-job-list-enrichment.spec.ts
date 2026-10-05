@@ -129,12 +129,12 @@ describe("a hibajegy-lista delegáltak és helyszín-kód mezői", () => {
 });
 
 /*
-  A PARTNER NEM KAPJA MEG A BELSO FELELOSOKET (kartya a0660885, 2026-10-05).
-  A 10-04-i szerviz-felmeres: a lista partnernek is kiadta a delegaltak nevet,
-  mig a reszletlap partner alakja nem. MI PIROSIT: ha a partner (vevo VAGY
-  szallito) valaszaban az `assignees` kulcs barmilyen alakban ott all, akar
-  ures tombkent is; vagy ha a vetites a belso valaszbol is kivenne, vagy a
-  partner tobbi mezojet is elvinne.
+  A PARTNER A DELEGALTAK NEVET KAPJA, MAST NEM (kartya a0660885, acrobot 26185,
+  2026-10-05). A 10-04-i szerviz-felmeres: a lista partnernek is kiadta a
+  delegaltak teljes rekordjat. A dontes: a nev lathato (mint a munkalap-listan
+  es a jegy-naplon), a felhasznalo-azonosito es a delegalas ideje nem. MI
+  PIROSIT: ha a partner (vevo VAGY szallito) valaszaban az azonosito vagy az
+  ido barhol megjelenik; ha a nev hianyzik; vagy ha a belso valasz megvaltozik.
 */
 describe("a hibajegy-lista partner alakja", () => {
   const sor = {
@@ -182,14 +182,15 @@ describe("a hibajegy-lista partner alakja", () => {
       { id: "p-2", role: "PARTNER_SERVICE", supplierId: "s-1" },
     ],
   ] as const)
-    it(`${nev}: a sorban nincs assignees kulcs, a többi mező megvan`, async () => {
+    it(`${nev}: a delegáltak neve megvan, azonosítójuk és idejük nincs`, async () => {
       const response = await service().list(
         {},
         user as unknown as AuthenticatedUser,
       );
       const item = response.items[0]!;
       assert.equal("assignees" in item, false);
-      assert.doesNotMatch(JSON.stringify(response), /Gabi|Tóth|user-1/);
+      assert.deepEqual(item.assigneeNames, ["Gabi"]);
+      assert.doesNotMatch(JSON.stringify(response), /user-1|2026-10-04T10:00/);
       assert.equal(item.jobNumber, "HJ-2026-003");
       assert.equal(item.departmentCode, "CAP-SHK");
       assert.equal(item.partnerStatusLabel.length > 0, true);
@@ -200,9 +201,11 @@ describe("a hibajegy-lista partner alakja", () => {
       id: "office-user",
       role: "ADMIN",
     } as AuthenticatedUser);
+    const item = response.items[0]!;
     assert.deepEqual(
-      response.items[0]!.assignees!.map((a) => a.name),
-      ["Gabi"],
+      item.assignees!.map((a) => [a.name, a.userId, a.assignedAt]),
+      [["Gabi", "user-1", "2026-10-04T10:00:00.000Z"]],
     );
+    assert.equal("assigneeNames" in item, false);
   });
 });

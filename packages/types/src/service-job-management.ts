@@ -104,13 +104,19 @@ export interface ServiceJobListItem {
    * oszlopahoz (2026-09-24): a mai adat MAR letezik a jegyen, a listaba
    * eddig csak nem jutott el.
    *
-   * PARTNERNEK NEM JAR, ES A KULCS HIANYZIK, NEM URES (kartya a0660885,
-   * 2026-10-05): a belso munkaszervezes, ugyanugy, mint a reszletlap partner
-   * alakjaban (`partnerServiceJobDetail`). Egy ures tomb azt allitana, hogy
-   * nincs delegalt; a hiany azt, hogy ez nem a partnerre tartozik. A
-   * vetites: `partnerServiceJobListItem`.
+   * PARTNERNEK NEM JAR, ES A KULCS HIANYZIK (kartya a0660885, 2026-10-05):
+   * az azonosito es a delegalas ideje belso. A partner a NEVEKET kapja, kulon
+   * mezoben (`assigneeNames`). A vetites: `partnerServiceJobListItem`.
    */
   assignees?: ServiceJobAssignee[];
+  /**
+   * A DELEGALTAK NEVE, CSAK A PARTNER VALASZABAN (kartya a0660885, acrobot
+   * 26185). Ugyanaz az alak es ugyanaz a dontes, mint a munkalap-listan
+   * (`WorksheetListItem.assigneeNames`, a partner portal "Felelos" oszlopa),
+   * es mint a jegy-naplo kolleganeve (Balazs, 2026-09-21: "a megjegyzes nem
+   * kell a nev igen"). A belso valaszban nincs: ott az `assignees` all.
+   */
+  assigneeNames?: string[];
   worksheetCount: number;
   createdAt: string;
   /**
@@ -868,21 +874,24 @@ export type ServiceJobPartnerTimelineEntry =
  * A LISTA-SOR PARTNER ALAKJA (kartya a0660885, 2026-10-05).
  *
  * A 10-04-i szerviz-felmeres merte: a `GET /service/jobs` lista partnernek is
- * kiadta a belso felelosok nevet (es azonositojat, a delegalas idejet), mig a
- * reszletlap partner alakja nem. Ugyanaz az elv, mint ott (Balazs dontese,
- * 2026-09-21 12:07:32 UTC): a partner SAJAT ALAKOT kap, mert a "nem latja" nem
- * vedelem -- a bongeszo fejlesztoi ablaka elolvassa a valaszt.
+ * kiadta a delegaltak teljes rekordjat (nev, felhasznalo-azonosito, a
+ * delegalas ideje). A dontes (acrobot 26185): a kollega NEVE a partnernek
+ * lathato, ugyanugy, mint a munkalap-listan es a jegy-naplon; az azonosito es
+ * az ido nem. Ugyanaz az elv, mint a reszletlapon (Balazs, 2026-09-21
+ * 12:07:32 UTC): a partner SAJAT ALAKOT kap, mert a "nem latja" nem vedelem.
  *
- * MA CSAK A DELEGALTAK MARADNAK KI. A belso allapot (`status`) es a
- * szamlalo-kulcsok maradnak: a partner portal a `counts`-ot a belso allapotok
- * szerint osszegzi (`apps/partner/src/lib/ticket-scope-counts.ts`), tehat
- * annak a kivetele a portal atirasat is kivanna. Szemelyes adat nincs bennuk.
+ * A belso allapot (`status`) es a szamlalo-kulcsok maradnak: a partner portal
+ * a `counts`-ot a belso allapotok szerint osszegzi
+ * (`apps/partner/src/lib/ticket-scope-counts.ts`). Szemelyes adat nincs bennuk.
  */
 export function partnerServiceJobListItem(
   item: ServiceJobListItem,
 ): ServiceJobListItem {
-  const { assignees: _internal, ...partner } = item;
-  return partner;
+  const { assignees, ...partner } = item;
+  return {
+    ...partner,
+    assigneeNames: (assignees ?? []).map((assignee) => assignee.name),
+  };
 }
 
 export function partnerServiceJobDetail(
