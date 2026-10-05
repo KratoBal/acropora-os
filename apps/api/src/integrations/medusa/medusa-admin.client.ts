@@ -564,6 +564,86 @@ export interface MedusaOrderOverviewPage {
   limit: number;
 }
 
+/** Egy cím a Medusa rendelésen (a kért mezőkkel). */
+export interface MedusaOrderAddressRow {
+  first_name?: string | null;
+  last_name?: string | null;
+  company?: string | null;
+  address_1?: string | null;
+  address_2?: string | null;
+  city?: string | null;
+  postal_code?: string | null;
+  country_code?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * EGY RENDELÉS RÉSZLETE (`GET /admin/orders/:id`, a `ORDER_DETAIL_FIELDS`
+ * mezőivel). A fizetés `data` mezője a szolgáltatóé: a Stripe-nál a
+ * PaymentIntent, benne a `client_secret` is -- ebből az OS CSAK az
+ * azonosítót veszi ki, a többit nem adja tovább.
+ */
+export interface MedusaOrderDetailRow {
+  id: string;
+  display_id: number;
+  created_at: string;
+  email: string | null;
+  currency_code: string;
+  customer_id: string | null;
+  metadata: Record<string, unknown> | null;
+  total: number;
+  subtotal: number;
+  discount_total: number;
+  shipping_total: number;
+  shipping_address: MedusaOrderAddressRow | null;
+  billing_address: MedusaOrderAddressRow | null;
+  items: {
+    id: string;
+    title: string;
+    product_title: string | null;
+    variant_title: string | null;
+    variant_sku: string | null;
+    quantity: number;
+    unit_price: number;
+    total: number;
+    metadata: Record<string, unknown> | null;
+  }[];
+  shipping_methods: {
+    name: string;
+    data: Record<string, unknown> | null;
+  }[];
+  payment_collections: {
+    status: string | null;
+    amount: number | null;
+    authorized_amount: number | null;
+    captured_amount: number | null;
+    refunded_amount: number | null;
+    payments: {
+      id: string;
+      provider_id: string;
+      data: Record<string, unknown> | null;
+    }[];
+  }[];
+}
+
+/** A webshop üzleti státusza egy rendelésre (`GET /admin/order-business-status/:id`, #472). */
+export interface MedusaOrderBusinessStatus {
+  order_id: string;
+  status: string;
+  label: string;
+  changed_at: string;
+  next_statuses: { status: string; label: string }[];
+  history: {
+    from_status: string | null;
+    from_label: string | null;
+    to_status: string;
+    to_label: string;
+    actor: string;
+    source: string;
+    created_at: string;
+  }[];
+}
+
 export interface MedusaOrderListResult {
   rows: MedusaOrderRow[];
   /**
@@ -626,6 +706,12 @@ export interface MedusaAdminClient {
     limit: number;
     offset: number;
   }): Promise<MedusaOrderOverviewPage>;
+  /** Egy rendelés részlete; nem létező azonosítóra `null`. */
+  order(id: string): Promise<MedusaOrderDetailRow | null>;
+  /** A rendelés üzleti státusza a történettel; ha nincs, `null`. */
+  orderBusinessStatus(id: string): Promise<MedusaOrderBusinessStatus | null>;
+  /** Hány rendelése van a vásárlónak (az „új vásárló” jelhez). */
+  countCustomerOrders(customerId: string): Promise<number>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1095,6 +1181,42 @@ export function describeMedusaFailure(error: unknown): string {
   return String(error);
 }
 
+/** A rendelés-részlet mezői (`order`); a fizetés `data`-ja csak szerveren marad. */
+export const ORDER_DETAIL_FIELDS = [
+  "id",
+  "display_id",
+  "created_at",
+  "email",
+  "currency_code",
+  "customer_id",
+  "metadata",
+  "total",
+  "subtotal",
+  "discount_total",
+  "shipping_total",
+  "shipping_address.*",
+  "billing_address.*",
+  "items.id",
+  "items.title",
+  "items.product_title",
+  "items.variant_title",
+  "items.variant_sku",
+  "items.quantity",
+  "items.unit_price",
+  "items.total",
+  "items.metadata",
+  "shipping_methods.name",
+  "shipping_methods.data",
+  "payment_collections.status",
+  "payment_collections.amount",
+  "payment_collections.authorized_amount",
+  "payment_collections.captured_amount",
+  "payment_collections.refunded_amount",
+  "payment_collections.payments.id",
+  "payment_collections.payments.provider_id",
+  "payment_collections.payments.data",
+].join(",");
+
 export class MedusaAdminHttpError extends Error {
   constructor(
     readonly status: number,
@@ -1267,6 +1389,47 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return this.request<MedusaOrderOverviewPage>(
       `/admin/order-overview?${params.toString()}`,
     );
+  }
+
+  async order(id: string): Promise<MedusaOrderDetailRow | null> {
+    const params = new URLSearchParams({ fields: ORDER_DETAIL_FIELDS });
+    try {
+      const body = await this.request<{ order: MedusaOrderDetailRow }>(
+        `/admin/orders/${encodeURIComponent(id)}?${params.toString()}`,
+      );
+      return body.order ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async orderBusinessStatus(
+    id: string,
+  ): Promise<MedusaOrderBusinessStatus | null> {
+    try {
+      const body = await this.request<{
+        business_status: MedusaOrderBusinessStatus;
+      }>(`/admin/order-business-status/${encodeURIComponent(id)}`);
+      return body.business_status ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async countCustomerOrders(customerId: string): Promise<number> {
+    const params = new URLSearchParams({
+      customer_id: customerId,
+      fields: "id",
+      limit: "1",
+    });
+    const body = await this.request<{ count?: number }>(
+      `/admin/orders?${params.toString()}`,
+    );
+    return body.count ?? 0;
   }
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {

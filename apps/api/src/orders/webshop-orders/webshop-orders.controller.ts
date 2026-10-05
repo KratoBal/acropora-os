@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import { PERMISSIONS } from "@acropora/types";
 
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
@@ -14,5 +14,11 @@ export class WebshopOrdersController {
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   list(@Query() query: WebshopOrderListQueryDto) {
     return this.orders.list(query);
+  }
+
+  @Get(":id")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  detail(@Param("id") id: string) {
+    return this.orders.detail(id);
   }
 }

@@ -168,3 +168,118 @@ describe("WebshopOrdersService.list", () => {
     }
   });
 });
+
+/*
+  AZ ADATLAP OLVASÁSA. MI PIROSÍT: egy nem létező rendelés 500 vagy üres 200
+  404 helyett; a vegyes kosár párjának olvasási hibája az egész adatlapot
+  elviszi; a párt nem olvassa ki (a link sorszám nélkül marad, holott van);
+  a vendég rendelésnél is kérdez a vásárlói számra.
+*/
+describe("WebshopOrdersService.detail", () => {
+  const detailOrder = (
+    id: string,
+    metadata: Record<string, unknown> | null,
+    customer: string | null = "cus_1",
+  ) => ({
+    id,
+    display_id: Number(id.replace(/\D/g, "")),
+    created_at: "2026-10-05T10:00:00.000Z",
+    email: "x@example.hu",
+    currency_code: "huf",
+    customer_id: customer,
+    metadata,
+    total: 1000,
+    subtotal: 1000,
+    discount_total: 0,
+    shipping_total: 0,
+    shipping_address: null,
+    billing_address: null,
+    items: [],
+    shipping_methods: [],
+    payment_collections: [],
+  });
+
+  function detailService(
+    options: {
+      relatedFails?: boolean;
+      missing?: boolean;
+      guest?: boolean;
+      http?: boolean;
+    } = {},
+  ) {
+    const counted: string[] = [];
+    const client = {
+      order: async (id: string) => {
+        if (options.http) throw new MedusaAdminHttpError(500, "boom");
+        if (options.missing && id === "order_38") return null;
+        if (id === "order_39") {
+          if (options.relatedFails) throw new Error("network");
+          return detailOrder("order_39", {
+            acropora_parent_order_id: "order_38",
+          });
+        }
+        return detailOrder(
+          "order_38",
+          { acropora_pickup_order_id: "order_39" },
+          options.guest ? null : "cus_1",
+        );
+      },
+      orderBusinessStatus: async () => null,
+      countCustomerOrders: async (customerId: string) => {
+        counted.push(customerId);
+        return 1;
+      },
+    } as unknown as MedusaAdminClient;
+    const credentials = {
+      resolve: async () => ({ apiKey: "k", source: "database", revision: "r" }),
+    } as unknown as MedusaCredentialProvider;
+    return {
+      orders: new WebshopOrdersService(credentials, () => client),
+      counted,
+    };
+  }
+
+  it("names the mixed cart's pair by its number, and a failing pair lookup does not take the page", async () => {
+    const ok = await detailService().orders.detail("order_38", NOW);
+    assert.deepEqual(ok.relatedOrder, {
+      id: "order_39",
+      displayId: 39,
+      role: "pickup",
+    });
+    const failing = await detailService({ relatedFails: true }).orders.detail(
+      "order_38",
+      NOW,
+    );
+    assert.deepEqual(failing.relatedOrder, {
+      id: "order_39",
+      displayId: null,
+      role: "pickup",
+    });
+  });
+
+  it("an unknown order is 404, a webshop error 503; a guest's order count is not asked", async () => {
+    await assert.rejects(
+      detailService({ missing: true }).orders.detail("order_38", NOW),
+      (error: unknown) => {
+        assert.equal(
+          (error as { status?: number }).constructor.name,
+          "NotFoundException",
+        );
+        return true;
+      },
+    );
+    await assert.rejects(
+      detailService({ http: true }).orders.detail("order_38", NOW),
+      (error: unknown) => {
+        assert.ok(error instanceof ServiceUnavailableException);
+        return true;
+      },
+    );
+    const guest = detailService({ guest: true });
+    const result = await guest.orders.detail("order_38", NOW);
+    assert.deepEqual(
+      [guest.counted, result.customer.guest, result.customer.isNew],
+      [[], true, false],
+    );
+  });
+});

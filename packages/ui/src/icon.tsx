@@ -14,6 +14,7 @@ export type IconName =
   | "chevron-down"
   | "chevron-left"
   | "clipboard"
+  | "copy"
   | "credit-card"
   | "dashboard"
   | "download"
@@ -26,10 +27,12 @@ export type IconName =
   | "info"
   | "key"
   | "lightbulb"
+  | "mail"
   | "menu"
   | "message"
   | "package"
   | "pencil"
+  | "phone"
   | "plus"
   | "search"
   | "send"
@@ -210,6 +213,21 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
         <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
       )}
       {name === "x" && <path d="M18 6 6 18M6 6l12 12" />}
+      {name === "copy" && (
+        <>
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+        </>
+      )}
+      {name === "mail" && (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 6 9-6" />
+        </>
+      )}
+      {name === "phone" && (
+        <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z" />
+      )}
       {name === "info" && (
         <>
           <circle cx="12" cy="12" r="9" />

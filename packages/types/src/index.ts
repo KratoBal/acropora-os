@@ -1113,6 +1113,11 @@ export {
   WEBSHOP_ORDER_STATUS_LABELS,
 } from "./webshop-orders.js";
 export type {
+  WebshopOrderAddress,
+  WebshopOrderDetail,
+  WebshopOrderHistoryEntry,
+  WebshopOrderLine,
+  WebshopOrderStep,
   WebshopOrderListItem,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
