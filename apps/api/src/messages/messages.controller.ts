@@ -27,8 +27,10 @@ import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 import {
   AttachmentQueryDto,
   CreateConversationDto,
+  AddMembersDto,
   EditMessageDto,
   ForwardMessageDto,
+  LinkContextDto,
   NotificationSettingDto,
   ReactionDto,
   MarkReadDto,
@@ -124,6 +126,65 @@ export class MessagesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.messages.send(user, id, body);
+  }
+
+  /**
+   * „Beszélgetés” a munkalapról vagy a hibajegyről (4. fázis): a meglévő élő
+   * beszélgetés, vagy egy új. A `kind` a web útvonalának szava.
+   */
+  @Post("context/:kind/:objectId")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  openContext(
+    @Param("kind") kind: string,
+    @Param("objectId") objectId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const type =
+      kind === "worksheet"
+        ? "WORKSHEET"
+        : kind === "service-job"
+          ? "SERVICE_JOB"
+          : null;
+    if (!type)
+      throw new BadRequestException(
+        "Ismeretlen objektum: csak munkalap vagy hibajegy köthető.",
+      );
+    return this.messages.openContextConversation(user, type, objectId);
+  }
+
+  /** Egy meglévő csoport kötése (4. fázis). */
+  @Post("conversations/:id/context")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  link(
+    @Param("id") id: string,
+    @Body() body: LinkContextDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.linkContext(user, id, body);
+  }
+
+  @Delete("conversations/:id/context")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  unlink(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.unlinkContext(user, id);
+  }
+
+  /** Tag hozzáadása (4. fázis). */
+  @Post("conversations/:id/members")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  addMembers(
+    @Param("id") id: string,
+    @Body() body: AddMembersDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.addMembers(user, id, body.userIds);
+  }
+
+  /** Kilépés (4. fázis). */
+  @Post("conversations/:id/leave")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  leave(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.leave(user, id);
   }
 
   /** Keresés a megnyitott beszélgetésben (3. fázis). */

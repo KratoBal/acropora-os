@@ -93,6 +93,34 @@ export interface MessageItem {
   forwardedFrom?: { senderName: string } | null;
 }
 
+/**
+ * MIHEZ KÖTHETŐ EGY BESZÉLGETÉS (4. fázis, prompt 23. pont; Balázs, 2026-10-05:
+ * munkalaphoz ÉS hibajegyhez).
+ */
+export const CONVERSATION_CONTEXT_TYPES = ["WORKSHEET", "SERVICE_JOB"] as const;
+export type ConversationContextType =
+  (typeof CONVERSATION_CONTEXT_TYPES)[number];
+
+/**
+ * A KAPCSOLT OBJEKTUM KÁRTYÁJA (Figma 450:323, 450:697). Aki a beszélgetés
+ * tagja, de a szervizt nem látja, annak `restricted`: csak a típus és a szám
+ * megy ki, a partner és az állapot nem, és a kliens nem ad „Megnyitás”-t.
+ */
+export interface ConversationContextCard {
+  type: ConversationContextType;
+  id: string;
+  /** A munkalap száma (`BIO-2026-001`) vagy a hibajegyé; szám nélküli munkalapnál null. */
+  number: string | null;
+  partnerName: string | null;
+  /**
+   * Munkalapnál a `WorksheetDisplayStatus` értéke, hibajegynél a
+   * `ServiceJobStatusValue`; a feliratot a kliens adja.
+   */
+  status: string | null;
+  createdAt: string | null;
+  restricted: boolean;
+}
+
 export interface ConversationListItem {
   id: string;
   type: ConversationTypeValue;
@@ -104,6 +132,8 @@ export interface ConversationListItem {
   lastMessage: MessageItem | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  /** 4. fázis: a kötés típusa a listán („Munkalaphoz kapcsolva”); nincs kötés: null. */
+  contextType?: ConversationContextType | null;
 }
 
 export interface ConversationListResponse {
@@ -119,6 +149,8 @@ export interface ConversationDetail extends ConversationListItem {
    * Opcionális, hogy a régebbi kliensek tesztjei ne törjenek el.
    */
   notification?: ConversationNotificationState;
+  /** 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája; nincs kötés: null. */
+  context?: ConversationContextCard | null;
 }
 
 export interface MessagePage {
