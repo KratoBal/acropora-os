@@ -60,6 +60,8 @@ function service(input: {
   documents?: CandidateDocument[];
   coverage: string[];
   mailbox?: { id: string; content: Uint8Array; fileName: string }[];
+  /** terhelés -> kézzel párosított dokumentum(ok) */
+  manual?: Map<string, string[]>;
 }) {
   const stored: [string, string][] = [];
   const ranges: [string, string][] = [];
@@ -68,7 +70,7 @@ function service(input: {
     debits: async () => input.debits,
     credits: async () => input.credits ?? [],
     statementCoverage: async () => new Set(input.coverage),
-    manualMatches: async () => new Map(),
+    manualMatches: async () => input.manual ?? new Map(),
     candidates: async (from: string, to: string) => {
       ranges.push([from, to]);
       return input.documents ?? [];
@@ -262,6 +264,47 @@ describe("MissingInvoicesService.documentPairings", () => {
         [1, false],
         [1, false],
       ],
+    );
+  });
+});
+
+describe("MissingInvoicesService.documentPairings, a manually paired unreadable upload", () => {
+  /**
+   * 7ff26bc9: a Tesla 4042V0000011711 feltöltött másolatát kézzel párosították;
+   * a fizetésnek a SZÁMLA SORÁHOZ is el kell jutnia, mert a kifizetett-jelölés
+   * azt keresi (`bankMatchOf`, a sor forrás-dokumentuma). MI PIROSÍT: ha a
+   * `compute` nem vonja össze a feltöltést a sorral.
+   */
+  it("reaches the invoice row, not only the upload", async () => {
+    const row: CandidateDocument = {
+      ...nav("2026-09-10", 4400, "Tesla Hungary Kft."),
+      source: "SZAMLAZZ",
+      number: "4042V0000011711",
+    };
+    const copy: CandidateDocument = {
+      ...nav("2026-09-14", 0, ""),
+      source: "UPLOAD",
+      number: "tesla_invoice4f06695c-8ac5-4358-9265-54171c226486 2.pdf",
+      gross: null,
+      payee: "COMPANY",
+      identities: ["sha:copy"],
+    };
+    const paid = debit("2026-09-14", 4400, "Tesla Inc", {
+      bankAccountId: CARD.id,
+    });
+    const { missing } = service({
+      debits: [paid],
+      documents: [row, copy],
+      coverage: [`${CARD.id}:2026-09`],
+      manual: new Map([[paid.id, [copy.id]]]),
+    });
+    const pairings = await missing.documentPairings();
+    assert.deepEqual(
+      [
+        pairings.get(row.id)?.debits.length,
+        pairings.get(row.id) === pairings.get(copy.id),
+      ],
+      [1, true],
     );
   });
 });

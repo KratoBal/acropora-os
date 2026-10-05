@@ -596,6 +596,110 @@ export function monthlyCardGroups(debits: readonly MatchableDebit[]): {
     });
 }
 
+/**
+ * A KÉZZEL PÁROSÍTOTT, OLVASHATATLAN FELTÖLTÉS ÖSSZEVONÁSA A SZÁMLA SORÁVAL
+ * (7ff26bc9, acrobot 26120 és 26292).
+ *
+ * Egy feltöltött másolat, amiből sem szám, sem szállító nem olvasható, nem
+ * vonódik össze a `mergeSameInvoice`-ban, tehát a kézi párosítása csak a
+ * feltöltést fizeti: a NAV- vagy a Számlázz.hu-sor ugyanarról a számláról
+ * párosítatlan marad, és a bejövő számla nem lesz fizetett (mérve
+ * 2026-10-02: a Tesla 4042V0000011711). Itt összevonjuk azzal az EGYETLEN
+ * számla-sorral, amelyik
+ *
+ *   - a feltöltés fájlnevével azonos számú, VAGY
+ *   - a 3. szabály szerint illik MINDEN terheléséhez: partner (0,5), pontos
+ *     összeg, dátumablak, és a száma nem egy ugyanolyan alakú MÁSIK szám,
+ *     mint a fájlnév (KBOSS: a feltöltés E-KBOSS-2026-503610, a sor
+ *     E-KBOSS-2026-560251, azonos összeggel és partnerrel: két számla).
+ *
+ * Ha nincs ilyen, vagy több van, vagy a sort más terheléshez párosították
+ * kézzel, minden marad. A partner-próba a 3. szabályé, változatlanul: a
+ * „TelekomSzaml*” partnernevű terhelés ezért nem vonódik össze a Magyar
+ * Telekom sorával (acrobot 26292: a Telekom kézi marad).
+ */
+export function mergeManualUploads(
+  documents: readonly CandidateDocument[],
+  manual: ReadonlyMap<string, readonly string[]>,
+  debits: readonly MatchableDebit[],
+): CandidateDocument[] {
+  const byId = new Map<string, CandidateDocument>();
+  for (const d of documents) {
+    byId.set(d.id, d);
+    for (const alias of d.aliasIds ?? []) byId.set(alias, d);
+  }
+  const debitById = new Map(debits.map((debit) => [debit.id, debit]));
+  // melyik dokumentumot melyik terhelés(ek)hez párosították kézzel
+  const pairedTo = new Map<CandidateDocument, MatchableDebit[]>();
+  for (const [debitId, ids] of manual) {
+    const debit = debitById.get(debitId);
+    if (!debit) continue;
+    for (const d of new Set(ids.flatMap((id) => byId.get(id) ?? [])))
+      pairedTo.set(d, [...(pairedTo.get(d) ?? []), debit]);
+  }
+  const unreadable = (d: CandidateDocument) =>
+    d.source === "UPLOAD" &&
+    !(d.aliasIds?.length ?? 0) &&
+    !(d.identities ?? []).some((identity) => identity.startsWith("inv:"));
+  const baseName = (fileName: string) => fileName.replace(/\.[a-z0-9]+$/i, "");
+
+  const absorbed = new Map<CandidateDocument, CandidateDocument[]>();
+  const taken = new Set<CandidateDocument>();
+  for (const [upload, uploadDebits] of pairedTo) {
+    if (!unreadable(upload)) continue;
+    const name = baseName(upload.number);
+    const invoices = documents.filter(
+      (d) =>
+        d !== upload &&
+        d.source !== "UPLOAD" &&
+        d.kind === "INVOICE" &&
+        d.gross !== null &&
+        !taken.has(d) &&
+        // más terheléshez kézzel párosítva: az a másik számlája
+        (pairedTo.get(d) ?? []).every((debit) => uploadDebits.includes(debit)),
+    );
+    const byNumber = invoices.filter(
+      (d) => compact(d.number) !== "" && compact(d.number) === compact(name),
+    );
+    const byRule = invoices.filter(
+      (d) =>
+        !(shapeOf(compact(d.number)) === shapeOf(compact(name))) &&
+        uploadDebits.every(
+          (debit) =>
+            samePartner(debit.counterpartyName ?? "", d.supplierName, 0.5) &&
+            exact(amountGap(debit, d.gross, d.currency), d.currency) &&
+            inWindow(debit.bookingDate, d.date),
+        ),
+    );
+    const found = byNumber.length > 0 ? byNumber : byRule;
+    if (found.length !== 1) continue;
+    taken.add(found[0]!);
+    absorbed.set(found[0]!, [...(absorbed.get(found[0]!) ?? []), upload]);
+  }
+
+  const gone = new Set([...absorbed.values()].flat());
+  return documents.flatMap((d) => {
+    if (gone.has(d)) return [];
+    const uploads = absorbed.get(d);
+    if (!uploads) return [d];
+    return [
+      {
+        ...d,
+        aliasIds: [...(d.aliasIds ?? []), ...uploads.map((u) => u.id)],
+        // a sor saját eredetije marad; ha nincs (NAV), a feltöltés az
+        ...(d.hasOriginal ? {} : { originalId: uploads[0]!.id }),
+        hasOriginal: true,
+        identities: [
+          ...new Set([
+            ...(d.identities ?? []),
+            ...uploads.flatMap((u) => u.identities ?? []),
+          ]),
+        ],
+      },
+    ];
+  });
+}
+
 export function matchMonth(input: {
   debits: readonly MatchableDebit[];
   documents: readonly CandidateDocument[];

@@ -34,6 +34,7 @@ import {
 } from "./bank-transaction.classify.js";
 import {
   matchMonth,
+  mergeManualUploads,
   type CandidateDocument,
   type ItemState,
   type MatchOutcome,
@@ -733,14 +734,14 @@ export class MissingInvoicesService {
     // kelt, szeptember 25-én fizettük, a közlemény megnevezi, és a 4 hónapos
     // betöltés kizárta. Decembertől minden dokumentumon mérve a bővítés
     // pontosan ezt az egy párt adja hozzá, hamisat egyet sem.
-    const documents = await this.repository.candidates(
+    const loaded = await this.repository.candidates(
       `${shiftMonth(first, -12)}-01`,
       `${shiftMonth(last, 1)}-15`,
     );
     // minden forrás, aminek a vevője még nincs kiszámolva (payeeCheck NULL):
     // a postafiók lustán, és a cégnév-szabály előtti NOT_COMPANY sorok is,
     // amiket a 20261001000800 migráció visszaállított (acrobot 25640)
-    await this.checkPayees(documents.filter((d) => d.payee === "UNKNOWN"));
+    await this.checkPayees(loaded.filter((d) => d.payee === "UNKNOWN"));
 
     const ownAccounts = new Set(
       accountRows.map((a) => normalizeAccount(a.accountNumber)),
@@ -761,18 +762,21 @@ export class MissingInvoicesService {
         original: originalAmountOf(debit.narrative),
       };
     });
+    const matchable = classified.map(({ debit, classification, original }) => ({
+      id: debit.id,
+      bookingDate: debit.bookingDate.toISOString().slice(0, 10),
+      amount: debit.amount,
+      currency: debit.currency,
+      original,
+      counterpartyName: debit.counterpartyName,
+      counterpartyAccount: normalizeAccount(debit.counterpartyAccount),
+      narrative: debit.narrative,
+      category: classification.category,
+    }));
+    // a kézzel párosított, olvashatatlan feltöltés a számla sorával egy (7ff26bc9)
+    const documents = mergeManualUploads(loaded, manual, matchable);
     const outcomes = matchMonth({
-      debits: classified.map(({ debit, classification, original }) => ({
-        id: debit.id,
-        bookingDate: debit.bookingDate.toISOString().slice(0, 10),
-        amount: debit.amount,
-        currency: debit.currency,
-        original,
-        counterpartyName: debit.counterpartyName,
-        counterpartyAccount: normalizeAccount(debit.counterpartyAccount),
-        narrative: debit.narrative,
-        category: classification.category,
-      })),
+      debits: matchable,
       documents,
       manual,
       paperOriginals: new Set(
