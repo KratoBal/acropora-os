@@ -1,12 +1,17 @@
 import type { MessageItem } from "@acropora/types";
 import { describe, expect, it } from "vitest";
 
+import { lastMessagePreview } from "./conversation-parts";
 import { composerKeyAction } from "./conversation-view";
 import {
+  canSend,
   conversationTimeLabel,
   dayDividerLabel,
   mergeMessages,
+  fileSizeLabel,
   outboxReducer,
+  readyAttachmentIds,
+  uploadsReducer,
   visibleOutgoing,
   type OutgoingMessage,
 } from "./outbox";
@@ -120,5 +125,111 @@ describe("the composer and the labels", () => {
     expect(dayDividerLabel(new Date(2026, 9, 8, 8, 0).toISOString(), now)).toBe(
       "Tegnap",
     );
+  });
+});
+
+describe("the upload queue", () => {
+  const up = (localId: string) => ({
+    type: "added" as const,
+    upload: { localId, fileName: `${localId}.pdf`, sizeBytes: 2_500_000 },
+  });
+
+  it("uploading, progress, done or failed, retried, removed", () => {
+    let s = uploadsReducer([], up("a"));
+    s = uploadsReducer(s, { type: "progress", localId: "a", percent: 40 });
+    expect(s.map((u) => [u.status, u.percent])).toEqual([["uploading", 40]]);
+    s = uploadsReducer(s, {
+      type: "failed",
+      localId: "a",
+      error: "nincs kapcsolat",
+    });
+    s = uploadsReducer(s, { type: "retried", localId: "a" });
+    expect(s.map((u) => [u.status, u.percent, u.error])).toEqual([
+      ["uploading", 0, null],
+    ]);
+    s = uploadsReducer(s, { type: "done", localId: "a", attachmentId: "f1" });
+    expect(readyAttachmentIds(s)).toEqual(["f1"]);
+    expect(uploadsReducer(s, { type: "removed", localId: "a" })).toEqual([]);
+  });
+
+  it("sends only when nothing is uploading, and only with text or a finished file", () => {
+    const uploading = uploadsReducer([], up("a"));
+    const done = uploadsReducer(uploading, {
+      type: "done",
+      localId: "a",
+      attachmentId: "f1",
+    });
+    const failed = uploadsReducer(uploading, {
+      type: "failed",
+      localId: "a",
+      error: "x",
+    });
+    expect(canSend("szöveg", uploading)).toBe(false);
+    expect(canSend("", done)).toBe(true);
+    expect(canSend("", failed)).toBe(false);
+    expect(canSend("  ", [])).toBe(false);
+    expect(readyAttachmentIds(failed)).toEqual([]);
+  });
+
+  it("the size label of the design", () => {
+    expect([512, 20_480, 2_516_582].map(fileSizeLabel)).toEqual([
+      "512 B",
+      "20 kB",
+      "2,4 MB",
+    ]);
+  });
+});
+
+describe("the list preview", () => {
+  it("an image-only last message shows its kind, not an empty line", () => {
+    const last = {
+      id: "m1",
+      conversationId: "c1",
+      senderUserId: "u1",
+      senderName: "Anna",
+      type: "IMAGE",
+      text: null,
+      deleted: false,
+      createdAt: "2026-10-05T10:00:00.000Z",
+      editedAt: null,
+      replyToMessageId: null,
+      replyTo: null,
+      attachments: [
+        {
+          id: "a1",
+          kind: "IMAGE",
+          fileName: "kep.jpg",
+          contentType: "image/jpeg",
+          sizeBytes: 10,
+          hasThumbnail: true,
+        },
+      ],
+      reactions: [],
+      clientMessageId: null,
+    } satisfies MessageItem;
+    const item = {
+      id: "c1",
+      type: "GROUP" as const,
+      audience: "INTERNAL" as const,
+      title: "Szerviz",
+      members: [],
+      lastMessage: last,
+      lastMessageAt: last.createdAt,
+      unreadCount: 0,
+    };
+    expect(lastMessagePreview(item)).toBe("Anna: 📷 Kép");
+    expect(
+      lastMessagePreview({
+        ...item,
+        type: "DIRECT",
+        lastMessage: {
+          ...last,
+          type: "FILE",
+          attachments: [
+            { ...last.attachments[0]!, kind: "FILE", fileName: "a.pdf" },
+          ],
+        },
+      }),
+    ).toBe("📎 a.pdf");
   });
 });
