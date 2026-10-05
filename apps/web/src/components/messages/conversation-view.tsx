@@ -23,6 +23,11 @@ import {
   uploadMessageAttachment,
 } from "@/lib/api/messages";
 
+import {
+  ConversationDetailsPanel,
+  ForwardDialog,
+  SearchAndPinsPanel,
+} from "./conversation-drawer";
 import { Monogram, conversationName } from "./conversation-parts";
 import { useMessageStream } from "./message-stream";
 import {
@@ -38,6 +43,21 @@ import {
   type OutboxAction,
   type OutgoingMessage,
 } from "./outbox";
+import { messageActions } from "./phase3";
+
+/** A műveleti menü feliratai (Figma 453:244). */
+const ACTION_LABELS = {
+  reply: "Válasz",
+  copy: "Másolás",
+  forward: "Továbbítás",
+  pin: "Kitűzés",
+  unpin: "Kitűzés levétele",
+  edit: "Szerkesztés",
+  delete: "Üzenet törlése",
+} as const;
+
+/** Az „Ugrás” után ennyi ideig marad kiemelve a megtalált üzenet. */
+const HIGHLIGHT_MS = 2500;
 
 /** Ennyi pixelen belül a lap alja "lent" van: új üzenetnél oda görgetünk. */
 const NEAR_BOTTOM_PX = 120;
@@ -99,8 +119,25 @@ export function ConversationView({
   const stickToBottom = useRef(true);
   const keepOffset = useRef<number | null>(null);
   const lastMarked = useRef<string | null>(null);
+  // --- a 3. fázis: oldalsó fiók, ugrás, továbbítás
+  const [drawer, setDrawer] = useState<"search" | "details" | null>(null);
+  const [pinsVersion, setPinsVersion] = useState(0);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [forwarding, setForwarding] = useState<{
+    message: MessageItem;
+    clientMessageId: string;
+  } | null>(null);
+  /**
+   * AZ UGRÁS-MÓD: egy régebbi üzenet köré nyitott oldalon ÚJABB üzenetek is
+   * vannak még. Amíg tart, egy élő esemény nem fűzi hozzá a legújabbakat (az
+   * lyukat hagyna a közepén); lefelé görgetve az újabb oldalak jönnek, és az
+   * utolsó után a mód véget ér.
+   */
+  const [newerCursor, setNewerCursor] = useState<string | null>(null);
+  const jumpMode = useRef(false);
 
   const loadLatest = useCallback(async () => {
+    if (jumpMode.current) return;
     try {
       const page = await messagesApi.page(token, id);
       setItems((current) => mergeMessages(current, page.items));
@@ -128,6 +165,9 @@ export function ConversationView({
   useEffect(() => {
     setItems([]);
     setOlderCursor(null);
+    setNewerCursor(null);
+    jumpMode.current = false;
+    setDrawer(null);
     setLoading(true);
     stickToBottom.current = true;
     lastMarked.current = null;
@@ -140,9 +180,25 @@ export function ConversationView({
       (signal.type === "message.created" && signal.conversationId === id)
     )
       void loadLatest();
-    else if (signal.type === "message.updated" && signal.conversationId === id)
+    else if (
+      signal.type === "message.updated" &&
+      signal.conversationId === id
+    ) {
       void refreshOne(signal.messageId);
+      // egy kitűzés-változás is így jön: a fiók listája újraolvasódik
+      setPinsVersion((version) => version + 1);
+    }
   });
+
+  // az ugrás célja középre kerül, és rövid ideig kiemelve marad
+  useEffect(() => {
+    if (!highlight) return;
+    document
+      .querySelector(`[data-testid="message-${CSS.escape(highlight)}"]`)
+      ?.scrollIntoView?.({ block: "center" });
+    const timer = setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [highlight, items]);
 
   // OLVASOTT: a legutolsó MÁS által küldött üzenet, ha a lap látszik és fókuszban van
   useEffect(() => {
@@ -192,12 +248,52 @@ export function ConversationView({
     }
   };
 
+  /** „Ugrás” (keresési találat vagy kitűzött elem): ha már betöltve, csak odagörget. */
+  const jumpTo = async (messageId: string) => {
+    if (items.some((message) => message.id === messageId)) {
+      stickToBottom.current = false;
+      setHighlight(messageId);
+      return;
+    }
+    try {
+      const page = await messagesApi.around(token, id, messageId);
+      jumpMode.current = page.newerCursor != null;
+      stickToBottom.current = false;
+      setItems(page.items);
+      setOlderCursor(page.olderCursor);
+      setNewerCursor(page.newerCursor ?? null);
+      setHighlight(messageId);
+    } catch {
+      setNotice("Az üzenet nem érhető el.");
+    }
+  };
+
+  const loadNewer = async () => {
+    if (!newerCursor) return;
+    const cursor = newerCursor;
+    setNewerCursor(null);
+    try {
+      const page = await messagesApi.newer(token, id, cursor);
+      setItems((current) => mergeMessages(current, page.items));
+      const next = page.newerCursor ?? null;
+      setNewerCursor(next);
+      if (!next) {
+        // elértük a jelent: innentől az élő események újra hozzáfűznek
+        jumpMode.current = false;
+        void loadLatest();
+      }
+    } catch {
+      setNewerCursor(cursor);
+    }
+  };
+
   const onScroll = () => {
     const node = scroller.current;
     if (!node) return;
-    stickToBottom.current =
-      node.scrollHeight - node.scrollTop - node.clientHeight < NEAR_BOTTOM_PX;
+    const fromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    stickToBottom.current = !jumpMode.current && fromBottom < NEAR_BOTTOM_PX;
     if (node.scrollTop < 80) void loadOlder();
+    if (fromBottom < 80) void loadNewer();
   };
 
   const deliver = async (message: OutgoingMessage) => {
@@ -347,329 +443,412 @@ export function ConversationView({
     if (message.text) void navigator.clipboard?.writeText(message.text);
   };
 
+  const togglePin = async (message: MessageItem) => {
+    try {
+      const fresh = message.pinned
+        ? await messagesApi.unpin(token, message.id)
+        : await messagesApi.pin(token, message.id);
+      setItems((current) => mergeMessages(current, [fresh]));
+      setPinsVersion((version) => version + 1);
+    } catch {
+      setNotice("A kitűzés nem mentődött el.");
+    }
+  };
+
+  const forwardTo = async (target: ConversationListItem) => {
+    if (!forwarding) return;
+    await messagesApi.forward(token, forwarding.message.id, {
+      conversationId: target.id,
+      clientMessageId: forwarding.clientMessageId,
+    });
+    setForwarding(null);
+    setNotice(`Továbbítva: ${conversationName(target)}`);
+    onChanged();
+  };
+
   const now = new Date();
   const pending = visibleOutgoing(outbox, id, items);
   const name = conversationName(conversation);
 
   return (
-    <section
-      aria-label={`Beszélgetés: ${name}`}
-      className="flex min-h-0 flex-1 flex-col border border-pilot-grey-200 bg-white"
-    >
-      <header className="flex items-center gap-3 border-b border-pilot-grey-200 px-5 py-4">
-        <Monogram name={name} />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-pilot-grey-900">
-            {name}
-          </p>
-          {conversation.type === "GROUP" ? (
-            <p className="text-xs text-pilot-grey-500">
-              {conversation.members.length + 1} tag
-            </p>
-          ) : null}
-        </div>
-      </header>
-
-      <div
-        ref={scroller}
-        onScroll={onScroll}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-5"
-        data-testid="message-list"
+    <div className="flex min-h-0 flex-1">
+      <section
+        aria-label={`Beszélgetés: ${name}`}
+        className="flex min-h-0 flex-1 flex-col border border-pilot-grey-200 bg-white"
       >
-        {loading ? (
-          <p className="text-center text-sm text-pilot-grey-500">Betöltés…</p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-center text-sm text-pilot-red-700">
-            {error}
-          </p>
-        ) : null}
-        {notice ? (
-          <p role="status" className="text-center text-sm text-pilot-red-700">
-            {notice}
-          </p>
-        ) : null}
-        {!loading && !error && items.length === 0 && pending.length === 0 ? (
-          <p className="text-center text-sm text-pilot-grey-500">
-            Még nincs üzenet. Írj elsőként!
-          </p>
-        ) : null}
-        {items.map((message, index) => {
-          const previous = items[index - 1];
-          const divider = dayDividerLabel(message.createdAt, now);
-          const showDivider =
-            !previous || dayDividerLabel(previous.createdAt, now) !== divider;
-          const own = message.senderUserId === viewerId;
-          return (
-            <div key={message.id} data-testid={`message-${message.id}`}>
-              {showDivider ? (
-                <p className="py-2 text-center text-xs text-pilot-grey-500">
-                  {divider}
-                </p>
-              ) : null}
-              <div
-                className={`group flex flex-col gap-1 ${own ? "items-end" : "items-start"}`}
-              >
-                {editing?.id === message.id ? (
-                  <div className="flex w-full max-w-[70%] flex-col gap-2">
-                    <Textarea
-                      aria-label="Az üzenet új szövege"
-                      value={editing.text}
-                      maxLength={4000}
-                      onChange={(event) =>
-                        setEditing({ id: message.id, text: event.target.value })
-                      }
-                    />
-                    <div className="flex justify-end gap-3 text-xs">
-                      <button type="button" onClick={() => setEditing(null)}>
-                        Mégse
-                      </button>
-                      <button
-                        type="button"
-                        className="font-medium text-pilot-aqua-700"
-                        onClick={() => void saveEdit()}
-                      >
-                        Mentés
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <Bubble
-                    message={message}
-                    own={own}
-                    sender={
-                      conversation.type === "GROUP" && !own
-                        ? message.senderName
-                        : null
-                    }
-                    onReact={(reaction) => void react(message, reaction)}
-                  />
-                )}
-                {!message.deleted && editing?.id !== message.id ? (
-                  <div
-                    role="toolbar"
-                    aria-label="Műveletek az üzeneten"
-                    className="flex flex-wrap gap-1 text-xs opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
-                  >
-                    {MESSAGE_REACTIONS.map((reaction) => (
-                      <button
-                        key={reaction}
-                        type="button"
-                        aria-label={`Reakció: ${reaction}`}
-                        className="border border-pilot-grey-200 bg-white px-2 py-0.5"
-                        onClick={() => void react(message, reaction)}
-                      >
-                        {reaction}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      className="px-2 py-0.5 text-pilot-grey-600 hover:text-pilot-grey-900"
-                      onClick={() => setReplyTo(message)}
-                    >
-                      Válasz
-                    </button>
-                    {message.text ? (
-                      <button
-                        type="button"
-                        className="px-2 py-0.5 text-pilot-grey-600 hover:text-pilot-grey-900"
-                        onClick={() => copy(message)}
-                      >
-                        Másolás
-                      </button>
-                    ) : null}
-                    {own ? (
-                      <>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 text-pilot-grey-600 hover:text-pilot-grey-900"
-                          onClick={() =>
-                            setEditing({
-                              id: message.id,
-                              text: message.text ?? "",
-                            })
-                          }
-                        >
-                          Szerkesztés
-                        </button>
-                        <button
-                          type="button"
-                          className="px-2 py-0.5 text-pilot-red-700"
-                          onClick={() => setDeleting(message)}
-                        >
-                          Üzenet törlése
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-        {pending.map((message) => (
-          <div key={message.clientMessageId}>
-            <PendingBubble message={message} />
-            {message.status === "failed" ? (
-              <p className="mt-1 flex justify-end gap-3 text-xs" role="alert">
-                <span className="text-pilot-red-700">
-                  Nem sikerült elküldeni.
-                </span>
-                <button
-                  type="button"
-                  className="font-medium text-pilot-aqua-700 underline"
-                  onClick={() => retry(message)}
-                >
-                  Újra
-                </button>
-                <button
-                  type="button"
-                  className="font-medium text-pilot-grey-600 underline"
-                  onClick={() =>
-                    dispatch({
-                      type: "removed",
-                      clientMessageId: message.clientMessageId,
-                    })
-                  }
-                >
-                  Törlés
-                </button>
+        <header className="flex items-center gap-3 border-b border-pilot-grey-200 px-5 py-4">
+          <Monogram name={name} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-pilot-grey-900">
+              {name}
+            </p>
+            {conversation.type === "GROUP" ? (
+              <p className="text-xs text-pilot-grey-500">
+                {conversation.members.length + 1} tag
               </p>
             ) : null}
           </div>
-        ))}
-      </div>
-
-      <div className="border-t border-pilot-grey-200 px-5 py-4">
-        {replyTo ? (
-          <div
-            data-testid="reply-preview"
-            className="mb-3 flex items-start justify-between gap-3 bg-pilot-accent-warm-soft px-3 py-2 text-xs"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-pilot-accent-warm-text">
-                Válasz neki: {replyTo.senderName}
-              </p>
-              <p className="truncate text-pilot-grey-700">
-                {previewText(replyTo)}
-              </p>
-            </div>
+          <div className="ml-auto flex gap-1">
             <button
               type="button"
-              aria-label="Válasz megszakítása"
-              onClick={() => setReplyTo(null)}
+              aria-label="Keresés és kitűzött elemek"
+              aria-pressed={drawer === "search"}
+              className="flex size-9 items-center justify-center text-pilot-grey-600 hover:text-pilot-grey-900"
+              onClick={() =>
+                setDrawer((current) => (current === "search" ? null : "search"))
+              }
             >
-              <Icon name="x" size={14} />
+              <Icon name="search" size={18} />
+            </button>
+            <button
+              type="button"
+              aria-label="Beszélgetés adatai"
+              aria-pressed={drawer === "details"}
+              className="flex size-9 items-center justify-center text-pilot-grey-600 hover:text-pilot-grey-900"
+              onClick={() =>
+                setDrawer((current) =>
+                  current === "details" ? null : "details",
+                )
+              }
+            >
+              <Icon name="info" size={18} />
             </button>
           </div>
-        ) : null}
-        {uploads.length ? (
-          <ul className="mb-3 flex flex-wrap gap-2" aria-label="Csatolmányok">
-            {uploads.map((upload) => (
-              <li
-                key={upload.localId}
-                className="flex items-center gap-2 border border-pilot-grey-200 px-2 py-1 text-xs"
-                data-status={upload.status}
+        </header>
+
+        <div
+          ref={scroller}
+          onScroll={onScroll}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-5"
+          data-testid="message-list"
+        >
+          {loading ? (
+            <p className="text-center text-sm text-pilot-grey-500">Betöltés…</p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="text-center text-sm text-pilot-red-700">
+              {error}
+            </p>
+          ) : null}
+          {notice ? (
+            <p role="status" className="text-center text-sm text-pilot-red-700">
+              {notice}
+            </p>
+          ) : null}
+          {!loading && !error && items.length === 0 && pending.length === 0 ? (
+            <p className="text-center text-sm text-pilot-grey-500">
+              Még nincs üzenet. Írj elsőként!
+            </p>
+          ) : null}
+          {items.map((message, index) => {
+            const previous = items[index - 1];
+            const divider = dayDividerLabel(message.createdAt, now);
+            const showDivider =
+              !previous || dayDividerLabel(previous.createdAt, now) !== divider;
+            const own = message.senderUserId === viewerId;
+            return (
+              <div
+                key={message.id}
+                data-testid={`message-${message.id}`}
+                data-highlighted={highlight === message.id ? "true" : undefined}
+                className={
+                  highlight === message.id
+                    ? "bg-pilot-accent-warm-soft transition-colors"
+                    : "transition-colors"
+                }
               >
-                <span className="max-w-40 truncate">{upload.fileName}</span>
-                <span className="text-pilot-grey-500">
-                  {upload.status === "uploading"
-                    ? `${upload.percent}%`
-                    : upload.status === "done"
-                      ? fileSizeLabel(upload.sizeBytes)
-                      : (upload.error ?? "Hiba")}
-                </span>
-                {upload.status === "failed" &&
-                uploadJobs.current.has(upload.localId) ? (
+                {showDivider ? (
+                  <p className="py-2 text-center text-xs text-pilot-grey-500">
+                    {divider}
+                  </p>
+                ) : null}
+                <div
+                  className={`group flex flex-col gap-1 ${own ? "items-end" : "items-start"}`}
+                >
+                  {editing?.id === message.id ? (
+                    <div className="flex w-full max-w-[70%] flex-col gap-2">
+                      <Textarea
+                        aria-label="Az üzenet új szövege"
+                        value={editing.text}
+                        maxLength={4000}
+                        onChange={(event) =>
+                          setEditing({
+                            id: message.id,
+                            text: event.target.value,
+                          })
+                        }
+                      />
+                      <div className="flex justify-end gap-3 text-xs">
+                        <button type="button" onClick={() => setEditing(null)}>
+                          Mégse
+                        </button>
+                        <button
+                          type="button"
+                          className="font-medium text-pilot-aqua-700"
+                          onClick={() => void saveEdit()}
+                        >
+                          Mentés
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Bubble
+                      message={message}
+                      own={own}
+                      sender={
+                        conversation.type === "GROUP" && !own
+                          ? message.senderName
+                          : null
+                      }
+                      onReact={(reaction) => void react(message, reaction)}
+                    />
+                  )}
+                  {!message.deleted && editing?.id !== message.id ? (
+                    <div
+                      role="toolbar"
+                      aria-label="Műveletek az üzeneten"
+                      className="flex flex-wrap gap-1 text-xs opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
+                    >
+                      {MESSAGE_REACTIONS.map((reaction) => (
+                        <button
+                          key={reaction}
+                          type="button"
+                          aria-label={`Reakció: ${reaction}`}
+                          className="border border-pilot-grey-200 bg-white px-2 py-0.5"
+                          onClick={() => void react(message, reaction)}
+                        >
+                          {reaction}
+                        </button>
+                      ))}
+                      {messageActions({
+                        own,
+                        deleted: message.deleted,
+                        pinned: message.pinned === true,
+                        hasText: !!message.text,
+                      }).map((action) => (
+                        <button
+                          key={action}
+                          type="button"
+                          className={`px-2 py-0.5 ${
+                            action === "delete"
+                              ? "text-pilot-red-700"
+                              : "text-pilot-grey-600 hover:text-pilot-grey-900"
+                          }`}
+                          onClick={() => {
+                            if (action === "reply") setReplyTo(message);
+                            else if (action === "copy") copy(message);
+                            else if (action === "forward")
+                              setForwarding({
+                                message,
+                                clientMessageId: newClientMessageId(),
+                              });
+                            else if (action === "pin" || action === "unpin")
+                              void togglePin(message);
+                            else if (action === "edit")
+                              setEditing({
+                                id: message.id,
+                                text: message.text ?? "",
+                              });
+                            else setDeleting(message);
+                          }}
+                        >
+                          {ACTION_LABELS[action]}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+          {pending.map((message) => (
+            <div key={message.clientMessageId}>
+              <PendingBubble message={message} />
+              {message.status === "failed" ? (
+                <p className="mt-1 flex justify-end gap-3 text-xs" role="alert">
+                  <span className="text-pilot-red-700">
+                    Nem sikerült elküldeni.
+                  </span>
                   <button
                     type="button"
-                    aria-label={`Újra: ${upload.fileName}`}
-                    className="font-medium text-pilot-aqua-700"
-                    onClick={() => retryUpload(upload.localId)}
+                    className="font-medium text-pilot-aqua-700 underline"
+                    onClick={() => retry(message)}
                   >
                     Újra
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  aria-label={`Eltávolítás: ${upload.fileName}`}
-                  onClick={() => cancelUpload(upload.localId)}
+                  <button
+                    type="button"
+                    className="font-medium text-pilot-grey-600 underline"
+                    onClick={() =>
+                      dispatch({
+                        type: "removed",
+                        clientMessageId: message.clientMessageId,
+                      })
+                    }
+                  >
+                    Törlés
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-pilot-grey-200 px-5 py-4">
+          {replyTo ? (
+            <div
+              data-testid="reply-preview"
+              className="mb-3 flex items-start justify-between gap-3 bg-pilot-accent-warm-soft px-3 py-2 text-xs"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-pilot-accent-warm-text">
+                  Válasz neki: {replyTo.senderName}
+                </p>
+                <p className="truncate text-pilot-grey-700">
+                  {previewText(replyTo)}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Válasz megszakítása"
+                onClick={() => setReplyTo(null)}
+              >
+                <Icon name="x" size={14} />
+              </button>
+            </div>
+          ) : null}
+          {uploads.length ? (
+            <ul className="mb-3 flex flex-wrap gap-2" aria-label="Csatolmányok">
+              {uploads.map((upload) => (
+                <li
+                  key={upload.localId}
+                  className="flex items-center gap-2 border border-pilot-grey-200 px-2 py-1 text-xs"
+                  data-status={upload.status}
                 >
-                  <Icon name="x" size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <form
-          className="flex items-end gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            send();
-          }}
-        >
-          <input
-            ref={fileInput}
-            type="file"
-            multiple
-            accept={UPLOAD_ACCEPT}
-            className="hidden"
-            data-testid="attachment-input"
-            onChange={(event) => addFiles(event.target.files)}
-          />
-          <button
-            type="button"
-            aria-label="Csatolmány hozzáadása"
-            className="flex size-11 shrink-0 items-center justify-center border border-pilot-grey-200 text-pilot-grey-600"
-            onClick={() => fileInput.current?.click()}
+                  <span className="max-w-40 truncate">{upload.fileName}</span>
+                  <span className="text-pilot-grey-500">
+                    {upload.status === "uploading"
+                      ? `${upload.percent}%`
+                      : upload.status === "done"
+                        ? fileSizeLabel(upload.sizeBytes)
+                        : (upload.error ?? "Hiba")}
+                  </span>
+                  {upload.status === "failed" &&
+                  uploadJobs.current.has(upload.localId) ? (
+                    <button
+                      type="button"
+                      aria-label={`Újra: ${upload.fileName}`}
+                      className="font-medium text-pilot-aqua-700"
+                      onClick={() => retryUpload(upload.localId)}
+                    >
+                      Újra
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    aria-label={`Eltávolítás: ${upload.fileName}`}
+                    onClick={() => cancelUpload(upload.localId)}
+                  >
+                    <Icon name="x" size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <form
+            className="flex items-end gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              send();
+            }}
           >
-            <Icon name="file-text" size={18} />
-          </button>
-          <label className="min-w-0 flex-1">
-            <span className="sr-only">Üzenet</span>
-            <Textarea
-              value={draft}
-              rows={1}
-              maxLength={4000}
-              placeholder={replyTo ? "Írj választ…" : "Írj egy üzenetet…"}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (
-                  composerKeyAction({
-                    key: event.key,
-                    shiftKey: event.shiftKey,
-                    isComposing: event.nativeEvent.isComposing,
-                  }) === "send"
-                ) {
-                  event.preventDefault();
-                  send();
-                }
-              }}
-              className="max-h-40 min-h-11 resize-none"
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              accept={UPLOAD_ACCEPT}
+              className="hidden"
+              data-testid="attachment-input"
+              onChange={(event) => addFiles(event.target.files)}
             />
-          </label>
-          <button
-            type="submit"
-            aria-label="Küldés"
-            disabled={!canSend(draft, uploads)}
-            className="flex size-11 shrink-0 items-center justify-center bg-pilot-aqua-700 text-white disabled:opacity-40"
-          >
-            <Icon name="send" size={18} />
-          </button>
-        </form>
-      </div>
-      <ConfirmDialog
-        open={deleting !== null}
-        title="Törlöd az üzenetet?"
-        consequence="Az üzenet helyén mindenkinél az „Az üzenetet törölték.” felirat marad, a szövege és a csatolmányai nem látszanak többé."
-        recovery="A törlés nem vonható vissza: ha mégis kell, újra el kell küldeni."
-        confirmLabel="Törlés"
-        onCancel={() => setDeleting(null)}
-        onConfirm={() => {
-          if (deleting) void remove(deleting);
-        }}
-      />
-    </section>
+            <button
+              type="button"
+              aria-label="Csatolmány hozzáadása"
+              className="flex size-11 shrink-0 items-center justify-center border border-pilot-grey-200 text-pilot-grey-600"
+              onClick={() => fileInput.current?.click()}
+            >
+              <Icon name="file-text" size={18} />
+            </button>
+            <label className="min-w-0 flex-1">
+              <span className="sr-only">Üzenet</span>
+              <Textarea
+                value={draft}
+                rows={1}
+                maxLength={4000}
+                placeholder={replyTo ? "Írj választ…" : "Írj egy üzenetet…"}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    composerKeyAction({
+                      key: event.key,
+                      shiftKey: event.shiftKey,
+                      isComposing: event.nativeEvent.isComposing,
+                    }) === "send"
+                  ) {
+                    event.preventDefault();
+                    send();
+                  }
+                }}
+                className="max-h-40 min-h-11 resize-none"
+              />
+            </label>
+            <button
+              type="submit"
+              aria-label="Küldés"
+              disabled={!canSend(draft, uploads)}
+              className="flex size-11 shrink-0 items-center justify-center bg-pilot-aqua-700 text-white disabled:opacity-40"
+            >
+              <Icon name="send" size={18} />
+            </button>
+          </form>
+        </div>
+        <ConfirmDialog
+          open={deleting !== null}
+          title="Törlöd az üzenetet?"
+          consequence="Az üzenet helyén mindenkinél az „Az üzenetet törölték.” felirat marad, a szövege és a csatolmányai nem látszanak többé."
+          recovery="A törlés nem vonható vissza: ha mégis kell, újra el kell küldeni."
+          confirmLabel="Törlés"
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => {
+            if (deleting) void remove(deleting);
+          }}
+        />
+      </section>
+      {drawer === "search" ? (
+        <SearchAndPinsPanel
+          token={token}
+          conversationId={id}
+          pinsVersion={pinsVersion}
+          onJump={(messageId) => void jumpTo(messageId)}
+          onClose={() => setDrawer(null)}
+        />
+      ) : null}
+      {drawer === "details" ? (
+        <ConversationDetailsPanel
+          token={token}
+          conversation={conversation}
+          onClose={() => setDrawer(null)}
+        />
+      ) : null}
+      {forwarding ? (
+        <ForwardDialog
+          token={token}
+          currentConversationId={id}
+          onClose={() => setForwarding(null)}
+          onForward={forwardTo}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -677,10 +856,12 @@ function Time({
   value,
   edited,
   pending,
+  pinned,
 }: {
   value: string;
   edited?: boolean;
   pending?: boolean;
+  pinned?: boolean;
 }) {
   return (
     <p className="mt-1 text-xs text-pilot-grey-500">
@@ -690,6 +871,7 @@ function Time({
       })}
       {edited ? " · szerkesztve" : ""}
       {pending ? " · küldés…" : ""}
+      {pinned ? " · 📌 kitűzve" : ""}
     </p>
   );
 }
@@ -716,6 +898,14 @@ function Bubble({
     >
       {sender ? (
         <p className="mb-1 text-xs font-medium text-pilot-aqua-700">{sender}</p>
+      ) : null}
+      {message.forwardedFrom && !message.deleted ? (
+        <p
+          data-testid="forwarded-from"
+          className="mb-1 text-xs italic text-pilot-grey-500"
+        >
+          Továbbítva · {message.forwardedFrom.senderName}
+        </p>
       ) : null}
       {message.replyTo ? (
         <div
@@ -771,7 +961,11 @@ function Bubble({
           ) : null}
         </>
       )}
-      <Time value={message.createdAt} edited={message.editedAt !== null} />
+      <Time
+        value={message.createdAt}
+        edited={message.editedAt !== null}
+        pinned={message.pinned === true}
+      />
       {message.reactions.length ? (
         <div className="mt-1 flex gap-1" aria-label="Reakciók">
           {message.reactions.map((r) => (

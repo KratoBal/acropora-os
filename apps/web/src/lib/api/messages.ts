@@ -2,10 +2,15 @@ import type {
   MessageAttachmentItem,
   ConversationDetail,
   ConversationListResponse,
+  ConversationNotificationState,
+  ConversationNotifyMode,
   MessageItem,
   MessagePage,
   MessagePeopleResponse,
+  MessageSearchResponse,
   MessagesUnreadResponse,
+  PinnedItemsResponse,
+  SharedAttachmentPage,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -40,6 +45,86 @@ export const messagesApi = {
       {
         signal,
       },
+    );
+  },
+  /** 3. fázis, „Ugrás”: az üzenet köré nyíló oldal. */
+  around(token: string, id: string, messageId: string, signal?: AbortSignal) {
+    return apiRequest<MessagePage>(
+      `${conversationPath(id)}/messages?around=${encodeURIComponent(messageId)}`,
+      token,
+      { signal },
+    );
+  },
+  /** 3. fázis: az ugrás utáni újabb oldal. */
+  newer(token: string, id: string, after: string, signal?: AbortSignal) {
+    return apiRequest<MessagePage>(
+      `${conversationPath(id)}/messages?after=${encodeURIComponent(after)}`,
+      token,
+      { signal },
+    );
+  },
+  /** 3. fázis: keresés a megnyitott beszélgetésben. */
+  search(token: string, id: string, q: string, signal?: AbortSignal) {
+    return apiRequest<MessageSearchResponse>(
+      `${conversationPath(id)}/search?q=${encodeURIComponent(q)}`,
+      token,
+      { signal },
+    );
+  },
+  /** 3. fázis: a megosztott média vagy fájlok, a legújabb elöl. */
+  shared(
+    token: string,
+    id: string,
+    kind: "IMAGE" | "FILE",
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<SharedAttachmentPage>(
+      `${conversationPath(id)}/attachments?kind=${kind}`,
+      token,
+      { signal },
+    );
+  },
+  /** 3. fázis: a kitűzött elemek. */
+  pins(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<PinnedItemsResponse>(
+      `${conversationPath(id)}/pins`,
+      token,
+      {
+        signal,
+      },
+    );
+  },
+  pin(token: string, messageId: string) {
+    return apiRequest<MessageItem>(
+      `/messages/${encodeURIComponent(messageId)}/pin`,
+      token,
+      { method: "POST" },
+    );
+  },
+  unpin(token: string, messageId: string) {
+    return apiRequest<MessageItem>(
+      `/messages/${encodeURIComponent(messageId)}/pin`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  forward(
+    token: string,
+    messageId: string,
+    input: { conversationId: string; clientMessageId: string },
+  ) {
+    return apiRequest<MessageItem>(
+      `/messages/${encodeURIComponent(messageId)}/forward`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /** 3. fázis: a saját értesítési beállítás ebben a beszélgetésben. */
+  setNotification(token: string, id: string, mode: ConversationNotifyMode) {
+    return apiRequest<ConversationNotificationState>(
+      `${conversationPath(id)}/notifications`,
+      token,
+      { method: "PUT", body: JSON.stringify({ mode }) },
     );
   },
   send(
