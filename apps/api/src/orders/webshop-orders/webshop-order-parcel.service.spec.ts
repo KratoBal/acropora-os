@@ -12,6 +12,7 @@ import type {
 import type {
   MedusaOrderBusinessStatus,
   MedusaOrderDetailRow,
+  MedusaOrderPayment,
   MedusaShippingNotice,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
@@ -63,6 +64,7 @@ function setup(
     createError?: CarrierError;
     noticeError?: Error;
     releaseError?: CarrierError;
+    orderPayment?: MedusaOrderPayment | null;
   } = {},
 ) {
   const calls: string[] = [];
@@ -74,6 +76,9 @@ function setup(
       status: { status: "stocking" } as MedusaOrderBusinessStatus,
     }),
     detail: async (id: string) => ({ id }) as WebshopOrderDetail,
+    adminClient: async () => ({
+      orderPayment: async () => over.orderPayment ?? null,
+    }),
     sendShippingNotice: async (_id: string, notice: MedusaShippingNotice) => {
       notices.push(notice);
       if (over.noticeError) throw over.noticeError;
@@ -180,6 +185,23 @@ describe("WebshopOrderParcelService", () => {
       });
       assert.equal(created.length, 0);
     }
+  });
+
+  it("after a released hold, no parcel until the link is paid", async () => {
+    const { created, service } = setup({
+      invoice: ISSUED,
+      orderPayment: {
+        state: "link_sent",
+        hold: null,
+        link: null,
+        paid_at: null,
+      },
+    });
+    await assert.rejects(service.create("order_38", undefined, USER), {
+      status: 409,
+      message: /fizetési link kifizetése után/,
+    });
+    assert.equal(created.length, 0);
   });
 
   it("a carrier error is the colleague's sentence with its own status", async () => {
