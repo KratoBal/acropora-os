@@ -45,6 +45,22 @@ const api = vi.hoisted(() => ({
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+// Üzenetek 4. fázis: a „Beszélgetés” gombnak saját tesztje van; itt csak a helye és a tárgya
+vi.mock("@/components/messages/context-conversation-button", () => ({
+  ContextConversationButton: ({
+    kind,
+    objectId,
+  }: {
+    kind: string;
+    objectId: string;
+  }) => (
+    <span
+      data-testid="context-conversation-button"
+      data-kind={kind}
+      data-object={objectId}
+    />
+  ),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
 }));
@@ -183,6 +199,14 @@ describe("PilotWorksheetDetailPage -- redesign", () => {
     expect(screen.getByText("2 fő")).toBeTruthy();
     expect(screen.getByText("3 munkaóra")).toBeTruthy();
     expect(screen.getAllByText("3 óra").length).toBeGreaterThan(0);
+  });
+
+  it("the sheet carries the Beszélgetés button for itself", async () => {
+    api.detail.mockResolvedValue(sheet());
+    render(<PilotWorksheetDetailPage worksheetId="ws-1" />);
+    const button = await screen.findByTestId("context-conversation-button");
+    expect(button.getAttribute("data-kind")).toBe("worksheet");
+    expect(button.getAttribute("data-object")).toBe("ws-1");
   });
 
   it("names the assignees in the sheet data, or says nobody is assigned", async () => {

@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ConversationListItem } from "@/lib/messages/types";
 import { conversationTimeLabel, previewText } from "@/lib/messages/outbox";
+import { contextSubtitle } from "@/lib/messages/phase4";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
@@ -91,6 +92,11 @@ export function ConversationRow({
         <Text style={styles.name} numberOfLines={1}>
           {name}
         </Text>
+        {item.contextType ? (
+          <Text style={styles.context} numberOfLines={1}>
+            {contextSubtitle(item.contextType)}
+          </Text>
+        ) : null}
         <Text style={styles.preview} numberOfLines={1}>
           {lastMessagePreview(item)}
         </Text>
@@ -124,6 +130,7 @@ const rowStyles = (t: ThemeTokens) =>
     body: { flex: 1, minWidth: 0, gap: 4 },
     name: { color: t.textPrimary, fontSize: 15, fontWeight: "600" },
     preview: { color: t.textSecondary, fontSize: 13 },
+    context: { color: t.warning, fontSize: 12 },
     side: { alignItems: "flex-end", gap: 6 },
     time: { color: t.textMuted, fontSize: 12 },
     badge: {

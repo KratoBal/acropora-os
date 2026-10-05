@@ -121,6 +121,8 @@ beforeEach(() => {
   stream.listeners = [];
   for (const fn of Object.values(api)) fn.mockReset();
   api.list.mockResolvedValue({ items: [conversation] });
+  // 4. fázis: a nézet a kapcsolt kártyáért a beszélgetés adatait is kéri
+  api.detail.mockResolvedValue({ ...conversation, context: null });
   api.page.mockResolvedValue({
     items: [message("m1", "anna", "Megérkezett már a pumpa?")],
     olderCursor: null,

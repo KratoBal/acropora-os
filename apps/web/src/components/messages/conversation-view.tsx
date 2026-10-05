@@ -2,10 +2,12 @@
 
 import {
   MESSAGE_REACTIONS,
+  type ConversationContextCard,
   type ConversationListItem,
   type MessageItem,
 } from "@acropora/types";
 import { ConfirmDialog, Icon, Textarea } from "@acropora/ui";
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -30,6 +32,13 @@ import {
 } from "./conversation-drawer";
 import { Monogram, conversationName } from "./conversation-parts";
 import { useMessageStream } from "./message-stream";
+import {
+  contextCardParts,
+  contextCardTitle,
+  contextHref,
+  contextSubtitle,
+  isSystemMessage,
+} from "./phase4";
 import {
   canSend,
   dayDividerLabel,
@@ -90,6 +99,7 @@ export function ConversationView({
   outbox,
   dispatch,
   onChanged,
+  onLeft,
 }: {
   token: string;
   viewerId: string;
@@ -97,6 +107,8 @@ export function ConversationView({
   outbox: readonly OutgoingMessage[];
   dispatch: Dispatch<OutboxAction>;
   onChanged: () => void;
+  /** 4. fázis: a néző kilépett a csoportból; a lap visszamegy a listára. */
+  onLeft?: () => void;
 }) {
   const id = conversation.id;
   const [items, setItems] = useState<MessageItem[]>([]);
@@ -135,6 +147,17 @@ export function ConversationView({
    */
   const [newerCursor, setNewerCursor] = useState<string | null>(null);
   const jumpMode = useRef(false);
+  // --- a 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája
+  const [context, setContext] = useState<ConversationContextCard | null>(null);
+  const [contextVersion, setContextVersion] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void messagesApi
+      .detail(token, id, controller.signal)
+      .then((detail) => setContext(detail.context ?? null))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [id, token, contextVersion]);
 
   const loadLatest = useCallback(async () => {
     if (jumpMode.current) return;
@@ -485,6 +508,7 @@ export function ConversationView({
             {conversation.type === "GROUP" ? (
               <p className="text-xs text-pilot-grey-500">
                 {conversation.members.length + 1} tag
+                {context ? ` · ${contextSubtitle(context.type)}` : null}
               </p>
             ) : null}
           </div>
@@ -516,6 +540,8 @@ export function ConversationView({
           </div>
         </header>
 
+        {context ? <ContextCard card={context} /> : null}
+
         <div
           ref={scroller}
           onScroll={onScroll}
@@ -546,6 +572,23 @@ export function ConversationView({
             const showDivider =
               !previous || dayDividerLabel(previous.createdAt, now) !== divider;
             const own = message.senderUserId === viewerId;
+            // a rendszer-esemény (csatolás, tag, kilépés): középen, buborék és menü nélkül
+            if (isSystemMessage(message))
+              return (
+                <div key={message.id} data-testid={`message-${message.id}`}>
+                  {showDivider ? (
+                    <p className="py-2 text-center text-xs text-pilot-grey-500">
+                      {divider}
+                    </p>
+                  ) : null}
+                  <p
+                    data-testid="system-message"
+                    className="px-6 text-center text-xs text-pilot-grey-500"
+                  >
+                    {message.text}
+                  </p>
+                </div>
+              );
             return (
               <div
                 key={message.id}
@@ -837,7 +880,16 @@ export function ConversationView({
         <ConversationDetailsPanel
           token={token}
           conversation={conversation}
+          context={context}
           onClose={() => setDrawer(null)}
+          onChanged={() => {
+            setContextVersion((version) => version + 1);
+            onChanged();
+          }}
+          onLeft={() => {
+            setDrawer(null);
+            onLeft?.();
+          }}
         />
       ) : null}
       {forwarding ? (
@@ -1009,6 +1061,38 @@ function PendingBubble({ message }: { message: OutgoingMessage }) {
           pending={message.status === "pending"}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * A KAPCSOLT MUNKALAP VAGY HIBAJEGY (Figma 450:323): „KAPCSOLT MUNKALAP ·
+ * BIO-2026-001 · partner · állapot · dátum · Megnyitás”. Aki a szervizt nem
+ * látja, annak csak a szám, „Megnyitás” nélkül.
+ */
+function ContextCard({ card }: { card: ConversationContextCard }) {
+  const href = contextHref(card);
+  return (
+    <div
+      data-testid="context-card"
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-pilot-grey-200 bg-pilot-grey-50 px-5 py-3 text-xs"
+    >
+      <span className="font-semibold tracking-wide text-pilot-accent-warm-text">
+        {contextCardTitle(card.type)}
+      </span>
+      {contextCardParts(card).map((part) => (
+        <span key={part} className="text-pilot-grey-700">
+          · {part}
+        </span>
+      ))}
+      {href ? (
+        <Link
+          href={href}
+          className="ml-auto font-medium text-pilot-aqua-700 hover:underline"
+        >
+          Megnyitás
+        </Link>
+      ) : null}
     </div>
   );
 }

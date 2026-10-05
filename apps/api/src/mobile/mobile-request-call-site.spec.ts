@@ -318,7 +318,8 @@ function hivasKulcsai(kod: string, kezdet: number): Set<string> {
 // 2026-10-05: 26 -> 29, az Üzenetek három nevesített típusú írása (a szomszéd őr párjai)
 // 2026-10-05: 29 -> 31, az Üzenetek 2. fázisa: szerkesztés és reakció (a szomszéd őr párjai)
 // 2026-10-05: 31 -> 33, az Üzenetek 3. fázisa: továbbítás és értesítési beállítás (a szomszéd őr párjai)
-const IRAS_HIVASOK_A_FAN = 33;
+// 2026-10-05: 33 -> 35, az Üzenetek 4. fázisa: kapcsolás és tag felvétele (a szomszéd őr párjai)
+const IRAS_HIVASOK_A_FAN = 35;
 
 /** Minden `body: JSON.stringify(` elofordulas a mobil forrasban. */
 function hivasok(konyvtar: string, gyujto: string[] = []): string[] {

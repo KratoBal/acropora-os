@@ -9,7 +9,9 @@ import {
 } from "@nestjs/common";
 import {
   WEBSHOP_ORDER_STATUS_LABELS,
+  staleHoursOf,
   type WebshopOrderStatus,
+  type WebshopStaleThreshold,
 } from "@acropora/types";
 import type {
   WebshopOrderDetail,
@@ -84,6 +86,20 @@ export class WebshopOrdersService {
       apiKey: string,
     ) => MedusaAdminClient = medusaClientFromEnvironment,
   ) {}
+
+  /** Az elavulási küszöbök (Beállítások). */
+  staleThresholds(): Promise<WebshopStaleThreshold[]> {
+    return this.repository.staleThresholds();
+  }
+
+  /** Az elavulási küszöbök mentése; a válasz a mentett állapot. */
+  async saveStaleThresholds(
+    thresholds: WebshopStaleThreshold[],
+    userId: string,
+  ): Promise<WebshopStaleThreshold[]> {
+    await this.repository.saveStaleThresholds(thresholds, userId);
+    return this.repository.staleThresholds();
+  }
 
   /** A webshop admin kliense, a kapcsolat hibáját 503-ként (a tételműveletek ezen mennek). */
   adminClient(): Promise<MedusaAdminClient> {
@@ -172,7 +188,7 @@ export class WebshopOrdersService {
         })(),
       ]),
     );
-    const [invoices, parcels, orderPayment] = await Promise.all([
+    const [invoices, parcels, orderPayment, thresholds] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
       // csak megjelenítés: ha a webshop ezt nem adja, az adatlap nélküle áll
@@ -182,8 +198,10 @@ export class WebshopOrdersService {
         );
         return null;
       }),
+      this.repository.staleThresholds(),
     ]);
     return toDetail({
+      staleHours: staleHoursOf(thresholds),
       orderPayment,
       order,
       status,
@@ -308,15 +326,18 @@ export class WebshopOrdersService {
   ): Promise<WebshopOrderListResponse> {
     const { rows, truncated } = await this.readAll();
     const ids = rows.map((row) => row.id);
-    const [invoices, parcels] = await Promise.all([
+    const [invoices, parcels, thresholds] = await Promise.all([
       this.repository.invoices(ids),
       this.parcels.activeParcelsFor(ids),
+      this.repository.staleThresholds(),
     ]);
+    const hours = staleHoursOf(thresholds);
     const items = rows.map((row) =>
       toListItem(
         row,
         factsOf(invoices.get(row.id), parcelOf(parcels[row.id])),
         now,
+        hours,
       ),
     );
     const viewed = inView(items, query.view);

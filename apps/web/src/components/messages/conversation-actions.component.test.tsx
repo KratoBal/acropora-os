@@ -42,6 +42,8 @@ const api = vi.hoisted(() => ({
   remove: vi.fn(),
   react: vi.fn(),
   unreact: vi.fn(),
+  // 4. fázis: a nézet a kapcsolt kártyáért a beszélgetés adatait is kéri
+  detail: vi.fn(),
 }));
 const upload = vi.hoisted(() => ({ fn: vi.fn() }));
 const stream = vi.hoisted(() => ({
@@ -135,6 +137,7 @@ beforeEach(() => {
   for (const fn of Object.values(api)) fn.mockReset();
   upload.fn.mockReset();
   api.list.mockResolvedValue({ items: [conversation] });
+  api.detail.mockResolvedValue({ ...conversation, context: null });
   api.page.mockResolvedValue({ items: [theirs, mine], olderCursor: null });
   api.markRead.mockResolvedValue({ moved: true });
   vi.spyOn(document, "hasFocus").mockReturnValue(true);

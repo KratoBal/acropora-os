@@ -18,7 +18,11 @@ import { MailTemplatePage } from "./mail-template-page";
  * a kalibráció kimenetéből nem látszana, melyik fogott.
  */
 
-const api = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn() }));
+const api = vi.hoisted(() => ({
+  read: vi.fn(),
+  save: vi.fn(),
+  list: vi.fn(),
+}));
 
 vi.mock("@/lib/api/mail-templates", async () => {
   const valodi = await vi.importActual<
@@ -140,6 +144,7 @@ const szovegesElonezet = () => {
 beforeEach(() => {
   api.read.mockReset();
   api.save.mockReset();
+  api.list.mockReset().mockResolvedValue([]);
   kepApi.list.mockReset().mockResolvedValue([]);
   kepApi.upload.mockReset();
   kepApi.content.mockReset();
@@ -150,7 +155,8 @@ describe("a levélsablon szerkesztője", () => {
   it("azt a változót is kiírja, amit senki nem égetett a felületbe", async () => {
     await megjelenit();
     expect(screen.getByText("{{holnaputani_valtozo}}")).toBeTruthy();
-    expect(screen.getByText("Egy később felvett mező.")).toBeTruthy();
+    // the description travels with the chip, as its tooltip (Figma 527:415)
+    expect(screen.getByTitle("Egy később felvett mező.")).toBeTruthy();
     // KONTROLL: a lista nem ezt az EGYET mutatja, hanem mind a négyet.
     expect(screen.getByText("{{jegyszam}}")).toBeTruthy();
   });
@@ -411,6 +417,11 @@ describe("MailTemplatePage és az alapértelmezés visszatöltése", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Alapértelmezés visszatöltése" }),
     );
+    // it asks first (Figma 530:347): nothing changes until it is confirmed
+    expect((screen.getByLabelText("Tárgy") as HTMLInputElement).value).toBe(
+      "Átírt tárgy",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Visszaállítás" }));
 
     expect(
       (screen.getByLabelText("Tárgy") as HTMLInputElement).value,

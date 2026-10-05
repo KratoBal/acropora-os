@@ -73,6 +73,23 @@ export interface MessageItem {
   forwardedFrom?: { senderName: string } | null;
 }
 
+/** 4. fázis: mihez köthető egy beszélgetés (munkalap és hibajegy). */
+export type ConversationContextType = "WORKSHEET" | "SERVICE_JOB";
+
+/**
+ * 4. fázis: a kapcsolt objektum kártyája. `restricted`: a néző a szervizt nem
+ * látja, csak a típus és a szám jön, „Megnyitás” nélkül.
+ */
+export interface ConversationContextCard {
+  type: ConversationContextType;
+  id: string;
+  number: string | null;
+  partnerName: string | null;
+  status: string | null;
+  createdAt: string | null;
+  restricted: boolean;
+}
+
 export interface ConversationListItem {
   id: string;
   type: ConversationTypeValue;
@@ -82,6 +99,8 @@ export interface ConversationListItem {
   lastMessage: MessageItem | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  /** 4. fázis: a kötés típusa a listán; nincs kötés: null. */
+  contextType?: ConversationContextType | null;
 }
 
 export interface ConversationListResponse {
@@ -94,6 +113,8 @@ export interface ConversationDetail extends ConversationListItem {
   lastReadMessageId: string | null;
   /** 3. fázis: a saját értesítési beállítás ebben a beszélgetésben. */
   notification?: ConversationNotificationState;
+  /** 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája; nincs kötés: null. */
+  context?: ConversationContextCard | null;
 }
 
 export interface MessagePage {

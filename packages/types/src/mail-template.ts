@@ -46,8 +46,12 @@ export interface MailTemplateVariable {
    * CELJAKENT is beilleszheto (`<a href="{{jegy_linkje}}">`). Hianyzo ertek:
    * sima szoveg. A mezo a listan all, nem a feluleten, hogy a tisztito es a
    * szerkeszto ugyanabbol tudja, melyik nev lehet `href`.
+   *
+   * `"block"`: a system-built piece of the mail (an item list, a pickup point),
+   * inserted after sanitizing and only as the sole content of a paragraph. Its
+   * inside is not editable, only its position (`mail-blocks.ts`).
    */
-  readonly kind?: "link";
+  readonly kind?: "link" | "block";
 }
 
 /**
@@ -253,7 +257,122 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description:
       "A bizonylat hivatkozása (például a vevő rendelésszáma). Ha a szöveg használja és nincs kitöltve, a levél nem megy ki.",
   },
+  /*
+    THE WEBSHOP MAILS' VALUES AND BLOCKS (2026-10-05). The webshop posts the
+    facts, the OS derives these from them (`webshop-mail.ts`); every name here
+    is filled by that derivation for the events that list it.
+  */
+  {
+    name: "rendeles_szam",
+    description: "A rendelés száma, # nélkül, például 38.",
+  },
+  {
+    name: "ugyfel_neve",
+    description:
+      "A vevő neve a számlázási címből, vezetéknévvel elöl. Üres, ha a webshop nem adta.",
+  },
+  {
+    name: "rendeles_datum",
+    description:
+      "A rendelés napja, például 2026. október 5. Üres, ha a webshop nem adta.",
+  },
+  {
+    name: "rendeles_szamok",
+    description:
+      "A rendelés száma #-tel; vegyes kosárnál a két rendelésé, például #38 és #39.",
+  },
+  {
+    name: "vegyes_kosar_mondat",
+    description:
+      "Vegyes kosárnál a mondat arról, hogy az élő állat miatt két rendelés lett. Egyébként üres.",
+  },
+  {
+    name: "osszesen",
+    description: "A fizetendő végösszeg, például 39 400 Ft.",
+  },
+  {
+    name: "kovetkezo_lepes",
+    description:
+      "Mi történik most: összekészítjük, vagy a boltban veszed át. A rendelés szállításától függ.",
+  },
+  { name: "szallitasi_mod", description: "A szállítási mód neve." },
+  {
+    name: "szallito",
+    description:
+      "A szállító: FOXPOST – Packeta Group, GLS csomagpont vagy GLS házhozszállítás.",
+  },
+  { name: "tracking_szam", description: "A csomag követési száma." },
+  {
+    name: "tracking_link",
+    description:
+      "A csomag követése a szállító oldalán. Üres, ha nincs ilyen cím.",
+    kind: "link",
+  },
+  {
+    name: "zarolt_osszeg",
+    description: "A kártyán zárolt és most feloldott összeg.",
+  },
+  {
+    name: "bolti_rendeles_mondat",
+    description:
+      "Vegyes kosárnál a mondat a bolti átvételes rendelésről. Egyébként üres.",
+  },
+  {
+    name: "fizetesi_link",
+    description: "A fizetési oldal címe.",
+    kind: "link",
+  },
+  {
+    name: "fizetendo",
+    description:
+      "A fizetési link összege; vegyes kosárnál a két rendelésé együtt.",
+  },
+  {
+    name: "link_lejarat",
+    description:
+      "Az utolsó nap, amikor a link még fizet, például 2026. október 11.",
+  },
+  {
+    name: "visszaterites_osszege",
+    description: "Ennek a visszatérítésnek az összege.",
+  },
+  {
+    name: "kartya_megnevezes",
+    description:
+      "A kártya: „a 4242 végű kártyádra”, vagy ha a szám nem ismert, „a kártyádra, amellyel fizettél”.",
+  },
+  {
+    name: "eddigi_visszaterites_mondat",
+    description:
+      "Ha erről a rendelésről korábban is volt visszatérítés, a mondat az eddigi összegről. Egyébként üres.",
+  },
+  {
+    name: "rendeles_tetelek",
+    description:
+      "Blokk: a rendelés tételei, a szállítás, a végösszeg és a fizetési mód. A rendszer állítja össze, külön bekezdésben áll.",
+    kind: "block",
+  },
+  {
+    name: "fizetendo_doboz",
+    description:
+      "Blokk: a kiemelt fizetendő összeg (utánvétnél, bolti fizetésnél, fizetési linknél). Ha nincs mit fizetni, nem jelenik meg.",
+    kind: "block",
+  },
+  {
+    name: "szallitas_doboz",
+    description:
+      "Blokk: a szállító, a cím vagy a pont, a követési szám és a követés gombja.",
+    kind: "block",
+  },
+  {
+    name: "csomag_tartalma",
+    description: "Blokk: a csomagban lévő tételek, ár nélkül.",
+    kind: "block",
+  },
 ] as const;
+
+export const MAIL_TEMPLATE_GROUPS = ["SERVICE", "WEBSHOP"] as const;
+export type MailTemplateGroup = (typeof MAIL_TEMPLATE_GROUPS)[number];
 
 /** Egy levelezesi esemeny: a sablon kulcsa es az emberi neve. */
 export interface MailTemplateEvent {
@@ -263,6 +382,12 @@ export interface MailTemplateEvent {
   readonly name: string;
   /** Mikor megy ki -- a szerkeszto melle. */
   readonly description: string;
+  /**
+   * The tab it is listed under. `SERVICE`: the OS's own mails (service,
+   * worksheets, materials, measurements, invoices). `WEBSHOP`: the mails the
+   * webshop sends, rendered by the OS.
+   */
+  readonly group: MailTemplateGroup;
   /**
    * A valtozok, amiket EZ AZ ESEMENY kuldesi utja kitolt -- es csak ezek.
    * A mentes ehhez mer, a szerkeszto ezeket ajanlja fel. Egy itt felsorolt, de
@@ -303,6 +428,7 @@ const BILLING_DOCUMENT_VARIABLES = [
 export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   {
     id: "WORKSHEET_SIGNED",
+    group: "SERVICE",
     name: "Munkalapot aláírtak",
     description:
       "A hibajegyhez tartozó munkalap aláírása után megy ki a jegy nyitójának.",
@@ -316,6 +442,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "SERVICE_JOB_OPENED_BY_CUSTOMER",
+    group: "SERVICE",
     name: "Ügyfél hibajegyet rögzít",
     description:
       "Akkor megy ki, amikor egy ügyfél hibajegyet nyit a partnerportálon. Címzettje mindenki, akinél a hibajegy-felelős szerep be van jelölve.",
@@ -331,6 +458,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "WORKSHEET_SEND_FOR_SIGNATURE",
+    group: "SERVICE",
     name: "Munkalap aláírásra kiküldve",
     description:
       "Akkor megy ki, amikor egy kolléga a munkalapot aláírásra kiküldi. Címzettje a kiválasztott aláíró, a partner munkatársa.",
@@ -344,6 +472,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "MATERIAL_REQUEST_CREATED",
+    group: "SERVICE",
     name: "Anyagigény érkezett",
     description:
       'Akkor megy ki, amikor egy szervizes anyagigényt küld a munkalapról. Címzettje mindenki, akinél a "szerviz anyagbeszerzés: értesítést fogad" jelölő be van jelölve.',
@@ -357,6 +486,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "MATERIAL_REQUEST_RECEIVED",
+    group: "SERVICE",
     name: "Anyag beérkezett",
     description:
       "Akkor megy ki, amikor a beszerző megjelöli, hogy az anyag megérkezett. Címzettje az igényt kérő kolléga és a munkalap minden felelőse.",
@@ -370,6 +500,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "MATERIAL_REQUEST_CLAIMED",
+    group: "SERVICE",
     name: "Anyagigény beszerzése átvéve",
     description:
       "Akkor megy ki, amikor egy kolléga átveszi az anyagigény beszerzését („Én intézem a beszerzést”). Címzettje az igényt kérő kolléga.",
@@ -383,6 +514,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "MATERIAL_REQUEST_ORDERED",
+    group: "SERVICE",
     name: "Anyag megrendelve",
     description:
       "Akkor megy ki, amikor a beszerzés felelőse rögzíti, hogy megrendelte az anyagot. Címzettje az igényt kérő kolléga.",
@@ -396,6 +528,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "MATERIAL_REQUEST_CANCELLED",
+    group: "SERVICE",
     name: "Anyagigény visszavonva",
     description:
       "Akkor megy ki, amikor egy már átvett anyagigényt visszavonnak. Címzettje a beszerzés felelőse. Ha még senki nem vette át, nem megy ki.",
@@ -414,6 +547,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
    */
   {
     id: "AQUARIUM_MEASUREMENT_RESULT",
+    group: "SERVICE",
     name: "Vízmérés eredménye",
     description:
       "Akkor megy ki, amikor egy kolléga elküldi egy akvárium vagy tó vízmérésének eredményét az ügyfélnek, gombnyomásra.",
@@ -421,6 +555,7 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "BILLING_DOCUMENT_MANUAL",
+    group: "SERVICE",
     name: "Számla kiküldése (kézi számlázás)",
     description:
       "A kiállított számla, díjbekérő vagy előlegszámla kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy. Formázható: a levél HTML-ként és szöveges alternatívaként megy ki.",
@@ -428,10 +563,177 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   },
   {
     id: "BILLING_DOCUMENT_WEBSHOP_ORDER",
+    group: "SERVICE",
     name: "Számla kiküldése (webshopos rendelés)",
     description:
       "A webshop-rendeléshez automatikusan kiállított számla levele. Ma csak a sablon szerkeszthető: az automatikus számlázás és kiküldés még nem épült meg.",
     variables: BILLING_DOCUMENT_VARIABLES,
+  },
+  /*
+    THE WEBSHOP'S CUSTOMER MAILS (Balazs, 2026-10-05 20:11 UTC: the OS
+    renders, the webshop sends). The webshop decides WHEN; these hold only
+    WHAT. Keys: `WEBSHOP_MAIL_KEYS` in `webshop-mail.ts`.
+  */
+  {
+    id: "WEBSHOP_ORDER_PLACED",
+    group: "WEBSHOP",
+    name: "Rendelés leadva",
+    description: "A rendelés leadása után.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_szamok",
+      "vegyes_kosar_mondat",
+      "osszesen",
+      "kovetkezo_lepes",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_CONFIRMED",
+    group: "WEBSHOP",
+    name: "Rendelés visszaigazolva",
+    description: "Amikor a rendelés Visszaigazolva státuszba kerül.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "szallitasi_mod",
+      "osszesen",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_OUT_FOR_DELIVERY",
+    group: "WEBSHOP",
+    name: "Kiszállítás alatt",
+    description:
+      "Amikor a rendelés kiszállítás alatt van. Nem megy ki, ha a „Feladtuk a csomagodat” levél már elment.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "szallitasi_mod",
+      "osszesen",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_READY_FOR_PICKUP",
+    group: "WEBSHOP",
+    name: "Üzletben átvehető",
+    description: "Amikor a rendelés az üzletben átvehető.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "szallitasi_mod",
+      "osszesen",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_SHIPPED",
+    group: "WEBSHOP",
+    name: "Csomag átadva a szállítónak",
+    description: "Amikor a csomagot átadtuk a szállítónak, a követési számmal.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "szallito",
+      "tracking_szam",
+      "tracking_link",
+      "szallitas_doboz",
+      "fizetendo_doboz",
+      "csomag_tartalma",
+    ],
+  },
+  {
+    id: "WEBSHOP_SHIPPING_DELAYED",
+    group: "WEBSHOP",
+    name: "Szállítási csúszás",
+    description:
+      "Amikor a kártyás zárolást feloldjuk, mert a rendelés nem teljesíthető időben.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_szamok",
+      "zarolt_osszeg",
+      "bolti_rendeles_mondat",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_PAYMENT_LINK",
+    group: "WEBSHOP",
+    name: "Fizetési link",
+    description: "Amikor a rendeléshez fizetési linket küldünk.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_szamok",
+      "fizetesi_link",
+      "fizetendo",
+      "link_lejarat",
+      "bolti_rendeles_mondat",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_PAYMENT_REMINDER",
+    group: "WEBSHOP",
+    name: "Fizetési emlékeztető",
+    description:
+      "A fizetési link kiküldése után a 3. napon, ha még nem érkezett fizetés.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_szamok",
+      "fizetesi_link",
+      "fizetendo",
+      "link_lejarat",
+      "bolti_rendeles_mondat",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
+  },
+  {
+    id: "WEBSHOP_REFUND",
+    group: "WEBSHOP",
+    name: "Visszatérítés",
+    description: "Amikor a kártyás fizetésből visszatérítés indult.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "visszaterites_osszege",
+      "kartya_megnevezes",
+      "eddigi_visszaterites_mondat",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_CLOSED",
+    group: "WEBSHOP",
+    name: "Rendelés lezárva",
+    description: "Amikor a rendelés Megrendelés lezárva státuszba kerül.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "szallitasi_mod",
+      "osszesen",
+      "fizetendo_doboz",
+      "rendeles_tetelek",
+    ],
   },
 ] as const;
 
