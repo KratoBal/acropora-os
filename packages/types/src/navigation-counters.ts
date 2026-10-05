@@ -4,8 +4,9 @@
  *
  * Each counts what is waiting on ME, not what is new:
  *   service-jobs               repair tickets assigned to me, not finished
- *   worksheets                 worksheets assigned to me, still to sign
- *                              (the latest version is a draft or rejected)
+ *   worksheets                 worksheets assigned to me, new or in
+ *                              progress (the latest version is a draft: the
+ *                              phone list's default filter)
  *   material-requests-pending  for a purchaser (the "anyag beérkezett"
  *                              capability): requests waiting to be taken
  *                              over; for anyone else: my own open requests

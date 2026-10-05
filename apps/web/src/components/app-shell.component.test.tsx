@@ -711,7 +711,9 @@ describe("AppShell menu numbers", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
     await szerviz();
     expect(
-      await screen.findByLabelText("140 nekem kiosztott, aláíratlan munkalap"),
+      await screen.findByLabelText(
+        "140 nekem kiosztott, új vagy folyamatban lévő munkalap",
+      ),
     ).toHaveTextContent("99+");
   });
 });

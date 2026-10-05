@@ -48,7 +48,7 @@ export function tileCountAccessibility(
     case "service-jobs":
       return `${count} nekem kiosztott, nyitott hibajegy`;
     case "worksheets":
-      return `${count} nekem kiosztott, aláíratlan munkalap`;
+      return `${count} nekem kiosztott, új vagy folyamatban lévő munkalap`;
     case "material-requests-pending":
       return `${count} teendő anyagigény`;
     default:

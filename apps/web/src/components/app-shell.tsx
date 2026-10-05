@@ -45,7 +45,7 @@ import { useNavigationCounters } from "./use-navigation-counters";
 /** What the menu number counts, for a screen reader (card 4a6813db). */
 const NAVIGATION_COUNTER_ARIA: Record<NavigationCounterId, string> = {
   "service-jobs": "nekem kiosztott, nyitott hibajegy",
-  worksheets: "nekem kiosztott, aláíratlan munkalap",
+  worksheets: "nekem kiosztott, új vagy folyamatban lévő munkalap",
   "material-requests-pending": "teendő anyagigény",
 };
 

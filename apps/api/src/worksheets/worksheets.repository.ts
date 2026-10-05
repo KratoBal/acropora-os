@@ -987,11 +987,13 @@ export class WorksheetsRepository extends Repository {
    */
   /**
    * THE MENU NUMBER (navigation counters, card 4a6813db): worksheets
-   * assigned to the user whose latest version still needs the assignee, a
-   * draft or a rejected one. Awaiting signature waits on the customer, signed
-   * is done. The list's visibility (`worksheetListWheres`), hidden rows out.
+   * assigned to the user whose latest version is a draft. That is the phone
+   * list's default filter, "Új és folyamatban" (Balázs, 2026-10-04; a new and
+   * an in-progress sheet are both drafts, told apart by their line count), so
+   * the number and the list show the same sheets. The list's visibility
+   * (`worksheetListWheres`), hidden rows out.
    */
-  async countAssignedToFinish(
+  async countAssignedDrafts(
     scope: PartnerScope,
     assignedUnitIds: readonly string[],
     userId: string,
@@ -1005,7 +1007,7 @@ export class WorksheetsRepository extends Repository {
       false,
     );
     const byStatus = await this.countsByLatestStatus(counts);
-    return byStatus.DRAFT + byStatus.REJECTED;
+    return byStatus.DRAFT;
   }
 
   private async countsByLatestStatus(

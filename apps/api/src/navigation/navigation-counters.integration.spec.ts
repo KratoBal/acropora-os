@@ -20,8 +20,8 @@ import {
  *
  *   service-jobs   assigned to me, open, repair; NOT: someone else's, finished,
  *                  maintenance, hidden
- *   worksheets     assigned to me, latest version draft or rejected; NOT: a
- *                  sheet whose EARLIER version was a draft, awaiting
+ *   worksheets     assigned to me, latest version a draft; NOT: a sheet
+ *                  whose EARLIER version was a draft, rejected, awaiting
  *                  signature, someone else's, hidden
  *   material       purchaser: OPEN; requester: own sent and unfinished; NOT:
  *                  a draft, received, someone else's, on a hidden worksheet
@@ -187,14 +187,14 @@ describe(
       );
     });
 
-    it("worksheets: mine whose LATEST version is a draft or rejected (2 of 6)", async () => {
+    it("worksheets: mine whose LATEST version is a draft (1 of 6)", async () => {
       assert.equal(
-        await new WorksheetsRepository().countAssignedToFinish(
+        await new WorksheetsRepository().countAssignedDrafts(
           internal,
           [],
           id("me"),
         ),
-        2,
+        1,
       );
     });
 
