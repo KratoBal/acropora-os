@@ -1069,3 +1069,24 @@ export type {
 } from "./service-drafts.js";
 
 export { serviceJobReporterName } from "./service-job-reporter.js";
+
+export {
+  CONVERSATION_MAX_MEMBERS,
+  MESSAGE_PAGE_DEFAULT,
+  MESSAGE_PAGE_MAX,
+  MESSAGE_TEXT_MAX_LENGTH,
+} from "./messages.js";
+export type {
+  ConversationAudienceValue,
+  ConversationDetail,
+  ConversationListItem,
+  ConversationListResponse,
+  ConversationPerson,
+  ConversationTypeValue,
+  MessageItem,
+  MessagePage,
+  MessagePeopleResponse,
+  MessageStreamEvent,
+  MessageTypeValue,
+  MessagesUnreadResponse,
+} from "./messages.js";

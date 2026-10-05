@@ -259,6 +259,10 @@ export const PERMISSIONS = {
   /// tételes szerepkör-listákon is - anélkül a SALES, WAREHOUSE, SERVICE és
   /// VIEWER nem kapná meg, és a "mindenki" csendben háromra szűkülne.
   AI_TEST_VIEW: "ai-test.view",
+  /// AZ ÜZENETEK MODUL (kártya 51d7aba0). Minden belső emberi szerepkör
+  /// megkapja, a VIEWER is; gépi ágens és partnerfiók nem (acrobot döntése,
+  /// 26174). A beszélgetésen belüli jogot a tagság adja, nem ez.
+  MESSAGES_USE: "messages.use",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -312,6 +316,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.CONTENT_APPROVE,
     ),
     SALES: [
+      PERMISSIONS.MESSAGES_USE,
       PERMISSIONS.AI_TEST_VIEW,
       PERMISSIONS.DASHBOARD_VIEW,
       PERMISSIONS.TASKS_VIEW,
@@ -324,6 +329,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.FINANCE_VIEW,
     ],
     WAREHOUSE: [
+      PERMISSIONS.MESSAGES_USE,
       PERMISSIONS.AI_TEST_VIEW,
       PERMISSIONS.DASHBOARD_VIEW,
       PERMISSIONS.TASKS_VIEW,
@@ -361,6 +367,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
      * itt olyan munkát állítana meg, amit ma végeznek.
      */
     SERVICE: [
+      PERMISSIONS.MESSAGES_USE,
       PERMISSIONS.DASHBOARD_VIEW,
       PERMISSIONS.TASKS_VIEW,
       /// Csak nézni. A szerviz partner a szervizesnek munkakörnyezet, de a
@@ -372,7 +379,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.AQUARIUMS_MANAGE,
     ],
-    VIEWER: VIEW_PERMISSIONS,
+    VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 
     /**
      * GÉPI ÁGENS, AMI CSAK TARTALMAT VISZ BE.
