@@ -15,6 +15,7 @@ import type {
   FeedStoreOutcome,
   SzamlazzFeedsRepository,
 } from "./szamlazz-feeds.repository.js";
+import { preferredSameContentSource } from "./szamlazz-feeds.repository.js";
 import { SzamlazzFeedsService } from "./szamlazz-feeds.service.js";
 
 /*
@@ -533,5 +534,27 @@ describe("SzamlazzFeedsService", () => {
       ],
       [200, true, 200, 400, 2, "SZAMLAKI:98765", []],
     );
+  });
+});
+
+/*
+  A VETÍTÉS FORRÁSA AZONOS TARTALOMNÁL (TEA E-SI-2026-51598, élesen mérve
+  2026-10-05). MI PIROSÍT: ha a legkorábbi, de begyűjtött másolatot választja,
+  holott ugyanez a tartalom más úton is megvan -- azt a jelölt-összerakó
+  kihagyja, és a forrás egyetlen jelöltben sem állna.
+*/
+describe("preferredSameContentSource", () => {
+  it("the copy the matcher keeps, not the earliest collected one; only collected: the earliest", () => {
+    const mail = { id: "gyujtott", origin: "COLLECTED_MAIL" };
+    const drive = { id: "drive", origin: "COLLECTED_DRIVE" };
+    const upload = { id: "feltoltes", origin: "UPLOAD" };
+    const mailbox = { id: "postafiok", origin: "MAILBOX" };
+    assert.equal(preferredSameContentSource([mail, upload])?.id, "feltoltes");
+    assert.equal(
+      preferredSameContentSource([mail, drive, mailbox, upload])?.id,
+      "postafiok",
+    );
+    assert.equal(preferredSameContentSource([drive, mail])?.id, "drive");
+    assert.equal(preferredSameContentSource([]), null);
   });
 });
