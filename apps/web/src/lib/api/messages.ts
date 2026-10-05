@@ -1,5 +1,6 @@
 import type {
   MessageAttachmentItem,
+  ConversationContextType,
   ConversationDetail,
   ConversationListResponse,
   ConversationNotificationState,
@@ -204,6 +205,65 @@ export const messagesApi = {
     return apiRequest<MessagesUnreadResponse>("/messages/unread", token, {
       signal,
     });
+  },
+  /**
+   * 4. fázis, „Beszélgetés” a munkalapról vagy a hibajegyről: a tárgy élő
+   * beszélgetése, vagy egy új, ha még nincs. A kérdezőt a szerver felveszi.
+   */
+  openContext(
+    token: string,
+    kind: "worksheet" | "service-job",
+    objectId: string,
+  ) {
+    return apiRequest<ConversationDetail>(
+      `/messages/context/${kind}/${encodeURIComponent(objectId)}`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /** 4. fázis: egy meglévő csoport csatolása munkalaphoz vagy hibajegyhez. */
+  linkContext(
+    token: string,
+    id: string,
+    input: { type: ConversationContextType; id: string },
+  ) {
+    return apiRequest<ConversationDetail>(
+      `${conversationPath(id)}/context`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /** 4. fázis: leválasztás; a beszélgetés megmarad. */
+  unlinkContext(token: string, id: string) {
+    return apiRequest<ConversationDetail>(
+      `${conversationPath(id)}/context`,
+      token,
+      {
+        method: "DELETE",
+      },
+    );
+  },
+  /** 4. fázis: tagok felvétele egy csoportba. */
+  addMembers(token: string, id: string, userIds: string[]) {
+    return apiRequest<ConversationDetail>(
+      `${conversationPath(id)}/members`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ userIds }),
+      },
+    );
+  },
+  /** 4. fázis: kilépés egy csoportból; az utolsó után a beszélgetés archív lesz. */
+  leave(token: string, id: string) {
+    return apiRequest<{ left: true; archived: boolean }>(
+      `${conversationPath(id)}/leave`,
+      token,
+      { method: "POST" },
+    );
   },
 };
 

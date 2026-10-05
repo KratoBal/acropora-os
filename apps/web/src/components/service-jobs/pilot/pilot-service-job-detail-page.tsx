@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { useListHref } from "@/components/navigation-history";
+import { ContextConversationButton } from "@/components/messages/context-conversation-button";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
@@ -640,29 +641,32 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
             ) : null}
           </div>
         </div>
-        {job.partnerStatus === "COMPLETED" ? (
-          <div className="flex flex-wrap gap-2">
-            <PilotButton
-              variant="secondary"
-              size="regular"
-              onClick={() => void downloadPackage()}
-              disabled={downloadingPackage}
-            >
-              {downloadingPackage
-                ? "Dokumentumcsomag letöltése…"
-                : "Csomag letöltése (.zip)"}
-            </PilotButton>
-            {canManage ? (
+        <div className="flex flex-wrap items-start gap-2">
+          <ContextConversationButton kind="service-job" objectId={job.id} />
+          {job.partnerStatus === "COMPLETED" ? (
+            <div className="flex flex-wrap gap-2">
               <PilotButton
-                variant="primary"
+                variant="secondary"
                 size="regular"
-                onClick={() => void openHandoverMail()}
+                onClick={() => void downloadPackage()}
+                disabled={downloadingPackage}
               >
-                Küldés e-mailben
+                {downloadingPackage
+                  ? "Dokumentumcsomag letöltése…"
+                  : "Csomag letöltése (.zip)"}
               </PilotButton>
-            ) : null}
-          </div>
-        ) : null}
+              {canManage ? (
+                <PilotButton
+                  variant="primary"
+                  size="regular"
+                  onClick={() => void openHandoverMail()}
+                >
+                  Küldés e-mailben
+                </PilotButton>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {packageError ? (
