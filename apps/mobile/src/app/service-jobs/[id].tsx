@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { statusBadgeStyle } from "@/lib/theme/label-styles";
+import { ContextConversationButton } from "@/components/messages/ContextConversationButton";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { DocumentImage } from "@/components/documents/DocumentImage";
@@ -405,6 +406,14 @@ export default function ServiceJobDetailScreen() {
             ) : null}
           </View>
         </View>
+        {/* a partner ma kívül áll az üzeneteken (Üzenetek 4. fázis, a partner-rész később) */}
+        {!partnerAlak(detail) ? (
+          <ContextConversationButton
+            kind="service-job"
+            objectId={detail.id}
+            tokens={tokens}
+          />
+        ) : null}
         <View style={styles.block}>
           {/*
             A VEVO NEVE CSAK BELSO ALAKNAL. Partnernel a vevo MAGA a nezo: a
