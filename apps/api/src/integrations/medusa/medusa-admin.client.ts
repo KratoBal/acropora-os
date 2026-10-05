@@ -615,7 +615,14 @@ export interface MedusaOrderDetailRow {
   shipping_methods: {
     name: string;
     data: Record<string, unknown> | null;
+    /**
+     * SZÁMOLT MEZŐ, és kifejezett `fields` listával a webshop NEM adja
+     * (acrobot mérése, commerce-stage 41-43. rendelés, 2026-10-05): ilyenkor
+     * `undefined`. A tárolt ár az `amount`, az `is_tax_inclusive` mellett.
+     */
     total?: number | null;
+    amount?: number | null;
+    is_tax_inclusive?: boolean | null;
     tax_lines?: { rate: number }[] | null;
   }[];
   payment_collections: {
@@ -1221,6 +1228,8 @@ export const ORDER_DETAIL_FIELDS = [
   "shipping_methods.name",
   "shipping_methods.data",
   "shipping_methods.total",
+  "shipping_methods.amount",
+  "shipping_methods.is_tax_inclusive",
   "shipping_methods.tax_lines.rate",
   "payment_collections.status",
   "payment_collections.amount",

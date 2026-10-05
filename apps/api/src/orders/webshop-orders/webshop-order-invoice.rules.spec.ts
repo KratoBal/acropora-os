@@ -252,6 +252,82 @@ describe("the invoice draft from a webshop order", () => {
   });
 });
 
+describe("what the webshop does not send", () => {
+  /*
+    acrobot mérése (commerce-stage 41-43, 2026-10-05): kifejezett mezőlistával
+    a `shipping_methods.total` NEM jön, csak a tárolt `amount` és az
+    `is_tax_inclusive`. MI PIROSÍT: a hiányzó összeg nullaként megy tovább
+    (fizetős szállítás „ingyenesnek” látszik, vagy nulla forintos tétel
+    kerül a számlára); az `amount` nem kerül a számlára.
+  */
+  const shippingAs = (
+    method: Partial<MedusaOrderDetailRow["shipping_methods"][number]>,
+  ) =>
+    order({
+      shipping_methods: [
+        {
+          name: "Foxpost csomagpont",
+          data: null,
+          tax_lines: rate(27),
+          ...method,
+        },
+      ],
+    });
+
+  it("the stored amount is the shipping gross when the computed total is missing", () => {
+    const result = invoiceDraftOf(
+      shippingAs({ total: undefined, amount: 1490, is_tax_inclusive: true }),
+      { customerId: "c", now: NOW },
+    );
+    assert.ok(result.ok);
+    assert.equal(
+      result.draft.lines.at(-1)!.description,
+      "Szállítás: Foxpost csomagpont",
+    );
+    assert.equal(grossOf(result.draft.lines), 26840);
+  });
+
+  it("a net stored amount gets its VAT", () => {
+    const result = invoiceDraftOf(
+      shippingAs({ total: null, amount: 1173.23, is_tax_inclusive: false }),
+      { customerId: "c", now: NOW },
+    );
+    assert.ok(result.ok);
+    assert.equal(Math.abs(grossOf(result.draft.lines) - 26840) < 1, true);
+  });
+
+  it("a missing amount is never zero: shipping, a line or the order total stops the invoice", () => {
+    const noShipping = invoiceDraftOf(shippingAs({ total: undefined }), {
+      customerId: "c",
+      now: NOW,
+    });
+    assert.equal(noShipping.ok, false);
+    assert.match(!noShipping.ok ? noShipping.message : "", /Szállítás/);
+
+    const base = order();
+    const noLine = invoiceDraftOf(
+      order({
+        items: [{ ...base.items[0]!, total: undefined as unknown as number }],
+        shipping_methods: [],
+        total: 0,
+      }),
+      { customerId: "c", now: NOW },
+    );
+    assert.equal(noLine.ok, false);
+    assert.match(
+      !noLine.ok ? noLine.message : "",
+      /nem adta meg ennek a tételnek/,
+    );
+
+    const noTotal = invoiceDraftOf(
+      order({ total: undefined as unknown as number }),
+      { customerId: "c", now: NOW },
+    );
+    assert.equal(noTotal.ok, false);
+    assert.match(!noTotal.ok ? noTotal.message : "", /végösszegét/);
+  });
+});
+
 describe("when an invoice may be issued", () => {
   it("not before confirmation, not after an unsuccessful close, not without a status", () => {
     assert.match(

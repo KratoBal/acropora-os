@@ -155,7 +155,37 @@ function rateOf(taxLines: { rate: number }[] | null | undefined) {
   return Number.isFinite(rate) && rate >= 0 ? String(rate) : null;
 }
 
-const money = (value: number | string | null | undefined) => Number(value ?? 0);
+/**
+ * EGY ÖSSZEG A WEBSHOPBÓL, vagy `null`, ha nincs. A hiány NEM nulla: egy
+ * számolt mező, amit a webshop az adott lekérdezésre nem ad, nullaként egy
+ * nulla forintos számlát engedne át.
+ */
+const amountOf = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+/**
+ * A SZÁLLÍTÁS BRUTTÓJA. A `total` számolt mező, és kifejezett mezőlistával a
+ * webshop nem adja (acrobot mérése a stage-en, 2026-10-05); ilyenkor a tárolt
+ * `amount` a forrás: bruttó áras webshopnál (`is_tax_inclusive`) maga a
+ * bruttó, nettó árasnál a kulccsal felszorozva. Ha egyik sincs, `null`: a
+ * számla nem készül el.
+ */
+function shippingGrossOf(
+  method: MedusaOrderDetailRow["shipping_methods"][number],
+): number | null {
+  const total = amountOf(method.total);
+  if (total !== null) return total;
+  const amount = amountOf(method.amount);
+  if (amount === null) return null;
+  if (method.is_tax_inclusive === true) return amount;
+  const rate = rateOf(method.tax_lines);
+  if (method.is_tax_inclusive === false && rate !== null)
+    return Math.round(amount * (100 + Number(rate))) / 100;
+  return null;
+}
 
 /** A bruttó sorösszeg szövegként, a pénznem tizedesein túl nem kerekítve. */
 const decimalText = (value: number) => String(value);
@@ -163,7 +193,7 @@ const decimalText = (value: number) => String(value);
 interface SourceLine {
   description: string;
   quantity: number;
-  gross: number;
+  gross: number | null;
   taxLines: { rate: number }[] | null | undefined;
   comment: string | null;
 }
@@ -190,14 +220,14 @@ function sourceLinesOf(order: MedusaOrderDetailRow): SourceLine[] {
             .filter(Boolean)
             .join(" · "),
       quantity: Number(item.quantity),
-      gross: money(item.total),
+      gross: amountOf(item.total),
       taxLines: item.tax_lines,
       comment:
         !fee && item.variant_sku ? `Cikkszám: ${item.variant_sku}` : null,
     });
   }
   for (const method of order.shipping_methods ?? []) {
-    const gross = money(method.total);
+    const gross = shippingGrossOf(method);
     if (gross === 0) continue;
     lines.push({
       description: `Szállítás: ${method.name}`,
@@ -241,6 +271,11 @@ export function invoiceDraftOf(
         ok: false,
         message: `A webshop nem adott egyértelmű ÁFA-kulcsot ehhez a tételhez: „${source.description}”. A számla nem állítható ki.`,
       };
+    if (source.gross === null)
+      return {
+        ok: false,
+        message: `A webshop nem adta meg ennek a tételnek az összegét: „${source.description}”. A számla nem állítható ki.`,
+      };
     if (!(source.quantity > 0) || source.gross < 0)
       return {
         ok: false,
@@ -272,12 +307,18 @@ export function invoiceDraftOf(
   }
   if (!lines.length)
     return { ok: false, message: "A rendelésnek nincs számlázható tétele." };
-  const difference =
-    Math.round((invoiceGross - money(order.total)) * 100) / 100;
+  const orderTotal = amountOf(order.total);
+  if (orderTotal === null)
+    return {
+      ok: false,
+      message:
+        "A webshop nem adta meg a rendelés végösszegét, ezért a számla nem állítható ki.",
+    };
+  const difference = Math.round((invoiceGross - orderTotal) * 100) / 100;
   if (Math.abs(difference) >= 1)
     return {
       ok: false,
-      message: `A számla tételei (${invoiceGross} ${currency}) nem adják ki a rendelés végösszegét (${money(order.total)} ${currency}). Valószínűleg kedvezmény vagy jóváírás áll a rendelésen, amit a tételek nem viselnek; a számla nem készül el.`,
+      message: `A számla tételei (${invoiceGross} ${currency}) nem adják ki a rendelés végösszegét (${orderTotal} ${currency}). Valószínűleg kedvezmény vagy jóváírás áll a rendelésen, amit a tételek nem viselnek; a számla nem készül el.`,
     };
   const today = budapestDayKey(input.now);
   return {
