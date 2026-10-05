@@ -1501,7 +1501,6 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       `/admin/order-shipping-notice/${encodeURIComponent(id)}`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(notice),
       },
     );
