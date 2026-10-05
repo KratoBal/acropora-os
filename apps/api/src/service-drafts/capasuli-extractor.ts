@@ -49,6 +49,42 @@ function repeatKey(text: string): string | null {
   if (/korallos/.test(t) && /lcd|kijelzo/.test(t)) return "korallos-lcd";
   return null;
 }
+/** Inline images of a signature or a pasted logo: `[cid:…]`, `<Outlook-….jpg>`. */
+const INLINE_IMAGE = /\[cid:[^\]]*\]|<Outlook-[^>\s]*>/gi;
+/**
+ * The sender's signature block (2026-06-04, 2026-06-06: name, job titles, the
+ * zoo's name, its address, Mobile, E-mail). It has no bullet and no section of
+ * its own, so without this every line became a draft. The anchor is the zoo's
+ * name, a postcode line or a contact field; the name and the job titles stand
+ * right above it, in short Title Case lines.
+ */
+function isSignatureAnchor(f: string): boolean {
+  return (
+    /^(budapest zoo\b|fovarosi allat- ?es novenykert)/.test(f) ||
+    /^h-?\d{4} /.test(f) ||
+    /^(mobile?|mobil|tel|telefon|phone|e-?mail)\s*:/.test(f)
+  );
+}
+const isTitleCaseLine = (line: string) => {
+  const words = line.split(/\s+/);
+  return (
+    words.length <= 5 && words.every((w) => /^\p{Lu}[\p{L}.'’-]*$/u.test(w))
+  );
+};
+/** Index of the first signature line, or the length when there is none. */
+function signatureStart(lines: readonly string[]): number {
+  const anchor = lines.findIndex((l) => isSignatureAnchor(fold(l.trim())));
+  if (anchor < 0) return lines.length;
+  let start = anchor;
+  for (let i = anchor - 1, taken = 0; i >= 0 && taken < 4; i--) {
+    const line = lines[i]!.replace(INLINE_IMAGE, "").trim();
+    if (!line) continue;
+    if (!isTitleCaseLine(line)) break;
+    start = i;
+    taken++;
+  }
+  return start;
+}
 /** Local template parser: no staff names or report text leave the application for a model. */
 export function extractCapasuliReports(body: string): ExtractedReport[] {
   const clean = body.replace(/\r/g, "").replace(/^(?:[ \t]*>[ \t]*)+/gm, "");
@@ -79,7 +115,8 @@ export function extractCapasuliReports(body: string): ExtractedReport[] {
     const items: { text: string; attachmentNames: string[] }[] = [];
     let current: (typeof items)[number] | undefined;
     let workCandidate: (typeof items)[number] | undefined;
-    for (const original of block.split("\n")) {
+    const lines = block.split("\n");
+    for (const original of lines.slice(0, signatureStart(lines))) {
       let line = original.trim();
       const f = fold(line);
       // Mail-client signatures end the report. Android Outlook writes
@@ -119,6 +156,7 @@ export function extractCapasuliReports(body: string): ExtractedReport[] {
       ].map((m) => m[1]!);
       const content = line
         .replace(/\[[^\]]+\.(?:jpe?g|png|webp|gif|mov|mp4)\]/gi, "")
+        .replace(INLINE_IMAGE, "")
         .trim();
       if (!content) {
         if (current) current.attachmentNames.push(...names);

@@ -89,6 +89,68 @@ describe("Cápasuli template extraction", () => {
     assert.equal(r[0]!.problems.length, 1);
     assert.equal(r[0]!.problems[0]!.repeatKey, r[1]!.problems[0]!.repeatKey);
   });
+  // The shapes of 2026-06-04 and 2026-06-06; name, phone, address and e-mail invented.
+  const signature = [
+    "Minta Réka",
+    "Marine Biology Specialist",
+    "Marine Aquarist",
+    "Budapest Zoo & Botanical Garden",
+    "H-1000 Budapest, Példa utca 1.",
+    "Mobile: +36 30 000 0000<tel:+36300000000>",
+    "E-mail: minta.reka@example.org<mailto:minta.reka@example.org>",
+  ];
+  it("drops the sender's signature block after a fault (2026-06-04 shape)", () => {
+    const items = extractCapasuliReports(
+      [
+        "Cápasuli: 2026. június 4.",
+        "Nap folyamán felmerülő hibák, intézkedések: volt",
+        "A biodóm sórámpa rácsa fél állásban megáll, a problémát jeleztük.",
+        ...signature,
+      ].join("\n"),
+    )[0]!.problems;
+    assert.deepEqual(
+      items.map((i) => i.title),
+      ["A biodóm sórámpa rácsa fél állásban megáll, a problémát jeleztük."],
+    );
+  });
+  it("drops the signature with its inline logo after blank lines (2026-06-06 shape)", () => {
+    const items = extractCapasuliReports(
+      [
+        "Cápasuli: 2026. június 6.",
+        "Nap folyamán felmerülő hibák, intézkedések: volt",
+        "A kismedence lakóinál vízcserét végeztünk, és rákötöttük a vödörszűrőt.",
+        "",
+        ...signature.slice(0, 3),
+        "",
+        ...signature.slice(3),
+        "[cid:00000000-0000-4000-8000-000000000000]",
+        "<Outlook-abcdefgh.jpg>",
+      ].join("\n"),
+    )[0]!.problems;
+    assert.deepEqual(
+      items.map((i) => i.title),
+      [
+        "A kismedence lakóinál vízcserét végeztünk, és rákötöttük a vödörszűrőt.",
+      ],
+    );
+  });
+  it("an inline image line alone is not an item, and a contact line alone still ends the report", () => {
+    const items = extractCapasuliReports(
+      [
+        "Cápasuli: 2026. június 2.",
+        "Nap folyamán felmerülő hibák, intézkedések: volt",
+        "A BMS-en két piros hibajel is van.",
+        "[cid:00000000-0000-4000-8000-000000000000]",
+        "<Outlook-abcdefgh.jpg>",
+        "A lehabzó szivattyúja zajos.",
+        "Mobil: +36 30 000 0000",
+      ].join("\n"),
+    )[0]!.problems;
+    assert.deepEqual(
+      items.map((i) => i.title),
+      ["A BMS-en két piros hibajel is van.", "A lehabzó szivattyúja zajos."],
+    );
+  });
   it("rejects invalid dates and bodies without the template", () => {
     assert.deepEqual(extractCapasuliReports("Re: szivattyú csere"), []);
     assert.deepEqual(extractCapasuliReports("Cápasuli: 2026. február 31."), []);
