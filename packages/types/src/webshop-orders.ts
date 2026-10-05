@@ -199,6 +199,32 @@ export interface WebshopOrderStep {
 export interface WebshopOrderHistoryEntry {
   at: string;
   text: string;
+  /**
+   * A sor státuszlevele a webshopból (commerce #479): a legutóbbi küldés,
+   * az újraküldésekkel együtt; `null`, ha nem ment levél (vagy a levélküldés
+   * ki van kapcsolva).
+   */
+  mail: WebshopOrderMailState | null;
+}
+
+export interface WebshopOrderMailState {
+  status: "sent" | "failed" | "pending";
+  at: string;
+  /** Hányszor küldték újra (az első küldésen felül). */
+  resent: number;
+}
+
+/**
+ * A státuszlevél sorsa egy váltás vagy újraküldés után (commerce #479). Az okok
+ * a webshopéi: `not_requested`, `mail_off`, `no_mail_for_status`, `no_email`,
+ * `already_sent`, `shipped_mail_sent`, `failed`.
+ */
+export type WebshopStatusMailOutcome =
+  { sent: true } | { sent: false; reason: string };
+
+export interface WebshopOrderStatusChangeResult {
+  order: WebshopOrderDetail;
+  mail: WebshopStatusMailOutcome;
 }
 
 export interface WebshopOrderDetail {

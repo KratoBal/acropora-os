@@ -1146,6 +1146,9 @@ export type {
   WebshopOrderParcel,
   WebshopOrderParcelCreate,
   WebshopOrderParcelResult,
+  WebshopOrderMailState,
+  WebshopOrderStatusChangeResult,
+  WebshopStatusMailOutcome,
   WebshopParcelSize,
   WebshopShippingNoticeOutcome,
 } from "./webshop-orders.js";

@@ -666,8 +666,19 @@ export interface MedusaOrderBusinessStatus {
     actor: string;
     source: string;
     created_at: string;
+    /** A sor levele (commerce #479); `null`: nem ment, vagy a levélküldés ki van kapcsolva. */
+    notification?: {
+      status: "sent" | "failed" | "pending";
+      at: string;
+      template: string;
+      resent: number;
+    } | null;
   }[];
 }
+
+/** A státuszlevél sorsa a webshop válaszában (commerce #479). */
+export type MedusaStatusNotification =
+  { sent: true } | { sent: false; reason: string };
 
 export interface MedusaOrderListResult {
   rows: MedusaOrderRow[];
@@ -742,7 +753,16 @@ export interface MedusaAdminClient {
    * A szabályt és a Kiszállításkori levonást a webshop workflow-ja viszi; a
    * hibája `MedusaAdminHttpError`, a törzsében a webshop mondatával.
    */
-  transitionBusinessStatus(id: string, status: string): Promise<void>;
+  transitionBusinessStatus(
+    id: string,
+    status: string,
+    notifyCustomer?: boolean,
+  ): Promise<MedusaStatusNotification>;
+  /**
+   * A LEGUTÓBBI státuszlevél újraküldése (`POST .../resend-notification`,
+   * commerce #479), új kulccsal.
+   */
+  resendStatusNotification(id: string): Promise<MedusaStatusNotification>;
   /**
    * A „FELADTUK A CSOMAGODAT” LEVÉL (`POST /admin/order-shipping-notice/:id`,
    * commerce #477). A webshop küldi, rendelés és csomagszám párra egyszer
@@ -1483,14 +1503,30 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     }
   }
 
-  async transitionBusinessStatus(id: string, status: string): Promise<void> {
-    await this.request<unknown>(
-      `/admin/order-business-status/${encodeURIComponent(id)}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ status }),
-      },
+  async transitionBusinessStatus(
+    id: string,
+    status: string,
+    notifyCustomer = true,
+  ): Promise<MedusaStatusNotification> {
+    const body = await this.request<{
+      notification?: MedusaStatusNotification;
+    }>(`/admin/order-business-status/${encodeURIComponent(id)}`, {
+      method: "POST",
+      body: JSON.stringify({ status, notify_customer: notifyCustomer }),
+    });
+    return body.notification ?? { sent: false, reason: "unknown" };
+  }
+
+  async resendStatusNotification(
+    id: string,
+  ): Promise<MedusaStatusNotification> {
+    const body = await this.request<{
+      notification?: MedusaStatusNotification;
+    }>(
+      `/admin/order-business-status/${encodeURIComponent(id)}/resend-notification`,
+      { method: "POST", body: JSON.stringify({}) },
     );
+    return body.notification ?? { sent: false, reason: "unknown" };
   }
 
   async sendShippingNotice(

@@ -15,6 +15,7 @@ import { WebshopOrderDetailPage } from "./webshop-order-detail-page";
 const api = vi.hoisted(() => ({
   detail: vi.fn(),
   changeStatus: vi.fn(),
+  resendStatusMail: vi.fn(),
   issueInvoice: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
@@ -158,6 +159,7 @@ const detail: WebshopOrderDetail = {
     {
       at: "2026-10-05T11:21:00.000Z",
       text: "Rendelés létrejött · Feldolgozásra vár",
+      mail: null,
     },
   ],
 };
@@ -166,6 +168,7 @@ beforeEach(() => {
   auth.session = session("OWNER");
   api.detail.mockReset();
   api.changeStatus.mockReset();
+  api.resendStatusMail.mockReset();
   api.issueInvoice.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
@@ -264,13 +267,16 @@ describe("WebshopOrderDetailPage", () => {
   it("offers only the allowed next statuses and sends the chosen one", async () => {
     api.detail.mockResolvedValue(detail);
     api.changeStatus.mockResolvedValue({
-      ...detail,
-      status: {
-        ...detail.status,
-        code: "stocking",
-        label: "Készletezés alatt",
+      order: {
+        ...detail,
+        status: {
+          ...detail.status,
+          code: "stocking",
+          label: "Készletezés alatt",
+        },
+        nextStatuses: [],
       },
-      nextStatuses: [],
+      mail: { sent: false, reason: "no_mail_for_status" },
     });
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     fireEvent.click(
@@ -298,8 +304,101 @@ describe("WebshopOrderDetailPage", () => {
       "token",
       "order_38",
       "stocking",
+      true,
     );
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByText("Ehhez az állapothoz nem tartozik levél."),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A STÁTUSZLEVÉL (commerce #479). MI PIROSÍT: a „Vevő értesítése” jelölő
+   * kikapcsolása nem jut el a kérésig; a sor levele nem látszik; az
+   * újraküldés nem hívódik, vagy kezelési jog nélkül is gomb áll.
+   */
+  it("an unticked „Vevő értesítése” changes the status without a mail", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.changeStatus.mockResolvedValue({
+      order: detail,
+      mail: { sent: false, reason: "not_requested" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Státusz módosítása" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Státusz módosítása" });
+    const box = within(dialog).getByRole("checkbox", {
+      name: "Vevő értesítése",
+    }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    fireEvent.click(box);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Státusz módosítása" }),
+    );
+    expect(
+      await screen.findByText("A vevő nem kapott levelet (nem kérted)."),
+    ).toBeTruthy();
+    expect(api.changeStatus).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      "stocking",
+      false,
+    );
+  });
+
+  it("the history shows each row's mail, and the latest one can be resent", async () => {
+    const withMail = {
+      ...detail,
+      history: [
+        {
+          at: "2026-10-05T11:21:00.000Z",
+          text: "Rendelés létrejött · Feldolgozásra vár",
+          mail: {
+            status: "sent" as const,
+            at: "2026-10-05T11:21:05.000Z",
+            resent: 1,
+          },
+        },
+        {
+          at: "2026-10-05T11:40:00.000Z",
+          text: "Feldolgozásra vár → Visszaigazolva",
+          mail: {
+            status: "failed" as const,
+            at: "2026-10-05T11:40:02.000Z",
+            resent: 0,
+          },
+        },
+      ],
+    };
+    api.detail.mockResolvedValue(withMail);
+    api.resendStatusMail.mockResolvedValue({
+      order: withMail,
+      mail: { sent: true },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Előzmények" });
+    expect(
+      within(card).getByText("Értesítő elküldve (újraküldve 1×)"),
+    ).toBeTruthy();
+    expect(within(card).getByText("Értesítő nem ment ki")).toBeTruthy();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Értesítő újraküldése" }),
+    );
+    expect(
+      await within(card).findByText("A vevő megkapta a státuszlevelet."),
+    ).toBeTruthy();
+    expect(api.resendStatusMail).toHaveBeenCalledWith("token", "order_38");
+  });
+
+  it("without orders.manage there is no resend button", async () => {
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Előzmények" });
+    expect(
+      within(card).queryByRole("button", { name: "Értesítő újraküldése" }),
+    ).toBeNull();
   });
 
   it("a refusal stays in the dialog with the webshop's reason", async () => {

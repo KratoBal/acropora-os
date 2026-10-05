@@ -272,6 +272,13 @@ export function historyOf(
       entry.from_status === null
         ? `Rendelés létrejött · ${entry.to_label}`
         : `${entry.from_label} → ${entry.to_label}${entry.actor === "carrier" ? " (futár)" : ""}`,
+    mail: entry.notification
+      ? {
+          status: entry.notification.status,
+          at: entry.notification.at,
+          resent: entry.notification.resent,
+        }
+      : null,
   }));
 }
 

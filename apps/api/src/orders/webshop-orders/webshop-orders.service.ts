@@ -14,6 +14,8 @@ import type {
   WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
+  WebshopOrderStatusChangeResult,
+  WebshopStatusMailOutcome,
 } from "@acropora/types";
 
 import {
@@ -216,8 +218,9 @@ export class WebshopOrdersService {
     id: string,
     to: WebshopOrderStatus,
     userId: string,
+    notifyCustomer = true,
     now = new Date(),
-  ): Promise<WebshopOrderDetail> {
+  ): Promise<WebshopOrderStatusChangeResult> {
     const client = await this.client();
     const current = await this.fromWebshop(() =>
       client.orderBusinessStatus(id),
@@ -228,8 +231,9 @@ export class WebshopOrdersService {
       throw new ConflictException(
         `A rendelés „${current.label}” állapotból nem léptethető „${WEBSHOP_ORDER_STATUS_LABELS[to]}” állapotba. Frissítsd az oldalt.`,
       );
+    let mail: WebshopStatusMailOutcome;
     try {
-      await client.transitionBusinessStatus(id, to);
+      mail = await client.transitionBusinessStatus(id, to, notifyCustomer);
     } catch (error) {
       if (
         error instanceof MedusaAdminHttpError &&
@@ -251,7 +255,35 @@ export class WebshopOrdersService {
       from: current.status,
       to,
     });
-    return this.detail(id, now);
+    return { order: await this.detail(id, now), mail };
+  }
+
+  /**
+   * A LEGUTÓBBI STÁTUSZLEVÉL ÚJRAKÜLDÉSE (az adatlap „Értesítő újraküldése”,
+   * commerce #479). Ki kérte, az auditnaplóba kerül.
+   */
+  async resendStatusMail(
+    id: string,
+    userId: string,
+    now = new Date(),
+  ): Promise<WebshopOrderStatusChangeResult> {
+    const client = await this.client();
+    let mail: WebshopStatusMailOutcome;
+    try {
+      mail = await client.resendStatusNotification(id);
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        throw new NotFoundException(
+          "A rendelésnek nincs státusz-előzménye a webshopban.",
+        );
+      if (error instanceof MedusaAdminHttpError)
+        throw new ServiceUnavailableException(
+          `A webshop nem küldte újra a levelet (HTTP ${error.status}).`,
+        );
+      throw error;
+    }
+    await this.repository.recordStatusMailResent({ userId, orderId: id, mail });
+    return { order: await this.detail(id, now), mail };
   }
 
   async list(

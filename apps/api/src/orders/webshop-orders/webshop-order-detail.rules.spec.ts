@@ -7,6 +7,7 @@ import type {
 } from "../../integrations/medusa/medusa-admin.client.js";
 import {
   addressOf,
+  historyOf,
   linesOf,
   shippingOf,
   stepsOf,
@@ -326,6 +327,50 @@ describe("the processing bar", () => {
         (step) => step.state === "current",
       ),
       false,
+    );
+  });
+});
+
+/*
+  A STÁTUSZLEVÉL AZ ELŐZMÉNYEKBEN (commerce #479). MI PIROSÍT: a sor levele
+  elveszik, vagy a sablon neve kijut; a levél nélküli sor levelet mutat.
+*/
+describe("the history's mail", () => {
+  it("each row carries its newest mail, with the resend count; no mail is null", () => {
+    const history = historyOf(
+      status("confirmed", {
+        history: [
+          {
+            from_status: null,
+            from_label: null,
+            to_status: "pending_processing",
+            to_label: "Feldolgozásra vár",
+            actor: "system",
+            source: "order_created",
+            created_at: "2026-10-05T11:21:00.000Z",
+            notification: {
+              status: "sent",
+              at: "2026-10-05T11:21:05.000Z",
+              template: "order-placed",
+              resent: 1,
+            },
+          },
+          {
+            from_status: "pending_processing",
+            from_label: "Feldolgozásra vár",
+            to_status: "confirmed",
+            to_label: "Visszaigazolva",
+            actor: "admin",
+            source: "admin",
+            created_at: "2026-10-05T11:40:00.000Z",
+            notification: null,
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(
+      history.map((entry) => entry.mail),
+      [{ status: "sent", at: "2026-10-05T11:21:05.000Z", resent: 1 }, null],
     );
   });
 });

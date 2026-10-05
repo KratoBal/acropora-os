@@ -49,7 +49,23 @@ export class WebshopOrdersController {
     @Body() body: WebshopOrderStatusChangeDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.orders.changeStatus(id, body.status, user.id);
+    return this.orders.changeStatus(
+      id,
+      body.status,
+      user.id,
+      body.notifyCustomer ?? true,
+    );
+  }
+
+  /** A legutóbbi státuszlevél újraküldése; a válasz a friss adatlap és a levél sorsa. */
+  @Post(":id/status-mail/resend")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  resendStatusMail(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.orders.resendStatusMail(id, user.id);
   }
 
   /**
