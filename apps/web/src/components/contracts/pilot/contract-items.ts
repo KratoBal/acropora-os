@@ -31,3 +31,34 @@ export function contractItemRemovalBlocker(
     ? "Ehhez a tételhez már készült megrendelőlap, ezért nem törölhető."
     : null;
 }
+
+/** A szerver tétel-szabálya (`contracts/dto.ts` `ContractItemDto`), előre. */
+const DECIMAL = /^\d+(?:\.\d+)?$/;
+
+/**
+ * KITÖLTÖTT-E A TÉTEL ÚGY, AHOGY A SZERVER ELFOGADJA. Ugyanaz a szabály az új
+ * szerződés űrlapján és az adatlap szerkesztésekor (kártya c014db6f): enélkül
+ * egy hibás mező az API angol üzenetével térne vissza.
+ */
+export function isValidContractItem(item: {
+  description: string;
+  unitNet: string;
+  quantity: string;
+  vatRatePercent: string;
+  occasionsPerYear: string | number;
+}): boolean {
+  const occasions = Number(item.occasionsPerYear);
+  return (
+    item.description.trim() !== "" &&
+    DECIMAL.test(item.unitNet) &&
+    DECIMAL.test(item.quantity) &&
+    DECIMAL.test(item.vatRatePercent) &&
+    Number.isInteger(occasions) &&
+    occasions >= 1 &&
+    occasions <= 366
+  );
+}
+
+/** Az új, még el nem mentett tétel ideiglenes azonosítója az adatlapon. */
+export const NEW_ITEM_PREFIX = "new-";
+export const isUnsavedItem = (id: string) => id.startsWith(NEW_ITEM_PREFIX);

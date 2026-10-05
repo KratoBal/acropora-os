@@ -17,7 +17,10 @@ import {
 import {
   contractItemRemovalBlocker,
   contractItemsWithOrders,
-} from "./contract-item-removal";
+  isUnsavedItem,
+  isValidContractItem,
+  NEW_ITEM_PREFIX,
+} from "./contract-items";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   PilotBadge,
@@ -55,13 +58,31 @@ export function missingContractFields(contract: {
   number: string;
   title: string;
   validFrom: string;
+  /**
+   * A TÉTELEK IS, MERT 2026-10-05 ÓTA SZERKESZTHETŐK (kártya c014db6f): a
+   * mentés MINDEN tételt elküld, tehát mindnek a szerver szabályát kell
+   * teljesítenie, nem csak egynek, mint az új szerződés űrlapján.
+   */
+  items?: readonly {
+    description: string;
+    unitNet: string;
+    quantity: string;
+    vatRatePercent: string;
+    occasionsPerYear: string | number;
+  }[];
 }): string[] {
   const list: string[] = [];
   if (!contract.number.trim()) list.push("Szerződésszám");
   if (!contract.title.trim()) list.push("Szerződés címe");
   if (!contract.validFrom) list.push("Érvényesség kezdete");
+  // az utolsó tétel nem törölhető a felületen, tehát üres listát nem itt kell
+  // kizárni; ami van, annak mind érvényesnek kell lennie
+  if (contract.items && !contract.items.every(isValidContractItem))
+    list.push("minden tétel kitöltése");
   return list;
 }
+
+let nextNewItem = 0;
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- SZERZŐDÉS ADATLAP.
@@ -244,7 +265,9 @@ export function PilotContractDetailPage({
           mezőt pedig a szerkesztett állapotból.
         */
         items: contract.items.map((item) => ({
-          id: item.id,
+          // az új, még el nem mentett tétel azonosító nélkül megy: a szerver
+          // abból új sort hoz létre
+          ...(isUnsavedItem(item.id) ? {} : { id: item.id }),
           description: item.description,
           unitNet: item.unitNet,
           quantity: item.quantity,
@@ -294,6 +317,44 @@ export function PilotContractDetailPage({
   */
   const lockedItemIds =
     orders === null ? null : contractItemsWithOrders(orders);
+  /*
+    A TÉTEL SZERKESZTÉSE ÉS FELVÉTELE (kártya c014db6f, Ág Luca, 2026-10-05:
+    mentés és újranyitás után is szerkeszthetők legyenek). A változás a
+    `contract` állapotba kerül, és a "Módosítások mentése" küldi.
+  */
+  const editItem = (
+    itemId: string,
+    patch: Partial<ContractSummary["items"][number]>,
+  ) => {
+    if (!contract) return;
+    setContract({
+      ...contract,
+      items: contract.items.map((item) =>
+        item.id === itemId ? { ...item, ...patch } : item,
+      ),
+    });
+  };
+  const addItem = () => {
+    if (!contract) return;
+    setContract({
+      ...contract,
+      items: [
+        ...contract.items,
+        {
+          id: `${NEW_ITEM_PREFIX}${++nextNewItem}`,
+          position: contract.items.length + 1,
+          description: "",
+          unitNet: "",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+          departmentId: null,
+          assets: [],
+        },
+      ],
+    });
+  };
+
   const removeItem = (itemId: string) => {
     if (!contract) return;
     setContract({
@@ -599,22 +660,22 @@ export function PilotContractDetailPage({
                 </p>
               ) : null}
               <ul className="flex flex-col gap-4 text-sm">
-                {contract.items.map((item) => (
+                {contract.items.map((item, index) => (
                   <li
                     key={item.id}
                     className="flex flex-col gap-2 border-b border-pilot-grey-100 pb-3 last:border-0"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-pilot-grey-900">
-                        {item.position}. {item.description} — {item.unitNet} Ft
-                        × {item.quantity} db × {item.occasionsPerYear} alkalom /
+                        {index + 1}. {item.description} — {item.unitNet} Ft ×{" "}
+                        {item.quantity} db × {item.occasionsPerYear} alkalom /
                         év, {item.vatRatePercent}% ÁFA
                       </p>
                       {contract.items.length > 1 ? (
                         <PilotButton
                           variant="secondary"
                           size="action"
-                          aria-label={`${item.position}. tétel törlése`}
+                          aria-label={`${index + 1}. tétel törlése`}
                           disabled={
                             saving ||
                             contractItemRemovalBlocker(
@@ -640,6 +701,62 @@ export function PilotContractDetailPage({
                         {contractItemRemovalBlocker(item.id, lockedItemIds)}
                       </p>
                     ) : null}
+                    <div className="grid gap-2 md:grid-cols-5">
+                      <PilotFormField label="Leírás">
+                        <PilotInput
+                          aria-label={`${index + 1}. tétel leírása`}
+                          value={item.description}
+                          onChange={(value) =>
+                            editItem(item.id, { description: value })
+                          }
+                        />
+                      </PilotFormField>
+                      <PilotFormField label="Nettó egységár">
+                        <PilotInput
+                          aria-label={`${index + 1}. tétel nettó egységára`}
+                          value={item.unitNet}
+                          onChange={(value) =>
+                            editItem(item.id, { unitNet: value })
+                          }
+                        />
+                      </PilotFormField>
+                      <PilotFormField label="Darabszám">
+                        <PilotInput
+                          aria-label={`${index + 1}. tétel darabszáma`}
+                          value={item.quantity}
+                          onChange={(value) =>
+                            editItem(item.id, { quantity: value })
+                          }
+                        />
+                      </PilotFormField>
+                      <PilotFormField label="Alkalom / év">
+                        <PilotInput
+                          aria-label={`${index + 1}. tétel alkalma évente`}
+                          value={
+                            Number.isNaN(item.occasionsPerYear)
+                              ? ""
+                              : String(item.occasionsPerYear)
+                          }
+                          onChange={(value) =>
+                            editItem(item.id, {
+                              occasionsPerYear:
+                                value.trim() === ""
+                                  ? Number.NaN
+                                  : Number(value),
+                            })
+                          }
+                        />
+                      </PilotFormField>
+                      <PilotFormField label="ÁFA %">
+                        <PilotInput
+                          aria-label={`${index + 1}. tétel ÁFA-kulcsa`}
+                          value={item.vatRatePercent}
+                          onChange={(value) =>
+                            editItem(item.id, { vatRatePercent: value })
+                          }
+                        />
+                      </PilotFormField>
+                    </div>
                     {departmentOptions.length > 0 ? (
                       <div className="grid gap-2 md:grid-cols-2">
                         <PilotFormField label="Helyszín">
@@ -681,6 +798,16 @@ export function PilotContractDetailPage({
                   </li>
                 ))}
               </ul>
+              <div>
+                <PilotButton
+                  type="button"
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={addItem}
+                >
+                  Tétel hozzáadása
+                </PilotButton>
+              </div>
             </div>
           </PilotCard>
           <PilotCard>
@@ -699,26 +826,29 @@ export function PilotContractDetailPage({
                   (alapból az összes ki van jelölve):
                 </p>
                 <ul className="flex flex-col gap-1 text-sm">
-                  {contract.items.map((item) => (
-                    <li key={item.id}>
-                      <label className="flex cursor-pointer items-center gap-2 py-1">
-                        <input
-                          type="checkbox"
-                          checked={selectedItemIds.has(item.id)}
-                          onChange={() => toggleItem(item.id)}
-                          className="h-4 w-4 rounded accent-pilot-aqua-600"
-                        />
-                        <span className="text-pilot-grey-800">
-                          {item.position}. {item.description}
-                        </span>
-                        {item.departmentId ? null : (
-                          <span className="text-xs text-red-600">
-                            (nincs helyszín megadva -- nem állítható ki belőle)
+                  {contract.items
+                    .filter((item) => !isUnsavedItem(item.id))
+                    .map((item) => (
+                      <li key={item.id}>
+                        <label className="flex cursor-pointer items-center gap-2 py-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedItemIds.has(item.id)}
+                            onChange={() => toggleItem(item.id)}
+                            className="h-4 w-4 rounded accent-pilot-aqua-600"
+                          />
+                          <span className="text-pilot-grey-800">
+                            {item.position}. {item.description}
                           </span>
-                        )}
-                      </label>
-                    </li>
-                  ))}
+                          {item.departmentId ? null : (
+                            <span className="text-xs text-red-600">
+                              (nincs helyszín megadva -- nem állítható ki
+                              belőle)
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    ))}
                 </ul>
                 <div className="mt-3">
                   <PilotButton

@@ -22,6 +22,8 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
+import { isValidContractItem } from "./contract-items";
+
 export type DraftItem = {
   description: string;
   unitNet: string;
@@ -65,7 +67,6 @@ function money(value: string) {
  * UGYANAZ A MINTA, MINT AZ API `ContractItemDto`-JÁBAN
  * (`apps/api/src/contracts/dto.ts`) -- ha ott változik, itt is kell.
  */
-const DECIMAL = /^\d+(?:\.\d+)?$/;
 
 /**
  * A "validFrom must be a valid ISO 8601 date string" ANGOL API-HIBA OKA:
@@ -90,16 +91,7 @@ export function missingFields(draft: {
   if (!draft.number.trim()) missing.push("Szerződésszám");
   if (!draft.title.trim()) missing.push("Szerződés címe");
   if (!draft.validFrom) missing.push("Érvényesség kezdete");
-  const hasValidItem = draft.items.some(
-    (item) =>
-      item.description.trim() !== "" &&
-      DECIMAL.test(item.unitNet) &&
-      DECIMAL.test(item.quantity) &&
-      DECIMAL.test(item.vatRatePercent) &&
-      Number.isInteger(Number(item.occasionsPerYear)) &&
-      Number(item.occasionsPerYear) >= 1 &&
-      Number(item.occasionsPerYear) <= 366,
-  );
+  const hasValidItem = draft.items.some(isValidContractItem);
   if (!hasValidItem) missing.push("legalább egy kitöltött tétel");
   return missing;
 }
