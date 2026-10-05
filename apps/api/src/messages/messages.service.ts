@@ -337,6 +337,7 @@ function toPerson(row: MessagingUserRow): ConversationPerson {
     userId: row.id,
     name: personDisplayName(row),
     avatarUrl: row.avatarUrl,
+    role: row.role,
     isActive: row.isActive,
   };
 }

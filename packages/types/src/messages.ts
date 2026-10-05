@@ -3,6 +3,8 @@
  * a mobil ugyanezeket olvassa.
  */
 
+import type { UserRole } from "./auth.js";
+
 export type ConversationTypeValue = "DIRECT" | "GROUP";
 export type ConversationAudienceValue = "INTERNAL" | "PARTNER";
 export type MessageTypeValue = "TEXT" | "IMAGE" | "FILE" | "SYSTEM";
@@ -20,6 +22,8 @@ export interface ConversationPerson {
   /** A becenév, ha van, különben a teljes név (`personDisplayName`). */
   name: string;
   avatarUrl: string | null;
+  /** A szerepköre: a felület címkét ír belőle (a Figma kollégaválasztója). */
+  role: UserRole;
   /** Deaktivált kolléga: a régi beszélgetésben marad, újat nem lehet vele indítani. */
   isActive: boolean;
 }
