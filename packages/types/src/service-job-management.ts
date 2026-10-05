@@ -103,8 +103,20 @@ export interface ServiceJobListItem {
    * (`ServiceJobDetail.assignees`). Felvéve a Figma-lista "Delegálva"
    * oszlopahoz (2026-09-24): a mai adat MAR letezik a jegyen, a listaba
    * eddig csak nem jutott el.
+   *
+   * PARTNERNEK NEM JAR, ES A KULCS HIANYZIK (kartya a0660885, 2026-10-05):
+   * az azonosito es a delegalas ideje belso. A partner a NEVEKET kapja, kulon
+   * mezoben (`assigneeNames`). A vetites: `partnerServiceJobListItem`.
    */
-  assignees: ServiceJobAssignee[];
+  assignees?: ServiceJobAssignee[];
+  /**
+   * A DELEGALTAK NEVE, CSAK A PARTNER VALASZABAN (kartya a0660885, acrobot
+   * 26185). Ugyanaz az alak es ugyanaz a dontes, mint a munkalap-listan
+   * (`WorksheetListItem.assigneeNames`, a partner portal "Felelos" oszlopa),
+   * es mint a jegy-naplo kolleganeve (Balazs, 2026-09-21: "a megjegyzes nem
+   * kell a nev igen"). A belso valaszban nincs: ott az `assignees` all.
+   */
+  assigneeNames?: string[];
   worksheetCount: number;
   createdAt: string;
   /**
@@ -858,6 +870,30 @@ export type ServiceJobPartnerTimelineEntry =
  * pontosan azt az alapertelmezest venne el, amiert ez a tipus letezik -- egy
  * holnap felvett belso mezo magatol atmenne rajta.
  */
+/**
+ * A LISTA-SOR PARTNER ALAKJA (kartya a0660885, 2026-10-05).
+ *
+ * A 10-04-i szerviz-felmeres merte: a `GET /service/jobs` lista partnernek is
+ * kiadta a delegaltak teljes rekordjat (nev, felhasznalo-azonosito, a
+ * delegalas ideje). A dontes (acrobot 26185): a kollega NEVE a partnernek
+ * lathato, ugyanugy, mint a munkalap-listan es a jegy-naplon; az azonosito es
+ * az ido nem. Ugyanaz az elv, mint a reszletlapon (Balazs, 2026-09-21
+ * 12:07:32 UTC): a partner SAJAT ALAKOT kap, mert a "nem latja" nem vedelem.
+ *
+ * A belso allapot (`status`) es a szamlalo-kulcsok maradnak: a partner portal
+ * a `counts`-ot a belso allapotok szerint osszegzi
+ * (`apps/partner/src/lib/ticket-scope-counts.ts`). Szemelyes adat nincs bennuk.
+ */
+export function partnerServiceJobListItem(
+  item: ServiceJobListItem,
+): ServiceJobListItem {
+  const { assignees, ...partner } = item;
+  return {
+    ...partner,
+    assigneeNames: (assignees ?? []).map((assignee) => assignee.name),
+  };
+}
+
 export function partnerServiceJobDetail(
   detail: ServiceJobDetail,
 ): ServiceJobPartnerDetail {
