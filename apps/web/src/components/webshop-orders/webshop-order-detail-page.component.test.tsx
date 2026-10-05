@@ -16,6 +16,8 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   changeStatus: vi.fn(),
   resendStatusMail: vi.fn(),
+  editLine: vi.fn(),
+  replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
@@ -122,6 +124,7 @@ const detail: WebshopOrderDetail = {
   invoiceNumber: null,
   invoice: null,
   parcel: null,
+  lineEdit: { allowed: true, reason: null },
   steps: [
     {
       key: "confirm",
@@ -169,6 +172,8 @@ beforeEach(() => {
   api.detail.mockReset();
   api.changeStatus.mockReset();
   api.resendStatusMail.mockReset();
+  api.editLine.mockReset();
+  api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
@@ -684,6 +689,173 @@ describe("WebshopOrderDetailPage", () => {
     expect(within(card).getByText("Teszt-csomag")).toBeTruthy();
     expect(
       within(card).queryByRole("button", { name: /Címke|Csomag feladása/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * A TÉTELMŰVELETEK ÉS A SZÉTBONTÁS-KIJELÖLÉS (Rendelések, 6. PR). MI
+   * PIROSÍT: a mennyiség, a csere vagy a törlés nem a választott tételre és
+   * értékkel megy; a webshop elutasítása elveszik; tiltott állapotban ikon áll,
+   * vagy nem látszik, miért tiltott; a „Szétbontás” kijelölés nélkül is áll,
+   * vagy nem a kijelölt tételeket mutatja; kezelési jog nélkül művelet áll.
+   */
+  const twoLines: WebshopOrderDetail = {
+    ...detail,
+    lines: [
+      ...detail.lines,
+      {
+        id: "i2",
+        title: "Coral Food",
+        variantTitle: "100 ml",
+        sku: "CF-100",
+        quantity: 2,
+        unitPrice: 3000,
+        total: 6000,
+      },
+    ],
+  };
+
+  it("a quantity goes to the chosen line with the new value", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    api.editLine.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    fireEvent.click(
+      within(items).getAllByRole("button", {
+        name: "Mennyiség módosítása",
+      })[1]!,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Mennyiség módosítása" });
+    fireEvent.change(within(dialog).getByLabelText("Új mennyiség"), {
+      target: { value: "1" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Mennyiség módosítása" }),
+      ).toBeNull(),
+    );
+    expect(api.editLine).toHaveBeenCalledWith("token", "order_38", "i2", {
+      kind: "quantity",
+      quantity: 1,
+    });
+  });
+
+  it("a removal asks first; the webshop's refusal stays in the dialog", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    api.editLine.mockRejectedValue(
+      new Error(
+        "A tétel nem változott. A webshop válasza: A szerkesztés után a rendelés többe kerül",
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    fireEvent.click(
+      within(items).getAllByRole("button", { name: "Tétel törlése" })[0]!,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Tétel törlése" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlés" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(
+      /többe kerül/,
+    );
+    expect(api.editLine).toHaveBeenCalledWith("token", "order_38", "i1", {
+      kind: "remove",
+    });
+  });
+
+  it("a replacement searches, takes the picked variant and the quantity", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    api.replacementVariants.mockResolvedValue([
+      { variantId: "v1", title: "Reef Salt Pro 25 kg", sku: "RSP-25" },
+    ]);
+    api.editLine.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    fireEvent.click(
+      within(items).getAllByRole("button", { name: "Termék cseréje" })[0]!,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Termék cseréje" });
+    fireEvent.change(within(dialog).getByLabelText("Termék keresése"), {
+      target: { value: "reef" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keresés" }));
+    fireEvent.click(
+      await within(dialog).findByRole("radio", { name: /Reef Salt Pro 25 kg/ }),
+    );
+    fireEvent.change(within(dialog).getByLabelText("Mennyiség"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Csere" }));
+    await vi.waitFor(() =>
+      expect(api.editLine).toHaveBeenCalledWith("token", "order_38", "i1", {
+        kind: "replace",
+        variantId: "v1",
+        quantity: 2,
+      }),
+    );
+    expect(api.replacementVariants).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      "reef",
+    );
+  });
+
+  it("when the lines cannot change, the icons go and the reason shows; selecting still works", async () => {
+    api.detail.mockResolvedValue({
+      ...twoLines,
+      lineEdit: {
+        allowed: false,
+        reason:
+          "A számla már ki van állítva: a tétel csak a számla sztornója után módosítható.",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    expect(within(items).getByText(/sztornója után/)).toBeTruthy();
+    expect(
+      within(items).queryByRole("button", {
+        name: /Mennyiség|cseréje|törlése/,
+      }),
+    ).toBeNull();
+    expect(within(items).getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("Szétbontás appears only with a selection, and shows the selected lines", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    expect(
+      within(items).queryByRole("button", { name: "Szétbontás" }),
+    ).toBeNull();
+    const box = within(items).getByRole("checkbox", {
+      name: "Coral Food kijelölése",
+    });
+    fireEvent.click(box);
+    fireEvent.click(within(items).getByRole("button", { name: "Szétbontás" }));
+    const dialog = screen.getByRole("dialog", { name: "Szétbontás" });
+    expect(
+      within(within(dialog).getByRole("list", { name: "Kijelölt tételek" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Coral Food · 2 db"]);
+    expect(within(dialog).getByText(/következő körben/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Bezárás" }));
+    fireEvent.click(box);
+    expect(
+      within(items).queryByRole("button", { name: "Szétbontás" }),
+    ).toBeNull();
+  });
+
+  it("without orders.manage there is no selection and no line action", async () => {
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    expect(within(items).queryByRole("checkbox")).toBeNull();
+    expect(
+      within(items).queryByRole("button", {
+        name: /Mennyiség|cseréje|törlése/,
+      }),
     ).toBeNull();
   });
 });

@@ -39,6 +39,31 @@ export class WebshopOrdersRepository {
     });
   }
 
+  /** Egy tételművelet: ki, melyik tételen, mit (a webshop „admin” névvel rögzíti). */
+  async recordLineEdit(input: {
+    userId: string;
+    orderId: string;
+    itemId: string;
+    title: string;
+    before: number;
+    edit: { kind: string; quantity?: number; variantId?: string };
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "webshop-order.line-edited",
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: {
+          itemId: input.itemId,
+          title: input.title,
+          before: input.before,
+          ...input.edit,
+        },
+      },
+    });
+  }
+
   /** A státuszlevél újraküldése: ki kérte, és mi lett a sorsa. */
   async recordStatusMailResent(input: {
     userId: string;

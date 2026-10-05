@@ -8,6 +8,8 @@ import {
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderHistoryEntry,
+  type WebshopOrderLineEdit,
+  type WebshopVariantOption,
   type WebshopOrderStatus,
   type WebshopOrderStep,
   type WebshopParcelSize,
@@ -26,6 +28,12 @@ import {
 import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
+import { useLineSelection } from "./line-selection";
+import {
+  OrderLinesTable,
+  ScissorsIcon,
+  SplitDialog,
+} from "./webshop-order-lines";
 import {
   STATUS_TILE,
   formatMoney,
@@ -80,19 +88,23 @@ function Card({
   title,
   children,
   className = "",
+  action,
 }: {
   title: string;
   children: ReactNode;
   className?: string;
+  /** A cím mellett álló művelet (a Tételeknél a „Szétbontás”). */
+  action?: ReactNode;
 }) {
   return (
     <section
       aria-label={title}
       className={`rounded-2xl border border-pilot-grey-200 bg-white p-5 ${className}`}
     >
-      <h2 className="mb-4 text-base font-semibold text-pilot-grey-900">
-        {title}
-      </h2>
+      <div className="mb-4 flex items-center gap-3">
+        <h2 className="text-base font-semibold text-pilot-grey-900">{title}</h2>
+        {action}
+      </div>
       {children}
     </section>
   );
@@ -331,6 +343,12 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueInvoice(token, id));
     setNow(Date.now());
   };
+  const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
+    setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
+    setNow(Date.now());
+  };
+  const searchVariants = (query: string) =>
+    webshopOrdersApi.replacementVariants(token, id, query);
   const createParcel = async (size: WebshopParcelSize | undefined) => {
     const result = await webshopOrdersApi.createParcel(token, id, size);
     setOrder(result.order);
@@ -427,6 +445,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onCreateParcel={createParcel}
           onParcelLabel={parcelLabel}
           onReleaseParcel={releaseParcel}
+          onEditLine={editLine}
+          onSearchVariants={searchVariants}
         />
       ) : null}
     </PilotThemeRoot>
@@ -821,6 +841,8 @@ function OrderBody({
   onCreateParcel,
   onParcelLabel,
   onReleaseParcel,
+  onEditLine,
+  onSearchVariants,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -839,8 +861,12 @@ function OrderBody({
   ) => Promise<WebshopShippingNoticeOutcome>;
   onParcelLabel: () => Promise<void>;
   onReleaseParcel: () => Promise<void>;
+  onEditLine: (itemId: string, edit: WebshopOrderLineEdit) => Promise<void>;
+  onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
+  const selection = useLineSelection(order.lines.map((line) => line.id));
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
   const tile = order.status.code ? STATUS_TILE[order.status.code] : null;
   const money = (value: number) => formatMoney(value, order.currency);
@@ -1055,48 +1081,37 @@ function OrderBody({
             </div>
           </Card>
 
-          <Card title="Tételek">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-pilot-grey-200 text-[11px] uppercase tracking-[0.05em] text-pilot-grey-500">
-                    <th className="py-2 pr-3 font-semibold">Termék</th>
-                    <th className="py-2 pr-3 font-semibold">Cikkszám</th>
-                    <th className="py-2 pr-3 text-right font-semibold">
-                      Menny.
-                    </th>
-                    <th className="py-2 pr-3 text-right font-semibold">
-                      Egységár
-                    </th>
-                    <th className="py-2 text-right font-semibold">Összesen</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-pilot-grey-100">
-                  {order.lines.map((line) => (
-                    <tr key={line.id}>
-                      <td className="py-3 pr-3 text-pilot-grey-900">
-                        {line.title}
-                        {line.variantTitle ? (
-                          <span className="block text-xs text-pilot-grey-500">
-                            {line.variantTitle}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="py-3 pr-3 text-xs text-pilot-grey-600">
-                        {line.sku ?? "—"}
-                      </td>
-                      <td className="py-3 pr-3 text-right">{line.quantity}</td>
-                      <td className="py-3 pr-3 text-right">
-                        {money(line.unitPrice)}
-                      </td>
-                      <td className="py-3 text-right font-semibold">
-                        {money(line.total)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <Card
+            title="Tételek"
+            action={
+              selection.selectedIds.length ? (
+                <button
+                  type="button"
+                  onClick={() => setSplitOpen(true)}
+                  className="flex items-center gap-2 rounded-lg border border-pilot-accent-warm px-3 py-1 text-sm font-medium text-pilot-accent-warm-text"
+                >
+                  <ScissorsIcon />
+                  Szétbontás
+                </button>
+              ) : null
+            }
+          >
+            <OrderLinesTable
+              order={order}
+              money={money}
+              canManage={canManage}
+              selection={selection}
+              onEdit={onEditLine}
+              onSearchVariants={onSearchVariants}
+            />
+            {splitOpen ? (
+              <SplitDialog
+                lines={order.lines.filter((line) =>
+                  selection.selectedIds.includes(line.id),
+                )}
+                onClose={() => setSplitOpen(false)}
+              />
+            ) : null}
             <div className="mt-4 flex flex-col-reverse gap-4 border-t border-pilot-grey-200 pt-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="flex flex-wrap gap-2">
                 {payment?.authorized != null &&

@@ -5,6 +5,8 @@ import type {
   WebshopOrderParcelResult,
   WebshopOrderStatus,
   WebshopOrderStatusChangeResult,
+  WebshopOrderLineEdit,
+  WebshopVariantOption,
   WebshopParcelSize,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -61,6 +63,26 @@ export const webshopOrdersApi = {
         method: "POST",
         body: JSON.stringify({ status, notifyCustomer }),
       },
+    );
+  },
+  /** Tételművelet (mennyiség, csere, törlés); a válasz a friss adatlap. */
+  editLine(
+    token: string,
+    id: string,
+    itemId: string,
+    edit: WebshopOrderLineEdit,
+  ) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/lines/${encodeURIComponent(itemId)}`,
+      token,
+      { method: "POST", body: JSON.stringify(edit) },
+    );
+  },
+  /** Termékváltozatok a cseréhez. */
+  replacementVariants(token: string, id: string, query: string) {
+    return apiRequest<WebshopVariantOption[]>(
+      `/webshop-orders/${encodeURIComponent(id)}/replacement-variants?${new URLSearchParams({ q: query })}`,
+      token,
     );
   },
   /** A legutóbbi státuszlevél újraküldése. */

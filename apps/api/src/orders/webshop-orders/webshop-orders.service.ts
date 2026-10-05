@@ -82,6 +82,11 @@ export class WebshopOrdersService {
     ) => MedusaAdminClient = medusaClientFromEnvironment,
   ) {}
 
+  /** A webshop admin kliense, a kapcsolat hibáját 503-ként (a tételműveletek ezen mennek). */
+  adminClient(): Promise<MedusaAdminClient> {
+    return this.client();
+  }
+
   private async client(): Promise<MedusaAdminClient> {
     try {
       const resolved = await this.credentials.resolve();
