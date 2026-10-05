@@ -41,7 +41,7 @@ export interface MailTemplateResponse {
    * után nem lenne mihez visszatérni -- a szöveg ott állna a szerveren, és
    * semmi nem adná oda.
    */
-  defaultTemplate: { subject: string; body: string };
+  defaultTemplate: { subject: string; body: string; bodyHtml?: string };
   /**
    * A link-valtozok mintaja az elonezethez: a szerver a valodi level webcimevel
    * es utvonalaval epiti (2026-09-28). Ures ertek: a szerveren nincs webcim, a
@@ -58,7 +58,22 @@ export interface MailTemplateResponse {
   variables: readonly MailTemplateVariable[];
 }
 
+/** One row of the template list: whether its text is stored, and since when. */
+export interface MailTemplateState {
+  id: string;
+  source: "stored" | "default";
+  updatedAt: string | null;
+}
+
 export const mailTemplatesApi = {
+  list(token: string, options: { signal?: AbortSignal } = {}) {
+    return apiRequest<MailTemplateState[]>(
+      "/notifications/mail-templates",
+      token,
+      { signal: options.signal },
+    );
+  },
+
   read(token: string, id: string, options: { signal?: AbortSignal } = {}) {
     return apiRequest<MailTemplateResponse>(
       `/notifications/mail-templates/${encodeURIComponent(id)}`,
