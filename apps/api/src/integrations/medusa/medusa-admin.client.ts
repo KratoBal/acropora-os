@@ -520,6 +520,50 @@ export interface MedusaOrderRow {
   sales_channel_id: string | null;
 }
 
+/**
+ * EGY SOR A WEBSHOP RENDELÉSLISTÁJÁBÓL (`GET /admin/order-overview`,
+ * acropora-commerce #472, `order-query-projection.ts`). A pénz sima szám, a
+ * dátum ISO-szöveg (JSON).
+ */
+export interface MedusaOrderOverviewRow {
+  id: string;
+  display_id: number;
+  created_at: string;
+  total: number;
+  email: string;
+  currency_code: string | null;
+  customer_name: string | null;
+  phone: string | null;
+  business_status: {
+    code: string | null;
+    label: string | null;
+    changed_at: string | null;
+  };
+  shipping_method: string | null;
+  pickup_point: { id: string | null; name: string } | null;
+  payment: {
+    provider_id: string | null;
+    status: string | null;
+    amount: number | null;
+    captured_amount: number | null;
+    refunded_amount: number | null;
+  } | null;
+  related_order: { id: string; role: "pickup" | "parent" } | null;
+  customer_signals: {
+    is_new_customer: boolean;
+    unsuccessful_closed_order_count: number;
+    has_other_open_order: boolean;
+    purchased_without_registration: boolean;
+  };
+}
+
+export interface MedusaOrderOverviewPage {
+  orders: MedusaOrderOverviewRow[];
+  count: number;
+  offset: number;
+  limit: number;
+}
+
 export interface MedusaOrderListResult {
   rows: MedusaOrderRow[];
   /**
@@ -574,6 +618,14 @@ export interface MedusaAdminClient {
    * az elso futasban van, es a hatar szabja meg, mennyit kapunk.
    */
   listOrders(sinceIso: string | null): Promise<MedusaOrderListResult>;
+  /**
+   * A WEBSHOP RENDELÉSEI A „RENDELÉSEK” OLDALHOZ, lapozva, a legújabb elöl,
+   * az üzleti státusszal együtt (a sima `/admin/orders` azt nem hozza).
+   */
+  orderOverview(page: {
+    limit: number;
+    offset: number;
+  }): Promise<MedusaOrderOverviewPage>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1202,6 +1254,19 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     );
     const rows = body.orders ?? [];
     return { rows, truncated: rows.length >= ORDER_LIST_LIMIT };
+  }
+
+  async orderOverview(page: {
+    limit: number;
+    offset: number;
+  }): Promise<MedusaOrderOverviewPage> {
+    const params = new URLSearchParams({
+      limit: String(page.limit),
+      offset: String(page.offset),
+    });
+    return this.request<MedusaOrderOverviewPage>(
+      `/admin/order-overview?${params.toString()}`,
+    );
   }
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {

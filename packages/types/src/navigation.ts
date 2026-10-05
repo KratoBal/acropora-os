@@ -279,6 +279,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.ORDERS_VIEW),
   },
   {
+    /** Az új (Medusa) webshop rendelései; a UNAS lista a `webshop-orders`. */
+    id: "webshop-medusa-orders",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.ORDERS_VIEW),
+  },
+  {
     id: "webshop-customers",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.CUSTOMERS_VIEW),

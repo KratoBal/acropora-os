@@ -1102,3 +1102,23 @@ export type {
 } from "./messages.js";
 
 export type { CashRegisterReceiptListResponse } from "./cash-registers.js";
+
+export {
+  WEBSHOP_ORDER_CLOSED_STATUSES,
+  WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_ORDER_STAGES,
+  WEBSHOP_ORDER_STAGE_LABELS,
+  WEBSHOP_ORDER_STALE_DEFAULTS,
+  WEBSHOP_ORDER_STATUSES,
+  WEBSHOP_ORDER_STATUS_LABELS,
+} from "./webshop-orders.js";
+export type {
+  WebshopOrderListItem,
+  WebshopOrderListQuery,
+  WebshopOrderListResponse,
+  WebshopOrderPaymentState,
+  WebshopOrderSortField,
+  WebshopOrderStage,
+  WebshopOrderStatus,
+  WebshopOrderView,
+} from "./webshop-orders.js";

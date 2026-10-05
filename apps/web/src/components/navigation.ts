@@ -203,6 +203,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "webshop-orders",
       },
       {
+        // Balázs, 2026-10-05: az új webshop rendelései (Medusa), feldolgozás,
+        // számlázás és feladás egy helyen. A UNAS lista mellette változatlan.
+        href: "/webshop/rendelesek",
+        label: "Rendelések",
+        icon: "cart",
+        entryId: "webshop-medusa-orders",
+      },
+      {
         href: "/vevok",
         label: "Webshop vásárlók",
         icon: "users",
