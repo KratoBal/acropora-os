@@ -1058,6 +1058,24 @@ export class ServiceJobsService {
     return this.repository.listAssignments(userId);
   }
 
+  /**
+   * THE MENU NUMBER: open repair tickets assigned to the user, with the
+   * list's own visibility and hidden-row rule (hidden rows never count).
+   */
+  async navigationCount(user: AuthenticatedUser): Promise<number> {
+    const visibility: Prisma.ServiceJobWhereInput = {
+      AND: [
+        await this.visibilityFor(user),
+        hiddenRowsWhere(
+          partnerScopeOf(user),
+          false,
+          hasPermission(user, PERMISSIONS.SERVICE_HIDE),
+        ),
+      ],
+    };
+    return this.repository.countAssignedOpen(visibility, user.id);
+  }
+
   async list(
     query: ServiceJobListQueryDto,
     user: AuthenticatedUser,

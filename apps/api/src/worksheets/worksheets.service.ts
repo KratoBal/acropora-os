@@ -349,6 +349,20 @@ export class WorksheetsService {
    * A BELSOS AGON A MASODIK LEKERDEZEST EL SEM INDITJUK: ott a szuro ures,
    * tehat a hozzarendelt helyszinek nem szamitanak.
    */
+  /** The menu number: see `WorksheetsRepository.countAssignedToFinish`. */
+  async navigationCount(user: AuthenticatedUser): Promise<number> {
+    const scope = partnerScopeOf(user);
+    const assignedUnitIds =
+      scope.kind === "internal"
+        ? []
+        : await this.repository.assignedUnitIds(user.id);
+    return this.repository.countAssignedToFinish(
+      scope,
+      assignedUnitIds,
+      user.id,
+    );
+  }
+
   async list(
     query: WorksheetListQueryDto,
     user: AuthenticatedUser,

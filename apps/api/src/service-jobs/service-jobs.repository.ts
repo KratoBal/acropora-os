@@ -1,4 +1,7 @@
-import { serviceJobReporterName } from "@acropora/types";
+import {
+  SERVICE_JOB_FINISHED_STATUSES,
+  serviceJobReporterName,
+} from "@acropora/types";
 import { Injectable } from "@nestjs/common";
 import type { NamedPerson } from "@acropora/types";
 
@@ -1122,6 +1125,32 @@ export class ServiceJobsRepository {
    * A `groupBy` a HATARTOL FUGGETLEN: a ketszazas vagas a lapozasra vonatkozik,
    * nem a szamolasra.
    */
+  /**
+   * THE MENU NUMBER (navigation counters, card 4a6813db): repair tickets
+   * assigned to the user and not finished, inside the same visibility as the
+   * list. Repair only: the Hibajegyek menu lists repairs, maintenance has its
+   * own.
+   */
+  async countAssignedOpen(
+    visibility: Prisma.ServiceJobWhereInput,
+    userId: string,
+  ): Promise<number> {
+    return this.database.serviceJob.count({
+      where: {
+        AND: [
+          visibility,
+          { kind: "REPAIR" },
+          {
+            status: {
+              notIn: [...SERVICE_JOB_FINISHED_STATUSES] as ServiceJobStatus[],
+            },
+          },
+          { assignees: { some: { userId } } },
+        ],
+      },
+    });
+  }
+
   async countsByStatus(
     visibility: Prisma.ServiceJobWhereInput,
     search?: string,

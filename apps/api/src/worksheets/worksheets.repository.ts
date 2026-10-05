@@ -985,6 +985,29 @@ export class WorksheetsRepository extends Repository {
    * (nehany ezer lapig nem merheto); ha egyszer tizezres nagysagrend lesz, mind
    * a ketto helye egy karbantartott oszlop a `Worksheet` soron.
    */
+  /**
+   * THE MENU NUMBER (navigation counters, card 4a6813db): worksheets
+   * assigned to the user whose latest version still needs the assignee, a
+   * draft or a rejected one. Awaiting signature waits on the customer, signed
+   * is done. The list's visibility (`worksheetListWheres`), hidden rows out.
+   */
+  async countAssignedToFinish(
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+    userId: string,
+  ): Promise<number> {
+    const { counts } = worksheetListWheres(
+      scope,
+      assignedUnitIds,
+      { assignees: { some: { userId } } },
+      {},
+      false,
+      false,
+    );
+    const byStatus = await this.countsByLatestStatus(counts);
+    return byStatus.DRAFT + byStatus.REJECTED;
+  }
+
   private async countsByLatestStatus(
     where: Prisma.WorksheetWhereInput,
   ): Promise<Record<WorksheetVersionStatus, number>> {
