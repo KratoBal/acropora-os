@@ -142,6 +142,32 @@ describe("mergeManualUploads", () => {
     );
   });
 
+  it("the number match needs no gross: the TEA copy collected from the mailbox has none", () => {
+    const merged = mergeManualUploads(
+      [
+        feed("m-tea", {
+          source: "MAILBOX",
+          number: "E-SI-2026-51598",
+          gross: null,
+          supplierName: "TEA MOBILITÁS Kft.",
+        }),
+        upload("u-tea", "E-SI-2026-51598.pdf"),
+      ],
+      new Map([["d-tea", ["u-tea"]]]),
+      [
+        debit("d-tea", {
+          amount: D(20000),
+          counterpartyName: "BARIONP*TEA",
+          bookingDate: "2026-09-28",
+        }),
+      ],
+    );
+    assert.deepEqual(
+      merged.map((d) => [d.id, d.aliasIds ?? []]),
+      [["m-tea", ["u-tea"]]],
+    );
+  });
+
   it("KBOSS: same amount and partner, but the file names another number of the same series, so two invoices", () => {
     const documents = [
       feed("f-kboss", {

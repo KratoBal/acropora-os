@@ -607,7 +607,8 @@ export function monthlyCardGroups(debits: readonly MatchableDebit[]): {
  * 2026-10-02: a Tesla 4042V0000011711). Itt összevonjuk azzal az EGYETLEN
  * számla-sorral, amelyik
  *
- *   - a feltöltés fájlnevével azonos számú, VAGY
+ *   - a feltöltés fájlnevével azonos számú (bruttó nélkül is: a postafiókból
+ *     begyűjtött hazai számlának gyakran nincs, mérve 2026-10-05, TEA), VAGY
  *   - a 3. szabály szerint illik MINDEN terheléséhez: partner (0,5), pontos
  *     összeg, dátumablak, és a száma nem egy ugyanolyan alakú MÁSIK szám,
  *     mint a fájlnév (KBOSS: a feltöltés E-KBOSS-2026-503610, a sor
@@ -653,7 +654,6 @@ export function mergeManualUploads(
         d !== upload &&
         d.source !== "UPLOAD" &&
         d.kind === "INVOICE" &&
-        d.gross !== null &&
         !taken.has(d) &&
         // más terheléshez kézzel párosítva: az a másik számlája
         (pairedTo.get(d) ?? []).every((debit) => uploadDebits.includes(debit)),
