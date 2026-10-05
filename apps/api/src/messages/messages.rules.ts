@@ -142,3 +142,147 @@ export const ORPHAN_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 /** A bélyegkép dokumentum-azonosítója a tárolóban, az eredeti mellett. */
 export const thumbnailDocumentId = (attachmentId: string) =>
   `${attachmentId}-thumb`;
+
+/**
+ * A KERESÉS MINTÁJA (3. fázis, prompt 13. pont). Az `ILIKE` maga a `%` és a
+ * `_` jelet joker-karakternek veszi, ezért a felhasználó szövegében ezeket
+ * (és magát a `\` jelet) escape-eljük: a „100%” keresés a „100%” szövegre
+ * illeszkedjen, ne minden „100”-ra. Az ügyfélkereső mintája
+ * (`customerSearchPattern`), az ékezet-függetlenséget a lekérdezés adja.
+ */
+export function messageSearchPattern(query: string): string {
+  return `%${query.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/** Egy karakter összehasonlítható alakja: kisbetű, ékezet nélkül („Ő” → „o”). */
+const foldChar = (char: string): string =>
+  char.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+const SNIPPET_RADIUS = 40;
+
+/**
+ * A TALÁLAT KÖRNYEZETE A LISTÁBAN (Figma 453:491: „…megérkezett már a Zoo-s
+ * pumpa?”). Ugyanúgy ékezet- és kisbetű-függetlenül keres, mint az adatbázis,
+ * különben egy „kotel” keresés találatánál a szöveg elejét mutatnánk a
+ * „kötél” helyett. Ha a szövegben (pl. egy egyedi írásjel miatt) mégsem
+ * található, a szöveg eleje megy.
+ */
+export function searchSnippet(
+  text: string,
+  query: string,
+  radius = SNIPPET_RADIUS,
+): string {
+  const chars = [...text];
+  const folded = chars.map(foldChar);
+  const needle = [...query.trim()].map(foldChar).join("");
+  let at = -1;
+  if (needle) {
+    for (let start = 0; start < folded.length && at < 0; start += 1) {
+      let joined = "";
+      for (
+        let end = start;
+        end < folded.length && joined.length < needle.length;
+        end += 1
+      )
+        joined += folded[end];
+      if (joined.startsWith(needle)) at = start;
+    }
+  }
+  const flat = (part: string[]) => part.join("").replace(/\s+/g, " ").trim();
+  if (at < 0)
+    return chars.length > radius * 2
+      ? `${flat(chars.slice(0, radius * 2))}…`
+      : flat(chars);
+  const from = Math.max(0, at - radius);
+  const to = Math.min(chars.length, at + [...query.trim()].length + radius);
+  return `${from > 0 ? "…" : ""}${flat(chars.slice(from, to))}${to < chars.length ? "…" : ""}`;
+}
+
+const BUDAPEST_PARTS = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Budapest",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+const budapestParts = (at: Date) => {
+  const parts = Object.fromEntries(
+    BUDAPEST_PARTS.formatToParts(at).map((part) => [part.type, part.value]),
+  );
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+  };
+};
+
+/** Egy budapesti fali óra szerinti időpont UTC-ben, a nyári és a téli időre is. */
+function budapestWallTime(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+): Date {
+  const wanted = Date.UTC(year, month - 1, day, hour, 0);
+  let guess = wanted;
+  // két kör elég: az első az eltolást, a második az átállás napját igazítja
+  for (let round = 0; round < 2; round += 1) {
+    const seen = budapestParts(new Date(guess));
+    guess +=
+      wanted -
+      Date.UTC(seen.year, seen.month - 1, seen.day, seen.hour, seen.minute);
+  }
+  return new Date(guess);
+}
+
+/**
+ * A „NÉMÍTÁS HOLNAPIG” VÉGE: a KÖVETKEZŐ reggel 8 óra, budapesti idő szerint
+ * (Balázs döntése, 2026-10-05 15:07 UTC, acrobot 26415: „Elfogadom” a „másnap
+ * reggel 8 óráig” javaslatra). Éjfélig nem, mert akkor éjjel jönnének az
+ * értesítések. Éjfél és reggel 8 között a „másnap” a MAI reggel: 00:30-kor a
+ * szándék a reggelig tartó csend, nem egy 31 órás némítás.
+ */
+export const MUTE_UNTIL_MORNING_HOUR = 8;
+
+/**
+ * EGY ÉRTESÍTÉSI MÓD HATÁSA a tagság két oszlopára (prompt 17. pont). A
+ * `notify` csak a „Minden új üzenet” választásnál változik (és ott a némítás is
+ * megszűnik); a némítások a meglévő `notify` értéket hagyják, csak a
+ * `mutedUntil`-t írják. Az idő a szerveré, nem a kliensé.
+ */
+export function notificationUpdate(
+  mode: "ALL" | "MUTE_1H" | "MUTE_UNTIL_MORNING" | "UNMUTE",
+  now: Date,
+): { notify?: "ALL"; mutedUntil: Date | null } {
+  switch (mode) {
+    case "ALL":
+      return { notify: "ALL", mutedUntil: null };
+    case "UNMUTE":
+      return { mutedUntil: null };
+    case "MUTE_1H":
+      return { mutedUntil: new Date(now.getTime() + 60 * 60 * 1000) };
+    case "MUTE_UNTIL_MORNING": {
+      const today = budapestParts(now);
+      const morning = (dayOffset: number) => {
+        const day = new Date(
+          Date.UTC(today.year, today.month - 1, today.day + dayOffset),
+        );
+        return budapestWallTime(
+          day.getUTCFullYear(),
+          day.getUTCMonth() + 1,
+          day.getUTCDate(),
+          MUTE_UNTIL_MORNING_HOUR,
+        );
+      };
+      const todays = morning(0);
+      return {
+        mutedUntil: todays.getTime() > now.getTime() ? todays : morning(1),
+      };
+    }
+  }
+}

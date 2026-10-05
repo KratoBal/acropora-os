@@ -56,6 +56,11 @@ const MESSAGE_SELECT = {
     orderBy: { createdAt: "asc" },
   },
   reactions: { select: { reaction: true, userId: true } },
+  // a 3. fázis: a kitűzés (legfeljebb egy sor, az egyediség miatt) és a továbbítás eredeti szerzője
+  pins: { select: { id: true } },
+  forwardedFromMessageId: true,
+  forwardedFromUserId: true,
+  forwardedFromUser: { select: { displayName: true, nickname: true } },
   replyTo: {
     select: {
       id: true,
@@ -209,7 +214,13 @@ export class MessagesRepository extends Repository {
         leftAt: null,
         conversation: { archivedAt: null },
       },
-      select: { joinedAt: true, lastReadAt: true, lastReadMessageId: true },
+      select: {
+        joinedAt: true,
+        lastReadAt: true,
+        lastReadMessageId: true,
+        notify: true,
+        mutedUntil: true,
+      },
     });
   }
 
@@ -303,6 +314,201 @@ export class MessagesRepository extends Repository {
     };
   }
 
+  /**
+   * AZ ÚJABB OLDAL (3. fázis, „Ugrás”): a kurzornál újabb üzenetek, időrendben.
+   * A `messagesPage` tükre: ugyanaz a (createdAt, id) rendezés, másik irány.
+   */
+  async messagesAfter(input: {
+    conversationId: string;
+    after: { createdAt: Date; id: string };
+    limit: number;
+  }): Promise<{ rows: MessageRow[]; hasNewer: boolean }> {
+    const rows = await this.database.message.findMany({
+      where: {
+        conversationId: input.conversationId,
+        OR: [
+          { createdAt: { gt: input.after.createdAt } },
+          { createdAt: input.after.createdAt, id: { gt: input.after.id } },
+        ],
+      },
+      select: MESSAGE_SELECT,
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: input.limit + 1,
+    });
+    return {
+      rows: rows.slice(0, input.limit),
+      hasNewer: rows.length > input.limit,
+    };
+  }
+
+  /**
+   * KERESÉS EGY BESZÉLGETÉSBEN (3. fázis, prompt 13. pont). Ékezet- és
+   * kisbetű-független, ugyanúgy, mint az ügyfélkereső (`unaccent` mindkét
+   * oldalon, a `messageSearchPattern` escape-elt mintájával). Törölt üzenet nem
+   * jön. A számolás `cap`-nél megáll: egy beszélgetésen belül ez a teljes
+   * találatszám, csak egy elszabadult beszélgetésen nem számolunk a végtelenig.
+   */
+  async searchMessages(input: {
+    conversationId: string;
+    pattern: string;
+    limit: number;
+    cap: number;
+  }): Promise<{ ids: string[]; total: number }> {
+    const [hits, counted] = await Promise.all([
+      this.database.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "Message"
+        WHERE "conversationId" = ${input.conversationId}
+          AND "deletedAt" IS NULL
+          AND unaccent(COALESCE("text", '')) ILIKE unaccent(${input.pattern}::text)
+        ORDER BY "createdAt" DESC, "id" DESC
+        LIMIT ${input.limit}
+      `,
+      this.database.$queryRaw<{ total: bigint }[]>`
+        SELECT count(*) AS "total" FROM (
+          SELECT 1 FROM "Message"
+          WHERE "conversationId" = ${input.conversationId}
+            AND "deletedAt" IS NULL
+            AND unaccent(COALESCE("text", '')) ILIKE unaccent(${input.pattern}::text)
+          LIMIT ${input.cap}
+        ) AS capped
+      `,
+    ]);
+    return {
+      ids: hits.map((hit) => hit.id),
+      total: Number(counted[0]?.total ?? 0),
+    };
+  }
+
+  /**
+   * A MEGOSZTOTT TARTALOM (3. fázis, prompt 15. pont): az ELKÜLDÖTT, nem törölt
+   * üzenetek csatolmányai, a legújabb elöl. A gazdátlan feltöltés (még nincs
+   * üzenete) nem megosztás. A `[conversationId, createdAt]` indexen fut.
+   */
+  async sharedAttachments(input: {
+    conversationId: string;
+    kind: "IMAGE" | "FILE";
+    before: { createdAt: Date; id: string } | null;
+    limit: number;
+  }) {
+    const rows = await this.database.messageAttachment.findMany({
+      where: {
+        conversationId: input.conversationId,
+        kind: input.kind,
+        // kifejezetten: a gazdátlan sor (messageId NULL) ne jöjjön, és a törölt üzeneté se
+        messageId: { not: null },
+        message: { is: { deletedAt: null } },
+        ...(input.before
+          ? {
+              OR: [
+                { createdAt: { lt: input.before.createdAt } },
+                {
+                  createdAt: input.before.createdAt,
+                  id: { lt: input.before.id },
+                },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        kind: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        thumbnailKey: true,
+        createdAt: true,
+        message: {
+          select: {
+            id: true,
+            createdAt: true,
+            sender: { select: { displayName: true, nickname: true } },
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: input.limit + 1,
+    });
+    return {
+      rows: rows.slice(0, input.limit),
+      hasOlder: rows.length > input.limit,
+    };
+  }
+
+  /**
+   * KITŰZÉS (3. fázis, prompt 14. pont). Idempotens: egy már kitűzött üzenet
+   * újabb kitűzése nem hiba, és nem hoz létre második sort (az egyediség az
+   * adatbázisban áll). `true`, ha most jött létre.
+   */
+  async pin(input: {
+    conversationId: string;
+    messageId: string;
+    userId: string;
+  }): Promise<boolean> {
+    try {
+      await this.database.pinnedMessage.create({
+        data: {
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          pinnedByUserId: input.userId,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        return false;
+      throw error;
+    }
+  }
+
+  /** A kitűzés levétele. `true`, ha volt mit levenni. */
+  async unpin(conversationId: string, messageId: string): Promise<boolean> {
+    const result = await this.database.pinnedMessage.deleteMany({
+      where: { conversationId, messageId },
+    });
+    return result.count > 0;
+  }
+
+  /** A beszélgetés kitűzött üzenetei, a legutóbbi kitűzés elöl; a törölt üzeneté nem jön. */
+  pins(conversationId: string) {
+    return this.database.pinnedMessage.findMany({
+      where: { conversationId, message: { deletedAt: null } },
+      select: {
+        createdAt: true,
+        pinnedBy: { select: { displayName: true, nickname: true } },
+        message: {
+          select: {
+            id: true,
+            text: true,
+            createdAt: true,
+            sender: { select: { displayName: true, nickname: true } },
+            attachments: {
+              select: { fileName: true },
+              orderBy: { createdAt: "asc" },
+              take: 1,
+            },
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
+
+  /** A tag értesítési beállítása ebben a beszélgetésben (3. fázis, prompt 17. pont). */
+  async setNotification(
+    conversationId: string,
+    userId: string,
+    data: { notify?: "ALL"; mutedUntil: Date | null },
+  ) {
+    return this.database.conversationMember.update({
+      where: { conversationId_userId: { conversationId, userId } },
+      data,
+      select: { notify: true, mutedUntil: true },
+    });
+  }
+
   messageByClientId(
     senderUserId: string,
     clientMessageId: string,
@@ -327,6 +533,8 @@ export class MessagesRepository extends Repository {
     type?: "TEXT" | "IMAGE" | "FILE";
     replyToMessageId?: string | null;
     attachmentIds?: readonly string[];
+    /** Továbbításnál az eredeti üzenet és a szerzője (3. fázis). */
+    forwardedFrom?: { messageId: string; userId: string } | null;
   }): Promise<MessageRow> {
     return this.database.$transaction(async (tx) => {
       const created = await tx.message.create({
@@ -337,6 +545,8 @@ export class MessagesRepository extends Repository {
           text: input.text,
           clientMessageId: input.clientMessageId,
           replyToMessageId: input.replyToMessageId ?? null,
+          forwardedFromMessageId: input.forwardedFrom?.messageId ?? null,
+          forwardedFromUserId: input.forwardedFrom?.userId ?? null,
         },
         select: { id: true },
       });

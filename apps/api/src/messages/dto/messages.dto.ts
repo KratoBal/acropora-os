@@ -1,14 +1,19 @@
 import { Type } from "class-transformer";
 import {
   CONVERSATION_MAX_MEMBERS,
+  CONVERSATION_NOTIFY_MODES,
   MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_PAGE_MAX,
+  MESSAGE_SEARCH_MAX_LENGTH,
+  MESSAGE_SEARCH_MIN_LENGTH,
   MESSAGE_TEXT_MAX_LENGTH,
+  type ConversationNotifyMode,
 } from "@acropora/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -55,6 +60,10 @@ export class MarkReadDto {
 
 export class MessagePageQueryDto {
   @IsOptional() @IsString() @MaxLength(200) before?: string;
+  /** 3. fázis, „Ugrás” után: az újabb oldal kurzora. */
+  @IsOptional() @IsString() @MaxLength(200) after?: string;
+  /** 3. fázis, „Ugrás”: az üzenet azonosítója, ami köré az oldal nyílik. */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) around?: string;
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -77,4 +86,36 @@ export class ReactionDto {
 
 export class AttachmentQueryDto {
   @IsOptional() @IsString() @MaxLength(20) variant?: string;
+}
+
+/** Keresés a megnyitott beszélgetésben (3. fázis, prompt 13. pont). */
+export class MessageSearchQueryDto {
+  @IsString()
+  @MinLength(MESSAGE_SEARCH_MIN_LENGTH)
+  @MaxLength(MESSAGE_SEARCH_MAX_LENGTH)
+  q!: string;
+}
+
+/** A megosztott média vagy fájlok egy oldala (3. fázis, prompt 15. pont). */
+export class SharedAttachmentQueryDto {
+  @IsIn(["IMAGE", "FILE"]) kind!: "IMAGE" | "FILE";
+  @IsOptional() @IsString() @MaxLength(200) before?: string;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MESSAGE_PAGE_MAX)
+  limit?: number;
+}
+
+/** Az értesítési beállítás (3. fázis, prompt 17. pont). */
+export class NotificationSettingDto {
+  @IsIn([...CONVERSATION_NOTIFY_MODES]) mode!: ConversationNotifyMode;
+}
+
+/** Továbbítás egy másik beszélgetésbe (3. fázis, prompt 9. pont). */
+export class ForwardMessageDto {
+  @IsString() @MinLength(1) @MaxLength(64) conversationId!: string;
+  /** Mint a küldésnél: egy újraküldés ezzel nem duplikál. */
+  @IsString() @MinLength(8) @MaxLength(64) clientMessageId!: string;
 }

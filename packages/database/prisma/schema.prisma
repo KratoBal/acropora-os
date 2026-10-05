@@ -922,6 +922,10 @@ model User {
   /// Az Üzenetek 2. fázisa: a feltöltött csatolmányai és a reakciói.
   uploadedMessageAttachments MessageAttachment[]
   messageReactions           MessageReaction[]
+  /// Az Üzenetek 3. fázisa: az általa kitűzött üzenetek, és azok a továbbított
+  /// üzenetek, amiknek ő az eredeti szerzője.
+  pinnedMessages             PinnedMessage[]               @relation("PinnedMessageBy")
+  forwardedAuthoredMessages  Message[]                     @relation("MessageForwardedFromUser")
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
   /// vagyis egy takaritasi muvelet TAGITANA a hozzaferest. Restrict mellett a
@@ -8080,6 +8084,7 @@ model Conversation {
   archivedAt      DateTime?
 
   createdBy   User                 @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+  pins        PinnedMessage[]
   members     ConversationMember[]
   messages    Message[]
   attachments MessageAttachment[]
@@ -8110,31 +8115,40 @@ model ConversationMember {
 }
 
 model Message {
-  id               String      @id @default(cuid())
-  conversationId   String
-  senderUserId     String
-  type             MessageType @default(TEXT)
-  text             String?
+  id                     String      @id @default(cuid())
+  conversationId         String
+  senderUserId           String
+  type                   MessageType @default(TEXT)
+  text                   String?
   /// A KLIENS SAJÁT AZONOSÍTÓJA. Egy újraküldés (hálózati hiba után) ugyanezzel
   /// érkezik, és nem hoz létre második üzenetet.
-  clientMessageId  String?
+  clientMessageId        String?
   /// A válasz (2. fázis felülete). Az eredeti üzenet soft delete-tel törlődik,
   /// tehát a kapcsolat nem szakad el.
-  replyToMessageId String?
-  createdAt        DateTime    @default(now())
-  editedAt         DateTime?
+  replyToMessageId       String?
+  createdAt              DateTime    @default(now())
+  editedAt               DateTime?
   /// SOFT DELETE: a szöveg az adatbázisban marad, a felületen és az API-n senki
   /// nem látja, automatikus végleges törlés nincs (acrobot döntése, 26174).
-  deletedAt        DateTime?
-  deletedByUserId  String?
+  deletedAt              DateTime?
+  deletedByUserId        String?
+  /// TOVÁBBÍTÁS (3. fázis; Balázs 2026-10-05: az eredeti szerző látszik). Az
+  /// eredeti üzenet, és külön a szerzője PILLANATKÉPKÉNT: ha az eredeti
+  /// beszélgetésből a továbbító később kilép, a név akkor is megmarad.
+  forwardedFromMessageId String?
+  forwardedFromUserId    String?
 
-  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User                @relation("MessageSender", fields: [senderUserId], references: [id])
-  deletedBy    User?               @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
-  replyTo      Message?            @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies      Message[]           @relation("MessageReply")
-  attachments  MessageAttachment[]
-  reactions    MessageReaction[]
+  conversation      Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender            User                @relation("MessageSender", fields: [senderUserId], references: [id])
+  deletedBy         User?               @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  replyTo           Message?            @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies           Message[]           @relation("MessageReply")
+  attachments       MessageAttachment[]
+  reactions         MessageReaction[]
+  forwardedFrom     Message?            @relation("MessageForward", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwards          Message[]           @relation("MessageForward")
+  forwardedFromUser User?               @relation("MessageForwardedFromUser", fields: [forwardedFromUserId], references: [id], onDelete: SetNull)
+  pins              PinnedMessage[]
 
   @@unique([senderUserId, clientMessageId])
   @@index([conversationId, createdAt, id])
@@ -8332,4 +8346,23 @@ model WebshopParcel {
 
   @@index([commerceOrderId, status])
   @@index([carrier, parcelNumber])
+}
+
+/// KITŰZÖTT ÜZENET (Üzenetek 3. fázis, prompt 14. pont). Bármelyik tag kitűzhet
+/// és levehet, és mindkettő auditálva (Balázs, 2026-10-05). Egy üzenet egy
+/// beszélgetésben egyszer kitűzött. A törölt üzenet kitűzését a lekérdezés
+/// szűri ki, a sor megmarad.
+model PinnedMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  messageId      String
+  pinnedByUserId String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedBy     User         @relation("PinnedMessageBy", fields: [pinnedByUserId], references: [id])
+
+  @@unique([conversationId, messageId])
+  @@index([conversationId, createdAt])
 }

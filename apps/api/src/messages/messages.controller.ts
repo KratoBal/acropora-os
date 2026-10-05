@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Sse,
   StreamableFile,
@@ -27,11 +28,15 @@ import {
   AttachmentQueryDto,
   CreateConversationDto,
   EditMessageDto,
+  ForwardMessageDto,
+  NotificationSettingDto,
   ReactionDto,
   MarkReadDto,
   MessagePageQueryDto,
   MessagePeopleQueryDto,
+  MessageSearchQueryDto,
   SendMessageDto,
+  SharedAttachmentQueryDto,
 } from "./dto/messages.dto.js";
 import { MessagesService } from "./messages.service.js";
 
@@ -121,6 +126,46 @@ export class MessagesController {
     return this.messages.send(user, id, body);
   }
 
+  /** Keresés a megnyitott beszélgetésben (3. fázis). */
+  @Get("conversations/:id/search")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  search(
+    @Param("id") id: string,
+    @Query() query: MessageSearchQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.search(user, id, query.q);
+  }
+
+  /** A megosztott média vagy fájlok (3. fázis). */
+  @Get("conversations/:id/attachments")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  shared(
+    @Param("id") id: string,
+    @Query() query: SharedAttachmentQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.sharedAttachments(user, id, query);
+  }
+
+  /** A kitűzött elemek (3. fázis). */
+  @Get("conversations/:id/pins")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  pins(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.pins(user, id);
+  }
+
+  /** A saját értesítési beállítás ebben a beszélgetésben (3. fázis). */
+  @Put("conversations/:id/notifications")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  notifications(
+    @Param("id") id: string,
+    @Body() body: NotificationSettingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.setNotification(user, id, body.mode);
+  }
+
   @Post("conversations/:id/read")
   @RequirePermissions(PERMISSIONS.MESSAGES_USE)
   read(
@@ -203,6 +248,28 @@ export class MessagesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.messages.react(user, id, body.reaction, true);
+  }
+
+  @Post(":id/pin")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  pin(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.pin(user, id, true);
+  }
+
+  @Delete(":id/pin")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  unpin(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.messages.pin(user, id, false);
+  }
+
+  @Post(":id/forward")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  forward(
+    @Param("id") id: string,
+    @Body() body: ForwardMessageDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.forward(user, id, body);
   }
 
   @Delete(":id/reactions/:reaction")
