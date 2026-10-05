@@ -13,11 +13,10 @@
  * Each default is HTML in the editor's own stored form (variables as
  * `<span data-variable>`), so loading it into the editor changes nothing.
  */
-import { richHtmlForEmail, richHtmlToText } from "@acropora/rich-text";
+import { richHtmlToText } from "@acropora/rich-text";
 import {
   MAIL_TEMPLATE_VARIABLES,
   SHOP_CONTACT,
-  SHOP_NAME,
   WEBSHOP_MAIL_KEYS,
 } from "@acropora/types";
 
@@ -174,21 +173,4 @@ export function webshopDefaultTemplate(
     bodyHtml: raw.bodyHtml,
     body: richHtmlToText(raw.bodyHtml, { hrefPlaceholders: LINK_NAMES }),
   };
-}
-
-/**
- * THE WEBSHOP MAIL'S DOCUMENT. The same frame as the OS's own mails
- * (`mailHtmlDocument`: font, size, colour, and the button and alignment
- * styles from `richHtmlForEmail`), plus the shop's name at the foot, as the
- * webshop's own frame has it today. The webshop sends this unchanged.
- */
-export function webshopMailHtmlDocument(fragment: string): string {
-  return [
-    "<!DOCTYPE html>",
-    '<html lang="hu"><head><meta charset="utf-8"></head>',
-    '<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;">',
-    richHtmlForEmail(fragment),
-    `<p style="margin-top:24px;color:#6b7280;font-size:12px;">${SHOP_NAME}</p>`,
-    "</body></html>",
-  ].join("\n");
 }

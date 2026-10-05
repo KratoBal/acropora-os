@@ -539,6 +539,11 @@ const SAMPLE_ORDER: WebshopMailOrder = {
   payment: "COD",
 };
 
+const SAMPLE_COMMON = {
+  customer_name: "Kiss Márta",
+  order_created_at: "2026-10-05T09:21:00.000Z",
+};
+
 /**
  * The preview's facts, one per template: sample data, never a real order.
  * They go through the same derivation and renderer as a real mail, so the
@@ -548,18 +553,22 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
   Record<WebshopMailTemplate, WebshopMailFacts>
 > = {
   "order-placed": {
+    ...SAMPLE_COMMON,
     template: "order-placed",
     orders: [{ ...SAMPLE_ORDER, pickup: false }],
   },
   "order-status-confirmed": {
+    ...SAMPLE_COMMON,
     template: "order-status-confirmed",
     order: SAMPLE_ORDER,
   },
   "order-status-out_for_delivery": {
+    ...SAMPLE_COMMON,
     template: "order-status-out_for_delivery",
     order: SAMPLE_ORDER,
   },
   "order-status-ready_for_pickup": {
+    ...SAMPLE_COMMON,
     template: "order-status-ready_for_pickup",
     order: {
       ...SAMPLE_ORDER,
@@ -568,10 +577,12 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     },
   },
   "order-status-closed": {
+    ...SAMPLE_COMMON,
     template: "order-status-closed",
     order: SAMPLE_ORDER,
   },
   "order-shipped": {
+    ...SAMPLE_COMMON,
     template: "order-shipped",
     shipped: {
       display_id: 38,
@@ -590,12 +601,14 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     },
   },
   "order-payment-delayed": {
+    ...SAMPLE_COMMON,
     template: "order-payment-delayed",
     order: { ...SAMPLE_ORDER, payment: "ONLINE_CARD" },
     amount: 39400,
     pickup_display_id: null,
   },
   "order-payment-link": {
+    ...SAMPLE_COMMON,
     template: "order-payment-link",
     order: { ...SAMPLE_ORDER, payment: "ONLINE_CARD" },
     url: "https://acropora.hu/fizetes/minta",
@@ -604,6 +617,7 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     pickup: null,
   },
   "order-payment-reminder": {
+    ...SAMPLE_COMMON,
     template: "order-payment-reminder",
     order: { ...SAMPLE_ORDER, payment: "ONLINE_CARD" },
     url: "https://acropora.hu/fizetes/minta",
@@ -612,6 +626,7 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     pickup: null,
   },
   "payment-refunded": {
+    ...SAMPLE_COMMON,
     template: "payment-refunded",
     refund: {
       display_id: 38,

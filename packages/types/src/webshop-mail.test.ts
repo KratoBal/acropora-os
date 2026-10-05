@@ -198,7 +198,7 @@ describe("parseWebshopMailFacts", () => {
       );
       assert.deepEqual(parsed, {
         ok: true,
-        facts: { ...facts, customer_name: null, order_created_at: null },
+        facts,
       });
     }
   });

@@ -172,6 +172,15 @@ export {
   webshopMailContent,
   webshopMailTemplateOf,
 } from "./webshop-mail.js";
+export {
+  renderWebshopMail,
+  webshopMailDocument,
+} from "./webshop-mail-render.js";
+export type {
+  WebshopMailRender,
+  WebshopRenderSteps,
+  WebshopTemplateText,
+} from "./webshop-mail-render.js";
 export type {
   WebshopFactsParse,
   WebshopMailCommonFacts,

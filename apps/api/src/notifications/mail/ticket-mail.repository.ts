@@ -74,6 +74,13 @@ export class TicketMailRepository {
     };
   }
 
+  /** Which templates have a stored text, and when it was last saved. */
+  async templateStates(): Promise<{ id: string; updatedAt: Date }[]> {
+    return prisma.ticketMailTemplate.findMany({
+      select: { id: true, updatedAt: true },
+    });
+  }
+
   async template(id: string): Promise<StoredMailTemplate | null> {
     return prisma.ticketMailTemplate.findUnique({
       where: { id },

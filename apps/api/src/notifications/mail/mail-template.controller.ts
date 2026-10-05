@@ -23,6 +23,7 @@ import {
   sanitizeRichHtml,
 } from "@acropora/rich-text";
 import {
+  MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_VARIABLES,
   isMailTemplateEvent,
   misplacedBlockVariables,
@@ -215,6 +216,27 @@ export class MailTemplateController {
     @Inject(TICKET_MAIL_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
+
+  /**
+   * THE LIST'S STATUS: every event, whether its text is the default or a
+   * stored one, and when that was saved. One call for the list, instead of
+   * one read per template.
+   */
+  @Get()
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  async list() {
+    const tarolt = new Map(
+      (await this.repository.templateStates()).map((s) => [s.id, s.updatedAt]),
+    );
+    return MAIL_TEMPLATE_EVENTS.map((esemeny) => {
+      const mentve = tarolt.get(esemeny.id);
+      return {
+        id: esemeny.id,
+        source: mentve ? ("stored" as const) : ("default" as const),
+        updatedAt: mentve ? mentve.toISOString() : null,
+      };
+    });
+  }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)

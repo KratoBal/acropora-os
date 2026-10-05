@@ -567,3 +567,32 @@ describe("MailTemplateController: a webshop sablonjai", () => {
     assert.equal(mentett.length, 1);
   });
 });
+
+describe("MailTemplateController.list", () => {
+  it("minden eseményt felsorol, a tárolt mentési idejével, a többit alapértelmezettként", async () => {
+    const lista = await new MailTemplateController(
+      {
+        templateStates: async () => [
+          {
+            id: "WEBSHOP_ORDER_SHIPPED",
+            updatedAt: new Date("2026-10-05T16:42:00.000Z"),
+          },
+        ],
+      } as unknown as TicketMailRepository,
+      KEPEK,
+    ).list();
+    assert.equal(lista.length, MAIL_TEMPLATE_EVENTS.length);
+    assert.deepEqual(
+      lista.find((s) => s.id === "WEBSHOP_ORDER_SHIPPED"),
+      {
+        id: "WEBSHOP_ORDER_SHIPPED",
+        source: "stored",
+        updatedAt: "2026-10-05T16:42:00.000Z",
+      },
+    );
+    assert.deepEqual(
+      lista.find((s) => s.id === WORKSHEET_SIGNED),
+      { id: WORKSHEET_SIGNED, source: "default", updatedAt: null },
+    );
+  });
+});
