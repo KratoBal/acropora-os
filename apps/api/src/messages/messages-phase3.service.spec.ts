@@ -220,6 +220,8 @@ function fake() {
       };
     },
     sharedAttachments: async () => ({ rows: [], hasOlder: false }),
+    unreadTotals: async (ids: readonly string[]) =>
+      Object.fromEntries(ids.map((id, i) => [id, i + 2])),
     setNotification: async (
       c: string,
       u: string,
@@ -345,13 +347,20 @@ function fake() {
     events.push(`${e.type} -> ${[...ids].sort().join(",")}`);
     publish(ids, e);
   };
+  const pushes: {
+    userIds: readonly string[];
+    badges?: Record<string, number>;
+  }[] = [];
   const service = new MessagesService(
     repo as never,
     bus,
-    { notifyNewMessage: () => undefined } as never,
+    {
+      notifyNewMessage: (notice: (typeof pushes)[number]) =>
+        void pushes.push(notice),
+    } as never,
     store as never,
   );
-  return { service, repo, store, events, add, messages };
+  return { service, repo, store, events, add, messages, pushes };
 }
 
 const status = async (p: Promise<unknown>) => {
@@ -822,5 +831,27 @@ describe("forwarding", () => {
       404,
     );
     assert.equal(messages.length, 1);
+  });
+});
+
+describe("the app icon number on a new message push", () => {
+  it("the push carries each recipient's unread total; if the count fails, the push still goes", async () => {
+    const { service, repo, pushes } = fake();
+    await service.send(viewer("a"), "c1", {
+      text: "Szia",
+      clientMessageId: "badge-00001",
+    });
+    assert.deepEqual(pushes.at(-1)?.userIds, ["b"]);
+    assert.deepEqual(pushes.at(-1)?.badges, { b: 2 });
+
+    (repo as { unreadTotals: unknown }).unreadTotals = async () => {
+      throw new Error("adatbázis");
+    };
+    await service.send(viewer("a"), "c1", {
+      text: "Még egy",
+      clientMessageId: "badge-00002",
+    });
+    assert.equal(pushes.length, 2);
+    assert.equal(pushes.at(-1)?.badges, undefined);
   });
 });

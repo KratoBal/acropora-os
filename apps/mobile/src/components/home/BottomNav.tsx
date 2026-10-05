@@ -3,7 +3,9 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useMessagesUnreadTotal } from "@/components/messages/MessagesBadge";
 import { BOTTOM_NAV_ITEMS, type BottomNavItem } from "@/lib/home/bottom-nav";
+import { unreadBadgeLabel } from "@/lib/messages/unread-badge";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
@@ -30,16 +32,20 @@ export function BottomNav({
   const router = useRouter();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
+  const unread = unreadBadgeLabel(useMessagesUnreadTotal());
   return (
     <SafeAreaView edges={["bottom"]} style={styles.bar}>
       <View accessibilityRole="tablist" style={styles.row}>
         {BOTTOM_NAV_ITEMS.map((item) => {
           const selected = item.key === active;
+          const badge = item.key === "messages" ? unread : null;
           return (
             <Pressable
               key={item.key}
               accessibilityRole="tab"
-              accessibilityLabel={item.label}
+              accessibilityLabel={
+                badge ? `${item.label}, ${badge} olvasatlan` : item.label
+              }
               accessibilityState={{ selected }}
               onPress={() => {
                 if (!selected) router.navigate(item.route);
@@ -52,6 +58,11 @@ export function BottomNav({
                   size={22}
                   color={selected ? tokens.accent : tokens.textMuted}
                 />
+                {badge ? (
+                  <View style={styles.badge} testID="messages-unread-badge">
+                    <Text style={styles.badgeText}>{badge}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={[styles.label, selected && styles.labelActive]}>
                 {item.label}
@@ -87,6 +98,19 @@ function createStyles(t: ThemeTokens) {
     },
     iconActive: { backgroundColor: t.accentSoft },
     label: { color: t.textMuted, fontSize: 12 },
+    badge: {
+      position: "absolute",
+      top: -4,
+      right: -10,
+      minWidth: 18,
+      height: 18,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      backgroundColor: t.danger,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    badgeText: { color: t.textOnAccent, fontSize: 11, fontWeight: "700" },
     labelActive: { color: t.accent, fontWeight: "600" },
   });
 }

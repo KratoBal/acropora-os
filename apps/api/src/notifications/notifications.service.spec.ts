@@ -783,3 +783,58 @@ describe("push redirect (staging)", () => {
     assert.equal(tok.kertUserIdk.length, 0);
   });
 });
+
+describe("the message push carries each recipient's unread total (iOS badge)", () => {
+  /*
+    MI PIROSIT: mindenki ugyanazt a szamot kapja; a szam nem a cimzett
+    ESZKOZEHEZ (felhasznalojahoz) kotodik; badge nelkuli ertesites badge-et kap.
+  */
+  it("each device gets its own owner's number; without numbers there is none", async () => {
+    const { sender: apns, sent } = sender();
+    const logged = log();
+    const value = Object.assign(logged.log, {
+      recordNewMessage: async () => undefined,
+    });
+    const service = new NotificationsService(
+      tokens([
+        {
+          userId: "user-a",
+          token: "aa".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+        {
+          userId: "user-b",
+          token: "bb".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+      ]),
+      apns,
+      value,
+      fcmSender().sender,
+    );
+    await service.deliverNewMessage({
+      messageId: "m1",
+      conversationId: "c1",
+      userIds: ["user-a", "user-b"],
+      title: "Kovács Anna",
+      body: "Szia",
+      badges: { "user-a": 4, "user-b": 1 },
+    });
+    assert.deepEqual(
+      sent.map((m) => [m.deviceToken.slice(0, 2), m.badge]),
+      [
+        ["aa", 4],
+        ["bb", 1],
+      ],
+    );
+    sent.length = 0;
+    await service.deliverNewMessage({
+      messageId: "m2",
+      conversationId: "c1",
+      userIds: ["user-a"],
+      title: "Kovács Anna",
+      body: "Szia",
+    });
+    assert.ok(sent.every((m) => m.badge === undefined));
+  });
+});
