@@ -15,20 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Monogram } from "@/components/messages/MessageParts";
 import { createConversation, searchMessagePeople } from "@/lib/api/messages";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { ROLE_LABELS } from "@/lib/messages/role-labels";
 import type { ConversationPerson } from "@/lib/messages/types";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
-
-/** A szerepkör felirata a kollégaválasztóban (a web `role-labels.ts`-ével azonos). */
-const ROLE_LABELS: Record<string, string> = {
-  OWNER: "Tulajdonos",
-  ADMIN: "Admin",
-  MANAGER: "Menedzser",
-  SALES: "Értékesítés",
-  WAREHOUSE: "Raktár",
-  SERVICE: "Szerviz",
-  VIEWER: "Megtekintő",
-};
 
 /**
  * ÚJ ÜZENET (Figma 443:347). Egy kiválasztott kolléga a DIRECT beszélgetést

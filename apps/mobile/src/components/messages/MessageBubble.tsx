@@ -36,6 +36,7 @@ export function MessageBubble({
   onLongPress,
   onToggleReaction,
   onOpenImage,
+  highlighted = false,
 }: {
   message: MessageItem;
   own: boolean;
@@ -44,10 +45,18 @@ export function MessageBubble({
   onLongPress: (() => void) | null;
   onToggleReaction: (reaction: MessageReactionValue, mine: boolean) => void;
   onOpenImage: (attachment: MessageAttachmentItem) => void;
+  /** 3. fázis: az „Ugrás” célja rövid ideig kiemelve. */
+  highlighted?: boolean;
 }) {
   const styles = bubbleStyles(tokens);
   return (
-    <View style={[styles.column, own ? styles.columnOwn : styles.columnOther]}>
+    <View
+      style={[
+        styles.column,
+        own ? styles.columnOwn : styles.columnOther,
+        highlighted && styles.highlighted,
+      ]}
+    >
       <Pressable
         onLongPress={onLongPress ?? undefined}
         delayLongPress={350}
@@ -57,6 +66,11 @@ export function MessageBubble({
         style={[styles.bubble, own ? styles.bubbleOwn : styles.bubbleOther]}
       >
         {sender ? <Text style={styles.sender}>{sender}</Text> : null}
+        {message.forwardedFrom && !message.deleted ? (
+          <Text style={styles.forwarded}>
+            Továbbítva · {message.forwardedFrom.senderName}
+          </Text>
+        ) : null}
         {message.replyTo && !message.deleted ? (
           <View style={styles.quote}>
             <Text style={styles.quoteName}>{message.replyTo.senderName}</Text>
@@ -121,6 +135,7 @@ export function MessageBubble({
             minute: "2-digit",
           })}
           {message.editedAt && !message.deleted ? " · szerkesztve" : ""}
+          {message.pinned && !message.deleted ? " · 📌 kitűzve" : ""}
         </Text>
       </Pressable>
       {message.reactions.length && !message.deleted ? (
@@ -183,6 +198,8 @@ export function MessageActionsPanel({
   tokens,
   onReact,
   onReply,
+  onForward,
+  onTogglePin,
   onEdit,
   onDelete,
   onClose,
@@ -192,6 +209,9 @@ export function MessageActionsPanel({
   tokens: ThemeTokens;
   onReact: (reaction: MessageReactionValue, mine: boolean) => void;
   onReply: () => void;
+  /** 3. fázis: továbbítás és kitűzés, bárkinek (Balázs, 2026-10-05). */
+  onForward: () => void;
+  onTogglePin: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
@@ -229,6 +249,18 @@ export function MessageActionsPanel({
         icon="arrow-undo"
         tokens={tokens}
         onPress={onReply}
+      />
+      <PanelButton
+        label="Továbbítás"
+        icon="arrow-redo"
+        tokens={tokens}
+        onPress={onForward}
+      />
+      <PanelButton
+        label={message.pinned ? "Kitűzés levétele" : "Kitűzés"}
+        icon={message.pinned ? "pin" : "pin-outline"}
+        tokens={tokens}
+        onPress={onTogglePin}
       />
       {own ? (
         <>
@@ -390,6 +422,8 @@ const bubbleStyles = (t: ThemeTokens) =>
     bubbleOwn: { alignSelf: "flex-end", backgroundColor: t.accentSoft },
     bubbleOther: { backgroundColor: t.surface },
     sender: { color: t.accentSoftText, fontSize: 12, fontWeight: "600" },
+    forwarded: { color: t.textMuted, fontSize: 12, fontStyle: "italic" },
+    highlighted: { backgroundColor: t.warningSoft, padding: 4 },
     quote: {
       borderLeftWidth: 3,
       borderLeftColor: t.accent,

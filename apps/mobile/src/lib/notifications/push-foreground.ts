@@ -1,3 +1,6 @@
+import { openConversationId } from "../messages/open-conversation";
+import { suppressForegroundPush } from "../messages/phase3";
+
 /**
  * MI TORTENJEN AZ ERTESITESSEL, AMIG AZ APP NYITVA VAN.
  *
@@ -84,4 +87,28 @@ export function foregroundNotificationBehavior(): ForegroundNotificationBehavior
      */
     shouldSetBadge: false,
   };
+}
+
+/** Semmi nem jelenik meg: a nyitott beszélgetés üzenete úgyis ott van a képernyőn. */
+export const SUPPRESSED_FOREGROUND: ForegroundNotificationBehavior = {
+  shouldShowBanner: false,
+  shouldShowList: false,
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+};
+
+/**
+ * AZ EGYETLEN KIVÉTEL A „MINDIG MUTATJUK” ALÓL (Üzenetek 3. fázis, a prompt 21.
+ * pontja): ha a push egy beszélgetésről szól, és PONT az van nyitva, nincs sáv.
+ * Ezt az útvonal mondja meg, amit a fenti szabály nem látott; most a
+ * beszélgetés-képernyő maga jelzi (`open-conversation.ts`), tehát mérhető.
+ * Minden más esetben a fenti, változatlan viselkedés megy.
+ */
+export function foregroundNotificationFor(
+  data: Record<string, unknown> | null | undefined,
+  openConversation: string | null = openConversationId(),
+): ForegroundNotificationBehavior {
+  return suppressForegroundPush(data, openConversation)
+    ? SUPPRESSED_FOREGROUND
+    : foregroundNotificationBehavior();
 }

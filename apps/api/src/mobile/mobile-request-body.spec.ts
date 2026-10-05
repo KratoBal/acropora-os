@@ -370,6 +370,27 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  /** A 3. fázis (2026-10-05): a továbbítás és az értesítési beállítás. */
+  {
+    mit: "továbbítás",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "ForwardMessageInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "ForwardMessageDto",
+    kontroll: ["conversationId", "clientMessageId"],
+    mobilMinimum: 2,
+    dtoMinimum: 2,
+  },
+  {
+    mit: "értesítési beállítás",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "NotificationSettingInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "NotificationSettingDto",
+    kontroll: ["mode"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -487,7 +508,8 @@ const PAROK: readonly Par[] = [
  * típussal megy, mind a három PÁR fent.
  */
 // 2026-10-05: 28 -> 30, az Üzenetek 2. fázisa: szerkesztés és reakció, mindkettő párral
-const IRAS_HIVASOK_MA = 30;
+// 2026-10-05: 30 -> 32, az Üzenetek 3. fázisa: továbbítás és értesítési beállítás, mindkettő párral
+const IRAS_HIVASOK_MA = 32;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
