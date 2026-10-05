@@ -198,6 +198,80 @@ describe("Szerződés-tétel integritás", { skip: gate.mode === "skip" }, () =>
     );
   });
 
+  /*
+    A JAVÍTÁSI DÍJAK (kártya 3d80a18d, minta: exchange/szerzodes-javitasi-dijak-
+    minta-2026-10-05.png). MI PIROSÍT: ha a díj nem tárolódik; ha egy díjat nem
+    küldő mentés (régi kliens, vagy a tételek nélküli patch) kinullázza; ha a
+    kimondott `null` nem törli; ha a szerver számolna (az összesen NEM a
+    díjakból jön, a minta szerint sem).
+  */
+  it("a javítási díjak tárolódnak, a hiányzó mező megtartja, a null törli, és semmi nem számolódik", async () => {
+    const customer = await makeCustomer("FEE");
+    const created = await service.create({
+      customerId: customer.id,
+      number: `${PREFIX}${suffix}-FEE`,
+      title: "Javítási díjak",
+      validFrom: "2026-01-01",
+      items: [
+        {
+          description: "Óradíj - technikus, szakmunkás",
+          unitNet: "0",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+          repairFeeWorkdayHours: "9000",
+          repairFeeWorkdayOffHours: "13000",
+          repairFeeHoliday: "14500",
+          repairWeight: "90",
+          repairTotal: "10125000",
+        },
+      ],
+    });
+    const item = created!.items[0]!;
+    assert.equal(item.repairFeeWorkdayHours?.toString(), "9000");
+    assert.equal(item.repairWeight?.toString(), "90");
+    assert.equal(item.repairTotal?.toString(), "10125000");
+
+    // a díjakat nem ismerő kliens (a mezők hiányoznak): a díjak maradnak
+    const kept = await service.update(created!.id, {
+      items: [
+        {
+          id: item.id,
+          description: "Óradíj, átírva",
+          unitNet: "0",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+        },
+      ],
+    } as UpdateContractDto);
+    assert.equal(kept.items[0]!.repairFeeHoliday?.toString(), "14500");
+    assert.equal(kept.items[0]!.repairTotal?.toString(), "10125000");
+
+    // tételek nélküli patch: a szolgáltatás a tárolt tételeket viszi tovább
+    const untouched = await service.update(created!.id, {
+      title: "Javítási díjak, új cím",
+    } as UpdateContractDto);
+    assert.equal(untouched.items[0]!.repairFeeWorkdayHours?.toString(), "9000");
+
+    // a kimondott null töröl, a többi marad
+    const cleared = await service.update(created!.id, {
+      items: [
+        {
+          id: item.id,
+          description: "Óradíj, átírva",
+          unitNet: "0",
+          quantity: "1",
+          occasionsPerYear: 1,
+          vatRatePercent: "27",
+          repairTotal: null,
+        },
+      ],
+    } as UpdateContractDto);
+    assert.equal(cleared.items[0]!.repairTotal, null);
+    assert.equal(cleared.items[0]!.repairWeight?.toString(), "90");
+  });
+
   it("P2003-at ad (409), ha egy tételt törölnénk, amihez már készült megrendelőlap", async () => {
     const customer = await makeCustomer("B");
     const contract = await service.create({

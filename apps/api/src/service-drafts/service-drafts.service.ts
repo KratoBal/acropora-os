@@ -6,7 +6,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
-import { ServiceDraftsRepository } from "./service-drafts.repository.js";
+import {
+  ServiceDraftsRepository,
+  draftFilterKey,
+  type DraftFilter,
+} from "./service-drafts.repository.js";
+import { CapasuliItemJevService } from "./capasuli-item-jev.service.js";
+import { extractCapasuliReports } from "./capasuli-extractor.js";
+import type { CapasuliGmailMessage } from "./capasuli-gmail.client.js";
 import { CapasuliGmailClient } from "./capasuli-gmail.client.js";
 import {
   capasuliConfig,
@@ -35,6 +42,7 @@ export class ServiceDraftsService {
     private readonly gmail: CapasuliGmailClient,
     private readonly jobs: ServiceJobsService,
     private readonly notifications: NotificationsService,
+    private readonly jev: CapasuliItemJevService,
   ) {}
   async list(
     user: AuthenticatedUser,
@@ -45,7 +53,44 @@ export class ServiceDraftsService {
     return {
       ...(await this.repository.list(status, cursor)),
       ...(await this.repository.reviewSettings()),
+      // a "nem szűrt" jel csak akkor mond valamit, ha a szűrés be van kapcsolva
+      filterEnabled: this.jev.enabled(),
+      filtered: status === "PENDING" ? await this.repository.filtered() : [],
     };
+  }
+  /** "Mégis piszkozat": egy kiszűrt tétel vissza a listára (brief 4. pont). */
+  async promote(id: string, user: AuthenticatedUser) {
+    requireDraftAdmin(user);
+    return this.repository.promote(id);
+  }
+  /**
+   * A LEVÉL TÉTELEINEK SZŰRÉSE, A TRANZAKCIÓ ELŐTT: a Jev-hívás hálózati, az
+   * ingest pedig zárat tart. Ugyanazt a kivonatolót futtatja, mint az ingest,
+   * tehát ugyanazokra a tételekre. Kikapcsolva üres térkép: minden UNFILTERED.
+   */
+  private async filtersFor(
+    message: CapasuliGmailMessage,
+    mailbox: string,
+  ): Promise<Map<string, DraftFilter>> {
+    const filters = new Map<string, DraftFilter>();
+    if (!this.jev.enabled()) return filters;
+    for (const report of extractCapasuliReports(message.text)) {
+      const reportDate = report.reportDate.toISOString().slice(0, 10);
+      for (const problem of report.problems)
+        filters.set(
+          draftFilterKey(reportDate, problem.fingerprint),
+          await this.jev.filterFor(
+            {
+              source: "CAPASULI_DAILY_REPORT",
+              mailbox,
+              reportDate,
+              fingerprint: problem.fingerprint,
+            },
+            problem.text,
+          ),
+        );
+    }
+    return filters;
   }
   status(user: AuthenticatedUser) {
     requireDraftAdmin(user);
@@ -111,11 +156,11 @@ export class ServiceDraftsService {
         )
           continue;
         let result: Awaited<ReturnType<ServiceDraftsRepository["ingest"]>>;
+        let filters = new Map<string, DraftFilter>();
         try {
-          result = await this.repository.ingest(
-            await this.gmail.getMessage(id),
-            c,
-          );
+          const message = await this.gmail.getMessage(id);
+          filters = await this.filtersFor(message, c.user);
+          result = await this.repository.ingest(message, c, filters);
         } catch (error) {
           // A malformed/oversized historical mail must not block later reports.
           // Leave it uningested so the next pull can retry; log only a safe code.
@@ -129,6 +174,11 @@ export class ServiceDraftsService {
         }
         added += result.added;
         processed++;
+        // a megjelenő tételek futása SHOWN; a kiszűrteké HIDDEN marad
+        const shown = [...filters.values()]
+          .filter((f) => f.filterState !== "FILTERED" && f.decisionRunId)
+          .map((f) => f.decisionRunId!);
+        if (shown.length) await this.repository.markRunsShown(shown);
         if (result.added) {
           const reviewer = await this.repository.reviewer(c.reviewerId);
           if (reviewer) {

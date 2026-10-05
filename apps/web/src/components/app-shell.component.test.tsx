@@ -14,6 +14,13 @@ vi.mock("next/navigation", () => ({
 vi.mock("./auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
+// az olvasatlan-szam lekerese: a teszt ne menjen halozatra
+vi.mock("@/lib/api/messages", () => ({
+  messagesApi: {
+    unread: vi.fn().mockResolvedValue({ total: 0, conversations: 0 }),
+  },
+  MESSAGE_STREAM_URL: "/api/messages/stream",
+}));
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
@@ -577,9 +584,25 @@ describe("AppShell kompakt profil", () => {
     ).toBeNull();
   });
 
-  it("az Üzenetek ikon alapból nem jelenik meg", () => {
+  /*
+    A MODUL MEGVAN (kartya 51d7aba0): az ikon most mar annak jelenik meg
+    alapbol, aki uzenhet (`messages.use`), es az Uzenetek lapjara visz. Akinek
+    nincs joga, annak tovabbra sem.
+  */
+  it("az Üzenetek ikon annak jelenik meg, aki üzenhet, és a lapra visz", async () => {
     render(<AppShell>Oldaltartalom</AppShell>);
+    const header = screen.getByRole("banner");
+    expect(
+      within(header).getByRole("link", { name: "Üzenetek" }),
+    ).toHaveAttribute("href", "/uzenetek");
+  });
 
+  it("akinek nincs `messages.use` joga, annak nincs Üzenetek ikonja", () => {
+    auth.session = {
+      ...auth.session!,
+      user: { ...auth.session!.user, role: "CONTENT_AGENT" },
+    };
+    render(<AppShell>Oldaltartalom</AppShell>);
     expect(screen.queryByRole("link", { name: /Üzenetek/ })).toBeNull();
   });
 
@@ -610,9 +633,11 @@ describe("AppShell kompakt profil", () => {
         Oldaltartalom
       </AppShell>,
     );
-    expect(screen.getByRole("link", { name: "Üzenetek" })).toHaveTextContent(
-      /^$/,
-    );
+    expect(
+      within(screen.getByRole("banner")).getByRole("link", {
+        name: "Üzenetek",
+      }),
+    ).toHaveTextContent(/^$/);
 
     rerender(
       <AppShell messages={{ href: "/uzenetek", icon: null, unreadCount: 12 }}>
@@ -620,7 +645,9 @@ describe("AppShell kompakt profil", () => {
       </AppShell>,
     );
     expect(
-      screen.getByRole("link", { name: "Üzenetek, 12 olvasatlan" }),
+      within(screen.getByRole("banner")).getByRole("link", {
+        name: "Üzenetek, 12 olvasatlan",
+      }),
     ).toHaveTextContent(/^9\+$/);
   });
 });

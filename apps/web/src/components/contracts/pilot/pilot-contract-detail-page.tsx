@@ -20,7 +20,12 @@ import {
   isUnsavedItem,
   isValidContractItem,
   NEW_ITEM_PREFIX,
+  repairFeeSummary,
+  repairFeesPayload,
+  repairFeesValid,
 } from "./contract-items";
+import { ContractRepairFees } from "./contract-repair-fees";
+import { formatHuNumber } from "@/lib/format/number";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   PilotBadge,
@@ -69,6 +74,11 @@ export function missingContractFields(contract: {
     quantity: string;
     vatRatePercent: string;
     occasionsPerYear: string | number;
+    repairFeeWorkdayHours?: string | null;
+    repairFeeWorkdayOffHours?: string | null;
+    repairFeeHoliday?: string | null;
+    repairWeight?: string | null;
+    repairTotal?: string | null;
   }[];
 }): string[] {
   const list: string[] = [];
@@ -79,6 +89,8 @@ export function missingContractFields(contract: {
   // kizárni; ami van, annak mind érvényesnek kell lennie
   if (contract.items && !contract.items.every(isValidContractItem))
     list.push("minden tétel kitöltése");
+  if (contract.items && !contract.items.every(repairFeesValid))
+    list.push("a javítási díjak csak számok lehetnek");
   return list;
 }
 
@@ -275,6 +287,7 @@ export function PilotContractDetailPage({
           vatRatePercent: item.vatRatePercent,
           departmentId: itemDepartmentId[item.id] || null,
           assetIds: itemAssetIds[item.id] ?? [],
+          ...repairFeesPayload(item),
         })),
       });
       applyContractDetail(next);
@@ -350,6 +363,11 @@ export function PilotContractDetailPage({
           vatRatePercent: "27",
           departmentId: null,
           assets: [],
+          repairFeeWorkdayHours: null,
+          repairFeeWorkdayOffHours: null,
+          repairFeeHoliday: null,
+          repairWeight: null,
+          repairTotal: null,
         },
       ],
     });
@@ -757,6 +775,18 @@ export function PilotContractDetailPage({
                         />
                       </PilotFormField>
                     </div>
+                    {repairFeeSummary(item, (v) => formatHuNumber(v)) ? (
+                      <p className="text-xs text-pilot-grey-600">
+                        {repairFeeSummary(item, (v) => formatHuNumber(v))}
+                      </p>
+                    ) : null}
+                    <ContractRepairFees
+                      values={item}
+                      ariaPrefix={`${index + 1}. tétel `}
+                      onChange={(key, value) =>
+                        editItem(item.id, { [key]: value })
+                      }
+                    />
                     {departmentOptions.length > 0 ? (
                       <div className="grid gap-2 md:grid-cols-2">
                         <PilotFormField label="Helyszín">

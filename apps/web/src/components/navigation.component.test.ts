@@ -294,6 +294,9 @@ describe("navigation", () => {
       [
         "Dashboard",
         "Feladataim",
+        // AZ UZENETEK MODUL (kartya 51d7aba0): minden belso emberi szerepkor
+        // `messages.use` jogot kap (acrobot dontese, 26174).
+        "Üzenetek",
         // A 12:33-as bovites, es a lanc elso eleme.
         "Hibajegyek",
         "Karbantartás",
@@ -381,6 +384,7 @@ describe("navigation", () => {
   const A_BEVEZETES_ELOTTI_JOGOK: Record<string, Permission> = {
     "/": "dashboard.view",
     "/feladataim": "tasks.view",
+    "/uzenetek": "messages.use",
     // A BEVEZETES UTAN FELVETT SOR (2026-09-02 12:33-as dontes utan), nem a
     // pillanatkep resze. Azert kerul ide, mert a fenti kontroll a tablat es a
     // menut ugyanarra a halmazra koti: enelkul az uj oldal CSENDBEN kimaradna

@@ -34,6 +34,7 @@ export type {
   GoodsReceipt,
   GoodsReceiptLine,
   IncomingBillingDocument,
+  ServiceDraftFilterState,
   IcpReport,
   IcpResult,
   Product,

@@ -22,7 +22,13 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
-import { isValidContractItem } from "./contract-items";
+import {
+  isValidContractItem,
+  repairFeesPayload,
+  repairFeesValid,
+  type RepairFeeValues,
+} from "./contract-items";
+import { ContractRepairFees } from "./contract-repair-fees";
 
 export type DraftItem = {
   description: string;
@@ -44,7 +50,7 @@ export type DraftItem = {
    * sor belső állapotát (az eszközválasztó keresőjét) a törölt helyére tenné.
    */
   rowKey?: string;
-};
+} & RepairFeeValues;
 let nextRowKey = 0;
 export const emptyItem = (): DraftItem => ({
   rowKey: `row-${++nextRowKey}`,
@@ -93,6 +99,8 @@ export function missingFields(draft: {
   if (!draft.validFrom) missing.push("Érvényesség kezdete");
   const hasValidItem = draft.items.some(isValidContractItem);
   if (!hasValidItem) missing.push("legalább egy kitöltött tétel");
+  if (!draft.items.every(repairFeesValid))
+    missing.push("a javítási díjak csak számok lehetnek");
   return missing;
 }
 
@@ -239,6 +247,7 @@ export function PilotContractsPage() {
         items: draft.items.map(({ rowKey: _rowKey, ...item }) => ({
           ...item,
           occasionsPerYear: Number(item.occasionsPerYear),
+          ...repairFeesPayload(item),
         })),
       });
       setDraft({
@@ -520,6 +529,20 @@ export function PilotContractsPage() {
                           />
                         </PilotFormField>
                       </div>
+                      <ContractRepairFees
+                        values={item}
+                        ariaPrefix={`${index + 1}. tétel `}
+                        onChange={(key, value) =>
+                          setDraft({
+                            ...draft,
+                            items: draft.items.map((row, rowIndex) =>
+                              rowIndex === index
+                                ? { ...row, [key]: value }
+                                : row,
+                            ),
+                          })
+                        }
+                      />
                       {/*
                         A HELYSZÍN ÉS AZ ESZKÖZ ITT VÁLASZTHATÓ -- acrobot kérése
                         (2026-09-24 20:36, élesben blokkoló): a szerver mindig is

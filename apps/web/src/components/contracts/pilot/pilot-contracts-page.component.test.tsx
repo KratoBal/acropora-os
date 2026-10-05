@@ -286,3 +286,86 @@ describe("PilotContractsPage -- új szerződés, tétel törlése", () => {
     expect(screen.queryByRole("button", { name: /tétel törlése/ })).toBeNull();
   });
 });
+
+/*
+  A JAVÍTÁSI DÍJAK AZ ÚJ SZERZŐDÉS ŰRLAPJÁN (kártya 3d80a18d). MI PIROSÍT:
+  ha a díj nem megy el, vagy nem a szerver számalakjában; ha egy nem szám díjjal
+  menteni lehet.
+*/
+describe("PilotContractsPage -- javítási díjak", () => {
+  beforeEach(() => {
+    auth.session = session();
+    api.list.mockReset().mockResolvedValue([]);
+    api.customers
+      .mockReset()
+      .mockResolvedValue([
+        { id: "customer-1", displayName: "Fővárosi Állatkert" },
+      ]);
+    api.create.mockReset().mockResolvedValue({ id: "contract-1" });
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  async function fillContract() {
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fireEvent.click(screen.getByText("Új szerződés"));
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "customer-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződésszám *"), {
+      target: { value: "SZ2026/0000030" },
+    });
+    fireEvent.change(screen.getByLabelText("Szerződés címe *"), {
+      target: { value: "Javítási díjak" },
+    });
+    fireEvent.change(screen.getByLabelText("Érvényesség kezdete *"), {
+      target: { value: "2026-01-01" },
+    });
+    fireEvent.change(screen.getByLabelText("Tétel leírása"), {
+      target: { value: "Óradíj - technikus" },
+    });
+    fireEvent.change(screen.getByLabelText("Nettó egységár"), {
+      target: { value: "0" },
+    });
+  }
+
+  it("a kitöltött díjak a szerver számalakjában mennek, az üresek nullként", async () => {
+    await fillContract();
+    fireEvent.change(
+      screen.getByLabelText("1. tétel Munkanapon, munkaidőben (Ft)"),
+      { target: { value: "9 000" } },
+    );
+    fireEvent.change(screen.getByLabelText("1. tétel Súlyszám"), {
+      target: { value: "90" },
+    });
+    fireEvent.change(screen.getByLabelText("1. tétel Összesen (Ft)"), {
+      target: { value: "10 125 000" },
+    });
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+    await waitFor(() => expect(api.create).toHaveBeenCalled());
+    expect(api.create.mock.calls[0]![1].items[0]).toMatchObject({
+      repairFeeWorkdayHours: "9000",
+      repairFeeWorkdayOffHours: null,
+      repairFeeHoliday: null,
+      repairWeight: "90",
+      repairTotal: "10125000",
+    });
+  });
+
+  it("nem szám díjjal nem menthető", async () => {
+    await fillContract();
+    fireEvent.change(screen.getByLabelText("1. tétel Súlyszám"), {
+      target: { value: "sok" },
+    });
+    expect(
+      screen.getByText(/a javítási díjak csak számok lehetnek/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("Szerződés mentése")
+        .closest("button")!
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+});

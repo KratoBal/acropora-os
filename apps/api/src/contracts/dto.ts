@@ -35,6 +35,22 @@ export class ContractItemDto {
   @IsInt() @Min(1) @Max(366) occasionsPerYear!: number;
   @IsString() @Matches(DECIMAL) vatRatePercent!: string;
   @IsString() @IsOptional() departmentId?: string | null;
+  /**
+   * JAVÍTÁSI DÍJAK (kártya 3d80a18d): nem kötelezők, és nincs számolás. A
+   * HIÁNYZÓ mező a tárolt értéket megtartja, a `null` törli -- egy régi kliens
+   * így nem nullázza ki, amit nem ismer.
+   */
+  @IsString()
+  @Matches(DECIMAL)
+  @IsOptional()
+  repairFeeWorkdayHours?: string | null;
+  @IsString()
+  @Matches(DECIMAL)
+  @IsOptional()
+  repairFeeWorkdayOffHours?: string | null;
+  @IsString() @Matches(DECIMAL) @IsOptional() repairFeeHoliday?: string | null;
+  @IsString() @Matches(DECIMAL) @IsOptional() repairWeight?: string | null;
+  @IsString() @Matches(DECIMAL) @IsOptional() repairTotal?: string | null;
   @IsArray()
   @ArrayMaxSize(100)
   @IsString({ each: true })

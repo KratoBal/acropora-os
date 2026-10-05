@@ -64,4 +64,11 @@ export class ServiceDraftsController {
   ) {
     return this.service.decide(id, user, "reject");
   }
+  /** "Mégis piszkozat": egy kiszűrt tétel vissza a listára. */
+  @Post(":id/promote") promote(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.promote(id, user);
+  }
 }
