@@ -167,3 +167,94 @@ export interface WebshopOrderListResponse {
   /** Igaz, ha a webshop több rendelést tart, mint amennyit az OS egy körben beolvas. */
   truncated: boolean;
 }
+
+/** Egy cím a rendelésen, a felületre összerakva. */
+export interface WebshopOrderAddress {
+  name: string | null;
+  company: string | null;
+  /** „1117 Budapest, Fehérvári út 24.” */
+  line: string | null;
+  countryCode: string | null;
+  phone: string | null;
+}
+
+export interface WebshopOrderLine {
+  id: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+/** A feldolgozási sáv egy lépése (a prompt 5. pontja). */
+export interface WebshopOrderStep {
+  key: string;
+  label: string;
+  detail: string;
+  state: "done" | "current" | "blocked" | "todo";
+}
+
+export interface WebshopOrderHistoryEntry {
+  at: string;
+  text: string;
+}
+
+export interface WebshopOrderDetail {
+  id: string;
+  displayId: number;
+  createdAt: string;
+  currency: string;
+  status: WebshopOrderListItem["status"];
+  /** A webshop átmenet-táblájából: ide léptetheti a kezelő most. */
+  nextStatuses: { status: WebshopOrderStatus; label: string }[];
+  customer: {
+    name: string | null;
+    email: string;
+    phone: string | null;
+    isNew: boolean;
+    guest: boolean;
+  };
+  billingAddress: WebshopOrderAddress | null;
+  shippingAddress: WebshopOrderAddress | null;
+  shipping: {
+    method: string | null;
+    storePickup: boolean;
+    carrier: "FOXPOST" | "GLS" | null;
+    pickupPoint: {
+      id: string | null;
+      name: string;
+      address: string | null;
+    } | null;
+  };
+  lines: WebshopOrderLine[];
+  totals: {
+    subtotal: number;
+    discount: number;
+    shipping: number;
+    /** Az utánvét kezelési díja (külön díjsor a webshopban). */
+    codFee: number;
+    total: number;
+  };
+  payment: {
+    method: string | null;
+    state: WebshopOrderPaymentState | null;
+    /** A zárolt (engedélyezett) összeg. */
+    authorized: number | null;
+    /** Amit a Kiszállításkor levonunk: a rendelés mostani végösszege. */
+    toCapture: number;
+    captured: number;
+    refunded: number;
+    /** A Stripe PaymentIntent azonosítója (`pi_…`); más szolgáltatónál `null`. */
+    stripePaymentIntentId: string | null;
+  } | null;
+  invoiceNumber: string | null;
+  steps: WebshopOrderStep[];
+  relatedOrder: {
+    id: string;
+    displayId: number | null;
+    role: "pickup" | "parent";
+  } | null;
+  history: WebshopOrderHistoryEntry[];
+}

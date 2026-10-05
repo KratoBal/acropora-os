@@ -1,9 +1,11 @@
 import {
   Injectable,
+  NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import type {
+  WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
 } from "@acropora/types";
@@ -26,6 +28,7 @@ import {
   sortItems,
   toListItem,
 } from "./webshop-orders.rules.js";
+import { toDetail } from "./webshop-order-detail.rules.js";
 
 /** Egy lap a webshopból; ennyi lapot olvasunk egy körben. */
 export const OVERVIEW_PAGE_SIZE = 100;
@@ -90,6 +93,56 @@ export class WebshopOrdersService {
       throw error;
     }
     return { rows, truncated: true };
+  }
+
+  /** A webshop hívásának hibája: 503 egy mondattal, nem 500. */
+  private async fromWebshop<T>(read: () => Promise<T>): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError)
+        throw new ServiceUnavailableException(
+          `A webshop nem adta ki a rendelést (HTTP ${error.status}).`,
+        );
+      throw error;
+    }
+  }
+
+  /**
+   * EGY RENDELÉS ADATLAPJA: a rendelés, az üzleti státusz a történettel, az
+   * „új vásárló” jel (a vásárló rendeléseinek száma) és a vegyes kosár
+   * párjának sorszáma. A párt nem kötelező elérni: ha nincs meg, a link a
+   * sorszám nélkül marad.
+   */
+  async detail(id: string, now = new Date()): Promise<WebshopOrderDetail> {
+    const client = await this.client();
+    const order = await this.fromWebshop(() => client.order(id));
+    if (!order)
+      throw new NotFoundException("A rendelés nem található a webshopban.");
+    const [status, customerOrderCount, related] = await this.fromWebshop(() =>
+      Promise.all([
+        client.orderBusinessStatus(id),
+        order.customer_id
+          ? client.countCustomerOrders(order.customer_id)
+          : Promise.resolve(null),
+        (() => {
+          const relatedId =
+            order.metadata?.acropora_pickup_order_id ??
+            order.metadata?.acropora_parent_order_id;
+          return typeof relatedId === "string" && relatedId
+            ? client.order(relatedId).catch(() => null)
+            : Promise.resolve(null);
+        })(),
+      ]),
+    );
+    return toDetail({
+      order,
+      status,
+      facts: NO_FACTS,
+      customerOrderCount,
+      relatedDisplayId: related?.display_id ?? null,
+      now,
+    });
   }
 
   async list(

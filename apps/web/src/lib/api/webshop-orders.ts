@@ -1,4 +1,5 @@
 import type {
+  WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
 } from "@acropora/types";
@@ -33,6 +34,13 @@ export const webshopOrdersApi = {
     }
     return apiRequest<WebshopOrderListResponse>(
       `/webshop-orders?${query.toString()}`,
+      token,
+      { signal },
+    );
+  },
+  detail(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}`,
       token,
       { signal },
     );
