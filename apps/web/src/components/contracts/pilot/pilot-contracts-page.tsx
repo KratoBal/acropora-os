@@ -36,8 +36,16 @@ export type DraftItem = {
    */
   departmentId: string;
   assetIds: string[];
+  /**
+   * A SOR ÁLLANDÓ KULCSA A FELÜLETEN, A SZERVERRE NEM MEGY (kártya c014db6f).
+   * Index-kulcs mellett egy középső sor törlése után a React a következő
+   * sor belső állapotát (az eszközválasztó keresőjét) a törölt helyére tenné.
+   */
+  rowKey?: string;
 };
+let nextRowKey = 0;
 export const emptyItem = (): DraftItem => ({
+  rowKey: `row-${++nextRowKey}`,
   description: "",
   unitNet: "",
   quantity: "1",
@@ -236,7 +244,7 @@ export function PilotContractsPage() {
         validFrom: draft.validFrom,
         validTo: draft.validTo || null,
         notes: draft.notes || null,
-        items: draft.items.map((item) => ({
+        items: draft.items.map(({ rowKey: _rowKey, ...item }) => ({
           ...item,
           occasionsPerYear: Number(item.occasionsPerYear),
         })),
@@ -421,7 +429,7 @@ export function PilotContractsPage() {
                   {draft.items.map((item, index) => (
                     <div
                       className="flex flex-col gap-2 rounded-lg bg-pilot-grey-50 p-3 ring-1 ring-pilot-grey-100"
-                      key={index}
+                      key={item.rowKey ?? index}
                     >
                       <div className="grid gap-2 md:grid-cols-5">
                         <PilotFormField
@@ -586,6 +594,31 @@ export function PilotContractsPage() {
                             </div>
                           </div>
                         )
+                      ) : null}
+                      {/*
+                        A FELVETT SOR TÖRÖLHETŐ (kártya c014db6f, Ág Luca
+                        bejelentése, 2026-10-05: eddig csak hozzáadni lehetett).
+                        Az utolsó sor nem: egy szerződés tétel nélkül nem menthető.
+                      */}
+                      {draft.items.length > 1 ? (
+                        <div className="flex justify-end">
+                          <PilotButton
+                            type="button"
+                            variant="ghost"
+                            size="action"
+                            aria-label={`${index + 1}. tétel törlése`}
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                items: draft.items.filter(
+                                  (_row, rowIndex) => rowIndex !== index,
+                                ),
+                              })
+                            }
+                          >
+                            Tétel törlése
+                          </PilotButton>
+                        </div>
                       ) : null}
                     </div>
                   ))}

@@ -14,6 +14,10 @@ import {
   maintenanceOrdersApi,
   type MaintenanceOrderSummary,
 } from "@/lib/api/maintenance-orders";
+import {
+  contractItemRemovalBlocker,
+  contractItemsWithOrders,
+} from "./contract-item-removal";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   PilotBadge,
@@ -279,6 +283,28 @@ export function PilotContractDetailPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  /*
+    A TÉTEL TÖRLÉSE (kártya c014db6f): a tétel kikerül a szerkesztett
+    listából, és a "Módosítások mentése" a megmaradókat az azonosítójukkal
+    küldi -- a szerver a kimaradtat törli, a többiek azonosítója változatlan.
+    A kijelölésből is kikerül, különben a megrendelőlap-kiállítás egy nem
+    létező tételt kérne.
+  */
+  const lockedItemIds =
+    orders === null ? null : contractItemsWithOrders(orders);
+  const removeItem = (itemId: string) => {
+    if (!contract) return;
+    setContract({
+      ...contract,
+      items: contract.items.filter((item) => item.id !== itemId),
+    });
+    setSelectedItemIds((current) => {
+      const next = new Set(current);
+      next.delete(itemId);
+      return next;
+    });
   };
 
   const toggleItem = (itemId: string) => {
@@ -578,11 +604,42 @@ export function PilotContractDetailPage({
                     key={item.id}
                     className="flex flex-col gap-2 border-b border-pilot-grey-100 pb-3 last:border-0"
                   >
-                    <p className="text-pilot-grey-900">
-                      {item.position}. {item.description} — {item.unitNet} Ft ×{" "}
-                      {item.quantity} db × {item.occasionsPerYear} alkalom / év,{" "}
-                      {item.vatRatePercent}% ÁFA
-                    </p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-pilot-grey-900">
+                        {item.position}. {item.description} — {item.unitNet} Ft
+                        × {item.quantity} db × {item.occasionsPerYear} alkalom /
+                        év, {item.vatRatePercent}% ÁFA
+                      </p>
+                      {contract.items.length > 1 ? (
+                        <PilotButton
+                          variant="secondary"
+                          size="action"
+                          aria-label={`${item.position}. tétel törlése`}
+                          disabled={
+                            saving ||
+                            contractItemRemovalBlocker(
+                              item.id,
+                              lockedItemIds,
+                            ) !== null
+                          }
+                          title={
+                            contractItemRemovalBlocker(
+                              item.id,
+                              lockedItemIds,
+                            ) ?? undefined
+                          }
+                          onClick={() => removeItem(item.id)}
+                        >
+                          Törlés
+                        </PilotButton>
+                      ) : null}
+                    </div>
+                    {contract.items.length > 1 &&
+                    contractItemRemovalBlocker(item.id, lockedItemIds) ? (
+                      <p className="text-xs text-pilot-grey-400">
+                        {contractItemRemovalBlocker(item.id, lockedItemIds)}
+                      </p>
+                    ) : null}
                     {departmentOptions.length > 0 ? (
                       <div className="grid gap-2 md:grid-cols-2">
                         <PilotFormField label="Helyszín">
