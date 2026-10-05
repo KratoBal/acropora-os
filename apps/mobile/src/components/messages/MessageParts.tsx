@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { ConversationListItem } from "@/lib/messages/types";
-import { conversationTimeLabel } from "@/lib/messages/outbox";
+import { conversationTimeLabel, previewText } from "@/lib/messages/outbox";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
@@ -59,7 +59,7 @@ export function lastMessagePreview(item: ConversationListItem): string {
   const last = item.lastMessage;
   if (!last) return "Még nincs üzenet";
   if (last.deleted) return "Az üzenetet törölték.";
-  const text = last.text ?? "";
+  const text = previewText(last);
   return item.type === "GROUP" ? `${last.senderName}: ${text}` : text;
 }
 

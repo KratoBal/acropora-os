@@ -349,6 +349,27 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  /** A 2. fázis (2026-10-05): a saját üzenet szerkesztése és a reakció. */
+  {
+    mit: "üzenet szerkesztése",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "EditMessageInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "EditMessageDto",
+    kontroll: ["text"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
+  {
+    mit: "reakció",
+    mobil: "../mobile/src/lib/api/messages.ts",
+    mobilNev: "ReactionInput",
+    dto: "src/messages/dto/messages.dto.ts",
+    dtoNev: "ReactionDto",
+    kontroll: ["reaction"],
+    mobilMinimum: 1,
+    dtoMinimum: 1,
+  },
 ];
 
 /**
@@ -465,7 +486,8 @@ const PAROK: readonly Par[] = [
  * `createConversation`, `markConversationRead`. Mind a három nevesített
  * típussal megy, mind a három PÁR fent.
  */
-const IRAS_HIVASOK_MA = 28;
+// 2026-10-05: 28 -> 30, az Üzenetek 2. fázisa: szerkesztés és reakció, mindkettő párral
+const IRAS_HIVASOK_MA = 30;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

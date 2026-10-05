@@ -39,6 +39,13 @@ const MOBIL = "../mobile/src/lib/service-jobs/types.ts";
 */
 const KOZOS_ESZKOZ = "../../packages/types/src/asset-management.ts";
 const MOBIL_ESZKOZ = "../mobile/src/lib/api/assets.ts";
+/*
+  A HARMADIK PAR: AZ UZENETEK (2026-10-05, a 2. fazis). A mobil masolat fejlece
+  eddig is ezt a fajlt nevezte meg orzonek, de par nem allt itt: a csatolmany,
+  a valasz es a reakcio mezoi ezert most kerulnek ala.
+*/
+const KOZOS_UZENET = "../../packages/types/src/messages.ts";
+const MOBIL_UZENET = "../mobile/src/lib/messages/types.ts";
 
 function forras(ut: string): string {
   const s = readFileSync(ut, "utf8");
@@ -260,4 +267,30 @@ describe("az anyagigény V2 mobil típusai a közös csomaghoz mérve", () => {
   ])
     it(`a(z) ${nev} mezőnevei egyeznek`, () =>
       egyezzen(nev, mezok(kozos(), nev)));
+});
+
+describe("az üzenetek mobil típusai a közös csomaghoz mérve", () => {
+  /**
+   * AZ ÜZENETEK TÜKRE: TELJES EGYEZÉS, mert a telefon ma minden mezőt tükröz
+   * (mérve 2026-10-05). Egy új szerver-mező, amit senki nem tükröz, így nem
+   * csúszhat át csendben; egy szándékos szűkítést ki kell mondani.
+   */
+  for (const nev of [
+    "MessageItem",
+    "MessageAttachmentItem",
+    "MessageReactionSummary",
+    "MessageReplyPreview",
+    "ConversationPerson",
+  ]) {
+    it(`az üzenetek ${nev} mezői PONTOSAN egyeznek a közössel`, () => {
+      const kozosMezok = mezok(forras(KOZOS_UZENET), nev);
+      // POZITIV KONTROLL: ket ures halmaz osszevetese zolden allna.
+      assert.ok(kozosMezok.size >= 3, `gyanúsan kevés mező: ${nev}`);
+      assert.deepEqual(
+        [...mezok(forras(MOBIL_UZENET), nev)].sort(),
+        [...kozosMezok].sort(),
+        `a telefon ${nev} másolata eltér a szervertől`,
+      );
+    });
+  }
 });

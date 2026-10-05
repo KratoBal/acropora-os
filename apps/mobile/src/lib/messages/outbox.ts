@@ -3,7 +3,7 @@
  * (`apps/web/src/components/messages/outbox.ts`). Másolat, mert az Expo app nem
  * húzza be a web kódját; a két oldal speceje ugyanazokat az eseteket méri.
  */
-import type { MessageItem } from "./types";
+import type { MessageItem, MessageReplyPreview } from "./types";
 
 /**
  * A KÜLDÉS ÁLLAPOTA A KLIENSEN (a prompt 22. pontja). Egy üzenet addig
@@ -19,6 +19,9 @@ export interface OutgoingMessage {
   clientMessageId: string;
   conversationId: string;
   text: string;
+  /** A 2. fázis óta: a kész feltöltések és a válasz célja (az újrapróbálás is ezt viszi). */
+  attachmentIds?: string[];
+  replyToMessageId?: string;
   status: "pending" | "failed";
   createdAt: string;
 }
@@ -120,4 +123,120 @@ export function dayDividerLabel(iso: string, now: Date): string {
     month: "long",
     day: "numeric",
   });
+}
+
+/**
+ * A FELTÖLTÉSI SOR A COMPOSERBEN (a 2. fázis, a prompt 12. pontja): fájlonként
+ * haladás, siker, hiba, újrapróbálás és megszakítás. A küldés csak a SIKERES
+ * feltöltéseket viszi, és amíg bármelyik még tölt, nem indulhat.
+ */
+export interface PendingUpload {
+  localId: string;
+  fileName: string;
+  sizeBytes: number;
+  percent: number;
+  status: "uploading" | "done" | "failed";
+  attachmentId: string | null;
+  error: string | null;
+}
+
+export type UploadAction =
+  | {
+      type: "added";
+      upload: Pick<PendingUpload, "localId" | "fileName" | "sizeBytes">;
+    }
+  | { type: "progress"; localId: string; percent: number }
+  | { type: "done"; localId: string; attachmentId: string }
+  | { type: "failed"; localId: string; error: string }
+  | { type: "retried"; localId: string }
+  | { type: "removed"; localId: string }
+  | { type: "cleared" };
+
+export function uploadsReducer(
+  state: readonly PendingUpload[],
+  action: UploadAction,
+): PendingUpload[] {
+  const patch = (localId: string, change: Partial<PendingUpload>) =>
+    state.map((u) => (u.localId === localId ? { ...u, ...change } : u));
+  switch (action.type) {
+    case "added":
+      return [
+        ...state,
+        {
+          ...action.upload,
+          percent: 0,
+          status: "uploading",
+          attachmentId: null,
+          error: null,
+        },
+      ];
+    case "progress":
+      return patch(action.localId, { percent: action.percent });
+    case "done":
+      return patch(action.localId, {
+        percent: 100,
+        status: "done",
+        attachmentId: action.attachmentId,
+      });
+    case "failed":
+      return patch(action.localId, { status: "failed", error: action.error });
+    case "retried":
+      return patch(action.localId, {
+        status: "uploading",
+        percent: 0,
+        error: null,
+      });
+    case "removed":
+      return state.filter((u) => u.localId !== action.localId);
+    case "cleared":
+      return [];
+  }
+}
+
+/** Küldhető-e: van szöveg vagy kész csatolmány, és semmi nem tölt még. */
+export function canSend(
+  text: string,
+  uploads: readonly PendingUpload[],
+): boolean {
+  if (uploads.some((u) => u.status === "uploading")) return false;
+  return Boolean(text.trim()) || uploads.some((u) => u.status === "done");
+}
+
+/** A küldéssel menő csatolmány-azonosítók: csak a sikeresek. */
+export function readyAttachmentIds(
+  uploads: readonly PendingUpload[],
+): string[] {
+  return uploads.flatMap((u) =>
+    u.status === "done" && u.attachmentId ? [u.attachmentId] : [],
+  );
+}
+
+/** Ember-olvasható fájlméret (a Figma „2,4 MB” alakja). */
+export function fileSizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+/**
+ * AZ ÜZENET RÖVID SZÖVEGE a listában és a válasz-előnézetben. Egy csak képből
+ * álló üzenetnek nincs szövege: üres előnézet helyett a csatolmány fajtája áll.
+ */
+export function previewText(
+  message: Pick<MessageItem, "text" | "deleted" | "attachments">,
+): string {
+  if (message.deleted) return "Az üzenetet törölték.";
+  if (message.text) return message.text;
+  const first = message.attachments[0];
+  if (!first) return "";
+  return first.kind === "IMAGE" ? "📷 Kép" : `📎 ${first.fileName}`;
+}
+
+/** A megidézett üzenet sora a buborék tetején. */
+export function replyPreviewText(reply: MessageReplyPreview): string {
+  if (reply.deleted) return "Az üzenetet törölték.";
+  if (reply.text) return reply.text;
+  if (reply.attachmentKind === "IMAGE") return "📷 Kép";
+  if (reply.attachmentKind === "FILE") return "📎 Fájl";
+  return "";
 }
