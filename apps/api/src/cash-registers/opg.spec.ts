@@ -50,7 +50,11 @@ const tlv = (tag: number, data: Buffer) =>
   ]);
 const seq = (...values: Buffer[]) => tlv(48, Buffer.concat(values));
 const oid = (hex: string) => tlv(6, Buffer.from(hex, "hex"));
-export const cms = (payload: Buffer, constructed = false) =>
+export const cms = (
+  payload: Buffer,
+  constructed = false,
+  contentType = "2a864886f70d010701",
+) =>
   seq(
     oid("2a864886f70d010702"),
     tlv(
@@ -59,7 +63,7 @@ export const cms = (payload: Buffer, constructed = false) =>
         tlv(2, Buffer.from([1])),
         tlv(49, Buffer.alloc(0)),
         seq(
-          oid("2a864886f70d010701"),
+          oid(contentType),
           tlv(
             160,
             constructed
@@ -171,6 +175,12 @@ test("wrong identity, duplicate receipts, missing fields, wrong namespaces and X
 test("bounded CMS primitive and segmented BER extraction and ZIP CRC", () => {
   assert.deepEqual(cmsPayload(cms(xml)), xml);
   assert.deepEqual(cmsPayload(cms(xml, true)), xml);
+  // The real NAV files use id-digestedData for the encapsulated content.
+  assert.deepEqual(cmsPayload(cms(xml, false, "2a864886f70d010705")), xml);
+  assert.throws(
+    () => cmsPayload(cms(xml, false, "2a864886f70d010703")),
+    /OPG_CMS_INVALID/,
+  );
   assert.deepEqual(archivePayload(archive(xml)), xml);
   assert.throws(
     () => cmsPayload(Buffer.concat([cms(xml), Buffer.from("<?xml evil?>")])),
