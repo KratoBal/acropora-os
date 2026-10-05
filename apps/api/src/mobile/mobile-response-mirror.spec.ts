@@ -294,3 +294,22 @@ describe("az üzenetek mobil típusai a közös csomaghoz mérve", () => {
     });
   }
 });
+
+/*
+  THE MENU NUMBERS' MIRROR (card 4a6813db). The shared type is a `Record` over
+  the counter ids, not an interface, so its "fields" are the ids: the phone's
+  union must name exactly the shared ones. A new counter the phone does not
+  know would never show a badge, and nothing else would turn red.
+*/
+const MOBIL_SZAMLALO = "../mobile/src/lib/navigation/counters.ts";
+
+describe("a menü-számlálók mobil típusa a közös csomaghoz mérve", () => {
+  it("a telefon pontosan a közös számláló-azonosítókat ismeri", async () => {
+    const { NAVIGATION_COUNTER_IDS } = await import("@acropora/types");
+    const forras = readFileSync(MOBIL_SZAMLALO, "utf8");
+    const unio = /export type NavigationCounterId =([^;]+);/.exec(forras)?.[1];
+    assert.ok(unio, "a NavigationCounterId típus nem olvasható ki");
+    const mobil = [...unio.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual([...mobil].sort(), [...NAVIGATION_COUNTER_IDS].sort());
+  });
+});

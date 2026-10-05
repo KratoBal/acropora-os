@@ -10,6 +10,8 @@ import type { ThemeTokens } from "@/lib/theme/tokens";
 
 import { BottomNav } from "@/components/home/BottomNav";
 import { ModuleTile } from "@/components/home/ModuleTile";
+import { useNavigationCounters } from "@/components/home/useNavigationCounters";
+import { tileBadge } from "@/lib/navigation/counters";
 import { runningVersionLine } from "@/lib/app-version";
 import { HOME_MODULES } from "@/lib/home/modules";
 import {
@@ -65,6 +67,8 @@ export default function HomeScreen() {
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   const isOnline = useIsOnline();
+  // the tile numbers (card 4a6813db), before any early return
+  const counters = useNavigationCounters();
   /**
    * A SOR KIURITESE ITT INDUL, mert ez az elso kepernyo, amit a kollega lat.
    * A hook maga dont: csak online fut, es csak egyszer egyidoben.
@@ -270,6 +274,7 @@ export default function HomeScreen() {
                   <ModuleTile
                     key={code}
                     module={entry}
+                    badge={tileBadge(code, counters)}
                     onPress={() => {
                       if (entry.route) router.push(entry.route as Href);
                     }}

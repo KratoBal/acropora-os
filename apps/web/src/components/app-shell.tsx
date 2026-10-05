@@ -6,6 +6,9 @@ import { Badge, Button, Icon, useThemePreference } from "@acropora/ui";
 import {
   isNavigationEntryVisible,
   servedNavigationFeatures,
+  isNavigationCounterId,
+  navigationCounterLabel,
+  type NavigationCounterId,
 } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -37,6 +40,14 @@ import {
   type HeaderMessagesProps,
 } from "./shell-profile";
 import { dashboardApi } from "@/lib/api/dashboard";
+import { useNavigationCounters } from "./use-navigation-counters";
+
+/** What the menu number counts, for a screen reader (card 4a6813db). */
+const NAVIGATION_COUNTER_ARIA: Record<NavigationCounterId, string> = {
+  "service-jobs": "nekem kiosztott, nyitott hibajegy",
+  worksheets: "nekem kiosztott, aláíratlan munkalap",
+  "material-requests-pending": "teendő anyagigény",
+};
 
 interface NavigationGroupProps {
   active: boolean;
@@ -161,6 +172,10 @@ export function AppShell({
           unreadCount: messagesUnread,
         }
       : undefined);
+  const navigationCounters = useNavigationCounters(
+    session?.token ?? "",
+    Boolean(session),
+  );
   const { effectiveTheme, preference, setPreference } = useThemePreference();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
@@ -198,15 +213,32 @@ export function AppShell({
   const unasActive = visibleUnasNavigation.some((item) => isActive(item));
   const closeMobileNavigation = () => setMobileNavigationOpen(false);
 
-  const renderItem = (item: AppNavigationItem, nested = false) => (
-    <NavigationItem
-      key={item.href}
-      item={item}
-      active={isActive(item)}
-      nested={nested}
-      onChoose={closeMobileNavigation}
-    />
-  );
+  const renderItem = (item: AppNavigationItem, nested = false) => {
+    const count = isNavigationCounterId(item.entryId)
+      ? navigationCounters?.[item.entryId]
+      : null;
+    const label = navigationCounterLabel(count);
+    return (
+      <NavigationItem
+        key={item.href}
+        item={item}
+        active={isActive(item)}
+        nested={nested}
+        onChoose={closeMobileNavigation}
+        badge={
+          label && isNavigationCounterId(item.entryId) ? (
+            <Badge
+              className="px-1.5"
+              variant="warning"
+              aria-label={`${count} ${NAVIGATION_COUNTER_ARIA[item.entryId]}`}
+            >
+              {label}
+            </Badge>
+          ) : undefined
+        }
+      />
+    );
+  };
 
   const renderEntry = (entry: AppNavigationEntry) => {
     if (!isNavigationGroup(entry)) {
