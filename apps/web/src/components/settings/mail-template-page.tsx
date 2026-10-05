@@ -40,6 +40,7 @@ import {
   useMailImages,
   withImageSources,
 } from "@/components/settings/mail-image-picker";
+import { WebshopStuckMails } from "@/components/settings/webshop-stuck-mails";
 import {
   mailTemplatesApi,
   type MailTemplateResponse,
@@ -296,6 +297,16 @@ export function MailTemplatePage() {
           </button>
         ))}
       </div>
+
+      {group === "WEBSHOP" ? (
+        <WebshopStuckMails
+          token={token}
+          onOpenTemplate={(id) => {
+            if (id !== esemenyId)
+              kerValtas({ kind: "template", group: "WEBSHOP", id });
+          }}
+        />
+      ) : null}
 
       <div className="grid gap-4 md:grid-cols-[192px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)_minmax(0,1fr)]">
         <PilotCard className="p-4 md:row-span-2 xl:row-span-1">

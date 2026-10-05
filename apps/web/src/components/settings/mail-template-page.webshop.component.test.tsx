@@ -37,6 +37,12 @@ const kepApi = vi.hoisted(() => ({
   content: vi.fn(),
 }));
 vi.mock("@/lib/api/mail-images", () => ({ mailImagesApi: kepApi }));
+vi.mock("@/lib/api/webshop-mail-outbox", () => ({
+  webshopMailOutboxApi: {
+    stuck: vi.fn().mockResolvedValue({ items: [], count: 0 }),
+    retry: vi.fn(),
+  },
+}));
 
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({

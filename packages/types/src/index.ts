@@ -193,6 +193,8 @@ export type {
   WebshopPlacedOrder,
   WebshopRefundFacts,
   WebshopShippedFacts,
+  WebshopStuckMail,
+  WebshopStuckMailList,
 } from "./webshop-mail.js";
 export {
   worksheetStatusLabel,

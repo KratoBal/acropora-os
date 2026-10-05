@@ -862,3 +862,31 @@ function parseTemplateFacts(
     }
   }
 }
+
+/**
+ * A MAIL THE WEBSHOP COULD NOT SEND (commerce W2, murena 26562).
+ *
+ * `permanent` (the OS answered 400/422) and `config` (401/403, a missing
+ * setting) are stuck at once and are not retried; anything else after an
+ * hour. `last_error` is the OS render endpoint's own `message`, word for word,
+ * or the webshop's Hungarian sentence for a network error.
+ */
+export interface WebshopStuckMail {
+  readonly id: string;
+  readonly template: string;
+  readonly display_id: string | number | null;
+  readonly resource_id: string;
+  readonly to: string;
+  readonly attempts: number;
+  readonly failure_kind: "permanent" | "config" | "transient" | null;
+  readonly last_error: string | null;
+  readonly created_at: string;
+  readonly next_attempt_at: string | null;
+  readonly alerted_at: string | null;
+}
+
+export interface WebshopStuckMailList {
+  readonly items: readonly WebshopStuckMail[];
+  /** Every stuck mail, not just this page. */
+  readonly count: number;
+}
