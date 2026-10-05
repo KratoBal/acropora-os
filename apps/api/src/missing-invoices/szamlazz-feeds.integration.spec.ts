@@ -450,6 +450,86 @@ describe(
       assert.equal(await source(), existingId);
     });
 
+    /**
+     * AZ AZONOS TARTALMÚ MÁSOLATOK KÖZÜL A MEGTARTOTT (TEA, élesen mérve
+     * 2026-10-05): a begyűjtött másolatot a jelölt-összerakó kihagyja, ha a
+     * tartalom más úton is megvan, ezért a forrás a feltöltés legyen, akkor is,
+     * ha a begyűjtött a korábbi.
+     */
+    it("with an earlier collected copy and a later upload of the same file, the source is the upload", async () => {
+      const externalId = `${PREFIX}be-kept`;
+      const sha = `${PREFIX}sha-kept`;
+      await repository.storeRaw({
+        kind: "SZAMLABE",
+        externalId,
+        sha256: "kept",
+        body: "<szamlabe/>",
+      });
+      const copy = (suffix: string, origin: string, at: string) =>
+        prisma.incomingSupplierDocument.create({
+          data: {
+            gmailMessageId: `szamlazz:szamlabe:${PREFIX}${suffix}`,
+            fileName: "E-SI-2026-51598.pdf",
+            receivedAt: new Date(at),
+            createdAt: new Date(at),
+            sizeBytes: 3,
+            sha256: sha,
+            content: new Uint8Array([1, 2, 3]),
+            status: "FAILED",
+            kind: "INVOICE",
+            origin,
+          },
+          select: { id: true },
+        });
+      await copy("gyujtott", "COLLECTED_MAIL", "2026-09-27T00:00:00Z");
+      const { id: uploadId } = await copy(
+        "feltoltes",
+        "UPLOAD",
+        "2026-09-28T00:00:00Z",
+      );
+      await repository.projectIncoming({
+        externalId,
+        sha256: "kept",
+        contentSha256: sha,
+        projection: {
+          externalId,
+          kindCode: "SZ",
+          documentNumber: "E-SI-2026-51598",
+          electronic: true,
+          issueDate: "2026-09-26",
+          fulfillmentDate: null,
+          dueDate: null,
+          paymentMethod: "Bankkártya",
+          currency: "HUF",
+          exchangeRate: null,
+          exchangeBank: null,
+          supplierName: "TEA MOBILITÁS Kft.",
+          supplierTaxNumber: null,
+          supplierEuTaxNumber: null,
+          supplierAddress: null,
+          supplierBankAccount: null,
+          buyerName: "Acropora Kft.",
+          buyerTaxNumber: "23916229-2-42",
+          netAmount: "15748",
+          vatAmount: "4252",
+          grossAmount: "20000",
+          lines: [],
+          vatSummary: [],
+          paymentsKnown: false,
+          payments: [],
+          note: null,
+          orderNumber: null,
+          referencedInvoiceNumber: null,
+          referencedProformaNumber: null,
+          cancelled: false,
+        },
+      });
+      const row = await prisma.incomingBillingDocument.findUniqueOrThrow({
+        where: { source_externalId: { source: "SZAMLAZZ", externalId } },
+      });
+      assert.equal(row.sourceDocumentId, uploadId);
+    });
+
     it("a forwarded invoice is a candidate, with its source, gross and supplier", async () => {
       const { id } = await repository.storeInvoice({
         externalId: `${PREFIX}2`,

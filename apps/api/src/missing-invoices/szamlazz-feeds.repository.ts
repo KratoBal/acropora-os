@@ -20,6 +20,27 @@ export interface FeedInvoiceInput {
   textReading: Prisma.InputJsonValue;
 }
 
+/**
+ * AZ AZONOS TARTALMÚ DOKUMENTUMOK KÖZÜL AZ, AMELYIK A PÁROSÍTÓ JELÖLTJE LEHET.
+ *
+ * A jelölt-összerakó a BEGYŰJTÖTT másolatot (`COLLECTED_MAIL`,
+ * `COLLECTED_DRIVE`) kihagyja, ha ugyanez a tartalom más úton is megvan
+ * (`missing-invoices.repository.ts`, `candidates`). Ha a vetítés egy ilyen
+ * kihagyott másolatra mutatna, a forrás egyetlen jelöltben sem állna, és a
+ * párosítás nem érne el hozzá (mérve élesen 2026-10-05: TEA E-SI-2026-51598,
+ * `banki-jeloletlen-diagnozis-2026-09.txt`). Ezért ugyanaz a szabály: előbb a
+ * nem begyűjtött másolat, a legkorábbi; ha csak begyűjtött van, a legkorábbi az.
+ */
+export function preferredSameContentSource<T extends { origin: string }>(
+  documents: readonly T[],
+): T | null {
+  return (
+    documents.find((document) => !document.origin.startsWith("COLLECTED_")) ??
+    documents[0] ??
+    null
+  );
+}
+
 /** A Számlázz.hu számla- és nyugta-továbbítás adatbázis-oldala. */
 @Injectable()
 export class SzamlazzFeedsRepository {
@@ -201,11 +222,13 @@ export class SzamlazzFeedsRepository {
           select: { id: true, fileName: true },
         })) ??
         (input.contentSha256
-          ? await transaction.incomingSupplierDocument.findFirst({
-              where: { sha256: input.contentSha256 },
-              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-              select: { id: true, fileName: true },
-            })
+          ? preferredSameContentSource(
+              await transaction.incomingSupplierDocument.findMany({
+                where: { sha256: input.contentSha256 },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                select: { id: true, fileName: true, origin: true },
+              }),
+            )
           : null);
       const {
         externalId,
