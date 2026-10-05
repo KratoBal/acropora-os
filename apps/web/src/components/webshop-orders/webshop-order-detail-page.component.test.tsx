@@ -880,6 +880,7 @@ describe("WebshopOrderDetailPage", () => {
       holdWarning: "soon",
       link: null,
       paidAt: null,
+      due: null,
       canRelease: true,
       canSendLink: false,
       ...over,
@@ -966,6 +967,32 @@ describe("WebshopOrderDetailPage", () => {
       await within(pay).findByText("https://shop.example/fizetes/tok"),
     ).toBeTruthy();
     expect(api.sendPaymentLink).toHaveBeenCalledWith("token", "order_38", true);
+  });
+
+  it("an added line over the hold: the link is for the difference, and says the hold stays", async () => {
+    api.detail.mockResolvedValue(
+      card({
+        state: "awaiting_payment",
+        holdWarning: null,
+        canRelease: false,
+        canSendLink: true,
+        due: { amount: 3500, reason: "difference" },
+      }),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pay = await screen.findByRole("region", { name: "Fizetés" });
+    expect(within(pay).getByText("Különbözet, fizetendő")).toBeTruthy();
+    fireEvent.click(
+      within(pay).getByRole("button", { name: "Fizetési link küldése" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Fizetési link küldése",
+    });
+    expect(
+      within(dialog).getByText(
+        /különbözetére szól: 3500 Ft\. A kártyás zárolás megmarad/,
+      ),
+    ).toBeTruthy();
   });
 
   it("without orders.manage the state shows, the buttons do not", async () => {

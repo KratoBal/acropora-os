@@ -690,6 +690,12 @@ export interface MedusaOrderPayment {
     url: string;
   } | null;
   paid_at: string | null;
+  /**
+   * Amit a link MOST fizettetne (murena L2b): a feloldott zárolás teljes
+   * összege, vagy egy utólag hozzáadott tétel különbözete (a zárolás ilyenkor
+   * megmarad, és a Kiszállításkor vonódik le). Régebbi webshopnál hiányzik.
+   */
+  due?: { amount: number; reason: "released" | "difference" } | null;
 }
 
 /** Egy változat a cseréhez (`GET /admin/product-variants`). */

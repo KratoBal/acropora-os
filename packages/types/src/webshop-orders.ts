@@ -408,6 +408,12 @@ export interface WebshopOrderCardPayment {
     url: string;
   } | null;
   paidAt: string | null;
+  /**
+   * Amit a fizetési link most fizettetne: a feloldott zárolás helyett a
+   * végösszeg, vagy egy utólag hozzáadott tétel különbözete (Balázs „Mehet”,
+   * 2026-10-05 18:01 UTC; a zárolás ilyenkor megmarad).
+   */
+  due: { amount: number; reason: "released" | "difference" } | null;
   /** „Csúszik a szállítás”: a zárolás feloldása, levél a vevőnek. */
   canRelease: boolean;
   /** „Fizetési link küldése” (újraküldés is: ugyanarra az összegre ugyanaz a link). */

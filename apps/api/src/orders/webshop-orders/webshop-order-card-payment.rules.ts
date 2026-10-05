@@ -58,8 +58,8 @@ export function cardPaymentOf(
   now: Date,
 ): WebshopOrderCardPayment | null {
   if (!row || !isState(row.state)) return null;
-  const holdExpiresAt =
-    row.state === "hold" ? (row.hold?.expires_at ?? null) : null;
+  // a zárolás a különbözet-linknél is él (murena L2b): a lejárata állapottól függetlenül számít
+  const holdExpiresAt = row.hold?.expires_at ?? null;
   const closed = status === "closed" || status === "closed_unsuccessfully";
   return {
     state: row.state,
@@ -75,6 +75,9 @@ export function cardPaymentOf(
         }
       : null,
     paidAt: row.paid_at,
+    due: row.due
+      ? { amount: Number(row.due.amount), reason: row.due.reason }
+      : null,
     canRelease: row.state === "hold" && RELEASABLE.includes(status),
     canSendLink: LINKABLE.includes(row.state) && !closed,
   };

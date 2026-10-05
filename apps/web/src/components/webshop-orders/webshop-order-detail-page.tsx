@@ -730,6 +730,17 @@ function CardPaymentSection({
           </Field>
         </div>
       ) : null}
+      {card.due ? (
+        <Field
+          label={
+            card.due.reason === "difference"
+              ? "Különbözet, fizetendő"
+              : "Fizetendő linken"
+          }
+        >
+          {money(card.due.amount)}
+        </Field>
+      ) : null}
       {card.paidAt ? (
         <Field label="Kifizetve">{when(card.paidAt)}</Field>
       ) : null}
@@ -772,7 +783,9 @@ function CardPaymentSection({
           text={
             open === "release"
               ? `A kártyás zárolás (${payment(order, money)}) feloldódik, a vevő kártyáját nem terheljük. Áruérkezéskor fizetési linket küldünk.`
-              : `A link a rendelés mostani végösszegére szól: ${money(order.totals.total)}. Ha tétel kiesett, előbb azt módosítsd.`
+              : card.due?.reason === "difference"
+                ? `A link az utólag hozzáadott tétel különbözetére szól: ${money(card.due.amount)}. A kártyás zárolás megmarad, a Kiszállításkor vonódik le.`
+                : `A link a rendelés mostani végösszegére szól: ${money(card.due?.amount ?? order.totals.total)}. Ha tétel kiesett, előbb azt módosítsd.`
           }
           onClose={() => setOpen(null)}
           onConfirm={async (notify) => {

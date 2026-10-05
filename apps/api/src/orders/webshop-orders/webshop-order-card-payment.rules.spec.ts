@@ -61,6 +61,7 @@ describe("the card payment on the page", () => {
       holdWarning: "soon",
       link: null,
       paidAt: null,
+      due: null,
       canRelease: true,
       canSendLink: false,
     });
@@ -134,6 +135,39 @@ describe("the card payment on the page", () => {
       null,
     );
     assert.equal(cardPaymentOf(null, "stocking", day(1)), null);
+  });
+
+  it("an added line over the hold: the hold stays and still warns, the link is for the difference", () => {
+    // murena L2b, Balázs „Mehet” 18:01 UTC
+    const card = cardPaymentOf(
+      payment({
+        state: "awaiting_payment",
+        due: { amount: 3500, reason: "difference" },
+      }),
+      "stocking",
+      day(5),
+    )!;
+    assert.deepEqual(
+      [
+        card.holdExpiresAt,
+        card.holdWarning,
+        card.due,
+        card.canSendLink,
+        card.canRelease,
+      ],
+      [EXPIRES, "soon", { amount: 3500, reason: "difference" }, true, false],
+    );
+    assert.match(parcelPaymentRefusal(card) ?? "", /kifizetése után/);
+  });
+
+  it("none (cash on delivery, pay at store, cancelled) is no card payment, and blocks nothing", () => {
+    const card = cardPaymentOf(
+      payment({ state: "none", hold: null }),
+      "stocking",
+      day(1),
+    );
+    assert.equal(card, null);
+    assert.equal(parcelPaymentRefusal(card), null);
   });
 
   it("a parcel waits for the payment after a released hold", () => {
