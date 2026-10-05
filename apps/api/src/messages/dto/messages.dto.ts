@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   CONVERSATION_MAX_MEMBERS,
+  MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_PAGE_MAX,
   MESSAGE_TEXT_MAX_LENGTH,
 } from "@acropora/types";
@@ -36,7 +37,14 @@ export class CreateConversationDto {
 }
 
 export class SendMessageDto {
-  @IsString() @MaxLength(MESSAGE_TEXT_MAX_LENGTH) text!: string;
+  /** Csatolmánnyal szöveg nélkül is mehet (a 2. fázis óta). */
+  @IsOptional() @IsString() @MaxLength(MESSAGE_TEXT_MAX_LENGTH) text?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MESSAGE_ATTACHMENTS_MAX)
+  @IsString({ each: true })
+  attachmentIds?: string[];
+  @IsOptional() @IsString() @MinLength(1) replyToMessageId?: string;
   /** A kliens saját azonosítója: az újraküldés ezzel nem duplikál. */
   @IsString() @MinLength(8) @MaxLength(64) clientMessageId!: string;
 }
@@ -57,4 +65,16 @@ export class MessagePageQueryDto {
 
 export class MessagePeopleQueryDto {
   @IsOptional() @IsString() @MaxLength(100) q?: string;
+}
+
+export class EditMessageDto {
+  @IsString() @MaxLength(MESSAGE_TEXT_MAX_LENGTH) text!: string;
+}
+
+export class ReactionDto {
+  @IsString() @MinLength(1) @MaxLength(16) reaction!: string;
+}
+
+export class AttachmentQueryDto {
+  @IsOptional() @IsString() @MaxLength(20) variant?: string;
 }

@@ -45,6 +45,9 @@ const server = (
     createdAt,
     editedAt: null,
     replyToMessageId: null,
+    replyTo: null,
+    attachments: [],
+    reactions: [],
     clientMessageId,
   }) as MessageItem;
 

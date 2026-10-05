@@ -6,7 +6,10 @@ import { Prisma, prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { encodeCursor, decodeCursor, directKeyOf } from "./messages.rules.js";
-import { MessagesRepository } from "./messages.repository.js";
+import {
+  AttachmentBindingError,
+  MessagesRepository,
+} from "./messages.repository.js";
 
 /**
  * AZ ÜZENETEK ADATBÁZIS-OLDALA (kártya 51d7aba0): amit csak valódi Postgresen
@@ -205,6 +208,71 @@ describe(
         (error: unknown) =>
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002",
+      );
+    });
+
+    it("a reaction is stored once per person, and a bad attachment binding rolls the whole send back", async () => {
+      const { id } = await repository.createConversation({
+        type: "GROUP",
+        title: "2. fázis",
+        description: null,
+        createdByUserId: ids.a,
+        directKey: null,
+        memberIds: [ids.a, ids.b],
+      });
+      const message = await repository.createMessage({
+        conversationId: id,
+        senderUserId: ids.a,
+        text: "reagálj",
+        clientMessageId: `client-${suffix}-react`,
+      });
+      await repository.addReaction(message.id, ids.b, "👍");
+      await repository.addReaction(message.id, ids.b, "👍");
+      assert.equal(
+        await prisma.messageReaction.count({
+          where: { messageId: message.id },
+        }),
+        1,
+      );
+
+      // b feltöltése nem köthető a üzenetéhez: a küldés egésze visszagördül
+      const foreign = await repository.createAttachment({
+        id: `att-${suffix}-b`,
+        conversationId: id,
+        uploadedByUserId: ids.b,
+        kind: "FILE",
+        fileName: "b.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 10,
+        sha256: "0".repeat(64),
+        storageKey: `messages/${id}/att-${suffix}-b`,
+        thumbnailKey: null,
+      });
+      const before = await prisma.message.count({
+        where: { conversationId: id },
+      });
+      await assert.rejects(
+        repository.createMessage({
+          conversationId: id,
+          senderUserId: ids.a,
+          text: null,
+          clientMessageId: `client-${suffix}-bind`,
+          type: "FILE",
+          attachmentIds: [foreign.id],
+        }),
+        (error: unknown) => error instanceof AttachmentBindingError,
+      );
+      assert.equal(
+        await prisma.message.count({ where: { conversationId: id } }),
+        before,
+      );
+      assert.equal(
+        (
+          await prisma.messageAttachment.findUnique({
+            where: { id: foreign.id },
+          })
+        )?.messageId,
+        null,
       );
     });
   },

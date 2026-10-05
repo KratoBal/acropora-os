@@ -72,6 +72,8 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
         "CompletionCertificateDocument",
         "ContractDocument",
         "MaintenanceOrderDocument",
+        // az Üzenetek csatolmánya (2. fázis): ugyanabból a keretből fogy
+        "MessageAttachment",
         "ServiceJobDocument",
         "WorksheetDocument",
       ],

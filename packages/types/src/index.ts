@@ -1074,6 +1074,8 @@ export type {
 export { serviceJobReporterName } from "./service-job-reporter.js";
 
 export {
+  MESSAGE_ATTACHMENTS_MAX,
+  MESSAGE_REACTIONS,
   CONVERSATION_MAX_MEMBERS,
   MESSAGE_PAGE_DEFAULT,
   MESSAGE_PAGE_MAX,
@@ -1086,8 +1088,13 @@ export type {
   ConversationListResponse,
   ConversationPerson,
   ConversationTypeValue,
+  MessageAttachmentItem,
+  MessageAttachmentKindValue,
   MessageItem,
   MessagePage,
+  MessageReactionSummary,
+  MessageReactionValue,
+  MessageReplyPreview,
   MessagePeopleResponse,
   MessageStreamEvent,
   MessageTypeValue,

@@ -28,6 +28,8 @@ export const DOCUMENT_OWNERS = [
   "invoice",
   // a külső kimenő számla PDF-je (ExternalBillingDocument; OTP eBIZ, 2026-10-02)
   "external-invoice",
+  // az Üzenetek csatolmánya (2. fázis, kártya 51d7aba0); ownerId: a beszélgetés
+  "message",
 ] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
@@ -70,6 +72,7 @@ const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
   "service-job": "service-jobs",
   invoice: "invoices",
   "external-invoice": "external-invoices",
+  message: "messages",
 };
 
 export function ownerDirectory(owner: DocumentOwner): string {

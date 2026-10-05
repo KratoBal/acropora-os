@@ -124,6 +124,8 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
     invoice: async () => null,
     /** A külső kimenő számla PDF-je: ugyanaz, mint a számláé. */
     "external-invoice": async () => null,
+    /** Az üzenet-csatolmány soha nem inline: a bájtok csak a tárolóban állnak. */
+    message: async () => null,
   };
 
 export async function inlineDokumentumJelentes() {

@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
 import { NotificationsModule } from "../notifications/notifications.module.js";
+import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
+import { MessageAttachmentCleanup } from "./message-attachment-cleanup.js";
 
 import {
   InMemoryMessageEventBus,
@@ -21,6 +23,9 @@ import { MessagesService } from "./messages.service.js";
     MessagesRepository,
     MessagesService,
     { provide: MESSAGE_EVENT_BUS, useClass: InMemoryMessageEventBus },
+    // a csatolmány a közös dokumentum-tárolóba megy (ugyanaz a jelző, mint a szerviznél)
+    documentStoreProvider,
+    MessageAttachmentCleanup,
   ],
 })
 export class MessagesModule {}

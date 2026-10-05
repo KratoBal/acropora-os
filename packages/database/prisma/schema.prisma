@@ -917,6 +917,9 @@ model User {
   conversationMemberships    ConversationMember[]
   sentMessages               Message[]                     @relation("MessageSender")
   deletedMessages            Message[]                     @relation("MessageDeletedBy")
+  /// Az Üzenetek 2. fázisa: a feltöltött csatolmányai és a reakciói.
+  uploadedMessageAttachments MessageAttachment[]
+  messageReactions           MessageReaction[]
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
   /// vagyis egy takaritasi muvelet TAGITANA a hozzaferest. Restrict mellett a
@@ -8074,9 +8077,10 @@ model Conversation {
   updatedAt       DateTime             @updatedAt
   archivedAt      DateTime?
 
-  createdBy User                 @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
-  members   ConversationMember[]
-  messages  Message[]
+  createdBy   User                 @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+  members     ConversationMember[]
+  messages    Message[]
+  attachments MessageAttachment[]
 
   @@index([lastMessageAt])
   @@index([contextType, contextId])
@@ -8122,11 +8126,13 @@ model Message {
   deletedAt        DateTime?
   deletedByUserId  String?
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation("MessageSender", fields: [senderUserId], references: [id])
-  deletedBy    User?        @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
-  replyTo      Message?     @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies      Message[]    @relation("MessageReply")
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                @relation("MessageSender", fields: [senderUserId], references: [id])
+  deletedBy    User?               @relation("MessageDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  replyTo      Message?            @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies      Message[]           @relation("MessageReply")
+  attachments  MessageAttachment[]
+  reactions    MessageReaction[]
 
   @@unique([senderUserId, clientMessageId])
   @@index([conversationId, createdAt, id])
@@ -8233,4 +8239,56 @@ model CashRegisterSyncRun {
   updatedAt       DateTime               @updatedAt
 
   @@index([startedAt])
+}
+
+/// AZ ÜZENETEK 2. FÁZISA (kártya 51d7aba0; terv:
+/// agents/nautilus/megosztas/uzenetek-2-fazis-terv.md; acrobot 26242, emlék 2076).
+enum MessageAttachmentKind {
+  IMAGE
+  FILE
+}
+
+/// EGY CSATOLMÁNY. A bájtok CSAK a dokumentum-tárolóban (a prompt szerint
+/// bináris nem kerül az adatbázisba), a bélyegkép is, második kulcson.
+///
+/// KÉTLÉPÉSES: a feltöltés üzenet nélkül jön létre (`messageId` NULL), és a
+/// küldés köti az üzenethez. A gazdátlan feltöltés 24 óra után törölhető
+/// (acrobot döntése, 26242): az nem üzenet, csak egy félbehagyott feltöltés.
+model MessageAttachment {
+  id               String                @id @default(cuid())
+  conversationId   String
+  uploadedByUserId String
+  messageId        String?
+  kind             MessageAttachmentKind
+  fileName         String
+  contentType      String
+  sizeBytes        Int
+  sha256           String                @db.VarChar(64)
+  storageKey       String
+  thumbnailKey     String?
+  createdAt        DateTime              @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedByUserId], references: [id])
+  message      Message?     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([conversationId, createdAt])
+  @@index([uploadedByUserId, messageId])
+}
+
+/// EGY REAKCIÓ. Egy felhasználó ugyanazt a jelet ugyanarra az üzenetre csak
+/// egyszer adhatja; az első körben csak a négy jel (👍 ❤️ ✅ 👀).
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  reaction  String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, reaction])
+  @@index([messageId])
 }
