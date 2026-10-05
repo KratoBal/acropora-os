@@ -19,6 +19,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
+import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
 import {
   STATUS_TILE,
@@ -280,10 +281,24 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE),
   );
+  // a számla kiállítása a rendelés kezelése ÉS a kiállítás joga (a szerver is mindkettőt kéri)
+  const canIssue = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE) &&
+    hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
+  );
   const token = session?.token ?? "";
   const changeStatus = async (status: WebshopOrderStatus) => {
     setOrder(await webshopOrdersApi.changeStatus(token, id, status));
     setNow(Date.now());
+  };
+  const issueInvoice = async () => {
+    setOrder(await webshopOrdersApi.issueInvoice(token, id));
+    setNow(Date.now());
+  };
+  const openPdf = async (documentId: string) => {
+    const blob = await billingDocumentsApi.pdf(token, documentId);
+    window.open(URL.createObjectURL(blob), "_blank");
   };
 
   const load = useCallback(
@@ -354,10 +369,131 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           order={order}
           now={now}
           canManage={canManage}
+          canIssue={canIssue}
           onChangeStatus={changeStatus}
+          onIssueInvoice={issueInvoice}
+          onOpenPdf={openPdf}
         />
       ) : null}
     </PilotThemeRoot>
+  );
+}
+
+/** Ezekben az állapotokban nincs számla-kiállítás (a szerver is így dönt). */
+const NOT_INVOICEABLE: readonly (WebshopOrderStatus | null)[] = [
+  null,
+  "pending_processing",
+  "closed_unsuccessfully",
+];
+
+/**
+ * A SZÁMLA KÁRTYA (Rendelések, 4. PR). A kiállítás a Számlázás kiállítása:
+ * ugyanaz a zár és ugyanaz a Számlázz.hu-hívás, ezért a bizonylat a
+ * Számlázásban is megnyitható. A kiállítás alatti és az elutasított állapot
+ * nem kap új gombot: ott a Számlázásban kell megnézni, mi történt.
+ */
+function InvoiceCard({
+  order,
+  canIssue,
+  onIssue,
+  onOpenPdf,
+}: {
+  order: WebshopOrderDetail;
+  canIssue: boolean;
+  onIssue: () => Promise<void>;
+  onOpenPdf: (documentId: string) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const invoice = order.invoice;
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await work();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const link = invoice ? (
+    <Link
+      href={`/penzugy/szamlazas/${encodeURIComponent(invoice.id)}`}
+      className="text-sm font-medium text-pilot-aqua-700 underline"
+    >
+      Megnyitás a Számlázásban
+    </Link>
+  ) : null;
+  const waiting = NOT_INVOICEABLE.includes(order.status.code);
+  return (
+    <Card title="Számla">
+      <div className="space-y-3">
+        {invoice?.status === "ISSUED" ? (
+          <>
+            <Field label="Számlaszám">{invoice.number ?? "—"}</Field>
+            <div className="flex flex-wrap items-center gap-3">
+              <PilotButton
+                size="regular"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void run(() => onOpenPdf(invoice.id))}
+              >
+                PDF megnyitása
+              </PilotButton>
+              {link}
+            </div>
+          </>
+        ) : invoice?.status === "ISSUING" ? (
+          <>
+            <p className="text-sm text-pilot-amber-700">
+              A kiállítás elindult, és ellenőrzésre vár: nézd meg a
+              Számlázz.hu-n, elkészült-e.
+            </p>
+            {link}
+          </>
+        ) : invoice?.status === "ISSUE_FAILED" ? (
+          <>
+            <p className="text-sm text-pilot-red-700">
+              A kiállítás elutasítva maradt. Az okát a bizonylatnál látod.
+            </p>
+            {link}
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-pilot-grey-700">
+              Még nincs kiállított számla.
+            </p>
+            {waiting ? (
+              <p className="text-xs text-pilot-grey-500">
+                {order.status.code === "pending_processing"
+                  ? "A számla a visszaigazolás után állítható ki."
+                  : "Erre a rendelésre nem állítunk ki számlát."}
+              </p>
+            ) : canIssue ? (
+              <PilotButton
+                size="regular"
+                variant="primary"
+                disabled={busy}
+                onClick={() => void run(onIssue)}
+              >
+                {busy ? "Kiállítás…" : "Számla kiállítása"}
+              </PilotButton>
+            ) : null}
+          </>
+        )}
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 
@@ -365,12 +501,18 @@ function OrderBody({
   order,
   now,
   canManage,
+  canIssue,
   onChangeStatus,
+  onIssueInvoice,
+  onOpenPdf,
 }: {
   order: WebshopOrderDetail;
   now: number;
   canManage: boolean;
+  canIssue: boolean;
   onChangeStatus: (status: WebshopOrderStatus) => Promise<void>;
+  onIssueInvoice: () => Promise<void>;
+  onOpenPdf: (documentId: string) => Promise<void>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
@@ -729,11 +871,12 @@ function OrderBody({
             </div>
           </Card>
 
-          <Card title="Számla">
-            <p className="text-sm text-pilot-grey-700">
-              {order.invoiceNumber ?? "Még nincs kiállított számla."}
-            </p>
-          </Card>
+          <InvoiceCard
+            order={order}
+            canIssue={canIssue}
+            onIssue={onIssueInvoice}
+            onOpenPdf={onOpenPdf}
+          />
 
           <Card title="Megjegyzések">
             <p className="text-sm text-pilot-grey-500">

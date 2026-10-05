@@ -29,6 +29,7 @@ import {
 const NOW = new Date("2026-10-05T12:00:00.000Z");
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
+  invoices: async () => new Map(),
 } as unknown as WebshopOrdersRepository;
 const order = (n: number, status = "confirmed"): MedusaOrderOverviewRow => ({
   id: `order_${n}`,
@@ -353,6 +354,7 @@ describe("WebshopOrdersService.changeStatus", () => {
     } as unknown as MedusaCredentialProvider;
     const repository = {
       recordStatusChange: async (input: unknown) => void audited.push(input),
+      invoices: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(credentials, repository, () => client),

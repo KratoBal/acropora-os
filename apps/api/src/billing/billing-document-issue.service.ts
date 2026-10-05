@@ -36,7 +36,8 @@ import {
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { toBillingDocumentDetail } from "./billing-documents.service.js";
-import { billingIssueEnabled } from "./billing-issue.config.js";
+import { billingIssueMode } from "./billing-issue.config.js";
+import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent-stub.client.js";
 
 /** Injectable for tests: the environment the switch is read from. */
 export const BILLING_ISSUE_ENV = Symbol("BILLING_ISSUE_ENV");
@@ -92,12 +93,26 @@ export class BillingDocumentIssueService {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
+  /**
+   * A kiállítás módja ezen a szerveren (élő, álszámlázó, kikapcsolt vagy
+   * ellentmondásos). Más modul ezzel nézi meg, MIELŐTT a kiállításhoz vezető
+   * mellékhatást (partner, vázlat) létrehozná.
+   */
+  issueMode() {
+    return billingIssueMode(this.environment);
+  }
+
   async issue(
     id: string,
     expectedUpdatedAt: string,
     user: AuthenticatedUser,
   ): Promise<BillingDocumentDetail> {
-    if (!billingIssueEnabled(this.environment))
+    const mode = billingIssueMode(this.environment);
+    if (mode === "conflict")
+      throw new ConflictException(
+        "A kiállítás beállítása ellentmondásos: a valódi kiállítás és az álszámlázó egyszerre van bekapcsolva. Egyiket ki kell kapcsolni.",
+      );
+    if (mode === "off")
       throw new ConflictException(
         "A valódi kiállítás ezen a szerveren nincs bekapcsolva.",
       );
@@ -121,7 +136,9 @@ export class BillingDocumentIssueService {
 
     let agentKey: string;
     try {
-      agentKey = (await this.credentials.resolve()).agentKey;
+      // az álszámlázó a tárolt kulcsot SEM olvassa: a teszt-szerveren az az éles fiókra szólhat
+      agentKey =
+        mode === "stub" ? "stub" : (await this.credentials.resolve()).agentKey;
     } catch (error) {
       if (error instanceof SzamlazzConnectionError)
         throw new ConflictException(
@@ -156,7 +173,9 @@ export class BillingDocumentIssueService {
 
     let response;
     try {
-      response = await this.client.generateInvoice(xml);
+      response = await (
+        mode === "stub" ? new StubSzamlazzAgentClient() : this.client
+      ).generateInvoice(xml);
     } catch (error) {
       await this.repository.markOutcomeUnknown(
         id,

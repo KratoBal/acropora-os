@@ -40,8 +40,8 @@ const order = (
   discount_total: 0,
   shipping_total: 1490,
   shipping_address: {
-    first_name: "Nagy",
-    last_name: "Emese",
+    first_name: "Emese",
+    last_name: "Nagy",
     address_1: "Október huszonharmadika u. 8–10.",
     city: "Budapest",
     postal_code: "1117",
@@ -49,8 +49,8 @@ const order = (
     phone: "+36 30 555 0137",
   },
   billing_address: {
-    first_name: "Nagy",
-    last_name: "Emese",
+    first_name: "Emese",
+    last_name: "Nagy",
     address_1: "Fehérvári út 24.",
     city: "Budapest",
     postal_code: "1117",
@@ -269,7 +269,7 @@ describe("the processing bar", () => {
         stepsOf(
           "stocking",
           false,
-          { invoiceNumber: "ACR-1", hasParcel: false },
+          { invoiceNumber: "ACR-1", invoice: null, hasParcel: false },
           false,
         ),
       ),
@@ -286,7 +286,7 @@ describe("the processing bar", () => {
         stepsOf(
           "closed",
           false,
-          { invoiceNumber: "ACR-1", hasParcel: true },
+          { invoiceNumber: "ACR-1", invoice: null, hasParcel: true },
           true,
         ),
       ).every((s) => s.endsWith(":done")),
@@ -300,7 +300,7 @@ describe("the processing bar", () => {
         stepsOf(
           "ready_for_pickup",
           true,
-          { invoiceNumber: "ACR-1", hasParcel: false },
+          { invoiceNumber: "ACR-1", invoice: null, hasParcel: false },
           false,
         ),
       ),

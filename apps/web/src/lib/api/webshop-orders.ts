@@ -50,6 +50,18 @@ export const webshopOrdersApi = {
       },
     );
   },
+  /**
+   * A rendelés számlája: vázlat a rendelésből és kiállítás (a teszt-szerveren
+   * az álszámlázóval). A válasz a friss adatlap; a kiállított számlára a
+   * második hívás nem állít ki újat.
+   */
+  issueInvoice(token: string, id: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/invoice`,
+      token,
+      { method: "POST" },
+    );
+  },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}`,

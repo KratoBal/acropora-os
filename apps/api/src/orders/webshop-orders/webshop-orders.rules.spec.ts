@@ -138,8 +138,16 @@ describe("stale", () => {
 describe("stage", () => {
   it("invoice before parcel; a shop pickup waits for no parcel", () => {
     const noInvoice = NO_FACTS;
-    const invoiced = { invoiceNumber: "ACR-2026-1", hasParcel: false };
-    const shipped = { invoiceNumber: "ACR-2026-1", hasParcel: true };
+    const invoiced = {
+      invoiceNumber: "ACR-2026-1",
+      invoice: null,
+      hasParcel: false,
+    };
+    const shipped = {
+      invoiceNumber: "ACR-2026-1",
+      invoice: null,
+      hasParcel: true,
+    };
     assert.deepEqual(
       [
         stageOf("pending_processing", false, noInvoice),

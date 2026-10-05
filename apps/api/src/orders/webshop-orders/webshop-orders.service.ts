@@ -21,15 +21,17 @@ import {
   MedusaConfigurationError,
   medusaClientFromEnvironment,
   type MedusaAdminClient,
+  type MedusaOrderBusinessStatus,
+  type MedusaOrderDetailRow,
   type MedusaOrderOverviewRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { MedusaConnectionError } from "../../integrations/medusa/medusa-connection.types.js";
 import { MedusaCredentialProvider } from "../../integrations/medusa/medusa-credential.provider.js";
 import {
-  NO_FACTS,
   applyFilters,
   countersOf,
   distinctSorted,
+  factsOf,
   inView,
   sortItems,
   toListItem,
@@ -155,14 +157,28 @@ export class WebshopOrdersService {
         })(),
       ]),
     );
+    const invoice = (await this.repository.invoices([id])).get(id);
     return toDetail({
       order,
       status,
-      facts: NO_FACTS,
+      facts: factsOf(invoice),
       customerOrderCount,
       relatedDisplayId: related?.display_id ?? null,
       now,
     });
+  }
+
+  /** A rendelés és az üzleti státusza a webshopból, nyersen (a számla ebből készül). */
+  async source(id: string): Promise<{
+    order: MedusaOrderDetailRow;
+    status: MedusaOrderBusinessStatus | null;
+  }> {
+    const client = await this.client();
+    const order = await this.fromWebshop(() => client.order(id));
+    if (!order)
+      throw new NotFoundException("A rendelés nem található a webshopban.");
+    const status = await this.fromWebshop(() => client.orderBusinessStatus(id));
+    return { order, status };
   }
 
   /**
@@ -223,7 +239,10 @@ export class WebshopOrdersService {
     now = new Date(),
   ): Promise<WebshopOrderListResponse> {
     const { rows, truncated } = await this.readAll();
-    const items = rows.map((row) => toListItem(row, NO_FACTS, now));
+    const invoices = await this.repository.invoices(rows.map((row) => row.id));
+    const items = rows.map((row) =>
+      toListItem(row, factsOf(invoices.get(row.id)), now),
+    );
     const viewed = inView(items, query.view);
     const filtered = sortItems(
       applyFilters(viewed, query),

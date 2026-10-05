@@ -49,5 +49,7 @@ import { ExternalBillingDocumentsController } from "./external-billing-documents
     BillingDocumentEmailDraftService,
     documentStoreProvider,
   ],
+  // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy
+  exports: [BillingDocumentsService, BillingDocumentIssueService],
 })
 export class BillingModule {}

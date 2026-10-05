@@ -120,6 +120,7 @@ function setup(
     failed: [] as string[],
     unknown: [] as string[],
     pdf: [] as unknown[],
+    resolve: 0,
   };
   let current = row(options.status, options.format);
   const documents = {
@@ -144,6 +145,7 @@ function setup(
   } as unknown as BillingDocumentIssueRepository;
   const credentials = {
     resolve: async () => ({
+      ...(calls.resolve++, {}),
       agentKey: "test-key",
       source: "database",
       revision: "db:1",
@@ -195,6 +197,30 @@ const issue = (service: BillingDocumentIssueService) =>
   service.issue("doc-1", "2026-09-30T10:00:00.000Z", USER);
 
 describe("BillingDocumentIssueService", () => {
+  /*
+    AZ ÁLSZÁMLÁZÓ (Webshop / Rendelések, 4. PR). MI PIROSÍT: a teszt-szerveren a
+    kiállítás a Számlázz.hu-t hívja vagy a tárolt (esetleg éles) kulcsot
+    olvassa; a sorszám nem ismerhető fel teszt-sorszámként; a két kapcsoló
+    együtt bármelyik úton kiállít.
+  */
+  it("the stub issues a TESZT number with a PDF, without Számlázz.hu and without reading the stored key", async () => {
+    const { service, calls } = setup({ env: { SZAMLAZZ_AGENT_MODE: "stub" } });
+    const detail = await issue(service);
+    assert.equal(detail.status, "ISSUED");
+    const [issued] = calls.issued as Array<Record<string, unknown>>;
+    assert.match(String(issued!.invoiceNumber), /^TESZT-\d{4}-[0-9A-F]{8}$/);
+    assert.deepEqual([calls.generate, calls.resolve], [0, 0]);
+    assert.ok(calls.pdf.length > 0);
+  });
+
+  it("the live switch and the stub together is a contradiction: nothing is issued", async () => {
+    const { service, calls } = setup({
+      env: { BILLING_ISSUE_ENABLED: "true", SZAMLAZZ_AGENT_MODE: "stub" },
+    });
+    await assert.rejects(() => issue(service), /ellentmondásos/);
+    assert.deepEqual([calls.claim, calls.generate, calls.resolve], [0, 0, 0]);
+  });
+
   it("does not call Számlázz.hu while the switch is off", async () => {
     const { service, calls } = setup({ env: {} });
     await assert.rejects(() => issue(service), ConflictException);
