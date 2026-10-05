@@ -209,6 +209,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
       },
     ],
   },
+  {
+    title: "Rendelések",
+    icon: "cart",
+    links: [
+      {
+        label: "Rendelések elavulása",
+        description:
+          "Státuszonként: mennyi idő után jelezzen a Rendelések lista. Kikapcsolva az érték megmarad.",
+        href: "/beallitasok/rendeles-elavulas",
+        permission: PERMISSIONS.ORDERS_VIEW,
+      },
+    ],
+  },
 ];
 
 export function SettingsOverviewPage() {

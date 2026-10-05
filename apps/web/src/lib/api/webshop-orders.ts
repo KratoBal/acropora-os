@@ -7,6 +7,7 @@ import type {
   WebshopOrderStatusChangeResult,
   WebshopOrderLineEdit,
   WebshopVariantOption,
+  WebshopStaleThreshold,
   WebshopParcelSize,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -99,6 +100,21 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/payment/link`,
       token,
       { method: "POST", body: JSON.stringify({ notifyCustomer }) },
+    );
+  },
+  /** Az elavulási küszöbök (Beállítások). */
+  staleThresholds(token: string, signal?: AbortSignal) {
+    return apiRequest<WebshopStaleThreshold[]>(
+      "/webshop-orders/settings/stale-thresholds",
+      token,
+      { signal },
+    );
+  },
+  saveStaleThresholds(token: string, thresholds: WebshopStaleThreshold[]) {
+    return apiRequest<WebshopStaleThreshold[]>(
+      "/webshop-orders/settings/stale-thresholds",
+      token,
+      { method: "PUT", body: JSON.stringify({ thresholds }) },
     );
   },
   /** A legutóbbi státuszlevél újraküldése. */
