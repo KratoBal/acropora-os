@@ -109,7 +109,11 @@ describe("a kezelo regisztracioja", () => {
       eltunne, mint 2026-09-04 elott.
     */
     assert.match(layout, /Notifications\.setNotificationHandler\(\{/);
-    assert.match(layout, /foregroundNotificationBehavior\(\)/);
+    // a 3. fázis óta az adatot is átadja, hogy a nyitott beszélgetésről ne jöjjön sáv
+    assert.match(
+      layout,
+      /foregroundNotificationFor\(notification\.request\.content\.data\)/,
+    );
   });
 
   it("MODUL SZINTEN regisztral, nem egy komponensben", () => {
