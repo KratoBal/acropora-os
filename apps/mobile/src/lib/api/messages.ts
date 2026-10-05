@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 import { uploadWithProgress, type UploadHandle } from "./upload-with-progress";
 import type {
+  ConversationContextType,
   ConversationDetail,
   MessageAttachmentItem,
   ConversationListResponse,
@@ -220,6 +221,59 @@ export function setConversationNotification(
   return apiRequest<ConversationNotificationState>(
     `${MESSAGES}/conversations/${encodeURIComponent(id)}/notifications`,
     { method: "PUT", body: JSON.stringify(input) },
+  );
+}
+
+/** 4. fázis: egy csoport csatolása munkalaphoz vagy hibajegyhez (a `LinkContextDto` párja). */
+export interface LinkContextInput {
+  type: ConversationContextType;
+  id: string;
+}
+
+/** 4. fázis: tagok felvétele egy csoportba (az `AddMembersDto` párja). */
+export interface AddMembersInput {
+  userIds: string[];
+}
+
+/**
+ * 4. fázis, „Beszélgetés” a munkalapról vagy a hibajegyről: a tárgy élő
+ * beszélgetése, vagy egy új; a kérdezőt a szerver felveszi.
+ */
+export function openContextConversation(
+  kind: "worksheet" | "service-job",
+  objectId: string,
+) {
+  return apiRequest<ConversationDetail>(
+    `${MESSAGES}/context/${kind}/${encodeURIComponent(objectId)}`,
+    { method: "POST" },
+  );
+}
+
+export function linkConversationContext(id: string, input: LinkContextInput) {
+  return apiRequest<ConversationDetail>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/context`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function unlinkConversationContext(id: string) {
+  return apiRequest<ConversationDetail>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/context`,
+    { method: "DELETE" },
+  );
+}
+
+export function addConversationMembers(id: string, input: AddMembersInput) {
+  return apiRequest<ConversationDetail>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/members`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function leaveConversation(id: string) {
+  return apiRequest<{ left: true; archived: boolean }>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}/leave`,
+    { method: "POST" },
   );
 }
 
