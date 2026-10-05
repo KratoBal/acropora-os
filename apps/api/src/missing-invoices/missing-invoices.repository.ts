@@ -1,3 +1,4 @@
+import type { InvoiceTextReading } from "./collection/invoice-text.js";
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type { SupplierInvoiceImportResult } from "@acropora/types";
@@ -679,6 +680,22 @@ export class MissingInvoicesRepository {
    * láncba nem jut. Ugyanabban a tranzakcióban a terheléshez párosul (kézzel),
    * és az auditnapló is megkapja.
    */
+  /**
+   * A szállító NAV-számlaszámai (adószám-törzs szerint): az általános olvasó
+   * ebből tudja, melyik szám a számláé (ugyanaz, mint a begyűjtésnél).
+   */
+  async navNumbers(supplierTaxBase: string): Promise<string[]> {
+    if (!/^\d{8}$/.test(supplierTaxBase)) return [];
+    const rows = await this.database.navIncomingInvoice.findMany({
+      where: {
+        supplierTaxNumber: { startsWith: supplierTaxBase },
+        invoiceOperation: "CREATE",
+      },
+      select: { navInvoiceNumber: true },
+    });
+    return rows.map((row) => row.navInvoiceNumber);
+  }
+
   async uploadAndPair(input: {
     bankTransactionId: string;
     fileName: string;
@@ -686,6 +703,8 @@ export class MissingInvoicesRepository {
     sha256: string;
     kind: "INVOICE" | "PREMIUM_NOTICE";
     importResult: SupplierInvoiceImportResult | null;
+    /** Az általános olvasó eredménye, ha a szállítói minta nem ismerte fel. */
+    textReading: InvoiceTextReading | null;
     payee: Payee;
     userId: string;
   }): Promise<string> {
@@ -703,6 +722,8 @@ export class MissingInvoicesRepository {
               ? "PROFORMA"
               : "INVOICE",
           importResult: (input.importResult ??
+            undefined) as unknown as Prisma.InputJsonValue,
+          textReading: (input.textReading ??
             undefined) as unknown as Prisma.InputJsonValue,
           payeeCheck: input.payee,
           origin: "UPLOAD",

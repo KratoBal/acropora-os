@@ -17,6 +17,7 @@ import {
  *
  *   pnpm --filter @acropora/api invoice-text:reread -- --number HU00008659
  *   pnpm --filter @acropora/api invoice-text:reread -- --ids id1,id2
+ *   pnpm --filter @acropora/api invoice-text:reread -- --unread-uploads
  *   ... ugyanez `--apply`-jal: csak ekkor ír
  *   ... és `--allow-clear`-rel: csak ekkor írhat meglévő számot üresre
  *
@@ -36,7 +37,14 @@ export function parseSelector(
     .map((id) => id.trim())
     .filter(Boolean);
   const number = value("--number")?.trim() || null;
-  return ids.length > 0 || number ? { ids, number } : null;
+  const unreadUploads = argv.includes("--unread-uploads");
+  return ids.length > 0 || number || unreadUploads
+    ? {
+        ids,
+        number,
+        ...(unreadUploads ? { unreadUploads: true as const } : {}),
+      }
+    : null;
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -45,7 +53,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const selector = parseSelector(argv);
   if (!selector) {
     process.stderr.write(
-      "Adj meg kiválasztást: --ids id1,id2 vagy --number <tárolt számlaszám>.\n",
+      "Adj meg kiválasztást: --ids id1,id2, --number <tárolt számlaszám> vagy --unread-uploads.\n",
     );
     return 2;
   }
@@ -57,6 +65,15 @@ async function main(argv: readonly string[]): Promise<number> {
           where: {
             OR: [
               ...(s.ids.length ? [{ id: { in: [...s.ids] } }] : []),
+              ...(s.unreadUploads
+                ? [
+                    {
+                      origin: "UPLOAD",
+                      importResult: { equals: Prisma.AnyNull },
+                      textReading: { equals: Prisma.AnyNull },
+                    },
+                  ]
+                : []),
               ...(s.number
                 ? [
                     {

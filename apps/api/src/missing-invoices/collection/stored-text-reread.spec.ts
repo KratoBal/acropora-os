@@ -261,5 +261,11 @@ describe("re-reading a stored document's text", () => {
       ids: [],
       number: "HU00008659",
     });
+    // a 2026-10-05 előtti olvasatlan feltöltések pótlása (barracuda mérése: 19)
+    assert.deepEqual(parseSelector(["--unread-uploads", "--apply"]), {
+      ids: [],
+      number: null,
+      unreadUploads: true,
+    });
   });
 });

@@ -46,6 +46,11 @@ export interface StoredTextSelector {
   ids: readonly string[];
   /** a tárolt (hibás) számlaszám, amire a dokumentumokat keressük */
   number: string | null;
+  /**
+   * a kézi feltöltések, amiket sem a szállítói minta, sem az általános olvasó
+   * nem olvasott (a feltöltés 2026-10-05-ig csak a mintán ment át)
+   */
+  unreadUploads?: true;
 }
 
 export interface StoredTextRereadDeps {
