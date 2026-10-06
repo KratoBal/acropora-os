@@ -1,6 +1,10 @@
 import {
+  WEBSHOP_PROFORMA_DUE_DAYS,
   szamlazzUnitNetFromGross,
+  webshopProformaExpired,
   type BillingDocumentDetail,
+  type BillingDocumentStatus,
+  type WebshopOrderProforma,
   type BillingDocumentDraftInput,
   type BillingDocumentLineInput,
   type WebshopOrderStatus,
@@ -10,7 +14,10 @@ import type {
   MedusaOrderAddressRow,
   MedusaOrderDetailRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
-import { budapestDayKey } from "../../dashboard/budapest-day.js";
+import {
+  budapestDayKey,
+  startOfBudapestDay,
+} from "../../dashboard/budapest-day.js";
 import {
   COD_PROVIDER_ID,
   orderPaymentProviderId,
@@ -30,6 +37,8 @@ import {
 export const invoiceDraftIdOf = (orderId: string) => `webshop-${orderId}`;
 
 /** A rendelés szállítólevelének azonosítója: rendelésenként egy, mint a számláé. */
+export const proformaDraftIdOf = (orderId: string) =>
+  `webshop-proforma-${orderId}`;
 export const deliveryNoteDraftIdOf = (orderId: string) =>
   `webshop-dn-${orderId}`;
 
@@ -109,6 +118,22 @@ export function invoiceRefusal(
     return "A számla a visszaigazolás után állítható ki.";
   if (NOT_INVOICEABLE.includes(status))
     return "Sikertelenül lezárt rendelésre nem állítunk ki számlát.";
+  return null;
+}
+
+/**
+ * A DÍJBEKÉRŐ A VISSZAIGAZOLÁS ELŐTT IS MEHET (Balázs, 2026-10-06: „Leadja a
+ * rendelest es mi kuldjuk neki gombbal a dijbekerot”). A díjbekérő fizetési
+ * felszólítás, nem számla, és a gombot ember nyomja meg. Sikertelenül lezárt
+ * vagy státusz nélküli rendelésre viszont nem megy.
+ */
+export function proformaRefusal(
+  status: WebshopOrderStatus | null,
+): string | null {
+  if (status === null)
+    return "A rendelésnek nincs státusza a webshopban, ezért a díjbekérő nem küldhető.";
+  if (status === "closed_unsuccessfully")
+    return "Sikertelenül lezárt rendelésre nem küldünk díjbekérőt.";
   return null;
 }
 
@@ -462,4 +487,64 @@ export function buyerMismatch(
   return differences.length
     ? `Az OS-partner adatai eltérnek a rendelés számlázási adataitól (${differences.join("; ")}). Javítsd a partnert, és utána állítsd ki a számlát.`
     : null;
+}
+
+/**
+ * A DÍJBEKÉRŐ VÁZLATA (kártya bb3a6bd5): ugyanazok a tételek és ugyanaz az
+ * ellenőrzés, mint a számlánál (a végösszegnek ki kell jönnie), csak a típus
+ * PROFORMA, a fizetési mód átutalás, és a határidő 8 nap (Balázs, 2026-10-06
+ * 16:32 UTC). A határidő napja Budapest szerint számít.
+ */
+export function proformaDraftOf(
+  order: MedusaOrderDetailRow,
+  input: { customerId: string; now: Date },
+): InvoiceDraftResult {
+  const invoice = invoiceDraftOf(order, input);
+  if (!invoice.ok) return invoice;
+  return {
+    ...invoice,
+    draft: {
+      ...invoice.draft,
+      id: proformaDraftIdOf(order.id),
+      documentType: "PROFORMA",
+      invoiceFormat: null,
+      dueDate: budapestDayKey(
+        startOfBudapestDay(input.now, WEBSHOP_PROFORMA_DUE_DAYS),
+      ),
+      paymentMethod: "Átutalás",
+    },
+  };
+}
+
+/** A lista jelölése: a rendelés díjbekérője lejárt-e (nincs díjbekérő: nem). */
+export function proformaExpiredOf(
+  row: Parameters<typeof proformaOf>[0] | undefined,
+  now: Date,
+): boolean {
+  return row ? proformaOf(row, now).expired : false;
+}
+
+/** A díjbekérő az adatlapon: a határidő napja és hogy lejárt-e (Budapest szerint). */
+export function proformaOf(
+  row: {
+    id: string;
+    status: BillingDocumentStatus;
+    number: string | null;
+    dueDate: Date | null;
+    emailStatus: string | null;
+  },
+  now: Date,
+): WebshopOrderProforma {
+  const dueDate = row.dueDate ? budapestDayKey(row.dueDate) : null;
+  return {
+    id: row.id,
+    status: row.status as WebshopOrderProforma["status"],
+    number: row.number,
+    dueDate,
+    emailStatus: row.emailStatus,
+    expired: webshopProformaExpired(
+      { status: row.status, dueDate },
+      budapestDayKey(now),
+    ),
+  };
 }

@@ -36,12 +36,15 @@ const NOW = new Date("2026-10-05T12:00:00.000Z");
 const thresholdsNow: { list: WebshopStaleThreshold[] } = {
   list: [...WEBSHOP_STALE_THRESHOLD_DEFAULTS],
 };
+/** A tárolt díjbekérők a hamis repositoryban; teszt állíthatja. */
+const proformasNow: { map: Map<string, unknown> } = { map: new Map() };
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
   staleThresholds: async () => thresholdsNow.list,
   osCustomerByKey: async () => null,
   internalNote: async () => null,
+  proformas: async () => proformasNow.map,
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -232,6 +235,48 @@ describe("the stored stale thresholds", () => {
       );
     } finally {
       thresholdsNow.list = [...WEBSHOP_STALE_THRESHOLD_DEFAULTS];
+    }
+  });
+});
+
+describe("the expired proforma on the list", () => {
+  /*
+    „LEJÁRT DÍJBEKÉRŐ” (Balázs, 2026-10-06 16:41 UTC: a rendelés ezzel a
+    jelöléssel áll a listán). MI PIROSÍT: a jelölés a határidő napján már
+    áll; a ki nem állított díjbekérőn is áll; díjbekérő nélkül is áll; a
+    lista nem a rendelés saját díjbekérőjét nézi.
+  */
+  it("marks the order whose issued proforma is past its due day, and only that", async () => {
+    const row = (dueDate: string, status = "ISSUED") => ({
+      id: `doc_${dueDate}_${status}`,
+      status,
+      number: "D-1",
+      dueDate: new Date(`${dueDate}T10:00:00.000Z`),
+      emailStatus: "SENT",
+    });
+    proformasNow.map = new Map<string, unknown>([
+      ["order_1", row("2026-10-04")],
+      ["order_2", row("2026-10-05")],
+      ["order_3", row("2026-10-04", "ISSUING")],
+    ]);
+    try {
+      const result = await service([
+        order(1),
+        order(2),
+        order(3),
+        order(4),
+      ]).orders.list({ view: "all" }, NOW);
+      assert.deepEqual(
+        result.items.map((item) => [item.id, item.proformaExpired]).sort(),
+        [
+          ["order_1", true],
+          ["order_2", false],
+          ["order_3", false],
+          ["order_4", false],
+        ],
+      );
+    } finally {
+      proformasNow.map = new Map();
     }
   });
 });
@@ -456,6 +501,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       staleThresholds: async () => thresholdsNow.list,
       osCustomerByKey: async () => null,
       internalNote: async () => null,
+      proformas: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(

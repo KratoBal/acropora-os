@@ -28,6 +28,7 @@ import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
   STORE_PICKUP_METHOD,
+  BANK_TRANSFER_PROVIDER_ID,
   isStale,
   orderPaymentProviderId,
   paymentMethodLabel,
@@ -405,6 +406,8 @@ export function toDetail(input: {
   /** A belső megjegyzés (csak OS). */
   internalNote?: WebshopOrderDetail["internalNote"];
   deliveryNote?: WebshopOrderDetail["deliveryNote"];
+  /** A díjbekérő (bb3a6bd5); nincs: `null`. */
+  proforma?: WebshopOrderDetail["proforma"];
   split?: WebshopOrderDetail["split"];
   /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
   signals?: MedusaOrderOverviewRow["customer_signals"] | null;
@@ -470,6 +473,10 @@ export function toDetail(input: {
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
     deliveryNote: input.deliveryNote ?? null,
+    bankTransfer:
+      orderPaymentProviderId(order.payment_collections?.[0]) ===
+      BANK_TRANSFER_PROVIDER_ID,
+    proforma: input.proforma ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
     osCustomer: input.osCustomer ?? null,
