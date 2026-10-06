@@ -1158,6 +1158,43 @@ describe("WebshopOrderDetailPage", () => {
     expect(within(card).getByText("GLS ParcelShop")).toBeTruthy();
   });
 
+  /*
+    THE GLS LOGO ON THE SHIPPING CARD (commerce #489's files): by the parcel's
+    kind, so the counter does not hand a locker parcel over as a point.
+  */
+  for (const [point, src, alt] of [
+    [null, "/images/gls.png", "GLS"],
+    [
+      {
+        id: "L1",
+        name: "GLS Automata Allee",
+        address: null,
+        kind: "parcel-locker",
+      },
+      "/images/gls-automata.png",
+      "GLS Automata",
+    ],
+    [
+      { id: "S1", name: "Mammut", address: null, kind: "parcel-shop" },
+      "/images/gls-csomagpont.png",
+      "GLS Csomagpont",
+    ],
+  ] as const)
+    it(`the shipping card shows the ${alt} logo`, async () => {
+      api.detail.mockResolvedValue({
+        ...detail,
+        shipping: {
+          method: point ? "GLS csomagpont" : "GLS házhozszállítás",
+          storePickup: false,
+          carrier: "GLS",
+          pickupPoint: point,
+        },
+      });
+      render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+      const card = await screen.findByRole("region", { name: "Szállítás" });
+      expect(within(card).getByAltText(alt).getAttribute("src")).toBe(src);
+    });
+
   it("without orders.manage there are no pencils", async () => {
     auth.session = session("WAREHOUSE");
     api.detail.mockResolvedValue(detail);
