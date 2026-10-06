@@ -318,6 +318,16 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
       "Vegyes kosárnál a mondat a bolti átvételes rendelésről. Egyébként üres.",
   },
   {
+    name: "masodik_resz_szam",
+    description:
+      "Szétbontott rendelésnél a később érkező rész száma #-tel, például #39.",
+  },
+  {
+    name: "reszek_fizetese_mondat",
+    description:
+      "Szétbontott rendelésnél a mondat arról, hogyan fizeti a két részt: kártyával, utánvéttel vagy a boltban.",
+  },
+  {
     name: "fizetesi_link",
     description: "A fizetési oldal címe.",
     kind: "link",
@@ -651,6 +661,22 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
       "szallitas_doboz",
       "fizetendo_doboz",
       "csomag_tartalma",
+    ],
+  },
+  {
+    id: "WEBSHOP_ORDER_SPLIT",
+    group: "WEBSHOP",
+    name: "Rendelés két részben",
+    description:
+      "Amikor a rendelést két részre bontjuk, mert egyes tételei később érkeznek.",
+    variables: [
+      "rendeles_szam",
+      "ugyfel_neve",
+      "rendeles_datum",
+      "rendeles_szamok",
+      "masodik_resz_szam",
+      "reszek_fizetese_mondat",
+      "rendeles_tetelek",
     ],
   },
   {
