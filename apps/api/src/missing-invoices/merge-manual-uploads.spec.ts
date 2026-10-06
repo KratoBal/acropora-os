@@ -363,6 +363,19 @@ describe("mergeManualUploads, the monthly recurring invoice", () => {
     assert.deepEqual(winner([...rows, copy]), []);
   });
 
+  // murena 26882, 3.a: the case where only the guard decides. No earlier row
+  // could stop it here, only a row after the payment fits besides the latest.
+  it("without the first pass's pairings it stays, even when nothing earlier would stop it", () => {
+    const next = month("n-10", "2026-10-10");
+    assert.deepEqual(winner([feed("f-09"), next, copy]), []);
+  });
+
+  // murena 26882, 3.b: the upload's own debit is not "elsewhere"
+  it("a row the first pass paired to the upload's own debit still wins", () => {
+    const own = new Map([...paidBefore, ["f-09", ["d-tesla"]]]);
+    assert.deepEqual(winner([...rows, copy], own), ["f-09"]);
+  });
+
   it("stays when an earlier row is still free", () => {
     const open = new Map(paidBefore);
     open.delete("n-07");
