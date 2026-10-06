@@ -567,6 +567,7 @@ export type {
   PurchaseInvoiceLineDetail,
   PurchaseInvoiceLineProjectAllocation,
   PurchaseInvoiceLineSyncStatus,
+  PurchaseInvoiceListItem,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
   PurchaseInvoiceSource,

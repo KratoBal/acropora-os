@@ -78,6 +78,7 @@ function response(page: number): PurchaseInvoiceListResponse {
         totalNet: "10000",
         createdAt: "2026-08-19T10:00:00.000Z",
         updatedAt: "2026-08-19T10:00:00.000Z",
+        hasPdf: false,
       },
     ],
     pagination: { page, pageSize: 25, totalItems: 60, totalPages: 3 },

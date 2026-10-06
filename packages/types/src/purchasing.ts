@@ -75,8 +75,18 @@ export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {
   lines: PurchaseInvoiceLineDetail[];
 }
 
+/**
+ * A lista sora. A `hasPdf` csak itt áll (kártya f7df5354): igaz, ha a számla
+ * PDF-je ismert (a beszállító levélben küldte, a Számlázz.hu feed hozta, vagy
+ * a várható beérkezésen áll). Sutyerák ebből mondja meg, hogy „felkerült-e
+ * már a PDF”.
+ */
+export interface PurchaseInvoiceListItem extends PurchaseInvoiceSummary {
+  hasPdf: boolean;
+}
+
 export interface PurchaseInvoiceListResponse {
-  items: PurchaseInvoiceSummary[];
+  items: PurchaseInvoiceListItem[];
   pagination: {
     page: number;
     pageSize: number;
