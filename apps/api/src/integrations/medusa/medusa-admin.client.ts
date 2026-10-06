@@ -609,6 +609,20 @@ export interface MedusaOrderPointChange {
   point: Record<string, unknown> | null;
 }
 
+/**
+ * `POST /admin/order-split/:id` (commerce, murena 26630): az ÚJ rendelés
+ * (`order_id`, `display_id`) és a két új összeg. `payment_state` az új
+ * rendelésé: kártyás zárolásnál `awaiting_payment` (fizetési linkkel fizet).
+ */
+export interface MedusaOrderSplit {
+  order_id: string;
+  display_id: number | null;
+  parent_order_id: string;
+  parent_total: number;
+  total: number;
+  payment_state: string;
+}
+
 /** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
 export interface MedusaOrderNotes {
   customer_note: string | null;
@@ -906,6 +920,20 @@ export interface MedusaAdminClient {
     orderId: string,
     input: { customer_note?: string | null; carrier_note?: string | null },
   ): Promise<MedusaOrderNotes>;
+  /**
+   * A kijelölt tételek új, kapcsolt rendelésbe (commerce, murena 26630).
+   * A `request_id` KÖTELEZŐ (murena 26634): a bontás a webshopban két
+   * lépés, és ugyanazzal az azonosítóval az újraküldés a már létrejött
+   * rendelést adja vagy a félbemaradt bontást fejezi be.
+   */
+  splitOrder(
+    orderId: string,
+    input: {
+      lines: { item_id: string; quantity: number }[];
+      actor?: string;
+      request_id: string;
+    },
+  ): Promise<MedusaOrderSplit>;
   /** Termékváltozat keresése név vagy cikkszám szerint (a tétel cseréjéhez). */
   searchVariants(query: string): Promise<MedusaVariantSearchRow[]>;
   /**
@@ -1798,6 +1826,20 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   ): Promise<MedusaOrderPointChange> {
     return this.request<MedusaOrderPointChange>(
       `/admin/order-shipping/${encodeURIComponent(orderId)}/point`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  }
+
+  async splitOrder(
+    orderId: string,
+    input: {
+      lines: { item_id: string; quantity: number }[];
+      actor?: string;
+      request_id: string;
+    },
+  ): Promise<MedusaOrderSplit> {
+    return this.request<MedusaOrderSplit>(
+      `/admin/order-split/${encodeURIComponent(orderId)}`,
       { method: "POST", body: JSON.stringify(input) },
     );
   }

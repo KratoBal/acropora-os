@@ -193,7 +193,7 @@ export class WebshopOrderEditsService {
 /** Egy keresés legfeljebb ennyi pontot ad (a pénztár alapértéke körül). */
 export const POINT_PAGE = 20;
 
-function pointOptionOf(row: MedusaPickupPointRow) {
+export function pointOptionOf(row: MedusaPickupPointRow) {
   return {
     id: row.id,
     name: row.name,
@@ -211,7 +211,7 @@ function pointOptionOf(row: MedusaPickupPointRow) {
  * választható pont) is; 5xx-re, 503-ra (a fuvarozó listája) „most nem
  * érhető el”. Minden más hiba változatlanul megy tovább.
  */
-function refusalOf(error: unknown, what: string): unknown {
+export function refusalOf(error: unknown, what: string): unknown {
   if (!(error instanceof MedusaAdminHttpError)) return error;
   const message = webshopErrorMessage(error.body);
   if (error.status === 404 || error.status === 409)

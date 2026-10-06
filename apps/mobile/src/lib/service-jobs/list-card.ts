@@ -24,17 +24,23 @@ import type {
  *   before the server sent assignees, so nobody knows; writing "nincs
  *   kiosztva" there would state something false (the brief, point 2).
  *
- * A PARTNER DOES NOT SEE THE LINE (decision of 2026-10-04): `null` when the
- * viewer is a partner user.
+ * THE NAMES COME FROM ONE OF TWO FIELDS (card a0660885, #1449): an internal
+ * user's row carries `assignees`, a partner's carries only `assigneeNames`.
+ * Reading `assignees` alone made every partner row "nem ismert".
+ *
+ * A PARTNER SEES THE LINE TOO (acrobot 26185, 2026-10-05, and a0660885's
+ * follow-up): the server sends a partner the names precisely so they can be
+ * shown, as on the partner portal's "Felelős" column. This replaces the
+ * 2026-10-04 rule that hid the line from partners.
  */
 export function serviceJobAssigneeLine(
-  item: Pick<ServiceJobListItem, "assignees">,
-  viewerIsPartner: boolean,
-): string | null {
-  if (viewerIsPartner) return null;
-  if (item.assignees === undefined) return "Felelős: nem ismert";
-  if (item.assignees.length === 0) return "Felelős: nincs kiosztva";
-  return `Felelős: ${item.assignees.map((person) => person.name).join(", ")}`;
+  item: Pick<ServiceJobListItem, "assignees" | "assigneeNames">,
+): string {
+  const names =
+    item.assignees?.map((person) => person.name) ?? item.assigneeNames;
+  if (names === undefined) return "Felelős: nem ismert";
+  if (names.length === 0) return "Felelős: nincs kiosztva";
+  return `Felelős: ${names.join(", ")}`;
 }
 
 const MONTHS = [
@@ -79,12 +85,14 @@ export function shortWhen(iso: string, now: Date): string {
 
 /** The card's last line: assignees, worksheets, when it was opened. */
 export function serviceJobCardMeta(
-  item: Pick<ServiceJobListItem, "assignees" | "worksheetCount" | "createdAt">,
-  viewerIsPartner: boolean,
+  item: Pick<
+    ServiceJobListItem,
+    "assignees" | "assigneeNames" | "worksheetCount" | "createdAt"
+  >,
   now: Date,
 ): string {
   return [
-    serviceJobAssigneeLine(item, viewerIsPartner),
+    serviceJobAssigneeLine(item),
     `${item.worksheetCount} ML`,
     shortWhen(item.createdAt, now),
   ]

@@ -22,6 +22,8 @@ import {
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
   type WebshopOrderNotesInput,
+  type WebshopOrderSplitInput,
+  type WebshopOrderSplitResult,
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
 } from "@acropora/types";
@@ -389,6 +391,12 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.changePoint(token, id, pointId));
     setNow(Date.now());
   };
+  const split = async (input: WebshopOrderSplitInput) => {
+    const result = await webshopOrdersApi.split(token, id, input);
+    setOrder(result.order);
+    setNow(Date.now());
+    return result.created;
+  };
   const saveNotes = async (input: WebshopOrderNotesInput) => {
     setOrder(await webshopOrdersApi.saveNotes(token, id, input));
     setNow(Date.now());
@@ -527,6 +535,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onUpdateAddress={updateAddress}
           onSaveNote={saveNote}
           onChangePoint={changePoint}
+          onSplit={split}
           onSaveNotes={saveNotes}
           onSearchPoints={searchPoints}
         />
@@ -1389,6 +1398,7 @@ function OrderBody({
   onUpdateAddress,
   onSaveNote,
   onChangePoint,
+  onSplit,
   onSaveNotes,
   onSearchPoints,
 }: {
@@ -1418,11 +1428,16 @@ function OrderBody({
   onUpdateAddress: (input: WebshopOrderAddressInput) => Promise<void>;
   onSaveNote: (text: string) => Promise<void>;
   onChangePoint: (pointId: string) => Promise<void>;
+  onSplit: (
+    input: WebshopOrderSplitInput,
+  ) => Promise<WebshopOrderSplitResult["created"]>;
   onSaveNotes: (input: WebshopOrderNotesInput) => Promise<void>;
   onSearchPoints: (query: string) => Promise<WebshopPickupPointSearch>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
+  // a sikeres bontás után a kijelölés is kiürül, a megszakított után marad
+  const [splitDone, setSplitDone] = useState(false);
   const [editing, setEditing] = useState<
     | "billing"
     | "shipping"
@@ -1552,6 +1567,42 @@ function OrderBody({
           >
             Megnyitás
           </Link>
+        </div>
+      ) : null}
+
+      {order.split.from || order.split.into.length ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-pilot-accent-warm-soft px-5 py-3 text-sm font-medium text-pilot-accent-warm-text">
+          {order.split.from ? (
+            <span>
+              Szétbontva ebből:{" "}
+              <Link
+                href={`/webshop/rendelesek/${encodeURIComponent(order.split.from.id)}`}
+                className="underline"
+              >
+                {order.split.from.displayId !== null
+                  ? orderNumber(order.split.from.displayId)
+                  : "az eredeti rendelés"}
+              </Link>
+            </span>
+          ) : null}
+          {order.split.into.length ? (
+            <span>
+              Kibontott rendelés:{" "}
+              {order.split.into.map((part, index) => (
+                <span key={part.id}>
+                  {index ? ", " : null}
+                  <Link
+                    href={`/webshop/rendelesek/${encodeURIComponent(part.id)}`}
+                    className="underline"
+                  >
+                    {part.displayId !== null
+                      ? orderNumber(part.displayId)
+                      : "kapcsolt rendelés"}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -1749,7 +1800,18 @@ function OrderBody({
                 lines={order.lines.filter((line) =>
                   selection.selectedIds.includes(line.id),
                 )}
-                onClose={() => setSplitOpen(false)}
+                allLines={order.lines}
+                reason={order.splitEdit.reason}
+                onSplit={async (input) => {
+                  const created = await onSplit(input);
+                  setSplitDone(true);
+                  return created;
+                }}
+                onClose={() => {
+                  setSplitOpen(false);
+                  if (splitDone) selection.clear();
+                  setSplitDone(false);
+                }}
               />
             ) : null}
             <div className="mt-4 flex flex-col-reverse gap-4 border-t border-pilot-grey-200 pt-4 sm:flex-row sm:items-end sm:justify-between">
