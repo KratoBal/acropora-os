@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { InvoiceTextReading } from "./invoice-text.js";
 import { parseSelector } from "./stored-text-reread.cli.js";
 import {
+  rereadReport,
   rereadStoredText,
   type StoredTextDocument,
 } from "./stored-text-reread.js";
@@ -100,6 +101,64 @@ describe("re-reading a stored document's text", () => {
         },
       },
     ]);
+  });
+
+  /*
+    kártya 37b8643d: a tárolt olvasat bruttó és név nélkül állt. MI PIROSÍT: ha
+    az újraolvasás nem írja be a címkés végösszeget (a változás nem is
+    látszik); ha a Számlázz.hu bruttóját, pénznemét vagy nevét eldobja.
+  */
+  it("adds the labelled total where the stored reading had none, and shows it in the report", async () => {
+    const reading = {
+      invoiceNumber: "E0401374511",
+      numberFrom: "NAV" as const,
+      supplierTaxNumber: "25103272-2-42",
+    };
+    const { deps: d, saved } = deps([
+      {
+        lines: [...FLEETCOR, "Fizetendő: | -76.096 | Ft"],
+        textReading: reading,
+      },
+    ]);
+    const rows = await rereadStoredText(d, SELECT, true);
+    assert.equal(rows[0]!.changed, true);
+    assert.deepEqual(rows[0]!.amount, { before: null, after: "-76096 HUF" });
+    assert.deepEqual(saved[0]!.reading, {
+      ...reading,
+      gross: "-76096",
+      currency: "HUF",
+    });
+    assert.match(rereadReport(rows, true), /bruttó - -> -76096 HUF/);
+  });
+
+  it("keeps the gross, currency and name the stored reading already had", async () => {
+    // a régi szám hibás (az ügyfél-azonosító), tehát a sor íródik
+    const reading = {
+      ...OLD,
+      gross: "13000",
+      currency: "EUR",
+      supplierName: "Szállító Kft.",
+    };
+    const { deps: d, saved } = deps([
+      {
+        lines: [...FLEETCOR, "Fizetendő: | 12 700 | Ft"],
+        textReading: reading,
+      },
+    ]);
+    const rows = await rereadStoredText(d, SELECT, true);
+    assert.deepEqual(rows[0]!.amount, {
+      before: "13000 EUR",
+      after: "13000 EUR",
+    });
+    assert.deepEqual(
+      [
+        saved[0]!.reading.invoiceNumber,
+        saved[0]!.reading.gross,
+        saved[0]!.reading.currency,
+        saved[0]!.reading.supplierName,
+      ],
+      ["E0401374511", "13000", "EUR", "Szállító Kft."],
+    );
   });
 
   it("dry by default: reports, writes nothing", async () => {

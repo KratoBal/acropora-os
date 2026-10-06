@@ -326,6 +326,47 @@ export class MissingInvoicesRepository {
     );
   }
 
+  /*
+    A SZÁLLÍTÓ NEVE AZ ADÓSZÁM-TÖRZSBŐL (kártya 37b8643d, mérve 2026-10-06
+    élesen): az általános olvasó csak a szállító adószámát nyeri ki, a nevét
+    nem, ezért a NAV-val össze nem vont jelölt név nélkül állt a listán. A
+    NAV-sorok, a Számlázz.hu feed és a Szállítók törzse ugyanahhoz az
+    adószámhoz nevet ad: a NAV-val összevont 249 dokumentumon mérve 247 egyezik
+    a NAV nevével, 1 eltér, 1-nél nincs név. Csak a jelölt NEVE jön innen, a
+    párosítás kulcsa (`invoiceKey`) az adószámon marad.
+  */
+  private async nameFromTaxRegistry(
+    nameless: readonly { document: CandidateDocument; base: string }[],
+    suppliers: readonly { taxNumber: string | null; name: string }[],
+  ): Promise<void> {
+    if (nameless.length === 0) return;
+    const [nav, feed] = await Promise.all([
+      this.database.navIncomingInvoice.findMany({
+        distinct: ["supplierTaxNumber"],
+        orderBy: { invoiceIssueDate: "desc" },
+        select: { supplierTaxNumber: true, supplierName: true },
+      }),
+      this.database.incomingBillingDocument.findMany({
+        where: { supplierTaxNumber: { not: null } },
+        distinct: ["supplierTaxNumber"],
+        select: { supplierTaxNumber: true, supplierName: true },
+      }),
+    ]);
+    const nameByBase = new Map<string, string>();
+    const add = (tax: string | null, name: string) => {
+      const base = taxBase(tax);
+      if (base && name.trim() && !nameByBase.has(base))
+        nameByBase.set(base, name.trim());
+    };
+    for (const row of [...nav, ...feed])
+      add(row.supplierTaxNumber, row.supplierName);
+    for (const supplier of suppliers) add(supplier.taxNumber, supplier.name);
+    for (const { document, base } of nameless) {
+      const name = nameByBase.get(base);
+      if (name) document.supplierName = name;
+    }
+  }
+
   /** A jelöltek egy dátumablakban, mind a négy forrásból. */
   async candidates(from: string, to: string): Promise<CandidateDocument[]> {
     const range = {
@@ -406,7 +447,12 @@ export class MissingInvoicesRepository {
       }),
       this.database.supplier.findMany({
         where: { taxNumber: { not: null } },
-        select: { taxNumber: true, bankAccountNumber: true, iban: true },
+        select: {
+          taxNumber: true,
+          name: true,
+          bankAccountNumber: true,
+          iban: true,
+        },
       }),
     ]);
 
@@ -443,6 +489,8 @@ export class MissingInvoicesRepository {
 
     const documents: CandidateDocument[] = [];
     const keys = new Map<string, string>();
+    /** az általános olvasó dokumentumai, amiknek csak az adószáma van meg */
+    const nameless: { document: CandidateDocument; base: string }[] = [];
     for (const invoice of nav) {
       const parsed = invoice.parsedData as {
         supplierBankAccountNumber?: string;
@@ -593,7 +641,13 @@ export class MissingInvoicesRepository {
           result?.supplier.name ?? reading?.supplierName ?? "",
         ),
       );
+      const last = documents[documents.length - 1]!;
+      const base = taxBase(
+        result?.supplier.vatId ?? reading?.supplierTaxNumber,
+      );
+      if (!last.supplierName && base) nameless.push({ document: last, base });
     }
+    await this.nameFromTaxRegistry(nameless, suppliers);
     for (const settlement of foxpost)
       documents.push({
         id: settlement.id,

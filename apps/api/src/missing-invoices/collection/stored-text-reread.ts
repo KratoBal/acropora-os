@@ -5,6 +5,7 @@ import {
   looksLikeTaxNumber,
   readInvoiceText,
   withKnownNumber,
+  withLabelledTotal,
   type InvoiceTextReading,
   type KnownInvoiceNumber,
 } from "./invoice-text.js";
@@ -22,7 +23,9 @@ import {
  * szállítói illesztő olvasatát (`importResult`) nem bántja: az a dokumentum nem
  * az általános olvasón ment át. A banki hivatkozás és a kártyás fizetés a régi
  * olvasatból megmarad: azokat a begyűjtés a bank adataiból számolta, nem a
- * szövegből.
+ * szövegből. A régi bruttó, pénznem és szállítónév is megmarad (a Számlázz.hu
+ * továbbítás forrásból hozza); ahol nincs, a címkés végösszeg kerül a helyére
+ * (kártya 37b8643d).
  *
  * Ha az új olvasás nem talál számot, a régi szám marad, KIVÉVE ha az a
  * szövegben ügyfél-azonosítóként áll, vagy adószám: az soha nem számlaszám.
@@ -87,8 +90,15 @@ export interface StoredTextRereadRow {
   skipped: "ADAPTER_READ" | "UNREADABLE" | "WOULD_CLEAR" | null;
   before: Brief | null;
   after: Brief | null;
+  /** a bruttó és a pénznem előtte és utána („-76096 HUF”), ha bármelyik van */
+  amount?: { before: string | null; after: string | null };
   changed: boolean;
 }
+
+const amountOf = (
+  reading: Partial<InvoiceTextReading> | null,
+): string | null =>
+  reading?.gross != null ? `${reading.gross} ${reading.currency ?? "?"}` : null;
 
 const brief = (
   reading: Partial<InvoiceTextReading> | null,
@@ -171,7 +181,8 @@ export async function rereadStoredText(
       oldNumber !== null &&
       !looksLikeTaxNumber(oldNumber) &&
       !customerIds(lines).has(compactNumber(oldNumber));
-    const next: InvoiceTextReading = {
+    const oldName = old?.supplierName;
+    const kept: InvoiceTextReading = {
       ...fresh,
       ...(keepOld
         ? { invoiceNumber: oldNumber, numberFrom: old?.numberFrom ?? null }
@@ -180,7 +191,13 @@ export async function rereadStoredText(
         ? { bankReference: old.bankReference }
         : {}),
       ...(old?.cardPayment ? { cardPayment: old.cardPayment } : {}),
+      ...(old?.gross != null
+        ? { gross: old.gross, currency: old.currency ?? null }
+        : {}),
+      ...(oldName ? { supplierName: oldName } : {}),
     };
+    const next = withLabelledTotal(kept, lines);
+    const amount = { before: amountOf(old), after: amountOf(next) };
     const kind =
       document.kind === "INVOICE" &&
       document.origin !== "UPLOAD" &&
@@ -190,19 +207,28 @@ export async function rereadStoredText(
     const changed =
       JSON.stringify(brief(old, document.kind)) !==
         JSON.stringify(brief(next, kind)) ||
-      (old?.bankReference ?? null) !== (next.bankReference ?? null);
+      (old?.bankReference ?? null) !== (next.bankReference ?? null) ||
+      amount.before !== amount.after;
+    const shown = amount.before || amount.after ? { amount } : {};
     const clears = oldNumber !== null && next.invoiceNumber === null;
     if (clears && !allowClear) {
       rows.push({
         ...base,
         skipped: "WOULD_CLEAR",
         after: brief(next, kind),
+        ...shown,
         changed,
       });
       continue;
     }
     if (apply && changed) await deps.save(document.id, next, kind);
-    rows.push({ ...base, skipped: null, after: brief(next, kind), changed });
+    rows.push({
+      ...base,
+      skipped: null,
+      after: brief(next, kind),
+      ...shown,
+      changed,
+    });
   }
   return rows;
 }
@@ -226,7 +252,11 @@ export function rereadReport(
             ? `kihagyva (a számot üresre írná, csak --allow-clear-rel): ${show(row.before)} -> ${show(row.after)}`
             : row.skipped
               ? `kihagyva (${row.skipped})`
-              : `${show(row.before)} -> ${show(row.after)}${row.changed ? "" : "  (változatlan)"}`
+              : `${show(row.before)} -> ${show(row.after)}${
+                  row.amount && row.amount.before !== row.amount.after
+                    ? ` | bruttó ${row.amount.before ?? "-"} -> ${row.amount.after ?? "-"}`
+                    : ""
+                }${row.changed ? "" : "  (változatlan)"}`
         }\n`,
     ),
   ].join("");

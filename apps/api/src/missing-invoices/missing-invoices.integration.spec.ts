@@ -400,4 +400,41 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
       candidates.some((d) => d.id === id || d.aliasIds?.includes(id));
     assert.deepEqual([among(contract.id), among(invoice.id)], [false, true]);
   });
+
+  // kártya 37b8643d: az általános olvasó csak az adószámot nyeri ki; a név az
+  // adószám-törzsből (itt a NAV-sorból) jön, a bruttó az olvasat címkés
+  // végösszegéből, előjellel. MI PIROSÍT: ha a jelölt neve üres marad.
+  it("a collected invoice without a NAV row takes its supplier's name from the tax registry", async () => {
+    const created = await prisma.incomingSupplierDocument.create({
+      data: {
+        gmailMessageId: "collect:INFO_MAIL:hianyzo-it-name",
+        fileName: "HIANYZOTESZT-NEV-1.pdf",
+        sizeBytes: 14,
+        sha256: "hianyzo-it-name",
+        content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+        status: "FAILED",
+        kind: "INVOICE",
+        origin: "COLLECTED_MAIL",
+        receivedAt: new Date("2026-08-09T09:00:00Z"),
+        payeeCheck: "COMPANY",
+        textReading: {
+          invoiceNumber: "HIANYZOTESZT-NEV-1",
+          numberFrom: "LABEL",
+          supplierTaxNumber: "99999999-2-42",
+          gross: "-76096",
+          currency: "HUF",
+        },
+      },
+      select: { id: true },
+    });
+    const candidates = await new MissingInvoicesRepository().candidates(
+      "2026-08-01",
+      "2026-08-31",
+    );
+    const found = candidates.find((d) => d.id === created.id);
+    assert.deepEqual(
+      [found?.supplierName, found?.gross?.toString(), found?.currency],
+      [SUPPLIER, "-76096", "HUF"],
+    );
+  });
 });

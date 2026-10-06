@@ -57,7 +57,11 @@ export function MessagesPage() {
     if (enabled) void reload();
   }, [enabled, reload]);
 
+  // A lebontás UTÁN nem indul időzítő (kártya d27df94f): egy késve érkező
+  // válasz (például az olvasott-jelölésé) még hívhatja, és az akkor induló
+  // időzítőt a lebontás már nem törölhetné.
   const scheduleReload = useCallback(() => {
+    if (!alive.current) return;
     if (reloadTimer.current) clearTimeout(reloadTimer.current);
     reloadTimer.current = setTimeout(() => void reload(), 300);
   }, [reload]);

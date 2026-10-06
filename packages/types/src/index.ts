@@ -1254,3 +1254,18 @@ export type {
   NavigationCounterId,
   NavigationCounters,
 } from "./navigation-counters.js";
+
+export {
+  MY_SERVICE_WORK_VIEWS,
+  serviceJobOverdueSince,
+  serviceJobWorkBucket,
+  sortMyServiceWork,
+  worksheetWorkBucket,
+} from "./my-service-work.js";
+export type {
+  MyServiceWorkBucket,
+  MyServiceWorkItem,
+  MyServiceWorkKind,
+  MyServiceWorkResponse,
+  MyServiceWorkView,
+} from "./my-service-work.js";
