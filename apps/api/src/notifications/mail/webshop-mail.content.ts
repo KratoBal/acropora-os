@@ -124,6 +124,20 @@ const RAW: Readonly<
       contact,
     ].join(""),
   },
+  WEBSHOP_ORDER_SPLIT: {
+    subject: "Két részben érkezik a rendelésed ({{rendeles_szamok}})",
+    bodyHtml: [
+      top(
+        "RENDELÉS KÉT RÉSZBEN",
+        "Két részben érkezik a rendelésed",
+        v("rendeles_szamok"),
+      ),
+      `<p>A rendelésed néhány tétele még nem érkezett meg hozzánk. Hogy a többire ne kelljen várnod, a rendelést két részre bontottuk: amit már tudunk, elindítjuk, a többit a ${v("masodik_resz_szam")} rendelésben küldjük, amint megérkezik.</p>`,
+      own("reszek_fizetese_mondat"),
+      own("rendeles_tetelek"),
+      contact,
+    ].join(""),
+  },
   WEBSHOP_SHIPPING_DELAYED: {
     subject: "Csúszik a rendelésed szállítása (#{{rendeles_szam}})",
     bodyHtml: [
