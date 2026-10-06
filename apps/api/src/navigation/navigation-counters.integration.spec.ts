@@ -114,6 +114,13 @@ describe(
             ...(hidden ? { hiddenAt: new Date() } : {}),
           },
         });
+        /*
+          THE TABLE'S OWN RULES (migration 20260817231500): a version that is
+          not a draft has a `closedAt` (WorksheetVersion_closed_state_check),
+          and from the second version on a non-blank `changeReason`
+          (WorksheetVersion_change_reason_check). The first CI run stopped on
+          the first of these; locally this suite does not run.
+        */
         for (const [i, status] of statuses.entries())
           await prisma.worksheetVersion.create({
             data: {
@@ -121,6 +128,8 @@ describe(
               version: i + 1,
               status,
               subject: name,
+              ...(status === "DRAFT" ? {} : { closedAt: new Date() }),
+              ...(i > 0 ? { changeReason: "Kitalált új verzió" } : {}),
             },
           });
         await prisma.worksheetAssignee.create({
