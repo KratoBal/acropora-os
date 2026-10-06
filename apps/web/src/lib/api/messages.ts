@@ -269,6 +269,15 @@ export const messagesApi = {
       },
     );
   },
+  /**
+   * A beszélgetés törlése (fecbb1fe): a létrehozó, az admin, és Sutyerák kettes
+   * beszélgetésében a dolgozó. Mindenki elől eltűnik.
+   */
+  deleteConversation(token: string, id: string) {
+    return apiRequest<{ deleted: true }>(conversationPath(id), token, {
+      method: "DELETE",
+    });
+  },
   /** 4. fázis: kilépés egy csoportból; az utolsó után a beszélgetés archív lesz. */
   leave(token: string, id: string) {
     return apiRequest<{ left: true; archived: boolean }>(

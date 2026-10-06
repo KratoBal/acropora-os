@@ -22,6 +22,7 @@ import {
   MESSAGE_SEARCH_LIMIT,
   MESSAGE_SEARCH_MIN_LENGTH,
   PERMISSIONS,
+  hasPermission,
   ROLE_PERMISSIONS,
   SUTYERAK_USER_ID,
   USER_ROLES,
@@ -263,7 +264,60 @@ export class MessagesService {
       notification: notificationState(membership),
       context: await this.contextCard(user, row),
       assistantThinking: this.thinking?.has(id) ?? false,
+      canDelete: mayDeleteConversation(user, row),
     };
+  }
+
+  /**
+   * A BESZÉLGETÉS TÖRLÉSE (fecbb1fe; Balázs, 2026-10-06 13:15:49 UTC).
+   *
+   * Ki: a létrehozója és Sutyerák kettes beszélgetésében a dolgozó (mindkettő
+   * aktív tagként), meg az admin (`messages.admin`) tagság nélkül is. Más: 403.
+   *
+   * Mi történik: SOFT, mint az üzenet törlése. A beszélgetés `archivedAt`-ot
+   * kap, és minden úton eltűnik; az üzenetek, csatolmányok, kitűzések és az
+   * olvasottság a soraikkal maradnak, de nem érhetők el. A munkalap és a
+   * hibajegy gombja utána újat nyit (az egyedi index csak az élőkre szól). Az
+   * audit-sor mondja meg, ki, mikor, és mit törölt. A többi tag push nélkül,
+   * egy folyam-eseményből tudja meg.
+   */
+  async deleteConversation(
+    user: AuthenticatedUser,
+    conversationId: string,
+  ): Promise<{ deleted: true }> {
+    const row = await this.repository.conversation(conversationId);
+    if (!row) throw notFound();
+    const admin = hasPermission(user, PERMISSIONS.MESSAGES_ADMIN);
+    if (
+      !admin &&
+      !(await this.repository.activeMembership(conversationId, user.id))
+    )
+      throw notFound();
+    if (!mayDeleteConversation(user, row))
+      throw new ForbiddenException(
+        "Ezt a beszélgetést csak a létrehozója vagy egy admin törölheti.",
+      );
+    const memberIds = await this.repository.deleteConversation(conversationId);
+    if (!memberIds) throw notFound();
+    await this.repository.audit({
+      userId: user.id,
+      action: "conversation.deleted",
+      conversationId,
+      metadata: {
+        title: row.title,
+        type: row.type,
+        createdByUserId: row.createdByUserId,
+        contextType: row.contextType,
+        contextId: row.contextId,
+        memberIds,
+        asAdmin: admin && row.createdByUserId !== user.id,
+      },
+    });
+    this.bus.publish(memberIds, {
+      type: "conversation.deleted",
+      conversationId,
+    });
+    return { deleted: true };
   }
 
   /**
@@ -1667,3 +1721,25 @@ const isContextType = (
   value: string | null,
 ): value is ConversationContextType =>
   value === "WORKSHEET" || value === "SERVICE_JOB";
+
+/**
+ * KI TÖRÖLHETI A BESZÉLGETÉST (fecbb1fe): a létrehozója, az admin
+ * (`messages.admin`), és Sutyerák kettes beszélgetésében a dolgozó (Balázs
+ * kérése szerint az övé is törölhető, akárki indította).
+ */
+export function mayDeleteConversation(
+  user: AuthenticatedUser,
+  row: {
+    type: string;
+    createdByUserId: string;
+    members: readonly { userId: string }[];
+  },
+): boolean {
+  if (hasPermission(user, PERMISSIONS.MESSAGES_ADMIN)) return true;
+  if (row.createdByUserId === user.id) return true;
+  return (
+    row.type === "DIRECT" &&
+    row.members.some((member) => member.userId === SUTYERAK_USER_ID) &&
+    row.members.some((member) => member.userId === user.id)
+  );
+}

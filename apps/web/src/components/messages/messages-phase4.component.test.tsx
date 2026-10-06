@@ -53,6 +53,7 @@ const api = vi.hoisted(() => ({
   people: vi.fn(),
   addMembers: vi.fn(),
   leave: vi.fn(),
+  deleteConversation: vi.fn(),
   linkContext: vi.fn(),
   unlinkContext: vi.fn(),
 }));
@@ -406,6 +407,74 @@ describe("the service job's partner conversation", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText("Partner")).toBeNull();
+  });
+});
+
+/*
+  A BESZÉLGETÉS TÖRLÉSE (fecbb1fe). MI PIROSÍT: ha a gomb akkor is látszik,
+  amikor a szerver szerint a néző nem törölhet; ha megerősítés nélkül töröl;
+  ha a megerősítés nem nevezi meg a beszélgetést; ha utána nyitva marad; ha a
+  másik tag nyitott beszélgetése egy törlés-eseményre nem lép a listára.
+*/
+describe("deleting a conversation", () => {
+  it("is not offered when the server says the viewer may not", async () => {
+    api.list.mockResolvedValue({ items: [group] });
+    api.detail.mockResolvedValue({
+      ...detailOf(group, null),
+      canDelete: false,
+    });
+    render(<MessagesPage />);
+    const drawer = await openDetails();
+    await drawer.findByText("Értesítések");
+    expect(
+      drawer.queryByRole("button", { name: "Beszélgetés törlése" }),
+    ).toBeNull();
+  });
+
+  it("asks first, naming the conversation, then deletes and returns to the list", async () => {
+    api.list.mockResolvedValue({ items: [group] });
+    api.detail.mockResolvedValue({ ...detailOf(group, null), canDelete: true });
+    api.deleteConversation.mockResolvedValue({ deleted: true });
+    render(<MessagesPage />);
+    fireEvent.click(
+      await (
+        await openDetails()
+      ).findByRole("button", { name: "Beszélgetés törlése" }, SLOW),
+    );
+    expect(api.deleteConversation).not.toHaveBeenCalled();
+    const confirm = within(
+      await screen.findByRole(
+        "dialog",
+        {
+          name: "Törlöd a(z) „BIO-2026-001 · Fővárosi Állatkert” beszélgetést?",
+        },
+        SLOW,
+      ),
+    );
+    fireEvent.click(confirm.getByRole("button", { name: "Törlés" }));
+    await waitFor(
+      () => expect(api.deleteConversation).toHaveBeenCalledWith("t1", "c1"),
+      SLOW,
+    );
+    await waitFor(
+      () => expect(nav.replace).toHaveBeenCalledWith("/uzenetek"),
+      SLOW,
+    );
+  });
+
+  it("another member's open conversation goes back to the list on the stream event", async () => {
+    render(<MessagesPage />);
+    await screen.findByTestId("message-list", {}, SLOW);
+    nav.replace.mockClear();
+    for (const listener of stream.listeners)
+      listener({ type: "conversation.deleted", conversationId: "other" });
+    expect(nav.replace).not.toHaveBeenCalled();
+    for (const listener of stream.listeners)
+      listener({ type: "conversation.deleted", conversationId: "c1" });
+    await waitFor(
+      () => expect(nav.replace).toHaveBeenCalledWith("/uzenetek"),
+      SLOW,
+    );
   });
 });
 

@@ -31,6 +31,7 @@ export function refreshesUnread(signal: { type: string }): boolean {
     signal.type === "message.created" ||
     signal.type === "conversation.read" ||
     signal.type === "conversation.created" ||
+    signal.type === "conversation.deleted" ||
     signal.type === "resync"
   );
 }

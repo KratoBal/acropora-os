@@ -28,7 +28,7 @@ import {
   mayJoinInternal,
 } from "./messages.rules.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
-import { MessagesService } from "./messages.service.js";
+import { mayDeleteConversation, MessagesService } from "./messages.service.js";
 
 /*
   AZ ÜZENETEK 1. FÁZISA (kártya 51d7aba0). MI PIROSÍT:
@@ -81,6 +81,8 @@ function fakeRepository(users: MessagingUserRow[]) {
       members: Map<string, MemberRow & { lastReadMessageId: string | null }>;
       lastMessageId: string | null;
       lastMessageAt: Date | null;
+      /** fecbb1fe: törölt (archivált) beszélgetés, mint a valódi tárolóban */
+      archivedAt?: Date | null;
     }
   >();
   const messages: MessageRow[] = [];
@@ -131,6 +133,7 @@ function fakeRepository(users: MessagingUserRow[]) {
       return { id, created: true };
     },
     activeMembership: async (conversationId: string, userId: string) => {
+      if (conversations.get(conversationId)?.archivedAt) return null;
       const m = conversations.get(conversationId)?.members.get(userId);
       return m && m.leftAt === null
         ? {
@@ -139,6 +142,15 @@ function fakeRepository(users: MessagingUserRow[]) {
             lastReadMessageId: m.lastReadMessageId,
           }
         : null;
+    },
+    deleteConversation: async (id: string) => {
+      const c = conversations.get(id);
+      if (!c || c.archivedAt) return null;
+      c.archivedAt = new Date();
+      c.directKey = null;
+      return [...c.members.values()]
+        .filter((m) => m.leftAt === null)
+        .map((m) => m.userId);
     },
     conversation: async (id: string): Promise<ConversationRow | null> => {
       const c = conversations.get(id);
@@ -165,7 +177,9 @@ function fakeRepository(users: MessagingUserRow[]) {
       (
         await Promise.all(
           [...conversations.values()]
-            .filter((c) => c.members.get(userId)?.leftAt === null)
+            .filter(
+              (c) => !c.archivedAt && c.members.get(userId)?.leftAt === null,
+            )
             .map((c) => repo.conversation(c.id)),
         )
       ).filter((c): c is ConversationRow => c !== null),
@@ -569,6 +583,146 @@ describe("acrobot's handoff reply", () => {
         service.handoffReply({ userId: "a", conversationId: "c1", text: "x" }),
       ),
       400,
+    );
+  });
+});
+
+/*
+  A BESZÉLGETÉS TÖRLÉSE (fecbb1fe; Balázs, 2026-10-06 13:15:49 UTC: „törölni az
+  tud, aki nyitotta az üzenet szálat és az admin”). MI PIROSÍT: ha más tag is
+  törölhet; ha az admin nem; ha a törölt beszélgetés bárhol elérhető marad; ha a
+  többi tag nem kap folyam-eseményt (vagy kap push-t); ha nincs audit-sor; ha a
+  két ember következő kettes beszélgetése a TÖRÖLT sort kapja vissza.
+*/
+describe("deleting a conversation", () => {
+  const users = [person("a"), person("b"), person("c"), person("boss")];
+  const admin = (id: string) =>
+    ({ ...viewer(id), role: "ADMIN" as UserRole }) as AuthenticatedUser;
+
+  it("the creator deletes it: gone everywhere, members told on the stream, audited", async () => {
+    const { service, repo, published, pushes } = setup(users);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: ["b", "c"],
+      title: "Raktár",
+    });
+    published.length = 0;
+    const pushesBefore = pushes.length;
+    assert.deepEqual(await service.deleteConversation(viewer("a"), id), {
+      deleted: true,
+    });
+    assert.equal(await status(service.detail(viewer("b"), id)), 404);
+    assert.deepEqual(
+      (await service.list(viewer("b"))).items.map((c) => c.id),
+      [],
+    );
+    assert.deepEqual(published, [`conversation.deleted -> a,b,c`]);
+    assert.equal(pushes.length, pushesBefore);
+    assert.ok(repo.audits.some((a) => a.includes("conversation.deleted")));
+    assert.equal(
+      await status(service.deleteConversation(viewer("a"), id)),
+      404,
+    );
+  });
+
+  it("another member may not (403); a non-member is told nothing (404)", async () => {
+    const { service } = setup(users);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: ["b"],
+      title: "Csoport",
+    });
+    assert.equal(
+      await status(service.deleteConversation(viewer("b"), id)),
+      403,
+    );
+    assert.equal(
+      await status(service.deleteConversation(viewer("c"), id)),
+      404,
+    );
+  });
+
+  it("an admin deletes any conversation, member or not", async () => {
+    const { service } = setup(users);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: ["b"],
+      title: "Csoport",
+    });
+    assert.deepEqual(await service.deleteConversation(admin("boss"), id), {
+      deleted: true,
+    });
+  });
+
+  it("the detail tells the client whether it may delete", async () => {
+    const { service } = setup(users);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: ["b"],
+      title: "Csoport",
+    });
+    assert.equal((await service.detail(viewer("a"), id)).canDelete, true);
+    assert.equal((await service.detail(viewer("b"), id)).canDelete, false);
+  });
+
+  /*
+    A directKey-CSAPDA (acrobot 26955, külön kalibrálva): a kettes beszélgetés
+    kulcsa egyedi, és a keresés az archiváltat is megtalálja. Nullázás nélkül a
+    két ember a TÖRÖLT beszélgetést kapná vissza, ami sehol nem nyílik meg.
+  */
+  it("after deleting a direct conversation the same two people get a new one", async () => {
+    const { service } = setup(users);
+    const first = await service.createConversation(viewer("a"), {
+      memberIds: ["b"],
+    });
+    await service.deleteConversation(viewer("a"), first.id);
+    const second = await service.createConversation(viewer("b"), {
+      memberIds: ["a"],
+    });
+    assert.notEqual(second.id, first.id);
+    assert.equal((await service.detail(viewer("a"), second.id)).id, second.id);
+  });
+});
+
+describe("who may delete a conversation", () => {
+  const row = (createdByUserId: string, type: string, memberIds: string[]) => ({
+    type,
+    createdByUserId,
+    members: memberIds.map((userId) => ({ userId })),
+  });
+
+  it("the creator, an admin, and the worker in their direct conversation with Sutyerák", () => {
+    assert.equal(
+      mayDeleteConversation(viewer("a"), row("a", "GROUP", ["a", "b"])),
+      true,
+    );
+    assert.equal(
+      mayDeleteConversation(viewer("b"), row("a", "GROUP", ["a", "b"])),
+      false,
+    );
+    assert.equal(
+      mayDeleteConversation(
+        { ...viewer("x"), role: "OWNER" as UserRole } as AuthenticatedUser,
+        row("a", "GROUP", ["a", "b"]),
+      ),
+      true,
+    );
+    assert.equal(
+      mayDeleteConversation(
+        { ...viewer("m"), role: "MANAGER" as UserRole } as AuthenticatedUser,
+        row("a", "GROUP", ["a", "m"]),
+      ),
+      false,
+    );
+    assert.equal(
+      mayDeleteConversation(
+        viewer("a"),
+        row(SUTYERAK_USER_ID, "DIRECT", [SUTYERAK_USER_ID, "a"]),
+      ),
+      true,
+    );
+    assert.equal(
+      mayDeleteConversation(
+        viewer("b"),
+        row(SUTYERAK_USER_ID, "DIRECT", [SUTYERAK_USER_ID, "a"]),
+      ),
+      false,
     );
   });
 });
