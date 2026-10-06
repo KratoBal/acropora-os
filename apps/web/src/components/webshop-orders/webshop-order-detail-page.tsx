@@ -1,5 +1,5 @@
 "use client";
-import { Alert, Button, Icon, Skeleton } from "@acropora/ui";
+import { Alert, Button, ConfirmDialog, Icon, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -595,6 +595,11 @@ function InvoiceCard({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A KIÁLLÍTÁS MEGERŐSÍTÉSSEL (acrobot 26827, biztonsági korlát): a gomb
+  // valódi Számlázz.hu-bizonylatot állít ki, tehát egy kattintás nem elég
+  const [confirming, setConfirming] = useState<
+    "invoice" | "deliveryNote" | null
+  >(null);
   const invoice = order.invoice;
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -651,7 +656,7 @@ function InvoiceCard({
               note={order.deliveryNote}
               canIssue={canIssue}
               busy={busy}
-              onIssue={() => void run(onIssueDeliveryNote)}
+              onIssue={() => setConfirming("deliveryNote")}
               onOpenPdf={(documentId) => void run(() => onOpenPdf(documentId))}
             />
           </>
@@ -686,7 +691,7 @@ function InvoiceCard({
                 size="regular"
                 variant="primary"
                 disabled={busy}
-                onClick={() => void run(onIssue)}
+                onClick={() => setConfirming("invoice")}
               >
                 {busy ? "Kiállítás…" : "Számla kiállítása"}
               </PilotButton>
@@ -702,6 +707,33 @@ function InvoiceCard({
           </p>
         ) : null}
       </div>
+      {/* ugyanaz a megerősítés, mint a Számlázás szerkesztőjében (confirmIssue) */}
+      <ConfirmDialog
+        open={confirming !== null}
+        title={
+          confirming === "deliveryNote"
+            ? "Szállítólevél kiállítása"
+            : "Számla kiállítása"
+        }
+        consequence={
+          confirming === "deliveryNote"
+            ? "A kiállítással valódi szállítólevél készül a Számlázz.hu-n, saját számmal, a kiállított számla tételeiből."
+            : "A kiállítással valódi számla készül a Számlázz.hu-n, saját számmal, a rendelés tételeiből. A számla ezután nem szerkeszthető."
+        }
+        recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
+        confirmLabel={
+          confirming === "deliveryNote"
+            ? "Szállítólevél kiállítása"
+            : "Számla kiállítása"
+        }
+        busy={busy}
+        onConfirm={() => {
+          const work =
+            confirming === "deliveryNote" ? onIssueDeliveryNote : onIssue;
+          void run(work).finally(() => setConfirming(null));
+        }}
+        onCancel={() => setConfirming(null)}
+      />
     </Card>
   );
 }

@@ -565,6 +565,14 @@ describe("WebshopOrderDetailPage", () => {
     fireEvent.click(
       within(card).getByRole("button", { name: "Számla kiállítása" }),
     );
+    // MEGERŐSÍTÉS NÉLKÜL NEM ÍR (acrobot 26827): a gomb csak a dialógust nyitja
+    const confirm = screen.getByRole("dialog", { name: "Számla kiállítása" });
+    expect(confirm.textContent).toContain("valódi számla készül");
+    expect(confirm.textContent).toContain("csak sztornóval");
+    expect(api.issueInvoice).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Számla kiállítása" }),
+    );
     expect(await within(card).findByText("TESZT-2026-1A2B3C4D")).toBeTruthy();
     expect(api.issueInvoice).toHaveBeenCalledWith("token", "order_38");
     expect(
@@ -597,9 +605,32 @@ describe("WebshopOrderDetailPage", () => {
     fireEvent.click(
       within(card).getByRole("button", { name: "Számla kiállítása" }),
     );
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Számla kiállítása" }),
+      ).getByRole("button", { name: "Számla kiállítása" }),
+    );
     expect((await within(card).findByRole("alert")).textContent).toMatch(
       /eltérnek/,
     );
+  });
+
+  it("'Mégsem' in the confirmation issues nothing", async () => {
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Számla kiállítása" }),
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Számla kiállítása" }),
+      ).getByRole("button", { name: "Mégsem" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Számla kiállítása" }),
+    ).toBeNull();
+    expect(api.issueInvoice).not.toHaveBeenCalled();
   });
 
   it("no button before confirmation, without billing.issue, or while issuing", async () => {
@@ -671,6 +702,14 @@ describe("WebshopOrderDetailPage", () => {
     const card = await screen.findByRole("region", { name: "Számla" });
     fireEvent.click(
       within(card).getByRole("button", { name: "Szállítólevél kiállítása" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Szállítólevél kiállítása",
+    });
+    expect(confirm.textContent).toContain("valódi szállítólevél készül");
+    expect(api.issueDeliveryNote).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Szállítólevél kiállítása" }),
     );
     expect(await within(card).findByText("TESZT-2026-5E6F7A8B")).toBeTruthy();
     expect(api.issueDeliveryNote).toHaveBeenCalledWith("token", "order_38");
