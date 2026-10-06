@@ -221,6 +221,18 @@ export const messagesApi = {
       { method: "POST" },
     );
   },
+  /**
+   * „Beszélgetés a partnerrel” a hibajegyről (bd46ff05, a #1531 végpontja): a
+   * hibajegy PARTNERES beszélgetése, külön a belsőtől; ha még nincs, a szerver
+   * létrehozza, és a megnyitót felveszi.
+   */
+  openPartnerContext(token: string, serviceJobId: string) {
+    return apiRequest<ConversationDetail>(
+      `/messages/context/service-job/${encodeURIComponent(serviceJobId)}/partner`,
+      token,
+      { method: "POST" },
+    );
+  },
   /** 4. fázis: egy meglévő csoport csatolása munkalaphoz vagy hibajegyhez. */
   linkContext(
     token: string,

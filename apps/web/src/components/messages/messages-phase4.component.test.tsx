@@ -361,6 +361,54 @@ describe("members and leaving", () => {
   });
 });
 
+/*
+  A HIBAJEGY PARTNERES BESZÉLGETÉSE A BELSŐ OLDALON (bd46ff05, a #1531
+  szerint). MI PIROSÍT: ha a listán nincs „Partner” jelölés; ha a csatolás,
+  a tag, a kilépés vagy a kötés látszik (a szerver 400-at adna); ha a
+  továbbítás célpontjai közt a partneres beszélgetés felkínálódik.
+*/
+describe("the service job's partner conversation", () => {
+  const partnerConversation: ConversationListItem = {
+    ...group,
+    title: "HJ-2026-0042 · Fővárosi Állatkert · partner",
+    audience: "PARTNER",
+    contextType: "SERVICE_JOB",
+  };
+
+  it("is labelled Partner in the list, and offers no attachment, members, leaving or linking", async () => {
+    api.list.mockResolvedValue({ items: [partnerConversation] });
+    api.detail.mockResolvedValue(detailOf(partnerConversation, null));
+    render(<MessagesPage />);
+    expect(await screen.findByText("Partner", {}, SLOW)).toBeTruthy();
+    await screen.findByTestId("message-list", {}, SLOW);
+    expect(
+      screen.queryByRole("button", { name: "Csatolmány hozzáadása" }),
+    ).toBeNull();
+    const drawer = await openDetails();
+    await drawer.findByText("Értesítések");
+    for (const name of [
+      "Tag hozzáadása",
+      "Kilépés a beszélgetésből",
+      "Kapcsolás munkalaphoz vagy hibajegyhez",
+    ])
+      expect(drawer.queryByRole("button", { name })).toBeNull();
+  });
+
+  it("an internal conversation keeps its attachment button and no Partner label", async () => {
+    api.list.mockResolvedValue({ items: [group] });
+    api.detail.mockResolvedValue(detailOf(group, null));
+    render(<MessagesPage />);
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "Csatolmány hozzáadása" },
+        SLOW,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Partner")).toBeNull();
+  });
+});
+
 describe("linking", () => {
   it("searches the chosen kind by number and links the picked one", async () => {
     api.list.mockResolvedValue({ items: [{ ...group, contextType: null }] });

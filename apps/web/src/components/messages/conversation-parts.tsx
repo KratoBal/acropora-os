@@ -5,7 +5,7 @@ import type { ConversationListItem, ConversationPerson } from "@acropora/types";
 import { SUTYERAK_ASSETS } from "@/components/assistant/assets";
 
 import { conversationTimeLabel, previewText } from "./outbox";
-import { contextSubtitle } from "./phase4";
+import { contextSubtitle, isPartnerConversation } from "./phase4";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
 export function conversationName(
@@ -129,6 +129,11 @@ export function ConversationRow({
           {inactive ? (
             <span className="ml-1 text-xs font-normal text-pilot-grey-500">
               (inaktív)
+            </span>
+          ) : null}
+          {isPartnerConversation(item) ? (
+            <span className="ml-2 rounded bg-pilot-accent-warm-soft px-1.5 py-0.5 text-[11px] font-semibold text-pilot-accent-warm-text">
+              Partner
             </span>
           ) : null}
         </span>

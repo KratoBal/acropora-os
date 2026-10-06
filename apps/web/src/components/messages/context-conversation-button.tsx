@@ -17,9 +17,15 @@ import { useMessagesEnabled } from "./message-stream";
 export function ContextConversationButton({
   kind,
   objectId,
+  partner = false,
 }: {
   kind: "worksheet" | "service-job";
   objectId: string;
+  /**
+   * bd46ff05: a hibajegy PARTNERES beszélgetése („Beszélgetés a partnerrel”),
+   * külön a belsőtől. Csak hibajegyen értelmes.
+   */
+  partner?: boolean;
 }) {
   const { session } = useAuth();
   const enabled = useMessagesEnabled();
@@ -33,11 +39,10 @@ export function ContextConversationButton({
     setBusy(true);
     setError(null);
     try {
-      const conversation = await messagesApi.openContext(
-        session.token ?? "",
-        kind,
-        objectId,
-      );
+      const conversation =
+        partner && kind === "service-job"
+          ? await messagesApi.openPartnerContext(session.token ?? "", objectId)
+          : await messagesApi.openContext(session.token ?? "", kind, objectId);
       router.push(`/uzenetek?c=${encodeURIComponent(conversation.id)}`);
     } catch (cause) {
       setError(
@@ -56,7 +61,7 @@ export function ContextConversationButton({
         disabled={busy}
         onClick={() => void open()}
       >
-        Beszélgetés
+        {partner ? "Beszélgetés a partnerrel" : "Beszélgetés"}
       </PilotButton>
       {error ? (
         <span role="alert" className="text-xs text-pilot-red-700">
