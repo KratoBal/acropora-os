@@ -26,6 +26,7 @@ import {
   type PendingMaterialRequestListResponse,
 } from "@acropora/types";
 
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import { worksheetListWheres } from "../worksheets/worksheets.repository.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
@@ -496,6 +497,21 @@ export class MaterialRequestsService {
    * second visibility query. Internal callers only (`requireInternalWriter`
    * at every entry): partner users do not see material requests in V2.
    */
+  /**
+   * THE MENU NUMBER (Balázs, 2026-10-05 22:10 UTC, answer 1): a purchaser
+   * (the "anyag beérkezett" capability) sees the requests waiting to be taken
+   * over, anyone else their own open requests. `null` for a partner: the
+   * material requests are internal (`requireInternalWriter`), and the menu
+   * entry they still see answers them with a 403.
+   */
+  async navigationCount(actor: AuthenticatedUser): Promise<number | null> {
+    if (partnerScopeOf(actor).kind !== "internal") return null;
+    const visible = await this.visibleWorksheets(actor);
+    return (await this.repository.hasMarkReceivedCapability(actor.id))
+      ? this.repository.countPending(visible)
+      : this.repository.countOwnOpen(actor.id, visible);
+  }
+
   private async visibleWorksheets(
     actor: AuthenticatedUser,
   ): Promise<Prisma.WorksheetWhereInput> {

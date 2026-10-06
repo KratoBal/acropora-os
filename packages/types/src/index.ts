@@ -1214,3 +1214,12 @@ export type {
   WebshopParcelSize,
   WebshopShippingNoticeOutcome,
 } from "./webshop-orders.js";
+export {
+  NAVIGATION_COUNTER_IDS,
+  isNavigationCounterId,
+  navigationCounterLabel,
+} from "./navigation-counters.js";
+export type {
+  NavigationCounterId,
+  NavigationCounters,
+} from "./navigation-counters.js";

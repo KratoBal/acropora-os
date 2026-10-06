@@ -358,6 +358,34 @@ export class MaterialRequestsRepository extends Repository {
   }
 
   /** Van-e bejelolve nala a beerkezes-jelolo kepesseg. */
+  /** The purchaser's menu number: requests waiting to be taken over. */
+  async countPending(
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+  ): Promise<number> {
+    return this.database.materialRequest.count({
+      where: { status: "OPEN", worksheet: visibleWorksheet },
+    });
+  }
+
+  /**
+   * Anyone else's menu number: their own requests that are sent and not
+   * finished. A draft is not counted (it has not been asked for yet).
+   */
+  async countOwnOpen(
+    userId: string,
+    visibleWorksheet: Prisma.WorksheetWhereInput,
+  ): Promise<number> {
+    return this.database.materialRequest.count({
+      where: {
+        requestedById: userId,
+        status: {
+          in: ["OPEN", "IN_PROGRESS", "ORDERED", "PARTIALLY_RECEIVED"],
+        },
+        worksheet: visibleWorksheet,
+      },
+    });
+  }
+
   async hasMarkReceivedCapability(userId: string): Promise<boolean> {
     const row = await this.database.userServiceCapability.findUnique({
       where: {

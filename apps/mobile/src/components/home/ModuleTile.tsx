@@ -15,20 +15,30 @@ import { ModuleIcon } from "./ModuleIcon";
  * The line under the title is the module's static description in phase 1.
  * The Figma's status line ("7 nyitott · 2 sürgős") comes from the server's
  * summary in phase 2; nothing here invents a number.
+ *
+ * THE BADGE (card 4a6813db): what waits on me, from the server
+ * (`GET /navigation/counters`), next to the chevron. The caller passes the
+ * text and what it counts; no badge for none.
  */
 export function ModuleTile({
   module,
   onPress,
+  badge,
 }: {
   module: HomeModule;
   onPress(): void;
+  badge?: { label: string; accessibilityLabel: string } | null;
 }) {
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${module.title} megnyitása`}
+      accessibilityLabel={
+        badge
+          ? `${module.title} megnyitása, ${badge.accessibilityLabel}`
+          : `${module.title} megnyitása`
+      }
       onPress={onPress}
       style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
     >
@@ -36,7 +46,18 @@ export function ModuleTile({
         <View style={styles.iconBox}>
           <ModuleIcon name={module.icon} size={18} color={tokens.accent} />
         </View>
-        <ModuleIcon name="chevron-forward" size={16} color={tokens.textMuted} />
+        <View style={styles.trailing}>
+          {badge ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge.label}</Text>
+            </View>
+          ) : null}
+          <ModuleIcon
+            name="chevron-forward"
+            size={16}
+            color={tokens.textMuted}
+          />
+        </View>
       </View>
       <Text style={styles.title}>{module.title}</Text>
       <Text style={styles.line} numberOfLines={2}>
@@ -71,6 +92,17 @@ function createStyles(t: ThemeTokens) {
       justifyContent: "center",
       width: 32,
     },
+    trailing: { alignItems: "center", flexDirection: "row", gap: 4 },
+    badge: {
+      alignItems: "center",
+      backgroundColor: t.accent,
+      borderRadius: 10,
+      justifyContent: "center",
+      minWidth: 20,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    badgeText: { color: "#ffffff", fontSize: 11, fontWeight: "700" },
     title: { color: t.textPrimary, fontSize: 15, fontWeight: "700" },
     line: { color: t.textMuted, fontSize: 12, lineHeight: 16 },
     pressed: { opacity: 0.7 },

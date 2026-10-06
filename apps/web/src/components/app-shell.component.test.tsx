@@ -21,6 +21,13 @@ vi.mock("@/lib/api/messages", () => ({
   },
   MESSAGE_STREAM_URL: "/api/messages/stream",
 }));
+// the menu numbers (card 4a6813db): no network in a test
+const counters = vi.hoisted(() => ({
+  fetch: vi.fn(),
+}));
+vi.mock("@/lib/api/navigation-counters", () => ({
+  navigationCountersApi: { counters: counters.fetch },
+}));
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
@@ -51,6 +58,11 @@ const ownerSession: Session = {
 
 describe("AppShell settings navigation", () => {
   beforeEach(() => {
+    counters.fetch.mockReset().mockResolvedValue({
+      "service-jobs": 0,
+      worksheets: 0,
+      "material-requests-pending": 0,
+    });
     auth.session = ownerSession;
     navigation.pathname = "/";
   });
@@ -648,5 +660,60 @@ describe("AppShell kompakt profil", () => {
         name: "Üzenetek, 12 olvasatlan",
       }),
     ).toHaveTextContent(/^9\+$/);
+  });
+});
+
+/*
+  THE MENU NUMBERS (card 4a6813db). WHAT TURNS RED: the number is not on the
+  entry it counts; a zero or a null shows a badge; a big number is not cut to
+  "99+"; the screen reader does not hear what is counted.
+*/
+describe("AppShell menu numbers", () => {
+  beforeEach(() => {
+    auth.session = ownerSession;
+    navigation.pathname = "/";
+  });
+
+  const szerviz = async () => {
+    fireEvent.click(await screen.findByRole("button", { name: "Szerviz" }));
+  };
+
+  it("puts each number on its own entry, and none on a zero or a null", async () => {
+    counters.fetch.mockReset().mockResolvedValue({
+      "service-jobs": 3,
+      worksheets: 0,
+      "material-requests-pending": null,
+    });
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await szerviz();
+    const hibajegyek = await screen.findByRole("link", { name: /Hibajegyek/ });
+    expect(
+      within(hibajegyek).getByLabelText("3 nekem kiosztott, nyitott hibajegy"),
+    ).toHaveTextContent("3");
+    expect(
+      within(screen.getByRole("link", { name: /Munkalapok/ })).queryByText("0"),
+    ).toBeNull();
+    expect(
+      screen.queryByLabelText(/teendő anyagigény/),
+    ).not.toBeInTheDocument();
+    expect(counters.fetch).toHaveBeenCalledWith(
+      "owner-token",
+      expect.anything(),
+    );
+  });
+
+  it("a number above 99 shows as 99+", async () => {
+    counters.fetch.mockReset().mockResolvedValue({
+      "service-jobs": 0,
+      worksheets: 140,
+      "material-requests-pending": 0,
+    });
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await szerviz();
+    expect(
+      await screen.findByLabelText(
+        "140 nekem kiosztott, új vagy folyamatban lévő munkalap",
+      ),
+    ).toHaveTextContent("99+");
   });
 });

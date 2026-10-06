@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BottomNav } from "@/components/home/BottomNav";
 import { ModuleTile } from "@/components/home/ModuleTile";
+import { useNavigationCounters } from "@/components/home/useNavigationCounters";
+import { tileBadge } from "@/lib/navigation/counters";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { servedTileIds, tileVisible } from "@/lib/auth/tile-visibility";
 import { HOME_MODULES, launcherModules } from "@/lib/home/modules";
@@ -25,6 +27,7 @@ export default function ModulesScreen() {
   const { status, user, retryRestore } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
+  const counters = useNavigationCounters();
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
 
@@ -65,6 +68,7 @@ export default function ModulesScreen() {
                 <ModuleTile
                   key={code}
                   module={entry}
+                  badge={tileBadge(code, counters)}
                   onPress={() => {
                     if (entry.route) router.push(entry.route as Href);
                   }}
