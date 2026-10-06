@@ -10,6 +10,7 @@ import type {
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { partnerTermsFor } from "./partner-payment-terms.js";
 import type {
   CreateCustomerDto,
   CustomerListQueryDto,
@@ -193,7 +194,28 @@ export class CustomersRepository extends Repository {
         },
       },
     });
-    return this.toDetail(customer, reference?.externalId ?? null);
+    const detail = this.toDetail(customer, reference?.externalId ?? null);
+    if (detail.paymentDueDays !== null) return detail;
+    // a sor maga üres: ugyanez a cég a Partnerek oldalon viselhet napot
+    const partners = await prisma.supplier.findMany({
+      where: { paymentDueDays: { not: null } },
+      select: { name: true, taxNumber: true, paymentDueDays: true },
+    });
+    return {
+      ...detail,
+      partnerTerms: partnerTermsFor(
+        {
+          displayName: customer.displayName,
+          companyName: customer.companyName,
+          taxNumber: customer.taxNumber,
+        },
+        partners.map((partner) => ({
+          name: partner.name,
+          taxNumber: partner.taxNumber,
+          paymentDueDays: partner.paymentDueDays!,
+        })),
+      ),
+    };
   }
 
   /**

@@ -946,6 +946,39 @@ describe("BillingDocumentEditor", () => {
       );
     });
 
+    /*
+      KÁRTYA 7be4a85b, mérve 2026-10-06 élesen: az Állatkert két vevő-soron
+      áll, a választott sor napjai üresek, a Partnerek oldalon 30 nap áll.
+      MI PIROSÍT: ha a szerkesztő ilyenkor a 8 napos alapértéket adja, vagy
+      nem mondja ki, honnan jött a 30 nap.
+    */
+    it("a customer row without days takes the matching partner's days, and says so", async () => {
+      customers.detail.mockResolvedValue({
+        id: "cust-2",
+        customerNumber: "VEVO-1",
+        displayName: "Fővárosi Állat- és Növénykert",
+        companyName: "Fővárosi Állat- és Növénykert",
+        email: "szamlazas@partner.hu",
+        taxNumber: "12345678-2-42",
+        address: "1146 Budapest, Állatkerti krt. 6-12.",
+        paymentDueDays: null,
+        partnerTerms: {
+          paymentDueDays: 30,
+          partnerName: "Fővárosi Állat- és Növénykert",
+        },
+      });
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      expect(value("Fizetési határidő")).toBe(
+        plusDays(value("Teljesítés dátuma"), 30),
+      );
+      expect(
+        screen.getByText(
+          /30 nap, a\(z\) Fővárosi Állat- és Növénykert partner beállításából/,
+        ),
+      ).toBeTruthy();
+    });
+
     it("a due date typed by hand stays when the customer is picked", async () => {
       customers.detail.mockResolvedValue({
         id: "cust-1",
