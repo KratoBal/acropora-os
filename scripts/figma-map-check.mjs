@@ -100,6 +100,8 @@ const markdown = fs.readFileSync(mapPath, "utf8")
 const lines = markdown.split(/\r?\n/)
 
 let header = null
+let tableHeader = null
+let tableKind = null
 let checked = 0
 const missing = []
 const errors = []
@@ -108,6 +110,8 @@ for (const line of lines) {
   const cells = parseTableRow(line)
   if (!cells) {
     header = null
+    tableHeader = null
+    tableKind = null
     continue
   }
 
@@ -115,22 +119,61 @@ for (const line of lines) {
 
   const maybeHeader = cells.map(cleanCell)
 
-  if (maybeHeader[0] === "Figma Page / Section") {
+  if (!tableHeader) {
+    tableHeader = maybeHeader
+
+    const isBasePathHeader =
+      maybeHeader.includes("App") &&
+      maybeHeader.includes("Route base") &&
+      maybeHeader.includes("Component base")
+
+    if (isBasePathHeader) {
+      tableKind = "base-paths"
+      continue
+    }
+
     const required = ["App", "Route pattern", "Component area"]
     const missingHeaders = required.filter((name) => !maybeHeader.includes(name))
+    const hasAllRequiredHeaders = missingHeaders.length === 0
 
-    if (missingHeaders.length) {
-      errors.push(
-        `Hibás FIGMA-MAP tábla fejléc; hiányzik: ${missingHeaders.join(", ")}`,
-      )
-      header = null
-    } else {
-      header = maybeHeader
+    if (maybeHeader[0] === "Figma Page / Section") {
+      tableKind = "figma"
+
+      if (missingHeaders.length) {
+        errors.push(
+          `Hibás FIGMA-MAP tábla fejléc; hiányzik: ${missingHeaders.join(", ")}`,
+        )
+        header = null
+      } else {
+        header = maybeHeader
+      }
+      continue
     }
+
+    if (hasAllRequiredHeaders) {
+      tableKind = "invalid-figma"
+      errors.push(
+        'Hibás FIGMA-MAP tábla fejléc; az első oszlop pontos neve "Figma Page / Section" legyen.',
+      )
+      continue
+    }
+
+    tableKind = "other"
     continue
   }
 
-  if (!header) continue
+  if (!header) {
+    const appLikeCell = maybeHeader.find(
+      (cell) => cell.startsWith("apps/") || cell.startsWith("packages/"),
+    )
+
+    if (appLikeCell && tableKind !== "base-paths") {
+      errors.push(
+        `FIGMA-MAP adatsor érvényes Figma-fejléc nélkül: ${appLikeCell}`,
+      )
+    }
+    continue
+  }
 
   const appIndex = header.indexOf("App")
   const routeIndex = header.indexOf("Route pattern")
