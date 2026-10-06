@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type {
@@ -37,6 +38,8 @@ export const transferAmountText = (amount: Prisma.Decimal, currency: string) =>
  */
 @Injectable()
 export class WebshopOrderTransferService {
+  private readonly logger = new Logger(WebshopOrderTransferService.name);
+
   constructor(
     private readonly orders: WebshopOrdersService,
     private readonly repository: WebshopOrdersRepository,
@@ -104,6 +107,56 @@ export class WebshopOrderTransferService {
       displayId: order.display_id,
       amount: transferAmountText(amount.amount, amount.currency),
     });
+    await this.closeInShop(orderId);
     return this.orders.detail(orderId, now);
+  }
+
+  /**
+   * „WEBSHOP FIZETÉS LEZÁRÁSA”: a rögzített beérkezés újraküldése a webshopnak,
+   * ha az első küldés elhasalt. A webshop oldal ismétlésre nem ír újra
+   * (commerce #509: `recorded: false`). Beérkezés nélkül 409.
+   */
+  async syncShop(
+    orderId: string,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const receipt = (await this.repository.transferReceipts([orderId])).get(
+      orderId,
+    );
+    if (!receipt)
+      throw new ConflictException(
+        "Ennek a rendelésnek nincs rögzített beérkezése, ezért a webshopnak nincs mit küldeni.",
+      );
+    const failure = await this.closeInShop(orderId);
+    if (failure) throw new ConflictException(failure);
+    return this.orders.detail(orderId, now);
+  }
+
+  /**
+   * A WEBSHOP OLDALA (commerce #509): a rendelés ott is kifizetett lesz. Az OS
+   * beérkezés-sora AKKOR IS MARAD, ha ez elhasal: a pénz megjött, és ezt nem
+   * vonja vissza egy webshop-hiba. A hiba mondata a visszatérési érték, a
+   * „Webshop fizetés lezárása” gomb ismétli.
+   */
+  private async closeInShop(orderId: string): Promise<string | null> {
+    const receipt = (await this.repository.transferReceipts([orderId])).get(
+      orderId,
+    );
+    if (!receipt) return "Nincs rögzített beérkezés.";
+    try {
+      const client = await this.orders.adminClient();
+      await client.recordTransferReceipt(orderId, {
+        reference: receipt.reference,
+        received_at: receipt.receivedOn,
+        amount: Number(receipt.amount),
+      });
+      return null;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Előre utalás: a webshop fizetése nem zárult le (${orderId}): ${reason}`,
+      );
+      return `A beérkezés az OS-ben rögzítve van, de a webshop fizetése nem zárult le: ${reason}`;
+    }
   }
 }

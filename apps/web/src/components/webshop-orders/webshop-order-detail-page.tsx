@@ -394,6 +394,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
     setNow(Date.now());
   };
+  const syncTransferToShop = async () => {
+    setOrder(await webshopOrdersApi.syncTransferToShop(token, id));
+    setNow(Date.now());
+  };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
@@ -556,6 +560,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canSendProforma={canSendProforma}
           onSendProforma={sendProforma}
           onRecordTransfer={recordTransfer}
+          onSyncTransferToShop={syncTransferToShop}
           onChangeStatus={changeStatus}
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
@@ -786,6 +791,7 @@ function ProformaSection({
   canRecord,
   onSend,
   onRecord,
+  onSyncShop,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -794,6 +800,8 @@ function ProformaSection({
   canRecord: boolean;
   onSend: () => Promise<void>;
   onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
+  /** A rögzített beérkezés újraküldése a webshopnak (commerce #509). */
+  onSyncShop: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -812,6 +820,19 @@ function ProformaSection({
   const closed = order.status.code === "closed_unsuccessfully";
   const today = BUDAPEST_DAY.format(new Date(now));
   const label = sentBefore ? "Díjbekérő újraküldése" : "Díjbekérő kiküldése";
+  const runShop = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSyncShop();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   const send = async () => {
     setBusy(true);
     setError(null);
@@ -912,6 +933,22 @@ function ProformaSection({
         >
           Utalás beérkezett
         </PilotButton>
+      ) : null}
+      {canRecord && receipt && order.payment?.state === "AWAITING" ? (
+        <div className="space-y-2">
+          <p className="text-xs text-pilot-amber-700">
+            A beérkezés az OS-ben rögzítve van, de a webshopban a rendelés még
+            fizetésre vár.
+          </p>
+          <PilotButton
+            size="regular"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void runShop()}
+          >
+            {busy ? "Küldés…" : "Webshop fizetés lezárása"}
+          </PilotButton>
+        </div>
       ) : null}
       {recording && proforma ? (
         <TransferReceivedDialog
@@ -1723,6 +1760,7 @@ function OrderBody({
   canSendProforma,
   onSendProforma,
   onRecordTransfer,
+  onSyncTransferToShop,
   onChangeStatus,
   mailNotice,
   onResendStatusMail,
@@ -1754,6 +1792,7 @@ function OrderBody({
   canSendProforma: boolean;
   onSendProforma: () => Promise<void>;
   onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
+  onSyncTransferToShop: () => Promise<void>;
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
@@ -2300,6 +2339,7 @@ function OrderBody({
                 canRecord={canIssue}
                 onSend={onSendProforma}
                 onRecord={onRecordTransfer}
+                onSyncShop={onSyncTransferToShop}
               />
             ) : null}
           </Card>

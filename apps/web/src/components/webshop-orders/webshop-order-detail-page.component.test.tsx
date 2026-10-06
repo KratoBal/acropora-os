@@ -43,6 +43,7 @@ const api = vi.hoisted(() => ({
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
   recordTransferReceived: vi.fn(),
+  syncTransferToShop: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
@@ -254,6 +255,7 @@ beforeEach(() => {
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
   api.recordTransferReceived.mockReset();
+  api.syncTransferToShop.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
   api.releaseParcel.mockReset();
@@ -2190,6 +2192,64 @@ describe("the proforma on the Fizetés card", () => {
       "token",
       "order_38",
       { receivedOn: day.value, reference: "OTP 0013" },
+    );
+  });
+
+  /*
+    A WEBSHOP OLDALA (commerce #509). MI PIROSÍT: a gomb akkor is áll, ha a
+    webshop már kifizetettnek látja; nem a lezárás végpontját hívja; a hiba
+    elveszik.
+  */
+  it("paid in the OS but awaiting in the shop offers Webshop fizetés lezárása", async () => {
+    const awaiting = paid();
+    api.detail.mockResolvedValue(awaiting);
+    api.syncTransferToShop.mockResolvedValue({
+      ...awaiting,
+      payment: { ...awaiting.payment!, state: "CAPTURED" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(payment.textContent).toContain("még fizetésre vár");
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Webshop fizetés lezárása" }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        within(payment).queryByRole("button", {
+          name: "Webshop fizetés lezárása",
+        }),
+      ).toBeNull(),
+    );
+    expect(api.syncTransferToShop).toHaveBeenCalledWith("token", "order_38");
+  });
+
+  it("no shop button once the shop has the payment; a refusal stays on the card", async () => {
+    const captured = paid();
+    api.detail.mockResolvedValue({
+      ...captured,
+      payment: { ...captured.payment!, state: "CAPTURED" },
+    });
+    const first = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    expect(
+      within(await card()).queryByRole("button", {
+        name: "Webshop fizetés lezárása",
+      }),
+    ).toBeNull();
+    first.unmount();
+
+    api.detail.mockResolvedValue(paid());
+    api.syncTransferToShop.mockRejectedValue(
+      new Error("A webshop fizetése nem zárult le: Az összeg eltér"),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Webshop fizetés lezárása" }),
+    );
+    expect((await within(payment).findByRole("alert")).textContent).toMatch(
+      /Az összeg eltér/,
     );
   });
 

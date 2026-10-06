@@ -271,6 +271,14 @@ export const webshopOrdersApi = {
       { method: "POST", body: JSON.stringify(input) },
     );
   },
+  /** „Webshop fizetés lezárása”: a rögzített beérkezés újraküldése a webshopnak. */
+  syncTransferToShop(token: string, id: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/transfer-received/shop`,
+      token,
+      { method: "POST" },
+    );
+  },
   /** Csomagfeladás a szállítónál; a válasz a friss adatlap és a „Feladtuk” levél sorsa. */
   createParcel(token: string, id: string, size?: WebshopParcelSize) {
     return apiRequest<WebshopOrderParcelResult>(

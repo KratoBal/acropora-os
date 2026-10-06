@@ -23,10 +23,15 @@ function setup(
     provider?: string;
     proformaStatus?: string | null;
     exists?: boolean;
+    /** A webshop válasza a lezárásra; ha Error, azt dobja. */
+    shop?: Error;
+    /** Már rögzített beérkezés (a lezárás újraküldéséhez). */
+    receipt?: boolean;
   } = {},
 ) {
   const created: Record<string, unknown>[] = [];
   const notices: Record<string, unknown>[] = [];
+  const shopCalls: { orderId: string; receipt: Record<string, unknown> }[] = [];
   const service = new WebshopOrderTransferService(
     {
       source: async () => ({
@@ -48,6 +53,16 @@ function setup(
         status: { status: "pending_processing" },
       }),
       detail: async (id: string) => ({ id }) as WebshopOrderDetail,
+      adminClient: async () => ({
+        recordTransferReceipt: async (
+          orderId: string,
+          receipt: Record<string, unknown>,
+        ) => {
+          shopCalls.push({ orderId, receipt });
+          if (over.shop) throw over.shop;
+          return { recorded: true, payment_id: "pay_1" };
+        },
+      }),
     } as never,
     {
       proformas: async () =>
@@ -71,13 +86,32 @@ function setup(
         return true;
       },
       transferRecipients: async () => ["user_9", "user_7"],
+      // a lezárás a TÁROLT beérkezést küldi: a rögzítés után ez már áll
+      transferReceipts: async () =>
+        new Map(
+          created.length || over.receipt
+            ? [
+                [
+                  "order_55",
+                  {
+                    source: "MANUAL",
+                    receivedOn: "2026-10-06",
+                    reference: "OTP 2026-10-06 0013",
+                    amount: "4800.0000",
+                    currency: "HUF",
+                    recordedBy: "Teszt Elek",
+                  },
+                ],
+              ]
+            : [],
+        ),
     } as never,
     {
       notifyWebshopTransferReceived: (notice: Record<string, unknown>) =>
         notices.push(notice),
     } as never,
   );
-  return { service, created, notices };
+  return { service, created, notices, shopCalls };
 }
 
 const status = async (p: Promise<unknown>) => {
@@ -171,5 +205,63 @@ describe("recording a bank transfer by hand", () => {
       409,
     );
     assert.equal(notices.length, 0);
+  });
+});
+
+/*
+  A WEBSHOP OLDALA (commerce #509). MI PIROSÍT: a rögzítés után a webshop nem
+  kapja meg a beérkezést, vagy nem a tárolt hivatkozást, napot és összeget
+  kapja; a webshop hibája visszavonja vagy elnyeli az OS rögzítését; a
+  lezárás újraküldése beérkezés nélkül is hív, vagy a hibáját elnyeli.
+*/
+describe("closing the payment in the shop", () => {
+  it("after the record the shop gets the stored reference, day and amount", async () => {
+    const { service, shopCalls } = setup();
+    await service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "OTP 2026-10-06 0013" },
+      USER,
+      NOW,
+    );
+    assert.deepEqual(shopCalls, [
+      {
+        orderId: "order_55",
+        receipt: {
+          reference: "OTP 2026-10-06 0013",
+          received_at: "2026-10-06",
+          amount: 4800,
+        },
+      },
+    ]);
+  });
+
+  it("a shop failure keeps the OS record and the notice", async () => {
+    const { service, created, notices } = setup({ shop: new Error("503") });
+    await service.recordManual(
+      "order_55",
+      { receivedOn: "2026-10-06", reference: "OTP" },
+      USER,
+      NOW,
+    );
+    assert.equal(created.length, 1);
+    assert.equal(notices.length, 1);
+  });
+
+  it("the resend needs a record, and names the shop's refusal", async () => {
+    const none = setup();
+    assert.equal(await status(none.service.syncShop("order_55", NOW)), 409);
+    assert.equal(none.shopCalls.length, 0);
+
+    const failing = setup({
+      receipt: true,
+      shop: new Error("Az összeg eltér"),
+    });
+    await assert.rejects(failing.service.syncShop("order_55", NOW), {
+      message: /webshop fizetése nem zárult le: Az összeg eltér/,
+    });
+
+    const ok = setup({ receipt: true });
+    await ok.service.syncShop("order_55", NOW);
+    assert.equal(ok.shopCalls.length, 1);
   });
 });

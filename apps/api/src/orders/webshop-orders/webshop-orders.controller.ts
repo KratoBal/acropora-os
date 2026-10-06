@@ -305,6 +305,18 @@ export class WebshopOrdersController {
    * „UTALÁS BEÉRKEZETT” (bb3a6bd5): a kézi tartalék, ha a banki párosítás nem
    * találta meg a pénzt. Ugyanaz a jog, mint a díjbekérőnél.
    */
+  /**
+   * „WEBSHOP FIZETÉS LEZÁRÁSA” (bb3a6bd5): a rögzített beérkezés újraküldése
+   * a webshopnak, ha az első küldés elhasalt. Ugyanaz a jog, mint a
+   * rögzítésé; a webshop ismétlésre nem ír újra.
+   */
+  @Post(":id/transfer-received/shop")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  syncTransferToShop(@Param("id") id: string) {
+    return this.transfers.syncShop(id);
+  }
+
   @Post(":id/transfer-received")
   @HttpCode(200)
   @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
