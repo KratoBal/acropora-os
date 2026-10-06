@@ -1174,6 +1174,8 @@ export type {
   MessageStreamEvent,
   MessageTypeValue,
   MessagesUnreadResponse,
+  PartnerConversationMessage,
+  PartnerConversationPage,
   SharedAttachmentItem,
   SharedAttachmentPage,
 } from "./messages.js";

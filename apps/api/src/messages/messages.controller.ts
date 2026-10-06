@@ -152,6 +152,19 @@ export class MessagesController {
     return this.messages.openContextConversation(user, type, objectId);
   }
 
+  /**
+   * „Beszélgetés a partnerrel” a hibajegyről (084e2c24): a hibajegy partneres
+   * beszélgetése, a belső beszélgetésétől külön.
+   */
+  @Post("context/service-job/:objectId/partner")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  openPartner(
+    @Param("objectId") objectId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.openPartnerConversation(user, objectId);
+  }
+
   /** Egy meglévő csoport kötése (4. fázis). */
   @Post("conversations/:id/context")
   @RequirePermissions(PERMISSIONS.MESSAGES_USE)
