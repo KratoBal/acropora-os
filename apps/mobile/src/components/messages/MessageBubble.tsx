@@ -37,6 +37,7 @@ export function MessageBubble({
   onLongPress,
   onToggleReaction,
   onOpenImage,
+  onOpenFile,
   highlighted = false,
 }: {
   message: MessageItem;
@@ -46,6 +47,8 @@ export function MessageBubble({
   onLongPress: (() => void) | null;
   onToggleReaction: (reaction: MessageReactionValue, mine: boolean) => void;
   onOpenImage: (attachment: MessageAttachmentItem) => void;
+  /** 2d: egy fájl-csatolmány (PDF) a rendszer nézőjében. */
+  onOpenFile: (attachment: MessageAttachmentItem) => void;
   /** 3. fázis: az „Ugrás” célja rövid ideig kiemelve. */
   highlighted?: boolean;
 }) {
@@ -105,7 +108,14 @@ export function MessageBubble({
                   />
                 </Pressable>
               ) : (
-                <View key={attachment.id} style={styles.file}>
+                <Pressable
+                  key={attachment.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Fájl megnyitása: ${attachment.fileName}`}
+                  onPress={() => onOpenFile(attachment)}
+                  onLongPress={onLongPress ?? undefined}
+                  style={styles.file}
+                >
                   <Ionicons
                     name="document-text-outline"
                     size={20}
@@ -116,11 +126,10 @@ export function MessageBubble({
                       {attachment.fileName}
                     </Text>
                     <Text style={styles.fileMeta}>
-                      {fileSizeLabel(attachment.sizeBytes)} · a webes felületen
-                      nyitható meg
+                      {fileSizeLabel(attachment.sizeBytes)} · Megnyitás
                     </Text>
                   </View>
-                </View>
+                </Pressable>
               ),
             )}
             {message.text && message.assistant ? (
@@ -201,6 +210,7 @@ export function MessageActionsPanel({
   tokens,
   onReact,
   onReply,
+  onCopy,
   onForward,
   onTogglePin,
   onEdit,
@@ -212,6 +222,8 @@ export function MessageActionsPanel({
   tokens: ThemeTokens;
   onReact: (reaction: MessageReactionValue, mine: boolean) => void;
   onReply: () => void;
+  /** 2d: a szöveg a vágólapra; csak szöveges, nem törölt üzenetnél. */
+  onCopy: () => void;
   /** 3. fázis: továbbítás és kitűzés, bárkinek (Balázs, 2026-10-05). */
   onForward: () => void;
   onTogglePin: () => void;
@@ -253,6 +265,14 @@ export function MessageActionsPanel({
         tokens={tokens}
         onPress={onReply}
       />
+      {message.text && !message.deleted ? (
+        <PanelButton
+          label="Másolás"
+          icon="copy-outline"
+          tokens={tokens}
+          onPress={onCopy}
+        />
+      ) : null}
       <PanelButton
         label="Továbbítás"
         icon="arrow-redo"
@@ -286,16 +306,18 @@ export function MessageActionsPanel({
   );
 }
 
-/** A csatolás menüje (Figma 454:457). A „Fájl kiválasztása” új buildet kér, ezért itt még nincs. */
+/** A csatolás menüje (Figma 454:457), a „Fájl kiválasztása” sorral (2d, új build). */
 export function AttachPanel({
   tokens,
   onCamera,
   onLibrary,
+  onFile,
   onClose,
 }: {
   tokens: ThemeTokens;
   onCamera: () => void;
   onLibrary: () => void;
+  onFile: () => void;
   onClose: () => void;
 }) {
   const styles = panelStyles(tokens);
@@ -312,6 +334,12 @@ export function AttachPanel({
         icon="images-outline"
         tokens={tokens}
         onPress={onLibrary}
+      />
+      <PanelButton
+        label="Fájl kiválasztása"
+        icon="document-outline"
+        tokens={tokens}
+        onPress={onFile}
       />
       <PanelButton
         label="Mégse"
