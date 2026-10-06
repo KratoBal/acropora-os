@@ -59,5 +59,23 @@ export function assetFilterSummary(
     );
   if (params.get("label") === "without") lines.push("Matrica: nincs matricája");
   if (params.get("label") === "with") lines.push("Matrica: van matricája");
+  // van-e adott csatolmánya (kártya 1277394e): a lista `document` + `documentType` szűrője
+  const document = params.get("document");
+  if (document === "with" || document === "without") {
+    const type = params.get("documentType") ?? "";
+    const what = DOCUMENT_WORDS[type] ?? "csatolmánya";
+    lines.push(
+      `${type === "MANUAL" ? "Kézikönyv" : "Csatolmány"}: ${document === "with" ? "van" : "nincs"} ${what}`,
+    );
+  }
   return lines;
 }
+
+/** A csatolmány-fajták birtokos alakja a fejléc mondatához. */
+const DOCUMENT_WORDS: Record<string, string> = {
+  MANUAL: "kézikönyve",
+  WARRANTY: "garancialevele",
+  INVOICE: "számlája",
+  OTHER: "egyéb csatolmánya",
+  PHOTO: "fényképe",
+};
