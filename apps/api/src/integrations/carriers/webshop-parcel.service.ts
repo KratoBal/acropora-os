@@ -48,6 +48,10 @@ export interface CreateWebshopParcelInput {
   destination: ParcelDestination;
   size?: ParcelSize;
   codHuf?: number;
+  /** Az utanvet hivatkozasa (a szamla sorszama), a szallitonak tovabbadva. */
+  codReference?: string;
+  /** A cimke szovege, a szallitonak tovabbadva. */
+  labelContent?: string;
   createdByUserId?: string | null;
 }
 
@@ -129,6 +133,8 @@ export class WebshopParcelService {
         destination: input.destination,
         ...(input.size ? { size: input.size } : {}),
         ...(input.codHuf ? { codHuf: input.codHuf } : {}),
+        ...(input.codReference ? { codReference: input.codReference } : {}),
+        ...(input.labelContent ? { labelContent: input.labelContent } : {}),
       });
     } catch (error) {
       // csak a BIZTOS elutasitas engedi el a foglalast; ismeretlen hiba bizonytalan

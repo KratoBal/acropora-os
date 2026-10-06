@@ -304,6 +304,8 @@ export function toDetail(input: {
   customerOrderCount: number | null;
   relatedDisplayId: number | null;
   now: Date;
+  /** Az elavulási küszöbök órában (a beállított; ha hiányzik, az alapérték). */
+  staleHours?: Partial<Record<WebshopOrderStatus, { hours: number }>>;
   /** A kártyás fizetés útja a webshopból; `null` vagy hiányzó: nincs ilyen (vagy nem olvasható). */
   orderPayment?: MedusaOrderPayment | null;
 }): WebshopOrderDetail {
@@ -325,7 +327,7 @@ export function toDetail(input: {
       code,
       label: code ? WEBSHOP_ORDER_STATUS_LABELS[code] : null,
       changedAt: status?.changed_at ?? null,
-      stale: isStale(code, status?.changed_at ?? null, now),
+      stale: isStale(code, status?.changed_at ?? null, now, input.staleHours),
     },
     nextStatuses: (status?.next_statuses ?? [])
       .filter((next) => isStatus(next.status))

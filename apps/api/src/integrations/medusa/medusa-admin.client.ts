@@ -31,6 +31,7 @@
  * (`create`, `update`, `probe` - ott nincs `fields` szűkítés). Ha a keresés
  * egyszer több mezőt kér, ez a típus és a `fields` sor EGYÜTT változik.
  */
+import type { WebshopStuckMail, WebshopStuckMailList } from "@acropora/types";
 import type { KnowledgeProjection } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 
@@ -839,6 +840,20 @@ export interface MedusaAdminClient {
     id: string,
     notice: MedusaShippingNotice,
   ): Promise<MedusaShippingNoticeResult>;
+  /**
+   * THE WEBSHOP'S STUCK MAILS (`GET /admin/webshop-mail/outbox?stuck=true`,
+   * commerce W2): mails the webshop could not send, newest first.
+   */
+  stuckMails(page: {
+    limit: number;
+    offset: number;
+  }): Promise<WebshopStuckMailList>;
+  /**
+   * One stuck mail back in the queue (`POST /admin/webshop-mail/outbox/:id/retry`):
+   * the webshop's job sends it within two minutes. 404: no such mail; 409:
+   * it has gone out already.
+   */
+  retryStuckMail(id: string): Promise<WebshopStuckMail>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   /**
@@ -1708,6 +1723,27 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         method: "POST",
         body: JSON.stringify(notice),
       },
+    );
+  }
+
+  async stuckMails(page: {
+    limit: number;
+    offset: number;
+  }): Promise<WebshopStuckMailList> {
+    const params = new URLSearchParams({
+      stuck: "true",
+      limit: String(page.limit),
+      offset: String(page.offset),
+    });
+    return this.request<WebshopStuckMailList>(
+      `/admin/webshop-mail/outbox?${params.toString()}`,
+    );
+  }
+
+  async retryStuckMail(id: string): Promise<WebshopStuckMail> {
+    return this.request<WebshopStuckMail>(
+      `/admin/webshop-mail/outbox/${encodeURIComponent(id)}/retry`,
+      { method: "POST", body: JSON.stringify({}) },
     );
   }
 

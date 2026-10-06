@@ -8324,6 +8324,25 @@ enum WebshopParcelStatus {
 /// csomagra. Egy rendeléshez legfeljebb EGY ACTIVE csomag lehet: ezt a
 /// migráció részleges egyedi indexe őrzi (a Prisma séma nem tudja kifejezni).
 /// A CarrierShipment ettől független: az a UNAS SalesOrder eseménynaplója.
+/// A WEBSHOP RENDELÉS ELAVULÁSI KÜSZÖBE STÁTUSZONKÉNT (Rendelések, 7. PR; a
+/// prompt 17. pontja). Érték, egység (óra vagy nap) és be/ki kapcsoló;
+/// kikapcsolva az érték megmarad (Balázs, 2026-09-02: „ki lehessen kapcsolni
+/// úgy, hogy az érték benne marad”, és „nem kell nulla”). Ha egy státusznak
+/// nincs sora, a prompt alapértéke érvényes.
+model WebshopOrderStaleThreshold {
+  status          String           @id @db.VarChar(40)
+  value           Int
+  unit            WebshopStaleUnit
+  enabled         Boolean          @default(true)
+  updatedByUserId String?
+  updatedAt       DateTime         @updatedAt
+}
+
+enum WebshopStaleUnit {
+  HOUR
+  DAY
+}
+
 model WebshopParcel {
   id              String              @id @default(cuid())
   commerceOrderId String

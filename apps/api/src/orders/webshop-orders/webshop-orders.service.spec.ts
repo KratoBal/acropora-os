@@ -1,6 +1,10 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
+import {
+  WEBSHOP_STALE_THRESHOLD_DEFAULTS,
+  type WebshopStaleThreshold,
+} from "@acropora/types";
 import { describe, it } from "node:test";
 
 import { ServiceUnavailableException } from "@nestjs/common";
@@ -28,9 +32,14 @@ import {
   számolódnak; a lap nem a kért szelet.
 */
 const NOW = new Date("2026-10-05T12:00:00.000Z");
+/** A tárolt küszöbök a hamis repositoryban; teszt állíthatja. */
+const thresholdsNow: { list: WebshopStaleThreshold[] } = {
+  list: [...WEBSHOP_STALE_THRESHOLD_DEFAULTS],
+};
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
+  staleThresholds: async () => thresholdsNow.list,
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -192,6 +201,39 @@ describe("WebshopOrdersService.list", () => {
   elviszi; a párt nem olvassa ki (a link sorszám nélkül marad, holott van);
   a vendég rendelésnél is kérdez a vásárlói számra.
 */
+describe("the stored stale thresholds", () => {
+  /*
+    A BEÁLLÍTOTT KÜSZÖB (a prompt 17. pontja). MI PIROSÍT: a lista az
+    alapértéket nézi a beállított helyett; a kikapcsolt státusz mégis jelez;
+    a nap egység órának számít.
+  */
+  it("the list marks stale by the stored value; a switched-off status never", async () => {
+    thresholdsNow.list = [
+      { status: "pending_processing", value: 1, unit: "HOUR", enabled: true },
+      { status: "stocking", value: 1, unit: "HOUR", enabled: false },
+      { status: "out_for_delivery", value: 1, unit: "DAY", enabled: true },
+      { status: "ready_for_pickup", value: 5, unit: "DAY", enabled: true },
+    ];
+    try {
+      const result = await service([
+        order(1, "pending_processing"),
+        order(2, "stocking"),
+        order(3, "out_for_delivery"),
+      ]).orders.list({ view: "all" }, new Date("2026-10-05T12:30:00.000Z"));
+      assert.deepEqual(
+        result.items.map((item) => [item.status.code, item.status.stale]),
+        [
+          ["out_for_delivery", false],
+          ["stocking", false],
+          ["pending_processing", true],
+        ],
+      );
+    } finally {
+      thresholdsNow.list = [...WEBSHOP_STALE_THRESHOLD_DEFAULTS];
+    }
+  });
+});
+
 describe("WebshopOrdersService.detail", () => {
   const detailOrder = (
     id: string,
@@ -386,6 +428,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       recordStatusMailResent: async (input: unknown) =>
         void audited.push(input),
       invoices: async () => new Map(),
+      staleThresholds: async () => thresholdsNow.list,
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(

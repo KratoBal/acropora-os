@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { BillingDocumentStatus } from "@acropora/types";
+import {
+  WEBSHOP_STALE_THRESHOLD_DEFAULTS,
+  type BillingDocumentStatus,
+  type WebshopStaleThreshold,
+} from "@acropora/types";
 
 /** Egy rendelés számlája az OS-ben: a `WEBSHOP_ORDER` forrású bizonylat. */
 export interface WebshopOrderInvoiceRow {
@@ -62,6 +66,60 @@ export class WebshopOrdersRepository {
         },
       },
     });
+  }
+
+  /**
+   * AZ ELAVULÁSI KÜSZÖBÖK: a beállított sor, ahol van, különben az alapérték.
+   * Mindig mind a négy státusz, a prompt sorrendjében.
+   */
+  async staleThresholds(): Promise<WebshopStaleThreshold[]> {
+    const rows = await prisma.webshopOrderStaleThreshold.findMany();
+    const stored = new Map(rows.map((row) => [row.status, row]));
+    return WEBSHOP_STALE_THRESHOLD_DEFAULTS.map((fallback) => {
+      const row = stored.get(fallback.status);
+      return row
+        ? {
+            status: fallback.status,
+            value: row.value,
+            unit: row.unit,
+            enabled: row.enabled,
+          }
+        : { ...fallback };
+    });
+  }
+
+  /** A küszöbök mentése egy tranzakcióban, ki mentette (auditnapló, előtte és utána). */
+  async saveStaleThresholds(
+    thresholds: WebshopStaleThreshold[],
+    userId: string,
+  ): Promise<void> {
+    const before = await this.staleThresholds();
+    await prisma.$transaction([
+      ...thresholds.map((threshold) =>
+        prisma.webshopOrderStaleThreshold.upsert({
+          where: { status: threshold.status },
+          create: { ...threshold, updatedByUserId: userId },
+          update: {
+            value: threshold.value,
+            unit: threshold.unit,
+            enabled: threshold.enabled,
+            updatedByUserId: userId,
+          },
+        }),
+      ),
+      prisma.auditLog.create({
+        data: {
+          userId,
+          action: "webshop-order.stale-thresholds-saved",
+          entityType: "WebshopOrderStaleThreshold",
+          entityId: "all",
+          metadata: {
+            before,
+            after: thresholds,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      }),
+    ]);
   }
 
   /** A lejáró zárolás gombjai: ki nyomta meg, melyiket, és mi lett a levéllel. */

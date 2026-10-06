@@ -263,12 +263,18 @@ describe("a kettevagott valtozo", () => {
 });
 
 describe("a link-fajta valtozok", () => {
-  it("pontosan a harom webcim-valtozo link fajtaju", () => {
+  it("pontosan az ot webcim-valtozo link fajtaju", () => {
     assert.deepEqual(
       MAIL_TEMPLATE_VARIABLES.filter((v) => v.kind === "link").map(
         (v) => v.name,
       ),
-      ["jegy_linkje", "munkalap_linkje", "munkalap_belso_linkje"],
+      [
+        "jegy_linkje",
+        "munkalap_linkje",
+        "munkalap_belso_linkje",
+        "tracking_link",
+        "fizetesi_link",
+      ],
     );
   });
 });

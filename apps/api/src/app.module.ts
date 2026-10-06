@@ -25,6 +25,7 @@ import { AiChatModule } from "./integrations/ai-chat/ai-chat.module.js";
 import { AiUserContextModule } from "./integrations/ai/ai-user-context.module.js";
 import { AiProductSearchModule } from "./integrations/ai-product-search/ai-product-search.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
+import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
@@ -86,6 +87,7 @@ import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
     AiUserContextModule,
     AiProductSearchModule,
     NavigationCountersModule,
+    WebshopMailModule,
     AiChatModule,
     MedusaModule,
     NavOnlineInvoiceModule,

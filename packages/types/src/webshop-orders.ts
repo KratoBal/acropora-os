@@ -40,14 +40,53 @@ export const WEBSHOP_ORDER_CLOSED_STATUSES: readonly WebshopOrderStatus[] = [
  * 2026-09-02; a prompt 17. pontja). A beállítható változat egy későbbi PR;
  * addig ezek az értékek érvényesek.
  */
-export const WEBSHOP_ORDER_STALE_DEFAULTS: Partial<
-  Record<WebshopOrderStatus, { hours: number }>
-> = {
-  pending_processing: { hours: 4 },
-  stocking: { hours: 8 },
-  out_for_delivery: { hours: 72 },
-  ready_for_pickup: { hours: 120 },
-};
+/**
+ * AZ ELAVULÁSI KÜSZÖB STÁTUSZONKÉNT (a prompt 17. pontja): érték, egység és
+ * be/ki kapcsoló. Ezek az alapértékek; a beállított érték az OS-ben él
+ * (Beállítások, Rendelések elavulása).
+ */
+export const WEBSHOP_STALE_STATUSES = [
+  "pending_processing",
+  "stocking",
+  "out_for_delivery",
+  "ready_for_pickup",
+] as const;
+export type WebshopStaleStatus = (typeof WEBSHOP_STALE_STATUSES)[number];
+export type WebshopStaleUnit = "HOUR" | "DAY";
+
+export interface WebshopStaleThreshold {
+  status: WebshopStaleStatus;
+  /** Legalább 1: a figyelés kikapcsolása a kapcsoló dolga, nem a nulláé. */
+  value: number;
+  unit: WebshopStaleUnit;
+  enabled: boolean;
+}
+
+export const WEBSHOP_STALE_THRESHOLD_DEFAULTS: readonly WebshopStaleThreshold[] =
+  [
+    { status: "pending_processing", value: 4, unit: "HOUR", enabled: true },
+    { status: "stocking", value: 8, unit: "HOUR", enabled: true },
+    { status: "out_for_delivery", value: 3, unit: "DAY", enabled: true },
+    { status: "ready_for_pickup", value: 5, unit: "DAY", enabled: true },
+  ];
+
+/** A küszöbök órában, csak a bekapcsoltak: ezt nézi az elavultság. */
+export function staleHoursOf(
+  thresholds: readonly WebshopStaleThreshold[],
+): Partial<Record<WebshopOrderStatus, { hours: number }>> {
+  return Object.fromEntries(
+    thresholds
+      .filter((threshold) => threshold.enabled)
+      .map((threshold) => [
+        threshold.status,
+        { hours: threshold.value * (threshold.unit === "DAY" ? 24 : 1) },
+      ]),
+  );
+}
+
+export const WEBSHOP_ORDER_STALE_DEFAULTS = staleHoursOf(
+  WEBSHOP_STALE_THRESHOLD_DEFAULTS,
+);
 
 /** A listafej számlálói: mindegyik egy szűrő is. */
 export const WEBSHOP_ORDER_STAGES = [

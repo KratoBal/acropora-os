@@ -129,6 +129,7 @@ export function toListItem(
   row: MedusaOrderOverviewRow,
   facts: WebshopOrderFacts,
   now: Date,
+  thresholds = WEBSHOP_ORDER_STALE_DEFAULTS,
 ): WebshopOrderListItem {
   const code = isStatus(row.business_status.code)
     ? row.business_status.code
@@ -166,7 +167,7 @@ export function toListItem(
       code,
       label: code ? WEBSHOP_ORDER_STATUS_LABELS[code] : null,
       changedAt: row.business_status.changed_at,
-      stale: isStale(code, row.business_status.changed_at, now),
+      stale: isStale(code, row.business_status.changed_at, now, thresholds),
     },
     stage: stageOf(code, storePickup, facts),
     relatedOrder: row.related_order,
