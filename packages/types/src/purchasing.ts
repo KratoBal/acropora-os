@@ -395,6 +395,37 @@ export interface ExpectedArrivalListResponse {
    * elöl: innen vehetők vissza. Nem szerkeszthetők (`editorPath` null).
    */
   dismissed: ExpectedArrivalListItem[];
+  /**
+   * CSAK LAPOZOTT KÉRÉSNÉL (kártya dd0aef31): a teljes, szűrt lista mérete.
+   * Lapozó paraméter nélkül a válasz a régi, teljes lista, ez a mező nélkül:
+   * a webes Várható beérkezések oldal így nem változik.
+   */
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+  };
+}
+
+/** A lapozott lista mérete (`GET /purchasing/expected-arrivals?pageSize=`). */
+export const EXPECTED_ARRIVAL_LIST_PAGE_SIZE = {
+  default: 50,
+  max: 200,
+} as const;
+
+/**
+ * A lista szűrése és lapozása. Mind elhagyható; ha egyik lapozó mező sincs
+ * megadva, a válasz a teljes lista (ahogy a webes oldal kéri).
+ */
+export interface ExpectedArrivalListQuery {
+  page?: number;
+  pageSize?: number;
+  /** a `pageSize` másik neve: a Sutyerák így kérte, és a válasz csonkult */
+  limit?: number;
+  source?: ExpectedArrivalSource;
+  /** a szállító neve, a számla- vagy a rendelésszám része, kisbetű-érzéketlenül */
+  q?: string;
 }
 
 /** Egy levélből jött várható beérkezés a szerkesztőnek: a számla adatai és a javaslatok. */
