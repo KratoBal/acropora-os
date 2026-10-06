@@ -33,6 +33,7 @@ const api = vi.hoisted(() => ({
   saveNotes: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
+  issueDeliveryNote: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
@@ -155,6 +156,7 @@ const detail: WebshopOrderDetail = {
   },
   invoiceNumber: null,
   invoice: null,
+  deliveryNote: null,
   parcel: null,
   cardPayment: null,
   osCustomer: null,
@@ -228,6 +230,7 @@ beforeEach(() => {
   api.saveInternalNote.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
+  api.issueDeliveryNote.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
   api.releaseParcel.mockReset();
@@ -620,6 +623,75 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       within(card).getByRole("link", { name: "Megnyitás a Számlázásban" }),
     ).toBeTruthy();
+  });
+
+  /*
+    THE DELIVERY NOTE (card 0a14f739 C/1). WHAT TURNS RED: a delivery note
+    button before the invoice is issued; the button does not call its own
+    endpoint; the issued note's number or PDF does not show; without
+    billing.issue a button stands there.
+  */
+  it("after the invoice, issues the delivery note and opens its PDF", async () => {
+    const issued: WebshopOrderDetail = {
+      ...detail,
+      invoiceNumber: "E-1",
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    };
+    api.detail.mockResolvedValue(issued);
+    api.issueDeliveryNote.mockResolvedValue({
+      ...issued,
+      deliveryNote: {
+        id: "webshop-dn-order_38",
+        status: "ISSUED",
+        number: "TESZT-2026-5E6F7A8B",
+      },
+    });
+    billing.pdf.mockResolvedValue(new Blob(["%PDF"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(URL, "createObjectURL", {
+      value: vi.fn(() => "blob:pdf"),
+      configurable: true,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Szállítólevél kiállítása" }),
+    );
+    expect(await within(card).findByText("TESZT-2026-5E6F7A8B")).toBeTruthy();
+    expect(api.issueDeliveryNote).toHaveBeenCalledWith("token", "order_38");
+    expect(
+      within(card).queryByRole("button", { name: "Szállítólevél kiállítása" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Szállítólevél PDF" }),
+    );
+    await vi.waitFor(() =>
+      expect(billing.pdf).toHaveBeenCalledWith("token", "webshop-dn-order_38"),
+    );
+    open.mockRestore();
+  });
+
+  it("no delivery note button before the invoice, or without billing.issue", async () => {
+    api.detail.mockResolvedValue(detail);
+    const first = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    let card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).queryByText(/Szállítólevél/)).toBeNull();
+    first.unmount();
+
+    auth.session = session("SALES");
+    api.detail.mockResolvedValue({
+      ...detail,
+      invoiceNumber: "E-1",
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).getByText("Nincs szállítólevél.")).toBeTruthy();
+    expect(
+      within(card).queryByRole("button", { name: "Szállítólevél kiállítása" }),
+    ).toBeNull();
   });
 
   /**
