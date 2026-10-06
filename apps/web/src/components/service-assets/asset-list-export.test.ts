@@ -46,6 +46,19 @@ describe("assetFilterSummary", () => {
     ]);
   });
 
+  it("names the document filter (kártya 1277394e)", () => {
+    const summary = (text: string) =>
+      assetFilterSummary(new URLSearchParams(`status=ALL&${text}`)).slice(1);
+    expect(summary("document=without&documentType=MANUAL")).toEqual([
+      "Kézikönyv: nincs kézikönyve",
+    ]);
+    expect(summary("document=with&documentType=WARRANTY")).toEqual([
+      "Csatolmány: van garancialevele",
+    ]);
+    expect(summary("document=with")).toEqual(["Csatolmány: van csatolmánya"]);
+    expect(summary("documentType=MANUAL")).toEqual([]);
+  });
+
   it("unset filters stay out; 'all' and 'no category' are said as such", () => {
     expect(
       assetFilterSummary(new URLSearchParams("status=ALL&category=without")),

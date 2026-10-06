@@ -1,8 +1,9 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 
+import { prisma } from "@acropora/database";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 
@@ -109,5 +110,60 @@ describe("the asset list query", () => {
       ).list,
     );
     assert.match(asPartner, /"documents":\{"some":\{"type":\{"in":\[\]\}\}\}/);
+  });
+});
+
+/*
+  AZ EXPORT IS SZŰR (acrobot 26949, a #1528 után). A valódi tároló `listAll`-ja
+  ugyanazt a feltételt kéri a Prisma-tól, mint a lista, és abban benne a
+  kézikönyv-feltétel. A Prisma-delegált Proxy, ezért közvetlen hozzárendelés
+  (mint az `asset-list-export-scope.spec.ts`-ben), és utána az eredeti vissza.
+*/
+describe("the export filters by document too", () => {
+  const asset = prisma.asset;
+  const original = {
+    findMany: asset.findMany,
+    count: asset.count,
+    groupBy: asset.groupBy,
+  };
+  afterEach(() => {
+    asset.findMany = original.findMany;
+    asset.count = original.count;
+    asset.groupBy = original.groupBy;
+  });
+
+  it("listAll asks Prisma for the list's condition, with the manual filter in it", async () => {
+    const wheres: { op: string; where: unknown }[] = [];
+    asset.findMany = (async (args: { where?: unknown }) => {
+      wheres.push({ op: "findMany", where: args.where });
+      return [];
+    }) as unknown as typeof original.findMany;
+    asset.count = (async (args: { where?: unknown }) => {
+      wheres.push({ op: "count", where: args.where });
+      return 1;
+    }) as unknown as typeof original.count;
+    asset.groupBy = (async () => []) as unknown as typeof original.groupBy;
+
+    const repository = new ServiceAssetsRepository();
+    const query = plainToInstance(AssetListQueryDto, {
+      document: "without",
+      documentType: "MANUAL",
+      search: "Astral",
+    });
+    await repository.list(query, internal, []);
+    const listWhere = wheres.find((w) => w.op === "findMany")!.where;
+    wheres.length = 0;
+    await repository.listAll(query, internal, [], 5000);
+    const exportWheres = wheres
+      .filter((w) => w.op === "findMany")
+      .map((w) => w.where);
+    assert.ok(exportWheres.length > 0, "listAll did not query");
+    for (const where of exportWheres) {
+      assert.deepEqual(where, listWhere);
+      assert.match(
+        JSON.stringify(where),
+        /"documents":\{"none":\{"type":\{"in":\["MANUAL"\]\}\}\}/,
+      );
+    }
   });
 });
