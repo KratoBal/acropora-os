@@ -30,7 +30,11 @@ export function BillingPartnerCard({
 }: {
   token: string;
   customer: BillingDocumentCustomer | null;
-  onChange: (customer: BillingDocumentCustomer) => void;
+  /** A vevő, és a fizetési feltétele (napok; `null`: az alapérték). */
+  onChange: (
+    customer: BillingDocumentCustomer,
+    terms: { paymentDueDays: number | null },
+  ) => void;
   disabled?: boolean;
 }) {
   const [picking, setPicking] = useState(customer === null);
@@ -83,16 +87,19 @@ export function BillingPartnerCard({
       // AZ ADÓSZÁM A RÉSZLETLAPON ÁLL, a listán nem: a kártya ne mutasson
       // hiányt ott, ahol csak nem kértük le.
       const detail = await customersApi.detail(token, summary.id);
-      onChange({
-        id: detail.id,
-        name: detail.companyName?.trim() || detail.displayName,
-        address: detail.address,
-        taxNumber: detail.taxNumber ?? null,
-        euTaxNumber: null,
-        contactName: null,
-        email: detail.email ?? null,
-        internalCode: detail.customerNumber,
-      });
+      onChange(
+        {
+          id: detail.id,
+          name: detail.companyName?.trim() || detail.displayName,
+          address: detail.address,
+          taxNumber: detail.taxNumber ?? null,
+          euTaxNumber: null,
+          contactName: null,
+          email: detail.email ?? null,
+          internalCode: detail.customerNumber,
+        },
+        { paymentDueDays: detail.paymentDueDays },
+      );
       setPicking(false);
       setSearch("");
     } catch (cause) {

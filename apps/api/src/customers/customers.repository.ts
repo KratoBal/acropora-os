@@ -340,6 +340,7 @@ export class CustomersRepository extends Repository {
     return {
       ...this.toSummary(customer, unasExternalId),
       taxNumber: customer.taxNumber ?? undefined,
+      paymentDueDays: customer.paymentDueDays ?? null,
       marketingEmailConsent: customer.marketingEmailConsent,
       marketingSmsConsent: customer.marketingSmsConsent,
       addresses: customer.addresses.map(toAddress),

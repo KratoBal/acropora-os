@@ -51,6 +51,7 @@ import {
   missingForSave,
   newEditorState,
   toDraftInput,
+  withCustomer,
   type EditorState,
 } from "./billing-editor-state";
 import { BillingPartnerCard } from "./billing-partner-card";
@@ -459,13 +460,25 @@ export function BillingDocumentEditor({
           <BillingPartnerCard
             token={token}
             customer={state.customer}
-            onChange={(customer) => change({ customer })}
+            onChange={(customer, terms) =>
+              setState((current) =>
+                current
+                  ? withCustomer(current, customer, terms.paymentDueDays)
+                  : current,
+              )
+            }
             disabled={!editable}
           />
           <BillingDocumentFields
             state={state}
             format={format}
-            onChange={(key, value) => change({ [key]: value })}
+            onChange={(key, value) =>
+              change(
+                key === "dueDate"
+                  ? { dueDate: value, dueDateTouched: true }
+                  : { [key]: value },
+              )
+            }
             disabled={!editable}
           />
           <BillingDocumentLineEditor

@@ -81,6 +81,11 @@ export interface EditorState {
   customer: BillingDocumentCustomer | null;
   fulfillmentDate: string;
   dueDate: string;
+  /**
+   * A HATÁRIDŐT KÉZZEL ÁTÍRTÁK (vagy egy tárolt vázlatból jött): a vevő
+   * választása ilyenkor nem írja felül (`withCustomer`).
+   */
+  dueDateTouched: boolean;
   paymentMethod: string;
   currency: string;
   language: string;
@@ -147,6 +152,7 @@ export function newEditorState(input: {
     customer: null,
     fulfillmentDate: input.today,
     dueDate: addDays(input.today, DEFAULT_PAYMENT_DAYS),
+    dueDateTouched: false,
     paymentMethod: PAYMENT_METHODS[0],
     currency: "HUF",
     language: "hu",
@@ -155,6 +161,30 @@ export function newEditorState(input: {
     sourceType: input.sourceType ?? null,
     sourceId: input.sourceId ?? null,
     lines: [],
+  };
+}
+
+/**
+ * A VEVŐ VÁLASZTÁSA A FIZETÉSI FELTÉTELLEL (Balázs, 2026-10-06 08:27 UTC; a
+ * vevő `paymentDueDays`-e, a Partnerek oldalon állítva: van, aki 8, van, aki
+ * 30 nap alatt fizet). A határidő a teljesítés napja és a vevő fizetési
+ * napjai, ha nincs neki, a nyolc nap alapérték. Kézzel átírt (vagy tárolt
+ * vázlatból jött) határidőt nem ír felül, és teljesítési nap nélkül sem számol.
+ */
+export function withCustomer(
+  state: EditorState,
+  customer: BillingDocumentCustomer,
+  paymentDueDays: number | null,
+): EditorState {
+  if (state.dueDateTouched || !state.fulfillmentDate)
+    return { ...state, customer };
+  return {
+    ...state,
+    customer,
+    dueDate: addDays(
+      state.fulfillmentDate,
+      paymentDueDays ?? DEFAULT_PAYMENT_DAYS,
+    ),
   };
 }
 
@@ -197,6 +227,8 @@ export function fromDetail(detail: BillingDocumentDetail): EditorState {
     customer: detail.customer,
     fulfillmentDate: detail.fulfillmentDate ?? "",
     dueDate: detail.dueDate ?? "",
+    // a tárolt határidő döntés volt: egy másik vevő választása nem írja át csendben
+    dueDateTouched: !!detail.dueDate,
     paymentMethod: detail.paymentMethod ?? "",
     currency: detail.currency,
     language: detail.language,
