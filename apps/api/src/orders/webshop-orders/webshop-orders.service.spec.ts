@@ -340,10 +340,11 @@ describe("WebshopOrdersService.detail", () => {
     assert.deepEqual(split.split, {
       from: { id: "order_40", displayId: 40 },
       into: [{ id: "order_41", displayId: null }],
+      unfinished: null,
     });
     assert.equal(split.relatedOrder, null);
     const plain = await detailService().orders.detail("order_38", NOW);
-    assert.deepEqual(plain.split, { from: null, into: [] });
+    assert.deepEqual(plain.split, { from: null, into: [], unfinished: null });
   });
 
   it("an unknown order is 404, a webshop error 503; a guest's order count is not asked", async () => {
