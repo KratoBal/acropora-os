@@ -52,6 +52,8 @@ export interface CreateWebshopParcelInput {
   codReference?: string;
   /** A cimke szovege, a szallitonak tovabbadva. */
   labelContent?: string;
+  /** A szallitonak szolo uzenet (Foxpost: `deliveryNote`). */
+  courierNote?: string;
   createdByUserId?: string | null;
 }
 
@@ -135,6 +137,7 @@ export class WebshopParcelService {
         ...(input.codHuf ? { codHuf: input.codHuf } : {}),
         ...(input.codReference ? { codReference: input.codReference } : {}),
         ...(input.labelContent ? { labelContent: input.labelContent } : {}),
+        ...(input.courierNote ? { courierNote: input.courierNote } : {}),
       });
     } catch (error) {
       // csak a BIZTOS elutasitas engedi el a foglalast; ismeretlen hiba bizonytalan

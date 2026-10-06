@@ -155,6 +155,14 @@ export class FoxpostApiClient implements CarrierClient {
             recipientZip: input.destination.zip,
             recipientCity: input.destination.city,
             recipientAddress: input.destination.address,
+            // a hazhoz szallito futarnak; a mezo 50 karakteres (teszt-API, v1.2.14)
+            ...(input.courierNote
+              ? {
+                  deliveryNote: Array.from(input.courierNote.trim())
+                    .slice(0, 50)
+                    .join(""),
+                }
+              : {}),
           }),
     };
 

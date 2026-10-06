@@ -343,6 +343,18 @@ export interface WebshopOrderDetail {
   } | null;
   /** A belső megjegyzés: csak az OS-é, a vevő nem látja. */
   internalNote: { text: string; updatedAt: string } | null;
+  /**
+   * A vevő megjegyzése és a szállítónak szóló üzenet (commerce #493: a pénztár
+   * kéri be, a rendelés metaadatán áll). `null`: nincs.
+   */
+  notes: { customer: string | null; carrier: string | null };
+  /** Szerkeszthető-e most a két megjegyzés, és ha nem, miért. */
+  notesEdit: {
+    customer: { allowed: boolean; reason: string | null };
+    carrier: { allowed: boolean; reason: string | null };
+  };
+  /** Cserélhető-e most a csomagpont (commerce #494), és ha nem, miért. */
+  pointEdit: { allowed: boolean; reason: string | null };
   /** Szerkeszthető-e most a számlázási, illetve a szállítási cím, és ha nem, miért. */
   addressEdit: {
     billing: { allowed: boolean; reason: string | null };
@@ -519,4 +531,37 @@ export function glsDeliveryLabel(input: {
   if (!input.storePickup && !input.hasPoint && /^gls/i.test(input.method ?? ""))
     return "GLS házhoz";
   return null;
+}
+
+/** A szállítónak szóló üzenet felső határa: a Foxpost mezője (commerce #493). */
+export const WEBSHOP_CARRIER_NOTE_MAX = 50;
+/** A vevő megjegyzésének felső határa (commerce #493). */
+export const WEBSHOP_CUSTOMER_NOTE_MAX = 1000;
+
+/** Egy választható csomagpont a cseréhez (commerce #494, a pénztár listája). */
+export interface WebshopPickupPointOption {
+  id: string;
+  name: string;
+  /** „1033 Budapest, Szentendrei út 115.” */
+  address: string;
+  /** GLS-nél csomagpont vagy automata; Foxpostnál `null`. */
+  kind: WebshopPointKind | null;
+  /** Foxpostnál a pont típusa a saját szavával („FOXPOST A-BOX”); GLS-nél `null`. */
+  variant: string | null;
+  /** Üzemen kívüli GLS-automata: nem választható. */
+  outOfOrder: boolean;
+}
+
+export interface WebshopPickupPointSearch {
+  carrier: "FOXPOST" | "GLS";
+  currentPointId: string | null;
+  points: WebshopPickupPointOption[];
+  /** Az összes találat, nem csak a lap. */
+  count: number;
+}
+
+export interface WebshopOrderNotesInput {
+  /** Hiányzó mező: nem változik; üres szöveg: törlődik. */
+  customerNote?: string;
+  carrierNote?: string;
 }

@@ -573,6 +573,48 @@ export interface MedusaOrderOverviewPage {
 }
 
 /** Egy cím a Medusa rendelésen (a kért mezőkkel). */
+/**
+ * A CSOMAGPONT A WEBSHOP LISTÁJÁBÓL (commerce #494, a pénztár pontjai). Csak a
+ * mezők, amiket az OS használ: a két fuvarozó közös része, és GLS-nél a fajta
+ * és a terhelés, Foxpostnál a pont típusa.
+ */
+export interface MedusaPickupPointRow {
+  id: string;
+  name: string;
+  zip: string;
+  city: string;
+  address: string;
+  /** GLS: `parcel-shop` / `parcel-locker`. */
+  type?: string | null;
+  /** Foxpost: „FOXPOST A-BOX”, „Packeta Z-Pont”... */
+  variant?: string | null;
+  /** GLS: `outOfOrder` nem választható. */
+  locker_saturation?: string | null;
+}
+
+/** `GET /admin/order-shipping/:id/points` (commerce #494). */
+export interface MedusaOrderPointSearch {
+  carrier: "foxpost" | "gls";
+  current_point_id: string | null;
+  available: boolean;
+  pickup_points?: MedusaPickupPointRow[];
+  count?: number;
+}
+
+/** `POST /admin/order-shipping/:id/point` (commerce #494). */
+export interface MedusaOrderPointChange {
+  carrier: "foxpost" | "gls";
+  changed: boolean;
+  previous_point_id: string | null;
+  point: Record<string, unknown> | null;
+}
+
+/** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
+export interface MedusaOrderNotes {
+  customer_note: string | null;
+  carrier_note: string | null;
+}
+
 export interface MedusaOrderAddressRow {
   first_name?: string | null;
   last_name?: string | null;
@@ -842,6 +884,26 @@ export interface MedusaAdminClient {
     kind: "billing" | "shipping",
     address: MedusaOrderAddressRow,
   ): Promise<void>;
+  /**
+   * A rendelés módjához választható csomagpontok (commerce #494). A fuvarozót
+   * és a nehézáru-szabályt a rendelés dönti el, nem a hívó. 503: a fuvarozó
+   * listája most nem érhető el.
+   */
+  orderPickupPoints(
+    orderId: string,
+    query: string,
+    limit: number,
+  ): Promise<MedusaOrderPointSearch>;
+  /** A csomagpont cseréje (commerce #494); `actor` az előzménybe kerül. */
+  changeOrderPickupPoint(
+    orderId: string,
+    input: { point_id: string; source?: "finder" | "fallback"; actor?: string },
+  ): Promise<MedusaOrderPointChange>;
+  /** A vevő és a szállító megjegyzése (commerce #493); a hiányzó kulcs nem változik. */
+  updateOrderNotes(
+    orderId: string,
+    input: { customer_note?: string | null; carrier_note?: string | null },
+  ): Promise<MedusaOrderNotes>;
   /** Termékváltozat keresése név vagy cikkszám szerint (a tétel cseréjéhez). */
   searchVariants(query: string): Promise<MedusaVariantSearchRow[]>;
   /**
@@ -1714,6 +1776,37 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         method: "POST",
         body: JSON.stringify({ [`${kind}_address`]: address }),
       },
+    );
+  }
+
+  async orderPickupPoints(
+    orderId: string,
+    query: string,
+    limit: number,
+  ): Promise<MedusaOrderPointSearch> {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request<MedusaOrderPointSearch>(
+      `/admin/order-shipping/${encodeURIComponent(orderId)}/points?${params.toString()}`,
+    );
+  }
+
+  async changeOrderPickupPoint(
+    orderId: string,
+    input: { point_id: string; source?: "finder" | "fallback"; actor?: string },
+  ): Promise<MedusaOrderPointChange> {
+    return this.request<MedusaOrderPointChange>(
+      `/admin/order-shipping/${encodeURIComponent(orderId)}/point`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  }
+
+  async updateOrderNotes(
+    orderId: string,
+    input: { customer_note?: string | null; carrier_note?: string | null },
+  ): Promise<MedusaOrderNotes> {
+    return this.request<MedusaOrderNotes>(
+      `/admin/order-notes/${encodeURIComponent(orderId)}`,
+      { method: "POST", body: JSON.stringify(input) },
     );
   }
 

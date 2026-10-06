@@ -36,6 +36,13 @@ export interface CreateParcelInput {
   codReference?: string;
   /** A cimken allo szoveg: a rendelesazonosito (es kesobb a vevo megjegyzese). GLS: `Content`. */
   labelContent?: string;
+  /**
+   * A szallitonak szolo uzenet (commerce #493: a penztarban, legfeljebb 50
+   * karakter, csak hazhoz szallitasnal). Foxpost: `deliveryNote` (a hazhoz
+   * szallito futarnak, 50 karakter, a teszt-API leirasan merve, v1.2.14). GLS:
+   * a cimke szovegebe kerul (`labelContent`), mert kulon mezo nincs ra.
+   */
+  courierNote?: string;
 }
 
 export interface TrackingEvent {

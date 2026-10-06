@@ -5,6 +5,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { notesOf } from "./webshop-order-address.rules.js";
 import {
   WEBSHOP_ORDER_STATUSES,
   type AuthenticatedUser,
@@ -119,6 +120,7 @@ export class WebshopOrderParcelService {
     if (!input.ok) throw new UnprocessableEntityException(input.message);
 
     const parcelSize = sizeFor(input.carrier, size);
+    const courierNote = notesOf(order.metadata).carrier ?? undefined;
     const parcel = await this.carrier(() =>
       this.parcels.createParcel({
         commerceOrderId: order.id,
@@ -132,7 +134,16 @@ export class WebshopOrderParcelService {
         ...(input.codHuf && invoice?.number
           ? { codReference: invoice.number }
           : {}),
-        labelContent: `Rendelés #${order.display_id}`,
+        /*
+          A SZÁLLÍTÓNAK SZÓLÓ ÜZENET (commerce #493) a rendelés metaadatán áll,
+          és csak házhoz szállításnál értelmes (a pénztár másutt törli). GLS-nél
+          a címke szövegébe kerül a rendelésszám után (a kliens 40 karakterre
+          vág), Foxpostnál a futárnak szóló mezőbe.
+        */
+        labelContent: courierNote
+          ? `Rendelés #${order.display_id} · ${courierNote}`
+          : `Rendelés #${order.display_id}`,
+        ...(courierNote ? { courierNote } : {}),
         createdByUserId: user.id,
       }),
     );
