@@ -16,6 +16,9 @@ import {
   looksLikeReminder,
   otherDocumentFileName,
   readInvoiceText,
+  knownNumberInText,
+  withKnownNumber,
+  type KnownInvoiceNumber,
 } from "./invoice-text.js";
 
 /**
@@ -687,6 +690,128 @@ describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
         "Ellenoldali számlaszám | 50453331 -10000843 -00000000",
       ]).invoiceNumber,
       null,
+    );
+  });
+});
+
+/*
+  AZ ISMERT SZÁM SZÁLLÍTÓI ADÓSZÁM NÉLKÜL (acrobot 26885). A sorok a Tisza 97
+  U26/03861-SZ PDF-jének mért alakja (2026-10-06, éles): a szám egy táblázat
+  értéksorában áll, a szállító adószáma sehol, csak a miénk. MI PIROSÍT: ha
+  ez nem ad számot és adószámot; ha egy szó RÉSZLETE, egy rövid szám, két
+  különböző ismert szám, két szállító azonos száma vagy a saját adószámunk
+  sora mégis számot ad; ha egy címkézett, eltérő számot felülír.
+*/
+describe("a known number when the text names no supplier tax number (Tisza 97)", () => {
+  const TISZA = [
+    "Számla",
+    "BUDAPEST BANK 10104167-11770300-01004002 | Adószám: | 23916229-2-42",
+    "Fizetés módja | Teljesítés | ideje | Számla kelte | Fizetési határidő | Számla sorszáma",
+    "Átutalás 8 nap | 2026.10.05 | 2026.10.05 | 2026.10.13 | U26/03861-SZ",
+    "Számlaérték összesen: | 73 139,00 Ft",
+  ];
+  const KNOWN: KnownInvoiceNumber[] = [
+    { number: "U26/03861-SZ", supplierTaxNumber: "14880568-2-43" },
+    { number: "U26/01266-SZ", supplierTaxNumber: "14880568-2-43" },
+    { number: "E-KBOSS-2026-560251", supplierTaxNumber: "13917358-2-42" },
+  ];
+
+  it("finds the number in the table row and brings its supplier's tax number", () => {
+    assert.deepEqual(knownNumberInText(TISZA, KNOWN), KNOWN[0]);
+  });
+
+  it("completes the file-name reading into a NAV reading", () => {
+    assert.deepEqual(
+      withKnownNumber(
+        {
+          invoiceNumber: "03861-SZ",
+          numberFrom: "FILE_NAME",
+          supplierTaxNumber: null,
+          bankReference: "03861-SZ",
+        },
+        TISZA,
+        KNOWN,
+      ),
+      {
+        invoiceNumber: "U26/03861-SZ",
+        numberFrom: "NAV",
+        supplierTaxNumber: "14880568-2-43",
+        bankReference: "03861-SZ",
+      },
+    );
+  });
+
+  it("a number the PDF split into two words still counts", () => {
+    const split = TISZA.map((line) =>
+      line.replace("U26/03861-SZ", "U26/ 03861-SZ"),
+    );
+    assert.deepEqual(knownNumberInText(split, KNOWN), KNOWN[0]);
+  });
+
+  it("a number inside a longer word does not count", () => {
+    const inside = TISZA.map((line) =>
+      line.replace("U26/03861-SZ", "XU26/03861-SZ7"),
+    );
+    assert.equal(knownNumberInText(inside, KNOWN), null);
+  });
+
+  it("a date and a short number do not count, though both stand as words", () => {
+    // each is a word of the text: "2026.10.05" (eight digits) and "139,00"
+    const dateOnly = [
+      { number: "2026.10.05", supplierTaxNumber: "11111111-2-11" },
+    ];
+    const shortOnly = [{ number: "13900", supplierTaxNumber: "11111111-2-11" }];
+    assert.equal(knownNumberInText(TISZA, dateOnly), null);
+    assert.equal(knownNumberInText(TISZA, shortOnly), null);
+  });
+
+  it("two different known numbers in the text decide nothing", () => {
+    const two = [...TISZA, "Hivatkozás: U26/01266-SZ"];
+    assert.equal(knownNumberInText(two, KNOWN), null);
+  });
+
+  it("the same number from two suppliers decides nothing", () => {
+    const twice = [
+      ...KNOWN,
+      { number: "U26/03861-SZ", supplierTaxNumber: "22222222-2-22" },
+    ];
+    assert.equal(knownNumberInText(TISZA, twice), null);
+  });
+
+  it("a row under our own tax number is never the supplier", () => {
+    const ours = [
+      { number: "U26/03861-SZ", supplierTaxNumber: "23916229-2-42" },
+    ];
+    assert.equal(knownNumberInText(TISZA, ours), null);
+  });
+
+  it("a reading that already has a supplier tax number is left as it is", () => {
+    const read = {
+      invoiceNumber: "X-1",
+      numberFrom: "LABEL" as const,
+      supplierTaxNumber: "12345678-2-42",
+    };
+    assert.equal(withKnownNumber(read, TISZA, KNOWN), read);
+  });
+
+  it("a labelled, different number wins over a known one in the text", () => {
+    const read = {
+      invoiceNumber: "U26/09999-SZ",
+      numberFrom: "LABEL" as const,
+      supplierTaxNumber: null,
+    };
+    assert.equal(withKnownNumber(read, TISZA, KNOWN), read);
+  });
+
+  it("a labelled, same number gets the supplier's tax number", () => {
+    const read = {
+      invoiceNumber: "U26/03861-SZ",
+      numberFrom: "LABEL" as const,
+      supplierTaxNumber: null,
+    };
+    assert.equal(
+      withKnownNumber(read, TISZA, KNOWN).supplierTaxNumber,
+      "14880568-2-43",
     );
   });
 });

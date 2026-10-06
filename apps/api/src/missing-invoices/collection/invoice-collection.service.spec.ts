@@ -17,7 +17,7 @@ import {
   INVOICE_COLLECTION_RULES_VERSION,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
-import type { CardDebit } from "./invoice-text.js";
+import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 import type { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
   INVOICE_COLLECTION_HEARTBEAT_MS,
@@ -59,6 +59,8 @@ function setup(input: {
   failingCode?: string;
   failingDetail?: string;
   nav?: Record<string, string[]>;
+  /** az összes ismert bejövő szám, szállítótól függetlenül (`knownNumbers`) */
+  knownInvoices?: KnownInvoiceNumber[];
   debits?: string[];
   cardDebits?: CardDebit[];
   retryDue?: boolean;
@@ -106,6 +108,7 @@ function setup(input: {
     hasContent: async (sha: string) => knownShas.has(sha),
     sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
+    knownNumbers: async () => input.knownInvoices ?? [],
     ownAccounts: async () => ["1170900220624460"],
     debitNarratives: async () => input.debits ?? [],
     cardDebits: async () => input.cardDebits ?? [],
@@ -794,6 +797,48 @@ describe("InvoiceCollectionService", () => {
   it("a silent run goes stale only after several missed beats", () => {
     assert.ok(STALE_RUN_AFTER_MS >= 5 * INVOICE_COLLECTION_HEARTBEAT_MS);
     assert.ok(STALE_RUN_AFTER_MS <= 15 * 60_000);
+  });
+
+  /*
+    A TISZA 97 ESETE (acrobot 26885): a PDF szövegében a szám áll, a szállító
+    adószáma nem, csak a miénk. Eddig UNMATCHED lett (vagy a fájlnév csonka
+    számával tárolódott); most az ismert szám a szállító adószámával tárolódik.
+  */
+  it("stores a PDF without the supplier's tax number when a known number stands in it", async () => {
+    const invoice = await pdf([
+      "Számla",
+      "Vevő: Acropora Kft., adószám: 23916229-2-42",
+      "Fizetés módja | Számla kelte | Számla sorszáma",
+      "Átutalás 8 nap | 2026.10.05 | U26/03861-SZ",
+      "Számlaérték összesen: 73 139,00 Ft",
+    ]);
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          {
+            fileName: "U26_03861-SZ_Acropora Kereskedelm.pdf",
+            buffer: invoice,
+          },
+        ],
+      },
+      knownInvoices: [
+        { number: "U26/03861-SZ", supplierTaxNumber: "14880568-2-43" },
+        { number: "U26/01266-SZ", supplierTaxNumber: "14880568-2-43" },
+      ],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => {
+        const r = d.textReading as {
+          invoiceNumber?: string;
+          numberFrom?: string;
+          supplierTaxNumber?: string;
+        };
+        return [r.invoiceNumber, r.numberFrom, r.supplierTaxNumber];
+      }),
+      [["U26/03861-SZ", "NAV", "14880568-2-43"]],
+    );
   });
 
   it("re-evaluates for real with apply: an ordinary run that re-reads although it is not due", async () => {

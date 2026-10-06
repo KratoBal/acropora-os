@@ -549,6 +549,91 @@ export function readInvoiceText(
   return fromName ? reading(fromName, "FILE_NAME") : reading(null, null);
 }
 
+/** Egy ismert bejövő számla (NAV-sor vagy a Számlázz.hu feed sora). */
+export interface KnownInvoiceNumber {
+  number: string;
+  supplierTaxNumber: string;
+}
+
+/** Ennél rövidebb ismert szám nem azonosít egy számlát a szövegben (dátum, összeg). */
+const KNOWN_NUMBER_MIN = 8;
+
+/**
+ * AZ ISMERT SZÁM A SZÖVEGBEN, HA A SZÁLLÍTÓ ADÓSZÁMA NEM ÁLL BENNE (acrobot
+ * 26885, Tisza 97 U26/03861-SZ). Mérve 2026-10-06, éles: a PDF szövegében a
+ * számla száma ott áll (egy táblázat fejléce alatti sorban), a szállító
+ * adószáma viszont NEM, csak a miénk. A NAV-ág ezért el sem indult (az a
+ * szövegből vett adószámmal keres), és a begyűjtött PDF nem kötődött a
+ * számlához, mert ahhoz a szám ÉS az adószám kell.
+ *
+ * Itt az ÖSSZES ismert bejövő számot nézzük, szállítótól függetlenül, de
+ * szigorúbban, mint a NAV-ág: a számnak a szöveg egy SZAVA kell legyen
+ * (vagy két szomszédos szava, ha a PDF kettévágta), nem egy tetszőleges
+ * részlete, mert itt ezernyi számot vetünk össze, nem egy szállítóét. Legalább
+ * nyolc jel, benne számjegy, és a szöveg dátum-alakú szavai nem számítanak. Csak egyetlen találat számít; két különböző
+ * ismert szám egy szövegben (például egy hivatkozott korábbi számla) nem dönt.
+ */
+export function knownNumberInText(
+  lines: readonly string[],
+  known: readonly KnownInvoiceNumber[],
+): KnownInvoiceNumber | null {
+  const ours = ACROPORA_COMPANY.taxNumberBase;
+  // a dátum nem szám: egy 8 jegyű számlaszám a kelte számjegyeivel is egyezhet
+  const words = lines.flatMap((line) =>
+    line
+      .split(/[\s|]+/)
+      .filter((word) => !DATE_SHAPE.test(word.replace(/\.$/, "")))
+      .map(compactNumber)
+      .filter(Boolean),
+  );
+  const present = new Set(words);
+  for (let i = 0; i + 1 < words.length; i++)
+    present.add(`${words[i]}${words[i + 1]}`);
+  const hits = new Map<string, KnownInvoiceNumber>();
+  for (const candidate of known) {
+    const compact = compactNumber(candidate.number);
+    if (compact.length < KNOWN_NUMBER_MIN || !/\d/.test(compact)) continue;
+    if (taxBase(candidate.supplierTaxNumber) === ours) continue;
+    if (!present.has(compact)) continue;
+    const seen = hits.get(compact);
+    // ugyanaz a szám két szállítótól: nem dönthető el, kié
+    if (
+      seen &&
+      taxBase(seen.supplierTaxNumber) !== taxBase(candidate.supplierTaxNumber)
+    )
+      hits.set(compact, { number: "", supplierTaxNumber: "" });
+    else if (!seen) hits.set(compact, candidate);
+  }
+  const found = [...hits.values()];
+  return found.length === 1 && found[0]!.number ? found[0]! : null;
+}
+
+/**
+ * Az olvasat kiegészítése az ismert számmal, ha a szöveg nem adott szállítói
+ * adószámot. A címkézett, ELTÉRŐ szám nyer (a NAV-ág szabálya szerint): ott a
+ * szövegben álló ismert szám egy hivatkozott másik számla.
+ */
+export function withKnownNumber(
+  reading: InvoiceTextReading,
+  lines: readonly string[],
+  known: readonly KnownInvoiceNumber[],
+): InvoiceTextReading {
+  if (reading.supplierTaxNumber) return reading;
+  const hit = knownNumberInText(lines, known);
+  if (!hit) return reading;
+  if (
+    reading.numberFrom === "LABEL" &&
+    compactNumber(reading.invoiceNumber ?? "") !== compactNumber(hit.number)
+  )
+    return reading;
+  return {
+    ...reading,
+    invoiceNumber: hit.number,
+    numberFrom: "NAV",
+    supplierTaxNumber: hit.supplierTaxNumber,
+  };
+}
+
 /**
  * A NAV NÉLKÜLI SZÁMLA ÉS A KÁRTYÁS FIZETÉS (acrobot 25666 és 25673, Balázs a
  * Hetznerről): a külföldi előfizetés számlája nincs a NAV-ban, és a kártyás
