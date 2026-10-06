@@ -75,22 +75,46 @@ export function foxpostFieldErrorCode(
 }
 
 /**
- * A LETREHOZASI VALASZ KULCSNEVEI, ERTEK NELKUL: a valasze es az elso
- * csomag-eleme. Ha a `parcels` nem tomb vagy ures, azt mondja ki, nem talal ki
+ * A LETREHOZASI VALASZ KULCSNEVEI, ERTEK NELKUL: a valasze, es az elso
+ * csomag-eleme kulcsonkent azzal, hogy URES-e vagy VAN-E erteke (`=empty`,
+ * `=set`). Ha a `parcels` nem tomb vagy ures, azt mondja ki, nem talal ki
  * kulcsot.
+ *
+ * MIERT A JELOLES (acrobot merese, 2026-10-06 17:41, kartya 6077cda9): egy
+ * ervenytelen pontra kuldott, csomagot NEM letrehozo hivas valaszaban a
+ * `barcode` kulcs ott all (mellette `barcodeTof`, `clFoxId`, `uniqueBarcode`,
+ * `orderId`, `sendCode` es tarsai). Az eles probanal tehat valoszinuleg URES
+ * volt, es az azonosito egy masik kulcson allt. Hogy melyiken, azt a
+ * kovetkezo valasz ebbol a jelolesbol egy lepesben megmondja.
  */
 export function foxpostAnswerKeys(body: unknown): string {
-  const names = (value: unknown) =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? Object.keys(value).join(", ") || "(none)"
-      : `(${value === null ? "null" : Array.isArray(value) ? "array" : typeof value})`;
-  const parcels = (body as { parcels?: unknown } | null)?.parcels;
-  const parcel = Array.isArray(parcels)
-    ? parcels.length
-      ? names(parcels[0])
-      : "(empty list)"
-    : `(${parcels === undefined ? "missing" : Array.isArray(parcels) ? "array" : typeof parcels})`;
-  return `answer keys: ${names(body)}; parcel keys: ${parcel}`;
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  const kind = (value: unknown) =>
+    `(${value === null ? "null" : Array.isArray(value) ? "array" : typeof value})`;
+  const empty = (value: unknown) =>
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && !value.trim()) ||
+    (Array.isArray(value) && value.length === 0) ||
+    (isObject(value) && Object.keys(value).length === 0);
+  const answer = isObject(body)
+    ? Object.keys(body).join(", ") || "(none)"
+    : kind(body);
+  const parcels = isObject(body) ? body.parcels : undefined;
+  const element = Array.isArray(parcels) ? parcels[0] : undefined;
+  const parcel = !Array.isArray(parcels)
+    ? parcels === undefined
+      ? "(missing)"
+      : kind(parcels)
+    : parcels.length === 0
+      ? "(empty list)"
+      : !isObject(element)
+        ? kind(element)
+        : Object.entries(element)
+            .map(([key, value]) => `${key}=${empty(value) ? "empty" : "set"}`)
+            .join(", ") || "(none)";
+  return `answer keys: ${answer}; parcel keys: ${parcel}`;
 }
 
 export class FoxpostApiClient implements CarrierClient {
