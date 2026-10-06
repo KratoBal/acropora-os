@@ -80,6 +80,9 @@ A két repo Figma-mapje az elején hivatkozzon egymásra, mert az agentek által
 
 A mapping **ne csak route-ot mutasson**.
 
+**Relatív útvonalak alapja:** az OS webes route-minták alapértelmezésben az `apps/web/src/app/(shell)/` könyvtárhoz képest értendők. Ha ettől eltérő app vagy route group az owner (például `apps/mobile/src/app/`, `apps/partner/src/app/(portal)/`, illetve Commerce-ben `apps/storefront/src/app/[countryCode]/`), azt a mapping sor explicit módon jelölje. A validator ugyanezekből a deklarált base pathokból induljon.
+
+
 Az OS-ben sok `page.tsx` csak vékony belépési pont, a valódi UI a domain-specifikus komponensmappákban él. Ezért minden releváns Figma screenhez két kódbeli hivatkozás kell:
 
 **route pattern + component directory**
