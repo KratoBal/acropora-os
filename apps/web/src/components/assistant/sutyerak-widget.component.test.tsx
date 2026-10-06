@@ -191,9 +191,9 @@ describe("Sutyerák widget calibration", () => {
     await open();
     submit();
     await screen.findByRole("alert");
-    expect(figure().querySelector("img")?.getAttribute("src")).toMatch(
-      /elakadt/,
-    );
+    expect(
+      screen.getByTestId("sutyerak-figure").getAttribute("data-state"),
+    ).toBe("stuck");
   });
   it("saved position is clamped after resize and history belongs only to this employee", async () => {
     localStorage.setItem(
@@ -217,7 +217,7 @@ describe("Sutyerák widget calibration", () => {
     });
     act(() => window.dispatchEvent(new Event("resize")));
     expect(figure().style.width).toBe("192px");
-    expect(figure().querySelector("img")?.getAttribute("width")).toBe("192");
+    expect(screen.getByTestId("sutyerak-figure").style.width).toBe("192px");
     expect(Number.parseFloat(figure().style.left)).toBeLessThanOrEqual(
       320 - 192,
     );
@@ -252,5 +252,74 @@ describe("Sutyerák widget calibration", () => {
     expect(markup.container.querySelector("li")?.textContent).toBe("Első");
     expect(markup.container.querySelector("table")).not.toBeNull();
     expect(markup.container.querySelector("img")).toBeNull();
+  });
+});
+
+/*
+  A FIGURA A WIDGET ÁLLAPOTÁT MUTATJA (kártya e0780477). MI PIROSÍT: puszta
+  fókuszra jegyzetel; a gépelés vagy az IME nem indítja; a kérés alatt nem
+  keres; az első nem üres szöveg nem váltja válaszra; a figura nem dekoratív
+  (a képek megismétlik a gomb címkéjét); a bemutató gombjai az éles felületre
+  kerülnek.
+*/
+describe("Sutyerák's figure follows the widget", () => {
+  const body = () => screen.getByTestId("sutyerak-figure");
+  const field = () => screen.getByLabelText("Kérdés Sutyeráknak");
+
+  it("focus alone rests; typing, deleting and IME composition take notes", async () => {
+    fixture();
+    await open();
+    fireEvent.focus(field());
+    expect(body().getAttribute("data-state")).toBe("resting");
+    fireEvent.change(field(), { target: { value: "M" } });
+    expect(body().getAttribute("data-state")).toBe("takingNotes");
+    fireEvent.blur(field());
+    expect(body().getAttribute("data-state")).toBe("resting");
+    fireEvent.change(field(), { target: { value: "" } });
+    expect(body().getAttribute("data-state")).toBe("takingNotes");
+    fireEvent.blur(field());
+    fireEvent.compositionStart(field());
+    expect(body().getAttribute("data-state")).toBe("takingNotes");
+  });
+
+  it("a request searches, and the first non-empty text answers", async () => {
+    let emitText: ((delta: string) => void) | undefined;
+    api.ask.mockImplementation(
+      (_token, _input, emit) =>
+        new Promise<void>(() => {
+          emitText = (delta) => emit({ type: "text", delta });
+        }),
+    );
+    fixture();
+    await open();
+    submit();
+    expect(body().getAttribute("data-state")).toBe("searching");
+    fireEvent.change(field(), { target: { value: "közben gépelek" } });
+    expect(body().getAttribute("data-state")).toBe("searching");
+    act(() => emitText!(" "));
+    expect(body().getAttribute("data-state")).toBe("searching");
+    act(() => emitText!("Folyamatban"));
+    expect(body().getAttribute("data-state")).toBe("answering");
+  });
+
+  it("the figure is decorative, one pose at a time, from local layers, and no demo controls", async () => {
+    fixture();
+    await open();
+    expect(body().getAttribute("aria-hidden")).toBe("true");
+    const images = Array.from(body().querySelectorAll("img"));
+    expect(images.every((img) => img.getAttribute("alt") === "")).toBe(true);
+    expect(
+      images.every((img) =>
+        (img.getAttribute("src") ?? "").startsWith("/sutyerak/"),
+      ),
+    ).toBe(true);
+    expect(
+      body().querySelectorAll('[data-layer="valaszol-teljes"]'),
+    ).toHaveLength(0);
+    expect(
+      screen.queryByRole("button", {
+        name: /Keresés → válasz|Mozgás szüneteltetése|Sötét háttér/,
+      }),
+    ).toBeNull();
   });
 });

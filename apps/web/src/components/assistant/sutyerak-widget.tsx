@@ -19,7 +19,8 @@ import {
   panelPosition,
   type FigurePosition,
 } from "./position";
-import { SUTYERAK_ASSETS } from "./assets";
+import { SutyerakFigure } from "./sutyerak-figure";
+import { useSutyerakActivity } from "./use-sutyerak-activity";
 
 export function SutyerakWidget() {
   const { session } = useAuth();
@@ -62,7 +63,7 @@ export function SutyerakPanel({ session }: { session: Session }) {
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [threadId, setThreadId] = useState<string>();
-  const [state, setState] = useState<keyof typeof SUTYERAK_ASSETS>("resting");
+  const activity = useSutyerakActivity();
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
   const gesture = useRef<{
@@ -72,7 +73,6 @@ export function SutyerakPanel({ session }: { session: Session }) {
     dragged: boolean;
   } | null>(null);
   const suppressClick = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     setPosition(storedPosition(userId));
@@ -107,7 +107,6 @@ export function SutyerakPanel({ session }: { session: Session }) {
     return () => {
       window.removeEventListener("resize", resize);
       active.current?.abort();
-      if (timer.current) clearTimeout(timer.current);
     };
   }, [userId]);
   useEffect(() => {
@@ -170,12 +169,12 @@ export function SutyerakPanel({ session }: { session: Session }) {
     const controller = new AbortController();
     active.current = controller;
     setBusy(true);
-    setState("thinking");
-    if (timer.current) clearTimeout(timer.current);
+    const request = activity.began();
     setQuestion("");
     const index = turns.length;
     setTurns((previous) => [...previous, { question: text, answer: "" }]);
     let failed = false;
+    let answer = "";
     const patch = (update: (turn: Turn) => Turn) =>
       setTurns((previous) =>
         previous.map((turn, i) => (i === index ? update(turn) : turn)),
@@ -183,10 +182,15 @@ export function SutyerakPanel({ session }: { session: Session }) {
     const onEvent = (message: AssistantEvent) => {
       if (controller.signal.aborted) return;
       if (message.type === "thread") rememberThread(message.threadId);
-      if (message.type === "text")
+      if (message.type === "text") {
+        answer += message.delta;
+        activity.text(request, message.delta);
         patch((turn) => ({ ...turn, answer: turn.answer + message.delta }));
-      if (message.type === "done")
+      }
+      if (message.type === "done") {
+        answer = message.answer;
         patch((turn) => ({ ...turn, answer: message.answer }));
+      }
       if (message.type === "error") {
         failed = true;
         patch((turn) => ({ ...turn, error: message.message }));
@@ -204,6 +208,7 @@ export function SutyerakPanel({ session }: { session: Session }) {
         if (!(cause instanceof ApiError && cause.status === 403 && threadId))
           throw cause;
         rememberThread();
+        answer = "";
         patch((turn) => ({ ...turn, answer: "", error: undefined }));
         await assistantApi.ask(
           session.token ?? "",
@@ -213,13 +218,12 @@ export function SutyerakPanel({ session }: { session: Session }) {
         );
       }
       if (!controller.signal.aborted) {
-        setState(failed ? "stuck" : "found");
-        if (!failed)
-          timer.current = setTimeout(() => setState("resting"), 4000);
+        if (failed) activity.failed(request);
+        else activity.finished(request, answer);
       }
     } catch (cause) {
       if (!controller.signal.aborted) {
-        setState("stuck");
+        activity.failed(request);
         patch((turn) => ({
           ...turn,
           error:
@@ -242,8 +246,7 @@ export function SutyerakPanel({ session }: { session: Session }) {
     rememberThread();
     setTurns([]);
     setQuestion("");
-    setState("resting");
-    if (timer.current) clearTimeout(timer.current);
+    activity.reset();
   };
   if (!ready) return null;
   const panel = panelPosition(position, viewport.width, viewport.height);
@@ -288,15 +291,7 @@ export function SutyerakPanel({ session }: { session: Session }) {
           setOpen((value) => !value);
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- swappable local mascot assets */}
-        <img
-          src={SUTYERAK_ASSETS[state]}
-          width={FIGURE_SIZE}
-          height={FIGURE_SIZE}
-          alt=""
-          draggable={false}
-          className="h-full w-full object-contain drop-shadow-md"
-        />
+        <SutyerakFigure state={activity.figure} size={FIGURE_SIZE} />
       </button>
       {open && (
         <section
@@ -374,7 +369,15 @@ export function SutyerakPanel({ session }: { session: Session }) {
               maxLength={4000}
               rows={2}
               value={question}
-              onChange={(event) => setQuestion(event.target.value)}
+              onChange={(event) => {
+                // csak a tényleges bevitel jegyzetel (gépelés, törlés); fókusz és kurzor nem
+                if (event.target.value !== question) activity.typed();
+                setQuestion(event.target.value);
+              }}
+              onCompositionStart={activity.typed}
+              onCompositionUpdate={activity.typed}
+              onCompositionEnd={activity.typed}
+              onBlur={activity.blurred}
               placeholder="Írd ide a kérdésed…"
               className="w-full resize-none rounded-lg border border-pilot-grey-200 p-2 text-sm focus:outline-pilot-aqua-600"
             />
