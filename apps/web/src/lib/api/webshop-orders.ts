@@ -11,6 +11,7 @@ import type {
   WebshopOrderAddressInput,
   WebshopParcelSize,
   WebshopOrderNotesInput,
+  WebshopParcelTracking,
   WebshopPickupPointSearch,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -111,6 +112,13 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/address`,
       token,
       { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** A csomag állapota a szállítónál (csak olvasás). */
+  parcelTracking(token: string, id: string) {
+    return apiRequest<WebshopParcelTracking>(
+      `/webshop-orders/${encodeURIComponent(id)}/parcel/tracking`,
+      token,
     );
   },
   /** A rendelés módjához választható csomagpontok (commerce #494). */

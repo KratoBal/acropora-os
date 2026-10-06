@@ -416,6 +416,15 @@ export interface WebshopOrderParcel {
   size: string | null;
   codHuf: number | null;
   createdAt: string;
+  /** A szállító nyilvános követő oldala, ha a címe be van állítva (különben `null`). */
+  trackingUrl: string | null;
+}
+
+/** A csomag állapotai a szállítónál, a legutóbbi elöl. */
+export interface WebshopParcelTracking {
+  events: { status: string; text: string; at: string | null }[];
+  /** Mikor kérdeztük a szállítót. */
+  checkedAt: string;
 }
 
 /**

@@ -246,6 +246,13 @@ export class WebshopOrdersController {
     });
   }
 
+  /** A csomag állapota a szállítónál (csak olvasás). */
+  @Get(":id/parcel/tracking")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  parcelTracking(@Param("id") id: string) {
+    return this.parcels.tracking(id);
+  }
+
   /** A bizonytalan foglalás feloldása, miután a szállító felületén megnézték. */
   @Post(":id/parcel/release")
   @HttpCode(200)

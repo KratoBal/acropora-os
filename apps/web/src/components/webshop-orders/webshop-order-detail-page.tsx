@@ -23,6 +23,7 @@ import {
   WEBSHOP_CUSTOMER_NOTE_MAX,
   type WebshopOrderNotesInput,
   type WebshopPickupPointSearch,
+  type WebshopParcelTracking,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -390,6 +391,11 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   };
   const searchPoints = (query: string) =>
     webshopOrdersApi.pickupPoints(token, id, query);
+  // állandó azonosság: a követés mezője erre indít lekérést
+  const parcelTracking = useCallback(
+    () => webshopOrdersApi.parcelTracking(token, id),
+    [token, id],
+  );
   const releaseHold = async (notifyCustomer: boolean) => {
     const result = await webshopOrdersApi.releaseHold(
       token,
@@ -508,6 +514,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onCreateParcel={createParcel}
           onParcelLabel={parcelLabel}
           onReleaseParcel={releaseParcel}
+          onParcelTracking={parcelTracking}
           onEditLine={editLine}
           onSearchVariants={searchVariants}
           onReleaseHold={releaseHold}
@@ -992,15 +999,102 @@ export function noticeText(notice: WebshopShippingNoticeOutcome): string {
  * létrehozás kimenete bizonytalan, új csomag csak kifejezett feloldás után
  * indítható, és a gomb megmondja, mit kell előtte megnézni.
  */
+/**
+ * A CSOMAGKÖVETÉS (a prompt 7. pontja): a szállító utolsó állapota, frissítés,
+ * és ha a nyilvános követő oldal címe be van állítva, egy link oda. A cím nincs
+ * kitalálva (acrobot 26620): beállítás nélkül nincs link.
+ */
+function ParcelTrackingField({
+  trackingUrl,
+  load,
+}: {
+  trackingUrl: string | null;
+  load: () => Promise<WebshopParcelTracking>;
+}) {
+  const [tracking, setTracking] = useState<WebshopParcelTracking | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(() => {
+    setBusy(true);
+    setError(null);
+    void load()
+      .then(setTracking)
+      .catch((cause: unknown) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "A szállító állapota most nem kérdezhető le.",
+        ),
+      )
+      .finally(() => setBusy(false));
+  }, [load]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  const last = tracking?.events[0] ?? null;
+  return (
+    <Field
+      label="Csomagkövetés"
+      action={
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Csomagkövetés frissítése"
+            title="Csomagkövetés frissítése"
+            disabled={busy}
+            onClick={refresh}
+            className="rounded-md p-1 text-pilot-grey-500 transition-colors hover:text-pilot-accent-warm-text disabled:opacity-40"
+          >
+            <Icon name="refresh" size={16} />
+          </button>
+          {trackingUrl ? (
+            <a
+              href={trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Követés a szállító oldalán"
+              title="Követés a szállító oldalán"
+              className="rounded-md p-1 text-pilot-grey-500 transition-colors hover:text-pilot-accent-warm-text"
+            >
+              <Icon name="external-link" size={16} />
+            </a>
+          ) : null}
+        </span>
+      }
+    >
+      {error ? (
+        <span className="text-pilot-red-700">{error}</span>
+      ) : busy && !tracking ? (
+        <span className="text-pilot-grey-500">Lekérdezés…</span>
+      ) : last ? (
+        <span>
+          {last.text || last.status}
+          {last.at ? (
+            <span className="block text-xs text-pilot-grey-500">
+              {TIME.format(new Date(last.at))}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="text-pilot-grey-500">
+          A szállítónál még nincs állapot.
+        </span>
+      )}
+    </Field>
+  );
+}
+
 function ParcelSection({
   order,
   canManage,
   onCreate,
   onLabel,
   onRelease,
+  onTracking,
 }: {
   order: WebshopOrderDetail;
   canManage: boolean;
+  onTracking: () => Promise<WebshopParcelTracking>;
   onCreate: (
     size: WebshopParcelSize | undefined,
   ) => Promise<WebshopShippingNoticeOutcome>;
@@ -1055,6 +1149,10 @@ function ParcelSection({
           {parcel.codHuf ? (
             <Field label="Utánvét">{formatMoney(parcel.codHuf, "HUF")}</Field>
           ) : null}
+          <ParcelTrackingField
+            trackingUrl={parcel.trackingUrl}
+            load={onTracking}
+          />
           {canManage ? (
             <PilotButton
               size="regular"
@@ -1192,6 +1290,7 @@ function OrderBody({
   onCreateParcel,
   onParcelLabel,
   onReleaseParcel,
+  onParcelTracking,
   onEditLine,
   onSearchVariants,
   onReleaseHold,
@@ -1219,6 +1318,7 @@ function OrderBody({
   ) => Promise<WebshopShippingNoticeOutcome>;
   onParcelLabel: () => Promise<void>;
   onReleaseParcel: () => Promise<void>;
+  onParcelTracking: () => Promise<WebshopParcelTracking>;
   onEditLine: (itemId: string, edit: WebshopOrderLineEdit) => Promise<void>;
   onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
   onReleaseHold: (notifyCustomer: boolean) => Promise<string>;
@@ -1687,6 +1787,7 @@ function OrderBody({
                   onCreate={onCreateParcel}
                   onLabel={onParcelLabel}
                   onRelease={onReleaseParcel}
+                  onTracking={onParcelTracking}
                 />
               )}
             </div>
