@@ -2,6 +2,7 @@ import {
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
   type WebshopOrderAddressInput,
+  type WebshopOrderMethodInput,
   type WebshopOrderNotesInput,
 } from "@acropora/types";
 import {
@@ -51,4 +52,10 @@ export class WebshopOrderNotesDto implements WebshopOrderNotesInput {
   @IsString()
   @MaxLength(WEBSHOP_CARRIER_NOTE_MAX)
   carrierNote?: string;
+}
+
+/** A szállítási mód cseréje: a webshop listájából a mód, pontos módnál a pont is. */
+export class WebshopOrderMethodDto implements WebshopOrderMethodInput {
+  @IsString() @MinLength(1) @MaxLength(100) optionId!: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) pointId?: string;
 }

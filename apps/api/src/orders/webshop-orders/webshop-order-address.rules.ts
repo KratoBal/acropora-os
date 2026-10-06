@@ -68,6 +68,33 @@ export function pointEditOf(input: {
 }
 
 /**
+ * A SZÁLLÍTÁSI MÓD CSERÉJE (kártya 0a14f739 C/2; a webshop oldala murenáé,
+ * 26640). A webshop tilt, ha törölt, fizetett vagy van Medusa-teljesítése,
+ * de az OS-csomagot nem látja. A számla után sem: a díj a végösszeget, tehát
+ * a kiállított számlát is megváltoztatná. Bolti átvételnél nincs mit cserélni.
+ */
+export function methodEditOf(input: {
+  status: WebshopOrderStatus | null;
+  invoice: WebshopOrderDetail["invoice"];
+  parcel: WebshopOrderDetail["parcel"];
+  storePickup: boolean;
+}): WebshopOrderDetail["methodEdit"] {
+  const reason = CLOSED.includes(input.status)
+    ? "Lezárt rendelés szállítási módja nem cserélhető."
+    : input.storePickup
+      ? "Bolti átvételnél nincs futáros szállítási mód."
+      : input.status === "out_for_delivery"
+        ? "A rendelés már kiszállítás alatt van."
+        : input.parcel
+          ? "A csomag már fel van adva: a mód csak a csomag lemondása után cserélhető."
+          : input.invoice?.status === "ISSUED" ||
+              input.invoice?.status === "ISSUING"
+            ? "A számla már ki van állítva: a díj a számla összegét is változtatná, a mód csak a számla sztornója után cserélhető."
+            : null;
+  return { allowed: reason === null, reason };
+}
+
+/**
  * A KÉT MEGJEGYZÉS (commerce #493). A vevőé lezárásig írható. A szállítóé
  * csak házhoz szállításnál értelmes (a pénztár csomagpontnál és bolti
  * átvételnél törli), és a feladott csomag címkéjén már rajta van.

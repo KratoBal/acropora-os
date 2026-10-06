@@ -374,6 +374,8 @@ export interface WebshopOrderDetail {
   };
   /** Cserélhető-e most a csomagpont (commerce #494), és ha nem, miért. */
   pointEdit: { allowed: boolean; reason: string | null };
+  /** Cserélhető-e most a szállítási mód (kártya 0a14f739 C/2), és ha nem, miért. */
+  methodEdit: { allowed: boolean; reason: string | null };
   /** Szerkeszthető-e most a számlázási, illetve a szállítási cím, és ha nem, miért. */
   addressEdit: {
     billing: { allowed: boolean; reason: string | null };
@@ -586,6 +588,45 @@ export interface WebshopPickupPointSearch {
   points: WebshopPickupPointOption[];
   /** Az összes találat, nem csak a lap. */
   count: number;
+}
+
+/**
+ * A rendelés választható futáros módjai (commerce, murena 26640): a pénztár
+ * szállítási osztálya és díjszámítása szerint, a rendelés tételeire.
+ */
+export interface WebshopShippingOption {
+  id: string;
+  name: string;
+  /** A rendelés ÚJ szállítási díja ezzel a móddal, forintban. */
+  amount: number;
+  carrier: "GLS" | "FOXPOST";
+  needsPoint: boolean;
+  heavy: boolean;
+}
+
+export interface WebshopShippingOptions {
+  currentOptionId: string | null;
+  options: WebshopShippingOption[];
+}
+
+/** A szállítási mód cseréje; csomagpontos módnál a pont kötelező. */
+export interface WebshopOrderMethodInput {
+  optionId: string;
+  pointId?: string;
+}
+
+/** A csere válasza: a friss adatlap, és ha drágult, a különbözet linkje. */
+export interface WebshopOrderMethodResult {
+  order: WebshopOrderDetail;
+  change: {
+    changed: boolean;
+    previousTotal: number;
+    total: number;
+    /** Előjeles: pozitív, ha drágult. */
+    difference: number;
+    /** Drágulásnál a különbözet linkje kiment-e a vevőnek; különben `null`. */
+    link: WebshopStatusMailOutcome | null;
+  };
 }
 
 export interface WebshopOrderNotesInput {
