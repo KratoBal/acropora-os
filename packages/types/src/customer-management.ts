@@ -45,6 +45,14 @@ export interface CustomerDetail extends CustomerSummary {
    * alapérték (8 nap). Szervizpartnernél a Partnerek oldalon állítják.
    */
   paymentDueDays: number | null;
+  /**
+   * HA EZEN A SORON NINCS FIZETÉSI NAP, de ugyanez a cég (azonos adószám vagy
+   * név) a Partnerek oldalon napot visel: azok a napok és a partner neve
+   * (kártya 7be4a85b). Ugyanaz a cég több vevő-soron is állhat (a régi vevő
+   * és a szervizpartner tükre), és a számlán bármelyik választható. `null`, ha
+   * nincs ilyen, vagy több partner más-más napot mondana.
+   */
+  partnerTerms?: { paymentDueDays: number; partnerName: string } | null;
   marketingEmailConsent: boolean;
   marketingSmsConsent: boolean;
   addresses: CustomerAddress[];
