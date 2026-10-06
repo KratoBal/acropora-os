@@ -593,7 +593,9 @@ export class NotificationsService {
       userIds: notice.userIds,
       title: "Új Cápasuli piszkozatok",
       body: `${notice.count} kérés vár elbírálásra a Szerviz / Piszkozatok oldalon.`,
-      data: {},
+      // a koppintás a telefon Piszkozatok listájára visz (kártya 49210cdd);
+      // addig üres volt, és a nyitólapra vitt. A `targetId` a levél azonosítója.
+      data: { targetType: "serviceDrafts", targetId: notice.mailId },
       record: (attempts) =>
         this.log.recordServiceDraftsArrived({
           mailId: notice.mailId,

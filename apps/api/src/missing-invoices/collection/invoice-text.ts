@@ -194,6 +194,16 @@ const TAX_NUMBER =
 const DATE_SHAPE = /^(?:19|20)\d{2}[./-]\d{1,2}[./-]\d{1,2}$/;
 
 /**
+ * AZ EGYBEÍRT DÁTUM (`20260729`), CSAK A FÁJLNÉVBEN (kártya 37b8643d, mérve
+ * 2026-10-06 élesen, a száraz újraolvasásban): az `IMG_20260729_0002.pdf`
+ * szkennelés `20260729` darabja számlaszámnak ment, mert a szövegben a kelte
+ * (`2026.07.29`) tömörítve ugyanez. A címke utáni értékre NEM áll: ott egy
+ * nyolcjegyű szám lehet valódi számlaszám is, a fájlnévben viszont a
+ * szkennerek és a letöltők dátuma.
+ */
+const COMPACT_DATE = /^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$/;
+
+/**
  * A CÍMKE UTÁNI ÉRTÉK CSAK AKKOR SZÁMLASZÁM, ha nem egy cég és nem egy nap
  * azonosítója (kártya 096607af; élesen mérve 2026-10-06, 37 általános
  * olvasós rekordból ötnél: háromszor a SAJÁT adószámunk, kétszer egy dátum
@@ -459,7 +469,32 @@ export function looksLikeReminder(
   );
 }
 
+/**
+ * A DOKUMENTUM SAJÁT CÍME: egy cella, ami csak annyit mond, hogy számla.
+ * „Bankszámla”, „Számla száma” nem az: a cella egésze a szó.
+ */
+const INVOICE_TITLE_CELL =
+  /(?:^|\|)\s*(?:sz[áa]mla|invoice|rechnung|facture)\s*(?:\||$)/imu;
+
+/**
+ * DÍJBEKÉRŐ-E A DOKUMENTUM.
+ *
+ * ELŐBB A CÍM DÖNT: az első tíz sor közül az ELSŐ, ami fajtát mond. Ha abban
+ * a díjbekérő szó áll, díjbekérő; ha egy cellája csak annyit mond, hogy
+ * „Számla”, akkor SZÁMLA, akármi áll lejjebb. Mérve 2026-10-06 élesen
+ * (acrobot 27064): az UNAS aláírt e-számláinak első sora „FIZETVE | Számla”,
+ * a „Díjbekérő” csak a 12. sor egyik oszlopfejlécében áll (a kiegyenlített
+ * díjbekérő száma), és a teljes szövegen futó szabály ezt díjbekérőnek vette.
+ * Cím nélkül a régi szabály marad: a teljes szöveg dönt.
+ */
 export function looksLikeProforma(text: string): boolean {
+  // az ELSŐ sor dönt, ami fajtát mond: egy tíz soros ablak egy rövid számlán a
+  // „Díjbekérő” oszlopfejlécet is elérné, és az nem cím
+  for (const raw of text.split("\n").slice(0, REMINDER_TITLE_LINES)) {
+    const line = raw.normalize("NFC");
+    if (PROFORMA_WORD.test(line)) return true;
+    if (INVOICE_TITLE_CELL.test(line)) return false;
+  }
   return PROFORMA_WORD.test(text);
 }
 
@@ -587,6 +622,7 @@ export function readInvoiceText(
         token.length >= 5 &&
         /\d/.test(token) &&
         !DATE_SHAPE.test(token) &&
+        !COMPACT_DATE.test(token) &&
         !BANK_ACCOUNT.test(token) &&
         !looksLikeTaxNumber(token) &&
         !customers.has(compactNumber(token)) &&
