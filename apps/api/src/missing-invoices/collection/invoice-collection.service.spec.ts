@@ -676,6 +676,37 @@ describe("InvoiceCollectionService", () => {
     assert.deepEqual(seenFlags, [true]);
   });
 
+  /*
+    A SZÁRAZ KIMENET UGYANAZT MONDJA, AMIT AZ ÉLES ÍRÁS TENNE (acrobot 26752:
+    15 tárolt társ-melléklet „STORED -> DUPLICATE”-ként látszott, holott a
+    `record` a STORED sort nem írja felül). MI PIROSÍT: a már tárolt fájl a
+    száraz listán változásnak látszik; egy nem tárolt, ismert tartalmú fájl
+    DUPLICATE-je eltűnik.
+  */
+  it("a stored companion of a re-read mail stays STORED in the dry list, as the live write keeps it", async () => {
+    const stored = await pdf(["Invoice", "Invoice number: K-2026-10060"]);
+    const dry = (before: string | null) =>
+      setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "K-2026-10060.pdf", buffer: stored }] },
+        known: [stored],
+        before,
+      }).collection.reevaluate(false);
+    for (const before of ["STORED", "SUGGESTED"]) {
+      const { changes } = await dry(before);
+      assert.deepEqual(
+        changes.map((c) => [c.before, c.after]),
+        [[before, before]],
+        before,
+      );
+    }
+    const { changes } = await dry("UNMATCHED");
+    assert.deepEqual(
+      changes.map((c) => [c.before, c.after]),
+      [["UNMATCHED", "DUPLICATE"]],
+    );
+  });
+
   it("marks a dry row whose invoice number is already stored from another file (acrobot 25800)", async () => {
     const invoice = await pdf([
       "INVOICE",

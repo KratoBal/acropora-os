@@ -21,22 +21,28 @@ export class AssistantService {
     private readonly sessions: SessionRepository,
     private readonly budget: AssistantBudgetRepository,
   ) {}
+  /**
+   * `SUTYERAK_PILOT_USER_IDS=*` opens Sutyerák to every internal employee
+   * (Balázs, 2026-10-06 08:06 UTC); a list keeps it to those ids. Either way a
+   * partner and an assistant login stay out.
+   */
   available(user: AuthenticatedUser, kind: SessionKind | undefined): boolean {
     return kind === "USER" && this.availableTo(user);
   }
   /**
    * A DOLGOZÓ HASZNÁLHATJA-E SUTYERÁKOT, a munkamenet fajtájától függetlenül:
-   * belső dolgozó, bekapcsolt kapcsoló, a próba-listán. Az Üzenetek ezt nézik
-   * (4. pont B): ott az üzenetet a dolgozó saját munkamenete már elküldte.
+   * belső dolgozó, bekapcsolt kapcsoló, a próba-listán (vagy `*`: mindenki).
+   * Az Üzenetek ezt nézik (4. pont B): ott az üzenetet a dolgozó saját
+   * munkamenete már elküldte.
    */
   availableTo(user: AuthenticatedUser): boolean {
+    const pilots = (process.env.SUTYERAK_PILOT_USER_IDS ?? "")
+      .split(",")
+      .map((id) => id.trim());
     return (
       partnerScopeOf(user).kind === "internal" &&
       ["true", "1"].includes(process.env.SUTYERAK_ENABLED ?? "") &&
-      (process.env.SUTYERAK_PILOT_USER_IDS ?? "")
-        .split(",")
-        .map((id) => id.trim())
-        .includes(user.id)
+      (pilots.includes("*") || pilots.includes(user.id))
     );
   }
   async ask(

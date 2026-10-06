@@ -15,7 +15,7 @@ import {
   sanitizeRichHtml,
 } from "@acropora/rich-text";
 import {
-  billingDrawerCta,
+  billingIssueCta,
   getDocumentCapabilities,
   INVOICE_FORMAT_LABELS,
   renderMailTemplateHtml,
@@ -254,10 +254,12 @@ export function BillingDocumentEmailDrawer({
               ) : null}
             </>
           ) : (
+            // A SZERKESZTŐBŐL NYITVA (Balázs, 2026-10-06 09:21 UTC): a fiók
+            // csak a levelet állítja be, a kiállítás és a kiküldés a szerkesztő
+            // fő gombja (`billingIssueCta`, billing-document-summary.tsx)
             <p className="text-xs text-pilot-grey-500">
-              A kiállítás elküldi az adatokat a Számlázz.hu-nak, majd siker
-              esetén az értesítő levelet. A kiküldés a Számlázz.hu bekötésével
-              érkezik.
+              A levelet a „{billingIssueCta(documentType, format)}” gomb küldi
+              el.
             </p>
           )}
           <div className="flex gap-2">
@@ -274,13 +276,9 @@ export function BillingDocumentEmailDrawer({
                 {submit.busy ? "Küldés…" : submit.label}
               </PilotButton>
             ) : (
-              <PilotButton
-                variant="primary"
-                size="regular"
-                disabled
-                title="A kiküldés a Számlázz.hu bekötésével érkezik."
-              >
-                {billingDrawerCta(documentType, format)}
+              // a levél a szerkesztő állapotában marad, a fiók csak bezárul
+              <PilotButton variant="primary" size="regular" onClick={onClose}>
+                Kész
               </PilotButton>
             )}
           </div>
