@@ -25,6 +25,7 @@ Jelölések:
 - `—`: nincs külön stabil route- vagy component-area mapping.
 - `**`: a könyvtár alatti teljes route-terület.
 - Több hivatkozás egy cellában `<br>` jellel van elválasztva; a validator mindet külön ellenőrzi.
+- Az `@app/` prefix a route base helyett az adott app `src/app/` gyökeréből indul. Ezt a shell/portal route groupon kívüli képernyőknél használjuk (például `@app/nyomtatas/**`, `@app/login/page.tsx`).
 
 ## Karbantartási szabály
 
@@ -37,16 +38,16 @@ Szándékos design-eltérést a **Megjegyzés** mezőben kell dokumentálni. Ké
 | Figma Page / Section | Node | App | Route pattern | Component area | Utoljára egyeztetve | Megjegyzés |
 |---|---|---|---|---|---|---|
 | Dashboard | [382:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=382-2) | `apps/web` | `page.tsx` | `dashboard/` | 2026-10-06 · 22bda49 | — |
-| Products | [273:32](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-32) | `apps/web` | `products/**` | `products/`<br>`jev-product-intelligence/`<br>`brands/` | 2026-10-06 · 22bda49 | A JEV Product Intelligence is ehhez a domainhez tartozik. |
+| Products | [273:32](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-32) | `apps/web` | `products/**` | `products/`<br>`jev-product-intelligence/` | 2026-10-06 · 22bda49 | A JEV Product Intelligence is ehhez a domainhez tartozik. |
 | Purchasing | [302:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=302-2) | `apps/web` | `beszerzes/**` | `purchasing/`<br>`suppliers/` | 2026-10-06 · 22bda49 | — |
 | Invoicing | [316:1394](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=316-1394) | `apps/web` | `penzugy/szamlazas/**`<br>`penzugy/hianyzo-szamlak/**` | `billing/`<br>`finance/` | 2026-10-06 · 22bda49 | Az invoice email editor is itt él. |
 | Webshop Operations | [493:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=493-2) | `apps/web` | `webshop/**` | `webshop/`<br>`webshop-orders/` | 2026-10-06 · 22bda49 | Internal fulfillment: rendelések, FOXPOST/GLS, címke, csomagkezelés. |
 | POS | [434:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=434-2) | `apps/web` | `pos/**` | `pos/` | 2026-10-06 · 22bda49 | — |
-| Service / Hibajegyek | [423:20](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=423-20) | `apps/web` | `szerviz/hibajegyek/**` | `service/` | 2026-10-06 · 22bda49 | Lista és részlet. |
-| Service / Munkalapok | [423:448](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=423-448) | `apps/web` | `szerviz/munkalapok/**` | `service-jobs/`<br>`worksheets/` | 2026-10-06 · 22bda49 | — |
+| Service / Hibajegyek | [423:20](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=423-20) | `apps/web` | `szerviz/hibajegyek/**` | `service-jobs/` | 2026-10-06 · 22bda49 | Lista és részlet. |
+| Service / Munkalapok | [423:448](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=423-448) | `apps/web` | `szerviz/munkalapok/**` | `worksheets/` | 2026-10-06 · 22bda49 | — |
 | Service / Anyagigény | [423:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=423-2) | `apps/web` | `szerviz/anyagigenyek/**` | `material-requests/` | 2026-10-06 · 22bda49 | A korábbi Anyagigény V2 a Service Page-be került. |
 | Service / Eszközök | nincs | `apps/web` | `szerviz/eszkozok/**` | `service-assets/` | 2026-10-06 · 22bda49 | Jelenleg nincs külön aktuális Figma screen mapping. |
-| Service / Karbantartás | nincs | `apps/web` | `szerviz/karbantartas/**` | `service/` | 2026-10-06 · 22bda49 | — |
+| Service / Karbantartás | nincs | `apps/web` | `szerviz/karbantartas/**` | `service-jobs/` | 2026-10-06 · 22bda49 | — |
 | Service / Piszkozatok | [459:638](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=459-638) | `apps/web` | `szerviz/piszkozatok/**` | `service-drafts/` | 2026-10-06 · 22bda49 | — |
 | Service / Szerződések | nincs | `apps/web` | `partnerek/szerzodesek/**` | `contracts/` | 2026-10-06 · 22bda49 | A Service domainhez kapcsolódó szerződéses UI. |
 | Akváriumok | nincs | `apps/web` | `akvariumok/**` | `aquariums/` | 2026-10-06 · 22bda49 | A kód létezik, de nincs külön aktuális Figma screen mapping. |
@@ -57,17 +58,18 @@ Szándékos design-eltérést a **Megjegyzés** mezőben kell dokumentálni. Ké
 | Admin / Brands | nincs | `apps/web` | `admin/brands/**` | `brands/` | 2026-10-06 · 22bda49 | — |
 | Admin / Imports | nincs | `apps/web` | `admin/imports/**` | `imports/` | 2026-10-06 · 22bda49 | — |
 | Admin / Users | nincs | `apps/web` | `admin/users/**` | `users/` | 2026-10-06 · 22bda49 | — |
-| Feladataim | nincs | `apps/web` | `feladataim/page.tsx` | `—` | 2026-10-06 · 22bda49 | Létező UI-terület, jelenleg nincs Figma mapping. |
-| Partnerek | nincs | `apps/web` | `partnerek/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Vevők | nincs | `apps/web` | `vevok/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Raktár | nincs | `apps/web` | `raktar/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Készletegyeztetés | nincs | `apps/web` | `keszlet-egyeztetes/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
-| Készlet kimenősor | nincs | `apps/web` | `keszlet-kimenosor/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
-| Tartalom | nincs | `apps/web` | `tartalom/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Kalkulátorok | nincs | `apps/web` | `kalkulatorok/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
-| AI teszt | nincs | `apps/web` | `ai-teszt/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
+| Feladataim | nincs | `apps/web` | `feladataim/page.tsx` | `tasks/` | 2026-10-06 · 22bda49 | Létező UI-terület, jelenleg nincs Figma mapping. |
+| Partnerek | nincs | `apps/web` | `partnerek/**` | `suppliers/`<br>`contracts/` | 2026-10-06 · 22bda49 | — |
+| Vevők | nincs | `apps/web` | `vevok/**` | `customers/` | 2026-10-06 · 22bda49 | — |
+| Raktár | nincs | `apps/web` | `raktar/**` | `inventory/` | 2026-10-06 · 22bda49 | — |
+| Készletegyeztetés | nincs | `apps/web` | `keszlet-egyeztetes/page.tsx` | `webshop/` | 2026-10-06 · 22bda49 | — |
+| Készlet kimenősor | nincs | `apps/web` | `keszlet-kimenosor/page.tsx` | `webshop/` | 2026-10-06 · 22bda49 | — |
+| Tartalom | nincs | `apps/web` | `tartalom/**` | `content/` | 2026-10-06 · 22bda49 | — |
+| Kalkulátorok | nincs | `apps/web` | `kalkulatorok/page.tsx` | `calculators/` | 2026-10-06 · 22bda49 | — |
+| AI teszt | nincs | `apps/web` | `ai-teszt/page.tsx` | `ai-test/` | 2026-10-06 · 22bda49 | — |
 | Pénzügy / Elszámolások | nincs | `apps/web` | `penzugy/elszamolasok/page.tsx`<br>`penzugy/(elszamolasok)/**` | `finance/` | 2026-10-06 · 22bda49 | FOXPOST/GLS/SimplePay elszámolások. |
-| Gyűjtő route | nincs | `apps/web` | `[section]/page.tsx` | `—` | 2026-10-06 · 22bda49 | Generikus szekció-belépő. |
+| Gyűjtő route | nincs | `apps/web` | `[section]/page.tsx` | `—` | 2026-10-06 · 22bda49 | Generikus szekció-belépő; nincs külön domain komponensmappa. |
+| Nyomtatás / Eszközök | nincs | `apps/web` | `@app/nyomtatas/**` | `service-assets/` | 2026-10-06 · 22bda49 | A `(shell)` route groupon kívüli nyomtatási nézet. |
 
 ### Közös OS felületi elemek
 
@@ -79,16 +81,19 @@ Szándékos design-eltérést a **Megjegyzés** mezőben kell dokumentálni. Ké
 
 | Figma Page / Section | Node | App | Route pattern | Component area | Utoljára egyeztetve | Megjegyzés |
 |---|---|---|---|---|---|---|
-| Mobile / Home | [412:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=412-2) | `apps/mobile` | `index.tsx`<br>`modulok.tsx` | `—` | 2026-10-06 · 22bda49 | Role preset nyitóképernyők. |
-| Mobile / Service | [560:6097](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6097) | `apps/mobile` | `service-jobs/**`<br>`worksheets/**`<br>`service-drafts.tsx`<br>`assets/**` | `—` | 2026-10-06 · 22bda49 | Az assets a Mobile / Service domain része. |
-| Mobile / Material Requests | [560:6106](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6106) | `apps/mobile` | `material-requests/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Messaging | [560:6108](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6108) | `apps/mobile` | `uzenetek/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Aquariums | nincs | `apps/mobile` | `aquariums/**` | `—` | 2026-10-06 · 22bda49 | Kód létezik, Figma-terv nincs feltérképezve. |
-| Mobile / Orders | nincs | `apps/mobile` | `orders/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Partners | nincs | `apps/mobile` | `partners/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Settings | nincs | `apps/mobile` | `settings.tsx` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Queue | nincs | `apps/mobile` | `queue.tsx`<br>`queue-fix/**`<br>`queue-resolve/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Mobile / Login | nincs | `apps/mobile` | `login.tsx` | `—` | 2026-10-06 · 22bda49 | — |
+| Mobile / Home | [412:2](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=412-2) | `apps/mobile` | `index.tsx`<br>`modulok.tsx` | `home/`<br>`offline/` | 2026-10-06 · 22bda49 | Role preset nyitóképernyők. |
+| Mobile / Service / Jobs | [560:6097](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6097) | `apps/mobile` | `service-jobs/**` | `documents/`<br>`offline/`<br>`home/` | 2026-10-06 · 22bda49 | A route UI nagy része a route fájlban él; ezek a ténylegesen használt közös komponens-területek. |
+| Mobile / Service / Worksheets | [560:6097](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6097) | `apps/mobile` | `worksheets/**` | `worksheets/`<br>`documents/`<br>`offline/`<br>`messages/`<br>`home/` | 2026-10-06 · 22bda49 | — |
+| Mobile / Service / Assets | [560:6097](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6097) | `apps/mobile` | `assets/**` | `assets/`<br>`documents/`<br>`offline/` | 2026-10-06 · 22bda49 | Az assets a Mobile / Service domain része. |
+| Mobile / Service / Drafts | [560:6097](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6097) | `apps/mobile` | `service-drafts.tsx` | `—` | 2026-10-06 · 22bda49 | A képernyő UI-ja jelenleg a route fájlban él. |
+| Mobile / Material Requests | [560:6106](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6106) | `apps/mobile` | `material-requests/**` | `material-requests/` | 2026-10-06 · 22bda49 | — |
+| Mobile / Messaging | [560:6108](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=560-6108) | `apps/mobile` | `uzenetek/**` | `messages/`<br>`home/` | 2026-10-06 · 22bda49 | — |
+| Mobile / Aquariums | nincs | `apps/mobile` | `aquariums/**` | `aquariums/`<br>`offline/` | 2026-10-06 · 22bda49 | Kód létezik, Figma-terv nincs feltérképezve. |
+| Mobile / Orders | nincs | `apps/mobile` | `orders/**` | `orders/` | 2026-10-06 · 22bda49 | — |
+| Mobile / Partners | nincs | `apps/mobile` | `partners/**` | `—` | 2026-10-06 · 22bda49 | Nincs külön partner component mappa; a UI jelenleg a route fájlokban él. |
+| Mobile / Settings | nincs | `apps/mobile` | `settings.tsx` | `home/` | 2026-10-06 · 22bda49 | A közös alsó navigációt használja. |
+| Mobile / Queue | nincs | `apps/mobile` | `queue.tsx`<br>`queue-fix/**`<br>`queue-resolve/**` | `—` | 2026-10-06 · 22bda49 | A queue képernyők UI-ja jelenleg a route fájlokban él. |
+| Mobile / Login | nincs | `apps/mobile` | `login.tsx` | `—` | 2026-10-06 · 22bda49 | Nincs külön domain component mappa. |
 
 ## Partner Portal
 
@@ -96,14 +101,16 @@ A Partner Portalhoz jelenleg nincs külön aktuális Figma képernyőkészlet. E
 
 | Figma Page / Section | Node | App | Route pattern | Component area | Utoljára egyeztetve | Megjegyzés |
 |---|---|---|---|---|---|---|
-| Partner / Akváriumok | nincs | `apps/partner` | `akvariumok/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Eszközök | nincs | `apps/partner` | `eszkozok/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Hibajegyek | nincs | `apps/partner` | `hibajegyek/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Munkalapok | nincs | `apps/partner` | `munkalapok/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Megrendelések | nincs | `apps/partner` | `megrendelesek/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Teljesítési igazolások | nincs | `apps/partner` | `teljesitesi-igazolasok/**` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Beállítások | nincs | `apps/partner` | `beallitasok/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
-| Partner / Kalkulátorok | nincs | `apps/partner` | `kalkulatorok/page.tsx` | `—` | 2026-10-06 · 22bda49 | — |
+| Partner / Akváriumok | nincs | `apps/partner` | `akvariumok/**` | `aquarium-list.tsx`<br>`aquarium-detail.tsx`<br>`aquarium-measurement-history.tsx`<br>`aquarium-water-values.tsx`<br>`aquarium-assets.tsx`<br>`new-aquarium.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Eszközök | nincs | `apps/partner` | `eszkozok/**` | `asset-list.tsx`<br>`asset-detail.tsx`<br>`document-panel.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Hibajegyek | nincs | `apps/partner` | `hibajegyek/**` | `ticket-list.tsx`<br>`ticket-detail.tsx`<br>`ticket-conversation.tsx`<br>`ticket-fields-editor.tsx`<br>`new-ticket.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Munkalapok | nincs | `apps/partner` | `munkalapok/**` | `worksheet-list.tsx`<br>`worksheet-detail.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Megrendelések | nincs | `apps/partner` | `megrendelesek/**` | `maintenance-order-list.tsx`<br>`maintenance-order-detail.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Teljesítési igazolások | nincs | `apps/partner` | `teljesitesi-igazolasok/**` | `completion-certificate-list.tsx`<br>`completion-certificate-detail.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Beállítások | nincs | `apps/partner` | `beallitasok/page.tsx` | `settings.tsx` | 2026-10-06 · 22bda49 | — |
+| Partner / Kalkulátorok | nincs | `apps/partner` | `kalkulatorok/page.tsx` | `calculators/` | 2026-10-06 · 22bda49 | — |
+| Partner / Login | nincs | `apps/partner` | `@app/login/page.tsx` | `auth.tsx` | 2026-10-06 · 22bda49 | A `(portal)` route groupon kívül él. |
+| Partner / Root redirect | nincs | `apps/partner` | `@app/page.tsx` | `—` | 2026-10-06 · 22bda49 | A gyökér `/hibajegyek` oldalra irányít; nincs külön UI. |
 
 ## Design System
 
@@ -125,6 +132,12 @@ A Design System kivétel: itt a konkrét komponensfájl stabil és hasznos mappi
 | Sidebar | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `sidebar.tsx` | 2026-10-06 · 22bda49 | — |
 | Empty State | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `empty-state.tsx` | 2026-10-06 · 22bda49 | — |
 | Stat Card | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `stat-card.tsx` | 2026-10-06 · 22bda49 | — |
+| Form Field | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `form-field.tsx` | 2026-10-06 · 22bda49 | — |
+| Confirm Dialog | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `confirm-dialog.tsx` | 2026-10-06 · 22bda49 | — |
+| Topbar | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `topbar.tsx` | 2026-10-06 · 22bda49 | — |
+| Skeleton | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `skeleton.tsx` | 2026-10-06 · 22bda49 | — |
+| Pilot UI | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `pilot-ui.tsx` | 2026-10-06 · 22bda49 | — |
+| Pilot OS | [273:31](https://www.figma.com/design/ji64fTFss0jqm5Uifd0zhE?node-id=273-31) | `packages/ui` | `—` | `pilot-os.tsx` | 2026-10-06 · 22bda49 | — |
 
 ## Tranzakciós webshop-levelek
 
