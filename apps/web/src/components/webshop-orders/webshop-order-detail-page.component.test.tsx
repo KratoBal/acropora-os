@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Session, WebshopOrderDetail } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +28,9 @@ const api = vi.hoisted(() => ({
   sendPaymentLink: vi.fn(),
   updateAddress: vi.fn(),
   saveInternalNote: vi.fn(),
+  pickupPoints: vi.fn(),
+  changePoint: vi.fn(),
+  saveNotes: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   createParcel: vi.fn(),
@@ -144,6 +154,12 @@ const detail: WebshopOrderDetail = {
   cardPayment: null,
   osCustomer: null,
   internalNote: null,
+  notes: { customer: null, carrier: null },
+  notesEdit: {
+    customer: { allowed: true, reason: null },
+    carrier: { allowed: true, reason: null },
+  },
+  pointEdit: { allowed: true, reason: null },
   addressEdit: {
     billing: { allowed: true, reason: null },
     shipping: { allowed: true, reason: null },
@@ -1194,6 +1210,147 @@ describe("WebshopOrderDetailPage", () => {
       const card = await screen.findByRole("region", { name: "Szállítás" });
       expect(within(card).getByAltText(alt).getAttribute("src")).toBe(src);
     });
+
+  /*
+    THE POINT AND THE NOTES (commerce #494, #493). WHAT TURNS RED: the point
+    pencil is missing or ignores its reason; the dialog saves without a
+    choice, offers an out-of-order locker, or does not send the chosen point;
+    a note is sent under the other note's name, or the 50-character courier
+    note can be saved longer.
+  */
+  it("the point pencil searches the order's own list and sends the chosen point", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.pickupPoints.mockResolvedValue({
+      carrier: "FOXPOST",
+      currentPointId: "hu1",
+      count: 2,
+      points: [
+        {
+          id: "hu1",
+          name: "FOXPOST Allee",
+          address: "1117 Budapest, Október 23. u. 8.",
+          kind: null,
+          variant: "FOXPOST A-BOX",
+          outOfOrder: false,
+        },
+        {
+          id: "hu2",
+          name: "FOXPOST Etele",
+          address: "1119 Budapest, Etele út 68.",
+          kind: null,
+          variant: "FOXPOST Z-BOX",
+          outOfOrder: false,
+        },
+      ],
+    });
+    api.changePoint.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Csomagpont cseréje" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Csomagpont cseréje" });
+    const save = within(dialog).getByRole("button", {
+      name: "Mentés",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText("Csomagpont keresése"), {
+      target: { value: "etele" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keresés" }));
+    await waitFor(() =>
+      expect(api.pickupPoints).toHaveBeenCalledWith(
+        "token",
+        "order_38",
+        "etele",
+      ),
+    );
+    fireEvent.click(
+      await within(dialog).findByRole("radio", { name: /FOXPOST Etele/ }),
+    );
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.changePoint).toHaveBeenCalledWith("token", "order_38", "hu2"),
+    );
+  });
+
+  it("a held point names why, and an out-of-order locker cannot be chosen", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      pointEdit: {
+        allowed: false,
+        reason: "A csomag már fel van adva erre a pontra.",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pencil = (await screen.findByRole("button", {
+      name: "Csomagpont cseréje",
+    })) as HTMLButtonElement;
+    expect(pencil.disabled).toBe(true);
+    expect(pencil.title).toBe("A csomag már fel van adva erre a pontra.");
+    cleanup();
+
+    api.detail.mockResolvedValue(detail);
+    api.pickupPoints.mockResolvedValue({
+      carrier: "GLS",
+      currentPointId: null,
+      count: 1,
+      points: [
+        {
+          id: "L1",
+          name: "GLS Automata",
+          address: "1024 Budapest",
+          kind: "parcel-locker",
+          variant: null,
+          outOfOrder: true,
+        },
+      ],
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Csomagpont cseréje" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Csomagpont cseréje" });
+    fireEvent.change(within(dialog).getByLabelText("Csomagpont keresése"), {
+      target: { value: "a" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keresés" }));
+    const radio = (await within(dialog).findByRole("radio", {
+      name: /GLS Automata/,
+    })) as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+    expect(within(dialog).getByText(/üzemen kívül/)).toBeTruthy();
+  });
+
+  it("each note goes under its own name; the courier note stops at 50", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      notes: { customer: "Délután otthon vagyok.", carrier: null },
+    });
+    api.saveNotes.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(await screen.findByText("Délután otthon vagyok.")).toBeTruthy();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "A szállítónak szóló üzenet szerkesztése",
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Szállítónak" });
+    const box = within(dialog).getByLabelText("Szállítónak");
+    const save = within(dialog).getByRole("button", {
+      name: "Mentés",
+    }) as HTMLButtonElement;
+    fireEvent.change(box, { target: { value: "x".repeat(51) } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(box, { target: { value: "Csengess kétszer" } });
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.saveNotes).toHaveBeenCalledWith("token", "order_38", {
+        carrierNote: "Csengess kétszer",
+      }),
+    );
+  });
 
   it("without orders.manage there are no pencils", async () => {
     auth.session = session("WAREHOUSE");
