@@ -26,7 +26,15 @@ export interface ConversationPerson {
   role: UserRole;
   /** Deaktivált kolléga: a régi beszélgetésben marad, újat nem lehet vele indítani. */
   isActive: boolean;
+  /**
+   * `"assistant"`: Sutyerák (4. pont B; a kliens a figurát teszi ki és a lista
+   * elejére állítja). Hiányzik vagy `"user"`: ember. Opcionális, a régi kliens miatt.
+   */
+  kind?: "user" | "assistant";
 }
+
+/** Sutyerák rendszer-felhasználójának azonosítója (a migráció hozza létre). */
+export const SUTYERAK_USER_ID = "system-sutyerak";
 
 /** A négy reakció, amit az első kör támogat (a prompt 11. pontja). */
 export const MESSAGE_REACTIONS = ["👍", "❤️", "✅", "👀"] as const;
@@ -86,6 +94,12 @@ export interface MessageItem {
   clientMessageId: string | null;
   /** KITŰZÖTT-E (3. fázis). A régebbi kliensek tesztjei miatt opcionális. */
   pinned?: boolean;
+  /**
+   * SUTYERÁK ÜZENETÉN (4. pont B): `viaAcrobot` igaz, ha a választ acrobot írta
+   * vissza egy átadott kérdésre („Sutyerák, Acrobot válaszával”). Másnál
+   * hiányzik vagy `null`. A szöveg Markdown, mint a widgetben.
+   */
+  assistant?: { viaAcrobot: boolean } | null;
   /**
    * TOVÁBBÍTOTT ÜZENET (3. fázis): az eredeti szerző neve, Balázs döntése
    * szerint látszik („Továbbítva · Kovács Anna”). Nem továbbítottnál `null`.
@@ -151,6 +165,12 @@ export interface ConversationDetail extends ConversationListItem {
   notification?: ConversationNotificationState;
   /** 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája; nincs kötés: null. */
   context?: ConversationContextCard | null;
+  /**
+   * SUTYERÁK ÉPP VÁLASZOL ebben a beszélgetésben (4. pont B): újratöltés vagy
+   * újracsatlakozás után ebből tudja a kliens, mert az `assistant.thinking`
+   * eseményt addig nem látta. Az API memóriájából: újraindítás után `false`.
+   */
+  assistantThinking?: boolean;
 }
 
 export interface MessagePage {
@@ -253,4 +273,10 @@ export type MessageStreamEvent =
   | { type: "conversation.created"; conversationId: string }
   | { type: "conversation.read"; conversationId: string }
   /** Szerkesztés, törlés vagy reakció: a kliens azt az egy üzenetet olvassa újra. */
-  | { type: "message.updated"; conversationId: string; messageId: string };
+  | { type: "message.updated"; conversationId: string; messageId: string }
+  /**
+   * SUTYERÁK GONDOLKODIK (4. pont B): `true`, amikor az átjáró-hívás indul;
+   * `false`, ha véget ért (válasz, hiba, időtúllépés). A régi kliens az ismeretlen
+   * típust figyelmen kívül hagyja (murena mérése, web és mobil).
+   */
+  | { type: "assistant.thinking"; conversationId: string; active: boolean };

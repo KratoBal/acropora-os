@@ -61,6 +61,8 @@ const MESSAGE_SELECT = {
   forwardedFromMessageId: true,
   forwardedFromUserId: true,
   forwardedFromUser: { select: { displayName: true, nickname: true } },
+  // 4. pont B: Sutyerák üzenetén a válasz forrása (átjáró vagy acrobot)
+  assistantSource: true,
   replyTo: {
     select: {
       id: true,
@@ -733,6 +735,8 @@ export class MessagesRepository extends Repository {
     attachmentIds?: readonly string[];
     /** Továbbításnál az eredeti üzenet és a szerzője (3. fázis). */
     forwardedFrom?: { messageId: string; userId: string } | null;
+    /** Sutyerák üzeneténél a válasz forrása (4. pont B). */
+    assistantSource?: "GATEWAY" | "ACROBOT" | null;
   }): Promise<MessageRow> {
     return this.database.$transaction(async (tx) => {
       const created = await tx.message.create({
@@ -745,6 +749,7 @@ export class MessagesRepository extends Repository {
           replyToMessageId: input.replyToMessageId ?? null,
           forwardedFromMessageId: input.forwardedFrom?.messageId ?? null,
           forwardedFromUserId: input.forwardedFrom?.userId ?? null,
+          assistantSource: input.assistantSource ?? null,
         },
         select: { id: true },
       });
@@ -928,6 +933,39 @@ export class MessagesRepository extends Repository {
       },
     });
     return result.count > 0;
+  }
+
+  /** Sutyerák szála ebben a beszélgetésben ennek a kérdezőnek (4. pont B). */
+  async assistantThread(
+    conversationId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const row = await this.database.assistantConversationThread.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+      select: { threadId: true },
+    });
+    return row?.threadId ?? null;
+  }
+
+  async saveAssistantThread(
+    conversationId: string,
+    userId: string,
+    threadId: string,
+  ): Promise<void> {
+    await this.database.assistantConversationThread.upsert({
+      where: { conversationId_userId: { conversationId, userId } },
+      create: { conversationId, userId, threadId },
+      update: { threadId },
+    });
+  }
+
+  async dropAssistantThread(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.database.assistantConversationThread.deleteMany({
+      where: { conversationId, userId },
+    });
   }
 
   members(conversationId: string): Promise<MemberRow[]> {

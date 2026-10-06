@@ -7,5 +7,6 @@ import { AssistantBudgetRepository } from "./assistant-budget.repository.js";
   imports: [AuthModule],
   controllers: [AssistantController],
   providers: [AssistantService, AssistantBudgetRepository],
+  exports: [AssistantService],
 })
 export class AssistantModule {}

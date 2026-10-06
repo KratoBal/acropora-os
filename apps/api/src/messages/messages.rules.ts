@@ -319,3 +319,54 @@ export const systemText = {
 export function contextRef(number: string | null | undefined): string {
   return number?.trim() || "szám nélküli";
 }
+
+/** Az ékezet, a kisbetű és a szóköz nélküli alak: a név keresése ettől független. */
+const folded = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+/**
+ * Benne van-e a szövegben Sutyerák neve (ékezettől és kis-nagybetűtől
+ * függetlenül). Csak ELÖL kell szóhatár: a magyar toldalék a név mögé tapad
+ * („Sutyeráknak”, „Sutyerákkal”), és az is megszólítás.
+ */
+export function mentionsSutyerak(text: string | null): boolean {
+  return !!text && /(?<!\p{L})sutyerak/u.test(folded(text));
+}
+
+/** Amit Sutyerák a csak csatolmányt hozó üzenetre mond (4. pont B, 4. tétel). */
+export const SUTYERAK_ATTACHMENT_ONLY =
+  "Ezt a csatolmányt még nem tudom elolvasni. Írd le szövegben, mit szeretnél tudni, és megnézem.";
+
+/**
+ * MIKOR VÁLASZOL SUTYERÁK (4. pont B, 2. tétel): kettes beszélgetésben minden
+ * üzenetre, csoportban csak akkor, ha a szöveg a nevét említi. A saját, a
+ * törölt és a rendszer-üzenetre soha. Csak csatolmányra (szöveg nélkül) egy
+ * mondattal felel, hogy azt még nem tudja olvasni; csoportban az ilyen
+ * üzenet nem említi, tehát ott hallgat.
+ */
+export function assistantReplyPlan(input: {
+  assistantUserId: string;
+  senderUserId: string;
+  conversationType: "DIRECT" | "GROUP";
+  /** A beszélgetés JELENLEGI tagjai, Sutyerákkal együtt. */
+  activeMemberIds: readonly string[];
+  type: string;
+  text: string | null;
+  attachmentCount: number;
+  deleted: boolean;
+}):
+  | { kind: "ASK"; question: string; group: boolean }
+  | { kind: "ATTACHMENT_ONLY" }
+  | null {
+  if (input.senderUserId === input.assistantUserId) return null;
+  if (input.deleted || input.type === "SYSTEM") return null;
+  if (!input.activeMemberIds.includes(input.assistantUserId)) return null;
+  const group = input.conversationType === "GROUP";
+  const text = input.text?.trim() || null;
+  if (group && !mentionsSutyerak(text)) return null;
+  if (text) return { kind: "ASK", question: text.slice(0, 4000), group };
+  return input.attachmentCount > 0 ? { kind: "ATTACHMENT_ONLY" } : null;
+}

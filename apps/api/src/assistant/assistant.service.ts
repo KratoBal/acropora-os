@@ -27,11 +27,19 @@ export class AssistantService {
    * partner and an assistant login stay out.
    */
   available(user: AuthenticatedUser, kind: SessionKind | undefined): boolean {
+    return kind === "USER" && this.availableTo(user);
+  }
+  /**
+   * A DOLGOZÓ HASZNÁLHATJA-E SUTYERÁKOT, a munkamenet fajtájától függetlenül:
+   * belső dolgozó, bekapcsolt kapcsoló, a próba-listán (vagy `*`: mindenki).
+   * Az Üzenetek ezt nézik (4. pont B): ott az üzenetet a dolgozó saját
+   * munkamenete már elküldte.
+   */
+  availableTo(user: AuthenticatedUser): boolean {
     const pilots = (process.env.SUTYERAK_PILOT_USER_IDS ?? "")
       .split(",")
       .map((id) => id.trim());
     return (
-      kind === "USER" &&
       partnerScopeOf(user).kind === "internal" &&
       ["true", "1"].includes(process.env.SUTYERAK_ENABLED ?? "") &&
       (pilots.includes("*") || pilots.includes(user.id))
@@ -45,6 +53,34 @@ export class AssistantService {
   ): Promise<Response> {
     if (!this.available(user, kind))
       throw new ForbiddenException("Sutyerák számodra jelenleg nem elérhető.");
+    return this.forward(user, input, signal);
+  }
+  /**
+   * AZ ÜZENETEKBŐL (4. pont B): ugyanaz a továbbítás, a KÉRDEZŐ nevében és
+   * belépőjével, ugyanazzal a költségkerettel, mint a `/assistant/ask`.
+   */
+  async askOnBehalf(
+    user: AuthenticatedUser,
+    input: {
+      question: string;
+      threadId?: string;
+      context: Record<string, string>;
+    },
+    signal: AbortSignal,
+  ): Promise<Response> {
+    if (!this.availableTo(user))
+      throw new ForbiddenException("Sutyerák számodra jelenleg nem elérhető.");
+    return this.forward(user, input, signal);
+  }
+  private async forward(
+    user: AuthenticatedUser,
+    input: {
+      question: string;
+      threadId?: string;
+      context: Record<string, string | undefined> | AssistantAskDto["context"];
+    },
+    signal: AbortSignal,
+  ): Promise<Response> {
     await this.budget.consume(user.id);
     const session = await this.tokenFor(user);
     const url = process.env.SUTYERAK_GATEWAY_URL?.trim();

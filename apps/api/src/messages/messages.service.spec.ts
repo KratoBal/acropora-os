@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   PERMISSIONS,
   ROLE_PERMISSIONS,
+  SUTYERAK_USER_ID,
   USER_ROLES,
   type AuthenticatedUser,
   type MessageStreamEvent,
@@ -26,6 +27,7 @@ import {
   encodeCursor,
   mayJoinInternal,
 } from "./messages.rules.js";
+import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { MessagesService } from "./messages.service.js";
 
 /*
@@ -184,6 +186,7 @@ function fakeRepository(users: MessagingUserRow[]) {
       senderUserId: string;
       text: string;
       clientMessageId: string;
+      assistantSource?: "GATEWAY" | "ACROBOT" | null;
     }) => {
       const sender = people.get(input.senderUserId)!;
       const row = {
@@ -205,6 +208,7 @@ function fakeRepository(users: MessagingUserRow[]) {
         forwardedFromMessageId: null,
         forwardedFromUserId: null,
         forwardedFromUser: null,
+        assistantSource: input.assistantSource ?? null,
       } as MessageRow;
       messages.push(row);
       const c = conversations.get(input.conversationId)!;
@@ -235,7 +239,12 @@ function fakeRepository(users: MessagingUserRow[]) {
   return repo;
 }
 
-function setup(users: MessagingUserRow[]) {
+function setup(
+  users: MessagingUserRow[],
+  /** Sutyerák elérhetősége dolgozónként (4. pont B); hiányában senkinek. */
+  assistantFor: (user: AuthenticatedUser) => boolean = () => false,
+  thinking?: AssistantThinkingState,
+) {
   const repo = fakeRepository(users);
   const bus = new InMemoryMessageEventBus();
   const published: string[] = [];
@@ -257,6 +266,9 @@ function setup(users: MessagingUserRow[]) {
     repo as never,
     bus,
     notifications as never,
+    undefined,
+    { availableTo: assistantFor } as never,
+    thinking,
   );
   return { service, repo, bus, published, pushes };
 }
@@ -279,6 +291,8 @@ describe("who may message", () => {
       [...allowed].sort(),
       [
         "ADMIN",
+        // Sutyerák rendszer-fiókja (4. pont B): csak ezt az egy jogot kapja
+        "ASSISTANT",
         "MANAGER",
         "OWNER",
         "SALES",
@@ -301,6 +315,84 @@ describe("who may message", () => {
     assert.equal(check({ customerId: "cust-1" }), false);
     assert.equal(check({ supplierId: "sup-1" }), false);
     assert.equal(check({ isActive: false }), false);
+  });
+});
+
+/*
+  SUTYERÁK AZ ÜZENETEKBEN (4. pont B). MI PIROSÍT: Sutyerák annak is látszik
+  a listán vagy indítható vele beszélgetés, akinek nem elérhető; nem a lista
+  elején áll; az üzenete nem mondja meg, honnan jött a válasz; a gondolkodik-
+  jelzés nem jut el a beszélgetés részletéig.
+*/
+describe("Sutyerák in the messages", () => {
+  const sutyerak = person(SUTYERAK_USER_ID, {
+    role: "ASSISTANT" as UserRole,
+    displayName: "Sutyerák",
+  });
+  const users = [person("a"), person("b"), sutyerak];
+  const onlyA = (user: AuthenticatedUser) => user.id === "a";
+
+  it("is on the people list, first and marked, only for whom it is available", async () => {
+    const forA = await setup(users, onlyA).service.people(viewer("a"), "");
+    assert.deepEqual(
+      forA.items.map((p) => [p.userId, p.kind ?? "user"]),
+      // a hamis tároló a kérdezőt nem szűri ki (az a valódi lekérdezés dolga)
+      [
+        [SUTYERAK_USER_ID, "assistant"],
+        ["a", "user"],
+        ["b", "user"],
+      ],
+    );
+    const forB = await setup(users, onlyA).service.people(viewer("b"), "");
+    assert.deepEqual(
+      forB.items.map((p) => p.userId),
+      ["a", "b"],
+    );
+  });
+
+  it("a conversation with Sutyerák is refused to whom it is not available", async () => {
+    const { service } = setup(users, onlyA);
+    assert.equal(
+      await status(
+        service.createConversation(viewer("b"), {
+          memberIds: [SUTYERAK_USER_ID],
+        }),
+      ),
+      400,
+    );
+    const direct = await service.createConversation(viewer("a"), {
+      memberIds: [SUTYERAK_USER_ID],
+    });
+    assert.equal(direct.type, "DIRECT");
+  });
+
+  it("its message says where the answer came from; the detail shows it thinking", async () => {
+    const thinking = new AssistantThinkingState();
+    const { service } = setup(users, onlyA, thinking);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: [SUTYERAK_USER_ID],
+    });
+    const gateway = await service.postAsAssistant(id, " Szia! ", "GATEWAY");
+    const acrobot = await service.postAsAssistant(id, "Megvan.", "ACROBOT");
+    assert.deepEqual(
+      [gateway.text, gateway.assistant, acrobot.assistant],
+      ["Szia!", { viaAcrobot: false }, { viaAcrobot: true }],
+    );
+    const sent = await service.send(viewer("a"), id, {
+      text: "Köszi",
+      clientMessageId: "k1",
+    });
+    assert.equal(sent.assistant, undefined);
+    thinking.start(id);
+    assert.equal(
+      (await service.detail(viewer("a"), id)).assistantThinking,
+      true,
+    );
+    thinking.stop(id);
+    assert.equal(
+      (await service.detail(viewer("a"), id)).assistantThinking,
+      false,
+    );
   });
 });
 

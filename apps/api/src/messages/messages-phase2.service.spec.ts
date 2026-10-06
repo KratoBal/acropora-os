@@ -76,6 +76,7 @@ function fake() {
       // a 3. fázis mezői: itt nincs kitűzés és továbbítás
       pins: [],
       forwardedFromUser: null,
+      assistantSource: null,
       replyTo: reply
         ? {
             id: reply.id,

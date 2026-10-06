@@ -13,7 +13,7 @@ import {
 import {
   NOTIFICATION_ROLE_VALUES,
   SERVICE_CAPABILITY_VALUES,
-  USER_ROLES,
+  ASSIGNABLE_ROLES,
   type NotificationRoleValue,
   type ServiceCapabilityValue,
   type UserRole,
@@ -23,7 +23,7 @@ export class CreateUserDto {
   @IsString() @MinLength(1) firstName!: string;
   @IsString() @MinLength(1) lastName!: string;
   @IsEmail() email!: string;
-  @IsIn(USER_ROLES) role!: UserRole;
+  @IsIn(ASSIGNABLE_ROLES) role!: UserRole;
   @IsString() @MinLength(8) @IsOptional() password?: string;
   /**
    * WHICH CUSTOMER THIS ACCOUNT ACTS FOR. Absent or null for our own
@@ -44,7 +44,7 @@ export class UpdateUserDto {
    * `@MinLength(1)` - clearing a nickname has to be possible. */
   @IsString() @IsOptional() nickname?: string;
   @IsEmail() @IsOptional() email?: string;
-  @IsIn(USER_ROLES) @IsOptional() role?: UserRole;
+  @IsIn(ASSIGNABLE_ROLES) @IsOptional() role?: UserRole;
   /**
    * Absent leaves the tie alone; null cuts it. The difference matters more
    * here than for the nickname: cutting the tie WIDENS the scope, because a
@@ -83,5 +83,5 @@ export class UserListQueryDto {
   @IsString() @IsOptional() search?: string;
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
-  @IsIn(USER_ROLES) @IsOptional() role?: UserRole;
+  @IsIn(ASSIGNABLE_ROLES) @IsOptional() role?: UserRole;
 }

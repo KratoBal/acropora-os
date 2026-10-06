@@ -1,4 +1,4 @@
-import { USER_ROLES, type UserRole } from "@acropora/types";
+import { ASSIGNABLE_ROLES, type UserRole } from "@acropora/types";
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   OWNER: "Tulajdonos",
@@ -17,9 +17,11 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   CONTENT_AGENT: "Tartalom-ágens (gépi)",
   PARTNER_SERVICE: "Partner szerviz",
   ASSET_IMPORT_AGENT: "Eszköz-import ágens (gépi)",
+  /** Sutyerák rendszer-fiókja: nem választható (`ASSIGNABLE_ROLES`), csak a címke kell. */
+  ASSISTANT: "Sutyerák (rendszer)",
 };
 
-export const ROLE_OPTIONS = USER_ROLES.map((role) => ({
+export const ROLE_OPTIONS = ASSIGNABLE_ROLES.map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }));

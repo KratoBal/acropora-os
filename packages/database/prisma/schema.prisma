@@ -31,6 +31,11 @@ enum UserRole {
   /// betöltő négy hívása (helyszín- és kategórialista, partnerkód-keresés,
   /// eszköz-létrehozás) egyiket sem lépi túl.
   ASSET_IMPORT_AGENT
+
+  /// SUTYERÁK, A RENDSZER-FELHASZNÁLÓ (4. pont B, Balázs 2026-10-06): csak az
+  /// Üzenetek tagja lehet, jelszava nincs, belépni nem tud. Az átjárót mindig a
+  /// KÉRDEZŐ dolgozó belépőjével hívja, a saját szerepe semmit nem olvas.
+  ASSISTANT
 }
 
 enum ProductType {
@@ -789,6 +794,7 @@ model User {
   id                     String                 @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
   serviceTokens          ServiceToken[]         @relation("ServiceTokenUser")
+  assistantThreads       AssistantConversationThread[]
   /// Az általa kézzel indított JEV termékellenőrzések (PD-013).
   productEnrichmentRuns  ProductEnrichmentRun[]
   /// A termékismeret-tények, amiket ő fogadott el (#1431).
@@ -8085,14 +8091,30 @@ model Conversation {
   updatedAt       DateTime             @updatedAt
   archivedAt      DateTime?
 
-  createdBy   User                 @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
-  pins        PinnedMessage[]
-  members     ConversationMember[]
-  messages    Message[]
-  attachments MessageAttachment[]
+  createdBy        User                          @relation("ConversationCreatedBy", fields: [createdByUserId], references: [id])
+  pins             PinnedMessage[]
+  members          ConversationMember[]
+  messages         Message[]
+  attachments      MessageAttachment[]
+  assistantThreads AssistantConversationThread[]
 
   @@index([lastMessageAt])
   @@index([contextType, contextId])
+}
+
+/// SUTYERÁK SZÁLA EGY BESZÉLGETÉSBEN, KÉRDEZŐNKÉNT (4. pont B): az átjáró
+/// `threadId`-ja, hogy a folytatás ne kezdődjön elölről. A szál a kérdezőé (az
+/// átjáró 403-at ad másnak), ezért a kulcs a beszélgetés ÉS a kérdező.
+model AssistantConversationThread {
+  conversationId String
+  userId         String
+  threadId       String
+  updatedAt      DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
 }
 
 model ConversationMember {
@@ -8139,6 +8161,9 @@ model Message {
   /// beszélgetésből a továbbító később kilép, a név akkor is megmarad.
   forwardedFromMessageId String?
   forwardedFromUserId    String?
+  /// SUTYERÁK ÜZENETE (4. pont B): `GATEWAY` az átjáró válasza, `ACROBOT` az
+  /// acrobotnak átadott kérdés visszaírt válasza. Másnál `null`.
+  assistantSource        String?
 
   conversation      Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender            User                @relation("MessageSender", fields: [senderUserId], references: [id])
