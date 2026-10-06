@@ -246,6 +246,18 @@ export const webshopOrdersApi = {
       { method: "POST" },
     );
   },
+  /**
+   * A díjbekérő kiküldése a vevőnek (bb3a6bd5): az első hívás kiállítja a
+   * Számlázz.hu-n és elküldi, a kiállított díjbekérőt a további hívások csak
+   * újraküldik. A válasz a friss adatlap.
+   */
+  sendProforma(token: string, id: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/proforma`,
+      token,
+      { method: "POST" },
+    );
+  },
   /** Csomagfeladás a szállítónál; a válasz a friss adatlap és a „Feladtuk” levél sorsa. */
   createParcel(token: string, id: string, size?: WebshopParcelSize) {
     return apiRequest<WebshopOrderParcelResult>(

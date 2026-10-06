@@ -11,7 +11,11 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  PERMISSIONS,
+  type AuthenticatedUser,
+  type PurchaseInvoiceListResponse,
+} from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -21,6 +25,7 @@ import { ExchangeRateQueryDto } from "./dto/exchange-rate-query.dto.js";
 import { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.dto.js";
 import { PurchaseProductConflictQueryDto } from "./dto/purchase-product-conflict-query.dto.js";
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
+import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
 import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
@@ -36,6 +41,7 @@ export class PurchasingController {
     private readonly service: PurchasingService,
     private readonly supplierInvoiceImport: SupplierInvoiceImportService,
     private readonly lineSuggestions: SupplierLineSuggestionService,
+    private readonly pdfLookup: PurchaseInvoicePdfLookup,
   ) {}
 
   /**
@@ -85,8 +91,19 @@ export class PurchasingController {
 
   @Get("invoices")
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
-  listInvoices(@Query() query: PurchaseInvoiceListQueryDto) {
-    return this.service.list(query);
+  async listInvoices(
+    @Query() query: PurchaseInvoiceListQueryDto,
+  ): Promise<PurchaseInvoiceListResponse> {
+    const page = await this.service.list(query);
+    // a lap számláinak PDF-je (kártya f7df5354): egy lapra négy lekérdezés
+    const hasPdf = await this.pdfLookup.hasPdf(page.items);
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        hasPdf: hasPdf.get(item.id) ?? false,
+      })),
+    };
   }
 
   /**

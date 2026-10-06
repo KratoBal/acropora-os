@@ -8,6 +8,7 @@ import {
   parcelRefusal,
   sizeFor,
 } from "./webshop-order-parcel.rules.js";
+import { invoicePaymentMethodOf } from "./webshop-order-invoice.rules.js";
 
 /*
   A WEBSHOP RENDELÉS CSOMAGJÁNAK SZABÁLYAI. MI PIROSÍT: csomag megy számla
@@ -215,5 +216,52 @@ describe("the parcel on the page", () => {
         trackingUrl: null,
       },
     );
+  });
+});
+
+/*
+  A FÜGGŐ FIZETÉS VALÓDI ALAKJA (bb3a6bd5; mérve a stage-en 2026-10-06: tíz
+  utánvétes rendelésnél a fizetés-rekord nulla, a munkamenet pp_acropora_cod,
+  pending_authorization). A fenti ORDER fixtúra rekordot ad az utánvétnek, ami
+  a valóságban nem fordul elő -- ezért nem vette észre senki, hogy rekord
+  nélkül a csomag utánvét nélkül megy, és a számlára „Átutalás” kerül.
+  MI PIROSÍT: a munkamenetből nem olvas; egy törölt munkamenetet is számít; az
+  előre utalás utánvét-összeget kap.
+*/
+const pending = (provider: string, status = "pending_authorization") =>
+  order({
+    payment_collections: [
+      {
+        ...ORDER.payment_collections[0]!,
+        status: "not_paid",
+        authorized_amount: 0,
+        payments: [],
+        payment_sessions: [{ provider_id: provider, status }],
+      },
+    ],
+  });
+
+describe("a pending payment, as the shop really stores it", () => {
+  it("cash on delivery with only a session: the parcel carries the COD, the invoice says Utánvét", () => {
+    const cod = parcelInputOf(pending("pp_acropora_cod"));
+    assert.ok(cod.ok);
+    assert.equal(cod.codHuf, 20840);
+    assert.equal(invoicePaymentMethodOf(pending("pp_acropora_cod")), "Utánvét");
+  });
+
+  it("prepayment by bank transfer: no COD on the parcel, Átutalás on the invoice", () => {
+    const transfer = parcelInputOf(pending("pp_acropora_transfer"));
+    assert.ok(transfer.ok);
+    assert.equal("codHuf" in transfer, false);
+    assert.equal(
+      invoicePaymentMethodOf(pending("pp_acropora_transfer")),
+      "Átutalás",
+    );
+  });
+
+  it("a cancelled session is not the order's payment", () => {
+    const cancelled = parcelInputOf(pending("pp_acropora_cod", "canceled"));
+    assert.ok(cancelled.ok);
+    assert.equal("codHuf" in cancelled, false);
   });
 });

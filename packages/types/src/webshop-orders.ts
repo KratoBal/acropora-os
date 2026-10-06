@@ -106,6 +106,35 @@ export const WEBSHOP_ORDER_STAGE_LABELS: Record<WebshopOrderStage, string> = {
   stale: "Elavult",
 };
 
+/** A díjbekérő fizetési határideje napokban (Balázs, 2026-10-06 16:32 UTC). */
+export const WEBSHOP_PROFORMA_DUE_DAYS = 8;
+
+export interface WebshopOrderProforma {
+  id: string;
+  status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+  number: string | null;
+  /** ÉÉÉÉ-HH-NN, Budapest. */
+  dueDate: string | null;
+  /** A kiküldés állapota a bizonylaton (`BillingEmailStatus`); még nem ment ki: `null`. */
+  emailStatus: string | null;
+  expired: boolean;
+}
+
+/**
+ * LEJÁRT-E A DÍJBEKÉRŐ: a határidő napja már elmúlt (a határidő napján még
+ * nem). Ki nem állított díjbekérőnek nincs lejárata.
+ */
+export function webshopProformaExpired(
+  proforma: { status: string; dueDate: string | null },
+  today: string,
+): boolean {
+  return (
+    proforma.status === "ISSUED" &&
+    proforma.dueDate !== null &&
+    proforma.dueDate < today
+  );
+}
+
 export type WebshopOrderPaymentState =
   | "AWAITING"
   | "AUTHORIZED"
@@ -165,6 +194,12 @@ export interface WebshopOrderListItem {
   invoiceNumber: string | null;
   /** Az aktív csomag száma a szállítónál, ha van (a kereső ezt is nézi). */
   parcelNumber: string | null;
+  /**
+   * „Lejárt díjbekérő” (Balázs, 2026-10-06 16:41 UTC): a díjbekérő határideje
+   * elmúlt. Automatikusan semmi nem történik; kézzel törölhető vagy
+   * újraküldhető.
+   */
+  proformaExpired: boolean;
   status: {
     code: WebshopOrderStatus | null;
     label: string | null;
@@ -369,6 +404,19 @@ export interface WebshopOrderDetail {
     status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
     number: string | null;
   } | null;
+  /**
+   * ELŐRE UTALÁS (kártya bb3a6bd5): a rendelést előre, átutalással fizetik.
+   * Ilyenkor a „Díjbekérő kiküldése” gomb áll az adatlapon.
+   */
+  bankTransfer: boolean;
+  /**
+   * A rendelés díjbekérője, ha készült: a Számlázz.hu-n kiállítva, és az OS
+   * kiküldő útján elküldve (a Számlázz.hu sosem küld). `expired`: a fizetési
+   * határidő (8 nap, Balázs 2026-10-06) elmúlt; ilyenkor SEMMI automatikus
+   * nem történik, a rendelés „Lejárt díjbekérő” jelöléssel áll (Balázs,
+   * 2026-10-06 16:41 UTC).
+   */
+  proforma: WebshopOrderProforma | null;
   /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */
   osCustomer: {
     id: string;

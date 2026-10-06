@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Controller,
   Get,
   Header,
@@ -26,8 +27,7 @@ import {
 } from "./incoming-billing-documents.js";
 import {
   collectedPdfIds,
-  collectedPdfIndex,
-  type CollectedDocument,
+  loadCollectedPdfIndex,
 } from "./incoming-collected-pdf.js";
 
 const PDF_MAGIC = Buffer.from("%PDF-");
@@ -91,7 +91,12 @@ export class IncomingBillingDocumentsController {
    * A számla PDF-je. ELŐSZÖR a Számlázz.hu-é, ha valódi PDF-et küldött (a
    * `pdfszamlabe` regisztrációnál; élesen 2026-10-04-én 85-ből 5). Ha nem, a
    * BEGYŰJTÖTT PDF, számlaszám és adószám-törzs szerint párosítva
-   * (`incoming-collected-pdf.ts`). Egyik sem: 404, és a felület a `hasPdf`
+   * (`incoming-collected-pdf.ts`).
+   *
+   * A KÉT KUDARC KÉT KÜLÖN VÁLASZ (kártya f7df5354, Sutyerák #16): nincs ilyen
+   * számla: 404; a számla megvan, de PDF nem érkezett hozzá: 409. Korábban
+   * mindkettő 404 volt, és egy hívó (Sutyerák) nem tudta megmondani, hogy a
+   * PDF hiányzik, vagy rossz azonosítót kérdezett. A felület a `hasPdf`
    * alapján gombot sem mutat.
    */
   @Get("incoming-documents/:id/pdf")
@@ -123,7 +128,9 @@ export class IncomingBillingDocumentsController {
       }
     }
     if (!content)
-      throw new NotFoundException("Ehhez a számlához nem érkezett PDF.");
+      throw new ConflictException(
+        "A számla megvan, de PDF nem érkezett hozzá.",
+      );
     const fileName = `${row.documentNumber.replace(/[^\w.-]+/g, "_")}.pdf`;
     return new StreamableFile(content, {
       type: "application/pdf",
@@ -137,18 +144,7 @@ export class IncomingBillingDocumentsController {
    * (számlaszám, adószám) kellenek hozzá. A listánál egy lekérdezés az egész.
    */
   private async collectedIndex() {
-    const documents: CollectedDocument[] =
-      await this.database.incomingSupplierDocument.findMany({
-        where: { fileName: { endsWith: ".pdf", mode: "insensitive" } },
-        select: {
-          id: true,
-          fileName: true,
-          createdAt: true,
-          textReading: true,
-          importResult: true,
-        },
-      });
-    return collectedPdfIndex(documents);
+    return loadCollectedPdfIndex(this.database);
   }
 
   /**
