@@ -12,6 +12,8 @@ Ha nincs kártya, az rendben van, de írd oda, hogy nincs, és miért. Egy üres
 hogy elfelejtettük; egy kitöltött azt, hogy megnéztük.
 -->
 
+**Figma node:** `<link vagy node-id>` vagy **nincs UI-változás**
+
 ## Mit változtat
 
 ## Ellenőrzés
