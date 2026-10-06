@@ -30,7 +30,15 @@ import {
   ForwardDialog,
   SearchAndPinsPanel,
 } from "./conversation-drawer";
-import { Monogram, conversationName } from "./conversation-parts";
+import { AssistantMarkdown } from "@/components/assistant/markdown";
+import { SUTYERAK_ASSETS } from "@/components/assistant/assets";
+
+import {
+  Monogram,
+  SUTYERAK_VIA_ACROBOT,
+  conversationName,
+  isAssistantConversation,
+} from "./conversation-parts";
 import { useMessageStream } from "./message-stream";
 import {
   contextCardParts,
@@ -111,6 +119,10 @@ export function ConversationView({
   onLeft?: () => void;
 }) {
   const id = conversation.id;
+  const hasAssistant = conversation.members.some(
+    (member) => member.kind === "assistant",
+  );
+  const [assistantThinking, setAssistantThinking] = useState(false);
   const [items, setItems] = useState<MessageItem[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -197,7 +209,33 @@ export function ConversationView({
     void loadLatest();
   }, [loadLatest]);
 
+  // SUTYERÁK GONDOLKODIK (4. pont, B/3): a kezdőállapot a beszélgetés
+  // részletéből, mert egy újratöltés után az esemény már elment
+  const readAssistantThinking = useCallback(
+    (signal?: AbortSignal) => {
+      if (!hasAssistant) return;
+      messagesApi
+        .detail(token, id, signal)
+        .then((detail) =>
+          setAssistantThinking(detail.assistantThinking === true),
+        )
+        .catch(() => undefined);
+    },
+    [hasAssistant, token, id],
+  );
+  useEffect(() => {
+    setAssistantThinking(false);
+    const controller = new AbortController();
+    readAssistantThinking(controller.signal);
+    return () => controller.abort();
+  }, [readAssistantThinking]);
+
   useMessageStream((signal) => {
+    if (signal.type === "assistant.thinking") {
+      if (signal.conversationId === id) setAssistantThinking(signal.active);
+      return;
+    }
+    if (signal.type === "resync") readAssistantThinking();
     if (
       signal.type === "resync" ||
       (signal.type === "message.created" && signal.conversationId === id)
@@ -500,7 +538,10 @@ export function ConversationView({
         className="flex min-h-0 flex-1 flex-col border border-pilot-grey-200 bg-white"
       >
         <header className="flex items-center gap-3 border-b border-pilot-grey-200 px-5 py-4">
-          <Monogram name={name} />
+          <Monogram
+            name={name}
+            assistant={isAssistantConversation(conversation)}
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-pilot-grey-900">
               {name}
@@ -639,9 +680,11 @@ export function ConversationView({
                       message={message}
                       own={own}
                       sender={
-                        conversation.type === "GROUP" && !own
-                          ? message.senderName
-                          : null
+                        message.assistant?.viaAcrobot
+                          ? SUTYERAK_VIA_ACROBOT
+                          : conversation.type === "GROUP" && !own
+                            ? message.senderName
+                            : null
                       }
                       onReact={(reaction) => void react(message, reaction)}
                     />
@@ -797,6 +840,24 @@ export function ConversationView({
                 </li>
               ))}
             </ul>
+          ) : null}
+          {assistantThinking ? (
+            <p
+              role="status"
+              data-testid="sutyerak-thinking"
+              className="flex items-center gap-2 text-xs text-pilot-grey-600"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- swappable local mascot assets */}
+              <img
+                src={SUTYERAK_ASSETS.thinking}
+                alt=""
+                aria-hidden="true"
+                width={24}
+                height={24}
+                className="size-6 object-contain"
+              />
+              Sutyerák gondolkodik…
+            </p>
           ) : null}
           <form
             className="flex items-end gap-3"
@@ -1008,7 +1069,12 @@ function Bubble({
               </a>
             ),
           )}
-          {message.text ? (
+          {message.text && message.assistant ? (
+            // Sutyerák Markdownja, ugyanazzal a megjelenítővel, mint a widgetben: nincs nyers HTML
+            <div data-testid="assistant-text" className="break-words">
+              <AssistantMarkdown text={message.text} />
+            </div>
+          ) : message.text ? (
             <p className="whitespace-pre-wrap break-words">{message.text}</p>
           ) : null}
         </>

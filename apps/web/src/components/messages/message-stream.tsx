@@ -40,6 +40,7 @@ const STREAM_EVENTS: MessageStreamEvent["type"][] = [
   "conversation.created",
   "conversation.read",
   "message.updated",
+  "assistant.thinking",
 ];
 
 const StreamContext = createContext<{

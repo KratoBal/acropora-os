@@ -16,7 +16,11 @@ import { useEffect, useState } from "react";
 import { ROLE_LABELS } from "@/components/users/role-labels";
 import { attachmentUrl, messagesApi } from "@/lib/api/messages";
 
-import { Monogram, conversationName } from "./conversation-parts";
+import {
+  Monogram,
+  conversationName,
+  isAssistantConversation,
+} from "./conversation-parts";
 import { fileSizeLabel } from "./outbox";
 import { MembershipSection } from "./phase4-dialogs";
 import {
@@ -305,7 +309,10 @@ export function ConversationDetailsPanel({
         </button>
       </div>
       <div className="flex items-center gap-3">
-        <Monogram name={name} />
+        <Monogram
+          name={name}
+          assistant={isAssistantConversation(conversation)}
+        />
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-pilot-grey-900">
             {name}
@@ -342,7 +349,10 @@ export function ConversationDetailsPanel({
           <ul className="space-y-2" aria-label="Résztvevők">
             {conversation.members.map((member) => (
               <li key={member.userId} className="flex items-center gap-3">
-                <Monogram name={member.name} />
+                <Monogram
+                  name={member.name}
+                  assistant={member.kind === "assistant"}
+                />
                 <span className="min-w-0">
                   <span className="block truncate text-sm text-pilot-grey-900">
                     {member.name}
