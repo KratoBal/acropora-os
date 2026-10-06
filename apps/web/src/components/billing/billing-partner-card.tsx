@@ -9,6 +9,7 @@ import {
 import {
   CUSTOMER_LIST_PAGE_SIZE,
   type BillingDocumentCustomer,
+  type CustomerDetail,
   type CustomerSummary,
 } from "@acropora/types";
 import { useEffect, useState } from "react";
@@ -81,6 +82,9 @@ export function BillingPartnerCard({
     };
   }, [picking, search, token]);
 
+  /** honnan jött a fizetési nap, ha nem erről a vevő-sorról (7be4a85b) */
+  const [termsNote, setTermsNote] = useState<string | null>(null);
+
   const pick = async (summary: CustomerSummary) => {
     setError(null);
     try {
@@ -98,8 +102,14 @@ export function BillingPartnerCard({
           email: detail.email ?? null,
           internalCode: detail.customerNumber,
         },
-        { paymentDueDays: detail.paymentDueDays },
+        {
+          paymentDueDays:
+            detail.paymentDueDays ??
+            detail.partnerTerms?.paymentDueDays ??
+            null,
+        },
       );
+      setTermsNote(partnerTermsNote(detail));
       setPicking(false);
       setSearch("");
     } catch (cause) {
@@ -133,6 +143,9 @@ export function BillingPartnerCard({
               Partner-azonosító: {customer.internalCode} · EU adószám és
               kapcsolattartó: nincs a partner-törzsben
             </p>
+            {termsNote ? (
+              <p className="text-xs text-pilot-amber-700">{termsNote}</p>
+            ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {customer.taxNumber || customer.email ? (
@@ -198,4 +211,15 @@ export function BillingPartnerCard({
       )}
     </PilotSection>
   );
+}
+
+/**
+ * A FIZETÉSI NAP FORRÁSA, HA NEM A VÁLASZTOTT VEVŐ-SORÉ (kártya 7be4a85b):
+ * ugyanaz a cég több vevő-soron is állhat, és a napot a Partnerek oldalon
+ * állítják. A szöveg kimondja, honnan jött a határidő, hogy ne látsszon
+ * önkényesnek.
+ */
+export function partnerTermsNote(detail: CustomerDetail): string | null {
+  if (detail.paymentDueDays !== null || !detail.partnerTerms) return null;
+  return `Fizetési határidő: ${detail.partnerTerms.paymentDueDays} nap, a(z) ${detail.partnerTerms.partnerName} partner beállításából (ezen a vevő-soron nincs megadva).`;
 }
