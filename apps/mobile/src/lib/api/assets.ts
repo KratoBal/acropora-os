@@ -476,6 +476,11 @@ export interface AssetDocumentSummary {
    */
   caption: string | null;
   uploadedBy?: { id: string; displayName: string };
+  /**
+   * Whether the server reads this file as text (a PDF). Optional here only
+   * because a list saved for offline use before the field existed lacks it.
+   */
+  textReadable?: boolean;
   createdAt: string;
 }
 

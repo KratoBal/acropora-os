@@ -6,6 +6,12 @@ import type {
 } from "../auth/partner-scope.util.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
+import {
+  ASSET_DOCUMENT_TEXT_MAX_BYTES,
+  AssetDocumentTextCache,
+  isTextReadable,
+} from "./asset-document-text.js";
+import { SupplierInvoiceImportError } from "../purchasing/supplier-invoice-import/supplier-invoice-import.error.js";
 import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { describeFieldConflict } from "./asset-field-conflict.js";
 import {
@@ -17,11 +23,15 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  PayloadTooLargeException,
   ServiceUnavailableException,
+  UnprocessableEntityException,
+  UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type {
   AssetDocumentSummary,
+  AssetDocumentText,
   AssetQrCode,
   AuthenticatedUser,
 } from "@acropora/types";
@@ -98,6 +108,7 @@ export class ServiceAssetsService {
   ) {}
 
   private readonly logger = new Logger(ServiceAssetsService.name);
+  private readonly documentTexts = new AssetDocumentTextCache();
 
   /**
    * A HIVO LATASI HATOKORE, EGY HELYEN FELOLDVA.
@@ -937,7 +948,50 @@ export class ServiceAssetsService {
     }
 
     const document = await this.document(id, documentId, user);
+    return { ...document, bytes: await this.bytesOf(id, documentId, document) };
+  }
 
+  /**
+   * AN ATTACHMENT AS TEXT, for Sutyerák (Balázs, 2026-10-06 10:23 UTC).
+   *
+   * Same gate as the download: the document is resolved within the caller's
+   * scope first (404 for what they may not see), and only then read. The text
+   * is cached by the file's sha256, see `AssetDocumentTextCache`.
+   */
+  async documentText(
+    id: string,
+    documentId: string,
+    user: AuthenticatedUser,
+  ): Promise<AssetDocumentText> {
+    const document = await this.document(id, documentId, user);
+    if (!isTextReadable(document.contentType))
+      throw new UnsupportedMediaTypeException(
+        "Ennek a csatolmánynak nincs olvasható szövege: nem PDF.",
+      );
+    const read = await this.documentTexts
+      .text(document.sha256, async () => {
+        const bytes = await this.bytesOf(id, documentId, document);
+        if (bytes.length > ASSET_DOCUMENT_TEXT_MAX_BYTES)
+          throw new PayloadTooLargeException(
+            "A PDF túl nagy a szöveges olvasáshoz.",
+          );
+        return bytes;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof SupplierInvoiceImportError)
+          throw new UnprocessableEntityException(
+            "A PDF nem nyitható meg, a szövege nem olvasható.",
+          );
+        throw error;
+      });
+    return { documentId, fileName: document.fileName, ...read };
+  }
+
+  private async bytesOf(
+    id: string,
+    documentId: string,
+    document: { content: Uint8Array | null; storageKey: string | null },
+  ): Promise<Uint8Array> {
     if (document.storageKey === null) {
       if (document.content === null) {
         // A tábla CHECK megkötése ezt kizárja; a TÍPUS viszont nem, és egy
@@ -947,7 +1001,7 @@ export class ServiceAssetsService {
           "A dokumentumnak nincs tartalma egyik forrásban sem.",
         );
       }
-      return { ...document, bytes: document.content };
+      return document.content;
     }
 
     assertStorageKeyMatches(document.storageKey, {
@@ -964,7 +1018,7 @@ export class ServiceAssetsService {
     if (bytes === null) {
       throw new ServiceUnavailableException(documentUnavailableMessage());
     }
-    return { ...document, bytes };
+    return bytes;
   }
 
   /**

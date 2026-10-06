@@ -37,6 +37,7 @@ const DOKUMENTUMOK: AssetDocumentSummary[] = [
     sizeBytes: 12,
     sha256: "a".repeat(64),
     caption: "A szivattyú kézikönyve",
+    textReadable: true,
     createdAt: "2026-09-17T08:00:00.000Z",
   },
   {
@@ -47,6 +48,7 @@ const DOKUMENTUMOK: AssetDocumentSummary[] = [
     sizeBytes: 34,
     sha256: "b".repeat(64),
     caption: null,
+    textReadable: true,
     createdAt: "2026-09-16T08:00:00.000Z",
   },
 ];

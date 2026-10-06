@@ -494,6 +494,26 @@ export class ServiceAssetsController {
     return created;
   }
 
+  /**
+   * THE ATTACHMENT AS TEXT (Balázs, 2026-10-06 10:23 UTC: Sutyerák should read
+   * the uploaded PDFs, e.g. a manufacturer's parts list).
+   *
+   * Read-only, under the SAME permission and scope as the download below, so
+   * it opens nothing the caller could not already download. A GET, so the
+   * assistant login reaches it like any other read. `no-store` for the same
+   * reason as the download: the text is the file's content.
+   */
+  @Get(":id/documents/:documentId/text")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  documentText(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.documentText(id, documentId, user);
+  }
+
   @Get(":id/documents/:documentId")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   /*
