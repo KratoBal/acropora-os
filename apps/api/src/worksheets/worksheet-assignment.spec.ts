@@ -21,7 +21,10 @@ describe("WORKSHEET_ASSIGNABLE_ROLES", () => {
    */
   it("minden listázott szerep tud is dolgozni a lapon", () => {
     for (const role of WORKSHEET_ASSIGNABLE_ROLES) {
-      assert.equal(hasPermission(role, PERMISSIONS.SERVICE_MANAGE), true);
+      assert.equal(
+        hasPermission({ role: role }, PERMISSIONS.SERVICE_MANAGE),
+        true,
+      );
     }
   });
 
@@ -32,7 +35,10 @@ describe("WORKSHEET_ASSIGNABLE_ROLES", () => {
   // A VIEWER látja a lapot, de nem ír rá. Felelősnek kiosztva megkapná az
   // értesítést, megnyitná a lapot, és nem tudna rögzíteni semmit.
   it("leaves out a role that can only look at the worksheet", () => {
-    assert.equal(hasPermission("VIEWER", PERMISSIONS.SERVICE_VIEW), true);
+    assert.equal(
+      hasPermission({ role: "VIEWER" }, PERMISSIONS.SERVICE_VIEW),
+      true,
+    );
     assert.equal(WORKSHEET_ASSIGNABLE_ROLES.includes("VIEWER"), false);
   });
 });

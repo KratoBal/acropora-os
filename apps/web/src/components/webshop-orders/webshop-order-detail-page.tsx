@@ -4,6 +4,7 @@ import {
   hasPermission,
   PERMISSIONS,
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
+  WEBSHOP_PROFORMA_DUE_DAYS,
   WEBSHOP_PARCEL_SIZES,
   WEBSHOP_CARD_PAYMENT_STATE_LABELS,
   glsDeliveryLabel,
@@ -349,6 +350,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE) &&
     hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
   );
+  // a díjbekérő kiállítás ÉS kiküldés (a szerver a BILLING_RESEND-et is kéri)
+  const canSendProforma =
+    canIssue &&
+    Boolean(session && hasPermission(session.user, PERMISSIONS.BILLING_RESEND));
   const token = session?.token ?? "";
   const [mailNotice, setMailNotice] = useState<string | null>(null);
   const changeStatus = async (
@@ -377,6 +382,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   };
   const issueDeliveryNote = async () => {
     setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
+    setNow(Date.now());
+  };
+  const sendProforma = async () => {
+    setOrder(await webshopOrdersApi.sendProforma(token, id));
     setNow(Date.now());
   };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
@@ -538,6 +547,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           now={now}
           canManage={canManage}
           canIssue={canIssue}
+          canSendProforma={canSendProforma}
+          onSendProforma={sendProforma}
           onChangeStatus={changeStatus}
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
@@ -735,6 +746,131 @@ function InvoiceCard({
         onCancel={() => setConfirming(null)}
       />
     </Card>
+  );
+}
+
+/** A díjbekérő levelének állapota (`BillingEmailStatus`). */
+const PROFORMA_MAIL: Record<string, string> = {
+  SENT: "Kiküldve",
+  SENDING: "Küldés alatt",
+  FAILED: "Nem ment ki",
+};
+
+/**
+ * A DÍJBEKÉRŐ (kártya bb3a6bd5; Balázs, 2026-10-06: „Leadja a rendelest es
+ * mi kuldjuk neki gombbal a dijbekerot”, 8 napos határidő). Az első gomb a
+ * Számlázz.hu-n kiállítja és elküldi a vevőnek, a további csak újraküldi.
+ * Lejárat után semmi automatikus: „Lejárt díjbekérő”, és újraküldhető. A
+ * kiállítás alatti és az elutasított díjbekérő nem kap gombot: ott a
+ * Számlázásban kell megnézni, mi történt.
+ */
+function ProformaSection({
+  order,
+  canSend,
+  onSend,
+}: {
+  order: WebshopOrderDetail;
+  canSend: boolean;
+  onSend: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // VALÓDI BIZONYLAT ÉS VALÓDI LEVÉL (acrobot 26827): egy kattintás nem elég
+  const [confirming, setConfirming] = useState(false);
+  const proforma = order.proforma;
+  const issued = proforma?.status === "ISSUED";
+  const sentBefore = issued && proforma.emailStatus !== null;
+  const stuck =
+    proforma?.status === "ISSUING" || proforma?.status === "ISSUE_FAILED";
+  const sending = proforma?.emailStatus === "SENDING";
+  const closed = order.status.code === "closed_unsuccessfully";
+  const label = sentBefore ? "Díjbekérő újraküldése" : "Díjbekérő kiküldése";
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSend();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  };
+  return (
+    <div className="mt-4 space-y-3 border-t border-pilot-grey-100 pt-4">
+      {proforma?.expired ? (
+        <span className="inline-block rounded-full bg-pilot-red-50 px-3 py-1 text-xs font-medium text-pilot-red-700">
+          Lejárt díjbekérő
+        </span>
+      ) : order.payment?.state === "AWAITING" ? (
+        <span className="inline-block rounded-full bg-pilot-amber-50 px-3 py-1 text-xs font-medium text-pilot-amber-700">
+          Utalásra vár
+        </span>
+      ) : null}
+      {issued ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Díjbekérő">{proforma.number ?? "—"}</Field>
+          <Field label="Fizetési határidő">{proforma.dueDate ?? "—"}</Field>
+          <Field label="Levél">
+            {(proforma.emailStatus && PROFORMA_MAIL[proforma.emailStatus]) ??
+              "Még nem ment ki"}
+          </Field>
+        </div>
+      ) : stuck ? (
+        <p
+          className={`text-sm ${proforma.status === "ISSUING" ? "text-pilot-amber-700" : "text-pilot-red-700"}`}
+        >
+          {proforma.status === "ISSUING"
+            ? "A díjbekérő kiállítása elindult, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, elkészült-e."
+            : "A díjbekérő kiállítása elutasítva maradt. Az okát a bizonylatnál látod."}
+        </p>
+      ) : (
+        <p className="text-sm text-pilot-grey-700">Még nincs díjbekérő.</p>
+      )}
+      {proforma ? (
+        <Link
+          href={`/penzugy/szamlazas/${encodeURIComponent(proforma.id)}`}
+          className="text-sm font-medium text-pilot-aqua-700 underline"
+        >
+          Megnyitás a Számlázásban
+        </Link>
+      ) : null}
+      {canSend && !stuck && !closed ? (
+        <PilotButton
+          size="regular"
+          variant={sentBefore ? "secondary" : "primary"}
+          disabled={busy || sending}
+          onClick={() => setConfirming(true)}
+        >
+          {busy ? "Küldés…" : label}
+        </PilotButton>
+      ) : null}
+      {error ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+        >
+          {error}
+        </p>
+      ) : null}
+      <ConfirmDialog
+        open={confirming}
+        title={label}
+        consequence={
+          issued
+            ? `A vevő (${order.customer.email}) e-mailben újra megkapja a meglévő díjbekérőt. Új díjbekérő nem készül, a határidő nem változik.`
+            : `A kiküldéssel valódi díjbekérő készül a Számlázz.hu-n, saját számmal, ${WEBSHOP_PROFORMA_DUE_DAYS} napos fizetési határidővel, és a vevő (${order.customer.email}) e-mailben megkapja.`
+        }
+        recovery="A kiment levél nem vonható vissza."
+        confirmLabel={label}
+        busy={busy}
+        onConfirm={() => void send()}
+        onCancel={() => setConfirming(false)}
+      />
+    </div>
   );
 }
 
@@ -1453,6 +1589,8 @@ function OrderBody({
   now,
   canManage,
   canIssue,
+  canSendProforma,
+  onSendProforma,
   onChangeStatus,
   mailNotice,
   onResendStatusMail,
@@ -1481,6 +1619,8 @@ function OrderBody({
   now: number;
   canManage: boolean;
   canIssue: boolean;
+  canSendProforma: boolean;
+  onSendProforma: () => Promise<void>;
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
@@ -2019,6 +2159,13 @@ function OrderBody({
                 A webshop nem rögzített fizetést ehhez a rendeléshez.
               </p>
             )}
+            {order.bankTransfer ? (
+              <ProformaSection
+                order={order}
+                canSend={canSendProforma}
+                onSend={onSendProforma}
+              />
+            ) : null}
           </Card>
 
           <Card title="Szállítás">

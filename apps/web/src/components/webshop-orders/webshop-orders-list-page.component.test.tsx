@@ -83,6 +83,7 @@ const order = (
   },
   invoiceNumber: null,
   parcelNumber: null,
+  proformaExpired: false,
   status: {
     code: "confirmed",
     label: "Visszaigazolva",
@@ -183,6 +184,17 @@ describe("WebshopOrdersListPage", () => {
     expect(
       within(counters).getByRole("button", { name: /Számlára vár\s*5/ }),
     ).toBeTruthy();
+  });
+
+  it("an expired proforma is named in the payment column, and only there (bb3a6bd5)", async () => {
+    api.list.mockResolvedValue(
+      response([
+        order({ proformaExpired: true }),
+        order({ id: "order_39", displayId: 39 }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    expect(await screen.findAllByText("Lejárt díjbekérő")).toHaveLength(1);
   });
 
   it("an expiring card hold is named in the payment column (lejáró zárolás)", async () => {

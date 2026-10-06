@@ -146,10 +146,20 @@ function urlAfterChange() {
   return new URLSearchParams(target.split("?")[1]);
 }
 
+/**
+ * A LAP KESZ, HA A LISTA ES A KATEGORIAK IS MEGJOTTEK -- MINDKETTORE VARUNK.
+ *
+ * MERVE (2026-10-06, a teljes web-futasban egyszer bukott): eddig csak a
+ * listara vartunk. A kategoriak kulon keresben jonnek, es ha a
+ * `fireEvent.change` egy MEG NEM LETEZO opcio erteket allitja, a jsdom az
+ * ismeretlen erteket eldobja, a kezelo ures erteket kap („Minden kategória”),
+ * es a `categoryId` hianyzik. Terhelt gepen ez a sorrend elofordult.
+ */
 async function renderWith(search: string) {
   navigation.params = new URLSearchParams(search);
   render(<AssetListPage />);
   await waitFor(() => expect(api.list).toHaveBeenCalled());
+  await screen.findByRole("option", { name: "Szivattyú" });
 }
 
 function valaszto() {
@@ -187,7 +197,18 @@ describe("AssetListPage kategória-szűrő", () => {
     navigation.replace.mockClear();
     api.list.mockReset().mockResolvedValue(response([]));
     suppliers.units.mockReset().mockResolvedValue({ items: [] });
-    categories.list.mockReset().mockResolvedValue(categoryList);
+    /*
+      A KATEGORIAK SZANDEKOSAN EGY UTEMMEL KESOBB JONNEK, mint a lista. Igy a
+      fenti verseny MINDEN futasban fennall, nem csak terhelt gepen: ha valaki
+      a `renderWith` kategoria-varasat kiveszi, a ket kategoria-valaszto teszt
+      mindig piros, nem csak neha.
+    */
+    categories.list
+      .mockReset()
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve(categoryList), 0)),
+      );
   });
 
   /**

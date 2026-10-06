@@ -209,6 +209,8 @@ function setup(
       {} as CustomersRepository,
       documents,
       issuing,
+      {} as never,
+      {} as never,
     ),
   };
 }

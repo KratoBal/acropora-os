@@ -1,17 +1,23 @@
+import { randomUUID } from "node:crypto";
 import {
   ConflictException,
   Injectable,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
   WEBSHOP_ORDER_STATUSES,
+  billingEmailModeFor,
   type AuthenticatedUser,
+  type BillingEmailStatus,
   type BillingDocumentDetail,
   type BillingDocumentDraftInput,
   type WebshopOrderDetail,
   type WebshopOrderStatus,
 } from "@acropora/types";
 
+import { BillingDocumentEmailDraftService } from "../../billing/billing-document-email-draft.service.js";
+import { BillingDocumentEmailService } from "../../billing/billing-document-email.service.js";
 import { BillingDocumentIssueService } from "../../billing/billing-document-issue.service.js";
 import { BillingDocumentsService } from "../../billing/billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "../../billing/dto/billing-document-draft.dto.js";
@@ -25,7 +31,13 @@ import {
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
+  proformaDraftOf,
+  proformaRefusal,
 } from "./webshop-order-invoice.rules.js";
+import {
+  BANK_TRANSFER_PROVIDER_ID,
+  orderPaymentProviderId,
+} from "./webshop-orders.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 
@@ -63,7 +75,125 @@ export class WebshopOrderInvoiceService {
     private readonly customers: CustomersRepository,
     private readonly documents: BillingDocumentsService,
     private readonly issuing: BillingDocumentIssueService,
+    private readonly email: BillingDocumentEmailService,
+    private readonly emailDrafts: BillingDocumentEmailDraftService,
   ) {}
+
+  /**
+   * A DÍJBEKÉRŐ KIÁLLÍTÁSA ÉS KIKÜLDÉSE EGY GOMBBAL (kártya bb3a6bd5; Balázs,
+   * 2026-10-06 16:31 UTC: „Leadja a rendelest es mi kuldjuk neki gombbal a
+   * dijbekerot”). Csak előre utalásos rendelésnél.
+   *
+   * Ha a díjbekérő még nincs kiállítva, előbb kiállítja (PROFORMA, 8 nap,
+   * átutalás); utána kiküldi a vevőnek az OS kiküldő útján, a bizonylatok
+   * alap levélszövegével. A Számlázz.hu sosem küld (Balázs, 2026-09-30). Ha
+   * már kiment, ugyanez a gomb ÚJRAKÜLDI (a lejárt díjbekérőt is: Balázs
+   * 16:41, „a dijbekero ujrakuldheto”).
+   */
+  sendProforma(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    return this.serial(orderId, () => this.sendProformaNow(orderId, user, now));
+  }
+
+  private async sendProformaNow(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+  ): Promise<WebshopOrderDetail> {
+    this.requireIssuing();
+    const { order, status } = await this.orders.source(orderId);
+    if (
+      orderPaymentProviderId(order.payment_collections?.[0]) !==
+      BANK_TRANSFER_PROVIDER_ID
+    )
+      throw new ConflictException(
+        "Díjbekérő csak előre utalásos rendeléshez küldhető.",
+      );
+    const refusal = proformaRefusal(statusOf(status?.status));
+    if (refusal) throw new ConflictException(refusal);
+    /*
+      A LEVÉL-KAPU A KIÁLLÍTÁS ELŐTT (stage-próba, 2026-10-07): a díjbekérő
+      azért készül, hogy a vevő megkapja. Zárt kapunál eddig előbb kiállt egy
+      valódi bizonylat, és csak a küldés utasított el; a válasz hiba volt, a
+      bizonylat mégis megmaradt. Most semmi nem készül, és a kapu mondata jön.
+    */
+    const mailClosed = this.email.gateRefusal();
+    if (mailClosed) throw new ServiceUnavailableException(mailClosed);
+
+    let proforma = (await this.repository.invoices([orderId], "PROFORMA")).get(
+      orderId,
+    );
+    if (proforma?.status === "ISSUING")
+      throw new ConflictException(
+        "A díjbekérő már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
+      );
+    if (proforma?.status === "ISSUE_FAILED")
+      throw new ConflictException(
+        "A díjbekérő kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
+      );
+    if (proforma?.status !== "ISSUED") {
+      const customerId = await this.customerFor(order, user);
+      const buyer = await this.repository.customerBuyer(customerId);
+      if (!buyer)
+        throw new ConflictException("A rendelés OS-partnere nem található.");
+      const mismatch = buyerMismatch(order, buyer);
+      if (mismatch) throw new ConflictException(mismatch);
+      const draft = proformaDraftOf(order, { customerId, now });
+      if (!draft.ok) throw new UnprocessableEntityException(draft.message);
+      const saved: BillingDocumentDetail = proforma
+        ? await this.documents.update(
+            proforma.id,
+            this.dto({
+              ...draft.draft,
+              id: undefined,
+              expectedUpdatedAt: (await this.documents.detail(proforma.id))
+                .updatedAt,
+            }),
+          )
+        : await this.documents.create(this.dto(draft.draft), user);
+      await this.issuing.issue(saved.id, saved.updatedAt, user);
+      proforma = (await this.repository.invoices([orderId], "PROFORMA")).get(
+        orderId,
+      );
+      if (proforma?.status !== "ISSUED")
+        throw new ConflictException(
+          "A díjbekérő kiállítása nem fejeződött be, ezért nem ment ki. Nézd meg a bizonylatot a Számlázásban.",
+        );
+    }
+
+    const document = await this.documents.detail(proforma.id);
+    const mode = billingEmailModeFor(
+      "ISSUED",
+      (document.emailStatus ?? null) as BillingEmailStatus | null,
+    );
+    if (!mode)
+      throw new ConflictException(
+        "Épp fut a díjbekérő kiküldése; várd meg az eredményét.",
+      );
+    if (!order.email)
+      throw new ConflictException(
+        "A rendelésen nincs e-mail cím, ezért a díjbekérő nem küldhető ki.",
+      );
+    const letter = await this.emailDrafts.templateDraft();
+    await this.email.send(
+      proforma.id,
+      {
+        requestId: randomUUID(),
+        mode,
+        to: [order.email],
+        cc: [],
+        bcc: [],
+        subject: letter.subject,
+        body: letter.body,
+        bodyHtml: letter.bodyHtml,
+      },
+      user,
+    );
+    return this.orders.detail(orderId, now);
+  }
 
   /** Rendelésenként egyszerre egy kiállítás; a második a sor végén indul. */
   private serial<T>(orderId: string, work: () => Promise<T>): Promise<T> {

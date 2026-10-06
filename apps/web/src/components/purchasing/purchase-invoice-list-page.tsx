@@ -176,9 +176,7 @@ export function PurchaseInvoiceListPage() {
   const tabs = PURCHASING_TABS.filter((tab) => {
     const entry = allNavigationPages.find((page) => page.href === tab.href);
     return Boolean(
-      entry &&
-      session &&
-      isNavigationEntryVisible(entry.entryId, session.user.role),
+      entry && session && isNavigationEntryVisible(entry.entryId, session.user),
     );
   }).map((tab) => ({ ...tab, active: tab.href === "/beszerzes" }));
   const openInvoice = (item: PurchaseInvoiceSummary) =>

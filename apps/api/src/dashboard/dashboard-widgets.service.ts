@@ -206,7 +206,9 @@ export class DashboardWidgetsService {
 
   private async viewer(user: AuthenticatedUser): Promise<DashboardViewer> {
     return {
+      // a személy saját listája is (ha a szerver kitöltötte), nem csak a szerepe
       role: user.role,
+      permissions: user.permissions,
       capabilities: await this.repository.capabilities(user.id),
     };
   }

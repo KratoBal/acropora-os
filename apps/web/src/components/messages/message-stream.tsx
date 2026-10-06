@@ -17,9 +17,7 @@ import { isNavigationEntryVisible } from "@acropora/types";
 /** Látja-e a bejelentkezett kolléga az Üzeneteket. */
 export function useMessagesEnabled(): boolean {
   const { session } = useAuth();
-  return Boolean(
-    session && isNavigationEntryVisible("messages", session.user.role),
-  );
+  return Boolean(session && isNavigationEntryVisible("messages", session.user));
 }
 
 /**

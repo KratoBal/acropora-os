@@ -1,8 +1,8 @@
 import {
+  hasPermission,
   MESSAGE_TEXT_MAX_LENGTH,
   PERMISSIONS,
-  ROLE_PERMISSIONS,
-  type UserRole,
+  type PermissionSubject,
 } from "@acropora/types";
 
 /**
@@ -18,8 +18,7 @@ export function directKeyOf(a: string, b: string): string {
   return [a, b].sort().join(":");
 }
 
-export interface MessagingCandidate {
-  role: UserRole;
+export interface MessagingCandidate extends PermissionSubject {
   isActive: boolean;
   customerId: string | null;
   supplierId: string | null;
@@ -42,7 +41,7 @@ export function mayJoinInternal(user: MessagingCandidate): boolean {
     user.isActive &&
     user.customerId === null &&
     user.supplierId === null &&
-    ROLE_PERMISSIONS[user.role].includes(PERMISSIONS.MESSAGES_USE)
+    hasPermission(user, PERMISSIONS.MESSAGES_USE)
   );
 }
 

@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
-import type { AuthenticatedUser } from "@acropora/types";
+import { ROLE_PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { createHash } from "node:crypto";
 
 import { hashPassword, verifyPassword } from "../users/password.util.js";
@@ -152,6 +152,13 @@ export class AuthUserResolver {
       avatarUrl: user.avatarUrl,
       customerId: user.customerId,
       supplierId: user.supplierId,
+      /*
+        A SZEMÉLY JOGAI, EGY HELYEN: minden belépés és minden kérés ezen a
+        függvényen át kapja a felhasználót. Ma a szerep sablonja; a
+        felhasználónkénti eltérések tárolása után ITT kerülnek rá (Balázs
+        döntése, 2026-10-06: szerepkör-sablon + egyéni eltérés).
+      */
+      permissions: ROLE_PERMISSIONS[user.role],
     };
   }
 

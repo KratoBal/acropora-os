@@ -5,6 +5,10 @@ import { Prisma } from "@acropora/database";
 import type { ProductDatabase } from "./product.repository.js";
 import { ProductRepository } from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
+import type {
+  TakeoverPriceMirror,
+  TakeoverPriceVariant,
+} from "./takeover-price.js";
 
 const product = {
   id: "product-1",
@@ -181,7 +185,21 @@ const product = {
  * different behaviours, not different data: one row means this call performed
  * the transfer, zero means somebody (or something) got there first.
  */
-function createDatabase({ authorityUpdateCount = 1 } = {}) {
+function createDatabase({
+  authorityUpdateCount = 1,
+  mirror = {
+    grossPrice: new Prisma.Decimal("12990"),
+    currency: null,
+  } as TakeoverPriceMirror,
+  variants = [
+    {
+      id: "variant-1",
+      sku: "RS-1",
+      sellingGrossPrice: null,
+      unasVariantExtraGrossPrice: null,
+    },
+  ] as TakeoverPriceVariant[],
+} = {}) {
   const calls: Array<{ operation: string; args: unknown }> = [];
   const transaction = {
     product: {
@@ -216,6 +234,22 @@ function createDatabase({ authorityUpdateCount = 1 } = {}) {
       create: async (args: unknown) => {
         calls.push({ operation: "event", args });
         return {};
+      },
+    },
+    unasProductSnapshot: {
+      findUnique: async (args: unknown) => {
+        calls.push({ operation: "mirrorFind", args });
+        return mirror;
+      },
+    },
+    productVariant: {
+      findMany: async (args: unknown) => {
+        calls.push({ operation: "variantFindMany", args });
+        return variants;
+      },
+      updateMany: async (args: unknown) => {
+        calls.push({ operation: "variantUpdateMany", args });
+        return { count: 1 };
       },
     },
     aiProductSearchDocument: {
@@ -327,7 +361,14 @@ describe("ProductRepository", () => {
     assert.equal(result.changed, true);
     assert.deepEqual(
       calls.map((call) => call.operation),
-      ["productUpdateMany", "event", "transactionFind"],
+      [
+        "productUpdateMany",
+        "mirrorFind",
+        "variantFindMany",
+        "variantUpdateMany",
+        "event",
+        "transactionFind",
+      ],
     );
     const updateArgs = calls[0]?.args as {
       where: { id: string; catalogAuthority: string };
@@ -335,7 +376,7 @@ describe("ProductRepository", () => {
     };
     assert.equal(updateArgs.where.catalogAuthority, "UNAS");
     assert.equal(updateArgs.data.catalogAuthority, "ACROPORA");
-    const eventArgs = calls[1]?.args as {
+    const eventArgs = calls[4]?.args as {
       data: { eventType: string; actorUserId: string; payload: unknown };
     };
     assert.equal(
@@ -343,7 +384,117 @@ describe("ProductRepository", () => {
       "product.catalog-authority.transferred",
     );
     assert.equal(eventArgs.data.actorUserId, "user-1");
-    assert.deepEqual(eventArgs.data.payload, { from: "UNAS", to: "ACROPORA" });
+    assert.deepEqual(eventArgs.data.payload, {
+      from: "UNAS",
+      to: "ACROPORA",
+      priceSeed: {
+        source: "unas-mirror-list-price",
+        copied: [
+          {
+            variantId: "variant-1",
+            sku: "RS-1",
+            sellingGrossPrice: "12990.0000",
+            sellingPriceCurrency: "HUF",
+          },
+        ],
+        skipped: [],
+      },
+    });
+  });
+
+  /**
+   * THE PRICE MOVES WITH THE AUTHORITY (card fc5fb5f9, Balázs's "b" of
+   * 2026-09-04). Under ACROPORA authority the projection reads only the own
+   * `sellingGrossPrice`, and nothing else ever writes it: without the copy
+   * every taken-over product would stop at `own-price-missing` the same day.
+   *
+   * The copy is the LIST price plus the variant's UNAS surcharge, scoped to
+   * this product, and conditional on the field still being empty at write
+   * time, so a price typed in between is never overwritten.
+   */
+  it("copies the mirror list price with the surcharge into the empty own price", async () => {
+    const { database, calls } = createDatabase({
+      mirror: { grossPrice: new Prisma.Decimal("12990"), currency: null },
+      variants: [
+        {
+          id: "variant-1",
+          sku: "RS-1",
+          sellingGrossPrice: null,
+          unasVariantExtraGrossPrice: new Prisma.Decimal("1500"),
+        },
+      ],
+    });
+    const repository = new ProductRepository(database);
+
+    await repository.takeCatalogAuthority("product-1", "user-1");
+
+    const byOperation = (operation: string) =>
+      calls.filter((call) => call.operation === operation);
+    assert.deepEqual(byOperation("mirrorFind")[0]?.args, {
+      where: { productId: "product-1" },
+      select: { grossPrice: true, currency: true },
+    });
+    assert.deepEqual(
+      (byOperation("variantFindMany")[0]?.args as { where: unknown }).where,
+      { productId: "product-1" },
+    );
+    const writes = byOperation("variantUpdateMany");
+    assert.equal(writes.length, 1);
+    const write = writes[0]?.args as {
+      where: { id: string; sellingGrossPrice: null };
+      data: {
+        sellingGrossPrice: Prisma.Decimal;
+        sellingPriceCurrency: string;
+      };
+    };
+    assert.deepEqual(write.where, { id: "variant-1", sellingGrossPrice: null });
+    assert.equal(write.data.sellingGrossPrice.toFixed(4), "14490.0000");
+    assert.equal(write.data.sellingPriceCurrency, "HUF");
+  });
+
+  /**
+   * An own price already there is the owner's decision, not a gap: the
+   * takeover leaves it alone and says so in the log. A variant the mirror
+   * cannot price is skipped the same way, with its reason, and the others
+   * still get theirs.
+   */
+  it("keeps an own price and logs every variant it did not price", async () => {
+    const { database, calls } = createDatabase({
+      mirror: { grossPrice: null, currency: null },
+      variants: [
+        {
+          id: "variant-1",
+          sku: "RS-1",
+          sellingGrossPrice: new Prisma.Decimal("9990"),
+          unasVariantExtraGrossPrice: null,
+        },
+        {
+          id: "variant-2",
+          sku: "RS-2",
+          sellingGrossPrice: null,
+          unasVariantExtraGrossPrice: null,
+        },
+      ],
+    });
+    const repository = new ProductRepository(database);
+
+    await repository.takeCatalogAuthority("product-1", "user-1");
+
+    assert.equal(
+      calls.filter((call) => call.operation === "variantUpdateMany").length,
+      0,
+    );
+    const event = calls.find((call) => call.operation === "event")?.args as {
+      data: { payload: { priceSeed: unknown } };
+    };
+    assert.deepEqual(event.data.payload.priceSeed, {
+      source: "unas-mirror-list-price",
+      copied: [],
+      skipped: [
+        { variantId: "variant-1", sku: "RS-1", reason: "own-price-set" },
+        { variantId: "variant-2", sku: "RS-2", reason: "mirror-price-missing" },
+      ],
+    });
   });
 
   /**
@@ -362,6 +513,29 @@ describe("ProductRepository", () => {
     assert.deepEqual(
       calls.map((call) => call.operation),
       ["productUpdateMany", "transactionFind"],
+    );
+  });
+
+  /**
+   * A switch back to UNAS is not this method, and a repeated takeover is not
+   * a takeover: neither may touch a price. The copy runs only on the call
+   * that actually moved the authority.
+   */
+  it("prices nothing when the product was already ours", async () => {
+    const { database, calls } = createDatabase({ authorityUpdateCount: 0 });
+    const repository = new ProductRepository(database);
+
+    await repository.takeCatalogAuthority("product-1", "user-1");
+
+    assert.deepEqual(
+      calls
+        .map((call) => call.operation)
+        .filter((operation) =>
+          ["mirrorFind", "variantFindMany", "variantUpdateMany"].includes(
+            operation,
+          ),
+        ),
+      [],
     );
   });
 

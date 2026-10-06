@@ -14,11 +14,20 @@ describe("UnasConnectionController authorization", () => {
       Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, UnasConnectionController),
       [PERMISSIONS.SETTINGS_MANAGE],
     );
-    assert.equal(hasPermission("OWNER", PERMISSIONS.SETTINGS_MANAGE), true);
-    assert.equal(hasPermission("ADMIN", PERMISSIONS.SETTINGS_MANAGE), true);
-    assert.equal(hasPermission("MANAGER", PERMISSIONS.SETTINGS_MANAGE), false);
     assert.equal(
-      hasPermission("WAREHOUSE", PERMISSIONS.SETTINGS_MANAGE),
+      hasPermission({ role: "OWNER" }, PERMISSIONS.SETTINGS_MANAGE),
+      true,
+    );
+    assert.equal(
+      hasPermission({ role: "ADMIN" }, PERMISSIONS.SETTINGS_MANAGE),
+      true,
+    );
+    assert.equal(
+      hasPermission({ role: "MANAGER" }, PERMISSIONS.SETTINGS_MANAGE),
+      false,
+    );
+    assert.equal(
+      hasPermission({ role: "WAREHOUSE" }, PERMISSIONS.SETTINGS_MANAGE),
       false,
     );
   });

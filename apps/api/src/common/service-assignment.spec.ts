@@ -35,7 +35,7 @@ describe("SERVICE_ASSIGNABLE_ROLES", () => {
     // senki nem venne eszre, hogy a nevesitett szures feleslegesse vagy eppen
     // hianyossa valt.
     assert.equal(
-      hasPermission("PARTNER_SERVICE", PERMISSIONS.SERVICE_MANAGE),
+      hasPermission({ role: "PARTNER_SERVICE" }, PERMISSIONS.SERVICE_MANAGE),
       true,
       "a partner elvesztette a service.manage jogot: ez a teszt ettől már nem azt méri, amit",
     );
@@ -56,7 +56,10 @@ describe("SERVICE_ASSIGNABLE_ROLES", () => {
     );
     // ES MINDEGYIKNEK MEGVAN A JOGA: a szures szukit, nem valt masik kerdesre.
     for (const role of SERVICE_ASSIGNABLE_ROLES)
-      assert.equal(hasPermission(role, PERMISSIONS.SERVICE_MANAGE), true);
+      assert.equal(
+        hasPermission({ role: role }, PERMISSIONS.SERVICE_MANAGE),
+        true,
+      );
   });
 
   /**
@@ -65,7 +68,10 @@ describe("SERVICE_ASSIGNABLE_ROLES", () => {
    * amit a partner-szűrés nem helyettesít.
    */
   it("a néző szerep kimarad, mert nem tud dolgozni a lapon", () => {
-    assert.equal(hasPermission("VIEWER", PERMISSIONS.SERVICE_VIEW), true);
+    assert.equal(
+      hasPermission({ role: "VIEWER" }, PERMISSIONS.SERVICE_VIEW),
+      true,
+    );
     assert.equal(SERVICE_ASSIGNABLE_ROLES.includes("VIEWER"), false);
   });
 });

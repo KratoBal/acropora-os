@@ -17,8 +17,7 @@ export function SettlementsRedirect() {
   const { session } = useAuth();
   const router = useRouter();
   const target = SETTLEMENT_TABS.find(
-    (tab) =>
-      session && isNavigationEntryVisible(tab.entryId, session.user.role),
+    (tab) => session && isNavigationEntryVisible(tab.entryId, session.user),
   );
 
   useEffect(() => {

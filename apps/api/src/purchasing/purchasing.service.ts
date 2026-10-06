@@ -14,7 +14,6 @@ import type {
   ExchangeRateLookupResult,
   ProjectOption,
   PurchaseInvoiceDetail,
-  PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
   PurchaseProductConflictLookup,
   PurchaseProductSearchResult,
@@ -116,9 +115,7 @@ export class PurchasingService {
     );
   }
 
-  list(
-    query: PurchaseInvoiceListQueryDto,
-  ): Promise<PurchaseInvoiceListResponse> {
+  list(query: PurchaseInvoiceListQueryDto) {
     return this.invoices.list(query);
   }
 

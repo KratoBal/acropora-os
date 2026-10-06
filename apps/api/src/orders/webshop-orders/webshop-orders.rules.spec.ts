@@ -10,6 +10,7 @@ import {
   isStale,
   factsOf,
   matchesSearch,
+  orderPaymentProviderId,
   paymentMethodLabel,
   paymentStateOf,
   sortItems,
@@ -65,6 +66,49 @@ const row = (
 });
 const item = (over: Partial<MedusaOrderOverviewRow> & { id: string }) =>
   toListItem(row(over), NO_FACTS, NOW);
+
+describe("the order's payment provider (bb3a6bd5)", () => {
+  /*
+    A FÜGGŐ FIZETÉSNEK NINCS REKORDJA (mérve a stage-en 2026-10-06; Medusa
+    payment 2.20.1). MI PIROSÍT: csak a rekordot olvassa; a rekord helyett a
+    munkamenet nyer; egy törölt vagy hibás munkamenet is számít; az előre
+    utalás nem kap nevet.
+  */
+  it("the record when there is one, otherwise the live session", () => {
+    assert.equal(
+      orderPaymentProviderId({
+        payments: [{ provider_id: "pp_stripe_stripe" }],
+        payment_sessions: [
+          { provider_id: "pp_acropora_cod", status: "pending" },
+        ],
+      }),
+      "pp_stripe_stripe",
+    );
+    assert.equal(
+      orderPaymentProviderId({
+        payments: [],
+        payment_sessions: [
+          { provider_id: "pp_stripe_stripe", status: "canceled" },
+          { provider_id: "pp_acropora_cod", status: "pending_authorization" },
+        ],
+      }),
+      "pp_acropora_cod",
+    );
+    assert.equal(
+      orderPaymentProviderId({
+        payments: [],
+        payment_sessions: [{ provider_id: "pp_acropora_cod", status: "error" }],
+      }),
+      null,
+    );
+    assert.equal(orderPaymentProviderId(null), null);
+    assert.equal(orderPaymentProviderId({ payments: [] }), null);
+  });
+
+  it("prepayment by bank transfer has a name", () => {
+    assert.equal(paymentMethodLabel("pp_acropora_transfer"), "Előre utalás");
+  });
+});
 
 describe("payment", () => {
   it("held, captured, partly and fully refunded, canceled, awaiting", () => {
@@ -180,12 +224,14 @@ describe("stage", () => {
       invoice: null,
       hasParcel: false,
       parcel: null,
+      proformaExpired: false,
     };
     const shipped = {
       invoiceNumber: "ACR-2026-1",
       invoice: null,
       hasParcel: true,
       parcel: null,
+      proformaExpired: false,
     };
     assert.deepEqual(
       [

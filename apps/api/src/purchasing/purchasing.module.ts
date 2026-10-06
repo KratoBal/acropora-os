@@ -8,6 +8,7 @@ import { ExpectedArrivalScheduler } from "./expected-arrivals/expected-arrival.s
 import { ExpectedArrivalService } from "./expected-arrivals/expected-arrival.service.js";
 import { SupplierInvoiceMailClient } from "./expected-arrivals/supplier-invoice-mail.client.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
+import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceRepository } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchRepository } from "./purchase-product-search.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
@@ -29,6 +30,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
   controllers: [PurchasingController, ExpectedArrivalController],
   providers: [
     PurchaseInvoiceRepository,
+    PurchaseInvoicePdfLookup,
     PurchaseProductSearchRepository,
     PurchaseProductSearchService,
     ProjectRepository,

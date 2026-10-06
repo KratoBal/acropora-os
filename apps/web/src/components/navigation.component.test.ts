@@ -41,7 +41,7 @@ const ALL_FEATURES = new Set(NAVIGATION_FEATURES);
 
 function visibleLabelsFor(role: UserRole): string[] {
   return allNavigationPages
-    .filter((item) => isNavigationEntryVisible(item.entryId, role))
+    .filter((item) => isNavigationEntryVisible(item.entryId, { role: role }))
     .map((item) => item.label);
 }
 
@@ -157,6 +157,8 @@ describe("navigation", () => {
       "Kalkulátorok",
       "ICP",
       "Szerviz",
+      // az elhullási napló (kártya 115c9740): a Figma a Szerviz alá teszi
+      "Elhullási napló",
     ]);
   });
 
@@ -328,6 +330,9 @@ describe("navigation", () => {
         // ker, tehat aki latja az Akvariumokat, ezt is latja -- nem kulon
         // dontes, hanem ugyanannak a sornak a kovetkezmenye.
         "Kalkulátorok",
+        // AZ ELHULLÁSI NAPLÓ (kártya 115c9740): acrobot döntése (27141) a
+        // SERVICE szerepnek megtekintést és rögzítést is ad.
+        "Elhullási napló",
       ].sort(),
     );
   });
@@ -449,6 +454,7 @@ describe("navigation", () => {
     // "calculators" tetelenek fejlecet (`packages/types/src/navigation.ts`).
     "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
+    "/elhullasi-naplo": "mortality.view",
     "/admin/integrations/unas/connection": "settings.manage",
     "/admin/integrations/unas": "products.view",
     "/ai-teszt": "ai-test.view",
@@ -490,12 +496,12 @@ describe("navigation", () => {
       // every server switch on: here only the role rule is compared
       const aForrasSzerint = items
         .filter((item) =>
-          isNavigationEntryVisible(item.entryId, role, ALL_FEATURES),
+          isNavigationEntryVisible(item.entryId, { role: role }, ALL_FEATURES),
         )
         .map((item) => item.href);
       const aRegiKulcsokSzerint = items
         .filter((item) =>
-          hasPermission(role, A_BEVEZETES_ELOTTI_JOGOK[item.href]!),
+          hasPermission({ role: role }, A_BEVEZETES_ELOTTI_JOGOK[item.href]!),
         )
         .map((item) => item.href);
 
@@ -531,12 +537,12 @@ describe("Elszámolások", () => {
   it("the menu entry shows exactly when at least one tab does, for every role", () => {
     for (const role of USER_ROLES) {
       const anyTab = SETTLEMENT_TABS.some((tab) =>
-        isNavigationEntryVisible(tab.entryId, role),
+        isNavigationEntryVisible(tab.entryId, { role: role }),
       );
-      expect([role, isNavigationEntryVisible("settlements", role)]).toEqual([
+      expect([
         role,
-        anyTab,
-      ]);
+        isNavigationEntryVisible("settlements", { role: role }),
+      ]).toEqual([role, anyTab]);
     }
   });
 

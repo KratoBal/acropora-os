@@ -9,6 +9,12 @@ import type {
 } from "@acropora/types";
 
 import { writeSearchDocument } from "../integrations/ai-product-search/ai-product-search.writer.js";
+import {
+  takeoverPriceLog,
+  takeoverPriceSteps,
+  type TakeoverPriceMirror,
+  type TakeoverPriceVariant,
+} from "./takeover-price.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
@@ -97,6 +103,14 @@ interface ProductTransaction {
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
+  };
+  /** A gazda-átvétel ármásolásához (fc5fb5f9): a tükör ára és a változatok. */
+  unasProductSnapshot: {
+    findUnique(args: unknown): Promise<TakeoverPriceMirror>;
+  };
+  productVariant: {
+    findMany(args: unknown): Promise<TakeoverPriceVariant[]>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   /**
    * A keresési dokumentum írója ezt az egy táblát használja a hívó
@@ -410,6 +424,42 @@ export class ProductRepository extends Repository {
           data: { catalogAuthority: "ACROPORA" },
         });
 
+        /*
+          AZ ÁR AZ ÁTVÉTELLEL EGYÜTT (fc5fb5f9, lásd `takeover-price.ts`): csak
+          a VALÓDI váltáskor, és változatonként feltételesen (`sellingGrossPrice:
+          null`), hogy egy közben beírt saját árat se írjunk felül.
+        */
+        let priceSeed: Prisma.JsonObject | null = null;
+        if (result.count > 0) {
+          const [mirror, variants] = await Promise.all([
+            transaction.unasProductSnapshot.findUnique({
+              where: { productId: id },
+              select: { grossPrice: true, currency: true },
+            }),
+            transaction.productVariant.findMany({
+              where: { productId: id },
+              select: {
+                id: true,
+                sku: true,
+                sellingGrossPrice: true,
+                unasVariantExtraGrossPrice: true,
+              },
+              orderBy: { sku: "asc" },
+            }),
+          ]);
+          const steps = takeoverPriceSteps(variants, mirror);
+          for (const step of steps)
+            if (step.kind === "copy")
+              await transaction.productVariant.updateMany({
+                where: { id: step.variantId, sellingGrossPrice: null },
+                data: {
+                  sellingGrossPrice: step.sellingGrossPrice,
+                  sellingPriceCurrency: step.sellingPriceCurrency,
+                },
+              });
+          priceSeed = takeoverPriceLog(steps);
+        }
+
         if (result.count > 0)
           await transaction.domainEvent.create({
             data: {
@@ -423,6 +473,7 @@ export class ProductRepository extends Repository {
               payload: {
                 from: "UNAS",
                 to: "ACROPORA",
+                ...(priceSeed ? { priceSeed } : {}),
               } satisfies Prisma.JsonObject,
             },
           });

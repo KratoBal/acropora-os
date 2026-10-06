@@ -143,6 +143,10 @@ export const PERMISSIONS = {
   SERVICE_MANAGE: "service.manage",
   AQUARIUMS_VIEW: "aquariums.view",
   AQUARIUMS_MANAGE: "aquariums.manage",
+  /// AZ ELHULLÁSI NAPLÓ (kártya 115c9740; acrobot döntése 2026-10-06, 27141):
+  /// OWNER, ADMIN, MANAGER, SERVICE mindkettőt, VIEWER a view-t, partner semmit.
+  MORTALITY_VIEW: "mortality.view",
+  MORTALITY_MANAGE: "mortality.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
   CONTENT_VIEW: "content.view",
@@ -299,6 +303,7 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.FINANCE_VIEW,
   PERMISSIONS.SERVICE_VIEW,
   PERMISSIONS.AQUARIUMS_VIEW,
+  PERMISSIONS.MORTALITY_VIEW,
   PERMISSIONS.ICP_VIEW,
   PERMISSIONS.CONTENT_VIEW,
 ];
@@ -398,6 +403,9 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.AQUARIUMS_MANAGE,
+      // az elhullási napló (kártya 115c9740): a bolt élőállatait ők is gondozzák
+      PERMISSIONS.MORTALITY_VIEW,
+      PERMISSIONS.MORTALITY_MANAGE,
     ],
     VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 
@@ -591,6 +599,29 @@ export interface AuthenticatedUser {
   customerId: string | null;
   /** Which service partner this account acts on behalf of. See `customerId`. */
   supplierId: string | null;
+  /**
+   * THE ACCOUNT'S OWN, COMPUTED PERMISSIONS: its role's template, plus (once
+   * they exist) its personal exceptions (Balázs, 2026-10-06: role template +
+   * per-user exceptions). The server fills it when it resolves the session
+   * (`auth-user-resolver.ts`), and `/auth/me` hands it to the clients.
+   *
+   * OPTIONAL FOR NOW, AND ONLY WHILE IT EQUALS THE TEMPLATE: a missing list
+   * reads as the role's template (`effectivePermissions`), which is today's
+   * behaviour exactly. The moment an exception can narrow a template, a
+   * missing list would ignore that narrowing, so the step that stores
+   * exceptions must make every construction site fill it.
+   */
+  permissions?: readonly Permission[];
+}
+
+/**
+ * WHOSE PERMISSIONS ARE ASKED ABOUT: a role (its template) and, when known, the
+ * account's own computed list. Every user-shaped value fits; a bare role does
+ * not, on purpose (see `roleTemplateHasPermission`).
+ */
+export interface PermissionSubject {
+  role: UserRole;
+  permissions?: readonly Permission[];
 }
 
 /**
@@ -687,28 +718,59 @@ export interface Session {
   navigation?: readonly NavigationEntryView[];
 }
 
-export function hasPermission(
-  userOrRole: AuthenticatedUser | UserRole,
+/**
+ * WHAT A ROLE'S TEMPLATE GIVES, AND NOTHING ELSE.
+ *
+ * A SEPARATE NAME FROM `hasPermission`, and that is the point of the split
+ * (2026-10-06, the first step towards per-user exceptions). Until then one
+ * function took a user OR a bare role, and the two answered the same
+ * question. With exceptions they no longer do: a role says what its holders
+ * get by default, a user says what this one person may do. Asking about a
+ * person through their role would silently ignore their exceptions, so a
+ * bare role now only fits here, where the question really is the template.
+ */
+export function roleTemplateHasPermission(
+  role: UserRole,
   permission: Permission,
 ): boolean {
-  const role = typeof userOrRole === "string" ? userOrRole : userOrRole.role;
   return ROLE_PERMISSIONS[role].includes(permission);
 }
 
+/** The roles whose template carries this permission. */
+export function rolesWithPermission(
+  permission: Permission,
+  roles: readonly UserRole[] = USER_ROLES,
+): UserRole[] {
+  return roles.filter((role) => roleTemplateHasPermission(role, permission));
+}
+
+/**
+ * THE ACCOUNT'S PERMISSIONS: its own computed list when the server sent one,
+ * otherwise its role's template. Today the two are always equal.
+ */
+export function effectivePermissions(
+  subject: PermissionSubject,
+): readonly Permission[] {
+  return subject.permissions ?? ROLE_PERMISSIONS[subject.role];
+}
+
+export function hasPermission(
+  subject: PermissionSubject,
+  permission: Permission,
+): boolean {
+  return effectivePermissions(subject).includes(permission);
+}
+
 export function hasAnyPermission(
-  userOrRole: AuthenticatedUser | UserRole,
+  subject: PermissionSubject,
   permissions: readonly Permission[],
 ): boolean {
-  return permissions.some((permission) =>
-    hasPermission(userOrRole, permission),
-  );
+  return permissions.some((permission) => hasPermission(subject, permission));
 }
 
 export function hasAllPermissions(
-  userOrRole: AuthenticatedUser | UserRole,
+  subject: PermissionSubject,
   permissions: readonly Permission[],
 ): boolean {
-  return permissions.every((permission) =>
-    hasPermission(userOrRole, permission),
-  );
+  return permissions.every((permission) => hasPermission(subject, permission));
 }

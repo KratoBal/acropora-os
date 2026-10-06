@@ -39,8 +39,11 @@ import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
  * végezné mindkettőt, a nulla készlet előbb-utóbb hatna a publikációra - nem
  * azért, mert valaki eldönti, hanem mert egy helyen áll a kettő.
  *
- * Szándékosan nincs ütemező és nincs esemény-vezérelt futás: a brief mindkettőt
- * kizárja ebből a körből.
+ * Ütemezett futás 2026-10-07 óta van, KÜLÖN időzítővel és kapcsolóval
+ * (`medusa-inventory.scheduler.ts`; Balázs 2026-10-06 22:05:01 UTC, csak a teszt
+ * kirakat). A kettő ugyanazt a `projectTargetInventory`-t futtatja. Az eredeti brief
+ * ütemezőt kizáró mondata ezzel elavult; a publikáció és a készlet szétválasztása
+ * viszont áll: az ütemező a termék-vetítéshez nem nyúl.
  *
  * Használat:
  *   pnpm --filter @acropora/api medusa:inventory sku:teszt0001 [további...]
@@ -356,34 +359,59 @@ export async function runInventoryCli(
 
   let failed = 0;
   for (const argument of selectedTargets) {
-    const resolved = await resolveTargets(argument, warehouse.id, database);
-    if ("error" in resolved) {
-      out.stderr(`${resolved.error}\n`);
-      failed += 1;
-      continue;
-    }
-
-    for (const stock of resolved) {
-      if (stock.missingRow)
-        out.stdout(`${describeMissingStockRow(stock.sku, warehouse.name)}\n`);
-
-      const outcome = await service.project(stock);
-      if (outcome.action === "stopped") {
-        out.stderr(
-          `${stock.sku}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
-        );
-        failed += 1;
-        continue;
-      }
-
-      out.stdout(
-        `${stock.sku}: ${outcome.action} -> ${outcome.report.variantId}\n` +
-          `      ${describeInventory(outcome.report)}\n`,
-      );
-    }
+    const result = await projectTargetInventory(
+      argument,
+      { service, warehouse, database },
+      out,
+    );
+    failed += result.failures.length;
   }
 
   return failed ? 1 : 0;
+}
+
+/**
+ * EGY CÉL (termékazonosító vagy `sku:`) KÉSZLETÉNEK KIKÜLDÉSE. A kézi parancs és az
+ * ütemező (`medusa-inventory.scheduler.ts`) EZT hívja, tehát a kettő ugyanazt a
+ * szabályt futtatja: a gazda-ellenőrzést, a készletsor-választást és a WYSIWYG
+ * backordert. A visszatérés a megállások oka (üres lista: minden változat kiment).
+ */
+export async function projectTargetInventory(
+  argument: string,
+  context: {
+    service: Pick<MedusaInventoryProjectionService, "project">;
+    warehouse: { id: string; name: string };
+    database: InventoryCliDatabase;
+  },
+  out: { stdout(value: string): void; stderr(value: string): void },
+): Promise<{ failures: string[] }> {
+  const { service, warehouse, database } = context;
+  const resolved = await resolveTargets(argument, warehouse.id, database);
+  if ("error" in resolved) {
+    out.stderr(`${resolved.error}\n`);
+    return { failures: [resolved.error] };
+  }
+
+  const failures: string[] = [];
+  for (const stock of resolved) {
+    if (stock.missingRow)
+      out.stdout(`${describeMissingStockRow(stock.sku, warehouse.name)}\n`);
+
+    const outcome = await service.project(stock);
+    if (outcome.action === "stopped") {
+      out.stderr(
+        `${stock.sku}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
+      );
+      failures.push(`${stock.sku}: ${outcome.reason}`);
+      continue;
+    }
+
+    out.stdout(
+      `${stock.sku}: ${outcome.action} -> ${outcome.report.variantId}\n` +
+        `      ${describeInventory(outcome.report)}\n`,
+    );
+  }
+  return { failures };
 }
 
 if (
