@@ -24,6 +24,7 @@ const FA = [
 function fakes(
   sorok = [PROFIL],
   besorolasok: { productId: string; categoryId: string }[] = [],
+  unas: { productId: string; rawPayload: unknown }[] = [],
 ) {
   const ki: string[] = [];
   const hivasok: { id: string; apply: boolean; derived: boolean }[] = [];
@@ -36,6 +37,7 @@ function fakes(
   const database = {
     category: { findMany: async () => FA },
     productCategory: { findMany: async () => besorolasok },
+    unasProductSnapshot: { findMany: async () => unas },
     productShippingProfile: {
       findMany: async (args: unknown) => {
         lekerdezes.push(args);
@@ -188,5 +190,67 @@ describe("a szállítási jellemzők parancsa", () => {
     assert.equal(kod, 0);
     assert.deepEqual(f.hivasok, []);
     assert.match(f.szoveg(), /nincs mit átvinni/);
+  });
+
+  /*
+  A UNAS FELULIRASA HARMADIK FORRAS (kartya 2a7f2313). MI PIROSIT: ha a UNAS
+  szerinti termek nem kerul a celok koze; ha felulirja a KEZZEL kitoltott
+  profilt; ha egy felulirás nelkuli UNAS-termek is cel lesz.
+*/
+  describe("a UNAS szállítási felülírása", () => {
+    const csakFoxpost = {
+      ShippingMethods: {
+        Denied: {
+          Method: [
+            { Name: "GLS házhozszállítás" },
+            { Name: "Átvétel a GLS csomagponton" },
+          ],
+        },
+      },
+    };
+
+    it("a felülírt termék cél lesz, a felülírás nélküli nem, és a sort kiírja", async () => {
+      const f = fakes(
+        [],
+        [],
+        [
+          { productId: "unas-1", rawPayload: csakFoxpost },
+          { productId: "unas-2", rawPayload: {} },
+        ],
+      );
+      await runShippingAttributesCli(
+        [],
+        f.out,
+        undefined,
+        f.database,
+        f.service,
+      );
+      assert.deepEqual(
+        f.hivasok.map((h) => h.id),
+        ["unas-1"],
+      );
+      assert.match(f.szoveg(), /1 a UNAS szállítási felülírásából/);
+    });
+
+    it("a kézzel kitöltött profil erősebb a UNAS-nál", async () => {
+      const latott: unknown[] = [];
+      const f = fakes(
+        [PROFIL],
+        [],
+        [{ productId: PROFIL.productId, rawPayload: csakFoxpost }],
+      );
+      const service = {
+        project: async (_id: string, profil: unknown) => {
+          latott.push(profil);
+          return {
+            action: "planned",
+            medusaProductId: "m",
+            flags: "x",
+          } as const;
+        },
+      } as unknown as MedusaShippingAttributesService;
+      await runShippingAttributesCli([], f.out, undefined, f.database, service);
+      assert.deepEqual(latott, [PROFIL]);
+    });
   });
 });

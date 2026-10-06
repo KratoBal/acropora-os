@@ -12,6 +12,7 @@ import {
 } from "./medusa-projection.credentials.js";
 import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
+import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
 
 /**
  * A SZALLITASI JELLEMZOK ATVITELE A BOLTBA.
@@ -55,6 +56,12 @@ export interface ShippingAttributesCliDatabase {
         isFrozen: boolean;
       }[]
     >;
+  };
+  /** A UNAS-tükör nyers válasza: a szállítási mód-felülírások forrása. */
+  unasProductSnapshot: {
+    findMany(
+      args: unknown,
+    ): Promise<{ productId: string; rawPayload: unknown }[]>;
   };
 }
 
@@ -116,9 +123,32 @@ export async function runShippingAttributesCli(
     orderBy: { productId: "asc" },
   });
 
+  /*
+    A HARMADIK FORRAS: A UNAS SZALLITASI MOD-FELULIRASAI (kartya 2a7f2313,
+    Balazs 2026-10-06 16:45 UTC, csak a teszt bolt). A KEZZEL kitoltott
+    profil-sor ERŐSEBB: ahol van, a UNAS-bol jovo nem irja felul -- azt valaki
+    megvizsgalta. Az OS-be NEM irunk: a jelzo csak a vetitesben el.
+  */
+  const unasSorok = await database.unasProductSnapshot.findMany({
+    where: idk.length ? { productId: { in: idk } } : {},
+    select: { productId: true, rawPayload: true },
+  });
+  const unasProfilok = new Map(
+    unasSorok.flatMap((sor) => {
+      const profil = unasShippingProfile(sor.rawPayload);
+      return profil
+        ? [[sor.productId, { productId: sor.productId, ...profil }] as const]
+        : [];
+    }),
+  );
+
   const profilPerTermek = new Map(profilok.map((p) => [p.productId, p]));
   const celok = [
-    ...new Set([...profilPerTermek.keys(), ...eloAllatTermekek]),
+    ...new Set([
+      ...profilPerTermek.keys(),
+      ...unasProfilok.keys(),
+      ...eloAllatTermekek,
+    ]),
   ].sort();
 
   if (celok.length === 0) {
@@ -134,8 +164,12 @@ export async function runShippingAttributesCli(
     return 0;
   }
 
+  const csakUnas = [...unasProfilok.keys()].filter(
+    (id) => !profilPerTermek.has(id),
+  );
   out.stdout(
     `${celok.length} termék: ${profilPerTermek.size} kézzel kitöltött, ` +
+      `${csakUnas.length} a UNAS szállítási felülírásából, ` +
       `${eloAllatTermekek.size} élő állat besorolás alapján.\n`,
   );
 
@@ -161,7 +195,8 @@ export async function runShippingAttributesCli(
 
   let bukott = 0;
   for (const productId of celok) {
-    const profil = profilPerTermek.get(productId) ?? null;
+    const profil =
+      profilPerTermek.get(productId) ?? unasProfilok.get(productId) ?? null;
     const outcome = await futtato.project(
       productId,
       profil,
