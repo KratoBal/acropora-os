@@ -56,6 +56,33 @@
   transform-origin: 54.7% 65.6%;
 }
 
+/*
+  PISLOG (kártya bbbc6120; Balázs, 2026-10-06 12:17 UTC: „sutyerak piheno
+  allapotaban pislognia kellene”). A csukott szem a csomag rétege (pihen.json:
+  ugyanaz a méret és x, mint a nyitotté, y 91.02 a 106.96 helyett, tehát a
+  nyitott szem transzformja 1.27%-kal feljebb: -4.55% a -3.28% helyett).
+  Egy 17 s-os ciklusban négy csukás, mind ~130 ms (3,2 s, 7,9 s, 11,6 s,
+  16,4 s), a szünetek 4,6 / 3,6 / 4,7 / 3,7 s: 3–6 s-onként, nem szabályos
+  ritmusban. Csak pihenésben fut; csökkentett mozgásnál nem pislog.
+*/
+.sut-fig .sut-eyes-closed {
+  transform: translate(3.52%, -4.55%) scale(0.82);
+  transform-origin: 54.7% 65.6%;
+  opacity: 0;
+  animation: sut-blink-closed 17s linear infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig .sut-eyes {
+  animation: sut-blink-open 17s linear infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig[data-state="resting"] .sut-eyes,
+.sut-fig[data-state="resting"] .sut-eyes-closed {
+  animation-play-state: running;
+}
+
 /* Jegyzetel: a ceruza a lap belsején, 650 ms-os író ciklus */
 .sut-fig .sut-note-placement {
   transform: translate(23.4%, 28.3%) scale(0.6);
@@ -120,6 +147,85 @@
   }
   50% {
     transform: rotate(0.5deg) translateY(-0.5%);
+  }
+}
+
+@keyframes sut-blink-closed {
+  0%,
+  18.82% {
+    opacity: 0;
+  }
+  18.83%,
+  19.58% {
+    opacity: 1;
+  }
+  19.59%,
+  46.46% {
+    opacity: 0;
+  }
+  46.47%,
+  47.23% {
+    opacity: 1;
+  }
+  47.24%,
+  68.23% {
+    opacity: 0;
+  }
+  68.24%,
+  68.99% {
+    opacity: 1;
+  }
+  69%,
+  96.46% {
+    opacity: 0;
+  }
+  96.47%,
+  97.23% {
+    opacity: 1;
+  }
+  97.24%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* a nyitott szem a csukás idejére eltűnik: a kettő pontosan egymás tükre */
+@keyframes sut-blink-open {
+  0%,
+  18.82% {
+    opacity: 1;
+  }
+  18.83%,
+  19.58% {
+    opacity: 0;
+  }
+  19.59%,
+  46.46% {
+    opacity: 1;
+  }
+  46.47%,
+  47.23% {
+    opacity: 0;
+  }
+  47.24%,
+  68.23% {
+    opacity: 1;
+  }
+  68.24%,
+  68.99% {
+    opacity: 0;
+  }
+  69%,
+  96.46% {
+    opacity: 1;
+  }
+  96.47%,
+  97.23% {
+    opacity: 0;
+  }
+  97.24%,
+  100% {
+    opacity: 1;
   }
 }
 

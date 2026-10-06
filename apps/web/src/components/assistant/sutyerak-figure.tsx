@@ -36,6 +36,7 @@ export function SutyerakFigure({
         <Layer name="pihen-para" />
         <Layer name="pihen-alap" />
         <Layer name="pihen-szem" className="sut-eyes" />
+        <Layer name="pihen-szem-csukott" className="sut-eyes-closed" />
       </span>
       <span className="sut-pose sut-pose-takingNotes">
         <Layer name="jegyzetel-alap" />

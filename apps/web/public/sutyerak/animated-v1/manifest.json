@@ -49,6 +49,21 @@
       }
     },
     {
+      "file": "pihen-szem-csukott.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 2884,
+      "sha256": "7925fac7d990c77bc1d8340396228f3c3012163a66225ade38f26a65c3e13705",
+      "source": {
+        "file": "assets/pihen-szem-csukott.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 46140,
+        "sha256": "422f3fb726893e4c937f3270484e6cbbb988ce9eeea880a088a0f224bdc97a53"
+      }
+    },
+    {
       "file": "jegyzetel-alap.webp",
       "width": 512,
       "height": 512,
