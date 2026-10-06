@@ -126,6 +126,7 @@ const detail: WebshopOrderDetail = {
       name: "FOXPOST Allee",
       address: "1117 Budapest, Október huszonharmadika u. 8–10.",
       kind: null,
+      type: "FOXPOST automata",
     },
   },
   lines: [
@@ -1412,6 +1413,21 @@ describe("WebshopOrderDetailPage", () => {
     ).toBe("/images/foxpost-packeta-group.png");
   });
 
+  it("a Foxpost point's type shows under the shipping, in the customer's words", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      shipping: {
+        ...detail.shipping,
+        pickupPoint: { ...detail.shipping.pickupPoint!, type: "Packeta Z-BOX" },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", {
+      name: "Számlázási és szállítási adatok",
+    });
+    expect(within(card).getByText("Packeta Z-BOX")).toBeTruthy();
+  });
+
   it("a GLS ParcelShop order names the kind of its point (GLS prompt, point 11)", async () => {
     api.detail.mockResolvedValue({
       ...detail,
@@ -1424,6 +1440,7 @@ describe("WebshopOrderDetailPage", () => {
           name: "Mammut",
           address: null,
           kind: "parcel-shop",
+          type: null,
         },
       },
     });
@@ -1524,9 +1541,13 @@ describe("WebshopOrderDetailPage", () => {
         "etele",
       ),
     );
-    fireEvent.click(
-      await within(dialog).findByRole("radio", { name: /FOXPOST Etele/ }),
-    );
+    const etele = await within(dialog).findByRole("radio", {
+      name: /FOXPOST Etele/,
+    });
+    // a Z-BOX a vevő szavaival, ahogy a kirakat írja (commerce #498)
+    expect(etele.closest("label")?.textContent).toContain("Packeta Z-BOX");
+    expect(etele.closest("label")?.textContent).not.toContain("FOXPOST Z-BOX");
+    fireEvent.click(etele);
     expect(save.disabled).toBe(false);
     fireEvent.click(save);
     await waitFor(() =>

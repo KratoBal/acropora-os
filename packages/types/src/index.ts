@@ -1184,6 +1184,7 @@ export {
   staleHoursOf,
   pointKindOf,
   glsDeliveryLabel,
+  foxpostPointType,
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
 } from "./webshop-orders.js";

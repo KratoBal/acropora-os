@@ -1717,6 +1717,11 @@ function OrderBody({
                 }) ??
                   order.shipping.method ??
                   "—"}
+                {order.shipping.pickupPoint?.type ? (
+                  <span className="block text-pilot-grey-600">
+                    {order.shipping.pickupPoint.type}
+                  </span>
+                ) : null}
               </Field>
               {order.shipping.pickupPoint ? (
                 <>

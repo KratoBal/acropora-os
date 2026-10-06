@@ -1,5 +1,6 @@
 "use client";
 import { Icon } from "@acropora/ui";
+import { foxpostPointType } from "@acropora/types";
 import type {
   WebshopOrderAddressInput,
   WebshopPickupPointSearch,
@@ -345,7 +346,9 @@ export function PointDialog({
                   <span className="block text-xs text-pilot-grey-600">
                     {[
                       point.address,
-                      point.variant ??
+                      (point.variant
+                        ? foxpostPointType(point.variant)
+                        : null) ??
                         (point.kind === "parcel-locker"
                           ? "Automata"
                           : point.kind === "parcel-shop"
