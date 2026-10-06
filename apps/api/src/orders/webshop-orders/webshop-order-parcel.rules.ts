@@ -12,6 +12,10 @@ import type {
 import type { WebshopParcelView } from "../../integrations/carriers/webshop-parcel.service.js";
 import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admin.client.js";
 import { shippingOf } from "./webshop-order-detail.rules.js";
+import {
+  COD_PROVIDER_ID,
+  orderPaymentProviderId,
+} from "./webshop-orders.rules.js";
 
 /**
  * A WEBSHOP RENDELÉS CSOMAGJA, hálózat nélkül (Rendelések, 5. PR): mikor
@@ -120,9 +124,10 @@ export function parcelInputOf(order: MedusaOrderDetailRow): ParcelInput {
     destination = { kind: "home", zip, city, address };
   }
 
+  // az utánvétnek csak munkamenete van: rekordra várva a csomag utánvét nélkül
+  // ment volna fel, és a futár nem szedte volna be a pénzt (stage, 2026-10-06)
   const cod =
-    order.payment_collections?.[0]?.payments?.[0]?.provider_id ===
-    "pp_acropora_cod";
+    orderPaymentProviderId(order.payment_collections?.[0]) === COD_PROVIDER_ID;
   return {
     ok: true,
     carrier: shipping.carrier === "FOXPOST" ? "foxpost" : "gls",

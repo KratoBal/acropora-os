@@ -726,6 +726,15 @@ export interface MedusaOrderDetailRow {
       provider_id: string;
       data: Record<string, unknown> | null;
     }[];
+    /**
+     * A FÜGGŐ FIZETÉS (utánvét, előre utalás) a leadáskor csak munkamenet: a
+     * Medusa `pending_authorization`-nél fizetés-rekordot nem hoz létre
+     * (payment 2.20.1, `authorizePaymentSession`). Régi kérésnél hiányzik.
+     */
+    payment_sessions?: {
+      provider_id: string;
+      status: string | null;
+    }[];
   }[];
 }
 
@@ -1508,6 +1517,9 @@ export const ORDER_DETAIL_FIELDS = [
   "payment_collections.payments.id",
   "payment_collections.payments.provider_id",
   "payment_collections.payments.data",
+  // a függő fizetésnek (utánvét, előre utalás) nincs rekordja, csak munkamenete
+  "payment_collections.payment_sessions.provider_id",
+  "payment_collections.payment_sessions.status",
 ].join(",");
 
 export class MedusaAdminHttpError extends Error {
