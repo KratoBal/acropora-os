@@ -204,6 +204,72 @@ export class WebshopOrdersRepository {
     return result;
   }
 
+  /** A webshop-vevő kulcsához kötött OS-partner adatlapja (az adatlap „Vevő adatlapja” gombja). */
+  async osCustomerByKey(key: string): Promise<{
+    id: string;
+    customerNumber: string;
+    displayName: string;
+  } | null> {
+    const id = await this.customerByKey(key);
+    if (!id) return null;
+    return prisma.customer.findUnique({
+      where: { id },
+      select: { id: true, customerNumber: true, displayName: true },
+    });
+  }
+
+  /** A rendelés belső megjegyzése, ha van. */
+  async internalNote(
+    orderId: string,
+  ): Promise<{ text: string; updatedAt: string } | null> {
+    const row = await prisma.webshopOrderNote.findUnique({
+      where: { orderId },
+    });
+    return row
+      ? { text: row.text, updatedAt: row.updatedAt.toISOString() }
+      : null;
+  }
+
+  /** A belső megjegyzés mentése (üres szöveg: törlés), ki írta, auditnaplóban. */
+  async saveInternalNote(orderId: string, text: string, userId: string) {
+    await prisma.$transaction([
+      text
+        ? prisma.webshopOrderNote.upsert({
+            where: { orderId },
+            create: { orderId, text, updatedByUserId: userId },
+            update: { text, updatedByUserId: userId },
+          })
+        : prisma.webshopOrderNote.deleteMany({ where: { orderId } }),
+      prisma.auditLog.create({
+        data: {
+          userId,
+          action: "webshop-order.internal-note-saved",
+          entityType: "WebshopOrder",
+          entityId: orderId,
+          metadata: { length: text.length },
+        },
+      }),
+    ]);
+  }
+
+  /** Egy cím szerkesztése: ki, melyiket, és mi volt előtte. */
+  async recordAddressEdit(input: {
+    userId: string;
+    orderId: string;
+    kind: "billing" | "shipping";
+    before: unknown;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: `webshop-order.${input.kind}-address-edited`,
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: { before: input.before } as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   /** A webshop-vevő kulcsához kötött OS-partner, ha van. */
   async customerByKey(key: string): Promise<string | null> {
     const reference = await prisma.externalReference.findUnique({

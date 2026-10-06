@@ -45,6 +45,7 @@ import {
   toListItem,
 } from "./webshop-orders.rules.js";
 import { toDetail } from "./webshop-order-detail.rules.js";
+import { customerKeyOf } from "./webshop-order-invoice.rules.js";
 import { parcelOf } from "./webshop-order-parcel.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 
@@ -188,7 +189,15 @@ export class WebshopOrdersService {
         })(),
       ]),
     );
-    const [invoices, parcels, orderPayment, thresholds] = await Promise.all([
+    const customerKey = customerKeyOf(order);
+    const [
+      invoices,
+      parcels,
+      orderPayment,
+      thresholds,
+      osCustomer,
+      internalNote,
+    ] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
       // csak megjelenítés: ha a webshop ezt nem adja, az adatlap nélküle áll
@@ -199,8 +208,12 @@ export class WebshopOrdersService {
         return null;
       }),
       this.repository.staleThresholds(),
+      customerKey ? this.repository.osCustomerByKey(customerKey) : null,
+      this.repository.internalNote(id),
     ]);
     return toDetail({
+      osCustomer,
+      internalNote,
       staleHours: staleHoursOf(thresholds),
       orderPayment,
       order,

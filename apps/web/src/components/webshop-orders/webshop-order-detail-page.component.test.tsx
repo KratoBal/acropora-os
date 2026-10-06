@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   editLine: vi.fn(),
   releaseHold: vi.fn(),
   sendPaymentLink: vi.fn(),
+  updateAddress: vi.fn(),
+  saveInternalNote: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   createParcel: vi.fn(),
@@ -84,6 +86,18 @@ const detail: WebshopOrderDetail = {
     line: "1117 Budapest, Fehérvári út 24.",
     countryCode: "HU",
     phone: null,
+    fields: {
+      lastName: "Nagy",
+      firstName: "Emese",
+      company: null,
+      taxNumber: null,
+      postalCode: "1117",
+      city: "Budapest",
+      line1: "Fehérvári út 24.",
+      line2: null,
+      phone: null,
+      countryCode: "HU",
+    },
   },
   shippingAddress: null,
   shipping: {
@@ -127,6 +141,12 @@ const detail: WebshopOrderDetail = {
   invoice: null,
   parcel: null,
   cardPayment: null,
+  osCustomer: null,
+  internalNote: null,
+  addressEdit: {
+    billing: { allowed: true, reason: null },
+    shipping: { allowed: true, reason: null },
+  },
   lineEdit: { allowed: true, reason: null },
   steps: [
     {
@@ -178,6 +198,8 @@ beforeEach(() => {
   api.editLine.mockReset();
   api.releaseHold.mockReset();
   api.sendPaymentLink.mockReset();
+  api.updateAddress.mockReset();
+  api.saveInternalNote.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.createParcel.mockReset();
@@ -1007,5 +1029,117 @@ describe("WebshopOrderDetailPage", () => {
     expect(
       within(pay).queryByRole("button", { name: /Csúszik|Fizetési link/ }),
     ).toBeNull();
+  });
+
+  /**
+   * AZ ADATLAP CERUZÁI (Figma 494:386; acrobot 26502). MI PIROSÍT: a
+   * számlázási cím ceruzája nem a számlázási címet szerkeszti, vagy nem a
+   * meglévő adatokkal nyílik; a tiltott szerkesztés ceruzája kattintható, vagy
+   * nem mondja meg, miért tiltott; a „Vevő adatlapja” nem az OS-partnerre
+   * visz; a belső megjegyzés nem menthető; kezelési jog nélkül ceruza áll.
+   */
+  it("the billing pencil opens the address as it is, and saves the edited one", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.updateAddress.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Számlázási cím szerkesztése",
+      }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Számlázási cím" });
+    expect(
+      (within(dialog).getByLabelText("Utca, házszám") as HTMLInputElement)
+        .value,
+    ).toBe("Fehérvári út 24.");
+    fireEvent.change(within(dialog).getByLabelText("Adószám"), {
+      target: { value: "12345678-2-41" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Számlázási cím" }),
+      ).toBeNull(),
+    );
+    expect(api.updateAddress).toHaveBeenCalledWith("token", "order_38", {
+      ...detail.billingAddress!.fields,
+      kind: "billing",
+      taxNumber: "12345678-2-41",
+    });
+  });
+
+  it("a held address's pencil is disabled and says why", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      addressEdit: {
+        billing: {
+          allowed: false,
+          reason:
+            "A számla már ki van állítva ezzel a címmel: a cím csak a számla sztornója után változhat.",
+        },
+        shipping: { allowed: true, reason: null },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const pencil = (await screen.findByRole("button", {
+      name: "Számlázási cím szerkesztése",
+    })) as HTMLButtonElement;
+    expect(pencil.disabled).toBe(true);
+    expect(pencil.title).toMatch(/sztornója után/);
+  });
+
+  it("Vevő adatlapja goes to the OS partner; the internal note saves", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      osCustomer: {
+        id: "cust_1",
+        customerNumber: "VEVO-0042",
+        displayName: "Nagy Emese",
+      },
+    });
+    api.saveInternalNote.mockResolvedValue({
+      ...detail,
+      internalNote: {
+        text: "Első rendelése.",
+        updatedAt: "2026-10-05T19:00:00.000Z",
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(
+      (
+        await screen.findByRole("link", { name: "Vevő adatlapja" })
+      ).getAttribute("href"),
+    ).toBe("/vevok?search=VEVO-0042");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Belső megjegyzés szerkesztése" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Belső megjegyzés" });
+    fireEvent.change(within(dialog).getByLabelText("Belső megjegyzés"), {
+      target: { value: "Első rendelése." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    expect(await screen.findByText("Első rendelése.")).toBeTruthy();
+    expect(api.saveInternalNote).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      "Első rendelése.",
+    );
+  });
+
+  it("a FOXPOST order shows the official logo as its carrier", async () => {
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(
+      within(card).getByRole("img", { name: "FOXPOST" }).getAttribute("src"),
+    ).toBe("/images/foxpost-packeta-group.png");
+  });
+
+  it("without orders.manage there are no pencils", async () => {
+    auth.session = session("WAREHOUSE");
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(await screen.findByRole("heading", { name: "#38" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /szerkesztése/ })).toBeNull();
   });
 });

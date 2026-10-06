@@ -828,6 +828,15 @@ export interface MedusaAdminClient {
     orderId: string,
     notifyCustomer: boolean,
   ): Promise<MedusaStatusNotification>;
+  /**
+   * A rendelés címének frissítése a webshop beépített útján
+   * (`POST /admin/orders/:id`, `billing_address` vagy `shipping_address`).
+   */
+  updateOrderAddress(
+    orderId: string,
+    kind: "billing" | "shipping",
+    address: MedusaOrderAddressRow,
+  ): Promise<void>;
   /** Termékváltozat keresése név vagy cikkszám szerint (a tétel cseréjéhez). */
   searchVariants(query: string): Promise<MedusaVariantSearchRow[]>;
   /**
@@ -1687,6 +1696,20 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify({ notify_customer: notifyCustomer }),
     });
     return body.notification ?? { sent: false, reason: "unknown" };
+  }
+
+  async updateOrderAddress(
+    orderId: string,
+    kind: "billing" | "shipping",
+    address: MedusaOrderAddressRow,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/orders/${encodeURIComponent(orderId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ [`${kind}_address`]: address }),
+      },
+    );
   }
 
   async searchVariants(query: string): Promise<MedusaVariantSearchRow[]> {

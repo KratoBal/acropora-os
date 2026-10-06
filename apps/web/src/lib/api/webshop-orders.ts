@@ -8,6 +8,7 @@ import type {
   WebshopOrderLineEdit,
   WebshopVariantOption,
   WebshopStaleThreshold,
+  WebshopOrderAddressInput,
   WebshopParcelSize,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -100,6 +101,22 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/payment/link`,
       token,
       { method: "POST", body: JSON.stringify({ notifyCustomer }) },
+    );
+  },
+  /** Egy cím szerkesztése (a név a szállítási címen); a válasz a friss adatlap. */
+  updateAddress(token: string, id: string, input: WebshopOrderAddressInput) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/address`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** A belső megjegyzés (üres szöveg törli). */
+  saveInternalNote(token: string, id: string, text: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/internal-note`,
+      token,
+      { method: "PUT", body: JSON.stringify({ text }) },
     );
   },
   /** Az elavulási küszöbök (Beállítások). */
