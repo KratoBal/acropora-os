@@ -136,3 +136,20 @@ export class AddMembersDto {
   @IsString({ each: true })
   userIds!: string[];
 }
+
+/** A partner nézete a portálon (084e2c24): csak a régebbi lap kurzora és a méret. */
+export class PartnerConversationQueryDto {
+  @IsOptional() @IsString() @MaxLength(200) before?: string;
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MESSAGE_PAGE_MAX)
+  limit?: number;
+}
+
+/** A partner üzenete (084e2c24): csak szöveg; az újraküldés nem duplikál. */
+export class PartnerMessageDto {
+  @IsString() @MinLength(1) @MaxLength(MESSAGE_TEXT_MAX_LENGTH) text!: string;
+  @IsString() @MinLength(8) @MaxLength(64) clientMessageId!: string;
+}

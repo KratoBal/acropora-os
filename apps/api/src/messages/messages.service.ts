@@ -41,6 +41,8 @@ import {
   type MessageItem,
   type MessagePage,
   type MessageSearchResponse,
+  type PartnerConversationMessage,
+  type PartnerConversationPage,
   type PinnedItemsResponse,
   type SharedAttachmentPage,
   type MessagesUnreadResponse,
@@ -53,6 +55,7 @@ import {
   prepareDocument,
 } from "../documents/document-intake.js";
 import { AssistantService } from "../assistant/assistant.service.js";
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { SutyerakInbox } from "./sutyerak-inbox.js";
@@ -293,6 +296,15 @@ export class MessagesService {
       !(await this.repository.activeMembership(conversationId, user.id))
     )
       throw notFound();
+    /*
+      A PARTNERES BESZÉLGETÉS NEM TÖRÖLHETŐ, sem a létrehozójának, sem adminnak
+      (acrobot döntése, 2026-10-06 15:46): a partner üzenetei a hibajegyhez
+      tartoznak, és a törlés a portálról is eltüntetné őket.
+    */
+    if (row.audience === "PARTNER")
+      throw new ForbiddenException(
+        "A partneres beszélgetés nem törölhető: a partner üzenetei a hibajegyhez tartoznak.",
+      );
     if (!mayDeleteConversation(user, row))
       throw new ForbiddenException(
         "Ezt a beszélgetést csak a létrehozója vagy egy admin törölheti.",
@@ -622,6 +634,10 @@ export class MessagesService {
     file: { originalname: string; mimetype: string; buffer: Buffer },
   ): Promise<MessageAttachmentItem> {
     await this.membershipOr404(conversationId, user.id);
+    await this.refuseIntoPartner(
+      conversationId,
+      "A partneres beszélgetésbe ebben a körben csatolmány nem küldhető.",
+    );
     const store = this.store;
     if (!store || !documentStoreEnabled())
       throw new ServiceUnavailableException(
@@ -1128,6 +1144,10 @@ export class MessagesService {
     if (source.type === "SYSTEM")
       throw new BadRequestException("Rendszerüzenet nem továbbítható.");
     await this.membershipOr404(input.conversationId, user.id);
+    await this.refuseIntoPartner(
+      input.conversationId,
+      "A partneres beszélgetésbe nem továbbítható üzenet: írd meg benne.",
+    );
 
     const existing = await this.repository.messageByClientId(
       user.id,
@@ -1251,6 +1271,7 @@ export class MessagesService {
     await this.membershipOr404(conversationId, user.id);
     const row = await this.repository.conversation(conversationId);
     if (!row) throw notFound();
+    if (row.audience === "PARTNER") throw partnerFixed();
     if (row.type !== "GROUP")
       throw new BadRequestException(
         "Csak csoportos beszélgetés köthető munkalaphoz vagy hibajegyhez.",
@@ -1296,6 +1317,7 @@ export class MessagesService {
     await this.membershipOr404(conversationId, user.id);
     const row = await this.repository.conversation(conversationId);
     if (!row) throw notFound();
+    if (row.audience === "PARTNER") throw partnerFixed();
     if (!isContextType(row.contextType) || !row.contextId)
       return this.detail(user, conversationId);
     const type = row.contextType;
@@ -1333,6 +1355,7 @@ export class MessagesService {
     await this.membershipOr404(conversationId, user.id);
     const row = await this.repository.conversation(conversationId);
     if (!row) throw notFound();
+    if (row.audience === "PARTNER") throw partnerFixed();
     if (row.type !== "GROUP")
       throw new BadRequestException(
         "Közvetlen beszélgetéshez nem adható tag; indíts csoportot.",
@@ -1386,6 +1409,7 @@ export class MessagesService {
     await this.membershipOr404(conversationId, user.id);
     const row = await this.repository.conversation(conversationId);
     if (!row) throw notFound();
+    if (row.audience === "PARTNER") throw partnerFixed();
     if (row.type !== "GROUP")
       throw new BadRequestException(
         "Közvetlen beszélgetésből nem lehet kilépni.",
@@ -1403,6 +1427,273 @@ export class MessagesService {
       metadata: { remaining },
     });
     return { left: true, archived: remaining === 0 };
+  }
+
+  // --- A hibajegy partneres beszélgetése (kártya 084e2c24, a terv 2.5 pontja)
+
+  /**
+   * „BESZÉLGETÉS A PARTNERREL” A HIBAJEGYRŐL, A BELSŐ OLDALON. A hibajegy
+   * partneres (`PARTNER`) beszélgetése: ha van, azt adja, ha nincs, létrehozza.
+   * A belső kör minden megnyitáskor frissül, a megnyitó belép. A belső
+   * beszélgetéstől KÜLÖN áll: a partner azt soha nem látja.
+   */
+  async openPartnerConversation(
+    user: AuthenticatedUser,
+    jobId: string,
+  ): Promise<ConversationDetail> {
+    this.assertInternal(user);
+    this.assertSeesService(user);
+    const subject = await this.contextSubject("SERVICE_JOB", jobId);
+    if (!subject) throw new NotFoundException("A hibajegy nem található.");
+    const conversationId = await this.partnerConversationFor(
+      jobId,
+      subject.title,
+      user.id,
+    );
+    await this.syncPartnerStaff(conversationId, jobId, user.id);
+    return this.joinContextConversation(user, conversationId);
+  }
+
+  /**
+   * A PARTNER NÉZETE (a portál hibajegy-oldala). Csak partnerfióknak, és csak
+   * akkor, ha a hibajegyet MOST látja: a hozzáférés nem tagságból jön, hanem
+   * minden hívásnál a hibajegy láthatóságából. A partner a belső beszélgetést
+   * semmilyen úton nem kapja meg: itt csak a `PARTNER` közönségű, ehhez a
+   * hibajegyhez kötött beszélgetés olvasható. Mellékhatás nincs.
+   */
+  async partnerConversation(
+    user: AuthenticatedUser,
+    jobId: string,
+    query: { before?: string; limit?: number },
+  ): Promise<PartnerConversationPage> {
+    await this.partnerJobOr404(user, jobId);
+    const conversationId = await this.repository.conversationByContext(
+      "SERVICE_JOB",
+      jobId,
+      "PARTNER",
+    );
+    if (!conversationId) return { items: [], olderCursor: null };
+    const before = query.before ? decodeCursor(query.before) : null;
+    if (query.before && !before)
+      throw new BadRequestException("Érvénytelen lapozási kurzor.");
+    const { rows, hasOlder } = await this.repository.messagesPage({
+      conversationId,
+      before,
+      limit: Math.min(query.limit ?? MESSAGE_PAGE_DEFAULT, MESSAGE_PAGE_MAX),
+    });
+    const oldest = rows.at(-1);
+    return {
+      items: await this.toPartnerMessages(rows.reverse(), user.id),
+      olderCursor: hasOlder && oldest ? encodeCursor(oldest) : null,
+    };
+  }
+
+  /**
+   * A PARTNER ÜZENETE a hibajegy partneres beszélgetésébe; ha még nincs, most
+   * jön létre. Csak szöveg. A belső kör a küldés előtt frissül, és a push a
+   * belső tagoknak megy, a meglévő úton. A partner nem lesz tag: a hozzáférése
+   * a hibajegyé, és egy megszűnt hozzárendelés után nem marad nyitva semmi.
+   */
+  async sendAsPartner(
+    user: AuthenticatedUser,
+    jobId: string,
+    input: { text: string; clientMessageId: string },
+  ): Promise<PartnerConversationMessage> {
+    const job = await this.partnerJobOr404(user, jobId);
+    const text = cleanMessageText(input.text);
+    if (!text) throw new BadRequestException("Üres üzenet nem küldhető.");
+    const title = [job.jobNumber, job.customer?.displayName]
+      .filter(Boolean)
+      .join(" · ");
+    const conversationId = await this.partnerConversationFor(
+      jobId,
+      title,
+      user.id,
+    );
+
+    const existing = await this.repository.messageByClientId(
+      user.id,
+      input.clientMessageId,
+    );
+    if (existing) {
+      this.sameConversationOr409(existing, conversationId, user.id);
+      return (await this.toPartnerMessages([existing], user.id))[0]!;
+    }
+
+    await this.syncPartnerStaff(conversationId, jobId, user.id);
+    let row: MessageRow;
+    try {
+      row = await this.repository.createMessage({
+        conversationId,
+        senderUserId: user.id,
+        text,
+        clientMessageId: input.clientMessageId,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const raced = await this.repository.messageByClientId(
+          user.id,
+          input.clientMessageId,
+        );
+        if (raced) {
+          this.sameConversationOr409(raced, conversationId, user.id);
+          return (await this.toPartnerMessages([raced], user.id))[0]!;
+        }
+      }
+      throw error;
+    }
+    await this.announce(row, user);
+    return (await this.toPartnerMessages([row], user.id))[0]!;
+  }
+
+  /** A hibajegy, ha a kérdező partnerfiók és most látja; különben 403 vagy 404. */
+  private async partnerJobOr404(user: AuthenticatedUser, jobId: string) {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "internal")
+      throw new ForbiddenException(
+        "Belső fiókkal a partneres beszélgetés az Üzenetekben nyílik meg.",
+      );
+    const job = await this.repository.serviceJobVisibleToPartner(jobId, {
+      scope,
+      userId: user.id,
+    });
+    if (!job) throw new NotFoundException("A hibajegy nem található.");
+    return job;
+  }
+
+  /** A hibajegy élő partneres beszélgetése; ha nincs, most jön létre. */
+  private async partnerConversationFor(
+    jobId: string,
+    title: string,
+    createdByUserId: string,
+  ): Promise<string> {
+    const existing = await this.repository.conversationByContext(
+      "SERVICE_JOB",
+      jobId,
+      "PARTNER",
+    );
+    if (existing) return existing;
+    const created = await this.repository.createConversation({
+      type: "GROUP",
+      audience: "PARTNER",
+      title: `${title} · partner`,
+      description: null,
+      createdByUserId,
+      directKey: null,
+      memberIds: [],
+      context: { type: "SERVICE_JOB", id: jobId },
+    });
+    if (created.created)
+      await this.repository.audit({
+        userId: createdByUserId,
+        action: "conversation.created",
+        conversationId: created.id,
+        metadata: {
+          type: "GROUP",
+          audience: "PARTNER",
+          context: { type: "SERVICE_JOB", id: jobId },
+        },
+      });
+    return created.id;
+  }
+
+  /**
+   * A BELSŐ KÖR FRISSÍTÉSE, minden partneres üzenet és belső megnyitás előtt
+   * (Balázs, 2026-10-06 13:04 UTC: a delegált kapja meg; a kör minden
+   * üzenetnél újraszámolva). A kör a hibajegy delegált kollégái, delegált
+   * nélkül a „hibajegy nyílt” értesítési szerep tagjai, és mellettük, aki
+   * belső oldalról már írt benne (acrobot döntése, 15:29); csak aktív belső
+   * fiók. Aki a körbe újonnan került, most lesz tag, és a régebbi üzeneteket
+   * is látja. Aki nincs a körben (a delegálása megszűnt, és nem írt benne,
+   * vagy csak megnyitotta), kikerül; a beszélgetés ettől nem archiválódik.
+   */
+  private async syncPartnerStaff(
+    conversationId: string,
+    jobId: string,
+    actorUserId: string,
+  ): Promise<void> {
+    const [staff, writers, members] = await Promise.all([
+      this.repository.partnerConversationStaff(jobId),
+      this.repository.partnerConversationWriters(conversationId),
+      this.repository.members(conversationId),
+    ]);
+    const circle = new Set(
+      [...staff, ...writers]
+        .filter((person) => mayJoinInternal(person))
+        .map((p) => p.id),
+    );
+    const active = new Set(
+      members.filter((m) => m.leftAt === null).map((m) => m.userId),
+    );
+    const joining = [...circle].filter((id) => !active.has(id));
+    const leaving = [...active].filter((id) => !circle.has(id));
+    if (joining.length > 0) {
+      await this.repository.addMembers(conversationId, joining);
+      this.bus.publish(joining, {
+        type: "conversation.created",
+        conversationId,
+      });
+    }
+    await this.repository.removeMembers(conversationId, leaving);
+    // a kieső tag listájáról push nélkül tűnik el; ha épp nyitva van, a kliens
+    // a listára lép (ugyanaz az esemény, mint a törlésnél, #1532)
+    if (leaving.length > 0)
+      this.bus.publish(leaving, {
+        type: "conversation.deleted",
+        conversationId,
+      });
+    if (joining.length > 0 || leaving.length > 0)
+      await this.repository.audit({
+        userId: actorUserId,
+        action: "conversation.partner_staff_synced",
+        conversationId,
+        metadata: { joined: joining, left: leaving },
+      });
+  }
+
+  /**
+   * A PARTNER NÉZETÉNEK ÜZENETEI: csak élő szöveges üzenet, a szöveg, az idő,
+   * a szerző neve és oldala. Belső azonosító, rendszerüzenet, csatolmány,
+   * reakció és válasz-előnézet nem megy ki.
+   */
+  private async toPartnerMessages(
+    rows: readonly MessageRow[],
+    viewerId: string,
+  ): Promise<PartnerConversationMessage[]> {
+    const shown = rows.filter(
+      (row) => row.type !== "SYSTEM" && !row.deletedAt && row.text,
+    );
+    const authors = new Map(
+      (
+        await this.repository.users([
+          ...new Set(shown.map((row) => row.senderUserId)),
+        ])
+      ).map((person) => [person.id, person]),
+    );
+    return shown.map((row) => {
+      const author = authors.get(row.senderUserId);
+      return {
+        id: row.id,
+        text: row.text!,
+        createdAt: row.createdAt.toISOString(),
+        editedAt: row.editedAt?.toISOString() ?? null,
+        side:
+          author && (author.customerId !== null || author.supplierId !== null)
+            ? "PARTNER"
+            : "ACROPORA",
+        authorName: personDisplayName(row.sender),
+        mine: row.senderUserId === viewerId,
+      };
+    });
+  }
+
+  /** A partneres beszélgetésbe nem mehet továbbítás és csatolmány (084e2c24). */
+  private async refuseIntoPartner(conversationId: string, reason: string) {
+    const row = await this.repository.conversation(conversationId);
+    if (row?.audience === "PARTNER") throw new BadRequestException(reason);
   }
 
   /** A meglévő kötött beszélgetés: a kérdező, ha még nem tag, belép (szervizjoggal látja a tárgyat). */
@@ -1571,6 +1862,12 @@ export class MessagesService {
 
 const notFound = () => new NotFoundException("A beszélgetés nem található.");
 
+/** A partneres beszélgetés köre és kötése a hibajegyből jön, kézzel nem változik. */
+const partnerFixed = () =>
+  new BadRequestException(
+    "A partneres beszélgetés tagjait és kötését a hibajegy adja, kézzel nem változtatható.",
+  );
+
 function toPerson(row: MessagingUserRow): ConversationPerson {
   return {
     userId: row.id,
@@ -1731,10 +2028,13 @@ export function mayDeleteConversation(
   user: AuthenticatedUser,
   row: {
     type: string;
+    /** A hibajegy partneres beszélgetése senkinek nem törölhető (084e2c24). */
+    audience?: string;
     createdByUserId: string;
     members: readonly { userId: string }[];
   },
 ): boolean {
+  if (row.audience === "PARTNER") return false;
   if (hasPermission(user, PERMISSIONS.MESSAGES_ADMIN)) return true;
   if (row.createdByUserId === user.id) return true;
   return (
