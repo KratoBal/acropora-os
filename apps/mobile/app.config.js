@@ -215,6 +215,11 @@ module.exports = ({ config }) => {
        * jelenik meg: egy éteren át küldött frissítés nem hozza magával.
        */
       "@react-native-community/datetimepicker",
+      /**
+       * Az Üzenetek PDF-csatolmánya a rendszer saját nézőjében nyílik meg
+       * (kártya 34753075). NATÍV modul: csak új buildben él, éterről nem jön.
+       */
+      "expo-sharing",
     ],
     experiments: {
       /**
