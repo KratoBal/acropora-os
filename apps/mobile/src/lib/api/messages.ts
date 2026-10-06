@@ -270,6 +270,17 @@ export function addConversationMembers(id: string, input: AddMembersInput) {
   );
 }
 
+/**
+ * A beszélgetés törlése (fecbb1fe): a létrehozó, az admin, és Sutyerák kettes
+ * beszélgetésében a dolgozó. Mindenki elől eltűnik.
+ */
+export function deleteConversation(id: string) {
+  return apiRequest<{ deleted: true }>(
+    `${MESSAGES}/conversations/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
 export function leaveConversation(id: string) {
   return apiRequest<{ left: true; archived: boolean }>(
     `${MESSAGES}/conversations/${encodeURIComponent(id)}/leave`,

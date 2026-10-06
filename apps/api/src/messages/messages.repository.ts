@@ -304,6 +304,31 @@ export class MessagesRepository extends Repository {
   }
 
   /**
+   * A BESZÉLGETÉS TÖRLÉSE (fecbb1fe): SOFT, mint az üzeneté. Az `archivedAt`
+   * minden utat lezár (tagság, lista, csatolmány-letöltés, kontextus-keresés),
+   * a sorok maradnak. A `directKey` NULLÁRA áll: különben a két ember (vagy
+   * Sutyerák visszaírása) a következő kettes beszélgetésnél ugyanezt a törölt
+   * sort kapná vissza (`directConversationId` az archiváltat is megtalálja).
+   * Az aktív tagok azonosítóit adja (nekik megy a folyam-esemény); ha a
+   * beszélgetés nem élő (nincs, vagy már archivált), `null`-t.
+   */
+  async deleteConversation(conversationId: string): Promise<string[] | null> {
+    return this.database.$transaction(async (tx) => {
+      // CSAK ÉLŐ SORT: két egyszerre érkező törlésből a második `null`-t kap
+      const archived = await tx.conversation.updateMany({
+        where: { id: conversationId, archivedAt: null },
+        data: { archivedAt: new Date(), directKey: null },
+      });
+      if (archived.count === 0) return null;
+      const members = await tx.conversationMember.findMany({
+        where: { conversationId, leftAt: null },
+        select: { userId: true },
+      });
+      return members.map((member) => member.userId);
+    });
+  }
+
+  /**
    * RENDSZERÜZENET (4. fázis, Figma 450:710): a cselekvő nevében, `SYSTEM`
    * típussal. A beszélgetés előnézetébe kerül, és a cselekvőnek nem olvasatlan.
    */

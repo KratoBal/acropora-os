@@ -231,6 +231,11 @@ export function ConversationView({
   }, [readAssistantThinking]);
 
   useMessageStream((signal) => {
+    // fecbb1fe: a nyitott beszélgetést törölték, a nézet a listára lép
+    if (signal.type === "conversation.deleted") {
+      if (signal.conversationId === id) onLeft?.();
+      return;
+    }
     if (signal.type === "assistant.thinking") {
       if (signal.conversationId === id) setAssistantThinking(signal.active);
       return;

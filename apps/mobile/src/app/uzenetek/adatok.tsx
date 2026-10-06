@@ -11,6 +11,7 @@ import { ScreenHeader, phase3Styles } from "@/components/messages/Phase3Chrome";
 import {
   getConversation,
   leaveConversation,
+  deleteConversation,
   unlinkConversationContext,
 } from "@/lib/api/messages";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -87,6 +88,27 @@ export default function ConversationDetailsScreen() {
     );
   const name = conversation ? conversationName(conversation) : "";
   const now = new Date();
+
+  // fecbb1fe: a törlés előtt rákérdez, a beszélgetés nevével
+  const confirmDelete = () =>
+    Alert.alert(
+      `Törlöd a(z) „${name}” beszélgetést?`,
+      "Mindenki elől eltűnik, az üzeneteivel és a csatolmányaival együtt. A többiek nem kapnak róla értesítést.",
+      [
+        { text: "Mégse", style: "cancel" },
+        {
+          text: "Törlés",
+          style: "destructive",
+          onPress: () =>
+            void run(
+              () => deleteConversation(id!),
+              "A törlés nem sikerült.",
+            ).then((deleted) => {
+              if (deleted) router.dismissTo("/uzenetek");
+            }),
+        },
+      ],
+    );
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
@@ -226,6 +248,16 @@ export default function ConversationDetailsScreen() {
                 style={styles.card}
               >
                 <Text style={styles.error}>Kilépés a beszélgetésből</Text>
+              </Pressable>
+            ) : null}
+            {conversation.canDelete ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={confirmDelete}
+                style={styles.card}
+              >
+                <Text style={styles.error}>Beszélgetés törlése</Text>
               </Pressable>
             ) : null}
           </>

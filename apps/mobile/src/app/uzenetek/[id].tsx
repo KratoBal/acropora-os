@@ -240,6 +240,15 @@ export default function ConversationScreen() {
   };
 
   useMessageStream((signal) => {
+    // fecbb1fe: a nyitott beszélgetést törölték, a képernyő a listára lép
+    if (
+      signal.type === "conversation.deleted" &&
+      signal.conversationId === id
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+      router.dismissTo("/uzenetek");
+      return;
+    }
     setThinking((current) => ({
       ...current,
       value: nextThinking(current.value, signal, id),

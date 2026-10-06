@@ -22,7 +22,7 @@ import {
   isAssistantConversation,
 } from "./conversation-parts";
 import { fileSizeLabel } from "./outbox";
-import { MembershipSection } from "./phase4-dialogs";
+import { DeleteConversationSection, MembershipSection } from "./phase4-dialogs";
 import {
   fileTypeLabel,
   notificationLabel,
@@ -239,6 +239,8 @@ export function ConversationDetailsPanel({
     ConversationNotificationState | undefined
   >(undefined);
   const [choice, setChoice] = useState<ConversationNotifyMode | null>(null);
+  /** fecbb1fe: a szerver szerint a néző törölheti-e */
+  const [canDelete, setCanDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const now = new Date();
@@ -248,7 +250,10 @@ export function ConversationDetailsPanel({
     const controller = new AbortController();
     void messagesApi
       .detail(token, conversation.id, controller.signal)
-      .then((detail) => setNotification(detail.notification))
+      .then((detail) => {
+        setNotification(detail.notification);
+        setCanDelete(detail.canDelete === true);
+      })
       .catch(() => undefined);
     return () => controller.abort();
   }, [conversation.id, token]);
@@ -377,6 +382,13 @@ export function ConversationDetailsPanel({
             onChanged={onChanged}
             onLeft={onLeft}
           />
+          {canDelete ? (
+            <DeleteConversationSection
+              token={token}
+              conversation={conversation}
+              onDeleted={onLeft}
+            />
+          ) : null}
         </div>
       ) : null}
 

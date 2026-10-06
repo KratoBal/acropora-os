@@ -18,6 +18,7 @@ const KNOWN = new Set([
   "message.created",
   "conversation.created",
   "conversation.read",
+  "conversation.deleted",
   "message.updated",
   "assistant.thinking",
 ]);
