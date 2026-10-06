@@ -14,6 +14,7 @@ import { useAssistantPageContext } from "./page-context";
 import { AssistantMarkdown } from "./markdown";
 import {
   clampPosition,
+  FIGURE_SIZE,
   storedPosition,
   panelPosition,
   type FigurePosition,
@@ -254,8 +255,13 @@ export function SutyerakPanel({ session }: { session: Session }) {
         aria-expanded={open}
         aria-controls="sutyerak-panel"
         title="Sutyerák — húzható"
-        className="fixed z-50 h-12 w-12 touch-none cursor-grab rounded-full focus-visible:outline-2 focus-visible:outline-pilot-aqua-600"
-        style={{ left: position.x, top: position.y }}
+        className="fixed z-50 touch-none cursor-grab rounded-full focus-visible:outline-2 focus-visible:outline-pilot-aqua-600"
+        style={{
+          left: position.x,
+          top: position.y,
+          width: FIGURE_SIZE,
+          height: FIGURE_SIZE,
+        }}
         onPointerDown={(event) => {
           if (event.button !== 0) return;
           suppressClick.current = false;
@@ -285,8 +291,8 @@ export function SutyerakPanel({ session }: { session: Session }) {
         {/* eslint-disable-next-line @next/next/no-img-element -- swappable local mascot assets */}
         <img
           src={SUTYERAK_ASSETS[state]}
-          width={48}
-          height={48}
+          width={FIGURE_SIZE}
+          height={FIGURE_SIZE}
           alt=""
           draggable={false}
           className="h-full w-full object-contain drop-shadow-md"
