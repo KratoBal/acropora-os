@@ -266,6 +266,7 @@ describe("WebshopOrdersService.detail", () => {
       missing?: boolean;
       guest?: boolean;
       http?: boolean;
+      split?: boolean;
     } = {},
   ) {
     const counted: string[] = [];
@@ -273,6 +274,8 @@ describe("WebshopOrdersService.detail", () => {
       order: async (id: string) => {
         if (options.http) throw new MedusaAdminHttpError(500, "boom");
         if (options.missing && id === "order_38") return null;
+        if (id === "order_40") return detailOrder("order_40", null);
+        if (id === "order_41") throw new Error("network");
         if (id === "order_39") {
           if (options.relatedFails) throw new Error("network");
           return detailOrder("order_39", {
@@ -281,7 +284,12 @@ describe("WebshopOrdersService.detail", () => {
         }
         return detailOrder(
           "order_38",
-          { acropora_pickup_order_id: "order_39" },
+          options.split
+            ? {
+                acropora_split_from_order_id: "order_40",
+                acropora_split_order_ids: ["order_41"],
+              }
+            : { acropora_pickup_order_id: "order_39" },
           options.guest ? null : "cus_1",
         );
       },
@@ -322,6 +330,20 @@ describe("WebshopOrdersService.detail", () => {
       displayId: null,
       role: "pickup",
     });
+  });
+
+  it("names both ends of a split by number; a failing lookup leaves the link without one", async () => {
+    const split = await detailService({ split: true }).orders.detail(
+      "order_38",
+      NOW,
+    );
+    assert.deepEqual(split.split, {
+      from: { id: "order_40", displayId: 40 },
+      into: [{ id: "order_41", displayId: null }],
+    });
+    assert.equal(split.relatedOrder, null);
+    const plain = await detailService().orders.detail("order_38", NOW);
+    assert.deepEqual(plain.split, { from: null, into: [] });
   });
 
   it("an unknown order is 404, a webshop error 503; a guest's order count is not asked", async () => {

@@ -4,14 +4,22 @@ import {
   type WebshopOrderAddressInput,
   type WebshopOrderMethodInput,
   type WebshopOrderNotesInput,
+  type WebshopOrderSplitInput,
 } from "@acropora/types";
+import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   Length,
   MaxLength,
+  Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
 
 /** Egy cím az adatlapról. A kötelező mezők a csomagfeladás és a számla mezői. */
@@ -52,6 +60,24 @@ export class WebshopOrderNotesDto implements WebshopOrderNotesInput {
   @IsString()
   @MaxLength(WEBSHOP_CARRIER_NOTE_MAX)
   carrierNote?: string;
+}
+
+/** Egy kijelölt tétel a bontáshoz. */
+export class WebshopOrderSplitLineDto {
+  @IsString() @MinLength(1) @MaxLength(100) itemId!: string;
+  @IsInt() @Min(1) quantity!: number;
+}
+
+/** A szétbontás: a kijelölt tételek, és a párbeszédablak kérés-azonosítója. */
+export class WebshopOrderSplitDto implements WebshopOrderSplitInput {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => WebshopOrderSplitLineDto)
+  lines!: WebshopOrderSplitLineDto[];
+
+  @IsString() @MinLength(1) @MaxLength(100) requestId!: string;
 }
 
 /** A szállítási mód cseréje: a webshop listájából a mód, pontos módnál a pont is. */

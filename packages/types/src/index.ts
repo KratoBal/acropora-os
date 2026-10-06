@@ -1214,6 +1214,8 @@ export type {
   WebshopOrderAddressInput,
   WebshopOrderNotesInput,
   WebshopParcelTracking,
+  WebshopOrderSplitInput,
+  WebshopOrderSplitResult,
   WebshopPickupPointOption,
   WebshopPickupPointSearch,
   WebshopShippingOption,

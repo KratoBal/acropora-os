@@ -399,6 +399,21 @@ export interface WebshopOrderDetail {
    * miért (Rendelések, 6. PR).
    */
   lineEdit: { allowed: boolean; reason: string | null };
+  /**
+   * Bontható-e most a rendelés (kártya 0a14f739 C/3). Ugyanaz a határ, mint a
+   * tételeké: a bontás az eredeti rendelés tételeit csökkenti. A webshop a
+   * saját tiltásait (fizetett, vegyes kosár bolti fele) a kérésre mondja ki.
+   */
+  splitEdit: { allowed: boolean; reason: string | null };
+  /**
+   * A SZÉTBONTÁS KAPCSOLATA (commerce, murena 26630): `from` az eredeti
+   * rendelés, ha ez belőle bontott; `into` a belőle bontott rendelések. Nem
+   * a vegyes kosár párja (`relatedOrder`): annak a fizetése közös, ezé nem.
+   */
+  split: {
+    from: { id: string; displayId: number | null } | null;
+    into: { id: string; displayId: number | null }[];
+  };
   steps: WebshopOrderStep[];
   relatedOrder: {
     id: string;
@@ -597,6 +612,32 @@ export interface WebshopPickupPointSearch {
   points: WebshopPickupPointOption[];
   /** Az összes találat, nem csak a lap. */
   count: number;
+}
+
+/** A szétbontás kérése: a kijelölt tételek és mennyiségük (commerce, murena 26630). */
+export interface WebshopOrderSplitInput {
+  lines: { itemId: string; quantity: number }[];
+  /**
+   * A párbeszédablak saját azonosítója: ugyanazzal a kéréssel a webshop
+   * ugyanazt az új rendelést adja, tehát a dupla kattintás nem bont kétszer.
+   */
+  requestId: string;
+}
+
+/** A szétbontás válasza: a friss adatlap és az új rendelés. */
+export interface WebshopOrderSplitResult {
+  order: WebshopOrderDetail;
+  created: {
+    id: string;
+    displayId: number | null;
+    /** Az új rendelés összege; az eredetié a friss adatlapon áll. */
+    total: number;
+    /**
+     * Kártyás rendelésnél az új rendelés „Fizetésre vár”: a linket a kezelő
+     * küldi az adatlapjáról, amikor kiszállítható (acrobot 26652).
+     */
+    awaitingPayment: boolean;
+  };
 }
 
 /**

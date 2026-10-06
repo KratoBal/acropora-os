@@ -15,6 +15,8 @@ import type {
   WebshopOrderNotesInput,
   WebshopShippingOptions,
   WebshopParcelTracking,
+  WebshopOrderSplitInput,
+  WebshopOrderSplitResult,
   WebshopPickupPointSearch,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
@@ -137,6 +139,17 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/pickup-point`,
       token,
       { method: "PUT", body: JSON.stringify({ pointId }) },
+    );
+  },
+  /**
+   * A kijelölt tételek új, kapcsolt rendelésbe (kártya 0a14f739 C/3). A
+   * `requestId` a párbeszédablaké: az újraküldés nem bont kétszer.
+   */
+  split(token: string, id: string, input: WebshopOrderSplitInput) {
+    return apiRequest<WebshopOrderSplitResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/split`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
     );
   },
   /** A rendelés választható futáros módjai az új díjjal (kártya 0a14f739 C/2). */

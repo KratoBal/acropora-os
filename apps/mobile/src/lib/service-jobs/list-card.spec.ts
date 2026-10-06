@@ -24,14 +24,11 @@ const person = (name: string) => ({
 describe("a hibajegy-kártya felelős-sora", () => {
   it("nevekkel, üres listánál nincs kiosztva", () => {
     assert.equal(
-      serviceJobAssigneeLine(
-        { assignees: [person("Ádám"), person("Péter")] },
-        false,
-      ),
+      serviceJobAssigneeLine({ assignees: [person("Ádám"), person("Péter")] }),
       "Felelős: Ádám, Péter",
     );
     assert.equal(
-      serviceJobAssigneeLine({ assignees: [] }, false),
+      serviceJobAssigneeLine({ assignees: [] }),
       "Felelős: nincs kiosztva",
     );
   });
@@ -42,27 +39,31 @@ describe("a hibajegy-kártya felelős-sora", () => {
    * knows.
    */
   it("régi mentett sornál ismeretlen, sosem nincs kiosztva", () => {
-    const line = serviceJobAssigneeLine({}, false);
+    const line = serviceJobAssigneeLine({});
     assert.equal(line, "Felelős: nem ismert");
     assert.doesNotMatch(line!, /nincs kiosztva/i);
   });
 
-  it("partner szemnek nincs felelős-sor", () => {
+  /**
+   * A PARTNER'S ROW (card a0660885, #1449): no `assignees`, only
+   * `assigneeNames`. Reading `assignees` alone wrote "nem ismert" on every
+   * partner row; the names are sent so that they are shown (acrobot 26185).
+   */
+  it("partner során a nevek az assigneeNames mezőből jönnek", () => {
     assert.equal(
-      serviceJobAssigneeLine({ assignees: [person("Ádám")] }, true),
-      null,
+      serviceJobAssigneeLine({ assigneeNames: ["Ádám", "Péter"] }),
+      "Felelős: Ádám, Péter",
+    );
+    assert.equal(
+      serviceJobAssigneeLine({ assigneeNames: [] }),
+      "Felelős: nincs kiosztva",
     );
     assert.equal(
       serviceJobCardMeta(
-        {
-          assignees: [person("Ádám")],
-          worksheetCount: 1,
-          createdAt: at(4, 8, 14),
-        },
-        true,
+        { assigneeNames: ["Ádám"], worksheetCount: 1, createdAt: at(4, 8, 14) },
         now,
       ),
-      "1 ML · ma 08:14",
+      "Felelős: Ádám · 1 ML · ma 08:14",
     );
   });
 
@@ -74,7 +75,6 @@ describe("a hibajegy-kártya felelős-sora", () => {
           worksheetCount: 2,
           createdAt: at(4, 8, 14),
         },
-        false,
         now,
       ),
       "Felelős: Ádám, Péter · 2 ML · ma 08:14",

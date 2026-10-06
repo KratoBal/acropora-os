@@ -326,6 +326,26 @@ const relatedOf = (
   return null;
 };
 
+/**
+ * A SZÉTBONTÁS KULCSAI (commerce, murena 26630): az eredetin
+ * `acropora_split_order_ids`, a bontotton `acropora_split_from_order_id`.
+ * Szándékosan nem a vegyes kosár kulcsai: azokból a közös kártyás levonás a
+ * párt keresi, és a bontott rendelés nem ül az eredeti zárolásán.
+ */
+export function splitIdsOf(metadata: Record<string, unknown> | null): {
+  from: string | null;
+  into: string[];
+} {
+  const from = metadata?.acropora_split_from_order_id;
+  const into = metadata?.acropora_split_order_ids;
+  return {
+    from: typeof from === "string" && from ? from : null,
+    into: Array.isArray(into)
+      ? into.filter((id): id is string => typeof id === "string" && !!id)
+      : [],
+  };
+}
+
 export function toDetail(input: {
   order: MedusaOrderDetailRow;
   status: MedusaOrderBusinessStatus | null;
@@ -338,6 +358,7 @@ export function toDetail(input: {
   /** A belső megjegyzés (csak OS). */
   internalNote?: WebshopOrderDetail["internalNote"];
   deliveryNote?: WebshopOrderDetail["deliveryNote"];
+  split?: WebshopOrderDetail["split"];
   /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
   signals?: MedusaOrderOverviewRow["customer_signals"] | null;
   /** A csomagfeladás előnézete (`parcelInputOf`); bolti átvételnél `null`. */
@@ -437,6 +458,16 @@ export function toDetail(input: {
       });
       return { allowed: reason === null, reason };
     })(),
+    // a bontás az eredeti tételeit csökkenti: a tételek határa az övé is
+    splitEdit: (() => {
+      const reason = lineEditRefusal({
+        status: code,
+        invoice: facts.invoice,
+        parcel: facts.parcel,
+      });
+      return { allowed: reason === null, reason };
+    })(),
+    split: input.split ?? { from: null, into: [] },
     steps: stepsOf(
       code,
       shipping.storePickup,

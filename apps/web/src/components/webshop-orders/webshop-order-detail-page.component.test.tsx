@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   shippingOptionPoints: vi.fn(),
   changeShippingMethod: vi.fn(),
   saveNotes: vi.fn(),
+  split: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   issueDeliveryNote: vi.fn(),
@@ -179,6 +180,8 @@ const detail: WebshopOrderDetail = {
     shipping: { allowed: true, reason: null },
   },
   lineEdit: { allowed: true, reason: null },
+  splitEdit: { allowed: true, reason: null },
+  split: { from: null, into: [] },
   steps: [
     {
       key: "confirm",
@@ -235,6 +238,7 @@ beforeEach(() => {
   api.sendPaymentLink.mockReset();
   api.updateAddress.mockReset();
   api.saveInternalNote.mockReset();
+  api.split.mockReset();
   api.shippingOptions.mockReset();
   api.shippingOptionPoints.mockReset();
   api.changeShippingMethod.mockReset();
@@ -1015,16 +1019,144 @@ describe("WebshopOrderDetailPage", () => {
     fireEvent.click(box);
     fireEvent.click(within(items).getByRole("button", { name: "Szétbontás" }));
     const dialog = screen.getByRole("dialog", { name: "Szétbontás" });
+    const list = within(dialog).getByRole("list", { name: "Kijelölt tételek" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(
-      within(within(dialog).getByRole("list", { name: "Kijelölt tételek" }))
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual(["Coral Food · 2 db"]);
-    expect(within(dialog).getByText(/következő körben/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Bezárás" }));
+      (
+        within(list).getByRole("spinbutton", {
+          name: "Coral Food: bontandó mennyiség",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mégse" }));
     fireEvent.click(box);
     expect(
       within(items).queryByRole("button", { name: "Szétbontás" }),
+    ).toBeNull();
+  });
+
+  /*
+    THE SPLIT (card 0a14f739 C/3). WHAT TURNS RED: the chosen quantity or the
+    request id does not go out; a retry gets a new request id (a lost answer
+    would split twice); the whole order or an out-of-range quantity can be
+    sent; the new order is not named and linked; the webshop's refusal is
+    lost; a held split still offers the button; the page does not show
+    which order it was split from or into.
+  */
+  it("sends the chosen quantity with one request id, then names and links the new order", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    api.split
+      .mockRejectedValueOnce(new Error("A webshop nem érhető el (HTTP 503)."))
+      .mockResolvedValueOnce({
+        order: twoLines,
+        created: {
+          id: "order_39",
+          displayId: 39,
+          total: 3000,
+          awaitingPayment: true,
+        },
+      });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    fireEvent.click(
+      within(items).getByRole("checkbox", { name: "Coral Food kijelölése" }),
+    );
+    fireEvent.click(within(items).getByRole("button", { name: "Szétbontás" }));
+    const dialog = screen.getByRole("dialog", { name: "Szétbontás" });
+    fireEvent.change(
+      within(dialog).getByRole("spinbutton", {
+        name: "Coral Food: bontandó mennyiség",
+      }),
+      { target: { value: "1" } },
+    );
+    const submit = within(dialog).getByRole("button", { name: "Szétbontás" });
+    fireEvent.click(submit);
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(
+      /HTTP 503/,
+    );
+    fireEvent.click(submit);
+    const link = await within(dialog).findByRole("link", {
+      name: "Az új rendelés megnyitása",
+    });
+    expect(link.getAttribute("href")).toBe("/webshop/rendelesek/order_39");
+    expect(within(dialog).getByText(/#39/)).toBeTruthy();
+    expect(within(dialog).getByText(/fizetésre vár/).textContent).toMatch(
+      /adatlapjáról küldd, amikor kiszállítható/,
+    );
+    expect(api.split).toHaveBeenCalledTimes(2);
+    const [first, second] = api.split.mock.calls;
+    expect(first?.[2]).toEqual({
+      lines: [{ itemId: "i2", quantity: 1 }],
+      requestId: expect.any(String),
+    });
+    expect(second?.[2]).toEqual(first?.[2]);
+  });
+
+  it("the whole order or an out-of-range quantity cannot be sent", async () => {
+    api.detail.mockResolvedValue(twoLines);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const items = await screen.findByRole("region", { name: "Tételek" });
+    for (const name of [
+      "Reef Salt Pro 20 kg kijelölése",
+      "Coral Food kijelölése",
+    ])
+      fireEvent.click(within(items).getByRole("checkbox", { name }));
+    fireEvent.click(within(items).getByRole("button", { name: "Szétbontás" }));
+    const dialog = screen.getByRole("dialog", { name: "Szétbontás" });
+    const submit = within(dialog).getByRole("button", { name: "Szétbontás" });
+    expect(within(dialog).getByText(/nem bontás/)).toBeTruthy();
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    const coral = within(dialog).getByRole("spinbutton", {
+      name: "Coral Food: bontandó mennyiség",
+    });
+    fireEvent.change(coral, { target: { value: "3" } });
+    expect(
+      within(dialog).getByText(
+        "Coral Food: 1 és 2 közötti mennyiség bontható.",
+      ),
+    ).toBeTruthy();
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(coral, { target: { value: "1" } });
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("a held split names why and offers no button; the page shows the split's two ends", async () => {
+    api.detail.mockResolvedValue({
+      ...twoLines,
+      splitEdit: {
+        allowed: false,
+        reason:
+          "A számla már ki van állítva: a tétel csak a számla sztornója után módosítható.",
+      },
+      split: {
+        from: { id: "order_30", displayId: 30 },
+        into: [
+          { id: "order_39", displayId: 39 },
+          { id: "order_40", displayId: null },
+        ],
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(
+      (await screen.findByRole("link", { name: "#30" })).getAttribute("href"),
+    ).toBe("/webshop/rendelesek/order_30");
+    expect(screen.getByRole("link", { name: "#39" }).getAttribute("href")).toBe(
+      "/webshop/rendelesek/order_39",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "kapcsolt rendelés" })
+        .getAttribute("href"),
+    ).toBe("/webshop/rendelesek/order_40");
+    const items = screen.getByRole("region", { name: "Tételek" });
+    fireEvent.click(
+      within(items).getByRole("checkbox", { name: "Coral Food kijelölése" }),
+    );
+    fireEvent.click(within(items).getByRole("button", { name: "Szétbontás" }));
+    const dialog = screen.getByRole("dialog", { name: "Szétbontás" });
+    expect(within(dialog).getByText(/számla sztornója után/)).toBeTruthy();
+    expect(
+      within(dialog).queryByRole("button", { name: "Szétbontás" }),
     ).toBeNull();
   });
 
