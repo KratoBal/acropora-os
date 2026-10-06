@@ -39,6 +39,49 @@ describe("looksLikeInvoice", () => {
     assert.equal(looksLikeProforma("DÍJBEKÉRŐ\nSorszám: D-1"), true);
     assert.equal(looksLikeProforma("Számla\nSorszám: SZ-1"), false);
   });
+
+  /*
+    A CÍM DÖNT (acrobot 27064, mérve 2026-10-06 élesen, a sorok az UNAS aláírt
+    e-számlájából). MI PIROSÍT: ha a lejjebb álló „Díjbekérő” oszlopfejléc
+    díjbekérővé teszi a magát számlának mondó dokumentumot; ha a címben álló
+    díjbekérő szó nem dönt; ha cím nélkül a régi teljes-szöveges szabály kiesik.
+  */
+  it("lets the title decide: an invoice that names its pro forma in a column is still an invoice", () => {
+    const unas = [
+      "FIZETVE | Számla",
+      "Sorszám: | UO-418953/2026",
+      "Eladó: | Vevő:",
+      "UNAS Online Kft. | Acropora Kft.",
+      "Bank: | CIB Bank",
+      "Bankszámla: | 10700426-46856700-51100005",
+      "Teljesítés | Kelt | Fizetési határidő | Oldal | Díjbekérő",
+    ].join("\n");
+    assert.equal(looksLikeProforma(unas), false);
+    // a cím díjbekérőnek mondja magát: az dönt (Amblard, „Facture provisoire”)
+    assert.equal(
+      looksLikeProforma(
+        "F2602896 $ Facture provisoire $ 485,40\nInvoice n°: | Billing address",
+      ),
+      true,
+    );
+    // cím nélkül a teljes szöveg dönt, mint eddig
+    assert.equal(
+      looksLikeProforma(
+        [
+          "Szállító Kft.",
+          "Sorszám: D-7",
+          ...Array(10).fill("tétel"),
+          "Díjbekérő",
+        ].join("\n"),
+      ),
+      true,
+    );
+    // a „Bankszámla” cella nem cím
+    assert.equal(
+      looksLikeProforma("Bankszámla: | 1170\nSorszám: D-8\nDíjbekérő"),
+      true,
+    );
+  });
 });
 
 describe("readInvoiceText", () => {
