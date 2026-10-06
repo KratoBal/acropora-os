@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Monogram, conversationName } from "@/components/messages/MessageParts";
+import { isAssistant, isAssistantConversation } from "@/lib/messages/assistant";
 import { ScreenHeader, phase3Styles } from "@/components/messages/Phase3Chrome";
 import {
   getConversation,
@@ -97,7 +98,11 @@ export default function ConversationDetailsScreen() {
         {conversation ? (
           <>
             <View style={styles.row}>
-              <Monogram name={name} tokens={tokens} />
+              <Monogram
+                name={name}
+                tokens={tokens}
+                assistant={isAssistantConversation(conversation)}
+              />
               <View>
                 <Text style={styles.cardTitle}>{name}</Text>
                 <Text style={styles.muted}>
@@ -200,7 +205,11 @@ export default function ConversationDetailsScreen() {
             ) : null}
             {conversation.members.map((member) => (
               <View key={member.userId} style={[styles.card, styles.row]}>
-                <Monogram name={member.name} tokens={tokens} />
+                <Monogram
+                  name={member.name}
+                  tokens={tokens}
+                  assistant={isAssistant(member)}
+                />
                 <View>
                   <Text style={styles.cardTitle}>{member.name}</Text>
                   <Text style={styles.cardMeta}>

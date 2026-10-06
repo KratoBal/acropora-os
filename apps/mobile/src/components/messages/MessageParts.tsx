@@ -1,9 +1,12 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
+import { isAssistantConversation } from "@/lib/messages/assistant";
 import type { ConversationListItem } from "@/lib/messages/types";
 import { conversationTimeLabel, previewText } from "@/lib/messages/outbox";
 import { contextSubtitle } from "@/lib/messages/phase4";
 import type { ThemeTokens } from "@/lib/theme/tokens";
+
+import { SUTYERAK_FIGURE } from "./sutyerak-figure";
 
 /** A beszélgetés neve: csoportnál a megadott név, DIRECT-nél a másik tag neve. */
 export function conversationName(
@@ -29,10 +32,22 @@ export function monogram(name: string): string {
 export function Monogram({
   name,
   tokens,
+  assistant = false,
 }: {
   name: string;
   tokens: ThemeTokens;
+  /** Sutyerák: a monogram helyén a figurája. */
+  assistant?: boolean;
 }) {
+  if (assistant)
+    return (
+      <Image
+        source={SUTYERAK_FIGURE.resting}
+        accessibilityIgnoresInvertColors
+        style={{ width: 32, height: 40 }}
+        resizeMode="contain"
+      />
+    );
   return (
     <View
       style={{
@@ -87,7 +102,11 @@ export function ConversationRow({
       }
       style={styles.row}
     >
-      <Monogram name={name} tokens={tokens} />
+      <Monogram
+        name={name}
+        tokens={tokens}
+        assistant={isAssistantConversation(item)}
+      />
       <View style={styles.body}>
         <Text style={styles.name} numberOfLines={1}>
           {name}

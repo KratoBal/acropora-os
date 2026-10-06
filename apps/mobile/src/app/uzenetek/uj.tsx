@@ -15,6 +15,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Monogram } from "@/components/messages/MessageParts";
 import { createConversation, searchMessagePeople } from "@/lib/api/messages";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  SUTYERAK_PICKER_LABEL,
+  assistantFirst,
+  isAssistant,
+} from "@/lib/messages/assistant";
 import { ROLE_LABELS } from "@/lib/messages/role-labels";
 import type { ConversationPerson } from "@/lib/messages/types";
 import type { ThemeTokens } from "@/lib/theme/tokens";
@@ -60,7 +65,9 @@ export default function NewConversationScreen() {
     );
   const listed = [
     ...chosen,
-    ...(people.data?.items ?? []).filter((person) => !isChosen(person)),
+    ...assistantFirst(
+      (people.data?.items ?? []).filter((person) => !isChosen(person)),
+    ),
   ];
 
   const start = async () => {
@@ -124,11 +131,17 @@ export default function NewConversationScreen() {
               onPress={() => toggle(person)}
               style={[styles.person, selected && styles.personChosen]}
             >
-              <Monogram name={person.name} tokens={tokens} />
+              <Monogram
+                name={person.name}
+                tokens={tokens}
+                assistant={isAssistant(person)}
+              />
               <View style={styles.personBody}>
                 <Text style={styles.personName}>{person.name}</Text>
                 <Text style={styles.personRole}>
-                  {ROLE_LABELS[person.role] ?? ""}
+                  {isAssistant(person)
+                    ? SUTYERAK_PICKER_LABEL
+                    : (ROLE_LABELS[person.role] ?? "")}
                 </Text>
               </View>
               <View style={[styles.box, selected && styles.boxChosen]}>

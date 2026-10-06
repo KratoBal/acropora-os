@@ -2,6 +2,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { DocumentImage } from "@/components/documents/DocumentImage";
+import { AssistantText } from "@/components/messages/AssistantText";
 import {
   fileSizeLabel,
   replyPreviewText,
@@ -122,7 +123,9 @@ export function MessageBubble({
                 </View>
               ),
             )}
-            {message.text ? (
+            {message.text && message.assistant ? (
+              <AssistantText text={message.text} style={styles.text} />
+            ) : message.text ? (
               <Text style={styles.text} selectable>
                 {message.text}
               </Text>
