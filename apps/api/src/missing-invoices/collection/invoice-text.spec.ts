@@ -17,7 +17,9 @@ import {
   otherDocumentFileName,
   readInvoiceText,
   knownNumberInText,
+  labelledTotal,
   withKnownNumber,
+  withLabelledTotal,
   type KnownInvoiceNumber,
 } from "./invoice-text.js";
 
@@ -76,6 +78,80 @@ describe("readInvoiceText", () => {
       readInvoiceText(lines, { navNumbers: () => ["846602789443"] }),
       {
         invoiceNumber: "845114371429",
+        numberFrom: "LABEL",
+        supplierTaxNumber: "12345678-2-42",
+      },
+    );
+  });
+
+  /*
+    A MÓDOSÍTÓ SZÁMLA AZ EREDETI SZÁMÁT IS VISELI (kártya 37b8643d, mérve
+    2026-10-06 élesen, a sorok a KS2605898.pdf és a 4934_26_szamla.pdf
+    szövegéből). A régi kód az „Eredeti számla száma” címkéből az EREDETI
+    számot adta, a NAV megerősítette, és a módosító az eredetivel vonódott össze.
+  */
+  it("never takes the referenced original's number for a modifying invoice's own (the Fluidra credit note)", () => {
+    const lines = [
+      "KS26/05898 | 2/1. oldal",
+      SUPPLIER,
+      US,
+      "KS26/05898 | 60 napos átutalás",
+      "Eredeti számla száma: KS26/05848 Teljesítés kelte: 2026.06.15.",
+      "Fizetendő: | -76.096 | Ft",
+    ];
+    const hints = { fileName: "KS2605898.pdf" };
+    // az eredeti a NAV-ban van, a módosító még nincs: nem az eredeti a válasz
+    assert.deepEqual(
+      readInvoiceText(lines, { ...hints, navNumbers: () => ["KS26/05848"] }),
+      {
+        invoiceNumber: "KS2605898",
+        numberFrom: "FILE_NAME",
+        supplierTaxNumber: "12345678-2-42",
+      },
+    );
+    // ha már mindkettő a NAV-ban van, a saját száma az egyetlen találat
+    assert.deepEqual(
+      readInvoiceText(lines, {
+        ...hints,
+        navNumbers: () => ["KS26/05848", "KS26/05898"],
+      }),
+      {
+        invoiceNumber: "KS26/05898",
+        numberFrom: "NAV",
+        supplierTaxNumber: "12345678-2-42",
+      },
+    );
+  });
+
+  it("reads the own number of a modifying invoice when the original stands under its own label (the Menet-Trend case)", () => {
+    const lines = [
+      SUPPLIER,
+      US,
+      "Számlaszám: | 4934/26",
+      "Módosított számla: | 4867/26",
+      "Fizetendő | : | -167 478 Ft",
+    ];
+    assert.deepEqual(
+      readInvoiceText(lines, { navNumbers: () => ["4867/26"] }),
+      {
+        invoiceNumber: "4934/26",
+        numberFrom: "LABEL",
+        supplierTaxNumber: "12345678-2-42",
+      },
+    );
+    // a hivatkozás címkéje a sorszám-címkét sem adja át az eredetinek
+    assert.deepEqual(
+      readInvoiceText(
+        [
+          SUPPLIER,
+          US,
+          "Helyesbített számla sorszáma: 4867/26",
+          "Sorszám: 4934/26",
+        ],
+        { navNumbers: () => ["4867/26"] },
+      ),
+      {
+        invoiceNumber: "4934/26",
         numberFrom: "LABEL",
         supplierTaxNumber: "12345678-2-42",
       },
@@ -813,5 +889,92 @@ describe("a known number when the text names no supplier tax number (Tisza 97)",
       withKnownNumber(read, TISZA, KNOWN).supplierTaxNumber,
       "14880568-2-43",
     );
+  });
+});
+
+/*
+  A CÍMKÉS VÉGÖSSZEG (kártya 37b8643d). A sorok a valódi PDF-ek alakja, mérve
+  2026-10-06 élesen (KS2605898.pdf, 4934_26_szamla.pdf, KS2605848.pdf).
+  MI PIROSÍT: ha az előjel elveszik (a módosító pozitív bruttót kapna); ha két
+  különböző címkés értékből egyet választ; ha pénznem nélkül is dönt; ha a
+  „Kft.” vége forintnak számít.
+*/
+describe("labelledTotal", () => {
+  it("keeps the minus sign of a modifying invoice, on the same line and after a separator", () => {
+    assert.deepEqual(labelledTotal(["Fizetendő: | -76.096 | Ft"]), {
+      gross: "-76096",
+      currency: "HUF",
+    });
+    assert.deepEqual(
+      labelledTotal([
+        "Bruttó összes | : | -167 478 Ft",
+        "Fizetendő | : | -167 478 Ft",
+      ]),
+      { gross: "-167478", currency: "HUF" },
+    );
+    assert.deepEqual(labelledTotal(["Fizetendő: | 1.027.376 | Ft"]), {
+      gross: "1027376",
+      currency: "HUF",
+    });
+  });
+
+  it("takes the amount from the next line when the label stands alone, with decimals", () => {
+    assert.deepEqual(labelledTotal(["Invoice total", "€ 180,00"]), {
+      gross: "180",
+      currency: "EUR",
+    });
+    assert.deepEqual(labelledTotal(["Amount due: $20.50 USD"]), {
+      gross: "20.5",
+      currency: "USD",
+    });
+  });
+
+  it("does not decide between two different labelled values", () => {
+    assert.equal(
+      labelledTotal(["Végösszeg: 37 500 Ft", "Fizetendő: 7 972 Ft"]),
+      null,
+    );
+  });
+
+  it("does not decide without a currency, and a currency code inside a word is no currency", () => {
+    assert.equal(labelledTotal(["Szállító Kft.", "Végösszeg: 12 700"]), null);
+    // a dokumentum egyetlen pénzneme dönt, ha a címke sorában nincs; az
+    // „EUROPA” a szállító neve, nem euró
+    assert.deepEqual(
+      labelledTotal([
+        "EUROPA AQUA Kft.",
+        "Nettó: 10 000 Ft",
+        "Végösszeg: 12 700",
+      ]),
+      { gross: "12700", currency: "HUF" },
+    );
+  });
+});
+
+describe("withLabelledTotal", () => {
+  const reading = {
+    invoiceNumber: "SZ-1",
+    numberFrom: "LABEL" as const,
+    supplierTaxNumber: "12345678-2-42",
+  };
+  it("adds the labelled total, but never over a card payment or a gross from the source", () => {
+    const lines = ["Fizetendő: 12 700 Ft"];
+    assert.deepEqual(withLabelledTotal(reading, lines), {
+      ...reading,
+      gross: "12700",
+      currency: "HUF",
+    });
+    const card = {
+      ...reading,
+      cardPayment: {
+        amount: "12000",
+        currency: "HUF",
+        partner: "Szállító",
+        debitIds: ["d1"],
+      },
+    };
+    assert.deepEqual(withLabelledTotal(card, lines), card);
+    const feed = { ...reading, gross: "13000", currency: "HUF" };
+    assert.deepEqual(withLabelledTotal(feed, lines), feed);
   });
 });

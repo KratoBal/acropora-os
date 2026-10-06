@@ -46,6 +46,7 @@ import {
   isOwnInvoiceText,
   readInvoiceText,
   withKnownNumber,
+  withLabelledTotal,
   type KnownInvoiceNumber,
   type InvoiceTextReading,
 } from "./invoice-text.js";
@@ -586,7 +587,7 @@ export class InvoiceCollectionService {
               read: false,
               kind: looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
               importResult: null,
-              textReading,
+              textReading: withLabelledTotal(textReading, lines),
               payee: payeeFromText(text),
               suggestion,
             });
@@ -620,6 +621,8 @@ export class InvoiceCollectionService {
                   bankReference: reference,
                 };
       }
+      // a bruttó és a pénznem a címkés végösszegből, ha más nem adja (37b8643d)
+      textReading = withLabelledTotal(textReading, lines);
     }
     const proforma = importResult
       ? importResult.documentKind === "PROFORMA"

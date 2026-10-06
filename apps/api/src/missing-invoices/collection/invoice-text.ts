@@ -32,6 +32,15 @@ export interface InvoiceTextReading {
    * párosító ebből tudja a dokumentum bruttóját és szállítóját.
    */
   cardPayment?: CardPaymentMatch | null;
+  /**
+   * A címkés végösszeg (`labelledTotal`), előjellel: a párosító ebből tudja a
+   * NAV nélküli dokumentum bruttóját. A Számlázz.hu továbbítás is ide írja a
+   * sajátját (`szamlazz-feeds.service.ts`).
+   */
+  gross?: string | null;
+  currency?: string | null;
+  /** csak a Számlázz.hu továbbítás írja; az általános olvasó nem nyeri ki */
+  supplierName?: string;
 }
 
 /** Egy kártyás terhelés, amennyit a számla felismeréséhez kell. */
@@ -225,12 +234,45 @@ function cellValue(text: string): string | null {
   return usable(match[1]);
 }
 
+/**
+ * HIVATKOZÁS EGY MÁSIK SZÁMLÁRA, nem a dokumentum saját száma (kártya 37b8643d,
+ * mérve 2026-10-06 élesen): a KS26/05898 módosító számlán „Eredeti számla
+ * száma: KS26/05848” áll, és a „számla száma” címke ezt a SZÁMOT adta a
+ * módosítónak. Mivel a KS26/05848 a NAV-ban is ott van, a módosító az eredeti
+ * számlával vonódott össze, és a könyvelői csomag az eredeti helyett a
+ * módosítót tette volna be. Az ilyen szó után álló címke nem a dokumentumé.
+ */
+const REFERENCE_BEFORE =
+  /(eredeti|m[óo]dos[íi]tott|helyesb[íi]tett|sztorn[óo]zott|hivatkozott|korrig[áa]lt|original|referenced|corrected|cancelled)(\s+(sz[áa]mla|invoice))?\s*$/iu;
+
+/** A dokumentumban hivatkozott MÁS számlák számai (tömör alakban). */
+export function referencedNumbers(lines: readonly string[]): Set<string> {
+  const found = new Set<string>();
+  const reference =
+    /(eredeti|m[óo]dos[íi]tott|helyesb[íi]tett|sztorn[óo]zott|hivatkozott|korrig[áa]lt)\s+sz[áa]mla(\s+(sorsz[áa]ma|sz[áa]ma))?|(original|referenced|corrected|cancelled)\s+invoice(\s+(number|no\.?|#))?/giu;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    for (const match of line.matchAll(reference)) {
+      const rest = line.slice(match.index + match[0].length);
+      const value =
+        cellValue(rest) ?? (rest.trim() ? null : cellValue(lines[i + 1] ?? ""));
+      if (value) found.add(compactNumber(value));
+    }
+  }
+  return found;
+}
+
 function labelledValue(lines: readonly string[], label: string): string | null {
   for (let i = 0; i < lines.length; i++) {
     const lower = lines[i]!.toLowerCase();
     let at = lower.indexOf(label);
-    // a címke önálló szó legyen: a „bankszámlaszám” nem „számlaszám”
-    while (at > 0 && /\p{L}/u.test(lower[at - 1]!))
+    // a címke önálló szó legyen: a „bankszámlaszám” nem „számlaszám”; és
+    // nem egy hivatkozott MÁSIK számla címkéje („Eredeti számla száma”)
+    while (
+      at >= 0 &&
+      ((at > 0 && /\p{L}/u.test(lower[at - 1]!)) ||
+        REFERENCE_BEFORE.test(lower.slice(0, at)))
+    )
       at = lower.indexOf(label, at + 1);
     if (at < 0) continue;
     const rest = lines[i]!.slice(at + label.length);
@@ -488,13 +530,17 @@ export function readInvoiceText(
     labelled = labelledValue(lines, label);
     if (labelled) break;
   }
+  // a hivatkozott MÁSIK számla (eredeti, módosított) száma nem a dokumentumé
+  const referenced = referencedNumbers(lines);
+  if (labelled && referenced.has(compactNumber(labelled))) labelled = null;
   if (supplierTaxNumber && hints.navNumbers) {
     const present = hints
       .navNumbers(taxBase(supplierTaxNumber))
       .filter(
         (number) =>
           compactNumber(number).length >= 4 &&
-          compactText.includes(compactNumber(number)),
+          compactText.includes(compactNumber(number)) &&
+          !referenced.has(compactNumber(number)),
       );
     // ami egy másik, itt álló számnak csak a része, az nem önálló találat
     const whole = present.filter(
@@ -714,6 +760,90 @@ export function largestMoney(
       best = { cents, currency: CURRENCY_CODE[symbol] ?? symbol };
   }
   return best;
+}
+
+/*
+  A CÍMKÉS VÉGÖSSZEG (kártya 37b8643d, mérve 2026-10-06 élesen, a NAV-val
+  összevont 249 dokumentumon, ahol a NAV bruttója a helyes válasz): 118 helyes,
+  15 nem döntött (több különböző címkés érték), 109-ben nincs címke, 7 eltér.
+  Az eltérő hétből öt a „Fizetendő” kerekítése (legfeljebb 2 Ft: a fizetendő
+  összeg, nem a bruttó), kettő pedig egy MÓDOSÍTÓ számla, amit az olvasó rossz
+  NAV-sorral vont össze (a `REFERENCE_BEFORE` javítja): ott a címkés összeg volt
+  a helyes. Ezért: az előjel marad (a módosító negatív), több különböző érték
+  esetén nem döntünk, és pénznem nélkül sem (a HUF alapérték devizás számlán
+  hamis bruttót adna).
+*/
+const TOTAL_LABEL =
+  /(v[ée]g[öo]sszeg|fizetend[őo]|brutt[óo]\s+[öo]sszesen|[öo]sszesen\s+fizetend[őo]|sz[áa]mla\s+[öo]sszege|total\s+(amount|due|to\s+pay)|amount\s+due|grand\s+total|invoice\s+total|gesamtbetrag|rechnungsbetrag|endbetrag|zu\s+zahlen|totale\s+(fattura|da\s+pagare)|montant\s+total)/iu;
+const SIGNED_AMOUNT =
+  /(?<![\d.,])([-\u2212]\s?)?(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/gu;
+// a kód nem lehet egy szó része (az „EUROPA” nem euró): előtte, utána nem állhat betű
+const TOTAL_CURRENCY = /(?<!\p{L})(HUF|Ft\.?|EUR|USD|GBP)(?!\p{L})|([€$£])/u;
+
+function currencyIn(text: string): string | null {
+  const m = TOTAL_CURRENCY.exec(text);
+  const symbol = m ? (m[1] ?? m[2])! : null;
+  return symbol ? (CURRENCY_CODE[symbol] ?? symbol) : null;
+}
+
+/** A dokumentum egyetlen pénzneme, ha csak egy fajta áll benne. */
+function onlyCurrency(lines: readonly string[]): string | null {
+  const found = new Set<string>();
+  const all = new RegExp(TOTAL_CURRENCY.source, "gu");
+  for (const line of lines)
+    for (const m of line.matchAll(all)) {
+      const symbol = (m[1] ?? m[2])!;
+      found.add(CURRENCY_CODE[symbol] ?? symbol);
+    }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+/** A címke utáni összeg (vagy a következő soré), előjellel; a sor utolsó összege. */
+export function labelledTotal(
+  lines: readonly string[],
+): { gross: string; currency: string } | null {
+  const hits: { value: number; currency: string | null }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.normalize("NFC");
+    const label = TOTAL_LABEL.exec(line);
+    if (!label) continue;
+    const scan = (text: string) =>
+      [...text.matchAll(SIGNED_AMOUNT)]
+        .map((m) => (m[1] ? -1 : 1) * amountValue(m[2]!))
+        .filter((v) => Number.isFinite(v) && v !== 0);
+    let place = line.slice(label.index + label[0].length);
+    let values = scan(place);
+    if (values.length === 0 && i + 1 < lines.length) {
+      place = lines[i + 1]!;
+      values = scan(place);
+    }
+    if (values.length === 0) continue;
+    hits.push({
+      value: values[values.length - 1]!,
+      currency: currencyIn(place) ?? currencyIn(line),
+    });
+  }
+  const distinct = [...new Set(hits.map((h) => h.value))];
+  if (distinct.length !== 1) return null;
+  const currency =
+    hits.find((h) => h.currency)?.currency ?? onlyCurrency(lines);
+  return currency ? { gross: String(distinct[0]), currency } : null;
+}
+
+/**
+ * A címkés végösszeg az olvasatba, ha a bruttó máshonnan nem jön: a kártyás
+ * fizetés összege a terhelésé, a meglévő bruttó (Számlázz.hu) a forrásé, és
+ * mindkettő erősebb a szövegnél.
+ */
+export function withLabelledTotal(
+  reading: InvoiceTextReading,
+  lines: readonly string[],
+): InvoiceTextReading {
+  if (reading.cardPayment || reading.gross != null) return reading;
+  const total = labelledTotal(lines);
+  return total
+    ? { ...reading, gross: total.gross, currency: total.currency }
+    : reading;
 }
 
 /** Legfeljebb `max` elemű, nem üres részhalmazok. */
