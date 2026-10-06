@@ -19,6 +19,7 @@ import {
   Alert,
   AppState,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -39,6 +40,7 @@ import {
 } from "@/components/messages/MessageBubble";
 import { conversationName } from "@/components/messages/MessageParts";
 import { useMessageStream } from "@/components/messages/MessageStream";
+import { SUTYERAK_FIGURE } from "@/components/messages/sutyerak-figure";
 import {
   ContextCard,
   SystemMessageLine,
@@ -86,6 +88,7 @@ import {
   type MessageItem,
   type MessageReactionValue,
 } from "@/lib/messages/types";
+import { bubbleSender, nextThinking } from "@/lib/messages/assistant";
 import { setOpenConversation } from "@/lib/messages/open-conversation";
 import { contextSubtitle, isSystemMessage } from "@/lib/messages/phase4";
 import {
@@ -211,12 +214,28 @@ export default function ConversationScreen() {
         : "Az üzenetek nem töltődtek be.";
 
   // a szerver friss példánya felülírja a lapokon állót
+  // SUTYERÁK GONDOLKODIK (4. pont, B/3): a kezdőállapot a beszélgetés
+  // részletéből (újratöltés után az esemény már elment), utána az esemény viszi
+  const thinkingSeed = conversation?.assistantThinking === true;
+  const [thinking, setThinking] = useState({
+    id,
+    seed: thinkingSeed,
+    value: thinkingSeed,
+  });
+  if (thinking.id !== id || thinking.seed !== thinkingSeed)
+    setThinking({ id, seed: thinkingSeed, value: thinkingSeed });
+  const assistantThinking = thinking.value;
+
   const refreshOne = async (messageId: string) => {
     const fresh = await getMessage(messageId);
     setSent((current) => mergeMessages(current, [fresh]));
   };
 
   useMessageStream((signal) => {
+    setThinking((current) => ({
+      ...current,
+      value: nextThinking(current.value, signal, id),
+    }));
     if (
       signal.type === "resync" ||
       (signal.type === "message.created" && signal.conversationId === id)
@@ -675,11 +694,11 @@ export default function ConversationScreen() {
                 <MessageBubble
                   message={message}
                   own={own}
-                  sender={
-                    conversation?.type === "GROUP" && !own
-                      ? message.senderName
-                      : null
-                  }
+                  sender={bubbleSender(
+                    message,
+                    conversation?.type === "GROUP",
+                    own,
+                  )}
                   tokens={tokens}
                   onLongPress={
                     message.deleted
@@ -774,6 +793,21 @@ export default function ConversationScreen() {
             onDelete={() => confirmRemove(actionsFor)}
             onClose={() => setActionsFor(null)}
           />
+        ) : null}
+        {assistantThinking ? (
+          <View
+            accessibilityRole="text"
+            accessibilityLiveRegion="polite"
+            style={styles.thinking}
+          >
+            <Image
+              source={SUTYERAK_FIGURE.thinking}
+              accessibilityIgnoresInvertColors
+              style={styles.thinkingFigure}
+              resizeMode="contain"
+            />
+            <Text style={styles.thinkingText}>Sutyerák gondolkodik…</Text>
+          </View>
         ) : null}
         {attachOpen ? (
           <AttachPanel
@@ -908,6 +942,15 @@ const overlayStyles = StyleSheet.create({
 const createStyles = (t: ThemeTokens) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: t.background },
+    thinking: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+    },
+    thinkingFigure: { width: 24, height: 24 },
+    thinkingText: { color: t.textSecondary, fontSize: 13 },
     flex: { flex: 1 },
     header: {
       flexDirection: "row",

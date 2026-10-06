@@ -12,6 +12,11 @@ import {
   searchMessagePeople,
 } from "@/lib/api/messages";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  SUTYERAK_PICKER_LABEL,
+  assistantFirst,
+  isAssistant,
+} from "@/lib/messages/assistant";
 import { ROLE_LABELS } from "@/lib/messages/role-labels";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 
@@ -51,8 +56,8 @@ export default function AddMembersScreen() {
 
   if (status !== "authenticated") return <Redirect href="/login" />;
   const members = new Set((detail.data?.members ?? []).map((m) => m.userId));
-  const listed = (people.data?.items ?? []).filter(
-    (person) => !members.has(person.userId),
+  const listed = assistantFirst(
+    (people.data?.items ?? []).filter((person) => !members.has(person.userId)),
   );
   const toggle = (userId: string) =>
     setChosen((current) =>
@@ -105,11 +110,17 @@ export default function AddMembersScreen() {
               onPress={() => toggle(person.userId)}
               style={[styles.card, styles.row, selected && styles.cardChosen]}
             >
-              <Monogram name={person.name} tokens={tokens} />
+              <Monogram
+                name={person.name}
+                tokens={tokens}
+                assistant={isAssistant(person)}
+              />
               <View>
                 <Text style={styles.cardTitle}>{person.name}</Text>
                 <Text style={styles.cardMeta}>
-                  {ROLE_LABELS[person.role] ?? ""}
+                  {isAssistant(person)
+                    ? SUTYERAK_PICKER_LABEL
+                    : (ROLE_LABELS[person.role] ?? "")}
                 </Text>
               </View>
             </Pressable>
