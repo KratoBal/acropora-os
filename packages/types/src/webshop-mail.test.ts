@@ -167,6 +167,44 @@ describe("the derived content", () => {
     );
   });
 
+  /*
+    THE GLS LOGO (commerce G3 #490, murena 26590), as the webshop's own mail
+    draws it: alt by the point's kind, 140 at a point, 64 at home, and only an
+    https address becomes an image.
+  */
+  it("the GLS logo: alt and width by the parcel's kind, https only", () => {
+    const shipped = WEBSHOP_MAIL_SAMPLE_FACTS["order-shipped"];
+    if (shipped.template !== "order-shipped") throw new Error("sample");
+    const box = (over: Partial<typeof shipped.shipped>) =>
+      webshopMailContent({
+        ...shipped,
+        shipped: {
+          ...shipped.shipped,
+          carrier: "gls",
+          gls_logo_url: "https://acropora.hu/images/gls-automata.png",
+          ...over,
+        },
+      }).blocks.szallitas_doboz?.html ?? "";
+    assert.match(
+      box({ gls_point: true, gls_point_type: "parcel-locker" }),
+      /<img src="https:\/\/acropora\.hu\/images\/gls-automata\.png" alt="GLS Automata" width="140"/,
+    );
+    assert.match(
+      box({ gls_point: true, gls_point_type: "parcel-shop" }),
+      /alt="GLS Csomagpont" width="140"/,
+    );
+    assert.match(box({ gls_point: false }), /alt="GLS" width="64"/);
+    assert.doesNotMatch(
+      box({
+        gls_point: true,
+        gls_logo_url: "http://acropora.hu/images/gls.png",
+      }),
+      /<img/,
+    );
+    // a missing field (an older webshop) draws no image, and breaks nothing
+    assert.doesNotMatch(box({ gls_logo_url: undefined }), /<img/);
+  });
+
   it("the refund names the card when its digits are known", () => {
     const refund = (last4: string | null, refunded_total: number) =>
       webshopMailContent({

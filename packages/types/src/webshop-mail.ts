@@ -63,6 +63,13 @@ export interface WebshopShippedFacts {
   }[];
   readonly cod_amount: number | null;
   readonly foxpost_logo_url: string | null;
+  /**
+   * The GLS logo for the parcel's kind (point, locker or home), absolute;
+   * `null` or missing: no image. commerce G3 (#490), murena 26590.
+   */
+  readonly gls_logo_url?: string | null;
+  /** A GLS point's kind, `parcel-shop` / `parcel-locker`: the logo's alt text. */
+  readonly gls_point_type?: string | null;
 }
 
 /** commerce `RefundMailFacts`. */
@@ -400,13 +407,30 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
         .filter((part) => part && part !== carrier)
         .join(" · ");
       const tracking = webAddress(s.tracking_url);
-      const logo =
-        s.carrier === "foxpost" ? webAddress(s.foxpost_logo_url, true) : null;
+      /*
+        THE CARRIER'S LOGO, as the webshop's own mail draws it (commerce G3,
+        #490): FOXPOST's at 140, GLS's per parcel kind, 140 at a point and 64
+        at home. Only an https address becomes an image (the system writes it
+        after the sanitizer has run).
+      */
+      const logoUrl = webAddress(
+        s.carrier === "foxpost" ? s.foxpost_logo_url : (s.gls_logo_url ?? null),
+        true,
+      );
+      const logoAlt =
+        s.carrier === "foxpost"
+          ? "FOXPOST – Packeta Group"
+          : !s.gls_point
+            ? "GLS"
+            : s.gls_point_type === "parcel-locker"
+              ? "GLS Automata"
+              : "GLS Csomagpont";
+      const logoWidth = s.carrier === "gls" && !s.gls_point ? 64 : 140;
       const box: MailBlock = {
         html:
           `<div style="border:1px solid #e5e7eb;background:#f4f3ef;padding:16px;">` +
-          (logo
-            ? `<img src="${escapeHtml(logo)}" alt="FOXPOST – Packeta Group" width="140" style="display:block;margin-bottom:8px;" />`
+          (logoUrl
+            ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(logoAlt)}" width="${logoWidth}" style="display:block;margin-bottom:8px;" />`
             : "") +
           `<p style="margin:0;font-weight:bold;">${escapeHtml(carrier)}</p>` +
           (destination
@@ -598,6 +622,8 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
       })),
       cod_amount: 39400,
       foxpost_logo_url: null,
+      gls_logo_url: null,
+      gls_point_type: null,
     },
   },
   "order-payment-delayed": {
@@ -817,6 +843,11 @@ function parseTemplateFacts(
           foxpost_logo_url: strOrNull(
             s.foxpost_logo_url,
             "facts.shipped.foxpost_logo_url",
+          ),
+          gls_logo_url: strOrNull(s.gls_logo_url, "facts.shipped.gls_logo_url"),
+          gls_point_type: strOrNull(
+            s.gls_point_type,
+            "facts.shipped.gls_point_type",
           ),
         },
       };
