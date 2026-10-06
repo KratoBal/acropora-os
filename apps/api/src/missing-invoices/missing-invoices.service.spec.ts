@@ -307,6 +307,54 @@ describe("MissingInvoicesService.documentPairings, a manually paired unreadable 
       [1, true],
     );
   });
+
+  /*
+    A HAVI ISMÉTLŐDŐ SZÁMLA, A KÉT MENETTEL (acrobot 26871). Az augusztusi
+    4 400 Ft-os sort a szabály az augusztusi terheléshez párosítja; ezt csak az
+    első párosítás után tudjuk, és a második menet ennek alapján adja a
+    szeptemberi feltöltést a szeptemberi sornak. MI PIROSÍT: ha a `compute`
+    nem futtatja a második menetet, vagy nem az első menet párosításával.
+  */
+  it("the monthly recurring invoice: the upload reaches the latest row once the earlier one is paid", async () => {
+    const august: CandidateDocument = {
+      ...nav("2026-08-10", 4400, "Tesla Hungary Kft."),
+      number: "4042V0000010763",
+    };
+    const row: CandidateDocument = {
+      ...nav("2026-09-10", 4400, "Tesla Hungary Kft."),
+      source: "SZAMLAZZ",
+      number: "4042V0000011711",
+    };
+    const copy: CandidateDocument = {
+      ...nav("2026-09-14", 0, ""),
+      source: "UPLOAD",
+      number: "tesla_invoice4f06695c-8ac5-4358-9265-54171c226486 2.pdf",
+      gross: null,
+      payee: "COMPANY",
+      identities: ["sha:copy"],
+    };
+    const augustPaid = debit("2026-08-12", 4400, "Tesla Inc", {
+      bankAccountId: CARD.id,
+    });
+    const paid = debit("2026-09-14", 4400, "Tesla Inc", {
+      bankAccountId: CARD.id,
+    });
+    const { missing } = service({
+      debits: [augustPaid, paid],
+      documents: [august, row, copy],
+      coverage: [`${CARD.id}:2026-08`, `${CARD.id}:2026-09`],
+      manual: new Map([[paid.id, [copy.id]]]),
+    });
+    const pairings = await missing.documentPairings();
+    assert.deepEqual(
+      [
+        pairings.get(august.id)?.debits.map((d) => d.bookingDate),
+        pairings.get(row.id)?.debits.map((d) => d.bookingDate),
+        pairings.get(row.id) === pairings.get(copy.id),
+      ],
+      [["2026-08-12"], ["2026-09-14"], true],
+    );
+  });
 });
 
 describe("MissingInvoicesService.months", () => {

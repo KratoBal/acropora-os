@@ -618,11 +618,51 @@ export function monthlyCardGroups(debits: readonly MatchableDebit[]): {
  * kézzel, minden marad. A partner-próba a 3. szabályé, változatlanul: a
  * „TelekomSzaml*” partnernevű terhelés ezért nem vonódik össze a Magyar
  * Telekom sorával (acrobot 26292: a Telekom kézi marad).
+ *
+ * A HAVI ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ SZÁMLA (acrobot 26871, 2026-10-06): a Tesla
+ * 4 400 Ft-os havi számlájából öt felelt meg a 3. szabálynak (05-10 .. 09-10),
+ * és az olvashatatlan feltöltés nem mondja meg, melyik hónapé. Ilyenkor a
+ * fizetés napján vagy előtte kelt LEGUTOLSÓ sor nyer, de csak ha
+ *
+ *   1. legfeljebb 15 nappal a fizetés előtt kelt,
+ *   2. nincs más terheléshez párosítva, és
+ *   3. a nála korábbi, a szabálynak megfelelő sorok mind más terheléshez
+ *      párosítottak (az ablakon kívülieket a 3. szabály már kizárta).
+ *
+ * A „párosított” a szabályos párosítást is jelenti, nem csak a kézit, és az
+ * csak egy első párosítás UTÁN ismert: az `elsewhere` ezt hozza (dokumentum ->
+ * a terhelések, amelyekhez az első menet párosította). Nélküle, és ha a
+ * feltöltés több terheléshez tartozik, marad a mai egyértelműségi megállás.
  */
+/** A havi ismétlődő számla döntője: `[nyertes]`, vagy `[]`, ha bármelyik feltétel nem áll. */
+function latestRecurring(
+  rows: readonly CandidateDocument[],
+  debit: MatchableDebit,
+  elsewhere: ReadonlyMap<string, readonly string[]>,
+): CandidateDocument[] {
+  const pairedElsewhere = (d: CandidateDocument) =>
+    [d.id, ...(d.aliasIds ?? [])].some((id) =>
+      (elsewhere.get(id) ?? []).some((other) => other !== debit.id),
+    );
+  const before = rows
+    .filter((d) => d.date <= debit.bookingDate)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const latest = before[0];
+  if (!latest || before[1]?.date === latest.date) return [];
+  if (dayDistance(latest.date, debit.bookingDate) > RECURRING_DAYS) return [];
+  if (pairedElsewhere(latest)) return [];
+  if (!before.slice(1).every(pairedElsewhere)) return [];
+  return [latest];
+}
+
+/** A havi ismétlődő számla legfeljebb ennyi nappal a fizetés előtt kelhet (acrobot 26871). */
+const RECURRING_DAYS = 15;
+
 export function mergeManualUploads(
   documents: readonly CandidateDocument[],
   manual: ReadonlyMap<string, readonly string[]>,
   debits: readonly MatchableDebit[],
+  elsewhere?: ReadonlyMap<string, readonly string[]>,
 ): CandidateDocument[] {
   const byId = new Map<string, CandidateDocument>();
   for (const d of documents) {
@@ -671,7 +711,12 @@ export function mergeManualUploads(
             inWindow(debit.bookingDate, d.date),
         ),
     );
-    const found = byNumber.length > 0 ? byNumber : byRule;
+    const found =
+      byNumber.length > 0
+        ? byNumber
+        : byRule.length > 1 && elsewhere && uploadDebits.length === 1
+          ? latestRecurring(byRule, uploadDebits[0]!, elsewhere)
+          : byRule;
     if (found.length !== 1) continue;
     taken.add(found[0]!);
     absorbed.set(found[0]!, [...(absorbed.get(found[0]!) ?? []), upload]);

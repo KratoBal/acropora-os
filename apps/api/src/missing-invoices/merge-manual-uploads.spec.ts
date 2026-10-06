@@ -312,3 +312,115 @@ describe("mergeManualUploads", () => {
     assert.equal(merged.length, 2);
   });
 });
+
+/*
+  A HAVI ISMÉTLŐDŐ, AZONOS ÖSSZEGŰ SZÁMLA (acrobot 26871): a Tesla 4 400 Ft-os
+  havi számlájából öt felelt meg a 3. szabálynak, élesen mérve 2026-10-06. MI
+  PIROSÍT: ha a legutolsó, 15 napon belüli, szabad sor nem nyer; ha nyer, pedig
+  egy korábbi szabad, vagy ő maga más terheléshez párosított, vagy 15 napnál
+  régebbi, vagy két sor azonos napon kelt, vagy a feltöltés több terhelésé; és
+  ha az első menet (`elsewhere` nélkül) bármit eldöntene.
+*/
+describe("mergeManualUploads, the monthly recurring invoice", () => {
+  const month = (id: string, date: string) =>
+    feed(id, {
+      source: "NAV",
+      number: `4042V-${date}`,
+      date,
+      identities: [`inv:4042v-${date}|tesla hungary kft.`],
+    });
+  const rows = [
+    month("n-05", "2026-05-10"),
+    month("n-06", "2026-06-10"),
+    month("n-07", "2026-07-10"),
+    month("n-08", "2026-08-10"),
+    feed("f-09"),
+  ];
+  const copy = upload("u-tesla", TESLA_UPLOAD);
+  const manual = new Map([["d-tesla", ["u-tesla"]]]);
+  const paidBefore = new Map([
+    ["n-05", ["d-05"]],
+    ["n-06", ["d-06"]],
+    ["n-07", ["d-07"]],
+    ["n-08", ["d-08"]],
+    ["u-tesla", ["d-tesla"]],
+  ]);
+  const winner = (
+    documents: CandidateDocument[],
+    elsewhere?: Map<string, string[]>,
+    debits = [debit("d-tesla")],
+    pairs: Map<string, string[]> = manual,
+  ) =>
+    mergeManualUploads(documents, pairs, debits, elsewhere)
+      .filter((d) => d.aliasIds?.includes("u-tesla"))
+      .map((d) => d.id);
+
+  it("the latest row on or before the payment wins when every earlier one is paid elsewhere", () => {
+    assert.deepEqual(winner([...rows, copy], paidBefore), ["f-09"]);
+  });
+
+  it("the first pass, without what is paired elsewhere, decides nothing", () => {
+    assert.deepEqual(winner([...rows, copy]), []);
+  });
+
+  it("stays when an earlier row is still free", () => {
+    const open = new Map(paidBefore);
+    open.delete("n-07");
+    assert.deepEqual(winner([...rows, copy], open), []);
+  });
+
+  it("stays when the latest row is paired to another debit", () => {
+    const taken = new Map([...paidBefore, ["f-09", ["d-other"]]]);
+    assert.deepEqual(winner([...rows, copy], taken), []);
+  });
+
+  it("stays when the latest row is more than 15 days before the payment", () => {
+    assert.deepEqual(
+      winner([...rows, copy], paidBefore, [
+        debit("d-tesla", { bookingDate: "2026-09-30" }),
+      ]),
+      [],
+    );
+  });
+
+  it("15 days before the payment still counts", () => {
+    assert.deepEqual(
+      winner([...rows, copy], paidBefore, [
+        debit("d-tesla", { bookingDate: "2026-09-25" }),
+      ]),
+      ["f-09"],
+    );
+  });
+
+  // the twin is paid elsewhere: otherwise the third condition alone would stop
+  // it, and which of the two counts as "latest" would be a matter of sorting
+  it("stays when two rows share the latest date, even if one of them is paid elsewhere", () => {
+    const twin = feed("f-09b", { number: "4042V0000011712" });
+    const twinPaid = new Map([...paidBefore, ["f-09b", ["d-other"]]]);
+    assert.deepEqual(winner([...rows, twin, copy], twinPaid), []);
+  });
+
+  it("a later row does not count: the invoice is issued before the payment", () => {
+    const next = month("n-10", "2026-10-10");
+    assert.deepEqual(winner([...rows, next, copy], paidBefore), ["f-09"]);
+  });
+
+  it("stays when the upload belongs to two debits", () => {
+    const debits = [
+      debit("d-tesla"),
+      debit("d-tesla-2", { bookingDate: "2026-09-15" }),
+    ];
+    assert.deepEqual(
+      winner(
+        [...rows, copy],
+        paidBefore,
+        debits,
+        new Map([
+          ["d-tesla", ["u-tesla"]],
+          ["d-tesla-2", ["u-tesla"]],
+        ]),
+      ),
+      [],
+    );
+  });
+});

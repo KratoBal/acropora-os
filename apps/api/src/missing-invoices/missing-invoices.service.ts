@@ -808,29 +808,48 @@ export class MissingInvoicesService {
       narrative: debit.narrative,
       category: classification.category,
     }));
+    const match = (documents: CandidateDocument[]) =>
+      matchMonth({
+        debits: matchable,
+        documents,
+        manual,
+        paperOriginals: new Set(
+          debits.filter((d) => d.paperOriginalAt).map((d) => d.id),
+        ),
+        credits: credits.map((credit) => ({
+          id: credit.id,
+          bookingDate: dayOf(credit.bookingDate),
+          amount: credit.amount,
+          currency: credit.currency,
+          counterpartyName: credit.counterpartyName,
+          narrative: credit.narrative,
+        })),
+        // a kivonatok utolsó napja, nem a mai nap: egy még be nem töltött
+        // kivonat nem jelent elmaradt visszatérítést
+        asOf: [...debits, ...credits]
+          .map((t) => dayOf(t.bookingDate))
+          .reduce((a, b) => (a > b ? a : b)),
+      });
     // a kézzel párosított, olvashatatlan feltöltés a számla sorával egy (7ff26bc9)
-    const documents = mergeManualUploads(loaded, manual, matchable);
-    const outcomes = matchMonth({
-      debits: matchable,
-      documents,
-      manual,
-      paperOriginals: new Set(
-        debits.filter((d) => d.paperOriginalAt).map((d) => d.id),
-      ),
-      credits: credits.map((credit) => ({
-        id: credit.id,
-        bookingDate: dayOf(credit.bookingDate),
-        amount: credit.amount,
-        currency: credit.currency,
-        counterpartyName: credit.counterpartyName,
-        narrative: credit.narrative,
-      })),
-      // a kivonatok utolsó napja, nem a mai nap: egy még be nem töltött
-      // kivonat nem jelent elmaradt visszatérítést
-      asOf: [...debits, ...credits]
-        .map((t) => dayOf(t.bookingDate))
-        .reduce((a, b) => (a > b ? a : b)),
-    });
+    const firstPass = mergeManualUploads(loaded, manual, matchable);
+    let documents = firstPass;
+    let outcomes = match(firstPass);
+    /*
+      A HAVI ISMÉTLŐDŐ SZÁMLA DÖNTŐJE (acrobot 26871) azt kérdezi, melyik sor
+      van MÁR más terheléshez párosítva, és ezt csak egy párosítás után tudjuk.
+      Ezért az első menet eredményével még egyszer összevonunk, és csak akkor
+      párosítunk újra, ha ettől tényleg vonódott össze valami.
+    */
+    const elsewhere = new Map<string, string[]>();
+    for (const [debitId, outcome] of outcomes)
+      for (const document of outcome.documents)
+        for (const id of [document.id, ...(document.aliasIds ?? [])])
+          elsewhere.set(id, [...(elsewhere.get(id) ?? []), debitId]);
+    const secondPass = mergeManualUploads(loaded, manual, matchable, elsewhere);
+    if (secondPass.length !== firstPass.length) {
+      documents = secondPass;
+      outcomes = match(secondPass);
+    }
 
     const accountName = new Map(accounts.map((a) => [a.id, a.name]));
     const items = classified.map(({ debit, classification, original }) => {
