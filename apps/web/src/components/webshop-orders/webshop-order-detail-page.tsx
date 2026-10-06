@@ -21,7 +21,10 @@ import {
   type WebshopStatusMailOutcome,
   WEBSHOP_CARRIER_NOTE_MAX,
   WEBSHOP_CUSTOMER_NOTE_MAX,
+  type WebshopOrderMethodInput,
+  type WebshopOrderMethodResult,
   type WebshopOrderNotesInput,
+  type WebshopShippingOptions,
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
 } from "@acropora/types";
@@ -41,6 +44,7 @@ import { useLineSelection } from "./line-selection";
 import {
   AddressDialog,
   EditPencil,
+  MethodDialog,
   NoteDialog,
   PointDialog,
 } from "./webshop-order-edits";
@@ -392,6 +396,22 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   const searchPoints = (query: string) =>
     webshopOrdersApi.pickupPoints(token, id, query);
   // állandó azonosság: a követés mezője erre indít lekérést
+  const loadShippingOptions = useCallback(
+    () => webshopOrdersApi.shippingOptions(token, id),
+    [token, id],
+  );
+  const searchMethodPoints = (optionId: string, query: string) =>
+    webshopOrdersApi.shippingOptionPoints(token, id, optionId, query);
+  const changeMethod = async (input: WebshopOrderMethodInput) => {
+    const result = await webshopOrdersApi.changeShippingMethod(
+      token,
+      id,
+      input,
+    );
+    setOrder(result.order);
+    setMailNotice(methodChangeText(result.change));
+    setNow(Date.now());
+  };
   const parcelTracking = useCallback(
     () => webshopOrdersApi.parcelTracking(token, id),
     [token, id],
@@ -522,6 +542,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onUpdateAddress={updateAddress}
           onSaveNote={saveNote}
           onChangePoint={changePoint}
+          onLoadShippingOptions={loadShippingOptions}
+          onSearchMethodPoints={searchMethodPoints}
+          onChangeMethod={changeMethod}
           onSaveNotes={saveNotes}
           onSearchPoints={searchPoints}
         />
@@ -691,6 +714,23 @@ export function statusMailText(mail: WebshopStatusMailOutcome): string {
     default:
       return `A levél nem ment ki (${mail.reason}).`;
   }
+}
+
+/** A szállítási mód cseréjének eredménye egy mondatban (kártya 0a14f739 C/2). */
+export function methodChangeText(
+  change: WebshopOrderMethodResult["change"],
+): string {
+  if (!change.changed) return "A szállítási mód nem változott.";
+  const amount = formatMoney(Math.abs(change.difference), "HUF");
+  if (change.difference <= 0)
+    return change.difference < 0
+      ? `A szállítási mód cserélve, a végösszeg ${amount} összeggel csökkent. Új fizetés nem kell.`
+      : "A szállítási mód cserélve, a végösszeg nem változott.";
+  if (!change.link)
+    return `A szállítási mód cserélve, a végösszeg ${amount} összeggel nőtt.`;
+  return change.link.sent
+    ? `A szállítási mód cserélve, a végösszeg ${amount} összeggel nőtt. A vevő fizetési linket kapott a különbözetről.`
+    : `A szállítási mód cserélve, a végösszeg ${amount} összeggel nőtt, de a fizetési link nem ment ki: a Fizetési link küldése gombbal küldheted.`;
 }
 
 /** Az „Értesítő újraküldése”: a legutóbbi státusz levelét küldi újra. */
@@ -1298,6 +1338,9 @@ function OrderBody({
   onUpdateAddress,
   onSaveNote,
   onChangePoint,
+  onLoadShippingOptions,
+  onSearchMethodPoints,
+  onChangeMethod,
   onSaveNotes,
   onSearchPoints,
 }: {
@@ -1326,6 +1369,12 @@ function OrderBody({
   onUpdateAddress: (input: WebshopOrderAddressInput) => Promise<void>;
   onSaveNote: (text: string) => Promise<void>;
   onChangePoint: (pointId: string) => Promise<void>;
+  onLoadShippingOptions: () => Promise<WebshopShippingOptions>;
+  onSearchMethodPoints: (
+    optionId: string,
+    query: string,
+  ) => Promise<WebshopPickupPointSearch>;
+  onChangeMethod: (input: WebshopOrderMethodInput) => Promise<void>;
   onSaveNotes: (input: WebshopOrderNotesInput) => Promise<void>;
   onSearchPoints: (query: string) => Promise<WebshopPickupPointSearch>;
 }) {
@@ -1336,6 +1385,7 @@ function OrderBody({
     | "shipping"
     | "note"
     | "point"
+    | "method"
     | "customerNote"
     | "carrierNote"
     | null
@@ -1565,7 +1615,18 @@ function OrderBody({
               >
                 <Address address={order.billingAddress} />
               </Field>
-              <Field label="Szállítás">
+              <Field
+                label="Szállítás"
+                action={
+                  canManage && !order.shipping.storePickup ? (
+                    <EditPencil
+                      label="Szállítási mód cseréje"
+                      reason={order.methodEdit.reason}
+                      onClick={() => setEditing("method")}
+                    />
+                  ) : null
+                }
+              >
                 {glsDeliveryLabel({
                   method: order.shipping.method,
                   pointKind: order.shipping.pickupPoint?.kind ?? null,
@@ -1906,6 +1967,15 @@ function OrderBody({
               initial={order.notes.carrier ?? ""}
               onClose={() => setEditing(null)}
               onSave={(text) => onSaveNotes({ carrierNote: text })}
+            />
+          ) : null}
+          {editing === "method" ? (
+            <MethodDialog
+              currentPointId={order.shipping.pickupPoint?.id ?? null}
+              loadOptions={onLoadShippingOptions}
+              searchPoints={onSearchMethodPoints}
+              onClose={() => setEditing(null)}
+              onSave={onChangeMethod}
             />
           ) : null}
           {editing === "point" ? (
