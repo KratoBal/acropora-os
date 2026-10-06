@@ -26,6 +26,8 @@ import { WebshopOrderNotifyDto } from "./dto/webshop-order-notify.dto.js";
 import {
   WebshopOrderAddressDto,
   WebshopOrderNoteDto,
+  WebshopOrderNotesDto,
+  WebshopOrderPointDto,
 } from "./dto/webshop-order-edits.dto.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
@@ -66,6 +68,35 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.edits.saveInternalNote(id, body.text, user);
+  }
+
+  /** A rendelés módjához választható csomagpontok (commerce #494). */
+  @Get(":id/pickup-points")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  pickupPoints(@Param("id") id: string, @Query("q") q = "") {
+    return this.edits.pickupPoints(id, q);
+  }
+
+  /** A csomagpont cseréje (commerce #494). */
+  @Put(":id/pickup-point")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  changePoint(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderPointDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.changePoint(id, body.pointId, user);
+  }
+
+  /** A vevő és a szállító megjegyzése (commerce #493). */
+  @Put(":id/notes")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  saveNotes(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderNotesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.saveNotes(id, body, user);
   }
 
   /** „Csúszik a szállítás”: a kártyás zárolás feloldása, levél a vevőnek. */

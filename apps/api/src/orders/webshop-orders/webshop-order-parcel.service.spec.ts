@@ -173,6 +173,25 @@ describe("WebshopOrderParcelService", () => {
     );
   });
 
+  /*
+    THE COURIER NOTE (commerce #493): from the order's metadata to the
+    carrier, after the order number on the label, and as its own field.
+  */
+  it("the courier note goes on the label after the order number, and to the carrier", async () => {
+    const { created, service } = setup({
+      invoice: ISSUED,
+      order: {
+        ...ORDER,
+        metadata: { acropora_carrier_note: "Csengess kétszer" },
+      } as unknown as MedusaOrderDetailRow,
+    });
+    await service.create("order_38", undefined, USER);
+    assert.deepEqual(
+      [created[0]!.labelContent, created[0]!.courierNote],
+      ["Rendelés #38 · Csengess kétszer", "Csengess kétszer"],
+    );
+  });
+
   it("a stub parcel number never reaches the webshop's mail", async () => {
     const { notices, service } = setup({
       invoice: ISSUED,

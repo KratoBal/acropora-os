@@ -10,6 +10,8 @@ import type {
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
   WebshopParcelSize,
+  WebshopOrderNotesInput,
+  WebshopPickupPointSearch,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -107,6 +109,29 @@ export const webshopOrdersApi = {
   updateAddress(token: string, id: string, input: WebshopOrderAddressInput) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}/address`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  /** A rendelés módjához választható csomagpontok (commerce #494). */
+  pickupPoints(token: string, id: string, query: string) {
+    return apiRequest<WebshopPickupPointSearch>(
+      `/webshop-orders/${encodeURIComponent(id)}/pickup-points?q=${encodeURIComponent(query)}`,
+      token,
+    );
+  },
+  /** A csomagpont cseréje; a válasz a friss adatlap. */
+  changePoint(token: string, id: string, pointId: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/pickup-point`,
+      token,
+      { method: "PUT", body: JSON.stringify({ pointId }) },
+    );
+  },
+  /** A vevő és a szállító megjegyzése (a hiányzó mező nem változik, az üres töröl). */
+  saveNotes(token: string, id: string, input: WebshopOrderNotesInput) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/notes`,
       token,
       { method: "PUT", body: JSON.stringify(input) },
     );

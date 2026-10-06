@@ -150,6 +150,41 @@ describe("FoxpostApiClient", () => {
       [body.recipientZip, body.recipientCity, body.recipientAddress],
       ["1000", "Tesztváros", "Teszt utca 1."],
     );
+    assert.equal(body.deliveryNote, undefined);
+  });
+
+  /*
+    THE COURIER NOTE (commerce #493): Foxpost's own field for the home
+    delivery courier, 50 characters (test API v1.2.14). A point has no
+    courier at the door, so it never goes there.
+  */
+  it("a home delivery carries the courier note in deliveryNote, cut to 50; a point does not", async () => {
+    const note = "Csengess kétszer, a kapu kódja 1234, a lépcsőház bal oldalt";
+    const sent = async (
+      destination: Parameters<
+        FoxpostApiClient["createParcel"]
+      >[0]["destination"],
+    ) => {
+      const fetch = fakeFetch(
+        json({ valid: true, parcels: [{ barcode: "CLFOX000000000000003" }] }),
+      );
+      await new FoxpostApiClient(FOXPOST, fetch.impl, silent).createParcel({
+        reference: "1044",
+        recipient: RECIPIENT,
+        destination,
+        courierNote: note,
+      });
+      return JSON.parse(String(fetch.calls[0]!.init.body))[0];
+    };
+    const home = await sent({
+      kind: "home",
+      zip: "1000",
+      city: "Tesztváros",
+      address: "Teszt utca 1.",
+    });
+    assert.equal(home.deliveryNote, Array.from(note).slice(0, 50).join(""));
+    const point = await sent(POINT);
+    assert.equal(point.deliveryNote, undefined);
   });
 
   it("fails loudly when the create answer has no barcode, logging key names but no values", async () => {

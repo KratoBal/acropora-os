@@ -1,4 +1,9 @@
-import type { WebshopOrderAddressInput } from "@acropora/types";
+import {
+  WEBSHOP_CARRIER_NOTE_MAX,
+  WEBSHOP_CUSTOMER_NOTE_MAX,
+  type WebshopOrderAddressInput,
+  type WebshopOrderNotesInput,
+} from "@acropora/types";
 import {
   IsIn,
   IsOptional,
@@ -28,4 +33,22 @@ export class WebshopOrderAddressDto implements WebshopOrderAddressInput {
 /** A belső megjegyzés; üres szöveg törli. */
 export class WebshopOrderNoteDto {
   @IsString() @MaxLength(2000) text!: string;
+}
+
+/** A csomagpont cseréje: a választott pont a webshop listájából. */
+export class WebshopOrderPointDto {
+  @IsString() @MinLength(1) @MaxLength(100) pointId!: string;
+}
+
+/** A vevő és a szállító megjegyzése; a hiányzó mező nem változik, az üres töröl. */
+export class WebshopOrderNotesDto implements WebshopOrderNotesInput {
+  @IsOptional()
+  @IsString()
+  @MaxLength(WEBSHOP_CUSTOMER_NOTE_MAX)
+  customerNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(WEBSHOP_CARRIER_NOTE_MAX)
+  carrierNote?: string;
 }

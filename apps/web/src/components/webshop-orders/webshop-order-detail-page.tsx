@@ -19,6 +19,10 @@ import {
   type WebshopParcelSize,
   type WebshopShippingNoticeOutcome,
   type WebshopStatusMailOutcome,
+  WEBSHOP_CARRIER_NOTE_MAX,
+  WEBSHOP_CUSTOMER_NOTE_MAX,
+  type WebshopOrderNotesInput,
+  type WebshopPickupPointSearch,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -33,7 +37,12 @@ import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
 import { useLineSelection } from "./line-selection";
-import { AddressDialog, EditPencil, NoteDialog } from "./webshop-order-edits";
+import {
+  AddressDialog,
+  EditPencil,
+  NoteDialog,
+  PointDialog,
+} from "./webshop-order-edits";
 import {
   OrderLinesTable,
   ScissorsIcon,
@@ -371,6 +380,16 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.saveInternalNote(token, id, text));
     setNow(Date.now());
   };
+  const changePoint = async (pointId: string) => {
+    setOrder(await webshopOrdersApi.changePoint(token, id, pointId));
+    setNow(Date.now());
+  };
+  const saveNotes = async (input: WebshopOrderNotesInput) => {
+    setOrder(await webshopOrdersApi.saveNotes(token, id, input));
+    setNow(Date.now());
+  };
+  const searchPoints = (query: string) =>
+    webshopOrdersApi.pickupPoints(token, id, query);
   const releaseHold = async (notifyCustomer: boolean) => {
     const result = await webshopOrdersApi.releaseHold(
       token,
@@ -495,6 +514,9 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           onSendPaymentLink={sendPaymentLink}
           onUpdateAddress={updateAddress}
           onSaveNote={saveNote}
+          onChangePoint={changePoint}
+          onSaveNotes={saveNotes}
+          onSearchPoints={searchPoints}
         />
       ) : null}
     </PilotThemeRoot>
@@ -1131,6 +1153,9 @@ function OrderBody({
   onSendPaymentLink,
   onUpdateAddress,
   onSaveNote,
+  onChangePoint,
+  onSaveNotes,
+  onSearchPoints,
 }: {
   order: WebshopOrderDetail;
   now: number;
@@ -1155,11 +1180,20 @@ function OrderBody({
   onSendPaymentLink: (notifyCustomer: boolean) => Promise<string>;
   onUpdateAddress: (input: WebshopOrderAddressInput) => Promise<void>;
   onSaveNote: (text: string) => Promise<void>;
+  onChangePoint: (pointId: string) => Promise<void>;
+  onSaveNotes: (input: WebshopOrderNotesInput) => Promise<void>;
+  onSearchPoints: (query: string) => Promise<WebshopPickupPointSearch>;
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [editing, setEditing] = useState<
-    "billing" | "shipping" | "note" | null
+    | "billing"
+    | "shipping"
+    | "note"
+    | "point"
+    | "customerNote"
+    | "carrierNote"
+    | null
   >(null);
   const selection = useLineSelection(order.lines.map((line) => line.id));
   const terminal = !!order.status.code && TERMINAL.includes(order.status.code);
@@ -1400,7 +1434,18 @@ function OrderBody({
                   >
                     {order.shipping.pickupPoint.id ?? "—"}
                   </Field>
-                  <Field label="Pont címe">
+                  <Field
+                    label="Pont címe"
+                    action={
+                      canManage ? (
+                        <EditPencil
+                          label="Csomagpont cseréje"
+                          reason={order.pointEdit.reason}
+                          onClick={() => setEditing("point")}
+                        />
+                      ) : null
+                    }
+                  >
                     {order.shipping.pickupPoint.name}
                     {order.shipping.pickupPoint.address ? (
                       <span className="block text-pilot-grey-600">
@@ -1600,10 +1645,46 @@ function OrderBody({
 
           <Card title="Megjegyzések">
             <div className="space-y-4">
-              <p className="text-sm text-pilot-grey-500">
-                A webshop pénztára ma nem kér be megjegyzést (sem a vevőtől, sem
-                a szállítónak).
-              </p>
+              <Field
+                label="Vevő megjegyzése"
+                action={
+                  canManage ? (
+                    <EditPencil
+                      label="Vevő megjegyzésének szerkesztése"
+                      reason={order.notesEdit.customer.reason}
+                      onClick={() => setEditing("customerNote")}
+                    />
+                  ) : null
+                }
+              >
+                {order.notes.customer ? (
+                  <span className="whitespace-pre-wrap">
+                    {order.notes.customer}
+                  </span>
+                ) : (
+                  <span className="text-pilot-grey-500">Nincs.</span>
+                )}
+              </Field>
+              <Field
+                label="Szállítónak"
+                action={
+                  canManage ? (
+                    <EditPencil
+                      label="A szállítónak szóló üzenet szerkesztése"
+                      reason={order.notesEdit.carrier.reason}
+                      onClick={() => setEditing("carrierNote")}
+                    />
+                  ) : null
+                }
+              >
+                {order.notes.carrier ? (
+                  <span className="whitespace-pre-wrap">
+                    {order.notes.carrier}
+                  </span>
+                ) : (
+                  <span className="text-pilot-grey-500">Nincs.</span>
+                )}
+              </Field>
               <Field
                 label="Belső megjegyzés"
                 action={
@@ -1648,6 +1729,34 @@ function OrderBody({
               initial={order.internalNote?.text ?? ""}
               onClose={() => setEditing(null)}
               onSave={onSaveNote}
+            />
+          ) : null}
+          {editing === "customerNote" ? (
+            <NoteDialog
+              title="Vevő megjegyzése"
+              maxLength={WEBSHOP_CUSTOMER_NOTE_MAX}
+              hint="A vevő a pénztárban írta; a webshop rendelésén áll. Üresen mentve törlődik."
+              initial={order.notes.customer ?? ""}
+              onClose={() => setEditing(null)}
+              onSave={(text) => onSaveNotes({ customerNote: text })}
+            />
+          ) : null}
+          {editing === "carrierNote" ? (
+            <NoteDialog
+              title="Szállítónak"
+              maxLength={WEBSHOP_CARRIER_NOTE_MAX}
+              hint="A csomag feladásakor a futár megkapja (GLS: a címkén, Foxpost: a házhoz szállító futárnak). Üresen mentve törlődik."
+              initial={order.notes.carrier ?? ""}
+              onClose={() => setEditing(null)}
+              onSave={(text) => onSaveNotes({ carrierNote: text })}
+            />
+          ) : null}
+          {editing === "point" ? (
+            <PointDialog
+              currentPointId={order.shipping.pickupPoint?.id ?? null}
+              search={onSearchPoints}
+              onClose={() => setEditing(null)}
+              onSave={onChangePoint}
             />
           ) : null}
 

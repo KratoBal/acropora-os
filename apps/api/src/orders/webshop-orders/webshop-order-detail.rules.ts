@@ -15,7 +15,12 @@ import type {
   MedusaOrderDetailRow,
   MedusaOrderPayment,
 } from "../../integrations/medusa/medusa-admin.client.js";
-import { addressEditOf } from "./webshop-order-address.rules.js";
+import {
+  addressEditOf,
+  notesEditOf,
+  notesOf,
+  pointEditOf,
+} from "./webshop-order-address.rules.js";
 import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
 import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
@@ -386,6 +391,18 @@ export function toDetail(input: {
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
     osCustomer: input.osCustomer ?? null,
     internalNote: input.internalNote ?? null,
+    notes: notesOf(order.metadata),
+    notesEdit: notesEditOf({
+      status: code,
+      parcel: facts.parcel,
+      hasPoint: !!shipping.pickupPoint,
+      storePickup: shipping.storePickup,
+    }),
+    pointEdit: pointEditOf({
+      status: code,
+      parcel: facts.parcel,
+      hasPoint: !!shipping.pickupPoint,
+    }),
     addressEdit: addressEditOf({
       status: code,
       invoice: facts.invoice,

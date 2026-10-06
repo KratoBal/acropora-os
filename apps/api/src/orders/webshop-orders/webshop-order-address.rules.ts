@@ -45,6 +45,69 @@ export function addressEditOf(input: {
   };
 }
 
+/**
+ * A CSOMAGPONT CSERÉJE (commerce #494). A webshop a saját oldalán is tilt
+ * (lezárt, törölt, bolti alrendelés, már teljesített), de az OS-csomagot nem
+ * látja: a feladott csomag a régi pontra szól, azt csak az OS tudja.
+ */
+export function pointEditOf(input: {
+  status: WebshopOrderStatus | null;
+  parcel: WebshopOrderDetail["parcel"];
+  hasPoint: boolean;
+}): WebshopOrderDetail["pointEdit"] {
+  const reason = CLOSED.includes(input.status)
+    ? "Lezárt rendelés csomagpontja nem cserélhető."
+    : !input.hasPoint
+      ? "Ez a rendelés nem csomagpontra megy."
+      : input.parcel
+        ? "A csomag már fel van adva erre a pontra: a pont csak a csomag lemondása után cserélhető."
+        : input.status === "out_for_delivery"
+          ? "A rendelés már kiszállítás alatt van."
+          : null;
+  return { allowed: reason === null, reason };
+}
+
+/**
+ * A KÉT MEGJEGYZÉS (commerce #493). A vevőé lezárásig írható. A szállítóé
+ * csak házhoz szállításnál értelmes (a pénztár csomagpontnál és bolti
+ * átvételnél törli), és a feladott csomag címkéjén már rajta van.
+ */
+export function notesEditOf(input: {
+  status: WebshopOrderStatus | null;
+  parcel: WebshopOrderDetail["parcel"];
+  hasPoint: boolean;
+  storePickup: boolean;
+}): WebshopOrderDetail["notesEdit"] {
+  const closed = CLOSED.includes(input.status)
+    ? "Lezárt rendelés megjegyzése nem szerkeszthető."
+    : null;
+  const carrier =
+    closed ??
+    (input.storePickup
+      ? "Bolti átvételnél nincs szállító."
+      : input.hasPoint
+        ? "Csomagpontra menő csomagnál a futár nem kap üzenetet."
+        : input.parcel
+          ? "A csomag már fel van adva: a szállítónak szóló üzenet a címkén áll."
+          : null);
+  return {
+    customer: { allowed: closed === null, reason: closed },
+    carrier: { allowed: carrier === null, reason: carrier },
+  };
+}
+
+/** A két megjegyzés a rendelés metaadatáról (commerce #493 kulcsai). */
+export function notesOf(
+  metadata: Record<string, unknown> | null | undefined,
+): WebshopOrderDetail["notes"] {
+  const text = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value : null;
+  return {
+    customer: text(metadata?.acropora_customer_note),
+    carrier: text(metadata?.acropora_carrier_note),
+  };
+}
+
 const clean = (value: string | null | undefined) => value?.trim() || null;
 
 /**

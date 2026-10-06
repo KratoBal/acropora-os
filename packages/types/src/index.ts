@@ -1184,6 +1184,8 @@ export {
   staleHoursOf,
   pointKindOf,
   glsDeliveryLabel,
+  WEBSHOP_CARRIER_NOTE_MAX,
+  WEBSHOP_CUSTOMER_NOTE_MAX,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1210,6 +1212,9 @@ export type {
   WebshopStaleStatus,
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
+  WebshopOrderNotesInput,
+  WebshopPickupPointOption,
+  WebshopPickupPointSearch,
   WebshopPointKind,
   WebshopStaleUnit,
   WebshopVariantOption,

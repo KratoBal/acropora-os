@@ -253,6 +253,24 @@ export class WebshopOrdersRepository {
   }
 
   /** Egy cím szerkesztése: ki, melyiket, és mi volt előtte. */
+  /** Ki cserélte a csomagpontot vagy írta át a megjegyzéseket, és mi volt előtte. */
+  async recordOrderEdit(input: {
+    userId: string;
+    orderId: string;
+    action: "pickup-point-changed" | "notes-edited";
+    before: unknown;
+  }): Promise<void> {
+    await prisma.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: `webshop-order.${input.action}`,
+        entityType: "WebshopOrder",
+        entityId: input.orderId,
+        metadata: { before: input.before } as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   async recordAddressEdit(input: {
     userId: string;
     orderId: string;

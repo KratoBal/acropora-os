@@ -1,16 +1,23 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
-import type {
-  AuthenticatedUser,
-  WebshopOrderAddressInput,
-  WebshopOrderDetail,
+import {
+  pointKindOf,
+  type AuthenticatedUser,
+  type WebshopOrderAddressInput,
+  type WebshopOrderDetail,
+  type WebshopOrderNotesInput,
+  type WebshopPickupPointSearch,
 } from "@acropora/types";
 
-import { MedusaAdminHttpError } from "../../integrations/medusa/medusa-admin.client.js";
+import {
+  MedusaAdminHttpError,
+  type MedusaPickupPointRow,
+} from "../../integrations/medusa/medusa-admin.client.js";
 import { addressPayloadOf } from "./webshop-order-address.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
@@ -84,4 +91,136 @@ export class WebshopOrderEditsService {
     await this.repository.saveInternalNote(id, text.trim(), user.id);
     return this.orders.detail(id, now);
   }
+
+  /**
+   * A RENDELÉS MÓDJÁHOZ VÁLASZTHATÓ PONTOK (commerce #494). A fuvarozót és a
+   * GLS nehézáru-szabályát a webshop a rendelésből dönti el, tehát az OS nem
+   * tud rossz listából választani.
+   */
+  async pickupPoints(
+    id: string,
+    query: string,
+    now = new Date(),
+  ): Promise<WebshopPickupPointSearch> {
+    const q = query.trim();
+    if (!q)
+      throw new BadRequestException("Írj be legalább egy betűt a kereséshez.");
+    const detail = await this.orders.detail(id, now);
+    if (!detail.pointEdit.allowed)
+      throw new ConflictException(detail.pointEdit.reason);
+    const client = await this.orders.adminClient();
+    try {
+      const answer = await client.orderPickupPoints(
+        id,
+        q.slice(0, 100),
+        POINT_PAGE,
+      );
+      return {
+        carrier: answer.carrier === "gls" ? "GLS" : "FOXPOST",
+        currentPointId: answer.current_point_id,
+        points: (answer.pickup_points ?? []).map(pointOptionOf),
+        count: answer.count ?? answer.pickup_points?.length ?? 0,
+      };
+    } catch (error) {
+      throw refusalOf(error, "A csomagpontok listája most nem érhető el");
+    }
+  }
+
+  async changePoint(
+    id: string,
+    pointId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const detail = await this.orders.detail(id, now);
+    if (!detail.pointEdit.allowed)
+      throw new ConflictException(detail.pointEdit.reason);
+    const client = await this.orders.adminClient();
+    let changed: boolean;
+    try {
+      const answer = await client.changeOrderPickupPoint(id, {
+        point_id: pointId,
+        actor: user.displayName?.trim() || user.email,
+      });
+      changed = answer.changed;
+    } catch (error) {
+      throw refusalOf(error, "A csomagpont nem változott");
+    }
+    if (changed)
+      await this.repository.recordOrderEdit({
+        userId: user.id,
+        orderId: id,
+        action: "pickup-point-changed",
+        before: detail.shipping.pickupPoint,
+      });
+    return this.orders.detail(id, now);
+  }
+
+  async saveNotes(
+    id: string,
+    input: WebshopOrderNotesInput,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    const detail = await this.orders.detail(id, now);
+    if (input.customerNote !== undefined && !detail.notesEdit.customer.allowed)
+      throw new ConflictException(detail.notesEdit.customer.reason);
+    if (input.carrierNote !== undefined && !detail.notesEdit.carrier.allowed)
+      throw new ConflictException(detail.notesEdit.carrier.reason);
+    const client = await this.orders.adminClient();
+    try {
+      await client.updateOrderNotes(id, {
+        ...(input.customerNote !== undefined
+          ? { customer_note: input.customerNote.trim() || null }
+          : {}),
+        ...(input.carrierNote !== undefined
+          ? { carrier_note: input.carrierNote.trim() || null }
+          : {}),
+      });
+    } catch (error) {
+      throw refusalOf(error, "A megjegyzés nem változott");
+    }
+    await this.repository.recordOrderEdit({
+      userId: user.id,
+      orderId: id,
+      action: "notes-edited",
+      before: detail.notes,
+    });
+    return this.orders.detail(id, now);
+  }
+}
+
+/** Egy keresés legfeljebb ennyi pontot ad (a pénztár alapértéke körül). */
+export const POINT_PAGE = 20;
+
+function pointOptionOf(row: MedusaPickupPointRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    address: [`${row.zip} ${row.city}`.trim(), row.address]
+      .filter(Boolean)
+      .join(", "),
+    kind: pointKindOf(row.type),
+    variant: row.variant?.trim() || null,
+    outOfOrder: row.locker_saturation === "outOfOrder",
+  };
+}
+
+/**
+ * A WEBSHOP ELUTASÍTÁSA A SAJÁT MONDATÁVAL: 404 és 409 az ő szavával, 422 (nem
+ * választható pont) is; 5xx-re, 503-ra (a fuvarozó listája) „most nem
+ * érhető el”. Minden más hiba változatlanul megy tovább.
+ */
+function refusalOf(error: unknown, what: string): unknown {
+  if (!(error instanceof MedusaAdminHttpError)) return error;
+  const message = webshopErrorMessage(error.body);
+  if (error.status === 404 || error.status === 409)
+    return new ConflictException(message ?? `${what}. (HTTP ${error.status})`);
+  if (error.status < 500)
+    return new UnprocessableEntityException(
+      message ?? `${what}. (HTTP ${error.status})`,
+    );
+  return new ServiceUnavailableException(
+    message ?? `${what}: a webshop nem érhető el (HTTP ${error.status}).`,
+  );
 }
