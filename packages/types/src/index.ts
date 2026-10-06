@@ -412,6 +412,11 @@ export {
   assetCriticalityLabel,
   assetEventLabel,
 } from "./asset-management.js";
+export {
+  ASSET_EXPORT_HEADERS,
+  ASSET_EXPORT_MAX,
+  assetExportCells,
+} from "./asset-export.js";
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
 export type {
   UnitOfMeasure,

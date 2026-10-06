@@ -20,6 +20,7 @@ import type {
 
 import { apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
+import { readExport, type FileExport } from "./file-export";
 
 /** A kategoria-javaslat bemenete: az urlap vetulet-mezoi (#1199 P-004/P-013). */
 export interface AssetCategorySuggestionInput {
@@ -121,6 +122,29 @@ export const assetsApi = {
     return apiRequest<AssetListResponse>(`/service/assets?${query}`, token, {
       signal,
     });
+  },
+  /**
+   * A NYOMTATÁS ÉS AZ EXCEL (kártya 323e9b38): a lista szűrői, lapozás
+   * nélkül, a teljes szűrt halmaz. A `page`/`pageSize` paramétert a szerver
+   * itt nem használja.
+   */
+  exportItems(token: string, query: URLSearchParams, signal?: AbortSignal) {
+    return apiRequest<{ items: AssetListItem[] }>(
+      `/service/assets/export?${query}`,
+      token,
+      { signal },
+    );
+  },
+  async exportXlsx(token: string, query: URLSearchParams): Promise<FileExport> {
+    const response = await fetch(
+      `${API_PREFIX}/service/assets/export.xlsx?${query}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return readExport(
+      response,
+      "eszkozlista.xlsx",
+      "Az eszközlista nem tölthető le.",
+    );
   },
   /** Az adatlap Előző/Következő gombja: a lista kérésével a két szomszéd. */
   neighbors(

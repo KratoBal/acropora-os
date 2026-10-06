@@ -42,6 +42,8 @@ import {
   normalizeAssetLabelCode,
   PERMISSIONS,
 } from "@acropora/types";
+import { ASSET_EXPORT_MAX } from "@acropora/types";
+import { buildAssetListXlsx } from "./asset-list-xlsx.js";
 import { scanLabelOutcome } from "./scan-label-outcome.js";
 import {
   AssetLabelPoolExhaustedError,
@@ -146,6 +148,39 @@ export class ServiceAssetsService {
   async list(query: AssetListQueryDto, user: AuthenticatedUser) {
     const { scope, assignedUnitIds } = await this.latasiHatokor(user);
     return this.repository.list(query, scope, assignedUnitIds);
+  }
+
+  /**
+   * A NYOMTATÁS ÉS AZ EXCEL HALMAZA (kártya 323e9b38): a lista szűrői, a
+   * KÉRDEZŐ látási hatóköre (partner nem kap többet, mint a listán), lapozás
+   * nélkül. A határ fölött elutasít: a kezelő szűkítsen, a lista ne
+   * csonkuljon csendben.
+   */
+  async exportItems(query: AssetListQueryDto, user: AuthenticatedUser) {
+    const { scope, assignedUnitIds } = await this.latasiHatokor(user);
+    const items = await this.repository.listAll(
+      query,
+      scope,
+      assignedUnitIds,
+      ASSET_EXPORT_MAX,
+    );
+    if (!items)
+      throw new UnprocessableEntityException(
+        `A szűrés több mint ${ASSET_EXPORT_MAX} eszközt hoz. Szűkítsd a listát, és úgy nyomtasd vagy exportáld.`,
+      );
+    return items;
+  }
+
+  /** Az Excel: ugyanaz a halmaz, a fájlnévben a mai budapesti dátummal. */
+  async exportXlsx(query: AssetListQueryDto, user: AuthenticatedUser) {
+    const items = await this.exportItems(query, user);
+    const day = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Europe/Budapest",
+    }).format(new Date());
+    return {
+      fileName: `eszkozlista-${day}.xlsx`,
+      content: await buildAssetListXlsx(items),
+    };
   }
 
   /** Az adatlap Elozo/Kovetkezo gombja: ugyanaz a hatokor, mint a listae. */

@@ -38,6 +38,7 @@ import {
   UploadAssetDocumentDto,
 } from "./dto/asset.dto.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
+import { XLSX_MIME } from "../missing-invoices/missing-invoices-xlsx.js";
 
 /**
  * Hány fájl mehet egy feltöltési kérésben. A fájlok a memóriában gyűlnek, így
@@ -245,6 +246,37 @@ export class ServiceAssetsController {
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   labelBatchCodes(@Param("id") id: string) {
     return this.service.labelBatchCodes(id);
+  }
+
+  /**
+   * AZ ESZKÖZLISTA NYOMTATÁSA ÉS EXCELJE (kártya 323e9b38): a lista szűrői,
+   * lapozás nélkül, a kérdező hatókörével; a lista joga elég (ugyanazt látja,
+   * amit a listán). A `:id` útvonalak FÖLÖTT áll, különben az „export” egy
+   * eszköz azonosítójaként futna be.
+   */
+  @Get("export")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  async exportList(
+    @Query() query: AssetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return { items: await this.service.exportItems(query, user) };
+  }
+
+  @Get("export.xlsx")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  async exportXlsx(
+    @Query() query: AssetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const { fileName, content } = await this.service.exportXlsx(query, user);
+    return new StreamableFile(content, {
+      type: XLSX_MIME,
+      length: content.length,
+      disposition: `attachment; filename="${fileName}"`,
+    });
   }
 
   @Get("owners")

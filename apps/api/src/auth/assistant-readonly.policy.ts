@@ -43,11 +43,17 @@ export const ASSISTANT_SIDE_EFFECT_GETS = [
   },
 ] as const;
 
-/** All authentication/session/password/issuance routes, including public login. */
+/**
+ * All authentication/session/password/issuance routes, including public login.
+ * The asset export too: up to 5000 rows in one answer, while the assistant can
+ * still read the paged list (card 323e9b38).
+ */
 export const ASSISTANT_FORBIDDEN_PREFIXES = [
   "auth",
   "sessions",
   "password",
+  "service/assets/export",
+  "service/assets/export.xlsx",
 ] as const;
 
 export function assistantEndpointDenied(endpoint: string): boolean {
