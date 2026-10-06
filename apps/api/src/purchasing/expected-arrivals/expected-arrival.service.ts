@@ -4,11 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type {
-  ExpectedArrivalDetail,
-  ExpectedArrivalListItem,
-  ExpectedArrivalListResponse,
-  SupplierInvoiceImportResult,
+import {
+  EXPECTED_ARRIVAL_LIST_PAGE_SIZE,
+  type ExpectedArrivalDetail,
+  type ExpectedArrivalListItem,
+  type ExpectedArrivalListQuery,
+  type ExpectedArrivalListResponse,
+  type SupplierInvoiceImportResult,
 } from "@acropora/types";
 
 import { supplierIdByTaxKey } from "./expected-arrival.intake.js";
@@ -120,7 +122,9 @@ const DISMISSED_SHOWN = 50;
  */
 @Injectable()
 export class ExpectedArrivalService {
-  async list(): Promise<ExpectedArrivalListResponse> {
+  async list(
+    query: ExpectedArrivalListQuery = {},
+  ): Promise<ExpectedArrivalListResponse> {
     const [arrivals, navInvoices, dismissed] = await Promise.all([
       prisma.expectedArrival.findMany({
         where: {
@@ -185,14 +189,17 @@ export class ExpectedArrivalService {
       editorPath: `/beszerzes/uj?navInvoiceId=${encodeURIComponent(invoice.id)}`,
     }));
 
-    return {
-      items: [...mail, ...nav].sort((a, b) =>
-        (b.arrivedAt ?? "").localeCompare(a.arrivedAt ?? ""),
-      ),
-      dismissed: dismissed
-        .filter((arrival) => arrival.documents.length > 0)
-        .map((arrival) => ({ ...mailListItem(arrival), editorPath: null })),
-    };
+    return pageArrivalList(
+      {
+        items: [...mail, ...nav].sort((a, b) =>
+          (b.arrivedAt ?? "").localeCompare(a.arrivedAt ?? ""),
+        ),
+        dismissed: dismissed
+          .filter((arrival) => arrival.documents.length > 0)
+          .map((arrival) => ({ ...mailListItem(arrival), editorPath: null })),
+      },
+      query,
+    );
   }
 
   /**
@@ -322,4 +329,47 @@ export class ExpectedArrivalService {
         : [],
     };
   }
+}
+
+/**
+ * A LISTA SZŰRÉSE ÉS LAPOZÁSA (kártya dd0aef31; barracuda 2026-10-06: a
+ * Sutyerák egyetlen valódi csonkulása, a válasz mindig a teljes, 59 536 bájtos
+ * lista volt, a `limit` hatástalan).
+ *
+ * A két forrás (levél és NAV) a memóriában egyesül és rendeződik, ezért a
+ * lapozás is itt történik, az egyesítés UTÁN: egy adatbázis-oldali lapozás
+ * forrásonként vágna, és a lapok sorrendje összekeveredne.
+ *
+ * Lapozó mező (`page`, `pageSize`, `limit`) nélkül a lista teljes, és a válasz
+ * `pagination` nélküli: a webes oldal ezt kéri, és így nem változik. A szűrő
+ * (`source`, `q`) lapozás nélkül is szűr. A „Nem kell”-lel kivett tételek
+ * (`dismissed`) rövid listája változatlanul jön.
+ */
+export function pageArrivalList(
+  full: ExpectedArrivalListResponse,
+  query: ExpectedArrivalListQuery,
+): ExpectedArrivalListResponse {
+  const needle = query.q?.trim().toLowerCase() ?? "";
+  const items = full.items.filter(
+    (item) =>
+      (!query.source || item.source === query.source) &&
+      (!needle ||
+        [item.supplierName, item.invoiceNumber, item.orderReference].some((v) =>
+          (v ?? "").toLowerCase().includes(needle),
+        )),
+  );
+  const size = query.pageSize ?? query.limit;
+  if (query.page === undefined && size === undefined) return { ...full, items };
+  const pageSize = size ?? EXPECTED_ARRIVAL_LIST_PAGE_SIZE.default;
+  const page = query.page ?? 1;
+  return {
+    ...full,
+    items: items.slice((page - 1) * pageSize, page * pageSize),
+    pagination: {
+      page,
+      pageSize,
+      totalItems: items.length,
+      totalPages: Math.max(1, Math.ceil(items.length / pageSize)),
+    },
+  };
 }

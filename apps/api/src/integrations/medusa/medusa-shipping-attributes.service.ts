@@ -54,6 +54,11 @@ export class MedusaShippingAttributesService {
    * BOLTBA ir, es egy iras, ami veletlenul indul el, nem vonhato vissza egy
    * ujrafuttatassal -- a regi ertekeket mar senki nem tudja.
    */
+  /** A bolt termékeinek SKU-ja, lapozva (a CLI párosításához). */
+  listShopSkus(offset: number, limit: number) {
+    return this.medusa.listProductSkus(offset, limit);
+  }
+
   async project(
     osProductId: string,
     profile: OsShippingProfile | null,
@@ -73,11 +78,18 @@ export class MedusaShippingAttributesService {
      * egy korallon, nem "dontest hoz", hanem elront valamit, amit a fa mond.
      */
     derivedPickupOnly = false,
+    /**
+     * A bolti termék azonosítója SKU-párosításból, ha nincs kötés-sor (kártya
+     * 2a7f2313: a teszt bolt 1492 termékéből egyiknek sincs, és az external_id
+     * egy korábbi OS-állapoté). A kötés-sor, ha van, elsőbbséget kap.
+     */
+    bySku?: string | null,
   ): Promise<ShippingAttributesOutcome> {
     if (!profile && !derivedPickupOnly)
       return { action: "skipped", reason: "no-profile" };
 
-    const link = await this.links.findByProductId(osProductId);
+    const found = await this.links.findByProductId(osProductId);
+    const link = found ?? (bySku ? { medusaProductId: bySku } : null);
     if (!link) return { action: "skipped", reason: "no-link" };
 
     const wanted: MedusaShippingFlags = shippingFlagsFromProfile({
