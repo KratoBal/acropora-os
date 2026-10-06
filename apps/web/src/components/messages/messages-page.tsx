@@ -34,13 +34,22 @@ export function MessagesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [outbox, dispatch] = useReducer(outboxReducer, []);
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // él-e még a lap: a lebontás utáni válasz már nem ír állapotot, és a
+  // függő kérés megszakad
+  const alive = useRef(true);
+  const pending = useRef<AbortController | null>(null);
 
   const reload = useCallback(async () => {
+    pending.current?.abort();
+    const controller = new AbortController();
+    pending.current = controller;
     try {
-      setItems((await messagesApi.list(token)).items);
+      const { items } = await messagesApi.list(token, controller.signal);
+      if (!alive.current) return;
+      setItems(items);
       setError(null);
     } catch {
-      setError("A beszélgetések nem töltődtek be.");
+      if (alive.current) setError("A beszélgetések nem töltődtek be.");
     }
   }, [token]);
 
@@ -52,6 +61,19 @@ export function MessagesPage() {
     if (reloadTimer.current) clearTimeout(reloadTimer.current);
     reloadTimer.current = setTimeout(() => void reload(), 300);
   }, [reload]);
+
+  // A LAP LEBONTÁSAKOR SEMMI NEM OLVAS ÉS NEM ÍR TOVÁBB (2026-10-06, a CI-ban:
+  // egy tesztfájl vége után elsült a 300 ms-os újraolvasás, a válasza
+  // állapotot írt, és „window is not defined” vitte pirosra a teljes futást):
+  // a késleltetett újraolvasás leáll, a függő válasz pedig már nem ír.
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      pending.current?.abort();
+    };
+  }, []);
 
   useMessageStream(() => scheduleReload());
 

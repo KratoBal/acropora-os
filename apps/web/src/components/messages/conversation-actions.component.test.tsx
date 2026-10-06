@@ -365,3 +365,41 @@ describe("attachments", () => {
     expect(upload.fn).not.toHaveBeenCalled();
   });
 });
+
+/*
+  AZ ELHAGYOTT LAP NEM OLVAS ÚJRA (2026-10-06, a CI-ban: egy tesztfájl vége
+  után elsült a 300 ms-os újraolvasás, és „window is not defined” vitte
+  pirosra a teljes futást). MI PIROSÍT: az időzítő túléli a lapot.
+*/
+describe("the delayed list reload", () => {
+  it("dies with the page: a signal right before leaving reads nothing afterwards", async () => {
+    const page = render(<MessagesPage />);
+    await row("m1");
+    const calls = api.list.mock.calls.length;
+    act(() =>
+      stream.listeners.forEach((listener) =>
+        listener({ type: "conversation.read", conversationId: "c1" }),
+      ),
+    );
+    page.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(api.list.mock.calls.length).toBe(calls);
+  });
+});
+
+describe("a list request still pending when the page goes", () => {
+  it("is aborted when the page goes, so its answer cannot write into a page that is gone", async () => {
+    let signal: AbortSignal | undefined;
+    api.list.mockImplementationOnce(
+      (_token: string, current?: AbortSignal) =>
+        new Promise(() => {
+          signal = current;
+        }),
+    );
+    const page = render(<MessagesPage />);
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    expect(signal!.aborted).toBe(false);
+    page.unmount();
+    expect(signal!.aborted).toBe(true);
+  });
+});
