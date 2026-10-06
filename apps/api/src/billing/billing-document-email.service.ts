@@ -95,6 +95,24 @@ export class BillingDocumentEmailService {
     private readonly environment: NodeJS.ProcessEnv = process.env,
   ) {}
 
+  /**
+   * MEHET-E LEVÉL EBBEN A KÖRNYEZETBEN: `null`, ha igen, különben a mondat,
+   * amivel a küldés elutasítaná. Kívülről is kérdezhető, hogy egy olyan hívó,
+   * amelyik a küldés ELŐTT valódi bizonylatot állít ki (a webshop díjbekérője),
+   * zárt kapunál ne állítson ki olyat, amit senki nem kap meg (bb3a6bd5, a
+   * stage-próba lelete 2026-10-07: 503 jött, a díjbekérő mégis elkészült).
+   */
+  gateRefusal(): string | null {
+    const gate = mailGate({
+      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_BILLING_DOCUMENT),
+      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
+    });
+    if (gate.kind === "closed") return GATE_SENTENCE[gate.reason];
+    if (!this.sender) return GATE_SENTENCE["no-sender"];
+    return null;
+  }
+
   async send(
     id: string,
     input: BillingDocumentEmailInput,
@@ -175,14 +193,11 @@ export class BillingDocumentEmailService {
       );
     }
 
-    const gate = mailGate({
-      mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
-      pathMode: mailModeOf(this.environment.TICKET_MAIL_BILLING_DOCUMENT),
-      redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
-    });
-    if (gate.kind === "closed")
-      throw new ServiceUnavailableException(GATE_SENTENCE[gate.reason]);
-    if (!this.sender)
+    const closed = this.gateRefusal();
+    if (closed) throw new ServiceUnavailableException(closed);
+    // a `gateRefusal` mar kimondta, ha nincs kuldo; ez a sor a forditonak szol
+    const sender = this.sender;
+    if (!sender)
       throw new ServiceUnavailableException(GATE_SENTENCE["no-sender"]);
 
     const pdfMissing = new ConflictException(
@@ -215,7 +230,7 @@ export class BillingDocumentEmailService {
     let outcome: "SENT" | "FAILED" | "INDETERMINATE" = "SENT";
     let error: string | null = null;
     try {
-      await this.sender.send({
+      await sender.send({
         ...sentTo,
         subject: safeSubject,
         ...(input.bodyHtml?.trim()

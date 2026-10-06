@@ -93,6 +93,8 @@ function setup(over: {
   emailStatus?: string | null;
   issueEnds?: string;
   orderStatus?: string | null;
+  /** A levél-kapu mondata, ha zárva van (`gateRefusal`). */
+  mailClosed?: string;
 }) {
   const calls: string[] = [];
   let proforma: Row | undefined = over.proforma;
@@ -160,6 +162,7 @@ function setup(over: {
       },
     } as never,
     {
+      gateRefusal: () => over.mailClosed ?? null,
       send: async (
         id: string,
         input: { mode: string; to: string[]; subject: string },
@@ -279,6 +282,37 @@ describe("sending the proforma from the order page", () => {
       409,
     );
     assert.ok(!noEmail.calls.some((c) => c.startsWith("send")));
+  });
+});
+
+/*
+  A LEVÉL-KAPU A KIÁLLÍTÁS ELŐTT (stage-próba, 2026-10-07: zárt kapunál 503
+  jött, a díjbekérő mégis elkészült). MI PIROSÍT: zárt kapunál kiállít vagy
+  vázlatot ment; nem a kapu mondata jön; nyitott kapunál megáll.
+*/
+describe("a closed mail gate", () => {
+  it("issues nothing and says why", async () => {
+    const closed =
+      "A számlázási bizonylatok kiküldése ebben a környezetben ki van kapcsolva (TICKET_MAIL_BILLING_DOCUMENT).";
+    const { service, calls } = setup({ mailClosed: closed });
+    await assert.rejects(service.sendProforma("order_55", USER, NOW), {
+      status: 503,
+      message: closed,
+    });
+    assert.ok(!calls.some((c) => /^(create|update|issue|send)/.test(c)));
+  });
+
+  it("an existing proforma is not resent either", async () => {
+    const { service, calls } = setup({
+      mailClosed: "zárva",
+      proforma: { id: "doc_1", status: "ISSUED", number: "D-1" },
+      emailStatus: "SENT",
+    });
+    assert.equal(
+      await status(service.sendProforma("order_55", USER, NOW)),
+      503,
+    );
+    assert.ok(!calls.some((c) => c.startsWith("send")));
   });
 });
 
