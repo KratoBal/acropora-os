@@ -157,6 +157,8 @@ describe("navigation", () => {
       "Kalkulátorok",
       "ICP",
       "Szerviz",
+      // az elhullási napló (kártya 115c9740): a Figma a Szerviz alá teszi
+      "Elhullási napló",
     ]);
   });
 
@@ -328,6 +330,9 @@ describe("navigation", () => {
         // ker, tehat aki latja az Akvariumokat, ezt is latja -- nem kulon
         // dontes, hanem ugyanannak a sornak a kovetkezmenye.
         "Kalkulátorok",
+        // AZ ELHULLÁSI NAPLÓ (kártya 115c9740): acrobot döntése (27141) a
+        // SERVICE szerepnek megtekintést és rögzítést is ad.
+        "Elhullási napló",
       ].sort(),
     );
   });
@@ -449,6 +454,7 @@ describe("navigation", () => {
     // "calculators" tetelenek fejlecet (`packages/types/src/navigation.ts`).
     "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
+    "/elhullasi-naplo": "mortality.view",
     "/admin/integrations/unas/connection": "settings.manage",
     "/admin/integrations/unas": "products.view",
     "/ai-teszt": "ai-test.view",
