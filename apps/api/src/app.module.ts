@@ -65,6 +65,7 @@ import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { SearchModule } from "./search/search.module.js";
 
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
+import { MortalityModule } from "./mortality/mortality.module.js";
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
     AssetFunctionsModule,
     UnitsModule,
     AquariumsModule,
+    MortalityModule,
     AuthModule,
     BrandsModule,
     ProductModule,

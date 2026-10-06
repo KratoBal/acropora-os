@@ -1275,3 +1275,25 @@ export type {
   MyServiceWorkResponse,
   MyServiceWorkView,
 } from "./my-service-work.js";
+export {
+  MORTALITY_LIST_PAGE_SIZE,
+  MORTALITY_SOURCE_LABELS,
+  MORTALITY_SOURCE_NOTE_MAX,
+  MORTALITY_SOURCE_TYPES,
+} from "./mortality.js";
+export type {
+  CreateMortalityInput,
+  MortalityAquariumOption,
+  MortalityDetail,
+  MortalityListItem,
+  MortalityListQuery,
+  MortalityListResponse,
+  MortalityPhoto,
+  MortalityProductOption,
+  MortalityRecorderOption,
+  MortalitySource,
+  MortalitySourceType,
+  MortalitySummary,
+  MortalitySupplierOption,
+  UpdateMortalityInput,
+} from "./mortality.js";
