@@ -55,6 +55,40 @@ describe("mergeSameInvoice", () => {
     );
   });
 
+  // MI PIROSÍT: ha az eredeti a díjbekérő marad, amikor a csoportban a
+  // végleges számla is ott áll (Amblard F2602896, 2026-10-06). A díjbekérő
+  // ÁLL ELÖL, hogy a régi „első eredeti” szabály ezt válassza.
+  it("takes the final invoice as the original, not a pro forma with the same number", () => {
+    const nav = doc({ id: "nav-1" });
+    const proforma = doc({
+      id: "mb-proforma",
+      source: "MAILBOX",
+      kind: "PROFORMA",
+      gross: null,
+      payee: "UNKNOWN",
+      hasOriginal: true,
+    });
+    const invoice = doc({
+      id: "mb-invoice",
+      source: "MAILBOX",
+      gross: null,
+      payee: "UNKNOWN",
+      hasOriginal: true,
+    });
+    const keys = new Map([
+      ["nav-1", "sz-1|12345678"],
+      ["mb-proforma", "sz-1|12345678"],
+      ["mb-invoice", "sz-1|12345678"],
+    ]);
+    const merged = mergeSameInvoice([nav, proforma, invoice], keys);
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0]!.originalId, "mb-invoice");
+    assert.equal(merged[0]!.kind, "INVOICE");
+    // kontroll: számla nélkül a díjbekérő marad az eredeti, nem tűnik el
+    const alone = mergeSameInvoice([nav, proforma], keys);
+    assert.equal(alone[0]!.originalId, "mb-proforma");
+  });
+
   // MI PIROSÍT (acrobot 26084): ha a NAV-sorral összevont Számlázz.hu-számla
   // elveszítené a kártyás fizetési módot, és a 3f. szabály nem látná.
   it("keeps the card payment of any source of the merged invoice", () => {

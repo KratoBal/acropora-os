@@ -136,7 +136,17 @@ export function mergeSameInvoice(
   const merged = [...groups.values()].map((group) => {
     if (group.length === 1) return identified(group[0]!);
     const nav = group.find((d) => d.source === "NAV");
-    const original = group.find((d) => d.hasOriginal);
+    /*
+      AZ EREDETI ELŐBB SZÁMLA, CSAK UTÁNA BÁRMI (Amblard F2602896, mérve
+      2026-10-06 élesen): ugyanazzal a számmal érkezett egy „Facture
+      provisoire” (díjbekérő) és a végleges „Facture cpta”. Az eredeti
+      (originalId) az első eredetivel bíró dokumentum volt, a fajtájától
+      függetlenül, tehát a könyvelői csomagba a díjbekérő PDF-je is kerülhetett
+      a végleges számla helyett.
+    */
+    const original =
+      group.find((d) => d.hasOriginal && d.kind === "INVOICE") ??
+      group.find((d) => d.hasOriginal);
     const primary = nav ?? group[0]!;
     return {
       ...primary,
