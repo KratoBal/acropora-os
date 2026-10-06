@@ -187,8 +187,13 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {
+    /**
+     * 2026-10-06-TÓL A TELEFONON IS (kártya 49210cdd): az „Új Cápasuli
+     * piszkozatok” értesítés a telefonos listára visz, és a csempe
+     * (`TILE_ENTRY.PI`) ugyanebben a körben került be.
+     */
     id: "service-drafts",
-    surfaces: ["web"],
+    surfaces: ["web", "mobile"],
     visibility: {
       kind: "roles",
       roles: ["OWNER", "ADMIN"],

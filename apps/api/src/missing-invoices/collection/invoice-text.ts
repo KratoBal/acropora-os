@@ -469,7 +469,32 @@ export function looksLikeReminder(
   );
 }
 
+/**
+ * A DOKUMENTUM SAJÁT CÍME: egy cella, ami csak annyit mond, hogy számla.
+ * „Bankszámla”, „Számla száma” nem az: a cella egésze a szó.
+ */
+const INVOICE_TITLE_CELL =
+  /(?:^|\|)\s*(?:sz[áa]mla|invoice|rechnung|facture)\s*(?:\||$)/imu;
+
+/**
+ * DÍJBEKÉRŐ-E A DOKUMENTUM.
+ *
+ * ELŐBB A CÍM DÖNT: az első tíz sor közül az ELSŐ, ami fajtát mond. Ha abban
+ * a díjbekérő szó áll, díjbekérő; ha egy cellája csak annyit mond, hogy
+ * „Számla”, akkor SZÁMLA, akármi áll lejjebb. Mérve 2026-10-06 élesen
+ * (acrobot 27064): az UNAS aláírt e-számláinak első sora „FIZETVE | Számla”,
+ * a „Díjbekérő” csak a 12. sor egyik oszlopfejlécében áll (a kiegyenlített
+ * díjbekérő száma), és a teljes szövegen futó szabály ezt díjbekérőnek vette.
+ * Cím nélkül a régi szabály marad: a teljes szöveg dönt.
+ */
 export function looksLikeProforma(text: string): boolean {
+  // az ELSŐ sor dönt, ami fajtát mond: egy tíz soros ablak egy rövid számlán a
+  // „Díjbekérő” oszlopfejlécet is elérné, és az nem cím
+  for (const raw of text.split("\n").slice(0, REMINDER_TITLE_LINES)) {
+    const line = raw.normalize("NFC");
+    if (PROFORMA_WORD.test(line)) return true;
+    if (INVOICE_TITLE_CELL.test(line)) return false;
+  }
   return PROFORMA_WORD.test(text);
 }
 

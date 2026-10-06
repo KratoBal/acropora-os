@@ -237,6 +237,35 @@ describe("the derived content", () => {
         .reszek_fizetese_mondat,
       "Mindkét részt a boltban fizeted, átvételkor.",
     );
+    assert.equal(
+      webshopMailContent({ ...sample, payment: "transfer" }).values
+        .reszek_fizetese_mondat,
+      "Mindkét részt előre, banki átutalással fizeted, mindegyiket a saját összegével. A második részhez külön díjbekérőt küldünk.",
+    );
+  });
+
+  /*
+    ELŐRE UTALÁS (bb3a6bd5, commerce #506). MI PIROSÍT: a kirakat ezzel a
+    szereppel küldi a visszaigazolás tényeit, és ha az OS nem ismeri, 400-zal
+    elutasítja, a levél pedig ki sem megy; vagy a szöveg eltér a commerce-étől.
+  */
+  it("prepayment by bank transfer: accepted, named, and said in commerce's words", () => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"]),
+    ) as { orders: { payment: string | null }[] };
+    for (const o of facts.orders) o.payment = "BANK_TRANSFER";
+    const parsed = parseWebshopMailFacts("order-placed", facts);
+    assert.equal(parsed.ok, true);
+    const text =
+      webshopMailContent((parsed as { facts: WebshopMailFacts }).facts).blocks
+        .rendeles_tetelek?.text ?? "";
+    assert.match(text, /- Fizetés: Előre utalás/);
+    assert.match(
+      text,
+      /Az összeget előre, banki átutalással fizeted: a díjbekérőt emailben küldjük, 8 napos fizetési határidővel\. A rendelést a befizetés beérkezése után teljesítjük\./,
+    );
+    for (const o of facts.orders) o.payment = "VOUCHER";
+    assert.equal(parseWebshopMailFacts("order-placed", facts).ok, false);
   });
 
   it("the refund names the card when its digits are known", () => {
@@ -290,15 +319,18 @@ describe("parseWebshopMailFacts", () => {
     });
   });
 
-  it("a split's payment is one of the three ways", () => {
+  it("a split's payment is one of the four ways", () => {
     const facts = JSON.parse(
       JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-split"]),
     ) as Record<string, unknown>;
     facts.payment = "ONLINE_CARD";
     assert.deepEqual(parseWebshopMailFacts("order-split", facts), {
       ok: false,
-      error: "facts.payment: card, cod vagy store",
+      error: "facts.payment: card, cod, store vagy transfer",
     });
+    // bb3a6bd5: a bank-transfer order's split comes as "transfer" (commerce #506)
+    facts.payment = "transfer";
+    assert.equal(parseWebshopMailFacts("order-split", facts).ok, true);
     delete facts.split_order;
     facts.payment = "card";
     assert.equal(parseWebshopMailFacts("order-split", facts).ok, false);
