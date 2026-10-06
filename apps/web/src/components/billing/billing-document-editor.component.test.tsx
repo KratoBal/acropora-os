@@ -900,6 +900,58 @@ describe("BillingDocumentEditor", () => {
     a szerver alsó határa alatti lapméretet kér; ha egy elutasított keresés
     megint üres listának látszik.
   */
+  /*
+    A VEVŐ FIZETÉSI NAPJAI (Balázs, 2026-10-06 08:27 UTC). MI PIROSÍT: a
+    30 napos vevő választása után a határidő a nyolc napos alapértéken marad;
+    egy kézzel átírt határidőt egy későbbi vevőválasztás felülír.
+  */
+  describe("the customer's payment days", () => {
+    const plusDays = (day: string, days: number) => {
+      const date = new Date(`${day}T00:00:00.000Z`);
+      date.setUTCDate(date.getUTCDate() + days);
+      return date.toISOString().slice(0, 10);
+    };
+    const value = (label: string) =>
+      (screen.getByLabelText(label) as HTMLInputElement).value;
+
+    it("picking a 30-day customer moves the due date to 30 days after fulfillment", async () => {
+      customers.detail.mockResolvedValue({
+        id: "cust-1",
+        customerNumber: "V-1",
+        displayName: "Állatkert",
+        companyName: "Fővárosi Állat- és Növénykert",
+        email: "szamlazas@partner.hu",
+        taxNumber: "12345678-2-42",
+        address: "1146 Budapest, Állatkerti krt. 6-12.",
+        paymentDueDays: 30,
+      });
+      render(<BillingDocumentEditor />);
+      await pickPartner();
+      expect(value("Fizetési határidő")).toBe(
+        plusDays(value("Teljesítés dátuma"), 30),
+      );
+    });
+
+    it("a due date typed by hand stays when the customer is picked", async () => {
+      customers.detail.mockResolvedValue({
+        id: "cust-1",
+        customerNumber: "V-1",
+        displayName: "Állatkert",
+        companyName: "Fővárosi Állat- és Növénykert",
+        email: "szamlazas@partner.hu",
+        taxNumber: "12345678-2-42",
+        address: "1146 Budapest, Állatkerti krt. 6-12.",
+        paymentDueDays: 30,
+      });
+      render(<BillingDocumentEditor />);
+      fireEvent.change(screen.getByLabelText("Fizetési határidő"), {
+        target: { value: "2030-01-15" },
+      });
+      await pickPartner();
+      expect(value("Fizetési határidő")).toBe("2030-01-15");
+    });
+  });
+
   describe("the partner picker", () => {
     it("asks for a page size the server accepts", async () => {
       render(<BillingDocumentEditor />);

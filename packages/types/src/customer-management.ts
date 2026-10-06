@@ -40,6 +40,11 @@ export interface CustomerSummary {
 
 export interface CustomerDetail extends CustomerSummary {
   taxNumber?: string;
+  /**
+   * A fizetési határidő napokban a neki kiállított számlán; `null`: az
+   * alapérték (8 nap). Szervizpartnernél a Partnerek oldalon állítják.
+   */
+  paymentDueDays: number | null;
   marketingEmailConsent: boolean;
   marketingSmsConsent: boolean;
   addresses: CustomerAddress[];

@@ -13,6 +13,7 @@ import {
   toDraftInput,
   trimDecimal,
   variantOptionsOf,
+  withCustomer,
   type EditorState,
 } from "./billing-editor-state";
 
@@ -304,5 +305,56 @@ describe("the line's variant", () => {
       { id: "a", label: "A · 1 kg" },
       { id: "b", label: "B" },
     ]);
+  });
+});
+
+/*
+  A VEVŐ FIZETÉSI FELTÉTELE (Balázs, 2026-10-06 08:27 UTC: a 30 napos vevőnél a
+  határidő nyolc napon maradt). MI PIROSÍT: a határidő nem a vevő napjaihoz
+  igazodik; nap nélküli vevőnél nem az alapérték jön vissza; egy kézzel átírt
+  vagy tárolt határidőt a vevő választása felülír; teljesítési nap nélkül
+  egy kitalált napra számol.
+*/
+describe("withCustomer", () => {
+  const partner = state().customer!;
+  const fresh = () => newEditorState({ id: "draft-2", today: "2026-10-06" });
+
+  it("the due date follows the customer's payment days from the fulfillment date", () => {
+    expect(withCustomer(fresh(), partner, 30).dueDate).toBe("2026-11-05");
+    expect(withCustomer(fresh(), partner, 30).customer).toEqual(partner);
+  });
+
+  it("a customer without its own days gets the default eight", () => {
+    const thirty = withCustomer(fresh(), partner, 30);
+    expect(withCustomer(thirty, partner, null).dueDate).toBe("2026-10-14");
+  });
+
+  it("a due date written by hand, or loaded from a saved draft, stays", () => {
+    const typed = { ...fresh(), dueDate: "2026-10-20", dueDateTouched: true };
+    expect(withCustomer(typed, partner, 30).dueDate).toBe("2026-10-20");
+    const saved = fromDetail({
+      id: "draft-3",
+      status: "DRAFT",
+      documentType: "INVOICE",
+      invoiceFormat: "ELECTRONIC",
+      customer: partner,
+      fulfillmentDate: "2026-10-06",
+      dueDate: "2026-10-20",
+      paymentMethod: "Átutalás",
+      currency: "HUF",
+      language: "hu",
+      reference: null,
+      note: null,
+      sourceType: null,
+      sourceId: null,
+      lines: [],
+      updatedAt: "2026-10-06T08:00:00.000Z",
+    } as unknown as BillingDocumentDetail);
+    expect(withCustomer(saved, partner, 30).dueDate).toBe("2026-10-20");
+  });
+
+  it("without a fulfillment day it does not invent one", () => {
+    const blank = { ...fresh(), fulfillmentDate: "" };
+    expect(withCustomer(blank, partner, 30).dueDate).toBe(blank.dueDate);
   });
 });

@@ -121,5 +121,16 @@ describe(
         [],
       );
     });
+
+    // A SZÁMLA HATÁRIDEJE EBBŐL JÖN (Balázs, 2026-10-06 08:27 UTC): a
+    // részletlap adja a vevő fizetési napjait, nap nélkül null (az alapérték)
+    it("the detail carries the customer's payment days, null when it has none", async () => {
+      await prisma.customer.update({
+        where: { id: ids.zoo },
+        data: { paymentDueDays: 30 },
+      });
+      assert.equal((await repository.detail(ids.zoo))?.paymentDueDays, 30);
+      assert.equal((await repository.detail(ids.plain))?.paymentDueDays, null);
+    });
   },
 );
