@@ -84,6 +84,8 @@ function fakeRepository(users: MessagingUserRow[]) {
     }
   >();
   const messages: MessageRow[] = [];
+  /** üzenet -> a widget beszélgetése (`assistantThreadId`), a sorban nincs mezője */
+  const threads = new Map<string, string | null>();
   const audits: string[] = [];
   let n = 0;
   const repo = {
@@ -181,12 +183,23 @@ function fakeRepository(users: MessagingUserRow[]) {
           m.senderUserId === senderUserId &&
           m.clientMessageId === clientMessageId,
       ) ?? null,
+    acrobotReplies: async (directKey: string, threadId: string) =>
+      messages
+        .filter(
+          (m) =>
+            threads.get(m.id) === threadId &&
+            m.assistantSource === "ACROBOT" &&
+            !m.deletedAt &&
+            conversations.get(m.conversationId)?.directKey === directKey,
+        )
+        .map((m) => ({ id: m.id, text: m.text, createdAt: m.createdAt })),
     createMessage: async (input: {
       conversationId: string;
       senderUserId: string;
       text: string;
       clientMessageId: string;
       assistantSource?: "GATEWAY" | "ACROBOT" | null;
+      assistantThreadId?: string | null;
     }) => {
       const sender = people.get(input.senderUserId)!;
       const row = {
@@ -210,6 +223,7 @@ function fakeRepository(users: MessagingUserRow[]) {
         forwardedFromUser: null,
         assistantSource: input.assistantSource ?? null,
       } as MessageRow;
+      threads.set(row.id, input.assistantThreadId ?? null);
       messages.push(row);
       const c = conversations.get(input.conversationId)!;
       c.lastMessageId = row.id;
@@ -477,6 +491,61 @@ describe("acrobot's handoff reply", () => {
     assert.deepEqual(
       [conversation.type, [...conversation.members.keys()].sort()],
       ["DIRECT", ["a", SUTYERAK_USER_ID].sort()],
+    );
+  });
+
+  /*
+    5830ee10 (Balázs 2026-10-06 12:14 UTC): a widgetből jött kérdés válasza a
+    widgetben is megjelenik. MI PIROSÍT: ha a `threadId` nem tárolódik; ha a
+    widget más beszélgetésének, más dolgozó kettesének, egy nem-acrobot vagy egy
+    törölt üzenetnek a válaszát is megkapja.
+  */
+  it("a widget answer carries its thread, and the widget gets only its own", async () => {
+    const { service, repo } = setup(users, () => true);
+    await service.handoffReply({
+      userId: "a",
+      threadId: "t-1",
+      text: "Válasz.",
+    });
+    await service.handoffReply({
+      userId: "a",
+      threadId: "t-2",
+      text: "Másik ablak.",
+    });
+    await service.handoffReply({
+      userId: "b",
+      threadId: "t-1",
+      text: "B-nek.",
+    });
+    const deleted = await service.handoffReply({
+      userId: "a",
+      threadId: "t-1",
+      text: "Törölt.",
+    });
+    repo.messages.find((m) => m.id === deleted.messageId)!.deletedAt =
+      new Date();
+    const own = await service.handoffReply({
+      userId: "a",
+      text: "Nincs ablaka.",
+    });
+    await service.postAsAssistant(
+      own.conversationId,
+      "Átjáró.",
+      "GATEWAY",
+      "t-1",
+    );
+
+    const replies = await service.widgetReplies(viewer("a"), "t-1");
+    assert.deepEqual(
+      replies.items.map((r) => r.text),
+      ["Válasz."],
+    );
+    assert.match(replies.items[0]!.createdAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.deepEqual(
+      (await service.widgetReplies(viewer("b"), "t-1")).items.map(
+        (r) => r.text,
+      ),
+      ["B-nek."],
     );
   });
 

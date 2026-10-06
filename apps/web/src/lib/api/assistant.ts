@@ -1,3 +1,4 @@
+import type { AssistantHandoffReply } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { apiAuthHeaders, apiRequest, ApiError } from "./client";
 export type AssistantEvent =
@@ -16,6 +17,17 @@ export const assistantApi = {
       signal,
       cache: "no-store",
     });
+  },
+  /**
+   * ACROBOT VÁLASZAI EGY ÁTADOTT KÉRDÉSRE, ennek a beszélgetésnek az
+   * azonosítójával (5830ee10). Csak a hívó saját válaszai jönnek.
+   */
+  handoffReplies(token: string, threadId: string, signal: AbortSignal) {
+    return apiRequest<{ items: AssistantHandoffReply[] }>(
+      `/assistant/handoff-replies?threadId=${encodeURIComponent(threadId)}`,
+      token,
+      { signal, cache: "no-store" },
+    );
   },
   async ask(
     token: string,

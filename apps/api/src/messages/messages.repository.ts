@@ -737,6 +737,8 @@ export class MessagesRepository extends Repository {
     forwardedFrom?: { messageId: string; userId: string } | null;
     /** Sutyerák üzeneténél a válasz forrása (4. pont B). */
     assistantSource?: "GATEWAY" | "ACROBOT" | null;
+    /** A widget beszélgetése, amiből az átadott kérdés jött (5830ee10). */
+    assistantThreadId?: string | null;
   }): Promise<MessageRow> {
     return this.database.$transaction(async (tx) => {
       const created = await tx.message.create({
@@ -750,6 +752,7 @@ export class MessagesRepository extends Repository {
           forwardedFromMessageId: input.forwardedFrom?.messageId ?? null,
           forwardedFromUserId: input.forwardedFrom?.userId ?? null,
           assistantSource: input.assistantSource ?? null,
+          assistantThreadId: input.assistantThreadId ?? null,
         },
         select: { id: true },
       });
@@ -936,6 +939,26 @@ export class MessagesRepository extends Repository {
   }
 
   /** Sutyerák szála ebben a beszélgetésben ennek a kérdezőnek (4. pont B). */
+  /**
+   * ACROBOT VÁLASZAI EGY WIDGET-BESZÉLGETÉSRE (5830ee10), CSAK A HÍVÓÉI: a
+   * válasz a dolgozó és Sutyerák kettes beszélgetésében áll, tehát a kettes
+   * kulcs (`directKey`) köti a hívóhoz, nem a beszélgetés-azonosító, amit a
+   * widget nem ismer. Törölt üzenet nem jön.
+   */
+  acrobotReplies(directKey: string, threadId: string) {
+    return this.database.message.findMany({
+      where: {
+        assistantThreadId: threadId,
+        assistantSource: "ACROBOT",
+        deletedAt: null,
+        conversation: { directKey },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, text: true, createdAt: true },
+      take: 50,
+    });
+  }
+
   async assistantThread(
     conversationId: string,
     userId: string,
