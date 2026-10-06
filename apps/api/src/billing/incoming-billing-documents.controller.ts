@@ -21,6 +21,7 @@ import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query
 import {
   incomingListResponse,
   toIncomingDetail,
+  mailboxOnlyPaidItems,
   toIncomingListItem,
 } from "./incoming-billing-documents.js";
 import {
@@ -54,13 +55,17 @@ export class IncomingBillingDocumentsController {
       this.collectedIndex(),
     ]);
     return incomingListResponse(
-      rows.map((row) =>
-        toIncomingListItem(
-          row,
-          pairings,
-          collectedPdfIds(row, collected).length > 0,
+      [
+        ...rows.map((row) =>
+          toIncomingListItem(
+            row,
+            pairings,
+            collectedPdfIds(row, collected).length > 0,
+          ),
         ),
-      ),
+        // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
+        ...mailboxOnlyPaidItems(rows, pairings),
+      ],
       query,
     );
   }

@@ -140,6 +140,13 @@ export function incomingPaymentOf(
   };
 }
 
+/** A feed sora a listán: minden adata megvan (az adatlap is ebből épül). */
+type FeedListItem = IncomingDocumentListItem &
+  Pick<
+    IncomingDocumentDetail,
+    "origin" | "invoiceFormat" | "netAmount" | "vatAmount" | "grossAmount"
+  >;
+
 export function toIncomingListItem(
   row: IncomingBillingDocument,
   pairings: ReadonlyMap<string, DocumentPairing>,
@@ -148,10 +155,11 @@ export function toIncomingListItem(
    * PDF-je nélkül is igaz lehet: a `hasPdf` bármelyik forrásra igaz.
    */
   collectedPdf = false,
-): IncomingDocumentListItem {
+): FeedListItem {
   const bankMatch = bankMatchOf(row, pairings);
   return {
     id: row.id,
+    origin: "SZAMLAZZ",
     documentNumber: row.documentNumber,
     kindCode: row.kindCode,
     kindLabel: externalKindLabel(row.kindCode),
@@ -177,6 +185,112 @@ export function toIncomingListItem(
     ),
     bankMatch,
     hasPdf: row.hasPdf || collectedPdf,
+  };
+}
+
+/** A csak postafiókos sor forrásai: ahonnan eredeti számla jön, nem a NAV és nem a feed. */
+const MAILBOX_ONLY_SOURCES: ReadonlySet<string> = new Set([
+  "MAILBOX",
+  "DRIVE",
+  "UPLOAD",
+]);
+const compactNumber = (value: string) =>
+  value.replace(/[\s/_-]/g, "").toLowerCase();
+
+/**
+ * A CSAK POSTAFIÓKBÓL ISMERT, FIZETETT SZÁMLÁK SORAI (kártya 096607af;
+ * acrobot 26716: kapjanak jelölést, ugyanazzal a párosítási feltétellel,
+ * látszó forrással, duplikáció nélkül). Élesen mérve 2026-10-06-án: 10
+ * szeptemberi számla FOUND-dal fizetett, mégis hiányzott a listáról, mert
+ * nincs a Számlázz.hu feedben (külföldi kiállító nem jelent a NAV-nak).
+ *
+ * Sor CSAK abból lesz, amit a feed-sorok ugyanazzal a feltétellel
+ * fizetettnek jelölnének: valódi számla, a cégre szól, minden párosított
+ * terhelés teljesen fizeti (`paidInFull`). A párosítatlan postafiókos
+ * dokumentum a Hiányzó számlák dolga marad, nem sor itt.
+ *
+ * DUPLIKÁCIÓ NÉLKÜL: ha a dokumentum (vagy bármelyik aliasa) egy feed-sor
+ * forrása, vagy a száma egy feed-soré, a feed sora jelöli, ez kimarad.
+ */
+export function mailboxOnlyPaidItems(
+  feed: readonly Pick<
+    IncomingBillingDocument,
+    "sourceDocumentId" | "documentNumber"
+  >[],
+  pairings: ReadonlyMap<string, DocumentPairing>,
+): IncomingDocumentListItem[] {
+  const feedSources = new Set(
+    feed.map((row) => row.sourceDocumentId).filter(Boolean),
+  );
+  const feedNumbers = new Set(
+    feed.map((row) => compactNumber(row.documentNumber)),
+  );
+  const seen = new Set<DocumentPairing>();
+  const items: IncomingDocumentListItem[] = [];
+  for (const pairing of pairings.values()) {
+    if (seen.has(pairing)) continue;
+    seen.add(pairing);
+    const document = pairing.document;
+    if (
+      pairing.kind !== "INVOICE" ||
+      pairing.payee !== "COMPANY" ||
+      !pairing.paidInFull ||
+      pairing.debits.length === 0 ||
+      !MAILBOX_ONLY_SOURCES.has(document.source)
+    )
+      continue;
+    const ids = [document.id, ...(document.aliasIds ?? [])];
+    if (
+      ids.some((id) => feedSources.has(id)) ||
+      feedNumbers.has(compactNumber(document.number))
+    )
+      continue;
+    items.push(mailboxListItem(document, pairing));
+  }
+  return items;
+}
+
+function mailboxListItem(
+  document: DocumentPairing["document"],
+  pairing: DocumentPairing,
+): IncomingDocumentListItem {
+  const debits = pairing.debits;
+  // bruttó nélküli rekordnál a fizetett összeg a terheléseké, a terhelés devizájában
+  const currency = document.gross ? document.currency : debits[0]!.currency;
+  const paid = document.gross
+    ? document.gross
+    : debits.reduce(
+        (sum, debit) => sum.plus(new Prisma.Decimal(debit.amount)),
+        new Prisma.Decimal(0),
+      );
+  return {
+    id: `mailbox:${document.id}`,
+    origin: "MAILBOX",
+    documentNumber: document.number,
+    kindCode: "SZ",
+    kindLabel: externalKindLabel("SZ"),
+    invoiceFormat: null,
+    cancelled: false,
+    supplierName: document.supplierName,
+    supplierTaxNumber: null,
+    issueDate: document.date,
+    fulfillmentDate: null,
+    dueDate: null,
+    paymentMethod: null,
+    currency,
+    exchangeRate: null,
+    netAmount: null,
+    vatAmount: null,
+    grossAmount: document.gross ? money(document.gross, currency) : null,
+    paymentState: "PAID",
+    paidAmount: money(paid, currency),
+    lastPaymentDate: debits
+      .map((debit) => debit.bookingDate)
+      .reduce((a, b) => (a > b ? a : b)),
+    paymentSource: "BANK_PAIRING",
+    paymentConflict: false,
+    bankMatch: { state: "PAIRED", reason: null, debits },
+    hasPdf: false,
   };
 }
 

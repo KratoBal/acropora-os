@@ -10,6 +10,7 @@ import {
   filterIncoming,
   incomingListResponse,
   incomingPaymentOf,
+  mailboxOnlyPaidItems,
   paymentStateOf,
   toIncomingDetail,
   toIncomingListItem,
@@ -66,11 +67,28 @@ const row = (
 });
 
 const debit = { bookingDate: "2026-09-30", amount: "12700", currency: "HUF" };
+const candidate = (
+  over: Partial<DocumentPairing["document"]> = {},
+): DocumentPairing["document"] => ({
+  id: "doc-1",
+  source: "NAV",
+  number: "KI-2026/77",
+  date: "2026-09-28",
+  gross: D(12700),
+  currency: "HUF",
+  supplierName: "Korall Import Kft.",
+  supplierAccounts: [],
+  kind: "INVOICE",
+  payee: "COMPANY",
+  hasOriginal: true,
+  ...over,
+});
 const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing => ({
   payee: "COMPANY",
   kind: "INVOICE",
   debits: [debit],
   paidInFull: true,
+  document: candidate(),
   ...over,
 });
 
@@ -496,6 +514,158 @@ describe("incomingListResponse", () => {
           currencies: ["EUR", "HUF"],
         },
       ],
+    );
+  });
+});
+
+/*
+  THE MAILBOX-ONLY PAID INVOICES (card 096607af, acrobot 26716; the cases are
+  the 2026-10-06 production measurement's). WHAT TURNS RED: a paid invoice
+  known only from the mailbox has no row; a row appears for something the
+  feed rows would not mark (proforma, not the company's, not paid in full,
+  no debit, a NAV row or a settlement); a feed invoice gets a second row
+  (through an alias or its number); one pairing under several ids gives
+  several rows; the source does not show.
+*/
+describe("mailboxOnlyPaidItems", () => {
+  const hetzner = candidate({
+    id: "mail-hetzner",
+    source: "MAILBOX",
+    number: "089001181580",
+    date: "2026-09-05",
+    gross: D("46.64"),
+    currency: "EUR",
+    supplierName: "HETZNER ONLINE GMBH",
+  });
+  const hetznerPaid = pairing({
+    document: hetzner,
+    debits: [{ bookingDate: "2026-09-09", amount: "17113", currency: "HUF" }],
+  });
+
+  it("a paid foreign invoice from the mailbox is a paid row, marked from the bank, with its source", () => {
+    const [item, ...rest] = mailboxOnlyPaidItems(
+      [row()],
+      new Map([["mail-hetzner", hetznerPaid]]),
+    );
+    assert.equal(rest.length, 0);
+    assert.deepEqual(
+      {
+        id: item!.id,
+        origin: item!.origin,
+        documentNumber: item!.documentNumber,
+        supplierName: item!.supplierName,
+        issueDate: item!.issueDate,
+        currency: item!.currency,
+        grossAmount: item!.grossAmount,
+        netAmount: item!.netAmount,
+        invoiceFormat: item!.invoiceFormat,
+        paymentState: item!.paymentState,
+        paidAmount: item!.paidAmount,
+        lastPaymentDate: item!.lastPaymentDate,
+        paymentSource: item!.paymentSource,
+        bankMatch: item!.bankMatch.state,
+      },
+      {
+        id: "mailbox:mail-hetzner",
+        origin: "MAILBOX",
+        documentNumber: "089001181580",
+        supplierName: "HETZNER ONLINE GMBH",
+        issueDate: "2026-09-05",
+        currency: "EUR",
+        grossAmount: "46.64",
+        netAmount: null,
+        invoiceFormat: null,
+        paymentState: "PAID",
+        paidAmount: "46.64",
+        lastPaymentDate: "2026-09-09",
+        paymentSource: "BANK_PAIRING",
+        bankMatch: "PAIRED",
+      },
+    );
+  });
+
+  it("a record without an amount shows what the debit paid, in its currency", () => {
+    const [item] = mailboxOnlyPaidItems(
+      [],
+      new Map([
+        [
+          "mail-amblard",
+          pairing({
+            document: candidate({
+              id: "mail-amblard",
+              source: "MAILBOX",
+              number: "F2602896",
+              gross: null,
+              supplierName: "",
+            }),
+            debits: [
+              { bookingDate: "2026-09-16", amount: "179520", currency: "HUF" },
+            ],
+          }),
+        ],
+      ]),
+    );
+    assert.equal(item!.grossAmount, null);
+    assert.equal(item!.currency, "HUF");
+    assert.equal(item!.paidAmount, "179520");
+  });
+
+  it("only what the feed rows would mark: a company invoice, paid in full, by a debit, from an original", () => {
+    const skipped: DocumentPairing[] = [
+      pairing({ document: hetzner, kind: "PROFORMA" }),
+      pairing({ document: hetzner, payee: "NOT_COMPANY" }),
+      pairing({ document: hetzner, paidInFull: false }),
+      pairing({ document: hetzner, debits: [] }),
+      pairing({ document: { ...hetzner, source: "NAV" } }),
+      pairing({ document: { ...hetzner, source: "SETTLEMENT" } }),
+    ];
+    for (const one of skipped)
+      assert.deepEqual(
+        mailboxOnlyPaidItems([], new Map([["mail-hetzner", one]])),
+        [],
+      );
+  });
+
+  it("an invoice the feed already has gets no second row, by alias or by number", () => {
+    // a FleetCor esete: a Drive-os összevont jelölt egyik aliasa a feed sorának forrása
+    const fleet = pairing({
+      document: candidate({
+        id: "drive-fleet",
+        source: "DRIVE",
+        number: "E0401363885",
+        aliasIds: ["feed-src-fleet"],
+      }),
+    });
+    assert.deepEqual(
+      mailboxOnlyPaidItems(
+        [row({ sourceDocumentId: "feed-src-fleet", documentNumber: "X" })],
+        new Map([["drive-fleet", fleet]]),
+      ),
+      [],
+    );
+    assert.deepEqual(
+      mailboxOnlyPaidItems(
+        [row({ sourceDocumentId: "other", documentNumber: "089 001 181580" })],
+        new Map([["mail-hetzner", hetznerPaid]]),
+      ),
+      [],
+    );
+  });
+
+  it("one pairing under its id and its aliases is one row", () => {
+    const shared = pairing({
+      document: { ...hetzner, aliasIds: ["mail-hetzner-2"] },
+      debits: hetznerPaid.debits,
+    });
+    assert.equal(
+      mailboxOnlyPaidItems(
+        [],
+        new Map([
+          ["mail-hetzner", shared],
+          ["mail-hetzner-2", shared],
+        ]),
+      ).length,
+      1,
     );
   });
 });

@@ -86,12 +86,24 @@ export interface IncomingDocumentListQuery {
   bankMatch?: IncomingBankMatchState;
 }
 
+export type IncomingDocumentOrigin = "SZAMLAZZ" | "MAILBOX";
+
 export interface IncomingDocumentListItem {
   id: string;
+  /**
+   * HONNAN ISMERJÜK (kártya 096607af, acrobot 26716): `SZAMLAZZ` a bejövő feed
+   * sora; `MAILBOX` a feedben NEM szereplő, csak postafiókból (Drive-ról,
+   * feltöltésből) ismert számla, amit a banki párosítás teljesen fizetettnek
+   * talált (külföldi kiállító nem jelent a NAV-nak, így a Számlázz.hu sem
+   * kapja meg). A postafiókos sornak nincs feed-adatlapja, és nincs nettó,
+   * ÁFA és formátum adata.
+   */
+  origin: IncomingDocumentOrigin;
   documentNumber: string;
   kindCode: string;
   kindLabel: string;
-  invoiceFormat: InvoiceFormat;
+  /** A postafiókos sornál `null`: a formátumot a feed adja. */
+  invoiceFormat: InvoiceFormat | null;
   cancelled: boolean;
   supplierName: string;
   supplierTaxNumber: string | null;
@@ -101,9 +113,11 @@ export interface IncomingDocumentListItem {
   paymentMethod: string | null;
   currency: string;
   exchangeRate: DecimalText | null;
-  netAmount: DecimalText;
-  vatAmount: DecimalText;
-  grossAmount: DecimalText;
+  /** A postafiókos sornál `null`: a nettó és az ÁFA a feed adata. */
+  netAmount: DecimalText | null;
+  vatAmount: DecimalText | null;
+  /** `null`, ha a postafiókos rekord bruttó nélküli (akkor a fizetett összeg a terhelésé). */
+  grossAmount: DecimalText | null;
   /**
    * A KIFIZETETTSÉG (acrobot 25988): ahol a Számlázz.hu kifizetést küldött, az
    * nyer (`SZAMLAZZ`); ahol nem, de a Hiányzó számlák a számlát banki
@@ -154,6 +168,12 @@ export interface IncomingDocumentLine {
 }
 
 export interface IncomingDocumentDetail extends IncomingDocumentListItem {
+  /** Adatlapja csak a feed sorának van: ott a formátum és az összegek megvannak. */
+  origin: "SZAMLAZZ";
+  invoiceFormat: InvoiceFormat;
+  netAmount: DecimalText;
+  vatAmount: DecimalText;
+  grossAmount: DecimalText;
   exchangeBank: string | null;
   supplier: {
     name: string;

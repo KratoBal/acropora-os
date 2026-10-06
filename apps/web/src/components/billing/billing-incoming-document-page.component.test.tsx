@@ -45,6 +45,7 @@ const detail = (
   overrides: Partial<IncomingDocumentDetail> = {},
 ): IncomingDocumentDetail => ({
   id: "in-1",
+  origin: "SZAMLAZZ",
   documentNumber: "E-KBOSS-2026-1234",
   kindCode: "SZ",
   kindLabel: "Számla",

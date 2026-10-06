@@ -41,7 +41,9 @@ export const incomingDocumentHref = (id: string) =>
   `${BILLING_LIST_PATH}/bejovo/${id}`;
 
 /** Összeg a pénznem tizedeseivel, pénznem-jel nélkül (a DEVIZA oszlop mondja). */
-export function incomingAmount(value: string, currency: string): string {
+export function incomingAmount(value: string | null, currency: string): string {
+  // a csak postafiókos sornál a nettó és az ÁFA nem ismert (096607af)
+  if (value === null) return "—";
   const digits = currency === "HUF" ? 0 : 2;
   return new Intl.NumberFormat("hu-HU", {
     minimumFractionDigits: digits,
@@ -57,10 +59,15 @@ const rateText = (value: string | null) =>
       }).format(Number(value))
     : "—";
 
-/** A számla jelzői: a típus röviden (a „Számla” itt „Normál”) és a formátum. */
-const flagsText = (item: IncomingDocumentListItem) =>
+/**
+ * A számla jelzői: a típus röviden (a „Számla” itt „Normál”) és a formátum;
+ * a csak postafiókból ismert számlánál a forrás, mert formátumot a feed ad.
+ */
+export const flagsText = (item: IncomingDocumentListItem) =>
   `${item.kindCode.toUpperCase() === "SZ" ? "Normál" : item.kindLabel} · ${
-    INVOICE_FORMAT_LABELS[item.invoiceFormat]
+    item.origin === "MAILBOX" || item.invoiceFormat === null
+      ? "Postafiókból"
+      : INVOICE_FORMAT_LABELS[item.invoiceFormat]
   }`;
 
 /** A banki párosítás színe (a kifizetésé a közös `PAYMENT_STATE_TONE`). */
@@ -96,7 +103,7 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
             className="truncate font-semibold text-pilot-grey-900"
             title={item.supplierName}
           >
-            {item.supplierName}
+            {item.supplierName || "(név nélkül)"}
           </span>
           <span className="text-xs text-pilot-grey-500">
             {item.supplierTaxNumber ?? "—"}
@@ -505,11 +512,15 @@ export function BillingIncomingList({ token }: { token: string }) {
               columns={INCOMING_COLUMNS}
               rows={data.items}
               rowKey={(item) => item.id}
-              onRowActivate={(item) =>
-                router.push(incomingDocumentHref(item.id))
-              }
+              onRowActivate={(item) => {
+                // a csak postafiókos sornak nincs feed-adatlapja
+                if (item.origin === "MAILBOX") return;
+                router.push(incomingDocumentHref(item.id));
+              }}
               rowLabel={(item) =>
-                `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName} megnyitása`
+                item.origin === "MAILBOX"
+                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, csak postafiókból ismert`
+                  : `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName} megnyitása`
               }
               minWidth={1040}
             />

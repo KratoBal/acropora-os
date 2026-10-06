@@ -1011,6 +1011,7 @@ export type {
   IncomingDocumentDetail,
   IncomingDocumentLine,
   IncomingDocumentListItem,
+  IncomingDocumentOrigin,
   IncomingDocumentListQuery,
   IncomingDocumentListResponse,
   IncomingPaymentState,
