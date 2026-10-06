@@ -194,6 +194,16 @@ const TAX_NUMBER =
 const DATE_SHAPE = /^(?:19|20)\d{2}[./-]\d{1,2}[./-]\d{1,2}$/;
 
 /**
+ * AZ EGYBEÍRT DÁTUM (`20260729`), CSAK A FÁJLNÉVBEN (kártya 37b8643d, mérve
+ * 2026-10-06 élesen, a száraz újraolvasásban): az `IMG_20260729_0002.pdf`
+ * szkennelés `20260729` darabja számlaszámnak ment, mert a szövegben a kelte
+ * (`2026.07.29`) tömörítve ugyanez. A címke utáni értékre NEM áll: ott egy
+ * nyolcjegyű szám lehet valódi számlaszám is, a fájlnévben viszont a
+ * szkennerek és a letöltők dátuma.
+ */
+const COMPACT_DATE = /^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])$/;
+
+/**
  * A CÍMKE UTÁNI ÉRTÉK CSAK AKKOR SZÁMLASZÁM, ha nem egy cég és nem egy nap
  * azonosítója (kártya 096607af; élesen mérve 2026-10-06, 37 általános
  * olvasós rekordból ötnél: háromszor a SAJÁT adószámunk, kétszer egy dátum
@@ -612,6 +622,7 @@ export function readInvoiceText(
         token.length >= 5 &&
         /\d/.test(token) &&
         !DATE_SHAPE.test(token) &&
+        !COMPACT_DATE.test(token) &&
         !BANK_ACCOUNT.test(token) &&
         !looksLikeTaxNumber(token) &&
         !customers.has(compactNumber(token)) &&

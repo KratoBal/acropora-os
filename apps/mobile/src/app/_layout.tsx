@@ -179,6 +179,7 @@ function RootNavigator() {
       />
       <Stack.Screen name="settings" options={{ title: "Profil" }} />
       <Stack.Screen name="queue" options={{ title: "Feltöltésre várók" }} />
+      <Stack.Screen name="service-drafts" options={{ title: "Piszkozatok" }} />
       <Stack.Screen
         name="queue-fix/[id]"
         options={{ title: "Elakadt felvitel" }}

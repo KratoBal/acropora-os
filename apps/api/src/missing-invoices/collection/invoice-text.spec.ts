@@ -720,6 +720,24 @@ describe("the number from an underscore-joined file name (2026-10-06)", () => {
       null,
     );
   });
+
+  // kártya 37b8643d: a SOPRO szkennelés (IMG_20260729_0002.pdf) száma a
+  // szkennelés napja lett. MI PIROSÍT: ha az egybeírt dátum is szám lehet.
+  it("never takes a scanner's compact date for the number, but keeps a real eight-digit one", () => {
+    assert.equal(
+      readInvoiceText(["Kelt: 2026.07.29.", "Összesen 1 000 Ft"], {
+        fileName: "IMG_20260729_0002.pdf",
+      }).invoiceNumber,
+      null,
+    );
+    // ugyanez az alak, ami nem lehet nap (13. hónap): az számlaszám marad
+    assert.equal(
+      readInvoiceText(["Számla 20261329", "Összesen 1 000 Ft"], {
+        fileName: "Rechnung_20261329.pdf",
+      }).invoiceNumber,
+      "20261329",
+    );
+  });
 });
 
 describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {

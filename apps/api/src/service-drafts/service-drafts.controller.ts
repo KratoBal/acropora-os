@@ -17,7 +17,7 @@ class DraftListQuery {
     "PENDING" | "ACCEPTED" | "REJECTED";
   @IsOptional() @IsString() @MaxLength(100) cursor?: string;
 }
-class AcceptDraftDto {
+export class AcceptDraftDto {
   @IsOptional() @IsString() @MaxLength(200) reporterPersonName?: string | null;
   @IsString() @MaxLength(100) departmentId!: string;
 }

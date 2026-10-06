@@ -41,6 +41,12 @@ export const TILE_ENTRY = {
    * ugyanaz a minta, mint az `AI` kódnál fent.
    */
   AK: "aquariums",
+  /**
+   * A `service-drafts` tetel 2026-10-06-IG CSAK web feluletu volt; a telefonos
+   * Piszkozatok lista (kartya 49210cdd) adta hozza a `mobile` feluletet --
+   * ugyanaz a minta, mint az `AI` kodnal fent.
+   */
+  PI: "service-drafts",
 } as const;
 
 export type TileCode = keyof typeof TILE_ENTRY;
