@@ -336,6 +336,7 @@ export function toDetail(input: {
   osCustomer?: WebshopOrderDetail["osCustomer"];
   /** A belső megjegyzés (csak OS). */
   internalNote?: WebshopOrderDetail["internalNote"];
+  deliveryNote?: WebshopOrderDetail["deliveryNote"];
   /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
   signals?: MedusaOrderOverviewRow["customer_signals"] | null;
   /** A csomagfeladás előnézete (`parcelInputOf`); bolti átvételnél `null`. */
@@ -399,6 +400,7 @@ export function toDetail(input: {
     payment,
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
+    deliveryNote: input.deliveryNote ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
     osCustomer: input.osCustomer ?? null,
