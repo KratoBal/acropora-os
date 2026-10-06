@@ -23,7 +23,9 @@
 import type { MailBlock, MailBlocks } from "./mail-blocks.js";
 import type { MailTemplateValues } from "./mail-template.js";
 
-export type WebshopPaymentRole = "ONLINE_CARD" | "COD" | "PAY_AT_STORE";
+/** BANK_TRANSFER: prepayment by transfer (card bb3a6bd5, commerce #506). */
+export type WebshopPaymentRole =
+  "ONLINE_CARD" | "COD" | "PAY_AT_STORE" | "BANK_TRANSFER";
 
 export interface WebshopMailLine {
   readonly title: string;
@@ -147,11 +149,12 @@ type WebshopTemplateFacts =
     };
 
 /** How a split order is paid, from the original order (murena 26656). */
-export type WebshopSplitPayment = "card" | "cod" | "store";
+export type WebshopSplitPayment = "card" | "cod" | "store" | "transfer";
 export const WEBSHOP_SPLIT_PAYMENTS: readonly WebshopSplitPayment[] = [
   "card",
   "cod",
   "store",
+  "transfer",
 ];
 
 export type WebshopMailTemplate = WebshopMailFacts["template"];
@@ -223,6 +226,7 @@ const PAYMENT_LABEL: Record<WebshopPaymentRole, string> = {
   ONLINE_CARD: "Bankkártya",
   COD: "Utánvét",
   PAY_AT_STORE: "Fizetés a boltban",
+  BANK_TRANSFER: "Előre utalás",
 };
 
 const H2 = 'style="font-size:16px;margin:20px 0 8px;"';
@@ -290,6 +294,9 @@ const paymentSentence = (role: WebshopPaymentRole | null): string | null => {
       return "Az összeget a csomag átvételekor fizeted.";
     case "PAY_AT_STORE":
       return "Az összeget a boltban, átvételkor fizeted.";
+    // bb3a6bd5: the commerce wording (#506), letter for letter
+    case "BANK_TRANSFER":
+      return "Az összeget előre, banki átutalással fizeted: a díjbekérőt emailben küldjük, 8 napos fizetési határidővel. A rendelést a befizetés beérkezése után teljesítjük.";
     default:
       return null;
   }
@@ -304,6 +311,8 @@ const SPLIT_PAYMENT_SENTENCE: Record<WebshopSplitPayment, string> = {
   card: "A kártyádról az első részért csak annak az összegét vonjuk le, amikor a csomag elindul. A második részhez, amikor készen áll a szállításra, emailben fizetési linket küldünk.",
   cod: "Mindkét részt a csomag átvételekor fizeted, a saját összegét. Külön utánvét-díjat nem számolunk fel.",
   store: "Mindkét részt a boltban fizeted, átvételkor.",
+  transfer:
+    "Mindkét részt előre, banki átutalással fizeted, mindegyiket a saját összegével. A második részhez külön díjbekérőt küldünk.",
 };
 
 const ordersLabel = (id: number | string, other: number | string | null) =>
@@ -797,8 +806,16 @@ function list<T>(
 }
 function role(v: unknown, path: string): WebshopPaymentRole | null {
   if (v === null || v === undefined) return null;
-  if (v === "ONLINE_CARD" || v === "COD" || v === "PAY_AT_STORE") return v;
-  throw new FactsError(`${path}: ONLINE_CARD, COD, PAY_AT_STORE vagy null`);
+  if (
+    v === "ONLINE_CARD" ||
+    v === "COD" ||
+    v === "PAY_AT_STORE" ||
+    v === "BANK_TRANSFER"
+  )
+    return v;
+  throw new FactsError(
+    `${path}: ONLINE_CARD, COD, PAY_AT_STORE, BANK_TRANSFER vagy null`,
+  );
 }
 function order(v: unknown, path: string): WebshopMailOrder {
   const o = obj(v, path);
@@ -960,7 +977,7 @@ function parseTemplateFacts(
         typeof payment !== "string" ||
         !(WEBSHOP_SPLIT_PAYMENTS as readonly string[]).includes(payment)
       )
-        throw new FactsError("facts.payment: card, cod vagy store");
+        throw new FactsError("facts.payment: card, cod, store vagy transfer");
       return {
         template,
         order: order(f.order, "facts.order"),
