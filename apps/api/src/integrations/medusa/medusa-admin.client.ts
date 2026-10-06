@@ -1072,6 +1072,30 @@ export interface MedusaAdminClient {
    * KULONBSEGET irja ki ("mar igy allt" kontra "most allitottuk be"), es ahhoz
    * kell egy kiindulasi allapot.
    */
+  /** A bolt EGYETLEN alapértelmezett szállítási profilja, vagy `null`. */
+  defaultShippingProfileId(): Promise<string | null>;
+  /** Egy lap termék a szállítási profiljukkal. */
+  listProductShippingProfiles(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; shipping_profile?: { id: string } | null }[];
+    count: number;
+  }>;
+  productShippingProfileId(productId: string): Promise<string | null>;
+  /** Egy lap termék a változatai SKU-jával: a kötés-sor nélküli párosításhoz. */
+  listProductSkus(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    count: number;
+  }>;
+  /** A termék kötése egy szállítási profilhoz. EZ IR A BOLTI OLDALRA. */
+  setProductShippingProfile(
+    productId: string,
+    shippingProfileId: string,
+  ): Promise<void>;
   fetchShippingAttributes(
     productId: string,
   ): Promise<MedusaShippingAttributeRow>;
@@ -2107,6 +2131,72 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "POST", body: JSON.stringify(input) },
     );
     return body.product;
+  }
+
+  /**
+   * A BOLT ALAPÉRTELMEZETT SZÁLLÍTÁSI PROFILJA (kártya 2a7f2313). A commerce
+   * seedje az ÖSSZES szállítási módot erre az egyre teszi
+   * (`initial-data-seed.ts`), és a Medusa csak olyan terméket enged
+   * megrendelni, amelyik profilhoz kötött. `null`, ha nem pontosan egy van:
+   * akkor a hívó nem választ.
+   */
+  async defaultShippingProfileId(): Promise<string | null> {
+    const body = await this.request<{
+      shipping_profiles: { id: string; type: string }[];
+    }>("/admin/shipping-profiles?limit=50");
+    const defaults = body.shipping_profiles.filter((p) => p.type === "default");
+    return defaults.length === 1 ? defaults[0]!.id : null;
+  }
+
+  /** Egy lap termék a szállítási profiljukkal (`*shipping_profile`: reláció). */
+  async listProductShippingProfiles(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; shipping_profile?: { id: string } | null }[];
+    count: number;
+  }> {
+    const params = new URLSearchParams({
+      fields: "id,*shipping_profile",
+      offset: String(offset),
+      limit: String(limit),
+    });
+    return this.request(`/admin/products?${params.toString()}`);
+  }
+
+  async listProductSkus(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    count: number;
+  }> {
+    const params = new URLSearchParams({
+      fields: "id,*variants",
+      offset: String(offset),
+      limit: String(limit),
+    });
+    return this.request(`/admin/products?${params.toString()}`);
+  }
+
+  /** Egy termék szállítási profilja, a visszaméréshez. */
+  async productShippingProfileId(productId: string): Promise<string | null> {
+    const body = await this.request<{
+      product: { shipping_profile?: { id: string } | null };
+    }>(
+      `/admin/products/${encodeURIComponent(productId)}?fields=id,*shipping_profile`,
+    );
+    return body.product.shipping_profile?.id ?? null;
+  }
+
+  async setProductShippingProfile(
+    productId: string,
+    shippingProfileId: string,
+  ): Promise<void> {
+    await this.request(`/admin/products/${encodeURIComponent(productId)}`, {
+      method: "POST",
+      body: JSON.stringify({ shipping_profile_id: shippingProfileId }),
+    });
   }
 
   async fetchShippingAttributes(

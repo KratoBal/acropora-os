@@ -209,4 +209,56 @@ describe("a szállítási jellemzők származtatott bolti átvétele", () => {
     assert.deepEqual(outcome, { action: "skipped", reason: "no-profile" });
     assert.deepEqual(f.hivasok, []);
   });
+
+  /*
+  KOTES-SOR NELKUL A SKU-PAR VISZI (kartya 2a7f2313). MI PIROSIT: ha a
+  kotes-sor hianyaban a SKU-parral sem ir; ha a SKU-par felulirja a meglevo
+  kotes-sort.
+*/
+  describe("a SKU-pár mint tartalék", () => {
+    it("kötés-sor nélkül a SKU-pár bolti termékére ír", async () => {
+      const f = fakes({ link: null });
+      const outcome = await f.service.project(
+        "prod-os-1",
+        PROFIL,
+        true,
+        false,
+        "prod_by_sku",
+      );
+      assert.deepEqual(
+        [
+          outcome.action,
+          "medusaProductId" in outcome ? outcome.medusaProductId : null,
+        ],
+        ["applied", "prod_by_sku"],
+      );
+    });
+
+    it("ha van kötés-sor, az nyer a SKU-pár ellen", async () => {
+      const f = fakes({});
+      const outcome = await f.service.project(
+        "prod-os-1",
+        PROFIL,
+        true,
+        false,
+        "prod_by_sku",
+      );
+      assert.equal(
+        "medusaProductId" in outcome ? outcome.medusaProductId : null,
+        "prod_medusa_1",
+      );
+    });
+
+    it("se kötés, se SKU-pár: kihagyja, mint eddig", async () => {
+      const f = fakes({ link: null });
+      const outcome = await f.service.project(
+        "prod-os-1",
+        PROFIL,
+        true,
+        false,
+        null,
+      );
+      assert.deepEqual(outcome, { action: "skipped", reason: "no-link" });
+    });
+  });
 });
