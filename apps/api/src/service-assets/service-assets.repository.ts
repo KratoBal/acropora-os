@@ -1,4 +1,5 @@
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { isTextReadable } from "./asset-document-text.js";
 import {
   ASSET_DOCUMENT_TYPES,
   rowBelongsToScope,
@@ -2483,6 +2484,7 @@ export class ServiceAssetsRepository extends Repository {
         contentType: true,
         content: true,
         storageKey: true,
+        sha256: true,
         type: true,
       },
     });
@@ -2493,6 +2495,7 @@ export class ServiceAssetsRepository extends Repository {
       contentType: row.contentType,
       content: row.content,
       storageKey: row.storageKey,
+      sha256: row.sha256,
     };
   }
 
@@ -2891,6 +2894,7 @@ export class ServiceAssetsRepository extends Repository {
       sizeBytes: document.sizeBytes,
       sha256: document.sha256,
       caption: document.caption,
+      textReadable: isTextReadable(document.contentType),
       uploadedBy: document.uploadedBy
         ? {
             id: document.uploadedBy.id,
