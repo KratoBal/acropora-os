@@ -296,6 +296,15 @@ export class MessagesService {
       !(await this.repository.activeMembership(conversationId, user.id))
     )
       throw notFound();
+    /*
+      A PARTNERES BESZÉLGETÉS NEM TÖRÖLHETŐ, sem a létrehozójának, sem adminnak
+      (acrobot döntése, 2026-10-06 15:46): a partner üzenetei a hibajegyhez
+      tartoznak, és a törlés a portálról is eltüntetné őket.
+    */
+    if (row.audience === "PARTNER")
+      throw new ForbiddenException(
+        "A partneres beszélgetés nem törölhető: a partner üzenetei a hibajegyhez tartoznak.",
+      );
     if (!mayDeleteConversation(user, row))
       throw new ForbiddenException(
         "Ezt a beszélgetést csak a létrehozója vagy egy admin törölheti.",
@@ -1629,6 +1638,13 @@ export class MessagesService {
       });
     }
     await this.repository.removeMembers(conversationId, leaving);
+    // a kieső tag listájáról push nélkül tűnik el; ha épp nyitva van, a kliens
+    // a listára lép (ugyanaz az esemény, mint a törlésnél, #1532)
+    if (leaving.length > 0)
+      this.bus.publish(leaving, {
+        type: "conversation.deleted",
+        conversationId,
+      });
     if (joining.length > 0 || leaving.length > 0)
       await this.repository.audit({
         userId: actorUserId,
@@ -2012,10 +2028,13 @@ export function mayDeleteConversation(
   user: AuthenticatedUser,
   row: {
     type: string;
+    /** A hibajegy partneres beszélgetése senkinek nem törölhető (084e2c24). */
+    audience?: string;
     createdByUserId: string;
     members: readonly { userId: string }[];
   },
 ): boolean {
+  if (row.audience === "PARTNER") return false;
   if (hasPermission(user, PERMISSIONS.MESSAGES_ADMIN)) return true;
   if (row.createdByUserId === user.id) return true;
   return (

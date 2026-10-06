@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { InMemoryMessageEventBus } from "./message-event-bus.js";
-import { MessagesService } from "./messages.service.js";
+import { MessagesService, mayDeleteConversation } from "./messages.service.js";
 
 /*
   A HIBAJEGY PARTNERES BESZÉLGETÉSE (kártya 084e2c24, a terv 2.5 pontja;
@@ -336,11 +336,24 @@ function fake() {
       conversationId: string;
       metadata: unknown;
     }) => void audits.push(input),
+    deleteConversation: async () => {
+      throw new Error("a partneres beszélgetés nem törölhető");
+    },
     unreadCounts: async () => new Map<string, number>(),
     unreadTotals: async () => ({}),
     messagesByIds: async () => [],
   };
   const bus = new InMemoryMessageEventBus();
+  const events: { to: string[]; type: string; conversationId: string }[] = [];
+  const publish = bus.publish.bind(bus);
+  bus.publish = (ids, event) => {
+    events.push({
+      to: [...ids].sort(),
+      type: event.type,
+      conversationId: (event as { conversationId: string }).conversationId,
+    });
+    publish(ids, event);
+  };
   const service = new MessagesService(
     repo as never,
     bus,
@@ -351,6 +364,7 @@ function fake() {
   );
   return {
     service,
+    events,
     conversations,
     messages,
     audits,
@@ -557,7 +571,19 @@ describe("the partner's message", () => {
 
     // a hibajegyet „b”-re delegálták át
     f.setStaff(["b"]);
+    f.events.length = 0;
     await send(f, "második");
+    // a kiesők listájáról push nélkül tűnik el (ugyanaz az esemény, mint a törlésnél)
+    assert.deepEqual(
+      f.events.filter((e) => e.type === "conversation.deleted"),
+      [
+        {
+          to: ["a", "vezeto"],
+          type: "conversation.deleted",
+          conversationId: conv.id,
+        },
+      ],
+    );
     assert.deepEqual(
       conv.members.filter((m) => !m.leftAt).map((m) => m.userId),
       ["b"],
@@ -630,6 +656,38 @@ describe("the partner conversation on the internal side", () => {
     assert.equal(
       await status(f.service.openPartnerConversation(partnerUser, "job1")),
       403,
+    );
+  });
+
+  it("nobody can delete it, neither its creator nor an admin (acrobot, 15:46)", async () => {
+    const f = fake();
+    const opener = user("a");
+    const { id } = await f.service.openPartnerConversation(opener, "job1");
+    assert.equal(f.conversations.get(id)!.createdByUserId, "a");
+    const admin = user("b", { role: "ADMIN" });
+    // a mondat a partneres beszélgetésről szól, nem a „csak a létrehozója vagy
+    // admin” szabályról: itt a létrehozó és az admin sem törölheti
+    for (const who of [opener, admin])
+      await assert.rejects(
+        f.service.deleteConversation(who, id),
+        (error: unknown) =>
+          (error as { getStatus?: () => number }).getStatus?.() === 403 &&
+          /partneres beszélgetés nem törölhető/.test((error as Error).message),
+      );
+    assert.equal(f.conversations.get(id)!.archivedAt, null);
+    const row = { type: "GROUP", createdByUserId: "a", members: [] };
+    assert.equal(
+      mayDeleteConversation(admin, { ...row, audience: "PARTNER" }),
+      false,
+    );
+    assert.equal(
+      mayDeleteConversation(opener, { ...row, audience: "PARTNER" }),
+      false,
+    );
+    // a kontroll: ugyanez belső beszélgetésnél törölhető
+    assert.equal(
+      mayDeleteConversation(admin, { ...row, audience: "INTERNAL" }),
+      true,
     );
   });
 
