@@ -408,6 +408,7 @@ export function toDetail(input: {
   deliveryNote?: WebshopOrderDetail["deliveryNote"];
   /** A díjbekérő (bb3a6bd5); nincs: `null`. */
   proforma?: WebshopOrderDetail["proforma"];
+  transferReceipt?: WebshopOrderDetail["transferReceipt"];
   split?: WebshopOrderDetail["split"];
   /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
   signals?: MedusaOrderOverviewRow["customer_signals"] | null;
@@ -477,6 +478,7 @@ export function toDetail(input: {
       orderPaymentProviderId(order.payment_collections?.[0]) ===
       BANK_TRANSFER_PROVIDER_ID,
     proforma: input.proforma ?? null,
+    transferReceipt: input.transferReceipt ?? null,
     parcel: facts.parcel,
     cardPayment: cardPaymentOf(input.orderPayment ?? null, code, now),
     osCustomer: input.osCustomer ?? null,

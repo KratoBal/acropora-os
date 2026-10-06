@@ -125,6 +125,8 @@ export interface WebshopOrderFacts {
   parcel: WebshopOrderDetail["parcel"];
   /** A díjbekérő határideje elmúlt, és a rendelés még áll (bb3a6bd5). */
   proformaExpired: boolean;
+  /** Az előre utalás pénze megjött (bb3a6bd5). */
+  transferReceived: boolean;
 }
 export const NO_FACTS: WebshopOrderFacts = {
   invoiceNumber: null,
@@ -132,6 +134,7 @@ export const NO_FACTS: WebshopOrderFacts = {
   hasParcel: false,
   parcel: null,
   proformaExpired: false,
+  transferReceived: false,
 };
 
 /** A tények a rendelés számlájából és aktív csomagjából. */
@@ -139,6 +142,7 @@ export function factsOf(
   invoice: WebshopOrderDetail["invoice"] | undefined,
   parcel: WebshopOrderDetail["parcel"] = null,
   proformaExpired = false,
+  transferReceived = false,
 ): WebshopOrderFacts {
   return {
     invoiceNumber:
@@ -146,7 +150,9 @@ export function factsOf(
     invoice: invoice ?? null,
     hasParcel: !!parcel?.parcelNumber,
     parcel,
-    proformaExpired,
+    // a kifizetett díjbekérő nem jár le
+    proformaExpired: proformaExpired && !transferReceived,
+    transferReceived,
   };
 }
 
@@ -211,6 +217,7 @@ export function toListItem(
     invoiceNumber: facts.invoiceNumber,
     parcelNumber: facts.parcel?.parcelNumber ?? null,
     proformaExpired: facts.proformaExpired,
+    transferReceived: facts.transferReceived,
     status: {
       code,
       label: code ? WEBSHOP_ORDER_STATUS_LABELS[code] : null,

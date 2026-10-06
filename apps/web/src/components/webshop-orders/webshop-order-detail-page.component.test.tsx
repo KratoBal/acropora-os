@@ -42,6 +42,7 @@ const api = vi.hoisted(() => ({
   issueInvoice: vi.fn(),
   issueDeliveryNote: vi.fn(),
   sendProforma: vi.fn(),
+  recordTransferReceived: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
@@ -168,6 +169,7 @@ const detail: WebshopOrderDetail = {
   deliveryNote: null,
   bankTransfer: false,
   proforma: null,
+  transferReceipt: null,
   parcel: null,
   cardPayment: null,
   osCustomer: null,
@@ -250,6 +252,7 @@ beforeEach(() => {
   api.issueInvoice.mockReset();
   api.issueDeliveryNote.mockReset();
   api.sendProforma.mockReset();
+  api.recordTransferReceived.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
   api.releaseParcel.mockReset();
@@ -2020,6 +2023,7 @@ describe("the proforma on the Fizetés card", () => {
       dueDate: "2026-10-14",
       emailStatus: "SENT",
       expired: false,
+      grossAmount: "20840.0000",
       ...over,
     },
   });
@@ -2112,6 +2116,97 @@ describe("the proforma on the Fizetés card", () => {
       expect(button === null || (button as HTMLButtonElement).disabled).toBe(
         true,
       );
+      view.unmount();
+    }
+  });
+
+  /*
+    MEGJÖTT A PÉNZ (bb3a6bd5). MI PIROSÍT: a kifizetett rendelésen „Utalásra
+    vár”, „Lejárt díjbekérő” vagy küldő gomb áll; a kézi rögzítés hivatkozás
+    nélkül vagy nem a megadott nappal megy; jog vagy kiállított díjbekérő
+    nélkül is van gomb.
+  */
+  const paid = (
+    over: Partial<NonNullable<WebshopOrderDetail["transferReceipt"]>> = {},
+  ): WebshopOrderDetail => ({
+    ...issued({ expired: false }),
+    transferReceipt: {
+      source: "MANUAL",
+      receivedOn: "2026-10-06",
+      reference: "OTP 0013",
+      amount: "20840.0000",
+      currency: "HUF",
+      recordedBy: "Teszt Elek",
+      ...over,
+    },
+  });
+
+  it("a paid order says Kifizetve, with the day, the reference and who, and offers nothing to send", async () => {
+    api.detail.mockResolvedValue(paid());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).getByText("Kifizetve")).toBeTruthy();
+    expect(within(payment).queryByText("Utalásra vár")).toBeNull();
+    expect(within(payment).queryByText("Lejárt díjbekérő")).toBeNull();
+    expect(within(payment).getByText("2026-10-06")).toBeTruthy();
+    expect(within(payment).getByText("OTP 0013")).toBeTruthy();
+    expect(within(payment).getByText("Teszt Elek")).toBeTruthy();
+    expect(
+      within(payment).queryByRole("button", { name: /Díjbekérő|Utalás/ }),
+    ).toBeNull();
+  });
+
+  it("a bank pairing is named as such", async () => {
+    api.detail.mockResolvedValue(
+      paid({ source: "BANK_PAIRING", recordedBy: null }),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(within(await card()).getByText("Banki párosítás")).toBeTruthy();
+  });
+
+  it("records a transfer by hand: today by default, a reference required, then Kifizetve", async () => {
+    api.detail.mockResolvedValue(issued());
+    api.recordTransferReceived.mockResolvedValue(paid());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Utalás beérkezett" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Utalás beérkezett" });
+    expect(dialog.textContent).toMatch(/20\s?840/);
+    const day = within(dialog).getByLabelText(
+      "A jóváírás napja",
+    ) as HTMLInputElement;
+    expect(day.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const save = within(dialog).getByRole("button", { name: "Mentés" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText("Banki hivatkozás"), {
+      target: { value: "  OTP 0013 " },
+    });
+    fireEvent.click(save);
+    expect(await within(payment).findByText("Kifizetve")).toBeTruthy();
+    expect(api.recordTransferReceived).toHaveBeenCalledWith(
+      "token",
+      "order_38",
+      { receivedOn: day.value, reference: "OTP 0013" },
+    );
+  });
+
+  it("no Utalás beérkezett before the proforma is issued, or without the billing rights", async () => {
+    for (const [order, role] of [
+      [transfer, "OWNER"],
+      [issued(), "SALES"],
+    ] as const) {
+      auth.session = session(role);
+      api.detail.mockResolvedValue(order);
+      const view = render(
+        createElement(WebshopOrderDetailPage, { id: "order_38" }),
+      );
+      expect(
+        within(await card()).queryByRole("button", {
+          name: "Utalás beérkezett",
+        }),
+      ).toBeNull();
       view.unmount();
     }
   });

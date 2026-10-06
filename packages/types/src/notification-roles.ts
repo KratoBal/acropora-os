@@ -11,7 +11,10 @@
  */
 export interface NotificationRoleInfo {
   /** Az adatbazis enum erteke. */
-  readonly value: "SERVICE_JOB_OPENED" | "MATERIAL_REQUEST_CREATED";
+  readonly value:
+    | "SERVICE_JOB_OPENED"
+    | "MATERIAL_REQUEST_CREATED"
+    | "WEBSHOP_TRANSFER_RECEIVED";
   /** A jelolonegyzet felirata. */
   readonly label: string;
   /** Mit jelent, ha be van jelolve -- a felirat ala. */
@@ -30,6 +33,12 @@ export const NOTIFICATION_ROLES: readonly NotificationRoleInfo[] = [
     label: "Anyagigény-felelős",
     description:
       "Push és e-mail értesítést kap, amikor egy szervizes anyagigényt küld a munkalapról. Ez csak az értesülés szerepe -- a beérkezés jelölése külön jogosultság, ettől a jelölőtől függetlenül állítható.",
+  },
+  {
+    value: "WEBSHOP_TRANSFER_RECEIVED",
+    label: "Webshop befizetés-felelős",
+    description:
+      "Push értesítést kap, amikor egy előre utalásos webshop rendelés pénze megjön (a banki párosításból vagy kézi rögzítésből).",
   },
 ] as const;
 

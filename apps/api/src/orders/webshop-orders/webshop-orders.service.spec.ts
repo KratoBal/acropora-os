@@ -38,6 +38,7 @@ const thresholdsNow: { list: WebshopStaleThreshold[] } = {
 };
 /** A tárolt díjbekérők a hamis repositoryban; teszt állíthatja. */
 const proformasNow: { map: Map<string, unknown> } = { map: new Map() };
+const receiptsNow: { map: Map<string, unknown> } = { map: new Map() };
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
@@ -45,6 +46,7 @@ const NO_AUDIT = {
   osCustomerByKey: async () => null,
   internalNote: async () => null,
   proformas: async () => proformasNow.map,
+  transferReceipts: async () => receiptsNow.map,
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -281,6 +283,47 @@ describe("the expired proforma on the list", () => {
   });
 });
 
+describe("a received transfer on the list", () => {
+  /*
+    „KIFIZETVE” (bb3a6bd5). MI PIROSÍT: a beérkezett utalás nem jelölődik; a
+    kifizetett díjbekérő lejártnak látszik; egy másik rendelés is
+    kifizetettnek látszik.
+  */
+  it("marks the paid order, and a paid proforma is no longer expired", async () => {
+    proformasNow.map = new Map<string, unknown>([
+      [
+        "order_1",
+        {
+          id: "doc_1",
+          status: "ISSUED",
+          number: "D-1",
+          dueDate: new Date("2026-10-01T10:00:00.000Z"),
+          emailStatus: "SENT",
+        },
+      ],
+    ]);
+    receiptsNow.map = new Map<string, unknown>([["order_1", {}]]);
+    try {
+      const result = await service([order(1), order(2)]).orders.list(
+        { view: "all" },
+        NOW,
+      );
+      assert.deepEqual(
+        result.items
+          .map((item) => [item.id, item.transferReceived, item.proformaExpired])
+          .sort(),
+        [
+          ["order_1", true, false],
+          ["order_2", false, false],
+        ],
+      );
+    } finally {
+      proformasNow.map = new Map();
+      receiptsNow.map = new Map();
+    }
+  });
+});
+
 describe("WebshopOrdersService.detail", () => {
   const detailOrder = (
     id: string,
@@ -502,6 +545,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       osCustomerByKey: async () => null,
       internalNote: async () => null,
       proformas: async () => new Map(),
+      transferReceipts: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(

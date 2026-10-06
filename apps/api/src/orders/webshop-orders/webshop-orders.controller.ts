@@ -40,6 +40,8 @@ import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 import { loadTransferPairing } from "./webshop-transfer-pairing.dry-run.js";
+import { WebshopOrderTransferService } from "./webshop-order-transfer.service.js";
+import { WebshopTransferReceiptDto } from "./dto/webshop-transfer-receipt.dto.js";
 
 /** Webshop / Rendelések: az új webshop rendelései (nem a UNAS-é, az a `integrations/unas/orders`). */
 @Controller("webshop-orders")
@@ -53,6 +55,7 @@ export class WebshopOrdersController {
     private readonly edits: WebshopOrderEditsService,
     private readonly splits: WebshopOrderSplitService,
     private readonly methods: WebshopOrderShippingMethodService,
+    private readonly transfers: WebshopOrderTransferService,
   ) {}
 
   /**
@@ -296,6 +299,21 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.invoices.issueDeliveryNote(id, user);
+  }
+
+  /**
+   * „UTALÁS BEÉRKEZETT” (bb3a6bd5): a kézi tartalék, ha a banki párosítás nem
+   * találta meg a pénzt. Ugyanaz a jog, mint a díjbekérőnél.
+   */
+  @Post(":id/transfer-received")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  recordTransferReceived(
+    @Param("id") id: string,
+    @Body() body: WebshopTransferReceiptDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.transfers.recordManual(id, body, user);
   }
 
   /**

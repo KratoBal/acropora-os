@@ -211,6 +211,7 @@ export class WebshopOrdersService {
       deliveryNotes,
       splitDisplayIds,
       proformas,
+      receipts,
     ] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
@@ -237,6 +238,7 @@ export class WebshopOrdersService {
         ),
       ),
       this.repository.proformas([id]),
+      this.repository.transferReceipts([id]),
     ]);
     /*
       A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
@@ -262,7 +264,11 @@ export class WebshopOrdersService {
     const shipping = shippingOf(order.shipping_methods ?? []);
     const plan = shipping.storePickup ? null : parcelInputOf(order);
     const proformaRow = proformas.get(id);
-    const proforma = proformaRow ? proformaOf(proformaRow, now) : null;
+    const transferReceipt = receipts.get(id) ?? null;
+    const shown = proformaRow ? proformaOf(proformaRow, now) : null;
+    // a kifizetett díjbekérő nem jár le (a lista ugyanígy dönt, `factsOf`)
+    const proforma =
+      shown && transferReceipt ? { ...shown, expired: false } : shown;
     return toDetail({
       signals,
       dispatchPreview: plan
@@ -276,6 +282,7 @@ export class WebshopOrdersService {
       internalNote,
       deliveryNote: deliveryNotes.get(id) ?? null,
       proforma,
+      transferReceipt,
       split: {
         from: splitIds.from
           ? { id: splitIds.from, displayId: splitDisplayIds[0] ?? null }
@@ -294,6 +301,7 @@ export class WebshopOrdersService {
         invoices.get(id),
         parcelOf(parcels[id]),
         proforma?.expired ?? false,
+        transferReceipt !== null,
       ),
       customerOrderCount,
       relatedDisplayId: related?.display_id ?? null,
@@ -415,12 +423,14 @@ export class WebshopOrdersService {
   ): Promise<WebshopOrderListResponse> {
     const { rows, truncated } = await this.readAll();
     const ids = rows.map((row) => row.id);
-    const [invoices, parcels, thresholds, proformas] = await Promise.all([
-      this.repository.invoices(ids),
-      this.parcels.activeParcelsFor(ids),
-      this.repository.staleThresholds(),
-      this.repository.proformas(ids),
-    ]);
+    const [invoices, parcels, thresholds, proformas, receipts] =
+      await Promise.all([
+        this.repository.invoices(ids),
+        this.parcels.activeParcelsFor(ids),
+        this.repository.staleThresholds(),
+        this.repository.proformas(ids),
+        this.repository.transferReceipts(ids),
+      ]);
     const hours = staleHoursOf(thresholds);
     const items = rows.map((row) =>
       toListItem(
@@ -429,6 +439,7 @@ export class WebshopOrdersService {
           invoices.get(row.id),
           parcelOf(parcels[row.id]),
           proformaExpiredOf(proformas.get(row.id), now),
+          receipts.has(row.id),
         ),
         now,
         hours,

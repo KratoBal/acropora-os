@@ -18,6 +18,7 @@ import type {
   WebshopOrderSplitInput,
   WebshopOrderSplitResult,
   WebshopPickupPointSearch,
+  WebshopTransferReceiptInput,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -256,6 +257,18 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/proforma`,
       token,
       { method: "POST" },
+    );
+  },
+  /** „Utalás beérkezett” kézzel (bb3a6bd5); a válasz a friss adatlap. */
+  recordTransferReceived(
+    token: string,
+    id: string,
+    input: WebshopTransferReceiptInput,
+  ) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/transfer-received`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
     );
   },
   /** Csomagfeladás a szállítónál; a válasz a friss adatlap és a „Feladtuk” levél sorsa. */

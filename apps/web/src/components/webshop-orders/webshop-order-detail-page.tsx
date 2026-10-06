@@ -30,6 +30,7 @@ import {
   type WebshopShippingOptions,
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
+  type WebshopTransferReceiptInput,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -50,6 +51,7 @@ import {
   MethodDialog,
   NoteDialog,
   PointDialog,
+  TransferReceivedDialog,
 } from "./webshop-order-edits";
 import {
   OrderLinesTable,
@@ -388,6 +390,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.sendProforma(token, id));
     setNow(Date.now());
   };
+  const recordTransfer = async (input: WebshopTransferReceiptInput) => {
+    setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
+    setNow(Date.now());
+  };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
@@ -549,6 +555,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canIssue={canIssue}
           canSendProforma={canSendProforma}
           onSendProforma={sendProforma}
+          onRecordTransfer={recordTransfer}
           onChangeStatus={changeStatus}
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
@@ -749,6 +756,11 @@ function InvoiceCard({
   );
 }
 
+/** ÉÉÉÉ-HH-NN, budapesti fali óra szerint (a kézi rögzítés napja). */
+const BUDAPEST_DAY = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Budapest",
+});
+
 /** A díjbekérő levelének állapota (`BillingEmailStatus`). */
 const PROFORMA_MAIL: Record<string, string> = {
   SENT: "Kiküldve",
@@ -766,24 +778,34 @@ const PROFORMA_MAIL: Record<string, string> = {
  */
 function ProformaSection({
   order,
+  now,
   canSend,
+  canRecord,
   onSend,
+  onRecord,
 }: {
   order: WebshopOrderDetail;
+  now: number;
   canSend: boolean;
+  /** Az „Utalás beérkezett” joga (a rendelés kezelése és a kiállítás joga). */
+  canRecord: boolean;
   onSend: () => Promise<void>;
+  onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // VALÓDI BIZONYLAT ÉS VALÓDI LEVÉL (acrobot 26827): egy kattintás nem elég
   const [confirming, setConfirming] = useState(false);
+  const [recording, setRecording] = useState(false);
   const proforma = order.proforma;
+  const receipt = order.transferReceipt;
   const issued = proforma?.status === "ISSUED";
   const sentBefore = issued && proforma.emailStatus !== null;
   const stuck =
     proforma?.status === "ISSUING" || proforma?.status === "ISSUE_FAILED";
   const sending = proforma?.emailStatus === "SENDING";
   const closed = order.status.code === "closed_unsuccessfully";
+  const today = BUDAPEST_DAY.format(new Date(now));
   const label = sentBefore ? "Díjbekérő újraküldése" : "Díjbekérő kiküldése";
   const send = async () => {
     setBusy(true);
@@ -801,7 +823,11 @@ function ProformaSection({
   };
   return (
     <div className="mt-4 space-y-3 border-t border-pilot-grey-100 pt-4">
-      {proforma?.expired ? (
+      {receipt ? (
+        <span className="inline-block rounded-full bg-pilot-green-50 px-3 py-1 text-xs font-medium text-pilot-green-700">
+          Kifizetve
+        </span>
+      ) : proforma?.expired ? (
         <span className="inline-block rounded-full bg-pilot-red-50 px-3 py-1 text-xs font-medium text-pilot-red-700">
           Lejárt díjbekérő
         </span>
@@ -830,6 +856,22 @@ function ProformaSection({
       ) : (
         <p className="text-sm text-pilot-grey-700">Még nincs díjbekérő.</p>
       )}
+      {receipt ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Beérkezett">{receipt.receivedOn}</Field>
+          <Field label="Összeg">
+            {formatMoney(Number(receipt.amount), receipt.currency)}
+          </Field>
+          <Field label="Hivatkozás">
+            <span className="break-all">{receipt.reference}</span>
+          </Field>
+          <Field label="Rögzítette">
+            {receipt.source === "BANK_PAIRING"
+              ? "Banki párosítás"
+              : (receipt.recordedBy ?? "—")}
+          </Field>
+        </div>
+      ) : null}
       {proforma ? (
         <Link
           href={`/penzugy/szamlazas/${encodeURIComponent(proforma.id)}`}
@@ -838,7 +880,7 @@ function ProformaSection({
           Megnyitás a Számlázásban
         </Link>
       ) : null}
-      {canSend && !stuck && !closed ? (
+      {canSend && !stuck && !closed && !receipt ? (
         <PilotButton
           size="regular"
           variant={sentBefore ? "secondary" : "primary"}
@@ -847,6 +889,28 @@ function ProformaSection({
         >
           {busy ? "Küldés…" : label}
         </PilotButton>
+      ) : null}
+      {canRecord && issued && !receipt && !closed ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => setRecording(true)}
+        >
+          Utalás beérkezett
+        </PilotButton>
+      ) : null}
+      {recording && proforma ? (
+        <TransferReceivedDialog
+          today={today}
+          amount={
+            proforma.grossAmount
+              ? formatMoney(Number(proforma.grossAmount), order.currency)
+              : "—"
+          }
+          onClose={() => setRecording(false)}
+          onSave={onRecord}
+        />
       ) : null}
       {error ? (
         <p
@@ -1591,6 +1655,7 @@ function OrderBody({
   canIssue,
   canSendProforma,
   onSendProforma,
+  onRecordTransfer,
   onChangeStatus,
   mailNotice,
   onResendStatusMail,
@@ -1621,6 +1686,7 @@ function OrderBody({
   canIssue: boolean;
   canSendProforma: boolean;
   onSendProforma: () => Promise<void>;
+  onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
@@ -2162,8 +2228,11 @@ function OrderBody({
             {order.bankTransfer ? (
               <ProformaSection
                 order={order}
+                now={now}
                 canSend={canSendProforma}
+                canRecord={canIssue}
                 onSend={onSendProforma}
+                onRecord={onRecordTransfer}
               />
             ) : null}
           </Card>
