@@ -31,6 +31,7 @@ import {
   WebshopOrderSplitDto,
 } from "./dto/webshop-order-edits.dto.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
+import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
@@ -47,6 +48,7 @@ export class WebshopOrdersController {
     private readonly lines: WebshopOrderLinesService,
     private readonly payments: WebshopOrderPaymentService,
     private readonly edits: WebshopOrderEditsService,
+    private readonly splits: WebshopOrderSplitService,
   ) {}
 
   /** A számlázási vagy a szállítási cím (a név is) szerkesztése. */
@@ -101,7 +103,7 @@ export class WebshopOrdersController {
     @Body() body: WebshopOrderSplitDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.edits.split(id, body, user);
+    return this.splits.split(id, body, user);
   }
 
   /** A vevő és a szállító megjegyzése (commerce #493). */

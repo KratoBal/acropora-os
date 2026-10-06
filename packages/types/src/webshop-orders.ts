@@ -614,6 +614,8 @@ export interface WebshopOrderSplitResult {
     total: number;
     /** Kártyás zárolásnál az új rendelés fizetési linkre vár. */
     awaitingPayment: boolean;
+    /** Ha fizetésre vár: a fizetési link kiment-e a vevőnek; különben `null`. */
+    link: WebshopStatusMailOutcome | null;
   };
 }
 

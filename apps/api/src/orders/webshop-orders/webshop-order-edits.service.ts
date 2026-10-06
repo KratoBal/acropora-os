@@ -11,18 +11,14 @@ import {
   type WebshopOrderAddressInput,
   type WebshopOrderDetail,
   type WebshopOrderNotesInput,
-  type WebshopOrderSplitInput,
-  type WebshopOrderSplitResult,
   type WebshopPickupPointSearch,
 } from "@acropora/types";
 
 import {
   MedusaAdminHttpError,
-  type MedusaOrderSplit,
   type MedusaPickupPointRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { addressPayloadOf } from "./webshop-order-address.rules.js";
-import { splitRequestRefusal } from "./webshop-order-lines.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import {
   WebshopOrdersService,
@@ -160,62 +156,6 @@ export class WebshopOrderEditsService {
     return this.orders.detail(id, now);
   }
 
-  /**
-   * A SZÉTBONTÁS (kártya 0a14f739 C/3; a webshop oldala murenáé, 26630): a
-   * kijelölt tételek új, kapcsolt rendelésbe kerülnek a webshopban. Az OS
-   * határa a tételeké (számla és csomag előtt), mert a bontás az eredeti
-   * tételeit csökkenti; a webshop a saját tiltásait (fizetett, vegyes kosár
-   * bolti fele, élő teljesítés) a saját mondatával adja.
-   *
-   * A `requestId` a párbeszédablaké: a webshop ugyanarra ugyanazt az új
-   * rendelést adja, tehát az újraküldés nem bont kétszer.
-   */
-  async split(
-    id: string,
-    input: WebshopOrderSplitInput,
-    user: AuthenticatedUser,
-    now = new Date(),
-  ): Promise<WebshopOrderSplitResult> {
-    const detail = await this.orders.detail(id, now);
-    if (!detail.splitEdit.allowed)
-      throw new ConflictException(detail.splitEdit.reason);
-    const refusal = splitRequestRefusal(detail.lines, input.lines);
-    if (refusal) throw new UnprocessableEntityException(refusal);
-    const client = await this.orders.adminClient();
-    let answer: MedusaOrderSplit;
-    try {
-      answer = await client.splitOrder(id, {
-        lines: input.lines.map((line) => ({
-          item_id: line.itemId,
-          quantity: line.quantity,
-        })),
-        actor: user.displayName?.trim() || user.email,
-        request_id: input.requestId,
-      });
-    } catch (error) {
-      throw refusalOf(error, "A rendelés nem lett szétbontva");
-    }
-    await this.repository.recordOrderEdit({
-      userId: user.id,
-      orderId: id,
-      action: "split",
-      before: {
-        createdOrderId: answer.order_id,
-        lines: input.lines,
-        total: detail.totals.total,
-      },
-    });
-    return {
-      order: await this.orders.detail(id, now),
-      created: {
-        id: answer.order_id,
-        displayId: answer.display_id ?? null,
-        total: Number(answer.total),
-        awaitingPayment: answer.payment_state === "awaiting_payment",
-      },
-    };
-  }
-
   async saveNotes(
     id: string,
     input: WebshopOrderNotesInput,
@@ -253,7 +193,7 @@ export class WebshopOrderEditsService {
 /** Egy keresés legfeljebb ennyi pontot ad (a pénztár alapértéke körül). */
 export const POINT_PAGE = 20;
 
-function pointOptionOf(row: MedusaPickupPointRow) {
+export function pointOptionOf(row: MedusaPickupPointRow) {
   return {
     id: row.id,
     name: row.name,
@@ -271,7 +211,7 @@ function pointOptionOf(row: MedusaPickupPointRow) {
  * választható pont) is; 5xx-re, 503-ra (a fuvarozó listája) „most nem
  * érhető el”. Minden más hiba változatlanul megy tovább.
  */
-function refusalOf(error: unknown, what: string): unknown {
+export function refusalOf(error: unknown, what: string): unknown {
   if (!(error instanceof MedusaAdminHttpError)) return error;
   const message = webshopErrorMessage(error.body);
   if (error.status === 404 || error.status === 409)
