@@ -1117,6 +1117,14 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
           return sor;
         },
       },
+      /*
+        A SZÁLLÍTÁS FORRÁSAI A LÉTREHOZÁSKOR (kártya 2a7f2313): üresen, tehát
+        a termék korlátozás nélkül megy ki. Ha hiányoznának, az osztály
+        kiírása elhasalna, és a hiba csak a kimenet egy sorában látszana.
+      */
+      productCategory: { findMany: async () => [] },
+      productShippingProfile: { findMany: async () => [] },
+      unasProductSnapshot: { findMany: async () => [] },
       externalReference: {
         findMany: async (args: unknown) => {
           hivasok.push({ metodus: "externalReference.findMany", args });
@@ -1292,6 +1300,16 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * `boltiFetch` a cimet es a metodust orzi, tehat rajta egy hianyzo kulcs
    * eszrevetlen marad.
    */
+  /** A bolt szállítási jelzői egy új terméken: semmi nincs bekapcsolva. */
+  const SZALLITAS_ALAP = {
+    id: null,
+    product_id: "prod_medusa_1",
+    pickup_only: false,
+    foxpost_forbidden: false,
+    is_heavy: false,
+    is_frozen: false,
+  };
+
   function boltiFetchTorzzsel(
     keresek: { url: string; method: string; body: unknown }[],
   ): typeof fetch {
@@ -1306,6 +1324,13 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       if (cim.includes("/admin/products?")) return valasz({ products: [] });
       if (cim.endsWith("/admin/products") && method === "POST")
         return valasz({ product: { id: "prod_medusa_1" } });
+      // kártya 2a7f2313: a létrehozás profilt kér, utána az osztályt nézi
+      if (cim.includes("/admin/shipping-profiles"))
+        return valasz({
+          shipping_profiles: [{ id: "sp_default", type: "default" }],
+        });
+      if (cim.includes("/admin/shipping-attributes/"))
+        return valasz({ shipping_attribute: SZALLITAS_ALAP });
       return valasz({}, new Uint8Array([1, 2, 3]));
     }) as unknown as typeof fetch;
   }
@@ -1323,6 +1348,13 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       if (cim.includes("/admin/products?")) return valasz({ products: [] });
       if (cim.endsWith("/admin/products") && method === "POST")
         return valasz({ product: { id: "prod_medusa_1" } });
+      // kártya 2a7f2313: a létrehozás profilt kér, utána az osztályt nézi
+      if (cim.includes("/admin/shipping-profiles"))
+        return valasz({
+          shipping_profiles: [{ id: "sp_default", type: "default" }],
+        });
+      if (cim.includes("/admin/shipping-attributes/"))
+        return valasz({ shipping_attribute: SZALLITAS_ALAP });
       /** Minden mas cim a KEP lehivasa: nyers bajtok, nem JSON. */
       return valasz({}, kepBajtok ?? new Uint8Array([1, 2, 3]));
     }) as unknown as typeof fetch;
@@ -1895,8 +1927,14 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     assert.deepEqual(utak, [
       "GET /admin/sales-channels/sc_1",
       "GET /admin/products",
+      // kártya 2a7f2313: a létrehozás a bolt alapértelmezett profilját kapja
+      "GET /admin/shipping-profiles",
       "POST /admin/products",
     ]);
+    assert.match(
+      stdout.join(""),
+      /szállítás: profil: az alapértelmezett; osztály: nincs korlátozás/,
+    );
 
     /** A LEKEPEZES SORA: a vetites utan a par be van irva, es csak egyszer. */
     const irasok = hivasok.filter(

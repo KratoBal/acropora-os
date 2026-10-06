@@ -62,6 +62,11 @@ export interface MedusaShippingAttributeRow extends MedusaShippingFlags {
 
 export interface MedusaProductInput {
   title: string;
+  /**
+   * A bolt szállítási profilja (kártya 2a7f2313): profil nélkül a termék nem
+   * rendelhető meg. A 2.20.1 létrehozó validátora elfogadja.
+   */
+  shipping_profile_id?: string;
   description?: string | null;
   external_id: string;
   handle?: string;
