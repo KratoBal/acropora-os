@@ -150,6 +150,29 @@ export interface ConversationListItem {
   contextType?: ConversationContextType | null;
 }
 
+/**
+ * A HIBAJEGY PARTNERES BESZÉLGETÉSE A PARTNER PORTÁLON (kártya 084e2c24). A
+ * partner csak ezt a szűk alakot kapja: szöveg, idő, és hogy melyik oldal írta.
+ * Rendszerüzenet, csatolmány, reakció, válasz-előnézet és belső azonosító nem
+ * megy ki; a törölt üzenet kimarad.
+ */
+export interface PartnerConversationMessage {
+  id: string;
+  text: string;
+  createdAt: string;
+  editedAt: string | null;
+  /** A partner oldaláról (`PARTNER`) vagy az Acropora részéről (`ACROPORA`). */
+  side: "PARTNER" | "ACROPORA";
+  authorName: string;
+  mine: boolean;
+}
+
+/** Időrendben; amíg senki nem írt, üres, és nincs régebbi lap. */
+export interface PartnerConversationPage {
+  items: PartnerConversationMessage[];
+  olderCursor: string | null;
+}
+
 export interface ConversationListResponse {
   items: ConversationListItem[];
 }

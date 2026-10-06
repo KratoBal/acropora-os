@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
-import type { UserRole } from "@acropora/types";
+import type { ConversationAudienceValue, UserRole } from "@acropora/types";
 
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
+import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
+import { serviceJobVisibilityWhere } from "../service-jobs/service-job-visibility.js";
 
 /**
  * AZ ÜZENETEK ADATELÉRÉSE (kártya 51d7aba0). A jogosultságot nem ez dönti el:
@@ -29,6 +32,13 @@ const USER_SELECT = {
   displayName: true,
   nickname: true,
   avatarUrl: true,
+} as const;
+
+/** Aktív, partnerhez nem kötött fiók (a partneres beszélgetés belső köre). */
+const ACTIVE_INTERNAL = {
+  isActive: true,
+  customerId: null,
+  supplierId: null,
 } as const;
 
 const MESSAGE_SELECT = {
@@ -181,12 +191,15 @@ export class MessagesRepository extends Repository {
     memberIds: readonly string[];
     /** 4. fázis: a kapcsolt munkalap vagy hibajegy. */
     context?: { type: string; id: string } | null;
+    /** A hibajegy partneres beszélgetése `PARTNER` (084e2c24); minden más belső. */
+    audience?: ConversationAudienceValue;
   }): Promise<{ id: string; created: boolean }> {
+    const audience = input.audience ?? "INTERNAL";
     try {
       const row = await this.database.conversation.create({
         data: {
           type: input.type,
-          audience: "INTERNAL",
+          audience,
           title: input.title,
           description: input.description,
           createdByUserId: input.createdByUserId,
@@ -211,6 +224,7 @@ export class MessagesRepository extends Repository {
             ? await this.conversationByContext(
                 input.context.type,
                 input.context.id,
+                audience,
               )
             : null;
         if (existing) return { id: existing, created: false };
@@ -219,13 +233,18 @@ export class MessagesRepository extends Repository {
     }
   }
 
-  /** A munkalap vagy a hibajegy ÉLŐ beszélgetése (4. fázis), vagy `null`. */
+  /**
+   * A munkalap vagy a hibajegy ÉLŐ beszélgetése (4. fázis), vagy `null`. A
+   * közönség része a kérdésnek: a hibajegy belső beszélgetése nem a partneres,
+   * és fordítva (084e2c24).
+   */
   async conversationByContext(
     type: string,
     id: string,
+    audience: ConversationAudienceValue = "INTERNAL",
   ): Promise<string | null> {
     const row = await this.database.conversation.findFirst({
-      where: { contextType: type, contextId: id, archivedAt: null },
+      where: { contextType: type, contextId: id, audience, archivedAt: null },
       select: { id: true },
     });
     return row?.id ?? null;
@@ -279,6 +298,19 @@ export class MessagesRepository extends Repository {
         }),
       ),
     );
+  }
+
+  /**
+   * A PARTNERES BESZÉLGETÉS BELSŐ KÖRÉBŐL KIESETTEK (084e2c24): a tagság zárul,
+   * de a beszélgetés NEM archiválódik, akkor sem, ha belső tag nem maradt --
+   * a partner oldala a hibajegyhez kötődik, nem a tagsághoz.
+   */
+  async removeMembers(conversationId: string, userIds: readonly string[]) {
+    if (userIds.length === 0) return;
+    await this.database.conversationMember.updateMany({
+      where: { conversationId, userId: { in: [...userIds] }, leftAt: null },
+      data: { leftAt: new Date() },
+    });
   }
 
   /**
@@ -392,6 +424,60 @@ export class MessagesRepository extends Repository {
         status: true,
         createdAt: true,
         assignedUserId: true,
+        customer: { select: { displayName: true } },
+      },
+    });
+  }
+
+  /**
+   * A PARTNERES BESZÉLGETÉS BELSŐ KÖRE (084e2c24). Balázs, 2026-10-06 13:04
+   * UTC: „az kapja meg aki delegalva van a hibajegyhez” -- a hibajegy delegált
+   * kollégái (`ServiceJobAssignee`, amit a hibajegy-lista „Delegálva” oszlopa
+   * mutat). Ha nincs delegált, a „hibajegy nyílt” értesítési szerep tagjai
+   * (acrobot döntése), hogy a partner üzenete ne vesszen el. Mindkét kör
+   * csak aktív, belső fiókot ad: a tartalék akkor is életbe lép, ha delegált
+   * van, de egyik sem aktív.
+   */
+  async partnerConversationStaff(
+    serviceJobId: string,
+  ): Promise<MessagingUserRow[]> {
+    const delegated = await this.database.serviceJobAssignee.findMany({
+      where: { serviceJobId, user: ACTIVE_INTERNAL },
+      select: { user: { select: USER_SELECT } },
+    });
+    if (delegated.length > 0) return delegated.map((row) => row.user);
+    const opened = await this.database.userNotificationRole.findMany({
+      where: { role: "SERVICE_JOB_OPENED", user: ACTIVE_INTERNAL },
+      select: { user: { select: USER_SELECT } },
+    });
+    return opened.map((row) => row.user);
+  }
+
+  /**
+   * A HIBAJEGY, HA A PARTNER-FELHASZNÁLÓ MOST LÁTJA (084e2c24). Ugyanaz a
+   * feltétel, mint a portál hibajegy-listájáé és -adatlapjáé
+   * (`serviceJobVisibilityWhere`: a saját vevő vagy szállító, és a hozzárendelt
+   * helyszín-fa). Minden partneres hívás ezzel kezd, tehát egy megszűnt
+   * hozzárendelés után a beszélgetés sem látszik.
+   */
+  async serviceJobVisibleToPartner(
+    id: string,
+    input: { scope: PartnerScope; userId: string },
+  ) {
+    return this.database.serviceJob.findFirst({
+      where: {
+        AND: [
+          { id },
+          serviceJobVisibilityWhere({
+            scope: input.scope,
+            userId: input.userId,
+            unitIds: await assignedUnitIdsFor(input.userId),
+          }),
+        ],
+      },
+      select: {
+        id: true,
+        jobNumber: true,
         customer: { select: { displayName: true } },
       },
     });
