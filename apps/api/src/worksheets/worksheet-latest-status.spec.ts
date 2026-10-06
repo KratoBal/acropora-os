@@ -42,7 +42,31 @@ import test from "node:test";
  * AMI EBBŐL KÖVETKEZIK, ÉS AMI NEM. A viselkedés fedett, tehát ide NEM kell
  * második állítás ugyanarra: az csak duplikáció lenne. A lenti két sor
  * viszont MARAD, és az indoka változatlan -- az integrációs suite a
- * `pnpm test` sorában nem fut, tehát a helyi kapu egyedül ezeket látja.
+ * `pnpm test` sorában nem fut, tehát a helyi kapu egyedül ezeket látja. *
+ * === A MÁSIK `ORDER BY` IS MÉRVE (2026-10-06, kártya 73baa400) ===
+ *
+ * A tárolóban KÉT egyforma `ORDER BY "worksheetId", "version" DESC` sor áll. A
+ * fenti kör az ELSŐT mérte (a lista szűrése). A második a
+ * `countsByLatestStatus` metódusban van: abból jönnek a csempék
+ * darabszámai és a navigáció „saját piszkozat" számlálója. A lenti
+ * `LATEST_VERSION_ORDER` minta EZT NEM látja: a két egyforma sorból egy is
+ * kielégíti, tehát a második ág elírása itt zölden átmenne.
+ *
+ * A mérés-kör (`meres/munkalap-csempe-rendezes-1`, d0dbcb36, futás
+ * 37430882903) a rontás helyét a METÓDUS TÖRZSÉBŐL azonosította, nem
+ * sorszámból, és ott fordította meg a rendezést (DESC -> ASC). A jóslat az
+ * volt, hogy semmi nem pirosodik. Ez téves volt: az integrációs suite 591
+ * állításából EGY lett piros, és az a szánt okon:
+ *
+ *     not ok - worksheets: mine whose LATEST version is a draft (1 of 6)
+ *              (navigation/navigation-counters.integration.spec.ts)
+ *              2 !== 1: a lezárt lap az ELSŐ verziója szerint piszkozatnak számolódott
+ *     ok     - filters on the status of the latest version, not on any earlier one
+ *     ok     - counts what it lists
+ *
+ * A két `ok` a pozitív kontroll: a lista ága érintetlen maradt, a suite élt.
+ * A csempe-ág tehát FEDETT, a navigáció számlálóján át, mert ugyanazt a
+ * metódust hívja. Ide ezért nem kerül új állítás: duplikáció lenne.
  */
 
 const REPOSITORY = "src/worksheets/worksheets.repository.ts";
