@@ -320,6 +320,7 @@ export {
   PERMISSIONS,
   ROLE_PERMISSIONS,
   USER_ROLES,
+  ASSIGNABLE_ROLES,
 } from "./auth.js";
 export {
   isNavigationEntryVisible,
@@ -1128,6 +1129,7 @@ export { serviceJobReporterName } from "./service-job-reporter.js";
 export {
   MESSAGE_ATTACHMENTS_MAX,
   MESSAGE_REACTIONS,
+  SUTYERAK_USER_ID,
   CONVERSATION_MAX_MEMBERS,
   MESSAGE_PAGE_DEFAULT,
   MESSAGE_PAGE_MAX,

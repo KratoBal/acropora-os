@@ -28,6 +28,7 @@ export const USER_ROLES = [
   "CONTENT_AGENT",
   "PARTNER_SERVICE",
   "ASSET_IMPORT_AGENT",
+  "ASSISTANT",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
@@ -53,9 +54,20 @@ export const MACHINE_ROLES = [
    * létre a felületen; a szerep csak a jogkört adja.
    */
   "ASSET_IMPORT_AGENT",
+  /**
+   * Sutyerák rendszer-felhasználója (4. pont B, Balázs 2026-10-06): csak az
+   * Üzenetek tagja lehet. Nem választható a felhasználó-kezelőben
+   * (`ASSIGNABLE_ROLES`): migráció hozza létre, egyetlen fióknak.
+   */
+  "ASSISTANT",
 ] as const satisfies readonly UserRole[];
 
 export type MachineRole = (typeof MACHINE_ROLES)[number];
+
+/** A szerepek, amiket egy ember a felhasználó-kezelőben kioszthat: a rendszer-szerep nem. */
+export const ASSIGNABLE_ROLES: readonly UserRole[] = USER_ROLES.filter(
+  (role) => role !== "ASSISTANT",
+);
 
 export const isMachineRole = (role: UserRole): role is MachineRole =>
   (MACHINE_ROLES as readonly UserRole[]).includes(role);
@@ -495,6 +507,12 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
      * nem nyúl akváriumhoz -- egyiket sem hívja, tehát egyiket sem kapja meg.
      */
     ASSET_IMPORT_AGENT: [PERMISSIONS.SERVICE_VIEW, PERMISSIONS.SERVICE_MANAGE],
+
+    /**
+     * SUTYERÁK: csak az Üzenetek tagsága. Semmit nem olvas a saját jogán: az
+     * átjárót mindig a kérdező dolgozó ASSISTANT_READONLY belépőjével hívjuk.
+     */
+    ASSISTANT: [PERMISSIONS.MESSAGES_USE],
   };
 
 const BILLING_PERMISSIONS: readonly Permission[] = [

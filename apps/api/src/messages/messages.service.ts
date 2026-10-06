@@ -23,6 +23,7 @@ import {
   MESSAGE_SEARCH_MIN_LENGTH,
   PERMISSIONS,
   ROLE_PERMISSIONS,
+  SUTYERAK_USER_ID,
   USER_ROLES,
   personDisplayName,
   type AuthenticatedUser,
@@ -49,7 +50,9 @@ import {
   discardStoredDocument,
   prepareDocument,
 } from "../documents/document-intake.js";
+import { AssistantService } from "../assistant/assistant.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
+import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import {
@@ -102,7 +105,24 @@ export class MessagesService {
     @Optional()
     @Inject(DOCUMENT_STORE)
     private readonly store?: DocumentStore,
+    /** Sutyerák (4. pont B): ki látja és ki indíthat vele beszélgetést. */
+    @Optional() private readonly assistant?: AssistantService,
+    @Optional() private readonly thinking?: AssistantThinkingState,
   ) {}
+
+  /** Sutyerák elérhető-e ennek a dolgozónak (ugyanaz a szabály, mint a widgeté). */
+  private assistantFor(user: AuthenticatedUser): boolean {
+    return this.assistant?.availableTo(user) ?? false;
+  }
+
+  /** Sutyerák nem választható, akinek nem elérhető (ugyanaz, mint a listán). */
+  private refuseUnavailableAssistant(
+    user: AuthenticatedUser,
+    memberIds: readonly string[],
+  ): void {
+    if (memberIds.includes(SUTYERAK_USER_ID) && !this.assistantFor(user))
+      throw new BadRequestException("Sutyerák számodra jelenleg nem elérhető.");
+  }
 
   private readonly logger = new Logger(MessagesService.name);
 
@@ -119,7 +139,18 @@ export class MessagesService {
       excludeUserId: user.id,
       limit: 50,
     });
-    return { items: rows.filter(mayJoinInternal).map(toPerson) };
+    // Sutyerák csak annak látszik, akinek elérhető, és a lista elején áll
+    const assistant = this.assistantFor(user);
+    const items = rows
+      .filter(mayJoinInternal)
+      .filter((row) => row.role !== "ASSISTANT" || assistant)
+      .map(toPerson);
+    return {
+      items: [
+        ...items.filter((p) => p.kind === "assistant"),
+        ...items.filter((p) => p.kind !== "assistant"),
+      ],
+    };
   }
 
   async createConversation(
@@ -130,6 +161,7 @@ export class MessagesService {
     const others = [...new Set(input.memberIds)].filter((id) => id !== user.id);
     if (others.length === 0)
       throw new BadRequestException("Legalább egy másik kollégát válassz ki.");
+    this.refuseUnavailableAssistant(user, others);
     if (others.length + 1 > CONVERSATION_MAX_MEMBERS)
       throw new BadRequestException(
         `Egy beszélgetésnek legfeljebb ${CONVERSATION_MAX_MEMBERS} tagja lehet.`,
@@ -219,7 +251,40 @@ export class MessagesService {
       lastReadMessageId: membership.lastReadMessageId,
       notification: notificationState(membership),
       context: await this.contextCard(user, row),
+      assistantThinking: this.thinking?.has(id) ?? false,
     };
+  }
+
+  /**
+   * SUTYERÁK ÜZENETE (4. pont B): a válasz, a hiba-mondat vagy acrobot
+   * visszaírt válasza, Sutyerák nevében. Ugyanaz a közzététel, mint egy
+   * dolgozó üzeneténél (folyam, push, jelvény).
+   */
+  async postAsAssistant(
+    conversationId: string,
+    text: string,
+    source: "GATEWAY" | "ACROBOT",
+  ): Promise<MessageItem> {
+    const [assistant] = await this.repository.users([SUTYERAK_USER_ID]);
+    if (!assistant) throw new Error("Sutyerák rendszer-felhasználója hiányzik");
+    const row = await this.repository.createMessage({
+      conversationId,
+      senderUserId: SUTYERAK_USER_ID,
+      text: text.trim(),
+      clientMessageId: randomUUID(),
+      assistantSource: source,
+    });
+    await this.announce(row, {
+      id: assistant.id,
+      email: "",
+      displayName: assistant.displayName,
+      nickname: assistant.nickname ?? null,
+      role: assistant.role,
+      avatarUrl: assistant.avatarUrl,
+      customerId: null,
+      supplierId: null,
+    });
+    return toMessage(row, SUTYERAK_USER_ID);
   }
 
   async messages(
@@ -1096,6 +1161,7 @@ export class MessagesService {
     const current = new Set(row.members.map((member) => member.userId));
     const wanted = [...new Set(userIds)].filter((id) => !current.has(id));
     if (wanted.length === 0) return this.detail(user, conversationId);
+    this.refuseUnavailableAssistant(user, wanted);
     if (current.size + wanted.length > CONVERSATION_MAX_MEMBERS)
       throw new BadRequestException(
         `Egy beszélgetésnek legfeljebb ${CONVERSATION_MAX_MEMBERS} tagja lehet.`,
@@ -1333,6 +1399,7 @@ function toPerson(row: MessagingUserRow): ConversationPerson {
     avatarUrl: row.avatarUrl,
     role: row.role,
     isActive: row.isActive,
+    ...(row.role === "ASSISTANT" ? { kind: "assistant" as const } : {}),
   };
 }
 
@@ -1368,6 +1435,10 @@ function toMessage(row: MessageRow, viewerId: string): MessageItem {
     forwardedFrom: row.forwardedFromUser
       ? { senderName: personDisplayName(row.forwardedFromUser) }
       : null,
+    // 4. pont B: Sutyerák üzenetén, honnan jött a válasz
+    ...(row.senderUserId === SUTYERAK_USER_ID
+      ? { assistant: { viaAcrobot: row.assistantSource === "ACROBOT" } }
+      : {}),
   };
 }
 

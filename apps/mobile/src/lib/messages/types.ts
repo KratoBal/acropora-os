@@ -18,6 +18,8 @@ export interface ConversationPerson {
   avatarUrl: string | null;
   role: string;
   isActive: boolean;
+  /** 4. pont B: `"assistant"` Sutyerák; hiányzik vagy `"user"`: ember. */
+  kind?: "user" | "assistant";
 }
 
 /** A négy reakció (acrobot döntése, 26242); a szerver ezen kívül mást nem fogad el. */
@@ -71,6 +73,8 @@ export interface MessageItem {
   pinned?: boolean;
   /** 3. fázis: továbbításnál az eredeti szerző neve. */
   forwardedFrom?: { senderName: string } | null;
+  /** 4. pont B: Sutyerák üzenetén; `viaAcrobot`: acrobot írta vissza a választ. */
+  assistant?: { viaAcrobot: boolean } | null;
 }
 
 /** 4. fázis: mihez köthető egy beszélgetés (munkalap és hibajegy). */
@@ -115,6 +119,8 @@ export interface ConversationDetail extends ConversationListItem {
   notification?: ConversationNotificationState;
   /** 4. fázis: a kapcsolt munkalap vagy hibajegy kártyája; nincs kötés: null. */
   context?: ConversationContextCard | null;
+  /** 4. pont B: Sutyerák épp válaszol ebben a beszélgetésben. */
+  assistantThinking?: boolean;
 }
 
 export interface MessagePage {
@@ -188,4 +194,6 @@ export type MessageStreamEvent =
   | { type: "message.created"; conversationId: string; messageId: string }
   | { type: "conversation.created"; conversationId: string }
   | { type: "conversation.read"; conversationId: string }
-  | { type: "message.updated"; conversationId: string; messageId: string };
+  | { type: "message.updated"; conversationId: string; messageId: string }
+  /** 4. pont B: a `KNOWN` halmaz még nem engedi át; a mobil felület veszi fel. */
+  | { type: "assistant.thinking"; conversationId: string; active: boolean };
