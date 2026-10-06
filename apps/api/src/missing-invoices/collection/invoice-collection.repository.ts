@@ -7,7 +7,7 @@ import {
   type InvoiceCollectionSource,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
-import type { CardDebit } from "./invoice-text.js";
+import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 
 const ACTIVE_KEY = "ACTIVE";
 /**
@@ -197,6 +197,38 @@ export class InvoiceCollectionRepository {
         ...nav.map((row) => row.navInvoiceNumber),
         ...feed.map((row) => row.documentNumber),
       ]),
+    ];
+  }
+
+  /**
+   * AZ ÖSSZES ISMERT BEJÖVŐ SZÁM, a szállító adószámával (acrobot 26885): ha a
+   * PDF szövegéből nem jön szállítói adószám, a `knownNumberInText` ezek közül
+   * keresi, melyik áll benne. Ugyanaz a két forrás és ugyanaz a fajta-szűrés,
+   * mint a `navNumbers`-nél, csak szállító nélkül.
+   */
+  async knownNumbers(): Promise<KnownInvoiceNumber[]> {
+    const [nav, feed] = await Promise.all([
+      this.database.navIncomingInvoice.findMany({
+        where: { invoiceOperation: "CREATE" },
+        select: { navInvoiceNumber: true, supplierTaxNumber: true },
+      }),
+      this.database.incomingBillingDocument.findMany({
+        where: {
+          kindCode: { in: [...FEED_BASE_KINDS] },
+          supplierTaxNumber: { not: null },
+        },
+        select: { documentNumber: true, supplierTaxNumber: true },
+      }),
+    ]);
+    return [
+      ...nav.map((row) => ({
+        number: row.navInvoiceNumber,
+        supplierTaxNumber: row.supplierTaxNumber,
+      })),
+      ...feed.map((row) => ({
+        number: row.documentNumber,
+        supplierTaxNumber: row.supplierTaxNumber!,
+      })),
     ];
   }
 

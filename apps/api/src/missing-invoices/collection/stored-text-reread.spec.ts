@@ -251,6 +251,46 @@ describe("re-reading a stored document's text", () => {
     );
   });
 
+  // acrobot 26885: the stored Tisza 97 document after release, the same rule
+  // as the collection (`withKnownNumber`)
+  it("Tisza 97: the file-name number becomes the known number with its supplier", async () => {
+    const { deps: d, saved } = deps([
+      {
+        id: "tisza",
+        fileName: "U26_03861-SZ_Acropora Kereskedelm.pdf",
+        subject: "számla",
+        lines: [
+          "Számla",
+          "BUDAPEST BANK 10104167-11770300-01004002 | Adószám: | 23916229-2-42",
+          "Átutalás 8 nap | 2026.10.05 | 2026.10.05 | 2026.10.13 | U26/03861-SZ",
+        ],
+        textReading: {
+          numberFrom: "FILE_NAME",
+          bankReference: "03861-SZ",
+          invoiceNumber: "03861-SZ",
+          supplierTaxNumber: null,
+        },
+      },
+    ]);
+    const rows = await rereadStoredText(
+      {
+        ...d,
+        knownNumbers: async () => [
+          { number: "U26/03861-SZ", supplierTaxNumber: "14880568-2-43" },
+        ],
+      },
+      SELECT,
+      true,
+    );
+    assert.deepEqual(rows[0]!.after, {
+      invoiceNumber: "U26/03861-SZ",
+      numberFrom: "NAV",
+      supplierTaxNumber: "14880568-2-43",
+      kind: "INVOICE",
+    });
+    assert.equal(saved[0]!.reading.bankReference, "03861-SZ");
+  });
+
   it("the command needs an explicit selection", () => {
     assert.equal(parseSelector(["--apply"]), null);
     assert.deepEqual(parseSelector(["--ids", "a, b", "--apply"]), {

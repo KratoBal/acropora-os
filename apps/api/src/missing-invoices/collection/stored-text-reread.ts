@@ -4,7 +4,9 @@ import {
   looksLikeProforma,
   looksLikeTaxNumber,
   readInvoiceText,
+  withKnownNumber,
   type InvoiceTextReading,
+  type KnownInvoiceNumber,
 } from "./invoice-text.js";
 
 /**
@@ -57,6 +59,12 @@ export interface StoredTextRereadDeps {
   documents(selector: StoredTextSelector): Promise<StoredTextDocument[]>;
   lines(content: Uint8Array): Promise<string[]>;
   navNumbers(supplierTaxBase: string): Promise<readonly string[]>;
+  /**
+   * Az összes ismert bejövő szám a szállító adószámával (acrobot 26885): ha a
+   * szöveg nem ad szállítói adószámot, ezek közül keresünk. Elhagyható; akkor
+   * minden úgy megy, mint eddig.
+   */
+  knownNumbers?(): Promise<readonly KnownInvoiceNumber[]>;
   save(
     id: string,
     reading: InvoiceTextReading,
@@ -112,6 +120,7 @@ export async function rereadStoredText(
   allowClear = false,
 ): Promise<StoredTextRereadRow[]> {
   const rows: StoredTextRereadRow[] = [];
+  let known: Promise<readonly KnownInvoiceNumber[]> | null = null;
   for (const document of await deps.documents(selector)) {
     const old = (
       document.textReading && typeof document.textReading === "object"
@@ -147,10 +156,15 @@ export async function rereadStoredText(
     const hints = { fileName: document.fileName, subject: document.subject };
     const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
     const navNumbers = supplier ? await deps.navNumbers(taxBase(supplier)) : [];
-    const fresh = readInvoiceText(lines, {
+    const read = readInvoiceText(lines, {
       ...hints,
       navNumbers: () => navNumbers,
     });
+    // ugyanaz a szabály, mint a begyűjtésnél (`withKnownNumber`)
+    const fresh =
+      read.supplierTaxNumber || !deps.knownNumbers
+        ? read
+        : withKnownNumber(read, lines, await (known ??= deps.knownNumbers()));
     const oldNumber = old?.invoiceNumber ?? null;
     const keepOld =
       fresh.invoiceNumber === null &&

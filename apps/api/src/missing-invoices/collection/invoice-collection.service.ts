@@ -45,6 +45,8 @@ import {
   customerIds,
   isOwnInvoiceText,
   readInvoiceText,
+  withKnownNumber,
+  type KnownInvoiceNumber,
   type InvoiceTextReading,
 } from "./invoice-text.js";
 
@@ -279,6 +281,7 @@ export class InvoiceCollectionService {
   ): Promise<{ failed: string[]; paused: string[] }> {
     // a saját bankszámláink: futásonként egyszer, frissen
     this.ownAccountDigits = null;
+    this.knownNumberList = null;
     const failedSources: string[] = [];
     const pausedSources: string[] = [];
     for (const source of sources) {
@@ -346,6 +349,12 @@ export class InvoiceCollectionService {
   }
 
   private ownAccountDigits: Promise<string[]> | null = null;
+  /** Az ismert bejövő számok, futásonként egyszer (`withKnownNumber`). */
+  private knownNumberList: Promise<KnownInvoiceNumber[]> | null = null;
+  private knownNumbers(): Promise<KnownInvoiceNumber[]> {
+    this.knownNumberList ??= this.repository.knownNumbers();
+    return this.knownNumberList;
+  }
 
   /** Egy futásban egyszer kérdezzük le. */
   private ownAccounts(): Promise<string[]> {
@@ -525,6 +534,15 @@ export class InvoiceCollectionService {
       if (textReading.numberFrom !== "NAV") {
         if (isOwnInvoiceText(text, await this.ownAccounts()))
           return skip("OWN_INVOICE");
+        // a szállító adószáma nélkül is ismert szám (acrobot 26885, Tisza 97):
+        // a saját-számla próba UTÁN, hogy egy kimenő számlánk ne legyen bejövő
+        textReading = withKnownNumber(
+          textReading,
+          lines,
+          await this.knownNumbers(),
+        );
+      }
+      if (textReading.numberFrom !== "NAV") {
         const reference = bankReference(
           lines,
           textReading,

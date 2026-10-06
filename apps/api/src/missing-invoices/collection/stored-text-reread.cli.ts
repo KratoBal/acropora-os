@@ -100,6 +100,7 @@ async function main(argv: readonly string[]): Promise<number> {
         }),
       lines: (content) => pdfTextLines(content),
       navNumbers: (base) => repository.navNumbers(base),
+      knownNumbers: () => repository.knownNumbers(),
       save: async (id, reading, kind) => {
         await prisma.incomingSupplierDocument.update({
           where: { id },
