@@ -43,6 +43,11 @@ function termek(overrides: Record<string, unknown> = {}) {
 function adatbazis(
   termekek: Record<string, unknown>[],
   lekepezesek: { entityId: string; lastSyncedAt: Date | null }[] = [],
+  /**
+   * A kor vegen kerdezett kotesek (az ar-vetites szuroje). Ha nincs megadva,
+   * ugyanaz, mint a lekepezesek: egy vetitett termeknek van kotese.
+   */
+  kotesek?: { entityId: string }[],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -55,7 +60,9 @@ function adatbazis(
     externalReference: {
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "externalReference.findMany", args });
-        return lekepezesek;
+        const aKorVegen = !(args as { select: Record<string, unknown> }).select
+          .lastSyncedAt;
+        return aKorVegen ? (kotesek ?? lekepezesek) : lekepezesek;
       },
     },
   } as unknown as ProjectionSchedulerDatabase;
@@ -81,6 +88,19 @@ function naplo() {
 
 /** A futtato duplaja: felirja, mit kapott, es a megadott kodot adja vissza. */
 function futtato(kod = 0) {
+  const kapott: string[][] = [];
+  const run: ProjectionRunner = async (ids) => {
+    kapott.push(ids);
+    return kod;
+  };
+  return { run, kapott };
+}
+
+/**
+ * AZ AR-FUTTATO DUPLAJA. Minden konstrukcio megkapja: az alapertelmezes a valodi
+ * `runPricingCli`, ami adatbazishoz es a bolthoz nyulna.
+ */
+function arFuttato(kod = 0) {
   const kapott: string[][] = [];
   const run: ProjectionRunner = async (ids) => {
     kapott.push(ids);
@@ -147,6 +167,7 @@ describe("MedusaProjectionScheduler.runOnce", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
@@ -165,6 +186,7 @@ describe("MedusaProjectionScheduler.runOnce", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
@@ -187,6 +209,7 @@ describe("MedusaProjectionScheduler.runOnce", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
@@ -202,10 +225,138 @@ describe("MedusaProjectionScheduler.runOnce", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
     assert.equal(await scheduler.runOnce(), "FAILED");
+  });
+});
+
+/**
+ * AZ AR AZ UTEMEZETT KORBEN (7-es tetel, 329f8a2e). Az allitasok harom hatarra
+ * szolnak: az ar-vetites a termek-vetites UTAN fut, CSAK a kotott esedekes
+ * termekekre, es a bukasa nem olvad az APPLIED-ba.
+ */
+describe("MedusaProjectionScheduler ar-vetitese", () => {
+  it("a termek-vetites utan, a kotott esedekes termekekre fut", async () => {
+    const { db } = adatbazis(
+      [termek(), termek({ id: "prod-2" }), termek({ id: "prod-3" })],
+      [],
+      [{ entityId: "prod-3" }, { entityId: "prod-1" }],
+    );
+    const sorrend: string[] = [];
+    const ar = arFuttato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: async () => {
+        sorrend.push("termek");
+        return 0;
+      },
+      runPricing: async (ids, out) => {
+        sorrend.push("ar");
+        return ar.run(ids, out);
+      },
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(sorrend, ["termek", "ar"]);
+    assert.deepEqual(ar.kapott, [["prod-1", "prod-3"]]);
+  });
+
+  it("a kotes lekerdezese a MEDUSA Product kotesre es az esedekesekre szol", async () => {
+    const { db, hivasok } = adatbazis([termek(), termek({ id: "prod-2" })]);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+
+    await scheduler.runOnce();
+
+    const kotesLekerdezes = hivasok.filter(
+      (hivas) => hivas.metodus === "externalReference.findMany",
+    )[1]?.args;
+    assert.deepEqual(kotesLekerdezes, {
+      where: {
+        system: "MEDUSA",
+        entityType: "Product",
+        entityId: { in: ["prod-1", "prod-2"] },
+      },
+      select: { entityId: true },
+    });
+  });
+
+  it("egy tagabb valasz sem visz nem esedekes termeket az ar-vetitesbe", async () => {
+    const { db } = adatbazis(
+      [termek()],
+      [],
+      [{ entityId: "prod-1" }, { entityId: "prod-mas" }],
+    );
+    const ar = arFuttato();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+
+    await scheduler.runOnce();
+
+    assert.deepEqual(ar.kapott, [["prod-1"]]);
+  });
+
+  it("kotes nelkul az ar-futtatot meg sem hivja, es a naplo a szamot mondja", async () => {
+    const { db } = adatbazis([termek(), termek({ id: "prod-2" })], [], []);
+    const ar = arFuttato();
+    const { sorok, logger } = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(ar.kapott, []);
+    assert.ok(
+      sorok.some((sor) => sor.includes("2 termek Medusa kotes nelkul")),
+      sorok.join("\n"),
+    );
+  });
+
+  it("FAILED, ha csak az ar-vetites bukik", async () => {
+    const { db } = adatbazis([termek()], [], [{ entityId: "prod-1" }]);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(0).run,
+      runPricing: arFuttato(1).run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+  });
+
+  it("a termek-vetites bukasa utan az ar-vetites meg fut", async () => {
+    const { db } = adatbazis([termek()], [], [{ entityId: "prod-1" }]);
+    const ar = arFuttato(0);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(1).run,
+      runPricing: ar.run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(ar.kapott, [["prod-1"]]);
   });
 });
 
@@ -230,6 +381,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
       scheduler: new MedusaProjectionScheduler({
         db,
         runProjection: run,
+        runPricing: arFuttato().run,
         environment: BEKAPCSOLVA,
         logger: n.logger,
       }),
@@ -297,6 +449,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
       logger: n.logger,
     });
@@ -354,6 +507,7 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
@@ -380,6 +534,7 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
 
@@ -411,6 +566,7 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     await new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     }).runOnce();
 
@@ -434,6 +590,7 @@ describe("a kapcsolatok idobelyege esedekesse tesz", () => {
     const scheduler = new MedusaProjectionScheduler({
       db,
       runProjection: run,
+      runPricing: arFuttato().run,
       environment: BEKAPCSOLVA,
     });
     await scheduler.runOnce();
