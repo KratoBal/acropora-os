@@ -181,9 +181,23 @@ const HU_TAX_NUMBER = /^\d{8}-\d-\d{2}$/;
 const TAX_NUMBER =
   /(?<![\dA-Za-z])(\d{8}-\d-\d{2}|FR[0-9A-Z]{2}\d{9}|NL\d{9}B\d{2}|ATU\d{8}|[A-Z]{2}\d{8,12})(?![\dA-Za-z])/g;
 
+/** Egy dátum (`2026.05.05`, `2026/09/22`, `2026-10-01`): a kelte, nem a száma. */
+const DATE_SHAPE = /^(?:19|20)\d{2}[./-]\d{1,2}[./-]\d{1,2}$/;
+
+/**
+ * A CÍMKE UTÁNI ÉRTÉK CSAK AKKOR SZÁMLASZÁM, ha nem egy cég és nem egy nap
+ * azonosítója (kártya 096607af; élesen mérve 2026-10-06, 37 általános
+ * olvasós rekordból ötnél: háromszor a SAJÁT adószámunk, kétszer egy dátum
+ * állt a címke mellett, a díjbekérő vevő-cellájából és a kelte-cellából).
+ * Ilyenkor a címke későbbi előfordulása vagy a fájlnév dönt.
+ */
 const usable = (value: string | undefined): string | null => {
   const cleaned = value?.replace(/[.]$/, "");
-  return cleaned && /\d/.test(cleaned) && !BANK_ACCOUNT.test(cleaned)
+  return cleaned &&
+    /\d/.test(cleaned) &&
+    !BANK_ACCOUNT.test(cleaned) &&
+    !looksLikeTaxNumber(cleaned) &&
+    !DATE_SHAPE.test(cleaned)
     ? cleaned
     : null;
 };
