@@ -641,10 +641,13 @@ function InvoiceCard({
     </Link>
   ) : null;
   const waiting = NOT_INVOICEABLE.includes(order.status.code);
+  const external = order.externalInvoice;
   return (
     <Card title="Számla">
       <div className="space-y-3">
-        {invoice?.status === "ISSUED" ? (
+        {!invoice && order.bankTransfer ? (
+          <ExternalInvoiceField external={external} />
+        ) : invoice?.status === "ISSUED" ? (
           <>
             <Field
               label="Számlaszám"
@@ -799,6 +802,8 @@ function ProformaSection({
   const [recording, setRecording] = useState(false);
   const proforma = order.proforma;
   const receipt = order.transferReceipt;
+  // a Számlázz.hu számlája a saját kifizetései szerint is mondhatja (bb3a6bd5)
+  const paidByInvoice = !receipt && !!order.externalInvoice?.paid;
   const issued = proforma?.status === "ISSUED";
   const sentBefore = issued && proforma.emailStatus !== null;
   const stuck =
@@ -823,7 +828,7 @@ function ProformaSection({
   };
   return (
     <div className="mt-4 space-y-3 border-t border-pilot-grey-100 pt-4">
-      {receipt ? (
+      {receipt || paidByInvoice ? (
         <span className="inline-block rounded-full bg-pilot-green-50 px-3 py-1 text-xs font-medium text-pilot-green-700">
           Kifizetve
         </span>
@@ -871,6 +876,14 @@ function ProformaSection({
               : (receipt.recordedBy ?? "—")}
           </Field>
         </div>
+      ) : paidByInvoice ? (
+        <p className="text-xs text-pilot-grey-500">
+          A Számlázz.hu számlája szerint kifizetve
+          {order.externalInvoice?.paidOn
+            ? ` (${order.externalInvoice.paidOn})`
+            : ""}
+          .
+        </p>
       ) : null}
       {proforma ? (
         <Link
@@ -880,7 +893,7 @@ function ProformaSection({
           Megnyitás a Számlázásban
         </Link>
       ) : null}
-      {canSend && !stuck && !closed && !receipt ? (
+      {canSend && !stuck && !closed && !receipt && !paidByInvoice ? (
         <PilotButton
           size="regular"
           variant={sentBefore ? "secondary" : "primary"}
@@ -890,7 +903,7 @@ function ProformaSection({
           {busy ? "Küldés…" : label}
         </PilotButton>
       ) : null}
-      {canRecord && issued && !receipt && !closed ? (
+      {canRecord && issued && !receipt && !paidByInvoice && !closed ? (
         <PilotButton
           size="regular"
           variant="secondary"
@@ -935,6 +948,60 @@ function ProformaSection({
         onCancel={() => setConfirming(false)}
       />
     </div>
+  );
+}
+
+/** Miből tudjuk, hogy a Számlázz.hu számlája ehhez a rendeléshez tartozik. */
+const EXTERNAL_LINK_TEXT: Record<
+  NonNullable<WebshopOrderDetail["externalInvoice"]>["link"],
+  string
+> = {
+  ORDER_NUMBER: "A számla rendelésszáma szerint.",
+  PROFORMA_NUMBER: "A számla a díjbekérő számára hivatkozik.",
+  BUYER_AMOUNT:
+    "Csak a vevő és az összeg egyezik: nézd meg, tényleg ehhez a rendeléshez tartozik-e.",
+};
+
+/**
+ * ELŐRE UTALÁSNÁL A SZÁMLÁT A SZÁMLÁZZ.HU ÁLLÍTJA KI (bb3a6bd5; Balázs,
+ * 2026-10-06 18:22 UTC: „be van kapcsolva az automatikus szamlazas ha
+ * kifizetik a dijbekerot”). Ezért itt nincs kiállítás-gomb: a kifizetett
+ * díjbekérőből készült számla a kimenő továbbítással jön be, és ide kötődik.
+ */
+function ExternalInvoiceField({
+  external,
+}: {
+  external: WebshopOrderDetail["externalInvoice"];
+}) {
+  if (!external)
+    return (
+      <p className="text-sm text-pilot-grey-700">
+        A számlát a Számlázz.hu állítja ki, amikor a díjbekérőt kifizetik; ide
+        magától bekerül.
+      </p>
+    );
+  return (
+    <>
+      <Field
+        label="Számlaszám"
+        action={
+          <CopyButton value={external.number} label="Számlaszám másolása" />
+        }
+      >
+        {external.number}
+      </Field>
+      <p
+        className={`text-xs ${external.link === "BUYER_AMOUNT" ? "font-medium text-pilot-amber-700" : "text-pilot-grey-500"}`}
+      >
+        A Számlázz.hu állította ki. {EXTERNAL_LINK_TEXT[external.link]}
+      </p>
+      <Link
+        href={`/penzugy/szamlazas/kulso/${encodeURIComponent(external.id)}`}
+        className="text-sm font-medium text-pilot-aqua-700 underline"
+      >
+        Megnyitás a Számlázásban
+      </Link>
+    </>
   );
 }
 

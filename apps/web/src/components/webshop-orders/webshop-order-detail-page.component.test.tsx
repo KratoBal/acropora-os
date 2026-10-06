@@ -170,6 +170,7 @@ const detail: WebshopOrderDetail = {
   bankTransfer: false,
   proforma: null,
   transferReceipt: null,
+  externalInvoice: null,
   parcel: null,
   cardPayment: null,
   osCustomer: null,
@@ -2209,6 +2210,67 @@ describe("the proforma on the Fizetés card", () => {
       ).toBeNull();
       view.unmount();
     }
+  });
+
+  /*
+    A SZÁMLÁZZ.HU SZÁMLÁJA (bb3a6bd5). MI PIROSÍT: előre utalásnál az OS
+    kiállítás-gombot ad; a bejött számla nem látszik, nem a külső bizonylatra
+    visz, vagy a gyenge kötés nincs jelölve; a számla szerinti kifizetés nem
+    „Kifizetve”.
+  */
+  const external = (
+    over: Partial<NonNullable<WebshopOrderDetail["externalInvoice"]>> = {},
+  ): WebshopOrderDetail => ({
+    ...issued(),
+    externalInvoice: {
+      id: "ext_1",
+      number: "E-ACR-2026-77",
+      link: "ORDER_NUMBER",
+      paid: true,
+      paidOn: "2026-10-07",
+      ...over,
+    },
+  });
+
+  it("before the Számlázz.hu invoice the Számla card offers no OS invoice", async () => {
+    api.detail.mockResolvedValue(issued());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const invoiceCard = await screen.findByRole("region", { name: "Számla" });
+    expect(invoiceCard.textContent).toContain("a Számlázz.hu állítja ki");
+    expect(within(invoiceCard).queryByRole("button")).toBeNull();
+  });
+
+  it("the Számlázz.hu invoice shows with its link, and paid by it says Kifizetve", async () => {
+    api.detail.mockResolvedValue(external());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const invoiceCard = await screen.findByRole("region", { name: "Számla" });
+    expect(within(invoiceCard).getByText("E-ACR-2026-77")).toBeTruthy();
+    expect(
+      within(invoiceCard)
+        .getByRole("link", { name: "Megnyitás a Számlázásban" })
+        .getAttribute("href"),
+    ).toBe("/penzugy/szamlazas/kulso/ext_1");
+    expect(invoiceCard.textContent).not.toContain("nézd meg");
+    const payment = await card();
+    expect(within(payment).getByText("Kifizetve")).toBeTruthy();
+    expect(payment.textContent).toContain(
+      "A Számlázz.hu számlája szerint kifizetve (2026-10-07)",
+    );
+    expect(
+      within(payment).queryByRole("button", { name: /Díjbekérő|Utalás/ }),
+    ).toBeNull();
+  });
+
+  it("a weak link by buyer and amount says to check it; an unpaid invoice is not Kifizetve", async () => {
+    api.detail.mockResolvedValue(
+      external({ link: "BUYER_AMOUNT", paid: false, paidOn: null }),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const invoiceCard = await screen.findByRole("region", { name: "Számla" });
+    expect(invoiceCard.textContent).toContain(
+      "Csak a vevő és az összeg egyezik",
+    );
+    expect(within(await card()).queryByText("Kifizetve")).toBeNull();
   });
 
   it("a refused send keeps the reason on the card", async () => {

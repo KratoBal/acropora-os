@@ -7,6 +7,13 @@ import {
   type WebshopTransferReceipt,
 } from "@acropora/types";
 
+import {
+  linkExternalInvoices,
+  mentionsNumber,
+  type LinkProforma,
+  type LinkedExternalInvoice,
+} from "./webshop-external-invoice-link.js";
+
 /** Egy rendelés számlája az OS-ben: a `WEBSHOP_ORDER` forrású bizonylat. */
 export interface WebshopOrderInvoiceRow {
   id: string;
@@ -213,6 +220,130 @@ export class WebshopOrdersRepository {
           number: row.invoiceNumber,
         });
     return result;
+  }
+
+  /**
+   * A SZÁMLÁZZ.HU ÁLTAL KIÁLLÍTOTT SZÁMLA A RENDELÉSHEZ (bb3a6bd5): a
+   * kifizetett díjbekérőből az Autokassza állítja ki, a kimenő továbbítás
+   * hozza be. A kötés szabálya `linkExternalInvoices`; itt csak a bemenete áll
+   * össze: a rendelések kiállított díjbekérői, a díjbekérő napja óta kelt
+   * kimenő számlák, és hogy melyik nyers üzenet nevezi meg a díjbekérő számát.
+   * `paid`: a számla a saját kifizetései szerint ki van egyenlítve.
+   */
+  async externalInvoices(
+    orderIds: string[],
+  ): Promise<
+    Map<
+      string,
+      LinkedExternalInvoice & { paid: boolean; paidOn: string | null }
+    >
+  > {
+    if (!orderIds.length) return new Map();
+    const proformas = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: { in: orderIds },
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        invoiceNumber: { not: null },
+        grossAmount: { not: null },
+      },
+      select: {
+        sourceId: true,
+        invoiceNumber: true,
+        reference: true,
+        partnerName: true,
+        grossAmount: true,
+        createdAt: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const input: LinkProforma[] = proformas.flatMap((row) =>
+      row.sourceId && row.invoiceNumber && row.grossAmount
+        ? [
+            {
+              orderId: row.sourceId,
+              number: row.invoiceNumber,
+              reference: row.reference,
+              partnerName: row.partnerName,
+              grossAmount: row.grossAmount.toFixed(4),
+              issuedOn: row.createdAt.toISOString().slice(0, 10),
+            },
+          ]
+        : [],
+    );
+    if (!input.length) return new Map();
+    const since = input.reduce(
+      (min, row) => (row.issuedOn < min ? row.issuedOn : min),
+      input[0]!.issuedOn,
+    );
+    const sinceDate = new Date(`${since}T00:00:00Z`);
+    const documents = await prisma.externalBillingDocument.findMany({
+      where: { issueDate: { gte: sinceDate } },
+      select: {
+        id: true,
+        externalId: true,
+        kindCode: true,
+        documentNumber: true,
+        orderNumber: true,
+        customerName: true,
+        grossAmount: true,
+        paidAmount: true,
+        lastPaymentDate: true,
+        issueDate: true,
+        cancelled: true,
+      },
+    });
+    if (!documents.length) return new Map();
+    // a díjbekérő száma a nyers üzenetben, bármelyik mezőben
+    const mentions = new Map<string, string[]>();
+    for (const proforma of input) {
+      const messages = await prisma.szamlazzFeedMessage.findMany({
+        where: {
+          kind: "SZAMLAKI",
+          receivedAt: { gte: sinceDate },
+          body: { contains: proforma.number },
+        },
+        select: { externalId: true, body: true },
+      });
+      for (const message of messages.filter((m) =>
+        mentionsNumber(m.body, proforma.number),
+      ))
+        mentions.set(message.externalId, [
+          ...(mentions.get(message.externalId) ?? []),
+          proforma.number,
+        ]);
+    }
+    const linked = linkExternalInvoices(
+      input,
+      documents.map((doc) => ({
+        id: doc.id,
+        kindCode: doc.kindCode,
+        documentNumber: doc.documentNumber,
+        orderNumber: doc.orderNumber,
+        customerName: doc.customerName,
+        grossAmount: doc.grossAmount.toFixed(2),
+        issueDate: doc.issueDate.toISOString().slice(0, 10),
+        cancelled: doc.cancelled,
+        mentions: mentions.get(doc.externalId) ?? [],
+      })),
+    );
+    const byId = new Map(documents.map((doc) => [doc.id, doc]));
+    return new Map(
+      [...linked].map(([orderId, link]) => {
+        const doc = byId.get(link.id)!;
+        return [
+          orderId,
+          {
+            ...link,
+            paid: doc.grossAmount.gt(0) && doc.paidAmount.gte(doc.grossAmount),
+            paidOn: doc.lastPaymentDate
+              ? doc.lastPaymentDate.toISOString().slice(0, 10)
+              : null,
+          },
+        ];
+      }),
+    );
   }
 
   /**

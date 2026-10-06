@@ -39,6 +39,7 @@ const thresholdsNow: { list: WebshopStaleThreshold[] } = {
 /** A tárolt díjbekérők a hamis repositoryban; teszt állíthatja. */
 const proformasNow: { map: Map<string, unknown> } = { map: new Map() };
 const receiptsNow: { map: Map<string, unknown> } = { map: new Map() };
+const externalsNow: { map: Map<string, unknown> } = { map: new Map() };
 const NO_AUDIT = {
   recordStatusChange: async () => undefined,
   invoices: async () => new Map(),
@@ -47,6 +48,7 @@ const NO_AUDIT = {
   internalNote: async () => null,
   proformas: async () => proformasNow.map,
   transferReceipts: async () => receiptsNow.map,
+  externalInvoices: async () => externalsNow.map,
 } as unknown as WebshopOrdersRepository;
 const NO_PARCELS = {
   activeParcelsFor: async () => ({}),
@@ -324,6 +326,45 @@ describe("a received transfer on the list", () => {
   });
 });
 
+describe("the Számlázz.hu invoice of a prepaid order on the list", () => {
+  /*
+    (bb3a6bd5) MI PIROSÍT: a Számlázz.hu számlája nem lesz a rendelés számlája
+    (a csomag a „Számlára vár” sávban ragad); egy ki nem fizetett számla
+    kifizetettnek látszik.
+  */
+  it("its number is the order's invoice, and its own payments say paid", async () => {
+    externalsNow.map = new Map<string, unknown>([
+      [
+        "order_1",
+        { id: "ext_1", number: "E-77", link: "ORDER_NUMBER", paid: true },
+      ],
+      [
+        "order_3",
+        { id: "ext_3", number: "E-78", link: "BUYER_AMOUNT", paid: false },
+      ],
+    ]);
+    try {
+      const result = await service([
+        order(1, "stocking"),
+        order(2, "stocking"),
+        order(3, "stocking"),
+      ]).orders.list({ view: "all" }, NOW);
+      assert.deepEqual(
+        result.items
+          .map((item) => [item.id, item.invoiceNumber, item.transferReceived])
+          .sort(),
+        [
+          ["order_1", "E-77", true],
+          ["order_2", null, false],
+          ["order_3", "E-78", false],
+        ],
+      );
+    } finally {
+      externalsNow.map = new Map();
+    }
+  });
+});
+
 describe("WebshopOrdersService.detail", () => {
   const detailOrder = (
     id: string,
@@ -546,6 +587,7 @@ describe("WebshopOrdersService.changeStatus", () => {
       internalNote: async () => null,
       proformas: async () => new Map(),
       transferReceipts: async () => new Map(),
+      externalInvoices: async () => new Map(),
     } as unknown as WebshopOrdersRepository;
     return {
       orders: new WebshopOrdersService(

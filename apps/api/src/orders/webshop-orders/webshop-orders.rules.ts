@@ -143,10 +143,13 @@ export function factsOf(
   parcel: WebshopOrderDetail["parcel"] = null,
   proformaExpired = false,
   transferReceived = false,
+  /** A Számlázz.hu által kiállított, a rendeléshez kötött számla száma (bb3a6bd5). */
+  externalInvoiceNumber: string | null = null,
 ): WebshopOrderFacts {
+  const issuedNumber =
+    invoice?.status === "ISSUED" ? (invoice.number ?? null) : null;
   return {
-    invoiceNumber:
-      invoice?.status === "ISSUED" ? (invoice.number ?? null) : null,
+    invoiceNumber: issuedNumber ?? externalInvoiceNumber,
     invoice: invoice ?? null,
     hasParcel: !!parcel?.parcelNumber,
     parcel,

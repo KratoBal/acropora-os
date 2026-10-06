@@ -88,6 +88,8 @@ function setup(
     linked?: string | null;
     byEmail?: { id: string; displayName: string; linked: boolean }[];
     buyer?: typeof SAME_BUYER;
+    /** A rendelés fizetési munkamenetének szolgáltatója (függő fizetés). */
+    provider?: string;
   } = {},
 ) {
   const calls: string[] = [];
@@ -95,7 +97,22 @@ function setup(
     source: async () => {
       calls.push("source");
       return {
-        order: ORDER,
+        order: over.provider
+          ? {
+              ...ORDER,
+              payment_collections: [
+                {
+                  payments: [],
+                  payment_sessions: [
+                    {
+                      provider_id: over.provider,
+                      status: "pending_authorization",
+                    },
+                  ],
+                },
+              ],
+            }
+          : ORDER,
         status: {
           status: over.status ?? "confirmed",
         } as MedusaOrderBusinessStatus,
@@ -220,6 +237,19 @@ describe("WebshopOrderInvoiceService", () => {
       "issue webshop-order_38 2026-10-05T12:00:01.000Z",
       "detail order_38",
     ]);
+  });
+
+  /*
+    ELŐRE UTALÁSNÁL A SZÁMLÁT A SZÁMLÁZZ.HU ÁLLÍTJA KI (bb3a6bd5; Balázs,
+    2026-10-06 18:22 UTC). MI PIROSÍT: az OS is kiállít mellé egyet.
+  */
+  it("a prepaid order gets no OS invoice: Számlázz.hu issues it", async () => {
+    const { calls, service } = setup({ provider: "pp_acropora_transfer" });
+    await assert.rejects(service.issue("order_38", USER, NOW), {
+      status: 409,
+      message: /Számlázz\.hu állítja ki/,
+    });
+    assert.deepEqual(calls, ["source"]);
   });
 
   it("an unconfirmed order is refused before any partner is made", async () => {

@@ -138,6 +138,22 @@ export interface WebshopTransferReceipt {
   recordedBy: string | null;
 }
 
+/**
+ * A SZÁMLÁZZ.HU ÁLTAL KIÁLLÍTOTT SZÁMLA (bb3a6bd5): előre utalásnál a
+ * kifizetett díjbekérőből az Autokassza állítja ki, és a kimenő továbbítás
+ * hozza be. `link`: miből tudjuk, hogy ehhez a rendeléshez tartozik; a
+ * `BUYER_AMOUNT` gyenge (csak a vevő és az összeg egyezik), ellenőrizendő.
+ */
+export interface WebshopExternalInvoice {
+  /** Az `ExternalBillingDocument` azonosítója (Számlázás, külső bizonylat). */
+  id: string;
+  number: string;
+  link: "ORDER_NUMBER" | "PROFORMA_NUMBER" | "BUYER_AMOUNT";
+  /** A számla saját kifizetései szerint ki van egyenlítve. */
+  paid: boolean;
+  paidOn: string | null;
+}
+
 /** A kézi rögzítés bemenete: a jóváírás napja és a banki hivatkozás. */
 export interface WebshopTransferReceiptInput {
   receivedOn: string;
@@ -445,6 +461,8 @@ export interface WebshopOrderDetail {
   proforma: WebshopOrderProforma | null;
   /** Az előre utalás beérkezése, ha már rögzítve van; különben `null`. */
   transferReceipt: WebshopTransferReceipt | null;
+  /** A Számlázz.hu számlája, ha bejött és a rendeléshez köthető; különben `null`. */
+  externalInvoice: WebshopExternalInvoice | null;
   /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */
   osCustomer: {
     id: string;
