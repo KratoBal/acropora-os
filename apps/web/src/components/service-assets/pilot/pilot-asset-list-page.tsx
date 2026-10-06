@@ -42,6 +42,7 @@ import {
   PAGE_SIZES,
   withManualFilter,
 } from "./asset-list-query";
+import { assetExportQuery } from "../asset-list-export";
 import {
   PilotBadge,
   PilotButton,
@@ -95,6 +96,8 @@ export function PilotAssetListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState(params.get("search") ?? "");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -105,6 +108,39 @@ export function PilotAssetListPage() {
   const activeStatus = params.get("status") ?? "IN_PLACE";
 
   const query = useMemo(() => assetListQuery(params), [params]);
+
+  /*
+    NYOMTATÁS ÉS EXCEL (kártya 323e9b38): a szűrők utáni TELJES halmaz, nem
+    csak ez az oldal, ugyanabból a kérésből, amiből a lista (`assetExportQuery`).
+  */
+  const printList = () =>
+    window.open(
+      `/nyomtatas/eszkozok?${assetExportQuery(params)}`,
+      "_blank",
+      "noopener",
+    );
+  const downloadExcel = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { blob, fileName } = await assetsApi.exportXlsx(
+        token,
+        assetExportQuery(params),
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setExportError(
+        cause instanceof Error ? cause.message : "Az Excel nem tölthető le.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -348,7 +384,22 @@ export function PilotAssetListPage() {
             </option>
           ))}
         </select>
+        <PilotButton variant="secondary" onClick={printList}>
+          Nyomtatás
+        </PilotButton>
+        <PilotButton
+          variant="secondary"
+          disabled={exporting}
+          onClick={() => void downloadExcel()}
+        >
+          {exporting ? "Excel…" : "Excel"}
+        </PilotButton>
       </div>
+      {exportError ? (
+        <p role="alert" className="px-8 py-2 text-sm text-pilot-red-700">
+          {exportError}
+        </p>
+      ) : null}
 
       {loading && !data ? (
         <div className="space-y-3 px-8 py-6" aria-label="Eszközök betöltése">
