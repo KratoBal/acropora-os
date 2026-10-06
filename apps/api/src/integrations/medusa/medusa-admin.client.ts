@@ -623,6 +623,32 @@ export interface MedusaOrderSplit {
   payment_state: string;
 }
 
+/** `GET /admin/order-shipping/:id/options` (commerce, murena 26640). */
+export interface MedusaOrderShippingOptions {
+  current_option_id: string | null;
+  options: {
+    id: string;
+    name: string;
+    amount: number;
+    carrier: "gls" | "foxpost";
+    needs_point: boolean;
+    heavy: boolean;
+  }[];
+}
+
+/**
+ * `POST /admin/order-shipping/:id/method` (commerce, murena 26640). Ha
+ * `payment_due`, a különbözet a meglévő fizetési link útján fizetendő.
+ */
+export interface MedusaOrderMethodChange {
+  changed: boolean;
+  previous_total: number;
+  total: number;
+  difference: number;
+  payment_due: boolean;
+  payment_state: string | null;
+}
+
 /** `POST /admin/order-notes/:id` (commerce #493): a mentés utáni állapot. */
 export interface MedusaOrderNotes {
   customer_note: string | null;
@@ -909,7 +935,21 @@ export interface MedusaAdminClient {
     orderId: string,
     query: string,
     limit: number,
+    /** A cél mód pontjai (a mód cseréjéhez); nélküle a rendelés mostani módjáé. */
+    optionId?: string,
   ): Promise<MedusaOrderPointSearch>;
+  /** A rendelés választható futáros módjai az új díjjal (commerce, murena 26640). */
+  orderShippingOptions(orderId: string): Promise<MedusaOrderShippingOptions>;
+  /** A szállítási mód cseréje, pontos módnál a ponttal együtt, egy lépésben. */
+  changeOrderShippingMethod(
+    orderId: string,
+    input: {
+      shipping_option_id: string;
+      point_id?: string;
+      source?: "finder" | "fallback";
+      actor?: string;
+    },
+  ): Promise<MedusaOrderMethodChange>;
   /** A csomagpont cseréje (commerce #494); `actor` az előzménybe kerül. */
   changeOrderPickupPoint(
     orderId: string,
@@ -1813,10 +1853,35 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     orderId: string,
     query: string,
     limit: number,
+    optionId?: string,
   ): Promise<MedusaOrderPointSearch> {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
+    if (optionId) params.set("option_id", optionId);
     return this.request<MedusaOrderPointSearch>(
       `/admin/order-shipping/${encodeURIComponent(orderId)}/points?${params.toString()}`,
+    );
+  }
+
+  async orderShippingOptions(
+    orderId: string,
+  ): Promise<MedusaOrderShippingOptions> {
+    return this.request<MedusaOrderShippingOptions>(
+      `/admin/order-shipping/${encodeURIComponent(orderId)}/options`,
+    );
+  }
+
+  async changeOrderShippingMethod(
+    orderId: string,
+    input: {
+      shipping_option_id: string;
+      point_id?: string;
+      source?: "finder" | "fallback";
+      actor?: string;
+    },
+  ): Promise<MedusaOrderMethodChange> {
+    return this.request<MedusaOrderMethodChange>(
+      `/admin/order-shipping/${encodeURIComponent(orderId)}/method`,
+      { method: "POST", body: JSON.stringify(input) },
     );
   }
 

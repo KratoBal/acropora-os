@@ -3,14 +3,17 @@ import { Icon } from "@acropora/ui";
 import { foxpostPointType } from "@acropora/types";
 import type {
   WebshopOrderAddressInput,
+  WebshopOrderMethodInput,
   WebshopPickupPointSearch,
+  WebshopShippingOptions,
 } from "@acropora/types";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   PilotButton,
   PilotDialog,
   PilotInput,
 } from "@/components/pilot/pilot-ui";
+import { formatMoney } from "./webshop-orders-list-page";
 
 /**
  * AZ ADATLAP CERUZÁI (Figma 494:386; acrobot 26502): a cím (számlázási és
@@ -239,27 +242,27 @@ export function NoteDialog({
 }
 
 /**
- * A CSOMAGPONT CSERÉJE (commerce #494). A lista a rendelés saját módjához
- * tartozik (a webshop dönti el a fuvarozót és a GLS nehézáru-szabályát), a
- * keresés a pénztáré. Az üzemen kívüli automata nem választható.
+ * A CSOMAGPONT KERESŐ: a webshop listája (a pénztáré), az üzemen kívüli
+ * automata nem választható. A pont cseréje és a szállítási mód cseréje is
+ * ezt használja; a lista forrása a hívóé.
  */
-export function PointDialog({
+function PointPicker({
   currentPointId,
   search,
-  onClose,
-  onSave,
+  chosen,
+  onChoose,
+  hint,
 }: {
   currentPointId: string | null;
   search: (query: string) => Promise<WebshopPickupPointSearch>;
-  onClose: () => void;
-  onSave: (pointId: string) => Promise<void>;
+  chosen: string | null;
+  onChoose: (pointId: string | null) => void;
+  hint: string;
 }) {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<WebshopPickupPointSearch | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [chosen, setChosen] = useState<string | null>(null);
-  const { busy, error, save } = useSave(onClose);
   const current = result?.currentPointId ?? currentPointId;
 
   const find = () => {
@@ -269,7 +272,7 @@ export function PointDialog({
     void search(query.trim())
       .then((found) => {
         setResult(found);
-        setChosen(null);
+        onChoose(null);
       })
       .catch((cause: unknown) =>
         setSearchError(
@@ -280,16 +283,7 @@ export function PointDialog({
   };
 
   return (
-    <Shell
-      title="Csomagpont cseréje"
-      busy={busy}
-      error={error ?? searchError}
-      onClose={onClose}
-      saveDisabled={!chosen || chosen === current}
-      onSave={() => {
-        if (chosen) save(() => onSave(chosen));
-      }}
-    >
+    <>
       <form
         className="flex gap-2"
         onSubmit={(event) => {
@@ -312,6 +306,14 @@ export function PointDialog({
           {searching ? "Keresés…" : "Keresés"}
         </PilotButton>
       </form>
+      {searchError ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-pilot-red-50 p-3 text-sm text-pilot-red-700"
+        >
+          {searchError}
+        </p>
+      ) : null}
       {result ? (
         result.points.length ? (
           <div
@@ -334,7 +336,7 @@ export function PointDialog({
                   value={point.id}
                   disabled={point.outOfOrder}
                   checked={chosen === point.id}
-                  onChange={() => setChosen(point.id)}
+                  onChange={() => onChoose(point.id)}
                 />
                 <span>
                   <span className="font-medium">{point.name}</span>
@@ -373,10 +375,185 @@ export function PointDialog({
           <p className="text-sm text-pilot-grey-500">Nincs találat.</p>
         )
       ) : (
-        <p className="text-xs text-pilot-grey-500">
-          A lista ugyanaz, mint a pénztárban, ehhez a szállítási módhoz.
-        </p>
+        <p className="text-xs text-pilot-grey-500">{hint}</p>
       )}
+    </>
+  );
+}
+
+/**
+ * A CSOMAGPONT CSERÉJE (commerce #494). A lista a rendelés saját módjához
+ * tartozik (a webshop dönti el a fuvarozót és a GLS nehézáru-szabályát), a
+ * keresés a pénztáré. Az üzemen kívüli automata nem választható.
+ */
+export function PointDialog({
+  currentPointId,
+  search,
+  onClose,
+  onSave,
+}: {
+  currentPointId: string | null;
+  search: (query: string) => Promise<WebshopPickupPointSearch>;
+  onClose: () => void;
+  onSave: (pointId: string) => Promise<void>;
+}) {
+  const [chosen, setChosen] = useState<string | null>(null);
+  const { busy, error, save } = useSave(onClose);
+  return (
+    <Shell
+      title="Csomagpont cseréje"
+      busy={busy}
+      error={error}
+      onClose={onClose}
+      saveDisabled={!chosen || chosen === currentPointId}
+      onSave={() => {
+        if (chosen) save(() => onSave(chosen));
+      }}
+    >
+      <PointPicker
+        currentPointId={currentPointId}
+        search={search}
+        chosen={chosen}
+        onChoose={setChosen}
+        hint="A lista ugyanaz, mint a pénztárban, ehhez a szállítási módhoz."
+      />
+    </Shell>
+  );
+}
+
+/**
+ * A SZÁLLÍTÁSI MÓD CSERÉJE (kártya 0a14f739 C/2): a webshop futáros módjai az
+ * új díjjal (a pénztár számítása), csomagpontos módnál a cél mód pontjai. A
+ * mód és a pont egy lépésben cserél. Drágulásnál a vevő fizetési linket kap a
+ * különbözetről (Balázs), csökkenésnél nincs új fizetés.
+ */
+export function MethodDialog({
+  currentPointId,
+  loadOptions,
+  searchPoints,
+  onClose,
+  onSave,
+}: {
+  currentPointId: string | null;
+  loadOptions: () => Promise<WebshopShippingOptions>;
+  searchPoints: (
+    optionId: string,
+    query: string,
+  ) => Promise<WebshopPickupPointSearch>;
+  onClose: () => void;
+  onSave: (input: WebshopOrderMethodInput) => Promise<void>;
+}) {
+  const [options, setOptions] = useState<WebshopShippingOptions | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [optionId, setOptionId] = useState<string | null>(null);
+  const [pointId, setPointId] = useState<string | null>(null);
+  const { busy, error, save } = useSave(onClose);
+
+  useEffect(() => {
+    let alive = true;
+    loadOptions()
+      .then((loaded) => {
+        if (alive) setOptions(loaded);
+      })
+      .catch((cause: unknown) => {
+        if (alive)
+          setLoadError(
+            cause instanceof Error
+              ? cause.message
+              : "A szállítási módok listája nem érhető el.",
+          );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [loadOptions]);
+
+  const current = options?.options.find(
+    (option) => option.id === options.currentOptionId,
+  );
+  const chosen = options?.options.find((option) => option.id === optionId);
+  const difference = chosen && current ? chosen.amount - current.amount : null;
+  const unchanged =
+    !chosen ||
+    (chosen.id === options?.currentOptionId &&
+      (!chosen.needsPoint || !pointId || pointId === currentPointId));
+
+  return (
+    <Shell
+      title="Szállítási mód cseréje"
+      busy={busy}
+      error={error ?? loadError}
+      onClose={onClose}
+      saveDisabled={unchanged || (!!chosen?.needsPoint && !pointId)}
+      onSave={() => {
+        if (chosen)
+          save(() =>
+            onSave({
+              optionId: chosen.id,
+              ...(chosen.needsPoint && pointId ? { pointId } : {}),
+            }),
+          );
+      }}
+    >
+      {options ? (
+        <div
+          role="radiogroup"
+          aria-label="Választható szállítási módok"
+          className="space-y-1"
+        >
+          {options.options.map((option) => (
+            <label
+              key={option.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-pilot-grey-200 p-2 text-sm"
+            >
+              <span className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="shipping-option"
+                  value={option.id}
+                  checked={optionId === option.id}
+                  onChange={() => {
+                    setOptionId(option.id);
+                    setPointId(null);
+                  }}
+                />
+                <span>
+                  {option.name}
+                  {option.id === options.currentOptionId ? (
+                    <span className="ml-2 text-xs text-pilot-grey-500">
+                      (a mostani)
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+              <span className="text-pilot-grey-700">
+                {formatMoney(option.amount, "HUF")}
+              </span>
+            </label>
+          ))}
+        </div>
+      ) : loadError ? null : (
+        <p className="text-sm text-pilot-grey-500">A módok betöltése…</p>
+      )}
+      {chosen?.needsPoint ? (
+        <PointPicker
+          key={chosen.id}
+          currentPointId={
+            chosen.id === options?.currentOptionId ? currentPointId : null
+          }
+          search={(query) => searchPoints(chosen.id, query)}
+          chosen={pointId}
+          onChoose={setPointId}
+          hint="Ehhez a módhoz csomagpont kell: keresd ki a listából."
+        />
+      ) : null}
+      {difference !== null && difference !== 0 ? (
+        <p className="text-xs text-pilot-grey-600">
+          {difference > 0
+            ? `A szállítási díj ${formatMoney(difference, "HUF")} összeggel nő. Kártyás fizetésnél a vevő fizetési linket kap a különbözetről, és a csomag a fizetés után adható fel.`
+            : `A szállítási díj ${formatMoney(-difference, "HUF")} összeggel csökken. Új fizetés nem kell: a levonás a kisebb összeget veszi.`}
+        </p>
+      ) : null}
     </Shell>
   );
 }

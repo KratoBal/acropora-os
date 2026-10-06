@@ -27,11 +27,13 @@ import {
   WebshopOrderAddressDto,
   WebshopOrderNoteDto,
   WebshopOrderNotesDto,
+  WebshopOrderMethodDto,
   WebshopOrderPointDto,
   WebshopOrderSplitDto,
 } from "./dto/webshop-order-edits.dto.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
+import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-method.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
@@ -49,6 +51,7 @@ export class WebshopOrdersController {
     private readonly payments: WebshopOrderPaymentService,
     private readonly edits: WebshopOrderEditsService,
     private readonly splits: WebshopOrderSplitService,
+    private readonly methods: WebshopOrderShippingMethodService,
   ) {}
 
   /** A számlázási vagy a szállítási cím (a név is) szerkesztése. */
@@ -78,6 +81,38 @@ export class WebshopOrdersController {
   @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
   pickupPoints(@Param("id") id: string, @Query("q") q = "") {
     return this.edits.pickupPoints(id, q);
+  }
+
+  /** A rendelés választható futáros módjai az új díjjal (kártya 0a14f739 C/2). */
+  @Get(":id/shipping-options")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  shippingOptions(@Param("id") id: string) {
+    return this.methods.options(id);
+  }
+
+  /** Egy választható mód csomagpontjai (a mód cseréjéhez). */
+  @Get(":id/shipping-options/:optionId/pickup-points")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  shippingOptionPoints(
+    @Param("id") id: string,
+    @Param("optionId") optionId: string,
+    @Query("q") q = "",
+  ) {
+    return this.methods.points(id, optionId, q);
+  }
+
+  /**
+   * A szállítási mód cseréje, pontos módnál a ponttal együtt. Drágulásnál a
+   * különbözet linkje kimegy a vevőnek; a válasz a friss adatlap és a csere.
+   */
+  @Put(":id/shipping-method")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  changeShippingMethod(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderMethodDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.methods.change(id, body, user);
   }
 
   /** A csomagpont cseréje (commerce #494). */

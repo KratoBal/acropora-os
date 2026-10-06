@@ -10,6 +10,7 @@ import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
+import { WebshopOrderShippingMethodService } from "./webshop-order-shipping-method.service.js";
 import { WebshopOrdersController } from "./webshop-orders.controller.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -29,6 +30,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopMailOutboxService,
     WebshopOrderEditsService,
     WebshopOrderSplitService,
+    WebshopOrderShippingMethodService,
   ],
 })
 export class WebshopOrdersModule {}

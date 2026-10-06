@@ -10,7 +10,10 @@ import type {
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
   WebshopParcelSize,
+  WebshopOrderMethodInput,
+  WebshopOrderMethodResult,
   WebshopOrderNotesInput,
+  WebshopShippingOptions,
   WebshopParcelTracking,
   WebshopOrderSplitInput,
   WebshopOrderSplitResult,
@@ -147,6 +150,37 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/split`,
       token,
       { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /** A rendelés választható futáros módjai az új díjjal (kártya 0a14f739 C/2). */
+  shippingOptions(token: string, id: string) {
+    return apiRequest<WebshopShippingOptions>(
+      `/webshop-orders/${encodeURIComponent(id)}/shipping-options`,
+      token,
+    );
+  },
+  /** Egy választható mód csomagpontjai (a mód cseréjéhez). */
+  shippingOptionPoints(
+    token: string,
+    id: string,
+    optionId: string,
+    query: string,
+  ) {
+    return apiRequest<WebshopPickupPointSearch>(
+      `/webshop-orders/${encodeURIComponent(id)}/shipping-options/${encodeURIComponent(optionId)}/pickup-points?q=${encodeURIComponent(query)}`,
+      token,
+    );
+  },
+  /** A szállítási mód cseréje; drágulásnál a különbözet linkje kimegy a vevőnek. */
+  changeShippingMethod(
+    token: string,
+    id: string,
+    input: WebshopOrderMethodInput,
+  ) {
+    return apiRequest<WebshopOrderMethodResult>(
+      `/webshop-orders/${encodeURIComponent(id)}/shipping-method`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
     );
   },
   /** A vevő és a szállító megjegyzése (a hiányzó mező nem változik, az üres töröl). */

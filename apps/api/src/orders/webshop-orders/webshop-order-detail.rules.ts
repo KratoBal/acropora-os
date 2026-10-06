@@ -21,6 +21,7 @@ import {
   addressEditOf,
   notesEditOf,
   notesOf,
+  methodEditOf,
   pointEditOf,
 } from "./webshop-order-address.rules.js";
 import { cardPaymentOf } from "./webshop-order-card-payment.rules.js";
@@ -437,6 +438,12 @@ export function toDetail(input: {
       status: code,
       parcel: facts.parcel,
       hasPoint: !!shipping.pickupPoint,
+      storePickup: shipping.storePickup,
+    }),
+    methodEdit: methodEditOf({
+      status: code,
+      invoice: facts.invoice,
+      parcel: facts.parcel,
       storePickup: shipping.storePickup,
     }),
     pointEdit: pointEditOf({
