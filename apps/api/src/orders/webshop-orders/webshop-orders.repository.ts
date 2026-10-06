@@ -13,6 +13,14 @@ export interface WebshopOrderInvoiceRow {
   number: string | null;
 }
 
+export interface WebshopOrderProformaRow {
+  id: string;
+  status: BillingDocumentStatus;
+  number: string | null;
+  dueDate: Date | null;
+  emailStatus: string | null;
+}
+
 /** A webshop vevőinek kötése: `ExternalReference(MEDUSA, "Customer")`. */
 const CUSTOMER_REFERENCE = {
   system: "MEDUSA",
@@ -182,7 +190,7 @@ export class WebshopOrdersRepository {
    */
   async invoices(
     orderIds: string[],
-    documentType: "INVOICE" | "DELIVERY_NOTE" = "INVOICE",
+    documentType: "INVOICE" | "DELIVERY_NOTE" | "PROFORMA" = "INVOICE",
   ): Promise<Map<string, WebshopOrderInvoiceRow>> {
     if (!orderIds.length) return new Map();
     const rows = await prisma.invoice.findMany({
@@ -201,6 +209,44 @@ export class WebshopOrdersRepository {
           id: row.id,
           status: row.status as BillingDocumentStatus,
           number: row.invoiceNumber,
+        });
+    return result;
+  }
+
+  /**
+   * A RENDELÉSEK DÍJBEKÉRŐJE (bb3a6bd5): rendelésenként a legújabb, a
+   * határidejével és a kiküldés állapotával. A lista a lejárt díjbekérőt
+   * jelöli, ezért egy lekérdezés megy az egész oldalra.
+   */
+  async proformas(
+    orderIds: string[],
+  ): Promise<Map<string, WebshopOrderProformaRow>> {
+    if (!orderIds.length) return new Map();
+    const rows = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: { in: orderIds },
+        documentType: "PROFORMA",
+      },
+      select: {
+        id: true,
+        sourceId: true,
+        status: true,
+        invoiceNumber: true,
+        dueDate: true,
+        emailStatus: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const result = new Map<string, WebshopOrderProformaRow>();
+    for (const row of rows)
+      if (row.sourceId)
+        result.set(row.sourceId, {
+          id: row.id,
+          status: row.status as BillingDocumentStatus,
+          number: row.invoiceNumber,
+          dueDate: row.dueDate,
+          emailStatus: row.emailStatus,
         });
     return result;
   }

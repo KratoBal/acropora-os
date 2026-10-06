@@ -160,6 +160,8 @@ function setup(
       customers,
       documents,
       issuing,
+      {} as never,
+      {} as never,
     ),
   };
 }
