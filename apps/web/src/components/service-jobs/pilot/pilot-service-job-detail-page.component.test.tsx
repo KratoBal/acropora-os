@@ -93,14 +93,17 @@ vi.mock("@/components/messages/context-conversation-button", () => ({
   ContextConversationButton: ({
     kind,
     objectId,
+    partner,
   }: {
     kind: string;
     objectId: string;
+    partner?: boolean;
   }) => (
     <span
       data-testid="context-conversation-button"
       data-kind={kind}
       data-object={objectId}
+      data-partner={partner ? "true" : "false"}
     />
   ),
 }));
@@ -185,9 +188,16 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
   it("a hibajegyen áll a „Beszélgetés” gomb, a jegy azonosítójával", async () => {
     api.detail.mockResolvedValue(detail({ kind: "REPAIR" }));
     render(<PilotServiceJobDetailPage jobId="job-1" />);
-    const button = await screen.findByTestId("context-conversation-button");
-    expect(button.getAttribute("data-kind")).toBe("service-job");
-    expect(button.getAttribute("data-object")).toBe("job-1");
+    // a belső „Beszélgetés” és (bd46ff05) a „Beszélgetés a partnerrel”
+    const buttons = await screen.findAllByTestId("context-conversation-button");
+    expect(buttons.map((b) => b.getAttribute("data-partner"))).toEqual([
+      "false",
+      "true",
+    ]);
+    for (const button of buttons) {
+      expect(button.getAttribute("data-kind")).toBe("service-job");
+      expect(button.getAttribute("data-object")).toBe("job-1");
+    }
   });
 
   /*

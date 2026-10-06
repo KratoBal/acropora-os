@@ -45,6 +45,7 @@ import {
   contextCardTitle,
   contextHref,
   contextSubtitle,
+  isPartnerConversation,
   isSystemMessage,
 } from "./phase4";
 import {
@@ -880,14 +881,17 @@ export function ConversationView({
               data-testid="attachment-input"
               onChange={(event) => addFiles(event.target.files)}
             />
-            <button
-              type="button"
-              aria-label="Csatolmány hozzáadása"
-              className="flex size-11 shrink-0 items-center justify-center border border-pilot-grey-200 text-pilot-grey-600"
-              onClick={() => fileInput.current?.click()}
-            >
-              <Icon name="file-text" size={18} />
-            </button>
+            {/* a partneres beszélgetésbe csatolmány nem mehet (bd46ff05, #1531: 400) */}
+            {isPartnerConversation(conversation) ? null : (
+              <button
+                type="button"
+                aria-label="Csatolmány hozzáadása"
+                className="flex size-11 shrink-0 items-center justify-center border border-pilot-grey-200 text-pilot-grey-600"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Icon name="file-text" size={18} />
+              </button>
+            )}
             <label className="min-w-0 flex-1">
               <span className="sr-only">Üzenet</span>
               <Textarea

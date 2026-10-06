@@ -31,6 +31,7 @@ import {
   searchCountLabel,
   searchHitMeta,
 } from "./phase3";
+import { isPartnerConversation } from "./phase4";
 
 /**
  * A KERESÉS ÉS A KITŰZÖTT ELEMEK FIÓKJA (Figma 453:491, „Search and pin”):
@@ -534,7 +535,11 @@ export function ForwardDialog({
       .list(token, controller.signal)
       .then((response) =>
         setItems(
-          response.items.filter((item) => item.id !== currentConversationId),
+          // a partneres beszélgetésbe nem lehet továbbítani (bd46ff05, #1531: 400)
+          response.items.filter(
+            (item) =>
+              item.id !== currentConversationId && !isPartnerConversation(item),
+          ),
         ),
       )
       .catch(() => {

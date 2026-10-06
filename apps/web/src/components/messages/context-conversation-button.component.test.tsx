@@ -13,7 +13,10 @@ const auth = vi.hoisted(() => ({
   enabled: true,
 }));
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
-const api = vi.hoisted(() => ({ openContext: vi.fn() }));
+const api = vi.hoisted(() => ({
+  openContext: vi.fn(),
+  openPartnerContext: vi.fn(),
+}));
 
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
@@ -52,6 +55,7 @@ beforeEach(() => {
   auth.enabled = true;
   nav.push.mockReset();
   api.openContext.mockReset();
+  api.openPartnerContext.mockReset();
 });
 afterEach(() => cleanup());
 
@@ -82,5 +86,26 @@ describe("ContextConversationButton", () => {
       "Ehhez nincs jogod: a szervizt nem látod.",
     );
     expect(nav.push).not.toHaveBeenCalled();
+  });
+});
+
+/*
+  „BESZÉLGETÉS A PARTNERREL” A HIBAJEGYEN (bd46ff05). MI PIROSÍT: ha a belső
+  beszélgetést nyitja a partneres helyett; ha a felirat nem különbözteti meg.
+*/
+describe("ContextConversationButton, the partner one", () => {
+  it("opens the job's partner conversation, not the internal one", async () => {
+    api.openPartnerContext.mockResolvedValue({ id: "p1" });
+    render(
+      <ContextConversationButton kind="service-job" objectId="job-1" partner />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Beszélgetés a partnerrel" }),
+    );
+    await waitFor(() =>
+      expect(nav.push).toHaveBeenCalledWith("/uzenetek?c=p1"),
+    );
+    expect(api.openPartnerContext).toHaveBeenCalledWith("t1", "job-1");
+    expect(api.openContext).not.toHaveBeenCalled();
   });
 });
