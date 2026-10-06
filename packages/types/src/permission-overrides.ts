@@ -59,12 +59,19 @@ export function applyPermissionOverrides(
     if (override.effect === "GRANT") granted.add(override.permission);
     else if (override.effect === "REVOKE") revoked.add(override.permission);
   }
+  // A SABLON SORRENDJE MARAD, a megadott jogok a végére kerülnek: eltérés
+  // nélkül a személy jogai PONTOSAN a sablon, sorrendre is (a feloldó
+  // integrációs tesztje így méri).
   const base = new Set<string>(template);
-  return ALL_PERMISSION_VALUES.filter(
-    (permission) =>
-      (base.has(permission) || granted.has(permission)) &&
-      !revoked.has(permission),
-  );
+  return [
+    ...template.filter((permission) => !revoked.has(permission)),
+    ...ALL_PERMISSION_VALUES.filter(
+      (permission) =>
+        granted.has(permission) &&
+        !base.has(permission) &&
+        !revoked.has(permission),
+    ),
+  ];
 }
 
 /** A szerep sablonja és az eltérései alapján a személy jogai. */

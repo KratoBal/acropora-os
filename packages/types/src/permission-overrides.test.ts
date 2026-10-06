@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { PERMISSIONS, ROLE_PERMISSIONS } from "./auth.js";
+import { PERMISSIONS, ROLE_PERMISSIONS, type UserRole } from "./auth.js";
 import {
   ALL_PERMISSION_VALUES,
   applyPermissionOverrides,
@@ -19,11 +19,25 @@ import {
  * ha nem tulajdonos adhatna csak-tulajdonosi jogot.
  */
 describe("applyPermissionOverrides", () => {
-  it("eltérés nélkül a sablon", () => {
-    assert.deepEqual(
-      permissionsWithOverrides("SERVICE", []),
-      ALL_PERMISSION_VALUES.filter((p) => ROLE_PERMISSIONS.SERVICE.includes(p)),
-    );
+  it("eltérés nélkül PONTOSAN a sablon, sorrendre is, minden szerepre", () => {
+    // a sorrend is mérce: a feloldó integrációs tesztje a sablonnal veti
+    // össze, és az ADMIN sablonjában a számlázás a lista végén áll
+    for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[])
+      assert.deepEqual(
+        permissionsWithOverrides(role, []),
+        ROLE_PERMISSIONS[role],
+        role,
+      );
+  });
+
+  it("a megadott jog a sablon után áll, a sablon sorrendje nem mozdul", () => {
+    const result = permissionsWithOverrides("VIEWER", [
+      { permission: PERMISSIONS.SERVICE_MANAGE, effect: "GRANT" },
+    ]);
+    assert.deepEqual(result, [
+      ...ROLE_PERMISSIONS.VIEWER,
+      PERMISSIONS.SERVICE_MANAGE,
+    ]);
   });
 
   it("megad és elvesz", () => {
