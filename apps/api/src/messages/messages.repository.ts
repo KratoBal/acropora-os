@@ -454,6 +454,26 @@ export class MessagesRepository extends Repository {
   }
 
   /**
+   * AKIK MÁR ÍRTAK a partneres beszélgetésben, aktív belső fiókként (acrobot
+   * döntése, 2026-10-06 15:29: aki egyszer írt benne, a körben marad, hogy a
+   * partner válasza ne vesszen el nála). A rendszerüzenet nem számít.
+   */
+  async partnerConversationWriters(
+    conversationId: string,
+  ): Promise<MessagingUserRow[]> {
+    const rows = await this.database.message.findMany({
+      where: {
+        conversationId,
+        type: { not: "SYSTEM" },
+        sender: ACTIVE_INTERNAL,
+      },
+      distinct: ["senderUserId"],
+      select: { sender: { select: USER_SELECT } },
+    });
+    return rows.map((row) => row.sender);
+  }
+
+  /**
    * A HIBAJEGY, HA A PARTNER-FELHASZNÁLÓ MOST LÁTJA (084e2c24). Ugyanaz a
    * feltétel, mint a portál hibajegy-listájáé és -adatlapjáé
    * (`serviceJobVisibilityWhere`: a saját vevő vagy szállító, és a hozzárendelt

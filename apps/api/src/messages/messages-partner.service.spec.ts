@@ -295,6 +295,18 @@ function fake() {
         hasOlder: rows.length > input.limit,
       };
     },
+    partnerConversationWriters: async (conversationId: string) =>
+      [
+        ...new Set(
+          messages
+            .filter(
+              (m) => m.conversationId === conversationId && m.type !== "SYSTEM",
+            )
+            .map((m) => m.senderUserId),
+        ),
+      ]
+        .map((id) => people.get(id)!)
+        .filter((p) => p.isActive && !p.customerId && !p.supplierId),
     message: async (id: string) => messages.find((m) => m.id === id) ?? null,
     messageByClientId: async (senderUserId: string, clientMessageId: string) =>
       messages.find(
@@ -555,6 +567,30 @@ describe("the partner's message", () => {
     f.setStaff([]);
     await send(f, "harmadik");
     assert.equal(conv.archivedAt, null);
+  });
+
+  it("whoever wrote in it from our side stays in the circle after a re-delegation (acrobot, 15:29)", async () => {
+    const f = fake();
+    f.setStaff(["a"]);
+    await send(f, "első");
+    const conv = [...f.conversations.values()][0]!;
+    const manager = user("vezeto", { role: "MANAGER" });
+    await f.service.openPartnerConversation(manager, "job1");
+    await f.service.send(manager, conv.id, {
+      text: "Holnap délelőtt ott leszünk.",
+      clientMessageId: "kliens-vezeto-1",
+    });
+
+    f.setStaff(["b"]);
+    await send(f, "Köszönjük, várjuk.");
+    assert.deepEqual(
+      conv.members
+        .filter((m) => !m.leftAt)
+        .map((m) => m.userId)
+        .sort(),
+      ["b", "vezeto"],
+    );
+    assert.deepEqual(f.pushes.at(-1)!.userIds.sort(), ["b", "vezeto"]);
   });
 
   it("a resend with the same client id returns the same message, and an empty text is refused", async () => {

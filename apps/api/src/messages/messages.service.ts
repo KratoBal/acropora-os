@@ -1595,22 +1595,26 @@ export class MessagesService {
    * A BELSŐ KÖR FRISSÍTÉSE, minden partneres üzenet és belső megnyitás előtt
    * (Balázs, 2026-10-06 13:04 UTC: a delegált kapja meg; a kör minden
    * üzenetnél újraszámolva). A kör a hibajegy delegált kollégái, delegált
-   * nélkül a „hibajegy nyílt” értesítési szerep tagjai; csak aktív belső fiók.
-   * Aki a körbe újonnan került, most lesz tag, és a régebbi üzeneteket is
-   * látja. Aki nincs a körben (a delegálása megszűnt, vagy csak megnyitotta),
-   * kikerül; a beszélgetés ettől nem archiválódik.
+   * nélkül a „hibajegy nyílt” értesítési szerep tagjai, és mellettük, aki
+   * belső oldalról már írt benne (acrobot döntése, 15:29); csak aktív belső
+   * fiók. Aki a körbe újonnan került, most lesz tag, és a régebbi üzeneteket
+   * is látja. Aki nincs a körben (a delegálása megszűnt, és nem írt benne,
+   * vagy csak megnyitotta), kikerül; a beszélgetés ettől nem archiválódik.
    */
   private async syncPartnerStaff(
     conversationId: string,
     jobId: string,
     actorUserId: string,
   ): Promise<void> {
-    const [staff, members] = await Promise.all([
+    const [staff, writers, members] = await Promise.all([
       this.repository.partnerConversationStaff(jobId),
+      this.repository.partnerConversationWriters(conversationId),
       this.repository.members(conversationId),
     ]);
     const circle = new Set(
-      staff.filter((person) => mayJoinInternal(person)).map((p) => p.id),
+      [...staff, ...writers]
+        .filter((person) => mayJoinInternal(person))
+        .map((p) => p.id),
     );
     const active = new Set(
       members.filter((m) => m.leftAt === null).map((m) => m.userId),

@@ -163,3 +163,32 @@ describe("the partner conversation's internal circle, in the repository", () => 
     });
   });
 });
+
+describe("the partner conversation's writers, in the repository", () => {
+  const findMany = prisma.message.findMany;
+  afterEach(() => {
+    prisma.message.findMany = findMany;
+  });
+
+  it("are the active internal senders of non-system messages in this conversation, once each", async () => {
+    let asked: unknown;
+    prisma.message.findMany = (async (args: unknown) => {
+      asked = args;
+      return [{ sender: { id: "vezeto" } }];
+    }) as unknown as typeof findMany;
+    const writers = await new MessagesRepository().partnerConversationWriters(
+      "conv1",
+    );
+    assert.deepEqual(
+      writers.map((person) => person.id),
+      ["vezeto"],
+    );
+    const { where, distinct } = asked as { where: unknown; distinct: unknown };
+    assert.deepEqual(where, {
+      conversationId: "conv1",
+      type: { not: "SYSTEM" },
+      sender: { isActive: true, customerId: null, supplierId: null },
+    });
+    assert.deepEqual(distinct, ["senderUserId"]);
+  });
+});
