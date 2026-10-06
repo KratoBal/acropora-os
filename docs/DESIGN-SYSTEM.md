@@ -1,5 +1,7 @@
 # Acropora OS Design System
 
+A Figma-tervek és a kódbeli route-/komponens-területek megfeleltetését a [FIGMA-MAP.md](./FIGMA-MAP.md) tartalmazza.
+
 ## Cél
 
 Az Acropora OS felülete gyorsan áttekinthető, visszafogott és sűrű információt is kényelmesen kezel. A vizuális nyelv a Shopify Admin, a Linear és a Stripe Dashboard termékszemléletét követi, kész admin sablon átvétele nélkül.

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it } from "node:test";
 
 /**
@@ -47,6 +48,7 @@ function sor(mezok: {
   model?: string;
   detail?: string;
   uid?: string;
+  quantity?: string;
   volume?: string;
   performance?: string;
   powerConsumptionRaw?: string;
@@ -63,6 +65,7 @@ function sor(mezok: {
   oszlopok[8] = mezok.model ?? "";
   oszlopok[9] = mezok.detail ?? "";
   oszlopok[10] = mezok.uid ?? "";
+  oszlopok[11] = mezok.quantity ?? "";
   oszlopok[12] = mezok.volume ?? "";
   oszlopok[13] = mezok.performance ?? "";
   oszlopok[14] = mezok.powerConsumptionRaw ?? "";
@@ -342,7 +345,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const elso = payload[0];
     assert.match(elso.name, /^BIO\/LSS22 /);
     assert.equal(elso.electricalCode, "022-3-003 / 62M");
-    assert.equal(elso.partnerInternalCode, "LSS22-AIP-01");
+    assert.equal(elso.partnerInternalCode, "BIO-LSS22-AIP-01");
     assert.equal(elso.departmentId, "unit-lss22");
     assert.equal(elso.ownerType, "SUPPLIER");
     assert.equal(elso.kind, "EQUIPMENT");
@@ -443,12 +446,15 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.match(stderr, /146\.7/);
   });
 
-  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel MEGALL, nem kerekit es nem talalgat", () => {
+  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel a mezo ures marad, a nyers ertek a leirasba kerul", () => {
     /*
       acrobot merese, 2026-09-23 22:01: a valodi forrasban 16 sor nem
       egyetlen szam (tartomany, tobb ertek, mas mertekegyseg) -- ezeket
       NEM lehet kerekitessel feloldani, mert tobb informaciot hordoznak,
-      mint amennyi a mezobe fer.
+      mint amennyi a mezobe fer. Eddig ez MEGALLASI ok volt; acrobot dontese
+      2026-10-06 (27092, a "31-29-26" cella az RHK/MEK/ETK/BO1/BO2 soron): a
+      mezo ures marad, a nyers ertek a leirasba kerul, es a stderr nevesiti.
+      MI PIROSIT: ha a nyers ertek elveszik, vagy egy szamma alakul.
     */
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
@@ -460,10 +466,13 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "--units",
       units,
     ]);
-    assert.notEqual(kod, 0);
-    assert.equal(stdout, "");
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload[0].performance, undefined);
+    assert.equal(payload[0].performanceUnitId, undefined);
+    assert.match(payload[0].description, /Teljesítmény \(nyers\): 175\/210/);
+    assert.match(stderr, /TELJESITMENY NYERSEN/);
     assert.match(stderr, /sor 40/);
-    assert.match(stderr, /175\/210/);
   });
 
   it("a Terfogat (L oszlop) UGYANAZZAL a fuggvennyel kerekit, mint a Teljesitmeny", () => {
@@ -532,7 +541,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const payload = JSON.parse(stdout);
     assert.ok(
       payload.every((p: { partnerInternalCode: string }) =>
-        p.partnerInternalCode.startsWith("LSS22-"),
+        p.partnerInternalCode.startsWith("BIO-LSS22-"),
       ),
       `idegen helyszin sora csuszott be: ${stdout}`,
     );
@@ -688,7 +697,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     // A sajat kod (E, "TRI") RESZE a partnerInternalCode-nak -- nautilus
     // merese: nelkule ket KULONBOZO gyermek (pl. egy TRI es egy VAL)
     // ugyanazon szulo alatt UGYANAZT a kodot kapna.
-    assert.equal(payload[0].partnerInternalCode, "LSS22-CPT-TRI-01");
+    assert.equal(payload[0].partnerInternalCode, "BIO-LSS22-CPT-TRI-01");
   });
 
   it("BEEPITETT sorokon a sajat kod (E) nelkul KET KULONBOZO gyermek NEM utkozne -- csak akkor utkozik, ha E ES F is egyezik", () => {
@@ -726,8 +735,8 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       (p: { partnerInternalCode: string }) => p.partnerInternalCode,
     );
     assert.deepEqual([...new Set(kodok)], kodok);
-    assert.ok(kodok.includes("LSS22-CPT-TRI-01"));
-    assert.ok(kodok.includes("LSS22-CPT-VAL"));
+    assert.ok(kodok.includes("BIO-LSS22-CPT-TRI-01"));
+    assert.ok(kodok.includes("BIO-LSS22-CPT-VAL"));
   });
 
   it("BEEPITETT soron D kitoltve, de NINCS onallo szulo-sor a C-vel: MEGALL", () => {
@@ -802,13 +811,13 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(kod, 0, stderr);
     const payload = JSON.parse(stdout);
     const gyerek = payload.find((p: { partnerInternalCode: string }) =>
-      p.partnerInternalCode.startsWith("LSS22-CPT-01-VAL"),
+      p.partnerInternalCode.startsWith("BIO-LSS22-CPT-01-VAL"),
     );
     assert.ok(gyerek, `nem talaltam a D-t hordozo builtin sort: ${stdout}`);
-    assert.equal(gyerek.partnerInternalCode, "LSS22-CPT-01-VAL-01");
+    assert.equal(gyerek.partnerInternalCode, "BIO-LSS22-CPT-01-VAL-01");
     const szulo = payload.find(
       (p: { partnerInternalCode: string }) =>
-        p.partnerInternalCode === "LSS22-CPT-01",
+        p.partnerInternalCode === "BIO-LSS22-CPT-01",
     );
     assert.ok(szulo, `nem talaltam az onallo szulo-sort: ${stdout}`);
   });
@@ -850,10 +859,10 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(kod, 0, stderr);
     const payload = JSON.parse(stdout);
     const gyerek = payload.find((p: { partnerInternalCode: string }) =>
-      p.partnerInternalCode.startsWith("LSS22-CPT-01-02-PUM"),
+      p.partnerInternalCode.startsWith("BIO-LSS22-CPT-01-02-PUM"),
     );
     assert.ok(gyerek, `nem talaltam az osszetett D-t hordozo sort: ${stdout}`);
-    assert.equal(gyerek.partnerInternalCode, "LSS22-CPT-01-02-PUM-01");
+    assert.equal(gyerek.partnerInternalCode, "BIO-LSS22-CPT-01-02-PUM-01");
   });
 
   it("BEEPITETT soron OSSZETETT D ('01/02'), az egyik resznek NINCS szuloje: MEGALL", () => {
@@ -1029,7 +1038,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "meglevo.json",
       JSON.stringify({
         items: [
-          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+          { partnerInternalCode: "BIO-LSS95-VPU-04", id: "real-parent-id-1" },
         ],
       }),
     );
@@ -1049,14 +1058,14 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const payload = JSON.parse(stdout);
     const gyerek = payload.find(
       (p: { partnerInternalCode: string }) =>
-        p.partnerInternalCode === "LSS95-VPU-04-FIB",
+        p.partnerInternalCode === "BIO-LSS95-VPU-04-FIB",
     );
     assert.ok(gyerek, `nem talaltam a gyermeket: ${stdout}`);
     assert.equal(gyerek.parentAssetId, "real-parent-id-1");
     // A SZULO SAJAT sora (nem beepitett) NEM kaphat parentAssetId-t.
     const szulo = payload.find(
       (p: { partnerInternalCode: string }) =>
-        p.partnerInternalCode === "LSS95-VPU-04",
+        p.partnerInternalCode === "BIO-LSS95-VPU-04",
     );
     assert.ok(szulo);
     assert.ok(!("parentAssetId" in szulo));
@@ -1101,7 +1110,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "meglevo.json",
       JSON.stringify({
         items: [
-          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+          { partnerInternalCode: "BIO-LSS95-VPU-04", id: "real-parent-id-1" },
         ],
       }),
     );
@@ -1134,7 +1143,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "meglevo.json",
       JSON.stringify({
         items: [
-          { partnerInternalCode: "LSS95-VPU-04", id: "real-parent-id-1" },
+          { partnerInternalCode: "BIO-LSS95-VPU-04", id: "real-parent-id-1" },
         ],
       }),
     );
@@ -1152,7 +1161,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     const payload = JSON.parse(stdout);
     const uresD = payload.find(
       (p: { partnerInternalCode: string }) =>
-        p.partnerInternalCode === "LSS95-HSZ-VPU",
+        p.partnerInternalCode === "BIO-LSS95-HSZ-VPU",
     );
     assert.ok(uresD, `nem talaltam az ures D-vel allo sort: ${stdout}`);
     assert.ok(!("parentAssetId" in uresD));
@@ -1229,7 +1238,7 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.equal(kod, 0, stderr);
     const payload = JSON.parse(stdout);
     const gyerek = payload.find((p: { partnerInternalCode: string }) =>
-      p.partnerInternalCode.startsWith("LSS95-CPT-01-02-PUM"),
+      p.partnerInternalCode.startsWith("BIO-LSS95-CPT-01-02-PUM"),
     );
     assert.ok(gyerek, `nem talaltam az osszetett D-t hordozo sort: ${stdout}`);
     assert.ok(!("parentAssetId" in gyerek));
@@ -1274,5 +1283,189 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.notEqual(kod, 0);
     assert.equal(stdout, "");
     assert.match(stderr, /LSS-NEMLETEZO/);
+  });
+
+  /*
+  A PARTNER-KOD ELOTAGJA A LEGFELSO HELYSZIN KODJA (Balazs, 2026-09-24
+  09:33/09:37 UTC; acrobot emleke 1806/1807). MI PIROSIT: ha a kod a
+  kozvetlen szulo kodjat kapja a gyokere helyett (a FAN/AKV/A11 faban a
+  kozbulso AKV kimarad, Balazs sajat peldaja: FAN-A11-HSZ-01); ha a beepitett
+  sor szulo-keresese elotag nelkul keres (a bent levo kodok mind elotagosak).
+*/
+  describe("fank-payload: a partner-kod elotagja a legfelso helyszin", () => {
+    // a szkript importalhato: a CLI csak kozvetlen futtataskor indul (isMain)
+    const modul = () =>
+      import(pathToFileURL(SZKRIPT).href) as Promise<{
+        resolveUnit: (
+          units: unknown[],
+          code: string,
+        ) => { parentCode: string; topCode: string };
+        buildPartnerInternalCode: (
+          site: string,
+          row: object,
+          top?: string,
+        ) => string;
+        resolveParentAssetId: (
+          site: string,
+          row: object,
+          existing: Map<string, string>,
+          top?: string,
+        ) => { szuloKod: string; parentAssetId: string | null };
+      }>;
+    const FA = [
+      { id: "fan", parentId: null, code: "FAN", name: "Fank", isActive: true },
+      {
+        id: "akv",
+        parentId: "fan",
+        code: "AKV",
+        name: "Akvarium",
+        isActive: true,
+      },
+      {
+        id: "a11",
+        parentId: "akv",
+        code: "A11",
+        name: "Akvarium 11",
+        isActive: true,
+      },
+    ];
+
+    it("a gyoker kodjat adja a kozbulso szint helyett", async () => {
+      const { resolveUnit, buildPartnerInternalCode } = await modul();
+      const { parentCode, topCode } = resolveUnit(FA, "A11");
+      assert.deepEqual([parentCode, topCode], ["AKV", "FAN"]);
+      assert.equal(
+        buildPartnerInternalCode(
+          "A11",
+          { deviceCode: "HSZ", deviceSerial: "01", builtin: "" },
+          topCode,
+        ),
+        "FAN-A11-HSZ-01",
+      );
+    });
+
+    it("a beepitett sor szulojet az elotagos koddal keresi", async () => {
+      const { resolveParentAssetId } = await modul();
+      const meglevo = new Map([["FAN-A11-HSZ-01", "real-parent"]]);
+      const talalat = resolveParentAssetId(
+        "A11",
+        {
+          deviceCode: "HSZ",
+          deviceSerial: "01",
+          builtin: "VAL",
+          builtinSerial: "01",
+        },
+        meglevo,
+        "FAN",
+      );
+      assert.deepEqual(
+        [talalat.szuloKod, talalat.parentAssetId],
+        ["FAN-A11-HSZ-01", "real-parent"],
+      );
+    });
+
+    it("megall, ha egy os hianyzik az egyseg-listabol", async () => {
+      const { resolveUnit } = await modul();
+      assert.throws(
+        () =>
+          resolveUnit(
+            FA.filter((u) => u.id !== "fan"),
+            "A11",
+          ),
+        /ose/,
+      );
+    });
+  });
+
+  /*
+  A DARABSZAM KIBONTASA (--darabszam-kibontas, alapbol KI; acrobot 27092). A
+  bevett minta elesben: BIO-LSS07-PMF-01-MET-01..05. MI PIROSIT: ha kapcsolo
+  nelkul is kibont; ha a darabok kulcsa nem kulonbozik (az idempotencia a
+  masodikat elnyelne); ha egy mar kitoltott sorszam-helyet felulir; ha a nem
+  egesz darabszamot csendben 1-nek veszi.
+*/
+  describe("fank-payload: a darabszam kibontasa", () => {
+    const TSV = (extra: string[]) =>
+      [
+        TSV_FEJLEC,
+        sor({ sor: "1", site: "LSS22", deviceCode: "CPT", deviceSerial: "01" }),
+        ...extra,
+      ].join("\n") + "\n";
+    const futas = (tsvText: string, kibont: boolean) => {
+      const dir = mappa();
+      return futtat([
+        "LSS22",
+        "--tsv",
+        iras(dir, "forras.tsv", tsvText),
+        "--units",
+        iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK)),
+        ...(kibont ? ["--darabszam-kibontas"] : []),
+      ]);
+    };
+    const harom = sor({
+      sor: "2",
+      site: "LSS22",
+      deviceCode: "CPT",
+      deviceSerial: "01",
+      builtin: "MET",
+      quantity: "3",
+    });
+
+    it("kapcsolo nelkul egy sor egy eszkoz, mint eddig", () => {
+      const { kod, stdout, stderr } = futas(TSV([harom]), false);
+      assert.equal(kod, 0, stderr);
+      assert.equal(JSON.parse(stdout).length, 2);
+    });
+
+    it("kapcsoloval a K=3 sor harom eszkoz, -01..-03 koddal es kulon kulccsal", () => {
+      const { kod, stdout, stderr } = futas(TSV([harom]), true);
+      assert.equal(kod, 0, stderr);
+      const payload = JSON.parse(stdout) as {
+        partnerInternalCode: string;
+        clientOperationId: string;
+      }[];
+      assert.deepEqual(
+        payload
+          .slice(1)
+          .map((p) => [p.partnerInternalCode, p.clientOperationId]),
+        [
+          ["BIO-LSS22-CPT-01-MET-01", "fank-import:lss22:2:01"],
+          ["BIO-LSS22-CPT-01-MET-02", "fank-import:lss22:2:02"],
+          ["BIO-LSS22-CPT-01-MET-03", "fank-import:lss22:2:03"],
+        ],
+      );
+      assert.match(stderr, /\+ 2 kibontott darab = 4 kimeneti eszkoz/);
+    });
+
+    it("megall, ha a sorszam helye mar ki van toltve, vagy a darabszam nem egesz szam", () => {
+      const kitoltott = sor({
+        ...{
+          sor: "3",
+          site: "LSS22",
+          deviceCode: "CPT",
+          deviceSerial: "01",
+          builtin: "VAL",
+          builtinSerial: "02",
+          quantity: "4",
+        },
+      });
+      const szoveg = sor({
+        sor: "4",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01",
+        builtin: "PUM",
+        quantity: "Futesi",
+      });
+      const elso = futas(TSV([kitoltott]), true);
+      assert.notEqual(elso.kod, 0);
+      assert.match(elso.stderr, /sor 3: K=4, de a sorszam helye \(F="02"\)/);
+      const masodik = futas(TSV([szoveg]), true);
+      assert.notEqual(masodik.kod, 0);
+      assert.match(
+        masodik.stderr,
+        /sor 4: a darabszam nem egesz szam: "Futesi"/,
+      );
+    });
   });
 });
