@@ -387,6 +387,44 @@ describe("the delayed list reload", () => {
   });
 });
 
+describe("a late answer after the page is gone (card d27df94f)", () => {
+  /*
+    A MÁSIK ÚT AZ IDŐZÍTŐHÖZ: a beszélgetés-nézet olvasottnak jelöl
+    (`markRead(...).then(onChanged)`), és az `onChanged` a lap késleltetett
+    újraolvasását indítja. Ha a jelölés válasza a lap lebontása UTÁN jön, a
+    lebontás már nem törölheti az akkor induló időzítőt. Ez ingadozott a CI-ban
+    (a fenti „dies with the page” teszt a 400 ms alatt egy listaolvasást látott):
+    a válasz hol a lebontás előtt jött, hol utána. Itt a sorrend rögzített: a
+    válasz a lebontás után jön, és utána a lap már nem olvas.
+  */
+  it("a mark-read answer arriving after leaving schedules no list read", async () => {
+    let answer: (value: { moved: boolean }) => void = () => {};
+    api.markRead.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const page = render(<MessagesPage />);
+      await row("m1");
+      await vi.waitFor(() => expect(api.markRead).toHaveBeenCalled());
+      const calls = api.list.mock.calls.length;
+      page.unmount();
+      await act(async () => {
+        answer({ moved: true });
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(api.list.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("a list request still pending when the page goes", () => {
   it("is aborted when the page goes, so its answer cannot write into a page that is gone", async () => {
     let signal: AbortSignal | undefined;

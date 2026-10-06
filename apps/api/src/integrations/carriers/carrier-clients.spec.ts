@@ -7,6 +7,7 @@ import { carrierClientFor } from "./carrier-client.factory.js";
 import {
   FOXPOST_API_URL,
   FoxpostApiClient,
+  foxpostAnswerKeys,
   type FoxpostApiConfig,
 } from "./foxpost-api.client.js";
 import {
@@ -209,8 +210,63 @@ describe("FoxpostApiClient", () => {
 
     assert.equal(error.code, "UNEXPECTED_RESPONSE");
     assert.equal(logged.length, 1);
-    assert.match(logged[0]!, /clFox, recipientName/);
+    assert.match(logged[0]!, /clFox=set, recipientName=set/);
     assert.doesNotMatch(logged[0]!, /Teszt Címzett/);
+    // a hiba reszlete maga is hordozza a kulcsneveket (6077cda9), ertek nelkul
+    assert.equal(
+      error.detail,
+      "no barcode in the create answer; answer keys: valid, parcels; parcel keys: clFox=set, recipientName=set",
+    );
+    assert.doesNotMatch(error.detail ?? "", /Teszt Címzett|"X"/);
+  });
+
+  it("names what is missing when the answer has no parcel element, never inventing keys", () => {
+    assert.equal(
+      foxpostAnswerKeys({ valid: true, parcels: [] }),
+      "answer keys: valid, parcels; parcel keys: (empty list)",
+    );
+    assert.equal(
+      foxpostAnswerKeys({ valid: true }),
+      "answer keys: valid; parcel keys: (missing)",
+    );
+    assert.equal(
+      foxpostAnswerKeys(null),
+      "answer keys: (null); parcel keys: (missing)",
+    );
+    assert.equal(
+      foxpostAnswerKeys({ parcels: [{}] }),
+      "answer keys: parcels; parcel keys: (none)",
+    );
+  });
+
+  /*
+    A KULCSONKENTI JELOLES (6077cda9; acrobot merese 17:41): az eles valaszban
+    a `barcode` ott allhat URESEN, es az azonosito egy masik kulcson. A jeloles
+    megmondja, melyik ures es melyiknek van erteke -- az erteket soha.
+  */
+  it("marks each parcel key empty or set, and never shows a value", () => {
+    const text = foxpostAnswerKeys({
+      valid: true,
+      parcels: [
+        {
+          barcode: null,
+          barcodeTof: "   ",
+          clFoxId: "CLFOX0000000000123",
+          uniqueBarcode: "",
+          orderId: 987654,
+          sendCode: [],
+          errors: [],
+          routeInfo: {},
+          recipientName: "Teszt Címzett",
+          fragile: false,
+        },
+      ],
+    });
+    assert.equal(
+      text,
+      "answer keys: valid, parcels; parcel keys: barcode=empty, barcodeTof=empty, clFoxId=set, uniqueBarcode=empty, orderId=set, sendCode=empty, errors=empty, routeInfo=empty, recipientName=set, fragile=set",
+    );
+    assert.doesNotMatch(text, /CLFOX0000000000123|987654|Teszt Címzett/);
   });
 
   it("maps a field error on the destination to INVALID_POINT, with a Hungarian message", async () => {

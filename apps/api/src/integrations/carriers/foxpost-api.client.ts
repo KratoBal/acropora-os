@@ -74,6 +74,49 @@ export function foxpostFieldErrorCode(
   return "REJECTED";
 }
 
+/**
+ * A LETREHOZASI VALASZ KULCSNEVEI, ERTEK NELKUL: a valasze, es az elso
+ * csomag-eleme kulcsonkent azzal, hogy URES-e vagy VAN-E erteke (`=empty`,
+ * `=set`). Ha a `parcels` nem tomb vagy ures, azt mondja ki, nem talal ki
+ * kulcsot.
+ *
+ * MIERT A JELOLES (acrobot merese, 2026-10-06 17:41, kartya 6077cda9): egy
+ * ervenytelen pontra kuldott, csomagot NEM letrehozo hivas valaszaban a
+ * `barcode` kulcs ott all (mellette `barcodeTof`, `clFoxId`, `uniqueBarcode`,
+ * `orderId`, `sendCode` es tarsai). Az eles probanal tehat valoszinuleg URES
+ * volt, es az azonosito egy masik kulcson allt. Hogy melyiken, azt a
+ * kovetkezo valasz ebbol a jelolesbol egy lepesben megmondja.
+ */
+export function foxpostAnswerKeys(body: unknown): string {
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  const kind = (value: unknown) =>
+    `(${value === null ? "null" : Array.isArray(value) ? "array" : typeof value})`;
+  const empty = (value: unknown) =>
+    value === null ||
+    value === undefined ||
+    (typeof value === "string" && !value.trim()) ||
+    (Array.isArray(value) && value.length === 0) ||
+    (isObject(value) && Object.keys(value).length === 0);
+  const answer = isObject(body)
+    ? Object.keys(body).join(", ") || "(none)"
+    : kind(body);
+  const parcels = isObject(body) ? body.parcels : undefined;
+  const element = Array.isArray(parcels) ? parcels[0] : undefined;
+  const parcel = !Array.isArray(parcels)
+    ? parcels === undefined
+      ? "(missing)"
+      : kind(parcels)
+    : parcels.length === 0
+      ? "(empty list)"
+      : !isObject(element)
+        ? kind(element)
+        : Object.entries(element)
+            .map(([key, value]) => `${key}=${empty(value) ? "empty" : "set"}`)
+            .join(", ") || "(none)";
+  return `answer keys: ${answer}; parcel keys: ${parcel}`;
+}
+
 export class FoxpostApiClient implements CarrierClient {
   readonly carrier = "foxpost" as const;
 
@@ -191,14 +234,20 @@ export class FoxpostApiClient implements CarrierClient {
     }
     const barcode = parcel?.barcode;
     if (typeof barcode !== "string" || !barcode.trim()) {
-      // a kulcsnevek mennek a naplora, ertek (szemelyes adat) nem
+      /*
+        A HIBA MAGA HORDOZZA A VALASZ KULCSNEVEIT (kartya 6077cda9): az eles
+        valaszban nem volt `barcode`, es a kulcs nevet csak a valasz mondhatja
+        meg -- a leiras a csomag-elemet uresen adja. Kulcsnev megy, ertek
+        (szemelyes adat, csomagszam) nem; a hivo a reszletet naplozza.
+      */
+      const keys = foxpostAnswerKeys(body);
       this.logger.warn(
-        `Foxpost createParcel: no barcode in the answer; keys: ${Object.keys(parcel ?? body ?? {}).join(", ")}`,
+        `Foxpost createParcel: no barcode in the answer; ${keys}`,
       );
       throw new CarrierError(
         "UNEXPECTED_RESPONSE",
         "foxpost",
-        "no barcode in the create answer",
+        `no barcode in the create answer; ${keys}`,
       );
     }
     return { parcelNumber: barcode.trim() };
