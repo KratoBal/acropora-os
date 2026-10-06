@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnModuleDestroy,
   type OnModuleInit,
 } from "@nestjs/common";
@@ -32,6 +33,7 @@ import {
   assistantReplyPlan,
 } from "./messages.rules.js";
 import { MessagesService } from "./messages.service.js";
+import { SUTYERAK_INBOX_REDIRECT, SutyerakInbox } from "./sutyerak-inbox.js";
 
 /** Az átjáró egy NDJSON-sora, amennyit a válaszhoz olvasunk belőle. */
 type GatewayEvent =
@@ -81,7 +83,7 @@ export function readGatewayAnswer(body: string): {
 @Injectable()
 export class MessagesAssistantService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MessagesAssistantService.name);
-  private subscription: Subscription | null = null;
+  private readonly subscriptions: Subscription[] = [];
   private readonly running = new Map<string, Promise<unknown>>();
 
   constructor(
@@ -90,16 +92,101 @@ export class MessagesAssistantService implements OnModuleInit, OnModuleDestroy {
     private readonly assistant: AssistantService,
     private readonly thinking: AssistantThinkingState,
     @Inject(MESSAGE_EVENT_BUS) private readonly bus: MessageEventBus,
+    /** A senki által nem olvasott postafiók-fiókok (4. pont B, 6. tétel). */
+    @Optional() private readonly inbox?: SutyerakInbox,
   ) {}
 
   onModuleInit(): void {
-    this.subscription = this.bus
-      .subscribe(SUTYERAK_USER_ID)
-      .subscribe((event) => this.onEvent(event));
+    this.subscriptions.push(
+      this.bus
+        .subscribe(SUTYERAK_USER_ID)
+        .subscribe((event) => this.onEvent(event)),
+    );
+    for (const inboxId of this.inbox?.ids() ?? []) {
+      this.subscriptions.push(
+        this.bus
+          .subscribe(inboxId)
+          .subscribe((event) => this.onInboxEvent(inboxId, event)),
+      );
+    }
+    // a már meglévő, megválaszolatlan beszélgetések egyszer megkapják a mondatot
+    void this.redirectWaiting().catch((error: unknown) =>
+      this.logger.warn(
+        `Inbox redirect pass failed: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
   }
 
   onModuleDestroy(): void {
-    this.subscription?.unsubscribe();
+    for (const subscription of this.subscriptions) subscription.unsubscribe();
+  }
+
+  private onInboxEvent(inboxId: string, event: MessageStreamEvent): void {
+    if (event.type !== "message.created") return;
+    void this.serial(event.conversationId, () =>
+      this.redirect(inboxId, event.conversationId, event.messageId),
+    ).catch((error: unknown) =>
+      this.logger.warn(
+        `Inbox redirect failed in ${event.conversationId}: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+  }
+
+  /**
+   * A POSTAFIÓK-FIÓK EGY MONDATA (4. pont B, 6. tétel; a választás indoka: ez
+   * hagyja a legkevesebb különutat). A fiók nem választható többé, és ha mégis
+   * írnak neki (egy régi beszélgetésben), a SAJÁT nevében egyszer megmondja,
+   * hogy nem olvas, és kit kérdezzenek. Ha az előző üzenet már ez a mondat
+   * volt, nem ismétli. A visszatérés a teszteknek szól.
+   */
+  async redirect(
+    inboxId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<"SKIPPED" | "REDIRECTED"> {
+    const [row] = await this.repository.messagesByIds([messageId]);
+    if (!row || row.senderUserId === inboxId || row.deletedAt !== null)
+      return "SKIPPED";
+    if (row.type === "SYSTEM") return "SKIPPED";
+    const { rows } = await this.repository.messagesPage({
+      conversationId,
+      before: null,
+      limit: 2,
+    });
+    const previous = rows.find((m) => m.id !== messageId);
+    if (
+      previous?.senderUserId === inboxId &&
+      previous.text === SUTYERAK_INBOX_REDIRECT
+    )
+      return "SKIPPED";
+    await this.messages.postAs(
+      inboxId,
+      conversationId,
+      SUTYERAK_INBOX_REDIRECT,
+    );
+    return "REDIRECTED";
+  }
+
+  /**
+   * INDULÁSKOR egyszer: minden beszélgetés, ahol egy postafiók-fiók tag, és az
+   * utolsó üzenet nem tőle jött (vagyis valaki írt neki, és nem kapott
+   * választ), megkapja a mondatot. Ugyanaz a szabály, mint fent, tehát egy
+   * újraindítás nem ismétli.
+   */
+  async redirectWaiting(): Promise<number> {
+    let sent = 0;
+    for (const inboxId of this.inbox?.ids() ?? []) {
+      for (const conversation of await this.repository.conversationsOf(
+        inboxId,
+      )) {
+        if (!conversation.lastMessageId) continue;
+        const outcome = await this.serial(conversation.id, () =>
+          this.redirect(inboxId, conversation.id, conversation.lastMessageId!),
+        );
+        if (outcome === "REDIRECTED") sent++;
+      }
+    }
+    return sent;
   }
 
   private onEvent(event: MessageStreamEvent): void {
