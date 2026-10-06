@@ -144,7 +144,7 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     ).toBe("true");
     await webshopFul();
     const lista = screen.getByRole("list", { name: "Sablonok" });
-    expect(within(lista).getAllByRole("button")).toHaveLength(10);
+    expect(within(lista).getAllByRole("button")).toHaveLength(11);
     const feladtuk = within(lista).getByRole("button", {
       name: /Csomag átadva a szállítónak/,
     });

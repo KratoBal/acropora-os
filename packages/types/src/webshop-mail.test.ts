@@ -12,6 +12,7 @@ import {
   mailForint,
   parseWebshopMailFacts,
   webshopMailContent,
+  type WebshopMailFacts,
   type WebshopMailOrder,
 } from "./webshop-mail.js";
 
@@ -26,7 +27,7 @@ describe("the webshop events and their derivation", () => {
       webshop.map((e) => e.id).sort(),
       Object.values(WEBSHOP_MAIL_KEYS).sort(),
     );
-    assert.equal(webshop.length, 10);
+    assert.equal(webshop.length, 11);
   });
 
   /*
@@ -205,6 +206,39 @@ describe("the derived content", () => {
     assert.doesNotMatch(box({ gls_logo_url: undefined }), /<img/);
   });
 
+  /*
+    THE SPLIT NOTICE (card 0a14f739 C/3; murena 26656). WHAT TURNS RED: the
+    sentence follows the later part's own payment (a card split's later part
+    has none yet) instead of the original's; the card sentence promises a
+    charge at the split; one of the two parts is missing from the list.
+  */
+  it("a split: both parts listed, and the payment sentence follows the original order", () => {
+    const sample = WEBSHOP_MAIL_SAMPLE_FACTS["order-split"] as Extract<
+      WebshopMailFacts,
+      { template: "order-split" }
+    >;
+    const card = webshopMailContent(sample);
+    assert.equal(card.values.rendeles_szamok, "#38 és #39");
+    assert.equal(card.values.masodik_resz_szam, "#39");
+    assert.match(
+      card.values.reszek_fizetese_mondat ?? "",
+      /amikor a csomag elindul.*fizetési linket küldünk/,
+    );
+    const list = card.blocks.rendeles_tetelek?.text ?? "";
+    assert.match(list, /Most indul \(#38\):\n- Hanna HI780-25 pH reagens/);
+    assert.match(list, /Később érkezik \(#39\):\n- Aquaforest Reef Salt 22 kg/);
+    assert.match(
+      webshopMailContent({ ...sample, payment: "cod" }).values
+        .reszek_fizetese_mondat ?? "",
+      /átvételekor fizeted.*Külön utánvét-díjat nem/,
+    );
+    assert.equal(
+      webshopMailContent({ ...sample, payment: "store" }).values
+        .reszek_fizetese_mondat,
+      "Mindkét részt a boltban fizeted, átvételkor.",
+    );
+  });
+
   it("the refund names the card when its digits are known", () => {
     const refund = (last4: string | null, refunded_total: number) =>
       webshopMailContent({
@@ -254,6 +288,20 @@ describe("parseWebshopMailFacts", () => {
       ok: false,
       error: "template: ismeretlen sablon",
     });
+  });
+
+  it("a split's payment is one of the three ways", () => {
+    const facts = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-split"]),
+    ) as Record<string, unknown>;
+    facts.payment = "ONLINE_CARD";
+    assert.deepEqual(parseWebshopMailFacts("order-split", facts), {
+      ok: false,
+      error: "facts.payment: card, cod vagy store",
+    });
+    delete facts.split_order;
+    facts.payment = "card";
+    assert.equal(parseWebshopMailFacts("order-split", facts).ok, false);
   });
 
   it("a text longer than the bound is refused, not cut", () => {

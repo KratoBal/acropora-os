@@ -132,7 +132,27 @@ type WebshopTemplateFacts =
   | {
       readonly template: "payment-refunded";
       readonly refund: WebshopRefundFacts;
+    }
+  | {
+      /**
+       * The order split in two (card 0a14f739 C/3; murena 26656): `order` is
+       * the first part with its reduced lines and total, `split_order` the
+       * part that comes later. `payment` is the ORIGINAL order's way of
+       * paying: a card split's later part has no payment yet when this goes.
+       */
+      readonly template: "order-split";
+      readonly order: WebshopMailOrder;
+      readonly split_order: WebshopMailOrder;
+      readonly payment: WebshopSplitPayment;
     };
+
+/** How a split order is paid, from the original order (murena 26656). */
+export type WebshopSplitPayment = "card" | "cod" | "store";
+export const WEBSHOP_SPLIT_PAYMENTS: readonly WebshopSplitPayment[] = [
+  "card",
+  "cod",
+  "store",
+];
 
 export type WebshopMailTemplate = WebshopMailFacts["template"];
 
@@ -152,6 +172,7 @@ export const WEBSHOP_MAIL_KEYS = {
   "order-payment-reminder": "WEBSHOP_PAYMENT_REMINDER",
   "payment-refunded": "WEBSHOP_REFUND",
   "order-status-closed": "WEBSHOP_ORDER_CLOSED",
+  "order-split": "WEBSHOP_ORDER_SPLIT",
 } as const satisfies Record<WebshopMailTemplate, string>;
 
 export const SHOP_NAME = "Acropora tengeri akvarisztika";
@@ -272,6 +293,17 @@ const paymentSentence = (role: WebshopPaymentRole | null): string | null => {
     default:
       return null;
   }
+};
+
+/**
+ * A split order's two parts, paid the original way. A card is charged when
+ * each part's parcel starts (not at the split), and the later part gets its
+ * own payment link when it is ready to ship (acrobot 26652).
+ */
+const SPLIT_PAYMENT_SENTENCE: Record<WebshopSplitPayment, string> = {
+  card: "A kártyádról az első részért csak annak az összegét vonjuk le, amikor a csomag elindul. A második részhez, amikor készen áll a szállításra, emailben fizetési linket küldünk.",
+  cod: "Mindkét részt a csomag átvételekor fizeted, a saját összegét. Külön utánvét-díjat nem számolunk fel.",
+  store: "Mindkét részt a boltban fizeted, átvételkor.",
 };
 
 const ordersLabel = (id: number | string, other: number | string | null) =>
@@ -532,6 +564,31 @@ function templateContent(facts: WebshopTemplateFacts): WebshopMailContent {
       };
     }
 
+    case "order-split": {
+      const a = facts.order;
+      const b = facts.split_order;
+      return {
+        values: {
+          rendeles_szam: String(a.display_id),
+          rendeles_szamok: ordersLabel(a.display_id, b.display_id),
+          masodik_resz_szam: `#${b.display_id}`,
+          reszek_fizetese_mondat: SPLIT_PAYMENT_SENTENCE[facts.payment],
+        },
+        blocks: {
+          rendeles_tetelek: listBlock([
+            {
+              title: `Most indul (#${a.display_id})`,
+              lines: [...priced(a), `Végösszeg: ${mailForint(a.total)}`],
+            },
+            {
+              title: `Később érkezik (#${b.display_id})`,
+              lines: [...priced(b), `Végösszeg: ${mailForint(b.total)}`],
+            },
+          ]),
+        },
+      };
+    }
+
     case "payment-refunded": {
       const r = facts.refund;
       return {
@@ -650,6 +707,24 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     expires_at: "2026-10-11T12:00:00.000Z",
     amount: 39400,
     pickup: null,
+  },
+  "order-split": {
+    ...SAMPLE_COMMON,
+    template: "order-split",
+    order: {
+      ...SAMPLE_ORDER,
+      items: SAMPLE_ORDER.items.slice(0, 1),
+      total: 10500,
+      payment: "ONLINE_CARD",
+    },
+    split_order: {
+      display_id: 39,
+      items: SAMPLE_ORDER.items.slice(1),
+      shipping: [],
+      total: 28900,
+      payment: null,
+    },
+    payment: "card",
   },
   "payment-refunded": {
     ...SAMPLE_COMMON,
@@ -877,6 +952,20 @@ function parseTemplateFacts(
           f.pickup === null || f.pickup === undefined
             ? null
             : order(f.pickup, "facts.pickup"),
+      };
+    }
+    case "order-split": {
+      const payment = f.payment;
+      if (
+        typeof payment !== "string" ||
+        !(WEBSHOP_SPLIT_PAYMENTS as readonly string[]).includes(payment)
+      )
+        throw new FactsError("facts.payment: card, cod vagy store");
+      return {
+        template,
+        order: order(f.order, "facts.order"),
+        split_order: order(f.split_order, "facts.split_order"),
+        payment: payment as WebshopSplitPayment,
       };
     }
     case "payment-refunded": {
