@@ -48,6 +48,7 @@ function sor(mezok: {
   model?: string;
   detail?: string;
   uid?: string;
+  quantity?: string;
   volume?: string;
   performance?: string;
   powerConsumptionRaw?: string;
@@ -64,6 +65,7 @@ function sor(mezok: {
   oszlopok[8] = mezok.model ?? "";
   oszlopok[9] = mezok.detail ?? "";
   oszlopok[10] = mezok.uid ?? "";
+  oszlopok[11] = mezok.quantity ?? "";
   oszlopok[12] = mezok.volume ?? "";
   oszlopok[13] = mezok.performance ?? "";
   oszlopok[14] = mezok.powerConsumptionRaw ?? "";
@@ -444,12 +446,15 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
     assert.match(stderr, /146\.7/);
   });
 
-  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel MEGALL, nem kerekit es nem talalgat", () => {
+  it("a Teljesitmeny NEM EGYETLEN SZAM erteknel a mezo ures marad, a nyers ertek a leirasba kerul", () => {
     /*
       acrobot merese, 2026-09-23 22:01: a valodi forrasban 16 sor nem
       egyetlen szam (tartomany, tobb ertek, mas mertekegyseg) -- ezeket
       NEM lehet kerekitessel feloldani, mert tobb informaciot hordoznak,
-      mint amennyi a mezobe fer.
+      mint amennyi a mezobe fer. Eddig ez MEGALLASI ok volt; acrobot dontese
+      2026-10-06 (27092, a "31-29-26" cella az RHK/MEK/ETK/BO1/BO2 soron): a
+      mezo ures marad, a nyers ertek a leirasba kerul, es a stderr nevesiti.
+      MI PIROSIT: ha a nyers ertek elveszik, vagy egy szamma alakul.
     */
     const dir = mappa();
     const tsv = iras(dir, "forras.tsv", ALAP_TSV);
@@ -461,10 +466,13 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
       "--units",
       units,
     ]);
-    assert.notEqual(kod, 0);
-    assert.equal(stdout, "");
+    assert.equal(kod, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload[0].performance, undefined);
+    assert.equal(payload[0].performanceUnitId, undefined);
+    assert.match(payload[0].description, /Teljesítmény \(nyers\): 175\/210/);
+    assert.match(stderr, /TELJESITMENY NYERSEN/);
     assert.match(stderr, /sor 40/);
-    assert.match(stderr, /175\/210/);
   });
 
   it("a Terfogat (L oszlop) UGYANAZZAL a fuggvennyel kerekit, mint a Teljesitmeny", () => {
@@ -1365,6 +1373,98 @@ describe("fank-payload: helyszin -> betoltesi payload", () => {
             "A11",
           ),
         /ose/,
+      );
+    });
+  });
+
+  /*
+  A DARABSZAM KIBONTASA (--darabszam-kibontas, alapbol KI; acrobot 27092). A
+  bevett minta elesben: BIO-LSS07-PMF-01-MET-01..05. MI PIROSIT: ha kapcsolo
+  nelkul is kibont; ha a darabok kulcsa nem kulonbozik (az idempotencia a
+  masodikat elnyelne); ha egy mar kitoltott sorszam-helyet felulir; ha a nem
+  egesz darabszamot csendben 1-nek veszi.
+*/
+  describe("fank-payload: a darabszam kibontasa", () => {
+    const TSV = (extra: string[]) =>
+      [
+        TSV_FEJLEC,
+        sor({ sor: "1", site: "LSS22", deviceCode: "CPT", deviceSerial: "01" }),
+        ...extra,
+      ].join("\n") + "\n";
+    const futas = (tsvText: string, kibont: boolean) => {
+      const dir = mappa();
+      return futtat([
+        "LSS22",
+        "--tsv",
+        iras(dir, "forras.tsv", tsvText),
+        "--units",
+        iras(dir, "egysegek.json", JSON.stringify(EGYSEGEK)),
+        ...(kibont ? ["--darabszam-kibontas"] : []),
+      ]);
+    };
+    const harom = sor({
+      sor: "2",
+      site: "LSS22",
+      deviceCode: "CPT",
+      deviceSerial: "01",
+      builtin: "MET",
+      quantity: "3",
+    });
+
+    it("kapcsolo nelkul egy sor egy eszkoz, mint eddig", () => {
+      const { kod, stdout, stderr } = futas(TSV([harom]), false);
+      assert.equal(kod, 0, stderr);
+      assert.equal(JSON.parse(stdout).length, 2);
+    });
+
+    it("kapcsoloval a K=3 sor harom eszkoz, -01..-03 koddal es kulon kulccsal", () => {
+      const { kod, stdout, stderr } = futas(TSV([harom]), true);
+      assert.equal(kod, 0, stderr);
+      const payload = JSON.parse(stdout) as {
+        partnerInternalCode: string;
+        clientOperationId: string;
+      }[];
+      assert.deepEqual(
+        payload
+          .slice(1)
+          .map((p) => [p.partnerInternalCode, p.clientOperationId]),
+        [
+          ["BIO-LSS22-CPT-01-MET-01", "fank-import:lss22:2:01"],
+          ["BIO-LSS22-CPT-01-MET-02", "fank-import:lss22:2:02"],
+          ["BIO-LSS22-CPT-01-MET-03", "fank-import:lss22:2:03"],
+        ],
+      );
+      assert.match(stderr, /\+ 2 kibontott darab = 4 kimeneti eszkoz/);
+    });
+
+    it("megall, ha a sorszam helye mar ki van toltve, vagy a darabszam nem egesz szam", () => {
+      const kitoltott = sor({
+        ...{
+          sor: "3",
+          site: "LSS22",
+          deviceCode: "CPT",
+          deviceSerial: "01",
+          builtin: "VAL",
+          builtinSerial: "02",
+          quantity: "4",
+        },
+      });
+      const szoveg = sor({
+        sor: "4",
+        site: "LSS22",
+        deviceCode: "CPT",
+        deviceSerial: "01",
+        builtin: "PUM",
+        quantity: "Futesi",
+      });
+      const elso = futas(TSV([kitoltott]), true);
+      assert.notEqual(elso.kod, 0);
+      assert.match(elso.stderr, /sor 3: K=4, de a sorszam helye \(F="02"\)/);
+      const masodik = futas(TSV([szoveg]), true);
+      assert.notEqual(masodik.kod, 0);
+      assert.match(
+        masodik.stderr,
+        /sor 4: a darabszam nem egesz szam: "Futesi"/,
       );
     });
   });
