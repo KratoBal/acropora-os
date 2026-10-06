@@ -95,7 +95,7 @@ describe("DashboardService", () => {
   it("minden tiltott blokk kulcsa hiányzik a válaszból", async () => {
     for (const [block, permission] of blockPermissions) {
       const role = USER_ROLES.find(
-        (candidate) => !hasPermission(candidate, permission),
+        (candidate) => !hasPermission({ role: candidate }, permission),
       );
       assert.ok(
         role,

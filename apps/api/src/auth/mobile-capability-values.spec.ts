@@ -249,7 +249,7 @@ describe("a mobil csempek es a kozos menu-forras", () => {
     // egy gepi szerepnek nincs "mobil" navigacioja, tehat a hozza tartozo
     // csempe-osszevetes nem hianyt mer, hanem egy nem letezo fogalmat kerdez.
     for (const role of HUMAN_ROLES as readonly UserRole[]) {
-      const forras = new Set(navigationIdsFor(role, "mobile"));
+      const forras = new Set(navigationIdsFor({ role: role }, "mobile"));
       const webshop = mirror.getWebshopCapabilities(role);
       const service = mirror.getServiceCapabilities(role);
       const telefon: Record<string, boolean> = { ...webshop, ...service };

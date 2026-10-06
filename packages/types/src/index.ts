@@ -308,9 +308,12 @@ export interface NavigationItem {
 }
 
 export {
+  effectivePermissions,
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
+  roleTemplateHasPermission,
+  rolesWithPermission,
   HUMAN_ROLES,
   INTERNAL_ROLES,
   isMachineRole,
@@ -369,6 +372,7 @@ export type {
 } from "./brand-management.js";
 export type {
   AuthenticatedUser,
+  PermissionSubject,
   CurrentUserResponse,
   MachineRole,
   PartnerMembership,

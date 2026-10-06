@@ -60,9 +60,8 @@ export function UserVisibleUnits({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
-  const viewerRole = session?.user.role;
-  const canAssign = viewerRole
-    ? hasPermission(viewerRole, PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
+  const canAssign = session
+    ? hasPermission(session.user, PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
     : false;
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);

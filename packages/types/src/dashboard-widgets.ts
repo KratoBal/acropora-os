@@ -25,6 +25,7 @@ import {
   hasAllPermissions,
   PERMISSIONS,
   type Permission,
+  type PermissionSubject,
   type UserRole,
 } from "./auth.js";
 import type { ServiceCapabilityValue } from "./service-capabilities.js";
@@ -620,8 +621,8 @@ export type DashboardStarterLayoutId =
 // The pure rules.
 
 /** Who is looking: the role (permissions) and the per-user capabilities. */
-export interface DashboardViewer {
-  role: UserRole;
+/** The viewer: whose permissions (see `PermissionSubject`) and capabilities. */
+export interface DashboardViewer extends PermissionSubject {
   capabilities: readonly ServiceCapabilityValue[];
 }
 
@@ -667,8 +668,7 @@ export function isDashboardWidgetAvailable(
   viewer: DashboardViewer,
 ): boolean {
   if (definition.availability !== "active") return false;
-  if (!hasAllPermissions(viewer.role, definition.requiredPermissions))
-    return false;
+  if (!hasAllPermissions(viewer, definition.requiredPermissions)) return false;
   if (
     definition.requiredCapability &&
     !viewer.capabilities.includes(definition.requiredCapability)

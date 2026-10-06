@@ -75,8 +75,14 @@ describe("a menü közös forrása", () => {
    * hamisat adna -- vagyis ha az egész menü eltűnt volna.
    */
   it("ismeretlen azonosítóra nem ad láthatóságot, ismertre igen", () => {
-    assert.equal(isNavigationEntryVisible("nincs-ilyen-tetel", "OWNER"), false);
-    assert.equal(isNavigationEntryVisible("dashboard", "OWNER"), true);
+    assert.equal(
+      isNavigationEntryVisible("nincs-ilyen-tetel", { role: "OWNER" }),
+      false,
+    );
+    assert.equal(
+      isNavigationEntryVisible("dashboard", { role: "OWNER" }),
+      true,
+    );
     assert.equal(navigationEntry("nincs-ilyen-tetel"), undefined);
   });
 
@@ -98,16 +104,16 @@ describe("a menü közös forrása", () => {
    */
   it("szűkít: akinek nincs joga, nem látja -- akinek van, igen", () => {
     // JOG-ALAPÚ ÁG. A SERVICE szerepnek nincs `users.manage` joga, az OWNER-nek van.
-    assert.equal(isNavigationEntryVisible("users", "SERVICE"), false);
-    assert.equal(isNavigationEntryVisible("users", "OWNER"), true);
+    assert.equal(isNavigationEntryVisible("users", { role: "SERVICE" }), false);
+    assert.equal(isNavigationEntryVisible("users", { role: "OWNER" }), true);
 
     // SZEREP-LISTÁS ÁG. A SALES nincs a NAV-csempe listáján, az ADMIN igen.
     assert.equal(
-      isNavigationEntryVisible("nav-integration-mobile", "SALES"),
+      isNavigationEntryVisible("nav-integration-mobile", { role: "SALES" }),
       false,
     );
     assert.equal(
-      isNavigationEntryVisible("nav-integration-mobile", "ADMIN"),
+      isNavigationEntryVisible("nav-integration-mobile", { role: "ADMIN" }),
       true,
     );
   });
@@ -119,17 +125,23 @@ describe("a menü közös forrása", () => {
    * hogy a kettő örökre együtt marad.
    */
   it("a Kalkulátorok tétel ugyanazt a jogot nézi, mint az Akváriumok", () => {
-    assert.equal(isNavigationEntryVisible("calculators", "OWNER"), true);
-    assert.equal(isNavigationEntryVisible("calculators", "WAREHOUSE"), false);
     assert.equal(
-      isNavigationEntryVisible("calculators", "OWNER"),
-      isNavigationEntryVisible("aquariums", "OWNER"),
+      isNavigationEntryVisible("calculators", { role: "OWNER" }),
+      true,
+    );
+    assert.equal(
+      isNavigationEntryVisible("calculators", { role: "WAREHOUSE" }),
+      false,
+    );
+    assert.equal(
+      isNavigationEntryVisible("calculators", { role: "OWNER" }),
+      isNavigationEntryVisible("aquariums", { role: "OWNER" }),
     );
   });
 
   it("felületenként külön szűr", () => {
-    const web = navigationIdsFor("OWNER", "web");
-    const mobil = navigationIdsFor("OWNER", "mobile");
+    const web = navigationIdsFor({ role: "OWNER" }, "web");
+    const mobil = navigationIdsFor({ role: "OWNER" }, "mobile");
 
     assert.ok(web.includes("dashboard"));
     assert.equal(mobil.includes("dashboard"), false);
@@ -145,23 +157,27 @@ describe("a menü közös forrása", () => {
       "jev-product-enrichment",
     );
     assert.equal(
-      isNavigationEntryVisible("product-data-quality", "OWNER"),
+      isNavigationEntryVisible("product-data-quality", { role: "OWNER" }),
       false,
     );
     assert.equal(
-      isNavigationEntryVisible("product-data-quality", "OWNER", on),
+      isNavigationEntryVisible("product-data-quality", { role: "OWNER" }, on),
       true,
     );
     // a kapcsoló nem írja felül a jogot (SERVICE: nincs products.view)
     assert.equal(
-      isNavigationEntryVisible("product-data-quality", "SERVICE", on),
+      isNavigationEntryVisible("product-data-quality", { role: "SERVICE" }, on),
       false,
     );
     assert.ok(
-      !navigationIdsFor("OWNER", "web").includes("product-data-quality"),
+      !navigationIdsFor({ role: "OWNER" }, "web").includes(
+        "product-data-quality",
+      ),
     );
     assert.ok(
-      navigationIdsFor("OWNER", "web", on).includes("product-data-quality"),
+      navigationIdsFor({ role: "OWNER" }, "web", on).includes(
+        "product-data-quality",
+      ),
     );
   });
 
@@ -169,11 +185,15 @@ describe("a menü közös forrása", () => {
     const on = new Set(["jev-product-enrichment"] as const);
     assert.deepEqual([...servedNavigationFeatures(undefined)], []);
     assert.deepEqual(
-      [...servedNavigationFeatures(visibleNavigationFor("OWNER"))],
+      [...servedNavigationFeatures(visibleNavigationFor({ role: "OWNER" }))],
       [],
     );
     assert.deepEqual(
-      [...servedNavigationFeatures(visibleNavigationFor("OWNER", on))],
+      [
+        ...servedNavigationFeatures(
+          visibleNavigationFor({ role: "OWNER" }, on),
+        ),
+      ],
       ["jev-product-enrichment"],
     );
     // ismeretlen azonosító nem kapcsol be semmit

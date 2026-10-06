@@ -75,7 +75,7 @@ export class AuthController {
     return {
       ...user,
       navigation: visibleNavigationFor(
-        user.role,
+        user,
         navigationFeatures(this.environment, user.id),
       ),
       expiresAt: request.sessionExpiresAt,
@@ -158,7 +158,7 @@ export class AuthController {
       user: {
         ...session.user,
         navigation: visibleNavigationFor(
-          session.user.role,
+          session.user,
           navigationFeatures(this.environment, session.user.id),
         ),
       },

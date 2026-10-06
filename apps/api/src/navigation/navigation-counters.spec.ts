@@ -57,11 +57,11 @@ describe("NavigationCountersController", () => {
   it("without the menu's permission: null, and nothing is counted", async () => {
     // control: the role really has neither permission
     assert.equal(
-      hasPermission("CONTENT_AGENT", PERMISSIONS.SERVICE_VIEW),
+      hasPermission({ role: "CONTENT_AGENT" }, PERMISSIONS.SERVICE_VIEW),
       false,
     );
     assert.equal(
-      hasPermission("CONTENT_AGENT", PERMISSIONS.SERVICE_MANAGE),
+      hasPermission({ role: "CONTENT_AGENT" }, PERMISSIONS.SERVICE_MANAGE),
       false,
     );
     const calls: string[] = [];

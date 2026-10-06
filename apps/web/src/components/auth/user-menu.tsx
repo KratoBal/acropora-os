@@ -31,10 +31,7 @@ export function UserMenu({
 
   if (!session) return null;
   const { user } = session;
-  const canOpenSettings = isNavigationEntryVisible(
-    "settings-general",
-    user.role,
-  );
+  const canOpenSettings = isNavigationEntryVisible("settings-general", user);
 
   return (
     <div className="relative">

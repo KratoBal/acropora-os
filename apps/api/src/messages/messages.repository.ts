@@ -137,12 +137,12 @@ export class MessagesRepository extends Repository {
   }
 
   /**
-   * AKIVEL BESZÉLGETÉS INDÍTHATÓ: aktív, partnerhez nem kötött fiók a megadott
-   * szerepkörökből, név vagy e-mail szerint. A szerepkör-szűrést a szolgáltatás
-   * adja át (`messages.use`), hogy a szabály egy helyen álljon.
+   * AKIVEL BESZÉLGETÉS INDÍTHATÓ: aktív, partnerhez nem kötött fiók, akinek
+   * `messages.use` joga van, név vagy e-mail szerint. A jog-szűrőt a szolgáltatás
+   * adja át (`usersWithPermissionWhere`), hogy a szabály egy helyen álljon.
    */
   people(input: {
-    roles: readonly UserRole[];
+    holders: Prisma.UserWhereInput;
     query: string;
     excludeUserId: string;
     limit: number;
@@ -153,7 +153,7 @@ export class MessagesRepository extends Repository {
         isActive: true,
         customerId: null,
         supplierId: null,
-        role: { in: [...input.roles] },
+        ...input.holders,
         id: { not: input.excludeUserId },
         ...(q
           ? {

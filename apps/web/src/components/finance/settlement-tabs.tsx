@@ -17,8 +17,7 @@ export function SettlementTabs() {
   const pathname = usePathname() ?? "";
   const { session } = useAuth();
   const tabs = SETTLEMENT_TABS.filter(
-    (tab) =>
-      session && isNavigationEntryVisible(tab.entryId, session.user.role),
+    (tab) => session && isNavigationEntryVisible(tab.entryId, session.user),
   );
   if (tabs.length === 0) return null;
   return (

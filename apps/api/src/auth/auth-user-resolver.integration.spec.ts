@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { UnauthorizedException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
+import { ROLE_PERMISSIONS } from "@acropora/types";
 
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 
@@ -97,6 +98,21 @@ describe(
       );
       assert.equal(user.email, activeEmail);
       assert.equal(user.displayName, "Integration Active User");
+    });
+
+    /**
+     * A SZEMÉLY JOGAI A FELOLDÁSKOR KERÜLNEK RÁ (2026-10-06): ma a szerep
+     * sablonja. Ha a lista hiányozna, a kliensek a szerepből számolnának, és
+     * a felhasználónkénti eltérés a felületen sosem jelenne meg.
+     */
+    it("a feloldott felhasználó hordozza a saját jogait", async () => {
+      const user = await resolver.resolveByEmailAndPassword(
+        activeEmail,
+        password,
+      );
+      assert.deepEqual(user.permissions, ROLE_PERMISSIONS.ADMIN);
+      const again = await resolver.resolveById(user.id);
+      assert.deepEqual(again.permissions, ROLE_PERMISSIONS.ADMIN);
     });
 
     it("is case-insensitive on the e-mail address", async () => {

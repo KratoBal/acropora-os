@@ -79,7 +79,7 @@ describe("the read-only stock-sync outbox (owner decision 2026-10-02)", () => {
         availableDashboardWidgets(viewer(role)).some(
           (w) => w.id === "stock-sync-outbox",
         ),
-        hasAllPermissions(role, [PERMISSIONS.INVENTORY_VIEW]),
+        hasAllPermissions({ role: role }, [PERMISSIONS.INVENTORY_VIEW]),
         role,
       );
   });
@@ -91,7 +91,7 @@ describe("permission filtering", () => {
       for (const w of availableDashboardWidgets(viewer(role))) {
         assert.equal(w.availability, "active", `${role}: ${w.id}`);
         assert.ok(
-          hasAllPermissions(role, w.requiredPermissions),
+          hasAllPermissions({ role: role }, w.requiredPermissions),
           `${role}: ${w.id}`,
         );
       }

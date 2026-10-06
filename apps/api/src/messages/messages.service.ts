@@ -23,9 +23,7 @@ import {
   MESSAGE_SEARCH_MIN_LENGTH,
   PERMISSIONS,
   hasPermission,
-  ROLE_PERMISSIONS,
   SUTYERAK_USER_ID,
-  USER_ROLES,
   personDisplayName,
   type AssistantHandoffReply,
   type AuthenticatedUser,
@@ -56,6 +54,7 @@ import {
 } from "../documents/document-intake.js";
 import { AssistantService } from "../assistant/assistant.service.js";
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { usersWithPermissionWhere } from "../auth/permission-holders.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { SutyerakInbox } from "./sutyerak-inbox.js";
@@ -139,15 +138,10 @@ export class MessagesService {
 
   private readonly logger = new Logger(MessagesService.name);
 
-  /** A szerepkörök, amelyek a `messages.use` jogot megkapják. */
-  private static readonly MESSAGING_ROLES = USER_ROLES.filter((role) =>
-    ROLE_PERMISSIONS[role].includes(PERMISSIONS.MESSAGES_USE),
-  );
-
   async people(user: AuthenticatedUser, query: string) {
     this.assertInternal(user);
     const rows = await this.repository.people({
-      roles: MessagesService.MESSAGING_ROLES,
+      holders: usersWithPermissionWhere(PERMISSIONS.MESSAGES_USE),
       query,
       excludeUserId: user.id,
       limit: 50,
@@ -1760,7 +1754,7 @@ export class MessagesService {
     if (!isContextType(row.contextType) || !row.contextId) return null;
     const type = row.contextType;
     const id = row.contextId;
-    const sees = ROLE_PERMISSIONS[user.role].includes(PERMISSIONS.SERVICE_VIEW);
+    const sees = hasPermission(user, PERMISSIONS.SERVICE_VIEW);
     if (type === "WORKSHEET") {
       const sheet = await this.repository.worksheetForContext(id);
       const version = sheet?.versions[0];
@@ -1808,7 +1802,7 @@ export class MessagesService {
   }
 
   private assertSeesService(user: AuthenticatedUser) {
-    if (!ROLE_PERMISSIONS[user.role].includes(PERMISSIONS.SERVICE_VIEW))
+    if (!hasPermission(user, PERMISSIONS.SERVICE_VIEW))
       throw new ForbiddenException(
         "A szervizt nem látod, ezért ezt nem teheted meg.",
       );

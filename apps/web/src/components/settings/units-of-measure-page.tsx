@@ -53,16 +53,15 @@ import {
 export function UnitsOfMeasurePage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
-  const role = session?.user.role;
   /**
-   * A JOG A SZEREPBŐL JÖN, NEM A TOKENBŐL.
+   * A JOG A FELHASZNÁLÓBÓL JÖN (a szerver adja), NEM A TOKENBŐL.
    *
    * Egy `token`-re kötött feltétel élesben, sütis munkamenetben mindig üres --
    * és akkor a képernyő üzemképesnek látszik, de semmit nem enged. Ez pontosan
    * az a hiba, ami a Tartalom-felvitelnél kiment (2026-09-02).
    */
-  const canManage = role
-    ? hasPermission(role, PERMISSIONS.SETTINGS_MANAGE)
+  const canManage = session
+    ? hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE)
     : false;
 
   const [kind, setKind] = useState<UnitOfMeasureKind>("PERFORMANCE");
