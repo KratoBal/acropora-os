@@ -6,6 +6,7 @@ import {
   WEBSHOP_ORDER_PAYMENT_STATE_LABELS,
   WEBSHOP_PARCEL_SIZES,
   WEBSHOP_CARD_PAYMENT_STATE_LABELS,
+  glsDeliveryLabel,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderHistoryEntry,
@@ -301,6 +302,17 @@ function StatusDialog({
       </div>
     </PilotDialog>
   );
+}
+
+/** The GLS logo for the parcel's kind: home, point or locker (commerce #489). */
+function glsLogoOf(point: WebshopOrderDetail["shipping"]["pickupPoint"]): {
+  src: string;
+  alt: string;
+} {
+  if (!point) return { src: "/images/gls.png", alt: "GLS" };
+  return point.kind === "parcel-locker"
+    ? { src: "/images/gls-automata.png", alt: "GLS Automata" }
+    : { src: "/images/gls-csomagpont.png", alt: "GLS Csomagpont" };
 }
 
 export function WebshopOrderDetailPage({ id }: { id: string }) {
@@ -1363,7 +1375,16 @@ function OrderBody({
               >
                 <Address address={order.billingAddress} />
               </Field>
-              <Field label="Szállítás">{order.shipping.method ?? "—"}</Field>
+              <Field label="Szállítás">
+                {glsDeliveryLabel({
+                  method: order.shipping.method,
+                  pointKind: order.shipping.pickupPoint?.kind ?? null,
+                  hasPoint: !!order.shipping.pickupPoint,
+                  storePickup: order.shipping.storePickup,
+                }) ??
+                  order.shipping.method ??
+                  "—"}
+              </Field>
               {order.shipping.pickupPoint ? (
                 <>
                   <Field
@@ -1540,6 +1561,15 @@ function OrderBody({
                   <img
                     src="/images/foxpost-packeta-group.png"
                     alt="FOXPOST"
+                    height={28}
+                    className="h-7 w-auto"
+                  />
+                ) : order.shipping.carrier === "GLS" ? (
+                  // a GLS hivatalos logói a csomag fajtájához, a kirakatéval azonos fájlok (commerce #489)
+                  // eslint-disable-next-line @next/next/no-img-element -- static PNG
+                  <img
+                    src={glsLogoOf(order.shipping.pickupPoint).src}
+                    alt={glsLogoOf(order.shipping.pickupPoint).alt}
                     height={28}
                     className="h-7 w-auto"
                   />

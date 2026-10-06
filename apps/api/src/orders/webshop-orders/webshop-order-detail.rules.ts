@@ -1,6 +1,7 @@
 import {
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  pointKindOf,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
   type WebshopOrderLine,
@@ -118,7 +119,12 @@ export function linesOf(items: MedusaOrderDetailRow["items"]): {
   return { lines, feeTotal };
 }
 
-type PickupPointData = { id?: string; name?: string; address?: string } | null;
+type PickupPointData = {
+  id?: string;
+  name?: string;
+  address?: string;
+  type?: string;
+} | null;
 
 export function shippingOf(
   methods: MedusaOrderDetailRow["shipping_methods"],
@@ -146,6 +152,7 @@ export function shippingOf(
           id: point.id ?? null,
           name: point.name,
           address: point.address ?? null,
+          kind: gls ? pointKindOf(point.type) : null,
         }
       : null,
   };

@@ -541,7 +541,12 @@ export interface MedusaOrderOverviewRow {
     changed_at: string | null;
   };
   shipping_method: string | null;
-  pickup_point: { id: string | null; name: string } | null;
+  /** `type`: a GLS-pont fajtája (`parcel-shop` / `parcel-locker`), ha a webshop adja. */
+  pickup_point: {
+    id: string | null;
+    name: string;
+    type?: string | null;
+  } | null;
   payment: {
     provider_id: string | null;
     status: string | null;

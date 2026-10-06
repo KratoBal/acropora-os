@@ -23,6 +23,7 @@ import {
   type WebshopOrderPaymentState,
   type WebshopOrderSortField,
   type WebshopOrderStatus,
+  glsDeliveryLabel,
 } from "@acropora/types";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -98,8 +99,17 @@ export function paymentText(item: WebshopOrderListItem): string {
   return [item.payment.method, state].filter(Boolean).join(" · ") || "—";
 }
 
+/** A szállítás a listán; GLS-nél a fajtája (ParcelShop, automata, házhoz), a GLS prompt 11. pontja szerint. */
 export const shippingText = (item: WebshopOrderListItem) =>
-  [item.shipping.method, item.shipping.pickupPoint]
+  [
+    glsDeliveryLabel({
+      method: item.shipping.method,
+      pointKind: item.shipping.pointKind,
+      hasPoint: !!item.shipping.pickupPoint,
+      storePickup: item.shipping.storePickup,
+    }) ?? item.shipping.method,
+    item.shipping.pickupPoint,
+  ]
     .filter(Boolean)
     .join(" · ") || "—";
 

@@ -1182,6 +1182,8 @@ export {
   WEBSHOP_STALE_STATUSES,
   WEBSHOP_STALE_THRESHOLD_DEFAULTS,
   staleHoursOf,
+  pointKindOf,
+  glsDeliveryLabel,
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
@@ -1208,6 +1210,7 @@ export type {
   WebshopStaleStatus,
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
+  WebshopPointKind,
   WebshopStaleUnit,
   WebshopVariantOption,
   WebshopOrderStatusChangeResult,
