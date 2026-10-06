@@ -587,9 +587,11 @@ export type {
   SupplierInvoiceMailSyncStatus,
   ExpectedArrivalDetail,
   ExpectedArrivalListItem,
+  ExpectedArrivalListQuery,
   ExpectedArrivalListResponse,
   ExpectedArrivalSource,
 } from "./purchasing.js";
+export { EXPECTED_ARRIVAL_LIST_PAGE_SIZE } from "./purchasing.js";
 export type {
   CreatePosSaleInput,
   CreatePosSaleLineInput,

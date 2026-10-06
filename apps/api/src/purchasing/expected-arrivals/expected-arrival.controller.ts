@@ -1,9 +1,10 @@
-import { Controller, Get, HttpCode, Param, Post } from "@nestjs/common";
+import { Controller, Get, HttpCode, Param, Post, Query } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { ExpectedArrivalIntakeService } from "./expected-arrival-intake.service.js";
+import { ExpectedArrivalListQueryDto } from "./expected-arrival-list-query.dto.js";
 import { ExpectedArrivalService } from "./expected-arrival.service.js";
 
 /**
@@ -19,8 +20,8 @@ export class ExpectedArrivalController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
-  list() {
-    return this.arrivals.list();
+  list(@Query() query: ExpectedArrivalListQueryDto) {
+    return this.arrivals.list(query);
   }
 
   @Get("sync")
