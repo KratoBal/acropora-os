@@ -1,5 +1,7 @@
 import type {
   CreateTaskInput,
+  MyServiceWorkResponse,
+  MyServiceWorkView,
   TaskAssigneeOptionsResponse,
   TaskListResponse,
   TaskStatusFilter,
@@ -9,6 +11,14 @@ import type {
 import { apiRequest } from "./client";
 
 export const tasksApi = {
+  /** A szervizes Feladataim tartalma (kártya 041a3dd5). */
+  serviceWork(token: string, view: MyServiceWorkView, signal?: AbortSignal) {
+    return apiRequest<MyServiceWorkResponse>(
+      `/tasks/service-work?view=${encodeURIComponent(view)}`,
+      token,
+      { signal },
+    );
+  },
   listMine(token: string, status: TaskStatusFilter, signal?: AbortSignal) {
     return apiRequest<TaskListResponse>(
       `/tasks/mine?status=${encodeURIComponent(status)}`,
