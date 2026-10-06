@@ -522,13 +522,25 @@ export function readInvoiceText(
     if (found) return reading(found, "NAV");
   }
   if (labelled) return reading(labelled, "LABEL");
+  /*
+    AZ ALÁHÚZÁSSAL ÖSSZEFŰZÖTT NÉV DARABJAI IS JELÖLTEK, az egész UTÁN (mérve
+    2026-10-06, `Rechnung_400055181585.pdf`): a szám a szövegben a „Nummer:”
+    címke után áll, a fájlnév egész darabja (`RECHNUNG400055181585`) viszont
+    nem, tehát az egészre szűrve nem volt találat. Az egész marad az első, mert
+    egy szövegben is így álló `INV_20261` a számla saját alakja. A dátum soha
+    nem a szám: egy `Szamla_2026-07-31.pdf` kelte a szövegben is ott áll.
+  */
   const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
+    .flatMap((token) =>
+      token.includes("_") ? [token, ...token.split("_")] : [token],
+    )
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
     .find(
       (token) =>
         token.length >= 5 &&
         /\d/.test(token) &&
+        !DATE_SHAPE.test(token) &&
         !BANK_ACCOUNT.test(token) &&
         !looksLikeTaxNumber(token) &&
         !customers.has(compactNumber(token)) &&
