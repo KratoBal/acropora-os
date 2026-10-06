@@ -882,6 +882,21 @@ export function matchMonth(input: {
     if (realInvoice)
       for (let i = named.length - 1; i >= 0; i--)
         if (named[i]!.document.kind === "PROFORMA") named.splice(i, 1);
+    // AZ ÖSSZEG NÉLKÜLI MEGNEVEZETT IS CSAK TARTALÉK (kártya 096607af,
+    // FleetCor 2026-09-03): a közlemény a vevőazonosítónkat írta
+    // (HU00008659), amit egy júliusi, bruttó nélküli postafiókos rekord
+    // „számlaszámként” visel, így a szeptemberi terhelés azt kapta, a valódi,
+    // pontos összegű számla (E0401363885) pedig párosítatlan maradt. Ha a
+    // közlemény CSAK összeg nélküli dokumentumot nevez meg, és a partnertől van
+    // pontos összegű valódi számla az ablakban, a megnevezett kimarad, és a
+    // terhelés a további szabályokhoz megy. Élesen mérve 32 számlaszámos
+    // párosításból egyet mozdít (szamszabaly-brutto-nelkul-hatas-2026-10-06).
+    if (
+      realInvoice &&
+      named.length &&
+      named.every((n) => n.document.gross === null)
+    )
+      named.splice(0, named.length);
     // ELÍRÁS-GYANÚ (acrobot 25655, Fluidra 2026-07-30): a közlemény helyesen
     // nevezi meg a számlát (KS26/04727), de az összeg nem illik hozzá, és
     // ugyanattól a partnertől egy MÁSIK fizetés pontosan a számla összegét
