@@ -1,0 +1,7 @@
+# meres/munkalap-csempe-rendezes-1 (kartya 73baa400, murena 2026-10-06)
+# A ronta: countsByLatestStatus (a csempe-darabszamok aga) ORDER BY ... DESC -> ASC.
+# A jóslat (agents/murena/megosztas/meres-73baa400-joslat-2026-10-06.md): SEMMI nem pirosodik,
+# tehat a ket szomszed allitas zold marad. Ha ez a kor zold, a csempe-ag NEM fedett.
+# A teljes naplot kezzel is atnezem: egyetlen "not ok" sor sem lehet az integracios suite-ban.
+ok - filters on the status of the latest version, not on any earlier one
+ok - counts what it lists

@@ -1031,7 +1031,7 @@ export class WorksheetsRepository extends Repository {
         SELECT DISTINCT ON ("worksheetId") "worksheetId", "status"
         FROM "WorksheetVersion"
         WHERE "worksheetId" = ANY(${ids})
-        ORDER BY "worksheetId", "version" DESC
+        ORDER BY "worksheetId", "version" ASC
       ) AS latest
       GROUP BY latest."status"
     `;
