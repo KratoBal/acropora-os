@@ -72,8 +72,15 @@ export interface MortalityPhoto {
 export interface MortalityDetail extends MortalityListItem {
   note: string | null;
   createdAt: string;
-  /** az utolsó módosítás ideje, ha a rekordot létrehozása óta módosították */
-  updatedAt: string | null;
+  /**
+   * Az utolsó módosítás (az auditnapló legutóbbi `mortality.updated` sora), vagy
+   * `null`, ha a bejegyzést létrehozása óta nem módosították („Nem módosították”).
+   */
+  lastModified: {
+    at: string;
+    /** `null`, ha a módosító felhasználót azóta törölték */
+    by: { id: string; name: string } | null;
+  } | null;
   photos: MortalityPhoto[];
 }
 
@@ -106,12 +113,17 @@ export interface MortalityListResponse {
 export interface MortalitySummary {
   /** a folyó naptári hónap elhullott példányai */
   thisMonth: number;
+  /** hány különböző akváriumban („3 akváriumban”) */
+  thisMonthAquariumCount: number;
   /** az elmúlt 7 nap (a mai napot is beleértve) elhullott példányai */
   last7Days: number;
+  /** az azt megelőző 7 nap, az összevetéshez („2-vel kevesebb az előző hétnél”) */
+  previous7Days: number;
   /** a folyó hónap legtöbb példányt vesztett akváriuma, vagy `null` */
   mostAffectedAquarium: {
     id: string;
     name: string;
+    aquariumNumber: string;
     quantity: number;
   } | null;
 }

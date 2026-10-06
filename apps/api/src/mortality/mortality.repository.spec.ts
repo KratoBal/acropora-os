@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { mortalityWhere } from "./mortality.repository.js";
+import {
+  mortalityWhere,
+  summarizeMonth,
+  summaryWindows,
+} from "./mortality.repository.js";
 
 describe("mortalityWhere", () => {
   it("szűrő nélkül üres", () => {
@@ -62,5 +66,43 @@ describe("mortalityWhere", () => {
         ],
       },
     );
+  });
+});
+
+describe("summaryWindows", () => {
+  it("a hónap eleje, az utolsó 7 nap és az előző 7 nap, Budapest szerint", () => {
+    // 2026-10-06 20:00 Budapest (CEST)
+    assert.deepEqual(summaryWindows(new Date("2026-10-06T18:00:00Z")), {
+      monthStart: new Date("2026-09-30T22:00:00.000Z"),
+      weekStart: new Date("2026-09-29T22:00:00.000Z"),
+      previousWeekStart: new Date("2026-09-22T22:00:00.000Z"),
+    });
+  });
+
+  it("a hónap első napján a hónap eleje a mai nap", () => {
+    // 2026-11-01 00:30 Budapest (CET): UTC szerint még október 31.
+    const { monthStart } = summaryWindows(new Date("2026-10-31T23:30:00Z"));
+    assert.deepEqual(monthStart, new Date("2026-10-31T23:00:00.000Z"));
+  });
+});
+
+describe("summarizeMonth", () => {
+  it("összesen, hány akváriumban, és a legérintettebb", () => {
+    assert.deepEqual(
+      summarizeMonth([
+        { aquariumId: "a", quantity: 2 },
+        { aquariumId: "b", quantity: 6 },
+        { aquariumId: "c", quantity: 1 },
+      ]),
+      { total: 9, aquariumCount: 3, top: { aquariumId: "b", quantity: 6 } },
+    );
+  });
+
+  it("üres hónapban nincs legérintettebb", () => {
+    assert.deepEqual(summarizeMonth([]), {
+      total: 0,
+      aquariumCount: 0,
+      top: null,
+    });
   });
 });

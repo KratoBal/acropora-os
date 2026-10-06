@@ -25,6 +25,7 @@ import { mortalityChanges } from "./mortality.policy.js";
 
 /** Az auditnapló sorának neve. */
 export const MORTALITY_UPDATED_ACTION = "mortality.updated";
+export const MORTALITY_ENTITY_TYPE = "MortalityRecord";
 
 const OPTION_LIMIT = 20;
 
@@ -106,6 +107,33 @@ export function mortalityWhere(
   return and.length ? { AND: and } : {};
 }
 
+/** A három összesítő ablak kezdete, Budapest naptára szerint. */
+export function summaryWindows(now: Date) {
+  const dayOfMonth = Number(budapestDayKey(now).slice(8, 10));
+  return {
+    monthStart: startOfBudapestDay(now, -(dayOfMonth - 1)),
+    weekStart: startOfBudapestDay(now, -6),
+    previousWeekStart: startOfBudapestDay(now, -13),
+  };
+}
+
+/**
+ * A hónap akváriumonkénti összegeiből: összesen, hány akváriumban, és a
+ * legérintettebb. Döntetlennél az elsőként kapott marad (a sorrend ott nem
+ * jelentés, csak egy akvárium kell a kártyára).
+ */
+export function summarizeMonth(
+  rows: readonly { aquariumId: string; quantity: number }[],
+) {
+  let total = 0;
+  let top: { aquariumId: string; quantity: number } | null = null;
+  for (const row of rows) {
+    total += row.quantity;
+    if (!top || row.quantity > top.quantity) top = row;
+  }
+  return { total, aquariumCount: rows.length, top };
+}
+
 @Injectable()
 export class MortalityRepository {
   private readonly database = prisma;
@@ -137,16 +165,15 @@ export class MortalityRepository {
 
   /**
    * A HÁROM ÖSSZESÍTŐ KÁRTYA (Figma), PÉLDÁNYSZÁMBAN, Budapest naptára szerint:
-   * a folyó hónap, az utolsó 7 nap (a mait is beleértve), és a hónap legtöbb
-   * példányt vesztett akváriuma. Két aggregáló lekérdezés, a lista szűrőitől
-   * függetlenül.
+   * a folyó hónap (és hány akváriumban), az utolsó 7 nap (a mait is
+   * beleértve) és az azt megelőző 7 nap, valamint a hónap legtöbb példányt
+   * vesztett akváriuma. A lista szűrőitől független.
    */
   async summary(now = new Date()): Promise<MortalitySummary> {
-    const dayOfMonth = Number(budapestDayKey(now).slice(8, 10));
-    const monthStart = startOfBudapestDay(now, -(dayOfMonth - 1));
-    const weekStart = startOfBudapestDay(now, -6);
-    const [month, week, byAquarium] = await Promise.all([
-      this.database.mortalityRecord.aggregate({
+    const { monthStart, weekStart, previousWeekStart } = summaryWindows(now);
+    const [byAquarium, week, previousWeek] = await Promise.all([
+      this.database.mortalityRecord.groupBy({
+        by: ["aquariumId"],
         where: { recordedAt: { gte: monthStart } },
         _sum: { quantity: true },
       }),
@@ -154,27 +181,31 @@ export class MortalityRepository {
         where: { recordedAt: { gte: weekStart } },
         _sum: { quantity: true },
       }),
-      this.database.mortalityRecord.groupBy({
-        by: ["aquariumId"],
-        where: { recordedAt: { gte: monthStart } },
+      this.database.mortalityRecord.aggregate({
+        where: { recordedAt: { gte: previousWeekStart, lt: weekStart } },
         _sum: { quantity: true },
-        orderBy: { _sum: { quantity: "desc" } },
-        take: 1,
       }),
     ]);
-    const top = byAquarium[0];
-    const aquarium = top
+    const month = summarizeMonth(
+      byAquarium.map((row) => ({
+        aquariumId: row.aquariumId,
+        quantity: row._sum.quantity ?? 0,
+      })),
+    );
+    const aquarium = month.top
       ? await this.database.aquarium.findUnique({
-          where: { id: top.aquariumId },
-          select: { id: true, name: true },
+          where: { id: month.top.aquariumId },
+          select: { id: true, name: true, aquariumNumber: true },
         })
       : null;
     return {
-      thisMonth: month._sum.quantity ?? 0,
+      thisMonth: month.total,
+      thisMonthAquariumCount: month.aquariumCount,
       last7Days: week._sum.quantity ?? 0,
+      previous7Days: previousWeek._sum.quantity ?? 0,
       mostAffectedAquarium:
-        top && aquarium
-          ? { ...aquarium, quantity: top._sum.quantity ?? 0 }
+        month.top && aquarium
+          ? { ...aquarium, quantity: month.top.quantity }
           : null,
     };
   }
@@ -186,7 +217,6 @@ export class MortalityRepository {
         ...LIST_SELECT,
         note: true,
         createdAt: true,
-        updatedAt: true,
         documents: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -201,13 +231,32 @@ export class MortalityRepository {
       },
     });
     if (!row) return null;
-    // ha a rekordot soha nem módosították, az updatedAt a létrehozás pillanata
-    const modified = row.updatedAt.getTime() - row.createdAt.getTime() > 1000;
+    // a „legutóbbi módosítás” az auditnaplóból jön, nem az updatedAt-ből: az
+    // a módosítót nem tudja, és egy fénykép-feltöltés nem módosítás
+    const lastUpdate = await this.database.auditLog.findFirst({
+      where: {
+        entityType: MORTALITY_ENTITY_TYPE,
+        entityId: id,
+        action: MORTALITY_UPDATED_ACTION,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        createdAt: true,
+        user: { select: { id: true, displayName: true } },
+      },
+    });
     return {
       ...toListItem(row),
       note: row.note,
       createdAt: row.createdAt.toISOString(),
-      updatedAt: modified ? row.updatedAt.toISOString() : null,
+      lastModified: lastUpdate
+        ? {
+            at: lastUpdate.createdAt.toISOString(),
+            by: lastUpdate.user
+              ? { id: lastUpdate.user.id, name: lastUpdate.user.displayName }
+              : null,
+          }
+        : null,
       photos: row.documents.map((d): MortalityPhoto => ({
         ...d,
         createdAt: d.createdAt.toISOString(),
@@ -273,7 +322,7 @@ export class MortalityRepository {
         data: {
           userId: actorUserId,
           action: MORTALITY_UPDATED_ACTION,
-          entityType: "MortalityRecord",
+          entityType: MORTALITY_ENTITY_TYPE,
           entityId: id,
           metadata: { changes } as unknown as Prisma.InputJsonValue,
         },
