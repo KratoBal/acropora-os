@@ -114,6 +114,12 @@ export interface DocumentPairing {
    * sztornózott vásárlás jóváírója is párosított; ezek NEM teljes fizetések.
    */
   paidInFull: boolean;
+  /**
+   * A párosított dokumentum maga (aliasaival). A „Bejövő számlák” ebből
+   * mutatja a feedben NEM szereplő, csak postafiókból ismert számlát
+   * (kártya 096607af, acrobot 26716).
+   */
+  document: CandidateDocument;
 }
 
 interface Computed {
@@ -351,6 +357,7 @@ export class MissingInvoicesService {
         kind: document.kind,
         debits: [],
         paidInFull: false,
+        document,
       };
       for (const id of ids) result.set(id, pairing);
       return pairing;

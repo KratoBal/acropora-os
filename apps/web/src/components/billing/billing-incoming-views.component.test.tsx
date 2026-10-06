@@ -69,6 +69,7 @@ function incoming(
 ): IncomingDocumentListItem {
   return {
     id: "in-1",
+    origin: "SZAMLAZZ",
     documentNumber: "TM-2026-1847",
     kindCode: "SZ",
     kindLabel: "Számla",
@@ -241,6 +242,50 @@ describe("the incoming list", () => {
     expect(urlNavigation.push).toHaveBeenLastCalledWith(
       "/penzugy/szamlazas/bejovo/in-2",
     );
+  });
+
+  /*
+    A CSAK POSTAFIÓKOS, FIZETETT SZÁMLA (kártya 096607af). MI PIROSÍT: a sor a
+    formátumot írná a forrás helyett; a név nélküli rekord üres cellát kapna;
+    a nem ismert nettó számnak látszana; a sor a feed-adatlapra vinne (404).
+  */
+  it("a mailbox-only paid invoice says where it comes from, and opens no feed page", async () => {
+    api.incomingList.mockResolvedValue(
+      page([
+        incoming({
+          id: "mailbox:mail-amblard",
+          origin: "MAILBOX",
+          documentNumber: "F2602896",
+          invoiceFormat: null,
+          supplierName: "",
+          supplierTaxNumber: null,
+          currency: "HUF",
+          exchangeRate: null,
+          netAmount: null,
+          vatAmount: null,
+          grossAmount: null,
+          paymentState: "PAID",
+          paidAmount: "179520",
+          lastPaymentDate: "2026-09-16",
+          paymentSource: "BANK_PAIRING",
+          bankMatch: { state: "PAIRED", reason: null, debits: [] },
+        }),
+      ]),
+    );
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    const row = await screen.findByRole("row", {
+      name: /F2602896, név nélkül, csak postafiókból ismert$/,
+    });
+    const cells = within(row);
+    expect(cells.getByText("Normál · Postafiókból")).toBeInTheDocument();
+    expect(cells.getByText("(név nélkül)")).toBeInTheDocument();
+    expect(cells.getByText("Nettó —")).toBeInTheDocument();
+    expect(cells.getByText("Bruttó —")).toBeInTheDocument();
+    expect(cells.getAllByText("Fizetve").length).toBeGreaterThan(0);
+    const before = urlNavigation.push.mock.calls.length;
+    fireEvent.click(cells.getByText("F2602896"));
+    expect(urlNavigation.push.mock.calls.length).toBe(before);
   });
 
   it("the filters go to the request from the URL: a month as its first and last day, on the fulfillment date", async () => {
