@@ -179,6 +179,18 @@ export const webshopOrdersApi = {
       { method: "POST" },
     );
   },
+  /**
+   * A rendelés szállítólevele a kiállított számla tételeiből (kártya 0a14f739
+   * C/1). A válasz a friss adatlap; a kiállított szállítólevélre a második
+   * hívás nem állít ki újat.
+   */
+  issueDeliveryNote(token: string, id: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/delivery-note`,
+      token,
+      { method: "POST" },
+    );
+  },
   /** Csomagfeladás a szállítónál; a válasz a friss adatlap és a „Feladtuk” levél sorsa. */
   createParcel(token: string, id: string, size?: WebshopParcelSize) {
     return apiRequest<WebshopOrderParcelResult>(

@@ -199,6 +199,7 @@ export class WebshopOrdersService {
       thresholds,
       osCustomer,
       internalNote,
+      deliveryNotes,
     ] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
@@ -212,6 +213,7 @@ export class WebshopOrdersService {
       this.repository.staleThresholds(),
       customerKey ? this.repository.osCustomerByKey(customerKey) : null,
       this.repository.internalNote(id),
+      this.repository.invoices([id], "DELIVERY_NOTE"),
     ]);
     /*
       A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
@@ -247,6 +249,7 @@ export class WebshopOrdersService {
         : null,
       osCustomer,
       internalNote,
+      deliveryNote: deliveryNotes.get(id) ?? null,
       staleHours: staleHoursOf(thresholds),
       orderPayment,
       order,

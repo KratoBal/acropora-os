@@ -1,5 +1,6 @@
 import {
   szamlazzUnitNetFromGross,
+  type BillingDocumentDetail,
   type BillingDocumentDraftInput,
   type BillingDocumentLineInput,
   type WebshopOrderStatus,
@@ -23,6 +24,71 @@ import { budapestDayKey } from "../../dashboard/budapest-day.js";
 
 /** A rendelés vázlatának azonosítója: egy rendeléshez egy vázlat, a dupla kattintás ugyanazt kapja. */
 export const invoiceDraftIdOf = (orderId: string) => `webshop-${orderId}`;
+
+/** A rendelés szállítólevelének azonosítója: rendelésenként egy, mint a számláé. */
+export const deliveryNoteDraftIdOf = (orderId: string) =>
+  `webshop-dn-${orderId}`;
+
+/**
+ * A SZÁLLÍTÓLEVÉL A KIÁLLÍTOTT SZÁMLÁBÓL (Balázs döntése, 2026-10-06, emlék
+ * 2124; kártya 0a14f739 C/1). Ugyanaz a vevő, ugyanazok a tételek és
+ * ugyanaz a teljesítés napja, mint a számlán: a szállítólevél nem új
+ * árazás, hanem a kiszállított tételek kísérője. A rendelésből újra
+ * számolni azt kockáztatná, hogy a kettő eltér; a számla sorai viszont a
+ * kiállítás óta nem változnak.
+ *
+ * A kedvezmény-sort nem másoljuk: a számlázás a tétel kedvezmény-százalékából
+ * maga képzi (`normalizeBillingDraft`). Formátum, határidő és fizetési mód
+ * nincs: a szállítólevél nem fizetendő bizonylat, a Számlázz.hu kötelező
+ * mezőit a kiállítás tölti ki.
+ */
+export function deliveryNoteDraftOf(
+  orderId: string,
+  invoice: BillingDocumentDetail,
+):
+  | { ok: true; draft: BillingDocumentDraftInput }
+  | { ok: false; message: string } {
+  if (invoice.status !== "ISSUED")
+    return {
+      ok: false,
+      message:
+        "A szállítólevél a kiállított számla tételeiből készül: előbb állítsd ki a számlát.",
+    };
+  if (!invoice.customer) return { ok: false, message: "A számlán nincs vevő." };
+  const lines = invoice.lines
+    .filter((line) => line.kind === "ITEM")
+    .map((line): BillingDocumentLineInput => ({
+      productId: line.productId,
+      variantId: line.variantId ?? null,
+      description: line.description,
+      quantity: line.quantity,
+      unit: line.unit,
+      unitNet: line.unitNet,
+      vatRatePercent: line.vatRatePercent,
+      discountPercent: line.discountPercent,
+      comment: line.comment,
+    }));
+  if (!lines.length) return { ok: false, message: "A számlán nincs tétel." };
+  return {
+    ok: true,
+    draft: {
+      id: deliveryNoteDraftIdOf(orderId),
+      documentType: "DELIVERY_NOTE",
+      invoiceFormat: null,
+      customerId: invoice.customer.id,
+      fulfillmentDate: invoice.fulfillmentDate,
+      dueDate: null,
+      paymentMethod: null,
+      currency: invoice.currency,
+      language: invoice.language,
+      reference: invoice.reference,
+      note: invoice.documentNumber ? `Számla: ${invoice.documentNumber}` : null,
+      sourceType: "WEBSHOP_ORDER",
+      sourceId: orderId,
+      lines,
+    },
+  };
+}
 
 /** Ezekben az állapotokban még (vagy már) nem állítunk ki számlát. */
 const NOT_INVOICEABLE: readonly WebshopOrderStatus[] = [
