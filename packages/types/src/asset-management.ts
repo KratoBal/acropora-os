@@ -390,7 +390,25 @@ export interface AssetDocumentSummary {
    */
   caption: string | null;
   uploadedBy?: { id: string; displayName: string };
+  /**
+   * Whether `GET :id/documents/:documentId/text` reads this file (today: a
+   * PDF). A scanned PDF is readable too; it simply has no text in it.
+   */
+  textReadable: boolean;
   createdAt: string;
+}
+
+/** The text of an asset attachment (`GET :id/documents/:documentId/text`). */
+export interface AssetDocumentText {
+  documentId: string;
+  fileName: string;
+  pageCount: number;
+  /** `false` for a scan: the file opened, and there is no text in it. */
+  hasText: boolean;
+  /** The text was cut at the length limit. */
+  truncated: boolean;
+  /** Lines in reading order, table cells joined by " | ", pages ended by "=== oldal vege ===". */
+  text: string;
 }
 
 export interface AssetEventSummary {

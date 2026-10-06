@@ -52,18 +52,36 @@ export class WebshopOrderSplitService {
     const detail = await this.orders.detail(id, now);
     if (!detail.splitEdit.allowed)
       throw new ConflictException(detail.splitEdit.reason);
-    const refusal = splitRequestRefusal(detail.lines, input.lines);
-    if (refusal) throw new UnprocessableEntityException(refusal);
+    /*
+      A FÉLBEMARADT SZÉTBONTÁS ELŐBB BEFEJEZŐDIK (acrobot 26807, commerce
+      #504): a tételei már kikerültek innen, ezért a mostani tételekre szóló
+      ellenőrzés nem rá való. A webshop a rekordból folytatja; a kérés a
+      rekord azonosítóját és sorait viszi, a kijelölést nem.
+    */
+    const unfinished = detail.split.unfinished ?? null;
+    const request: WebshopOrderSplitInput = unfinished
+      ? {
+          requestId: unfinished.requestId,
+          lines: unfinished.lines.map(({ itemId, quantity }) => ({
+            itemId,
+            quantity,
+          })),
+        }
+      : input;
+    if (!unfinished) {
+      const refusal = splitRequestRefusal(detail.lines, input.lines);
+      if (refusal) throw new UnprocessableEntityException(refusal);
+    }
     const client = await this.orders.adminClient();
     let answer: MedusaOrderSplit;
     try {
       answer = await client.splitOrder(id, {
-        lines: input.lines.map((line) => ({
+        lines: request.lines.map((line) => ({
           item_id: line.itemId,
           quantity: line.quantity,
         })),
         actor: user.displayName?.trim() || user.email,
-        request_id: input.requestId,
+        request_id: request.requestId,
       });
     } catch (error) {
       throw refusalOf(error, "A rendelés nem lett szétbontva");
@@ -74,7 +92,8 @@ export class WebshopOrderSplitService {
       action: "split",
       before: {
         createdOrderId: answer.order_id,
-        lines: input.lines,
+        lines: request.lines,
+        resumed: unfinished !== null,
         total: detail.totals.total,
       },
     });

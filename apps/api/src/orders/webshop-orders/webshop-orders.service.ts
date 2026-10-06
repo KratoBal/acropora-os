@@ -8,7 +8,11 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { parcelInputOf } from "./webshop-order-parcel.rules.js";
-import { shippingOf, splitIdsOf } from "./webshop-order-detail.rules.js";
+import {
+  shippingOf,
+  splitIdsOf,
+  unfinishedSplitOf,
+} from "./webshop-order-detail.rules.js";
 import {
   WEBSHOP_ORDER_STATUS_LABELS,
   staleHoursOf,
@@ -271,6 +275,7 @@ export class WebshopOrdersService {
           id: splitId,
           displayId: splitDisplayIds[index + 1] ?? null,
         })),
+        unfinished: unfinishedSplitOf(order.metadata ?? null),
       },
       staleHours: staleHoursOf(thresholds),
       orderPayment,

@@ -352,6 +352,45 @@ export function splitIdsOf(metadata: Record<string, unknown> | null): {
   };
 }
 
+/**
+ * A FÉLBEMARADT SZÉTBONTÁS (commerce #504, acrobot 26807): az eredeti
+ * `acropora_split_requests` rekordjai közül az első, ami nincs kész. A
+ * tételei már kikerültek innen; a webshop a következő kérésre befejezi.
+ */
+export function unfinishedSplitOf(
+  metadata: Record<string, unknown> | null,
+): WebshopOrderDetail["split"]["unfinished"] {
+  const requests = metadata?.acropora_split_requests;
+  if (!requests || typeof requests !== "object") return null;
+  for (const [requestId, record] of Object.entries(
+    requests as Record<string, unknown>,
+  )) {
+    if (!record || typeof record !== "object") continue;
+    const { done, moved } = record as { done?: unknown; moved?: unknown };
+    if (done === true || !Array.isArray(moved)) continue;
+    const lines = moved.flatMap((line: unknown) => {
+      const { from_item_id, title, quantity } = (line ?? {}) as Record<
+        string,
+        unknown
+      >;
+      return typeof from_item_id === "string" &&
+        from_item_id !== "" &&
+        Number.isInteger(quantity) &&
+        (quantity as number) > 0
+        ? [
+            {
+              itemId: from_item_id,
+              title: typeof title === "string" ? title : "",
+              quantity: quantity as number,
+            },
+          ]
+        : [];
+    });
+    if (lines.length) return { requestId, lines };
+  }
+  return null;
+}
+
 export function toDetail(input: {
   order: MedusaOrderDetailRow;
   status: MedusaOrderBusinessStatus | null;

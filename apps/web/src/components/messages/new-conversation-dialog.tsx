@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { messagesApi } from "@/lib/api/messages";
 import { ROLE_LABELS } from "@/components/users/role-labels";
 
-import { Monogram } from "./conversation-parts";
+import { Monogram, assistantFirst } from "./conversation-parts";
 
 /**
  * ÚJ BESZÉLGETÉS (Figma 443:53). Egy kiválasztott kolléga DIRECT beszélgetést
@@ -76,7 +76,10 @@ export function NewConversationDialog({
   };
 
   // a kiválasztottak a lista tetején maradnak akkor is, ha a keresés kiszűrné őket
-  const listed = [...chosen, ...people.filter((person) => !isChosen(person))];
+  const listed = [
+    ...chosen,
+    ...assistantFirst(people.filter((person) => !isChosen(person))),
+  ];
 
   return (
     <div
@@ -126,13 +129,18 @@ export function NewConversationDialog({
                     : "hover:bg-pilot-grey-50"
                 }`}
               >
-                <Monogram name={person.name} />
+                <Monogram
+                  name={person.name}
+                  assistant={person.kind === "assistant"}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-pilot-grey-900">
                     {person.name}
                   </span>
                   <span className="block truncate text-xs text-pilot-grey-600">
-                    {ROLE_LABELS[person.role]}
+                    {person.kind === "assistant"
+                      ? "Segéd, kérdezd bármiről"
+                      : ROLE_LABELS[person.role]}
                   </span>
                 </span>
                 <input

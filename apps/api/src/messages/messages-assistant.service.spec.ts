@@ -15,6 +15,7 @@ import {
   readGatewayAnswer,
 } from "./messages-assistant.service.js";
 import type { MessagingUserRow } from "./messages.repository.js";
+import { SUTYERAK_INBOX_REDIRECT } from "./sutyerak-inbox.js";
 import {
   SUTYERAK_ATTACHMENT_ONLY,
   assistantReplyPlan,
@@ -329,5 +330,86 @@ describe("MessagesAssistantService.handle", () => {
     );
     assert.deepEqual(threads, ["drop a", "save a t-new"]);
     assert.deepEqual(posted, [["c1", "Újra itt.", "GATEWAY"]]);
+  });
+});
+
+/*
+  A POSTAFIÓK-FIÓK (4. pont B, 6. tétel; az „Acrobot Szerviz”). MI PIROSÍT: aki
+  neki ír, nem kap választ; a mondat minden üzenetre megismétlődik; a saját
+  mondatára is válaszol; induláskor a megválaszolatlan régi beszélgetés nem
+  kapja meg, vagy a már megválaszolt újra megkapja.
+*/
+describe("MessagesAssistantService: an inbox nobody reads", () => {
+  const INBOX = "inbox-1";
+  function inboxSetup(history: { id: string; sender: string; text: string }[]) {
+    const posted: [string, string, string][] = [];
+    const rows = history.map((h) => ({
+      id: h.id,
+      conversationId: "c9",
+      senderUserId: h.sender,
+      type: "TEXT",
+      text: h.text,
+      attachments: [],
+      deletedAt: null,
+    }));
+    const repository = {
+      messagesByIds: async (ids: readonly string[]) =>
+        rows.filter((r) => ids.includes(r.id)),
+      messagesPage: async () => ({
+        rows: [...rows].reverse(),
+        hasOlder: false,
+      }),
+      conversationsOf: async () => [
+        { id: "c9", lastMessageId: rows.at(-1)?.id ?? null },
+      ],
+    };
+    const messages = {
+      postAs: async (sender: string, c: string, text: string) =>
+        void posted.push([sender, c, text]),
+    };
+    const service = new MessagesAssistantService(
+      repository as never,
+      messages as never,
+      { availableTo: () => true } as never,
+      new AssistantThinkingState(),
+      { publish: () => undefined, subscribe: () => undefined } as never,
+      { ids: () => [INBOX], has: (id: string) => id === INBOX } as never,
+    );
+    return { service, posted };
+  }
+
+  it("whoever writes to it gets one sentence in its name, telling them to ask Sutyerák", async () => {
+    const { service, posted } = inboxSetup([
+      { id: "m1", sender: "feri", text: "Mikor jön az alkatrész?" },
+    ]);
+    assert.equal(await service.redirect(INBOX, "c9", "m1"), "REDIRECTED");
+    assert.deepEqual(posted, [[INBOX, "c9", SUTYERAK_INBOX_REDIRECT]]);
+  });
+
+  it("not again right after its own sentence, and never to its own message", async () => {
+    const after = inboxSetup([
+      { id: "m1", sender: "feri", text: "Kérdés" },
+      { id: "m2", sender: INBOX, text: SUTYERAK_INBOX_REDIRECT },
+      { id: "m3", sender: "feri", text: "Még egy" },
+    ]);
+    // közvetlenül a 3. üzenet előtt már a mondat áll: tudja, nem ismétli
+    assert.equal(await after.service.redirect(INBOX, "c9", "m3"), "SKIPPED");
+    const own = inboxSetup([
+      { id: "m2", sender: INBOX, text: SUTYERAK_INBOX_REDIRECT },
+    ]);
+    assert.equal(await own.service.redirect(INBOX, "c9", "m2"), "SKIPPED");
+  });
+
+  it("at start-up an unanswered old conversation gets it once, an answered one not again", async () => {
+    const waiting = inboxSetup([
+      { id: "m1", sender: "feri", text: "Ki olvassa ezt?" },
+    ]);
+    assert.equal(await waiting.service.redirectWaiting(), 1);
+    const answered = inboxSetup([
+      { id: "m1", sender: "feri", text: "Ki olvassa ezt?" },
+      { id: "m2", sender: INBOX, text: SUTYERAK_INBOX_REDIRECT },
+    ]);
+    assert.equal(await answered.service.redirectWaiting(), 0);
+    assert.deepEqual(answered.posted, []);
   });
 });

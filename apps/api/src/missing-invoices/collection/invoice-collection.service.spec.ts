@@ -2,7 +2,7 @@ import "reflect-metadata";
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 
 import PDFDocument from "pdfkit";
 
@@ -20,9 +20,11 @@ import {
 import type { CardDebit } from "./invoice-text.js";
 import type { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
+  INVOICE_COLLECTION_HEARTBEAT_MS,
   InvoiceCollectionService,
   type GoogleClientFactory,
 } from "./invoice-collection.service.js";
+import { STALE_RUN_AFTER_MS } from "./invoice-collection.repository.js";
 
 function pdf(lines: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -60,6 +62,10 @@ function setup(input: {
   debits?: string[];
   cardDebits?: CardDebit[];
   retryDue?: boolean;
+  /** az újraolvasás-döntés addig vár, amíg ez fel nem oldódik (a futás közepe) */
+  retryDueGate?: Promise<boolean>;
+  /** az újraolvasás-döntés hibát dob: a forrásokon kívüli hiba */
+  retryDueThrows?: boolean;
   /** a fájlok korábbi ítélete, a száraz újraértékelés ehhez méri */
   before?: string | null;
   /** a már tárolt dokumentumok számlaszám szerint */
@@ -76,6 +82,7 @@ function setup(input: {
   const recorded: string[] = [];
   const fetched: string[] = [];
   const started: string[] = [];
+  const touched: string[] = [];
   const finished: (string | null)[] = [];
   const failedFlags: boolean[] = [];
   const seenFlags: boolean[] = [];
@@ -90,7 +97,11 @@ function setup(input: {
       seenFlags.push(retry);
       return new Set(ids.filter((id) => (input.seen ?? []).includes(id)));
     },
-    unmatchedRetryDue: async () => input.retryDue ?? true,
+    unmatchedRetryDue: async () => {
+      if (input.retryDueThrows) throw new Error("adatbázis nem érhető el");
+      return input.retryDueGate ?? input.retryDue ?? true;
+    },
+    touchRun: async (id: string) => void touched.push(id),
     verdictOf: async () => input.before ?? null,
     hasContent: async (sha: string) => knownShas.has(sha),
     sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
@@ -174,6 +185,7 @@ function setup(input: {
     stored,
     recorded,
     started,
+    touched,
     fetched,
     finished,
     failedFlags,
@@ -738,6 +750,50 @@ describe("InvoiceCollectionService", () => {
     const clean = await dry();
     assert.equal(clean.changes[0]!.after, "STORED");
     assert.equal("sameNumber" in clean.changes[0]!, false);
+  });
+
+  /*
+    A BERAGADT FUTÁS (acrobot 26830, 2026-10-06): egy megölt folyamat sora
+    RUNNING maradt, és a zár két óráig minden futást kihagyott. Az élő futás
+    ezért percenként frissíti a sorát, és a végén abbahagyja.
+  */
+  it("a live run beats every minute, and stops beating when it ends", async () => {
+    mock.timers.enable({ apis: ["setInterval"] });
+    try {
+      let release: (due: boolean) => void = () => undefined;
+      const { collection, touched } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: {},
+        retryDueGate: new Promise<boolean>((resolve) => (release = resolve)),
+      });
+      const running = collection.run("SCHEDULED");
+      await new Promise((resolve) => setImmediate(resolve));
+      mock.timers.tick(60_000);
+      mock.timers.tick(60_000);
+      assert.deepEqual(touched, ["run-1", "run-1"]);
+      release(false);
+      await running;
+      mock.timers.tick(60_000);
+      assert.equal(touched.length, 2);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  it("a failure outside the sources closes the run as failed instead of leaving it RUNNING", async () => {
+    const { collection, finished, failedFlags } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {},
+      retryDueThrows: true,
+    });
+    await assert.rejects(collection.run("SCHEDULED"), /nem érhető el/);
+    assert.deepEqual(finished, ["INVOICE_COLLECTION_RUN_FAILED"]);
+    assert.deepEqual(failedFlags, [true]);
+  });
+
+  it("a silent run goes stale only after several missed beats", () => {
+    assert.ok(STALE_RUN_AFTER_MS >= 5 * INVOICE_COLLECTION_HEARTBEAT_MS);
+    assert.ok(STALE_RUN_AFTER_MS <= 15 * 60_000);
   });
 
   it("re-evaluates for real with apply: an ordinary run that re-reads although it is not due", async () => {
