@@ -20,6 +20,7 @@ import { TicketFieldsEditor } from "./ticket-fields-editor";
 import { partnerApi } from "@/lib/api";
 import { naploSor } from "@/lib/naplo-sor";
 import { DocumentPanel } from "./document-panel";
+import { TicketConversation } from "./ticket-conversation";
 import { Message } from "./ticket-list";
 
 /**
@@ -284,6 +285,12 @@ export function TicketDetail({ id }: { id: string }) {
               )}
             </div>
           </PilotCard>
+
+          {/*
+            A HIBAJEGY BESZÉLGETÉSE (084e2c24): a partner itt ír nekünk, és itt
+            olvassa a választ. A belső beszélgetés ide nem jön.
+          */}
+          <TicketConversation ticketId={id} />
 
           <DocumentPanel
             title="Fényképek és fájlok"
