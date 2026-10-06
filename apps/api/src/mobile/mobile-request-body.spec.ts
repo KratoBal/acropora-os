@@ -412,6 +412,16 @@ const PAROK: readonly Par[] = [
     mobilMinimum: 1,
     dtoMinimum: 1,
   },
+  {
+    mit: "piszkozat elfogadása",
+    mobil: "../mobile/src/lib/service-drafts/types.ts",
+    mobilNev: "AcceptServiceDraftInput",
+    dto: "src/service-drafts/service-drafts.controller.ts",
+    dtoNev: "AcceptDraftDto",
+    kontroll: ["departmentId", "reporterPersonName"],
+    mobilMinimum: 2,
+    dtoMinimum: 2,
+  },
 ];
 
 /**
@@ -531,7 +541,9 @@ const PAROK: readonly Par[] = [
 // 2026-10-05: 28 -> 30, az Üzenetek 2. fázisa: szerkesztés és reakció, mindkettő párral
 // 2026-10-05: 30 -> 32, az Üzenetek 3. fázisa: továbbítás és értesítési beállítás, mindkettő párral
 // 2026-10-05: 32 -> 34, az Üzenetek 4. fázisa: kapcsolás és tag felvétele, mindkettő párral
-const IRAS_HIVASOK_MA = 34;
+// 2026-10-06: 34 -> 35, a Cápasuli piszkozat elfogadása a telefonon (kártya 49210cdd), párral;
+// az elvetésnek nincs törzse
+const IRAS_HIVASOK_MA = 35;
 
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
   it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {

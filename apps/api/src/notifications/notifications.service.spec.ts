@@ -838,3 +838,46 @@ describe("the message push carries each recipient's unread total (iOS badge)", (
     assert.ok(sent.every((m) => m.badge === undefined));
   });
 });
+
+/**
+ * A CÁPASULI PISZKOZAT ÉRTESÍTÉSE (kártya 49210cdd). Eddig `data: {}`-val ment,
+ * és a koppintás a nyitólapra vitt (Balázs, 2026-10-06 17:05).
+ * MI PIROSÍT: ha a célpont hiányzik, vagy nem a levél azonosítóját viszi.
+ */
+describe("a Cápasuli piszkozat értesítésének célpontja", () => {
+  it("a telefon Piszkozatok listájára visz, a levél azonosítójával", async () => {
+    const { sender: apns, sent } = sender();
+    const written = log();
+    const recorded: unknown[] = [];
+    const service = new NotificationsService(
+      tokens([
+        {
+          userId: "user-2",
+          token: "dd".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+      ]),
+      apns,
+      {
+        ...written.log,
+        recordServiceDraftsArrived: async (outcome: unknown) => {
+          recorded.push(outcome);
+        },
+      } as unknown as NotificationLogRepository,
+      fcmSender().sender,
+    );
+
+    await service.deliverServiceDraftsArrived({
+      mailId: "mail-7",
+      userIds: ["user-2"],
+      count: 3,
+    });
+
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0]?.data, {
+      targetType: "serviceDrafts",
+      targetId: "mail-7",
+    });
+    assert.equal(recorded.length, 1);
+  });
+});

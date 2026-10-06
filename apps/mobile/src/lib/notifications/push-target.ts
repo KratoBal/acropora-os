@@ -71,6 +71,13 @@ export interface PushResponseLike {
  * AZ OTODIK ERTEK, `conversation`, 2026-10-05-EN KERULT FEL (Uzenetek, kartya
  * 51d7aba0), UGYANAZZAL A SZABALLYAL: a szerver `deliverNewMessage`-e kuldi, es a
  * beszelgetes kepernyoje ugyanabban a PR-ban keszult.
+ *
+ * A HATODIK ERTEK, `serviceDrafts`, 2026-10-06-AN KERULT FEL (kartya
+ * 49210cdd), UGYANAZZAL A SZABALLYAL: a szerver
+ * `deliverServiceDraftsArrived`-je addig URES `data`-val kuldott, es a
+ * koppintas a nyitolapra vitt, mert a Piszkozatok oldal csak a weben allt. A
+ * telefonos lista ugyanabban a PR-ban keszult. A `targetId` a LEVEL
+ * azonositoja; a lista-kepernyo nem hasznalja, de a celpont-alak megkoveteli.
  */
 export const PUSH_TARGET_TYPES = [
   "worksheet",
@@ -78,6 +85,7 @@ export const PUSH_TARGET_TYPES = [
   "materialRequest",
   "aquarium",
   "conversation",
+  "serviceDrafts",
 ] as const;
 
 export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
@@ -138,6 +146,7 @@ export const PUSH_TARGET_ROUTES = {
   materialRequest: "/material-requests/[id]",
   aquarium: "/aquariums/[id]",
   conversation: "/uzenetek/[id]",
+  serviceDrafts: "/service-drafts",
 } as const satisfies Record<PushTargetType, string>;
 
 export interface PushTarget {
