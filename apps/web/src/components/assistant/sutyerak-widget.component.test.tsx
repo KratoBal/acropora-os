@@ -216,8 +216,14 @@ describe("Sutyerák widget calibration", () => {
       configurable: true,
     });
     act(() => window.dispatchEvent(new Event("resize")));
-    expect(Number.parseFloat(figure().style.left)).toBeLessThanOrEqual(272);
-    expect(Number.parseFloat(figure().style.top)).toBeLessThanOrEqual(432);
+    expect(figure().style.width).toBe("192px");
+    expect(figure().querySelector("img")?.getAttribute("width")).toBe("192");
+    expect(Number.parseFloat(figure().style.left)).toBeLessThanOrEqual(
+      320 - 192,
+    );
+    expect(Number.parseFloat(figure().style.top)).toBeLessThanOrEqual(
+      480 - 192,
+    );
     const panel = screen.getByRole("dialog");
     expect(
       Number.parseFloat(panel.style.left) +
