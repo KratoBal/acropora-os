@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import { hasPermission, INTERNAL_ROLES, PERMISSIONS } from "@acropora/types";
 
+import { usersWithPermissionWhere } from "../auth/permission-holders.js";
 import {
   assignableUserWhere,
   SERVICE_ASSIGNABLE_ROLES,
@@ -91,10 +92,14 @@ describe("assignableUserWhere", () => {
     assert.equal(where.supplierId, null);
   });
 
-  it("csak aktív fiók kapható meg, és csak kiosztható szereppel", () => {
+  it("csak aktív fiók kapható meg, és csak a szerviz-jog hordozója", () => {
     const where = assignableUserWhere();
     assert.equal(where.isActive, true);
-    assert.deepEqual(where.role, { in: [...SERVICE_ASSIGNABLE_ROLES] });
+    // a jog-szűrő a közös `usersWithPermissionWhere` (sablon + egyéni eltérés)
+    assert.deepEqual(
+      where.AND,
+      usersWithPermissionWhere(PERMISSIONS.SERVICE_MANAGE, INTERNAL_ROLES).AND,
+    );
   });
 
   /**
