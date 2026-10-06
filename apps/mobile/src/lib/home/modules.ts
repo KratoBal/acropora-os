@@ -58,6 +58,12 @@ export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
     icon: "fish-outline",
     route: "/aquariums",
   },
+  PI: {
+    title: "Piszkozatok",
+    description: "Cápasuli kérések elbírálása: elfogadás vagy elvetés",
+    icon: "mail-unread-outline",
+    route: "/service-drafts",
+  },
   RE: {
     title: "Rendelések",
     description: "UNAS rendelések, státuszok és tételek",
@@ -97,6 +103,7 @@ export const MODULE_ORDER: readonly TileCode[] = [
   "AI",
   "ES",
   "AK",
+  "PI",
   "RE",
   "PA",
   "BE",

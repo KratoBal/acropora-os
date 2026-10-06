@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  acceptBlocker,
+  acceptInput,
   canReviewServiceDrafts,
   draftFilterLabel,
   draftMetaLine,
@@ -68,6 +70,34 @@ describe("draftMetaLine", () => {
         attachments: [],
       }),
       "2026-10-06",
+    );
+  });
+});
+
+describe("accepting a draft", () => {
+  it("needs the opener first, then a location, as on the web", () => {
+    // MI PIROSIT: ha a nyito hianya nem allit meg (a szerver elutasitana)
+    assert.match(acceptBlocker("dep-1", null)!, /partnerfelhasználójának/);
+    // MI PIROSIT: ha helyszin nelkul is engedne
+    assert.equal(
+      acceptBlocker("", { id: "u1" }),
+      "Válassz helyszínt az elfogadáshoz.",
+    );
+    assert.equal(acceptBlocker("dep-1", { id: "u1" }), null);
+  });
+
+  it("sends the trimmed author, cut at 200, and null for an empty one", () => {
+    assert.deepEqual(acceptInput("dep-1", "  Kiss Anna "), {
+      departmentId: "dep-1",
+      reporterPersonName: "Kiss Anna",
+    });
+    assert.deepEqual(acceptInput("dep-1", "   "), {
+      departmentId: "dep-1",
+      reporterPersonName: null,
+    });
+    assert.equal(
+      acceptInput("dep-1", "x".repeat(250)).reporterPersonName!.length,
+      200,
     );
   });
 });

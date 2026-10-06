@@ -14,14 +14,37 @@ export interface ServiceDraftListItem {
   /** ÉÉÉÉ-HH-NN */
   reportDate: string;
   reporterPersonName: string | null;
+  /** a kivonatoló javasolt helyszíne; az elfogadáskor ez az előválasztás */
+  proposedDepartmentId: string | null;
   filterState: ServiceDraftFilterState;
   /** hányadszor jelenik meg ugyanez a hiba (1 = először) */
   occurrence: number;
   attachments: { id: string }[];
 }
 
+/** A Cápasuli helyszínei: az elfogadáskor ezek közül kell egyet választani. */
+export interface ServiceDraftLocation {
+  id: string;
+  name: string;
+}
+
 export interface ServiceDraftListResponse {
   items: ServiceDraftListItem[];
   nextCursor: string | null;
   filterEnabled: boolean;
+  locations: ServiceDraftLocation[];
+  /**
+   * A hibajegy nyitója (a Cápasuli partnerfelhasználója). `null`, ha nincs
+   * beállítva: ilyenkor elfogadni nem lehet, elvetni igen (mint a weben).
+   */
+  openedBy: { id: string; name: string } | null;
+}
+
+/**
+ * Az ELFOGADÁS törzse: a szerver `AcceptDraftDto`-ja
+ * (`apps/api/src/service-drafts/service-drafts.controller.ts`).
+ */
+export interface AcceptServiceDraftInput {
+  departmentId: string;
+  reporterPersonName?: string | null;
 }

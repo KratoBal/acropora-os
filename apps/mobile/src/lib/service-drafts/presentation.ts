@@ -4,7 +4,7 @@
  * Tiszta függvények, hogy a teszt-fordítás is lássa őket: ez a fájl nem
  * importál `@/` aliast és Expo futásidőt (lásd `push-target.ts` fejléce).
  */
-import type { ServiceDraftListItem } from "./types";
+import type { AcceptServiceDraftInput, ServiceDraftListItem } from "./types";
 
 /**
  * KI LÁTJA A PISZKOZATOKAT: ugyanaz a szabály, mint a szerver
@@ -57,4 +57,30 @@ export function draftMetaLine(
   if (item.attachments.length > 0)
     parts.push(`${item.attachments.length} melléklet`);
   return parts.join(" · ");
+}
+
+/**
+ * MIÉRT NEM FOGADHATÓ EL MOST (vagy `null`, ha elfogadható). Ugyanaz a két
+ * feltétel, mint a weben: helyszín nélkül nincs hova nyitni a jegyet, és a
+ * hibajegy nyitója (a Cápasuli partnerfelhasználója) nélkül a szerver úgyis
+ * elutasítaná. A szöveg a gomb alatt áll: egy szürke gomb ok nélkül
+ * elromlottnak látszik.
+ */
+export function acceptBlocker(
+  departmentId: string,
+  openedBy: { id: string } | null,
+): string | null {
+  if (!openedBy)
+    return "Elfogadni csak a Cápasuli helyszínének és partnerfelhasználójának beállítása után lehet (weben). Elvetni addig is lehet.";
+  if (!departmentId) return "Válassz helyszínt az elfogadáshoz.";
+  return null;
+}
+
+/** Az elfogadás törzse: a szerző levágva, legfeljebb 200 jel, üresen `null`. */
+export function acceptInput(
+  departmentId: string,
+  reporterPersonName: string,
+): AcceptServiceDraftInput {
+  const name = reporterPersonName.trim().slice(0, 200);
+  return { departmentId, reporterPersonName: name || null };
 }
