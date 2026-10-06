@@ -1213,6 +1213,8 @@ export type {
   WebshopStaleThreshold,
   WebshopOrderAddressInput,
   WebshopOrderNotesInput,
+  WebshopOrderSplitInput,
+  WebshopOrderSplitResult,
   WebshopPickupPointOption,
   WebshopPickupPointSearch,
   WebshopPointKind,

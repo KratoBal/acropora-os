@@ -4,8 +4,11 @@ import type {
   WebshopOrderDetail,
   WebshopOrderLine,
   WebshopOrderLineEdit,
+  WebshopOrderSplitInput,
+  WebshopOrderSplitResult,
   WebshopVariantOption,
 } from "@acropora/types";
+import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import {
   PilotButton,
@@ -527,39 +530,172 @@ function RemoveDialog({
  * mutatja, és kimondja, hogy maga a bontás (új rendelés a kijelölt
  * tételekkel, a fizetés sorsa) a következő körben készül el.
  */
+/** Egy szétbontás azonosítója: a párbeszédablaké, az újraküldés ugyanazt viszi. */
+function newRequestId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `split-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+}
+
+/**
+ * A SZÉTBONTÁS (kártya 0a14f739 C/3): a kijelölt tételek, soronként a
+ * bontandó mennyiséggel, új kapcsolt rendelésbe kerülnek a webshopban. A
+ * kérés azonosítója az ablak megnyitásakor születik, ezért egy elveszett
+ * válasz után az újraküldés nem bont kétszer. Az egész rendelés nem bontás.
+ */
 export function SplitDialog({
   lines,
+  allLines,
+  reason,
   onClose,
+  onSplit,
 }: {
   lines: WebshopOrderLine[];
+  /** A rendelés összes tétele: az egész rendelés nem bontható. */
+  allLines: WebshopOrderLine[];
+  /** Ha nem `null`, most nem bontható, és ez az oka. */
+  reason: string | null;
   onClose: () => void;
+  onSplit: (
+    input: WebshopOrderSplitInput,
+  ) => Promise<WebshopOrderSplitResult["created"]>;
 }) {
+  const [requestId] = useState(newRequestId);
+  const [quantities, setQuantities] = useState<Record<string, string>>(() =>
+    Object.fromEntries(lines.map((line) => [line.id, String(line.quantity)])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<
+    WebshopOrderSplitResult["created"] | null
+  >(null);
+  const wanted = lines.map((line) => ({
+    itemId: line.id,
+    quantity: Number(quantities[line.id]),
+  }));
+  const invalid = lines.find((line, index) => {
+    const quantity = wanted[index]!.quantity;
+    return (
+      !Number.isInteger(quantity) || quantity < 1 || quantity > line.quantity
+    );
+  });
+  const whole = allLines.every(
+    (line) =>
+      wanted.find((item) => item.itemId === line.id)?.quantity ===
+      line.quantity,
+  );
+  const hint = invalid
+    ? `${invalid.title}: 1 és ${invalid.quantity} közötti mennyiség bontható.`
+    : whole
+      ? "Minden tétel teljes mennyisége nem bontás: az eredeti rendelésben maradnia kell valaminek."
+      : null;
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setCreated(await onSplit({ lines: wanted, requestId }));
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A bontás nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <DialogShell
       title="Szétbontás"
       onClose={onClose}
-      busy={false}
-      error={null}
+      busy={busy}
+      error={error}
       footer={
-        <PilotButton size="regular" variant="secondary" onClick={onClose}>
-          Bezárás
-        </PilotButton>
+        created || reason ? (
+          <PilotButton size="regular" variant="secondary" onClick={onClose}>
+            Bezárás
+          </PilotButton>
+        ) : (
+          <>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={onClose}
+            >
+              Mégse
+            </PilotButton>
+            <PilotButton
+              size="regular"
+              variant="primary"
+              disabled={busy || hint !== null}
+              onClick={() => void submit()}
+            >
+              {busy ? "Bontás…" : "Szétbontás"}
+            </PilotButton>
+          </>
+        )
       }
     >
-      <ul
-        aria-label="Kijelölt tételek"
-        className="space-y-1 text-sm text-pilot-grey-800"
-      >
-        {lines.map((line) => (
-          <li key={line.id}>
-            {line.title} · {line.quantity} db
-          </li>
-        ))}
-      </ul>
-      <p className="text-sm text-pilot-grey-600">
-        A kijelölt tételek külön rendelésbe bontása a következő körben készül
-        el: a kijelölés már működik, a bontás még nem.
-      </p>
+      {created ? (
+        <div className="space-y-2 text-sm text-pilot-grey-800">
+          <p>
+            Létrejött a{" "}
+            {created.displayId !== null ? `#${created.displayId}` : "kapcsolt"}{" "}
+            rendelés a kijelölt tételekkel.
+          </p>
+          {created.awaitingPayment ? (
+            <p className="text-pilot-amber-700">
+              Az új rendelés fizetésre vár: kiszállítás előtt fizetési linket
+              kap.
+            </p>
+          ) : null}
+          <Link
+            href={`/webshop/rendelesek/${encodeURIComponent(created.id)}`}
+            className="font-medium text-pilot-aqua-700 underline"
+          >
+            Az új rendelés megnyitása
+          </Link>
+        </div>
+      ) : reason ? (
+        <p className="text-sm text-pilot-grey-700">{reason}</p>
+      ) : (
+        <>
+          <p className="text-sm text-pilot-grey-600">
+            A kijelölt tételek új, kapcsolt rendelésbe kerülnek. Az eredeti
+            rendelés összege ennyivel csökken.
+          </p>
+          <ul aria-label="Kijelölt tételek" className="space-y-2">
+            {lines.map((line) => (
+              <li
+                key={line.id}
+                className="flex items-center justify-between gap-3 text-sm text-pilot-grey-800"
+              >
+                <span className="min-w-0">
+                  {line.title}
+                  <span className="block text-xs text-pilot-grey-500">
+                    a rendelésen: {line.quantity} db
+                  </span>
+                </span>
+                <PilotInput
+                  aria-label={`${line.title}: bontandó mennyiség`}
+                  type="number"
+                  min={1}
+                  max={line.quantity}
+                  value={quantities[line.id] ?? ""}
+                  onChange={(value) =>
+                    setQuantities((current) => ({
+                      ...current,
+                      [line.id]: value,
+                    }))
+                  }
+                  className="w-20"
+                />
+              </li>
+            ))}
+          </ul>
+          {hint ? <p className="text-xs text-pilot-red-700">{hint}</p> : null}
+        </>
+      )}
     </DialogShell>
   );
 }

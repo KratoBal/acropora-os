@@ -28,6 +28,7 @@ import {
   WebshopOrderNoteDto,
   WebshopOrderNotesDto,
   WebshopOrderPointDto,
+  WebshopOrderSplitDto,
 } from "./dto/webshop-order-edits.dto.js";
 import { WebshopOrderEditsService } from "./webshop-order-edits.service.js";
 import { WebshopStaleThresholdsDto } from "./dto/webshop-order-stale-thresholds.dto.js";
@@ -86,6 +87,21 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.edits.changePoint(id, body.pointId, user);
+  }
+
+  /**
+   * A kijelölt tételek új, kapcsolt rendelésbe (kártya 0a14f739 C/3). A
+   * válasz a friss adatlap és az új rendelés.
+   */
+  @Post(":id/split")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  split(
+    @Param("id") id: string,
+    @Body() body: WebshopOrderSplitDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.edits.split(id, body, user);
   }
 
   /** A vevő és a szállító megjegyzése (commerce #493). */

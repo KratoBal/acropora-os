@@ -8,7 +8,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { parcelInputOf } from "./webshop-order-parcel.rules.js";
-import { shippingOf } from "./webshop-order-detail.rules.js";
+import { shippingOf, splitIdsOf } from "./webshop-order-detail.rules.js";
 import {
   WEBSHOP_ORDER_STATUS_LABELS,
   staleHoursOf,
@@ -192,6 +192,7 @@ export class WebshopOrdersService {
       ]),
     );
     const customerKey = customerKeyOf(order);
+    const splitIds = splitIdsOf(order.metadata ?? null);
     const [
       invoices,
       parcels,
@@ -199,6 +200,7 @@ export class WebshopOrdersService {
       thresholds,
       osCustomer,
       internalNote,
+      splitDisplayIds,
     ] = await Promise.all([
       this.repository.invoices([id]),
       this.parcels.activeParcelsFor([id]),
@@ -212,6 +214,17 @@ export class WebshopOrdersService {
       this.repository.staleThresholds(),
       customerKey ? this.repository.osCustomerByKey(customerKey) : null,
       this.repository.internalNote(id),
+      // csak a rendelésszámért: ha a webshop nem adja, a kapcsolat szám nélkül áll
+      Promise.all(
+        [splitIds.from, ...splitIds.into].map((splitId) =>
+          splitId
+            ? client
+                .order(splitId)
+                .then((row) => row?.display_id ?? null)
+                .catch(() => null)
+            : Promise.resolve(null),
+        ),
+      ),
     ]);
     /*
       A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
@@ -247,6 +260,15 @@ export class WebshopOrdersService {
         : null,
       osCustomer,
       internalNote,
+      split: {
+        from: splitIds.from
+          ? { id: splitIds.from, displayId: splitDisplayIds[0] ?? null }
+          : null,
+        into: splitIds.into.map((splitId, index) => ({
+          id: splitId,
+          displayId: splitDisplayIds[index + 1] ?? null,
+        })),
+      },
       staleHours: staleHoursOf(thresholds),
       orderPayment,
       order,
