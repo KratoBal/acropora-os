@@ -11,6 +11,10 @@ import type {
   MedusaOrderDetailRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
+import {
+  COD_PROVIDER_ID,
+  orderPaymentProviderId,
+} from "./webshop-orders.rules.js";
 
 /**
  * A WEBSHOP RENDELÉS SZÁMLÁJA, hálózat nélkül: a Medusa rendelésből a
@@ -208,9 +212,11 @@ export function newCustomerOf(order: MedusaOrderDetailRow):
 
 /** A számlán álló fizetési mód (a Számlázz.hu ezt a szöveget írja ki). */
 export function invoicePaymentMethodOf(order: MedusaOrderDetailRow): string {
-  const provider = order.payment_collections?.[0]?.payments?.[0]?.provider_id;
+  // az utánvétnek csak munkamenete van a leadáskor: a rekordra várva a
+  // számlán „Átutalás” állt volna (mérve a stage-en, 2026-10-06)
+  const provider = orderPaymentProviderId(order.payment_collections?.[0]);
   if (provider === "pp_stripe_stripe") return "Bankkártya";
-  if (provider === "pp_acropora_cod") return "Utánvét";
+  if (provider === COD_PROVIDER_ID) return "Utánvét";
   return "Átutalás";
 }
 

@@ -29,6 +29,7 @@ import { lineEditRefusal } from "./webshop-order-lines.rules.js";
 import {
   STORE_PICKUP_METHOD,
   isStale,
+  orderPaymentProviderId,
   paymentMethodLabel,
   paymentStateOf,
   type WebshopOrderFacts,
@@ -178,7 +179,8 @@ export function paymentOf(
   const collection = collections[0];
   if (!collection) return null;
   const payment = collection.payments?.[0];
-  const providerId = payment?.provider_id ?? null;
+  // a függő fizetésnek csak munkamenete van (lásd orderPaymentProviderId)
+  const providerId = orderPaymentProviderId(collection);
   const intent = payment?.data?.id;
   return {
     method: paymentMethodLabel(providerId),

@@ -33,7 +33,46 @@ export function paymentMethodLabel(providerId: string | null): string | null {
   if (!providerId) return null;
   if (providerId === "pp_stripe_stripe") return "Stripe";
   if (providerId === "pp_acropora_cod") return "Utánvét";
+  // bb3a6bd5: előre utalás (commerce #506)
+  if (providerId === "pp_acropora_transfer") return "Előre utalás";
   return `Egyéb (${providerId})`;
+}
+
+/** A webshop saját, függő fizetési szolgáltatói: a rendelés a pénz beérkezéséig fizetetlen. */
+export const COD_PROVIDER_ID = "pp_acropora_cod";
+export const BANK_TRANSFER_PROVIDER_ID = "pp_acropora_transfer";
+
+/**
+ * A RENDELÉS FIZETÉSI SZOLGÁLTATÓJA: a fizetés-rekordé, ha van, különben az
+ * élő munkamenet szolgáltatója.
+ *
+ * MIÉRT KELL A MUNKAMENET (mérve 2026-10-06, a stage-en): a függő fizetésnek
+ * (utánvét, előre utalás) a leadáskor NINCS fizetés-rekordja, mert a Medusa
+ * `pending_authorization`-nél nem hoz létre (payment 2.20.1,
+ * `authorizePaymentSession`). A stage tíz utánvétes rendelésénél a rekord
+ * nulla volt, a munkamenet `pp_acropora_cod`. Csak a rekordot olvasva az OS
+ * ezeknél üres módot mutatott, a számlára „Átutalás” került volna, és a
+ * csomag utánvét-összeg nélkül ment volna fel.
+ *
+ * A törölt vagy hibás munkamenet nem számít: az nem a rendelés fizetése.
+ */
+export function orderPaymentProviderId(
+  collection:
+    | {
+        payments?: { provider_id: string }[] | null;
+        payment_sessions?:
+          { provider_id: string; status: string | null }[] | null;
+      }
+    | null
+    | undefined,
+): string | null {
+  if (!collection) return null;
+  const recorded = collection.payments?.[0]?.provider_id;
+  if (recorded) return recorded;
+  const live = (collection.payment_sessions ?? []).find(
+    (session) => session.status !== "canceled" && session.status !== "error",
+  );
+  return live?.provider_id ?? null;
 }
 
 /** A fizetés állapota a fizetési gyűjtő összegeiből és állapotából. */
