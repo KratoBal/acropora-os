@@ -171,6 +171,12 @@ export interface ConversationDetail extends ConversationListItem {
    * eseményt addig nem látta. Az API memóriájából: újraindítás után `false`.
    */
   assistantThinking?: boolean;
+  /**
+   * A KÉRDEZŐ TÖRÖLHETI-E A BESZÉLGETÉST (fecbb1fe): a létrehozója, az admin
+   * (`messages.admin`), és Sutyerák kettes beszélgetésében a dolgozó. A kliens
+   * ebből mutatja a gombot; a döntés a szerveré. Opcionális a régi klienseknek.
+   */
+  canDelete?: boolean;
 }
 
 export interface MessagePage {
@@ -272,6 +278,12 @@ export type MessageStreamEvent =
   | { type: "message.created"; conversationId: string; messageId: string }
   | { type: "conversation.created"; conversationId: string }
   | { type: "conversation.read"; conversationId: string }
+  /**
+   * A BESZÉLGETÉST TÖRÖLTÉK (fecbb1fe): a tagok listájáról push nélkül tűnik
+   * el; ha épp nyitva van, a kliens a listára lép. A régi kliens nem ismeri, és
+   * a következő frissítéskor látja.
+   */
+  | { type: "conversation.deleted"; conversationId: string }
   /** Szerkesztés, törlés vagy reakció: a kliens azt az egy üzenetet olvassa újra. */
   | { type: "message.updated"; conversationId: string; messageId: string }
   /**

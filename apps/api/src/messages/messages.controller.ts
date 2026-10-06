@@ -180,6 +180,20 @@ export class MessagesController {
     return this.messages.addMembers(user, id, body.userIds);
   }
 
+  /**
+   * A BESZÉLGETÉS TÖRLÉSE (fecbb1fe): a létrehozó, az admin, és Sutyerák
+   * kettes beszélgetésében a dolgozó. A szabály a szolgáltatásé
+   * (`mayDeleteConversation`); itt csak a belépő joga.
+   */
+  @Delete("conversations/:id")
+  @RequirePermissions(PERMISSIONS.MESSAGES_USE)
+  deleteConversation(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.messages.deleteConversation(user, id);
+  }
+
   /** Kilépés (4. fázis). */
   @Post("conversations/:id/leave")
   @RequirePermissions(PERMISSIONS.MESSAGES_USE)

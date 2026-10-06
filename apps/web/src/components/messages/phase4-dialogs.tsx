@@ -14,11 +14,78 @@ import { messagesApi } from "@/lib/api/messages";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
-import { Monogram, assistantFirst } from "./conversation-parts";
+import {
+  Monogram,
+  assistantFirst,
+  conversationName,
+} from "./conversation-parts";
 import { canManageMembers, contextCardParts, contextCardTitle } from "./phase4";
 
 const failure = (cause: unknown, fallback: string) =>
   cause instanceof Error && cause.message ? cause.message : fallback;
+
+/**
+ * A BESZÉLGETÉS TÖRLÉSE (fecbb1fe; Balázs, 2026-10-06 13:15:49 UTC): a
+ * létrehozónak, az adminnak, és Sutyerák kettes beszélgetésében a dolgozónak.
+ * Hogy a néző törölhet-e, a szerver mondja meg (`canDelete`); a gomb csak
+ * akkor látszik. Megerősítő ablak a beszélgetés nevével.
+ */
+export function DeleteConversationSection({
+  token,
+  conversation,
+  onDeleted,
+}: {
+  token: string;
+  conversation: ConversationListItem;
+  onDeleted: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const name = conversationName(conversation);
+
+  const remove = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await messagesApi.deleteConversation(token, conversation.id);
+      setConfirming(false);
+      onDeleted();
+    } catch (cause) {
+      setConfirming(false);
+      setError(failure(cause, "A törlés nem sikerült."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 border-t border-pilot-grey-200 pt-3 text-xs">
+      <button
+        type="button"
+        disabled={busy}
+        className="text-pilot-red-700 hover:underline"
+        onClick={() => setConfirming(true)}
+      >
+        Beszélgetés törlése
+      </button>
+      {error ? (
+        <p role="alert" className="mt-1 text-pilot-red-700">
+          {error}
+        </p>
+      ) : null}
+      <ConfirmDialog
+        open={confirming}
+        title={`Törlöd a(z) „${name}” beszélgetést?`}
+        consequence="Mindenki elől eltűnik, az üzeneteivel és a csatolmányaival együtt. A többiek nem kapnak róla értesítést."
+        recovery="A törlés nem vonható vissza a felületen."
+        confirmLabel="Törlés"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => void remove()}
+      />
+    </div>
+  );
+}
 
 /**
  * A „BESZÉLGETÉS ADATAI” 4. FÁZISA (terv 2.3 és 2.4; Figma 450:474, 450:260):

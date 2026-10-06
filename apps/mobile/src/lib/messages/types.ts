@@ -121,6 +121,8 @@ export interface ConversationDetail extends ConversationListItem {
   context?: ConversationContextCard | null;
   /** 4. pont B: Sutyerák épp válaszol ebben a beszélgetésben. */
   assistantThinking?: boolean;
+  /** fecbb1fe: a kérdező törölheti-e a beszélgetést (a szerver dönt). */
+  canDelete?: boolean;
 }
 
 export interface MessagePage {
@@ -193,6 +195,7 @@ export interface MessagePeopleResponse {
 export type MessageStreamEvent =
   | { type: "message.created"; conversationId: string; messageId: string }
   | { type: "conversation.created"; conversationId: string }
+  | { type: "conversation.deleted"; conversationId: string }
   | { type: "conversation.read"; conversationId: string }
   | { type: "message.updated"; conversationId: string; messageId: string }
   /** 4. pont B: a `KNOWN` halmaz még nem engedi át; a mobil felület veszi fel. */

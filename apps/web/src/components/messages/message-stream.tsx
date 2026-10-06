@@ -39,6 +39,7 @@ const STREAM_EVENTS: MessageStreamEvent["type"][] = [
   "message.created",
   "conversation.created",
   "conversation.read",
+  "conversation.deleted",
   "message.updated",
   "assistant.thinking",
 ];

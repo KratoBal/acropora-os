@@ -275,6 +275,11 @@ export const PERMISSIONS = {
   /// megkapja, a VIEWER is; gépi ágens és partnerfiók nem (acrobot döntése,
   /// 26174). A beszélgetésen belüli jogot a tagság adja, nem ez.
   MESSAGES_USE: "messages.use",
+  /// BÁRMELY BESZÉLGETÉS TÖRLÉSE (kártya fecbb1fe; Balázs, 2026-10-06 13:15:49
+  /// UTC: „törölni az tud, aki nyitotta az üzenet szálat és az admin”). A saját
+  /// beszélgetését a létrehozója e nélkül is törölheti; ez az adminé, ezért
+  /// csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent).
+  MESSAGES_ADMIN: "messages.admin",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -321,6 +326,9 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
         permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
         permission !== PERMISSIONS.PRODUCTS_KNOWLEDGE_APPROVE &&
+        // MÁS BESZÉLGETÉSÉNEK TÖRLÉSE AZ ADMINÉ (fecbb1fe): egy MANAGER, aki
+        // bármit törölhet, mások beszélgetését is eltüntethetné a listájukról.
+        permission !== PERMISSIONS.MESSAGES_ADMIN &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
