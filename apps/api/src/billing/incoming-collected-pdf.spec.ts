@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { NotFoundException, StreamableFile } from "@nestjs/common";
+import {
+  ConflictException,
+  NotFoundException,
+  StreamableFile,
+} from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import { IncomingBillingDocumentsController } from "./incoming-billing-documents.controller.js";
@@ -163,13 +167,27 @@ describe("a bejövő számla PDF-végpontja", () => {
     assert.deepEqual(read, ["feed-1", "col-1"]);
   });
 
-  it("nem PDF tartalmú begyűjtött fájl nem megy ki; ha nincs más, 404", async () => {
+  it("nem PDF tartalmú begyűjtött fájl nem megy ki; ha nincs más, 409", async () => {
     const { subject } = controller({
       billRow,
       contents: { "feed-1": XML, "col-1": XML },
       collected: [doc()],
     });
-    await assert.rejects(subject.pdf("in-1"), NotFoundException);
+    await assert.rejects(subject.pdf("in-1"), ConflictException);
+  });
+
+  /**
+   * A KÉT KUDARC KÜLÖN VÁLASZ (kártya f7df5354): a nem létező számla 404, a
+   * PDF nélküli 409. Sutyerák 2026-10-06-án mindkettőre 404-et kapott.
+   */
+  it("nem létező számlára 404, nem 409", async () => {
+    const { subject, read } = controller({
+      billRow: null,
+      contents: {},
+      collected: [doc()],
+    });
+    await assert.rejects(subject.pdf("nincs"), NotFoundException);
+    assert.deepEqual(read, []);
   });
 });
 

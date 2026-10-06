@@ -42,7 +42,7 @@ function numberKey(value: string): string {
   return value.replace(/\s/g, "").toUpperCase();
 }
 
-function invoiceKey(
+export function invoiceKey(
   number: string | null | undefined,
   taxNumber: string | null | undefined,
 ): string | null {
@@ -116,4 +116,42 @@ export function collectedPdfIds(
   const key = invoiceKey(bill.documentNumber, bill.supplierTaxNumber);
   if (!key) return [];
   return (index.get(key) ?? []).filter((id) => id !== bill.sourceDocumentId);
+}
+
+/** Amennyi adatbázis a betöltéshez kell (a tesztek ezt cserélik). */
+export interface CollectedPdfSource {
+  incomingSupplierDocument: {
+    findMany(args: {
+      where: { fileName: { endsWith: string; mode: "insensitive" } };
+      select: {
+        id: true;
+        fileName: true;
+        createdAt: true;
+        textReading: true;
+        importResult: true;
+      };
+    }): Promise<CollectedDocument[]>;
+  };
+}
+
+/**
+ * A begyűjtött PDF-ek indexe az adatbázisból, a tartalmuk nélkül: csak a
+ * kulcsok (számlaszám, adószám) kellenek. A bejövő számlák listája és a
+ * beszerzési számlák `hasPdf` mezője ugyanezt olvassa.
+ */
+export async function loadCollectedPdfIndex(
+  database: CollectedPdfSource,
+): Promise<Map<string, string[]>> {
+  return collectedPdfIndex(
+    await database.incomingSupplierDocument.findMany({
+      where: { fileName: { endsWith: ".pdf", mode: "insensitive" } },
+      select: {
+        id: true,
+        fileName: true,
+        createdAt: true,
+        textReading: true,
+        importResult: true,
+      },
+    }),
+  );
 }
