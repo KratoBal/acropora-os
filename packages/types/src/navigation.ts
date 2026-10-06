@@ -440,6 +440,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.ICP_VIEW),
   },
   {
+    /** Az elhullási napló (kártya 115c9740); a telefonra most nem kerül. */
+    id: "mortality",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.MORTALITY_VIEW),
+  },
+  {
     id: "unas-connection",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
