@@ -316,7 +316,7 @@ describe("BillingDocumentEditor", () => {
     expect(api.create).toHaveBeenCalledTimes(1);
   });
 
-  it("the e-mail drawer: variables go into the letter, the preview fills what is known, the send button waits", async () => {
+  it("the e-mail drawer: variables go into the letter, the preview fills what is known, 'Kész' keeps the letter", async () => {
     render(<BillingDocumentEditor />);
     await pickPartner();
     fireEvent.click(
@@ -373,11 +373,25 @@ describe("BillingDocumentEditor", () => {
     expect(frame.getAttribute("srcdoc")).toMatch(
       /<p>Szia,<span[^>]*>Fővárosi Állat- és Növénykert<\/span><\/p>/,
     );
+    // A FIÓK CSAK A LEVELET ÁLLÍTJA BE (Balázs, 2026-10-06): „Kész” bezárja,
+    // és a levél megmarad, amikor újra megnyitják
     expect(
-      within(drawer).getByRole("button", {
-        name: "E-számla kiállítása és elküldése",
-      }),
-    ).toBeDisabled();
+      within(drawer).getByText(
+        "A levelet a „Kiállítás és kiküldés” gomb küldi el.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Kész" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "E-mail szerkesztése" }),
+    );
+    const reopened = await screen.findByRole("dialog");
+    // a fiók az előnézetnél nyílik újra: a megőrzött levél ott látszik
+    expect(
+      within(reopened).getByTitle("Levél előnézete").getAttribute("srcdoc"),
+    ).toMatch(/<p>Szia,<span[^>]*>Fővárosi Állat- és Növénykert<\/span><\/p>/);
   });
 
   /*
