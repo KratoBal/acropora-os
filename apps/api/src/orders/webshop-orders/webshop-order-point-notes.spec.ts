@@ -38,6 +38,7 @@ const parcel = {
   size: null,
   codHuf: null,
   createdAt: "2026-10-05T12:00:00.000Z",
+  trackingUrl: null,
 };
 
 describe("when the point and the notes may change", () => {

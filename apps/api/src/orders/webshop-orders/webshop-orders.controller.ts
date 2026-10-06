@@ -236,6 +236,21 @@ export class WebshopOrdersController {
   }
 
   /**
+   * A RENDELÉS SZÁLLÍTÓLEVELE a kiállított számla tételeiből, ugyanazzal a
+   * kiállítással (kártya 0a14f739 C/1). Ugyanaz a két jog kell, mint a
+   * számlához. A válasz a friss adatlap.
+   */
+  @Post(":id/delivery-note")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  issueDeliveryNote(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.issueDeliveryNote(id, user);
+  }
+
+  /**
    * CSOMAGFELADÁS: a szállítónál létrejön a csomag (a számla után), és a
    * webshop elküldi a „Feladtuk” levelet. A válasz a friss adatlap és a levél
    * sorsa.
@@ -262,6 +277,13 @@ export class WebshopOrdersController {
       length: bytes.length,
       disposition: `inline; filename*=UTF-8''${encodeURIComponent(`cimke-${id}.pdf`)}`,
     });
+  }
+
+  /** A csomag állapota a szállítónál (csak olvasás). */
+  @Get(":id/parcel/tracking")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  parcelTracking(@Param("id") id: string) {
+    return this.parcels.tracking(id);
   }
 
   /** A bizonytalan foglalás feloldása, miután a szállító felületén megnézték. */

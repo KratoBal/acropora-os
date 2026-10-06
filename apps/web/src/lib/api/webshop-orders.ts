@@ -11,6 +11,7 @@ import type {
   WebshopOrderAddressInput,
   WebshopParcelSize,
   WebshopOrderNotesInput,
+  WebshopParcelTracking,
   WebshopOrderSplitInput,
   WebshopOrderSplitResult,
   WebshopPickupPointSearch,
@@ -115,6 +116,13 @@ export const webshopOrdersApi = {
       { method: "PUT", body: JSON.stringify(input) },
     );
   },
+  /** A csomag állapota a szállítónál (csak olvasás). */
+  parcelTracking(token: string, id: string) {
+    return apiRequest<WebshopParcelTracking>(
+      `/webshop-orders/${encodeURIComponent(id)}/parcel/tracking`,
+      token,
+    );
+  },
   /** A rendelés módjához választható csomagpontok (commerce #494). */
   pickupPoints(token: string, id: string, query: string) {
     return apiRequest<WebshopPickupPointSearch>(
@@ -188,6 +196,18 @@ export const webshopOrdersApi = {
   issueInvoice(token: string, id: string) {
     return apiRequest<WebshopOrderDetail>(
       `/webshop-orders/${encodeURIComponent(id)}/invoice`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
+   * A rendelés szállítólevele a kiállított számla tételeiből (kártya 0a14f739
+   * C/1). A válasz a friss adatlap; a kiállított szállítólevélre a második
+   * hívás nem állít ki újat.
+   */
+  issueDeliveryNote(token: string, id: string) {
+    return apiRequest<WebshopOrderDetail>(
+      `/webshop-orders/${encodeURIComponent(id)}/delivery-note`,
       token,
       { method: "POST" },
     );

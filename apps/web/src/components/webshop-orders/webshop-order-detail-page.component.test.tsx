@@ -34,9 +34,11 @@ const api = vi.hoisted(() => ({
   split: vi.fn(),
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
+  issueDeliveryNote: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
+  parcelTracking: vi.fn(),
 }));
 const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -155,6 +157,7 @@ const detail: WebshopOrderDetail = {
   },
   invoiceNumber: null,
   invoice: null,
+  deliveryNote: null,
   parcel: null,
   cardPayment: null,
   osCustomer: null,
@@ -215,6 +218,10 @@ const detail: WebshopOrderDetail = {
 };
 
 beforeEach(() => {
+  api.parcelTracking.mockReset().mockResolvedValue({
+    events: [],
+    checkedAt: "2026-10-06T08:00:00.000Z",
+  });
   auth.session = session("OWNER");
   api.detail.mockReset();
   api.changeStatus.mockReset();
@@ -227,6 +234,7 @@ beforeEach(() => {
   api.split.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
+  api.issueDeliveryNote.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
   api.releaseParcel.mockReset();
@@ -621,6 +629,75 @@ describe("WebshopOrderDetailPage", () => {
     ).toBeTruthy();
   });
 
+  /*
+    THE DELIVERY NOTE (card 0a14f739 C/1). WHAT TURNS RED: a delivery note
+    button before the invoice is issued; the button does not call its own
+    endpoint; the issued note's number or PDF does not show; without
+    billing.issue a button stands there.
+  */
+  it("after the invoice, issues the delivery note and opens its PDF", async () => {
+    const issued: WebshopOrderDetail = {
+      ...detail,
+      invoiceNumber: "E-1",
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    };
+    api.detail.mockResolvedValue(issued);
+    api.issueDeliveryNote.mockResolvedValue({
+      ...issued,
+      deliveryNote: {
+        id: "webshop-dn-order_38",
+        status: "ISSUED",
+        number: "TESZT-2026-5E6F7A8B",
+      },
+    });
+    billing.pdf.mockResolvedValue(new Blob(["%PDF"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    Object.defineProperty(URL, "createObjectURL", {
+      value: vi.fn(() => "blob:pdf"),
+      configurable: true,
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Számla" });
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Szállítólevél kiállítása" }),
+    );
+    expect(await within(card).findByText("TESZT-2026-5E6F7A8B")).toBeTruthy();
+    expect(api.issueDeliveryNote).toHaveBeenCalledWith("token", "order_38");
+    expect(
+      within(card).queryByRole("button", { name: "Szállítólevél kiállítása" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Szállítólevél PDF" }),
+    );
+    await vi.waitFor(() =>
+      expect(billing.pdf).toHaveBeenCalledWith("token", "webshop-dn-order_38"),
+    );
+    open.mockRestore();
+  });
+
+  it("no delivery note button before the invoice, or without billing.issue", async () => {
+    api.detail.mockResolvedValue(detail);
+    const first = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    let card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).queryByText(/Szállítólevél/)).toBeNull();
+    first.unmount();
+
+    auth.session = session("SALES");
+    api.detail.mockResolvedValue({
+      ...detail,
+      invoiceNumber: "E-1",
+      invoice: { id: "webshop-order_38", status: "ISSUED", number: "E-1" },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    card = await screen.findByRole("region", { name: "Számla" });
+    expect(within(card).getByText("Nincs szállítólevél.")).toBeTruthy();
+    expect(
+      within(card).queryByRole("button", { name: "Szállítólevél kiállítása" }),
+    ).toBeNull();
+  });
+
   /**
    * A CSOMAG (Rendelések, 5. PR). MI PIROSÍT: számla előtt gomb áll; a méret
    * nem megy a kéréssel; a levél sorsa nem látszik; a csomagszám vagy a címke
@@ -645,6 +722,7 @@ describe("WebshopOrderDetailPage", () => {
       size: "m",
       codHuf: null,
       createdAt: "2026-10-05T12:00:00.000Z",
+      trackingUrl: null,
       ...parcel,
     },
   });
@@ -1548,6 +1626,59 @@ describe("WebshopOrderDetailPage", () => {
       await screen.findByText(/2 korábbi sikertelen\s+rendelés/),
     ).toBeTruthy();
     expect(screen.getByText(/van másik nyitott rendelése/)).toBeTruthy();
+  });
+
+  /*
+    THE PARCEL'S TRACKING (the prompt, point 7). WHAT TURNS RED: the carrier's
+    last state does not show; refresh does not ask again; a carrier error
+    hides instead of saying so; a link appears without a configured address.
+  */
+  it("a parcel shows the carrier's last state, refreshes, and links out only when configured", async () => {
+    api.detail.mockResolvedValue(withParcel({}));
+    api.parcelTracking.mockResolvedValue({
+      events: [
+        {
+          status: "HDINTRANSIT",
+          text: "Úton a címzetthez",
+          at: "2026-10-06T08:00:00.000Z",
+        },
+        {
+          status: "CREATE",
+          text: "Létrehozva",
+          at: "2026-10-05T10:00:00.000Z",
+        },
+      ],
+      checkedAt: "2026-10-06T09:00:00.000Z",
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(await within(card).findByText("Úton a címzetthez")).toBeTruthy();
+    expect(within(card).queryByText("Létrehozva")).toBeNull();
+    expect(
+      within(card).queryByRole("link", { name: "Követés a szállító oldalán" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Csomagkövetés frissítése" }),
+    );
+    await waitFor(() => expect(api.parcelTracking).toHaveBeenCalledTimes(2));
+    cleanup();
+
+    api.detail.mockResolvedValue(
+      withParcel({ trackingUrl: "https://track.example/?code=CLFOX1" }),
+    );
+    api.parcelTracking.mockRejectedValue(
+      new Error("A szállító most nem érhető el."),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const linked = await screen.findByRole("region", { name: "Szállítás" });
+    expect(
+      await within(linked).findByText("A szállító most nem érhető el."),
+    ).toBeTruthy();
+    expect(
+      within(linked)
+        .getByRole("link", { name: "Követés a szállító oldalán" })
+        .getAttribute("href"),
+    ).toBe("https://track.example/?code=CLFOX1");
   });
 
   it("without orders.manage there are no pencils", async () => {

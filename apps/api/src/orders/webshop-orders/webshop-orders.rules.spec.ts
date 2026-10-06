@@ -247,6 +247,7 @@ describe("search and filters", () => {
         size: null,
         codHuf: null,
         createdAt: "2026-10-05T12:00:00.000Z",
+        trackingUrl: null,
       }),
       NOW,
     );

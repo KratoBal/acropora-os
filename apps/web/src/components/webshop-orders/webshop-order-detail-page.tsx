@@ -25,6 +25,7 @@ import {
   type WebshopOrderSplitInput,
   type WebshopOrderSplitResult,
   type WebshopPickupPointSearch,
+  type WebshopParcelTracking,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -370,6 +371,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueInvoice(token, id));
     setNow(Date.now());
   };
+  const issueDeliveryNote = async () => {
+    setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
+    setNow(Date.now());
+  };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
@@ -398,6 +403,11 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   };
   const searchPoints = (query: string) =>
     webshopOrdersApi.pickupPoints(token, id, query);
+  // állandó azonosság: a követés mezője erre indít lekérést
+  const parcelTracking = useCallback(
+    () => webshopOrdersApi.parcelTracking(token, id),
+    [token, id],
+  );
   const releaseHold = async (notifyCustomer: boolean) => {
     const result = await webshopOrdersApi.releaseHold(
       token,
@@ -512,10 +522,12 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
           onIssueInvoice={issueInvoice}
+          onIssueDeliveryNote={issueDeliveryNote}
           onOpenPdf={openPdf}
           onCreateParcel={createParcel}
           onParcelLabel={parcelLabel}
           onReleaseParcel={releaseParcel}
+          onParcelTracking={parcelTracking}
           onEditLine={editLine}
           onSearchVariants={searchVariants}
           onReleaseHold={releaseHold}
@@ -549,11 +561,13 @@ function InvoiceCard({
   order,
   canIssue,
   onIssue,
+  onIssueDeliveryNote,
   onOpenPdf,
 }: {
   order: WebshopOrderDetail;
   canIssue: boolean;
   onIssue: () => Promise<void>;
+  onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -610,6 +624,13 @@ function InvoiceCard({
               </PilotButton>
               {link}
             </div>
+            <DeliveryNoteField
+              note={order.deliveryNote}
+              canIssue={canIssue}
+              busy={busy}
+              onIssue={() => void run(onIssueDeliveryNote)}
+              onOpenPdf={(documentId) => void run(() => onOpenPdf(documentId))}
+            />
           </>
         ) : invoice?.status === "ISSUING" ? (
           <>
@@ -659,6 +680,82 @@ function InvoiceCard({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/**
+ * A SZÁLLÍTÓLEVÉL (kártya 0a14f739 C/1): a Számlázz.hu szállítólevele, a
+ * kiállított számla tételeiből. Ezért a számla kártyáján áll, és csak a
+ * kiállított számla alatt. A kiállítás alatti és az elutasított állapot itt
+ * sem kap új gombot: a Számlázásban kell megnézni, mi történt.
+ */
+function DeliveryNoteField({
+  note,
+  canIssue,
+  busy,
+  onIssue,
+  onOpenPdf,
+}: {
+  note: WebshopOrderDetail["deliveryNote"];
+  canIssue: boolean;
+  busy: boolean;
+  onIssue: () => void;
+  onOpenPdf: (documentId: string) => void;
+}) {
+  const link = note ? (
+    <Link
+      href={`/penzugy/szamlazas/${encodeURIComponent(note.id)}`}
+      className="text-sm font-medium text-pilot-aqua-700 underline"
+    >
+      Megnyitás a Számlázásban
+    </Link>
+  ) : null;
+  return (
+    <div className="space-y-2 border-t border-pilot-grey-100 pt-3">
+      {note?.status === "ISSUED" ? (
+        <>
+          <Field label="Szállítólevél">{note.number ?? "—"}</Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => onOpenPdf(note.id)}
+            >
+              Szállítólevél PDF
+            </PilotButton>
+            {link}
+          </div>
+        </>
+      ) : note?.status === "ISSUING" ? (
+        <>
+          <p className="text-sm text-pilot-amber-700">
+            A szállítólevél kiállítása elindult, és ellenőrzésre vár: nézd meg a
+            Számlázz.hu-n, elkészült-e.
+          </p>
+          {link}
+        </>
+      ) : note?.status === "ISSUE_FAILED" ? (
+        <>
+          <p className="text-sm text-pilot-red-700">
+            A szállítólevél kiállítása elutasítva maradt. Az okát a bizonylatnál
+            látod.
+          </p>
+          {link}
+        </>
+      ) : canIssue ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          disabled={busy}
+          onClick={onIssue}
+        >
+          {busy ? "Kiállítás…" : "Szállítólevél kiállítása"}
+        </PilotButton>
+      ) : (
+        <p className="text-sm text-pilot-grey-700">Nincs szállítólevél.</p>
+      )}
+    </div>
   );
 }
 
@@ -1001,15 +1098,102 @@ export function noticeText(notice: WebshopShippingNoticeOutcome): string {
  * létrehozás kimenete bizonytalan, új csomag csak kifejezett feloldás után
  * indítható, és a gomb megmondja, mit kell előtte megnézni.
  */
+/**
+ * A CSOMAGKÖVETÉS (a prompt 7. pontja): a szállító utolsó állapota, frissítés,
+ * és ha a nyilvános követő oldal címe be van állítva, egy link oda. A cím nincs
+ * kitalálva (acrobot 26620): beállítás nélkül nincs link.
+ */
+function ParcelTrackingField({
+  trackingUrl,
+  load,
+}: {
+  trackingUrl: string | null;
+  load: () => Promise<WebshopParcelTracking>;
+}) {
+  const [tracking, setTracking] = useState<WebshopParcelTracking | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(() => {
+    setBusy(true);
+    setError(null);
+    void load()
+      .then(setTracking)
+      .catch((cause: unknown) =>
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "A szállító állapota most nem kérdezhető le.",
+        ),
+      )
+      .finally(() => setBusy(false));
+  }, [load]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  const last = tracking?.events[0] ?? null;
+  return (
+    <Field
+      label="Csomagkövetés"
+      action={
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Csomagkövetés frissítése"
+            title="Csomagkövetés frissítése"
+            disabled={busy}
+            onClick={refresh}
+            className="rounded-md p-1 text-pilot-grey-500 transition-colors hover:text-pilot-accent-warm-text disabled:opacity-40"
+          >
+            <Icon name="refresh" size={16} />
+          </button>
+          {trackingUrl ? (
+            <a
+              href={trackingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Követés a szállító oldalán"
+              title="Követés a szállító oldalán"
+              className="rounded-md p-1 text-pilot-grey-500 transition-colors hover:text-pilot-accent-warm-text"
+            >
+              <Icon name="external-link" size={16} />
+            </a>
+          ) : null}
+        </span>
+      }
+    >
+      {error ? (
+        <span className="text-pilot-red-700">{error}</span>
+      ) : busy && !tracking ? (
+        <span className="text-pilot-grey-500">Lekérdezés…</span>
+      ) : last ? (
+        <span>
+          {last.text || last.status}
+          {last.at ? (
+            <span className="block text-xs text-pilot-grey-500">
+              {TIME.format(new Date(last.at))}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="text-pilot-grey-500">
+          A szállítónál még nincs állapot.
+        </span>
+      )}
+    </Field>
+  );
+}
+
 function ParcelSection({
   order,
   canManage,
   onCreate,
   onLabel,
   onRelease,
+  onTracking,
 }: {
   order: WebshopOrderDetail;
   canManage: boolean;
+  onTracking: () => Promise<WebshopParcelTracking>;
   onCreate: (
     size: WebshopParcelSize | undefined,
   ) => Promise<WebshopShippingNoticeOutcome>;
@@ -1064,6 +1248,10 @@ function ParcelSection({
           {parcel.codHuf ? (
             <Field label="Utánvét">{formatMoney(parcel.codHuf, "HUF")}</Field>
           ) : null}
+          <ParcelTrackingField
+            trackingUrl={parcel.trackingUrl}
+            load={onTracking}
+          />
           {canManage ? (
             <PilotButton
               size="regular"
@@ -1197,10 +1385,12 @@ function OrderBody({
   mailNotice,
   onResendStatusMail,
   onIssueInvoice,
+  onIssueDeliveryNote,
   onOpenPdf,
   onCreateParcel,
   onParcelLabel,
   onReleaseParcel,
+  onParcelTracking,
   onEditLine,
   onSearchVariants,
   onReleaseHold,
@@ -1223,12 +1413,14 @@ function OrderBody({
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
   onIssueInvoice: () => Promise<void>;
+  onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
   onCreateParcel: (
     size: WebshopParcelSize | undefined,
   ) => Promise<WebshopShippingNoticeOutcome>;
   onParcelLabel: () => Promise<void>;
   onReleaseParcel: () => Promise<void>;
+  onParcelTracking: () => Promise<WebshopParcelTracking>;
   onEditLine: (itemId: string, edit: WebshopOrderLineEdit) => Promise<void>;
   onSearchVariants: (query: string) => Promise<WebshopVariantOption[]>;
   onReleaseHold: (notifyCustomer: boolean) => Promise<string>;
@@ -1749,6 +1941,7 @@ function OrderBody({
                   onCreate={onCreateParcel}
                   onLabel={onParcelLabel}
                   onRelease={onReleaseParcel}
+                  onTracking={onParcelTracking}
                 />
               )}
             </div>
@@ -1758,6 +1951,7 @@ function OrderBody({
             order={order}
             canIssue={canIssue}
             onIssue={onIssueInvoice}
+            onIssueDeliveryNote={onIssueDeliveryNote}
             onOpenPdf={onOpenPdf}
           />
 

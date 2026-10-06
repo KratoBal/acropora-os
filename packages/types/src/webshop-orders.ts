@@ -354,6 +354,15 @@ export interface WebshopOrderDetail {
     status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
     number: string | null;
   } | null;
+  /**
+   * A rendelés szállítólevele (kártya 0a14f739 C/1): a kiállított számla
+   * tételeiből, a Számlázz.hu-n át. Amíg nem készült, `null`.
+   */
+  deliveryNote: {
+    id: string;
+    status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+    number: string | null;
+  } | null;
   /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */
   osCustomer: {
     id: string;
@@ -431,6 +440,15 @@ export interface WebshopOrderParcel {
   size: string | null;
   codHuf: number | null;
   createdAt: string;
+  /** A szállító nyilvános követő oldala, ha a címe be van állítva (különben `null`). */
+  trackingUrl: string | null;
+}
+
+/** A csomag állapotai a szállítónál, a legutóbbi elöl. */
+export interface WebshopParcelTracking {
+  events: { status: string; text: string; at: string | null }[];
+  /** Mikor kérdeztük a szállítót. */
+  checkedAt: string;
 }
 
 /**

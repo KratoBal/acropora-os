@@ -200,6 +200,7 @@ export class WebshopOrdersService {
       thresholds,
       osCustomer,
       internalNote,
+      deliveryNotes,
       splitDisplayIds,
     ] = await Promise.all([
       this.repository.invoices([id]),
@@ -214,6 +215,7 @@ export class WebshopOrdersService {
       this.repository.staleThresholds(),
       customerKey ? this.repository.osCustomerByKey(customerKey) : null,
       this.repository.internalNote(id),
+      this.repository.invoices([id], "DELIVERY_NOTE"),
       // csak a rendelésszámért: ha a webshop nem adja, a kapcsolat szám nélkül áll
       Promise.all(
         [splitIds.from, ...splitIds.into].map((splitId) =>
@@ -260,6 +262,7 @@ export class WebshopOrdersService {
         : null,
       osCustomer,
       internalNote,
+      deliveryNote: deliveryNotes.get(id) ?? null,
       split: {
         from: splitIds.from
           ? { id: splitIds.from, displayId: splitDisplayIds[0] ?? null }
