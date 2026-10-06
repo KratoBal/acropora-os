@@ -1504,6 +1504,77 @@ describe("a proforma is only a fallback (acrobot 25607, Aquarioom 2026-09-29)", 
   });
 });
 
+/*
+  AN AMOUNTLESS NAMED DOCUMENT IS ONLY A FALLBACK (card 096607af, FleetCor
+  2026-09-03). The narrative is our customer reference at FleetCor, which a
+  July mailbox record without an amount carries as its "number". WHAT TURNS
+  RED: the September payment keeps the July record while the partner's
+  exact-amount invoice is there; or a named record WITH an amount, or one
+  with no exact-amount alternative, or one next to another partner's invoice,
+  is dropped. Explicit ids: no counter moves the order.
+*/
+describe("an amountless named document is only a fallback (card 096607af, FleetCor 2026-09-03)", () => {
+  const fleet = (overrides: Partial<MatchableDebit> = {}) =>
+    debit({
+      id: "fleet-0903",
+      bookingDate: "2026-09-03",
+      amount: D(152656),
+      counterpartyName: "Fleetcore",
+      narrative: "HU00008659",
+      ...overrides,
+    });
+  const july = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      id: "mail-july",
+      source: "MAILBOX",
+      number: "HU00008659",
+      date: "2026-07-08",
+      gross: null,
+      supplierName: "",
+      ...overrides,
+    });
+  const invoice = (overrides: Partial<CandidateDocument> = {}) =>
+    doc({
+      id: "fleet-invoice",
+      source: "DRIVE",
+      number: "E0401363885",
+      date: "2026-09-01",
+      gross: D(152656),
+      supplierName: "FleetCor Hungary Kft.",
+      ...overrides,
+    });
+
+  it("the amountless record gives way to the partner's exact-amount invoice", () => {
+    const d = fleet();
+    const outcome = run([d], [july(), invoice()]).get(d.id)!;
+    assert.equal(outcome.state, "FOUND");
+    assert.deepEqual(
+      outcome.documents.map((x) => x.number),
+      ["E0401363885"],
+    );
+  });
+
+  it("with no exact-amount invoice of the partner, or a named record that has an amount, the named one stays", () => {
+    for (const [named, others] of [
+      [july(), []],
+      [july(), [invoice({ gross: D(152000) })]],
+      [july(), [invoice({ supplierName: "Fauna Marin GmbH" })]],
+      [
+        july({ gross: D(99000), supplierName: "FleetCor Hungary Kft." }),
+        [invoice()],
+      ],
+    ] as [CandidateDocument, CandidateDocument[]][]) {
+      const d = fleet();
+      const outcome = run([d], [named, ...others]).get(d.id)!;
+      assert.deepEqual(
+        outcome.documents.map((x) => x.number),
+        ["HU00008659"],
+      );
+      assert.equal(outcome.reason, "a számla száma a közleményben");
+    }
+  });
+});
+
 describe("a typo twin: the exact payment wins over the by-name one (acrobot 25655, Fluidra 2026-07-30)", () => {
   const fluidra = (
     amount: number,
