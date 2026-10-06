@@ -38,7 +38,9 @@ import { TABS } from "../asset-list-page";
 import {
   assetListQuery,
   DEFAULT_PAGE_SIZE,
+  manualFilterOf,
   PAGE_SIZES,
+  withManualFilter,
 } from "./asset-list-query";
 import {
   PilotBadge,
@@ -211,6 +213,12 @@ export function PilotAssetListPage() {
       ? NINCS_KATEGORIA
       : (params.get("categoryId") ?? "");
 
+  // van-e kézikönyve (kártya 1277394e), az URL-ben, mint a többi szűrő
+  const setManualFilter = (value: string) => {
+    router.replace(`${pathname}?${withManualFilter(params, value)}`);
+  };
+  const manualFilterValue = manualFilterOf(params);
+
   const selectStatus = (key: string) => {
     filter("status", key === activeStatus ? "ALL" : key);
   };
@@ -317,6 +325,16 @@ export function PilotAssetListPage() {
             </option>
           ))}
           <option value={NINCS_KATEGORIA}>Nincs kategória</option>
+        </select>
+        <select
+          aria-label="Kézikönyv"
+          value={manualFilterValue}
+          onChange={(event) => setManualFilter(event.target.value)}
+          className="cursor-pointer rounded-md py-1.5 pl-2.5 pr-6 text-sm text-pilot-grey-700 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+        >
+          <option value="">Kézikönyv: mind</option>
+          <option value="with">Van kézikönyve</option>
+          <option value="without">Nincs kézikönyve</option>
         </select>
         <select
           aria-label="Hány eszköz egy oldalon"

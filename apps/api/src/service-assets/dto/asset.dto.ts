@@ -1,4 +1,7 @@
-import { ASSET_DOCUMENT_TYPES } from "../../auth/partner-scope.util.js";
+import {
+  ASSET_DOCUMENT_TYPES,
+  type AssetDocumentTypeValue,
+} from "../../auth/partner-scope.util.js";
 import {
   ASSET_LABEL_BATCH_MAX,
   ASSET_LABEL_BATCH_MIN,
@@ -152,6 +155,17 @@ export class AssetListQueryDto {
   @IsOptional()
   category?: "with" | "without";
   @IsString() @IsOptional() categoryId?: string;
+  /**
+   * VAN-E / NINCS-E CSATOLMÁNYA (kártya 1277394e), a `documentType` fajtájából
+   * vagy bármelyikből. A partner csak a neki látható fajtákat számolja
+   * (`assetDocumentWhere`).
+   */
+  @IsIn(["with", "without"])
+  @IsOptional()
+  document?: "with" | "without";
+  @IsIn(ASSET_DOCUMENT_TYPES)
+  @IsOptional()
+  documentType?: AssetDocumentTypeValue;
   /**
    * EGY KONKRET MATRICAKOD, PONTOS EGYEZESSEL.
    *

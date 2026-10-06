@@ -23,3 +23,32 @@ export function assetListQueryFromHref(href: string): URLSearchParams {
     new URLSearchParams(cut === -1 ? "" : href.slice(cut + 1)),
   );
 }
+
+/**
+ * VAN-E KÉZIKÖNYVE (kártya 1277394e): a lista `document` és `documentType`
+ * paramétere. A kettő együtt áll vagy együtt törlődik (egy magában maradt
+ * `documentType` nem szűr, csak zavar), és a szűrés az első lapra visz.
+ */
+export function withManualFilter(
+  params: URLSearchParams,
+  value: string,
+): URLSearchParams {
+  const next = new URLSearchParams(params.toString());
+  next.delete("document");
+  next.delete("documentType");
+  if (value === "with" || value === "without") {
+    next.set("document", value);
+    next.set("documentType", "MANUAL");
+  }
+  next.set("page", "1");
+  return next;
+}
+
+/** A Kézikönyv-szűrő mai állása az URL-ből: "", "with" vagy "without". */
+export function manualFilterOf(params: URLSearchParams): string {
+  const document = params.get("document");
+  return params.get("documentType") === "MANUAL" &&
+    (document === "with" || document === "without")
+    ? document
+    : "";
+}

@@ -21,6 +21,7 @@ import {
   ASSET_NEIGHBOR_SCAN_LIMIT,
   assetListNeighbors,
 } from "./asset-list-neighbors.js";
+import { assetDocumentWhere } from "./asset-document-filter.js";
 import { assetLabelWhere } from "./asset-label-filter.js";
 import { assetCategoryWhere } from "./asset-category-filter.js";
 import { assetSearchWhere } from "./asset-search-filter.js";
@@ -634,6 +635,8 @@ export class ServiceAssetsRepository extends Repository {
       ...mergeAssetWhere(
         assetLabelWhere(query.label, query.labelCode),
         assetCategoryWhere(query.category, query.categoryId),
+        // van-e / nincs-e csatolmánya (1277394e): a hatókör látható fajtáival
+        assetDocumentWhere(query.document, query.documentType, scope),
       ),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(excludedAssetIds ? { id: { notIn: excludedAssetIds } } : {}),
