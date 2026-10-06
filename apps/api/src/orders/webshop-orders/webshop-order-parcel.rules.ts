@@ -4,6 +4,7 @@ import type {
   WebshopParcelSize,
 } from "@acropora/types";
 
+import { trackingUrlFor } from "../../integrations/carriers/tracking-url.js";
 import type {
   CarrierCode,
   ParcelDestination,
@@ -140,6 +141,7 @@ export const sizeFor = (
 /** A csomag az adatlapon. */
 export function parcelOf(
   view: WebshopParcelView | undefined,
+  env: Record<string, string | undefined> = process.env,
 ): WebshopOrderParcel | null {
   if (!view) return null;
   return {
@@ -150,5 +152,8 @@ export function parcelOf(
     size: view.size,
     codHuf: view.codHuf,
     createdAt: view.createdAt.toISOString(),
+    trackingUrl: view.stub
+      ? null
+      : trackingUrlFor(view.carrier, view.parcelNumber, env),
   };
 }

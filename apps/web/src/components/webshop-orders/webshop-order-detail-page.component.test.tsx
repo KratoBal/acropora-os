@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
+  parcelTracking: vi.fn(),
 }));
 const billing = vi.hoisted(() => ({ pdf: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -214,6 +215,10 @@ const detail: WebshopOrderDetail = {
 };
 
 beforeEach(() => {
+  api.parcelTracking.mockReset().mockResolvedValue({
+    events: [],
+    checkedAt: "2026-10-06T08:00:00.000Z",
+  });
   auth.session = session("OWNER");
   api.detail.mockReset();
   api.changeStatus.mockReset();
@@ -713,6 +718,7 @@ describe("WebshopOrderDetailPage", () => {
       size: "m",
       codHuf: null,
       createdAt: "2026-10-05T12:00:00.000Z",
+      trackingUrl: null,
       ...parcel,
     },
   });
@@ -1488,6 +1494,59 @@ describe("WebshopOrderDetailPage", () => {
       await screen.findByText(/2 korábbi sikertelen\s+rendelés/),
     ).toBeTruthy();
     expect(screen.getByText(/van másik nyitott rendelése/)).toBeTruthy();
+  });
+
+  /*
+    THE PARCEL'S TRACKING (the prompt, point 7). WHAT TURNS RED: the carrier's
+    last state does not show; refresh does not ask again; a carrier error
+    hides instead of saying so; a link appears without a configured address.
+  */
+  it("a parcel shows the carrier's last state, refreshes, and links out only when configured", async () => {
+    api.detail.mockResolvedValue(withParcel({}));
+    api.parcelTracking.mockResolvedValue({
+      events: [
+        {
+          status: "HDINTRANSIT",
+          text: "Úton a címzetthez",
+          at: "2026-10-06T08:00:00.000Z",
+        },
+        {
+          status: "CREATE",
+          text: "Létrehozva",
+          at: "2026-10-05T10:00:00.000Z",
+        },
+      ],
+      checkedAt: "2026-10-06T09:00:00.000Z",
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
+    expect(await within(card).findByText("Úton a címzetthez")).toBeTruthy();
+    expect(within(card).queryByText("Létrehozva")).toBeNull();
+    expect(
+      within(card).queryByRole("link", { name: "Követés a szállító oldalán" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Csomagkövetés frissítése" }),
+    );
+    await waitFor(() => expect(api.parcelTracking).toHaveBeenCalledTimes(2));
+    cleanup();
+
+    api.detail.mockResolvedValue(
+      withParcel({ trackingUrl: "https://track.example/?code=CLFOX1" }),
+    );
+    api.parcelTracking.mockRejectedValue(
+      new Error("A szállító most nem érhető el."),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const linked = await screen.findByRole("region", { name: "Szállítás" });
+    expect(
+      await within(linked).findByText("A szállító most nem érhető el."),
+    ).toBeTruthy();
+    expect(
+      within(linked)
+        .getByRole("link", { name: "Követés a szállító oldalán" })
+        .getAttribute("href"),
+    ).toBe("https://track.example/?code=CLFOX1");
   });
 
   it("without orders.manage there are no pencils", async () => {
