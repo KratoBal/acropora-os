@@ -73,6 +73,9 @@ export interface CollectedDocumentInput {
  * előbb, a figyelő beszúrása elhasalna, és a bevételezésből kimaradna a
  * számla. Várható beérkezést a begyűjtött dokumentum SOHA nem kap.
  */
+/** A feed alapszámla-fajtái: normál, előleg- és végszámla (nem sztornó, jóváíró, helyesbítő, díjbekérő). */
+const FEED_BASE_KINDS = ["SZ", "ES", "VS"] as const;
+
 @Injectable()
 export class InvoiceCollectionRepository {
   private readonly database = prisma;
@@ -115,8 +118,10 @@ export class InvoiceCollectionRepository {
    * Kell-e most újraolvasni az UNMATCHED leveleket (acrobot 25605: óránként
    * mind a ~90-et letöltötte újra, és ez is a Gmail kvótáját ette). Egy
    * UNMATCHED ítélet csak két dologtól változhat: új banki terheléstől (a
-   * közlemény köti a külföldi számlát) vagy javított szabálytól. Ezért:
-   * naponta egyszer, és ha az utolsó TELJES futás óta új terhelés jött.
+   * közlemény köti a külföldi számlát), új ISMERT SZÁMTÓL (NAV-sor vagy a
+   * Számlázz.hu feed sora: a szállító száma így válik ismertté; acrobot
+   * 26752, U26/03861-SZ) vagy javított szabálytól. Ezért: naponta egyszer, és
+   * ha az utolsó TELJES futás óta új terhelés, NAV-sor vagy feed-sor jött.
    */
   async unmatchedRetryDue(now: Date): Promise<boolean> {
     const last = await this.database.invoiceCollectionRun.findFirst({
@@ -124,14 +129,25 @@ export class InvoiceCollectionRepository {
       orderBy: { startedAt: "desc" },
       select: { startedAt: true, rulesVersion: true },
     });
-    const newDebits = last
-      ? await this.database.bankTransaction.count({
-          where: { direction: "DEBIT", createdAt: { gt: last.startedAt } },
-        })
+    const since = last ? { gt: last.startedAt } : null;
+    const newEvidence = since
+      ? (
+          await Promise.all([
+            this.database.bankTransaction.count({
+              where: { direction: "DEBIT", createdAt: since },
+            }),
+            this.database.navIncomingInvoice.count({
+              where: { createdAt: since },
+            }),
+            this.database.incomingBillingDocument.count({
+              where: { createdAt: since },
+            }),
+          ])
+        ).reduce((sum, count) => sum + count, 0)
       : 0;
     return unmatchedRetryDue(
       last?.startedAt ?? null,
-      newDebits,
+      newEvidence,
       now,
       last?.rulesVersion ?? null,
     );
@@ -143,15 +159,36 @@ export class InvoiceCollectionRepository {
    */
   async navNumbers(supplierTaxBase: string): Promise<string[]> {
     if (!/^\d{8}$/.test(supplierTaxBase)) return [];
-    const rows = await this.database.navIncomingInvoice.findMany({
-      // csak az alapszámla, mint a párosítóban: a jóváíró PDF-je külön döntés
-      where: {
-        supplierTaxNumber: { startsWith: supplierTaxBase },
-        invoiceOperation: "CREATE",
-      },
-      select: { navInvoiceNumber: true },
-    });
-    return rows.map((row) => row.navInvoiceNumber);
+    const [nav, feed] = await Promise.all([
+      this.database.navIncomingInvoice.findMany({
+        // csak az alapszámla, mint a párosítóban: a jóváíró PDF-je külön döntés
+        where: {
+          supplierTaxNumber: { startsWith: supplierTaxBase },
+          invoiceOperation: "CREATE",
+        },
+        select: { navInvoiceNumber: true },
+      }),
+      /*
+        A SZÁMLÁZZ.HU FEED SZÁMAI IS ISMERTEK (acrobot 26752: a Tisza 97
+        U26/03861-SZ számlája a feedben bent volt, a NAV-sorok között még
+        nem, és a PDF-je ezért UNMATCHED maradt). A feed is a NAV-ba jelentett
+        számla; itt is csak az alapszámla (normál, előleg, vég), nem a sztornó,
+        a jóváíró, a helyesbítő és a díjbekérő.
+      */
+      this.database.incomingBillingDocument.findMany({
+        where: {
+          supplierTaxNumber: { startsWith: supplierTaxBase },
+          kindCode: { in: [...FEED_BASE_KINDS] },
+        },
+        select: { documentNumber: true },
+      }),
+    ]);
+    return [
+      ...new Set([
+        ...nav.map((row) => row.navInvoiceNumber),
+        ...feed.map((row) => row.documentNumber),
+      ]),
+    ];
   }
 
   /** A saját bankszámláink számjegyei; egy PDF-ben ezek a kiállító jelei. */

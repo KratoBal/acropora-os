@@ -224,8 +224,9 @@ const BUDAPEST_DAY = new Intl.DateTimeFormat("en-CA", {
  *   2026-10-01.2  NAV nélküli számla egy kártyás fizetéshez (#1344)
  *   2026-10-01.3  kártyás fizetés-halmaz a végösszeghez (#1347)
  *   2026-10-01.4  a saját bankszámlánk a szövegben: saját kimenő számla (#1315)
+ *   2026-10-06.1  a Számlázz.hu feed számai is ismert számok (acrobot 26752)
  */
-export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-01.4";
+export const INVOICE_COLLECTION_RULES_VERSION = "2026-10-06.1";
 
 /**
  * Az UNMATCHED újraolvasás döntése: nincs még teljes futás, az utolsó teljes

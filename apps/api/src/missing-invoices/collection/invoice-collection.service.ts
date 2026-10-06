@@ -295,12 +295,23 @@ export class InvoiceCollectionService {
     sha256: string | null,
   ): Promise<void> {
     if (this.dry) {
+      const before = await this.repository.verdictOf(
+        source,
+        externalId,
+        fileName,
+      );
       this.dry.push({
         source,
         externalId,
         fileName,
-        before: await this.repository.verdictOf(source, externalId, fileName),
-        after: verdict,
+        before,
+        /*
+          UGYANAZ, AMIT AZ ÉLES ÍRÁS TENNE (acrobot 26752): a tárolt és a
+          javasolt sor egy dokumentumra mutat, a `record` nem írja felül. A
+          száraz kimenet eddig „STORED -> DUPLICATE”-et írt a már tárolt
+          társ-mellékletre, holott az --apply hozzá sem nyúl.
+        */
+        after: before === "STORED" || before === "SUGGESTED" ? before : verdict,
       });
       return;
     }

@@ -9,6 +9,7 @@ import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { MissingInvoicesRepository } from "../missing-invoices.repository.js";
 import { InvoiceCollectionSuggestionsRepository } from "./invoice-collection-suggestions.repository.js";
+import { INVOICE_COLLECTION_RULES_VERSION } from "./invoice-collection.config.js";
 import { InvoiceCollectionRepository } from "./invoice-collection.repository.js";
 
 /**
@@ -23,6 +24,9 @@ const MESSAGE = "collect-it-message-1";
 const FILE = "SZ-IT-1.pdf";
 
 async function removeLeftovers() {
+  await prisma.incomingBillingDocument.deleteMany({
+    where: { externalId: { startsWith: "collect-it-feed-" } },
+  });
   await prisma.invoiceCollectionItem.deleteMany({
     where: { externalId: { startsWith: "collect-it-" } },
   });
@@ -272,6 +276,94 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
         },
       },
     });
+  });
+
+  /*
+    A SZÁMLÁZZ.HU FEED SZÁMAI IS ISMERTEK (acrobot 26752, U26/03861-SZ: a
+    feedben bent volt, a NAV-sorok között nem, és a PDF UNMATCHED maradt).
+    MI PIROSÍT: a feed alapszámlája nem ismert szám; a sztornó vagy a
+    díjbekérő száma ismertté válik; egy másik szállító száma átjön.
+  */
+  it("a supplier's base invoices in the Számlázz.hu feed are known numbers, its storno and proforma are not", async () => {
+    const feedRow = (
+      externalId: string,
+      kindCode: string,
+      number: string,
+      tax: string,
+    ) =>
+      prisma.incomingBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId,
+          feedMessageId: "collect-it-feed-msg",
+          feedReceivedAt: new Date("2026-10-05T14:31:00Z"),
+          kindCode,
+          documentNumber: number,
+          electronic: true,
+          issueDate: new Date("2026-10-05T00:00:00Z"),
+          currency: "HUF",
+          supplierName: "Tisza 97 Kft.",
+          supplierTaxNumber: tax,
+          buyerName: "Acropora Kft.",
+          netAmount: 57590,
+          vatAmount: 15549,
+          grossAmount: 73139,
+          lines: [],
+          vatSummary: [],
+          payments: [],
+          paymentsKnown: false,
+          paidAmount: 0,
+        },
+      });
+    await feedRow("collect-it-feed-1", "SZ", "U26/03861-SZ", "99887766-2-03");
+    await feedRow("collect-it-feed-2", "SS", "U26/03862-SS", "99887766-2-03");
+    await feedRow("collect-it-feed-3", "D", "D-2026-1", "99887766-2-03");
+    await feedRow("collect-it-feed-4", "SZ", "MASIK-1", "11223344-2-03");
+    assert.deepEqual(await repository.navNumbers("99887766"), ["U26/03861-SZ"]);
+  });
+
+  // a feed új sora önmagában is újraolvasást ad: nem kell új terhelésre várni
+  it("a new feed row since the last complete run makes the UNMATCHED re-read due", async () => {
+    const run = await prisma.invoiceCollectionRun.create({
+      data: {
+        status: "APPLIED",
+        trigger: "SCHEDULED",
+        startedAt: new Date(),
+        completedAt: new Date(),
+        rulesVersion: INVOICE_COLLECTION_RULES_VERSION,
+      },
+    });
+    try {
+      const now = new Date(run.startedAt.getTime() + 1000);
+      assert.equal(await repository.unmatchedRetryDue(now), false);
+      await prisma.incomingBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId: "collect-it-feed-5",
+          feedMessageId: "collect-it-feed-msg",
+          feedReceivedAt: new Date(),
+          kindCode: "SZ",
+          documentNumber: "U26/03999-SZ",
+          electronic: true,
+          issueDate: new Date("2026-10-06T00:00:00Z"),
+          currency: "HUF",
+          supplierName: "Tisza 97 Kft.",
+          supplierTaxNumber: "99887766-2-03",
+          buyerName: "Acropora Kft.",
+          netAmount: 1000,
+          vatAmount: 270,
+          grossAmount: 1270,
+          lines: [],
+          vatSummary: [],
+          payments: [],
+          paymentsKnown: false,
+          paidAmount: 0,
+        },
+      });
+      assert.equal(await repository.unmatchedRetryDue(now), true);
+    } finally {
+      await prisma.invoiceCollectionRun.delete({ where: { id: run.id } });
+    }
   });
 
   it("lets one run at a time", async () => {
