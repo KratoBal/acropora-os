@@ -11,6 +11,7 @@ import type {
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceSource,
+  PurchaseInvoiceSummary,
   PurchaseProductConflictOwner,
 } from "@acropora/types";
 
@@ -921,9 +922,11 @@ export class PurchaseInvoiceRepository extends Repository {
     return toPurchaseInvoiceDetail(created);
   }
 
-  async list(
-    query: PurchaseInvoiceListQueryDto,
-  ): Promise<PurchaseInvoiceListResponse> {
+  async list(query: PurchaseInvoiceListQueryDto): Promise<
+    Omit<PurchaseInvoiceListResponse, "items"> & {
+      items: PurchaseInvoiceSummary[];
+    }
+  > {
     const where = purchaseInvoiceListWhere(query);
     const [invoices, totalItems] = await Promise.all([
       this.invoiceDatabase.purchaseInvoice.findMany({

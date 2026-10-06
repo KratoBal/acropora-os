@@ -397,6 +397,9 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "inventory.view",
         // az Üzenetek modul: minden belső emberi szerepkör (acrobot 26174)
         "messages.use",
+        // az Elhullási napló (kártya 115c9740, acrobot 27141): a MANAGER mindkettőt
+        "mortality.manage",
+        "mortality.view",
         "orders.manage",
         "orders.view",
         "partners.manage",

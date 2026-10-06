@@ -791,26 +791,26 @@ enum InvoiceSyncStatus {
 }
 
 model User {
-  id                     String                 @id @default(cuid())
+  id                     String                        @id @default(cuid())
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
-  serviceTokens          ServiceToken[]         @relation("ServiceTokenUser")
+  serviceTokens          ServiceToken[]                @relation("ServiceTokenUser")
   assistantThreads       AssistantConversationThread[]
   /// Az általa kézzel indított JEV termékellenőrzések (PD-013).
   productEnrichmentRuns  ProductEnrichmentRun[]
   /// A termékismeret-tények, amiket ő fogadott el (#1431).
-  acceptedKnowledgeFacts ProductKnowledgeFact[] @relation("ProductKnowledgeFactAcceptedBy")
+  acceptedKnowledgeFacts ProductKnowledgeFact[]        @relation("ProductKnowledgeFactAcceptedBy")
   /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
-  editedCopyBlocks       ProductCopy[]          @relation("ProductCopyEditedBy")
-  approvedCopyBlocks     ProductCopy[]          @relation("ProductCopyApprovedBy")
-  email                  String                 @unique
+  editedCopyBlocks       ProductCopy[]                 @relation("ProductCopyEditedBy")
+  approvedCopyBlocks     ProductCopy[]                 @relation("ProductCopyApprovedBy")
+  email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
   displayName            String
   /// Ahogy a kollégát a csapatban szólítják. A felületek ezt írják ki a
   /// teljes név helyett, ha ki van töltve. Nem egyedi, és nem azonosító.
   nickname               String?
-  firstName              String                 @default("")
-  lastName               String                 @default("")
+  firstName              String                        @default("")
+  lastName               String                        @default("")
   passwordHash           String?
   passwordUpdatedAt      DateTime?
   /// AZ ALAIROKOD HASHE -- amit az ugyfel embere ir be a munkalap alairasakor.
@@ -832,7 +832,7 @@ model User {
   /// idoszakban az alairas ettol FORMALIS, es ez nem mulasztas.
   signatureCodeHash      String?
   role                   UserRole
-  isActive               Boolean                @default(true)
+  isActive               Boolean                       @default(true)
   avatarUrl              String?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
@@ -846,8 +846,8 @@ model User {
   /// engedne at. Ezert a tiltas adatbazis-szinten all, nem csak a kodban.
   customerId             String?
   supplierId             String?
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
 
   sessions                   Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
@@ -944,6 +944,8 @@ model User {
   invoicesIssued             Invoice[]                     @relation("InvoiceIssuedBy")
   billingMailDeliveries      BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
   simplePayLinesApproved     SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
+  mortalityRecordsRecorded   MortalityRecord[]             @relation("MortalityRecordRecordedBy")
+  mortalityDocumentsUploaded MortalityRecordDocument[]     @relation("MortalityRecordDocumentUploadedBy")
   dashboardLayout            UserDashboardLayout?
 
   @@index([role, isActive])
@@ -1107,6 +1109,8 @@ model Product {
   knowledgeFacts             ProductKnowledgeFact[]
   /// A vevőnek szóló, OS-ben szerkesztett és jóváhagyott szöveg blokkonként.
   copyBlocks                 ProductCopy[]
+  /// az elhullási napló bejegyzései (kártya 115c9740)
+  mortalityRecords           MortalityRecord[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -1577,6 +1581,7 @@ model Supplier {
   customer              Customer?          @relation("PartnerWorksheetMirror", fields: [customerId], references: [id], onDelete: Restrict)
   /// A fiokok, amik ENNEK a partnernek a neveben lepnek be. Nem a mi kollegaink.
   portalUsers           User[]             @relation("SupplierPortalUser")
+  mortalityRecords      MortalityRecord[]
 
   @@index([country, isActive])
 }
@@ -3614,23 +3619,24 @@ model Aquarium {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
-  customer     Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  department   WorksheetDepartment?        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  measurements AquariumMeasurement[]
-  serviceJobs  ServiceJob[]
-  assets       Asset[]
+  customer         Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  department       WorksheetDepartment?        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  measurements     AquariumMeasurement[]
+  serviceJobs      ServiceJob[]
+  assets           Asset[]
   /// A FELSZERELT BERENDEZÉSEK, SAJÁT TÁBLÁBAN -- NEM az `Asset` (eszköz-
   /// nyilvántartás). Lásd az `AquariumEquipment` fejlécét, miért két
   /// különböző fogalom.
-  equipment    AquariumEquipment[]
+  equipment        AquariumEquipment[]
   /// KI TARTJA KARBAN -- TÖBB BELSŐ KOLLÉGA IS LEHET. Lásd az
   /// `AquariumMaintainer` fejlécét: ez a lista a valódi forrás, a fenti
   /// `responsibleUserId`/`maintainedByUs` mezők a sémán maradnak, de a
   /// felület már ezt a listát mutatja.
-  maintainers  AquariumMaintainer[]
+  maintainers      AquariumMaintainer[]
   /// AZ AKVÁRIUM SAJÁT VÍZÉRTÉK-CÉLTARTOMÁNYAI. Lásd az
   /// `AquariumMeasurementTarget` fejlécét.
-  targets      AquariumMeasurementTarget[]
+  targets          AquariumMeasurementTarget[]
+  mortalityRecords MortalityRecord[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -8426,4 +8432,78 @@ model PinnedMessage {
 
   @@unique([conversationId, messageId])
   @@index([conversationId, createdAt])
+}
+
+/// AZ ELHULLÁSI ESEMÉNY FORRÁSA, AHONNAN AZ ÁLLAT ÉRKEZETT (kártya 115c9740).
+/// Balázs promptja: ne csak beszállító-azonosítóban gondolkodjunk, mert az
+/// állat érkezhet helyi tenyésztőtől, cseréből vagy saját szaporulatból is.
+enum MortalitySourceType {
+  SUPPLIER
+  LOCAL_BREEDER
+  TRADE
+  OWN_BREEDING
+  OTHER
+}
+
+/// EGY ELHULLÁSI ESEMÉNY: egy élőlény (termék), egy vagy több példány, egy
+/// akváriumban (kártya 115c9740; Balázs promptja 2026-10-06, acrobot döntései
+/// 27141). Több faj egyszerre: több rekord. Külön elhullási időpont NINCS: a
+/// rögzítés ideje (`recordedAt`) és a rögzítő (`recordedById`) automatikus.
+///
+/// Két szabály az adatbázisban is áll, a migrációban: a példányszám legalább 1,
+/// és beszállító-forrásnál a beszállító kötelező. Törlés nincs; a módosítás
+/// auditált (AuditLog).
+model MortalityRecord {
+  id           String              @id @default(cuid())
+  /// a belső azonosító, ember olvasta alakban (ELH-...)
+  recordNumber String              @unique
+  productId    String
+  quantity     Int
+  aquariumId   String
+  sourceType   MortalitySourceType
+  /// kötelező, ha `sourceType` SUPPLIER; a többinél üres
+  supplierId   String?
+  /// a nem beszállítói forrás megnevezése (pl. a tenyésztő neve); OTHER-nél kötelező
+  sourceNote   String?             @db.VarChar(200)
+  note         String?
+  recordedById String
+  recordedAt   DateTime            @default(now())
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  product    Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  aquarium   Aquarium                  @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
+  supplier   Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  recordedBy User                      @relation("MortalityRecordRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  documents  MortalityRecordDocument[]
+
+  @@index([recordedAt])
+  @@index([aquariumId, recordedAt])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([recordedById])
+}
+
+/// AZ ELHULLÁSI BEJEGYZÉS FOTÓI. Ugyanaz az alak, mint a `ServiceJobDocument`:
+/// a feltöltés szabályai közös modulban állnak (`documents/document-intake.ts`),
+/// egy harmadik alak minden későbbi változást megdupláztatna.
+model MortalityRecordDocument {
+  id                String   @id @default(cuid())
+  mortalityRecordId String
+  fileName          String
+  contentType       String
+  sizeBytes         Int
+  sha256            String   @db.VarChar(64)
+  content           Bytes?
+  storageKey        String?
+  thumbnail         Bytes?
+  uploadedById      String?
+  caption           String?  @db.VarChar(500)
+  createdAt         DateTime @default(now())
+
+  mortalityRecord MortalityRecord @relation(fields: [mortalityRecordId], references: [id], onDelete: Cascade)
+  uploadedBy      User?           @relation("MortalityRecordDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([mortalityRecordId, createdAt])
+  @@index([sha256])
 }

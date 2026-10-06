@@ -517,6 +517,11 @@ export function WebshopOrdersListPage() {
                 : "A zárolás 2 napon belül lejár"}
             </span>
           ) : null}
+          {item.proformaExpired ? (
+            <span className="block text-xs font-medium text-pilot-red-700">
+              Lejárt díjbekérő
+            </span>
+          ) : null}
         </span>
       ),
     },

@@ -126,6 +126,8 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
     "external-invoice": async () => null,
     /** Az üzenet-csatolmány soha nem inline: a bájtok csak a tárolóban állnak. */
     message: async () => null,
+    mortality: () =>
+      tablaOsszegzes("mortality", Prisma.sql`"MortalityRecordDocument"`),
   };
 
 export async function inlineDokumentumJelentes() {
