@@ -1074,6 +1074,14 @@ export interface MedusaAdminClient {
     count: number;
   }>;
   productShippingProfileId(productId: string): Promise<string | null>;
+  /** Egy lap termék a változatai SKU-jával: a kötés-sor nélküli párosításhoz. */
+  listProductSkus(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    count: number;
+  }>;
   /** A termék kötése egy szállítási profilhoz. EZ IR A BOLTI OLDALRA. */
   setProductShippingProfile(
     productId: string,
@@ -2138,6 +2146,21 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   }> {
     const params = new URLSearchParams({
       fields: "id,*shipping_profile",
+      offset: String(offset),
+      limit: String(limit),
+    });
+    return this.request(`/admin/products?${params.toString()}`);
+  }
+
+  async listProductSkus(
+    offset: number,
+    limit: number,
+  ): Promise<{
+    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    count: number;
+  }> {
+    const params = new URLSearchParams({
+      fields: "id,*variants",
       offset: String(offset),
       limit: String(limit),
     });

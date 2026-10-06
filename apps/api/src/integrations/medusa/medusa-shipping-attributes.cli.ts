@@ -57,6 +57,10 @@ export interface ShippingAttributesCliDatabase {
       }[]
     >;
   };
+  /** Az OS változatok SKU-ja, a bolti termékek párosításához. */
+  productVariant: {
+    findMany(args: unknown): Promise<{ sku: string; productId: string }[]>;
+  };
   /** A UNAS-tükör nyers válasza: a szállítási mód-felülírások forrása. */
   unasProductSnapshot: {
     findMany(
@@ -193,6 +197,19 @@ export async function runShippingAttributesCli(
     }
   }
 
+  /*
+    A KOTES-SOR NELKULI PAROSITAS SKU ALAPJAN (kartya 2a7f2313, mert
+    2026-10-06): a teszt bolt 1492 termekebol egyiknek sincs ExternalReference
+    kotese, es az external_id-juk egy korabbi OS-allapote (1/1492 egyezik). A
+    bolti valtozatok SKU-ja az OS valtozat-SKU es a UNAS cikkszam ellen; CSAK
+    az egyertelmu par szamit (minden SKU egy OS termekre mutat, es arra az OS
+    termekre csak ez az egy bolti termek).
+  */
+  const parositas = await skuParositas(futtato, database);
+  out.stdout(
+    `SKU-párosítás: ${parositas.osToShop.size} egyértelmű, ${parositas.ketertelmu} kétértelmű, ${parositas.nincs} pár nélkül (a bolt ${parositas.boltiTermek} termékéből)\n`,
+  );
+
   let bukott = 0;
   for (const productId of celok) {
     const profil =
@@ -202,6 +219,7 @@ export async function runShippingAttributesCli(
       profil,
       apply,
       eloAllatTermekek.has(productId),
+      parositas.osToShop.get(productId) ?? null,
     );
     switch (outcome.action) {
       case "skipped":
@@ -237,6 +255,71 @@ export async function runShippingAttributesCli(
     );
 
   return bukott ? 1 : 0;
+}
+
+const norm = (sku: unknown) =>
+  String(sku ?? "")
+    .trim()
+    .toLowerCase();
+
+/** OS termek -> bolti termek, csak az egyertelmu SKU-parok. */
+export async function skuParositas(
+  futtato: Pick<MedusaShippingAttributesService, "listShopSkus">,
+  database: Pick<
+    ShippingAttributesCliDatabase,
+    "productVariant" | "unasProductSnapshot"
+  >,
+): Promise<{
+  osToShop: Map<string, string>;
+  ketertelmu: number;
+  nincs: number;
+  boltiTermek: number;
+}> {
+  const [valtozatok, tukrok] = await Promise.all([
+    database.productVariant.findMany({
+      select: { sku: true, productId: true },
+    }),
+    database.unasProductSnapshot.findMany({
+      select: { productId: true, rawPayload: true },
+    }),
+  ]);
+  const osBySku = new Map<string, Set<string>>();
+  const add = (sku: unknown, productId: string) => {
+    const k = norm(sku);
+    if (k) osBySku.set(k, new Set([...(osBySku.get(k) ?? []), productId]));
+  };
+  for (const v of valtozatok) add(v.sku, v.productId);
+  for (const t of tukrok)
+    add((t.rawPayload as { Sku?: unknown } | null)?.Sku, t.productId);
+
+  const jelolt = new Map<string, string[]>(); // OS termek -> bolti termekek
+  let ketertelmu = 0;
+  let nincs = 0;
+  let boltiTermek = 0;
+  for (let offset = 0; ;) {
+    const page = await futtato.listShopSkus(offset, 200);
+    for (const p of page.products) {
+      boltiTermek++;
+      const celok = new Set(
+        (p.variants ?? []).flatMap((v) => [
+          ...(osBySku.get(norm(v.sku)) ?? []),
+        ]),
+      );
+      if (celok.size === 1) {
+        const os = [...celok][0]!;
+        jelolt.set(os, [...(jelolt.get(os) ?? []), p.id]);
+      } else if (celok.size > 1) ketertelmu++;
+      else nincs++;
+    }
+    offset += page.products.length;
+    if (page.products.length === 0 || offset >= page.count) break;
+  }
+  const osToShop = new Map<string, string>();
+  for (const [os, boltiak] of jelolt) {
+    if (boltiak.length === 1) osToShop.set(os, boltiak[0]!);
+    else ketertelmu += boltiak.length;
+  }
+  return { osToShop, ketertelmu, nincs, boltiTermek };
 }
 
 if (
