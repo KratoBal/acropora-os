@@ -4,6 +4,7 @@ import { AssistantModule } from "../assistant/assistant.module.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { ServiceTokenRepository } from "../tasks/service-token.repository.js";
+import { AssistantHandoffRepliesController } from "./handoff/assistant-handoff-replies.controller.js";
 import { SutyerakHandoffController } from "./handoff/sutyerak-handoff.controller.js";
 import { SutyerakHandoffGuard } from "./handoff/sutyerak-handoff.guard.js";
 import { SutyerakInbox } from "./sutyerak-inbox.js";
@@ -25,7 +26,11 @@ import { MessagesService } from "./messages.service.js";
  */
 @Module({
   imports: [NotificationsModule, AssistantModule],
-  controllers: [MessagesController, SutyerakHandoffController],
+  controllers: [
+    MessagesController,
+    SutyerakHandoffController,
+    AssistantHandoffRepliesController,
+  ],
   providers: [
     MessagesRepository,
     MessagesService,

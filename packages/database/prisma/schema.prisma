@@ -8164,6 +8164,10 @@ model Message {
   /// SUTYERÁK ÜZENETE (4. pont B): `GATEWAY` az átjáró válasza, `ACROBOT` az
   /// acrobotnak átadott kérdés visszaírt válasza. Másnál `null`.
   assistantSource        String?
+  /// A WIDGET BESZÉLGETÉSE, AMIBŐL AZ ÁTADOTT KÉRDÉS JÖTT (5830ee10, Balázs
+  /// 2026-10-06): acrobot válaszát a widget e szerint kéri le, és ugyanabban a
+  /// beszélgetésben mutatja. Csak `assistantSource = ACROBOT` üzenetnél.
+  assistantThreadId      String?
 
   conversation      Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender            User                @relation("MessageSender", fields: [senderUserId], references: [id])
@@ -8180,6 +8184,7 @@ model Message {
   @@unique([senderUserId, clientMessageId])
   @@index([conversationId, createdAt, id])
   @@index([senderUserId])
+  @@index([assistantThreadId])
 }
 
 /// NAV OPG imports are separate from invoices and POS stock movements.

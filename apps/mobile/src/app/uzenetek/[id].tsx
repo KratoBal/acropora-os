@@ -63,7 +63,15 @@ import {
   uploadMessageAttachment,
   type AttachmentUploadFile,
 } from "@/lib/api/messages";
-import { toPickedImages } from "@/lib/api/picked-image";
+import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
+import { environment } from "@/config/env";
+import {
+  copyText,
+  openAttachmentDeps,
+  pickDocuments,
+} from "@/lib/messages/native-files";
+import { openAttachment } from "@/lib/messages/open-attachment";
+import { toPickedDocuments } from "@/lib/messages/picked-documents";
 import {
   UploadAbortedError,
   type UploadHandle,
@@ -407,11 +415,40 @@ export default function ConversationScreen() {
       ]),
     );
     const { files, skipped } = toPickedImages(result.assets);
+    enqueuePicked(files, sizes, skipped, "csak JPEG és PNG megy");
+  };
+
+  /** 2d: a fájlválasztó (PDF, JPEG, PNG), ugyanabba a feltöltési sorba. */
+  const addPickedDocuments = async () => {
+    setAttachOpen(false);
+    let result: Awaited<ReturnType<typeof pickDocuments>>;
+    try {
+      result = await pickDocuments();
+    } catch {
+      setActionNotice("A fájlválasztó nem nyílt meg.");
+      return;
+    }
+    if (result.kind === "cancelled") return;
+    const { files, skipped } = toPickedDocuments(result.assets);
+    enqueuePicked(
+      files,
+      new Map(files.map((file) => [file.uri, file.sizeBytes])),
+      skipped,
+      "csak PDF, JPEG és PNG megy",
+    );
+  };
+
+  const enqueuePicked = (
+    files: readonly PickedFile[],
+    sizes: ReadonlyMap<string, number>,
+    skipped: readonly string[],
+    rule: string,
+  ) => {
     const room = MESSAGE_ATTACHMENTS_MAX - uploads.length;
     const accepted = files.slice(0, Math.max(0, room));
     const notes: string[] = [];
     if (skipped.length)
-      notes.push(`Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`);
+      notes.push(`Kimaradt (${rule}): ${skipped.join(", ")}.`);
     if (files.length > accepted.length)
       notes.push(
         `Egy üzenethez legfeljebb ${MESSAGE_ATTACHMENTS_MAX} csatolmány tartozhat.`,
@@ -429,6 +466,19 @@ export default function ConversationScreen() {
       });
       startUpload(localId, file);
     }
+  };
+
+  /** 2d: a fájl-csatolmány (PDF) a rendszer nézőjében; a hiba a sávba kerül. */
+  const openFile = async (attachment: MessageAttachmentItem) => {
+    setActionNotice(null);
+    const result = await openAttachment(
+      {
+        apiUrl: environment.ok ? environment.config.apiUrl : null,
+        attachment,
+      },
+      openAttachmentDeps,
+    );
+    if (!result.ok) setActionNotice(result.message);
   };
 
   const retryUpload = (localId: string) => {
@@ -712,6 +762,7 @@ export default function ConversationScreen() {
                     void react(message, reaction, mine)
                   }
                   onOpenImage={setBigImage}
+                  onOpenFile={(attachment) => void openFile(attachment)}
                   highlighted={highlight === message.id}
                 />
               );
@@ -780,6 +831,19 @@ export default function ConversationScreen() {
               setReplyTo(actionsFor);
               setActionsFor(null);
             }}
+            onCopy={() => {
+              const text = actionsFor.text ?? "";
+              setActionsFor(null);
+              void copyText(text)
+                .then((ok) =>
+                  setActionNotice(
+                    ok
+                      ? "Az üzenet szövege a vágólapra került."
+                      : "A másolás nem sikerült.",
+                  ),
+                )
+                .catch(() => setActionNotice("A másolás nem sikerült."));
+            }}
             onForward={() => {
               const message = actionsFor;
               setActionsFor(null);
@@ -814,6 +878,7 @@ export default function ConversationScreen() {
             tokens={tokens}
             onCamera={() => void takePhotoFromCamera().then(addPicked)}
             onLibrary={() => void pickPhotosFromLibrary().then(addPicked)}
+            onFile={() => void addPickedDocuments()}
             onClose={() => setAttachOpen(false)}
           />
         ) : null}

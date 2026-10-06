@@ -52,6 +52,33 @@ interface Turn {
   question: string;
   answer: string;
   error?: string;
+  /**
+   * ACROBOT VÁLASZA (5830ee10): amit Sutyerák átadott, és acrobot visszaírt.
+   * Kérdés nélküli forduló; az üzenet azonosítója a kettőzés ellen.
+   */
+  acrobotId?: string;
+}
+
+/** Ennyi időnként néz rá a nyitott ablak acrobot válaszaira (Balázs: fél perc). */
+export const ACROBOT_REPLY_POLL_MS = 30_000;
+
+/** Az új acrobot-válaszok a forduló-lista végére, egyszer mindegyik. */
+export function withAcrobotReplies(
+  turns: readonly Turn[],
+  replies: readonly { id: string; text: string }[],
+): Turn[] {
+  const known = new Set(turns.flatMap((turn) => turn.acrobotId ?? []));
+  const fresh = replies.filter((reply) => !known.has(reply.id));
+  return fresh.length === 0
+    ? (turns as Turn[])
+    : [
+        ...turns,
+        ...fresh.map((reply) => ({
+          question: "",
+          answer: reply.text,
+          acrobotId: reply.id,
+        })),
+      ];
 }
 export function SutyerakPanel({ session }: { session: Session }) {
   const context = useAssistantPageContext();
@@ -90,7 +117,9 @@ export function SutyerakPanel({ session }: { session: Session }) {
         history.every(
           (turn) =>
             typeof turn.question === "string" &&
-            typeof turn.answer === "string",
+            typeof turn.answer === "string" &&
+            (turn.acrobotId === undefined ||
+              typeof turn.acrobotId === "string"),
         )
       )
         setTurns(history);
@@ -134,6 +163,30 @@ export function SutyerakPanel({ session }: { session: Session }) {
   useEffect(() => {
     answerEnd.current?.scrollIntoView?.({ block: "nearest" });
   }, [turns]);
+  /*
+    ACROBOT VÁLASZA AZ ABLAKBAN (5830ee10, Balázs 2026-10-06 12:14 UTC): amit
+    Sutyerák átadott, arra a válasz az Üzenetekbe megy (push), és ide is, ebbe
+    a beszélgetésbe. Nyitáskor azonnal, nyitva fél percenként néz rá; csukva
+    nem kérdez. A hiba csendes: a válasz az Üzenetekben amúgy is ott van.
+  */
+  useEffect(() => {
+    if (!open || !threadId) return;
+    const controller = new AbortController();
+    const look = () =>
+      void assistantApi
+        .handoffReplies(session.token ?? "", threadId, controller.signal)
+        .then((result) => {
+          if (!controller.signal.aborted)
+            setTurns((previous) => withAcrobotReplies(previous, result.items));
+        })
+        .catch(() => undefined);
+    look();
+    const timer = window.setInterval(look, ACROBOT_REPLY_POLL_MS);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [open, threadId, session.token]);
   const rememberThread = (id?: string) => {
     setThreadId(id);
     try {
@@ -338,10 +391,16 @@ export function SutyerakPanel({ session }: { session: Session }) {
               </p>
             )}
             {turns.map((turn, index) => (
-              <article key={index} className="space-y-2">
-                <p className="rounded-xl bg-pilot-aqua-50 px-3 py-2 font-medium">
-                  {turn.question}
-                </p>
+              <article key={turn.acrobotId ?? index} className="space-y-2">
+                {turn.acrobotId ? (
+                  <p className="text-xs font-semibold text-pilot-grey-500">
+                    Acrobot válasza
+                  </p>
+                ) : (
+                  <p className="rounded-xl bg-pilot-aqua-50 px-3 py-2 font-medium">
+                    {turn.question}
+                  </p>
+                )}
                 <div className="px-1">
                   <AssistantMarkdown text={turn.answer} />
                   {turn.error && (

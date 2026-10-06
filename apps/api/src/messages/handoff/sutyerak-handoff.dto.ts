@@ -25,9 +25,28 @@ export class SutyerakHandoffReplyDto {
   @MaxLength(100)
   userId?: string;
 
+  /**
+   * A WIDGET BESZÉLGETÉSE (5830ee10): a `handoff.json` `threadId`-je. A widget
+   * ezzel kéri le a választ, és ugyanabban a beszélgetésben mutatja; az
+   * Üzenetekbe így is bekerül. Elhagyható: nélküle csak az Üzenetekben látszik.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  threadId?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(MESSAGE_TEXT_MAX_LENGTH)
   @Matches(/\S/)
   text!: string;
+}
+
+/** A widget lekérdezése: a saját beszélgetésének azonosítója. */
+export class AssistantHandoffRepliesQueryDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  threadId!: string;
 }
