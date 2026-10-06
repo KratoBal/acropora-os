@@ -557,6 +557,49 @@ describe("a labelled value that is a company or a day is not the invoice number 
   });
 });
 
+describe("the number from an underscore-joined file name (2026-10-06)", () => {
+  // the shape of the stored Rechnung_400055181585.pdf: the number after a
+  // bare "Nummer:" label, which is not one of the number labels
+  const RECHNUNG = [
+    "Magyarország | Rechnung",
+    "UID-Nr.: 23916229-2-42",
+    "Nummer: | 400055181585",
+    "Datum: | 31.07.2026",
+  ];
+
+  it("takes the part of the name that stands in the text", () => {
+    assert.deepEqual(
+      readInvoiceText(RECHNUNG, {
+        fileName: "Rechnung_400055181585.pdf",
+        subject: "Rechnung_400055181585",
+      }),
+      {
+        invoiceNumber: "400055181585",
+        numberFrom: "FILE_NAME",
+        supplierTaxNumber: null,
+      },
+    );
+  });
+
+  it("keeps the whole token first when the text has it whole", () => {
+    assert.equal(
+      readInvoiceText(["Beleg INV_20261 | 12,00 EUR"], {
+        fileName: "INV_20261.pdf",
+      }).invoiceNumber,
+      "INV_20261",
+    );
+  });
+
+  it("never takes a date part for the number", () => {
+    assert.equal(
+      readInvoiceText(["Kelt: 2026-07-31", "Összesen 1 000 Ft"], {
+        fileName: "Szamla_2026-07-31.pdf",
+      }).invoiceNumber,
+      null,
+    );
+  });
+});
+
 describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
   const FLEETCOR = [
     "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számla - Eredeti példány",
