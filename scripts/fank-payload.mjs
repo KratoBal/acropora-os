@@ -347,6 +347,7 @@ export function toTsvRow(row) {
     model: cell(row, COLUMN.model),
     detail: cell(row, COLUMN.detail),
     uid: cell(row, COLUMN.uid),
+    quantity: cell(row, COLUMN.quantity),
     volume: cell(row, COLUMN.volume),
     performance: cell(row, COLUMN.performance),
     powerConsumptionRaw: cell(row, COLUMN.powerConsumptionRaw),
@@ -513,7 +514,37 @@ export function resolveUnit(units, siteCode) {
     throw new FankPayloadError(
       `A "${siteCode}" helyszin szuloje (${unit.parentId}) nem szerepel az egyseg-listaban.`,
     );
-  return { unit, parentCode: parent.code };
+  return { unit, parentCode: parent.code, topCode: topCodeOf(units, unit) };
+}
+
+/**
+ * A HELYSZIN-FA GYOKERENEK KODJA (pl. BIO) -- a partner-kod elotagja.
+ *
+ * Balazs dontese, 2026-09-24 09:33 es 09:37 UTC (Szerviz es eszkoznyilvantartas
+ * szal, message_id 1552613938510700575 es 1552614888054984736): a partner-kod
+ * elso tagja a LEGFELSO helyszin kodja ("ahogy a BIO alatti eszkozoknel az
+ * elso tag legyen BIO"), es a mar bent levo kodok is megkaptak (176 kod,
+ * BIO- elotaggal, acrobot emleke 1807). Ez a szkript 2026-09-23-an keszult,
+ * a dontes elott: elotag nelkul a kovetkezo helyszin kodjai elternenek a bent
+ * levoktol, a szerver pedig a megadott kodot nem irja felul (#1048), tehat az
+ * elteres csendben bent maradna. ES a beepitett sor szulojet is ezzel a koddal
+ * keresi a meglevo eszkozok kozott, tehat elotag nelkul a szulo sem talalhato.
+ */
+export function topCodeOf(units, unit) {
+  let current = unit;
+  for (let depth = 0; current.parentId; depth++) {
+    const next = units.find((u) => u.id === current.parentId);
+    if (!next)
+      throw new FankPayloadError(
+        `A "${unit.code}" helyszin egyik ose (${current.parentId}) nem szerepel az egyseg-listaban -- a partner-kod elotagja igy nem allithato elo.`,
+      );
+    if (depth > 20)
+      throw new FankPayloadError(
+        `A "${unit.code}" helyszin fajaban kor van (20 szintnel melyebb) -- a szkript nem valaszt.`,
+      );
+    current = next;
+  }
+  return current.code;
 }
 
 /**
@@ -554,7 +585,12 @@ export function resolveUnit(units, siteCode) {
  * nem szarmazhat: a gyermek-szegmens (E) helyen mindig BETUS eszkozkod all
  * (PUM, FIB, SKI...), szam soha, tehat a D-D-E hatar egyertelmu.
  */
-export function buildPartnerInternalCode(siteCode, row) {
+export function buildPartnerInternalCode(siteCode, row, topCode) {
+  const code = partnerCodeWithoutTop(siteCode, row);
+  return topCode ? `${topCode}-${code}` : code;
+}
+
+function partnerCodeWithoutTop(siteCode, row) {
   if (row.builtin) {
     const szuloReszek = row.deviceSerial
       ? row.deviceSerial
@@ -630,7 +666,7 @@ export function parseExistingAssetsMap(json) {
  * hivonak, MELYIK csendes esetrol van szo (kulonbozik a "no-lookup-file"-tol,
  * ami sosem STOP, mert ott a hivo eleve nem kert szulo-feloldast).
  */
-export function resolveParentAssetId(siteCode, row, existingAssets) {
+export function resolveParentAssetId(siteCode, row, existingAssets, topCode) {
   if (!row.builtin) return { attempted: false, reason: "not-builtin" };
   if (!existingAssets) return { attempted: false, reason: "no-lookup-file" };
   if (!row.deviceSerial) return { attempted: false, reason: "empty-d" };
@@ -639,11 +675,15 @@ export function resolveParentAssetId(siteCode, row, existingAssets) {
     .map((s) => s.trim())
     .filter(Boolean);
   if (reszek.length !== 1) return { attempted: false, reason: "composite-d" };
-  const szuloKod = buildPartnerInternalCode(siteCode, {
-    deviceCode: row.deviceCode,
-    deviceSerial: reszek[0],
-    builtin: "",
-  });
+  const szuloKod = buildPartnerInternalCode(
+    siteCode,
+    {
+      deviceCode: row.deviceCode,
+      deviceSerial: reszek[0],
+      builtin: "",
+    },
+    topCode,
+  );
   const parentAssetId = existingAssets.get(szuloKod);
   return { attempted: true, szuloKod, parentAssetId: parentAssetId ?? null };
 }
@@ -728,15 +768,21 @@ export function buildAssetPayload(row, ctx) {
     performanceValue,
     volumeValue,
     parentAssetId,
+    topCode,
+    performanceRaw,
   } = ctx;
-  const partnerInternalCode = buildPartnerInternalCode(siteCode, row);
+  const partnerInternalCode = buildPartnerInternalCode(siteCode, row, topCode);
   const payload = {
     // "fank-import", NEM "fank-payload" -- acrobot merese, 2026-09-23 21:45:
     // a ma esti kezi betoltes MAR ezzel az elotaggal es KISBETUS
     // helyszin-kodadal irta be a kilenc eszkozt. Ket kulonbozo elotag ket
     // kulon idempotencia-nevteret jelentene: egy ismetelt futas nem ismerne
     // fel, hogy a sor mar bent van, es duplikatumot hozna letre.
-    clientOperationId: `fank-import:${siteCode.toLowerCase()}:${row.sor}`,
+    // a kibontott darab SAJAT kulcsot kap (`:NN`), kulonben az idempotencia a
+    // masodik darabot az elso ismetlesenek venne, es csendben elnyelne
+    clientOperationId: `fank-import:${siteCode.toLowerCase()}:${row.sor}${
+      row.peldany ? `:${pad2(row.peldany)}` : ""
+    }`,
     ownerType,
     ownerId: partnerId,
     departmentId: unit.id,
@@ -748,7 +794,15 @@ export function buildAssetPayload(row, ctx) {
   if (row.manufacturer) payload.manufacturer = row.manufacturer;
   if (row.model) payload.model = row.model;
   if (row.uid) payload.serialNumber = row.uid;
-  if (row.detail) payload.description = row.detail;
+  const description = [
+    row.detail,
+    // acrobot dontese, 2026-10-06 (27092): a tobb-erteku teljesitmeny-cella
+    // ("31-29-26") nem szam, a mezo ures marad, a nyers ertek a leirasba kerul
+    performanceRaw ? `Teljesítmény (nyers): ${performanceRaw}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (description) payload.description = description;
   if (volumeValue) payload.volume = volumeValue;
   if (row.powerConsumptionRaw)
     payload.powerConsumptionRaw = row.powerConsumptionRaw;
@@ -759,6 +813,59 @@ export function buildAssetPayload(row, ctx) {
   if (categoryId) payload.categoryId = categoryId;
   if (parentAssetId) payload.parentAssetId = parentAssetId;
   return { sor: row.sor, partnerInternalCode, payload };
+}
+
+/**
+ * A DARABSZAM KIBONTASA (`--darabszam-kibontas`, alapbol KI; acrobot 27092).
+ *
+ * Egy K >= 2 darabszamu sor K eszkoz lesz, -01..-K sorszammal: ez a bevett
+ * minta, elesben merve 2026-10-06 (BIO-LSS07-PMF-01-MET-01..05,
+ * BIO-EBB-HSZ-01-VAL-01..05). A sorszam BEEPITETT sornal az F (a sajat
+ * alkatresz-sorszam) helyere kerul, ONALLO sornal a D helyere.
+ *
+ * MEGALL, ha a sorszam helye MAR KI VAN TOLTVE (F, illetve D), es a K mégis
+ * >= 2: ilyenkor a forras mast mond a sorszamrol, mint a darabszam, es a
+ * szkript nem valaszt. MEGALL a nem egesz darabszamnal is (pl. "Futesi" az
+ * LSS10 287. soran): az a darabszam-cella hibaja, nem kibonthato. Az URES
+ * darabszam 1 darab (a C1 kerdes, Balazs megerositesere var: 98c8b67b).
+ */
+export function expandQuantities(siteCode, rows) {
+  const hibak = [];
+  const out = [];
+  for (const row of rows) {
+    const q = row.quantity ?? "";
+    if (q === "" || q === "1") {
+      out.push(row);
+      continue;
+    }
+    if (!/^\d+$/.test(q)) {
+      hibak.push(`  sor ${row.sor}: a darabszam nem egesz szam: "${q}"`);
+      continue;
+    }
+    const k = Number(q);
+    if (k === 0) {
+      hibak.push(`  sor ${row.sor}: a darabszam nulla`);
+      continue;
+    }
+    if (k === 1) {
+      out.push(row);
+      continue;
+    }
+    const hely = row.builtin ? "builtinSerial" : "deviceSerial";
+    if (row[hely]) {
+      hibak.push(
+        `  sor ${row.sor}: K=${k}, de a sorszam helye (${row.builtin ? "F" : "D"}="${row[hely]}") mar ki van toltve`,
+      );
+      continue;
+    }
+    for (let i = 1; i <= k; i++)
+      out.push({ ...row, [hely]: pad2(i), peldany: i });
+  }
+  if (hibak.length > 0)
+    throw new FankPayloadError(
+      `A(z) ${siteCode} helyszin alabbi sorainak darabszama nem bonthato ki -- a szkript nem valaszt:\n${hibak.join("\n")}`,
+    );
+  return out;
 }
 
 /**
@@ -777,14 +884,18 @@ export function buildSitePayload({
   categoryMap,
   existingAssets,
   szuloNelkulEngedve,
+  darabszamKibontas = false,
 }) {
   const { rows } = parseTsv(tsvText);
   const skip = new Set(skipSorok.map(String));
-  const { unit, parentCode } = resolveUnit(units, siteCode);
+  const { unit, parentCode, topCode } = resolveUnit(units, siteCode);
 
   const allSiteRows = rows.map(toTsvRow).filter((row) => row.site === siteCode);
-  const siteRows = allSiteRows.filter((row) => !skip.has(row.sor));
-  const kihagyottSorSzama = allSiteRows.length - siteRows.length;
+  const forrasSorok = allSiteRows.filter((row) => !skip.has(row.sor));
+  const siteRows = darabszamKibontas
+    ? expandQuantities(siteCode, forrasSorok)
+    : forrasSorok;
+  const kihagyottSorSzama = allSiteRows.length - forrasSorok.length;
 
   const hianyzoKod = siteRows.filter((row) => !row.deviceCode);
   if (hianyzoKod.length > 0)
@@ -891,6 +1002,7 @@ export function buildSitePayload({
   ];
   const meresHianyok = [];
   const meresKerekitve = [];
+  const teljesitmenyNyersen = [];
   /*
     A GYERMEK-SOR `parentAssetId`-JE -- acrobot masodik kore, 2026-09-23
     23:31, a nautilus-fele probafutas leletere ("nulla parentAssetId barhol
@@ -925,7 +1037,12 @@ export function buildSitePayload({
         kategoriaHianyok.push({ sor: row.sor, kulcs });
       }
     }
-    const szuloFeloldas = resolveParentAssetId(siteCode, row, existingAssets);
+    const szuloFeloldas = resolveParentAssetId(
+      siteCode,
+      row,
+      existingAssets,
+      topCode,
+    );
     if (szuloFeloldas.attempted && !szuloFeloldas.parentAssetId) {
       parentAssetIdHianyzik.push({
         sor: row.sor,
@@ -947,7 +1064,11 @@ export function buildSitePayload({
       const nyers = row[mezo];
       if (!nyers) continue;
       const normalizalt = normalizeMeasurementValue(nyers);
-      if (normalizalt === null) {
+      if (normalizalt === null && mezo === "performance") {
+        // nem szam: a mezo ures marad, a nyers ertek a leirasba megy
+        meresErtekek.performanceRaw = nyers;
+        teljesitmenyNyersen.push({ sor: row.sor, nyers });
+      } else if (normalizalt === null) {
         meresHianyok.push({ sor: row.sor, label, nyers });
       } else {
         meresErtekek[ctxKey] = normalizalt.value;
@@ -963,6 +1084,7 @@ export function buildSitePayload({
     return buildAssetPayload(row, {
       siteCode,
       parentCode,
+      topCode,
       unit,
       partnerId,
       ownerType,
@@ -1051,6 +1173,8 @@ export function buildSitePayload({
     hianyzoKategoriaSorok: hianyzoKategoria.map((e) => e.sor),
     meresKerekitve,
     szuloNelkulSorok: szuloNelkulEngedve ? szuloAmbivalens : [],
+    teljesitmenyNyersen,
+    kibontottTobblet: siteRows.length - forrasSorok.length,
     bemenetiSorSzam: allSiteRows.length,
     kihagyottSorSzama,
     kimenetiEszkozSzam: entries.length,
@@ -1065,6 +1189,7 @@ function parseArgs(argv) {
     categoryMap: null,
     existingAssets: null,
     szuloNelkulEngedve: false,
+    darabszamKibontas: false,
     skip: [],
     partner: FANK_PARTNER_DEFAULT,
     ownerType: "SUPPLIER",
@@ -1088,6 +1213,9 @@ function parseArgs(argv) {
         break;
       case "--szulo-nelkul-engedve":
         args.szuloNelkulEngedve = true;
+        break;
+      case "--darabszam-kibontas":
+        args.darabszamKibontas = true;
         break;
       case "--kihagy":
         args.skip.push(
@@ -1180,6 +1308,8 @@ export function main(argv) {
     hianyzoKategoriaSorok,
     meresKerekitve,
     szuloNelkulSorok,
+    teljesitmenyNyersen,
+    kibontottTobblet,
     bemenetiSorSzam,
     kihagyottSorSzama,
     kimenetiEszkozSzam,
@@ -1194,6 +1324,7 @@ export function main(argv) {
     categoryMap,
     existingAssets,
     szuloNelkulEngedve: args.szuloNelkulEngedve,
+    darabszamKibontas: args.darabszamKibontas,
   });
 
   if (hianyzoKategoriaSorok.length > 0) {
@@ -1229,8 +1360,16 @@ export function main(argv) {
     megnezni. A hivo sajat szamitasa (hany sort szant --kihagy-nak) itt
     osszevethető a szkript sajat szamlalasaval.
   */
+  if (teljesitmenyNyersen.length > 0)
+    process.stderr.write(
+      `TELJESITMENY NYERSEN A LEIRASBAN (nem egyetlen szam): ${teljesitmenyNyersen.length} sor\n${teljesitmenyNyersen
+        .map((t) => `  sor ${t.sor}: "${t.nyers}"`)
+        .join("\n")}\n`,
+    );
   process.stderr.write(
-    `${args.site}: ${bemenetiSorSzam} bemeneti sor - ${kihagyottSorSzama} kihagyva = ${kimenetiEszkozSzam} kimeneti eszkoz (${args.tsv}).\n`,
+    `${args.site}: ${bemenetiSorSzam} bemeneti sor - ${kihagyottSorSzama} kihagyva${
+      kibontottTobblet ? ` + ${kibontottTobblet} kibontott darab` : ""
+    } = ${kimenetiEszkozSzam} kimeneti eszkoz (${args.tsv}).\n`,
   );
   process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
   return 0;

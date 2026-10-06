@@ -77,6 +77,7 @@ describe("a csempék sorrendje", () => {
       "AI",
       "ES",
       "AK",
+      "PI",
       "RE",
       "PA",
       "BE",
