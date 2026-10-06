@@ -6,6 +6,7 @@ import { documentStoreProvider } from "../service-assets/document-store/document
 import { ServiceTokenRepository } from "../tasks/service-token.repository.js";
 import { SutyerakHandoffController } from "./handoff/sutyerak-handoff.controller.js";
 import { SutyerakHandoffGuard } from "./handoff/sutyerak-handoff.guard.js";
+import { SutyerakInbox } from "./sutyerak-inbox.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { MessageAttachmentCleanup } from "./message-attachment-cleanup.js";
 
@@ -37,6 +38,7 @@ import { MessagesService } from "./messages.service.js";
     MessagesAssistantService,
     // acrobot visszaírása, a saját szolgáltatás-tokenjével
     SutyerakHandoffGuard,
+    SutyerakInbox,
     ServiceTokenRepository,
   ],
 })

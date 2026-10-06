@@ -53,6 +53,7 @@ import {
 import { AssistantService } from "../assistant/assistant.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
+import { SutyerakInbox } from "./sutyerak-inbox.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import {
@@ -108,6 +109,8 @@ export class MessagesService {
     /** Sutyerák (4. pont B): ki látja és ki indíthat vele beszélgetést. */
     @Optional() private readonly assistant?: AssistantService,
     @Optional() private readonly thinking?: AssistantThinkingState,
+    /** A senki által nem olvasott postafiók-fiókok (4. pont B, 6. tétel). */
+    @Optional() private readonly inbox?: SutyerakInbox,
   ) {}
 
   /** Sutyerák elérhető-e ennek a dolgozónak (ugyanaz a szabály, mint a widgeté). */
@@ -122,6 +125,11 @@ export class MessagesService {
   ): void {
     if (memberIds.includes(SUTYERAK_USER_ID) && !this.assistantFor(user))
       throw new BadRequestException("Sutyerák számodra jelenleg nem elérhető.");
+    // a postafiók-fiók senkit nem olvas: új beszélgetésbe nem vehető fel
+    if (memberIds.some((id) => this.inbox?.has(id)))
+      throw new BadRequestException(
+        "Ez a fiók nem olvassa az üzeneteket. Kérdezd Sutyerákot.",
+      );
   }
 
   private readonly logger = new Logger(MessagesService.name);
@@ -144,6 +152,8 @@ export class MessagesService {
     const items = rows
       .filter(mayJoinInternal)
       .filter((row) => row.role !== "ASSISTANT" || assistant)
+      // a postafiók-fiók nem választható (senki nem olvassa)
+      .filter((row) => !this.inbox?.has(row.id))
       .map(toPerson);
     return {
       items: [
@@ -331,26 +341,39 @@ export class MessagesService {
     text: string,
     source: "GATEWAY" | "ACROBOT",
   ): Promise<MessageItem> {
-    const [assistant] = await this.repository.users([SUTYERAK_USER_ID]);
-    if (!assistant) throw new Error("Sutyerák rendszer-felhasználója hiányzik");
+    return this.postAs(SUTYERAK_USER_ID, conversationId, text, source);
+  }
+
+  /**
+   * EGY RENDSZER-ÜZENET EGY TAG NEVÉBEN (Sutyerák válasza, vagy egy postafiók-
+   * fiók átirányító mondata), ugyanazzal a közzététellel, mint egy dolgozóé.
+   */
+  async postAs(
+    senderUserId: string,
+    conversationId: string,
+    text: string,
+    assistantSource: "GATEWAY" | "ACROBOT" | null = null,
+  ): Promise<MessageItem> {
+    const [sender] = await this.repository.users([senderUserId]);
+    if (!sender) throw new Error(`A küldő (${senderUserId}) nem létezik`);
     const row = await this.repository.createMessage({
       conversationId,
-      senderUserId: SUTYERAK_USER_ID,
+      senderUserId,
       text: text.trim(),
       clientMessageId: randomUUID(),
-      assistantSource: source,
+      assistantSource,
     });
     await this.announce(row, {
-      id: assistant.id,
+      id: sender.id,
       email: "",
-      displayName: assistant.displayName,
-      nickname: assistant.nickname ?? null,
-      role: assistant.role,
-      avatarUrl: assistant.avatarUrl,
-      customerId: null,
-      supplierId: null,
+      displayName: sender.displayName,
+      nickname: sender.nickname ?? null,
+      role: sender.role,
+      avatarUrl: sender.avatarUrl,
+      customerId: sender.customerId,
+      supplierId: sender.supplierId,
     });
-    return toMessage(row, SUTYERAK_USER_ID);
+    return toMessage(row, senderUserId);
   }
 
   async messages(

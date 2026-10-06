@@ -244,6 +244,7 @@ function setup(
   /** Sutyerák elérhetősége dolgozónként (4. pont B); hiányában senkinek. */
   assistantFor: (user: AuthenticatedUser) => boolean = () => false,
   thinking?: AssistantThinkingState,
+  inboxIds: string[] = [],
 ) {
   const repo = fakeRepository(users);
   const bus = new InMemoryMessageEventBus();
@@ -269,6 +270,7 @@ function setup(
     undefined,
     { availableTo: assistantFor } as never,
     thinking,
+    { has: (id: string) => inboxIds.includes(id) } as never,
   );
   return { service, repo, bus, published, pushes };
 }
@@ -402,6 +404,25 @@ describe("Sutyerák in the messages", () => {
   Sutyerák kettes beszélgetésébe megy, vagy minden válasz újat nyit; partnernek
   vagy inaktív dolgozónak is ír; a válasz nem jelöli, hogy acrobot írta.
 */
+describe("an inbox nobody reads (the Acrobot Szerviz account)", () => {
+  const users = [person("a"), person("b"), person("inbox")];
+
+  it("is not on the people list, and no new conversation takes it", async () => {
+    const { service } = setup(users, () => true, undefined, ["inbox"]);
+    const people = await service.people(viewer("a"), "");
+    assert.equal(
+      people.items.some((p) => p.userId === "inbox"),
+      false,
+    );
+    assert.equal(
+      await status(
+        service.createConversation(viewer("a"), { memberIds: ["inbox"] }),
+      ),
+      400,
+    );
+  });
+});
+
 describe("acrobot's handoff reply", () => {
   const sutyerak = person(SUTYERAK_USER_ID, {
     role: "ASSISTANT" as UserRole,
