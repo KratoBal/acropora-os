@@ -730,6 +730,34 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
+   * A TELJES SZŰRT HALMAZ A NYOMTATÁSNAK ÉS AZ EXCELNEK (kártya 323e9b38).
+   * Ugyanaz a `where`, a sorrend és a sor-alak, mint a listáé, csak lapozás
+   * nélkül: amit a kezelő a szűrők után lát, az kerül a papírra. A határ
+   * fölött `null`: a hívó szűkítést kér, nem vág le csendben.
+   */
+  async listAll(
+    query: AssetListQueryDto,
+    scope: PartnerScope,
+    assignedUnitIds: readonly string[],
+    max: number,
+  ): Promise<AssetListItem[] | null> {
+    const { list: where } = await this.listWheres(
+      query,
+      scope,
+      assignedUnitIds,
+    );
+    const rows = await prisma.asset.findMany({
+      where,
+      include: assetSummaryInclude,
+      orderBy: assetListOrderBy(query.sort, query.direction),
+      take: max + 1,
+    });
+    if (rows.length > max) return null;
+    const paths = await this.unitPaths(rows);
+    return rows.map((row) => this.toListItem(row, paths));
+  }
+
+  /**
    * ALLAPOTONKENTI DARABSZAM, EGY LEKERDEZESBOL.
    *
    * A `groupBy` a LAPOZASTOL FUGGETLEN: a csempek a teljes szurt halmazrol
