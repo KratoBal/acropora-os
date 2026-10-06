@@ -64,6 +64,11 @@ vi.mock("@/lib/api/assets", () => ({ assetsApi: api }));
  * teszt pedig a MEGHIUSULT hivas utani allapotot merte -- vagyis nem azt, amit
  * hitt: egy ures partnerlista ugyanugy nez ki, mint egy halott hivas.
  */
+// az eszköz-funkciók választója: a teszt ne menjen hálózatra (barracuda,
+// 2026-10-06: ECONNREFUSED a CI naplójában)
+vi.mock("@/lib/api/asset-functions", () => ({
+  assetFunctionsApi: { list: vi.fn().mockResolvedValue({ items: [] }) },
+}));
 vi.mock("@/lib/api/suppliers", () => ({ suppliersApi: suppliers }));
 vi.mock("@/lib/api/units-of-measure", () => ({
   unitsOfMeasureApi: unitsOfMeasure,
