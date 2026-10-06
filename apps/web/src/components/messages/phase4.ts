@@ -82,6 +82,17 @@ export function isSystemMessage(message: Pick<MessageItem, "type">): boolean {
   return message.type === "SYSTEM";
 }
 
+/**
+ * A HIBAJEGY PARTNERES BESZÉLGETÉSE (bd46ff05, a #1531 szerint): a belső
+ * oldalon rögzített. Csatolmány, tag, kilépés, kötés és a BELE továbbítás a
+ * szerveren 400, ezért a felület meg sem mutatja őket.
+ */
+export function isPartnerConversation(item: {
+  audience?: string | null;
+}): boolean {
+  return item.audience === "PARTNER";
+}
+
 /** Kilépni és tagot hozzáadni csak csoportban lehet; a direkt beszélgetés két emberé. */
 export function canManageMembers(type: "DIRECT" | "GROUP"): boolean {
   return type === "GROUP";

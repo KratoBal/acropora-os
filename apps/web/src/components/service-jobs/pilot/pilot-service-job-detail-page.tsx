@@ -643,6 +643,11 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
         </div>
         <div className="flex flex-wrap items-start gap-2">
           <ContextConversationButton kind="service-job" objectId={job.id} />
+          <ContextConversationButton
+            kind="service-job"
+            objectId={job.id}
+            partner
+          />
           {job.partnerStatus === "COMPLETED" ? (
             <div className="flex flex-wrap gap-2">
               <PilotButton

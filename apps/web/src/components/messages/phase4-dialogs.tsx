@@ -19,7 +19,12 @@ import {
   assistantFirst,
   conversationName,
 } from "./conversation-parts";
-import { canManageMembers, contextCardParts, contextCardTitle } from "./phase4";
+import {
+  canManageMembers,
+  contextCardParts,
+  contextCardTitle,
+  isPartnerConversation,
+} from "./phase4";
 
 const failure = (cause: unknown, fallback: string) =>
   cause instanceof Error && cause.message ? cause.message : fallback;
@@ -111,7 +116,12 @@ export function MembershipSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!canManageMembers(conversation.type)) return null;
+  // a partneres beszélgetés tagjai és kötése rögzített (bd46ff05)
+  if (
+    !canManageMembers(conversation.type) ||
+    isPartnerConversation(conversation)
+  )
+    return null;
 
   const leave = async () => {
     setBusy(true);
