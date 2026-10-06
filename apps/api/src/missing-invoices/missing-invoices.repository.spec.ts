@@ -89,6 +89,41 @@ describe("mergeSameInvoice", () => {
     assert.equal(alone[0]!.originalId, "mb-proforma");
   });
 
+  // MI PIROSÍT: ha a feed XML-je lesz az eredeti a postafiók PDF-je helyett
+  // (UNAS UO-418953/2026, 2026-10-06: a PDF-et díjbekérőnek olvastuk, a feed
+  // sorát számlának). A forrás áll elöl, mert a PDF fajta-olvasata tévedhet.
+  it("takes the mailbox PDF as the original before the Számlázz.hu feed's file", () => {
+    const nav = doc({ id: "nav-1" });
+    const feed = doc({
+      id: "feed-xml",
+      source: "SZAMLAZZ",
+      gross: null,
+      payee: "UNKNOWN",
+      hasOriginal: true,
+    });
+    const pdf = doc({
+      id: "mb-pdf",
+      source: "MAILBOX",
+      kind: "PROFORMA",
+      gross: null,
+      payee: "UNKNOWN",
+      hasOriginal: true,
+    });
+    const keys = new Map([
+      ["nav-1", "uo-1|14114113"],
+      ["feed-xml", "uo-1|14114113"],
+      ["mb-pdf", "uo-1|14114113"],
+    ]);
+    const merged = mergeSameInvoice([nav, feed, pdf], keys);
+    assert.equal(merged[0]!.originalId, "mb-pdf");
+    assert.equal(merged[0]!.source, "MAILBOX");
+    // kontroll: ha csak a feed fájlja van, az az eredeti
+    assert.equal(
+      mergeSameInvoice([nav, feed], keys)[0]!.originalId,
+      "feed-xml",
+    );
+  });
+
   // MI PIROSÍT (acrobot 26084): ha a NAV-sorral összevont Számlázz.hu-számla
   // elveszítené a kártyás fizetési módot, és a 3f. szabály nem látná.
   it("keeps the card payment of any source of the merged invoice", () => {

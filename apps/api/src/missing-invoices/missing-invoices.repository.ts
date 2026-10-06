@@ -137,16 +137,29 @@ export function mergeSameInvoice(
     if (group.length === 1) return identified(group[0]!);
     const nav = group.find((d) => d.source === "NAV");
     /*
-      AZ EREDETI ELŐBB SZÁMLA, CSAK UTÁNA BÁRMI (Amblard F2602896, mérve
-      2026-10-06 élesen): ugyanazzal a számmal érkezett egy „Facture
-      provisoire” (díjbekérő) és a végleges „Facture cpta”. Az eredeti
-      (originalId) az első eredetivel bíró dokumentum volt, a fajtájától
-      függetlenül, tehát a könyvelői csomagba a díjbekérő PDF-je is kerülhetett
-      a végleges számla helyett.
+      MELYIK DOKUMENTUM AZ ÖSSZEVONT SZÁMLA EREDETIJE (originalId: ezt a fájlt
+      kapja a könyvelői csomag). Eddig az első eredetivel bíró dokumentum volt,
+      a forrásától és a fajtájától függetlenül. Két mért eset 2026-10-06-án:
+        - Amblard F2602896: egy „Facture provisoire” (díjbekérő) és a végleges
+          „Facture cpta” ugyanazzal a számmal, mindkettő a postafiókból;
+        - UNAS UO-418953/2026 és UO-422651/2026: az aláírt PDF a postafiókból
+          és a Számlázz.hu feed XML-je. A feed XML-t tárol, ha a feed üzenete
+          nem hoz PDF-et (`szamlazz-feeds.service.ts`), a könyvelő viszont PDF-et
+          vár.
+      Ezért előbb a FORRÁS dönt (postafiók, Drive, feltöltés a feed előtt),
+      utána a FAJTA (számla a díjbekérő előtt), azonos helyen az eredeti
+      sorrend. A forrás áll elöl, mert a postafiókos PDF fajta-olvasata
+      tévedhet (az UNAS PDF-et díjbekérőnek olvastuk), a feed XML-je viszont
+      soha nem az a fájl, amit a könyvelő kér.
     */
-    const original =
-      group.find((d) => d.hasOriginal && d.kind === "INVOICE") ??
-      group.find((d) => d.hasOriginal);
+    const rank = (d: CandidateDocument) =>
+      (d.source === "SZAMLAZZ" ? 2 : 0) + (d.kind === "INVOICE" ? 0 : 1);
+    const original = group
+      .filter((d) => d.hasOriginal)
+      .reduce<CandidateDocument | undefined>(
+        (best, d) => (!best || rank(d) < rank(best) ? d : best),
+        undefined,
+      );
     const primary = nav ?? group[0]!;
     return {
       ...primary,
