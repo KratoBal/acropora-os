@@ -286,6 +286,25 @@ export class WebshopOrdersController {
   }
 
   /**
+   * A DÍJBEKÉRŐ KIÁLLÍTÁSA ÉS KIKÜLDÉSE (kártya bb3a6bd5), előre utalásos
+   * rendelésnél; ha már kiment, újraküldés. Ugyanaz a két jog, mint a
+   * számlához, plusz a kiküldésé. A válasz a friss adatlap.
+   */
+  @Post(":id/proforma")
+  @HttpCode(200)
+  @RequirePermissions(
+    PERMISSIONS.ORDERS_MANAGE,
+    PERMISSIONS.BILLING_ISSUE,
+    PERMISSIONS.BILLING_RESEND,
+  )
+  sendProforma(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.invoices.sendProforma(id, user);
+  }
+
+  /**
    * CSOMAGFELADÁS: a szállítónál létrejön a csomag (a számla után), és a
    * webshop elküldi a „Feladtuk” levelet. A válasz a friss adatlap és a levél
    * sorsa.

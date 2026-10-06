@@ -97,6 +97,12 @@ jobs:
       - name: Secret scan
         run: node scripts/scan-secrets.mjs
 
+      # docs/FIGMA-MAP.md: every route and component path it names must exist.
+      # A renamed or moved screen breaks the map silently otherwise; the
+      # check also fails on a malformed table header (2026-10-06, #1550/#511).
+      - name: Figma map check
+        run: node scripts/figma-map-check.mjs
+
       - name: Static verification
         run: |
           pnpm typecheck

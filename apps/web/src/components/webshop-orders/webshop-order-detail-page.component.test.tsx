@@ -41,6 +41,7 @@ const api = vi.hoisted(() => ({
   replacementVariants: vi.fn(),
   issueInvoice: vi.fn(),
   issueDeliveryNote: vi.fn(),
+  sendProforma: vi.fn(),
   createParcel: vi.fn(),
   parcelLabel: vi.fn(),
   releaseParcel: vi.fn(),
@@ -165,6 +166,8 @@ const detail: WebshopOrderDetail = {
   invoiceNumber: null,
   invoice: null,
   deliveryNote: null,
+  bankTransfer: false,
+  proforma: null,
   parcel: null,
   cardPayment: null,
   osCustomer: null,
@@ -246,6 +249,7 @@ beforeEach(() => {
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.issueDeliveryNote.mockReset();
+  api.sendProforma.mockReset();
   api.createParcel.mockReset();
   api.parcelLabel.mockReset();
   api.releaseParcel.mockReset();
@@ -1982,5 +1986,155 @@ describe("WebshopOrderDetailPage", () => {
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     expect(await screen.findByRole("heading", { name: "#38" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /szerkesztése/ })).toBeNull();
+  });
+});
+
+/*
+  A DÍJBEKÉRŐ (kártya bb3a6bd5). MI PIROSÍT: nem előre utalásos rendelésen is
+  áll; a gomb megerősítés nélkül küld, vagy nem a díjbekérő végpontját hívja;
+  a kiküldött díjbekérő gombja nem újraküldés, vagy az újraküldés új
+  díjbekérőt ígér; a lejárt nem „Lejárt díjbekérő”; a kiállítás alatti mellé
+  gomb kerül; a számlázási jogok nélkül gomb áll; a hiba elveszik.
+*/
+describe("the proforma on the Fizetés card", () => {
+  const transfer: WebshopOrderDetail = {
+    ...detail,
+    bankTransfer: true,
+    payment: {
+      ...detail.payment!,
+      method: "Előre utalás",
+      state: "AWAITING",
+      authorized: 0,
+      stripePaymentIntentId: null,
+    },
+    cardPayment: null,
+  };
+  const issued = (
+    over: Partial<NonNullable<WebshopOrderDetail["proforma"]>> = {},
+  ): WebshopOrderDetail => ({
+    ...transfer,
+    proforma: {
+      id: "doc_p1",
+      status: "ISSUED",
+      number: "TESZT-D-1",
+      dueDate: "2026-10-14",
+      emailStatus: "SENT",
+      expired: false,
+      ...over,
+    },
+  });
+  const card = () => screen.findByRole("region", { name: "Fizetés" });
+
+  it("is not there for another payment method", async () => {
+    api.detail.mockResolvedValue(detail);
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).queryByText(/díjbekérő/i)).toBeNull();
+    expect(within(payment).queryByText("Utalásra vár")).toBeNull();
+  });
+
+  it("waits for the transfer; the first send asks first, then issues and sends", async () => {
+    api.detail.mockResolvedValue(transfer);
+    api.sendProforma.mockResolvedValue(issued());
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).getByText("Utalásra vár")).toBeTruthy();
+    expect(within(payment).getByText("Még nincs díjbekérő.")).toBeTruthy();
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    const confirm = screen.getByRole("dialog", { name: "Díjbekérő kiküldése" });
+    expect(confirm.textContent).toContain("valódi díjbekérő készül");
+    expect(confirm.textContent).toContain("8 napos");
+    expect(confirm.textContent).toContain("emese@example.hu");
+    expect(api.sendProforma).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    expect(await within(payment).findByText("TESZT-D-1")).toBeTruthy();
+    expect(api.sendProforma).toHaveBeenCalledWith("token", "order_38");
+    expect(within(payment).getByText("2026-10-14")).toBeTruthy();
+    expect(within(payment).getByText("Kiküldve")).toBeTruthy();
+    expect(
+      within(payment)
+        .getByRole("link", { name: "Megnyitás a Számlázásban" })
+        .getAttribute("href"),
+    ).toBe("/penzugy/szamlazas/doc_p1");
+  });
+
+  it("once sent, the button resends the same one; an expired one is marked and can be resent", async () => {
+    api.detail.mockResolvedValue(issued({ expired: true }));
+    api.sendProforma.mockResolvedValue(issued({ expired: true }));
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    expect(within(payment).getByText("Lejárt díjbekérő")).toBeTruthy();
+    expect(within(payment).queryByText("Utalásra vár")).toBeNull();
+    expect(
+      within(payment).queryByRole("button", { name: "Díjbekérő kiküldése" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Díjbekérő újraküldése" }),
+    );
+    const confirm = screen.getByRole("dialog", {
+      name: "Díjbekérő újraküldése",
+    });
+    expect(confirm.textContent).toContain("Új díjbekérő nem készül");
+    fireEvent.click(
+      within(confirm).getByRole("button", { name: "Díjbekérő újraküldése" }),
+    );
+    await vi.waitFor(() =>
+      expect(api.sendProforma).toHaveBeenCalledWith("token", "order_38"),
+    );
+  });
+
+  it("no button while issuing, while sending, without the billing rights (SALES), or on a failed order", async () => {
+    for (const [order, role] of [
+      [issued({ status: "ISSUING", number: null, emailStatus: null }), "OWNER"],
+      [issued({ emailStatus: "SENDING" }), "OWNER"],
+      [transfer, "SALES"],
+      [
+        {
+          ...transfer,
+          status: { ...transfer.status, code: "closed_unsuccessfully" },
+        },
+        "OWNER",
+      ],
+    ] as const) {
+      auth.session = session(role);
+      api.detail.mockResolvedValue(order);
+      const view = render(
+        createElement(WebshopOrderDetailPage, { id: "order_38" }),
+      );
+      const payment = await card();
+      const button = within(payment).queryByRole("button", {
+        name: /Díjbekérő/,
+      });
+      expect(button === null || (button as HTMLButtonElement).disabled).toBe(
+        true,
+      );
+      view.unmount();
+    }
+  });
+
+  it("a refused send keeps the reason on the card", async () => {
+    api.detail.mockResolvedValue(transfer);
+    api.sendProforma.mockRejectedValue(
+      new Error(
+        "A rendelésen nincs e-mail cím, ezért a díjbekérő nem küldhető ki.",
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const payment = await card();
+    fireEvent.click(
+      within(payment).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Díjbekérő kiküldése" }),
+      ).getByRole("button", { name: "Díjbekérő kiküldése" }),
+    );
+    expect((await within(payment).findByRole("alert")).textContent).toMatch(
+      /nincs e-mail cím/,
+    );
   });
 });
