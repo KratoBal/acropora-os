@@ -34,9 +34,9 @@ export function EditPencil({
       title={reason ?? label}
       disabled={reason !== null}
       onClick={onClick}
-      className="rounded-md p-1 text-pilot-grey-500 hover:bg-pilot-grey-100 disabled:cursor-not-allowed disabled:opacity-40"
+      className="rounded-md p-1 text-pilot-grey-500 transition-colors hover:text-pilot-accent-warm-text disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-pilot-grey-500"
     >
-      <Icon name="pencil" size={14} />
+      <Icon name="pencil" size={16} />
     </button>
   );
 }

@@ -204,7 +204,31 @@ describe("the detail", () => {
       phone: "+36 30 555 0137",
       isNew: true,
       guest: false,
+      // no signals given: unknown, not zero
+      unsuccessfulOrderCount: null,
+      hasOtherOpenOrder: null,
     });
+    const signalled = toDetail({
+      order: order(),
+      status: status("confirmed"),
+      facts: NO_FACTS,
+      customerOrderCount: 3,
+      relatedDisplayId: null,
+      now: NOW,
+      signals: {
+        is_new_customer: false,
+        unsuccessful_closed_order_count: 2,
+        has_other_open_order: true,
+        purchased_without_registration: false,
+      },
+    });
+    assert.deepEqual(
+      [
+        signalled.customer.unsuccessfulOrderCount,
+        signalled.customer.hasOtherOpenOrder,
+      ],
+      [2, true],
+    );
     assert.equal(
       result.billingAddress?.line,
       "1117 Budapest, Fehérvári út 24.",

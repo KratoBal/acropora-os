@@ -7,6 +7,8 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { parcelInputOf } from "./webshop-order-parcel.rules.js";
+import { shippingOf } from "./webshop-order-detail.rules.js";
 import {
   WEBSHOP_ORDER_STATUS_LABELS,
   staleHoursOf,
@@ -211,7 +213,38 @@ export class WebshopOrdersService {
       customerKey ? this.repository.osCustomerByKey(customerKey) : null,
       this.repository.internalNote(id),
     ]);
+    /*
+      A VEVŐ JELZÉSEI (a lista „korábbi sikertelen” és „másik nyitott”
+      jelzése) csak a webshop áttekintésében állnak. Vendégnél és első
+      rendelésnél ez 0 és nincs másik rendelés, ezért a lekérés csak akkor
+      fut, ha a vevőnek több rendelése van; olvasási hiba nem állítja meg az
+      adatlapot.
+    */
+    const signals =
+      customerOrderCount !== null && customerOrderCount > 1
+        ? await this.readAll()
+            .then(
+              ({ rows }) =>
+                rows.find((row) => row.id === id)?.customer_signals ?? null,
+            )
+            .catch(() => null)
+        : {
+            is_new_customer: customerOrderCount === 1,
+            unsuccessful_closed_order_count: 0,
+            has_other_open_order: false,
+            purchased_without_registration: !order.customer_id,
+          };
+    const shipping = shippingOf(order.shipping_methods ?? []);
+    const plan = shipping.storePickup ? null : parcelInputOf(order);
     return toDetail({
+      signals,
+      dispatchPreview: plan
+        ? {
+            ready: plan.ok,
+            reason: plan.ok ? null : plan.message,
+            codHuf: plan.ok ? (plan.codHuf ?? null) : null,
+          }
+        : null,
       osCustomer,
       internalNote,
       staleHours: staleHoursOf(thresholds),
