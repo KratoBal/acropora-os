@@ -10,8 +10,17 @@ import {
 import type { CardDebit } from "./invoice-text.js";
 
 const ACTIVE_KEY = "ACTIVE";
-/** Egy futás, ami ennyi ideje nem frissült, elakadt: a következő átveszi. */
-const STALE_RUN_AFTER_MS = 2 * 60 * 60 * 1000;
+/**
+ * Egy futás, ami ennyi ideje nem frissült, elakadt: a következő átveszi.
+ *
+ * A FUTÁS PERCENKÉNT FRISSÍTI MAGÁT (`touchRun`, a szolgáltatás szívverése),
+ * ezért ez nem a futás HOSSZÁNAK, hanem a CSENDJÉNEK a korlátja. Mérve
+ * 2026-10-06: a 09:35:25 UTC-s futást két API-újraindítás ölte meg, és mert a
+ * sort futás közben semmi nem frissítette, a régi 2 órás korlát az INDULÁSTÓL
+ * számolt; addig minden óránkénti futás kimaradt (acrobot 26830). Tíz perc
+ * csend tíz kimaradt szívverés: egy élő futás ennyit nem hallgat.
+ */
+export const STALE_RUN_AFTER_MS = 10 * 60 * 1000;
 
 export type InvoiceCollectionVerdict =
   | "STORED"
@@ -435,6 +444,14 @@ export class InvoiceCollectionRepository {
         throw new ConflictException("INVOICE_COLLECTION_ALREADY_RUNNING");
       throw error;
     }
+  }
+
+  /** A futó futás szívverése: az `updatedAt` most. Lezárt futáson nem ír. */
+  async touchRun(id: string): Promise<void> {
+    await this.database.invoiceCollectionRun.updateMany({
+      where: { id, status: "RUNNING" },
+      data: { updatedAt: new Date() },
+    });
   }
 
   /**
