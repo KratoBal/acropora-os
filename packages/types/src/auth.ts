@@ -143,6 +143,10 @@ export const PERMISSIONS = {
   SERVICE_MANAGE: "service.manage",
   AQUARIUMS_VIEW: "aquariums.view",
   AQUARIUMS_MANAGE: "aquariums.manage",
+  /// AZ ELHULLÁSI NAPLÓ (kártya 115c9740; acrobot döntése 2026-10-06, 27141):
+  /// OWNER, ADMIN, MANAGER, SERVICE mindkettőt, VIEWER a view-t, partner semmit.
+  MORTALITY_VIEW: "mortality.view",
+  MORTALITY_MANAGE: "mortality.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
   CONTENT_VIEW: "content.view",
@@ -299,6 +303,7 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.FINANCE_VIEW,
   PERMISSIONS.SERVICE_VIEW,
   PERMISSIONS.AQUARIUMS_VIEW,
+  PERMISSIONS.MORTALITY_VIEW,
   PERMISSIONS.ICP_VIEW,
   PERMISSIONS.CONTENT_VIEW,
 ];
@@ -398,6 +403,9 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
       PERMISSIONS.SERVICE_MANAGE,
       PERMISSIONS.AQUARIUMS_VIEW,
       PERMISSIONS.AQUARIUMS_MANAGE,
+      // az elhullási napló (kártya 115c9740): a bolt élőállatait ők is gondozzák
+      PERMISSIONS.MORTALITY_VIEW,
+      PERMISSIONS.MORTALITY_MANAGE,
     ],
     VIEWER: [...VIEW_PERMISSIONS, PERMISSIONS.MESSAGES_USE],
 

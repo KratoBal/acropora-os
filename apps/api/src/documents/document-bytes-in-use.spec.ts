@@ -74,6 +74,8 @@ describe("a keret minden kötetet foglaló táblát számol", () => {
         "MaintenanceOrderDocument",
         // az Üzenetek csatolmánya (2. fázis): ugyanabból a keretből fogy
         "MessageAttachment",
+        // az elhullási napló fényképei (kártya 115c9740)
+        "MortalityRecordDocument",
         "ServiceJobDocument",
         "WorksheetDocument",
       ],

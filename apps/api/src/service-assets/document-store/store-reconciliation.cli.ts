@@ -227,6 +227,21 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
           ]
         : []),
     ]),
+  /** Az elhullási napló fényképei (kártya 115c9740), a hibajegy mintájára. */
+  mortality: async () =>
+    (
+      await prisma.mortalityRecordDocument.findMany({
+        where: { storageKey: { not: null } },
+        select: { mortalityRecordId: true, id: true, sizeBytes: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "mortality" as const,
+        ownerId: sor.mortalityRecordId,
+        documentId: sor.id,
+      },
+      sizeBytes: sor.sizeBytes,
+    })),
 };
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {
