@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { isNavigationEntryVisible, type Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,6 +26,21 @@ vi.mock("@/lib/api/messages", () => ({
     unread: vi.fn().mockResolvedValue({ total: 0, conversations: 0 }),
   },
   MESSAGE_STREAM_URL: "/api/messages/stream",
+}));
+// a „Feladataim” számlálója (dashboardApi.summary): a teszt ne menjen hálózatra
+// (barracuda, 2026-10-06: e nélkül minden renderelés a localhost:3000-et hívta,
+// a CI naplójában ECONNREFUSED és „socket hang up” sorokkal)
+const dashboard = vi.hoisted(() => ({
+  summary: vi.fn().mockResolvedValue({ myTaskCount: 0 }),
+}));
+vi.mock("@/lib/api/dashboard", () => ({ dashboardApi: dashboard }));
+// Sutyerák konfigurációja (assistant/sutyerak-widget.tsx): ugyanaz a hálózati
+// hívás minden renderelésnél; kikapcsolt asszisztenssel a widget nem rajzol
+vi.mock("@/lib/api/assistant", () => ({
+  assistantApi: {
+    config: vi.fn().mockResolvedValue({ enabled: false }),
+    handoffReplies: vi.fn().mockResolvedValue([]),
+  },
 }));
 // the menu numbers (card 4a6813db): no network in a test
 const counters = vi.hoisted(() => ({
@@ -125,6 +146,20 @@ describe("AppShell értesítési jelzés", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
 
     expect(screen.queryByRole("button", { name: "Értesítések" })).toBeNull();
+  });
+});
+
+describe("AppShell Feladataim-számláló", () => {
+  /**
+   * A HÍVÁS A DUBLŐRE MEGY, NEM A HÁLÓZATRA. Ha ez a mock kimarad, a teszt
+   * zöld marad, csak a napló telik meg ECONNREFUSED-sorokkal; ezért itt áll,
+   * hogy a hívás ténylegesen a dublőn ment át.
+   */
+  it("a dashboard összesítőjét a dublőn kéri le", async () => {
+    auth.session = ownerSession;
+    dashboard.summary.mockClear();
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await waitFor(() => expect(dashboard.summary).toHaveBeenCalled());
   });
 });
 

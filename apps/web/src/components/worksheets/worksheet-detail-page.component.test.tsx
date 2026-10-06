@@ -75,6 +75,22 @@ vi.mock("@/components/navigation-history", () => ({
     label: "Vissza a listához",
   }),
 }));
+// az anyagigény-panel listája (worksheet-material-requests.tsx): a teszt ne
+// menjen hálózatra (barracuda, 2026-10-06: ECONNREFUSED a CI naplójában)
+vi.mock("@/lib/api/material-requests", () => ({
+  materialRequestsApi: {
+    listForWorksheet: vi.fn().mockResolvedValue({ items: [] }),
+  },
+}));
+// a munkalap eszköz-választója (service-jobs/job-asset-picker.tsx) listát kér
+vi.mock("@/lib/api/assets", () => ({
+  assetsApi: {
+    list: vi.fn().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 1 },
+    }),
+  },
+}));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: api }));
 
 const session: Session = {
