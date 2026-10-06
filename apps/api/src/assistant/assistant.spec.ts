@@ -217,6 +217,28 @@ describe("Sutyerák gateway HTTP calibration", () => {
     }
     assert.equal(gatewayCalls, 0);
   });
+  it("'*' opens it to every employee, and still not to a partner or an assistant token", async () => {
+    process.env.SUTYERAK_PILOT_USER_IDS = "*";
+    const response = await ask();
+    assert.equal(response.status, 200);
+    await response.text();
+    const config = await fetch(`${base}/assistant/config`, {
+      headers: { Authorization: "Bearer user" },
+    });
+    assert.deepEqual(await config.json(), { enabled: true });
+    assert.equal(gatewayCalls, 1);
+    assert.equal((await ask("partner")).status, 403);
+    assert.equal((await ask(token)).status, 403);
+    assert.equal(gatewayCalls, 1);
+  });
+  it("a '*' inside a list counts as everyone too; a mere prefix of an id does not", async () => {
+    process.env.SUTYERAK_PILOT_USER_IDS = "other-user, *";
+    const open = await ask();
+    assert.equal(open.status, 200);
+    await open.text();
+    process.env.SUTYERAK_PILOT_USER_IDS = `${user.id.slice(0, -1)}`;
+    assert.equal((await ask()).status, 403);
+  });
   it("five consecutive questions issue at most one live assistant token", async () => {
     const before = issued;
     for (let i = 0; i < 5; i++) {
