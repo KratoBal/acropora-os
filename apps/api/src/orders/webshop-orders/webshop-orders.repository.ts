@@ -258,7 +258,11 @@ export class WebshopOrdersRepository {
   async recordOrderEdit(input: {
     userId: string;
     orderId: string;
-    action: "pickup-point-changed" | "notes-edited" | "split";
+    action:
+      | "pickup-point-changed"
+      | "notes-edited"
+      | "split"
+      | "shipping-method-changed";
     before: unknown;
   }): Promise<void> {
     await prisma.auditLog.create({

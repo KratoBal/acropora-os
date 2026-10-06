@@ -10,7 +10,10 @@ import type { Session, WebshopOrderDetail } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WebshopOrderDetailPage } from "./webshop-order-detail-page";
+import {
+  WebshopOrderDetailPage,
+  methodChangeText,
+} from "./webshop-order-detail-page";
 
 /*
   A WEBSHOP RENDELÉS ADATLAPJA, OLVASVA. MI PIROSÍT: a csomag lépés nem mondja,
@@ -30,6 +33,9 @@ const api = vi.hoisted(() => ({
   saveInternalNote: vi.fn(),
   pickupPoints: vi.fn(),
   changePoint: vi.fn(),
+  shippingOptions: vi.fn(),
+  shippingOptionPoints: vi.fn(),
+  changeShippingMethod: vi.fn(),
   saveNotes: vi.fn(),
   split: vi.fn(),
   replacementVariants: vi.fn(),
@@ -168,6 +174,7 @@ const detail: WebshopOrderDetail = {
     carrier: { allowed: true, reason: null },
   },
   pointEdit: { allowed: true, reason: null },
+  methodEdit: { allowed: true, reason: null },
   addressEdit: {
     billing: { allowed: true, reason: null },
     shipping: { allowed: true, reason: null },
@@ -232,6 +239,9 @@ beforeEach(() => {
   api.updateAddress.mockReset();
   api.saveInternalNote.mockReset();
   api.split.mockReset();
+  api.shippingOptions.mockReset();
+  api.shippingOptionPoints.mockReset();
+  api.changeShippingMethod.mockReset();
   api.replacementVariants.mockReset();
   api.issueInvoice.mockReset();
   api.issueDeliveryNote.mockReset();
@@ -1478,6 +1488,167 @@ describe("WebshopOrderDetailPage", () => {
     a note is sent under the other note's name, or the 50-character courier
     note can be saved longer.
   */
+  /*
+    THE SHIPPING METHOD CHANGE (card 0a14f739 C/2). WHAT TURNS RED: the
+    methods do not show their new fee; a point method can be saved without a
+    point, or its points are asked from the order's own method; the method
+    and the point do not go together; the difference and the link's fate do
+    not show; a held change still opens; a store pickup order gets a pencil.
+  */
+  it("a point method searches its own points, and the method and point go together", async () => {
+    api.detail.mockResolvedValue(detail);
+    api.shippingOptions.mockResolvedValue({
+      currentOptionId: "so_fox",
+      options: [
+        {
+          id: "so_fox",
+          name: "Foxpost automata",
+          amount: 990,
+          carrier: "FOXPOST",
+          needsPoint: true,
+          heavy: false,
+        },
+        {
+          id: "so_gls_point",
+          name: "GLS csomagpont",
+          amount: 1490,
+          carrier: "GLS",
+          needsPoint: true,
+          heavy: false,
+        },
+      ],
+    });
+    api.shippingOptionPoints.mockResolvedValue({
+      carrier: "GLS",
+      currentPointId: null,
+      count: 1,
+      points: [
+        {
+          id: "S1",
+          name: "GLS Mammut",
+          address: "1024 Budapest, Lövőház u. 2-6.",
+          kind: "parcel-shop",
+          variant: null,
+          outOfOrder: false,
+        },
+      ],
+    });
+    api.changeShippingMethod.mockResolvedValue({
+      order: detail,
+      change: {
+        changed: true,
+        previousTotal: 20840,
+        total: 21340,
+        difference: 500,
+        link: { sent: true },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Szállítási mód cseréje" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Szállítási mód cseréje",
+    });
+    const save = within(dialog).getByRole("button", {
+      name: "Mentés",
+    }) as HTMLButtonElement;
+    fireEvent.click(
+      await within(dialog).findByRole("radio", { name: /GLS csomagpont/ }),
+    );
+    expect(within(dialog).getByText(/1490 Ft|1 490 Ft/)).toBeTruthy();
+    expect(within(dialog).getByText(/500 Ft összeggel nő/)).toBeTruthy();
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(dialog).getByLabelText("Csomagpont keresése"), {
+      target: { value: "mammut" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keresés" }));
+    await waitFor(() =>
+      expect(api.shippingOptionPoints).toHaveBeenCalledWith(
+        "token",
+        "order_38",
+        "so_gls_point",
+        "mammut",
+      ),
+    );
+    expect(api.pickupPoints).not.toHaveBeenCalled();
+    fireEvent.click(
+      await within(dialog).findByRole("radio", { name: /GLS Mammut/ }),
+    );
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.changeShippingMethod).toHaveBeenCalledWith(
+        "token",
+        "order_38",
+        { optionId: "so_gls_point", pointId: "S1" },
+      ),
+    );
+    expect((await screen.findByRole("status")).textContent).toMatch(
+      /500 Ft összeggel nőtt. A vevő fizetési linket kapott/,
+    );
+  });
+
+  it("a held change names why; a store pickup order has no method pencil", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      methodEdit: {
+        allowed: false,
+        reason:
+          "A csomag már fel van adva: a mód csak a csomag lemondása után cserélhető.",
+      },
+    });
+    const first = render(
+      createElement(WebshopOrderDetailPage, { id: "order_38" }),
+    );
+    const pencil = (await screen.findByRole("button", {
+      name: "Szállítási mód cseréje",
+    })) as HTMLButtonElement;
+    expect(pencil.disabled).toBe(true);
+    expect(pencil.title).toMatch(/csomag lemondása után/);
+    first.unmount();
+
+    api.detail.mockResolvedValue({
+      ...detail,
+      shipping: { ...detail.shipping, storePickup: true, pickupPoint: null },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    await screen.findByRole("region", { name: "Tételek" });
+    expect(
+      screen.queryByRole("button", { name: "Szállítási mód cseréje" }),
+    ).toBeNull();
+  });
+
+  it("the method change sentence: fall, rise without a card, and a link that did not go", () => {
+    expect(
+      methodChangeText({
+        changed: true,
+        previousTotal: 2000,
+        total: 1500,
+        difference: -500,
+        link: null,
+      }),
+    ).toMatch(/500 Ft összeggel csökkent. Új fizetés nem kell/);
+    expect(
+      methodChangeText({
+        changed: true,
+        previousTotal: 1500,
+        total: 2000,
+        difference: 500,
+        link: { sent: false, reason: "failed" },
+      }),
+    ).toMatch(/nem ment ki: a Fizetési link küldése gombbal/);
+    expect(
+      methodChangeText({
+        changed: false,
+        previousTotal: 1500,
+        total: 1500,
+        difference: 0,
+        link: null,
+      }),
+    ).toBe("A szállítási mód nem változott.");
+  });
+
   it("the point pencil searches the order's own list and sends the chosen point", async () => {
     api.detail.mockResolvedValue(detail);
     api.pickupPoints.mockResolvedValue({
