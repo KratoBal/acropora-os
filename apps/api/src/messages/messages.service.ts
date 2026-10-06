@@ -256,6 +256,72 @@ export class MessagesService {
   }
 
   /**
+   * ACROBOT VISSZAÍRT VÁLASZA (4. pont B, 5. tétel). Beszélgetésből jött
+   * kérdésnél oda, ahol Sutyerák tag (különben 403: más beszélgetésbe a token
+   * sem írhat); a widgetből jöttnél a dolgozó és Sutyerák kettes
+   * beszélgetésébe, ami ha nincs, most jön létre, hogy push és jelvény is
+   * menjen. Csak belső, aktív dolgozónak.
+   */
+  async handoffReply(input: {
+    conversationId?: string;
+    userId?: string;
+    text: string;
+  }): Promise<{ conversationId: string; messageId: string }> {
+    if (!input.conversationId === !input.userId)
+      throw new BadRequestException(
+        "Pontosan az egyik kell: a beszélgetés (conversationId) vagy a dolgozó (userId).",
+      );
+    let conversationId: string;
+    if (input.conversationId) {
+      const row = await this.repository.conversation(input.conversationId);
+      if (!row) throw notFound();
+      if (!row.members.some((m) => m.userId === SUTYERAK_USER_ID))
+        throw new ForbiddenException(
+          "Ebben a beszélgetésben Sutyerák nem tag, ide nem írhat.",
+        );
+      conversationId = row.id;
+    } else {
+      const [person] = await this.repository.users([input.userId!]);
+      if (!person) throw notFound();
+      if (!mayJoinInternal(person))
+        throw new ForbiddenException(
+          "Sutyerák csak belső, aktív dolgozónak írhat.",
+        );
+      const { id, created } = await this.repository.createConversation({
+        type: "DIRECT",
+        title: null,
+        description: null,
+        createdByUserId: person.id,
+        directKey: directKeyOf(person.id, SUTYERAK_USER_ID),
+        memberIds: [person.id, SUTYERAK_USER_ID],
+      });
+      if (created) {
+        await this.repository.audit({
+          userId: person.id,
+          action: "conversation.created",
+          conversationId: id,
+          metadata: {
+            type: "DIRECT",
+            memberIds: [person.id, SUTYERAK_USER_ID],
+            by: "sutyerak-handoff",
+          },
+        });
+        this.bus.publish([person.id, SUTYERAK_USER_ID], {
+          type: "conversation.created",
+          conversationId: id,
+        });
+      }
+      conversationId = id;
+    }
+    const message = await this.postAsAssistant(
+      conversationId,
+      input.text,
+      "ACROBOT",
+    );
+    return { conversationId, messageId: message.id };
+  }
+
+  /**
    * SUTYERÁK ÜZENETE (4. pont B): a válasz, a hiba-mondat vagy acrobot
    * visszaírt válasza, Sutyerák nevében. Ugyanaz a közzététel, mint egy
    * dolgozó üzeneténél (folyam, push, jelvény).

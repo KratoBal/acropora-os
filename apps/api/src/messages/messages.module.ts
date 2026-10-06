@@ -3,6 +3,9 @@ import { Module } from "@nestjs/common";
 import { AssistantModule } from "../assistant/assistant.module.js";
 import { NotificationsModule } from "../notifications/notifications.module.js";
 import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
+import { ServiceTokenRepository } from "../tasks/service-token.repository.js";
+import { SutyerakHandoffController } from "./handoff/sutyerak-handoff.controller.js";
+import { SutyerakHandoffGuard } from "./handoff/sutyerak-handoff.guard.js";
 import { AssistantThinkingState } from "./assistant-thinking.state.js";
 import { MessageAttachmentCleanup } from "./message-attachment-cleanup.js";
 
@@ -21,7 +24,7 @@ import { MessagesService } from "./messages.service.js";
  */
 @Module({
   imports: [NotificationsModule, AssistantModule],
-  controllers: [MessagesController],
+  controllers: [MessagesController, SutyerakHandoffController],
   providers: [
     MessagesRepository,
     MessagesService,
@@ -32,6 +35,9 @@ import { MessagesService } from "./messages.service.js";
     // 4. pont B: Sutyerák a beszélgetésekben
     AssistantThinkingState,
     MessagesAssistantService,
+    // acrobot visszaírása, a saját szolgáltatás-tokenjével
+    SutyerakHandoffGuard,
+    ServiceTokenRepository,
   ],
 })
 export class MessagesModule {}

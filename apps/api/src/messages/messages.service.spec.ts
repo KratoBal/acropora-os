@@ -396,6 +396,93 @@ describe("Sutyerák in the messages", () => {
   });
 });
 
+/*
+  ACROBOT VISSZAÍRÁSA (4. pont B, 5. tétel). MI PIROSÍT: olyan beszélgetésbe is
+  ír, ahol Sutyerák nem tag; a widgetből jött kérdés válasza nem a dolgozó és
+  Sutyerák kettes beszélgetésébe megy, vagy minden válasz újat nyit; partnernek
+  vagy inaktív dolgozónak is ír; a válasz nem jelöli, hogy acrobot írta.
+*/
+describe("acrobot's handoff reply", () => {
+  const sutyerak = person(SUTYERAK_USER_ID, {
+    role: "ASSISTANT" as UserRole,
+    displayName: "Sutyerák",
+  });
+  const users = [
+    person("a"),
+    person("b"),
+    person("p", { role: "PARTNER_SERVICE" as UserRole, customerId: "cu-1" }),
+    person("x", { isActive: false }),
+    sutyerak,
+  ];
+
+  it("writes into the conversation it was asked in, marked as acrobot's", async () => {
+    const { service, repo } = setup(users, () => true);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: [SUTYERAK_USER_ID],
+    });
+    const result = await service.handoffReply({
+      conversationId: id,
+      text: "A raktárban 3 db van.",
+    });
+    assert.equal(result.conversationId, id);
+    const posted = repo.messages.at(-1)!;
+    assert.deepEqual(
+      [posted.senderUserId, posted.text, posted.assistantSource],
+      [SUTYERAK_USER_ID, "A raktárban 3 db van.", "ACROBOT"],
+    );
+  });
+
+  it("a conversation without Sutyerák is refused (403)", async () => {
+    const { service } = setup(users, () => true);
+    const { id } = await service.createConversation(viewer("a"), {
+      memberIds: ["b"],
+    });
+    assert.equal(
+      await status(service.handoffReply({ conversationId: id, text: "x" })),
+      403,
+    );
+  });
+
+  it("a widget question's answer goes to the worker's direct conversation with Sutyerák, made once", async () => {
+    const { service, repo } = setup(users, () => true);
+    const first = await service.handoffReply({ userId: "a", text: "Első." });
+    const second = await service.handoffReply({
+      userId: "a",
+      text: "Második.",
+    });
+    assert.equal(first.conversationId, second.conversationId);
+    assert.equal(repo.conversations.size, 1);
+    const conversation = repo.conversations.get(first.conversationId)!;
+    assert.deepEqual(
+      [conversation.type, [...conversation.members.keys()].sort()],
+      ["DIRECT", ["a", SUTYERAK_USER_ID].sort()],
+    );
+  });
+
+  it("not to a partner, an inactive or an unknown user; and exactly one target", async () => {
+    const { service } = setup(users, () => true);
+    assert.equal(
+      await status(service.handoffReply({ userId: "p", text: "x" })),
+      403,
+    );
+    assert.equal(
+      await status(service.handoffReply({ userId: "x", text: "x" })),
+      403,
+    );
+    assert.equal(
+      await status(service.handoffReply({ userId: "nincs", text: "x" })),
+      404,
+    );
+    assert.equal(await status(service.handoffReply({ text: "x" })), 400);
+    assert.equal(
+      await status(
+        service.handoffReply({ userId: "a", conversationId: "c1", text: "x" }),
+      ),
+      400,
+    );
+  });
+});
+
 describe("conversations", () => {
   const users = [person("a"), person("b"), person("c")];
 
