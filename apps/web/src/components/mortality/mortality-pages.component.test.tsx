@@ -144,6 +144,61 @@ describe("lista", () => {
     expect(query.get("from")).toBe(query.get("to"));
   });
 
+  it("a beszállító-szűrő a választott beszállítót küldi, a nevét mutatja", async () => {
+    navigation.search = new URLSearchParams(
+      "sourceType=SUPPLIER&supplierId=s1&supplierName=De+Jong+Marinelife",
+    );
+    render(<MortalityListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const query = api.list.mock.calls[0]![1] as URLSearchParams;
+    expect(query.get("sourceType")).toBe("SUPPLIER");
+    expect(query.get("supplierId")).toBe("s1");
+    expect(screen.getByRole("button", { name: "Csere" })).toBeTruthy();
+  });
+
+  it("más forrás mellett a beszállító nem megy el, és a választó sincs ott", async () => {
+    navigation.search = new URLSearchParams("sourceType=TRADE&supplierId=s1");
+    render(<MortalityListPage />);
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const query = api.list.mock.calls[0]![1] as URLSearchParams;
+    expect(query.get("sourceType")).toBe("TRADE");
+    expect(query.has("supplierId")).toBe(false);
+    expect(screen.queryByRole("textbox", { name: "Beszállító" })).toBeNull();
+  });
+
+  it("a beszállító kiválasztása az URL-be írja az azonosítót és a nevet", async () => {
+    navigation.search = new URLSearchParams("sourceType=SUPPLIER");
+    api.supplierOptions.mockResolvedValue([
+      { id: "s1", name: "De Jong Marinelife" },
+    ]);
+    render(<MortalityListPage />);
+    fireEvent.focus(screen.getByRole("textbox", { name: "Beszállító" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "De Jong Marinelife" }),
+    );
+    const url = navigation.replace.mock.calls.at(-1)![0] as string;
+    const written = new URLSearchParams(url.split("?")[1]);
+    expect(written.get("supplierId")).toBe("s1");
+    expect(written.get("supplierName")).toBe("De Jong Marinelife");
+    expect(written.get("sourceType")).toBe("SUPPLIER");
+  });
+
+  it("a forrás váltása törli a választott beszállítót", async () => {
+    navigation.search = new URLSearchParams(
+      "sourceType=SUPPLIER&supplierId=s1&supplierName=X&page=3",
+    );
+    render(<MortalityListPage />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Forrás" }), {
+      target: { value: "TRADE" },
+    });
+    const url = navigation.replace.mock.calls.at(-1)![0] as string;
+    const written = new URLSearchParams(url.split("?")[1]);
+    expect(written.get("sourceType")).toBe("TRADE");
+    expect(written.has("supplierId")).toBe(false);
+    expect(written.has("supplierName")).toBe(false);
+    expect(written.has("page")).toBe(false);
+  });
+
   it("a VIEWER lát, de nem rögzíthet", async () => {
     auth.role = "VIEWER";
     render(<MortalityListPage />);
