@@ -693,6 +693,8 @@ export interface MedusaOrderDetailRow {
 export interface MedusaShippingNotice {
   carrier: "foxpost" | "gls";
   tracking_number: string;
+  /** A szállító nyilvános követő oldala; a webshop levele gombot tesz rá (commerce #477). */
+  tracking_url?: string;
   /** Csak napló a webshopban: az OS csomag-sorának azonosítója. */
   parcel_id?: string;
 }

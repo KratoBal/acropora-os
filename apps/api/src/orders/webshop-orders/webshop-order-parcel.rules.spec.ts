@@ -212,6 +212,7 @@ describe("the parcel on the page", () => {
         size: "m",
         codHuf: 20840,
         createdAt: "2026-10-05T12:00:00.000Z",
+        trackingUrl: null,
       },
     );
   });

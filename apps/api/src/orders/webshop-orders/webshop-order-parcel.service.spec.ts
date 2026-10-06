@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import type { AuthenticatedUser, WebshopOrderDetail } from "@acropora/types";
 
-import { CarrierError } from "../../integrations/carriers/carrier.types.js";
+import {
+  CarrierError,
+  type TrackingEvent,
+} from "../../integrations/carriers/carrier.types.js";
 import type {
   CreateWebshopParcelInput,
   WebshopParcelService,
@@ -66,6 +69,8 @@ function setup(
     releaseError?: CarrierError;
     orderPayment?: MedusaOrderPayment | null;
     order?: MedusaOrderDetailRow;
+    tracking?: TrackingEvent[];
+    trackingError?: CarrierError;
   } = {},
 ) {
   const calls: string[] = [];
@@ -111,6 +116,10 @@ function setup(
       } satisfies WebshopParcelView;
     },
     labelPdf: async () => Buffer.from("%PDF"),
+    tracking: async () => {
+      if (over.trackingError) throw over.trackingError;
+      return over.tracking ?? [];
+    },
     releaseUnconfirmed: async (id: string) => {
       calls.push(`release ${id}`);
       if (over.releaseError) throw over.releaseError;
@@ -152,6 +161,65 @@ describe("WebshopOrderParcelService", () => {
       },
     ]);
     assert.deepEqual(result.notice, { sent: true });
+  });
+
+  /*
+    THE TRACKING ADDRESS GOES TO THE CUSTOMER'S MAIL ONLY WHEN CONFIGURED
+    (acrobot 26620): never guessed.
+  */
+  it("a configured tracking address goes with the shipped mail", async () => {
+    const before = process.env.FOXPOST_TRACKING_URL;
+    process.env.FOXPOST_TRACKING_URL =
+      "https://track.example/?code={parcelNumber}";
+    try {
+      const { notices, service } = setup({ invoice: ISSUED });
+      await service.create("order_38", "m", USER);
+      assert.equal(
+        notices[0]?.tracking_url,
+        "https://track.example/?code=CLFOX0000012345",
+      );
+    } finally {
+      if (before === undefined) delete process.env.FOXPOST_TRACKING_URL;
+      else process.env.FOXPOST_TRACKING_URL = before;
+    }
+  });
+
+  it("tracking: the carrier's states newest first; its failure is the colleague's sentence", async () => {
+    const { service } = setup({
+      tracking: [
+        {
+          status: "CREATE",
+          statusText: "Létrehozva",
+          at: new Date("2026-10-05T10:00:00.000Z"),
+        },
+        {
+          status: "HDINTRANSIT",
+          statusText: "Úton",
+          at: new Date("2026-10-06T08:00:00.000Z"),
+        },
+        { status: "X", statusText: "Időpont nélkül", at: null },
+      ],
+    });
+    const answer = await service.tracking(
+      "order_38",
+      new Date("2026-10-06T09:00:00.000Z"),
+    );
+    assert.deepEqual(answer, {
+      events: [
+        { status: "HDINTRANSIT", text: "Úton", at: "2026-10-06T08:00:00.000Z" },
+        {
+          status: "CREATE",
+          text: "Létrehozva",
+          at: "2026-10-05T10:00:00.000Z",
+        },
+        { status: "X", text: "Időpont nélkül", at: null },
+      ],
+      checkedAt: "2026-10-06T09:00:00.000Z",
+    });
+    const down = setup({
+      trackingError: new CarrierError("SERVICE_UNAVAILABLE", "gls"),
+    });
+    await assert.rejects(down.service.tracking("order_38"), { status: 503 });
   });
 
   it("cash on delivery: the invoice number goes as the COD reference (Balázs, emlék 2109)", async () => {

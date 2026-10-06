@@ -19,6 +19,7 @@ export type IconName =
   | "dashboard"
   | "download"
   | "droplet"
+  | "external-link"
   | "file-text"
   | "filter"
   | "finance"
@@ -34,6 +35,7 @@ export type IconName =
   | "pencil"
   | "phone"
   | "plus"
+  | "refresh"
   | "search"
   | "send"
   | "service"
@@ -268,6 +270,21 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
           <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
           <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
           <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
+        </>
+      )}
+      {name === "external-link" && (
+        <>
+          <path d="M14 4h6v6" />
+          <path d="M20 4 10 14" />
+          <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+        </>
+      )}
+      {name === "refresh" && (
+        <>
+          <path d="M20 11a8 8 0 0 0-14.6-4.5L4 8" />
+          <path d="M4 4v4h4" />
+          <path d="M4 13a8 8 0 0 0 14.6 4.5L20 16" />
+          <path d="M20 20v-4h-4" />
         </>
       )}
       {name === "download" && (

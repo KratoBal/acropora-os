@@ -5,6 +5,7 @@ import {
   Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { trackingUrlFor } from "../../integrations/carriers/tracking-url.js";
 import { notesOf } from "./webshop-order-address.rules.js";
 import {
   WEBSHOP_ORDER_STATUSES,
@@ -14,6 +15,7 @@ import {
   type WebshopOrderStatus,
   type WebshopParcelSize,
   type WebshopShippingNoticeOutcome,
+  type WebshopParcelTracking,
 } from "@acropora/types";
 
 import {
@@ -153,9 +155,11 @@ export class WebshopOrderParcelService {
       notice = { sent: false, reason: "stub" };
     } else {
       try {
+        const trackingUrl = trackingUrlFor(input.carrier, parcel.parcelNumber);
         notice = await this.orders.sendShippingNotice(order.id, {
           carrier: input.carrier,
           tracking_number: parcel.parcelNumber,
+          ...(trackingUrl ? { tracking_url: trackingUrl } : {}),
           parcel_id: parcel.id,
         });
       } catch (error) {
@@ -172,6 +176,31 @@ export class WebshopOrderParcelService {
   /** A címke PDF-je; a meglévő csomagra, újat sosem hoz létre. */
   label(orderId: string): Promise<Buffer> {
     return this.carrier(() => this.parcels.labelPdf(orderId));
+  }
+
+  /**
+   * A CSOMAG ÁLLAPOTA A SZÁLLÍTÓNÁL (a prompt 7. pontja): csak olvasás. A
+   * teszten az álszolgáltató válaszol; a szállító hibája a kollegának szóló
+   * mondattal megy ki, mint a címkénél.
+   */
+  async tracking(
+    orderId: string,
+    now = new Date(),
+  ): Promise<WebshopParcelTracking> {
+    const events = await this.carrier(() => this.parcels.tracking(orderId));
+    return {
+      events: events
+        .map((event) => ({
+          status: event.status,
+          text: event.statusText,
+          at:
+            event.at && !Number.isNaN(event.at.getTime())
+              ? event.at.toISOString()
+              : null,
+        }))
+        .sort((a, b) => (b.at ?? "").localeCompare(a.at ?? "")),
+      checkedAt: now.toISOString(),
+    };
   }
 
   /**
