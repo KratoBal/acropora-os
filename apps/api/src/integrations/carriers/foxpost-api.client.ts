@@ -74,6 +74,25 @@ export function foxpostFieldErrorCode(
   return "REJECTED";
 }
 
+/**
+ * A LETREHOZASI VALASZ KULCSNEVEI, ERTEK NELKUL: a valasze es az elso
+ * csomag-eleme. Ha a `parcels` nem tomb vagy ures, azt mondja ki, nem talal ki
+ * kulcsot.
+ */
+export function foxpostAnswerKeys(body: unknown): string {
+  const names = (value: unknown) =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? Object.keys(value).join(", ") || "(none)"
+      : `(${value === null ? "null" : Array.isArray(value) ? "array" : typeof value})`;
+  const parcels = (body as { parcels?: unknown } | null)?.parcels;
+  const parcel = Array.isArray(parcels)
+    ? parcels.length
+      ? names(parcels[0])
+      : "(empty list)"
+    : `(${parcels === undefined ? "missing" : Array.isArray(parcels) ? "array" : typeof parcels})`;
+  return `answer keys: ${names(body)}; parcel keys: ${parcel}`;
+}
+
 export class FoxpostApiClient implements CarrierClient {
   readonly carrier = "foxpost" as const;
 
@@ -191,14 +210,20 @@ export class FoxpostApiClient implements CarrierClient {
     }
     const barcode = parcel?.barcode;
     if (typeof barcode !== "string" || !barcode.trim()) {
-      // a kulcsnevek mennek a naplora, ertek (szemelyes adat) nem
+      /*
+        A HIBA MAGA HORDOZZA A VALASZ KULCSNEVEIT (kartya 6077cda9): az eles
+        valaszban nem volt `barcode`, es a kulcs nevet csak a valasz mondhatja
+        meg -- a leiras a csomag-elemet uresen adja. Kulcsnev megy, ertek
+        (szemelyes adat, csomagszam) nem; a hivo a reszletet naplozza.
+      */
+      const keys = foxpostAnswerKeys(body);
       this.logger.warn(
-        `Foxpost createParcel: no barcode in the answer; keys: ${Object.keys(parcel ?? body ?? {}).join(", ")}`,
+        `Foxpost createParcel: no barcode in the answer; ${keys}`,
       );
       throw new CarrierError(
         "UNEXPECTED_RESPONSE",
         "foxpost",
-        "no barcode in the create answer",
+        `no barcode in the create answer; ${keys}`,
       );
     }
     return { parcelNumber: barcode.trim() };

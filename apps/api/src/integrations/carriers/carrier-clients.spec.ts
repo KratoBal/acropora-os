@@ -7,6 +7,7 @@ import { carrierClientFor } from "./carrier-client.factory.js";
 import {
   FOXPOST_API_URL,
   FoxpostApiClient,
+  foxpostAnswerKeys,
   type FoxpostApiConfig,
 } from "./foxpost-api.client.js";
 import {
@@ -211,6 +212,31 @@ describe("FoxpostApiClient", () => {
     assert.equal(logged.length, 1);
     assert.match(logged[0]!, /clFox, recipientName/);
     assert.doesNotMatch(logged[0]!, /Teszt Címzett/);
+    // a hiba reszlete maga is hordozza a kulcsneveket (6077cda9), ertek nelkul
+    assert.equal(
+      error.detail,
+      "no barcode in the create answer; answer keys: valid, parcels; parcel keys: clFox, recipientName",
+    );
+    assert.doesNotMatch(error.detail ?? "", /Teszt Címzett|"X"/);
+  });
+
+  it("names what is missing when the answer has no parcel element, never inventing keys", () => {
+    assert.equal(
+      foxpostAnswerKeys({ valid: true, parcels: [] }),
+      "answer keys: valid, parcels; parcel keys: (empty list)",
+    );
+    assert.equal(
+      foxpostAnswerKeys({ valid: true }),
+      "answer keys: valid; parcel keys: (missing)",
+    );
+    assert.equal(
+      foxpostAnswerKeys(null),
+      "answer keys: (null); parcel keys: (missing)",
+    );
+    assert.equal(
+      foxpostAnswerKeys({ parcels: [{}] }),
+      "answer keys: parcels; parcel keys: (none)",
+    );
   });
 
   it("maps a field error on the destination to INVALID_POINT, with a Hungarian message", async () => {
