@@ -513,7 +513,37 @@ export function resolveUnit(units, siteCode) {
     throw new FankPayloadError(
       `A "${siteCode}" helyszin szuloje (${unit.parentId}) nem szerepel az egyseg-listaban.`,
     );
-  return { unit, parentCode: parent.code };
+  return { unit, parentCode: parent.code, topCode: topCodeOf(units, unit) };
+}
+
+/**
+ * A HELYSZIN-FA GYOKERENEK KODJA (pl. BIO) -- a partner-kod elotagja.
+ *
+ * Balazs dontese, 2026-09-24 09:33 es 09:37 UTC (Szerviz es eszkoznyilvantartas
+ * szal, message_id 1552613938510700575 es 1552614888054984736): a partner-kod
+ * elso tagja a LEGFELSO helyszin kodja ("ahogy a BIO alatti eszkozoknel az
+ * elso tag legyen BIO"), es a mar bent levo kodok is megkaptak (176 kod,
+ * BIO- elotaggal, acrobot emleke 1807). Ez a szkript 2026-09-23-an keszult,
+ * a dontes elott: elotag nelkul a kovetkezo helyszin kodjai elternenek a bent
+ * levoktol, a szerver pedig a megadott kodot nem irja felul (#1048), tehat az
+ * elteres csendben bent maradna. ES a beepitett sor szulojet is ezzel a koddal
+ * keresi a meglevo eszkozok kozott, tehat elotag nelkul a szulo sem talalhato.
+ */
+export function topCodeOf(units, unit) {
+  let current = unit;
+  for (let depth = 0; current.parentId; depth++) {
+    const next = units.find((u) => u.id === current.parentId);
+    if (!next)
+      throw new FankPayloadError(
+        `A "${unit.code}" helyszin egyik ose (${current.parentId}) nem szerepel az egyseg-listaban -- a partner-kod elotagja igy nem allithato elo.`,
+      );
+    if (depth > 20)
+      throw new FankPayloadError(
+        `A "${unit.code}" helyszin fajaban kor van (20 szintnel melyebb) -- a szkript nem valaszt.`,
+      );
+    current = next;
+  }
+  return current.code;
 }
 
 /**
@@ -554,7 +584,12 @@ export function resolveUnit(units, siteCode) {
  * nem szarmazhat: a gyermek-szegmens (E) helyen mindig BETUS eszkozkod all
  * (PUM, FIB, SKI...), szam soha, tehat a D-D-E hatar egyertelmu.
  */
-export function buildPartnerInternalCode(siteCode, row) {
+export function buildPartnerInternalCode(siteCode, row, topCode) {
+  const code = partnerCodeWithoutTop(siteCode, row);
+  return topCode ? `${topCode}-${code}` : code;
+}
+
+function partnerCodeWithoutTop(siteCode, row) {
   if (row.builtin) {
     const szuloReszek = row.deviceSerial
       ? row.deviceSerial
@@ -630,7 +665,7 @@ export function parseExistingAssetsMap(json) {
  * hivonak, MELYIK csendes esetrol van szo (kulonbozik a "no-lookup-file"-tol,
  * ami sosem STOP, mert ott a hivo eleve nem kert szulo-feloldast).
  */
-export function resolveParentAssetId(siteCode, row, existingAssets) {
+export function resolveParentAssetId(siteCode, row, existingAssets, topCode) {
   if (!row.builtin) return { attempted: false, reason: "not-builtin" };
   if (!existingAssets) return { attempted: false, reason: "no-lookup-file" };
   if (!row.deviceSerial) return { attempted: false, reason: "empty-d" };
@@ -639,11 +674,15 @@ export function resolveParentAssetId(siteCode, row, existingAssets) {
     .map((s) => s.trim())
     .filter(Boolean);
   if (reszek.length !== 1) return { attempted: false, reason: "composite-d" };
-  const szuloKod = buildPartnerInternalCode(siteCode, {
-    deviceCode: row.deviceCode,
-    deviceSerial: reszek[0],
-    builtin: "",
-  });
+  const szuloKod = buildPartnerInternalCode(
+    siteCode,
+    {
+      deviceCode: row.deviceCode,
+      deviceSerial: reszek[0],
+      builtin: "",
+    },
+    topCode,
+  );
   const parentAssetId = existingAssets.get(szuloKod);
   return { attempted: true, szuloKod, parentAssetId: parentAssetId ?? null };
 }
@@ -728,8 +767,9 @@ export function buildAssetPayload(row, ctx) {
     performanceValue,
     volumeValue,
     parentAssetId,
+    topCode,
   } = ctx;
-  const partnerInternalCode = buildPartnerInternalCode(siteCode, row);
+  const partnerInternalCode = buildPartnerInternalCode(siteCode, row, topCode);
   const payload = {
     // "fank-import", NEM "fank-payload" -- acrobot merese, 2026-09-23 21:45:
     // a ma esti kezi betoltes MAR ezzel az elotaggal es KISBETUS
@@ -780,7 +820,7 @@ export function buildSitePayload({
 }) {
   const { rows } = parseTsv(tsvText);
   const skip = new Set(skipSorok.map(String));
-  const { unit, parentCode } = resolveUnit(units, siteCode);
+  const { unit, parentCode, topCode } = resolveUnit(units, siteCode);
 
   const allSiteRows = rows.map(toTsvRow).filter((row) => row.site === siteCode);
   const siteRows = allSiteRows.filter((row) => !skip.has(row.sor));
@@ -925,7 +965,12 @@ export function buildSitePayload({
         kategoriaHianyok.push({ sor: row.sor, kulcs });
       }
     }
-    const szuloFeloldas = resolveParentAssetId(siteCode, row, existingAssets);
+    const szuloFeloldas = resolveParentAssetId(
+      siteCode,
+      row,
+      existingAssets,
+      topCode,
+    );
     if (szuloFeloldas.attempted && !szuloFeloldas.parentAssetId) {
       parentAssetIdHianyzik.push({
         sor: row.sor,
@@ -963,6 +1008,7 @@ export function buildSitePayload({
     return buildAssetPayload(row, {
       siteCode,
       parentCode,
+      topCode,
       unit,
       partnerId,
       ownerType,
