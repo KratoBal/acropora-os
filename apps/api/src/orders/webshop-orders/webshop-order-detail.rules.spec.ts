@@ -103,6 +103,7 @@ const order = (
           id: "HU12345",
           name: "FOXPOST Allee",
           address: "1117 Budapest, Október huszonharmadika u. 8–10.",
+          variant: "FOXPOST Z-BOX",
         },
       },
     },
@@ -242,6 +243,8 @@ describe("the detail", () => {
         name: "FOXPOST Allee",
         address: "1117 Budapest, Október huszonharmadika u. 8–10.",
         kind: null,
+        // a Foxpost saját címkéje Z-BOX-nál is „FOXPOST”, a vevőnek Packeta (commerce #498)
+        type: "Packeta Z-BOX",
       },
     });
     assert.deepEqual(result.relatedOrder, {
@@ -451,6 +454,24 @@ describe("the GLS point's kind", () => {
         foxpost_pickup_point: { id: "1", name: "Y", type: "parcel-shop" },
       }),
       null,
+    );
+  });
+
+  it("a GLS point and a Foxpost point without a type have no type line", () => {
+    const type = (data: Record<string, unknown>) =>
+      shippingOf([{ name: "x", data }]).pickupPoint?.type;
+    assert.equal(
+      type({
+        gls_pickup_point: { id: "1", name: "Mammut", variant: "FOXPOST Z-BOX" },
+      }),
+      null,
+    );
+    assert.equal(type({ foxpost_pickup_point: { id: "1", name: "Y" } }), null);
+    assert.equal(
+      type({
+        foxpost_pickup_point: { id: "1", name: "Y", variant: "FOXPOST A-BOX" },
+      }),
+      "FOXPOST automata",
     );
   });
 });

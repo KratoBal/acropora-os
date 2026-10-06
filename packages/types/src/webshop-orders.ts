@@ -320,6 +320,12 @@ export interface WebshopOrderDetail {
       address: string | null;
       /** A GLS-pont fajtája; Foxpostnál `null`. */
       kind: WebshopPointKind | null;
+      /**
+       * A Foxpost-pont típusa a vevő szavaival (`foxpostPointType`): „FOXPOST
+       * automata”, „Packeta Z-BOX”, „Packeta Z-Pont / átvevőhely”. GLS-nél és
+       * típus nélkül `null`.
+       */
+      type: string | null;
     } | null;
   };
   lines: WebshopOrderLine[];
@@ -585,6 +591,22 @@ export function glsDeliveryLabel(input: {
   if (!input.storePickup && !input.hasPoint && /^gls/i.test(input.method ?? ""))
     return "GLS házhoz";
   return null;
+}
+
+/**
+ * A FOXPOST-PONT TÍPUSA A VEVŐ SZAVAIVAL, ugyanúgy, ahogy a kirakat írja
+ * (commerce #498, `foxpostPontTipus`; murena 26688). A Foxpost saját címkéi
+ * („FOXPOST A-BOX”, „FOXPOST Z-BOX”, „Packeta Z-Pont”) közül a Z-BOX is
+ * „FOXPOST” előtaggal áll, de az Packeta Z-BOX, nem FOXPOST automata. Egy
+ * ismeretlen típus a Foxpost szavaival marad: abból sem lesz automata.
+ */
+export function foxpostPointType(variant: string | null | undefined): string {
+  const raw = (variant ?? "").trim();
+  const code = raw.toUpperCase().replace(/\s+/g, " ");
+  if (/\bZ-?BOX\b/.test(code)) return "Packeta Z-BOX";
+  if (/\bZ-?PONT\b/.test(code)) return "Packeta Z-Pont / átvevőhely";
+  if (/\bA-?BOX\b/.test(code) || code === "FOXPOST") return "FOXPOST automata";
+  return raw;
 }
 
 /** A szállítónak szóló üzenet felső határa: a Foxpost mezője (commerce #493). */

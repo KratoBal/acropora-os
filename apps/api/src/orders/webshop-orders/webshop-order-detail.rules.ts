@@ -1,6 +1,7 @@
 import {
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  foxpostPointType,
   pointKindOf,
   type WebshopOrderAddress,
   type WebshopOrderDetail,
@@ -131,6 +132,8 @@ type PickupPointData = {
   name?: string;
   address?: string;
   type?: string;
+  /** Foxpost: a pont típusa a Foxpost saját címkéjével („FOXPOST Z-BOX”). */
+  variant?: string;
 } | null;
 
 export function shippingOf(
@@ -160,6 +163,9 @@ export function shippingOf(
           name: point.name,
           address: point.address ?? null,
           kind: gls ? pointKindOf(point.type) : null,
+          type: foxpost?.variant?.trim()
+            ? foxpostPointType(foxpost.variant)
+            : null,
         }
       : null,
   };
