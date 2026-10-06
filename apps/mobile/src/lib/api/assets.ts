@@ -203,6 +203,12 @@ export interface AssetQrCode {
   assetNumber: string;
   value: string;
   svg: string;
+  /**
+   * The symbol as rows of "1" (dark) and "0" (light), no quiet zone. Optional
+   * HERE because an API released before this field does not send it; the
+   * card then says the code cannot be shown instead of drawing nothing.
+   */
+  modules?: string[];
   labelSizeMm: 30;
 }
 

@@ -13,6 +13,19 @@ const MAX_BYTES = 106;
 type Matrix = boolean[][];
 
 export function createAssetQrSvg(value: string): string {
+  return createAssetQr(value).svg;
+}
+
+/**
+ * The symbol twice: as SVG for the web and the label, and as rows of "1"
+ * (dark) and "0" (light) for the phone, which draws it from plain views and
+ * so needs no native SVG module (and no new native build). The rows carry no
+ * quiet zone; whoever draws them adds one.
+ */
+export function createAssetQr(value: string): {
+  svg: string;
+  modules: string[];
+} {
   const bytes = new TextEncoder().encode(value);
   if (bytes.length > MAX_BYTES)
     throw new Error(
@@ -21,7 +34,12 @@ export function createAssetQrSvg(value: string): string {
   const data = encodeData(bytes);
   const codewords = [...data, ...reedSolomonRemainder(data)];
   const modules = makeMatrix(codewords);
-  return toSvg(modules);
+  return {
+    svg: toSvg(modules),
+    modules: modules.map((row) =>
+      row.map((dark) => (dark ? "1" : "0")).join(""),
+    ),
+  };
 }
 
 function encodeData(bytes: Uint8Array): number[] {

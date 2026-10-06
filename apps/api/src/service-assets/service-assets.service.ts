@@ -78,7 +78,7 @@ import {
   DocumentRejected,
   prepareDocument,
 } from "../documents/document-intake.js";
-import { createAssetQrSvg } from "./qr-svg.js";
+import { createAssetQr } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 import {
   thumbnailResponse,
@@ -631,11 +631,13 @@ export class ServiceAssetsService {
       process.env.ASSET_QR_BASE_URL?.trim() || "acropora-os://assets/scan"
     ).replace(/\/+$/, "");
     const value = `${base}/${asset.qrToken}`;
+    const { svg, modules } = createAssetQr(value);
     return {
       assetId: asset.id,
       assetNumber: asset.assetNumber,
       value,
-      svg: createAssetQrSvg(value),
+      svg,
+      modules,
       labelSizeMm: 30,
     };
   }

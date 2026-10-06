@@ -723,5 +723,10 @@ export interface AssetQrCode {
   assetNumber: string;
   value: string;
   svg: string;
+  /**
+   * The same symbol as rows of "1" (dark) and "0" (light), without the quiet
+   * zone: the phone draws it from plain views, with no native SVG module.
+   */
+  modules: string[];
   labelSizeMm: 30;
 }
