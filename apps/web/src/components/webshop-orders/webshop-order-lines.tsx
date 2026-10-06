@@ -645,8 +645,8 @@ export function SplitDialog({
           </p>
           {created.awaitingPayment ? (
             <p className="text-pilot-amber-700">
-              Az új rendelés fizetésre vár: kiszállítás előtt fizetési linket
-              kap.
+              Az új rendelés fizetésre vár. A fizetési linket az adatlapjáról
+              küldd, amikor kiszállítható: a link 6 nap után lejár.
             </p>
           ) : null}
           <Link

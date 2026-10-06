@@ -10,7 +10,6 @@ import {
 } from "../../integrations/medusa/medusa-admin.client.js";
 import { splitIdsOf } from "./webshop-order-detail.rules.js";
 import { splitRequestRefusal } from "./webshop-order-lines.rules.js";
-import type { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import type { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import type { WebshopOrdersService } from "./webshop-orders.service.js";
@@ -105,12 +104,10 @@ function setup(
     splitEdit?: WebshopOrderDetail["splitEdit"];
     fail?: MedusaAdminHttpError;
     paymentState?: string;
-    linkFails?: boolean;
   } = {},
 ) {
   const calls: unknown[] = [];
   const audited: unknown[] = [];
-  const links: unknown[] = [];
   const client = {
     splitOrder: async (...args: unknown[]) => {
       calls.push(args);
@@ -138,24 +135,16 @@ function setup(
   const repository = {
     recordOrderEdit: async (input: unknown) => void audited.push(input),
   } as unknown as WebshopOrdersRepository;
-  const payments = {
-    sendPaymentLink: async (...args: unknown[]) => {
-      links.push(args.slice(0, 2));
-      if (over.linkFails) throw new Error("webshop down");
-      return { order: {}, mail: { sent: true } };
-    },
-  } as unknown as WebshopOrderPaymentService;
   return {
     calls,
     audited,
-    links,
-    service: new WebshopOrderSplitService(orders, repository, payments),
+    service: new WebshopOrderSplitService(orders, repository),
   };
 }
 
 describe("WebshopOrderSplitService.split", () => {
   it("sends the lines, the actor and the request id, audits, and names the new order", async () => {
-    const { calls, audited, links, service } = setup();
+    const { calls, audited, service } = setup();
     const result = await service.split(
       "order_38",
       {
@@ -191,35 +180,17 @@ describe("WebshopOrderSplitService.split", () => {
       displayId: 39,
       total: 9800,
       awaitingPayment: false,
-      link: null,
     });
-    assert.deepEqual(links, []);
   });
 
-  it("a card order's new part gets its payment link on the existing path (Balázs, „2”)", async () => {
-    const { links, service } = setup({ paymentState: "awaiting_payment" });
+  it("a card order's new part is reported as awaiting payment (its link goes later, from its own page)", async () => {
+    const { service } = setup({ paymentState: "awaiting_payment" });
     const result = await service.split(
       "order_38",
       { lines: [{ itemId: "item_salt", quantity: 1 }], requestId: "r" },
       USER,
     );
-    assert.deepEqual(links, [["order_39", true]]);
     assert.equal(result.created.awaitingPayment, true);
-    assert.deepEqual(result.created.link, { sent: true });
-  });
-
-  it("a failed link does not take back the split: it says so", async () => {
-    const { audited, service } = setup({
-      paymentState: "awaiting_payment",
-      linkFails: true,
-    });
-    const result = await service.split(
-      "order_38",
-      { lines: [{ itemId: "item_salt", quantity: 1 }], requestId: "r" },
-      USER,
-    );
-    assert.equal(audited.length, 1);
-    assert.deepEqual(result.created.link, { sent: false, reason: "failed" });
   });
 
   it("a held split or a bad request never reaches the webshop", async () => {

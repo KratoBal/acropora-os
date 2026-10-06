@@ -612,10 +612,11 @@ export interface WebshopOrderSplitResult {
     displayId: number | null;
     /** Az új rendelés összege; az eredetié a friss adatlapon áll. */
     total: number;
-    /** Kártyás zárolásnál az új rendelés fizetési linkre vár. */
+    /**
+     * Kártyás rendelésnél az új rendelés „Fizetésre vár”: a linket a kezelő
+     * küldi az adatlapjáról, amikor kiszállítható (acrobot 26652).
+     */
     awaitingPayment: boolean;
-    /** Ha fizetésre vár: a fizetési link kiment-e a vevőnek; különben `null`. */
-    link: WebshopStatusMailOutcome | null;
   };
 }
 

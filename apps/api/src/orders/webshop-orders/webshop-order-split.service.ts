@@ -1,20 +1,17 @@
 import {
   ConflictException,
   Injectable,
-  Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type {
   AuthenticatedUser,
   WebshopOrderSplitInput,
   WebshopOrderSplitResult,
-  WebshopStatusMailOutcome,
 } from "@acropora/types";
 
 import type { MedusaOrderSplit } from "../../integrations/medusa/medusa-admin.client.js";
 import { refusalOf } from "./webshop-order-edits.service.js";
 import { splitRequestRefusal } from "./webshop-order-lines.rules.js";
-import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 
@@ -24,20 +21,19 @@ import { WebshopOrdersService } from "./webshop-orders.service.js";
  *
  * KÁRTYÁS RENDELÉSNÉL (Balázs döntése, 2026-10-06 05:31 UTC, „2”): az eredeti
  * a zárolásán marad, és a Kiszállításkor a csökkentett összeget vonja le; a
- * levált rendelés fizetetlenül születik, és a saját összegére fizetési linket
- * kap. A link a MEGLÉVŐ fizetési link útján megy, ugyanazon, amin a szállítási
- * mód drágulásának különbözete (C/2): egy mechanizmus, nem kettő. Ha a link
- * nem megy ki, a bontás már megtörtént: nem dobunk, megmondjuk, és a levált
- * rendelés adatlapján ott a gomb.
+ * levált rendelés a saját összegére fizetési linket kap, a MEGLÉVŐ link-úton
+ * (ugyanazon, amin a C/2 különbözete megy: egy mechanizmus).
+ *
+ * A LINK NEM A BONTÁSKOR MEGY (acrobot 26652): a levált rendelés azért vált
+ * le, mert az áruja még nincs meg, és a link a 6. napon lejár, a rendelés
+ * pedig lezárul. A levált rendelés „Fizetésre vár” állapotban születik, és a
+ * kezelő akkor küldi a linket az adatlapjáról, amikor kiszállítható.
  */
 @Injectable()
 export class WebshopOrderSplitService {
-  private readonly logger = new Logger(WebshopOrderSplitService.name);
-
   constructor(
     private readonly orders: WebshopOrdersService,
     private readonly repository: WebshopOrdersRepository,
-    private readonly payments: WebshopOrderPaymentService,
   ) {}
 
   /**
@@ -82,27 +78,13 @@ export class WebshopOrderSplitService {
         total: detail.totals.total,
       },
     });
-    const awaitingPayment = answer.payment_state === "awaiting_payment";
-    // a levált rendelés a saját összegére fizetési linket kap (Balázs, „2”)
-    const link = awaitingPayment
-      ? await this.payments
-          .sendPaymentLink(answer.order_id, true, user, now)
-          .then((result) => result.mail)
-          .catch((error: unknown): WebshopStatusMailOutcome => {
-            this.logger.warn(
-              `payment link of split order ${answer.order_id} not sent: ${error instanceof Error ? error.message : String(error)}`,
-            );
-            return { sent: false, reason: "failed" };
-          })
-      : null;
     return {
       order: await this.orders.detail(id, now),
       created: {
         id: answer.order_id,
         displayId: answer.display_id ?? null,
         total: Number(answer.total),
-        awaitingPayment,
-        link,
+        awaitingPayment: answer.payment_state === "awaiting_payment",
       },
     };
   }

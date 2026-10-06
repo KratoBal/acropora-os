@@ -965,7 +965,7 @@ describe("WebshopOrderDetailPage", () => {
           id: "order_39",
           displayId: 39,
           total: 3000,
-          awaitingPayment: false,
+          awaitingPayment: true,
         },
       });
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
@@ -992,6 +992,9 @@ describe("WebshopOrderDetailPage", () => {
     });
     expect(link.getAttribute("href")).toBe("/webshop/rendelesek/order_39");
     expect(within(dialog).getByText(/#39/)).toBeTruthy();
+    expect(within(dialog).getByText(/fizetésre vár/).textContent).toMatch(
+      /adatlapjáról küldd, amikor kiszállítható/,
+    );
     expect(api.split).toHaveBeenCalledTimes(2);
     const [first, second] = api.split.mock.calls;
     expect(first?.[2]).toEqual({
