@@ -1652,6 +1652,22 @@ function OrderBody({
         </div>
       ) : null}
 
+      {order.split.unfinished ? (
+        <UnfinishedSplitNotice
+          unfinished={order.split.unfinished}
+          allowed={order.splitEdit.allowed}
+          onFinish={(unfinished) =>
+            onSplit({
+              requestId: unfinished.requestId,
+              lines: unfinished.lines.map(({ itemId, quantity }) => ({
+                itemId,
+                quantity,
+              })),
+            })
+          }
+        />
+      ) : null}
+
       {order.split.from || order.split.into.length ? (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-pilot-accent-warm-soft px-5 py-3 text-sm font-medium text-pilot-accent-warm-text">
           {order.split.from ? (
@@ -2230,5 +2246,69 @@ function OrderBody({
         ) : null}
       </Card>
     </>
+  );
+}
+
+/**
+ * FÉLBEMARADT SZÉTBONTÁS (acrobot 26807, commerce #504): a tételek már
+ * kikerültek ebből a rendelésből, az új rendelés még nem jött létre. Amíg ez
+ * nem látszik, senki nem tudja, hogy a tétel hiányzik. A gomb a félbemaradt
+ * szétbontást fejezi be a rekordjából; új bontást nem indít.
+ */
+function UnfinishedSplitNotice({
+  unfinished,
+  allowed,
+  onFinish,
+}: {
+  unfinished: NonNullable<WebshopOrderDetail["split"]["unfinished"]>;
+  allowed: boolean;
+  onFinish: (
+    unfinished: NonNullable<WebshopOrderDetail["split"]["unfinished"]>,
+  ) => Promise<unknown>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const finish = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onFinish(unfinished);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A szétbontás befejezése nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      role="alert"
+      data-testid="unfinished-split"
+      className="space-y-2 rounded-2xl border border-pilot-red-700 bg-pilot-red-50 px-5 py-3 text-sm text-pilot-red-700"
+    >
+      <p className="font-semibold">Félbemaradt szétbontás</p>
+      <p>
+        Ezek a tételek már kikerültek ebből a rendelésből, de az új rendelés még
+        nem jött létre:{" "}
+        {unfinished.lines
+          .map((line) => `${line.title} (${line.quantity} db)`)
+          .join(", ")}
+        . A befejezés létrehozza az új rendelést, a tételek nem vesznek el.
+      </p>
+      {error ? <p className="font-medium">{error}</p> : null}
+      {allowed ? (
+        <PilotButton
+          size="regular"
+          variant="primary"
+          disabled={busy}
+          onClick={() => void finish()}
+        >
+          {busy ? "Befejezés…" : "Szétbontás befejezése"}
+        </PilotButton>
+      ) : null}
+    </div>
   );
 }

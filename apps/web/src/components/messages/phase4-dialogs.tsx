@@ -14,7 +14,7 @@ import { messagesApi } from "@/lib/api/messages";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
-import { Monogram } from "./conversation-parts";
+import { Monogram, assistantFirst } from "./conversation-parts";
 import { canManageMembers, contextCardParts, contextCardTitle } from "./phase4";
 
 const failure = (cause: unknown, fallback: string) =>
@@ -244,7 +244,9 @@ export function AddMembersDialog({
     };
   }, [query, token]);
 
-  const listed = people.filter((person) => !memberIds.has(person.userId));
+  const listed = assistantFirst(
+    people.filter((person) => !memberIds.has(person.userId)),
+  );
   const toggle = (userId: string) =>
     setChosen((current) =>
       current.includes(userId)
@@ -290,13 +292,18 @@ export function AddMembersDialog({
         {listed.map((person) => (
           <li key={person.userId}>
             <label className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-pilot-grey-50">
-              <Monogram name={person.name} />
+              <Monogram
+                name={person.name}
+                assistant={person.kind === "assistant"}
+              />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-pilot-grey-900">
                   {person.name}
                 </span>
                 <span className="block truncate text-xs text-pilot-grey-600">
-                  {ROLE_LABELS[person.role]}
+                  {person.kind === "assistant"
+                    ? "Segéd, kérdezd bármiről"
+                    : ROLE_LABELS[person.role]}
                 </span>
               </span>
               <input

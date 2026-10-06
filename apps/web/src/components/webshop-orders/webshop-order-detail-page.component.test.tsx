@@ -1200,6 +1200,70 @@ describe("WebshopOrderDetailPage", () => {
     ).toBeNull();
   });
 
+  /*
+    FÉLBEMARADT SZÉTBONTÁS (acrobot 26807, commerce #504). MI PIROSÍT: ha nem
+    látszik, hogy a tétel már kikerült innen; ha a befejezés a kijelölést
+    vagy egy új azonosítót küldene a rekordé helyett; ha a gomb tartott
+    bontásnál is megjelenne.
+  */
+  it("a split left half done is shown with its lines, and 'Szétbontás befejezése' sends its record", async () => {
+    const unfinished = {
+      requestId: "req-half",
+      lines: [{ itemId: "item_gone", title: "Hanna HI780-25", quantity: 1 }],
+    };
+    api.detail.mockResolvedValue({
+      ...twoLines,
+      split: { from: null, into: [], unfinished },
+    });
+    api.split.mockResolvedValue({
+      order: {
+        ...twoLines,
+        split: { from: null, into: [{ id: "order_53", displayId: 53 }] },
+      },
+      created: {
+        id: "order_53",
+        displayId: 53,
+        total: 10500,
+        awaitingPayment: true,
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const notice = await screen.findByTestId("unfinished-split");
+    expect(notice.textContent).toContain("Félbemaradt szétbontás");
+    expect(notice.textContent).toContain("Hanna HI780-25 (1 db)");
+    fireEvent.click(
+      within(notice).getByRole("button", { name: "Szétbontás befejezése" }),
+    );
+    await waitFor(() => expect(api.split).toHaveBeenCalledTimes(1));
+    expect(api.split.mock.calls[0]!.slice(1)).toEqual([
+      "order_38",
+      { requestId: "req-half", lines: [{ itemId: "item_gone", quantity: 1 }] },
+    ]);
+    await waitFor(() =>
+      expect(screen.queryByTestId("unfinished-split")).toBeNull(),
+    );
+  });
+
+  it("a half split on an order that may not be edited is shown, but offers no button", async () => {
+    api.detail.mockResolvedValue({
+      ...twoLines,
+      splitEdit: { allowed: false, reason: "A számla már ki van állítva." },
+      split: {
+        from: null,
+        into: [],
+        unfinished: {
+          requestId: "req-half",
+          lines: [
+            { itemId: "item_gone", title: "Hanna HI780-25", quantity: 1 },
+          ],
+        },
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const notice = await screen.findByTestId("unfinished-split");
+    expect(within(notice).queryByRole("button")).toBeNull();
+  });
+
   it("without orders.manage there is no selection and no line action", async () => {
     auth.session = session("WAREHOUSE");
     api.detail.mockResolvedValue(twoLines);

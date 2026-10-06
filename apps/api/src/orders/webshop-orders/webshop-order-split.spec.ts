@@ -8,7 +8,7 @@ import {
   MedusaAdminHttpError,
   type MedusaAdminClient,
 } from "../../integrations/medusa/medusa-admin.client.js";
-import { splitIdsOf } from "./webshop-order-detail.rules.js";
+import { splitIdsOf, unfinishedSplitOf } from "./webshop-order-detail.rules.js";
 import { splitRequestRefusal } from "./webshop-order-lines.rules.js";
 import { WebshopOrderSplitService } from "./webshop-order-split.service.js";
 import type { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -104,6 +104,7 @@ function setup(
     splitEdit?: WebshopOrderDetail["splitEdit"];
     fail?: MedusaAdminHttpError;
     paymentState?: string;
+    unfinished?: WebshopOrderDetail["split"]["unfinished"];
   } = {},
 ) {
   const calls: unknown[] = [];
@@ -129,6 +130,7 @@ function setup(
         lines: LINES,
         totals: { total: 21800 },
         splitEdit: over.splitEdit ?? { allowed: true, reason: null },
+        split: { from: null, into: [], unfinished: over.unfinished ?? null },
       }) as unknown as WebshopOrderDetail,
     adminClient: async () => client,
   } as unknown as WebshopOrdersService;
@@ -142,7 +144,77 @@ function setup(
   };
 }
 
+describe("unfinishedSplitOf", () => {
+  it("names the first split left half done, with its lines; a finished one or none is null", () => {
+    assert.deepEqual(
+      unfinishedSplitOf({
+        acropora_split_requests: {
+          "req-done": {
+            done: true,
+            moved: [{ from_item_id: "item_a", title: "A", quantity: 1 }],
+          },
+          "req-half": {
+            done: false,
+            moved: [
+              {
+                from_item_id: "item_salt",
+                title: "Reef Salt Pro 20 kg",
+                quantity: 1,
+              },
+              { from_item_id: "", title: "hibás", quantity: 1 },
+              { from_item_id: "item_x", title: "nulla", quantity: 0 },
+            ],
+          },
+        },
+      }),
+      {
+        requestId: "req-half",
+        lines: [
+          { itemId: "item_salt", title: "Reef Salt Pro 20 kg", quantity: 1 },
+        ],
+      },
+    );
+    assert.equal(
+      unfinishedSplitOf({
+        acropora_split_requests: { r: { done: true, moved: [] } },
+      }),
+      null,
+    );
+    assert.equal(unfinishedSplitOf({ acropora_split_requests: "x" }), null);
+    assert.equal(unfinishedSplitOf(null), null);
+  });
+});
+
 describe("WebshopOrderSplitService.split", () => {
+  it("a split left half done is finished from its record: its id and lines go, not the selection, and the line check is not asked", async () => {
+    const { calls, audited, service } = setup({
+      unfinished: {
+        requestId: "req-half",
+        lines: [{ itemId: "item_gone", title: "Hanna HI780-25", quantity: 1 }],
+      },
+    });
+    // the only line left would be "the whole order": the line check must not refuse the finish
+    await service.split(
+      "order_38",
+      { lines: [{ itemId: "item_pump", quantity: 1 }], requestId: "req-new" },
+      USER,
+    );
+    assert.deepEqual(calls, [
+      [
+        "order_38",
+        {
+          lines: [{ item_id: "item_gone", quantity: 1 }],
+          actor: "Kiss Márta",
+          request_id: "req-half",
+        },
+      ],
+    ]);
+    assert.equal(
+      (audited[0] as { before: { resumed: boolean } }).before.resumed,
+      true,
+    );
+  });
+
   it("sends the lines, the actor and the request id, audits, and names the new order", async () => {
     const { calls, audited, service } = setup();
     const result = await service.split(
@@ -171,6 +243,7 @@ describe("WebshopOrderSplitService.split", () => {
         before: {
           createdOrderId: "order_39",
           lines: [{ itemId: "item_salt", quantity: 1 }],
+          resumed: false,
           total: 21800,
         },
       },

@@ -2,6 +2,8 @@
 
 import type { ConversationListItem, ConversationPerson } from "@acropora/types";
 
+import { SUTYERAK_ASSETS } from "@/components/assistant/assets";
+
 import { conversationTimeLabel, previewText } from "./outbox";
 import { contextSubtitle } from "./phase4";
 
@@ -24,13 +26,53 @@ export function monogram(name: string): string {
   return letters.join("") || "?";
 }
 
+/** Sutyerák válasza, amit acrobot adott (4. pont, B/5): a feladó neve helyén. */
+export const SUTYERAK_VIA_ACROBOT = "Sutyerák, Acrobot válaszával";
+
+/** A dolgozó és Sutyerák kettes beszélgetése: a másik tag ő. */
+export function isAssistantConversation(
+  item: Pick<ConversationListItem, "type" | "members">,
+): boolean {
+  return (
+    item.type === "DIRECT" &&
+    item.members.length === 1 &&
+    item.members[0]!.kind === "assistant"
+  );
+}
+
+/** Sutyerák a kollégaválasztó elején, a többiek az API sorrendjében. */
+export function assistantFirst<T extends Pick<ConversationPerson, "kind">>(
+  people: T[],
+): T[] {
+  return [
+    ...people.filter((person) => person.kind === "assistant"),
+    ...people.filter((person) => person.kind !== "assistant"),
+  ];
+}
+
 export function Monogram({
   name,
   inactive = false,
+  assistant = false,
 }: {
   name: string;
   inactive?: boolean;
+  /** Sutyerák: a monogram helyén a figurája. */
+  assistant?: boolean;
 }) {
+  if (assistant)
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- swappable local mascot assets
+      <img
+        src={SUTYERAK_ASSETS.resting}
+        alt=""
+        aria-hidden="true"
+        width={32}
+        height={32}
+        data-testid="sutyerak-avatar"
+        className="size-8 shrink-0 object-contain"
+      />
+    );
   return (
     <span
       aria-hidden="true"
@@ -76,7 +118,11 @@ export function ConversationRow({
         active ? "bg-pilot-accent-warm-soft" : "hover:bg-pilot-grey-50"
       }`}
     >
-      <Monogram name={name} inactive={inactive} />
+      <Monogram
+        name={name}
+        inactive={inactive}
+        assistant={isAssistantConversation(item)}
+      />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-pilot-grey-900">
           {name}

@@ -384,6 +384,7 @@ export type {
   AssetDetail,
   AssetDeletionBlockers,
   AssetDocumentSummary,
+  AssetDocumentText,
   AssetDocumentType,
   AssetEventSummary,
   AssetEventType,

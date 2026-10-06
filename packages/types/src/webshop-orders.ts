@@ -419,6 +419,16 @@ export interface WebshopOrderDetail {
   split: {
     from: { id: string; displayId: number | null } | null;
     into: { id: string; displayId: number | null }[];
+    /**
+     * FÉLBEMARADT SZÉTBONTÁS (acrobot 26807): a tételek már kikerültek ebből a
+     * rendelésből, az új rendelés még nem jött létre. A kezelő a „Szétbontás
+     * befejezése” gombbal fejezi be; a webshop a rekordból folytatja.
+     * Opcionális: a régebbi kliensek nem ismerik.
+     */
+    unfinished?: {
+      requestId: string;
+      lines: { itemId: string; title: string; quantity: number }[];
+    } | null;
   };
   steps: WebshopOrderStep[];
   relatedOrder: {
