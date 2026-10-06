@@ -33,7 +33,7 @@ export default function PartnerDetailScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const capabilities = user ? getWebshopCapabilities(user) : null;
 
   const partner = useQuery({
     queryKey: ["service-partner", id],

@@ -8,7 +8,7 @@ import {
 
 describe("getWebshopCapabilities", () => {
   it("gives managers the complete webshop workspace", () => {
-    const capabilities = getWebshopCapabilities("MANAGER");
+    const capabilities = getWebshopCapabilities({ role: "MANAGER" });
     assert.equal(capabilities.workspace, true);
     assert.equal(capabilities.ordersManage, true);
     assert.equal(capabilities.purchasingManage, true);
@@ -17,7 +17,7 @@ describe("getWebshopCapabilities", () => {
   });
 
   it("keeps warehouse users read-only for orders but lets them manage purchasing", () => {
-    const capabilities = getWebshopCapabilities("WAREHOUSE");
+    const capabilities = getWebshopCapabilities({ role: "WAREHOUSE" });
     assert.equal(capabilities.ordersView, true);
     assert.equal(capabilities.ordersManage, false);
     assert.equal(capabilities.purchasingManage, true);
@@ -25,13 +25,13 @@ describe("getWebshopCapabilities", () => {
   });
 
   it("does not expose the webshop workspace to the service role", () => {
-    const capabilities = getWebshopCapabilities("SERVICE");
+    const capabilities = getWebshopCapabilities({ role: "SERVICE" });
     assert.equal(capabilities.workspace, false);
     assert.equal(capabilities.ordersView, false);
   });
 
   it("keeps the partner service role out of the webshop and partner workspace", () => {
-    const capabilities = getWebshopCapabilities("PARTNER_SERVICE");
+    const capabilities = getWebshopCapabilities({ role: "PARTNER_SERVICE" });
     assert.equal(capabilities.workspace, false);
     assert.equal(capabilities.partnersView, false);
     assert.equal(capabilities.partnersManage, false);
@@ -44,7 +44,7 @@ describe("getWebshopCapabilities", () => {
    * 2026-09-02, so the tile is now simply not theirs.
    */
   it("hides products from the service role rather than showing a dead tile", () => {
-    const capabilities = getWebshopCapabilities("SERVICE");
+    const capabilities = getWebshopCapabilities({ role: "SERVICE" });
     assert.equal(capabilities.productsView, false);
     assert.equal(capabilities.productsManage, false);
   });
@@ -66,13 +66,13 @@ describe("getWebshopCapabilities", () => {
    * nothing once somebody is.
    */
   it("lets the service role see partners without editing them", () => {
-    const capabilities = getWebshopCapabilities("SERVICE");
+    const capabilities = getWebshopCapabilities({ role: "SERVICE" });
     assert.equal(capabilities.partnersView, true);
     assert.equal(capabilities.partnersManage, false);
   });
 
   it("keeps viewer access read-only", () => {
-    const capabilities = getWebshopCapabilities("VIEWER");
+    const capabilities = getWebshopCapabilities({ role: "VIEWER" });
     assert.equal(capabilities.workspace, true);
     assert.equal(capabilities.ordersView, true);
     assert.equal(capabilities.ordersManage, false);
@@ -83,20 +83,26 @@ describe("getWebshopCapabilities", () => {
 
 describe("getServiceCapabilities", () => {
   it("opens the field asset workspace for service users", () => {
-    const capabilities = getServiceCapabilities("SERVICE");
+    const capabilities = getServiceCapabilities({ role: "SERVICE" });
     assert.equal(capabilities.workspace, true);
     assert.equal(capabilities.assetsView, true);
     assert.equal(capabilities.assetsManage, true);
   });
 
   it("keeps viewers read-only and webshop-only roles outside", () => {
-    assert.equal(getServiceCapabilities("VIEWER").assetsManage, false);
-    assert.equal(getServiceCapabilities("WAREHOUSE").workspace, false);
-    assert.equal(getServiceCapabilities("SALES").assetsView, false);
+    assert.equal(
+      getServiceCapabilities({ role: "VIEWER" }).assetsManage,
+      false,
+    );
+    assert.equal(
+      getServiceCapabilities({ role: "WAREHOUSE" }).workspace,
+      false,
+    );
+    assert.equal(getServiceCapabilities({ role: "SALES" }).assetsView, false);
   });
 
   it("gives the partner service role only the shared service capabilities", () => {
-    const capabilities = getServiceCapabilities("PARTNER_SERVICE");
+    const capabilities = getServiceCapabilities({ role: "PARTNER_SERVICE" });
     assert.equal(capabilities.assetsView, true);
     assert.equal(capabilities.assetsManage, true);
     assert.equal(capabilities.worksheetsView, true);
@@ -122,7 +128,7 @@ describe("getServiceCapabilities", () => {
       "PARTNER_SERVICE",
       "VIEWER",
     ] as const) {
-      const capabilities = getServiceCapabilities(role);
+      const capabilities = getServiceCapabilities({ role: role });
       assert.equal(
         capabilities.worksheetsView,
         capabilities.assetsView,

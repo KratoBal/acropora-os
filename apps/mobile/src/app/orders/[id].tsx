@@ -32,7 +32,7 @@ export default function OrderDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const orderId = Array.isArray(params.id) ? params.id[0] : params.id;
   const { status, user } = useAuth();
-  const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const capabilities = user ? getWebshopCapabilities(user) : null;
   const order = useQuery({
     queryKey: ["unas-order", orderId],
     queryFn: () => getUnasOrder(orderId ?? ""),

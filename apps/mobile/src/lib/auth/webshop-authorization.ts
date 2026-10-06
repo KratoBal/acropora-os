@@ -172,11 +172,92 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
   },
 };
 
-export function getWebshopCapabilities(role: UserRole): WebshopCapabilities {
-  return ROLE_CAPABILITIES[role];
+/**
+ * KINEK A KÉPESSÉGEIRŐL KÉRDEZÜNK: a szerep, és ha a szerver elküldte, a személy
+ * saját jog-listája (sablon + felhasználónkénti eltérés, 2026-10-06). A lista
+ * dönt; csak a hiányában (régebbi szerver) a szerep táblája.
+ */
+export interface CapabilitySubject {
+  role: UserRole;
+  permissions?: readonly string[];
 }
 
-export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
+/**
+ * A KÉPESSÉG -> SZERVER-JOG MEGFELELTETÉS, a lista-alapú számításhoz. Ugyanaz a
+ * pár, amit a szerver oldali `mobile-capability-mirror.spec.ts` `SERVER_PAIR`-je
+ * rögzít; a `mobile-capability-values.spec.ts` minden szerepre összeveti a két
+ * utat (lista és tábla), tehát egy elírás itt pirosat ad.
+ */
+const WEBSHOP_PERMISSION = {
+  ordersView: "orders.view",
+  ordersManage: "orders.manage",
+  purchasingView: "purchasing.view",
+  purchasingManage: "purchasing.manage",
+  productsView: "products.view",
+  productsManage: "products.manage",
+  partnersView: "partners.view",
+  partnersManage: "partners.manage",
+} as const;
+
+function webshopFromPermissions(
+  permissions: readonly string[],
+): WebshopCapabilities {
+  const has = (permission: string) => permissions.includes(permission);
+  const ordersView = has(WEBSHOP_PERMISSION.ordersView);
+  const purchasingView = has(WEBSHOP_PERMISSION.purchasingView);
+  const productsView = has(WEBSHOP_PERMISSION.productsView);
+  return {
+    // a webshop-munkaterület annak jár, aki a rendelést, a beszerzést vagy a
+    // terméket látja; a partner-lista egymagában (SERVICE) nem nyitja meg
+    workspace: ordersView || purchasingView || productsView,
+    ordersView,
+    ordersManage: has(WEBSHOP_PERMISSION.ordersManage),
+    purchasingView,
+    purchasingManage: has(WEBSHOP_PERMISSION.purchasingManage),
+    productsView,
+    productsManage: has(WEBSHOP_PERMISSION.productsManage),
+    partnersView: has(WEBSHOP_PERMISSION.partnersView),
+    partnersManage: has(WEBSHOP_PERMISSION.partnersManage),
+  };
+}
+
+function serviceFromPermissions(
+  permissions: readonly string[],
+): ServiceCapabilities {
+  const has = (permission: string) => permissions.includes(permission);
+  const canView = has("service.view");
+  const canManage = has("service.manage");
+  return {
+    workspace: canView,
+    assetsView: canView,
+    assetsManage: canManage,
+    worksheetsView: canView,
+    worksheetsManage: canManage,
+    serviceJobsView: canView,
+    serviceJobsManage: canManage,
+    aquariumsView: has("aquariums.view"),
+    aquariumsManage: has("aquariums.manage"),
+  };
+}
+
+export function getWebshopCapabilities(
+  subject: CapabilitySubject,
+): WebshopCapabilities {
+  return subject.permissions
+    ? webshopFromPermissions(subject.permissions)
+    : ROLE_CAPABILITIES[subject.role];
+}
+
+export function getServiceCapabilities(
+  subject: CapabilitySubject,
+): ServiceCapabilities {
+  return subject.permissions
+    ? serviceFromPermissions(subject.permissions)
+    : serviceFromRole(subject.role);
+}
+
+/** A szerep táblája: csak régebbi szerver ellen, ami a listát nem küldi. */
+function serviceFromRole(role: UserRole): ServiceCapabilities {
   const canView =
     role === "OWNER" ||
     role === "ADMIN" ||

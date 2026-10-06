@@ -84,7 +84,7 @@ export default function NewServiceJobScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
