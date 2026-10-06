@@ -211,12 +211,6 @@ export default function ServiceJobListScreen() {
   const items: ServiceJobListItem[] = query.data
     ? itemsForScope(query.data.items, scope)
     : cachedForScope;
-  /*
-    A PARTNER DOES NOT SEE THE ASSIGNEE LINE (decision of 2026-10-04). The
-    scope comes from the session, the same two fields the server reads
-    (`partnerScopeOf`).
-  */
-  const viewerIsPartner = Boolean(user?.customerId || user?.supplierId);
   const tiles = serviceJobStatTiles(query.data?.counts);
   const now = new Date();
   const scopeNeedsConnection =
@@ -439,9 +433,7 @@ export default function ServiceJobListScreen() {
             {shortPath(item.departmentPath) ? (
               <Text style={styles.meta}>{shortPath(item.departmentPath)}</Text>
             ) : null}
-            <Text style={styles.meta}>
-              {serviceJobCardMeta(item, viewerIsPartner, now)}
-            </Text>
+            <Text style={styles.meta}>{serviceJobCardMeta(item, now)}</Text>
           </Pressable>
         )}
       />

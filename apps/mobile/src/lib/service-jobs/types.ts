@@ -51,6 +51,13 @@ export interface ServiceJobListItem {
    * read as "Nincs kiosztva" (`serviceJobAssigneeLine`).
    */
   assignees?: ServiceJobAssignee[];
+  /**
+   * THE ASSIGNEES' NAMES, IN A PARTNER'S ANSWER ONLY (card a0660885, #1449;
+   * acrobot 26185, 2026-10-05): a partner gets the colleagues' names, never
+   * their ids or the time of the delegation, so `assignees` is missing there
+   * and the names come here.
+   */
+  assigneeNames?: string[];
 }
 
 export interface ServiceJobListResponse {
@@ -244,9 +251,10 @@ export interface ServiceJobPartnerDetail {
  *
  * Az `Omit` ezt MONDJA KI, a csendes orokles helyett.
  */
+// `assigneeNames` is the partner LIST's field only (#1449): the detail never carries it
 export interface ServiceJobDetail extends Omit<
   ServiceJobListItem,
-  "worksheetCount"
+  "worksheetCount" | "assigneeNames"
 > {
   description: string | null;
   /**
