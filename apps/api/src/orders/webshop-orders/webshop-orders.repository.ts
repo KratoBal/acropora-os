@@ -178,17 +178,18 @@ export class WebshopOrdersRepository {
   /**
    * A RENDELÉSEK SZÁMLÁI. Rendelésenként a legutóbbi `WEBSHOP_ORDER` forrású
    * számla (a vázlat azonosítója rendelésenként egy, tehát a gyakorlatban
-   * egyetlen sor).
+   * egyetlen sor). Ugyanez adja a szállítólevelet is (`DELIVERY_NOTE`).
    */
   async invoices(
     orderIds: string[],
+    documentType: "INVOICE" | "DELIVERY_NOTE" = "INVOICE",
   ): Promise<Map<string, WebshopOrderInvoiceRow>> {
     if (!orderIds.length) return new Map();
     const rows = await prisma.invoice.findMany({
       where: {
         sourceType: "WEBSHOP_ORDER",
         sourceId: { in: orderIds },
-        documentType: "INVOICE",
+        documentType,
       },
       select: { id: true, sourceId: true, status: true, invoiceNumber: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],

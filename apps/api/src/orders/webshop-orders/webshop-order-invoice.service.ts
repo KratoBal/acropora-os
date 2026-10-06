@@ -21,6 +21,7 @@ import type { MedusaOrderDetailRow } from "../../integrations/medusa/medusa-admi
 import {
   buyerMismatch,
   customerKeyOf,
+  deliveryNoteDraftOf,
   invoiceDraftOf,
   invoiceRefusal,
   newCustomerOf,
@@ -85,11 +86,7 @@ export class WebshopOrderInvoiceService {
     return this.serial(orderId, () => this.issueNow(orderId, user, now));
   }
 
-  private async issueNow(
-    orderId: string,
-    user: AuthenticatedUser,
-    now: Date,
-  ): Promise<WebshopOrderDetail> {
+  private requireIssuing(): void {
     const mode = this.issuing.issueMode();
     if (mode === "off" || mode === "conflict")
       throw new ConflictException(
@@ -97,6 +94,14 @@ export class WebshopOrderInvoiceService {
           ? "A számla kiállítása ezen a szerveren nincs bekapcsolva."
           : "A kiállítás beállítása ellentmondásos: a valódi kiállítás és az álszámlázó egyszerre van bekapcsolva.",
       );
+  }
+
+  private async issueNow(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+  ): Promise<WebshopOrderDetail> {
+    this.requireIssuing();
 
     const existing = (await this.repository.invoices([orderId])).get(orderId);
     if (existing?.status === "ISSUED") return this.orders.detail(orderId, now);
@@ -121,6 +126,72 @@ export class WebshopOrderInvoiceService {
     if (mismatch) throw new ConflictException(mismatch);
 
     const draft = invoiceDraftOf(order, { customerId, now });
+    if (!draft.ok) throw new UnprocessableEntityException(draft.message);
+
+    const saved: BillingDocumentDetail = existing
+      ? await this.documents.update(
+          existing.id,
+          this.dto({
+            ...draft.draft,
+            id: undefined,
+            expectedUpdatedAt: (await this.documents.detail(existing.id))
+              .updatedAt,
+          }),
+        )
+      : await this.documents.create(this.dto(draft.draft), user);
+    await this.issuing.issue(saved.id, saved.updatedAt, user);
+    return this.orders.detail(orderId, now);
+  }
+
+  /**
+   * A SZÁLLÍTÓLEVÉL (Balázs döntése, 2026-10-06; kártya 0a14f739 C/1): a
+   * Számlázz.hu szállítólevele, ugyanazon a kiállításon át, mint a számla.
+   * Csak kiállított számla után: a sorrend előbb számla, utána címke, és a
+   * szállítólevél a számla tételeit viszi. Készletet nem mozgat (csak a
+   * számla mozgat), e-mailt nem küld (a típusnak nincs kiküldése).
+   *
+   * Ugyanabban a rendelésenkénti sorban fut, mint a számla, így egy épp
+   * kiállítás alatt álló számla mellé nem indul.
+   */
+  issueDeliveryNote(
+    orderId: string,
+    user: AuthenticatedUser,
+    now = new Date(),
+  ): Promise<WebshopOrderDetail> {
+    return this.serial(orderId, () =>
+      this.issueDeliveryNoteNow(orderId, user, now),
+    );
+  }
+
+  private async issueDeliveryNoteNow(
+    orderId: string,
+    user: AuthenticatedUser,
+    now: Date,
+  ): Promise<WebshopOrderDetail> {
+    this.requireIssuing();
+
+    const existing = (
+      await this.repository.invoices([orderId], "DELIVERY_NOTE")
+    ).get(orderId);
+    if (existing?.status === "ISSUED") return this.orders.detail(orderId, now);
+    if (existing?.status === "ISSUING")
+      throw new ConflictException(
+        "Ennek a rendelésnek a szállítólevele már kiállítás alatt van, és ellenőrzésre vár: nézd meg a Számlázz.hu-n, mielőtt újra próbálod.",
+      );
+    if (existing?.status === "ISSUE_FAILED")
+      throw new ConflictException(
+        "A rendelés szállítólevelének kiállítása elutasítva maradt. Nyisd meg a bizonylatot a Számlázásban, ott látod az okát.",
+      );
+
+    const invoice = (await this.repository.invoices([orderId])).get(orderId);
+    if (invoice?.status !== "ISSUED")
+      throw new ConflictException(
+        "A szállítólevél a kiállított számla tételeiből készül: előbb állítsd ki a számlát.",
+      );
+    const draft = deliveryNoteDraftOf(
+      orderId,
+      await this.documents.detail(invoice.id),
+    );
     if (!draft.ok) throw new UnprocessableEntityException(draft.message);
 
     const saved: BillingDocumentDetail = existing

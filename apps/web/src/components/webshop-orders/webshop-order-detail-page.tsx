@@ -373,6 +373,10 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.issueInvoice(token, id));
     setNow(Date.now());
   };
+  const issueDeliveryNote = async () => {
+    setOrder(await webshopOrdersApi.issueDeliveryNote(token, id));
+    setNow(Date.now());
+  };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
@@ -530,6 +534,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
           onIssueInvoice={issueInvoice}
+          onIssueDeliveryNote={issueDeliveryNote}
           onOpenPdf={openPdf}
           onCreateParcel={createParcel}
           onParcelLabel={parcelLabel}
@@ -570,11 +575,13 @@ function InvoiceCard({
   order,
   canIssue,
   onIssue,
+  onIssueDeliveryNote,
   onOpenPdf,
 }: {
   order: WebshopOrderDetail;
   canIssue: boolean;
   onIssue: () => Promise<void>;
+  onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -631,6 +638,13 @@ function InvoiceCard({
               </PilotButton>
               {link}
             </div>
+            <DeliveryNoteField
+              note={order.deliveryNote}
+              canIssue={canIssue}
+              busy={busy}
+              onIssue={() => void run(onIssueDeliveryNote)}
+              onOpenPdf={(documentId) => void run(() => onOpenPdf(documentId))}
+            />
           </>
         ) : invoice?.status === "ISSUING" ? (
           <>
@@ -680,6 +694,82 @@ function InvoiceCard({
         ) : null}
       </div>
     </Card>
+  );
+}
+
+/**
+ * A SZÁLLÍTÓLEVÉL (kártya 0a14f739 C/1): a Számlázz.hu szállítólevele, a
+ * kiállított számla tételeiből. Ezért a számla kártyáján áll, és csak a
+ * kiállított számla alatt. A kiállítás alatti és az elutasított állapot itt
+ * sem kap új gombot: a Számlázásban kell megnézni, mi történt.
+ */
+function DeliveryNoteField({
+  note,
+  canIssue,
+  busy,
+  onIssue,
+  onOpenPdf,
+}: {
+  note: WebshopOrderDetail["deliveryNote"];
+  canIssue: boolean;
+  busy: boolean;
+  onIssue: () => void;
+  onOpenPdf: (documentId: string) => void;
+}) {
+  const link = note ? (
+    <Link
+      href={`/penzugy/szamlazas/${encodeURIComponent(note.id)}`}
+      className="text-sm font-medium text-pilot-aqua-700 underline"
+    >
+      Megnyitás a Számlázásban
+    </Link>
+  ) : null;
+  return (
+    <div className="space-y-2 border-t border-pilot-grey-100 pt-3">
+      {note?.status === "ISSUED" ? (
+        <>
+          <Field label="Szállítólevél">{note.number ?? "—"}</Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => onOpenPdf(note.id)}
+            >
+              Szállítólevél PDF
+            </PilotButton>
+            {link}
+          </div>
+        </>
+      ) : note?.status === "ISSUING" ? (
+        <>
+          <p className="text-sm text-pilot-amber-700">
+            A szállítólevél kiállítása elindult, és ellenőrzésre vár: nézd meg a
+            Számlázz.hu-n, elkészült-e.
+          </p>
+          {link}
+        </>
+      ) : note?.status === "ISSUE_FAILED" ? (
+        <>
+          <p className="text-sm text-pilot-red-700">
+            A szállítólevél kiállítása elutasítva maradt. Az okát a bizonylatnál
+            látod.
+          </p>
+          {link}
+        </>
+      ) : canIssue ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          disabled={busy}
+          onClick={onIssue}
+        >
+          {busy ? "Kiállítás…" : "Szállítólevél kiállítása"}
+        </PilotButton>
+      ) : (
+        <p className="text-sm text-pilot-grey-700">Nincs szállítólevél.</p>
+      )}
+    </div>
   );
 }
 
@@ -1326,6 +1416,7 @@ function OrderBody({
   mailNotice,
   onResendStatusMail,
   onIssueInvoice,
+  onIssueDeliveryNote,
   onOpenPdf,
   onCreateParcel,
   onParcelLabel,
@@ -1355,6 +1446,7 @@ function OrderBody({
   mailNotice: string | null;
   onResendStatusMail: () => Promise<void>;
   onIssueInvoice: () => Promise<void>;
+  onIssueDeliveryNote: () => Promise<void>;
   onOpenPdf: (documentId: string) => Promise<void>;
   onCreateParcel: (
     size: WebshopParcelSize | undefined,
@@ -1858,6 +1950,7 @@ function OrderBody({
             order={order}
             canIssue={canIssue}
             onIssue={onIssueInvoice}
+            onIssueDeliveryNote={onIssueDeliveryNote}
             onOpenPdf={onOpenPdf}
           />
 
