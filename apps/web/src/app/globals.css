@@ -18,3 +18,6 @@
   NEM importalja.
 */
 @import "../../../../packages/ui/src/figma-theme.css";
+
+/* Sutyerák figurájának rétegei és mozgása (kártya e0780477): a widget saját lapja. */
+@import "../components/assistant/sutyerak-figure.css";

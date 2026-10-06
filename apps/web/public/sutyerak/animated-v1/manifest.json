@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "source": "exchange/sutyerak/animated-v1/sutyerak-os-integracio-v1 (ASSET-MANIFEST.json), Balázs, 2026-10-06",
+  "conversion": "sharp: resize 1254 -> 512 (lanczos3), WebP quality 90, alphaQuality 100; about twice the 192 px figure",
+  "assets": [
+    {
+      "file": "pihen-para.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 5296,
+      "sha256": "be9f5fa6aa712e39392469b4a6e0519add938402ff8be7eaf8815160e8b34224",
+      "source": {
+        "file": "assets/pihen-para.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 95478,
+        "sha256": "aef96bd51fe2d56be228fa283d2cc632842f6e20490a77dd98aad6bc48fbc05c"
+      }
+    },
+    {
+      "file": "pihen-alap.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 25274,
+      "sha256": "e1c37b2330987bd1fc94c39fc3158c25ad5b276415f71b841c29cd055ab8c037",
+      "source": {
+        "file": "assets/pihen-alap.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 637163,
+        "sha256": "475cad6926ee6fbf60f191b44081e4db7d6fe013bbd2c7cb0540369d075bf53b"
+      }
+    },
+    {
+      "file": "pihen-szem.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 4624,
+      "sha256": "3c54b75287129366bfd2136148b50d38134062c5666eafe1e23a889b4b9cda78",
+      "source": {
+        "file": "assets/pihen-szem.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 76384,
+        "sha256": "5b55de5f265b8b7792eef257f95d39fe76fcd1f0ae6f5b918ab2781bb5e7fa94"
+      }
+    },
+    {
+      "file": "jegyzetel-alap.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 40798,
+      "sha256": "a455e0f140e2ac2dc65ae05e6e8e1a1a2776f3943a2880b355d7ff587f1209d0",
+      "source": {
+        "file": "assets/jegyzetel-alap.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 916581,
+        "sha256": "aad2964a538bb2d0374ce335b96467a7004876430235798a67a2bf776769563c"
+      }
+    },
+    {
+      "file": "iro-ollo-ceruza.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 12364,
+      "sha256": "2912f10f24eeefc7493eb1753bc6cde081c560a75da266d109c9147e24167a8f",
+      "source": {
+        "file": "assets/iro-ollo-ceruza.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 254534,
+        "sha256": "67d4528fc46eb24573e2d699eb7af792eda97db058f3ab55500a4b6695302d61"
+      }
+    },
+    {
+      "file": "keres-alap.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 42704,
+      "sha256": "d3d1d1ec95d9c21799eb2707f3933b531b1b0ebb9c795661e42a5df1247bccb8",
+      "source": {
+        "file": "assets/keres-alap.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 967319,
+        "sha256": "4c28371eb27a94dc01bff9c3dfc1d20dd8cea471ea351fe65f47bf8186f8eeba"
+      }
+    },
+    {
+      "file": "nagyito-ollo.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 12506,
+      "sha256": "9d1093cf40032c52f7b13cfdebecba3eba9ee9a8c07cf1748aed0764a6895c26",
+      "source": {
+        "file": "assets/nagyito-ollo.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 168885,
+        "sha256": "f2b3ecd2e6d4051aa7662348726006df0fbb6f3b87da0aed0dc11f5bec0cc8ec"
+      }
+    },
+    {
+      "file": "valaszol-alap.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 44200,
+      "sha256": "3f46a55f52b6f1c78255422da984d29375b4228a4fed84038d022f8caf50f225",
+      "source": {
+        "file": "assets/valaszol-alap.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 965429,
+        "sha256": "81450f07e67305704b2a6d7c2b38584aada64c23cad64fe243f7f87ac84badfe"
+      }
+    },
+    {
+      "file": "beszedbuborek.webp",
+      "width": 512,
+      "height": 512,
+      "hasAlpha": true,
+      "bytes": 8938,
+      "sha256": "c6137a43ca264c12a7b095ae8b99209819139047f5b40112131748a95729d24a",
+      "source": {
+        "file": "assets/beszedbuborek.png",
+        "width": 1254,
+        "height": 1254,
+        "bytes": 160405,
+        "sha256": "78b5a4f377e798508f73e94ff88cc7c357dfeb4cc0e61d59dc275cf3c03a475e"
+      }
+    }
+  ]
+}

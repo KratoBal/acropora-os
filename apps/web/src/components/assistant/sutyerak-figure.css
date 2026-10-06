@@ -1,0 +1,190 @@
+/*
+  SUTYERÁK FIGURÁJA (kártya e0780477; Balázs, 2026-10-06). A jóváhagyott
+  referencia az `exchange/sutyerak/animated-v1/sutyerak-os-integracio-v1/
+  elo-nezet.html`: a rétegek helye, a forgási pontok, a mozdulatok és az
+  időzítések onnan valók, betű szerint. Ha a kettő eltér, a HTML nyer.
+  Egyszerre csak az aktuális póz látszik; a többi rétegei ott vannak, de
+  átlátszók, és a mozgásuk szünetel.
+*/
+
+.sut-fig {
+  position: relative;
+  display: block;
+}
+
+.sut-fig .sut-pose,
+.sut-fig .sut-layer,
+.sut-fig .sut-note-placement,
+.sut-fig .sut-bubble-placement {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sut-fig .sut-layer {
+  object-fit: contain;
+}
+
+.sut-fig .sut-pose {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  transform-origin: 55% 78%;
+}
+
+.sut-fig[data-state="resting"] .sut-pose-resting,
+.sut-fig[data-state="takingNotes"] .sut-pose-takingNotes,
+.sut-fig[data-state="searching"] .sut-pose-searching,
+.sut-fig[data-state="answering"] .sut-pose-answering,
+.sut-fig[data-state="stuck"] .sut-pose-stuck {
+  opacity: 1;
+}
+
+/* Pihen: para, alap, szem; finom 5,2 s-os mozgás */
+.sut-fig .sut-pose-resting {
+  animation: sut-rest 5.2s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig[data-state="resting"] .sut-pose-resting {
+  animation-play-state: running;
+}
+
+.sut-fig .sut-eyes {
+  transform: translate(3.52%, -3.28%) scale(0.82);
+  transform-origin: 54.7% 65.6%;
+}
+
+/* Jegyzetel: a ceruza a lap belsején, 650 ms-os író ciklus */
+.sut-fig .sut-note-placement {
+  transform: translate(23.4%, 28.3%) scale(0.6);
+  transform-origin: 0 0;
+}
+
+.sut-fig .sut-pencil {
+  transform-origin: 87% 85%;
+  animation: sut-write 0.65s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig[data-state="takingNotes"] .sut-pencil {
+  animation-play-state: running;
+}
+
+/* Keres: a papír és a szöveg fix, csak a nagyító-olló pásztáz, 2400 ms */
+.sut-fig .sut-glass {
+  transform-origin: 85% 83%;
+  animation: sut-scan 2.4s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig[data-state="searching"] .sut-glass {
+  animation-play-state: running;
+}
+
+/* Válaszol: 94%-os csoport, 380 ms buborék-belépés, 2600 ms buborék, 3600 ms alap */
+.sut-fig .sut-pose-answering {
+  transform: scale(0.94);
+  transform-origin: 50% 50%;
+}
+
+.sut-fig .sut-bubble-placement {
+  transform-origin: 86% 40%;
+}
+
+.sut-fig .sut-bubble {
+  transform-origin: 86% 40%;
+  animation: sut-reply 2.6s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig .sut-answer-body {
+  animation: sut-answer-rest 3.6s ease-in-out infinite;
+  animation-play-state: paused;
+}
+
+.sut-fig[data-state="answering"] .sut-bubble,
+.sut-fig[data-state="answering"] .sut-answer-body {
+  animation-play-state: running;
+}
+
+.sut-fig[data-state="answering"] .sut-bubble-placement {
+  animation: sut-appear 0.38s ease-out both;
+}
+
+@keyframes sut-rest {
+  0%,
+  100% {
+    transform: rotate(-0.5deg);
+  }
+  50% {
+    transform: rotate(0.5deg) translateY(-0.5%);
+  }
+}
+
+@keyframes sut-write {
+  0%,
+  100% {
+    transform: rotate(-1.7deg) translateX(-0.2%);
+  }
+  25% {
+    transform: rotate(0.4deg) translateX(0.1%);
+  }
+  50% {
+    transform: rotate(1.7deg) translateX(0.3%);
+  }
+  75% {
+    transform: rotate(-0.4deg) translateX(0.05%);
+  }
+}
+
+@keyframes sut-scan {
+  0%,
+  100% {
+    transform: rotate(-3deg) translate(-1.1%, 0.2%);
+  }
+  50% {
+    transform: rotate(3deg) translate(1.1%, -0.35%);
+  }
+}
+
+@keyframes sut-reply {
+  0%,
+  100% {
+    transform: translateY(0.25%) scale(0.98);
+  }
+  50% {
+    transform: translateY(-0.4%) scale(1);
+  }
+}
+
+@keyframes sut-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.75) translateY(1%);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes sut-answer-rest {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.3%);
+  }
+}
+
+/* kevesebb mozgás: az ismétlődő mozgás és az átmenet áll, az állapot (a póz) marad */
+@media (prefers-reduced-motion: reduce) {
+  .sut-fig *,
+  .sut-fig {
+    animation: none !important;
+    transition: none !important;
+  }
+}
