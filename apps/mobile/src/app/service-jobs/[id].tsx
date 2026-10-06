@@ -433,7 +433,7 @@ export default function ServiceJobDetailScreen() {
           ) : null}
           {!partnerAlak(detail) ? (
             <Text style={styles.meta}>
-              {serviceJobAssigneeLine({ assignees: detail.assignees }, false)}
+              {serviceJobAssigneeLine({ assignees: detail.assignees })}
             </Text>
           ) : null}
         </View>

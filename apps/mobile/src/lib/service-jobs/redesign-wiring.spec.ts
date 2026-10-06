@@ -18,13 +18,11 @@ const LIST = "src/app/service-jobs/index.tsx";
 const DETAIL = "src/app/service-jobs/[id].tsx";
 
 describe("a hibajegy-képernyők a redesign után", () => {
-  it("a lista kártyája a felelős-sort a partner-kapuval rajzolja", () => {
+  // a partner is shown the names too (card a0660885, acrobot 26185): no partner gate on the line
+  it("a lista kártyája a felelős-sort partnernek is kirajzolja", () => {
     const s = code(LIST);
-    assert.match(s, /serviceJobCardMeta\(item, viewerIsPartner, now\)/);
-    assert.match(
-      s,
-      /const viewerIsPartner = Boolean\(user\?\.customerId \|\| user\?\.supplierId\)/,
-    );
+    assert.match(s, /serviceJobCardMeta\(item, now\)/);
+    assert.doesNotMatch(s, /viewerIsPartner/);
   });
 
   it("a mentett másolatból a rám kiosztva a felhasználóval szűr", () => {
@@ -38,7 +36,7 @@ describe("a hibajegy-képernyők a redesign után", () => {
     const s = code(DETAIL);
     assert.match(
       s,
-      /!partnerAlak\(detail\) \? \(\s*<Text style=\{styles\.meta\}>\s*\{serviceJobAssigneeLine\(\{ assignees: detail\.assignees \}, false\)\}/,
+      /!partnerAlak\(detail\) \? \(\s*<Text style=\{styles\.meta\}>\s*\{serviceJobAssigneeLine\(\{ assignees: detail\.assignees \}\)\}/,
     );
     assert.match(s, /Partner: \{detail\.partnerStatusLabel\}/);
   });
