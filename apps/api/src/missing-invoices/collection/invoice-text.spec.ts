@@ -508,6 +508,55 @@ describe("payment reminders and bank accounts (acrobot 25664)", () => {
  * ügyfél-azonosító számlaszám lehet; ha egy szétvágott vagy bankszámla-cella
  * számlaszámnak olvasódik.
  */
+/*
+  A LABELLED VALUE THAT IS A COMPANY OR A DAY (card 096607af; production,
+  2026-10-06: five of the 37 general-reader records carried our own tax
+  number or a date as their invoice number). WHAT TURNS RED: our tax number,
+  any Hungarian tax number or a date next to a number label is taken as the
+  invoice number; the label's later, real value or the file name is then not
+  reached; a real number that only CONTAINS digits like a date is refused.
+*/
+describe("a labelled value that is a company or a day is not the invoice number (card 096607af)", () => {
+  it("our tax number or another company's beside the label is skipped for the label's next value", () => {
+    assert.equal(
+      readInvoiceText([
+        "Díjbekérő",
+        "Sorszám | 23916229-2-42",
+        "Sorszám | DIJBKK-26-000218",
+      ]).invoiceNumber,
+      "DIJBKK-26-000218",
+    );
+    assert.equal(
+      readInvoiceText(["Számla száma: 14114113-2-08"]).invoiceNumber,
+      null,
+    );
+  });
+
+  it("a date beside the label is not the number; the file name then decides", () => {
+    const lines = ["Számla száma | 2026.05.05", "SZLA-2026-828 | 176 460 Ft"];
+    assert.deepEqual(
+      readInvoiceText(lines, { fileName: "SZLA-2026-828.pdf" }),
+      {
+        invoiceNumber: "SZLA-2026-828",
+        numberFrom: "FILE_NAME",
+        supplierTaxNumber: null,
+      },
+    );
+    assert.equal(
+      readInvoiceText(["Invoice number 2026/09/22"]).invoiceNumber,
+      null,
+    );
+  });
+
+  it("a real number with a year in it is still a number", () => {
+    for (const number of ["2026/0912", "KS26/10722", "E-KBOSS-2026-503610"])
+      assert.equal(
+        readInvoiceText([`Számla száma: ${number}`]).invoiceNumber,
+        number,
+      );
+  });
+});
+
 describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
   const FLEETCOR = [
     "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számla - Eredeti példány",
