@@ -54,9 +54,8 @@ const FREE_LIMIT = 100;
 export function AssetLabelBatchesPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
-  const role = session?.user.role;
-  const canManage = role
-    ? hasPermission(role, PERMISSIONS.SETTINGS_MANAGE)
+  const canManage = session
+    ? hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE)
     : false;
 
   const [batches, setBatches] = useState<AssetLabelBatchSummary[]>([]);

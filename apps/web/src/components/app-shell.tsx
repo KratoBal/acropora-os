@@ -181,7 +181,7 @@ export function AppShell({
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!session || !isNavigationEntryVisible("dashboard", session.user.role)) {
+    if (!session || !isNavigationEntryVisible("dashboard", session.user)) {
       setMyTaskCount(null);
       return;
     }
@@ -199,8 +199,7 @@ export function AppShell({
   const features = servedNavigationFeatures(session?.navigation);
   const canAccess = (item: AppNavigationItem) =>
     Boolean(
-      session &&
-      isNavigationEntryVisible(item.entryId, session.user.role, features),
+      session && isNavigationEntryVisible(item.entryId, session.user, features),
     );
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);

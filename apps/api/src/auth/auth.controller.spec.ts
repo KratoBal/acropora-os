@@ -410,7 +410,7 @@ describe("AuthController", () => {
           const lathato =
             (rule.kind === "roles"
               ? rule.roles.includes(role)
-              : hasPermission(role, rule.permission)) &&
+              : hasPermission({ role: role }, rule.permission)) &&
             (entry.feature === undefined || switchOn);
 
           assert.equal(

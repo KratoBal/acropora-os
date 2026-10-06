@@ -243,8 +243,10 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         <Skeleton className="h-96" />
       </div>
     );
+  // a kiválasztott SZEREP sablonja (az előnézet); a személyes eltérések a
+  // felhasználónkénti táblázattal kerülnek ide
   const accessibleItems = allNavigationItems.filter((item) =>
-    isNavigationEntryVisible(item.entryId, role),
+    isNavigationEntryVisible(item.entryId, { role }),
   );
   const isPartnerAccount = Boolean(customerId);
   const availableRoleOptions = isPartnerAccount

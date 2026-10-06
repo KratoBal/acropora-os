@@ -1,5 +1,7 @@
 import type { Prisma } from "@acropora/database";
-import { hasPermission, INTERNAL_ROLES, PERMISSIONS } from "@acropora/types";
+import { INTERNAL_ROLES, PERMISSIONS } from "@acropora/types";
+
+import { usersWithPermissionWhere } from "../auth/permission-holders.js";
 
 /**
  * KI VÁLASZTHATÓ AKVÁRIUM-KARBANTARTÓNAK.
@@ -21,11 +23,7 @@ import { hasPermission, INTERNAL_ROLES, PERMISSIONS } from "@acropora/types";
 export function aquariumMaintainerUserWhere(): Prisma.UserWhereInput {
   return {
     isActive: true,
-    role: {
-      in: [...INTERNAL_ROLES].filter((role) =>
-        hasPermission(role, PERMISSIONS.AQUARIUMS_MANAGE),
-      ),
-    },
+    ...usersWithPermissionWhere(PERMISSIONS.AQUARIUMS_MANAGE, INTERNAL_ROLES),
     customerId: null,
     supplierId: null,
   };

@@ -1,5 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { isNavigationEntryVisible, type Session } from "@acropora/types";
+import {
+  isNavigationEntryVisible,
+  PERMISSIONS,
+  ROLE_PERMISSIONS,
+  type Session,
+} from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./app-shell";
@@ -412,7 +417,9 @@ describe("AppShell navigation source", () => {
 
     expect(visibleSidebarHrefs()).toEqual(
       allNavigationPages
-        .filter((item) => isNavigationEntryVisible(item.entryId, "OWNER"))
+        .filter((item) =>
+          isNavigationEntryVisible(item.entryId, { role: "OWNER" }),
+        )
         .map((item) => item.href)
         .sort(),
     );
@@ -428,10 +435,36 @@ describe("AppShell navigation source", () => {
 
     expect(visibleSidebarHrefs()).toEqual(
       allNavigationPages
-        .filter((item) => isNavigationEntryVisible(item.entryId, "SERVICE"))
+        .filter((item) =>
+          isNavigationEntryVisible(item.entryId, { role: "SERVICE" }),
+        )
         .map((item) => item.href)
         .sort(),
     );
+  });
+
+  /**
+   * A SZEMÉLY SAJÁT LISTÁJA DÖNT, NEM A SZEREPE (2026-10-06, a felhasználónkénti
+   * eltérés előkészítése). Egy OWNER, akinek a szerver kiadott listájából
+   * hiányzik a `users.manage`, nem látja a Felhasználók menüpontot.
+   * MI PIROSÍT: ha az oldalsáv újra `session.user.role`-ból számolna.
+   */
+  it("a szerver által kiadott saját jog-lista dönt, nem a szerep", () => {
+    auth.session = {
+      ...ownerSession,
+      user: {
+        ...ownerSession.user,
+        permissions: ROLE_PERMISSIONS.OWNER.filter(
+          (permission) => permission !== PERMISSIONS.USERS_MANAGE,
+        ),
+      },
+    };
+
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const hrefs = visibleSidebarHrefs();
+    expect(hrefs).not.toContain("/admin/users");
+    expect(hrefs).toContain("/admin/brands");
   });
 });
 

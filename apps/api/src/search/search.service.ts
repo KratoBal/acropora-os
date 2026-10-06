@@ -31,8 +31,7 @@ export class SearchService {
     const query = input?.trim();
     if (!query || query.length < 2) return {} satisfies SearchResponse;
 
-    const canSee = (entryId: string) =>
-      isNavigationEntryVisible(entryId, user.role);
+    const canSee = (entryId: string) => isNavigationEntryVisible(entryId, user);
 
     const [tickets, worksheets, assets, partners, aquariums] =
       await Promise.all([

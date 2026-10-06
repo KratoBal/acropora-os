@@ -226,7 +226,7 @@ export const SETTINGS_AREAS: SettingsArea[] = [
 
 export function SettingsOverviewPage() {
   const { session } = useAuth();
-  const role = session?.user.role;
+  const viewer = session?.user;
 
   /**
    * AMIT A NEZO NEM ER EL, AZT NEM IS MUTATJUK. Ma ez a szures a gyakorlatban
@@ -236,10 +236,10 @@ export function SettingsOverviewPage() {
    * szures nelkul egy olyan linket latna, amire 403-at kap.
    */
   const visible = (link: SettingsLink) => {
-    if (!role) return false;
+    if (!viewer) return false;
     return "entryId" in link
-      ? isNavigationEntryVisible(link.entryId, role)
-      : hasPermission(role, link.permission);
+      ? isNavigationEntryVisible(link.entryId, viewer)
+      : hasPermission(viewer, link.permission);
   };
 
   const areas = SETTINGS_AREAS.map((area) => ({

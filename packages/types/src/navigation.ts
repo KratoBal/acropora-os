@@ -2,6 +2,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type Permission,
+  type PermissionSubject,
   type UserRole,
 } from "./auth.js";
 
@@ -576,27 +577,28 @@ export function navigationEntry(id: string): NavigationEntry | undefined {
  */
 export function isNavigationEntryVisible(
   id: string,
-  role: UserRole,
+  viewer: PermissionSubject,
   features: ReadonlySet<NavigationFeature> = NO_FEATURES,
 ): boolean {
   const entry = BY_ID.get(id);
   if (!entry) return false;
   if (entry.feature && !features.has(entry.feature)) return false;
   const rule = entry.visibility;
+  // a permission rule asks the person (their own list), a role rule the role
   return rule.kind === "roles"
-    ? rule.roles.includes(role)
-    : hasPermission(role, rule.permission);
+    ? rule.roles.includes(viewer.role)
+    : hasPermission(viewer, rule.permission);
 }
 
 export function navigationIdsFor(
-  role: UserRole,
+  viewer: PermissionSubject,
   surface: NavigationSurface,
   features: ReadonlySet<NavigationFeature> = NO_FEATURES,
 ): string[] {
   return NAVIGATION_ENTRIES.filter(
     (entry) =>
       entry.surfaces.includes(surface) &&
-      isNavigationEntryVisible(entry.id, role, features),
+      isNavigationEntryVisible(entry.id, viewer, features),
   ).map((entry) => entry.id);
 }
 
@@ -624,11 +626,11 @@ export interface NavigationEntryView {
  * a webes es a mobil tabla kozott volt.
  */
 export function visibleNavigationFor(
-  role: UserRole,
+  viewer: PermissionSubject,
   features: ReadonlySet<NavigationFeature> = NO_FEATURES,
 ): NavigationEntryView[] {
   return NAVIGATION_ENTRIES.filter((entry) =>
-    isNavigationEntryVisible(entry.id, role, features),
+    isNavigationEntryVisible(entry.id, viewer, features),
   ).map((entry) => ({ id: entry.id, surfaces: entry.surfaces }));
 }
 

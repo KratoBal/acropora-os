@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  effectivePermissions,
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
   HUMAN_ROLES,
+  INTERNAL_ROLES,
+  roleTemplateHasPermission,
+  rolesWithPermission,
   MACHINE_ROLES,
   partnerMembership,
   PERMISSIONS,
@@ -142,20 +146,26 @@ describe("role permission mapping", () => {
 
 describe("permission helpers", () => {
   it("checks one permission", () => {
-    assert.equal(hasPermission("SERVICE", PERMISSIONS.SERVICE_MANAGE), true);
-    assert.equal(hasPermission("SERVICE", PERMISSIONS.USERS_MANAGE), false);
+    assert.equal(
+      hasPermission({ role: "SERVICE" }, PERMISSIONS.SERVICE_MANAGE),
+      true,
+    );
+    assert.equal(
+      hasPermission({ role: "SERVICE" }, PERMISSIONS.USERS_MANAGE),
+      false,
+    );
   });
 
   it("checks whether any permission is available", () => {
     assert.equal(
-      hasAnyPermission("SALES", [
+      hasAnyPermission({ role: "SALES" }, [
         PERMISSIONS.SETTINGS_MANAGE,
         PERMISSIONS.ORDERS_MANAGE,
       ]),
       true,
     );
     assert.equal(
-      hasAnyPermission("VIEWER", [
+      hasAnyPermission({ role: "VIEWER" }, [
         PERMISSIONS.SETTINGS_MANAGE,
         PERMISSIONS.USERS_MANAGE,
       ]),
@@ -165,14 +175,14 @@ describe("permission helpers", () => {
 
   it("checks whether every permission is available", () => {
     assert.equal(
-      hasAllPermissions("WAREHOUSE", [
+      hasAllPermissions({ role: "WAREHOUSE" }, [
         PERMISSIONS.INVENTORY_VIEW,
         PERMISSIONS.INVENTORY_MANAGE,
       ]),
       true,
     );
     assert.equal(
-      hasAllPermissions("WAREHOUSE", [
+      hasAllPermissions({ role: "WAREHOUSE" }, [
         PERMISSIONS.INVENTORY_MANAGE,
         PERMISSIONS.FINANCE_MANAGE,
       ]),
@@ -241,7 +251,7 @@ describe("AI_TEST_VIEW", () => {
 
     for (const role of vart) {
       assert.equal(
-        hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
+        hasPermission({ role: role }, PERMISSIONS.AI_TEST_VIEW),
         true,
         `${role} nem kapta meg az AI teszt-felület jogát`,
       );
@@ -252,7 +262,7 @@ describe("AI_TEST_VIEW", () => {
     // valaki szandekosan vette ki. (Ugyanaz az alak, mint a mobil tukornel a
     // bennragadt megfeleltetes.)
     const bennragadt = SZUKITETT.filter((role) =>
-      hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
+      hasPermission({ role: role }, PERMISSIONS.AI_TEST_VIEW),
     );
     assert.deepEqual(
       bennragadt,
@@ -463,5 +473,73 @@ describe("billing permissions follow the finance permissions", () => {
     assert.ok(ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SETTINGS_MANAGE));
     assert.ok(!ROLE_PERMISSIONS.MANAGER.includes(PERMISSIONS.SETTINGS_MANAGE));
     assert.ok(ROLE_PERMISSIONS.SALES.includes(PERMISSIONS.ORDERS_MANAGE));
+  });
+});
+
+/**
+ * A SZEMÉLY ÉS A SABLON KÜLÖN KÉRDÉS (2026-10-06, a felhasználónkénti eltérés
+ * előkészítése). Ma a kettő mindig egyenlő; ezek az állítások azt rögzítik,
+ * hogy ha a szerver a személy saját listáját küldi, AZ dönt, nem a szerepe.
+ *
+ * MI PIROSÍT: ha a `hasPermission` újra a szerepből olvasna, és a lista
+ * csak díszlet lenne a felhasználón.
+ */
+describe("a személy jogai és a szerep sablonja", () => {
+  it("lista nélkül a szerep sablonja", () => {
+    assert.deepEqual(
+      effectivePermissions({ role: "SERVICE" }),
+      ROLE_PERMISSIONS.SERVICE,
+    );
+  });
+
+  it("a személy saját listája dönt, szűkítésben és bővítésben is", () => {
+    const szukitett = {
+      role: "OWNER" as const,
+      permissions: [PERMISSIONS.DASHBOARD_VIEW],
+    };
+    assert.equal(hasPermission(szukitett, PERMISSIONS.USERS_MANAGE), false);
+    assert.equal(hasPermission(szukitett, PERMISSIONS.DASHBOARD_VIEW), true);
+    const bovitett = {
+      role: "VIEWER" as const,
+      permissions: [...ROLE_PERMISSIONS.VIEWER, PERMISSIONS.SERVICE_MANAGE],
+    };
+    assert.equal(hasPermission(bovitett, PERMISSIONS.SERVICE_MANAGE), true);
+    assert.equal(
+      hasAllPermissions(bovitett, [
+        PERMISSIONS.SERVICE_MANAGE,
+        PERMISSIONS.DASHBOARD_VIEW,
+      ]),
+      true,
+    );
+    assert.equal(
+      hasAnyPermission(szukitett, [PERMISSIONS.USERS_MANAGE]),
+      false,
+    );
+  });
+
+  it("a sablon-kérdés a szerepet nézi, a személyt nem", () => {
+    assert.equal(
+      roleTemplateHasPermission("SERVICE", PERMISSIONS.SERVICE_MANAGE),
+      true,
+    );
+    assert.equal(
+      roleTemplateHasPermission("VIEWER", PERMISSIONS.SERVICE_MANAGE),
+      false,
+    );
+  });
+
+  it("a szerepek, akiknek a sablonja hordozza a jogot", () => {
+    assert.deepEqual(
+      rolesWithPermission(PERMISSIONS.USERS_MANAGE, INTERNAL_ROLES),
+      INTERNAL_ROLES.filter((role) =>
+        ROLE_PERMISSIONS[role].includes(PERMISSIONS.USERS_MANAGE),
+      ),
+    );
+    assert.ok(
+      !rolesWithPermission(PERMISSIONS.SERVICE_MANAGE).includes("VIEWER"),
+    );
+    assert.ok(
+      rolesWithPermission(PERMISSIONS.SERVICE_MANAGE).includes("SERVICE"),
+    );
   });
 });

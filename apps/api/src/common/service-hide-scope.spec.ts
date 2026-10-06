@@ -41,7 +41,7 @@ const VEVO = { kind: "customer", customerId: "cust-1" } as const;
 function rejthet(role: UserRole, kind: "internal" | "partner"): boolean {
   return mayHideRows(
     kind === "internal" ? BELSO : VEVO,
-    hasPermission(role, PERMISSIONS.SERVICE_HIDE),
+    hasPermission({ role: role }, PERMISSIONS.SERVICE_HIDE),
   );
 }
 
@@ -70,7 +70,7 @@ describe("ki rejthet el sorokat -- a négy eset", () => {
     */
     assert.equal(rejthet("SERVICE", "internal"), false);
     assert.equal(
-      hasPermission("SERVICE", PERMISSIONS.SERVICE_MANAGE),
+      hasPermission({ role: "SERVICE" }, PERMISSIONS.SERVICE_MANAGE),
       true,
       "a régi kapu ezt a szerepet átengedte -- ha ez megszűnik, a fenti állítás mást mér",
     );
@@ -95,7 +95,7 @@ describe("ki rejthet el sorokat -- a négy eset", () => {
     */
     assert.equal(rejthet("PARTNER_SERVICE", "partner"), false);
     assert.equal(
-      hasPermission("PARTNER_SERVICE", PERMISSIONS.SERVICE_MANAGE),
+      hasPermission({ role: "PARTNER_SERVICE" }, PERMISSIONS.SERVICE_MANAGE),
       true,
       "a partner-fiók is viseli a SERVICE_MANAGE jogot -- ezért nem elég jogra kapuzni",
     );

@@ -1,10 +1,12 @@
 import type { Prisma } from "@acropora/database";
 import {
-  hasPermission,
   INTERNAL_ROLES,
   PERMISSIONS,
+  rolesWithPermission,
   type UserRole,
 } from "@acropora/types";
+
+import { usersWithPermissionWhere } from "../auth/permission-holders.js";
 
 /**
  * Kit lehet szerviz-munkára kiosztani: munkalap FELELŐSNEK vagy hibajegyre
@@ -57,9 +59,7 @@ import {
  * masikat -- a VIEWER belsos, de nem ir; a partner ir, de nem a mi emberunk.
  */
 export const SERVICE_ASSIGNABLE_ROLES: readonly UserRole[] =
-  INTERNAL_ROLES.filter((role) =>
-    hasPermission(role, PERMISSIONS.SERVICE_MANAGE),
-  );
+  rolesWithPermission(PERMISSIONS.SERVICE_MANAGE, INTERNAL_ROLES);
 
 /**
  * A KIOSZTHATO FELHASZNALO TELJES FELTETELE, EGY HELYEN.
@@ -80,7 +80,7 @@ export const SERVICE_ASSIGNABLE_ROLES: readonly UserRole[] =
 export function assignableUserWhere(): Prisma.UserWhereInput {
   return {
     isActive: true,
-    role: { in: [...SERVICE_ASSIGNABLE_ROLES] },
+    ...usersWithPermissionWhere(PERMISSIONS.SERVICE_MANAGE, INTERNAL_ROLES),
     customerId: null,
     supplierId: null,
   };
