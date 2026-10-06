@@ -39,6 +39,7 @@ import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
+import { loadTransferPairing } from "./webshop-transfer-pairing.dry-run.js";
 
 /** Webshop / Rendelések: az új webshop rendelései (nem a UNAS-é, az a `integrations/unas/orders`). */
 @Controller("webshop-orders")
@@ -53,6 +54,18 @@ export class WebshopOrdersController {
     private readonly splits: WebshopOrderSplitService,
     private readonly methods: WebshopOrderShippingMethodService,
   ) {}
+
+  /**
+   * AZ ELŐRE UTALÁS PÁROSÍTÁSÁNAK PRÓBAFUTÁSA (bb3a6bd5): mit párosítana a
+   * szabály a tárolt jóváírásokból, írás nélkül. A banki közlemény pénzügyi
+   * adat, ezért a pénzügy olvasása is kell hozzá. A `:id` útvonalak ELŐTT áll,
+   * hogy ne rendelés-azonosítónak olvassa a nevét.
+   */
+  @Get("transfer-pairing")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_VIEW)
+  transferPairing() {
+    return loadTransferPairing();
+  }
 
   /** A számlázási vagy a szállítási cím (a név is) szerkesztése. */
   @Put(":id/address")
