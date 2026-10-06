@@ -14,6 +14,8 @@ import type {
   CurrentUserResponse,
   MaintenanceOrderPartnerDetail,
   MaintenanceOrderPartnerListResponse,
+  PartnerConversationMessage,
+  PartnerConversationPage,
   ServiceJobPartnerDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
@@ -148,6 +150,21 @@ export const partnerApi = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
+  /**
+   * A HIBAJEGY BESZÉLGETÉSE (084e2c24). Csak a partneres beszélgetés jön, a
+   * belső soha: a szerver a hibajegy láthatóságából dönt minden hívásnál.
+   */
+  ticketConversation: (id: string, before?: string) =>
+    request<PartnerConversationPage>(
+      `/service/jobs/${encodeURIComponent(id)}/partner-conversation${
+        before ? `?${new URLSearchParams({ before })}` : ""
+      }`,
+    ),
+  sendTicketMessage: (id: string, text: string, clientMessageId: string) =>
+    request<PartnerConversationMessage>(
+      `/service/jobs/${encodeURIComponent(id)}/partner-conversation/messages`,
+      { method: "POST", body: JSON.stringify({ text, clientMessageId }) },
+    ),
   ticketDocuments: (id: string) =>
     request<{ items: ServiceJobDocumentSummary[] }>(
       `/service/jobs/${encodeURIComponent(id)}/documents`,
