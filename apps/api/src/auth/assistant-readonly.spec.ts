@@ -569,3 +569,32 @@ it("audit start failure prevents the request, and abort/finish completes at most
   callbacks.finish!();
   assert.deepEqual(results, [{ status: 499, result: "ABORTED" }]);
 });
+
+import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
+
+/*
+  The asset export (card 323e9b38) can put up to 5000 rows in one answer, so the
+  assistant may not call it; the paged list stays open to it. Sutyerák's
+  catalog is built from ASSISTANT_FORBIDDEN_PREFIXES, so the export disappears
+  from the catalog as well.
+*/
+it("the asset export (JSON and Excel) is blocked for the assistant, the paged list is not", () => {
+  const guard = (handler: keyof ServiceAssetsController, sessionKind: string) =>
+    new AssistantReadonlyGuard().canActivate({
+      getClass: () => ServiceAssetsController,
+      getHandler: () => ServiceAssetsController.prototype[handler],
+      switchToHttp: () => ({
+        getRequest: () => ({ headers: {}, method: "GET", sessionKind }),
+      }),
+    } as unknown as ExecutionContext);
+
+  for (const handler of ["exportList", "exportXlsx"] as const) {
+    assert.throws(
+      () => guard(handler, "ASSISTANT_READONLY"),
+      ForbiddenException,
+      handler,
+    );
+    assert.equal(guard(handler, "USER"), true);
+  }
+  assert.equal(guard("list", "ASSISTANT_READONLY"), true);
+});

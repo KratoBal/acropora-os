@@ -734,6 +734,9 @@ export class ServiceAssetsRepository extends Repository {
    * Ugyanaz a `where`, a sorrend és a sor-alak, mint a listáé, csak lapozás
    * nélkül: amit a kezelő a szűrők után lát, az kerül a papírra. A határ
    * fölött `null`: a hívó szűkítést kér, nem vág le csendben.
+   *
+   * ELŐBB SZÁMOL, és csak a határon belül tölti be a sorokat: a határ fölötti
+   * kérés így egy `count`, nem 5001 teljes sor a kapcsolataival.
    */
   async listAll(
     query: AssetListQueryDto,
@@ -746,13 +749,13 @@ export class ServiceAssetsRepository extends Repository {
       scope,
       assignedUnitIds,
     );
+    if ((await prisma.asset.count({ where })) > max) return null;
     const rows = await prisma.asset.findMany({
       where,
       include: assetSummaryInclude,
       orderBy: assetListOrderBy(query.sort, query.direction),
-      take: max + 1,
+      take: max,
     });
-    if (rows.length > max) return null;
     const paths = await this.unitPaths(rows);
     return rows.map((row) => this.toListItem(row, paths));
   }
