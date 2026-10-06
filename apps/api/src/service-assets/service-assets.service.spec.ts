@@ -320,6 +320,7 @@ test("generates an app deep link QR without exposing database ids", async () => 
     );
     assert.doesNotMatch(result.value, /asset-1/);
     assert.match(result.svg, /^<svg /);
+    assert.equal(result.modules.length, 37);
     assert.equal(result.labelSizeMm, 30);
   } finally {
     if (previous === undefined) delete process.env.ASSET_QR_BASE_URL;

@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 
 import {
   getAsset,
+  getAssetQr,
   setAssetDocumentCaption,
   uploadAssetDocuments,
 } from "@/lib/api/assets";
@@ -46,6 +47,8 @@ import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
 import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
+import { qrRuns } from "@/lib/assets/qr-runs";
+import { QrMatrix } from "@/components/assets/QrMatrix";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
@@ -82,6 +85,20 @@ export default function AssetDetailScreen() {
     queryFn: () => readCachedAsset(id!),
     enabled:
       status === "authenticated" && Boolean(id && capabilities?.assetsView),
+  });
+
+  /*
+    A QR-KÁRTYA (kanban 5622fe61). Külön kérés, és csak térerővel: a kód a
+    szerver `qrToken`-jéből készül, a mentett lapon nincs meg, és a matricán
+    úgyis ott áll.
+  */
+  const qr = useQuery({
+    queryKey: ["service-asset-qr", id],
+    queryFn: () => getAssetQr(id!),
+    enabled:
+      status === "authenticated" &&
+      online &&
+      Boolean(id && capabilities?.assetsView),
   });
 
   // Amit térerővel megnyitottak, az offline is TELJES lap marad. Enélkül a
@@ -559,6 +576,38 @@ export default function AssetDetailScreen() {
               <Info label="FP / Elektromos" value={asset.electricalCode} />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
+            </Section>
+
+            <Section title="QR-azonosító">
+              <Text style={styles.message}>
+                A matrica leolvasása az alkalmazásban ezt az eszközt nyitja meg.
+              </Text>
+              {(() => {
+                const runs = qrRuns(qr.data?.modules);
+                if (runs)
+                  return (
+                    <View style={styles.qr}>
+                      <QrMatrix
+                        runs={runs}
+                        size={220}
+                        label={`${asset.assetNumber} QR-kódja`}
+                      />
+                    </View>
+                  );
+                if (!qr.data && !online)
+                  return (
+                    <Text style={styles.message}>
+                      A QR-kód csak térerővel jelenik meg.
+                    </Text>
+                  );
+                if (qr.isLoading)
+                  return <ActivityIndicator style={styles.qr} />;
+                return (
+                  <Text style={styles.message}>
+                    A QR-kód most nem jeleníthető meg.
+                  </Text>
+                );
+              })()}
             </Section>
 
             <Section title="Karbantartás">
@@ -1088,6 +1137,7 @@ function createStyles(t: ThemeTokens) {
     chevron: { color: t.accent, fontSize: 26 },
     pressed: { opacity: 0.68 },
     message: { color: t.textSecondary, lineHeight: 20, marginTop: 8 },
+    qr: { marginTop: 12, alignItems: "center" },
     galeria: { flexDirection: "row", gap: 10, paddingVertical: 4 },
     csempe: { gap: 4, width: 104 },
     csempeKep: {
