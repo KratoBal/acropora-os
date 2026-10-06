@@ -47,6 +47,10 @@ import {
   weekComparison,
   type MortalityPeriod,
 } from "./mortality-format";
+import {
+  MortalitySearchPicker,
+  type PickerOption,
+} from "./mortality-search-picker";
 
 export const MORTALITY_LIST_PATH = "/elhullasi-naplo";
 
@@ -83,12 +87,24 @@ export function MortalityListPage() {
     "",
   );
   const aquariumId = params.get("aquariumId") ?? "";
+  // a konkrét beszállító csak a „Beszállító” forrás mellett él: más forrással
+  // a szerver ÉS-sel fűzné össze, és a lista csendben üres lenne
+  const supplierId =
+    sourceType === "SUPPLIER" ? (params.get("supplierId") ?? "") : "";
+  // a név csak megjelenítés: a beszállítónak nincs azonosító szerinti
+  // lekérdezése, és a visszalépett lista így is a választott nevet mutatja
+  const supplierName = params.get("supplierName") ?? "";
   const recordedById = params.get("recordedById") ?? "";
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
   const hasFilters = Boolean(
-    appliedSearch || sourceType || period || aquariumId || recordedById,
+    appliedSearch ||
+    sourceType ||
+    supplierId ||
+    period ||
+    aquariumId ||
+    recordedById,
   );
 
   const [data, setData] = useState<MortalityListResponse | null>(null);
@@ -117,6 +133,7 @@ export function MortalityListPage() {
     value.set("pageSize", String(MORTALITY_LIST_PAGE_SIZE.default));
     if (appliedSearch) value.set("q", appliedSearch);
     if (sourceType) value.set("sourceType", sourceType);
+    if (supplierId) value.set("supplierId", supplierId);
     if (aquariumId) value.set("aquariumId", aquariumId);
     if (recordedById) value.set("recordedById", recordedById);
     const range = periodRange(period, new Date());
@@ -125,7 +142,15 @@ export function MortalityListPage() {
       value.set("to", range.to);
     }
     return value;
-  }, [appliedSearch, aquariumId, page, period, recordedById, sourceType]);
+  }, [
+    appliedSearch,
+    aquariumId,
+    page,
+    period,
+    recordedById,
+    sourceType,
+    supplierId,
+  ]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -178,11 +203,32 @@ export function MortalityListPage() {
 
   const setFilter = (key: string, value: string) =>
     update({ [key]: value || null, page: null });
+  const setSourceType = (value: string) =>
+    update({
+      sourceType: value || null,
+      ...(value === "SUPPLIER" ? {} : { supplierId: null, supplierName: null }),
+      page: null,
+    });
+  const setSupplier = (option: PickerOption | null) =>
+    update({
+      supplierId: option?.id ?? null,
+      supplierName: option?.title ?? null,
+      page: null,
+    });
+  const searchSuppliers = useCallback(
+    async (term: string, signal: AbortSignal) =>
+      (await mortalityApi.supplierOptions(token, term, signal)).map(
+        (option) => ({ id: option.id, title: option.name }),
+      ),
+    [token],
+  );
   const clearFilters = () => {
     setSearch("");
     update({
       q: null,
       sourceType: null,
+      supplierId: null,
+      supplierName: null,
       period: null,
       aquariumId: null,
       recordedById: null,
@@ -242,7 +288,7 @@ export function MortalityListPage() {
             chevron
             aria-label="Forrás"
             value={sourceType}
-            onChange={(value) => setFilter("sourceType", value)}
+            onChange={setSourceType}
             className="min-w-[160px] flex-[1_1_170px] [&_select]:h-10"
           >
             <option value="">Minden forrás</option>
@@ -252,6 +298,25 @@ export function MortalityListPage() {
               </option>
             ))}
           </PilotSelect>
+          {sourceType === "SUPPLIER" ? (
+            <div className="min-w-[200px] flex-[1_1_220px]">
+              <MortalitySearchPicker
+                label="Beszállító"
+                placeholder="Beszállító keresése…"
+                value={
+                  supplierId
+                    ? {
+                        id: supplierId,
+                        title: supplierName || "Kiválasztott beszállító",
+                      }
+                    : null
+                }
+                onChange={setSupplier}
+                search={searchSuppliers}
+                emptyText="Nincs ilyen nevű beszállító."
+              />
+            </div>
+          ) : null}
           <PilotSelect
             chevron
             aria-label="Akvárium"
