@@ -26,6 +26,7 @@ import {
   SUTYERAK_USER_ID,
   USER_ROLES,
   personDisplayName,
+  type AssistantHandoffReply,
   type AuthenticatedUser,
   worksheetDisplayStatus,
   type ConversationContextCard,
@@ -275,6 +276,8 @@ export class MessagesService {
   async handoffReply(input: {
     conversationId?: string;
     userId?: string;
+    /** A widget beszélgetése (5830ee10): a widget ezzel kéri le a választ. */
+    threadId?: string;
     text: string;
   }): Promise<{ conversationId: string; messageId: string }> {
     if (!input.conversationId === !input.userId)
@@ -327,8 +330,32 @@ export class MessagesService {
       conversationId,
       input.text,
       "ACROBOT",
+      input.threadId ?? null,
     );
     return { conversationId, messageId: message.id };
+  }
+
+  /**
+   * ACROBOT VÁLASZAI A WIDGETBEN (5830ee10, Balázs 2026-10-06 12:14 UTC: „a
+   * válasz az üzenetben jött, nem Sutyerákhoz a chat ablakba”). A widget a
+   * saját beszélgetésének azonosítójával kéri, és CSAK a saját kettes
+   * beszélgetéséből kap: egy másik dolgozó azonosítójával sem lát mást.
+   */
+  async widgetReplies(
+    user: AuthenticatedUser,
+    threadId: string,
+  ): Promise<{ items: AssistantHandoffReply[] }> {
+    const rows = await this.repository.acrobotReplies(
+      directKeyOf(user.id, SUTYERAK_USER_ID),
+      threadId,
+    );
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        text: row.text ?? "",
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
   }
 
   /**
@@ -340,8 +367,15 @@ export class MessagesService {
     conversationId: string,
     text: string,
     source: "GATEWAY" | "ACROBOT",
+    threadId: string | null = null,
   ): Promise<MessageItem> {
-    return this.postAs(SUTYERAK_USER_ID, conversationId, text, source);
+    return this.postAs(
+      SUTYERAK_USER_ID,
+      conversationId,
+      text,
+      source,
+      threadId,
+    );
   }
 
   /**
@@ -353,6 +387,7 @@ export class MessagesService {
     conversationId: string,
     text: string,
     assistantSource: "GATEWAY" | "ACROBOT" | null = null,
+    assistantThreadId: string | null = null,
   ): Promise<MessageItem> {
     const [sender] = await this.repository.users([senderUserId]);
     if (!sender) throw new Error(`A küldő (${senderUserId}) nem létezik`);
@@ -362,6 +397,7 @@ export class MessagesService {
       text: text.trim(),
       clientMessageId: randomUUID(),
       assistantSource,
+      assistantThreadId,
     });
     await this.announce(row, {
       id: sender.id,

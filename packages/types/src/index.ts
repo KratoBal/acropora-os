@@ -1151,6 +1151,7 @@ export type {
   ConversationListResponse,
   ConversationNotificationState,
   ConversationNotifyMode,
+  AssistantHandoffReply,
   ConversationPerson,
   ConversationTypeValue,
   MessageAttachmentItem,

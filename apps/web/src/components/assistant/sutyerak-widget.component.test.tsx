@@ -7,7 +7,12 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@acropora/types";
-import { SutyerakWidget, SutyerakPanel } from "./sutyerak-widget";
+import {
+  ACROBOT_REPLY_POLL_MS,
+  SutyerakWidget,
+  SutyerakPanel,
+  withAcrobotReplies,
+} from "./sutyerak-widget";
 import { AssistantPageProvider, useAssistantEntity } from "./page-context";
 import { AssistantMarkdown } from "./markdown";
 import { ApiError } from "@/lib/api/client";
@@ -15,7 +20,11 @@ const state = vi.hoisted(() => ({
   session: null as Session | null,
   pathname: "/szerviz/munkalapok/worksheet-1",
 }));
-const api = vi.hoisted(() => ({ config: vi.fn(), ask: vi.fn() }));
+const api = vi.hoisted(() => ({
+  config: vi.fn(),
+  ask: vi.fn(),
+  handoffReplies: vi.fn(),
+}));
 vi.mock("../auth/auth-provider", () => ({
   useAuth: () => ({ session: state.session }),
 }));
@@ -66,6 +75,7 @@ beforeEach(() => {
   state.session = employee;
   state.pathname = "/szerviz/munkalapok/worksheet-1";
   api.config.mockResolvedValue({ enabled: true });
+  api.handoffReplies.mockResolvedValue({ items: [] });
   api.ask.mockImplementation(async (_token, _input, emit) => {
     emit({ type: "thread", threadId: "thread-1", new: true });
     emit({ type: "text", delta: "Folyamatban" });
@@ -321,5 +331,71 @@ describe("Sutyerák's figure follows the widget", () => {
         name: /Keresés → válasz|Mozgás szüneteltetése|Sötét háttér/,
       }),
     ).toBeNull();
+  });
+});
+
+/*
+  ACROBOT VÁLASZA AZ ABLAKBAN (5830ee10, Balázs 2026-10-06 12:14 UTC). MI
+  PIROSÍT: ha a válasz nem jelenik meg az ablakban; ha kétszer jelenik meg;
+  ha csukott ablakban vagy beszélgetés nélkül kérdez; ha fél percnél ritkábban
+  néz rá; ha a megjelölés hiányzik.
+*/
+describe("acrobot's answer in the window", () => {
+  it("appends a reply once, whatever the order of the polls", () => {
+    const first = withAcrobotReplies(
+      [{ question: "Hol a 72555?", answer: "Nem tudom, továbbadtam." }],
+      [{ id: "m1", text: "A polcon." }],
+    );
+    const again = withAcrobotReplies(first, [
+      { id: "m1", text: "A polcon." },
+      { id: "m2", text: "És a raktárban." },
+    ]);
+    expect(again.map((turn) => turn.acrobotId ?? turn.question)).toEqual([
+      "Hol a 72555?",
+      "m1",
+      "m2",
+    ]);
+    expect(withAcrobotReplies(again, [{ id: "m2", text: "x" }])).toBe(again);
+  });
+
+  it("shows the reply marked as acrobot's when the window opens, and looks again every half minute", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    sessionStorage.setItem("sutyerak.thread.pilot", "thread-7");
+    api.handoffReplies.mockResolvedValue({
+      items: [
+        {
+          id: "m1",
+          text: "A **polcon** van.",
+          createdAt: "2026-10-06T12:20:00.000Z",
+        },
+      ],
+    });
+    fixture();
+    await waitFor(() => expect(figure()).toBeInTheDocument());
+    expect(api.handoffReplies).not.toHaveBeenCalled();
+    fireEvent.click(figure());
+    await waitFor(() =>
+      expect(screen.getByText("Acrobot válasza")).toBeInTheDocument(),
+    );
+    expect(api.handoffReplies).toHaveBeenCalledWith(
+      "user-token",
+      "thread-7",
+      expect.any(AbortSignal),
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(ACROBOT_REPLY_POLL_MS);
+    });
+    await waitFor(() => expect(api.handoffReplies).toHaveBeenCalledTimes(2));
+    expect(screen.getAllByText("Acrobot válasza")).toHaveLength(1);
+    expect(ACROBOT_REPLY_POLL_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it("asks nothing without a conversation of its own", async () => {
+    fixture();
+    await open();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Kérdés Sutyeráknak")).toBeInTheDocument(),
+    );
+    expect(api.handoffReplies).not.toHaveBeenCalled();
   });
 });

@@ -280,3 +280,14 @@ export type MessageStreamEvent =
    * típust figyelmen kívül hagyja (murena mérése, web és mobil).
    */
   | { type: "assistant.thinking"; conversationId: string; active: boolean };
+
+/**
+ * ACROBOT VÁLASZA A WIDGETBEN (5830ee10): az átadott kérdésre visszaírt válasz,
+ * amit a widget a saját beszélgetésének azonosítójával kér le
+ * (`GET /assistant/handoff-replies?threadId=`). Az Üzenetekben is megjelenik.
+ */
+export interface AssistantHandoffReply {
+  id: string;
+  text: string;
+  createdAt: string;
+}
