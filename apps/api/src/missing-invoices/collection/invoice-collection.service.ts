@@ -142,6 +142,9 @@ interface Found {
  * A tárolt dokumentumot a Hiányzó számlák párosítója a többi jelölttel együtt
  * látja; várható beérkezést nem kap, tehát a bevételezési láncba nem jut.
  */
+/** A futás szívverésének üteme (lásd `STALE_RUN_AFTER_MS`). */
+export const INVOICE_COLLECTION_HEARTBEAT_MS = 60_000;
+
 @Injectable()
 export class InvoiceCollectionService {
   private readonly logger = new Logger(InvoiceCollectionService.name);
@@ -230,19 +233,43 @@ export class InvoiceCollectionService {
     const sources = this.enabledSources();
     const counts = emptyCounts();
     const runId = await this.repository.startRun(trigger);
-    const retryUnmatched =
-      options.forceRetry ||
-      (await this.repository.unmatchedRetryDue(new Date()));
-    const { failed: failedSources, paused: pausedSources } =
-      await this.collectAll(sources, counts, retryUnmatched);
-    const notes = [...failedSources, ...pausedSources];
-    await this.repository.finishRun(
-      runId,
-      counts,
-      notes.length ? notes.join(",").slice(0, 200) : null,
-      failedSources.length > 0,
-    );
-    return counts;
+    /*
+      A SZÍVVERÉS: amíg a futás él, percenként frissíti a sorát, így egy
+      megölt folyamat sora tíz perc csend után felszabadul (lásd
+      `STALE_RUN_AFTER_MS`), egy hosszú, élő futásé viszont nem.
+    */
+    const heartbeat = setInterval(() => {
+      this.repository.touchRun(runId).catch((error: unknown) => {
+        this.logger.warn(
+          `Invoice collection heartbeat failed: ${error instanceof Error ? error.name : "unknown"}`,
+        );
+      });
+    }, INVOICE_COLLECTION_HEARTBEAT_MS);
+    heartbeat.unref();
+    try {
+      const retryUnmatched =
+        options.forceRetry ||
+        (await this.repository.unmatchedRetryDue(new Date()));
+      const { failed: failedSources, paused: pausedSources } =
+        await this.collectAll(sources, counts, retryUnmatched);
+      const notes = [...failedSources, ...pausedSources];
+      await this.repository.finishRun(
+        runId,
+        counts,
+        notes.length ? notes.join(",").slice(0, 200) : null,
+        failedSources.length > 0,
+      );
+      return counts;
+    } catch (error) {
+      // A forrásokon kívüli hiba se hagyja a sort RUNNING állapotban: a
+      // következő futás ne a csend lejártára várjon.
+      await this.repository
+        .finishRun(runId, counts, "INVOICE_COLLECTION_RUN_FAILED", true)
+        .catch(() => undefined);
+      throw error;
+    } finally {
+      clearInterval(heartbeat);
+    }
   }
 
   private async collectAll(
