@@ -14,6 +14,7 @@ import type {
   MedusaOrderBusinessStatus,
   MedusaOrderDetailRow,
   MedusaOrderPayment,
+  MedusaOrderOverviewRow,
 } from "../../integrations/medusa/medusa-admin.client.js";
 import {
   addressEditOf,
@@ -335,6 +336,10 @@ export function toDetail(input: {
   osCustomer?: WebshopOrderDetail["osCustomer"];
   /** A belső megjegyzés (csak OS). */
   internalNote?: WebshopOrderDetail["internalNote"];
+  /** A vevő jelzései a webshop áttekintéséből; `null`: nem olvasható. */
+  signals?: MedusaOrderOverviewRow["customer_signals"] | null;
+  /** A csomagfeladás előnézete (`parcelInputOf`); bolti átvételnél `null`. */
+  dispatchPreview?: WebshopOrderDetail["dispatchPreview"];
   /** Az elavulási küszöbök órában (a beállított; ha hiányzik, az alapérték). */
   staleHours?: Partial<Record<WebshopOrderStatus, { hours: number }>>;
   /** A kártyás fizetés útja a webshopból; `null` vagy hiányzó: nincs ilyen (vagy nem olvasható). */
@@ -372,7 +377,14 @@ export function toDetail(input: {
       phone: delivery?.phone ?? billing?.phone ?? null,
       isNew: input.customerOrderCount === 1,
       guest: !order.customer_id,
+      unsuccessfulOrderCount: input.signals
+        ? input.signals.unsuccessful_closed_order_count
+        : null,
+      hasOtherOpenOrder: input.signals
+        ? input.signals.has_other_open_order
+        : null,
     },
+    dispatchPreview: input.dispatchPreview ?? null,
     billingAddress: billing,
     shippingAddress: delivery,
     shipping,

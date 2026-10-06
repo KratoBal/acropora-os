@@ -89,7 +89,11 @@ const detail: WebshopOrderDetail = {
     phone: "+36 30 555 0137",
     isNew: true,
     guest: false,
+    unsuccessfulOrderCount: 0,
+    hasOtherOpenOrder: false,
   },
+  dispatchPreview: { ready: true, reason: null, codHuf: null },
+
   billingAddress: {
     name: "Nagy Emese",
     company: null,
@@ -427,10 +431,15 @@ describe("WebshopOrderDetailPage", () => {
     });
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     const card = await screen.findByRole("region", { name: "Előzmények" });
+    // the mail's own send time stands next to its state (the prompt, point 10)
     expect(
-      within(card).getByText("Értesítő elküldve (újraküldve 1×)"),
+      within(card).getByText(
+        /^Értesítő elküldve · .*13:21.* \(újraküldve 1×\)$/,
+      ),
     ).toBeTruthy();
-    expect(within(card).getByText("Értesítő nem ment ki")).toBeTruthy();
+    expect(
+      within(card).getByText(/^Értesítő nem ment ki · .*13:40/),
+    ).toBeTruthy();
     fireEvent.click(
       within(card).getByRole("button", { name: "Értesítő újraküldése" }),
     );
@@ -636,7 +645,12 @@ describe("WebshopOrderDetailPage", () => {
     },
   });
 
-  it("before the invoice there is no parcel button", async () => {
+  /*
+    THE BUTTON STANDS THERE, HELD, AND SAYS WHY (the prompt, point 6): before
+    the invoice, and when the parcel would miss something (a phone, an
+    address), the reason shows before anyone presses it.
+  */
+  it("before the invoice the parcel button is held, with the reason", async () => {
     api.detail.mockResolvedValue(detail);
     render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
     const card = await screen.findByRole("region", { name: "Szállítás" });
@@ -645,9 +659,45 @@ describe("WebshopOrderDetailPage", () => {
         "Előbb állítsd ki a számlát, utána adható fel a csomag.",
       ),
     ).toBeTruthy();
+    const button = within(card).getByRole("button", {
+      name: "Csomag feladása",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.title).toBe("Előbb állítsd ki a számlát");
+  });
+
+  it("a parcel that would miss data is held before it is pressed; the COD shows on the form", async () => {
+    api.detail.mockResolvedValue({
+      ...invoiced,
+      dispatchPreview: {
+        ready: false,
+        reason:
+          "A címzettből hiányzik: telefonszám. A szállító enélkül nem veszi fel a csomagot.",
+        codHuf: null,
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const card = await screen.findByRole("region", { name: "Szállítás" });
     expect(
-      within(card).queryByRole("button", { name: "Csomag feladása" }),
-    ).toBeNull();
+      await within(card).findByText(/A címzettből hiányzik: telefonszám/),
+    ).toBeTruthy();
+    expect(
+      (
+        within(card).getByRole("button", {
+          name: "Csomag feladása",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    cleanup();
+
+    api.detail.mockResolvedValue({
+      ...invoiced,
+      dispatchPreview: { ready: true, reason: null, codHuf: 20840 },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    const ready = await screen.findByRole("region", { name: "Szállítás" });
+    expect(await within(ready).findByText(/Utánvét a csomagon/)).toBeTruthy();
+    expect(within(ready).getByText("20 840 Ft")).toBeTruthy();
   });
 
   it("creates the parcel with the chosen size, then shows its number, the mail and the label", async () => {
@@ -1350,6 +1400,22 @@ describe("WebshopOrderDetailPage", () => {
         carrierNote: "Csengess kétszer",
       }),
     );
+  });
+
+  it("the customer's earlier failed orders and other open order show on the page too", async () => {
+    api.detail.mockResolvedValue({
+      ...detail,
+      customer: {
+        ...detail.customer,
+        unsuccessfulOrderCount: 2,
+        hasOtherOpenOrder: true,
+      },
+    });
+    render(createElement(WebshopOrderDetailPage, { id: "order_38" }));
+    expect(
+      await screen.findByText(/2 korábbi sikertelen\s+rendelés/),
+    ).toBeTruthy();
+    expect(screen.getByText(/van másik nyitott rendelése/)).toBeTruthy();
   });
 
   it("without orders.manage there are no pencils", async () => {

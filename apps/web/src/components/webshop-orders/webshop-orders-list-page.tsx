@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import {
   Alert,
   Button,
@@ -26,7 +27,7 @@ import {
   glsDeliveryLabel,
 } from "@acropora/types";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   PilotButton,
@@ -48,7 +49,7 @@ import { webshopOrdersApi } from "@/lib/api/webshop-orders";
  * Figma lábléc-gombjai sem.
  */
 
-/** A státusz-csempe: a Figma jele és színe. A lila „Készletezés alatt”-ra nincs pilot token. */
+/** A státusz-csempe: a Figma jele és színe, a Pilot tokenekből (sötét módban is). */
 export const STATUS_TILE: Record<
   WebshopOrderStatus,
   { glyph: string; className: string }
@@ -58,7 +59,10 @@ export const STATUS_TILE: Record<
     className: "bg-pilot-amber-100 text-pilot-amber-700",
   },
   confirmed: { glyph: "✓", className: "bg-pilot-blue-50 text-pilot-blue-700" },
-  stocking: { glyph: "□", className: "bg-violet-50 text-violet-700" },
+  stocking: {
+    glyph: "□",
+    className: "bg-pilot-violet-50 text-pilot-violet-700",
+  },
   out_for_delivery: {
     glyph: "→",
     className: "bg-pilot-accent-warm-soft text-pilot-accent-warm-text",
@@ -138,6 +142,93 @@ function CustomerMarkers({ item }: { item: WebshopOrderListItem }) {
   );
 }
 
+/**
+ * SZÉLES-E A KÉPERNYŐ A TÁBLÁZATHOZ (1280 px fölött). A táblázat a menüsávval
+ * együtt kb. 1300 px-et kér; alatta a Figma tablet-kerete (493:232)
+ * kártyalistát mutat. Ahol nincs `matchMedia` (szerver, tesztkörnyezet), a
+ * táblázat áll: az a teljes nézet.
+ */
+const WIDE_QUERY = "(min-width: 1280px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window === "undefined" || !window.matchMedia) return () => {};
+      const query = window.matchMedia(WIDE_QUERY);
+      query.addEventListener("change", notify);
+      return () => query.removeEventListener("change", notify);
+    },
+    () =>
+      typeof window === "undefined" || !window.matchMedia
+        ? true
+        : window.matchMedia(WIDE_QUERY).matches,
+    () => true,
+  );
+}
+
+/** Egy rendelés kártyaként (tablet, Figma 493:232): ugyanazok az adatok, mint a sorban. */
+function OrderCard({
+  item,
+  now,
+  onOpen,
+}: {
+  item: WebshopOrderListItem;
+  now: number;
+  onOpen: (item: WebshopOrderListItem) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-label={`${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`}
+        onClick={() => onOpen(item)}
+        className={`block w-full rounded-xl border p-4 text-left transition-colors hover:border-pilot-accent-warm ${
+          item.status.stale
+            ? "border-pilot-amber-100 bg-pilot-amber-50"
+            : "border-pilot-grey-200 bg-white"
+        }`}
+      >
+        <span className="flex items-start justify-between gap-3">
+          <span className="font-semibold text-pilot-grey-900">
+            {orderNumber(item.displayId)}
+          </span>
+          <StatusCell item={item} now={now} />
+        </span>
+        <span className="mt-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <span className="min-w-0">
+            <span className="block truncate font-medium text-pilot-grey-900">
+              {item.customer.name ?? item.customer.email}
+            </span>
+            <CustomerMarkers item={item} />
+          </span>
+          <span className="font-semibold text-pilot-grey-900">
+            {formatMoney(item.total, item.currency)}
+          </span>
+          <span className="text-[13px] text-pilot-grey-700">
+            {shippingText(item)}
+          </span>
+          <span className="text-[13px] text-pilot-grey-700">
+            {paymentText(item)}
+          </span>
+          <span className="text-xs">
+            {item.invoiceNumber ? (
+              <span className="text-pilot-grey-600">{item.invoiceNumber}</span>
+            ) : item.stage === "invoice" ? (
+              <span className="text-pilot-accent-warm-text">Számlára vár</span>
+            ) : null}
+          </span>
+          {item.relatedOrder ? (
+            <span className="text-xs text-pilot-accent-warm-text">
+              {item.relatedOrder.role === "pickup"
+                ? "Van bolti átvételes része"
+                : "Bolti átvételes rész"}
+            </span>
+          ) : null}
+        </span>
+      </button>
+    </li>
+  );
+}
+
 function StatusCell({
   item,
   now,
@@ -214,6 +305,7 @@ export function WebshopOrdersListPage() {
   );
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [now, setNow] = useState(() => Date.now());
+  const wide = useWide();
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_VIEW),
   );
@@ -351,11 +443,19 @@ export function WebshopOrdersListPage() {
             {orderNumber(item.displayId)}
           </span>
           {item.relatedOrder ? (
-            <span className="mt-0.5 block text-[11px] text-pilot-accent-warm-text">
+            /*
+              A KAPCSOLT RENDELÉS LINK (a prompt 15. pontja): a sor maga is
+              megnyitja a saját rendelést, ezért a kattintás itt nem megy tovább.
+            */
+            <Link
+              href={`/webshop/rendelesek/${encodeURIComponent(item.relatedOrder.id)}`}
+              onClick={(event) => event.stopPropagation()}
+              className="mt-0.5 block text-[11px] text-pilot-accent-warm-text underline-offset-2 hover:underline"
+            >
               {item.relatedOrder.role === "pickup"
                 ? "Van bolti átvételes része"
                 : "Bolti átvételes rész"}
-            </span>
+            </Link>
           ) : null}
         </span>
       ),
@@ -676,19 +776,32 @@ export function WebshopOrdersListPage() {
       {data && !error ? (
         data.items.length ? (
           <section className="relative overflow-hidden rounded-2xl border border-pilot-grey-200 bg-white">
-            <PilotDataTable
-              columns={columns}
-              rows={data.items}
-              rowKey={(item) => item.id}
-              rowLabel={(item) =>
-                `${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`
-              }
-              rowClassName={(item) =>
-                item.status.stale ? "!bg-pilot-amber-50" : ""
-              }
-              onRowActivate={openOrder}
-              minWidth={1080}
-            />
+            {wide ? (
+              <PilotDataTable
+                columns={columns}
+                rows={data.items}
+                rowKey={(item) => item.id}
+                rowLabel={(item) =>
+                  `${orderNumber(item.displayId)} megnyitása${item.status.stale ? ", elavult" : ""}`
+                }
+                rowClassName={(item) =>
+                  item.status.stale ? "!bg-pilot-amber-50" : ""
+                }
+                onRowActivate={openOrder}
+                minWidth={1080}
+              />
+            ) : (
+              <ul aria-label="Rendelések" className="space-y-3 p-4">
+                {data.items.map((item) => (
+                  <OrderCard
+                    key={item.id}
+                    item={item}
+                    now={now}
+                    onOpen={openOrder}
+                  />
+                ))}
+              </ul>
+            )}
             <div className="flex flex-col gap-3 border-t border-pilot-grey-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-pilot-grey-500">
                 {data.total.toLocaleString("hu-HU")} rendelés

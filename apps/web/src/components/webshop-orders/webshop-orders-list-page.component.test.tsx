@@ -82,6 +82,7 @@ const order = (
     holdWarning: null,
   },
   invoiceNumber: null,
+  parcelNumber: null,
   status: {
     code: "confirmed",
     label: "Visszaigazolva",
@@ -108,7 +109,25 @@ const response = (
   ...over,
 });
 
+/*
+  THE SCREEN WIDTH IS THE TEST'S CHOICE: happy-dom is 1024 px wide, which is
+  the tablet frame (Figma 493:232, cards). The table needs 1280 px.
+*/
+const viewport = (wide: boolean) => {
+  window.matchMedia = ((query: string) => ({
+    matches: wide,
+    media: query,
+    onchange: null,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    dispatchEvent: () => false,
+  })) as typeof window.matchMedia;
+};
+
 beforeEach(() => {
+  viewport(true);
   auth.session = session("OWNER");
   nav.params = new URLSearchParams();
   nav.push.mockReset();
@@ -326,5 +345,49 @@ describe("WebshopOrdersListPage", () => {
       await screen.findByText("Nincs hozzáférésed a rendelésekhez"),
     ).toBeTruthy();
     expect(api.list).not.toHaveBeenCalled();
+  });
+
+  it("on a tablet the orders are cards, and a card opens its order (Figma 493:232)", async () => {
+    viewport(false);
+    api.list.mockResolvedValue(
+      response([
+        order(),
+        order({
+          id: "order_37",
+          displayId: 37,
+          status: {
+            code: "stocking",
+            label: "Készletezés alatt",
+            changedAt: new Date(Date.now() - 12 * 3_600_000).toISOString(),
+            stale: true,
+          },
+        }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    const cards = await screen.findByRole("list", { name: "Rendelések" });
+    expect(screen.queryByRole("table")).toBeNull();
+    const card = within(cards).getByRole("button", { name: "#38 megnyitása" });
+    expect(within(card).getByText("Nagy Emese")).toBeTruthy();
+    expect(within(card).getByText("Számlára vár")).toBeTruthy();
+    expect(
+      within(cards).getByRole("button", { name: "#37 megnyitása, elavult" })
+        .className,
+    ).toContain("bg-pilot-amber-50");
+    fireEvent.click(card);
+    expect(nav.push).toHaveBeenCalledWith("/webshop/rendelesek/order_38");
+  });
+
+  it("a mixed cart's pair is a link to it, and does not open the row's own order", async () => {
+    api.list.mockResolvedValue(
+      response([order({ relatedOrder: { id: "order_39", role: "pickup" } })]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    const link = await screen.findByRole("link", {
+      name: "Van bolti átvételes része",
+    });
+    expect(link.getAttribute("href")).toBe("/webshop/rendelesek/order_39");
+    fireEvent.click(link);
+    expect(nav.push).not.toHaveBeenCalled();
   });
 });

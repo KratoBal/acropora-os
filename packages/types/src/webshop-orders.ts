@@ -163,6 +163,8 @@ export interface WebshopOrderListItem {
   };
   /** A kiállított számla száma; az OS saját rekordja (`WEBSHOP_ORDER` forrású bizonylat). */
   invoiceNumber: string | null;
+  /** Az aktív csomag száma a szállítónál, ha van (a kereső ezt is nézi). */
+  parcelNumber: string | null;
   status: {
     code: WebshopOrderStatus | null;
     label: string | null;
@@ -288,7 +290,24 @@ export interface WebshopOrderDetail {
     phone: string | null;
     isNew: boolean;
     guest: boolean;
+    /**
+     * A vevő korábbi, sikertelenül lezárt rendelései és a másik nyitott
+     * rendelése, ahogy a lista is mutatja (a webshop áttekintéséből). `null`:
+     * nem olvasható most; vendég és első rendelés esetén 0 és `false`.
+     */
+    unsuccessfulOrderCount: number | null;
+    hasOtherOpenOrder: boolean | null;
   };
+  /**
+   * A CSOMAGFELADÁS ELŐNÉZETE, ugyanabból, amiből a feladás dolgozik
+   * (`parcelInputOf`): a gomb előtt kiderül, ha valami hiányzik, és látszik az
+   * utánvét. `null`: bolti átvétel, nincs csomag.
+   */
+  dispatchPreview: {
+    ready: boolean;
+    reason: string | null;
+    codHuf: number | null;
+  } | null;
   billingAddress: WebshopOrderAddress | null;
   shippingAddress: WebshopOrderAddress | null;
   shipping: {

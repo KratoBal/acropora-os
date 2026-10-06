@@ -104,6 +104,13 @@
   --color-pilot-blue-700: #1d4ed8;
 
   /**
+   * A LILA -- a webshop „Készletezés alatt” állapota (Figma 493:3). Eddig
+   * Tailwind `violet-*` alapszín állt ott, aminek nincs sötét párja.
+   */
+  --color-pilot-violet-50: #f5f3ff;
+  --color-pilot-violet-700: #6d28d9;
+
+  /**
    * AZ ÖTÖDIK SZÍN, A MUNKALAPOK FIGMA-KÖR (8. kör) SAJÁT KANONIKUS
    * `worksheetStatusTone`-JÁHOZ (`packages/types/src/worksheet-management.ts`):
    * a `REJECTED` állapot pirosa. A `PilotBadge` "danger" variánsa eddig
@@ -199,6 +206,10 @@
   --color-pilot-blue-100: #12294a;
   --color-pilot-blue-500: #5b9bf0;
   --color-pilot-blue-700: #a8cdfb;
+
+  /** A LILA SÖTÉT PÁRJA, a kékével azonos tónus-logikával. */
+  --color-pilot-violet-50: #221a3d;
+  --color-pilot-violet-700: #c4b5fd;
 
   /**
    * A PIROS SÖTÉT PÁRJA -- ugyanaz a tónus-logika, mint az amberé/kéké fent.

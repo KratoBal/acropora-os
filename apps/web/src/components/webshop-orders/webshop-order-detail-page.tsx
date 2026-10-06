@@ -577,7 +577,19 @@ function InvoiceCard({
       <div className="space-y-3">
         {invoice?.status === "ISSUED" ? (
           <>
-            <Field label="Számlaszám">{invoice.number ?? "—"}</Field>
+            <Field
+              label="Számlaszám"
+              action={
+                invoice.number ? (
+                  <CopyButton
+                    value={invoice.number}
+                    label="Számlaszám másolása"
+                  />
+                ) : null
+              }
+            >
+              {invoice.number ?? "—"}
+            </Field>
             <div className="flex flex-wrap items-center gap-3">
               <PilotButton
                 size="regular"
@@ -1017,7 +1029,9 @@ function ParcelSection({
     canManage &&
     !parcel &&
     !!order.invoiceNumber &&
-    PARCEL_STATUSES.includes(order.status.code);
+    PARCEL_STATUSES.includes(order.status.code) &&
+    order.dispatchPreview?.ready !== false;
+  const codDue = order.dispatchPreview?.codHuf ?? null;
   return (
     <div className="space-y-3">
       {parcel?.parcelNumber ? (
@@ -1075,10 +1089,33 @@ function ParcelSection({
             </p>
           ) : null}
         </>
-      ) : !order.invoiceNumber ? (
-        <p className="text-xs text-pilot-grey-500">
-          Előbb állítsd ki a számlát, utána adható fel a csomag.
-        </p>
+      ) : !order.invoiceNumber || order.dispatchPreview?.ready === false ? (
+        /*
+          A GOMB OTT ÁLL, LETILTVA, ÉS MEGMONDJA, MIÉRT (a prompt 6. pontja):
+          előbb számla, és a feladáshoz kellő adat (név, telefon, cím, pont)
+          a feladás előtt kiderül, nem a szállító hibájából.
+        */
+        <div className="space-y-2">
+          {canManage ? (
+            <PilotButton
+              size="regular"
+              variant="primary"
+              disabled
+              title={
+                !order.invoiceNumber
+                  ? "Előbb állítsd ki a számlát"
+                  : (order.dispatchPreview?.reason ?? undefined)
+              }
+            >
+              Csomag feladása
+            </PilotButton>
+          ) : null}
+          <p className="text-xs text-pilot-grey-500">
+            {!order.invoiceNumber
+              ? "Előbb állítsd ki a számlát, utána adható fel a csomag."
+              : order.dispatchPreview?.reason}
+          </p>
+        </div>
       ) : canCreate ? (
         <div className="flex flex-wrap items-end gap-2">
           {order.shipping.carrier === "FOXPOST" ? (
@@ -1099,6 +1136,14 @@ function ParcelSection({
                 ))}
               </PilotSelect>
             </label>
+          ) : null}
+          {codDue !== null ? (
+            <p className="w-full text-sm text-pilot-grey-700">
+              Utánvét a csomagon:{" "}
+              <span className="font-semibold">
+                {formatMoney(codDue, "HUF")}
+              </span>
+            </p>
           ) : null}
           <PilotButton
             size="regular"
@@ -1380,6 +1425,17 @@ function OrderBody({
               {order.customer.guest ? (
                 <span className="rounded-full bg-pilot-grey-100 px-3 py-1 text-xs font-medium text-pilot-grey-700">
                   ⊘ regisztráció nélkül
+                </span>
+              ) : null}
+              {order.customer.unsuccessfulOrderCount ? (
+                <span className="rounded-full bg-pilot-red-50 px-3 py-1 text-xs font-medium text-pilot-red-700">
+                  ↓{order.customer.unsuccessfulOrderCount} korábbi sikertelen
+                  rendelés
+                </span>
+              ) : null}
+              {order.customer.hasOtherOpenOrder ? (
+                <span className="rounded-full bg-pilot-blue-50 px-3 py-1 text-xs font-medium text-pilot-blue-700">
+                  + van másik nyitott rendelése
                 </span>
               ) : null}
               {order.osCustomer ? (
@@ -1785,6 +1841,9 @@ function OrderBody({
                     className={`text-xs ${MAIL_STATE[entry.mail.status].className}`}
                   >
                     {MAIL_STATE[entry.mail.status].label}
+                    {entry.mail.at
+                      ? ` · ${TIME.format(new Date(entry.mail.at))}`
+                      : ""}
                     {entry.mail.resent
                       ? ` (újraküldve ${entry.mail.resent}×)`
                       : ""}

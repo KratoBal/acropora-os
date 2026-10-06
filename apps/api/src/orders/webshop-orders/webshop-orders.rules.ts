@@ -165,6 +165,7 @@ export function toListItem(
       holdWarning: holdWarningOf(row.payment?.hold_expires_at, code, now),
     },
     invoiceNumber: facts.invoiceNumber,
+    parcelNumber: facts.parcel?.parcelNumber ?? null,
     status: {
       code,
       label: code ? WEBSHOP_ORDER_STATUS_LABELS[code] : null,
@@ -205,13 +206,18 @@ export const budapestDay = (iso: string) => BUDAPEST_DAY.format(new Date(iso));
 
 const digits = (value: string) => value.replace(/\D/g, "");
 
-/** Rendelésszám (#38 vagy 38), név, e-mail, telefon (számjegyekre) és számlaszám szerint. */
+/** Rendelésszám (#38 vagy 38), név, e-mail, telefon (számjegyekre), számlaszám és csomagszám szerint. */
 export function matchesSearch(item: WebshopOrderListItem, q: string): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
   const numeric = needle.replace(/^#/, "");
   if (/^\d+$/.test(numeric) && String(item.displayId) === numeric) return true;
-  const haystack = [item.customer.name, item.customer.email, item.invoiceNumber]
+  const haystack = [
+    item.customer.name,
+    item.customer.email,
+    item.invoiceNumber,
+    item.parcelNumber,
+  ]
     .filter(Boolean)
     .map((value) => value!.toLowerCase());
   if (haystack.some((value) => value.includes(needle))) return true;

@@ -8,6 +8,7 @@ import {
   countersOf,
   inView,
   isStale,
+  factsOf,
   matchesSearch,
   paymentMethodLabel,
   paymentStateOf,
@@ -229,6 +230,34 @@ describe("search and filters", () => {
       ].map((q) => matchesSearch(order, q)),
       [true, true, false, true, true, true, true, false],
     );
+  });
+
+  /*
+    THE PARCEL NUMBER IS SEARCHABLE (the prompt, point 2): a carrier's call
+    names the parcel, not the order.
+  */
+  it("the parcel number finds its order, case-insensitively", () => {
+    const shipped = toListItem(
+      row({ id: "p" }),
+      factsOf(undefined, {
+        carrier: "GLS",
+        reference: "38",
+        parcelNumber: "CLFOX0000000042",
+        stub: false,
+        size: null,
+        codHuf: null,
+        createdAt: "2026-10-05T12:00:00.000Z",
+      }),
+      NOW,
+    );
+    assert.equal(shipped.parcelNumber, "CLFOX0000000042");
+    assert.deepEqual(
+      ["clfox0000000042", "CLFOX00000000", "CLFOX9"].map((q) =>
+        matchesSearch(shipped, q),
+      ),
+      [true, true, false],
+    );
+    assert.equal(item({ id: "q" }).parcelNumber, null);
   });
 
   it("the day is Budapest's: 22:30 UTC on the 4th is the 5th", () => {
