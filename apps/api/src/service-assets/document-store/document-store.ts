@@ -32,6 +32,7 @@ export const DOCUMENT_OWNERS = [
   "message",
   // az elhullási napló fényképe (kártya 115c9740); ownerId: a bejegyzés
   "mortality",
+  "quote",
 ] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
@@ -76,6 +77,7 @@ const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
   "external-invoice": "external-invoices",
   message: "messages",
   mortality: "mortality",
+  quote: "quotes",
 };
 
 export function ownerDirectory(owner: DocumentOwner): string {

@@ -122,6 +122,8 @@ const LEKERDEZESEK: Record<DocumentOwner, () => Promise<SorOsszegzes | null>> =
      * nem értelmezhető rá.
      */
     invoice: async () => null,
+    // QuoteVersion stores a PDF key, not inline content/sizeBytes.
+    quote: async () => null,
     /** A külső kimenő számla PDF-je: ugyanaz, mint a számláé. */
     "external-invoice": async () => null,
     /** Az üzenet-csatolmány soha nem inline: a bájtok csak a tárolóban állnak. */

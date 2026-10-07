@@ -120,6 +120,30 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
     ],
   },
   {
+    key: "quotes",
+    label: "Árajánlatok",
+    view: P.QUOTES_VIEW,
+    manage: P.QUOTES_MANAGE,
+    extras: [
+      { permission: P.QUOTES_PUBLISH, label: "Ajánlat publikálása" },
+      { permission: P.QUOTES_SEND, label: "Ajánlat küldése" },
+      {
+        permission: P.QUOTES_COSTS_VIEW,
+        label: "Beszerzési ár és fedezet megtekintése",
+      },
+      { permission: P.QUOTES_ACCEPTANCE_RECORD, label: "Elfogadás rögzítése" },
+      {
+        permission: P.QUOTES_ACCEPTANCE_LINK_MANAGE,
+        label: "Elfogadási hivatkozások kezelése",
+      },
+      {
+        permission: P.QUOTES_TEMPLATES_MANAGE,
+        label: "Sablonok és szövegrészletek kezelése",
+      },
+      { permission: P.QUOTES_HANDOFF, label: "Ajánlat átadása projektnek" },
+    ],
+  },
+  {
     key: "service",
     label: "Szerviz",
     view: P.SERVICE_VIEW,
