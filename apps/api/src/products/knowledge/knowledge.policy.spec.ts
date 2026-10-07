@@ -402,7 +402,7 @@ describe("copy", () => {
     status: "VERIFIED",
   });
 
-  it("the description is all or nothing over lead and body, and only for our own master data", () => {
+  it("the description: lead and body together, the lead alone when the body is held back, and only for our own master data", () => {
     const facts = [verified("dosing", 1)];
     const both = [approved("lead", "Bevezető"), approved("body", "Törzs")];
     assert.equal(
@@ -414,7 +414,11 @@ describe("copy", () => {
       approved("lead", "Bevezető"),
       { ...approved("body", "Törzs"), status: "DRAFT" as const },
     ];
-    assert.equal(projectedCopy(draftBody, facts, "ACROPORA"), null);
+    // the body is a draft, the lead is publishable: the lead alone (acrobot 27556)
+    assert.equal(
+      projectedCopy(draftBody, facts, "ACROPORA")?.description,
+      "<p>Bevezető</p>",
+    );
     // A revision bump makes the approved text stale: today's description stays.
     assert.equal(
       projectedCopy(both, [verified("dosing", 2)], "ACROPORA"),
@@ -426,10 +430,61 @@ describe("copy", () => {
       "ACROPORA",
     );
     assert.deepEqual(seoOnly, {
-      description: null,
+      description: "<p>Bevezető</p>",
       seoTitle: "Cím",
       seoDescription: null,
     });
+  });
+
+  /*
+    A LEIRAS HAROM ESETE (acrobot 27556, a PR 1b stage-meres utan). A KZ Amino
+    alakja: a lead csak VERIFIED tenyekre epul, a body a vitatott dosing-ra.
+    MI PIROSIT: a visszatartott body mellett a leiras ures marad (vagy a body is
+    kimegy); mindket publikalhato blokk mellett a body lemarad; publikalhato lead
+    nelkul a forrasszoveg helyett barmi mas all.
+  */
+  it("the three description cases: both, the lead alone, neither", () => {
+    const tenyek = [
+      verified("application", 1),
+      {
+        field: "dosing",
+        revision: 1,
+        status: "CONFLICTING_SOURCES",
+      },
+    ];
+    const lead = {
+      ...approved("lead", "Bevezető"),
+      basedOn: { application: 1 },
+      usedFields: ["application"],
+    };
+    const body = {
+      ...approved("body", "Törzs"),
+      basedOn: { dosing: 1 },
+      usedFields: ["dosing"],
+    };
+    const verifiedBody = {
+      ...body,
+      basedOn: { application: 1 },
+      usedFields: ["application"],
+    };
+    // mindketto publikalhato: a mai lead+body
+    assert.equal(
+      projectedCopy([lead, verifiedBody], tenyek, "ACROPORA")?.description,
+      "<p>Bevezető</p>\n<p>Törzs</p>",
+    );
+    // a body visszatartva (a dosing vitatott), a lead publikalhato: a lead egyedul
+    assert.equal(
+      projectedCopy([lead, body], tenyek, "ACROPORA")?.description,
+      "<p>Bevezető</p>",
+    );
+    // a lead sem publikalhato: a mai leiras marad (a forrasszoveg), null
+    const draftLead = { ...lead, status: "DRAFT" as const };
+    assert.equal(projectedCopy([draftLead, body], tenyek, "ACROPORA"), null);
+    // es egy publikalhato body egyedul, lead nelkul sem lesz leiras
+    assert.equal(
+      projectedCopy([draftLead, verifiedBody], tenyek, "ACROPORA"),
+      null,
+    );
   });
 
   /*
