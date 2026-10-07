@@ -949,3 +949,84 @@ describe("MedusaProjectionScheduler, a csatorna-sorok", () => {
     });
   });
 });
+
+describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
+  /**
+   * MI PIROSIT: a kör kapcsoló nélkül is fut; bekapcsolva csak akkor fut, ha van
+   * esedékes termék; egy elutasítás vagy hiba nem kerül a naplóba, vagy
+   * megállítja a termékek körét.
+   */
+  const ures = () =>
+    adatbazis([termek()], [{ entityId: "prod-1", lastSyncedAt: MOST }]).db;
+
+  it("kikapcsolva (alapból) nem fut", async () => {
+    let hivas = 0;
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      runRedirects: async () => {
+        hivas += 1;
+        return { status: "unchanged", count: 0, hash: "h" };
+      },
+    });
+    await scheduler.runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("bekapcsolva üres körben is fut, és a küldést naplózza", async () => {
+    let hivas = 0;
+    const n = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db: ures(),
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: { ...BEKAPCSOLVA, MEDUSA_PROJECT_REDIRECTS: "true" },
+      logger: n.logger,
+      runRedirects: async () => {
+        hivas += 1;
+        return {
+          status: "sent",
+          count: 2,
+          hash: "h",
+          remoteCount: 0,
+          remoteHash: "r",
+        };
+      },
+    });
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(hivas, 1);
+    assert.ok(
+      n.sorok.some((s) => s.includes("ELKULDVE 2 szabaly")),
+      n.sorok.join("\n"),
+    );
+  });
+
+  it("egy elutasítás és egy hiba a naplóba megy, és a termékek köre fut tovább", async () => {
+    for (const runRedirects of [
+      async () => ({ status: "refused" as const, reason: "chain: /a -> /b" }),
+      async () => {
+        throw new Error("HTTP 404");
+      },
+    ]) {
+      const n = naplo();
+      const { run, kapott } = futtato(0);
+      const scheduler = new MedusaProjectionScheduler({
+        db: adatbazis([termek()], []).db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: { ...BEKAPCSOLVA, MEDUSA_PROJECT_REDIRECTS: "true" },
+        logger: n.logger,
+        runRedirects,
+      });
+      assert.equal(await scheduler.runOnce(), "APPLIED");
+      assert.deepEqual(kapott, [["prod-1"]]);
+      assert.ok(
+        n.sorok.some((s) => s.startsWith("Atiranyitasok:")),
+        n.sorok.join("\n"),
+      );
+    }
+  });
+});
