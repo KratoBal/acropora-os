@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
-import { documentStoreProvider } from "../service-assets/document-store/document-store.provider.js";
 import { QuoteCostingService } from "./quote-costing.service.js";
-import { QuotePublishService } from "./quote-publish.service.js";
+import {
+  QuotePublishService,
+  quoteDocumentStoreProvider,
+} from "./quote-publish.service.js";
 import { QuoteBomItemsController } from "./quote-bom-items.controller.js";
 import { QuoteEditorController } from "./quote-editor.controller.js";
 import { QuoteSnippetsController } from "./quote-snippets.controller.js";
@@ -26,7 +28,7 @@ import { QuotesService } from "./quotes.service.js";
     QuoteCostingService,
     QuoteSnippetsService,
     QuotePublishService,
-    documentStoreProvider,
+    quoteDocumentStoreProvider,
   ],
 })
 export class QuotesModule {}

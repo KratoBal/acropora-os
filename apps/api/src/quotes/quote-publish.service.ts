@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
@@ -16,6 +17,7 @@ import {
 } from "@acropora/types";
 
 import {
+  createDocumentStore,
   DOCUMENT_STORE,
   documentStoreEnabled,
 } from "../service-assets/document-store/document-store.provider.js";
@@ -47,6 +49,21 @@ import { renderQuotePdf } from "./pdf/quote-pdf.renderer.js";
  */
 
 type Tx = Prisma.TransactionClient;
+
+/**
+ * The environment the quote document store is read from. Unset: the process
+ * environment. A test provides its own (a global module), so it never writes
+ * `process.env` and stays in the shared integration run.
+ */
+export const QUOTE_DOCUMENT_ENV = Symbol("QUOTE_DOCUMENT_ENV");
+
+/** The quote module's store, built from that environment. */
+export const quoteDocumentStoreProvider = {
+  provide: DOCUMENT_STORE,
+  useFactory: (env?: NodeJS.ProcessEnv) =>
+    createDocumentStore(env ?? process.env),
+  inject: [{ token: QUOTE_DOCUMENT_ENV, optional: true }],
+};
 
 const EDITABLE_QUOTE_STATUSES = new Set(["DRAFT", "SENT", "POSTPONED"]);
 
@@ -216,7 +233,14 @@ async function lockVersion(tx: Tx, quoteId: string, versionId: string) {
 export class QuotePublishService {
   private readonly database = prisma;
 
-  constructor(@Inject(DOCUMENT_STORE) private readonly store: DocumentStore) {}
+  private readonly env: NodeJS.ProcessEnv;
+
+  constructor(
+    @Inject(DOCUMENT_STORE) private readonly store: DocumentStore,
+    @Optional() @Inject(QUOTE_DOCUMENT_ENV) env?: NodeJS.ProcessEnv,
+  ) {
+    this.env = env ?? process.env;
+  }
 
   private tree(tx: Tx | typeof prisma, versionId: string) {
     return tx.quoteVersion.findUniqueOrThrow({
@@ -226,7 +250,7 @@ export class QuotePublishService {
   }
 
   private async assertStoreReady() {
-    if (!documentStoreEnabled())
+    if (!documentStoreEnabled(this.env))
       throw new ServiceUnavailableException(
         "A dokumentumtár nincs bekapcsolva, ezért a publikálás nem futhat: a kiküldött PDF-nek meg kell maradnia.",
       );
