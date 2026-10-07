@@ -153,7 +153,9 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
           <>
             <PilotBadge variant="danger">{record.quantity} példány</PilotBadge>
             <PilotBadge variant="grey">
-              {aquariumLabel(record.aquarium)}
+              {record.aquarium
+                ? aquariumLabel(record.aquarium)
+                : (record.location?.name ?? "")}
             </PilotBadge>
           </>
         }
@@ -182,7 +184,9 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
                 {longDay(record.occurredOn)}
               </PilotDataItem>
               <PilotDataItem label="Akvárium">
-                {aquariumLabel(record.aquarium)}
+                {record.aquarium
+                  ? aquariumLabel(record.aquarium)
+                  : "Nincs megadva (halas rack)"}
               </PilotDataItem>
               <PilotDataItem label="Halas rack">
                 {record.location?.name ?? "Nincs megadva"}

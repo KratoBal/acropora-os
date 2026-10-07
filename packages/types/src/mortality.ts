@@ -3,11 +3,11 @@
  * döntései 27141).
  *
  * Egy rekord egy elhullási esemény: egy élőlény (élő állat kategóriájú termék),
- * egy vagy több példány, a bolt egy saját akváriumában. A rögzítő és a rögzítés
- * ideje automatikus. Az elhullás NAPJA külön mező (Luca kérése, 2026-10-07): egy
+ * egy vagy több példány, a bolt egy saját akváriumában VAGY egy halas rackben
+ * (legalább az egyik; a halas rack nem akvárium). A rögzítő és a rögzítés ideje
+ * automatikus. Az elhullás NAPJA külön mező (Luca kérése, 2026-10-07): egy
  * bejegyzés utólag is a valódi naphoz köthető, nem csak a begépelés idejéhez. A
- * forrás kötelező, és nem csak beszállító lehet; a halas rack (helyszín)
- * opcionális.
+ * forrás kötelező, és nem csak beszállító lehet.
  */
 
 export const MORTALITY_SOURCE_TYPES = [
@@ -73,7 +73,8 @@ export interface MortalityListItem {
   /** a szabad szöveges élőlény-név (Balázs 2026-10-07), ha nincs `product` */
   productName: string | null;
   quantity: number;
-  aquarium: { id: string; name: string; aquariumNumber: string };
+  /** az akvárium; `null`, ha csak halas rack áll (a kettőből legalább egy van) */
+  aquarium: { id: string; name: string; aquariumNumber: string } | null;
   /** a halas rack, ha meg van adva */
   location: MortalityLocationOption | null;
   source: MortalitySource;
@@ -182,7 +183,11 @@ export interface CreateMortalityInput {
   productId?: string | null;
   productName?: string | null;
   quantity: number;
-  aquariumId: string;
+  /**
+   * az akvárium VAGY a halas rack (`locationId`) kötelező, legalább az egyik
+   * (2026-10-07: a halas rackek nem akváriumok)
+   */
+  aquariumId?: string | null;
   sourceType: MortalitySourceType;
   supplierId?: string | null;
   sourceNote?: string | null;

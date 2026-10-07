@@ -11,11 +11,12 @@ import {
   SUPPLIER_NOT_FOUND_MESSAGE,
   mergedSource,
 } from "./mortality.service.js";
+import { PLACE_REQUIRED_MESSAGE } from "./mortality.policy.js";
 
 type Current = {
   productId: string | null;
   productName?: string | null;
-  aquariumId: string;
+  aquariumId: string | null;
   sourceType: "SUPPLIER" | "LOCAL_BREEDER" | "TRADE" | "OWN_BREEDING" | "OTHER";
   supplierId: string | null;
   sourceNote: string | null;
@@ -143,6 +144,60 @@ describe("MortalityService.create", () => {
       service.create({ ...VALID, occurredOn: "2026-02-30" }, "u"),
       BadRequestException,
       "Az elhullás napja érvénytelen dátum.",
+    );
+  });
+
+  it("akvárium és halas rack nélkül 400, és semmit nem ellenőriz előtte", async () => {
+    const { service, calls } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, aquariumId: null }, "u"),
+      BadRequestException,
+      PLACE_REQUIRED_MESSAGE,
+    );
+    await rejects(
+      service.create({ ...VALID, aquariumId: "", locationId: "" }, "u"),
+      BadRequestException,
+      PLACE_REQUIRED_MESSAGE,
+    );
+    assert.equal(calls.create.length, 0);
+    assert.deepEqual(calls.checked, []);
+  });
+
+  it("csak halas rackkel rögzít: akvárium nélkül, akvárium-ellenőrzés nélkül", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create(
+      { ...VALID, aquariumId: undefined, locationId: "loc-rakos-1" },
+      "u",
+    );
+    const created = calls.create[0] as {
+      aquariumId: unknown;
+      locationId: unknown;
+    };
+    assert.equal(created.aquariumId, null);
+    assert.equal(created.locationId, "loc-rakos-1");
+    assert.equal(
+      calls.checked.some((c) => c.startsWith("aquarium:")),
+      false,
+    );
+  });
+
+  it("csak akváriummal is rögzít (rack nélkül)", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create({ ...VALID, locationId: null }, "u");
+    const created = calls.create[0] as {
+      aquariumId: unknown;
+      locationId: unknown;
+    };
+    assert.equal(created.aquariumId, "own-1");
+    assert.equal(created.locationId, null);
+  });
+
+  it("akvárium és rack együtt is megadható", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create({ ...VALID, locationId: "loc-1" }, "u");
+    assert.deepEqual(
+      calls.checked.filter((c) => !c.startsWith("product:")),
+      ["aquarium:own-1", "supplier:sup-1", "location:loc-1"],
     );
   });
 
@@ -377,6 +432,44 @@ describe("MortalityService.update", () => {
       BadRequestException,
       LOCATION_NOT_FOUND_MESSAGE,
     );
+  });
+
+  it("az akvárium törölhető, ha rack áll (vagy most kerül) helyette", async () => {
+    const one = fakeRepository({ ...CURRENT, locationId: "loc-1" });
+    await one.service.update("rec-1", { aquariumId: null }, "u");
+    assert.deepEqual((one.calls.update[0] as { data: unknown }).data, {
+      aquariumId: null,
+    });
+    const two = fakeRepository(CURRENT);
+    await two.service.update(
+      "rec-1",
+      { aquariumId: null, locationId: "loc-2" },
+      "u",
+    );
+    assert.deepEqual((two.calls.update[0] as { data: unknown }).data, {
+      aquariumId: null,
+      locationId: "loc-2",
+    });
+  });
+
+  it("az utolsó helyszín nem törölhető: se az akvárium rack nélkül, se a rack akvárium nélkül", async () => {
+    const one = fakeRepository({ ...CURRENT, locationId: null });
+    await rejects(
+      one.service.update("rec-1", { aquariumId: null }, "u"),
+      BadRequestException,
+      PLACE_REQUIRED_MESSAGE,
+    );
+    const two = fakeRepository({
+      ...CURRENT,
+      aquariumId: null,
+      locationId: "loc-1",
+    });
+    await rejects(
+      two.service.update("rec-1", { locationId: null }, "u"),
+      BadRequestException,
+      PLACE_REQUIRED_MESSAGE,
+    );
+    assert.equal(one.calls.update.length + two.calls.update.length, 0);
   });
 
   it("forrás-típus váltásnál a régi beszállító nem öröklődik", async () => {

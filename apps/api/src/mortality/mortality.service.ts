@@ -19,6 +19,7 @@ import {
   normalizedProduct,
   normalizedSource,
   occurredOnProblem,
+  placeProblem,
   quantityProblem,
 } from "./mortality.policy.js";
 import { MortalityRepository } from "./mortality.repository.js";
@@ -46,13 +47,14 @@ function cleanNote(note: string | null | undefined): string | null {
  *   fa), VAGY szabad szöveges név, ha nincs a rendszerben (Balázs 2026-10-07);
  * - a rendszerbeli élőlény a készletből levonódik (`mortality-stock.ts`), a
  *   módosítás pontosan a különbséget mozgatja;
- * - csak a bolt saját (OWN) akváriuma;
+ * - a helyszín a bolt saját (OWN) akváriuma VAGY egy halas rack, legalább az
+ *   egyik (a halas rack nem akvárium);
  * - a forrás kötelező: beszállítónál a beszállító vagy a neve szabad szöveggel,
  *   „Egyéb”-nél a megnevezés;
  * - a rögzítő és a rögzítés ideje automatikus, és nem módosítható;
  * - az elhullás NAPJA külön mező (Luca, 2026-10-07): alapból a mai nap
  *   (Budapest szerint), módosítható, de nem lehet a jövőben;
- * - a halas rack opcionális, és csak élő (nem kivezetett) választható;
+ * - új halas racknek csak élő (nem kivezetett) választható;
  * - minden más mező módosítható, auditnaplóval; törlés nincs.
  *
  * MÓDOSÍTÁSKOR CSAK A MEGVÁLTOZOTT HIVATKOZÁST ELLENŐRIZZÜK ÚJRA. Egy termék
@@ -107,6 +109,7 @@ export class MortalityService {
     const problem =
       quantityProblem(input.quantity) ??
       mortalityProductProblem(input) ??
+      placeProblem(input) ??
       mortalitySourceProblem(input);
     if (problem) throw new BadRequestException(problem);
     const occurredOn = this.checkedDay(
@@ -114,7 +117,8 @@ export class MortalityService {
     );
     const product = normalizedProduct(input);
     if (product.productId) await this.checkProduct(product.productId);
-    await this.checkAquarium(input.aquariumId);
+    const aquariumId = input.aquariumId || null;
+    if (aquariumId) await this.checkAquarium(aquariumId);
     const source = normalizedSource(input);
     if (source.supplierId) await this.checkSupplier(source.supplierId);
     const locationId = input.locationId || null;
@@ -123,7 +127,7 @@ export class MortalityService {
     const { id } = await this.repository.create({
       ...product,
       quantity: input.quantity,
-      aquariumId: input.aquariumId,
+      aquariumId,
       ...source,
       note: cleanNote(input.note),
       occurredOn,
@@ -157,23 +161,29 @@ export class MortalityService {
         await this.checkProduct(product.productId);
       Object.assign(data, product);
     }
-    if (
-      input.aquariumId !== undefined &&
-      input.aquariumId !== current.aquariumId
-    ) {
-      await this.checkAquarium(input.aquariumId);
-      data.aquariumId = input.aquariumId;
+    if (input.aquariumId !== undefined || input.locationId !== undefined) {
+      // a helyszín a kettő együtt: a meg nem adott fél a mostani marad
+      const aquariumId =
+        input.aquariumId !== undefined
+          ? input.aquariumId || null
+          : current.aquariumId;
+      const locationId =
+        input.locationId !== undefined
+          ? input.locationId || null
+          : current.locationId;
+      const problem = placeProblem({ aquariumId, locationId });
+      if (problem) throw new BadRequestException(problem);
+      if (aquariumId && aquariumId !== current.aquariumId)
+        await this.checkAquarium(aquariumId);
+      // a régi, azóta kivezetett rack megtartható; csak az új választás számít
+      if (locationId && locationId !== current.locationId)
+        await this.checkLocation(locationId);
+      if (input.aquariumId !== undefined) data.aquariumId = aquariumId;
+      if (input.locationId !== undefined) data.locationId = locationId;
     }
     if (input.note !== undefined) data.note = cleanNote(input.note);
     if (input.occurredOn !== undefined)
       data.occurredOn = this.checkedDay(input.occurredOn ?? "");
-    if (input.locationId !== undefined) {
-      const locationId = input.locationId || null;
-      // a régi, azóta kivezetett rack megtartható; csak az új választás számít
-      if (locationId && locationId !== current.locationId)
-        await this.checkLocation(locationId);
-      data.locationId = locationId;
-    }
 
     if (
       input.sourceType !== undefined ||

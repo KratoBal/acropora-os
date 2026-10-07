@@ -38,6 +38,10 @@ import {
 
 const PHOTO_TYPES = ["image/jpeg", "image/png"];
 
+/** A helyszín szabálya, a szerverével egyező mondattal. */
+export const MORTALITY_PLACE_REQUIRED =
+  "Add meg az akváriumot vagy a halas racket (legalább az egyiket).";
+
 export interface MortalityFormState {
   product: PickerOption | null;
   quantity: string;
@@ -66,7 +70,8 @@ export function mortalityFormInput(
   const quantity = Number(state.quantity);
   if (!Number.isInteger(quantity) || quantity < 1)
     return { problem: "A példányszám legalább 1, egész szám." };
-  if (!state.aquariumId) return { problem: "Válaszd ki az akváriumot." };
+  if (!state.aquariumId && !state.locationId)
+    return { problem: MORTALITY_PLACE_REQUIRED };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(state.occurredOn))
     return { problem: "Add meg az elhullás napját." };
   // az ÉÉÉÉ-HH-NN alak szövegként is időrendben hasonlít
@@ -88,7 +93,7 @@ export function mortalityFormInput(
       productId: freeProduct ? null : state.product.id,
       productName: freeProduct ? state.product.title : null,
       quantity,
-      aquariumId: state.aquariumId,
+      aquariumId: state.aquariumId || null,
       sourceType: state.sourceType,
       supplierId: isSupplier && !freeSupplier ? state.supplier!.id : null,
       sourceNote: isSupplier
@@ -185,7 +190,8 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
         // egy régi bejegyzés akváriuma azóta inaktív lehet: a választóban
         // akkor is ott kell állnia
         setAquariums(
-          own.some((aquarium) => aquarium.id === record.aquarium.id)
+          !record.aquarium ||
+            own.some((aquarium) => aquarium.id === record.aquarium!.id)
             ? own
             : [record.aquarium, ...own],
         );
@@ -201,7 +207,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
                 MORTALITY_PRODUCT_NAME_MAX,
               ),
           quantity: String(record.quantity),
-          aquariumId: record.aquarium.id,
+          aquariumId: record.aquarium?.id ?? "",
           sourceType: record.source.type,
           supplier: record.source.supplier
             ? {
@@ -366,7 +372,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
             />
           </PilotFormField>
 
-          <div className="grid gap-5 sm:grid-cols-[140px_minmax(0,1fr)]">
+          <div className="grid gap-5 sm:grid-cols-[140px_180px]">
             <PilotFormField label="Példányszám" required>
               <PilotInput
                 aria-label="Példányszám"
@@ -378,29 +384,10 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
                 className="h-10"
               />
             </PilotFormField>
-            <PilotFormField label="Akvárium" required>
-              <PilotSelect
-                chevron
-                aria-label="Akvárium"
-                value={state.aquariumId}
-                onChange={(value) => set("aquariumId", value)}
-                className="[&_select]:h-10"
-              >
-                <option value="">Válassz akváriumot…</option>
-                {aquariums.map((aquarium) => (
-                  <option key={aquarium.id} value={aquarium.id}>
-                    {aquariumLabel(aquarium)}
-                  </option>
-                ))}
-              </PilotSelect>
-            </PilotFormField>
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
             <PilotFormField
               label="Elhullás napja"
               required
-              help="Ha utólag rögzíted, állítsd a valódi napra."
+              help="Utólag: a valódi nap."
             >
               <PilotInput
                 aria-label="Elhullás napja"
@@ -411,9 +398,45 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
                 className="h-10"
               />
             </PilotFormField>
+          </div>
+
+          {/* a helyszín: akvárium VAGY halas rack, legalább az egyik (a halas
+              rack nem akvárium); amelyik ki van töltve, a másikat elhagyhatóvá teszi */}
+          <div className="grid gap-5 sm:grid-cols-2">
+            <PilotFormField
+              label="Akvárium"
+              required={!state.locationId}
+              help={
+                state.locationId
+                  ? "Halas racknél elhagyható."
+                  : "Ha halas rackben történt, elég a racket megadni."
+              }
+            >
+              <PilotSelect
+                chevron
+                aria-label="Akvárium"
+                value={state.aquariumId}
+                onChange={(value) => set("aquariumId", value)}
+                className="[&_select]:h-10"
+              >
+                <option value="">
+                  {state.locationId ? "Nincs megadva" : "Válassz akváriumot…"}
+                </option>
+                {aquariums.map((aquarium) => (
+                  <option key={aquarium.id} value={aquarium.id}>
+                    {aquariumLabel(aquarium)}
+                  </option>
+                ))}
+              </PilotSelect>
+            </PilotFormField>
             <PilotFormField
               label="Halas rack"
-              help="Ha a halas rendszerben történt, melyik részén."
+              required={!state.aquariumId}
+              help={
+                state.aquariumId
+                  ? "Akváriumnál elhagyható."
+                  : "A halas rendszer része, ha ott történt."
+              }
             >
               <PilotSelect
                 chevron
@@ -612,7 +635,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
           <ul className="mt-2 space-y-1.5 text-sm text-pilot-grey-600">
             <li>• Ellenőrizd a példányszámot</li>
             <li>• Utólagos rögzítésnél állítsd át az elhullás napját</li>
-            <li>• Válaszd ki a pontos akváriumot</li>
+            <li>• Válaszd ki a pontos akváriumot vagy halas racket</li>
             <li>• A fotó opcionális, de ajánlott</li>
             <li>• Add meg, honnan érkezett az állat</li>
           </ul>

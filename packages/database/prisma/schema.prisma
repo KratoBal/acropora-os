@@ -8532,7 +8532,9 @@ model MortalityRecord {
   /// szabad szöveges élőlény-név, ha az élőlény nincs a rendszerben
   productName  String?             @db.VarChar(200)
   quantity     Int
-  aquariumId   String
+  /// a bolt saját akváriuma; a halas rack (`locationId`) mellett elhagyható:
+  /// a kettőből legalább az egyik kötelező (CHECK őrzi; 2026-10-07)
+  aquariumId   String?
   sourceType   MortalitySourceType
   /// beszállítói forrásnál a rendszerbeli beszállító VAGY a `sourceNote`
   /// szabad szövege (pontosan az egyik); a többi forrásnál üres
@@ -8545,7 +8547,8 @@ model MortalityRecord {
   /// szolgáltatás őrzi). Nincs adatbázis-alapértéke: a „ma” Budapest napja, nem
   /// a szerveré, ezért mindig az alkalmazás adja meg.
   occurredOn   DateTime            @db.Date
-  /// a halas rack, ahol történt (opcionális; Luca kérése, 2026-10-07)
+  /// a halas rack, ahol történt (Luca kérése, 2026-10-07); az akvárium VAGY
+  /// a rack kötelező, legalább az egyik, akár mindkettő
   locationId   String?
   recordedById String
   recordedAt   DateTime            @default(now())
@@ -8553,7 +8556,7 @@ model MortalityRecord {
   updatedAt    DateTime            @updatedAt
 
   product    Product?                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  aquarium   Aquarium                  @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
+  aquarium   Aquarium?                 @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
   supplier   Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   location   MortalityLocation?        @relation(fields: [locationId], references: [id], onDelete: Restrict)
   recordedBy User                      @relation("MortalityRecordRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)

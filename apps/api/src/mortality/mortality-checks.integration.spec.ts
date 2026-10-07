@@ -9,8 +9,9 @@ import { MORTALITY_REFERENCE_TYPE } from "./mortality-stock.js";
 import { MortalityRepository } from "./mortality.repository.js";
 
 /**
- * AZ ELHULLÁSI NAPLÓ HÁROM ADATBÁZIS-MEGKÖTÉSE (kártya 115c9740, migráció
- * `20261006200000_mortality_log`), VALÓDI POSTGRESEN.
+ * AZ ELHULLÁSI NAPLÓ ADATBÁZIS-MEGKÖTÉSEI (kártya 115c9740, migrációk
+ * `20261006200000_mortality_log` és `20261007140000_mortality_occurred_on_and_location`),
+ * VALÓDI POSTGRESEN.
  *
  * A szolgáltatás ugyanezt a három szabályt érthető üzenettel adja vissza; ez a
  * teszt azt méri, hogy a szolgáltatást megkerülő írás (egy szkript, egy jövőbeli
@@ -145,6 +146,8 @@ describe(
         sourceNote: string | null;
         productId: string | null;
         productName: string | null;
+        aquariumId: string | null;
+        locationId: string | null;
       }>,
     ) {
       counter += 1;
@@ -219,6 +222,17 @@ describe(
       await rejectedBy(
         "MortalityRecord_product_check",
         record({ productName: "és a termék is" }),
+      );
+    });
+
+    it("az akvárium VAGY a halas rack kell, legalább az egyik", async () => {
+      const [rack] = await new MortalityRepository().locationOptions();
+      await record({ aquariumId: null, locationId: rack!.id });
+      await record({ locationId: rack!.id });
+      await record({ locationId: null });
+      await rejectedBy(
+        "MortalityRecord_place_check",
+        record({ aquariumId: null, locationId: null }),
       );
     });
 

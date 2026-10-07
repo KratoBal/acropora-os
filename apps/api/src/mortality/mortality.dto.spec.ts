@@ -61,9 +61,9 @@ describe("CreateMortalityDto", () => {
   });
 
   it("a kötelező mezők hiánya", () => {
-    // az élőlény (termék VAGY név) a szolgáltatás szabálya, nem a DTO-é
+    // az élőlény (termék VAGY név) és a helyszín (akvárium VAGY halas rack) a
+    // szolgáltatás szabálya, nem a DTO-é
     assert.deepEqual(problems(CreateMortalityDto, {}).sort(), [
-      "aquariumId",
       "quantity",
       "sourceType",
     ]);
@@ -102,6 +102,22 @@ describe("CreateMortalityDto, az elhullás napja és a halas rack", () => {
         occurredOn: "2026-10-06T10:00",
       }),
       ["occurredOn"],
+    );
+  });
+
+  it("az akvárium elhagyható vagy null (ha halas rack áll helyette)", () => {
+    const { aquariumId: _omitted, ...withoutAquarium } = VALID;
+    assert.deepEqual(
+      problems(CreateMortalityDto, { ...withoutAquarium, locationId: "loc" }),
+      [],
+    );
+    assert.deepEqual(
+      problems(CreateMortalityDto, {
+        ...VALID,
+        aquariumId: null,
+        locationId: "loc",
+      }),
+      [],
     );
   });
 

@@ -464,12 +464,19 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
   },
   {
     id: "aquarium",
-    header: "Akvárium",
+    header: "Akvárium / rack",
+    // akvárium nélkül (csak halas racknél) a rack áll a helyén
     cell: (row) => (
       <div>
-        <div>{aquariumLabel(row.aquarium)}</div>
-        {row.location ? (
+        <div>
+          {row.aquarium
+            ? aquariumLabel(row.aquarium)
+            : (row.location?.name ?? "")}
+        </div>
+        {row.aquarium && row.location ? (
           <div className="text-xs text-pilot-grey-500">{row.location.name}</div>
+        ) : !row.aquarium ? (
+          <div className="text-xs text-pilot-grey-500">Halas rack</div>
         ) : null}
       </div>
     ),

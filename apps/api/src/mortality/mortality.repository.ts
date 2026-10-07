@@ -148,18 +148,23 @@ export function summaryWindows(now: Date) {
 /**
  * A hónap akváriumonkénti összegeiből: összesen, hány akváriumban, és a
  * legérintettebb. Döntetlennél az elsőként kapott marad (a sorrend ott nem
- * jelentés, csak egy akvárium kell a kártyára).
+ * jelentés, csak egy akvárium kell a kártyára). Az akvárium nélküli (csak halas
+ * rackes) csoport az összesbe beszámít, az akváriumok közé nem.
  */
 export function summarizeMonth(
-  rows: readonly { aquariumId: string; quantity: number }[],
+  rows: readonly { aquariumId: string | null; quantity: number }[],
 ) {
   let total = 0;
+  let aquariumCount = 0;
   let top: { aquariumId: string; quantity: number } | null = null;
   for (const row of rows) {
     total += row.quantity;
-    if (!top || row.quantity > top.quantity) top = row;
+    if (row.aquariumId === null) continue;
+    aquariumCount += 1;
+    if (!top || row.quantity > top.quantity)
+      top = { aquariumId: row.aquariumId, quantity: row.quantity };
   }
-  return { total, aquariumCount: rows.length, top };
+  return { total, aquariumCount, top };
 }
 
 @Injectable()
@@ -316,7 +321,7 @@ export class MortalityRepository {
     productId: string | null;
     productName: string | null;
     quantity: number;
-    aquariumId: string;
+    aquariumId: string | null;
     sourceType: MortalitySourceType;
     supplierId: string | null;
     sourceNote: string | null;
@@ -351,7 +356,7 @@ export class MortalityRepository {
       productId: string | null;
       productName: string | null;
       quantity: number;
-      aquariumId: string;
+      aquariumId: string | null;
       sourceType: MortalitySourceType;
       supplierId: string | null;
       sourceNote: string | null;

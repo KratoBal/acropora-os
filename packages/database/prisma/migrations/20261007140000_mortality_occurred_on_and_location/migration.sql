@@ -1,5 +1,6 @@
 -- Elhullási napló, 2026-10-07 (Luca kérése): az elhullás NAPJA külön mező, és
--- opcionálisan megadható a halas rack, ahol történt.
+-- megadható a halas rack, ahol történt. A halas rack nem akvárium, ezért egy
+-- bejegyzéshez az akvárium VAGY a rack kell, legalább az egyik.
 --
 -- Meglévő sorba egyetlen mezőt ír: az új `occurredOn` oszlopot tölti fel a
 -- létrehozás napjával. Más oszlop és más tábla meglévő sora nem változik.
@@ -53,3 +54,10 @@ CREATE INDEX "MortalityRecord_locationId_idx" ON "MortalityRecord"("locationId")
 ALTER TABLE "MortalityRecord" ADD CONSTRAINT "MortalityRecord_locationId_fkey"
   FOREIGN KEY ("locationId") REFERENCES "MortalityLocation"("id")
   ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Akvárium VAGY halas rack, legalább az egyik. Az akvárium eddig kötelező volt,
+-- tehát minden meglévő sornak van akváriuma, és a megkötés egyiken sem bukik.
+ALTER TABLE "MortalityRecord" ALTER COLUMN "aquariumId" DROP NOT NULL;
+ALTER TABLE "MortalityRecord" ADD CONSTRAINT "MortalityRecord_place_check" CHECK (
+  num_nonnulls("aquariumId", "locationId") >= 1
+);

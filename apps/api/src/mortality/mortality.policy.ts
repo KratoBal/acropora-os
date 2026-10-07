@@ -97,6 +97,21 @@ export function normalizedProduct(input: MortalityProductInput): {
     : { productId: null, productName: input.productName?.trim() || null };
 }
 
+/**
+ * A HELYSZÍN: a bolt saját akváriuma VAGY egy halas rack, legalább az egyik
+ * (2026-10-07: a halas rackek nem akváriumok, és nem is kerülnek az Akváriumok
+ * menübe). Mindkettő is megadható. Az adatbázis CHECK-je ugyanezt őrzi.
+ */
+export const PLACE_REQUIRED_MESSAGE =
+  "Add meg az akváriumot vagy a halas racket (legalább az egyiket).";
+
+export function placeProblem(input: {
+  aquariumId?: string | null;
+  locationId?: string | null;
+}): string | null {
+  return input.aquariumId || input.locationId ? null : PLACE_REQUIRED_MESSAGE;
+}
+
 /** Pozitív egész példányszám (a prompt: se 0, se negatív). */
 export function quantityProblem(quantity: unknown): string | null {
   return Number.isInteger(quantity) && (quantity as number) >= 1

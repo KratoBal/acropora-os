@@ -8,7 +8,11 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MortalityDetailPage } from "./mortality-detail-page";
-import { MortalityFormPage, mortalityFormInput } from "./mortality-form-page";
+import {
+  MORTALITY_PLACE_REQUIRED,
+  MortalityFormPage,
+  mortalityFormInput,
+} from "./mortality-form-page";
 import { budapestDay } from "./mortality-format";
 import { MortalityListPage } from "./mortality-list-page";
 import { freeTextOption } from "./mortality-search-picker";
@@ -91,6 +95,7 @@ const ITEM = {
 const RACKS = [
   { id: "r1", name: "JOBB 1. oszlop" },
   { id: "r2", name: "Bal hátsó nagy halas (dühöngő)" },
+  { id: "r3", name: "Rákos 1" },
 ];
 
 const LIST: MortalityListResponse = {
@@ -245,6 +250,16 @@ describe("lista", () => {
     ).toBeTruthy();
   });
 
+  it("akvárium nélkül a rack áll az akvárium helyén", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [{ ...ITEM, aquarium: null, location: RACKS[2] }],
+    });
+    render(<MortalityListPage />);
+    expect(await screen.findByText("Rákos 1")).toBeTruthy();
+    expect(screen.getByText("Halas rack")).toBeTruthy();
+  });
+
   it("a VIEWER lát, de nem rögzíthet", async () => {
     auth.role = "VIEWER";
     render(<MortalityListPage />);
@@ -279,6 +294,17 @@ describe("részlet", () => {
     render(<MortalityDetailPage recordId="rec-1" />);
     expect(await screen.findByText("2026. október 5.")).toBeTruthy();
     expect(screen.getByText("JOBB 1. oszlop")).toBeTruthy();
+  });
+
+  it("akvárium nélkül a rack a fejlécben és a sorában, az akvárium sor jelzi", async () => {
+    api.detail.mockResolvedValue({
+      ...DETAIL,
+      aquarium: null,
+      location: RACKS[2],
+    });
+    render(<MortalityDetailPage recordId="rec-1" />);
+    expect(await screen.findByText("Nincs megadva (halas rack)")).toBeTruthy();
+    expect(screen.getAllByText("Rákos 1").length).toBe(2);
   });
 
   it("rack nélkül „Nincs megadva”", async () => {
@@ -353,6 +379,52 @@ describe("űrlap", () => {
     expect(
       mortalityFormInput({ ...filled, occurredOn: TODAY }, TODAY),
     ).toMatchObject({ input: { occurredOn: TODAY } });
+  });
+
+  it("akvárium VAGY halas rack kell: egyik nélkül sem megy, csak rackkel igen", () => {
+    expect(
+      mortalityFormInput({ ...filled, aquariumId: "", locationId: "" }, TODAY),
+    ).toEqual({ problem: MORTALITY_PLACE_REQUIRED });
+    expect(
+      mortalityFormInput(
+        { ...filled, aquariumId: "", locationId: "r1" },
+        TODAY,
+      ),
+    ).toMatchObject({ input: { aquariumId: null, locationId: "r1" } });
+  });
+
+  it("csak halas rackkel menthető: az akvárium elhagyható, a rack megy el", async () => {
+    api.productOptions.mockResolvedValue([
+      { id: "p1", name: "Zebrasoma flavescens", commonName: null },
+    ]);
+    api.create.mockResolvedValue(DETAIL);
+    render(<MortalityFormPage />);
+    const input = await screen.findByRole("textbox", { name: "Élőlény" });
+    fireEvent.focus(input);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Zebrasoma flavescens/ }),
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Forrás típusa" }), {
+      target: { value: "TRADE" },
+    });
+    // egyik helyszín sincs: magyar mondat, nincs küldés
+    fireEvent.click(screen.getByRole("button", { name: "Bejegyzés mentése" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      MORTALITY_PLACE_REQUIRED,
+    );
+    expect(api.create).not.toHaveBeenCalled();
+
+    await screen.findByRole("option", { name: "Rákos 1" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Halas rack" }), {
+      target: { value: "r3" },
+    });
+    expect(screen.getByText("Halas racknél elhagyható.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Bejegyzés mentése" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalled());
+    expect(api.create.mock.calls[0]![1]).toMatchObject({
+      aquariumId: null,
+      locationId: "r3",
+    });
   });
 
   it("a választott halas rack az azonosítójával megy", () => {

@@ -18,7 +18,6 @@ import {
   Max,
   MaxLength,
   Min,
-  MinLength,
 } from "class-validator";
 
 import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
@@ -52,7 +51,8 @@ export class CreateMortalityDto implements CreateMortalityInput {
   @IsOptional()
   productName?: string | null;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
-  @IsString() @MinLength(1) aquariumId!: string;
+  // az akvárium VAGY a halas rack kell, legalább az egyik: a szolgáltatás dönt
+  @IsString() @IsOptional() aquariumId?: string | null;
   @IsIn(MORTALITY_SOURCE_TYPES) sourceType!: MortalitySourceType;
   @IsString() @IsOptional() supplierId?: string | null;
   @IsString()
@@ -73,7 +73,7 @@ export class UpdateMortalityDto implements UpdateMortalityInput {
   @IsOptional()
   productName?: string | null;
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() quantity?: number;
-  @IsString() @MinLength(1) @IsOptional() aquariumId?: string;
+  @IsString() @IsOptional() aquariumId?: string | null;
   @IsIn(MORTALITY_SOURCE_TYPES) @IsOptional() sourceType?: MortalitySourceType;
   @IsString() @IsOptional() supplierId?: string | null;
   @IsString()

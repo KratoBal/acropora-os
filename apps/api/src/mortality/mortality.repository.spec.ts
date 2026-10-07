@@ -103,6 +103,21 @@ describe("summarizeMonth", () => {
     );
   });
 
+  it("a csak halas rackes csoport az összesbe számít, az akváriumok közé nem", () => {
+    assert.deepEqual(
+      summarizeMonth([
+        { aquariumId: null, quantity: 9 },
+        { aquariumId: "a", quantity: 2 },
+      ]),
+      { total: 11, aquariumCount: 1, top: { aquariumId: "a", quantity: 2 } },
+    );
+    assert.deepEqual(summarizeMonth([{ aquariumId: null, quantity: 3 }]), {
+      total: 3,
+      aquariumCount: 0,
+      top: null,
+    });
+  });
+
   it("üres hónapban nincs legérintettebb", () => {
     assert.deepEqual(summarizeMonth([]), {
       total: 0,
