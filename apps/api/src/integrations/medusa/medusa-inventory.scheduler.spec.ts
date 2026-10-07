@@ -210,8 +210,29 @@ describe("MedusaInventoryScheduler", () => {
     assert.equal(created, 0);
   });
 
+  it("az üres kör is kap sort: az első, utána minden tizenkettedik", async () => {
+    const { db } = fakeDb({ linked: [] });
+    const logs: string[] = [];
+    const scheduler = new MedusaInventoryScheduler({
+      db: db as never,
+      environment: env,
+      createService: async () => ({ project: async () => ({}) as never }),
+      logger: {
+        log: (m: string) => logs.push(m),
+        warn: () => undefined,
+        error: () => undefined,
+      },
+    });
+    for (let round = 0; round < 13; round++) await scheduler.runOnce();
+    assert.deepEqual(logs, [
+      "Medusa inventory run: SKIPPED (0 esedékes termék, 1. üres kör egymás után)",
+      "Medusa inventory run: SKIPPED (0 esedékes termék, 12. üres kör egymás után)",
+    ]);
+  });
+
   it("siker a kör KEZDETÉVEL rögzül, kudarc az okkal", async () => {
     const { db, upserts } = fakeDb({ linked: ["ok", "rossz"] });
+    const logs: string[] = [];
     const dbWithVariants = {
       ...db,
       productVariant: {
@@ -260,12 +281,17 @@ describe("MedusaInventoryScheduler", () => {
               }) as never,
       }),
       logger: {
-        log: () => undefined,
+        log: (m: string) => logs.push(m),
         warn: () => undefined,
         error: () => undefined,
       },
     });
     assert.equal(await scheduler.runOnce(), "FAILED");
+    // a sor azt is megmondja, mi változott, és miért állt meg, ami megállt
+    assert.match(
+      logs.join("\n"),
+      /1 kiment, 1 megállt \(2 esedékes termék\); változat: 0 létrehozva, 1 frissítve, 0 változatlan, 1 megállt; első okok: SKU-rossz: variant-not-found/,
+    );
     const started = new Date(NOW.getTime() + 60_000);
     const byId = Object.fromEntries(
       upserts.map((u) => [
