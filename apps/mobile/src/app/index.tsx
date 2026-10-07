@@ -103,8 +103,8 @@ export default function HomeScreen() {
         preference: push.preference,
       }),
   );
-  const capabilities = user ? getWebshopCapabilities(user.role) : null;
-  const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getWebshopCapabilities(user) : null;
+  const serviceCapabilities = user ? getServiceCapabilities(user) : null;
   /**
    * AZ ESZKOZ-URLAP KET LISTAJA A KESZULEKRE, AMIG MEG VAN TEREO.
    *

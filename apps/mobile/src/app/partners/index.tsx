@@ -39,7 +39,7 @@ export default function PartnersScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const capabilities = user ? getWebshopCapabilities(user) : null;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 

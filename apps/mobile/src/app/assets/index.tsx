@@ -73,7 +73,7 @@ const STATUS_TABS: { key: AssetListStatusFilter; label: string }[] = [
 export default function AssetListScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const online = useIsOnline();
   const queryClient = useQueryClient();
   const { tokens } = useAppTheme();
