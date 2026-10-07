@@ -7,6 +7,7 @@ import {
   type MedusaProductRow,
   type MedusaSalesChannelRow,
 } from "./medusa-admin.client.js";
+import { vonalkodAlakjai } from "./medusa-barcode.policy.js";
 import {
   MedusaProductLinkRepository,
   type MedusaOrphanMark,
@@ -1239,9 +1240,24 @@ export class MedusaProductProjectionService {
         maradna, és a változatnak két különböző kódja lenne a boltban. Az üres
         mezőhöz nem nyúlunk.
       */
+      /*
+        UGYANAZ A GTIN MÁS ALAKBAN NEM ELTÉRŐ KÓD (barracuda, 27732): a
+        `036000291452` (12 jegy, `upc`) és a `0036000291452` (13 jegy, `ean`) egy
+        nyomtatott kód. Az összevetés ezért a `vonalkodAlakjai`-val megy, ugyanaz a
+        szabály, mint az ismétlődés-szűrésnél: a másik mező csak akkor ürül, ha a
+        kódja NEM a kívánt kód egyik alakja; és ha a bolt a kívánt GTIN-t a másik
+        mezőben már viseli (a saját mező üres), nincs mit írni.
+      */
       const masik = w.field === "ean" ? "upc" : "ean";
-      const urit = (row[masik] ?? null) !== null && row[masik] !== w.value;
-      if (row[w.field] === w.value && !urit) {
+      const alakok = vonalkodAlakjai(w.value);
+      const masikKod = row[masik] ?? null;
+      const urit = masikKod !== null && !alakok.includes(masikKod);
+      const marOtt =
+        row[w.field] === w.value ||
+        ((row[w.field] ?? null) === null &&
+          masikKod !== null &&
+          alakok.includes(masikKod));
+      if (marOtt && !urit) {
         report.unchanged += 1;
         continue;
       }

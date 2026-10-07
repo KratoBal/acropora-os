@@ -2252,6 +2252,40 @@ describe("MedusaProductProjectionService -- a valtozatok vonalkodja", () => {
     ]);
   });
 
+  /*
+    UGYANAZ A GTIN MAS ALAKBAN (barracuda, 27732). MI PIROSIT: a 12 jegyu upc
+    mellett a vezeto nullas 13 jegyu ean kivanasa irast vagy uritest okoz,
+    pedig a bolt mar viseli ugyanazt a nyomtatott kodot.
+  */
+  it("ugyanaz a GTIN a masik mezoben, masik alakban: nincs iras, nincs urites", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantBarcodes: async () => [
+        { id: "v_a", sku: "A", ean: null, upc: "036000291452" },
+        { id: "v_b", sku: "B", ean: "0036000291452", upc: "036000291452" },
+      ],
+      updateVariantBarcode: async (_p: string, id: string, patch: unknown) => {
+        irasok.push([id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantBarcodes: [
+          { sku: "A", field: "ean" as const, value: "0036000291452" },
+          { sku: "B", field: "ean" as const, value: "0036000291452" },
+        ],
+      },
+      now,
+    );
+    assert.deepEqual(irasok, []);
+    assert.equal(
+      outcome.action === "updated" && outcome.barcodes?.unchanged,
+      2,
+    );
+  });
+
   it("ures listanal nem fordul a bolthoz, es nincs jelentes", async () => {
     const f = fakes({ link, found: [] });
     let kerdezte = false;
