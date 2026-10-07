@@ -298,6 +298,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "billing",
       },
       {
+        // Árajánlatok (#1582 P1): a Figma 35 szerint a Pénzügy alatt; a
+        // `quotes` kapcsoló mögött, alapból rejtve.
+        href: "/ajanlatok",
+        label: "Árajánlatok",
+        icon: "file-text",
+        entryId: "quotes",
+      },
+      {
         // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön
         // egy Elszámolások menüpont. Ez alá kerüljön be a Foxpost a GLS és a
         // Simple Pay elszámolás." A menü két szintű, ezért a három fül a
@@ -488,6 +496,16 @@ export const settingsNavigation: AppNavigationItem[] = [
     label: "Eszköz-funkciók",
     icon: "settings",
     entryId: "asset-functions",
+  },
+  {
+    /*
+      AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat
+      kerete, ezert a Beallitasok tobbi listalapjanak mintajat koveti.
+    */
+    href: "/beallitasok/ajanlat-szovegreszletek",
+    label: "Ajánlat szövegrészletek",
+    icon: "settings",
+    entryId: "quote-snippets",
   },
 ];
 
