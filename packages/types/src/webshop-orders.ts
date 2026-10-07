@@ -118,6 +118,46 @@ export interface WebshopOrderProforma {
   /** A kiküldés állapota a bizonylaton (`BillingEmailStatus`); még nem ment ki: `null`. */
   emailStatus: string | null;
   expired: boolean;
+  /** A díjbekérő bruttó összege, tizedesponttal; kiállítás előtt `null`. */
+  grossAmount: string | null;
+}
+
+/**
+ * MEGJÖTT A PÉNZ (bb3a6bd5): a banki párosításból vagy kézi rögzítésből. A
+ * rendelésen „Kifizetve” áll helyette, nem „Utalásra vár”.
+ */
+export interface WebshopTransferReceipt {
+  source: "BANK_PAIRING" | "MANUAL";
+  /** ÉÉÉÉ-HH-NN, a jóváírás napja. */
+  receivedOn: string;
+  reference: string;
+  /** Tizedesponttal. */
+  amount: string;
+  currency: string;
+  /** Kézi rögzítésnél ki (a megjelenítendő név); párosításnál `null`. */
+  recordedBy: string | null;
+}
+
+/**
+ * A SZÁMLÁZZ.HU ÁLTAL KIÁLLÍTOTT SZÁMLA (bb3a6bd5): előre utalásnál a
+ * kifizetett díjbekérőből az Autokassza állítja ki, és a kimenő továbbítás
+ * hozza be. `link`: miből tudjuk, hogy ehhez a rendeléshez tartozik; a
+ * `BUYER_AMOUNT` gyenge (csak a vevő és az összeg egyezik), ellenőrizendő.
+ */
+export interface WebshopExternalInvoice {
+  /** Az `ExternalBillingDocument` azonosítója (Számlázás, külső bizonylat). */
+  id: string;
+  number: string;
+  link: "ORDER_NUMBER" | "PROFORMA_NUMBER" | "BUYER_AMOUNT";
+  /** A számla saját kifizetései szerint ki van egyenlítve. */
+  paid: boolean;
+  paidOn: string | null;
+}
+
+/** A kézi rögzítés bemenete: a jóváírás napja és a banki hivatkozás. */
+export interface WebshopTransferReceiptInput {
+  receivedOn: string;
+  reference: string;
 }
 
 /**
@@ -200,6 +240,8 @@ export interface WebshopOrderListItem {
    * újraküldhető.
    */
   proformaExpired: boolean;
+  /** Az előre utalás pénze megjött (bb3a6bd5): a listán „Kifizetve”. */
+  transferReceived: boolean;
   status: {
     code: WebshopOrderStatus | null;
     label: string | null;
@@ -417,6 +459,10 @@ export interface WebshopOrderDetail {
    * 2026-10-06 16:41 UTC).
    */
   proforma: WebshopOrderProforma | null;
+  /** Az előre utalás beérkezése, ha már rögzítve van; különben `null`. */
+  transferReceipt: WebshopTransferReceipt | null;
+  /** A Számlázz.hu számlája, ha bejött és a rendeléshez köthető; különben `null`. */
+  externalInvoice: WebshopExternalInvoice | null;
   /** A vevő OS-partnere, ha a számlázás már bekötötte (Medusa-kötés); különben `null`. */
   osCustomer: {
     id: string;

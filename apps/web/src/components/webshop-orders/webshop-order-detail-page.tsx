@@ -30,6 +30,7 @@ import {
   type WebshopShippingOptions,
   type WebshopPickupPointSearch,
   type WebshopParcelTracking,
+  type WebshopTransferReceiptInput,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -50,6 +51,7 @@ import {
   MethodDialog,
   NoteDialog,
   PointDialog,
+  TransferReceivedDialog,
 } from "./webshop-order-edits";
 import {
   OrderLinesTable,
@@ -388,6 +390,14 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
     setOrder(await webshopOrdersApi.sendProforma(token, id));
     setNow(Date.now());
   };
+  const recordTransfer = async (input: WebshopTransferReceiptInput) => {
+    setOrder(await webshopOrdersApi.recordTransferReceived(token, id, input));
+    setNow(Date.now());
+  };
+  const syncTransferToShop = async () => {
+    setOrder(await webshopOrdersApi.syncTransferToShop(token, id));
+    setNow(Date.now());
+  };
   const editLine = async (itemId: string, edit: WebshopOrderLineEdit) => {
     setOrder(await webshopOrdersApi.editLine(token, id, itemId, edit));
     setNow(Date.now());
@@ -549,6 +559,8 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canIssue={canIssue}
           canSendProforma={canSendProforma}
           onSendProforma={sendProforma}
+          onRecordTransfer={recordTransfer}
+          onSyncTransferToShop={syncTransferToShop}
           onChangeStatus={changeStatus}
           mailNotice={mailNotice}
           onResendStatusMail={resendStatusMail}
@@ -634,10 +646,13 @@ function InvoiceCard({
     </Link>
   ) : null;
   const waiting = NOT_INVOICEABLE.includes(order.status.code);
+  const external = order.externalInvoice;
   return (
     <Card title="Számla">
       <div className="space-y-3">
-        {invoice?.status === "ISSUED" ? (
+        {!invoice && order.bankTransfer ? (
+          <ExternalInvoiceField external={external} />
+        ) : invoice?.status === "ISSUED" ? (
           <>
             <Field
               label="Számlaszám"
@@ -749,6 +764,11 @@ function InvoiceCard({
   );
 }
 
+/** ÉÉÉÉ-HH-NN, budapesti fali óra szerint (a kézi rögzítés napja). */
+const BUDAPEST_DAY = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Europe/Budapest",
+});
+
 /** A díjbekérő levelének állapota (`BillingEmailStatus`). */
 const PROFORMA_MAIL: Record<string, string> = {
   SENT: "Kiküldve",
@@ -766,25 +786,53 @@ const PROFORMA_MAIL: Record<string, string> = {
  */
 function ProformaSection({
   order,
+  now,
   canSend,
+  canRecord,
   onSend,
+  onRecord,
+  onSyncShop,
 }: {
   order: WebshopOrderDetail;
+  now: number;
   canSend: boolean;
+  /** Az „Utalás beérkezett” joga (a rendelés kezelése és a kiállítás joga). */
+  canRecord: boolean;
   onSend: () => Promise<void>;
+  onRecord: (input: WebshopTransferReceiptInput) => Promise<void>;
+  /** A rögzített beérkezés újraküldése a webshopnak (commerce #509). */
+  onSyncShop: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // VALÓDI BIZONYLAT ÉS VALÓDI LEVÉL (acrobot 26827): egy kattintás nem elég
   const [confirming, setConfirming] = useState(false);
+  const [recording, setRecording] = useState(false);
   const proforma = order.proforma;
+  const receipt = order.transferReceipt;
+  // a Számlázz.hu számlája a saját kifizetései szerint is mondhatja (bb3a6bd5)
+  const paidByInvoice = !receipt && !!order.externalInvoice?.paid;
   const issued = proforma?.status === "ISSUED";
   const sentBefore = issued && proforma.emailStatus !== null;
   const stuck =
     proforma?.status === "ISSUING" || proforma?.status === "ISSUE_FAILED";
   const sending = proforma?.emailStatus === "SENDING";
   const closed = order.status.code === "closed_unsuccessfully";
+  const today = BUDAPEST_DAY.format(new Date(now));
   const label = sentBefore ? "Díjbekérő újraküldése" : "Díjbekérő kiküldése";
+  const runShop = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onSyncShop();
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   const send = async () => {
     setBusy(true);
     setError(null);
@@ -801,7 +849,11 @@ function ProformaSection({
   };
   return (
     <div className="mt-4 space-y-3 border-t border-pilot-grey-100 pt-4">
-      {proforma?.expired ? (
+      {receipt || paidByInvoice ? (
+        <span className="inline-block rounded-full bg-pilot-green-50 px-3 py-1 text-xs font-medium text-pilot-green-700">
+          Kifizetve
+        </span>
+      ) : proforma?.expired ? (
         <span className="inline-block rounded-full bg-pilot-red-50 px-3 py-1 text-xs font-medium text-pilot-red-700">
           Lejárt díjbekérő
         </span>
@@ -830,6 +882,30 @@ function ProformaSection({
       ) : (
         <p className="text-sm text-pilot-grey-700">Még nincs díjbekérő.</p>
       )}
+      {receipt ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Beérkezett">{receipt.receivedOn}</Field>
+          <Field label="Összeg">
+            {formatMoney(Number(receipt.amount), receipt.currency)}
+          </Field>
+          <Field label="Hivatkozás">
+            <span className="break-all">{receipt.reference}</span>
+          </Field>
+          <Field label="Rögzítette">
+            {receipt.source === "BANK_PAIRING"
+              ? "Banki párosítás"
+              : (receipt.recordedBy ?? "—")}
+          </Field>
+        </div>
+      ) : paidByInvoice ? (
+        <p className="text-xs text-pilot-grey-500">
+          A Számlázz.hu számlája szerint kifizetve
+          {order.externalInvoice?.paidOn
+            ? ` (${order.externalInvoice.paidOn})`
+            : ""}
+          .
+        </p>
+      ) : null}
       {proforma ? (
         <Link
           href={`/penzugy/szamlazas/${encodeURIComponent(proforma.id)}`}
@@ -838,7 +914,7 @@ function ProformaSection({
           Megnyitás a Számlázásban
         </Link>
       ) : null}
-      {canSend && !stuck && !closed ? (
+      {canSend && !stuck && !closed && !receipt && !paidByInvoice ? (
         <PilotButton
           size="regular"
           variant={sentBefore ? "secondary" : "primary"}
@@ -847,6 +923,44 @@ function ProformaSection({
         >
           {busy ? "Küldés…" : label}
         </PilotButton>
+      ) : null}
+      {canRecord && issued && !receipt && !paidByInvoice && !closed ? (
+        <PilotButton
+          size="regular"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => setRecording(true)}
+        >
+          Utalás beérkezett
+        </PilotButton>
+      ) : null}
+      {canRecord && receipt && order.payment?.state === "AWAITING" ? (
+        <div className="space-y-2">
+          <p className="text-xs text-pilot-amber-700">
+            A beérkezés az OS-ben rögzítve van, de a webshopban a rendelés még
+            fizetésre vár.
+          </p>
+          <PilotButton
+            size="regular"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void runShop()}
+          >
+            {busy ? "Küldés…" : "Webshop fizetés lezárása"}
+          </PilotButton>
+        </div>
+      ) : null}
+      {recording && proforma ? (
+        <TransferReceivedDialog
+          today={today}
+          amount={
+            proforma.grossAmount
+              ? formatMoney(Number(proforma.grossAmount), order.currency)
+              : "—"
+          }
+          onClose={() => setRecording(false)}
+          onSave={onRecord}
+        />
       ) : null}
       {error ? (
         <p
@@ -871,6 +985,60 @@ function ProformaSection({
         onCancel={() => setConfirming(false)}
       />
     </div>
+  );
+}
+
+/** Miből tudjuk, hogy a Számlázz.hu számlája ehhez a rendeléshez tartozik. */
+const EXTERNAL_LINK_TEXT: Record<
+  NonNullable<WebshopOrderDetail["externalInvoice"]>["link"],
+  string
+> = {
+  ORDER_NUMBER: "A számla rendelésszáma szerint.",
+  PROFORMA_NUMBER: "A számla a díjbekérő számára hivatkozik.",
+  BUYER_AMOUNT:
+    "Csak a vevő és az összeg egyezik: nézd meg, tényleg ehhez a rendeléshez tartozik-e.",
+};
+
+/**
+ * ELŐRE UTALÁSNÁL A SZÁMLÁT A SZÁMLÁZZ.HU ÁLLÍTJA KI (bb3a6bd5; Balázs,
+ * 2026-10-06 18:22 UTC: „be van kapcsolva az automatikus szamlazas ha
+ * kifizetik a dijbekerot”). Ezért itt nincs kiállítás-gomb: a kifizetett
+ * díjbekérőből készült számla a kimenő továbbítással jön be, és ide kötődik.
+ */
+function ExternalInvoiceField({
+  external,
+}: {
+  external: WebshopOrderDetail["externalInvoice"];
+}) {
+  if (!external)
+    return (
+      <p className="text-sm text-pilot-grey-700">
+        A számlát a Számlázz.hu állítja ki, amikor a díjbekérőt kifizetik; ide
+        magától bekerül.
+      </p>
+    );
+  return (
+    <>
+      <Field
+        label="Számlaszám"
+        action={
+          <CopyButton value={external.number} label="Számlaszám másolása" />
+        }
+      >
+        {external.number}
+      </Field>
+      <p
+        className={`text-xs ${external.link === "BUYER_AMOUNT" ? "font-medium text-pilot-amber-700" : "text-pilot-grey-500"}`}
+      >
+        A Számlázz.hu állította ki. {EXTERNAL_LINK_TEXT[external.link]}
+      </p>
+      <Link
+        href={`/penzugy/szamlazas/kulso/${encodeURIComponent(external.id)}`}
+        className="text-sm font-medium text-pilot-aqua-700 underline"
+      >
+        Megnyitás a Számlázásban
+      </Link>
+    </>
   );
 }
 
@@ -1591,6 +1759,8 @@ function OrderBody({
   canIssue,
   canSendProforma,
   onSendProforma,
+  onRecordTransfer,
+  onSyncTransferToShop,
   onChangeStatus,
   mailNotice,
   onResendStatusMail,
@@ -1621,6 +1791,8 @@ function OrderBody({
   canIssue: boolean;
   canSendProforma: boolean;
   onSendProforma: () => Promise<void>;
+  onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
+  onSyncTransferToShop: () => Promise<void>;
   onChangeStatus: (
     status: WebshopOrderStatus,
     notifyCustomer: boolean,
@@ -2162,8 +2334,12 @@ function OrderBody({
             {order.bankTransfer ? (
               <ProformaSection
                 order={order}
+                now={now}
                 canSend={canSendProforma}
+                canRecord={canIssue}
                 onSend={onSendProforma}
+                onRecord={onRecordTransfer}
+                onSyncShop={onSyncTransferToShop}
               />
             ) : null}
           </Card>

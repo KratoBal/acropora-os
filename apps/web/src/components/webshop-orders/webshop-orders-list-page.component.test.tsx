@@ -84,6 +84,7 @@ const order = (
   invoiceNumber: null,
   parcelNumber: null,
   proformaExpired: false,
+  transferReceived: false,
   status: {
     code: "confirmed",
     label: "Visszaigazolva",
@@ -184,6 +185,15 @@ describe("WebshopOrdersListPage", () => {
     expect(
       within(counters).getByRole("button", { name: /Számlára vár\s*5/ }),
     ).toBeTruthy();
+  });
+
+  it("a received transfer says Kifizetve instead of an expired proforma (bb3a6bd5)", async () => {
+    api.list.mockResolvedValue(
+      response([order({ transferReceived: true, proformaExpired: false })]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    expect(await screen.findByText("Kifizetve")).toBeTruthy();
+    expect(screen.queryByText("Lejárt díjbekérő")).toBeNull();
   });
 
   it("an expired proforma is named in the payment column, and only there (bb3a6bd5)", async () => {

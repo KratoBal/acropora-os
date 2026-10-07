@@ -39,6 +39,9 @@ import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderParcelService } from "./webshop-order-parcel.service.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
+import { loadTransferPairing } from "./webshop-transfer-pairing.dry-run.js";
+import { WebshopOrderTransferService } from "./webshop-order-transfer.service.js";
+import { WebshopTransferReceiptDto } from "./dto/webshop-transfer-receipt.dto.js";
 
 /** Webshop / Rendelések: az új webshop rendelései (nem a UNAS-é, az a `integrations/unas/orders`). */
 @Controller("webshop-orders")
@@ -52,7 +55,20 @@ export class WebshopOrdersController {
     private readonly edits: WebshopOrderEditsService,
     private readonly splits: WebshopOrderSplitService,
     private readonly methods: WebshopOrderShippingMethodService,
+    private readonly transfers: WebshopOrderTransferService,
   ) {}
+
+  /**
+   * AZ ELŐRE UTALÁS PÁROSÍTÁSÁNAK PRÓBAFUTÁSA (bb3a6bd5): mit párosítana a
+   * szabály a tárolt jóváírásokból, írás nélkül. A banki közlemény pénzügyi
+   * adat, ezért a pénzügy olvasása is kell hozzá. A `:id` útvonalak ELŐTT áll,
+   * hogy ne rendelés-azonosítónak olvassa a nevét.
+   */
+  @Get("transfer-pairing")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_VIEW)
+  transferPairing() {
+    return loadTransferPairing();
+  }
 
   /** A számlázási vagy a szállítási cím (a név is) szerkesztése. */
   @Put(":id/address")
@@ -283,6 +299,33 @@ export class WebshopOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.invoices.issueDeliveryNote(id, user);
+  }
+
+  /**
+   * „UTALÁS BEÉRKEZETT” (bb3a6bd5): a kézi tartalék, ha a banki párosítás nem
+   * találta meg a pénzt. Ugyanaz a jog, mint a díjbekérőnél.
+   */
+  /**
+   * „WEBSHOP FIZETÉS LEZÁRÁSA” (bb3a6bd5): a rögzített beérkezés újraküldése
+   * a webshopnak, ha az első küldés elhasalt. Ugyanaz a jog, mint a
+   * rögzítésé; a webshop ismétlésre nem ír újra.
+   */
+  @Post(":id/transfer-received/shop")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  syncTransferToShop(@Param("id") id: string) {
+    return this.transfers.syncShop(id);
+  }
+
+  @Post(":id/transfer-received")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  recordTransferReceived(
+    @Param("id") id: string,
+    @Body() body: WebshopTransferReceiptDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.transfers.recordManual(id, body, user);
   }
 
   /**

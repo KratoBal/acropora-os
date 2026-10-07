@@ -121,6 +121,15 @@ export interface MaterialRequestCreatedNotice {
  * ertesitesre: "aki kerte az anyagot, illetve mindenki akie a munkalap kap
  * rola push es email ertesites" (12:15:46 UTC).
  */
+/** Megjött egy előre utalásos webshop rendelés pénze (bb3a6bd5). */
+export interface WebshopTransferReceivedNotice {
+  userIds: readonly string[];
+  orderId: string;
+  displayId: number;
+  /** Megjelenítésre kész összeg, pl. „4 800 Ft”. */
+  amount: string;
+}
+
 export interface MaterialRequestReceivedNotice {
   materialRequestId: string;
   worksheetId: string;
@@ -422,6 +431,42 @@ export class NotificationsService {
     void this.deliverMaterialRequestCreated(notice).catch((cause: unknown) => {
       this.logger.warn(
         `Az anyagigény értesítése nem sikerült (${notice.materialRequestId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
+  /**
+   * MEGJÖTT AZ ELŐRE UTALÁS (bb3a6bd5; Balázs, 2026-10-06 16:42 UTC: „szolnia
+   * kell ha megjott a penz”) -- a „Webshop befizetés-felelős” szerep
+   * birtokosainak. A `data` ÜRES: a telefonon nincs webshop-rendelés képernyő,
+   * és egy ismeretlen céltípus a nyitóoldalra vinne (lásd az anyagigény
+   * fejlécét); a cím és a törzs a rendelésszámot és az összeget mondja meg.
+   */
+  async deliverWebshopTransferReceived(
+    notice: WebshopTransferReceivedNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Megjött az utalás",
+      body: `Webshop rendelés #${notice.displayId} · ${notice.amount}`,
+      data: {},
+      record: (attempts) =>
+        this.log.recordWebshopTransferReceived({
+          orderId: notice.orderId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Előre utalás értesítése: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.orderId}).`,
+    });
+  }
+
+  /** A nem-varo alak. */
+  notifyWebshopTransferReceived(notice: WebshopTransferReceivedNotice): void {
+    void this.deliverWebshopTransferReceived(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `Az előre utalás értesítése nem sikerült (${notice.orderId}): ${
           cause instanceof Error ? cause.message : "ismeretlen hiba"
         }`,
       );

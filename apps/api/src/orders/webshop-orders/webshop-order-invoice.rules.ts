@@ -532,6 +532,7 @@ export function proformaOf(
     number: string | null;
     dueDate: Date | null;
     emailStatus: string | null;
+    grossAmount?: { toFixed(digits: number): string } | null;
   },
   now: Date,
 ): WebshopOrderProforma {
@@ -542,6 +543,7 @@ export function proformaOf(
     number: row.number,
     dueDate,
     emailStatus: row.emailStatus,
+    grossAmount: row.grossAmount ? row.grossAmount.toFixed(4) : null,
     expired: webshopProformaExpired(
       { status: row.status, dueDate },
       budapestDayKey(now),

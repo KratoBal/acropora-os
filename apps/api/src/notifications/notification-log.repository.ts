@@ -44,6 +44,12 @@ export interface MaterialRequestNotificationOutcome {
   attempts: NotificationAttempt[];
 }
 
+/** Ugyanaz a kimenetel, egy webshop rendelés beérkezett előre utalására. */
+export interface WebshopTransferNotificationOutcome {
+  orderId: string;
+  attempts: NotificationAttempt[];
+}
+
 /** Ugyanaz a kimenetel, vizmeresre -- az aggregatum az AKVARIUM, nem a
  * mereskent felvitt sorok, mert egy mereesi alkalom tobb sort ir. */
 export interface AquariumMeasurementNotificationOutcome {
@@ -118,6 +124,18 @@ export class NotificationLogRepository extends Repository {
       eventType: "materialRequest.created.notified",
       aggregateType: "MaterialRequest",
       aggregateId: outcome.materialRequestId,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /** Az előre utalás megjött (bb3a6bd5): az aggregátum a webshop rendelés. */
+  async recordWebshopTransferReceived(
+    outcome: WebshopTransferNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: "webshopOrder.transferReceived.notified",
+      aggregateType: "WebshopOrder",
+      aggregateId: outcome.orderId,
       attempts: outcome.attempts,
     });
   }
