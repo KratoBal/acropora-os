@@ -69,7 +69,7 @@ export function acceptedLine(
     fact.fieldResultId === review.fieldResultId
       ? `${what} (${fact.revision}. változat)`
       : `${what}, egy korábbi ellenőrzésből. Újabb bizonyíték érkezett azóta.`;
-  return `${line}${webshopNote(fact.status)}`;
+  return `${line}${webshopNote(fact.status, fact.public ?? true)}`;
 }
 
 /**
@@ -77,7 +77,11 @@ export function acceptedLine(
  * OS-ben tárol, de egy javaslat vagy egy ütközés nem jut a webshopba; ezt a
  * sornak ki kell mondania, különben az elfogadás publikálásnak látszik.
  */
-function webshopNote(status: string): string {
+function webshopNote(status: string, kiadhato: boolean): string {
+  // SEO P0 PR 2: a mezo definicioja nem `public`, tehat ellenorzotten sem megy ki.
+  // A `?? true` a regi API-valaszra: a ket alkalmazas egymas utan telepul.
+  if (!kiadhato)
+    return " A webshopban nem jelenik meg: ez a mező nem nyilvános.";
   if (status === "VERIFIED") return "";
   return status === "CONFLICTING_SOURCES"
     ? " A webshopban nem jelenik meg, amíg az ütközés nincs feloldva."

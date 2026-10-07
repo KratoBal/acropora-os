@@ -82,6 +82,7 @@ export class ProductKnowledgeService {
         unit: fact.unit,
         status: fact.status as ProductFieldStatus,
         revision: fact.revision,
+        public: fact.public,
         acceptedAt: fact.acceptedAt.toISOString(),
         acceptedBy: fact.acceptedBy,
         fieldResultId: fact.fieldResultId,

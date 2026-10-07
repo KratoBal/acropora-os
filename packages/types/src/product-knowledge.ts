@@ -89,6 +89,11 @@ export interface ProductKnowledgeFact {
   unit: string | null;
   status: ProductFieldStatus;
   revision: number;
+  /**
+   * The field's definition is `public` (SEO P0 PR 2): the buyer may see this
+   * kind of fact at all. A VERIFIED fact with `false` stays in the OS.
+   */
+  public: boolean;
   acceptedAt: string;
   acceptedBy: { id: string; displayName: string };
   /** The JEV field result this fact was accepted from. */
