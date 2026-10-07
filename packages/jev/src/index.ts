@@ -126,6 +126,10 @@ export {
   type PairResolution,
 } from "./missing-invoice-pair-policy.js";
 export {
+  pairRuleR1,
+  similarSupplierName,
+} from "./missing-invoice-pair-rule.js";
+export {
   LETTER_CLASSES,
   LETTER_CLASS_POLICY,
   LETTER_HEAD_LINES,

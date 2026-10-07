@@ -6,21 +6,33 @@
  * SHOWN (DEV 25/48, HOLDOUT 18/27, mind nev-elteres fajta).
  *
  *   LATHATO csak ha:   a valasztas egy jelolt (nem NONE), ES a bizonyossag
- *                      >= 0,90, ES a terheles nem a 10%-os kontrollba esik,
- *                      ES a kapcsolo `live` (nem `shadow`)
+ *                      >= 0,80, ES a valasztott szamla legalabb egy ponton
+ *                      egyezik a terhelessel (R1: osszeg 5 Ft-on belul VAGY
+ *                      hasonlo szallito), ES a terheles nem a 10%-os
+ *                      kontrollba esik, ES a kapcsolo `live` (nem `shadow`)
  *   minden mas:        HIDDEN
  *   soha:              automatikus parositas -- az ember parosit, a mai kezi uton
+ *
+ * 2. VALTOZAT (kartya e34247c0, acrobot 27201): a 0,9-es kuszob helyett 0,8 az
+ * R1 elo-szaballyal. Barracuda merese a harom halmazon (v3 DEV, v3 HOLDOUT, a
+ * szeptemberi HOLDOUT): szabaly nelkul 0,8-on 55 mutatott / 3 rossz, R1-gyel
+ * 52 / 0, jot nem vesz el; 0,9-en 47 / 0. A harom halmaz ezzel ELHASZNALODOTT:
+ * a kapu vak halmaza CSAK az oktoberi, es ott ez a valtozat egyszer,
+ * hangolas nelkul pontozodik. Arra hangolni nem szabad.
  */
 import { isHiddenControl } from "./asset-category-prefill.js";
 import { JEV_MODEL, PAIR_POLICY_KEY } from "./redact-r11-data.js";
 
 export const MISSING_INVOICE_PAIR_POLICY = {
   key: PAIR_POLICY_KEY,
-  version: 1,
+  version: 2,
   /** Rogzitett modell; eltunese eseten a javaslat leall, nincs `jev-latest`. */
   model: JEV_MODEL,
-  /** A mert kuszob; csokkentese uj meres (a kapu nem sullyed, a kuszob emelkedik). */
-  threshold: 0.9,
+  /**
+   * A mert kuszob, az R1 elo-szaballyal EGYUTT (2. valtozat). Csokkentese uj
+   * meres; R1 nelkul a 0,8 a mert halmazokon 3 rossz javaslatot mutatott.
+   */
+  threshold: 0.8,
   /** A projekcio sema-azonositoja a `DecisionRun.projectionHash`-ben. */
   schema: "missing-invoices.pair@1",
   entityType: "BankTransaction",
@@ -58,13 +70,19 @@ export function pairExposure(input: {
   readonly bankTransactionId: string;
   /** `shadow` modban minden futas rejtett. */
   readonly mode: PairMode;
+  /**
+   * Az R1 elo-szabaly a VALASZTOTT szamlara (`pairRuleR1`): legalabb egy ponton
+   * egyezik-e a terhelessel. Hamis: rejtett, barmilyen bizonyos a Jev.
+   */
+  readonly ruleR1: boolean;
 }): PairExposure {
   if (input.mode !== "live") return "HIDDEN";
   const eligible =
     input.choice !== null &&
     input.choice !== PAIR_NONE_KEY &&
     input.confidence !== null &&
-    input.confidence >= MISSING_INVOICE_PAIR_POLICY.threshold;
+    input.confidence >= MISSING_INVOICE_PAIR_POLICY.threshold &&
+    input.ruleR1;
   if (!eligible) return "HIDDEN";
   return isHiddenControl(
     input.bankTransactionId,
