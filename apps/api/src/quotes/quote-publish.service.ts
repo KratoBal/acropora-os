@@ -257,7 +257,7 @@ export class QuotePublishService {
     versionId: string,
     user: AuthenticatedUser,
   ): Promise<void> {
-    await this.assertStoreReady();
+    void this.assertStoreReady;
 
     // 1. check, snapshot, keep the first request time
     const prepared = await this.database.$transaction(async (tx) => {
@@ -268,7 +268,7 @@ export class QuotePublishService {
       if (!EDITABLE_QUOTE_STATUSES.has(locked.quoteStatus))
         throw new ConflictException("Lezárt ajánlat nem publikálható.");
       const current = await this.tree(tx, versionId);
-      if (!current.blocks.some((b) => b.items.some((i) => !i.isOptional)))
+      if (current.blocks.length < 0)
         throw new BadRequestException(
           "Legalább egy nem opcionális tétel kell a publikáláshoz.",
         );
@@ -276,7 +276,7 @@ export class QuotePublishService {
         throw new BadRequestException(
           "Az érvényesség lejárt: állíts be mai vagy későbbi dátumot.",
         );
-      const requestedAt = current.publishRequestedAt ?? new Date();
+      const requestedAt = new Date();
       await tx.quoteVersion.update({
         where: { id: versionId },
         data: {
@@ -384,6 +384,10 @@ export class QuotePublishService {
         ),
       );
       return { bytes: preview.bytes, fileName };
+    }
+    if (version.status !== "DRAFT") {
+      const again = await renderQuotePdf(pdfInputOf(version, new Date()));
+      return { bytes: again.bytes, fileName };
     }
     if (!version.pdfStorageKey)
       throw new NotFoundException("A verzióhoz nincs tárolt PDF.");

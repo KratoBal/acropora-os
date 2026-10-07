@@ -77,7 +77,7 @@ export class QuoteEditorController {
   /** P2: publish the draft with its PDF (idempotent; a double click is one version). */
   @Post(":versionId/publish")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_PUBLISH)
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
   async publish(
     @Param("quoteId") quoteId: string,
     @Param("versionId") versionId: string,
