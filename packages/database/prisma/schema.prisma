@@ -7391,7 +7391,7 @@ model IncomingSupplierDocument {
   reviewedByUserId        String?
   createdAt               DateTime                       @default(now())
 
-  expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  expectedArrival ExpectedArrival?         @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
   /// A külföldi (postafiókos) számla kinyert adata, ha a Bejövő számlák olvasta (kártya e4c3b0fb).
   reading         IncomingDocumentReading?
 
@@ -8672,10 +8672,11 @@ model IncomingDocumentReading {
 
   document   IncomingSupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
   reviewedBy User?                    @relation("IncomingDocumentReadingReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-
-  @@index([state])
   // DB: CHECK a VERIFIED sor kötelező mezői (szállító, szám, kelt, deviza,
   // nettó, ÁFA, bruttó) és a jóváhagyás ideje megvannak (a migrációban).
+
+  @@index([state])
+}
 
 // ---------------------------------------------------------------------------
 // SEO P0 PR 2: AZ ATTRIBUTUM-MODELL (terv: exchange/seo/seo-p0-terv-2026-10-07.md,
