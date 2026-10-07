@@ -94,6 +94,20 @@ export const OWNER_GRANTED_PERMISSIONS: readonly Permission[] =
     (permission) => !ROLE_PERMISSIONS.MANAGER.includes(permission),
   );
 
+/**
+ * A TERÜLET KEZELÉSI JOGA ÉS A MEGTEKINTÉSI PÁRJA (`x.manage` -> `x.view`), ahol
+ * mindkettő létezik. Balázs modellje területenként Nincs / Megtekintés / Kezelés;
+ * a két jog negyedik kombinációja (kezelés megtekintés nélkül) nem állapot, ezért
+ * a változás-szabály kizárja (acrobot döntése, 2026-10-07, a #1561 átvételéből).
+ * A `settings.manage` és a `users.manage` párja nem létezik, rájuk nem vonatkozik.
+ */
+export const MANAGE_VIEW_PAIRS: readonly (readonly [Permission, Permission])[] =
+  ALL_PERMISSION_VALUES.flatMap((manage) => {
+    if (!manage.endsWith(".manage")) return [];
+    const view = `${manage.slice(0, -".manage".length)}.view`;
+    return isPermission(view) ? [[manage, view] as const] : [];
+  });
+
 export interface PermissionOverrideTarget {
   role: UserRole;
   customerId: string | null;
@@ -107,7 +121,12 @@ export interface PermissionOverrideTarget {
  * - gépi fiók jogai nem módosíthatók (a jogkörük a feladatuk, nem személyes);
  * - tulajdonos jogait csak tulajdonos módosítja;
  * - partner-fiók egyénileg sem kaphat jogot (elvenni lehet tőle);
- * - csak-tulajdonosi jogot (`OWNER_GRANTED_PERMISSIONS`) csak tulajdonos ad.
+ * - csak-tulajdonosi jogot (`OWNER_GRANTED_PERMISSIONS`) csak tulajdonos ad;
+ * - nem tulajdonos a SAJÁT fiókjának nem ad jogot (elvenni magától lehet);
+ * - a végső listában kezelés csak megtekintéssel együtt állhat.
+ *
+ * Az utolsó kettő acrobot döntése (2026-10-07, a #1561 átvételéből), biztonsági
+ * alapértelmezés: egy adminisztrátor ne emelhesse a saját jogait.
  *
  * A VÁLTOZÁST NÉZI, NEM A TELJES LISTÁT: egy adminisztrátor, aki egy olyan
  * listát ment vissza, amiben egy tulajdonos által adott jog változatlanul áll,
@@ -116,6 +135,8 @@ export interface PermissionOverrideTarget {
  */
 export function permissionOverrideChangeProblem(input: {
   actorRole: UserRole;
+  /** a módosító a saját fiókját módosítja; kötelező, hogy egy hívó se felejtse ki */
+  self: boolean;
   target: PermissionOverrideTarget;
   before: readonly PermissionOverride[];
   after: readonly PermissionOverride[];
@@ -141,6 +162,8 @@ export function permissionOverrideChangeProblem(input: {
     if (partner && after.get(permission) === "GRANT")
       return "Partner-fiók egyénileg sem kaphat jogot.";
     const gains = has.has(permission) && !had.has(permission);
+    if (gains && input.self && actorRole !== "OWNER")
+      return "A saját fiókodnak nem adhatsz jogot.";
     if (
       gains &&
       OWNER_GRANTED_PERMISSIONS.includes(permission) &&
@@ -148,6 +171,9 @@ export function permissionOverrideChangeProblem(input: {
     )
       return "Ezt a jogot csak tulajdonos adhatja meg.";
   }
+  for (const [manage, view] of MANAGE_VIEW_PAIRS)
+    if (has.has(manage) && !has.has(view))
+      return `Kezelés csak megtekintéssel együtt adható (${manage} mellé ${view} is kell).`;
   return null;
 }
 

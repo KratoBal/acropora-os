@@ -80,6 +80,7 @@ export class UserPermissionsService {
     const after = normalizePermissionOverrides(row.role, requested);
     const problem = permissionOverrideChangeProblem({
       actorRole: actor.role,
+      self: actor.id === row.id,
       target: row,
       before,
       after,

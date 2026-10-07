@@ -1305,6 +1305,7 @@ export {
   ALL_PERMISSION_VALUES,
   applyPermissionOverrides,
   isPermission,
+  MANAGE_VIEW_PAIRS,
   normalizePermissionOverrides,
   OWNER_GRANTED_PERMISSIONS,
   PERMISSION_OVERRIDE_EFFECTS,

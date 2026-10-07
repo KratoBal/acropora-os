@@ -141,6 +141,37 @@ describe("UserPermissionsService", () => {
     assert.equal(writes.length, 0);
   });
 
+  it("a saját fiók bővítése 403 és nem ír; ugyanez más fiókján megy", async () => {
+    const sajat = setup(
+      target({
+        id: "actor",
+        role: "ADMIN",
+        permissionOverrides: [
+          { permission: PERMISSIONS.SERVICE_VIEW, effect: "REVOKE" },
+        ],
+      }),
+    );
+    await assert.rejects(
+      sajat.service.replace("actor", [], actor("ADMIN")),
+      (error: Error) =>
+        error instanceof ForbiddenException &&
+        /saját fiókodnak/.test(error.message),
+    );
+    assert.equal(sajat.writes.length, 0);
+
+    const masik = setup(
+      target({
+        id: "u1",
+        role: "ADMIN",
+        permissionOverrides: [
+          { permission: PERMISSIONS.SERVICE_VIEW, effect: "REVOKE" },
+        ],
+      }),
+    );
+    await masik.service.replace("u1", [], actor("ADMIN"));
+    assert.equal(masik.writes.length, 1);
+  });
+
   it("partner-fiók egyéni megadása 403", async () => {
     const { service } = setup(
       target({ role: "PARTNER_SERVICE", customerId: "c1" }),
