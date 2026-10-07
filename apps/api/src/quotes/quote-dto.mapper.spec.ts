@@ -159,11 +159,30 @@ function keys(value: unknown): string[] {
     return Object.entries(value).flatMap(([k, v]) => [k, ...keys(v)]);
   return [];
 }
+/** No cost, margin, supplier or internal-note key anywhere (P0, unchanged in P1). */
 const noCosts = (value: unknown) =>
   assert.deepEqual(
-    keys(value).filter((k) => /cost|margin|bom|supplier|internalnote/i.test(k)),
+    keys(value).filter((k) => /cost|margin|supplier|internalnote/i.test(k)),
     [],
   );
+/** The customer output carries no BOM at all; the cost-free internal one does since P1. */
+const noBom = (value: unknown) =>
+  assert.deepEqual(
+    keys(value).filter((k) => /bom/i.test(k)),
+    [],
+  );
+/** P1: the cost-free BOM line is exactly this allowlist. */
+const BOM_LINE_KEYS = [
+  "createdProductVariantId",
+  "customName",
+  "id",
+  "kind",
+  "position",
+  "quantity",
+  "quoteItemId",
+  "unit",
+  "variantId",
+];
 test("list query fetches only a bounded header/version projection and list mapper cannot expose the tree", async (t) => {
   let query: Prisma.QuoteFindManyArgs | undefined;
   const original = {
@@ -229,6 +248,7 @@ test("list query fetches only a bounded header/version projection and list mappe
     ].sort(),
   );
   noCosts(dto);
+  noBom(dto);
   assert.equal(
     quoteListItemDto({ ...quoteFixture(), versions: [] }).latestVersion,
     null,
@@ -240,7 +260,12 @@ test("three allowlisted DTO shapes, decimal precision and no customer/internal c
     internal = internalQuoteDto(row),
     costs = quoteDto(row, user("ADMIN"));
   noCosts(customer);
+  noBom(customer);
   noCosts(internal);
+  // P1: the writer sees what a line is made of, never its cost
+  assert.ok(internal.versions[0]!.bomItems.length > 0);
+  for (const line of internal.versions[0]!.bomItems)
+    assert.deepEqual(Object.keys(line).sort(), BOM_LINE_KEYS);
   assert.equal(
     customer.versions[0]!.blocks[0]!.items[0]!.unitNetPrice,
     "100000.1234",

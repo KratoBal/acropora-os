@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { CreateQuoteInput, UpdateQuoteInput } from "@acropora/types";
+import type { TemplateBlock } from "./quote-editor-input.js";
 import { QUOTE_DETAIL_INCLUDE } from "./quote-dto.mapper.js";
 /** Bounded list projection: newest version summary only; no child collections or JSON. */
 export const QUOTE_LIST_SELECT = {
@@ -38,6 +39,22 @@ export class QuotesRepository {
       include: QUOTE_DETAIL_INCLUDE,
     });
   }
+  template(id: string) {
+    return prisma.quoteTemplate.findUnique({ where: { id } });
+  }
+  /** The template picker (P1): active templates, no JSON bodies. */
+  templates() {
+    return prisma.quoteTemplate.findMany({
+      where: { archivedAt: null },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        priceDisplay: true,
+        defaultValidityDays: true,
+      },
+    });
+  }
   async list(page: number, pageSize: number, q?: string) {
     const where: Prisma.QuoteWhereInput = q
       ? {
@@ -62,7 +79,19 @@ export class QuotesRepository {
     );
     return { items, total };
   }
-  async create(input: CreateQuoteInput, actorUserId: string) {
+  /**
+   * `template` (P1): the checked blocks and milestones of a `QuoteTemplate`,
+   * copied into version 1; the version remembers the template.
+   */
+  async create(
+    input: CreateQuoteInput,
+    actorUserId: string,
+    template?: {
+      id: string;
+      blocks: TemplateBlock[];
+      milestones: Array<{ label: string; percent: Prisma.Decimal }>;
+    },
+  ) {
     return prisma.$transaction(async (tx) => {
       const [seq] = await tx.$queryRaw<Array<{ value: bigint }>>(
         Prisma.sql`SELECT nextval('"QuoteNumberSequence"') AS value`,
@@ -82,6 +111,23 @@ export class QuotesRepository {
               validUntil: new Date(`${input.validUntil}T00:00:00Z`),
               currency: input.currency ?? "HUF",
               priceDisplay: input.priceDisplay ?? "NET",
+              ...(template
+                ? {
+                    templateId: template.id,
+                    blocks: {
+                      create: template.blocks.map((b, position) => ({
+                        position,
+                        ...b,
+                      })),
+                    },
+                    milestones: {
+                      create: template.milestones.map((m, position) => ({
+                        position,
+                        ...m,
+                      })),
+                    },
+                  }
+                : {}),
             },
           },
         },
@@ -93,7 +139,11 @@ export class QuotesRepository {
           versionId: row.versions[0]!.id,
           kind: "CREATED",
           actorUserId,
-          payload: { quoteNumber, versionNumber: 1 },
+          payload: {
+            quoteNumber,
+            versionNumber: 1,
+            ...(template ? { outcome: "FROM_TEMPLATE" } : {}),
+          },
         },
       });
       await tx.auditLog.create({
