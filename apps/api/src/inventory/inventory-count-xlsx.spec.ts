@@ -53,19 +53,41 @@ describe("InventoryCountXlsx", () => {
     assert.equal(buffer.subarray(0, 2).toString("ascii"), "PK");
   });
 
-  it("pre-fills the counted quantity with the current known quantity, not zero", async () => {
+  /*
+    A LELTÁRÍV 0-VAL INDUL (Balázs, 2026-10-07, kártya 49db3012). MI PIROSÍT:
+    egy számolatlan sor a várt készlettel jön vissza (csendes „egyezés”), vagy
+    a várt oszlop is nullázódik.
+  */
+  it("starts an uncounted row's counted quantity at zero, and keeps the expected column", async () => {
     const xlsx = new InventoryCountXlsx();
     const buffer = await xlsx.buildTemplate(detail);
     const { rows } = await xlsx.parseUpload(buffer);
 
-    assert.equal(rows.length, 2);
-    assert.equal(rows[0]?.sku, "REEF-SALT-01");
-    assert.equal(rows[0]?.countedQty, "12");
-    assert.equal(rows[1]?.sku, "PUMP-XL");
-    assert.equal(rows[1]?.countedQty, "3.5");
+    assert.deepEqual(
+      rows.map((row) => [row.sku, row.countedQty]),
+      [
+        ["REEF-SALT-01", "0"],
+        ["PUMP-XL", "0"],
+      ],
+    );
+
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as never);
+    const sheet = workbook.getWorksheet("Leltár")!;
+    assert.deepEqual(
+      [2, 3].map((row) => [
+        sheet.getRow(row).getCell(3).value,
+        sheet.getRow(row).getCell(4).value,
+      ]),
+      [
+        [12, 0],
+        [3.5, 0],
+      ],
+    );
   });
 
-  it("pre-fills with a previously entered count when re-downloading after a partial upload", async () => {
+  it("keeps a previously uploaded count on re-download; the rest starts at zero", async () => {
     const partiallyCounted: InventoryCountDetail = {
       ...detail,
       lines: [{ ...detail.lines[0]!, countedQty: "10" }, detail.lines[1]!],
@@ -78,7 +100,22 @@ describe("InventoryCountXlsx", () => {
       rows.find((row) => row.sku === "REEF-SALT-01")?.countedQty,
       "10",
     );
-    assert.equal(rows.find((row) => row.sku === "PUMP-XL")?.countedQty, "3.5");
+    assert.equal(rows.find((row) => row.sku === "PUMP-XL")?.countedQty, "0");
+  });
+
+  it("keeps an uploaded count of zero on re-download", async () => {
+    const zeroCounted: InventoryCountDetail = {
+      ...detail,
+      lines: [{ ...detail.lines[0]!, countedQty: "0" }, detail.lines[1]!],
+    };
+    const xlsx = new InventoryCountXlsx();
+    const { rows } = await xlsx.parseUpload(
+      await xlsx.buildTemplate(zeroCounted),
+    );
+    assert.equal(
+      rows.find((row) => row.sku === "REEF-SALT-01")?.countedQty,
+      "0",
+    );
   });
 
   it("treats a blank counted-quantity cell as not entered, not as zero", async () => {

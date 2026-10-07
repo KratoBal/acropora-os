@@ -263,6 +263,10 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                       mennyiségeket.
                     </p>
                     <p>
+                      A leltározott oszlop 0-val indul: amit nem írsz át, az a
+                      korrekció után nulla készlet lesz.
+                    </p>
+                    <p>
                       2. Töltsd vissza a kitöltött fájlt, ellenőrizd az
                       eltéréseket, majd indítsd a korrekciót.
                     </p>
