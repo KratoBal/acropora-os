@@ -830,9 +830,15 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               <p className="text-sm font-semibold text-pilot-grey-900">
                 {listing.channel}
               </p>
-              <p className="mt-1 text-xs text-pilot-grey-500">
-                Nyers külső státusz: {listing.externalStatus ?? "—"}
-              </p>
+              {listing.channel === "WEBSHOP" ? (
+                <p className="mt-1 text-xs text-pilot-grey-500">
+                  Webshop cím (slug): {listing.slug ?? "—"}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-pilot-grey-500">
+                  Nyers külső státusz: {listing.externalStatus ?? "—"}
+                </p>
+              )}
               {listing.productUrl ? (
                 <a
                   href={listing.productUrl}

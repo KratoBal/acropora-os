@@ -443,7 +443,16 @@ export class MedusaProjectionScheduler
         updatedAt: true,
         variants: { select: { updatedAt: true } },
         unasSnapshot: { select: { updatedAt: true } },
-        channelListings: { select: { updatedAt: true } },
+        /*
+          CSAK A UNAS-SOR (SEO P0 PR 5): a WEBSHOP-sor slugját a PR 7 előtt a
+          vetítés nem viszi ki, tehát a változása nem tesz esedékessé. Szűrés
+          nélkül a slug-backfill 1909 új sora az egész katalógust egyszerre
+          esedékessé tenné, egy semmit nem változtató körre. A PR 7 veszi fel.
+        */
+        channelListings: {
+          where: { channel: "UNAS" },
+          select: { updatedAt: true },
+        },
         /**
          * A KAPCSOLATOK IDOBELYEGE -- ES A `sourceRelations`, NEM A
          * `targetRelations`.

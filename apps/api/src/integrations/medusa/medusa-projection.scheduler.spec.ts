@@ -923,3 +923,29 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     assert.deepEqual(ar.kapott, []);
   });
 });
+
+/*
+  A WEBSHOP-SOR NEM TESZ ESEDÉKESSÉ (SEO P0 PR 5). A slug-backfill 1909 új
+  WEBSHOP-sora különben az egész katalógust egyszerre esedékessé tenné, egy
+  semmit nem változtató körre. MI PIROSIT: a csatorna-sorok időbélyege szűrés
+  nélkül számít.
+*/
+describe("MedusaProjectionScheduler, a csatorna-sorok", () => {
+  it("csak a UNAS-sor időbélyege számít", async () => {
+    const { db, hivasok } = adatbazis([termek()]);
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+    });
+    await scheduler.runOnce();
+    const kerdes = hivasok.find((h) => h.metodus === "product.findMany")!
+      .args as { select: { channelListings: unknown } };
+    assert.deepEqual(kerdes.select.channelListings, {
+      where: { channel: "UNAS" },
+      select: { updatedAt: true },
+    });
+  });
+});
