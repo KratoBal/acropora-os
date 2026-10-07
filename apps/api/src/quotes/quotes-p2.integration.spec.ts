@@ -1,7 +1,13 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -16,6 +22,7 @@ import {
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { configureApp } from "../app.configuration.js";
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
+import { MARKER_FILE } from "../service-assets/document-store/filesystem-document-store.js";
 import { QUOTE_DOCUMENT_ENV } from "./quote-publish.service.js";
 import { QuotesModule } from "./quotes.module.js";
 
@@ -23,6 +30,8 @@ const gate = integrationDatabaseGate(process.env);
 
 /** The store's environment for this spec only; `process.env` is never written. */
 const storeRoot = mkdtempSync(join(tmpdir(), "quote-store-"));
+// the store writes only onto a mounted volume, which the marker file proves
+writeFileSync(join(storeRoot, MARKER_FILE), "");
 const storeEnv: NodeJS.ProcessEnv = { DOCUMENT_STORE_ROOT: storeRoot };
 
 @Global()
