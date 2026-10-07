@@ -1061,6 +1061,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     overrides: Record<string, unknown> = {},
   ) {
     const hivasok: { metodus: string; args: unknown }[] = [];
+    const vonalkodSorok: unknown[] = [];
     const db = {
       product: {
         findMany: async (args: unknown) => {
@@ -1152,6 +1153,17 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         count: async (args: unknown) => {
           hivasok.push({ metodus: "productVariant.count", args });
           return 0;
+        },
+      },
+      /** A változatok vonalkódja (SEO P0 PR 4): alapból nincs sor. */
+      productBarcode: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "productBarcode.findMany", args });
+          return vonalkodSorok;
+        },
+        count: async (args: unknown) => {
+          hivasok.push({ metodus: "productBarcode.count", args });
+          return 1;
         },
       },
       productImage: {
@@ -1452,9 +1464,11 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     return termek({
       variants: [
         {
+          // a `ProductBarcode` sorok ehhez kotnek (SEO P0 PR 4)
+          id: "valtozat-1",
           sku,
           // A futtato a vonalkodot a ELSO valtozat `manufacturerPartNumber`
-          // mezojebol veszi (medusa-projection.runner.ts:919).
+          // mezojebol veszi, ha a ProductBarcode forras ki van kapcsolva.
           manufacturerPartNumber: "7290100772959",
           unit: null,
           secondaryUnit: null,
@@ -1464,9 +1478,21 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     });
   }
 
-  async function kikuldottTermek(sku: string) {
+  async function kikuldottTermek(
+    sku: string,
+    /*
+      A TILTÓ-LISTA A GYÁRTÓI CIKKSZÁM ÚTJÁT méri, ezért alapból kikapcsolt
+      `ProductBarcode` forrással fut (SEO P0 PR 4): bekapcsolva a vonalkód nem a
+      gyártói cikkszámból jönne, és a „nem megy ki” üresen igaz lenne.
+    */
+    kornyezet: Record<string, string | undefined> = {
+      ...boltiKornyezet,
+      MEDUSA_PROJECT_BARCODES: "false",
+    },
+    felulirasok: Record<string, unknown> = {},
+  ) {
     const { out, stdout, stderr } = collector();
-    const { db } = adatbazis(tiltottParosTermek(sku));
+    const { db } = adatbazis(tiltottParosTermek(sku), felulirasok);
     const keresek: { url: string; method: string; body: unknown }[] = [];
 
     const code = await boltiKorben(() =>
@@ -1474,7 +1500,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         ["prod-1"],
         out,
         provider(environmentSetting),
-        boltiKornyezet,
+        kornyezet,
         db,
         boltiFetchTorzzsel(keresek),
       ),
@@ -1508,6 +1534,36 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     const valtozat = await kikuldottTermek("SKU-KONTROLL");
 
     assert.equal(valtozat.ean, "7290100772959");
+  });
+
+  /*
+    A FORRÁS A `ProductBarcode` (SEO P0 PR 4, D1), a kapcsoló alapállásában. MI
+    PIROSIT: a gyártói cikkszám megy ki a primary sor helyett; a primary sor
+    nem megy ki; az INTERNAL típusú sor kimegy.
+  */
+  it("a kapcsoló alapállásában a primary ProductBarcode kódja megy ki, nem a gyártói cikkszám", async () => {
+    const valtozat = await kikuldottTermek("SKU-KONTROLL", boltiKornyezet, {
+      productBarcode: {
+        findMany: async () => [
+          { variantId: "valtozat-1", code: "4006381333931", type: "EAN13" },
+        ],
+        count: async () => 1,
+      },
+    });
+    assert.equal(valtozat.ean, "4006381333931");
+  });
+
+  it("egy INTERNAL típusú primary sor nem megy ki, és a gyártói cikkszám sem", async () => {
+    const valtozat = await kikuldottTermek("SKU-KONTROLL", boltiKornyezet, {
+      productBarcode: {
+        findMany: async () => [
+          { variantId: "valtozat-1", code: "2000000000008", type: "INTERNAL" },
+        ],
+        count: async () => 1,
+      },
+    });
+    assert.equal("ean" in valtozat, false);
+    assert.equal("upc" in valtozat, false);
   });
 
   it("tiltott kod-termek paron a vonalkod NEM megy ki a boltba", async () => {

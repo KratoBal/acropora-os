@@ -3,6 +3,8 @@ import { Prisma, prisma } from "@acropora/database";
 import type { ProductCopyBlock } from "@acropora/types";
 
 import type { StoredCheck } from "../enrichment/enrichment-run.js";
+import { vonalkodAlakjai } from "../../integrations/medusa/medusa-barcode.policy.js";
+import { barcodeType } from "../barcode-type.js";
 import type { FactDefinition } from "./fact-definition.policy.js";
 import { factSource } from "./knowledge.policy.js";
 
@@ -82,6 +84,23 @@ export interface KnowledgeStore {
     acceptedById: string;
     acceptedAt: Date;
   }): Promise<void>;
+  /**
+   * AZ ELFOGADOTT EAN MINT VONALKÓD (SEO P0 PR 4, C3). Létrehozza a változat
+   * `ProductBarcode` sorát (`source = JEV`, a bizonyítékkal), és primary-vé teszi,
+   * ha a változatnak még nincs primary-je; egy meglévőt nem ír felül. Ha a kód
+   * (bármelyik írásmódban) egy MÁSIK változat sora, nem ír, és megnevezi azt.
+   */
+  acceptBarcode(input: {
+    variantId: string;
+    code: string;
+    fieldResultId: string;
+    verifiedById: string;
+    verifiedAt: Date;
+  }): Promise<
+    | { kind: "created"; isPrimary: boolean }
+    | { kind: "exists" }
+    | { kind: "taken"; sku: string }
+  >;
   copy(productId: string): Promise<CopyRecord[]>;
   /** Saves a DRAFT (a new one, or over an approved one: the approval goes). */
   saveCopy(input: {
@@ -313,6 +332,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       select: {
         key: true,
         dataType: true,
+        medusaNativeField: true,
         canonicalUnit: true,
         scope: true,
         validation: true,
@@ -330,6 +350,36 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       select: { id: true },
     });
     return rows.map((row) => row.id);
+  }
+
+  async acceptBarcode(
+    input: Parameters<KnowledgeStore["acceptBarcode"]>[0],
+  ): ReturnType<KnowledgeStore["acceptBarcode"]> {
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.productBarcode.findFirst({
+        where: { code: { in: vonalkodAlakjai(input.code) } },
+        select: { variantId: true, variant: { select: { sku: true } } },
+      });
+      if (existing && existing.variantId !== input.variantId)
+        return { kind: "taken" as const, sku: existing.variant.sku };
+      if (existing) return { kind: "exists" as const };
+      const primary = await tx.productBarcode.count({
+        where: { variantId: input.variantId, isPrimary: true },
+      });
+      await tx.productBarcode.create({
+        data: {
+          variantId: input.variantId,
+          code: input.code,
+          type: barcodeType(input.code),
+          source: "JEV",
+          fieldResultId: input.fieldResultId,
+          verifiedById: input.verifiedById,
+          verifiedAt: input.verifiedAt,
+          isPrimary: primary === 0,
+        },
+      });
+      return { kind: "created" as const, isPrimary: primary === 0 };
+    });
   }
 
   async copy(productId: string): Promise<CopyRecord[]> {

@@ -799,6 +799,7 @@ model User {
   productEnrichmentRuns  ProductEnrichmentRun[]
   /// A termékismeret-tények, amiket ő fogadott el (#1431).
   acceptedKnowledgeFacts ProductKnowledgeFact[]        @relation("ProductKnowledgeFactAcceptedBy")
+  verifiedBarcodes       ProductBarcode[]              @relation("ProductBarcodeVerifiedBy")
   /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
   editedCopyBlocks       ProductCopy[]                 @relation("ProductCopyEditedBy")
   approvedCopyBlocks     ProductCopy[]                 @relation("ProductCopyApprovedBy")
@@ -1406,14 +1407,45 @@ model ProductRelation {
   @@index([sourceProductId, source])
 }
 
+/// A változat vonalkódja. SEO P0 PR 4: típus, forrás és bizonyíték; változatonként
+/// legfeljebb EGY primary (részleges egyedi index a migrációban, a Prisma nem írja le).
 model ProductBarcode {
-  id        String         @id @default(cuid())
-  variantId String
-  code      String         @unique
-  isPrimary Boolean        @default(false)
-  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  id            String                        @id @default(cuid())
+  variantId     String
+  code          String                        @unique
+  isPrimary     Boolean                       @default(false)
+  /// A JEV `validateGtin` dönti el (`barcode-type.ts`); NULL = még nincs besorolva
+  /// (a backfill tölti ki).
+  type          ProductBarcodeType?
+  source        ProductBarcodeSource?
+  /// Ha JEV-eredményből lett: a bizonyíték. RESTRICT, mint a ténynél.
+  fieldResultId String?
+  fieldResult   ProductEnrichmentFieldResult? @relation(fields: [fieldResultId], references: [id], onDelete: Restrict)
+  verifiedById  String?
+  verifiedBy    User?                         @relation("ProductBarcodeVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  verifiedAt    DateTime?
+  variant       ProductVariant                @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([variantId])
+  @@index([fieldResultId])
+}
+
+/// SEO P0 PR 4 (C3). `INTERNAL` = nem termék-GTIN: bolti tartomány, kiadvány-tartomány
+/// (977, 978, 979: a mért adatban generált kódok, D3), vagy nem GTIN alakú kód.
+enum ProductBarcodeType {
+  EAN13
+  EAN8
+  UPCA
+  GTIN14
+  INTERNAL
+}
+
+enum ProductBarcodeSource {
+  UNAS
+  IMPORT
+  MANUAL
+  JEV
+  POS
 }
 
 model CatalogImportBatch {
@@ -7931,6 +7963,7 @@ model ProductEnrichmentFieldResult {
 
   /// Az elfogadott tények, amik erre az eredményre mutatnak (Restrict).
   knowledgeFacts ProductKnowledgeFact[]
+  barcodes       ProductBarcode[]
 
   @@unique([checkId, field])
   @@index([status])
@@ -9040,6 +9073,8 @@ enum AttributeMedusaNativeField {
   VARIANT_WIDTH
   VARIANT_HEIGHT
   VARIANT_ORIGIN_COUNTRY
+  /// SEO P0 PR 4: az elfogadás `ProductBarcode` sort ír, nem tényt.
+  VARIANT_BARCODE
 }
 
 /// Egy termek-teny definicioja. A `key` = a `ProductKnowledgeFact.field`.
