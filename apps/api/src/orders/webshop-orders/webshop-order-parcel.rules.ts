@@ -35,12 +35,17 @@ export function parcelRefusal(input: {
   storePickup: boolean;
   carrier: "FOXPOST" | "GLS" | null;
   invoiceIssued: boolean;
+  /** Előre utalás: a számla a Számlázz.hu-tól jön, az OS nem állít ki. */
+  bankTransfer: boolean;
 }): string | null {
   if (input.storePickup)
     return "Bolti átvételes rendeléshez nem adunk fel csomagot.";
   if (!input.status || !PARCEL_STATUSES.includes(input.status))
     return "Csomag a visszaigazolt, még le nem zárt rendeléshez adható fel.";
-  if (!input.invoiceIssued) return "Előbb állítsd ki a számlát.";
+  if (!input.invoiceIssued)
+    return input.bankTransfer
+      ? "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor; a csomag utána adható fel."
+      : "Előbb állítsd ki a számlát.";
   if (!input.carrier)
     return "A rendelés szállítási módjából nem derül ki a szállító (Foxpost vagy GLS).";
   return null;

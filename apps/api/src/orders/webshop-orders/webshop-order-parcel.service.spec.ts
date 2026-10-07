@@ -303,6 +303,28 @@ describe("WebshopOrderParcelService", () => {
     }
   });
 
+  // stage-próba 2026-10-07 (#56): előre utalásnál a mondat nem kiállításra küld
+  it("a prepaid order without its Számlázz.hu invoice is told to wait for the payment", async () => {
+    const { created, service } = setup({
+      order: {
+        ...ORDER,
+        payment_collections: [
+          {
+            payment_sessions: [
+              { provider_id: "pp_acropora_transfer", status: "pending" },
+            ],
+          },
+        ],
+      } as unknown as MedusaOrderDetailRow,
+    });
+    await assert.rejects(service.create("order_38", undefined, USER), {
+      status: 409,
+      message:
+        "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor; a csomag utána adható fel.",
+    });
+    assert.equal(created.length, 0);
+  });
+
   it("the Számlázz.hu invoice of a prepaid order lets the parcel go (bb3a6bd5)", async () => {
     const { created, service } = setup({
       external: { id: "ext_1", number: "E-ACR-2026-77" },

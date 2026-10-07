@@ -11,6 +11,7 @@ import {
   linesOf,
   shippingOf,
   stepsOf,
+  TRANSFER_INVOICE_STEP,
   toDetail,
 } from "./webshop-order-detail.rules.js";
 import { NO_FACTS } from "./webshop-orders.rules.js";
@@ -170,6 +171,22 @@ const detail = (over: Partial<MedusaOrderDetailRow> = {}, code = "confirmed") =>
   });
 
 describe("the detail", () => {
+  // a jelző a sávig is eljut: egy előre utalásos rendelés lépése a kifizetést nevezi meg
+  it("a prepaid order's processing bar comes from the order's own payment", () => {
+    const result = detail({
+      payment_collections: [
+        {
+          payment_sessions: [
+            { provider_id: "pp_acropora_transfer", status: "pending" },
+          ],
+        },
+      ],
+    } as unknown as Partial<MedusaOrderDetailRow>);
+    assert.equal(result.bankTransfer, true);
+    assert.equal(result.steps[1]!.detail, TRANSFER_INVOICE_STEP);
+    assert.equal(detail().steps[1]!.detail, "Számla kiállítása");
+  });
+
   it("carries only the PaymentIntent id: no client_secret, no other provider data", () => {
     const result = detail();
     assert.equal(result.payment?.stripePaymentIntentId, "pi_3QX8fJ");
@@ -280,7 +297,7 @@ describe("the processing bar", () => {
     steps.map((step) => `${step.key}:${step.state}`);
 
   it("delivery: invoice before parcel, and the parcel says why it waits", () => {
-    const steps = stepsOf("confirmed", false, NO_FACTS, true);
+    const steps = stepsOf("confirmed", false, NO_FACTS, true, false);
     assert.deepEqual(states(steps), [
       "confirm:done",
       "invoice:current",
@@ -307,6 +324,7 @@ describe("the processing bar", () => {
             transferReceived: false,
           },
           false,
+          false,
         ),
       ),
       [
@@ -331,6 +349,7 @@ describe("the processing bar", () => {
             transferReceived: false,
           },
           true,
+          false,
         ),
       ).every((s) => s.endsWith(":done")),
       true,
@@ -352,16 +371,53 @@ describe("the processing bar", () => {
             transferReceived: false,
           },
           false,
+          false,
         ),
       ),
       ["confirm:done", "invoice:done", "pickup:done", "closed:current"],
     );
     assert.equal(
-      stepsOf("closed_unsuccessfully", false, NO_FACTS, true).some(
+      stepsOf("closed_unsuccessfully", false, NO_FACTS, true, false).some(
         (step) => step.state === "current",
       ),
       false,
     );
+  });
+
+  /*
+    ELŐRE UTALÁS (bb3a6bd5; stage-próba 2026-10-07, #56). Az OS ilyenkor nem
+    állít ki számlát (409), tehát a sáv sem hívhat kiállításra: a Számla lépés
+    és a csomag oka a Számlázz.hu-ra és a kifizetésre mutat. MI PIROSÍT: a
+    jelző nem jut el a sávig, vagy a régi „kiállítás” szöveg marad.
+  */
+  it("prepayment: the invoice step and the parcel name the payment, not issuing", () => {
+    const steps = stepsOf("confirmed", false, NO_FACTS, false, true);
+    assert.deepEqual(states(steps), [
+      "confirm:done",
+      "invoice:current",
+      "parcel:blocked",
+      "delivery:todo",
+      "closed:todo",
+    ]);
+    assert.equal(steps[1]!.detail, TRANSFER_INVOICE_STEP);
+    assert.equal(steps[1]!.detail, "A Számlázz.hu állítja ki a kifizetéskor");
+    assert.equal(steps[2]!.detail, "A számla a díjbekérő kifizetése után jön");
+    assert.ok(
+      steps.every((step) => !/kiállítása|állítsd ki/.test(step.detail)),
+    );
+  });
+
+  it("prepayment: once the Számlázz.hu invoice is linked, it is the step's text", () => {
+    const steps = stepsOf(
+      "confirmed",
+      false,
+      { ...NO_FACTS, invoiceNumber: "E-ACR-2026-1" },
+      false,
+      true,
+    );
+    assert.equal(steps[1]!.detail, "E-ACR-2026-1");
+    assert.equal(steps[1]!.state, "done");
+    assert.equal(steps[2]!.state, "current");
   });
 });
 

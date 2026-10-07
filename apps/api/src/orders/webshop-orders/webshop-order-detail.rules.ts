@@ -211,6 +211,11 @@ export function paymentOf(
   };
 }
 
+/** Előre utalásnál a Számla lépés: a számla a Számlázz.hu-tól jön. */
+export const TRANSFER_INVOICE_STEP = "A Számlázz.hu állítja ki a kifizetéskor";
+/** Előre utalásnál a csomag oka: nem kiállítás kell, hanem a kifizetés. */
+export const TRANSFER_PARCEL_WAIT = "A számla a díjbekérő kifizetése után jön";
+
 const AFTER = (
   code: WebshopOrderStatus | null,
   ...codes: WebshopOrderStatus[]
@@ -228,6 +233,7 @@ export function stepsOf(
   storePickup: boolean,
   facts: WebshopOrderFacts,
   cardPayment: boolean,
+  bankTransfer: boolean,
 ): WebshopOrderStep[] {
   const confirmed = AFTER(
     code,
@@ -249,7 +255,16 @@ export function stepsOf(
   draft.push({
     key: "invoice",
     label: "Számla",
-    detail: facts.invoiceNumber ?? "Számla kiállítása",
+    /*
+      ELŐRE UTALÁSNÁL A SZÁMLA NEM AZ OS DOLGA (bb3a6bd5): a Számlázz.hu
+      Autokassza állítja ki a kifizetett díjbekérőből, és az OS 409-cel
+      elutasítja a kiállítást. A lépés tehát nem hívhat kiállításra; azt
+      mondja meg, mire vár. Stage-próba, 2026-10-07: a #56-on ez a lépés még
+      „Számla kiállítása” volt.
+    */
+    detail:
+      facts.invoiceNumber ??
+      (bankTransfer ? TRANSFER_INVOICE_STEP : "Számla kiállítása"),
   });
   if (facts.invoiceNumber) done.add("invoice");
   if (storePickup) {
@@ -272,7 +287,10 @@ export function stepsOf(
     });
     if (facts.hasParcel) done.add("parcel");
     else if (!facts.invoiceNumber)
-      blocked.set("parcel", "Előbb állítsd ki a számlát");
+      blocked.set(
+        "parcel",
+        bankTransfer ? TRANSFER_PARCEL_WAIT : "Előbb állítsd ki a számlát",
+      );
     draft.push({
       key: "delivery",
       label: "Kiszállítás",
@@ -429,6 +447,9 @@ export function toDetail(input: {
   const billing = addressOf(order.billing_address);
   const delivery = addressOf(order.shipping_address);
   const related = relatedOf(order.metadata);
+  const bankTransfer =
+    orderPaymentProviderId(order.payment_collections?.[0]) ===
+    BANK_TRANSFER_PROVIDER_ID;
   return {
     id: order.id,
     displayId: order.display_id,
@@ -475,9 +496,7 @@ export function toDetail(input: {
     invoiceNumber: facts.invoiceNumber,
     invoice: facts.invoice,
     deliveryNote: input.deliveryNote ?? null,
-    bankTransfer:
-      orderPaymentProviderId(order.payment_collections?.[0]) ===
-      BANK_TRANSFER_PROVIDER_ID,
+    bankTransfer,
     proforma: input.proforma ?? null,
     transferReceipt: input.transferReceipt ?? null,
     externalInvoice: input.externalInvoice ?? null,
@@ -531,6 +550,7 @@ export function toDetail(input: {
       shipping.storePickup,
       facts,
       payment?.method === "Stripe",
+      bankTransfer,
     ),
     relatedOrder: related
       ? { ...related, displayId: input.relatedDisplayId }
