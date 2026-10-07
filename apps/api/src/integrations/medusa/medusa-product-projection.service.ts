@@ -40,6 +40,7 @@ import {
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
 import { buildProductDescription } from "./product-description.js";
+import type { ShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
   projectVariantOptions,
   type VariantOptionsRefusal,
@@ -326,6 +327,13 @@ export type ProjectionOutcome =
        * kimenet atiranyitasaval le lehet menteni.
        */
       cim: MedusaHandleParositas | null;
+      /**
+       * A SZÁLLÍTÁS SORSA A LÉTREHOZÁSKOR (kártya 2a7f2313), egy mondatban:
+       * kapott-e profilt, és mi lett a szállítási osztállyal. Csak akkor van,
+       * ha a vetítés a szállítást is kezeli; a termék akkor is kint van, ha
+       * az osztály kiírása elhasalt, és ez a mondat mondja ki.
+       */
+      shipping?: string;
     }
   /**
    * A meglévő terméket módosítottuk: `updated`, ha volt leképezés,
@@ -517,6 +525,11 @@ export class MedusaProductProjectionService {
      * legyen.
      */
     private readonly storefrontSalesChannelId: string | null,
+    /**
+     * A SZÁLLÍTÁS A LÉTREHOZÁSKOR (kártya 2a7f2313): profil és osztály. Ha
+     * nincs megadva, a létrehozás a korábbi módon megy, profil nélkül.
+     */
+    private readonly shipping?: ShippingOnCreate,
   ) {}
 
   /** Az első használatkor kérdezzük le, utána a folyamat élettartamára tartjuk. */
@@ -1024,9 +1037,34 @@ export class MedusaProductProjectionService {
           `ember döntése, hogy a törölt sor sorsa mi legyen.`,
       };
 
+    /*
+      A PROFIL A LÉTREHOZÁS RÉSZE, nem utólagos javítás: profil nélkül a
+      termék nem rendelhető meg. Ha a lekérdezés elhasal, a termék nem születik
+      meg (a következő futás újra megpróbálja), mert egy profil nélküli
+      termék csendes hiba lenne a pénztárban.
+    */
+    let shippingProfileId: string | null = null;
+    if (this.shipping) {
+      try {
+        shippingProfileId = await this.shipping.defaultProfileId();
+      } catch (error) {
+        return {
+          action: "stopped",
+          reason: "medusa-write-failed",
+          details:
+            `${product.id}: a bolt szállítási profilja nem kérdezhető le ` +
+            `(${describeMedusaFailure(error)}). A terméket NEM hoztuk létre: ` +
+            `profil nélkül nem lenne megrendelhető.`,
+        };
+      }
+    }
+
     let created: MedusaProductRow;
     try {
       created = await this.medusa.create({
+        ...(shippingProfileId
+          ? { shipping_profile_id: shippingProfileId }
+          : {}),
         title: product.name,
         description: descriptions.description,
         external_id: product.id,
@@ -1109,7 +1147,39 @@ export class MedusaProductProjectionService {
       cim,
       medusaProductId: created.id,
       publication: report,
+      ...(this.shipping
+        ? {
+            shipping: await this.shippingAfterCreate(
+              product.id,
+              shippingProfileId,
+            ),
+          }
+        : {}),
     };
+  }
+
+  /**
+   * AZ OSZTÁLY A KÖTÉS UTÁN, és a hibája NEM vonja vissza a terméket: az már
+   * kint van, kötéssel. A mondat kimondja, mi történt, és a
+   * `medusa:shipping-attributes` parancs újrafuttatása pótolja.
+   */
+  private async shippingAfterCreate(
+    osProductId: string,
+    profileId: string | null,
+  ): Promise<string> {
+    const profile = profileId
+      ? "profil: az alapértelmezett"
+      : "profil: NINCS (a boltban nem pontosan egy alapértelmezett profil áll; a medusa:shipping-profile-link pótolja)";
+    try {
+      const outcome = await this.shipping!.afterCreate(osProductId);
+      const osztaly =
+        outcome.action === "skipped"
+          ? "osztály: nincs korlátozás (nincs kézi sor, UNAS-felülírás vagy élő állat besorolás)"
+          : `osztály: ${outcome.flags}`;
+      return `${profile}; ${osztaly}`;
+    } catch (error) {
+      return `${profile}; osztály: NEM íródott ki (${describeMedusaFailure(error)}); a medusa:shipping-attributes --apply pótolja`;
+    }
   }
 }
 

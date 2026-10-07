@@ -1901,3 +1901,101 @@ describe("MedusaProductProjectionService -- a metaadat megőrzése", () => {
     );
   });
 });
+
+/*
+  A SZÁLLÍTÁS A LÉTREHOZÁSKOR (kártya 2a7f2313, a #1546 követő része). MI
+  PIROSÍT: az új termék profil nélkül születik, holott a boltnak pontosan egy
+  alapértelmezett profilja van; a profil-lekérdezés hibája mellett mégis
+  létrejön (megrendelhetetlen termék); az osztály a kötés ELŐTT íródik (akkor
+  még nincs mihez); az osztály kiírásának hibája visszavonja a létrehozást,
+  vagy némán elvész; a nem egyértelmű profil csendben kimarad.
+*/
+describe("the shipping of a newly created product", () => {
+  const withShipping = (shipping: {
+    profile?: string | null;
+    profileError?: Error;
+    classError?: Error;
+  }) => {
+    const base = fakes({ link: null, found: [] });
+    const service = new MedusaProductProjectionService(
+      base.links,
+      base.medusa,
+      SALES_CHANNEL,
+      {
+        defaultProfileId: async () => {
+          base.calls.push("defaultProfile");
+          if (shipping.profileError) throw shipping.profileError;
+          return shipping.profile === undefined
+            ? "sp_default"
+            : shipping.profile;
+        },
+        afterCreate: async (osProductId: string) => {
+          base.calls.push(`shippingClass ${osProductId}`);
+          if (shipping.classError) throw shipping.classError;
+          return {
+            action: "applied",
+            medusaProductId: "prod_uj",
+            flags: "bolti átvétel",
+          };
+        },
+      },
+    );
+    return { ...base, service };
+  };
+
+  it("is created on the default profile, and its class is written after the link", async () => {
+    const { service, calls, createdWith } = withShipping({});
+    const outcome = await service.project(product, now);
+    assert.equal(createdWith[0]!.shipping_profile_id, "sp_default");
+    assert.deepEqual(calls, [
+      "findSalesChannel",
+      "findLink",
+      "search",
+      "defaultProfile",
+      "create",
+      "link",
+      "shippingClass prod-os-1",
+    ]);
+    assert.equal(
+      outcome.action === "created" ? outcome.shipping : null,
+      "profil: az alapértelmezett; osztály: bolti átvétel",
+    );
+  });
+
+  it("without exactly one default profile it is created without one, and says so", async () => {
+    const { service, createdWith } = withShipping({ profile: null });
+    const outcome = await service.project(product, now);
+    assert.equal("shipping_profile_id" in createdWith[0]!, false);
+    assert.match(
+      outcome.action === "created" ? (outcome.shipping ?? "") : "",
+      /profil: NINCS/,
+    );
+  });
+
+  it("if the profile cannot be asked, nothing is created", async () => {
+    const { service, calls } = withShipping({
+      profileError: new Error("503"),
+    });
+    const outcome = await service.project(product, now);
+    assert.equal(outcome.action, "stopped");
+    assert.equal(calls.includes("create"), false);
+  });
+
+  it("a failed class write keeps the product and names the failure", async () => {
+    const { service, calls } = withShipping({ classError: new Error("502") });
+    const outcome = await service.project(product, now);
+    assert.equal(outcome.action, "created");
+    assert.ok(calls.includes("link"));
+    assert.match(
+      outcome.action === "created" ? (outcome.shipping ?? "") : "",
+      /osztály: NEM íródott ki .*medusa:shipping-attributes --apply/,
+    );
+  });
+
+  it("without the shipping part the create is as before", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+    const outcome = await service.project(product, now);
+    assert.equal("shipping_profile_id" in createdWith[0]!, false);
+    assert.equal(outcome.action === "created" && "shipping" in outcome, false);
+  });
+});
