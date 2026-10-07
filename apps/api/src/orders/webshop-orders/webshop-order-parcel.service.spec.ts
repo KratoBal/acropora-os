@@ -63,6 +63,8 @@ const ISSUED: WebshopOrderInvoiceRow = {
 function setup(
   over: {
     invoice?: WebshopOrderInvoiceRow;
+    /** A Számlázz.hu számlája, a rendeléshez kötve (előre utalás, bb3a6bd5). */
+    external?: { id: string; number: string };
     parcelNumber?: string;
     createError?: CarrierError;
     noticeError?: Error;
@@ -94,6 +96,12 @@ function setup(
   const repository = {
     invoices: async (ids: string[]) =>
       new Map(over.invoice ? [[ids[0]!, over.invoice]] : []),
+    externalInvoices: async (ids: string[]) =>
+      new Map(
+        over.external
+          ? [[ids[0]!, { ...over.external, link: "ORDER_NUMBER", paid: true }]]
+          : [],
+      ),
     recordParcelReleased: async (input: { orderId: string }) => {
       calls.push(`audit release ${input.orderId}`);
     },
@@ -293,6 +301,14 @@ describe("WebshopOrderParcelService", () => {
       });
       assert.equal(created.length, 0);
     }
+  });
+
+  it("the Számlázz.hu invoice of a prepaid order lets the parcel go (bb3a6bd5)", async () => {
+    const { created, service } = setup({
+      external: { id: "ext_1", number: "E-ACR-2026-77" },
+    });
+    await service.create("order_38", undefined, USER);
+    assert.equal(created.length, 1);
   });
 
   it("after a released hold, no parcel until the link is paid", async () => {

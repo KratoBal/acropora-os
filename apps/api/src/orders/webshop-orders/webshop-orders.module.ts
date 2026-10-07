@@ -4,6 +4,8 @@ import { BillingModule } from "../../billing/billing.module.js";
 import { CustomersModule } from "../../customers/customers.module.js";
 import { CarriersModule } from "../../integrations/carriers/carriers.module.js";
 import { MedusaModule } from "../../integrations/medusa/medusa.module.js";
+import { NotificationsModule } from "../../notifications/notifications.module.js";
+import { WebshopOrderTransferService } from "./webshop-order-transfer.service.js";
 import { WebshopOrderInvoiceService } from "./webshop-order-invoice.service.js";
 import { WebshopOrderLinesService } from "./webshop-order-lines.service.js";
 import { WebshopOrderPaymentService } from "./webshop-order-payment.service.js";
@@ -18,7 +20,13 @@ import { WebshopOrdersService } from "./webshop-orders.service.js";
 import { WebshopMailOutboxController } from "./webshop-mail-outbox.controller.js";
 import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
 @Module({
-  imports: [MedusaModule, BillingModule, CustomersModule, CarriersModule],
+  imports: [
+    MedusaModule,
+    BillingModule,
+    CustomersModule,
+    CarriersModule,
+    NotificationsModule,
+  ],
   controllers: [WebshopOrdersController, WebshopMailOutboxController],
   providers: [
     WebshopOrdersService,
@@ -31,6 +39,7 @@ import { WebshopMailOutboxService } from "./webshop-mail-outbox.service.js";
     WebshopOrderEditsService,
     WebshopOrderSplitService,
     WebshopOrderShippingMethodService,
+    WebshopOrderTransferService,
   ],
 })
 export class WebshopOrdersModule {}

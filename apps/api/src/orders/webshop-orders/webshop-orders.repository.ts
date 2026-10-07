@@ -4,7 +4,15 @@ import {
   WEBSHOP_STALE_THRESHOLD_DEFAULTS,
   type BillingDocumentStatus,
   type WebshopStaleThreshold,
+  type WebshopTransferReceipt,
 } from "@acropora/types";
+
+import {
+  linkExternalInvoices,
+  mentionsNumber,
+  type LinkProforma,
+  type LinkedExternalInvoice,
+} from "./webshop-external-invoice-link.js";
 
 /** Egy rendelés számlája az OS-ben: a `WEBSHOP_ORDER` forrású bizonylat. */
 export interface WebshopOrderInvoiceRow {
@@ -19,6 +27,7 @@ export interface WebshopOrderProformaRow {
   number: string | null;
   dueDate: Date | null;
   emailStatus: string | null;
+  grossAmount?: Prisma.Decimal | null;
 }
 
 /** A webshop vevőinek kötése: `ExternalReference(MEDUSA, "Customer")`. */
@@ -214,6 +223,228 @@ export class WebshopOrdersRepository {
   }
 
   /**
+   * A SZÁMLÁZZ.HU ÁLTAL KIÁLLÍTOTT SZÁMLA A RENDELÉSHEZ (bb3a6bd5): a
+   * kifizetett díjbekérőből az Autokassza állítja ki, a kimenő továbbítás
+   * hozza be. A kötés szabálya `linkExternalInvoices`; itt csak a bemenete áll
+   * össze: a rendelések kiállított díjbekérői, a díjbekérő napja óta kelt
+   * kimenő számlák, és hogy melyik nyers üzenet nevezi meg a díjbekérő számát.
+   * `paid`: a számla a saját kifizetései szerint ki van egyenlítve.
+   */
+  async externalInvoices(
+    orderIds: string[],
+  ): Promise<
+    Map<
+      string,
+      LinkedExternalInvoice & { paid: boolean; paidOn: string | null }
+    >
+  > {
+    if (!orderIds.length) return new Map();
+    const proformas = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: { in: orderIds },
+        documentType: "PROFORMA",
+        status: "ISSUED",
+        invoiceNumber: { not: null },
+        grossAmount: { not: null },
+      },
+      select: {
+        sourceId: true,
+        invoiceNumber: true,
+        reference: true,
+        partnerName: true,
+        grossAmount: true,
+        createdAt: true,
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const input: LinkProforma[] = proformas.flatMap((row) =>
+      row.sourceId && row.invoiceNumber && row.grossAmount
+        ? [
+            {
+              orderId: row.sourceId,
+              number: row.invoiceNumber,
+              reference: row.reference,
+              partnerName: row.partnerName,
+              grossAmount: row.grossAmount.toFixed(4),
+              issuedOn: row.createdAt.toISOString().slice(0, 10),
+            },
+          ]
+        : [],
+    );
+    if (!input.length) return new Map();
+    const since = input.reduce(
+      (min, row) => (row.issuedOn < min ? row.issuedOn : min),
+      input[0]!.issuedOn,
+    );
+    const sinceDate = new Date(`${since}T00:00:00Z`);
+    const documents = await prisma.externalBillingDocument.findMany({
+      where: { issueDate: { gte: sinceDate } },
+      select: {
+        id: true,
+        externalId: true,
+        kindCode: true,
+        documentNumber: true,
+        orderNumber: true,
+        customerName: true,
+        grossAmount: true,
+        paidAmount: true,
+        lastPaymentDate: true,
+        issueDate: true,
+        cancelled: true,
+      },
+    });
+    if (!documents.length) return new Map();
+    // a díjbekérő száma a nyers üzenetben, bármelyik mezőben
+    const mentions = new Map<string, string[]>();
+    for (const proforma of input) {
+      const messages = await prisma.szamlazzFeedMessage.findMany({
+        where: {
+          kind: "SZAMLAKI",
+          receivedAt: { gte: sinceDate },
+          body: { contains: proforma.number },
+        },
+        select: { externalId: true, body: true },
+      });
+      for (const message of messages.filter((m) =>
+        mentionsNumber(m.body, proforma.number),
+      ))
+        mentions.set(message.externalId, [
+          ...(mentions.get(message.externalId) ?? []),
+          proforma.number,
+        ]);
+    }
+    const linked = linkExternalInvoices(
+      input,
+      documents.map((doc) => ({
+        id: doc.id,
+        kindCode: doc.kindCode,
+        documentNumber: doc.documentNumber,
+        orderNumber: doc.orderNumber,
+        customerName: doc.customerName,
+        grossAmount: doc.grossAmount.toFixed(2),
+        issueDate: doc.issueDate.toISOString().slice(0, 10),
+        cancelled: doc.cancelled,
+        mentions: mentions.get(doc.externalId) ?? [],
+      })),
+    );
+    const byId = new Map(documents.map((doc) => [doc.id, doc]));
+    return new Map(
+      [...linked].map(([orderId, link]) => {
+        const doc = byId.get(link.id)!;
+        return [
+          orderId,
+          {
+            ...link,
+            paid: doc.grossAmount.gt(0) && doc.paidAmount.gte(doc.grossAmount),
+            paidOn: doc.lastPaymentDate
+              ? doc.lastPaymentDate.toISOString().slice(0, 10)
+              : null,
+          },
+        ];
+      }),
+    );
+  }
+
+  /**
+   * AZ ELŐRE UTALÁS BEÉRKEZÉSEI (bb3a6bd5), rendelésenként; kézi rögzítésnél
+   * a rögzítő megjelenítendő nevével.
+   */
+  async transferReceipts(
+    orderIds: string[],
+  ): Promise<Map<string, WebshopTransferReceipt>> {
+    if (!orderIds.length) return new Map();
+    const rows = await prisma.webshopTransferReceipt.findMany({
+      where: { orderId: { in: orderIds } },
+    });
+    const userIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.recordedByUserId ? [row.recordedByUserId] : [],
+        ),
+      ),
+    ];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true },
+        })
+      : [];
+    const names = new Map(users.map((user) => [user.id, user.displayName]));
+    return new Map(
+      rows.map((row) => [
+        row.orderId,
+        {
+          source: row.source,
+          receivedOn: row.receivedOn.toISOString().slice(0, 10),
+          reference: row.reference,
+          amount: row.amount.toFixed(4),
+          currency: row.currency,
+          recordedBy: row.recordedByUserId
+            ? (names.get(row.recordedByUserId) ?? null)
+            : null,
+        },
+      ]),
+    );
+  }
+
+  /**
+   * A BEÉRKEZÉS RÖGZÍTÉSE. Rendelésenként egy sor: ha már van, `false`, és
+   * nem ír (a párosítás és a kézi gomb versenyében az első nyer).
+   */
+  async createTransferReceipt(input: {
+    orderId: string;
+    proformaId: string;
+    source: "BANK_PAIRING" | "MANUAL";
+    bankTransactionId: string | null;
+    reference: string;
+    receivedOn: string;
+    amount: Prisma.Decimal;
+    currency: string;
+    recordedByUserId: string | null;
+  }): Promise<boolean> {
+    try {
+      await prisma.webshopTransferReceipt.create({
+        data: {
+          ...input,
+          receivedOn: new Date(`${input.receivedOn}T00:00:00Z`),
+        },
+      });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        return false;
+      throw error;
+    }
+  }
+
+  /** Akiknél a „Webshop befizetés-felelős” értesítési szerep be van jelölve. */
+  async transferRecipients(): Promise<string[]> {
+    const rows = await prisma.userNotificationRole.findMany({
+      where: { role: "WEBSHOP_TRANSFER_RECEIVED", user: { isActive: true } },
+      select: { userId: true },
+      orderBy: { userId: "asc" },
+    });
+    return rows.map((row) => row.userId);
+  }
+
+  /** A díjbekérő bruttó összege és devizája (a kézi rögzítés ezt írja be). */
+  async proformaAmount(
+    proformaId: string,
+  ): Promise<{ amount: Prisma.Decimal; currency: string } | null> {
+    const row = await prisma.invoice.findUnique({
+      where: { id: proformaId },
+      select: { grossAmount: true, currency: true },
+    });
+    return row?.grossAmount
+      ? { amount: row.grossAmount, currency: row.currency }
+      : null;
+  }
+
+  /**
    * A RENDELÉSEK DÍJBEKÉRŐJE (bb3a6bd5): rendelésenként a legújabb, a
    * határidejével és a kiküldés állapotával. A lista a lejárt díjbekérőt
    * jelöli, ezért egy lekérdezés megy az egész oldalra.
@@ -235,6 +466,7 @@ export class WebshopOrdersRepository {
         invoiceNumber: true,
         dueDate: true,
         emailStatus: true,
+        grossAmount: true,
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
@@ -247,6 +479,7 @@ export class WebshopOrdersRepository {
           number: row.invoiceNumber,
           dueDate: row.dueDate,
           emailStatus: row.emailStatus,
+          grossAmount: row.grossAmount,
         });
     return result;
   }

@@ -247,6 +247,20 @@ export class WebshopOrderInvoiceService {
     const { order, status } = await this.orders.source(orderId);
     const refusal = invoiceRefusal(statusOf(status?.status));
     if (refusal) throw new ConflictException(refusal);
+    /*
+      ELŐRE UTALÁSNÁL AZ OS NEM ÁLLÍT KI SZÁMLÁT (bb3a6bd5; Balázs, 2026-10-06
+      18:22 UTC: „be van kapcsolva az automatikus szamlazas ha kifizetik a
+      dijbekerot”). A Számlázz.hu Autokassza a kifizetett díjbekérőből maga
+      állítja ki, és a kimenő továbbítás behozza: egy második, OS-ből
+      kiállított valódi számla kettős számlázás lenne.
+    */
+    if (
+      orderPaymentProviderId(order.payment_collections?.[0]) ===
+      BANK_TRANSFER_PROVIDER_ID
+    )
+      throw new ConflictException(
+        "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor, és a rendelésen magától megjelenik. Az OS nem állít ki mellé másikat.",
+      );
 
     const customerId = await this.customerFor(order, user);
     const buyer = await this.repository.customerBuyer(customerId);

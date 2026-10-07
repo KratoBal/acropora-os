@@ -918,6 +918,11 @@ export interface MedusaAdminClient {
    * szállítás”) és a fizetési link küldése.
    */
   orderPayment(orderId: string): Promise<MedusaOrderPayment | null>;
+  /** Megjött az előre utalás: a webshop levont fizetéssé teszi (commerce #509). */
+  recordTransferReceipt(
+    orderId: string,
+    receipt: { reference: string; received_at: string; amount: number },
+  ): Promise<{ recorded: boolean; payment_id: string }>;
   releaseHold(
     orderId: string,
     notifyCustomer: boolean,
@@ -1860,6 +1865,22 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify({ notify_customer: notifyCustomer }),
     });
     return body.notification ?? { sent: false, reason: "unknown" };
+  }
+
+  /**
+   * MEGJÖTT AZ ELŐRE UTALÁS (commerce #509, kártya bb3a6bd5): a webshop a
+   * rendelés előre utalásos munkamenetét levont fizetéssé teszi. A második
+   * hívás nem ír, csak megmondja (`recorded: false`). Eltérő összegre, nem
+   * előre utalásos vagy nem váró rendelésre 409, magyar mondattal.
+   */
+  async recordTransferReceipt(
+    orderId: string,
+    receipt: { reference: string; received_at: string; amount: number },
+  ): Promise<{ recorded: boolean; payment_id: string }> {
+    return this.request(
+      `/admin/order-payment/${encodeURIComponent(orderId)}/transfer-receipt`,
+      { method: "POST", body: JSON.stringify(receipt) },
+    );
   }
 
   async sendPaymentLink(

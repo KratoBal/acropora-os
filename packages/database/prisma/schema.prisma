@@ -4706,6 +4706,10 @@ enum NotificationRole {
   /// KET FUGGETLEN jelolonegyzetet kert (2026-09-22 20:28:56 UTC, "Nem. Ket
   /// kulon jelolo legyen"), es a ketto EGYMAS NELKUL is allithato.
   MATERIAL_REQUEST_CREATED
+  /// A HARMADIK PONT: megjött egy előre utalásos webshop rendelés pénze
+  /// (kártya bb3a6bd5; Balázs, 2026-10-06 16:42 UTC: „szolnia kell ha
+  /// megjott a penz”). Alapból senki nem kapja, Balázs jelöli be.
+  WEBSHOP_TRANSFER_RECEIVED
 }
 
 /// KI KAP ERTESITEST, ES MIROL.
@@ -8410,6 +8414,33 @@ model WebshopOrderNote {
   text            String
   updatedByUserId String?
   updatedAt       DateTime @updatedAt
+}
+
+/// AZ ELŐRE UTALÁS BEÉRKEZÉSE (kártya bb3a6bd5): a webshop rendelés pénze
+/// megjött. Rendelésenként EGY sor; a webshop rendelés-azonosítója a kulcs.
+/// Két úton keletkezik: a banki párosításból (a jóváírás azonosítójával) vagy
+/// kézzel, a rendelés oldalán, ha a párosítás nem találta meg (Balázs: a kézi
+/// gomb tartaléknak marad). A díjbekérő bizonylatot (`Invoice`) nem írja át.
+model WebshopTransferReceipt {
+  orderId           String                       @id @db.VarChar(64)
+  /// A kifizetett díjbekérő (`Invoice`, `PROFORMA`).
+  proformaId        String
+  source            WebshopTransferReceiptSource
+  /// A párosított jóváírás; kézi rögzítésnél `null`.
+  bankTransactionId String?                      @unique
+  /// A banki hivatkozás vagy a kézzel megadott hivatkozás.
+  reference         String
+  receivedOn        DateTime                     @db.Date
+  amount            Decimal                      @db.Decimal(19, 4)
+  currency          String                       @db.VarChar(3)
+  /// Kézi rögzítésnél ki; a párosításnál `null`.
+  recordedByUserId  String?
+  createdAt         DateTime                     @default(now())
+}
+
+enum WebshopTransferReceiptSource {
+  BANK_PAIRING
+  MANUAL
 }
 
 enum WebshopStaleUnit {

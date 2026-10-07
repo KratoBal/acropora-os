@@ -194,6 +194,66 @@ export function AddressDialog({
 }
 
 /**
+ * „UTALÁS BEÉRKEZETT” (bb3a6bd5): a kézi tartalék, ha a banki párosítás nem
+ * találta meg a pénzt. A jóváírás napja és a banki hivatkozás kell hozzá; az
+ * összeg a díjbekérőé.
+ */
+export function TransferReceivedDialog({
+  today,
+  amount,
+  onClose,
+  onSave,
+}: {
+  /** ÉÉÉÉ-HH-NN, a nap alapértéke és felső határa. */
+  today: string;
+  /** Megjelenítésre kész összeg (a díjbekérőé). */
+  amount: string;
+  onClose: () => void;
+  onSave: (input: { receivedOn: string; reference: string }) => Promise<void>;
+}) {
+  const [receivedOn, setReceivedOn] = useState(today);
+  const [reference, setReference] = useState("");
+  const { busy, error, save } = useSave(onClose);
+  return (
+    <Shell
+      title="Utalás beérkezett"
+      busy={busy}
+      error={error}
+      onClose={onClose}
+      saveDisabled={!reference.trim() || !receivedOn || receivedOn > today}
+      onSave={() =>
+        save(() => onSave({ receivedOn, reference: reference.trim() }))
+      }
+    >
+      <label className="block text-xs text-pilot-grey-500">
+        A jóváírás napja
+        <PilotInput
+          aria-label="A jóváírás napja"
+          type="date"
+          value={receivedOn}
+          onChange={setReceivedOn}
+          className="mt-1"
+        />
+      </label>
+      <label className="block text-xs text-pilot-grey-500">
+        Banki hivatkozás
+        <PilotInput
+          aria-label="Banki hivatkozás"
+          value={reference}
+          onChange={setReference}
+          className="mt-1"
+        />
+      </label>
+      <p className="text-xs text-pilot-grey-500">
+        A rendelés {amount} befizetéssel kifizetettnek látszik, és a
+        befizetés-felelősök értesítést kapnak. A rögzítés a felületről nem
+        vonható vissza.
+      </p>
+    </Shell>
+  );
+}
+
+/**
  * EGY MEGJEGYZÉS SZERKESZTÉSE: a belső (csak OS), a vevőé és a szállítónak
  * szóló (commerce #493). A határ a mező saját határa: a szállítónak szóló
  * üzenet 50 karakter, mert a Foxpost mezője ekkora.
