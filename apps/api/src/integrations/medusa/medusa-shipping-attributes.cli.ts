@@ -12,6 +12,11 @@ import {
 } from "./medusa-projection.credentials.js";
 import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
+import {
+  listAllShopSkus,
+  osSkuIndex,
+  pairShopProducts,
+} from "./medusa-sku-pairing.js";
 import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
 
 /**
@@ -257,12 +262,10 @@ export async function runShippingAttributesCli(
   return bukott ? 1 : 0;
 }
 
-const norm = (sku: unknown) =>
-  String(sku ?? "")
-    .trim()
-    .toLowerCase();
-
-/** OS termek -> bolti termek, csak az egyertelmu SKU-parok. */
+/**
+ * OS termek -> bolti termek, csak az egyertelmu SKU-parok. A szabaly a
+ * `medusa-sku-pairing.ts`-ben all, mert az osszekoto parancs is azt futtatja.
+ */
 export async function skuParositas(
   futtato: Pick<MedusaShippingAttributesService, "listShopSkus">,
   database: Pick<
@@ -283,43 +286,21 @@ export async function skuParositas(
       select: { productId: true, rawPayload: true },
     }),
   ]);
-  const osBySku = new Map<string, Set<string>>();
-  const add = (sku: unknown, productId: string) => {
-    const k = norm(sku);
-    if (k) osBySku.set(k, new Set([...(osBySku.get(k) ?? []), productId]));
-  };
-  for (const v of valtozatok) add(v.sku, v.productId);
-  for (const t of tukrok)
-    add((t.rawPayload as { Sku?: unknown } | null)?.Sku, t.productId);
+  const boltiak = await listAllShopSkus({
+    listProductSkus: (offset, limit) => futtato.listShopSkus(offset, limit),
+  });
+  const dontesek = pairShopProducts(osSkuIndex(valtozatok, tukrok), boltiak);
 
-  const jelolt = new Map<string, string[]>(); // OS termek -> bolti termekek
+  const osToShop = new Map<string, string>();
   let ketertelmu = 0;
   let nincs = 0;
-  let boltiTermek = 0;
-  for (let offset = 0; ;) {
-    const page = await futtato.listShopSkus(offset, 200);
-    for (const p of page.products) {
-      boltiTermek++;
-      const celok = new Set(
-        (p.variants ?? []).flatMap((v) => [
-          ...(osBySku.get(norm(v.sku)) ?? []),
-        ]),
-      );
-      if (celok.size === 1) {
-        const os = [...celok][0]!;
-        jelolt.set(os, [...(jelolt.get(os) ?? []), p.id]);
-      } else if (celok.size > 1) ketertelmu++;
-      else nincs++;
-    }
-    offset += page.products.length;
-    if (page.products.length === 0 || offset >= page.count) break;
+  for (const dontes of dontesek) {
+    if (dontes.kind === "pair")
+      osToShop.set(dontes.osProductId, dontes.shopProductId);
+    else if (dontes.kind === "no-match") nincs++;
+    else ketertelmu++;
   }
-  const osToShop = new Map<string, string>();
-  for (const [os, boltiak] of jelolt) {
-    if (boltiak.length === 1) osToShop.set(os, boltiak[0]!);
-    else ketertelmu += boltiak.length;
-  }
-  return { osToShop, ketertelmu, nincs, boltiTermek };
+  return { osToShop, ketertelmu, nincs, boltiTermek: boltiak.length };
 }
 
 if (
