@@ -25,7 +25,7 @@ import {
   type QuoteSnippetDto,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
@@ -115,22 +115,59 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   const [leaving, setLeaving] = useState<string | null>(null);
   const go = (path: string) =>
     dirtyBlocks.size ? setLeaving(path) : router.push(path);
-  const markDirty = useCallback(
-    (blockId: string) => (dirty: boolean) =>
-      setDirtyBlocks((current) => {
-        if (current.has(blockId) === dirty) return current;
-        const next = new Set(current);
-        if (dirty) next.add(blockId);
-        else next.delete(blockId);
-        return next;
-      }),
-    [],
-  );
+  /*
+    ONE STABLE HANDLER PER KEY. The cards clean up on unmount through it, so a
+    fresh function per render would run that cleanup on every render, and the
+    unsaved state would flip off and on forever.
+  */
+  const dirtyHandlers = useRef(new Map<string, (dirty: boolean) => void>());
+  const markDirty = useCallback((key: string) => {
+    let handler = dirtyHandlers.current.get(key);
+    if (!handler) {
+      handler = (dirty: boolean) =>
+        setDirtyBlocks((current) => {
+          if (current.has(key) === dirty) return current;
+          const next = new Set(current);
+          if (dirty) next.add(key);
+          else next.delete(key);
+          return next;
+        });
+      dirtyHandlers.current.set(key, handler);
+    }
+    return handler;
+  }, []);
   useEffect(() => {
     if (!dirtyBlocks.size) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    /*
+      AN IN-APP LINK (the menu, a breadcrumb) navigates on the client, so no
+      unload happens: the click is caught before the router sees it, and the
+      same dialog asks. The browser's own Back is not covered: the app router
+      offers no way to hold a history step.
+    */
+    const catchLink = (event: MouseEvent) => {
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      if (!link || link.getAttribute("target") === "_blank") return;
+      const href = new URL(link.getAttribute("href")!, window.location.href);
+      if (href.origin !== window.location.origin) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaving(`${href.pathname}${href.search}`);
+    };
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    document.addEventListener("click", catchLink, true);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      document.removeEventListener("click", catchLink, true);
+    };
   }, [dirtyBlocks]);
   const [asking, setAsking] = useState<{
     title: string;
@@ -416,6 +453,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
               percent: m.percent,
             }))}
             busy={busy}
+            onDirtyChange={markDirty("milestones")}
             onSave={(milestones) =>
               write(() =>
                 quotesApi.setMilestones(token, quote.id, v.id, milestones),
@@ -489,7 +527,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       <ConfirmDialog
         open={leaving !== null}
         title="Nem mentett szöveg"
-        consequence={`${dirtyBlocks.size} blokk szövege még nincs mentve, és elvész, ha most elmész.`}
+        consequence={`${dirtyBlocks.size} mentetlen rész (blokk vagy fizetési ütemezés) elvész, ha most elmész.`}
         recovery="Maradj, és mentsd a blokkokat a „Blokk mentése” gombbal."
         confirmLabel="Elmegyek mentés nélkül"
         onConfirm={() => {
@@ -583,8 +621,11 @@ function BlockCard({
       : EMPTY;
   const [title, setTitle] = useState(block.title ?? "");
   const [text, setText] = useState(initialText);
-  const dirty = title !== (block.title ?? "") || text !== initialText;
+  // the title is saved trimmed, so it is compared trimmed
+  const dirty = title.trim() !== (block.title ?? "") || text !== initialText;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  // a deleted block takes its unsaved state with it
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const label = QUOTE_BLOCK_LABEL[block.kind];
   const subtotal = block.items
     .filter((i) => !i.isOptional)
@@ -744,9 +785,11 @@ function MilestonesCard({
   initial,
   busy,
   onSave,
+  onDirtyChange,
 }: {
   initial: Array<{ label: string; percent: string }>;
   busy: boolean;
+  onDirtyChange: (dirty: boolean) => void;
   onSave: (
     milestones: Array<{ label: string; percent: string }>,
   ) => Promise<boolean>;
@@ -757,6 +800,8 @@ function MilestonesCard({
     0,
   );
   const dirty = JSON.stringify(rows) !== JSON.stringify(initial);
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const set = (index: number, key: "label" | "percent", value: string) =>
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)));
   return (
