@@ -115,11 +115,12 @@ export const productApi = {
     id: string,
     block: ProductCopyBlock,
     body: string,
+    usedFields: string[],
   ) {
     return apiRequest<ProductKnowledge>(
       `/products/${encodeURIComponent(id)}/knowledge/copy/${block}`,
       token,
-      { method: "PUT", body: JSON.stringify({ body }) },
+      { method: "PUT", body: JSON.stringify({ body, usedFields }) },
     );
   },
   approveKnowledgeCopy(token: string, id: string, block: ProductCopyBlock) {

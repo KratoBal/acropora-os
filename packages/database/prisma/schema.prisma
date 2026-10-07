@@ -7980,8 +7980,14 @@ model ProductCopy {
   status       ProductCopyStatus @default(DRAFT)
   /// Minden mentés növeli; a vetítési szerződés blokkonként viszi.
   revision     Int
-  /// `{ mezőkulcs: revízió }`, a mentés pillanatában a termék összes tényéről.
+  /// `{ mezőkulcs: revízió }`, a mentés pillanatában. Ha a `usedFields` nem
+  /// üres, csak az ott felsorolt tények revízióját tartja; üresen a termék
+  /// összes tényéét (a régi, termékszintű szabály).
   basedOn      Json
+  /// A tények, amikre a blokk ténylegesen épül (SEO P0 PR 1b, Balázs
+  /// 2026-10-07). Az elavulás és a publikálhatóság csak ezeken mér. Üres lista:
+  /// a termékszintű szabály él tovább (a régi blokkok, amíg újra nem mentik).
+  usedFields   String[]          @default([])
   editedById   String
   editedBy     User              @relation("ProductCopyEditedBy", fields: [editedById], references: [id], onDelete: Restrict)
   approvedById String?

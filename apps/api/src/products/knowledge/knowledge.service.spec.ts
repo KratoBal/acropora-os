@@ -102,6 +102,7 @@ function memoryStore() {
         status: "DRAFT",
         revision: (previous?.revision ?? 0) + 1,
         basedOn: input.basedOn,
+        usedFields: input.usedFields,
         updatedAt: new Date(0),
         approvedAt: null,
       });
@@ -179,6 +180,7 @@ async function projected(memory: ReturnType<typeof memoryStore>) {
     status: c.status,
     revision: c.revision,
     basedOn: c.basedOn,
+    usedFields: c.usedFields,
   }));
   return knowledgeProjection(facts, copy);
 }
@@ -322,5 +324,81 @@ describe("product knowledge: stale copy", () => {
       knowledge.saveCopy(PRODUCT, "description", "x", USER),
       BadRequestException,
     );
+  });
+});
+
+describe("product knowledge: per-block basedOn (SEO P0 PR 1b)", () => {
+  /**
+   * THE SAVE NAMES THE FACTS THE BLOCK USES, AND ONLY THOSE COUNT.
+   *
+   * WHAT TURNS IT RED: `basedOn` keeps every fact; a key with no fact passes
+   * silently (acrobot 27489: refused, with the key's name); approval measures
+   * staleness product-wide while the projection measures it per block.
+   */
+  const APPLICATION = {
+    field: "application",
+    raw: "SPS és LPS korallokhoz",
+    value: "SPS és LPS korallok",
+    url: "https://gyarto.example.invalid/amino",
+    sourceType: "MANUFACTURER_PAGE",
+  };
+
+  it("the save stores the used facts' revisions only, and the view returns the list", async () => {
+    const { knowledge, memory } = service();
+    const dosing = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(PRODUCT, dosing.fieldResultId, USER);
+    const app = await knowledge.addEvidence(PRODUCT, APPLICATION, USER);
+    await knowledge.accept(PRODUCT, app.fieldResultId, USER);
+    const view = await knowledge.saveCopy(
+      PRODUCT,
+      "lead",
+      "Korallokhoz.",
+      USER,
+      ["application"],
+    );
+    assert.deepEqual(memory.copy.get("lead")!.basedOn, { application: 1 });
+    assert.deepEqual(view.copy[0]!.usedFields, ["application"]);
+    // without the list: today's product-wide basedOn
+    await knowledge.saveCopy(PRODUCT, "body", "Törzs.", USER);
+    assert.deepEqual(memory.copy.get("body")!.basedOn, {
+      application: 1,
+      dosing: 1,
+    });
+  });
+
+  it("(6) a key with no accepted fact is refused, naming the key", async () => {
+    const { knowledge, memory } = service();
+    const dosing = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(PRODUCT, dosing.fieldResultId, USER);
+    await assert.rejects(
+      knowledge.saveCopy(PRODUCT, "lead", "x", USER, ["dosing", "aplication"]),
+      (err: unknown) =>
+        err instanceof BadRequestException && /aplication/.test(err.message),
+    );
+    await assert.rejects(
+      knowledge.saveCopy(PRODUCT, "lead", "x", USER, "dosing"),
+      BadRequestException,
+    );
+    assert.equal(memory.copy.size, 0);
+  });
+
+  it("approval follows the block's own facts: an unused fact's change does not block it", async () => {
+    const { knowledge, memory } = service();
+    const first = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(PRODUCT, first.fieldResultId, USER);
+    const app = await knowledge.addEvidence(PRODUCT, APPLICATION, USER);
+    await knowledge.accept(PRODUCT, app.fieldResultId, USER);
+    await knowledge.saveCopy(PRODUCT, "lead", "Korallokhoz.", USER, [
+      "application",
+    ]);
+    // dosing moves to revision 2 (the conflict arrives); the lead does not use it
+    const second = await knowledge.addEvidence(PRODUCT, WEEKLY, USER);
+    const view = await knowledge.accept(PRODUCT, second.fieldResultId, USER);
+    assert.deepEqual(
+      view.copy.map((c) => [c.block, c.stale]),
+      [["lead", false]],
+    );
+    await knowledge.approveCopy(PRODUCT, "lead", USER);
+    assert.equal(memory.copy.get("lead")!.status, "APPROVED");
   });
 });

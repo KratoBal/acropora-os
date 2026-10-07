@@ -729,6 +729,7 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
           status: "APPROVED",
           revision: 1,
           basedOn: { dosing: 1 },
+          usedFields: [],
         },
         {
           block: "body",
@@ -736,6 +737,7 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
           status: "APPROVED",
           revision: 1,
           basedOn: { dosing: 1 },
+          usedFields: [],
         },
         {
           block: "seoTitle",
@@ -743,6 +745,7 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
           status: "APPROVED",
           revision: 1,
           basedOn: { dosing: 1 },
+          usedFields: [],
         },
       ],
       [{ field: "dosing", revision: 1, status: "CONFLICTING_SOURCES" }],

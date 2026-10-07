@@ -114,6 +114,11 @@ export interface ProductCopyEntry {
    * projected, approved or not.
    */
   stale: boolean;
+  /**
+   * The facts the block is built on (SEO P0 PR 1b): only these can make it
+   * stale or hold it back. Empty: the product-wide rule (every fact counts).
+   */
+  usedFields: string[];
   editedAt: string;
   approvedAt: string | null;
 }

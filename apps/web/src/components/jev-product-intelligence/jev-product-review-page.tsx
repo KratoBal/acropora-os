@@ -164,9 +164,14 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
       () => productApi.addKnowledgeEvidence(token, productId, input),
       "A bizonyíték rögzítve, a mező újra egyeztetve.",
     );
-  const saveCopy = (block: ProductCopyBlock, body: string) =>
+  const saveCopy = (
+    block: ProductCopyBlock,
+    body: string,
+    usedFields: string[],
+  ) =>
     void write(
-      () => productApi.saveKnowledgeCopy(token, productId, block, body),
+      () =>
+        productApi.saveKnowledgeCopy(token, productId, block, body, usedFields),
       "A szöveg mentve, piszkozatként.",
     );
   const approveCopy = (block: ProductCopyBlock) =>
@@ -322,6 +327,7 @@ export function JevProductReviewPage({ productId }: { productId: string }) {
           {knowledge && (canApprove || knowledge.copy.length > 0) ? (
             <JevCopyPanel
               copy={knowledge.copy}
+              facts={knowledge.facts}
               conflicts={conflictingFields(fields, knowledge.facts)}
               canApprove={canApprove}
               busy={busy}

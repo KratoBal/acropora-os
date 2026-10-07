@@ -25,6 +25,7 @@ function panel(body: string) {
           body,
           status: "APPROVED",
           stale: false,
+          usedFields: [],
           editedAt: "2026-10-03T19:00:00.000Z",
           approvedAt: "2026-10-03T19:01:00.000Z",
         },
@@ -66,5 +67,103 @@ describe("a vevői szöveg ütköző értékre figyelmeztet", () => {
     panel("x");
     const seo = document.querySelector('[data-copy-block="seoTitle"]')!;
     expect(seo.textContent).not.toContain("Ütköző mező");
+  });
+});
+
+/**
+ * MIRE EPUL A BLOKK (SEO P0 PR 1b). MI PIROSIT: ha a jeloles nem a mentett
+ * listat mutatja; ha egy regi (ures listas) blokknal nem minden teny van
+ * bejelolve (a szigoru irany); ha a mentes nem a bejelolt tenyeket kuldi; ha a
+ * nem ellenorzott teny nem mondja meg magarol.
+ */
+describe("a vevői szöveg tényei", () => {
+  const fact = (
+    field: "dosing" | "application" | "productFamily",
+    status: string,
+  ) =>
+    ({
+      field,
+      value: "x",
+      unit: null,
+      status,
+      revision: 1,
+      acceptedAt: "2026-10-07T09:00:00.000Z",
+      acceptedBy: { id: "u", displayName: "Kitalált Elfogadó" },
+      fieldResultId: `fr-${field}`,
+      source: { sourceType: null, sourceRef: null, retrievedAt: null },
+    }) as never;
+  const facts = [
+    fact("application", "VERIFIED"),
+    fact("dosing", "CONFLICTING_SOURCES"),
+    fact("productFamily", "VERIFIED"),
+  ];
+  const lead = (usedFields: string[]) => ({
+    block: "lead" as const,
+    body: "Korallokhoz.",
+    status: "DRAFT" as const,
+    stale: false,
+    usedFields,
+    editedAt: "2026-10-07T09:00:00.000Z",
+    approvedAt: null,
+  });
+  const pipalt = () =>
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>(
+        '[data-used-fields="lead"] input[type="checkbox"]',
+      ),
+    )
+      .filter((box) => box.checked)
+      .map((box) => box.id.replace("hasznalt-lead-", ""));
+
+  it("a mentett lista látszik; a régi blokknál minden tény be van jelölve", () => {
+    const { unmount } = render(
+      <JevCopyPanel
+        copy={[lead(["application"])]}
+        facts={facts}
+        canApprove
+        busy={false}
+        onSave={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    expect(pipalt()).toEqual(["application"]);
+    unmount();
+    render(
+      <JevCopyPanel
+        copy={[lead([])]}
+        facts={facts}
+        canApprove
+        busy={false}
+        onSave={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    expect(pipalt()).toEqual(["application", "dosing", "productFamily"]);
+    expect(screen.getAllByText("(ütköző)").length).toBeGreaterThan(0);
+  });
+
+  it("a jelölés változása menthető, és a mentés a bejelölt tényeket küldi", () => {
+    const onSave = vi.fn();
+    render(
+      <JevCopyPanel
+        copy={[lead([])]}
+        facts={facts}
+        canApprove
+        busy={false}
+        onSave={onSave}
+        onApprove={vi.fn()}
+      />,
+    );
+    const mentes = screen.getByRole("button", {
+      name: "Bevezető mentése",
+    }) as HTMLButtonElement;
+    expect(mentes.disabled).toBe(true);
+    fireEvent.click(document.getElementById("hasznalt-lead-dosing")!);
+    expect(mentes.disabled).toBe(false);
+    fireEvent.click(mentes);
+    expect(onSave).toHaveBeenCalledWith("lead", "Korallokhoz.", [
+      "application",
+      "productFamily",
+    ]);
   });
 });

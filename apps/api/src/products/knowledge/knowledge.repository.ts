@@ -42,6 +42,7 @@ export interface CopyRecord {
   status: "DRAFT" | "APPROVED";
   revision: number;
   basedOn: unknown;
+  usedFields: string[];
   updatedAt: Date;
   approvedAt: Date | null;
 }
@@ -74,6 +75,7 @@ export interface KnowledgeStore {
     block: ProductCopyBlock;
     body: string;
     basedOn: Record<string, number>;
+    usedFields: string[];
     editedById: string;
   }): Promise<void>;
   approveCopy(input: {
@@ -280,6 +282,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
         status: true,
         revision: true,
         basedOn: true,
+        usedFields: true,
         updatedAt: true,
         approvedAt: true,
       },
@@ -291,6 +294,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       body: input.body,
       status: "DRAFT" as const,
       basedOn: input.basedOn,
+      usedFields: input.usedFields,
       editedById: input.editedById,
       approvedById: null,
       approvedAt: null,

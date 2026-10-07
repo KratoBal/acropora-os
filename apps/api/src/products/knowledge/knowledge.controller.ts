@@ -61,7 +61,13 @@ export class ProductKnowledgeController {
     @Body() body: Record<string, unknown>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.knowledge.saveCopy(id, block, body?.body, user);
+    return this.knowledge.saveCopy(
+      id,
+      block,
+      body?.body,
+      user,
+      body?.usedFields,
+    );
   }
 
   @Post("copy/:block/approve")

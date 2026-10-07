@@ -21,6 +21,8 @@ import { ProductService } from "../product.service.js";
 import {
   copyIsStale,
   currentRevisions,
+  parseUsedFields,
+  savedRevisions,
   earlierStatements,
   factFromResult,
   isCopyBlock,
@@ -94,7 +96,8 @@ export class ProductKnowledgeService {
         block: row.block,
         body: row.body,
         status: row.status,
-        stale: copyIsStale(row.basedOn, revisions),
+        stale: copyIsStale(row.basedOn, revisions, row.usedFields),
+        usedFields: row.usedFields,
         editedAt: row.updatedAt.toISOString(),
         approvedAt: row.approvedAt?.toISOString() ?? null,
       })),
@@ -180,11 +183,17 @@ export class ProductKnowledgeService {
     return this.knowledge(productId);
   }
 
+  /**
+   * A SAVE NAMES THE FACTS THE BLOCK IS BUILT ON (`usedFields`, SEO P0 PR 1b).
+   * Without it the block keeps the product-wide rule: `basedOn` holds every
+   * fact, and any of them can hold it back or make it stale.
+   */
   async saveCopy(
     productId: string,
     block: unknown,
     body: unknown,
     user: Actor,
+    usedFields?: unknown,
   ): Promise<ProductKnowledge> {
     await this.products.getProduct(productId);
     if (!isCopyBlock(block))
@@ -192,11 +201,14 @@ export class ProductKnowledgeService {
     const parsed = parseCopyBody(block, body);
     if (!parsed.ok) throw new BadRequestException(parsed.reason);
     const facts = await this.store.facts(productId);
+    const used = parseUsedFields(usedFields, facts);
+    if (!used.ok) throw new BadRequestException(used.reason);
     await this.store.saveCopy({
       productId,
       block,
       body: parsed.value,
-      basedOn: currentRevisions(facts),
+      basedOn: savedRevisions(facts, used.value),
+      usedFields: used.value,
       editedById: user.id,
     });
     return this.knowledge(productId);
@@ -216,7 +228,7 @@ export class ProductKnowledgeService {
     ]);
     const row = copy.find((entry) => entry.block === block);
     if (!row) throw new NotFoundException(`no ${block} copy to approve`);
-    if (copyIsStale(row.basedOn, currentRevisions(facts)))
+    if (copyIsStale(row.basedOn, currentRevisions(facts), row.usedFields))
       throw new ConflictException(
         `the ${block} copy was written against facts that have changed since: save it again before approving`,
       );

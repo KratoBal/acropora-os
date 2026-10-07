@@ -154,6 +154,7 @@ export async function knowledgeRowsFor(
         status: true,
         revision: true,
         basedOn: true,
+        usedFields: true,
       },
     }),
   ]);
