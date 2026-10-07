@@ -1093,7 +1093,11 @@ export interface MedusaAdminClient {
     offset: number,
     limit: number,
   ): Promise<{
-    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    products: {
+      id: string;
+      external_id?: string | null;
+      variants?: { sku: string | null }[] | null;
+    }[];
     count: number;
   }>;
   /** A termék kötése egy szállítási profilhoz. EZ IR A BOLTI OLDALRA. */
@@ -2189,11 +2193,15 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     offset: number,
     limit: number,
   ): Promise<{
-    products: { id: string; variants?: { sku: string | null }[] | null }[];
+    products: {
+      id: string;
+      external_id?: string | null;
+      variants?: { sku: string | null }[] | null;
+    }[];
     count: number;
   }> {
     const params = new URLSearchParams({
-      fields: "id,*variants",
+      fields: "id,external_id,*variants",
       offset: String(offset),
       limit: String(limit),
     });
