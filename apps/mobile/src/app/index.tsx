@@ -264,7 +264,7 @@ export default function HomeScreen() {
             {/*
               THE VIEW DECIDES THE ORDER; THE SERVER DECIDES WHAT IS THERE.
               `homeModules` keeps only the view's modules whose navigation
-              entry the server served and that have a screen, at most six.
+              entry the server served and that have a screen, at most eight.
               A module outside the view is still under Modulok.
             */}
             <View style={styles.modules}>
