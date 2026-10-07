@@ -949,6 +949,14 @@ model User {
   mortalityRecordsRecorded   MortalityRecord[]             @relation("MortalityRecordRecordedBy")
   mortalityDocumentsUploaded MortalityRecordDocument[]     @relation("MortalityRecordDocumentUploadedBy")
   dashboardLayout            UserDashboardLayout?
+  ownedQuotes                Quote[]                       @relation("QuoteOwner")
+  createdQuotes              Quote[]                       @relation("QuoteCreator")
+  publishedQuoteVersions     QuoteVersion[]                @relation("QuotePublisher")
+  createdQuoteTemplates      QuoteTemplate[]               @relation("QuoteTemplateCreator")
+  updatedQuoteTemplates      QuoteTemplate[]               @relation("QuoteTemplateUpdater")
+  createdQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetCreator")
+  updatedQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetUpdater")
+  quoteEvents                QuoteEvent[]                  @relation("QuoteEventActor")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -1221,6 +1229,9 @@ model ProductVariant {
   stockReconciliationRepairs StockReconciliationRepair[]
   projectReservations        ProjectInventoryReservation[]
   assets                     Asset[]
+  quoteItems                 QuoteItem[]                   @relation("QuoteItemVariant")
+  quoteBomItems              QuoteBomItem[]                @relation("QuoteBomVariant")
+  quoteCreatedBomItems       QuoteBomItem[]                @relation("QuoteCreatedVariant")
 
   @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
@@ -1584,6 +1595,7 @@ model Supplier {
   /// A fiokok, amik ENNEK a partnernek a neveben lepnek be. Nem a mi kollegaink.
   portalUsers           User[]             @relation("SupplierPortalUser")
   mortalityRecords      MortalityRecord[]
+  quoteBomItems         QuoteBomItem[]
 
   @@index([country, isActive])
 }
@@ -2324,6 +2336,7 @@ model Customer {
   partner              Supplier?             @relation("PartnerWorksheetMirror")
   /// A fiokok, amik ENNEK a vevonek a neveben lepnek be. Nem a mi kollegaink.
   portalUsers          User[]                @relation("CustomerPortalUser")
+  quotes               Quote[]
 
   @@index([displayName])
   @@index([email])
@@ -2681,6 +2694,7 @@ model PurchaseInvoiceLine {
   purchaseInvoice     PurchaseInvoice               @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
   variant             ProductVariant?               @relation(fields: [variantId], references: [id])
   projectReservations ProjectInventoryReservation[]
+  quoteBomItems       QuoteBomItem[]
 
   @@index([purchaseInvoiceId])
   @@index([variantId])
@@ -8580,4 +8594,278 @@ model MortalityRecordDocument {
 
   @@index([mortalityRecordId, createdAt])
   @@index([sha256])
+}
+
+/// #1582 P0 foundation. Lifecycle/editor operations are implemented in later packages.
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  POSTPONED
+  CANCELLED
+}
+
+enum QuoteVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum QuoteBlockKind {
+  TEXT
+  SECTION
+  OPTIONS
+  SUMMARY
+  TERMS
+  IMAGE
+  PAGE_BREAK
+}
+
+enum QuoteItemSource {
+  STANDALONE
+  PRODUCT
+  BOM
+}
+
+enum QuoteBomItemKind {
+  PRODUCT
+  CUSTOM
+  SERVICE
+}
+
+enum QuoteCostSource {
+  LAST_PURCHASE
+  SUPPLIER_QUOTE
+  MANUAL
+  ESTIMATE
+}
+
+enum QuoteCloseReason {
+  PRICE
+  COMPETITOR
+  PROJECT_CANCELLED
+  PROJECT_POSTPONED
+  NO_RESPONSE
+  SCOPE_CHANGED
+  OTHER
+}
+
+enum QuoteEventKind {
+  CREATED
+  VERSION_CREATED
+  PUBLISHED
+  SENT
+  SEND_FAILED
+  LINK_ISSUED
+  LINK_REVOKED
+  LINK_OPENED
+  ACCEPTED
+  ACCEPTANCE_REVOKED
+  REJECTED
+  POSTPONED
+  CANCELLED
+  HANDOFF_EXECUTED
+}
+
+enum QuoteSnippetKind {
+  INTRO
+  TEXT
+  DELIVERY
+  WARRANTY
+  PAYMENT
+}
+
+model Quote {
+  id                String            @id @default(cuid())
+  quoteNumber       String            @unique
+  customerId        String?
+  title             String
+  status            QuoteStatus       @default(DRAFT)
+  ownerUserId       String?
+  closeReason       QuoteCloseReason?
+  closeNote         String?
+  postponedUntil    DateTime?         @db.Date
+  acceptedVersionId String?           @unique
+  createdById       String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  customer          Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  owner             User?             @relation("QuoteOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdBy         User?             @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedVersion   QuoteVersion?     @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
+  versions          QuoteVersion[]    @relation("QuoteVersions")
+  events            QuoteEvent[]
+
+  @@index([status, updatedAt])
+  @@index([customerId])
+}
+
+model QuoteVersion {
+  id                   String                  @id @default(cuid())
+  quoteId              String
+  versionNumber        Int
+  status               QuoteVersionStatus      @default(DRAFT)
+  validUntil           DateTime                @db.Date
+  currency             String                  @default("HUF") @db.VarChar(3)
+  priceDisplay         String
+  customerSnapshot     Json?
+  templateId           String?
+  pdfStorageKey        String?
+  pdfSha256            String?                 @db.VarChar(64)
+  pageCount            Int?
+  publishedAt          DateTime?
+  publishedById        String?
+  createdFromVersionId String?
+  quote                Quote                   @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Restrict)
+  acceptedByQuote      Quote?                  @relation("QuoteAcceptedVersion")
+  template             QuoteTemplate?          @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  publishedBy          User?                   @relation("QuotePublisher", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdFromVersion   QuoteVersion?           @relation("QuoteVersionOrigin", fields: [createdFromVersionId], references: [id], onDelete: SetNull)
+  derivedVersions      QuoteVersion[]          @relation("QuoteVersionOrigin")
+  blocks               QuoteBlock[]
+  items                QuoteItem[]
+  bomItems             QuoteBomItem[]
+  milestones           QuotePaymentMilestone[]
+  events               QuoteEvent[]
+
+  @@unique([quoteId, versionNumber])
+}
+
+model QuoteBlock {
+  id              String         @id @default(cuid())
+  versionId       String
+  position        Int
+  kind            QuoteBlockKind
+  title           String?
+  /// Copied TipTap subset, or IMAGE metadata. Never a live snippet reference.
+  content         Json?
+  keepWithNext    Boolean        @default(false)
+  startOnNewPage  Boolean        @default(false)
+  sourceSnippetId String?
+  version         QuoteVersion   @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  sourceSnippet   QuoteSnippet?  @relation(fields: [sourceSnippetId], references: [id], onDelete: SetNull)
+  items           QuoteItem[]
+
+  @@unique([versionId, position])
+  @@unique([id, versionId])
+}
+
+model QuoteItem {
+  id             String          @id @default(cuid())
+  versionId      String
+  blockId        String
+  position       Int
+  source         QuoteItemSource
+  variantId      String?
+  name           String
+  description    Json?
+  quantity       Decimal         @db.Decimal(19, 6)
+  unit           String
+  unitNetPrice   Decimal         @db.Decimal(19, 4)
+  vatRatePercent Decimal         @db.Decimal(5, 2)
+  isOptional     Boolean
+  version        QuoteVersion    @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  /// Composite FK prevents an item from referring to a block in another version.
+  block          QuoteBlock      @relation(fields: [blockId, versionId], references: [id, versionId], onDelete: Restrict)
+  variant        ProductVariant? @relation("QuoteItemVariant", fields: [variantId], references: [id], onDelete: Restrict)
+  bomItems       QuoteBomItem[]
+
+  @@unique([blockId, position])
+  @@unique([id, versionId])
+  @@index([versionId])
+}
+
+model QuoteBomItem {
+  id                          String               @id @default(cuid())
+  versionId                   String
+  quoteItemId                 String
+  position                    Int
+  kind                        QuoteBomItemKind
+  variantId                   String?
+  customName                  String?
+  quantity                    Decimal              @db.Decimal(19, 6)
+  unit                        String
+  unitCost                    Decimal?             @db.Decimal(19, 4)
+  costCurrency                String?              @db.VarChar(3)
+  costOriginal                Decimal?             @db.Decimal(19, 4)
+  exchangeRate                Decimal?             @db.Decimal(19, 6)
+  costSource                  QuoteCostSource?
+  costSourceDate              DateTime?
+  sourcePurchaseInvoiceLineId String?
+  supplierId                  String?
+  supplierSku                 String?
+  internalNote                String?
+  createdProductVariantId     String?
+  version                     QuoteVersion         @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  quoteItem                   QuoteItem            @relation(fields: [quoteItemId, versionId], references: [id, versionId], onDelete: Restrict)
+  variant                     ProductVariant?      @relation("QuoteBomVariant", fields: [variantId], references: [id], onDelete: Restrict)
+  createdProductVariant       ProductVariant?      @relation("QuoteCreatedVariant", fields: [createdProductVariantId], references: [id], onDelete: SetNull)
+  sourcePurchaseInvoiceLine   PurchaseInvoiceLine? @relation(fields: [sourcePurchaseInvoiceLineId], references: [id], onDelete: SetNull)
+  supplier                    Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@unique([quoteItemId, position])
+  @@index([versionId])
+}
+
+model QuotePaymentMilestone {
+  id        String       @id @default(cuid())
+  versionId String
+  position  Int
+  label     String
+  percent   Decimal      @db.Decimal(5, 2)
+  version   QuoteVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+
+  @@unique([versionId, position])
+}
+
+model QuoteTemplate {
+  id                  String         @id @default(cuid())
+  name                String
+  blocks              Json
+  milestones          Json
+  priceDisplay        String
+  defaultValidityDays Int
+  archivedAt          DateTime?
+  createdById         String?
+  updatedById         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  createdBy           User?          @relation("QuoteTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy           User?          @relation("QuoteTemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  versions            QuoteVersion[]
+}
+
+model QuoteSnippet {
+  id          String           @id @default(cuid())
+  name        String
+  kind        QuoteSnippetKind
+  content     Json
+  milestones  Json?
+  archivedAt  DateTime?
+  createdById String?
+  updatedById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  createdBy   User?            @relation("QuoteSnippetCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy   User?            @relation("QuoteSnippetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  blocks      QuoteBlock[]
+
+  @@index([kind, archivedAt])
+}
+
+model QuoteEvent {
+  id          String         @id @default(cuid())
+  quoteId     String
+  versionId   String?
+  kind        QuoteEventKind
+  actorUserId String?
+  /// Only allowlisted event metadata goes into the timeline DTO; never costs/BOM/margin.
+  payload     Json?
+  createdAt   DateTime       @default(now())
+  quote       Quote          @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  version     QuoteVersion?  @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  actor       User?          @relation("QuoteEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId, createdAt])
 }

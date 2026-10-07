@@ -1334,3 +1334,23 @@ export {
   withAreaLevel,
 } from "./permission-areas.js";
 export type { PermissionArea, PermissionLevel } from "./permission-areas.js";
+export type {
+  QuoteStatusValue,
+  QuotePriceDisplay,
+  QuoteRichText,
+  QuoteCustomerItem,
+  QuoteCustomerBlock,
+  QuoteMilestoneDto,
+  QuoteCustomerVersion,
+  QuoteCustomerDto,
+  QuoteEventDto,
+  QuoteInternalDto,
+  QuoteInternalBlock,
+  QuoteInternalVersion,
+  QuoteBomItemDto,
+  QuoteInternalCostsDto,
+  QuoteDetailDto,
+  QuoteListResponse,
+  CreateQuoteInput,
+  UpdateQuoteInput,
+} from "./quotes.js";

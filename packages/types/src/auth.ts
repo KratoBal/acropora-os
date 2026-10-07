@@ -106,6 +106,16 @@ export const INTERNAL_ROLES: readonly UserRole[] = USER_ROLES.filter(
 );
 
 export const PERMISSIONS = {
+  /// #1582 P0: quote permissions are deliberately excluded from VIEW_PERMISSIONS.
+  QUOTES_VIEW: "quotes.view",
+  QUOTES_MANAGE: "quotes.manage",
+  QUOTES_PUBLISH: "quotes.publish",
+  QUOTES_SEND: "quotes.send",
+  QUOTES_COSTS_VIEW: "quotes.costs.view",
+  QUOTES_ACCEPTANCE_RECORD: "quotes.acceptance.record",
+  QUOTES_ACCEPTANCE_LINK_MANAGE: "quotes.acceptance_link.manage",
+  QUOTES_TEMPLATES_MANAGE: "quotes.templates.manage",
+  QUOTES_HANDOFF: "quotes.handoff",
   DASHBOARD_VIEW: "dashboard.view",
   TASKS_VIEW: "tasks.view",
   ORDERS_VIEW: "orders.view",
@@ -341,6 +351,12 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.CONTENT_APPROVE,
     ),
     SALES: [
+      PERMISSIONS.QUOTES_VIEW,
+      PERMISSIONS.QUOTES_MANAGE,
+      PERMISSIONS.QUOTES_PUBLISH,
+      PERMISSIONS.QUOTES_SEND,
+      PERMISSIONS.QUOTES_ACCEPTANCE_RECORD,
+      PERMISSIONS.QUOTES_ACCEPTANCE_LINK_MANAGE,
       PERMISSIONS.MESSAGES_USE,
       PERMISSIONS.AI_TEST_VIEW,
       PERMISSIONS.DASHBOARD_VIEW,

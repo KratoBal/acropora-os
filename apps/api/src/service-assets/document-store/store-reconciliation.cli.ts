@@ -93,6 +93,20 @@ export type FetchRowsWithStorageKey = () => Promise<RowWithSize[]>;
  * pontosan az uj gazdat hagyna ki -- azt, amiert a mero letezik.
  */
 const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
+  quote: async () =>
+    (
+      await prisma.quoteVersion.findMany({
+        where: { pdfStorageKey: { not: null } },
+        select: { quoteId: true, pdfStorageKey: true },
+      })
+    ).map((v) => ({
+      key: {
+        owner: "quote" as const,
+        ownerId: v.quoteId,
+        documentId: v.pdfStorageKey!.split("/").pop() ?? v.pdfStorageKey!,
+      },
+      sizeBytes: null,
+    })),
   asset: async () =>
     (
       await prisma.assetDocument.findMany({
