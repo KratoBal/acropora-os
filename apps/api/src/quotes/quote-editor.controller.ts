@@ -3,11 +3,13 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Patch,
   Post,
   Put,
+  StreamableFile,
 } from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
@@ -26,6 +28,7 @@ import {
   QuoteVersionHeaderDto,
 } from "./dto/quote-editor.dto.js";
 import { QuoteCostingService } from "./quote-costing.service.js";
+import { QuotePublishService } from "./quote-publish.service.js";
 import { QuoteVersionEditor } from "./quote-version-editor.js";
 import { QuotesService } from "./quotes.service.js";
 
@@ -42,6 +45,7 @@ export class QuoteEditorController {
     private readonly editor: QuoteVersionEditor,
     private readonly costs: QuoteCostingService,
     private readonly quotes: QuotesService,
+    private readonly publishing: QuotePublishService,
   ) {}
 
   private detail(quoteId: string, user: AuthenticatedUser) {
@@ -68,6 +72,35 @@ export class QuoteEditorController {
   ) {
     await this.editor.updateVersion(quoteId, versionId, input, user);
     return this.detail(quoteId, user);
+  }
+
+  /** P2: publish the draft with its PDF (idempotent; a double click is one version). */
+  @Post(":versionId/publish")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_PUBLISH)
+  async publish(
+    @Param("quoteId") quoteId: string,
+    @Param("versionId") versionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.publishing.publish(quoteId, versionId, user);
+    return this.detail(quoteId, user);
+  }
+
+  /** P2: the stored PDF of a published version, or a draft's live preview. */
+  @Get(":versionId/pdf")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
+  async pdf(
+    @Param("quoteId") quoteId: string,
+    @Param("versionId") versionId: string,
+  ) {
+    const { bytes, fileName } = await this.publishing.pdf(quoteId, versionId);
+    return new StreamableFile(bytes, {
+      type: "application/pdf",
+      length: bytes.length,
+      disposition: `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    });
   }
 
   @Get(":versionId/costing")
