@@ -313,27 +313,50 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   set("documentNumber", pairing.number, "PAIRING");
   set("issueDate", pairing.date, "PAIRING");
   set("currency", pairing.currency?.toUpperCase(), "PAIRING");
-  if (pairing.gross)
+  /*
+    A PÁROSÍTÁS BRUTTÓJA GYENGE FORRÁS (barracuda, acrobot 27658): illesztős
+    külföldi számlánál ez az illesztő NETTÓJA, kártyás fizetésnél a TERHELÉS,
+    a terhelés devizájában. Ezért csak EGYEZŐ devizánál vesszük át, és nem
+    számolunk belőle ÁFÁ-t (lent): különben az ÁFA bruttó mínusz nettó lenne,
+    és a nettó + ÁFA = bruttó ellenőrzés szerkezetileg mindig zöld.
+  */
+  if (
+    pairing.gross &&
+    (values.currency === null ||
+      values.currency === pairing.currency?.toUpperCase())
+  )
     set("grossAmount", decimal(Number(pairing.gross)), "PAIRING");
 
   // 4. egyeztetés: egy rossz szám rosszabb, mint egy üres
   const net = values.netAmount !== null ? Number(values.netAmount) : null;
   const vat = values.vatAmount !== null ? Number(values.vatAmount) : null;
   const gross = values.grossAmount !== null ? Number(values.grossAmount) : null;
+  const pairingGross = sources.grossAmount === "PAIRING";
   if (net !== null && vat !== null && gross !== null) {
     if (Math.abs(net + vat - gross) > 0.02) {
-      warnings.push(
-        `A kiolvasott nettó (${decimal(net)}) és ÁFA (${decimal(vat)}) nem adja ki a bruttót (${decimal(gross)}); a kettőt kézzel kell beírni.`,
-      );
-      values.netAmount = null;
-      values.vatAmount = null;
-      delete sources.netAmount;
-      delete sources.vatAmount;
+      if (pairingGross) {
+        // a nettó és az ÁFA a számláról jön, a gyenge forrás a bruttó: az megy
+        warnings.push(
+          `A párosítás összege (${decimal(gross)}) nem egyezik a kiolvasott nettó (${decimal(net)}) és ÁFA (${decimal(vat)}) összegével; a bruttót kézzel kell beírni.`,
+        );
+        values.grossAmount = null;
+        delete sources.grossAmount;
+      } else {
+        warnings.push(
+          `A kiolvasott nettó (${decimal(net)}) és ÁFA (${decimal(vat)}) nem adja ki a bruttót (${decimal(gross)}); a kettőt kézzel kell beírni.`,
+        );
+        values.netAmount = null;
+        values.vatAmount = null;
+        delete sources.netAmount;
+        delete sources.vatAmount;
+      }
     }
-  } else if (net !== null && gross !== null && vat === null) {
-    // a hiányzó ÁFA a kettő különbsége: számítás, nem találgatás
+  } else if (net !== null && gross !== null && vat === null && !pairingGross) {
+    // a hiányzó ÁFA a számlán olvasott bruttó és nettó különbsége: számítás,
+    // nem találgatás. A párosítás bruttójából NEM (lásd fent); a fordított
+    // adózás 0 ÁFÁ-ját a REVERSE_CHARGE szabály adja.
     values.vatAmount = decimal(gross - net);
-    sources.vatAmount = sources.grossAmount === "PAIRING" ? "PAIRING" : "TEXT";
+    sources.vatAmount = sources.grossAmount ?? "TEXT";
   }
 
   /*

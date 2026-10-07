@@ -63,6 +63,8 @@ describe("the CLI options", () => {
       false,
     );
     assert.match(text, /^mód: csak olvas/);
+    // a „csak olvas” nem teljes igazság: a párosítás a gyorsítótárat kitöltheti
+    assert.match(text, /payeeCheck/);
     assert.match(
       text,
       /doc-1\t2026-10-03\tEUR\tkitalalt\.example\tigen\tnem\t9\tvatAmount\t0/,

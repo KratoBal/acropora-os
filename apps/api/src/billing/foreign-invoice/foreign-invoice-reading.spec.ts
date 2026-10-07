@@ -165,11 +165,11 @@ describe("readForeignInvoice", () => {
     assert.equal(sources.grossAmount, "PAIRING");
   });
 
-  it("net + VAT that does not give the gross: both empty, with a warning", () => {
+  it("net + VAT that does not give the gross read from the invoice: both empty, with a warning", () => {
     const { values, sources, warnings } = readForeignInvoice({
-      lines: ["Subtotal 100.00 EUR", "VAT 19.00 EUR"],
+      lines: ["Subtotal 100.00 EUR", "VAT 19.00 EUR", "Amount due 200.00 EUR"],
       adapter: null,
-      pairing: pairing({ gross: "200.00" }),
+      pairing: pairing(),
     });
     assert.equal(values.netAmount, null);
     assert.equal(values.vatAmount, null);
@@ -177,6 +177,75 @@ describe("readForeignInvoice", () => {
     assert.equal(values.grossAmount, "200.00");
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /nem adja ki a bruttót/);
+  });
+
+  /*
+    A PÁROSÍTÁS BRUTTÓJA GYENGE FORRÁS (barracuda, acrobot 27658). MI PIROSÍT:
+    ha belőle ÁFA számolódna (akkor a nettó + ÁFA = bruttó mindig zöld); ha
+    más devizában is átvennénk; ha egy ellentmondásnál a számláról olvasott
+    nettót és ÁFÁ-t dobnánk el a gyenge bruttó helyett.
+  */
+  it("adapter net + pairing gross without a VAT label: no VAT is derived", () => {
+    const adapter = {
+      supplier: { name: "Illesztő GmbH", vatId: "DE111111111", country: "DE" },
+      invoiceNumber: "ADP-8",
+      invoiceDate: "2026-09-20",
+      dueDate: null,
+      currency: "EUR",
+      netTotal: 100,
+      lines: [],
+    } as unknown as SupplierInvoiceImportResult;
+    // a párosítás bruttója itt az illesztő nettója
+    const { values, sources } = readForeignInvoice({
+      lines: null,
+      adapter,
+      pairing: pairing({ gross: "100.00", currency: "EUR" }),
+    });
+    assert.equal(values.netAmount, "100.00");
+    assert.equal(values.grossAmount, "100.00");
+    assert.equal(sources.grossAmount, "PAIRING");
+    assert.equal(values.vatAmount, null);
+    assert.equal(sources.vatAmount, undefined);
+  });
+
+  it("USD text with a HUF pairing: the HUF amount is not taken as the gross", () => {
+    const { values } = readForeignInvoice({
+      // ÁFA-sor nélkül: itt csak a deviza-feltétel véd, az ellentmondás-szabály nem
+      lines: ["Invoice", "Subtotal $20.00"],
+      adapter: null,
+      pairing: pairing({ gross: "7980", currency: "HUF" }),
+    });
+    assert.equal(values.currency, "USD");
+    assert.equal(values.grossAmount, null);
+    assert.equal(values.netAmount, "20.00");
+  });
+
+  it("a card debit as the pairing gross next to a net label: VAT stays empty", () => {
+    const { values, sources } = readForeignInvoice({
+      lines: ["Invoice", "Subtotal 20.00 USD"],
+      adapter: null,
+      pairing: pairing({
+        gross: "20.00",
+        currency: "USD",
+        debits: [{ amount: "20.00", currency: "USD" }],
+      }),
+    });
+    assert.equal(values.netAmount, "20.00");
+    assert.equal(values.grossAmount, "20.00");
+    assert.equal(sources.grossAmount, "PAIRING");
+    assert.equal(values.vatAmount, null);
+  });
+
+  it("when net + VAT from the invoice contradict the pairing gross, the gross goes", () => {
+    const { values, warnings } = readForeignInvoice({
+      lines: ["Subtotal 100.00 EUR", "VAT 19.00 EUR"],
+      adapter: null,
+      pairing: pairing({ gross: "100.00" }),
+    });
+    assert.equal(values.netAmount, "100.00");
+    assert.equal(values.vatAmount, "19.00");
+    assert.equal(values.grossAmount, null);
+    assert.match(warnings[0]!, /a bruttót kézzel kell beírni/);
   });
 
   it("a scanned PDF: nothing is read from it, the pairing fills what it knows", () => {

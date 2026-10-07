@@ -344,8 +344,10 @@ export class IncomingReviewService {
   }
 
   /**
-   * A MÉG NEM OLVASOTT POSTAFIÓKOS SOROK KINYERÉSE. Alapból NEM ír: csak
-   * számol és jelent (az éles számlálás, acrobot 27599). `apply` mellett a
+   * A MÉG NEM OLVASOTT POSTAFIÓKOS SOROK KINYERÉSE. Alapból olvasatot NEM ír:
+   * csak számol és jelent (az éles számlálás, acrobot 27599). A párosítás
+   * számítása (`documentPairings`) a vevő-ítélet gyorsítótárát (`payeeCheck`)
+   * kitöltheti, mint a lista megnyitása (acrobot 27658). `apply` mellett a
    * még nem olvasott sorok „Ellenőrizendő” olvasatot kapnak; a már tárolthoz
    * (és a kézzel javítotthoz) nem nyúl.
    */

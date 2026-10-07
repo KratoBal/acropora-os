@@ -21,7 +21,10 @@ import {
  * ALAPBÓL CSAK OLVAS (acrobot 27599: az éles számlálást ő futtatja): a
  * postafiókos sorok PDF-jét kiolvassa, és megmondja, hány van, hánynak van
  * szövegrétege és illesztője, hány jóváhagyható egy kattintással, milyen
- * devizában és milyen feladótól. Adatbázisba NEM ír.
+ * devizában és milyen feladótól. Olvasatot NEM ír. Egyetlen írás történhet:
+ * a banki párosítás számítása (`documentPairings`) a vevő-ítélet gyorsítótárát
+ * (`payeeCheck`) a még nem vizsgált dokumentumokra kitölti, ugyanúgy, mint a
+ * Bejövő számlák lista megnyitása (barracuda, acrobot 27658).
  *
  * `--apply`: a még nem olvasott sorok „Ellenőrizendő” olvasatot kapnak. A már
  * tárolt (vagy kézzel javított) olvasathoz nem nyúl, tehát újrafuttatható.
@@ -63,6 +66,7 @@ export function formatReport(report: PendingReport, apply: boolean): string {
       .join(", ") || "-";
   const lines = [
     `mód: ${apply ? "ÍR (--apply)" : "csak olvas"}`,
+    "megjegyzés: olvasatot csak --apply ír; a párosítás számítása a vevő-ítélet gyorsítótárát (payeeCheck) kitöltheti, mint a lista megnyitása.",
     `postafiókos sor: ${report.total}; már olvasott: ${report.alreadyRead}; most olvasott: ${report.read}; írt: ${report.written}`,
     `szövegréteg: ${report.withText}/${report.read}; illesztő: ${report.withAdapter}/${report.read}; jóváhagyható egy kattintással: ${report.complete}/${report.read}`,
     `deviza: ${count(report.byCurrency)}`,
