@@ -7,6 +7,22 @@ export interface PickerOption {
   id: string;
   title: string;
   subtitle?: string | null;
+  /**
+   * A beírt szöveg, nem a rendszer eleme (Balázs 2026-10-07: „előfordulhat, hogy
+   * olyan élőlény van, vagy beszállító, aki nincs a rendszerben, és nem is akarjuk
+   * felvenni”). Ilyenkor az `id` üres, a `title` a beírt név.
+   */
+  freeText?: boolean;
+}
+
+/** A beírt szöveg mint választás. */
+export function freeTextOption(term: string, maxLength: number): PickerOption {
+  return {
+    id: "",
+    title: term.trim().slice(0, maxLength),
+    subtitle: "nincs a rendszerben",
+    freeText: true,
+  };
 }
 
 /**
@@ -22,6 +38,7 @@ export function MortalitySearchPicker({
   onChange,
   search,
   emptyText,
+  freeTextMaxLength,
 }: {
   label: string;
   placeholder: string;
@@ -29,6 +46,8 @@ export function MortalitySearchPicker({
   onChange: (option: PickerOption | null) => void;
   search: (term: string, signal: AbortSignal) => Promise<PickerOption[]>;
   emptyText: string;
+  /** ha meg van adva, a beírt szöveg is választható, legfeljebb ennyi karakterrel */
+  freeTextMaxLength?: number;
 }) {
   const listId = useId();
   const [term, setTerm] = useState("");
@@ -155,6 +174,25 @@ export function MortalitySearchPicker({
               </li>
             ))
           )}
+          {freeTextMaxLength && term.trim() ? (
+            <li role="option" aria-selected={false}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(freeTextOption(term, freeTextMaxLength));
+                  setOpen(false);
+                }}
+                className="block w-full cursor-pointer border-t border-pilot-grey-100 px-3 py-2 text-left hover:bg-pilot-grey-50"
+              >
+                <span className="block text-sm text-pilot-grey-900">
+                  „{term.trim().slice(0, freeTextMaxLength)}” megadása
+                </span>
+                <span className="block text-xs text-pilot-grey-500">
+                  Nincs a rendszerben, és nem is kell felvenni
+                </span>
+              </button>
+            </li>
+          ) : null}
         </ul>
       ) : null}
     </div>

@@ -91,6 +91,18 @@ egy már megtörtént eseményt rögzítenek). A writer maga sosem tiltja a
 negatív eredményt - a `wentNegative` flaget visszaadja, a hívó dönt, mit
 kezd vele (POS: figyelmeztetés).
 
+### Elhullás (2026-10-07)
+
+Az elhullási naplóba rögzített, rendszerbeli élőlény a készletből levonódik
+(`apps/api/src/mortality/mortality-stock.ts`, `sourceProcess=MORTALITY`), a
+bejegyzéssel egy tranzakcióban. Levonás `SCRAP`, visszaírás `RETURN_IN`
+típussal; mindkettő hivatkozása `MortalityRecord` és a bejegyzés azonosítója.
+A már levont mennyiséget a ledger adja (a bejegyzésre hivatkozó mozgások
+összege), és egy módosítás csak a különbséget könyveli: más példányszám,
+másik élőlény, szabad szöveges névre váltás. A negatív eredményt nem tiltja
+(egy megtörtént eseményt rögzít, mint a sztornó), és UNAS-gazdájú terméknél
+ugyanúgy outbox-sort ír, mint a POS-eladás.
+
 ## UNAS készletszinkron outbox
 
 Modell: `UnasStockSyncOutbox` (`packages/database/prisma/schema.prisma`).

@@ -62,7 +62,9 @@ export type InventoryMovementSourceProcess =
   | "UNAS_ORDER_DELETED"
   | "RECONCILIATION"
   /** A Számlázás modulban kiállított számla (2026-09-30). */
-  | "BILLING_INVOICE";
+  | "BILLING_INVOICE"
+  /** Az elhullási naplóba rögzített, rendszerbeli élőlény (2026-10-07). */
+  | "MORTALITY";
 
 export type InventoryMovementType =
   | "PURCHASE_RECEIPT"

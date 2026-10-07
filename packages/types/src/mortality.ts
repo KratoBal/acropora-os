@@ -34,23 +34,32 @@ export const MORTALITY_LIST_PAGE_SIZE = { default: 25, max: 100 } as const;
 /** A megnevezés (`sourceNote`) leghosszabb alakja; az adatbázis is ezt tartja. */
 export const MORTALITY_SOURCE_NOTE_MAX = 200;
 
+/** A szabad szöveges élőlény-név leghosszabb alakja (az adatbázis is ezt tartja). */
+export const MORTALITY_PRODUCT_NAME_MAX = 200;
+
 export interface MortalitySource {
   type: MortalitySourceType;
-  /** csak beszállítónál */
+  /** csak beszállítónál, ha a beszállító a rendszerben van */
   supplier: { id: string; name: string } | null;
-  /** a nem beszállítói forrás megnevezése (pl. a tenyésztő neve) */
+  /**
+   * a forrás szabad szöveges megnevezése: beszállítónál a rendszerben nem
+   * szereplő beszállító neve (Balázs 2026-10-07), máshol pl. a tenyésztő neve
+   */
   note: string | null;
 }
 
 export interface MortalityListItem {
   id: string;
   recordNumber: string;
+  /** a rendszerbeli élőlény; `null`, ha szabad szöveggel rögzítették */
   product: {
     id: string;
     name: string;
     /** a termék adatlapjának magyar neve, ha ki van töltve */
     commonName: string | null;
-  };
+  } | null;
+  /** a szabad szöveges élőlény-név (Balázs 2026-10-07), ha nincs `product` */
+  productName: string | null;
   quantity: number;
   aquarium: { id: string; name: string; aquariumNumber: string };
   source: MortalitySource;
@@ -69,8 +78,28 @@ export interface MortalityPhoto {
   createdAt: string;
 }
 
+/**
+ * MIÉRT NEM VÁLTOZOTT A KÉSZLET egy bejegyzésnél (a többi esetben `null`):
+ * szabad szöveges élőlény; nem készletezett (szolgáltatás) termék; a terméknek
+ * nincs aktív változata, vagy több is van, és a bejegyzés nem mondja meg,
+ * melyik; csomagtermék.
+ */
+export type MortalityStockReason =
+  "FREE_TEXT" | "NOT_STOCKED" | "NO_VARIANT" | "VARIANT_NOT_CHOSEN" | "PACKAGE";
+
+/** A bejegyzés készlethatása (a mozgásnaplóból összegezve). */
+export interface MortalityStockEffect {
+  /** a bejegyzés miatt levont darab, a javításokkal együtt, nettóban */
+  deducted: number;
+  /** a levont változat cikkszáma, ha volt levonás */
+  sku: string | null;
+  /** miért nem mozgott a készlet, ha nem mozgott */
+  reason: MortalityStockReason | null;
+}
+
 export interface MortalityDetail extends MortalityListItem {
   note: string | null;
+  stock: MortalityStockEffect;
   createdAt: string;
   /**
    * Az utolsó módosítás (az auditnapló legutóbbi `mortality.updated` sora), vagy
@@ -128,8 +157,14 @@ export interface MortalitySummary {
   } | null;
 }
 
+/**
+ * Az élőlény a rendszerbeli termék (`productId`) VAGY a szabad szöveges név
+ * (`productName`), pontosan az egyik (Balázs 2026-10-07). Beszállítói forrásnál
+ * ugyanígy a `supplierId` VAGY a `sourceNote`.
+ */
 export interface CreateMortalityInput {
-  productId: string;
+  productId?: string | null;
+  productName?: string | null;
   quantity: number;
   aquariumId: string;
   sourceType: MortalitySourceType;

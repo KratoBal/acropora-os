@@ -12,7 +12,8 @@ import {
 } from "./mortality.service.js";
 
 type Current = {
-  productId: string;
+  productId: string | null;
+  productName?: string | null;
   aquariumId: string;
   sourceType: "SUPPLIER" | "LOCAL_BREEDER" | "TRADE" | "OWN_BREEDING" | "OTHER";
   supplierId: string | null;
@@ -79,13 +80,11 @@ async function rejects(
 describe("MortalityService.create", () => {
   it("rögzít, a rögzítő a hívó, a forrás normalizált", async () => {
     const { service, calls } = fakeRepository();
-    await service.create(
-      { ...VALID, sourceNote: "eldobva", note: "  " },
-      "user-1",
-    );
+    await service.create({ ...VALID, note: "  " }, "user-1");
     assert.deepEqual(calls.create, [
       {
         productId: "live-1",
+        productName: null,
         quantity: 2,
         aquariumId: "own-1",
         sourceType: "SUPPLIER",
@@ -95,6 +94,69 @@ describe("MortalityService.create", () => {
         recordedById: "user-1",
       },
     ]);
+  });
+
+  it("beszállító és szabad szöveges név együtt: 400, nem dobjuk el csendben", async () => {
+    const { service, calls } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, sourceNote: "eldobva" }, "u"),
+      BadRequestException,
+      /a kettőt együtt nem/,
+    );
+    assert.equal(calls.create.length, 0);
+  });
+
+  it("szabad szöveges élőlény: nincs termék-ellenőrzés, a név tárolódik", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create(
+      { ...VALID, productId: null, productName: "  Ismeretlen gébféle " },
+      "u",
+    );
+    assert.equal(
+      calls.checked.some((c) => c.startsWith("product:")),
+      false,
+    );
+    assert.deepEqual(
+      calls.create[0] as { productId: unknown; productName: unknown },
+      {
+        ...(calls.create[0] as object),
+        productId: null,
+        productName: "Ismeretlen gébféle",
+      },
+    );
+  });
+
+  it("élőlény nélkül, vagy terméket ÉS nevet adva: 400", async () => {
+    const { service, calls } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, productId: null }, "u"),
+      BadRequestException,
+      /Válaszd ki az élőlényt, vagy írd be a nevét/,
+    );
+    await rejects(
+      service.create({ ...VALID, productName: "x" }, "u"),
+      BadRequestException,
+      /a kettőt együtt nem/,
+    );
+    assert.equal(calls.create.length, 0);
+  });
+
+  it("szabad szöveges beszállító: nincs beszállító-ellenőrzés, a név a megnevezésbe kerül", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create(
+      { ...VALID, supplierId: null, sourceNote: "Kis Pál" },
+      "u",
+    );
+    assert.equal(
+      calls.checked.some((c) => c.startsWith("supplier:")),
+      false,
+    );
+    const created = calls.create[0] as {
+      supplierId: unknown;
+      sourceNote: unknown;
+    };
+    assert.equal(created.supplierId, null);
+    assert.equal(created.sourceNote, "Kis Pál");
   });
 
   it("nem élő állat terméket elutasít", async () => {
@@ -174,6 +236,36 @@ describe("MortalityService.update", () => {
     });
     await service.update("rec-1", { productId: "dry-old", note: "x" }, "u");
     assert.deepEqual(calls.checked, []);
+  });
+
+  it("szabad szövegre váltás: a termék törlődik, ellenőrzés nincs", async () => {
+    const { service, calls } = fakeRepository(CURRENT);
+    await service.update("rec-1", { productName: " Gébféle " }, "u");
+    assert.deepEqual(calls.checked, []);
+    assert.deepEqual(calls.update, [
+      {
+        id: "rec-1",
+        data: { productId: null, productName: "Gébféle" },
+        actor: "u",
+      },
+    ]);
+  });
+
+  it("szabad szövegről termékre váltás: a név törlődik, a termék ellenőrzött", async () => {
+    const { service, calls } = fakeRepository({
+      ...CURRENT,
+      productId: null,
+      productName: "Gébféle",
+    });
+    await service.update("rec-1", { productId: "live-9" }, "u");
+    assert.deepEqual(calls.checked, ["product:live-9"]);
+    assert.deepEqual(calls.update, [
+      {
+        id: "rec-1",
+        data: { productId: "live-9", productName: null },
+        actor: "u",
+      },
+    ]);
   });
 
   it("a megváltoztatott terméket ellenőrzi", async () => {

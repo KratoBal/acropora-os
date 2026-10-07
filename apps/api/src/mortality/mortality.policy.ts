@@ -1,4 +1,5 @@
 import {
+  MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_NOTE_MAX,
   type MortalitySourceType,
 } from "@acropora/types";
@@ -17,9 +18,11 @@ export interface MortalitySourceInput {
 }
 
 /**
- * A FORRÁS ÉRVÉNYESSÉGE: beszállítónál a beszállító kötelező, más forrásnál
- * nem lehet beszállító, az „egyéb” forrásnak neve kell. Hibánál az üzenet,
- * egyébként `null`.
+ * A FORRÁS ÉRVÉNYESSÉGE: beszállítónál a rendszerbeli beszállító VAGY a neve
+ * szabad szöveggel (pontosan az egyik; Balázs 2026-10-07: „előfordulhat, hogy
+ * olyan beszállító van, aki nincs a rendszerben, és nem is akarjuk felvenni”),
+ * más forrásnál nem lehet beszállító, az „egyéb” forrásnak neve kell. Hibánál az
+ * üzenet, egyébként `null`.
  */
 export function mortalitySourceProblem(
   input: MortalitySourceInput,
@@ -27,10 +30,13 @@ export function mortalitySourceProblem(
   const note = input.sourceNote?.trim() ?? "";
   if (note.length > MORTALITY_SOURCE_NOTE_MAX)
     return `A forrás megnevezése legfeljebb ${MORTALITY_SOURCE_NOTE_MAX} karakter.`;
-  if (input.sourceType === "SUPPLIER")
-    return input.supplierId
+  if (input.sourceType === "SUPPLIER") {
+    if (input.supplierId && note)
+      return "Beszállítónál vagy a listából válassz, vagy írd be a nevét, a kettőt együtt nem.";
+    return input.supplierId || note
       ? null
-      : "Beszállítói forrásnál a beszállító kötelező.";
+      : "Beszállítói forrásnál válaszd ki a beszállítót, vagy írd be a nevét.";
+  }
   if (input.supplierId)
     return "Beszállító csak beszállítói forrásnál adható meg.";
   if (input.sourceType === "OTHER" && !note)
@@ -38,20 +44,57 @@ export function mortalitySourceProblem(
   return null;
 }
 
-/** A tárolt forrás-mezők: beszállítónál nincs megnevezés, másutt nincs beszállító. */
+/**
+ * A tárolt forrás-mezők: beszállítónál a rendszerbeli beszállító, vagy ha nincs,
+ * a neve szabad szövegként; másutt nincs beszállító.
+ */
 export function normalizedSource(input: MortalitySourceInput): {
   sourceType: MortalitySourceType;
   supplierId: string | null;
   sourceNote: string | null;
 } {
   const note = input.sourceNote?.trim() || null;
-  return input.sourceType === "SUPPLIER"
-    ? {
-        sourceType: "SUPPLIER",
-        supplierId: input.supplierId ?? null,
-        sourceNote: null,
-      }
-    : { sourceType: input.sourceType, supplierId: null, sourceNote: note };
+  if (input.sourceType === "SUPPLIER")
+    return input.supplierId
+      ? {
+          sourceType: "SUPPLIER",
+          supplierId: input.supplierId,
+          sourceNote: null,
+        }
+      : { sourceType: "SUPPLIER", supplierId: null, sourceNote: note };
+  return { sourceType: input.sourceType, supplierId: null, sourceNote: note };
+}
+
+export interface MortalityProductInput {
+  productId?: string | null;
+  productName?: string | null;
+}
+
+/**
+ * AZ ÉLŐLÉNY: rendszerbeli termék VAGY szabad szöveges név, pontosan az egyik
+ * (Balázs 2026-10-07). Hibánál az üzenet, egyébként `null`.
+ */
+export function mortalityProductProblem(
+  input: MortalityProductInput,
+): string | null {
+  const name = input.productName?.trim() ?? "";
+  if (name.length > MORTALITY_PRODUCT_NAME_MAX)
+    return `Az élőlény neve legfeljebb ${MORTALITY_PRODUCT_NAME_MAX} karakter.`;
+  if (input.productId && name)
+    return "Az élőlényt vagy a listából válaszd, vagy írd be a nevét, a kettőt együtt nem.";
+  return input.productId || name
+    ? null
+    : "Válaszd ki az élőlényt, vagy írd be a nevét.";
+}
+
+/** A tárolt élőlény-mezők: a termék, vagy ha nincs, a szabad szöveges név. */
+export function normalizedProduct(input: MortalityProductInput): {
+  productId: string | null;
+  productName: string | null;
+} {
+  return input.productId
+    ? { productId: input.productId, productName: null }
+    : { productId: null, productName: input.productName?.trim() || null };
 }
 
 /** Pozitív egész példányszám (a prompt: se 0, se negatív). */

@@ -12,6 +12,7 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
+  MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_LABELS,
   MORTALITY_SOURCE_NOTE_MAX,
   MORTALITY_SOURCE_TYPES,
@@ -29,6 +30,7 @@ import { mortalityApi } from "@/lib/api/mortality";
 import { aquariumLabel } from "./mortality-format";
 import { MORTALITY_LIST_PATH } from "./mortality-list-page";
 import {
+  freeTextOption,
   MortalitySearchPicker,
   type PickerOption,
 } from "./mortality-search-picker";
@@ -52,7 +54,8 @@ export interface MortalityFormState {
 export function mortalityFormInput(
   state: MortalityFormState,
 ): { problem: string } | { input: CreateMortalityInput } {
-  if (!state.product) return { problem: "Válaszd ki az élőlényt." };
+  if (!state.product)
+    return { problem: "Válaszd ki az élőlényt, vagy írd be a nevét." };
   const quantity = Number(state.quantity);
   if (!Number.isInteger(quantity) || quantity < 1)
     return { problem: "A példányszám legalább 1, egész szám." };
@@ -60,18 +63,27 @@ export function mortalityFormInput(
   if (!state.sourceType)
     return { problem: "Add meg, honnan érkezett az állat." };
   if (state.sourceType === "SUPPLIER" && !state.supplier)
-    return { problem: "Válaszd ki a beszállítót." };
+    return { problem: "Válaszd ki a beszállítót, vagy írd be a nevét." };
   if (state.sourceType === "OTHER" && !state.sourceNote.trim())
     return { problem: "Az „Egyéb” forrásnál nevezd meg, honnan érkezett." };
   const isSupplier = state.sourceType === "SUPPLIER";
+  // a beírt (rendszerben nem szereplő) élőlény és beszállító a szabad szöveges
+  // mezőbe megy, az azonosító helyére (pontosan az egyik, a szerver is ezt kéri)
+  const freeProduct = state.product.freeText === true;
+  const freeSupplier = isSupplier && state.supplier!.freeText === true;
   return {
     input: {
-      productId: state.product.id,
+      productId: freeProduct ? null : state.product.id,
+      productName: freeProduct ? state.product.title : null,
       quantity,
       aquariumId: state.aquariumId,
       sourceType: state.sourceType,
-      supplierId: isSupplier ? state.supplier!.id : null,
-      sourceNote: isSupplier ? null : state.sourceNote.trim() || null,
+      supplierId: isSupplier && !freeSupplier ? state.supplier!.id : null,
+      sourceNote: isSupplier
+        ? freeSupplier
+          ? state.supplier!.title
+          : null
+        : state.sourceNote.trim() || null,
       note: state.note.trim() || null,
     },
   };
@@ -142,11 +154,16 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
             : [record.aquarium, ...own],
         );
         setState({
-          product: {
-            id: record.product.id,
-            title: record.product.name,
-            subtitle: record.product.commonName,
-          },
+          product: record.product
+            ? {
+                id: record.product.id,
+                title: record.product.name,
+                subtitle: record.product.commonName,
+              }
+            : freeTextOption(
+                record.productName ?? "",
+                MORTALITY_PRODUCT_NAME_MAX,
+              ),
           quantity: String(record.quantity),
           aquariumId: record.aquarium.id,
           sourceType: record.source.type,
@@ -155,8 +172,12 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
                 id: record.source.supplier.id,
                 title: record.source.supplier.name,
               }
-            : null,
-          sourceNote: record.source.note ?? "",
+            : record.source.type === "SUPPLIER" && record.source.note
+              ? freeTextOption(record.source.note, MORTALITY_SOURCE_NOTE_MAX)
+              : null,
+          // beszállítónál a megnevezés a beszállító helyén áll, nem külön mezőben
+          sourceNote:
+            record.source.type === "SUPPLIER" ? "" : (record.source.note ?? ""),
           note: record.note ?? "",
         });
       })
@@ -294,15 +315,16 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
           <PilotFormField
             label="Élőlény"
             required
-            help="Csak élő állat választható: a Korallok, Halak és Gerinctelenek kategória termékei."
+            help="A listában a Korallok, Halak és Gerinctelenek kategória termékei állnak. Ha az élőlény nincs a rendszerben, írd be a nevét. A rendszerbeli élőlény a készletből levonódik."
           >
             <MortalitySearchPicker
               label="Élőlény"
-              placeholder="Keresés név alapján…"
+              placeholder="Keresés név alapján, vagy írd be a nevét…"
               value={state.product}
               onChange={(option) => set("product", option)}
               search={searchProducts}
               emptyText="Nincs ilyen nevű élő állat."
+              freeTextMaxLength={MORTALITY_PRODUCT_NAME_MAX}
             />
           </PilotFormField>
 
@@ -365,11 +387,12 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
             <PilotFormField label="Beszállító" required>
               <MortalitySearchPicker
                 label="Beszállító"
-                placeholder="Keresés a beszállítók között…"
+                placeholder="Keresés a beszállítók között, vagy írd be a nevét…"
                 value={state.supplier}
                 onChange={(option) => set("supplier", option)}
                 search={searchSuppliers}
                 emptyText="Nincs ilyen nevű beszállító."
+                freeTextMaxLength={MORTALITY_SOURCE_NOTE_MAX}
               />
             </PilotFormField>
           ) : state.sourceType ? (

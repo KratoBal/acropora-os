@@ -15,12 +15,22 @@ import {
   type MortalitySupplierOption,
 } from "@acropora/types";
 
-import { withUniqueCode } from "../common/unique-code.util.js";
+import { generateCode } from "../common/code-generator.util.js";
+import { retryOnTakenCode } from "../common/unique-code.util.js";
 import {
   budapestDayKey,
   startOfBudapestDay,
 } from "../dashboard/budapest-day.js";
 import { liveAnimalSubtreeIds } from "../integrations/medusa/medusa-livestock.policy.js";
+import {
+  deductedByVariant,
+  mortalityLedger,
+  mortalityStockEffect,
+  mortalityStockProduct,
+  planMortalityStock,
+  syncMortalityStock,
+  type MortalityStockDatabase,
+} from "./mortality-stock.js";
 import { mortalityChanges } from "./mortality.policy.js";
 
 /** Az auditnapló sorának neve. */
@@ -32,6 +42,7 @@ const OPTION_LIMIT = 20;
 const LIST_SELECT = {
   id: true,
   recordNumber: true,
+  productName: true,
   quantity: true,
   sourceType: true,
   sourceNote: true,
@@ -55,11 +66,14 @@ function toListItem(row: ListRow): MortalityListItem {
   return {
     id: row.id,
     recordNumber: row.recordNumber,
-    product: {
-      id: row.product.id,
-      name: row.product.name,
-      commonName: row.product.datasheet?.magyarNev?.trim() || null,
-    },
+    product: row.product
+      ? {
+          id: row.product.id,
+          name: row.product.name,
+          commonName: row.product.datasheet?.magyarNev?.trim() || null,
+        }
+      : null,
+    productName: row.productName,
     quantity: row.quantity,
     aquarium: row.aquarium,
     source: {
@@ -81,12 +95,20 @@ export function mortalityWhere(
   const q = query.q?.trim();
   if (q)
     and.push({
-      product: {
-        OR: [
-          { name: { contains: q, mode: "insensitive" } },
-          { datasheet: { magyarNev: { contains: q, mode: "insensitive" } } },
-        ],
-      },
+      OR: [
+        {
+          product: {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              {
+                datasheet: { magyarNev: { contains: q, mode: "insensitive" } },
+              },
+            ],
+          },
+        },
+        // a szabad szöveggel rögzített élőlény is megtalálható
+        { productName: { contains: q, mode: "insensitive" } },
+      ],
     });
   if (query.sourceType) and.push({ sourceType: query.sourceType });
   if (query.supplierId) and.push({ supplierId: query.supplierId });
@@ -245,9 +267,19 @@ export class MortalityRepository {
         user: { select: { id: true, displayName: true } },
       },
     });
+    // a készlethatás a naplóból (amit valóban levontunk), az ok a mai tervből
+    const db = this.database as unknown as MortalityStockDatabase;
+    const stock = mortalityStockEffect(
+      deductedByVariant(await mortalityLedger(db, id)),
+      planMortalityStock(
+        await mortalityStockProduct(db, row.product?.id ?? null),
+        row.quantity,
+      ).reason,
+    );
     return {
       ...toListItem(row),
       note: row.note,
+      stock,
       createdAt: row.createdAt.toISOString(),
       lastModified: lastUpdate
         ? {
@@ -264,8 +296,14 @@ export class MortalityRepository {
     };
   }
 
+  /**
+   * A LÉTREHOZÁS ÉS A KÉSZLET-LEVONÁS EGY TRANZAKCIÓBAN: egy bejegyzés nem
+   * maradhat levonás nélkül, és egy levonás sem bejegyzés nélkül. Az azonosító-
+   * ütközés (a bejegyzés vagy a mozgás száma) az egész tranzakciót ismétli.
+   */
   async create(input: {
-    productId: string;
+    productId: string | null;
+    productName: string | null;
     quantity: number;
     aquariumId: string;
     sourceType: MortalitySourceType;
@@ -274,13 +312,19 @@ export class MortalityRepository {
     note: string | null;
     recordedById: string;
   }): Promise<{ id: string }> {
-    return withUniqueCode(
-      { prefix: "ELH", field: "recordNumber" },
-      (recordNumber) =>
-        this.database.mortalityRecord.create({
-          data: { ...input, recordNumber },
+    return retryOnTakenCode({ field: ["recordNumber", "movementNumber"] }, () =>
+      this.database.$transaction(async (tx) => {
+        const created = await tx.mortalityRecord.create({
+          data: { ...input, recordNumber: generateCode("ELH") },
           select: { id: true },
-        }),
+        });
+        await syncMortalityStock(
+          tx as unknown as MortalityStockDatabase,
+          created.id,
+          input.recordedById,
+        );
+        return created;
+      }),
     );
   }
 
@@ -291,7 +335,8 @@ export class MortalityRepository {
   async update(
     id: string,
     data: Partial<{
-      productId: string;
+      productId: string | null;
+      productName: string | null;
       quantity: number;
       aquariumId: string;
       sourceType: MortalitySourceType;
@@ -301,34 +346,43 @@ export class MortalityRepository {
     }>,
     actorUserId: string,
   ): Promise<boolean> {
-    return this.database.$transaction(async (tx) => {
-      const before = await tx.mortalityRecord.findUnique({
-        where: { id },
-        select: {
-          productId: true,
-          quantity: true,
-          aquariumId: true,
-          sourceType: true,
-          supplierId: true,
-          sourceNote: true,
-          note: true,
-        },
-      });
-      if (!before) return false;
-      const changes = mortalityChanges(before, data);
-      if (Object.keys(changes).length === 0) return true;
-      await tx.mortalityRecord.update({ where: { id }, data });
-      await tx.auditLog.create({
-        data: {
-          userId: actorUserId,
-          action: MORTALITY_UPDATED_ACTION,
-          entityType: MORTALITY_ENTITY_TYPE,
-          entityId: id,
-          metadata: { changes } as unknown as Prisma.InputJsonValue,
-        },
-      });
-      return true;
-    });
+    return retryOnTakenCode({ field: "movementNumber" }, () =>
+      this.database.$transaction(async (tx) => {
+        const before = await tx.mortalityRecord.findUnique({
+          where: { id },
+          select: {
+            productId: true,
+            productName: true,
+            quantity: true,
+            aquariumId: true,
+            sourceType: true,
+            supplierId: true,
+            sourceNote: true,
+            note: true,
+          },
+        });
+        if (!before) return false;
+        const changes = mortalityChanges(before, data);
+        if (Object.keys(changes).length === 0) return true;
+        await tx.mortalityRecord.update({ where: { id }, data });
+        await tx.auditLog.create({
+          data: {
+            userId: actorUserId,
+            action: MORTALITY_UPDATED_ACTION,
+            entityType: MORTALITY_ENTITY_TYPE,
+            entityId: id,
+            metadata: { changes } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        // a készlet a módosított bejegyzéshez igazodik: csak a különbség mozog
+        await syncMortalityStock(
+          tx as unknown as MortalityStockDatabase,
+          id,
+          actorUserId,
+        );
+        return true;
+      }),
+    );
   }
 
   async current(id: string) {
@@ -336,6 +390,7 @@ export class MortalityRepository {
       where: { id },
       select: {
         productId: true,
+        productName: true,
         aquariumId: true,
         sourceType: true,
         supplierId: true,

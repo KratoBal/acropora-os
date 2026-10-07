@@ -1,5 +1,6 @@
 import {
   MORTALITY_LIST_PAGE_SIZE,
+  MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_NOTE_MAX,
   MORTALITY_SOURCE_TYPES,
   type CreateMortalityInput,
@@ -44,7 +45,12 @@ export class MortalityListQueryDto implements MortalityListQuery {
 
 /** `POST /mortality`. A rögzítő és a rögzítés ideje NEM bemenet: automatikus. */
 export class CreateMortalityDto implements CreateMortalityInput {
-  @IsString() @MinLength(1) productId!: string;
+  // az élőlény: a termék VAGY a szabad szöveges név (a szolgáltatás dönt róla)
+  @IsString() @IsOptional() productId?: string | null;
+  @IsString()
+  @MaxLength(MORTALITY_PRODUCT_NAME_MAX)
+  @IsOptional()
+  productName?: string | null;
   @Type(() => Number) @IsInt() @Min(1) quantity!: number;
   @IsString() @MinLength(1) aquariumId!: string;
   @IsIn(MORTALITY_SOURCE_TYPES) sourceType!: MortalitySourceType;
@@ -58,7 +64,11 @@ export class CreateMortalityDto implements CreateMortalityInput {
 
 /** `PATCH /mortality/:id`: minden mező módosítható (acrobot 27141), auditnaplóval. */
 export class UpdateMortalityDto implements UpdateMortalityInput {
-  @IsString() @MinLength(1) @IsOptional() productId?: string;
+  @IsString() @IsOptional() productId?: string | null;
+  @IsString()
+  @MaxLength(MORTALITY_PRODUCT_NAME_MAX)
+  @IsOptional()
+  productName?: string | null;
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() quantity?: number;
   @IsString() @MinLength(1) @IsOptional() aquariumId?: string;
   @IsIn(MORTALITY_SOURCE_TYPES) @IsOptional() sourceType?: MortalitySourceType;

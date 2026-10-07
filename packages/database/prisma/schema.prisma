@@ -2176,6 +2176,9 @@ enum UnasStockSyncSourceProcess {
   /// A Számlázás modulban kiállított számla (2026-09-30): a kiszámlázott
   /// készletezett termék levonása, a POS-eladással azonos úton.
   BILLING_INVOICE
+  /// Az elhullási naplóba rögzített, rendszerbeli élőlény levonása
+  /// (2026-10-07), a bolti eladással azonos úton.
+  MORTALITY
 }
 
 /// Tartós, tranzakciós outbox a UNAS-készletpublikáláshoz.
@@ -8516,13 +8519,19 @@ model MortalityRecord {
   id           String              @id @default(cuid())
   /// a belső azonosító, ember olvasta alakban (ELH-...)
   recordNumber String              @unique
-  productId    String
+  /// a rendszerbeli élőlény; ha nincs, a `productName` szabad szöveg áll
+  /// (pontosan az egyik, CHECK őrzi; Balázs 2026-10-07)
+  productId    String?
+  /// szabad szöveges élőlény-név, ha az élőlény nincs a rendszerben
+  productName  String?             @db.VarChar(200)
   quantity     Int
   aquariumId   String
   sourceType   MortalitySourceType
-  /// kötelező, ha `sourceType` SUPPLIER; a többinél üres
+  /// beszállítói forrásnál a rendszerbeli beszállító VAGY a `sourceNote`
+  /// szabad szövege (pontosan az egyik); a többi forrásnál üres
   supplierId   String?
-  /// a nem beszállítói forrás megnevezése (pl. a tenyésztő neve); OTHER-nél kötelező
+  /// a forrás szabad szöveges megnevezése: beszállítónál a rendszerben nem
+  /// szereplő beszállító neve, máshol pl. a tenyésztő neve; OTHER-nél kötelező
   sourceNote   String?             @db.VarChar(200)
   note         String?
   recordedById String
@@ -8530,7 +8539,7 @@ model MortalityRecord {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
-  product    Product                   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product    Product?                  @relation(fields: [productId], references: [id], onDelete: Restrict)
   aquarium   Aquarium                  @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
   supplier   Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   recordedBy User                      @relation("MortalityRecordRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
