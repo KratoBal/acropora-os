@@ -43,6 +43,7 @@ import {
   monthCardTitle,
   periodRange,
   shortDateTime,
+  shortDay,
   livestockSubtitle,
   livestockTitle,
   sourceSubtitle,
@@ -399,7 +400,7 @@ export function MortalityListPage() {
               rows={data.items}
               rowKey={(row) => row.id}
               rowLabel={(row) =>
-                `${livestockTitle(row)}, ${shortDateTime(row.recordedAt)}`
+                `${livestockTitle(row)}, ${shortDay(row.occurredOn)}`
               }
               onRowActivate={(row) =>
                 router.push(
@@ -463,8 +464,22 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
   },
   {
     id: "aquarium",
-    header: "Akvárium",
-    cell: (row) => aquariumLabel(row.aquarium),
+    header: "Akvárium / rack",
+    // akvárium nélkül (csak halas racknél) a rack áll a helyén
+    cell: (row) => (
+      <div>
+        <div>
+          {row.aquarium
+            ? aquariumLabel(row.aquarium)
+            : (row.location?.name ?? "")}
+        </div>
+        {row.aquarium && row.location ? (
+          <div className="text-xs text-pilot-grey-500">{row.location.name}</div>
+        ) : !row.aquarium ? (
+          <div className="text-xs text-pilot-grey-500">Halas rack</div>
+        ) : null}
+      </div>
+    ),
   },
   {
     id: "source",
@@ -486,12 +501,17 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
     cell: (row) => row.recordedBy.name,
   },
   {
-    id: "recordedAt",
-    header: "Időpont",
+    // az elhullás napja (Luca, 2026-10-07); a lista is e szerint rendez és
+    // szűr, a rögzítés ideje csak a második sor
+    id: "occurredOn",
+    header: "Elhullás napja",
     cell: (row) => (
-      <span className="whitespace-nowrap tabular-nums">
-        {shortDateTime(row.recordedAt)}
-      </span>
+      <div className="whitespace-nowrap tabular-nums">
+        <div>{shortDay(row.occurredOn)}</div>
+        <div className="text-xs text-pilot-grey-500">
+          rögzítve {shortDateTime(row.recordedAt)}
+        </div>
+      </div>
     ),
   },
   {

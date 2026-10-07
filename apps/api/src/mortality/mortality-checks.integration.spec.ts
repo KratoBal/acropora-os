@@ -9,8 +9,9 @@ import { MORTALITY_REFERENCE_TYPE } from "./mortality-stock.js";
 import { MortalityRepository } from "./mortality.repository.js";
 
 /**
- * AZ ELHULLÁSI NAPLÓ HÁROM ADATBÁZIS-MEGKÖTÉSE (kártya 115c9740, migráció
- * `20261006200000_mortality_log`), VALÓDI POSTGRESEN.
+ * AZ ELHULLÁSI NAPLÓ ADATBÁZIS-MEGKÖTÉSEI (kártya 115c9740, migrációk
+ * `20261006200000_mortality_log` és `20261007150000_mortality_occurred_on_and_location`),
+ * VALÓDI POSTGRESEN.
  *
  * A szolgáltatás ugyanezt a három szabályt érthető üzenettel adja vissza; ez a
  * teszt azt méri, hogy a szolgáltatást megkerülő írás (egy szkript, egy jövőbeli
@@ -145,6 +146,8 @@ describe(
         sourceNote: string | null;
         productId: string | null;
         productName: string | null;
+        aquariumId: string | null;
+        locationId: string | null;
       }>,
     ) {
       counter += 1;
@@ -158,6 +161,7 @@ describe(
           sourceType: "TRADE",
           supplierId: null,
           sourceNote: null,
+          occurredOn: new Date("2026-10-07T00:00:00Z"),
           ...over,
         },
       });
@@ -221,6 +225,17 @@ describe(
       );
     });
 
+    it("az akvárium VAGY a halas rack kell, legalább az egyik", async () => {
+      const [rack] = await new MortalityRepository().locationOptions();
+      await record({ aquariumId: null, locationId: rack!.id });
+      await record({ locationId: rack!.id });
+      await record({ locationId: null });
+      await rejectedBy(
+        "MortalityRecord_place_check",
+        record({ aquariumId: null, locationId: null }),
+      );
+    });
+
     it("az „Egyéb” forráshoz kötelező a megnevezés, a szóköz nem az", async () => {
       await record({ sourceType: "OTHER", sourceNote: "Pista" });
       await rejectedBy(
@@ -230,6 +245,51 @@ describe(
       await rejectedBy(
         "MortalityRecord_other_note_check",
         record({ sourceType: "OTHER", sourceNote: "   " }),
+      );
+    });
+
+    /**
+     * A HALAS RACKEK KEZDŐ LISTÁJA A MIGRÁCIÓBÓL JÖN (Luca, 2026-10-07), nem a
+     * kódból: a választó végpontja ezt adja, ebben a sorrendben.
+     */
+    it("a migráció a tíz halas racket tölti fel, a választó ebben a sorrendben adja", async () => {
+      const names = (await new MortalityRepository().locationOptions()).map(
+        (location) => location.name,
+      );
+      assert.deepEqual(names, [
+        "JOBB 1. oszlop",
+        "JOBB 2. oszlop",
+        "JOBB 3. oszlop",
+        "JOBB 4. oszlop",
+        "JOBB 5. oszlop",
+        "JOBB 6. oszlop",
+        "Jobb hátsó nagy halas",
+        "Bal hátsó nagy halas (dühöngő)",
+        "Rákos 1",
+        "Rákos 2",
+      ]);
+    });
+
+    it("az elhullás napja és a halas rack a részletben visszajön, a módosítás naplózza a napot", async () => {
+      const repository = new MortalityRepository();
+      const [rack] = await repository.locationOptions();
+      const created = await record({});
+      await repository.update(
+        created.id,
+        { occurredOn: new Date("2026-10-03T00:00:00Z"), locationId: rack!.id },
+        ids.user,
+      );
+      const detail = await repository.detail(created.id);
+      assert.equal(detail?.occurredOn, "2026-10-03");
+      assert.deepEqual(detail?.location, { id: rack!.id, name: rack!.name });
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { entityType: "MortalityRecord", entityId: created.id },
+        select: { metadata: true },
+      });
+      assert.deepEqual(
+        (audit.metadata as { changes: Record<string, unknown> }).changes
+          .occurredOn,
+        { from: "2026-10-07", to: "2026-10-03" },
       );
     });
 
@@ -274,6 +334,8 @@ describe(
         supplierId: null,
         sourceNote: null,
         note: null,
+        occurredOn: new Date("2026-10-07T00:00:00Z"),
+        locationId: null,
         recordedById: ids.user,
       });
       assert.equal(await onHand(), 8);

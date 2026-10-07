@@ -4,9 +4,11 @@ import {
   aquariumLabel,
   budapestDay,
   longDateTime,
+  longDay,
   monthCardTitle,
   periodRange,
   shortDateTime,
+  shortDay,
   sourceTitle,
   weekComparison,
 } from "./mortality-format";
@@ -99,5 +101,11 @@ describe("feliratok", () => {
     expect(longDateTime("2026-10-06T07:42:00Z")).toBe(
       "2026. október 6. · 09:42",
     );
+  });
+
+  it("az elhullás napja zóna nélkül: a nap az, ami tárolva van", () => {
+    expect(shortDay("2026-10-05")).toBe("2026.10.05.");
+    expect(longDay("2026-10-05")).toBe("2026. október 5.");
+    expect(longDay("2026-01-31")).toBe("2026. január 31.");
   });
 });

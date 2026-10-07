@@ -5,6 +5,7 @@ import {
   type MortalityAquariumOption,
   type MortalityDetail,
   type MortalityListResponse,
+  type MortalityLocationOption,
   type MortalityPhoto,
   type MortalityProductOption,
   type MortalityRecorderOption,
@@ -74,6 +75,14 @@ export const mortalityApi = {
   supplierOptions(token: string, q?: string, signal?: AbortSignal) {
     return apiRequest<MortalitySupplierOption[]>(
       `/mortality/options/suppliers?q=${encodeURIComponent(q?.trim() ?? "")}`,
+      token,
+      { signal },
+    );
+  },
+  /** A halas rackek (Luca kérése, 2026-10-07). */
+  locationOptions(token: string, signal?: AbortSignal) {
+    return apiRequest<MortalityLocationOption[]>(
+      "/mortality/options/locations",
       token,
       { signal },
     );

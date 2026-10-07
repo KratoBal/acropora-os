@@ -61,9 +61,9 @@ describe("CreateMortalityDto", () => {
   });
 
   it("a kötelező mezők hiánya", () => {
-    // az élőlény (termék VAGY név) a szolgáltatás szabálya, nem a DTO-é
+    // az élőlény (termék VAGY név) és a helyszín (akvárium VAGY halas rack) a
+    // szolgáltatás szabálya, nem a DTO-é
     assert.deepEqual(problems(CreateMortalityDto, {}).sort(), [
-      "aquariumId",
       "quantity",
       "sourceType",
     ]);
@@ -82,6 +82,57 @@ describe("CreateMortalityDto", () => {
   });
 });
 
+describe("CreateMortalityDto, az elhullás napja és a halas rack", () => {
+  it("a nap ÉÉÉÉ-HH-NN, és elhagyható", () => {
+    assert.deepEqual(
+      problems(CreateMortalityDto, {
+        ...VALID,
+        occurredOn: "2026-10-06",
+        locationId: "loc",
+      }),
+      [],
+    );
+    assert.deepEqual(
+      problems(CreateMortalityDto, { ...VALID, occurredOn: "2026.10.06" }),
+      ["occurredOn"],
+    );
+    assert.deepEqual(
+      problems(CreateMortalityDto, {
+        ...VALID,
+        occurredOn: "2026-10-06T10:00",
+      }),
+      ["occurredOn"],
+    );
+  });
+
+  it("az akvárium elhagyható vagy null (ha halas rack áll helyette)", () => {
+    const { aquariumId: _omitted, ...withoutAquarium } = VALID;
+    assert.deepEqual(
+      problems(CreateMortalityDto, { ...withoutAquarium, locationId: "loc" }),
+      [],
+    );
+    assert.deepEqual(
+      problems(CreateMortalityDto, {
+        ...VALID,
+        aquariumId: null,
+        locationId: "loc",
+      }),
+      [],
+    );
+  });
+
+  it("a halas rack null-lal üresen hagyható, szám nem lehet", () => {
+    assert.deepEqual(
+      problems(CreateMortalityDto, { ...VALID, locationId: null }),
+      [],
+    );
+    assert.deepEqual(
+      problems(CreateMortalityDto, { ...VALID, locationId: 7 }),
+      ["locationId"],
+    );
+  });
+});
+
 describe("UpdateMortalityDto", () => {
   it("üres és null mezők is átmennek (a null törlés)", () => {
     assert.deepEqual(problems(UpdateMortalityDto, {}), []);
@@ -93,6 +144,19 @@ describe("UpdateMortalityDto", () => {
       }),
       [],
     );
+  });
+
+  it("az elhullás napja és a halas rack módosítható", () => {
+    assert.deepEqual(
+      problems(UpdateMortalityDto, {
+        occurredOn: "2026-10-01",
+        locationId: null,
+      }),
+      [],
+    );
+    assert.deepEqual(problems(UpdateMortalityDto, { occurredOn: "tegnap" }), [
+      "occurredOn",
+    ]);
   });
 
   it("a rögzítő itt sem módosítható", () => {
