@@ -14,8 +14,11 @@ import {
   type QuoteBomLineDto,
   type QuoteRichText,
 } from "@acropora/types";
-import type { QuoteListRow } from "./quotes.repository.js";
-export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
+import type { QuoteListRow, QuoteRow } from "./quotes.repository.js";
+export function quoteListItemDto(
+  row: QuoteListRow,
+  netTotals: ReadonlyMap<string, string> = new Map(),
+): QuoteListItemDto {
   const version = row.versions[0];
   return {
     id: row.id,
@@ -24,6 +27,8 @@ export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
     status: row.status,
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
+    customerName: row.customer?.displayName ?? null,
+    createdByName: row.createdBy?.displayName ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     latestVersion: version
@@ -37,27 +42,12 @@ export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
             QuoteListItemDto["latestVersion"]
           >["priceDisplay"],
           publishedAt: version.publishedAt?.toISOString() ?? null,
+          netTotal: netTotals.get(version.id) ?? "0.0000",
         }
       : null,
   };
 }
-export const QUOTE_DETAIL_INCLUDE = {
-  versions: {
-    orderBy: { versionNumber: "asc" },
-    include: {
-      blocks: {
-        orderBy: { position: "asc" },
-        include: { items: { orderBy: { position: "asc" } } },
-      },
-      bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
-      milestones: { orderBy: { position: "asc" } },
-    },
-  },
-  events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-} satisfies Prisma.QuoteInclude;
-export type QuoteRow = Prisma.QuoteGetPayload<{
-  include: typeof QUOTE_DETAIL_INCLUDE;
-}>;
+export type { QuoteRow } from "./quotes.repository.js";
 const record = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -181,6 +171,21 @@ function bomLineDto(
     createdProductVariantId: b.createdProductVariantId,
   };
 }
+/** Offered and optional net totals of a version, exact (P1). */
+function netTotals(v: QuoteRow["versions"][number]) {
+  let offered = new Prisma.Decimal(0);
+  let optional = new Prisma.Decimal(0);
+  for (const b of v.blocks)
+    for (const i of b.items) {
+      const line = i.quantity.times(i.unitNetPrice);
+      if (i.isOptional) optional = optional.plus(line);
+      else offered = offered.plus(line);
+    }
+  return {
+    netTotal: offered.toDecimalPlaces(4).toFixed(4),
+    optionalNetTotal: optional.toDecimalPlaces(4).toFixed(4),
+  };
+}
 function internalVersionDto(
   v: QuoteRow["versions"][number],
 ): QuoteInternalVersion {
@@ -190,6 +195,7 @@ function internalVersionDto(
     templateId: v.templateId,
     createdFromVersionId: v.createdFromVersionId,
     publishedAt: v.publishedAt?.toISOString() ?? null,
+    ...netTotals(v),
     bomItems: v.bomItems.map(bomLineDto),
     blocks: dto.blocks.map((b, index) => ({
       ...b,
@@ -220,6 +226,9 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
     createdById: row.createdById,
+    customerName: row.customer?.displayName ?? null,
+    ownerName: row.owner?.displayName ?? null,
+    createdByName: row.createdBy?.displayName ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     versions: row.versions.map(internalVersionDto),

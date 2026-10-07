@@ -2,7 +2,6 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { CreateQuoteInput, UpdateQuoteInput } from "@acropora/types";
 import type { TemplateBlock } from "./quote-editor-input.js";
-import { QUOTE_DETAIL_INCLUDE } from "./quote-dto.mapper.js";
 /** Bounded list projection: newest version summary only; no child collections or JSON. */
 export const QUOTE_LIST_SELECT = {
   id: true,
@@ -13,6 +12,8 @@ export const QUOTE_LIST_SELECT = {
   ownerUserId: true,
   createdAt: true,
   updatedAt: true,
+  customer: { select: { displayName: true } },
+  createdBy: { select: { displayName: true } },
   versions: {
     orderBy: { versionNumber: "desc" },
     take: 1,
@@ -29,6 +30,27 @@ export const QUOTE_LIST_SELECT = {
 } satisfies Prisma.QuoteSelect;
 export type QuoteListRow = Prisma.QuoteGetPayload<{
   select: typeof QUOTE_LIST_SELECT;
+}>;
+/** The detail tree; the mapper decides per audience what leaves. */
+export const QUOTE_DETAIL_INCLUDE = {
+  versions: {
+    orderBy: { versionNumber: "asc" },
+    include: {
+      blocks: {
+        orderBy: { position: "asc" },
+        include: { items: { orderBy: { position: "asc" } } },
+      },
+      bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
+      milestones: { orderBy: { position: "asc" } },
+    },
+  },
+  events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+  customer: { select: { displayName: true } },
+  owner: { select: { displayName: true } },
+  createdBy: { select: { displayName: true } },
+} satisfies Prisma.QuoteInclude;
+export type QuoteRow = Prisma.QuoteGetPayload<{
+  include: typeof QUOTE_DETAIL_INCLUDE;
 }>;
 export class QuoteWriteConflict extends Error {}
 @Injectable()
@@ -54,6 +76,30 @@ export class QuotesRepository {
         defaultValidityDays: true,
       },
     });
+  }
+  /**
+   * The offered (non-optional) net total per version, summed IN the database:
+   * the list stays bounded (no item rows are loaded), and the sum is exact.
+   */
+  async netTotals(versionIds: string[]): Promise<Map<string, string>> {
+    if (!versionIds.length) return new Map();
+    const rows = await prisma.$queryRaw<
+      Array<{ versionId: string; total: Prisma.Decimal | null }>
+    >(
+      Prisma.sql`SELECT "versionId", SUM("quantity" * "unitNetPrice") AS "total"
+        FROM "QuoteItem"
+        WHERE "versionId" IN (${Prisma.join(versionIds)}) AND NOT "isOptional"
+        GROUP BY "versionId"`,
+    );
+    const totals = new Map(
+      versionIds.map((id) => [id, new Prisma.Decimal(0).toFixed(4)]),
+    );
+    for (const r of rows)
+      totals.set(
+        r.versionId,
+        new Prisma.Decimal(r.total ?? 0).toDecimalPlaces(4).toFixed(4),
+      );
+    return totals;
   }
   async list(page: number, pageSize: number, q?: string) {
     const where: Prisma.QuoteWhereInput = q

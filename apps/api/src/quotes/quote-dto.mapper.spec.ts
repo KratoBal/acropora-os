@@ -91,6 +91,19 @@ export function quoteFixture(): QuoteRow {
                 vatRatePercent: d("27"),
                 isOptional: false,
               },
+              {
+                id: "optional",
+                position: 1,
+                source: "STANDALONE",
+                variantId: null,
+                name: "Option",
+                description: null,
+                quantity: d("3"),
+                unit: "db",
+                unitNetPrice: d("0.3333"),
+                vatRatePercent: d("27"),
+                isOptional: true,
+              },
             ],
           },
         ],
@@ -122,6 +135,9 @@ export function quoteFixture(): QuoteRow {
         ],
       },
     ],
+    customer: { displayName: "Blue Office Kft." },
+    owner: null,
+    createdBy: { displayName: "Balázs" },
     events: [
       {
         id: "event",
@@ -217,10 +233,18 @@ test("list query fetches only a bounded header/version projection and list mappe
     Object.keys(query.select).every(
       (k) =>
         k === "versions" ||
+        k === "customer" ||
+        k === "createdBy" ||
         query!.select![k as keyof Prisma.QuoteSelect] === true,
     ),
   );
-  const dto = quoteListItemDto(quoteFixture());
+  // P1: the two names come as ONE field each, never the related record
+  for (const k of ["customer", "createdBy"] as const)
+    assert.deepEqual(query.select[k], { select: { displayName: true } });
+  const dto = quoteListItemDto(quoteFixture(), new Map([["v", "200000.2470"]]));
+  assert.equal(dto.latestVersion!.netTotal, "200000.2470");
+  assert.equal(dto.customerName, "Blue Office Kft.");
+  assert.equal(dto.createdByName, "Balázs");
   assert.deepEqual(
     Object.keys(dto).sort(),
     [
@@ -230,6 +254,8 @@ test("list query fetches only a bounded header/version projection and list mappe
       "status",
       "customerId",
       "ownerUserId",
+      "customerName",
+      "createdByName",
       "createdAt",
       "updatedAt",
       "latestVersion",
@@ -245,6 +271,7 @@ test("list query fetches only a bounded header/version projection and list mappe
       "currency",
       "priceDisplay",
       "publishedAt",
+      "netTotal",
     ].sort(),
   );
   noCosts(dto);
@@ -365,6 +392,7 @@ test("cost-free API reads and writes use the safe mapper and VIEWER cannot reach
     list: async () => ({ items: [row], total: 1 }),
     create: async () => row,
     update: async () => row,
+    netTotals: async () => new Map(),
   } as unknown as QuotesRepository;
   const service = new QuotesService(repo);
   noCosts(await service.get("q", user("SALES")));
@@ -410,4 +438,14 @@ test("all four routes have central permission metadata and quote is a document-s
     );
   assert.ok(DOCUMENT_OWNERS.includes("quote"));
   assert.equal(ownerDirectory("quote"), "quotes");
+});
+
+test("P1: the detail carries the names and the offered/optional net totals, exactly", () => {
+  const dto = internalQuoteDto(quoteFixture());
+  assert.equal(dto.customerName, "Blue Office Kft.");
+  assert.equal(dto.ownerName, null);
+  assert.equal(dto.createdByName, "Balázs");
+  // 2.000001 * 100000.1234 = 200000.3468001234 -> 4 places; the option apart
+  assert.equal(dto.versions[0]!.netTotal, "200000.3468");
+  assert.equal(dto.versions[0]!.optionalNetTotal, "0.9999");
 });

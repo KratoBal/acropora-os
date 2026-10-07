@@ -35,6 +35,16 @@ A BOM-sor költség-, beszállító- és belső megjegyzés mezőit (`unitCost`,
 `supplierId`, `supplierSku`, `internalNote`, `refreshCost`) csak
 `quotes.costs.view` mellett lehet írni; nélküle 403, és nem íródik semmi.
 
+## Lista és részlet (P1 kiegészítés)
+
+A lista sora és a részlet a partner (`customerName`) és a készítő
+(`createdByName`) nevét is hozza, a részlet a felelősét (`ownerName`) is;
+a kapcsolt rekordból csak a név jön. A lista a legújabb verzió nem
+opcionális tételeinek nettó összegét (`netTotal`) az adatbázisban összegzi,
+tételsor betöltése nélkül. A részlet verziónként a nem opcionális
+(`netTotal`) és az opcionális (`optionalNetTotal`) összeget külön adja,
+pontos decimálisként.
+
 ## Szöveg
 
 A megengedett TipTap-részhalmaz egy helyen áll: `packages/types`
