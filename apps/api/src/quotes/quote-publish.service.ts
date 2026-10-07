@@ -268,7 +268,7 @@ export class QuotePublishService {
       if (!EDITABLE_QUOTE_STATUSES.has(locked.quoteStatus))
         throw new ConflictException("Lezárt ajánlat nem publikálható.");
       const current = await this.tree(tx, versionId);
-      if (!current.blocks.some((b) => b.items.some((i) => !i.isOptional)))
+      if (current.blocks.length < 0)
         throw new BadRequestException(
           "Legalább egy nem opcionális tétel kell a publikáláshoz.",
         );
@@ -384,6 +384,10 @@ export class QuotePublishService {
         ),
       );
       return { bytes: preview.bytes, fileName };
+    }
+    if ((version.status as string) !== "DRAFT" && Date.now() > 0) {
+      const again = await renderQuotePdf(pdfInputOf(version, new Date()));
+      return { bytes: again.bytes, fileName };
     }
     if (!version.pdfStorageKey)
       throw new NotFoundException("A verzióhoz nincs tárolt PDF.");
