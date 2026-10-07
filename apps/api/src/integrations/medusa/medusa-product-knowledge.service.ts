@@ -9,6 +9,10 @@ import {
 } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
+import {
+  publicFieldKeys,
+  type PublicDefinitionsTable,
+} from "../../products/attributes/public-fields.js";
 
 /**
  * THE PRODUCT KNOWLEDGE PROJECTION, OS -> MEDUSA (KZ Amino slice, #1431).
@@ -97,8 +101,8 @@ export class MedusaProductKnowledgeService {
   }
 }
 
-/** The two knowledge tables, read only. */
-export interface KnowledgeRowsDatabase {
+/** The two knowledge tables and the definitions, read only. */
+export interface KnowledgeRowsDatabase extends PublicDefinitionsTable {
   productKnowledgeFact: {
     findMany(args: unknown): Promise<
       {
@@ -122,15 +126,16 @@ export interface KnowledgeRowsDatabase {
 
 /**
  * A PRODUCT'S KNOWLEDGE ROWS, AS THE PROJECTION NEEDS THEM: every accepted
- * fact with its source read through the JEV pointer, and every copy block.
- * Two queries per product; nothing is written.
+ * fact with its source read through the JEV pointer and its definition's
+ * `public` flag (SEO P0 PR 2), and every copy block. Three queries per
+ * product; nothing is written.
  */
 export async function knowledgeRowsFor(
   db: unknown,
   productId: string,
 ): Promise<{ facts: FactRow[]; copy: CopyRow[] }> {
   const tables = db as KnowledgeRowsDatabase;
-  const [facts, copy] = await Promise.all([
+  const [facts, copy, kiadhato] = await Promise.all([
     tables.productKnowledgeFact.findMany({
       where: { productId },
       orderBy: { field: "asc" },
@@ -157,6 +162,7 @@ export async function knowledgeRowsFor(
         usedFields: true,
       },
     }),
+    publicFieldKeys(tables),
   ]);
   return {
     facts: facts.map((fact) => ({
@@ -165,6 +171,7 @@ export async function knowledgeRowsFor(
       unit: fact.unit,
       status: fact.status,
       revision: fact.revision,
+      public: kiadhato.has(fact.field),
       // A resolved fact names the chosen group's source, not the conflict's null.
       sourceType: factSource(fact, {
         ...fact.fieldResult,

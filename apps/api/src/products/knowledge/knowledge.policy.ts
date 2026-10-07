@@ -557,6 +557,13 @@ export interface FactState {
   field: string;
   revision: number;
   status: string;
+  /**
+   * The fact's definition is `public` (SEO P0 PR 2): the buyer may see this
+   * kind of fact at all. REQUIRED, so a reader that forgot to bind the
+   * definitions does not compile (decision 10); a fact with no definition is
+   * `false`.
+   */
+  public: boolean;
 }
 
 /** May the buyer see this fact (D5)? Only VERIFIED. */
@@ -564,6 +571,15 @@ export function isPublicFact(fact: { status: string }): boolean {
   return (PRODUCT_KNOWLEDGE_PUBLIC_STATUSES as readonly string[]).includes(
     fact.status,
   );
+}
+
+/**
+ * MAY THIS FACT LEAVE THE OS (SEO P0 PR 2): VERIFIED (D5) AND its definition is
+ * `public` (C8, the second line). Both gates sit on the OUTPUT, never on the
+ * input of `copyIsStale` (decision 7).
+ */
+export function canLeave(fact: { status: string; public: boolean }): boolean {
+  return isPublicFact(fact) && fact.public;
 }
 
 /**
@@ -585,8 +601,10 @@ function basedOnVerified(
 ): boolean {
   if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
     return false;
+  // decision 6: a VERIFIED fact the buyer may not see (`public = false`)
+  // does not appear in prose either
   const verified = new Set(
-    facts.filter((fact) => isPublicFact(fact)).map((fact) => fact.field),
+    facts.filter((fact) => canLeave(fact)).map((fact) => fact.field),
   );
   const fields = usedFields.length > 0 ? usedFields : Object.keys(basedOn);
   return fields.every((field) => verified.has(field));
@@ -689,6 +707,12 @@ export interface KnowledgeProjectionFact {
   status: string;
   source_type: string | null;
   revision: number;
+  /**
+   * The definition's `public` flag (decision 5): the commerce store route
+   * filters on it a second time, as it does on the status. Every fact that
+   * leaves carries `true`; the field is there for that second gate.
+   */
+  public: boolean;
 }
 
 export interface KnowledgeProjectionCopy {
@@ -708,6 +732,8 @@ export interface FactRow {
   unit: string | null;
   status: string;
   revision: number;
+  /** The definition's `public` flag; `false` with no definition (PR 2). */
+  public: boolean;
   /** Read through the pointer: the JEV result's primary source. */
   sourceType: string | null;
 }
@@ -715,7 +741,8 @@ export interface FactRow {
 /**
  * THE BODY OF `PUT /admin/product-knowledge/:product_id`, sorted so that two
  * builds of the same state are equal. Only the facts the buyer may see go
- * (D5: VERIFIED); the others stay in the OS. The copy carries the APPROVED,
+ * (D5: VERIFIED, and since PR 2 a `public` definition: `canLeave`); the others
+ * stay in the OS. The copy carries the APPROVED,
  * NOT STALE `lead` and `body` written against VERIFIED facts only; SEO goes
  * through the normal product projection.
  *
@@ -732,7 +759,7 @@ export function knowledgeProjection(
 ): KnowledgeProjection {
   return {
     facts: facts
-      .filter((fact) => isPublicFact(fact))
+      .filter((fact) => canLeave(fact))
       .sort((a, b) => a.field.localeCompare(b.field))
       .map((fact) => ({
         field: fact.field,
@@ -741,6 +768,7 @@ export function knowledgeProjection(
         status: fact.status,
         source_type: fact.sourceType,
         revision: fact.revision,
+        public: fact.public,
       })),
     copy: copy
       .filter(
@@ -779,6 +807,9 @@ function canonical(value: KnowledgeProjection): string {
       f.status,
       f.source_type ?? null,
       f.revision,
+      // a shop row written before PR 2c has no flag: that is a difference, and
+      // the next projection writes it
+      f.public ?? null,
     ])
     .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   const copy = (value.copy ?? [])

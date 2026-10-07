@@ -748,7 +748,14 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
           usedFields: [],
         },
       ],
-      [{ field: "dosing", revision: 1, status: "CONFLICTING_SOURCES" }],
+      [
+        {
+          field: "dosing",
+          revision: 1,
+          status: "CONFLICTING_SOURCES",
+          public: true,
+        },
+      ],
       "ACROPORA",
     );
     assert.equal(knowledgeCopy, null);
