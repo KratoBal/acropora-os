@@ -5,7 +5,7 @@ import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { Module, type INestApplication } from "@nestjs/common";
+import { Global, Module, type INestApplication } from "@nestjs/common";
 import { APP_GUARD, NestFactory } from "@nestjs/core";
 import { prisma } from "@acropora/database";
 import {
@@ -16,12 +16,24 @@ import {
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { configureApp } from "../app.configuration.js";
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
+import { QUOTE_DOCUMENT_ENV } from "./quote-publish.service.js";
 import { QuotesModule } from "./quotes.module.js";
 
 const gate = integrationDatabaseGate(process.env);
 
+/** The store's environment for this spec only; `process.env` is never written. */
+const storeRoot = mkdtempSync(join(tmpdir(), "quote-store-"));
+const storeEnv: NodeJS.ProcessEnv = { DOCUMENT_STORE_ROOT: storeRoot };
+
+@Global()
 @Module({
-  imports: [QuotesModule],
+  providers: [{ provide: QUOTE_DOCUMENT_ENV, useValue: storeEnv }],
+  exports: [QUOTE_DOCUMENT_ENV],
+})
+class TestStoreEnvModule {}
+
+@Module({
+  imports: [TestStoreEnvModule, QuotesModule],
   providers: [{ provide: APP_GUARD, useClass: PermissionGuard }],
 })
 class TestQuotesModule {}
@@ -58,8 +70,6 @@ describe(
   () => {
     const suffix = randomUUID();
     const quoteIds: string[] = [];
-    const storeRoot = mkdtempSync(join(tmpdir(), "quote-store-"));
-    const previousRoot = process.env.DOCUMENT_STORE_ROOT;
     let app: INestApplication, url: string, actorId: string;
     let perms: Permission[] = PUBLISHER;
 
@@ -130,7 +140,6 @@ describe(
           },
         })
       ).id;
-      process.env.DOCUMENT_STORE_ROOT = storeRoot;
       app = await NestFactory.create(TestQuotesModule, { logger: false });
       app.use(
         (req: { user: AuthenticatedUser }, _res: unknown, next: () => void) => {
@@ -153,7 +162,7 @@ describe(
 
     it("without a configured store publishing refuses (503) and the draft stays", async () => {
       const { quoteId, versionId } = await draftQuote(`P2 store ${suffix}`);
-      delete process.env.DOCUMENT_STORE_ROOT;
+      delete storeEnv.DOCUMENT_STORE_ROOT;
       try {
         const res = await request(
           `/quotes/${quoteId}/versions/${versionId}/publish`,
@@ -161,7 +170,7 @@ describe(
         );
         assert.equal(res.status, 503, "NO-STORE-503");
       } finally {
-        process.env.DOCUMENT_STORE_ROOT = storeRoot;
+        storeEnv.DOCUMENT_STORE_ROOT = storeRoot;
       }
       const v = await prisma.quoteVersion.findUniqueOrThrow({
         where: { id: versionId },
@@ -280,8 +289,6 @@ describe(
     after(async () => {
       if (gate.mode !== "run") return;
       if (app) await app.close();
-      if (previousRoot === undefined) delete process.env.DOCUMENT_STORE_ROOT;
-      else process.env.DOCUMENT_STORE_ROOT = previousRoot;
       const versions = (
         await prisma.quoteVersion.findMany({
           where: { quoteId: { in: quoteIds } },
