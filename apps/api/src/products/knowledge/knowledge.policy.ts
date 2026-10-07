@@ -636,10 +636,16 @@ export interface ProjectedCopy {
  * Only for a product WE master (`ACROPORA`): while UNAS owns the master data
  * it also owns the description, and an OS text would fight its sync.
  *
- * The description is all or nothing over `lead` and `body`: if every one of
- * them that exists is approved and not stale, they replace today's text;
- * if any is a draft or stale, today's description stays exactly as it is.
- * A partial swap would shrink a live page to its lead while the body waits.
+ * THE DESCRIPTION, OVER `lead` AND `body`:
+ * - every one of them that exists is publishable: they replace today's text,
+ *   lead first;
+ * - the body is held back but the lead is publishable: the LEAD ALONE
+ *   (acrobot 27556, with Balázs told, after the PR 1b stage run: a lead built
+ *   on VERIFIED facts went out on the knowledge endpoint while the product
+ *   description, and so the page's meta description, stayed empty);
+ * - otherwise (no publishable lead): today's description stays exactly as it
+ *   is, the source text (barracuda's PR 1 finding, unchanged). A body alone
+ *   without its lead is not a description the page was written for.
  * The SEO title and meta description go one by one: each replaces today's
  * value only when it is approved, not stale, and written against VERIFIED
  * facts only (`basedOnVerified`).
@@ -654,10 +660,13 @@ export function projectedCopy(
   const textBlocks = (["lead", "body"] as const)
     .map((block) => by.get(block))
     .filter((row): row is CopyRow => row !== undefined);
+  const lead = by.get("lead");
   const description =
     textBlocks.length > 0 && textBlocks.every((row) => publishable(row, facts))
       ? copyToHtml(textBlocks.map((row) => row.body))
-      : null;
+      : publishable(lead, facts)
+        ? copyToHtml([lead!.body])
+        : null;
   const seoTitle = by.get("seoTitle");
   const meta = by.get("metaDescription");
   const result: ProjectedCopy = {
