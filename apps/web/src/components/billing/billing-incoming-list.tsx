@@ -67,7 +67,8 @@ const rateText = (value: string | null) =>
  * a csak postafiókból ismert számlánál a forrás, mert formátumot a feed ad.
  */
 export const flagsText = (item: IncomingDocumentListItem) =>
-  `${item.kindCode.toUpperCase() === "SZ" ? "Normál" : item.kindLabel} · ${
+  // a postafiókos számla saját kódja (MB) is normál számla (e4c3b0fb)
+  `${["SZ", "MB"].includes(item.kindCode.toUpperCase()) ? "Normál" : item.kindLabel} · ${
     item.origin === "MAILBOX" || item.invoiceFormat === null
       ? "Postafiókból"
       : INVOICE_FORMAT_LABELS[item.invoiceFormat]

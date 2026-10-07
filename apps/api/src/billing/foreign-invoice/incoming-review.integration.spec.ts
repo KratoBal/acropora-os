@@ -39,7 +39,7 @@ const mailboxRow = (externalId: string) => ({
   externalId,
   feedMessageId: externalId,
   feedReceivedAt: new Date("2026-10-04T09:00:00Z"),
-  kindCode: "SZ",
+  kindCode: "MB",
   documentNumber: "KIT-POSTAFIOK-1",
   electronic: false,
   issueDate: new Date("2026-10-03T00:00:00Z"),

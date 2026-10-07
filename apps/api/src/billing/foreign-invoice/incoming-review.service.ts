@@ -25,6 +25,7 @@ import {
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
   MAILBOX_ITEM_PREFIX,
+  MAILBOX_KIND_CODE,
   mailboxOnlyPairings,
   mailboxOnlyPaidItems,
   mailboxPdfCandidates,
@@ -262,6 +263,13 @@ export class IncomingReviewService {
       where: { id: documentId },
       select: { receivedAt: true },
     });
+    /*
+      A sor a FÁJLT HORDOZÓ dokumentumra mutasson (barracuda visszamérése): a
+      PDF-út és a banki párosítás is ezen a kulcson megy, és összevont
+      jelöltnél a fájl az eredetinél áll. A párosítás-térkép az aliasokat is
+      ismeri, tehát a fizetettség így is a bankból jön.
+    */
+    const { pdfDocumentId } = await this.sourceOf(pairing);
     const verified = await this.database.$transaction(async (tx) => {
       const taken = await tx.incomingBillingDocument.findUnique({
         where: {
@@ -279,7 +287,7 @@ export class IncomingReviewService {
           // nincs feed-üzenet: a forrás maga a postafiókos dokumentum
           feedMessageId: documentId,
           feedReceivedAt: document?.receivedAt ?? now,
-          kindCode: "SZ",
+          kindCode: MAILBOX_KIND_CODE,
           documentNumber: values.documentNumber!,
           electronic: false,
           issueDate: asDate(values.issueDate)!,
@@ -299,8 +307,8 @@ export class IncomingReviewService {
           // a fizetés a banki párosításból jön, mint a postafiókos sornál
           paymentsKnown: false,
           paidAmount: new Prisma.Decimal(0),
-          sourceDocumentId: documentId,
-          hasPdf: true,
+          sourceDocumentId: pdfDocumentId ?? documentId,
+          hasPdf: pdfDocumentId !== null,
         },
       });
       const reading = await tx.incomingDocumentReading.update({
@@ -462,10 +470,13 @@ export class IncomingReviewService {
    */
   private async sourceOf(pairing: DocumentPairing): Promise<{
     pdf: Uint8Array | null;
+    /** a PDF-et ténylegesen hordozó dokumentum (összevont jelöltnél az eredeti) */
+    pdfDocumentId: string | null;
     adapter: SupplierInvoiceImportResult | null;
     sender: string | null;
   }> {
     let pdf: Uint8Array | null = null;
+    let pdfDocumentId: string | null = null;
     let adapter: SupplierInvoiceImportResult | null = null;
     let sender: string | null = null;
     for (const id of mailboxPdfCandidates(pairing.document)) {
@@ -479,10 +490,12 @@ export class IncomingReviewService {
         (row.importResult as unknown as SupplierInvoiceImportResult | null) ??
         null;
       const bytes = Buffer.from(row.content);
-      if (!pdf && bytes.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC))
+      if (!pdf && bytes.subarray(0, PDF_MAGIC.length).equals(PDF_MAGIC)) {
         pdf = new Uint8Array(bytes);
+        pdfDocumentId = id;
+      }
     }
-    return { pdf, adapter, sender };
+    return { pdf, pdfDocumentId, adapter, sender };
   }
 
   /**

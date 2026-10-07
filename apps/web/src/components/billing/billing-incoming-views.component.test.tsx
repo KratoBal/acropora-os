@@ -261,6 +261,8 @@ describe("the incoming list", () => {
         id: "mailbox:mail-amblard",
         origin: "MAILBOX",
         review: "TO_REVIEW",
+        kindCode: "MB",
+        kindLabel: "Postafiókos számla",
         documentNumber: "F2602896",
         invoiceFormat: null,
         supplierName: "",
@@ -284,7 +286,7 @@ describe("the incoming list", () => {
     urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
     render(<BillingDocumentListPage />);
     const row = await screen.findByRole("row", {
-      name: /F2602896, név nélkül, postafiókból, ellenőrizendő, ellenőrzés megnyitása$/,
+      name: /Bejövő postafiókos számla F2602896, név nélkül, postafiókból, ellenőrizendő, ellenőrzés megnyitása$/,
     });
     const cells = within(row);
     expect(cells.getByText("Normál · Postafiókból")).toBeInTheDocument();

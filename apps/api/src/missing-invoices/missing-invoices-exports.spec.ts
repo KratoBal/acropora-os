@@ -287,6 +287,20 @@ describe("the accountant package marks mailbox-only invoices", () => {
     assert.ok(!text.includes("Ellenőrizendő"));
   });
 
+  it("a reading stored under the merged candidate's alias still counts", async () => {
+    const { missing } = service({
+      debits: [debit("2026-08-03", 1000, "Szállító Kft.")],
+      documents: [
+        document({ id: "mb-f", gross: D(1000), aliasIds: ["mb-alias"] }),
+      ],
+      files: { "mb-f": await pdfOfPages(1) },
+      readings: new Map([["mb-alias", reading("VERIFIED")]]),
+    });
+    const { content } = await missing.accountantPackage("2026-08");
+    const text = (await pdfTextLines(new Uint8Array(content))).join(" ");
+    assert.ok(text.includes("ellenőrzött adat: nettó 81.30 EUR"), text);
+  });
+
   it("an invoice the Számlázz.hu feed also has is not marked", async () => {
     const text = await cover({
       feed: [{ sourceDocumentId: null, documentNumber: "SZ-mb-f" }],

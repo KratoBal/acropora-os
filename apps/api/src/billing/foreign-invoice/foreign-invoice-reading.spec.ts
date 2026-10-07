@@ -228,9 +228,9 @@ describe("readForeignInvoice", () => {
     assert.equal(sources.issueDate, "PAIRING");
   });
 
-  it("warns when the gross differs from the bank debits in the same currency", () => {
+  it("warns when the gross read from the text differs from the bank debits in the same currency", () => {
     const { warnings } = readForeignInvoice({
-      lines: NL_REVERSE,
+      lines: [...NL_REVERSE, "Amount due 250.00 EUR"],
       adapter: null,
       pairing: pairing({
         gross: "250.00",
@@ -239,6 +239,42 @@ describe("readForeignInvoice", () => {
     });
     assert.equal(warnings.length, 1);
     assert.match(warnings[0]!, /eltér a banki terheléstől/);
+  });
+
+  it("does not compare the pairing's own gross with the debit (a card payment's gross IS the debit)", () => {
+    const { values, sources, warnings } = readForeignInvoice({
+      lines: NL_REVERSE,
+      adapter: null,
+      pairing: pairing({
+        gross: "250.00",
+        debits: [{ amount: "260.00", currency: "EUR" }],
+      }),
+    });
+    assert.equal(values.grossAmount, "250.00");
+    assert.equal(sources.grossAmount, "PAIRING");
+    assert.deepEqual(warnings, []);
+  });
+
+  it("a supplier adapter that saw a proforma is not taken over", () => {
+    const adapter = {
+      supplier: { name: "Díjbekérő GmbH", vatId: "DE222222222", country: "DE" },
+      documentKind: "PROFORMA",
+      invoiceNumber: "PF-1",
+      invoiceDate: "2026-09-01",
+      dueDate: null,
+      currency: "EUR",
+      netTotal: 999,
+      lines: [],
+    } as unknown as SupplierInvoiceImportResult;
+    const { values, sources, warnings } = readForeignInvoice({
+      lines: null,
+      adapter,
+      pairing: pairing(),
+    });
+    assert.equal(values.netAmount, null);
+    assert.equal(values.documentNumber, "PAIR-1");
+    assert.ok(!Object.values(sources).includes("ADAPTER"));
+    assert.ok(warnings.some((w) => /díjbekérőnek látta/.test(w)));
   });
 
   it("does not compare with a debit in another currency", () => {

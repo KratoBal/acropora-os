@@ -13,7 +13,20 @@ import type {
 import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
-import { externalKindLabel } from "./billing-document-list.js";
+import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
+
+/**
+ * A POSTAFIÓKOS SZÁMLA SAJÁT TÍPUSKÓDJA (kártya e4c3b0fb, barracuda
+ * visszamérése, acrobot 27623). Nem `SZ`: a begyűjtés `FEED_BASE_KINDS`
+ * listája (`SZ`, `ES`, `VS`) a Számlázz.hu sorok számait ismert számnak veszi
+ * más PDF-ek felismerésénél, és ez a sor nem a Számlázz.hu-ból jön.
+ */
+export const MAILBOX_KIND_CODE = "MB";
+
+export const externalKindLabel = (kindCode: string): string =>
+  kindCode.toUpperCase() === MAILBOX_KIND_CODE
+    ? "Postafiókos számla"
+    : feedKindLabel(kindCode);
 import type {
   IncomingPayment,
   IncomingVatSummary,
@@ -346,8 +359,8 @@ function mailboxListItem(
     // jóváhagyás után a sor a feedből jön, ide csak ellenőrizetlen jut
     review: "TO_REVIEW",
     documentNumber: document.number,
-    kindCode: "SZ",
-    kindLabel: externalKindLabel("SZ"),
+    kindCode: MAILBOX_KIND_CODE,
+    kindLabel: externalKindLabel(MAILBOX_KIND_CODE),
     invoiceFormat: null,
     cancelled: false,
     supplierName: document.supplierName,

@@ -256,8 +256,16 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   const lines = input.lines?.filter((line) => line.trim()) ?? [];
   const hasText = lines.length > 0;
 
-  // 1. a beszállítói illesztő
-  if (adapter) {
+  /*
+    1. a beszállítói illesztő. A díjbekérőt is ez olvassa (Aquarioom,
+    `documentKind: PROFORMA`): abból jóváhagyott számla-sor nem lehet, tehát az
+    adatát nem vesszük át (barracuda visszamérése, acrobot 27623).
+  */
+  if (adapter?.documentKind === "PROFORMA")
+    warnings.push(
+      "A beszállítói olvasó díjbekérőnek látta a PDF-et: az adatait nem vettük át.",
+    );
+  if (adapter && adapter.documentKind !== "PROFORMA") {
     set("supplierName", adapter.supplier.name, "ADAPTER");
     set("supplierEuTaxNumber", adapter.supplier.vatId, "ADAPTER");
     set("documentNumber", adapter.invoiceNumber, "ADAPTER");
@@ -328,7 +336,12 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     sources.vatAmount = sources.grossAmount === "PAIRING" ? "PAIRING" : "TEXT";
   }
 
-  if (gross !== null && values.currency) {
+  /*
+    A BANKI EGYEZTETÉS CSAK A SZÖVEGBŐL OLVASOTT BRUTTÓRA: a párosítás bruttója
+    kártyás fizetésnél MAGA A TERHELÉS (`cardPayment`), azzal összevetni
+    önmagához mérés, ami mindig egyezik (barracuda visszamérése).
+  */
+  if (gross !== null && sources.grossAmount === "TEXT" && values.currency) {
     const same = pairing.debits.filter(
       (debit) => debit.currency.toUpperCase() === values.currency,
     );

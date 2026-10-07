@@ -702,13 +702,22 @@ export class MissingInvoicesService {
     const foundDocuments = found.flatMap(
       (item) => computed.outcomes.get(item.id)?.documents ?? [],
     );
+    // az olvasat a fő azonosítón áll, de egy összevont jelöltnél az alias vagy
+    // az eredeti is hordozhatja (barracuda visszamérése)
+    const idsOf = (document: CandidateDocument) => [
+      document.id,
+      ...(document.aliasIds ?? []),
+      ...(document.originalId ? [document.originalId] : []),
+    ];
     const { feed, readings } = await this.repository.packageReadings(
-      foundDocuments.map((document) => document.id),
+      foundDocuments.flatMap(idsOf),
     );
     const mailboxOnly = notInFeedTest(feed);
     const dataNoteOf = (document: CandidateDocument) => {
       if (!mailboxOnly(document)) return {};
-      const reading = readings.get(document.id);
+      const reading = idsOf(document)
+        .map((id) => readings.get(id))
+        .find(Boolean);
       return {
         dataNote: packageDataNote(
           reading

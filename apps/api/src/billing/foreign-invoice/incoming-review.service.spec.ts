@@ -328,7 +328,7 @@ describe("approval", () => {
         "mail-1",
         "mail-1",
         true,
-        "SZ",
+        "MB",
         "KIT-2026-0042",
         "EUR",
         "81.3",
@@ -355,6 +355,28 @@ describe("approval", () => {
       .manualFields;
     assert.ok(!manual.includes("netAmount"), manual.join(","));
     assert.ok(manual.includes("supplierEuTaxNumber"), manual.join(","));
+  });
+
+  it("a merged candidate's invoice row points at the document that holds the PDF", async () => {
+    const merged = pairing({
+      aliasIds: ["upload-1"],
+      originalId: "upload-1",
+    });
+    // a fő dokumentumnak nincs PDF-je, az eredetinek van
+    const h = harness({
+      pairings: [merged],
+      files: { "upload-1": await textPdf(INVOICE) },
+    });
+    await h.service.approve("mailbox:mail-1", COMPLETE, "user-1");
+    const row = h.feed.at(-1)!;
+    assert.equal(row.externalId, "mail-1");
+    assert.equal(row.sourceDocumentId, "upload-1");
+    assert.equal(row.hasPdf, true);
+    // a postafiókos sor ezután sem marad a listán
+    assert.deepEqual(
+      mailboxOnlyPaidItems(h.feed as never, new Map([["mail-1", merged]])),
+      [],
+    );
   });
 
   it("a second approval is 409", async () => {
