@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
+
+import { MedusaAdminHttpError } from "../../integrations/medusa/medusa-admin.client.js";
 import type { AuthenticatedUser, WebshopOrderDetail } from "@acropora/types";
 
 import { WebshopOrderTransferService } from "./webshop-order-transfer.service.js";
@@ -263,5 +265,42 @@ describe("closing the payment in the shop", () => {
     const ok = setup({ receipt: true });
     await ok.service.syncShop("order_55", NOW);
     assert.equal(ok.shopCalls.length, 1);
+  });
+
+  /*
+    A VALÓDI HIBA ALAKJA (stage-próba 2026-10-07, #56): a kliens
+    MedusaAdminHttpError-t dob, a törzsben JSON-nal. A kezelő mondatában a
+    webshop mondata áll, nem a hibakód és a JSON. MI PIROSÍT: a nyers üzenet
+    (MEDUSA_ADMIN_HTTP_409 és a JSON) visszakerül a mondatba.
+  */
+  it("the operator gets the shop's own sentence, not the raw HTTP error", async () => {
+    const shopSentence =
+      "Az összeg eltér: a rendelés 5950 HUF, a beérkezés 5900.";
+    const cases: Array<[MedusaAdminHttpError, string]> = [
+      [
+        new MedusaAdminHttpError(
+          409,
+          JSON.stringify({ type: "not_allowed", message: shopSentence }),
+        ),
+        shopSentence,
+      ],
+      [new MedusaAdminHttpError(409, "<html>nope</html>"), "HTTP 409"],
+      [
+        new MedusaAdminHttpError(503, "upstream down"),
+        "a webshop nem érhető el (HTTP 503)",
+      ],
+    ];
+    for (const [error, tail] of cases) {
+      const failing = setup({ receipt: true, shop: error });
+      await assert.rejects(failing.service.syncShop("order_55", NOW), (e) => {
+        const message = (e as Error).message;
+        assert.equal(
+          message,
+          `A beérkezés az OS-ben rögzítve van, de a webshop fizetése nem zárult le: ${tail}`,
+        );
+        assert.equal(/MEDUSA_ADMIN_HTTP|\{/.test(message), false);
+        return true;
+      });
+    }
   });
 });
