@@ -130,6 +130,7 @@ const member = (
   id,
   role: "SERVICE",
   isActive: true,
+  permissionOverrides: [],
   customerId: null,
   supplierId: null,
   displayName: `Teljes ${id}`,

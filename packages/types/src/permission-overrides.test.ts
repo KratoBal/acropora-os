@@ -1,0 +1,399 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { PERMISSIONS, ROLE_PERMISSIONS, type UserRole } from "./auth.js";
+import {
+  ALL_PERMISSION_VALUES,
+  applyPermissionOverrides,
+  normalizePermissionOverrides,
+  OWNER_GRANTED_PERMISSIONS,
+  permissionOverrideChangeProblem,
+  MANAGE_VIEW_PAIRS,
+  permissionsWithOverrides,
+} from "./permission-overrides.js";
+
+/**
+ * A FELHASZNÁLÓNKÉNTI ELTÉRÉS SZABÁLYAI (Balázs, 2026-10-06).
+ *
+ * MI PIROSÍT: ha az elvétel nem nyer; ha egy ismeretlen jog-név jogot adna;
+ * ha a számlázás a pénzügyet követné az eltérésnél; ha partner kaphatna jogot;
+ * ha nem tulajdonos adhatna csak-tulajdonosi jogot.
+ */
+describe("applyPermissionOverrides", () => {
+  it("eltérés nélkül PONTOSAN a sablon, sorrendre is, minden szerepre", () => {
+    // a sorrend is mérce: a feloldó integrációs tesztje a sablonnal veti
+    // össze, és az ADMIN sablonjában a számlázás a lista végén áll
+    for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[])
+      assert.deepEqual(
+        permissionsWithOverrides(role, []),
+        ROLE_PERMISSIONS[role],
+        role,
+      );
+  });
+
+  it("a megadott jog a sablon után áll, a sablon sorrendje nem mozdul", () => {
+    const result = permissionsWithOverrides("VIEWER", [
+      { permission: PERMISSIONS.SERVICE_MANAGE, effect: "GRANT" },
+    ]);
+    assert.deepEqual(result, [
+      ...ROLE_PERMISSIONS.VIEWER,
+      PERMISSIONS.SERVICE_MANAGE,
+    ]);
+  });
+
+  it("megad és elvesz", () => {
+    const result = permissionsWithOverrides("VIEWER", [
+      { permission: PERMISSIONS.SERVICE_MANAGE, effect: "GRANT" },
+      { permission: PERMISSIONS.DASHBOARD_VIEW, effect: "REVOKE" },
+    ]);
+    assert.ok(result.includes(PERMISSIONS.SERVICE_MANAGE));
+    assert.ok(!result.includes(PERMISSIONS.DASHBOARD_VIEW));
+  });
+
+  it("ugyanarra a jogra az elvétel nyer", () => {
+    const result = applyPermissionOverrides(
+      [],
+      [
+        { permission: PERMISSIONS.SERVICE_VIEW, effect: "GRANT" },
+        { permission: PERMISSIONS.SERVICE_VIEW, effect: "REVOKE" },
+      ],
+    );
+    assert.equal(result.includes(PERMISSIONS.SERVICE_VIEW), false);
+  });
+
+  it("ismeretlen jog-név és ismeretlen hatás nem ad semmit", () => {
+    assert.deepEqual(
+      applyPermissionOverrides(
+        [],
+        [
+          { permission: "nincs.ilyen", effect: "GRANT" },
+          { permission: PERMISSIONS.SERVICE_VIEW, effect: "MAYBE" },
+        ],
+      ),
+      [],
+    );
+  });
+
+  it("a számlázás a pénzügytől külön vehető el és adható (Balázs, 20:23)", () => {
+    const elvett = permissionsWithOverrides("MANAGER", [
+      { permission: PERMISSIONS.FINANCE_VIEW, effect: "REVOKE" },
+    ]);
+    assert.ok(!elvett.includes(PERMISSIONS.FINANCE_VIEW));
+    assert.ok(elvett.includes(PERMISSIONS.BILLING_VIEW));
+    const csakSzamlazas = permissionsWithOverrides("SERVICE", [
+      { permission: PERMISSIONS.BILLING_VIEW, effect: "GRANT" },
+    ]);
+    assert.ok(csakSzamlazas.includes(PERMISSIONS.BILLING_VIEW));
+    assert.ok(!csakSzamlazas.includes(PERMISSIONS.FINANCE_VIEW));
+  });
+});
+
+describe("OWNER_GRANTED_PERMISSIONS", () => {
+  it("a vezetői sablonból kimaradt jogok, a beállításokkal és a felhasználókkal", () => {
+    assert.ok(OWNER_GRANTED_PERMISSIONS.includes(PERMISSIONS.USERS_MANAGE));
+    assert.ok(OWNER_GRANTED_PERMISSIONS.includes(PERMISSIONS.SETTINGS_MANAGE));
+    assert.ok(!OWNER_GRANTED_PERMISSIONS.includes(PERMISSIONS.SERVICE_VIEW));
+    for (const permission of OWNER_GRANTED_PERMISSIONS)
+      assert.ok(!ROLE_PERMISSIONS.MANAGER.includes(permission), permission);
+  });
+});
+
+describe("permissionOverrideChangeProblem", () => {
+  const internal = { customerId: null, supplierId: null };
+  const grant = (permission: (typeof ALL_PERMISSION_VALUES)[number]) => ({
+    permission,
+    effect: "GRANT" as const,
+  });
+  const revoke = (permission: (typeof ALL_PERMISSION_VALUES)[number]) => ({
+    permission,
+    effect: "REVOKE" as const,
+  });
+
+  it("belső kollégának ADMIN adhat nem csak-tulajdonosi jogot", () => {
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        target: { role: "VIEWER", ...internal },
+        before: [],
+        after: [grant(PERMISSIONS.SERVICE_MANAGE)],
+      }),
+      null,
+    );
+  });
+
+  it("csak-tulajdonosi jogot csak tulajdonos ad", () => {
+    const input = {
+      target: { role: "SERVICE" as const, ...internal },
+      before: [],
+      after: [grant(PERMISSIONS.USERS_MANAGE)],
+    };
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        ...input,
+      }) ?? "",
+      /csak tulajdonos/,
+    );
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        ...input,
+      }),
+      null,
+    );
+  });
+
+  it("a változatlanul visszamentett tulajdonosi jog nem adás", () => {
+    const kapott = [grant(PERMISSIONS.USERS_MANAGE)];
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        target: { role: "SERVICE", ...internal },
+        before: kapott,
+        // a tulajdonosi sor változatlan, mellé egy nem tulajdonosi jog jön
+        after: [...kapott, grant(PERMISSIONS.SERVICE_MANAGE)],
+      }),
+      null,
+    );
+  });
+
+  it("a sablonban már meglévő jog megadása nem adás (nem kell hozzá tulajdonos)", () => {
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        target: { role: "ADMIN", ...internal },
+        before: [],
+        after: [grant(PERMISSIONS.USERS_MANAGE)],
+      }),
+      null,
+    );
+  });
+
+  it("egy elvétel törlése is adás: tulajdonosi jogot így sem ad vissza más", () => {
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        target: { role: "ADMIN", ...internal },
+        before: [revoke(PERMISSIONS.USERS_MANAGE)],
+        after: [],
+      }) ?? "",
+      /csak tulajdonos/,
+    );
+  });
+
+  it("partner egyénileg sem kap jogot, elvenni és visszaadni lehet", () => {
+    const partner = {
+      role: "PARTNER_SERVICE" as const,
+      customerId: "c1",
+      supplierId: null,
+    };
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: partner,
+        before: [],
+        after: [grant(PERMISSIONS.USERS_MANAGE)],
+      }) ?? "",
+      /Partner/,
+    );
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: partner,
+        before: [],
+        // a partner sablonja a kezelést is viseli: a megtekintés csak vele
+        // együtt vehető el
+        after: [
+          revoke(PERMISSIONS.SERVICE_VIEW),
+          revoke(PERMISSIONS.SERVICE_MANAGE),
+        ],
+      }),
+      null,
+    );
+    // belső szerepű, de partnerhez kötött fiók is partner
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: { role: "SERVICE", customerId: "c1", supplierId: null },
+        before: [],
+        after: [grant(PERMISSIONS.FINANCE_VIEW)],
+      }) ?? "",
+      /Partner/,
+    );
+  });
+
+  it("gépi fiók, és tulajdonos más által: tiltva", () => {
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: { role: "CONTENT_AGENT", ...internal },
+        before: [],
+        after: [revoke(PERMISSIONS.CONTENT_VIEW)],
+      }) ?? "",
+      /Gépi/,
+    );
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "ADMIN",
+        self: false,
+        target: { role: "OWNER", ...internal },
+        before: [],
+        after: [revoke(PERMISSIONS.SERVICE_VIEW)],
+      }) ?? "",
+      /Tulajdonos jogait/,
+    );
+  });
+
+  it("nem tulajdonos a saját fiókjának nem ad jogot, elvenni magától lehet", () => {
+    // az ADMIN sablonja minden jogot tartalmaz: nála a saját elvétel TÖRLÉSE
+    // az egyetlen út a bővítéshez, és az is adás
+    const admin = {
+      actorRole: "ADMIN" as const,
+      self: true,
+      target: { role: "ADMIN" as const, ...internal },
+    };
+    assert.match(
+      permissionOverrideChangeProblem({
+        ...admin,
+        before: [revoke(PERMISSIONS.SERVICE_VIEW)],
+        after: [],
+      }) ?? "",
+      /saját fiókodnak/,
+    );
+    // elvenni magától lehet
+    assert.equal(
+      permissionOverrideChangeProblem({
+        ...admin,
+        before: [],
+        after: [
+          revoke(PERMISSIONS.SERVICE_VIEW),
+          revoke(PERMISSIONS.SERVICE_MANAGE),
+        ],
+      }),
+      null,
+    );
+    // ugyanez más fiókján: nincs akadály
+    assert.equal(
+      permissionOverrideChangeProblem({
+        ...admin,
+        self: false,
+        before: [revoke(PERMISSIONS.SERVICE_VIEW)],
+        after: [],
+      }),
+      null,
+    );
+    // szűkebb sablonnál a megadás is: a szabály a szerepre nem néz
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "SERVICE",
+        self: true,
+        target: { role: "SERVICE", ...internal },
+        before: [],
+        after: [grant(PERMISSIONS.FINANCE_VIEW)],
+      }) ?? "",
+      /saját fiókodnak/,
+    );
+    // tulajdonost nem érinti
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: true,
+        target: { role: "OWNER", ...internal },
+        before: [revoke(PERMISSIONS.SERVICE_VIEW)],
+        after: [],
+      }),
+      null,
+    );
+  });
+
+  it("kezelés megtekintés nélkül nem menthető, együtt igen", () => {
+    const input = {
+      actorRole: "OWNER" as const,
+      self: false,
+      target: { role: "VIEWER" as const, ...internal },
+      before: [],
+    };
+    // a VIEWER sablonjában a megtekintés megvan: elvenni, a kezelést adni nem
+    assert.match(
+      permissionOverrideChangeProblem({
+        ...input,
+        after: [
+          revoke(PERMISSIONS.SERVICE_VIEW),
+          grant(PERMISSIONS.SERVICE_MANAGE),
+        ],
+      }) ?? "",
+      /Kezelés csak megtekintéssel/,
+    );
+    assert.equal(
+      permissionOverrideChangeProblem({
+        ...input,
+        after: [grant(PERMISSIONS.SERVICE_MANAGE)],
+      }),
+      null,
+    );
+    // a sablonból örökölt kezelés mellől sem vehető el egyedül a megtekintés
+    assert.match(
+      permissionOverrideChangeProblem({
+        ...input,
+        target: { role: "SERVICE", ...internal },
+        after: [revoke(PERMISSIONS.SERVICE_VIEW)],
+      }) ?? "",
+      /service\.manage mellé service\.view/,
+    );
+  });
+
+  it("a kezelés-megtekintés párok a jogokból jönnek, és egyik sablon sem sérti", () => {
+    assert.equal(MANAGE_VIEW_PAIRS.length, 12);
+    assert.ok(
+      !MANAGE_VIEW_PAIRS.some(
+        ([manage]) => manage === PERMISSIONS.USERS_MANAGE,
+      ),
+    );
+    for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[])
+      for (const [manage, view] of MANAGE_VIEW_PAIRS)
+        assert.ok(
+          !ROLE_PERMISSIONS[role].includes(manage) ||
+            ROLE_PERMISSIONS[role].includes(view),
+          `${role}: ${manage} ${view} nélkül`,
+        );
+  });
+
+  it("változás nélkül soha nincs akadály", () => {
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "VIEWER",
+        self: false,
+        target: { role: "CONTENT_AGENT", ...internal },
+        before: [],
+        after: [],
+      }),
+      null,
+    );
+  });
+});
+
+describe("normalizePermissionOverrides", () => {
+  it("a felesleges eltérés kimarad, ugyanarra a jogra a későbbi nyer", () => {
+    assert.deepEqual(
+      normalizePermissionOverrides("SERVICE", [
+        { permission: PERMISSIONS.SERVICE_VIEW, effect: "GRANT" },
+        { permission: PERMISSIONS.USERS_MANAGE, effect: "REVOKE" },
+        { permission: PERMISSIONS.FINANCE_VIEW, effect: "REVOKE" },
+        { permission: PERMISSIONS.FINANCE_VIEW, effect: "GRANT" },
+      ]),
+      ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.FINANCE_VIEW)
+        ? []
+        : [{ permission: PERMISSIONS.FINANCE_VIEW, effect: "GRANT" }],
+    );
+  });
+});

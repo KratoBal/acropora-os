@@ -1301,3 +1301,21 @@ export type {
   MortalitySupplierOption,
   UpdateMortalityInput,
 } from "./mortality.js";
+export {
+  ALL_PERMISSION_VALUES,
+  applyPermissionOverrides,
+  isPermission,
+  MANAGE_VIEW_PAIRS,
+  normalizePermissionOverrides,
+  OWNER_GRANTED_PERMISSIONS,
+  PERMISSION_OVERRIDE_EFFECTS,
+  permissionOverrideChangeProblem,
+  permissionsWithOverrides,
+} from "./permission-overrides.js";
+export type {
+  PermissionOverride,
+  PermissionOverrideEffect,
+  PermissionOverrideTarget,
+  UpdateUserPermissionOverridesInput,
+  UserPermissionOverview,
+} from "./permission-overrides.js";
