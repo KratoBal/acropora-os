@@ -1,6 +1,7 @@
 import { Prisma } from "@acropora/database";
 import {
   hasPermission,
+  parseQuoteRichText,
   PERMISSIONS,
   type AuthenticatedUser,
   type QuoteCustomerDto,
@@ -10,10 +11,14 @@ import {
   type QuoteInternalVersion,
   type QuoteInternalDto,
   type QuoteInternalCostsDto,
+  type QuoteBomLineDto,
   type QuoteRichText,
 } from "@acropora/types";
-import type { QuoteListRow } from "./quotes.repository.js";
-export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
+import type { QuoteListRow, QuoteRow } from "./quotes.repository.js";
+export function quoteListItemDto(
+  row: QuoteListRow,
+  netTotals: ReadonlyMap<string, string> = new Map(),
+): QuoteListItemDto {
   const version = row.versions[0];
   return {
     id: row.id,
@@ -22,6 +27,8 @@ export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
     status: row.status,
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
+    customerName: row.customer?.displayName ?? null,
+    createdByName: row.createdBy?.displayName ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     latestVersion: version
@@ -35,77 +42,21 @@ export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
             QuoteListItemDto["latestVersion"]
           >["priceDisplay"],
           publishedAt: version.publishedAt?.toISOString() ?? null,
+          netTotal: netTotals.get(version.id) ?? "0.0000",
         }
       : null,
   };
 }
-export const QUOTE_DETAIL_INCLUDE = {
-  versions: {
-    orderBy: { versionNumber: "asc" },
-    include: {
-      blocks: {
-        orderBy: { position: "asc" },
-        include: { items: { orderBy: { position: "asc" } } },
-      },
-      bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
-      milestones: { orderBy: { position: "asc" } },
-    },
-  },
-  events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
-} satisfies Prisma.QuoteInclude;
-export type QuoteRow = Prisma.QuoteGetPayload<{
-  include: typeof QUOTE_DETAIL_INCLUDE;
-}>;
+export type { QuoteRow } from "./quotes.repository.js";
 const record = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
     : null;
 /** Read-side allowlist: no arbitrary JSON is reflected into the customer or cost-free DTO.
- * P1 owns editor validation; P0 owns safe serialization even of legacy/untrusted JSON. */
-export function quoteText(value: unknown, depth = 0): QuoteRichText | null {
-  const n = record(value);
-  if (!n || depth > 24 || typeof n.type !== "string") return null;
-  const types = [
-    "doc",
-    "paragraph",
-    "text",
-    "bulletList",
-    "orderedList",
-    "listItem",
-    "hardBreak",
-  ] as const;
-  if (!types.includes(n.type as (typeof types)[number])) return null;
-  if (
-    Object.keys(n).some(
-      (k) => !["type", "text", "marks", "content"].includes(k),
-    )
-  )
-    return null;
-  const result: QuoteRichText = { type: n.type as QuoteRichText["type"] };
-  if (result.type === "text") {
-    if (typeof n.text !== "string") return null;
-    result.text = n.text;
-    if (Array.isArray(n.marks)) {
-      const marks = n.marks.map((m) => {
-        const r = record(m);
-        return r &&
-          Object.keys(r).every((k) => k === "type") &&
-          (r.type === "bold" || r.type === "italic")
-          ? { type: r.type as "bold" | "italic" }
-          : null;
-      });
-      if (marks.some((m) => m === null)) return null;
-      if (marks.length)
-        result.marks = marks as NonNullable<QuoteRichText["marks"]>;
-    }
-  }
-  if (Array.isArray(n.content)) {
-    const children = n.content.map((c) => quoteText(c, depth + 1));
-    if (children.some((c) => c === null)) return null;
-    result.content = children as QuoteRichText[];
-  }
-  return result;
-}
+ * The node list is the shared one (`packages/types` quote-text-schema, P1 decision 5),
+ * the same the editor and the write validator use. */
+export const quoteText = (value: unknown): QuoteRichText | null =>
+  parseQuoteRichText(value);
 function blockContent(kind: string, value: unknown) {
   if (kind !== "IMAGE") return quoteText(value);
   const v = record(value);
@@ -200,6 +151,41 @@ function versionDto(v: QuoteRow["versions"][number]): QuoteCustomerVersion {
     })),
   };
 }
+/**
+ * THE BOM WITHOUT COSTS (P1; the plan's FÜGGETLEN VISSZAMÉRÉS P1 point): a
+ * quote writer sees what the line is made of, never a cost, supplier or
+ * internal note. Positive allowlist, like the other outputs.
+ */
+function bomLineDto(
+  b: QuoteRow["versions"][number]["bomItems"][number],
+): QuoteBomLineDto {
+  return {
+    id: b.id,
+    quoteItemId: b.quoteItemId,
+    position: b.position,
+    kind: b.kind,
+    variantId: b.variantId,
+    customName: b.customName,
+    quantity: b.quantity.toString(),
+    unit: b.unit,
+    createdProductVariantId: b.createdProductVariantId,
+  };
+}
+/** Offered and optional net totals of a version, exact (P1). */
+function netTotals(v: QuoteRow["versions"][number]) {
+  let offered = new Prisma.Decimal(0);
+  let optional = new Prisma.Decimal(0);
+  for (const b of v.blocks)
+    for (const i of b.items) {
+      const line = i.quantity.times(i.unitNetPrice);
+      if (i.isOptional) optional = optional.plus(line);
+      else offered = offered.plus(line);
+    }
+  return {
+    netTotal: offered.toDecimalPlaces(4).toFixed(4),
+    optionalNetTotal: optional.toDecimalPlaces(4).toFixed(4),
+  };
+}
 function internalVersionDto(
   v: QuoteRow["versions"][number],
 ): QuoteInternalVersion {
@@ -209,6 +195,8 @@ function internalVersionDto(
     templateId: v.templateId,
     createdFromVersionId: v.createdFromVersionId,
     publishedAt: v.publishedAt?.toISOString() ?? null,
+    ...netTotals(v),
+    bomItems: v.bomItems.map(bomLineDto),
     blocks: dto.blocks.map((b, index) => ({
       ...b,
       sourceSnippetId: v.blocks[index]!.sourceSnippetId,
@@ -238,6 +226,9 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
     createdById: row.createdById,
+    customerName: row.customer?.displayName ?? null,
+    ownerName: row.owner?.displayName ?? null,
+    createdByName: row.createdBy?.displayName ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     versions: row.versions.map(internalVersionDto),
@@ -258,14 +249,7 @@ function withCosts(row: QuoteRow): QuoteInternalCostsDto {
     versions: row.versions.map((v) => ({
       ...internalVersionDto(v),
       bomItems: v.bomItems.map((b) => ({
-        id: b.id,
-        quoteItemId: b.quoteItemId,
-        position: b.position,
-        kind: b.kind,
-        variantId: b.variantId,
-        customName: b.customName,
-        quantity: b.quantity.toString(),
-        unit: b.unit,
+        ...bomLineDto(b),
         unitCost: b.unitCost?.toString() ?? null,
         costCurrency: b.costCurrency,
         costOriginal: b.costOriginal?.toString() ?? null,
@@ -276,7 +260,6 @@ function withCosts(row: QuoteRow): QuoteInternalCostsDto {
         supplierId: b.supplierId,
         supplierSku: b.supplierSku,
         internalNote: b.internalNote,
-        createdProductVariantId: b.createdProductVariantId,
       })),
     })),
   };

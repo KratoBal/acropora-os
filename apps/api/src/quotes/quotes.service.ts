@@ -10,11 +10,12 @@ import {
   hasPermission,
   PERMISSIONS,
   type AuthenticatedUser,
-  type CreateQuoteInput,
+  type CreateQuoteFromTemplateInput,
   type UpdateQuoteInput,
   type QuoteListResponse,
 } from "@acropora/types";
 import { quoteDto, quoteListItemDto } from "./quote-dto.mapper.js";
+import { templateInput } from "./quote-editor-input.js";
 import { QuotesRepository, QuoteWriteConflict } from "./quotes.repository.js";
 function permission(user: AuthenticatedUser, manage = false) {
   if (
@@ -67,9 +68,12 @@ export class QuotesService {
   ): Promise<QuoteListResponse> {
     permission(user);
     const result = await this.repository.list(page, pageSize, q);
+    const totals = await this.repository.netTotals(
+      result.items.flatMap((row) => row.versions.map((v) => v.id)),
+    );
     return {
       ...result,
-      items: result.items.map(quoteListItemDto),
+      items: result.items.map((row) => quoteListItemDto(row, totals)),
       page,
       pageSize,
     };
@@ -80,7 +84,7 @@ export class QuotesService {
     if (!row) throw new NotFoundException("Az ajánlat nem található.");
     return quoteDto(row, user);
   }
-  async create(input: CreateQuoteInput, user: AuthenticatedUser) {
+  async create(input: CreateQuoteFromTemplateInput, user: AuthenticatedUser) {
     permission(user, true);
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(input.validUntil) ||
@@ -91,6 +95,24 @@ export class QuotesService {
       throw new BadRequestException("Érvénytelen érvényességi dátum.");
     const clean = header(input);
     if (!clean.title) throw new BadRequestException("A megnevezés kötelező.");
+    // P1 decision 1: "new quote from a template" is a picker, not a template editor
+    let template:
+      | ({ id: string; priceDisplay: string } & ReturnType<
+          typeof templateInput
+        >)
+      | undefined;
+    if (input.templateId) {
+      const row = await this.repository.template(input.templateId);
+      if (!row || row.archivedAt)
+        throw new BadRequestException("A sablon nem található vagy archivált.");
+      if (!["NET", "GROSS", "BOTH"].includes(row.priceDisplay))
+        throw new BadRequestException("A sablon ár-megjelenítése hibás.");
+      template = {
+        id: row.id,
+        priceDisplay: row.priceDisplay,
+        ...templateInput(row),
+      };
+    }
     try {
       return quoteListItemDto(
         await this.repository.create(
@@ -99,9 +121,12 @@ export class QuotesService {
             title: clean.title,
             validUntil: input.validUntil,
             currency: input.currency,
-            priceDisplay: input.priceDisplay,
+            priceDisplay:
+              input.priceDisplay ??
+              (template?.priceDisplay as CreateQuoteFromTemplateInput["priceDisplay"]),
           },
           user.id,
+          template,
         ),
       );
     } catch (e) {
@@ -116,7 +141,10 @@ export class QuotesService {
     try {
       const row = await this.repository.update(id, clean, user.id);
       if (!row) throw new NotFoundException("Az ajánlat nem található.");
-      return quoteListItemDto(row);
+      return quoteListItemDto(
+        row,
+        await this.repository.netTotals(row.versions.map((v) => v.id)),
+      );
     } catch (e) {
       writeError(e);
     }
