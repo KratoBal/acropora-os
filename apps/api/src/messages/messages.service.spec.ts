@@ -48,6 +48,7 @@ const person = (
   id,
   role: "SERVICE",
   isActive: true,
+  permissionOverrides: [],
   customerId: null,
   supplierId: null,
   displayName: `Teljes ${id}`,
@@ -345,6 +346,13 @@ describe("who may message", () => {
     assert.equal(check({ customerId: "cust-1" }), false);
     assert.equal(check({ supplierId: "sup-1" }), false);
     assert.equal(check({ isActive: false }), false);
+    // a SZEMÉLY jogai döntenek (egyéni eltérés, 2026-10-06), nem a szerepe
+    assert.equal(
+      check({
+        permissionOverrides: [{ permission: "messages.use", effect: "REVOKE" }],
+      }),
+      false,
+    );
   });
 });
 

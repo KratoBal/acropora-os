@@ -257,7 +257,7 @@ export function resolvePriceSource(input: {
  * kerulout nelkul adodik ossze. Ugyanaz az indok, amiert a kliens oldalan a
  * felarak osszege `BigInt` fixpontos aritmetikaval megy.
  */
-function addSurcharge(
+export function addSurcharge(
   base: Prisma.Decimal | null,
   surcharge: Prisma.Decimal | null,
 ): Prisma.Decimal | null {

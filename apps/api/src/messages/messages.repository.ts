@@ -21,6 +21,8 @@ export interface MessagingUserRow {
   displayName: string;
   nickname: string | null;
   avatarUrl: string | null;
+  /** a személyes jog-eltérések (`mayJoinInternal` dönt belőlük); kifelé nem megy */
+  permissionOverrides: { permission: string; effect: string }[];
 }
 
 const USER_SELECT = {
@@ -32,6 +34,7 @@ const USER_SELECT = {
   displayName: true,
   nickname: true,
   avatarUrl: true,
+  permissionOverrides: { select: { permission: true, effect: true } },
 } as const;
 
 /** Aktív, partnerhez nem kötött fiók (a partneres beszélgetés belső köre). */

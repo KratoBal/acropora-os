@@ -5,10 +5,19 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
-import { ROLE_PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  permissionsWithOverrides,
+  type AuthenticatedUser,
+} from "@acropora/types";
+
 import { createHash } from "node:crypto";
 
 import { hashPassword, verifyPassword } from "../users/password.util.js";
+
+/** A személyes jog-eltérések, minden felhasználó-lekérdezéshez. */
+const WITH_OVERRIDES = {
+  permissionOverrides: { select: { permission: true, effect: true } },
+} as const;
 
 /**
  * Deliberately identical, generic message for "no such user", "user has no
@@ -51,6 +60,7 @@ export class AuthUserResolver {
           role: identity.role,
           isActive: true,
         },
+        include: WITH_OVERRIDES,
       });
       return this.toAuthenticatedUser(user);
     } catch (error) {
@@ -69,8 +79,14 @@ export class AuthUserResolver {
   ): Promise<AuthenticatedUser> {
     const normalizedEmail = identity.email.trim().toLowerCase();
     const user =
-      (await prisma.user.findUnique({ where: { id: identity.id } })) ??
-      (await prisma.user.findUnique({ where: { email: normalizedEmail } }));
+      (await prisma.user.findUnique({
+        where: { id: identity.id },
+        include: WITH_OVERRIDES,
+      })) ??
+      (await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        include: WITH_OVERRIDES,
+      }));
     if (!user || !user.isActive) {
       this.logger.warn(
         `Az autentikált identityhez nincs aktív belső User: subject=${identity.id}, emailHash=${this.emailHash(normalizedEmail)}`,
@@ -89,7 +105,10 @@ export class AuthUserResolver {
    * stores `userId` (no cached e-mail/displayName/role to fall back on).
    */
   async resolveById(userId: string): Promise<AuthenticatedUser> {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: WITH_OVERRIDES,
+    });
     if (!user || !user.isActive) {
       this.logger.warn(
         `Az autentikált sessionhöz nincs aktív belső User: userId=${userId}`,
@@ -108,6 +127,7 @@ export class AuthUserResolver {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
+      include: WITH_OVERRIDES,
     });
 
     const storedHash = user?.passwordHash ?? (await getDummyHash());
@@ -142,6 +162,8 @@ export class AuthUserResolver {
     avatarUrl: string | null;
     customerId: string | null;
     supplierId: string | null;
+    /** KÖTELEZŐ: a fordító minden lekérdezésen számon kéri az eltéréseket. */
+    permissionOverrides: readonly { permission: string; effect: string }[];
   }): AuthenticatedUser {
     return {
       id: user.id,
@@ -154,11 +176,15 @@ export class AuthUserResolver {
       supplierId: user.supplierId,
       /*
         A SZEMÉLY JOGAI, EGY HELYEN: minden belépés és minden kérés ezen a
-        függvényen át kapja a felhasználót. Ma a szerep sablonja; a
-        felhasználónkénti eltérések tárolása után ITT kerülnek rá (Balázs
-        döntése, 2026-10-06: szerepkör-sablon + egyéni eltérés).
+        függvényen át kapja a felhasználót. A szerep sablonja plusz a
+        személyes eltérései (Balázs döntése, 2026-10-06: szerepkör-sablon +
+        egyéni eltérés). Minden kérésnél frissen az adatbázisból, tehát egy
+        módosítás a következő kérésnél hat, kiléptetés nélkül.
       */
-      permissions: ROLE_PERMISSIONS[user.role],
+      permissions: permissionsWithOverrides(
+        user.role,
+        user.permissionOverrides,
+      ),
     };
   }
 

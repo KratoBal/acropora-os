@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   ConflictException,
   Injectable,
+  ServiceUnavailableException,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
@@ -113,6 +114,14 @@ export class WebshopOrderInvoiceService {
       );
     const refusal = proformaRefusal(statusOf(status?.status));
     if (refusal) throw new ConflictException(refusal);
+    /*
+      A LEVÉL-KAPU A KIÁLLÍTÁS ELŐTT (stage-próba, 2026-10-07): a díjbekérő
+      azért készül, hogy a vevő megkapja. Zárt kapunál eddig előbb kiállt egy
+      valódi bizonylat, és csak a küldés utasított el; a válasz hiba volt, a
+      bizonylat mégis megmaradt. Most semmi nem készül, és a kapu mondata jön.
+    */
+    const mailClosed = this.email.gateRefusal();
+    if (mailClosed) throw new ServiceUnavailableException(mailClosed);
 
     let proforma = (await this.repository.invoices([orderId], "PROFORMA")).get(
       orderId,

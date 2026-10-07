@@ -854,6 +854,8 @@ model User {
   unitAssignments            UserWorksheetDepartment[]
   notificationRoles          UserNotificationRole[]        @relation("UserNotificationRole")
   serviceCapabilities        UserServiceCapability[]       @relation("UserServiceCapability")
+  permissionOverrides        UserPermissionOverride[]      @relation("UserPermissionOverride")
+  permissionOverridesSet     UserPermissionOverride[]      @relation("UserPermissionOverrideSetBy")
   auditLogs                  AuditLog[]
   domainEvents               DomainEvent[]
   stockMovements             StockMovement[]
@@ -4777,6 +4779,32 @@ enum ServiceCapability {
   /// alairasat, mint a teljesites visszaigazolasat (pl. egy telephely-
   /// vezeto csak az elsot irja ala).
   COMPLETION_CERTIFICATE_UPLOAD_SIGNED
+}
+
+/// FELHASZNALONKENTI JOG-ELTERES A SZEREPKOR SABLONJATOL (Balazs dontese,
+/// 2026-10-06 19:53 UTC: szerepkor-sablon + egyeni elteres). A szemely jogai:
+/// a sablon, plusz a GRANT, minusz a REVOKE (`permissionsWithOverrides`).
+enum PermissionOverrideEffect {
+  GRANT
+  REVOKE
+}
+
+/// EGY SOR EGY JOG EGY FELHASZNALONAL. A `permission` SZOVEG, NEM ENUM: a jogok
+/// a kodban elnek (`PERMISSIONS`), es egy uj jog ne igenyeljen migraciot. Az
+/// ismeretlen nevu sort a szamitas kihagyja (egy kivezetett jog sora nem ad
+/// semmit). A modositast a `user.permissions-changed` naplosor rogziti.
+model UserPermissionOverride {
+  userId     String
+  permission String                   @db.VarChar(64)
+  effect     PermissionOverrideEffect
+  setById    String?
+  createdAt  DateTime                 @default(now())
+
+  user  User  @relation("UserPermissionOverride", fields: [userId], references: [id], onDelete: Cascade)
+  setBy User? @relation("UserPermissionOverrideSetBy", fields: [setById], references: [id], onDelete: SetNull)
+
+  @@id([userId, permission])
+  @@index([permission, effect])
 }
 
 /// LASD `UserNotificationRole` FEJLECET -- BETURE UGYANAZ AZ ALAK, MAS

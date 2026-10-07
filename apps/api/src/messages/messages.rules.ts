@@ -1,8 +1,9 @@
 import {
   hasPermission,
   MESSAGE_TEXT_MAX_LENGTH,
+  permissionsWithOverrides,
   PERMISSIONS,
-  type PermissionSubject,
+  type UserRole,
 } from "@acropora/types";
 
 /**
@@ -18,10 +19,16 @@ export function directKeyOf(a: string, b: string): string {
   return [a, b].sort().join(":");
 }
 
-export interface MessagingCandidate extends PermissionSubject {
+export interface MessagingCandidate {
+  role: UserRole;
   isActive: boolean;
   customerId: string | null;
   supplierId: string | null;
+  /**
+   * A személyes jog-eltérései (`UserPermissionOverride`). A repository mindig
+   * betölti (`USER_SELECT`); hiányukban a szerep sablonja dönt.
+   */
+  permissionOverrides?: readonly { permission: string; effect: string }[];
 }
 
 /**
@@ -41,7 +48,16 @@ export function mayJoinInternal(user: MessagingCandidate): boolean {
     user.isActive &&
     user.customerId === null &&
     user.supplierId === null &&
-    hasPermission(user, PERMISSIONS.MESSAGES_USE)
+    hasPermission(
+      {
+        role: user.role,
+        permissions: permissionsWithOverrides(
+          user.role,
+          user.permissionOverrides ?? [],
+        ),
+      },
+      PERMISSIONS.MESSAGES_USE,
+    )
   );
 }
 
