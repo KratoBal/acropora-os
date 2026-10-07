@@ -1,13 +1,9 @@
 import { Module } from "@nestjs/common";
 import { QuoteCostingService } from "./quote-costing.service.js";
-import {
-  QuoteBomItemsController,
-  QuoteEditorController,
-} from "./quote-editor.controller.js";
-import {
-  QuoteSnippetsController,
-  QuoteTemplatesController,
-} from "./quote-snippets.controller.js";
+import { QuoteBomItemsController } from "./quote-bom-items.controller.js";
+import { QuoteEditorController } from "./quote-editor.controller.js";
+import { QuoteSnippetsController } from "./quote-snippets.controller.js";
+import { QuoteTemplatesController } from "./quote-templates.controller.js";
 import { QuoteSnippetsService } from "./quote-snippets.service.js";
 import { QuoteVersionEditor } from "./quote-version-editor.js";
 import { QuotesController } from "./quotes.controller.js";

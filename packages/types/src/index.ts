@@ -1391,7 +1391,9 @@ export type {
   QuoteTemplateSummaryDto,
 } from "./quotes.js";
 export {
+  EMPTY_QUOTE_RICH_TEXT,
   parseQuoteRichText,
+  quoteRichTextFromEditor,
   QUOTE_RICH_TEXT_MARKS,
   QUOTE_RICH_TEXT_MAX_CHARS,
   QUOTE_RICH_TEXT_MAX_DEPTH,

@@ -131,6 +131,33 @@ export function quoteFixture(): QuoteRow {
             supplierSku: "private",
             internalNote: "private note",
             createdProductVariantId: null,
+            variant: null,
+          },
+          {
+            id: "bom-product",
+            quoteItemId: "item",
+            position: 1,
+            kind: "PRODUCT",
+            variantId: "var",
+            customName: null,
+            variant: {
+              sku: "ACR-1",
+              name: "Kék",
+              product: { name: "Szivattyú" },
+            },
+            quantity: d("1"),
+            unit: "db",
+            unitCost: null,
+            costCurrency: null,
+            costOriginal: null,
+            exchangeRate: null,
+            costSource: null,
+            costSourceDate: null,
+            sourcePurchaseInvoiceLineId: null,
+            supplierId: null,
+            supplierSku: null,
+            internalNote: null,
+            createdProductVariantId: null,
           },
         ],
       },
@@ -198,6 +225,7 @@ const BOM_LINE_KEYS = [
   "quoteItemId",
   "unit",
   "variantId",
+  "variantLabel",
 ];
 test("list query fetches only a bounded header/version projection and list mapper cannot expose the tree", async (t) => {
   let query: Prisma.QuoteFindManyArgs | undefined;
@@ -448,4 +476,16 @@ test("P1: the detail carries the names and the offered/optional net totals, exac
   // 2.000001 * 100000.1234 = 200000.3468001234 -> 4 places; the option apart
   assert.equal(dto.versions[0]!.netTotal, "200000.3468");
   assert.equal(dto.versions[0]!.optionalNetTotal, "0.9999");
+});
+
+test("P1: a linked variant is named on the internal detail only", () => {
+  const internal = internalQuoteDto(quoteFixture());
+  const bom = internal.versions[0]!.bomItems;
+  assert.equal(bom[0]!.variantLabel, null);
+  assert.equal(bom[1]!.variantLabel, "Szivattyú · Kék (ACR-1)");
+  assert.equal(internal.versions[0]!.blocks[0]!.items[0]!.variantLabel, null);
+  assert.doesNotMatch(
+    JSON.stringify(customerQuoteDto(quoteFixture())),
+    /variantLabel|ACR-1/,
+  );
 });
