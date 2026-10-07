@@ -99,7 +99,7 @@ export function medusaProjectionScheduleConfig(
  */
 export type ProjectionSchedulerDatabase = Pick<
   typeof prisma,
-  "product" | "externalReference"
+  "product" | "externalReference" | "unasProductSnapshot"
 >;
 
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
@@ -129,6 +129,8 @@ export interface MedusaProjectionSchedulerDeps {
   runPricing?: ProjectionRunner;
   environment?: NodeJS.ProcessEnv;
   logger?: ProjectionSchedulerLogger;
+  /** A „most”: az akció kezdete és vége az órához mér. */
+  now?: () => Date;
 }
 
 /**
@@ -158,6 +160,7 @@ export class MedusaProjectionScheduler
   private readonly runPricing: ProjectionRunner;
   private readonly environment: NodeJS.ProcessEnv;
   private readonly naplo: ProjectionSchedulerLogger;
+  private readonly now: () => Date;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
 
@@ -184,6 +187,7 @@ export class MedusaProjectionScheduler
       deps?.runPricing ?? ((ids, out) => runPricingCli(ids, out));
     this.environment = deps?.environment ?? process.env;
     this.naplo = deps?.logger ?? this.logger;
+    this.now = deps?.now ?? (() => new Date());
   }
 
   onModuleInit(): void {
@@ -212,9 +216,18 @@ export class MedusaProjectionScheduler
    */
   async runOnce(): Promise<ProjectionRunOutcome> {
     const config = medusaProjectionScheduleConfig(this.environment);
-    const esedekes = await this.esedekesAzonositok(
-      config.batchSize || DEFAULT_BATCH,
-    );
+    const limit = config.batchSize || DEFAULT_BATCH;
+    /*
+      AZ AKCIÓ HATÁRA IS ESEDÉKESSÉ TESZ (329f8a2e, acrobot 27356). Az UNAS
+      gazdájú termék ára az óra szerint vált (`isSaleActive(now)`): amikor egy
+      akció elindul vagy lejár, semmi nem íródik, tehát a forrás-időbélyegek
+      közül egyik sem mozdul, és a bolt a régi árat tartja. Az akciós termékek
+      állnak elöl, hogy egy teli kör ne szorítsa ki őket.
+    */
+    const akcio = await this.akcioHatarAzonositok();
+    const esedekes = [
+      ...new Set([...akcio, ...(await this.esedekesAzonositok(limit))]),
+    ].slice(0, limit);
     if (!esedekes.length) {
       this.uresKorNaploja();
       return "SKIPPED";
@@ -255,6 +268,52 @@ export class MedusaProjectionScheduler
       ? await this.runPricing(arazhato, kimenet)
       : 0;
     return kod === 0 && arKod === 0 ? "APPLIED" : "FAILED";
+  }
+
+  /**
+   * Azok a kötött termékek, amelyeknél egy akció kezdete vagy vége a legutóbbi
+   * vetítés ÓTA telt el. KÜLÖN LEKÉRDEZÉS, és ez a lényeg: az esedékességi
+   * lekérdezés csak a legutóbb módosított termékeket olvassa (updatedAt
+   * szerint), egy régen módosított termék akciós határa oda be sem kerülne.
+   *
+   * A jövőbeli határ nem számít, amíg el nem érkezik. A visszatekintő ablak
+   * csak a keresést szűkíti; a döntést a kötés `lastSyncedAt`-je hozza, tehát
+   * egy vetítés után a termék nem esedékes újra. Kötés nélküli termék nem
+   * kerül be: annak az ára úgysem mehet ki.
+   */
+  private async akcioHatarAzonositok(): Promise<string[]> {
+    const most = this.now();
+    const ablak = { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most };
+    const sorok = await this.db.unasProductSnapshot.findMany({
+      where: {
+        OR: [{ saleStartsAt: ablak }, { saleEndsAt: ablak }],
+        product: { isActive: true, webshopExcluded: false },
+      },
+      select: { productId: true, saleStartsAt: true, saleEndsAt: true },
+    });
+    if (!sorok.length) return [];
+
+    const kotesek = await this.db.externalReference.findMany({
+      where: {
+        ...MEDUSA_PRODUCT_REFERENCE,
+        entityId: { in: sorok.map((sor) => sor.productId) },
+      },
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    const utoljara = new Map(
+      kotesek.map((sor) => [sor.entityId, sor.lastSyncedAt]),
+    );
+
+    return sorok
+      .filter((sor) => {
+        if (!utoljara.has(sor.productId)) return false;
+        const vetitve = utoljara.get(sor.productId) ?? null;
+        const hatarok = [sor.saleStartsAt, sor.saleEndsAt].filter(
+          (hatar): hatar is Date => hatar !== null && hatar <= most,
+        );
+        return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
+      })
+      .map((sor) => sor.productId);
   }
 
   /**
@@ -415,3 +474,9 @@ const DEFAULT_BATCH = 25;
  * beolvasasa utan tudjuk eldonteni: egy naprakesz termek nem tolti a keretet.
  */
 const OVERSCAN = 4;
+/**
+ * Az akciós határ keresésének visszatekintő ablaka. Csak a keresést szűkíti;
+ * egy hétnél hosszabban álló ütemező után a régebbi határt a következő
+ * forrás-változás viszi ki.
+ */
+const AKCIO_ABLAK_MS = 7 * 24 * 60 * 60 * 1000;
