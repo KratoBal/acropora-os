@@ -32,6 +32,7 @@ vi.mock(
 const api = vi.hoisted(() => ({
   list: vi.fn(),
   incomingList: vi.fn(),
+  incomingPdf: vi.fn(),
   receipts: vi.fn(),
   cashRegisterReceipts: vi.fn().mockResolvedValue({
     day: "2026-10-03",
@@ -163,6 +164,7 @@ beforeEach(() => {
     ]),
   );
   api.receipts.mockReset().mockResolvedValue({ received: 0, items: [] });
+  api.incomingPdf.mockReset().mockResolvedValue(new Blob(["%PDF-1.4"]));
 });
 
 // MI PIROSÍT: ha a nézet nem az URL-ből jönne (frissítés után a kimenő
@@ -247,35 +249,40 @@ describe("the incoming list", () => {
   /*
     A CSAK POSTAFIÓKOS, FIZETETT SZÁMLA (kártya 096607af). MI PIROSÍT: a sor a
     formátumot írná a forrás helyett; a név nélküli rekord üres cellát kapna;
-    a nem ismert nettó számnak látszana; a sor a feed-adatlapra vinne (404).
+    a nem ismert nettó számnak látszana; a sor a feed-adatlapra vinne (404);
+    a kattintás semmit nem csinálna (Balázs jelzése, 2026-10-07), vagy nem a
+    postafiókos PDF-et nyitná új lapon; a PDF nélküli sor hibája elnyelődne.
   */
-  it("a mailbox-only paid invoice says where it comes from, and opens no feed page", async () => {
-    api.incomingList.mockResolvedValue(
-      page([
-        incoming({
-          id: "mailbox:mail-amblard",
-          origin: "MAILBOX",
-          documentNumber: "F2602896",
-          invoiceFormat: null,
-          supplierName: "",
-          supplierTaxNumber: null,
-          currency: "HUF",
-          exchangeRate: null,
-          netAmount: null,
-          vatAmount: null,
-          grossAmount: null,
-          paymentState: "PAID",
-          paidAmount: "179520",
-          lastPaymentDate: "2026-09-16",
-          paymentSource: "BANK_PAIRING",
-          bankMatch: { state: "PAIRED", reason: null, debits: [] },
-        }),
-      ]),
-    );
+  const mailboxPage = () =>
+    page([
+      incoming({
+        id: "mailbox:mail-amblard",
+        origin: "MAILBOX",
+        documentNumber: "F2602896",
+        invoiceFormat: null,
+        supplierName: "",
+        supplierTaxNumber: null,
+        currency: "HUF",
+        exchangeRate: null,
+        netAmount: null,
+        vatAmount: null,
+        grossAmount: null,
+        paymentState: "PAID",
+        paidAmount: "179520",
+        lastPaymentDate: "2026-09-16",
+        paymentSource: "BANK_PAIRING",
+        bankMatch: { state: "PAIRED", reason: null, debits: [] },
+      }),
+    ]);
+
+  it("a mailbox-only paid invoice says where it comes from, and opens its PDF, not a feed page", async () => {
+    api.incomingList.mockResolvedValue(mailboxPage());
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    URL.createObjectURL = vi.fn(() => "blob:pdf");
     urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
     render(<BillingDocumentListPage />);
     const row = await screen.findByRole("row", {
-      name: /F2602896, név nélkül, csak postafiókból ismert$/,
+      name: /F2602896, név nélkül, csak postafiókból ismert, PDF megnyitása$/,
     });
     const cells = within(row);
     expect(cells.getByText("Normál · Postafiókból")).toBeInTheDocument();
@@ -285,7 +292,32 @@ describe("the incoming list", () => {
     expect(cells.getAllByText("Fizetve").length).toBeGreaterThan(0);
     const before = urlNavigation.push.mock.calls.length;
     fireEvent.click(cells.getByText("F2602896"));
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith("blob:pdf", "_blank"),
+    );
+    expect(api.incomingPdf).toHaveBeenCalledWith(
+      "token-1",
+      "mailbox:mail-amblard",
+    );
     expect(urlNavigation.push.mock.calls.length).toBe(before);
+    open.mockRestore();
+  });
+
+  it("a mailbox-only invoice without a PDF says so instead of doing nothing", async () => {
+    api.incomingList.mockResolvedValue(mailboxPage());
+    api.incomingPdf.mockRejectedValue(
+      new Error("A számla megvan, de PDF nem érkezett hozzá."),
+    );
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    const row = await screen.findByRole("row", { name: /F2602896/ });
+    fireEvent.click(within(row).getByText("F2602896"));
+    expect(
+      await screen.findByText("A számla megvan, de PDF nem érkezett hozzá."),
+    ).toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
   it("the filters go to the request from the URL: a month as its first and last day, on the fulfillment date", async () => {

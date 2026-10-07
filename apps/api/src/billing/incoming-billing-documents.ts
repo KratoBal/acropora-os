@@ -250,6 +250,28 @@ export function mailboxOnlyPaidItems(
   return items;
 }
 
+/** A csak postafiókos sor azonosítójának előtagja; utána a jelölt dokumentum azonosítója. */
+export const MAILBOX_ITEM_PREFIX = "mailbox:";
+
+/**
+ * A CSAK POSTAFIÓKOS SOR PDF-JELÖLTJEI, sorrendben. A sor azonosítója a
+ * párosított jelölt `id`-je, ami összevont számlánál a fő dokumentumé (gyakran
+ * a NAV-soré, aminek nincs fájlja); a fájl az `originalId` dokumentumánál van.
+ * Ezért előbb az eredeti, utána maga a jelölt, végül az aliasai: mind
+ * `IncomingSupplierDocument` azonosító lehet, a NAV-sor egyszerűen nem talál.
+ */
+export function mailboxPdfCandidates(
+  document: DocumentPairing["document"],
+): string[] {
+  return [
+    ...new Set([
+      ...(document.originalId ? [document.originalId] : []),
+      document.id,
+      ...(document.aliasIds ?? []),
+    ]),
+  ];
+}
+
 function mailboxListItem(
   document: DocumentPairing["document"],
   pairing: DocumentPairing,
@@ -264,7 +286,7 @@ function mailboxListItem(
         new Prisma.Decimal(0),
       );
   return {
-    id: `mailbox:${document.id}`,
+    id: `${MAILBOX_ITEM_PREFIX}${document.id}`,
     origin: "MAILBOX",
     documentNumber: document.number,
     kindCode: "SZ",
