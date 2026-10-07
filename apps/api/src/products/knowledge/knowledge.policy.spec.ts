@@ -492,6 +492,23 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           revision: 1,
           sourceType: "SUPPLIER_PAGE",
         },
+        // a review két hiányzó státusza: ezek sem jutnak ki
+        {
+          field: "power",
+          value: "45",
+          unit: "W",
+          status: "UNVERIFIED",
+          revision: 1,
+          sourceType: "SUPPLIER_PAGE",
+        },
+        {
+          field: "weight",
+          value: "1",
+          unit: "g",
+          status: "POSSIBLE_WRONG_VALUE",
+          revision: 1,
+          sourceType: "SUPPLIER_PAGE",
+        },
       ],
       [],
     );
