@@ -18,7 +18,9 @@ import type {
   QuoteVersionHeaderInput,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 /**
  * AZ ÁRAJÁNLAT MODUL (#1582 P1). A címek kiírva állnak, nem helperrel
@@ -69,6 +71,22 @@ export const quotesApi = {
       token,
       json("PATCH", input),
     );
+  },
+  /** P2: publish the draft with its PDF (idempotent). */
+  publish(token: string, quoteId: string, versionId: string) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/publish`,
+      token,
+      json("POST", {}),
+    );
+  },
+  /** P2: a published version's stored PDF, or a draft's live preview. */
+  async pdf(token: string, quoteId: string, versionId: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/quotes/${id(quoteId)}/versions/${id(versionId)}/pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "Az ajánlat PDF-je nem tölthető le.");
   },
   costing(
     token: string,
