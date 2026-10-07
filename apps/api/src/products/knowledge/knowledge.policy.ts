@@ -10,6 +10,7 @@ import {
 import {
   PRODUCT_COPY_BLOCKS,
   PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
+  PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
   type ProductCopyBlock,
   type ProductManualEvidenceSourceType,
@@ -492,11 +493,52 @@ export interface CopyRow {
   basedOn: unknown;
 }
 
-function publishable(row: CopyRow | undefined, revisions: Revisions): boolean {
+/** The facts as they are now: what the copy is measured against. */
+export interface FactState {
+  field: string;
+  revision: number;
+  status: string;
+}
+
+/** May the buyer see this fact (D5)? Only VERIFIED. */
+export function isPublicFact(fact: { status: string }): boolean {
+  return (PRODUCT_KNOWLEDGE_PUBLIC_STATUSES as readonly string[]).includes(
+    fact.status,
+  );
+}
+
+/**
+ * EVERY FACT THE COPY WAS WRITTEN AGAINST IS VERIFIED NOW (D5, card 4622f1ac).
+ *
+ * Prose can state a value, so an approved text built on a SUGGESTED or an
+ * unresolved conflicting fact would publish what the fact gate holds back.
+ * `basedOn` holds the revisions of ALL the product's facts at save time
+ * (`knowledge.service.ts` `saveCopy`), not the ones the block used, so the
+ * rule is product-wide for now: one non-VERIFIED fact holds every block back.
+ * Per-block `basedOn` (Balázs, 2026-10-07: a block depends only on the facts
+ * it uses) is a separate PR with its own field.
+ */
+function basedOnVerified(
+  basedOn: unknown,
+  facts: readonly FactState[],
+): boolean {
+  if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
+    return false;
+  const verified = new Set(
+    facts.filter((fact) => isPublicFact(fact)).map((fact) => fact.field),
+  );
+  return Object.keys(basedOn).every((field) => verified.has(field));
+}
+
+function publishable(
+  row: CopyRow | undefined,
+  facts: readonly FactState[],
+): boolean {
   return (
     row !== undefined &&
     row.status === "APPROVED" &&
-    !copyIsStale(row.basedOn, revisions)
+    !copyIsStale(row.basedOn, currentRevisions(facts)) &&
+    basedOnVerified(row.basedOn, facts)
   );
 }
 
@@ -537,11 +579,12 @@ export interface ProjectedCopy {
  * if any is a draft or stale, today's description stays exactly as it is.
  * A partial swap would shrink a live page to its lead while the body waits.
  * The SEO title and meta description go one by one: each replaces today's
- * value only when it is approved and not stale.
+ * value only when it is approved, not stale, and written against VERIFIED
+ * facts only (`basedOnVerified`).
  */
 export function projectedCopy(
   rows: readonly CopyRow[],
-  revisions: Revisions,
+  facts: readonly FactState[],
   catalogAuthority: string | null,
 ): ProjectedCopy | null {
   if (catalogAuthority !== "ACROPORA") return null;
@@ -550,16 +593,15 @@ export function projectedCopy(
     .map((block) => by.get(block))
     .filter((row): row is CopyRow => row !== undefined);
   const description =
-    textBlocks.length > 0 &&
-    textBlocks.every((row) => publishable(row, revisions))
+    textBlocks.length > 0 && textBlocks.every((row) => publishable(row, facts))
       ? copyToHtml(textBlocks.map((row) => row.body))
       : null;
   const seoTitle = by.get("seoTitle");
   const meta = by.get("metaDescription");
   const result: ProjectedCopy = {
     description,
-    seoTitle: publishable(seoTitle, revisions) ? seoTitle!.body : null,
-    seoDescription: publishable(meta, revisions) ? meta!.body : null,
+    seoTitle: publishable(seoTitle, facts) ? seoTitle!.body : null,
+    seoDescription: publishable(meta, facts) ? meta!.body : null,
   };
   return result.description || result.seoTitle || result.seoDescription
     ? result
@@ -601,33 +643,38 @@ export interface FactRow {
 
 /**
  * THE BODY OF `PUT /admin/product-knowledge/:product_id`, sorted so that two
- * builds of the same state are equal. Every accepted fact goes, its status
- * unchanged (never flattened). The copy carries the APPROVED, NOT STALE
- * `lead` and `body` only; SEO goes through the normal product projection.
+ * builds of the same state are equal. Only the facts the buyer may see go
+ * (D5: VERIFIED); the others stay in the OS. The copy carries the APPROVED,
+ * NOT STALE `lead` and `body` written against VERIFIED facts only; SEO goes
+ * through the normal product projection.
+ *
+ * THE GATE IS ON THE OUTPUT, NOT THE INPUT (nautilus, review point 1). The
+ * copy's staleness is measured against ALL the facts: `copyIsStale` counts a
+ * missing fact as a change, so filtering the input would make every text
+ * written beside a SUGGESTED fact look stale. Only the list handed out is
+ * filtered.
  */
 export function knowledgeProjection(
   facts: readonly FactRow[],
   copy: readonly CopyRow[],
 ): KnowledgeProjection {
-  const revisions = currentRevisions(facts);
   return {
-    facts: [...facts]
+    facts: facts
+      .filter((fact) => isPublicFact(fact))
       .sort((a, b) => a.field.localeCompare(b.field))
       .map((fact) => ({
         field: fact.field,
-        value: fact.status === "CONFLICTING_SOURCES" ? null : fact.value,
-        unit: fact.status === "CONFLICTING_SOURCES" ? null : fact.unit,
+        value: fact.value,
+        unit: fact.unit,
         status: fact.status,
-        // A conflict has no single source to name.
-        source_type:
-          fact.status === "CONFLICTING_SOURCES" ? null : fact.sourceType,
+        source_type: fact.sourceType,
         revision: fact.revision,
       })),
     copy: copy
       .filter(
         (row): row is CopyRow & { block: "lead" | "body" } =>
           (row.block === "lead" || row.block === "body") &&
-          publishable(row, revisions),
+          publishable(row, facts),
       )
       .sort((a, b) => (a.block === b.block ? 0 : a.block === "lead" ? -1 : 1))
       .map((row) => ({

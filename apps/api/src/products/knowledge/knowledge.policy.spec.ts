@@ -392,24 +392,33 @@ describe("copy", () => {
     basedOn: { dosing: 1 },
   });
 
+  const verified = (field: string, revision: number) => ({
+    field,
+    revision,
+    status: "VERIFIED",
+  });
+
   it("the description is all or nothing over lead and body, and only for our own master data", () => {
-    const revisions = { dosing: 1 };
+    const facts = [verified("dosing", 1)];
     const both = [approved("lead", "Bevezető"), approved("body", "Törzs")];
     assert.equal(
-      projectedCopy(both, revisions, "ACROPORA")?.description,
+      projectedCopy(both, facts, "ACROPORA")?.description,
       "<p>Bevezető</p>\n<p>Törzs</p>",
     );
-    assert.equal(projectedCopy(both, revisions, "UNAS"), null);
+    assert.equal(projectedCopy(both, facts, "UNAS"), null);
     const draftBody = [
       approved("lead", "Bevezető"),
       { ...approved("body", "Törzs"), status: "DRAFT" as const },
     ];
-    assert.equal(projectedCopy(draftBody, revisions, "ACROPORA"), null);
+    assert.equal(projectedCopy(draftBody, facts, "ACROPORA"), null);
     // A revision bump makes the approved text stale: today's description stays.
-    assert.equal(projectedCopy(both, { dosing: 2 }, "ACROPORA"), null);
+    assert.equal(
+      projectedCopy(both, [verified("dosing", 2)], "ACROPORA"),
+      null,
+    );
     const seoOnly = projectedCopy(
       [...draftBody, approved("seoTitle", "Cím")],
-      revisions,
+      facts,
       "ACROPORA",
     );
     assert.deepEqual(seoOnly, {
@@ -417,6 +426,32 @@ describe("copy", () => {
       seoTitle: "Cím",
       seoDescription: null,
     });
+  });
+
+  /*
+    D5 A SZÖVEGRE IS (kártya 4622f1ac). A próza kimondhat egy értéket, tehát
+    egy jóváhagyott szöveg csak akkor mehet ki, ha MINDEN tény, amire írták,
+    ma VERIFIED. MI PIROSÍT: egy SUGGESTED vagy egy feloldatlan konfliktus
+    mellett írt szöveg kimegy a leírásba vagy a SEO-mezőbe.
+  */
+  it("a text written against a non-VERIFIED fact goes nowhere: description and SEO alike", () => {
+    for (const status of ["SUGGESTED", "CONFLICTING_SOURCES"]) {
+      const facts = [{ field: "dosing", revision: 1, status }];
+      assert.equal(
+        projectedCopy(
+          [
+            approved("lead", "Bevezető"),
+            approved("body", "Törzs"),
+            approved("seoTitle", "Cím"),
+            approved("metaDescription", "Leírás"),
+          ],
+          facts,
+          "ACROPORA",
+        ),
+        null,
+        status,
+      );
+    }
   });
 });
 
@@ -440,17 +475,44 @@ describe("the projection payload (the PR A / PR B contract)", () => {
     },
   ];
 
-  it("a conflict travels with a null value and no source, its status unchanged", () => {
-    const payload = knowledgeProjection(facts, []);
+  /*
+    A PUBLIKÁCIÓS KAPU (D5, kártya 4622f1ac): a vásárló csak VERIFIED tényt
+    kap. MI PIROSÍT: egy SUGGESTED, egy feloldatlan konfliktus, vagy bármely
+    más státusz kijut a commerce-be.
+  */
+  it("only VERIFIED facts leave; SUGGESTED and conflicts stay in the OS", () => {
+    const payload = knowledgeProjection(
+      [
+        ...facts,
+        {
+          field: "flowRate",
+          value: "3000",
+          unit: "l/h",
+          status: "SUGGESTED",
+          revision: 1,
+          sourceType: "SUPPLIER_PAGE",
+        },
+        // a review két hiányzó státusza: ezek sem jutnak ki
+        {
+          field: "power",
+          value: "45",
+          unit: "W",
+          status: "UNVERIFIED",
+          revision: 1,
+          sourceType: "SUPPLIER_PAGE",
+        },
+        {
+          field: "weight",
+          value: "1",
+          unit: "g",
+          status: "POSSIBLE_WRONG_VALUE",
+          revision: 1,
+          sourceType: "SUPPLIER_PAGE",
+        },
+      ],
+      [],
+    );
     assert.deepEqual(payload.facts, [
-      {
-        field: "dosing",
-        value: null,
-        unit: null,
-        status: "CONFLICTING_SOURCES",
-        source_type: null,
-        revision: 2,
-      },
       {
         field: "packSize",
         value: "100 ml",
@@ -463,12 +525,11 @@ describe("the projection payload (the PR A / PR B contract)", () => {
   });
 
   /**
-   * The guard on the way out: even a conflict row that carries a value and a
-   * source (written by hand, or by a future bug) leaves without them. WHAT
-   * TURNS IT RED: a payload that copies the row's value or source for a
-   * conflict.
+   * The guard on the way out: a conflict row that carries a value and a
+   * source (written by hand, or by a future bug) does not leave at all. WHAT
+   * TURNS IT RED: the row, or its value, reaching the payload.
    */
-  it("a conflict row never leaves with a value or a source, whatever the row holds", () => {
+  it("a conflict row never leaves, whatever the row holds", () => {
     const payload = knowledgeProjection(
       [
         {
@@ -482,15 +543,17 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       ],
       [],
     );
-    assert.deepEqual(
-      payload.facts.map((f) => [f.value, f.unit, f.source_type]),
-      [[null, null, null]],
-    );
+    assert.deepEqual(payload.facts, []);
   });
 
-  it("copy: approved and not stale lead/body only; SEO never travels here", () => {
+  it("copy: approved, not stale lead/body written against VERIFIED facts only; SEO never travels here", () => {
+    const allVerified: FactRow[] = facts.map((fact) => ({
+      ...fact,
+      status: "VERIFIED",
+      value: fact.value ?? "1 csepp/100 l/nap",
+    }));
     const fresh = { packSize: 1, dosing: 2 };
-    const payload = knowledgeProjection(facts, [
+    const payload = knowledgeProjection(allVerified, [
       {
         block: "body",
         body: "B",
@@ -514,10 +577,32 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       },
     ]);
     assert.deepEqual(payload.copy, [{ block: "body", body: "B", revision: 3 }]);
+
+    // The same copy beside the conflicting `dosing`: held back (D5).
+    assert.deepEqual(
+      knowledgeProjection(facts, [
+        {
+          block: "body",
+          body: "B",
+          status: "APPROVED",
+          revision: 3,
+          basedOn: fresh,
+        },
+      ]).copy,
+      [],
+    );
   });
 
   it("the diff: the same state in another order is unchanged; an empty record needs no write", () => {
-    const wanted = knowledgeProjection(facts, []);
+    const wanted = knowledgeProjection(
+      facts.map((fact) => ({
+        ...fact,
+        status: "VERIFIED",
+        value: fact.value ?? "1 csepp/100 l/nap",
+      })),
+      [],
+    );
+    assert.equal(wanted.facts.length, 2);
     const reordered = { facts: [...wanted.facts].reverse(), copy: [] };
     assert.equal(knowledgeProjectionDiffers(reordered, wanted), false);
     assert.equal(

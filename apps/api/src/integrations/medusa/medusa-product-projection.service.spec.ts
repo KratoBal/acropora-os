@@ -15,6 +15,7 @@ import {
   MedusaProductProjectionService,
   type ProjectableProduct,
 } from "./medusa-product-projection.service.js";
+import { projectedCopy } from "../../products/knowledge/knowledge.policy.js";
 
 /**
  * A vetítés DÖNTÉSE mérve, hívás nélkül.
@@ -710,6 +711,87 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     const torzs = f.createdWith[0];
     assert.equal(torzs?.description, "<p>Rovid</p>");
     assert.equal(torzs?.metadata?.unas_short_description, "<p>Rovid</p>");
+  });
+
+  /*
+    D5 A MÁR KINT LÉVŐ SZÖVEGRE (barracuda review, PR 1). Ha egy jóváhagyott
+    szöveg már nem publikálható (egy nem VERIFIED tény mellett írták), az
+    újravetítés a forrásszövegre állítja vissza a leírást, és a régi SEO-cím
+    kikerül. MI PIROSÍT: a régi szöveg bent marad, mert az update kihagyja a
+    leírást; a bent ragadt seo_title marad; vagy egy idegen kulcs elveszik.
+  */
+  it("a nem publikálható szöveg helyére a forrásszöveg kerül vissza, a régi SEO-cím kikerül", async () => {
+    const knowledgeCopy = projectedCopy(
+      [
+        {
+          block: "lead",
+          body: "Régi bevezető",
+          status: "APPROVED",
+          revision: 1,
+          basedOn: { dosing: 1 },
+        },
+        {
+          block: "body",
+          body: "Régi törzs",
+          status: "APPROVED",
+          revision: 1,
+          basedOn: { dosing: 1 },
+        },
+        {
+          block: "seoTitle",
+          body: "Régi OS cím",
+          status: "APPROVED",
+          revision: 1,
+          basedOn: { dosing: 1 },
+        },
+      ],
+      [{ field: "dosing", revision: 1, status: "CONFLICTING_SOURCES" }],
+      "ACROPORA",
+    );
+    assert.equal(knowledgeCopy, null);
+
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+      existingMetadata: { seo_title: "Régi OS cím", idegen_kulcs: "marad" },
+    });
+    await f.service.project(
+      {
+        ...product,
+        description: "<p>Forrás</p>",
+        descriptionLong: null,
+        seoTitle: null,
+        seoDescription: null,
+        knowledgeCopy,
+      },
+      now,
+    );
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.equal(torzs.description, "<p>Forrás</p>");
+    assert.equal(torzs.metadata?.unas_short_description, "<p>Forrás</p>");
+    assert.ok(!("seo_title" in (torzs.metadata ?? {})));
+    assert.equal(torzs.metadata?.idegen_kulcs, "marad");
+  });
+
+  it("üres forrásnál a leírás kifejezetten kiürül, nem marad bent a régi szöveg", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+    await f.service.project(
+      {
+        ...product,
+        description: null,
+        descriptionLong: null,
+        knowledgeCopy: null,
+      },
+      now,
+    );
+    const torzs = f.updatedWith[0];
+    assert.ok(
+      torzs && "description" in torzs,
+      "a leírás mezője nem maradhat el",
+    );
+    assert.equal(torzs.description, null);
   });
 
   it("a harom tovabbi SEO mezo kulon kulcsot kap a metaadatban", async () => {

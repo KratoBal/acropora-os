@@ -81,10 +81,7 @@ import {
   isWysiwygProduct,
   wysiwygSubtreeIds,
 } from "./medusa-wysiwyg.policy.js";
-import {
-  currentRevisions,
-  projectedCopy,
-} from "../../products/knowledge/knowledge.policy.js";
+import { projectedCopy } from "../../products/knowledge/knowledge.policy.js";
 import {
   MedusaProductKnowledgeService,
   knowledgeRowsFor,
@@ -1246,7 +1243,7 @@ export async function runProjectionCli(
     const tudas = await knowledgeRowsFor(db, product.id);
     const tudasSzoveg = projectedCopy(
       tudas.copy,
-      currentRevisions(tudas.facts),
+      tudas.facts,
       product.catalogAuthority,
     );
     const outcome = await service!.project(

@@ -51,6 +51,15 @@ export const PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES = [
   "CONFLICTING_SOURCES",
 ] as const satisfies readonly ProductFieldStatus[];
 
+/**
+ * THE STATUSES THE BUYER MAY SEE (D5, Balázs 2026-10-07; acrobot's reading,
+ * 27408): only VERIFIED. A SUGGESTED fact a human accepted stays in the OS
+ * and does not reach the shop; an unresolved conflict does not either.
+ */
+export const PRODUCT_KNOWLEDGE_PUBLIC_STATUSES = [
+  "VERIFIED",
+] as const satisfies readonly ProductFieldStatus[];
+
 /** `POST /products/:id/knowledge/evidence`. */
 export interface ProductManualEvidenceInput {
   field: ProductEnrichmentFieldKey;

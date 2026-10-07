@@ -190,7 +190,7 @@ describe("product knowledge: the conflict path end to end", () => {
    * value for the conflict (a winner picked, a value copied into the fact
    * or into the payload).
    */
-  it("two evidences conflict, the accepted fact has no value, and neither has the projection", async () => {
+  it("two evidences conflict, the accepted fact has no value, and the projection does not carry it (D5)", async () => {
     const { knowledge, memory } = service();
     const first = await knowledge.addEvidence(PRODUCT, DAILY, USER);
     assert.equal(first.status, "VERIFIED");
@@ -211,21 +211,13 @@ describe("product knowledge: the conflict path end to end", () => {
       ["1 drop/100 L/day", "1 drop/100 L, 1-2/week"],
     );
 
+    // D5 (kártya 4622f1ac): a feloldatlan konfliktus nem jut a vásárlóhoz.
     const payload = await projected(memory);
-    assert.deepEqual(payload.facts, [
-      {
-        field: "dosing",
-        value: null,
-        unit: null,
-        status: "CONFLICTING_SOURCES",
-        source_type: null,
-        revision: 1,
-      },
-    ]);
+    assert.deepEqual(payload.facts, []);
   });
 
-  it("a human picks one value: VERIFIED on the same pointer, the revision bumped", async () => {
-    const { knowledge } = service();
+  it("a human picks one value: VERIFIED on the same pointer, the revision bumped, and it reaches the shop", async () => {
+    const { knowledge, memory } = service();
     await knowledge.addEvidence(PRODUCT, DAILY, USER);
     const conflict = await knowledge.addEvidence(PRODUCT, WEEKLY, USER);
     await knowledge.accept(PRODUCT, conflict.fieldResultId, USER);
@@ -238,6 +230,11 @@ describe("product knowledge: the conflict path end to end", () => {
     assert.deepEqual(
       view.facts.map((f) => [f.value, f.status, f.revision, f.fieldResultId]),
       [["1 drop/100 L/day", "VERIFIED", 2, conflict.fieldResultId]],
+    );
+    // A feloldás az út vissza a lapra: a VERIFIED érték kimegy.
+    assert.deepEqual(
+      (await projected(memory)).facts.map((f) => [f.field, f.status]),
+      [["dosing", "VERIFIED"]],
     );
   });
 });

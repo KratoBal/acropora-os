@@ -235,7 +235,7 @@ export function JevCopyPanel({
   return (
     <PilotSection
       title="Vevői szöveg"
-      subtitle="Csak a jóváhagyott, nem elavult szöveg kerül a webshopba"
+      subtitle="Csak a jóváhagyott, nem elavult szöveg kerül a webshopba, és csak akkor, ha a termék minden elfogadott ténye ellenőrzött"
     >
       <div className="flex flex-col gap-4">
         {PRODUCT_COPY_BLOCKS.map((block) => (
