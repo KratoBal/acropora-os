@@ -286,6 +286,7 @@ export function BillingIncomingList({ token }: { token: string }) {
   const [data, setData] = useState<IncomingDocumentListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -360,6 +361,24 @@ export function BillingIncomingList({ token }: { token: string }) {
   };
   const goToPage = (next: number) =>
     update({ page: next === 1 ? null : String(next) });
+
+  /*
+    A CSAK POSTAFIÓKOS SORNAK nincs feed-adatlapja: a sor a postafiókos
+    dokumentum PDF-jét nyitja új lapon, ugyanazon a végponton és ugyanúgy,
+    mint az adatlap PDF-gombja (Balázs jelzése, 2026-10-07: eddig a kattintás
+    semmit nem csinált). Ha nincs PDF (409), a hibát kiírjuk, nem nyelünk el.
+  */
+  const openMailboxPdf = async (item: IncomingDocumentListItem) => {
+    setPdfError(null);
+    try {
+      const blob = await billingDocumentsApi.incomingPdf(token, item.id);
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (cause) {
+      setPdfError(
+        cause instanceof Error ? cause.message : "A PDF nem tölthető le.",
+      );
+    }
+  };
 
   return (
     <>
@@ -481,6 +500,13 @@ export function BillingIncomingList({ token }: { token: string }) {
           }
         />
       ) : null}
+      {pdfError ? (
+        <Alert
+          variant="danger"
+          title="A számla PDF-je nem nyitható meg"
+          description={pdfError}
+        />
+      ) : null}
       {loading && !data ? (
         <div aria-label="Bejövő számlák betöltése" className="space-y-3">
           <Skeleton className="h-16" />
@@ -513,13 +539,13 @@ export function BillingIncomingList({ token }: { token: string }) {
               rows={data.items}
               rowKey={(item) => item.id}
               onRowActivate={(item) => {
-                // a csak postafiókos sornak nincs feed-adatlapja
-                if (item.origin === "MAILBOX") return;
-                router.push(incomingDocumentHref(item.id));
+                // a csak postafiókos sornak nincs feed-adatlapja: a PDF-je nyílik
+                if (item.origin === "MAILBOX") void openMailboxPdf(item);
+                else router.push(incomingDocumentHref(item.id));
               }}
               rowLabel={(item) =>
                 item.origin === "MAILBOX"
-                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, csak postafiókból ismert`
+                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, csak postafiókból ismert, PDF megnyitása`
                   : `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName} megnyitása`
               }
               minWidth={1040}
