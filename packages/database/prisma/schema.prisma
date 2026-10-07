@@ -638,6 +638,38 @@ model SlugHistory {
   @@index([entityType, entityId])
 }
 
+/// SEO P0 PR 6 (C5): miert all egy atiranyitas. Forrasonkent mas a gazdaja: a
+/// UNAS-termek es -kategoria a backfill, a slug-csere a `changeSlug`, a kezi az admin.
+enum RedirectReason {
+  UNAS_PRODUCT
+  UNAS_CATEGORY
+  SLUG_CHANGE
+  MANUAL
+}
+
+/// SEO P0 PR 6 (C5): egy regi cim 301-e. A `sourcePath` a normalizalt ut, domain
+/// nelkul; a `sourcePathLower` a kisbetus keresesnek, es egyedi, tehat ket csak
+/// betumeretben elero forras nem allhat (D2). A `destinationPath` MINDIG a vegso cel:
+/// az iro a lancot osszevonja, tehat egy aktiv szabaly celja sem forras.
+model UrlRedirect {
+  id              String          @id @default(cuid())
+  sourcePath      String          @unique
+  sourcePathLower String          @unique
+  destinationPath String
+  httpStatus      Int             @default(301)
+  reason          RedirectReason
+  entityType      SlugEntityType?
+  entityId        String?
+  isActive        Boolean         @default(true)
+  createdById     String?
+  createdBy       User?           @relation("UrlRedirectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([destinationPath])
+  @@index([entityType, entityId])
+}
+
 /// MIERT NEM MENT KI EGY TERMEK KEPE A BOLTBA.
 ///
 /// ENUM ES NEM SZOVEG, mert az ot ok kozott MAS a teendo, es egy kozos
@@ -828,6 +860,7 @@ model User {
   acceptedKnowledgeFacts ProductKnowledgeFact[]        @relation("ProductKnowledgeFactAcceptedBy")
   verifiedBarcodes       ProductBarcode[]              @relation("ProductBarcodeVerifiedBy")
   replacedSlugs          SlugHistory[]                 @relation("SlugHistoryReplacedBy")
+  createdRedirects       UrlRedirect[]                 @relation("UrlRedirectCreatedBy")
   /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
   editedCopyBlocks       ProductCopy[]                 @relation("ProductCopyEditedBy")
   approvedCopyBlocks     ProductCopy[]                 @relation("ProductCopyApprovedBy")

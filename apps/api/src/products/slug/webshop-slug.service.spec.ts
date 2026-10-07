@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import { BadRequestException, ConflictException } from "@nestjs/common";
 
+import { MemoryRedirectStore } from "../redirect/redirect-memory-store.js";
+import { redirectInvariantViolations } from "../redirect/redirect-writer.js";
 import {
   SlugTakenError,
   WebshopSlugService,
@@ -25,6 +27,7 @@ function memoria(
   const regi = new Map<string, string>();
   const elozmeny: { productId: string; slug: string; userId: string }[] = [];
   let versenyEgyszer: string | null = null;
+  const atiranyitas = new MemoryRedirectStore();
   const store: WebshopSlugStore = {
     currentSlug: async (id) => elo.get(id) ?? null,
     basis: async (id) => termekek[id] ?? null,
@@ -49,7 +52,8 @@ function memoria(
         throw new SlugTakenError(slug);
       elo.set(id, slug);
     },
-    replace: async ({ productId, oldSlug, newSlug, userId }) => {
+    replace: async ({ productId, oldSlug, newSlug, userId }, redirects) => {
+      await redirects(atiranyitas);
       if (regi.get(newSlug) === productId) regi.delete(newSlug);
       if (oldSlug) {
         regi.set(oldSlug, productId);
@@ -63,6 +67,7 @@ function memoria(
     elo,
     regi,
     elozmeny,
+    atiranyitas,
     verseny: (slug: string) => {
       versenyEgyszer = slug;
     },
@@ -150,5 +155,56 @@ describe("changeSlug (kézi csere)", () => {
       );
     assert.equal(await s.changeSlug("p1", "pumpa", "u1"), "pumpa");
     assert.deepEqual(m.elozmeny, []);
+  });
+});
+
+describe("changeSlug: az átirányítás (SEO P0 PR 6)", () => {
+  const indulo = () => {
+    const m = memoria({ p1: { name: "Pumpa", primarySku: "A1" } });
+    m.elo.set("p1", "pumpa");
+    return { m, s: new WebshopSlugService(m.store) };
+  };
+  const szabalyok = async (m: ReturnType<typeof memoria>) =>
+    (await m.atiranyitas.listActive())
+      .map((r) => `${r.sourcePath} -> ${r.destinationPath}`)
+      .sort();
+
+  it("a régi cím az újra mutat", async () => {
+    const { m, s } = indulo();
+    await s.changeSlug("p1", "uj-pumpa", "u1");
+    assert.deepEqual(await szabalyok(m), [
+      "/hu/termek/pumpa -> /hu/termek/uj-pumpa",
+    ]);
+    const [uj] = m.atiranyitas.created();
+    assert.equal(uj?.reason, "SLUG_CHANGE");
+    assert.equal(uj?.entityId, "p1");
+    assert.equal(uj?.createdById, "u1");
+  });
+
+  it("két egymás utáni csere után nincs lánc", async () => {
+    const { m, s } = indulo();
+    await s.changeSlug("p1", "b", "u1");
+    await s.changeSlug("p1", "c", "u1");
+    assert.deepEqual(await szabalyok(m), [
+      "/hu/termek/b -> /hu/termek/c",
+      "/hu/termek/pumpa -> /hu/termek/c",
+    ]);
+    assert.deepEqual(await redirectInvariantViolations(m.atiranyitas), []);
+  });
+
+  it("a saját régi slug visszavétele: a visszavett cím élő, nem forrás, és nincs kör", async () => {
+    const { m, s } = indulo();
+    await s.changeSlug("p1", "uj-pumpa", "u1");
+    await s.changeSlug("p1", "pumpa", "u1");
+    assert.deepEqual(await szabalyok(m), [
+      "/hu/termek/uj-pumpa -> /hu/termek/pumpa",
+    ]);
+    assert.deepEqual(await redirectInvariantViolations(m.atiranyitas), []);
+  });
+
+  it("ugyanarra a slugra nem ír szabályt", async () => {
+    const { m, s } = indulo();
+    await s.changeSlug("p1", "pumpa", "u1");
+    assert.deepEqual(await szabalyok(m), []);
   });
 });

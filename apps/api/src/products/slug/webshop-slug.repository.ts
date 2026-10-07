@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
+import { PrismaRedirectStore } from "../redirect/redirect.repository.js";
 import {
   SlugTakenError,
   type WebshopSlugStore,
@@ -98,6 +99,7 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
 
   async replace(
     input: Parameters<WebshopSlugStore["replace"]>[0],
+    redirects: Parameters<WebshopSlugStore["replace"]>[1],
   ): Promise<void> {
     try {
       await prisma.$transaction(async (tx) => {
@@ -129,6 +131,7 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
           },
           update: { slug: input.newSlug },
         });
+        await redirects(new PrismaRedirectStore(tx));
       });
     } catch (error) {
       if (

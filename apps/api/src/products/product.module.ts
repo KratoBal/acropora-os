@@ -28,6 +28,12 @@ import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
 
+import { UrlRedirectController } from "./redirect/url-redirect.controller.js";
+import {
+  REDIRECT_TRANSACTOR,
+  UrlRedirectService,
+  prismaRedirectTransactor,
+} from "./redirect/url-redirect.service.js";
 import { WebshopSlugController } from "./slug/webshop-slug.controller.js";
 import { PrismaWebshopSlugStore } from "./slug/webshop-slug.repository.js";
 import {
@@ -46,6 +52,7 @@ import {
     ProductKnowledgeController,
     AttributeController,
     WebshopSlugController,
+    UrlRedirectController,
   ],
   providers: [
     ProductRepository,
@@ -62,6 +69,8 @@ import {
     { provide: KNOWLEDGE_STORE, useClass: PrismaKnowledgeStore },
     WebshopSlugService,
     { provide: WEBSHOP_SLUG_STORE, useClass: PrismaWebshopSlugStore },
+    UrlRedirectService,
+    { provide: REDIRECT_TRANSACTOR, useValue: prismaRedirectTransactor },
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })

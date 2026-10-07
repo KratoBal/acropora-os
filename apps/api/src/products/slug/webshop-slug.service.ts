@@ -5,6 +5,15 @@ import {
   Injectable,
 } from "@nestjs/common";
 
+import {
+  redirectPathLower,
+  webshopProductPath,
+} from "../redirect/redirect-path.js";
+import {
+  RedirectError,
+  writeRedirect,
+  type RedirectStore,
+} from "../redirect/redirect-writer.js";
 import { SLUG_ALAK, SLUG_MAX, baseProductSlug, resolveSlug } from "./slug.js";
 
 export const WEBSHOP_SLUG_STORE = Symbol("WEBSHOP_SLUG_STORE");
@@ -25,13 +34,19 @@ export interface WebshopSlugStore {
   ): Promise<{ kind: "live" | "history"; productId: string } | null>;
   /** Elmenti az első slugot. Egyedi-index ütközésnél `SlugTakenError`-t dob. */
   saveFirst(productId: string, slug: string): Promise<void>;
-  /** Kézi csere: a régi slug `SlugHistory`-ba, az új élő lesz; egy tranzakció. */
-  replace(input: {
-    productId: string;
-    oldSlug: string | null;
-    newSlug: string;
-    userId: string;
-  }): Promise<void>;
+  /**
+   * Kézi csere: a régi slug `SlugHistory`-ba, az új élő lesz, és a `redirects`
+   * ugyanabban a tranzakcióban írja az átirányítást (PR 6).
+   */
+  replace(
+    input: {
+      productId: string;
+      oldSlug: string | null;
+      newSlug: string;
+      userId: string;
+    },
+    redirects: (store: RedirectStore) => Promise<void>,
+  ): Promise<void>;
 }
 
 export class SlugTakenError extends Error {}
@@ -79,9 +94,13 @@ export class WebshopSlugService {
   }
 
   /**
-   * KÉZI CSERE: a régi slug `SlugHistory`-ba kerül (ebből generál a PR 6 301-et),
-   * és többé senki más nem kaphatja meg. A termék a SAJÁT régi slugját
-   * visszakaphatja.
+   * KÉZI CSERE: a régi slug `SlugHistory`-ba kerül, és többé senki más nem
+   * kaphatja meg. A termék a SAJÁT régi slugját visszakaphatja.
+   *
+   * AZ ÁTIRÁNYÍTÁS UGYANABBAN A TRANZAKCIÓBAN (PR 6): `/hu/termek/<régi>` →
+   * `/hu/termek/<új>`, és a régi címre mutató korábbi szabályok az újra íródnak át
+   * (két egymás utáni csere után nincs lánc). Az új slug élő oldal, tehát a rajta
+   * álló régi szabály megszűnik.
    */
   async changeSlug(
     productId: string,
@@ -104,8 +123,33 @@ export class WebshopSlugService {
         `slug "${newSlug}" ${gazda.kind === "live" ? "belongs to" : "was used by"} product ${gazda.productId}`,
       );
     try {
-      await this.store.replace({ productId, oldSlug: regi, newSlug, userId });
+      await this.store.replace(
+        { productId, oldSlug: regi, newSlug, userId },
+        async (redirects) => {
+          if (!regi) {
+            // az első slug: nincs régi cím, de az új élő oldalon ne álljon szabály
+            const celen = await redirects.findBySourceLower(
+              redirectPathLower(webshopProductPath(newSlug)),
+            );
+            if (celen?.isActive)
+              await redirects.update(celen.id, { isActive: false });
+            return;
+          }
+          await writeRedirect(redirects, {
+            source: webshopProductPath(regi),
+            destination: webshopProductPath(newSlug),
+            reason: "SLUG_CHANGE",
+            entityType: "PRODUCT",
+            entityId: productId,
+            createdById: userId,
+            onExisting: "replace",
+            destinationIsLive: true,
+          });
+        },
+      );
     } catch (error) {
+      if (error instanceof RedirectError)
+        throw new ConflictException(`redirect: ${error.message}`);
       // a mérés és az írás között valaki más vette el
       if (error instanceof SlugTakenError)
         throw new ConflictException(`slug "${newSlug}" is taken`);

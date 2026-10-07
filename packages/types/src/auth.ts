@@ -278,6 +278,11 @@ export const PERMISSIONS = {
   /// és jóváhagyott, az a webshop termékoldalára vetül, tehát a vevő olvassa.
   /// Csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent).
   PRODUCTS_KNOWLEDGE_APPROVE: "products.knowledge.approve",
+  /// A KÉZI WEBSHOP-ÁTIRÁNYÍTÁS (SEO P0 PR 6, D2). Szándékosan KÜLÖN a
+  /// PRODUCTS_MANAGE-től: egy rossz átirányítás a bolt egy élő címét viheti el,
+  /// és a vevő nem hibát lát, hanem egy másik oldalt. Csak OWNER/ADMIN, a MANAGER
+  /// sem (lásd ROLE_PERMISSIONS lent).
+  SEO_REDIRECTS_MANAGE: "seo.redirects.manage",
   /// A belső AI teszt-felület. Minden szerepkör megkapja, mert Balázs döntése
   /// szó szerint az volt, hogy "most kapja meg mindenki" (2026-08-26), és a
   /// szűkítés feltételét is ő mondta ki: amikor a felhasználói jogosultságokat
@@ -341,6 +346,7 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
         permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
         permission !== PERMISSIONS.PRODUCTS_KNOWLEDGE_APPROVE &&
+        permission !== PERMISSIONS.SEO_REDIRECTS_MANAGE &&
         // MÁS BESZÉLGETÉSÉNEK TÖRLÉSE AZ ADMINÉ (fecbb1fe): egy MANAGER, aki
         // bármit törölhet, mások beszélgetését is eltüntethetné a listájukról.
         permission !== PERMISSIONS.MESSAGES_ADMIN &&
