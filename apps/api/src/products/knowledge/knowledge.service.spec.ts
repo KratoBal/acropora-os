@@ -12,6 +12,7 @@ import type {
   EnrichmentFactsReader,
   StoredCheck,
 } from "../enrichment/enrichment-run.js";
+import { ATTRIBUTE_DEFINITIONS } from "../attributes/attribute-definitions.js";
 import type { ProductService } from "../product.service.js";
 import {
   knowledgeProjection,
@@ -34,7 +35,7 @@ import { ProductKnowledgeService } from "./knowledge.service.js";
  */
 const PRODUCT = "p-kz";
 
-function memoryStore() {
+function memoryStore(variantIds: string[] = ["v-egy"]) {
   let seq = 0;
   let clock = 0;
   const results: (FieldResultRecord & {
@@ -70,16 +71,31 @@ function memoryStore() {
       return id;
     },
     facts: async () =>
-      [...facts.values()].sort((a, b) => a.field.localeCompare(b.field)),
+      [...facts.values()].sort(
+        (a, b) =>
+          a.field.localeCompare(b.field) ||
+          (a.variantId ?? "").localeCompare(b.variantId ?? ""),
+      ),
+    // the seed itself (PR 2), so the door checks what the database will hold
+    definition: async (field) => {
+      const seed = ATTRIBUTE_DEFINITIONS.find((d) => d.key === field);
+      // `isActive` is the column default (true); the seed does not carry it
+      return seed ? { ...seed, isActive: true } : null;
+    },
+    variantIds: async () => [...variantIds],
     upsertFact: async (input) => {
-      const previous = facts.get(input.field);
+      // the Prisma key: product, scopeKey (`variantId ?? ""`), field
+      const key = `${input.variantId ?? ""}|${input.field}`;
+      const previous = facts.get(key);
       const result = results.find((r) => r.id === input.fieldResultId)!;
-      facts.set(input.field, {
+      facts.set(key, {
         field: input.field,
+        variantId: input.variantId,
         value: input.value,
         unit: input.unit,
         status: input.status,
         revision: (previous?.revision ?? 0) + 1,
+        public: true,
         acceptedAt: input.acceptedAt,
         acceptedBy: {
           id: input.acceptedById,
@@ -168,10 +184,12 @@ const WEEKLY = {
 async function projected(memory: ReturnType<typeof memoryStore>) {
   const facts: FactRow[] = (await memory.store.facts(PRODUCT)).map((f) => ({
     field: f.field,
+    variantId: f.variantId,
     value: f.value,
     unit: f.unit,
     status: f.status,
     revision: f.revision,
+    public: f.public,
     sourceType: f.source.sourceType,
   }));
   const copy: CopyRow[] = (await memory.store.copy(PRODUCT)).map((c) => ({
@@ -400,5 +418,122 @@ describe("product knowledge: per-block basedOn (SEO P0 PR 1b)", () => {
     );
     await knowledge.approveCopy(PRODUCT, "lead", USER);
     assert.equal(memory.copy.get("lead")!.status, "APPROVED");
+  });
+});
+
+/*
+  A VALTOZAT-SZINTU TENY (SEO P0 PR 3, D1 es D2). A tomeg VARIANT-hatokoru
+  mezo (a PR 2 seedje), az `application` PRODUCT-hatokoru.
+
+  MI PIROSIT: egy egyvaltozatos termek tomege termekszintu sorba kerul, vagy
+  egy masodik elfogadas uj sort nyit a meglevo leptetese helyett (a FO ESET:
+  a stage-en 1900/1909 termek egyvaltozatos, acrobot 2026-10-07 16:45); egy
+  tobbvaltozatos termek tomege valtozat nelkul is atmegy; egy termekszintu
+  mezo valtozatot kap; a vetuletbe valtozat-szintu teny kerul.
+*/
+describe("product knowledge: the variant a fact belongs to (SEO P0 PR 3)", () => {
+  const ALKALMAZAS = {
+    field: "application",
+    raw: "SPS és LPS korallokhoz",
+    value: "SPS és LPS korallok",
+    url: "https://gyarto.example.invalid/amino",
+    sourceType: "MANUFACTURER_PAGE",
+  };
+  const WEIGHT = {
+    field: "weight",
+    raw: "Gewicht: 120 g",
+    value: "120 g",
+    url: "https://gyarto.example.invalid/amino",
+    sourceType: "MANUFACTURER_PAGE",
+  };
+
+  it("one variant: the weight binds to it without being named", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    const r = await knowledge.addEvidence(PRODUCT, WEIGHT, USER);
+    const view = await knowledge.accept(PRODUCT, r.fieldResultId, USER);
+    assert.deepEqual(
+      view.facts.map((f) => [f.field, f.variantId, f.revision]),
+      [["weight", "v-egy", 1]],
+    );
+    assert.deepEqual([...memory.facts.keys()], ["v-egy|weight"]);
+  });
+
+  it("one variant: a second acceptance bumps the same row, it does not open a new one", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    const first = await knowledge.addEvidence(PRODUCT, WEIGHT, USER);
+    await knowledge.accept(PRODUCT, first.fieldResultId, USER);
+    const second = await knowledge.addEvidence(
+      PRODUCT,
+      { ...WEIGHT, url: "https://gyarto.example.invalid/amino-2" },
+      USER,
+    );
+    const view = await knowledge.accept(PRODUCT, second.fieldResultId, USER);
+    assert.deepEqual(
+      view.facts.map((f) => [f.field, f.variantId, f.revision]),
+      [["weight", "v-egy", 2]],
+    );
+    assert.equal(memory.facts.size, 1);
+  });
+
+  it("several variants: the weight needs the variant named, and goes to that one", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-a", "v-b"]));
+    const r = await knowledge.addEvidence(PRODUCT, WEIGHT, USER);
+    await assert.rejects(
+      knowledge.accept(PRODUCT, r.fieldResultId, USER),
+      (err: unknown) =>
+        err instanceof BadRequestException && /variantId/.test(err.message),
+    );
+    assert.equal(memory.facts.size, 0);
+    await assert.rejects(
+      knowledge.accept(PRODUCT, r.fieldResultId, USER, "v-masik-termeke"),
+      BadRequestException,
+    );
+    const view = await knowledge.accept(PRODUCT, r.fieldResultId, USER, "v-b");
+    assert.deepEqual(
+      view.facts.map((f) => [f.field, f.variantId]),
+      [["weight", "v-b"]],
+    );
+  });
+
+  it("a product-level field takes no variant", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-a", "v-b"]));
+    const r = await knowledge.addEvidence(PRODUCT, ALKALMAZAS, USER);
+    await assert.rejects(
+      knowledge.accept(PRODUCT, r.fieldResultId, USER, "v-a"),
+      (err: unknown) =>
+        err instanceof BadRequestException && /product-level/.test(err.message),
+    );
+    assert.equal(memory.facts.size, 0);
+    const view = await knowledge.accept(PRODUCT, r.fieldResultId, USER);
+    assert.deepEqual(
+      view.facts.map((f) => [f.field, f.variantId]),
+      [["application", null]],
+    );
+  });
+
+  it("the variant's fact stays in the OS: the projection carries the product's facts only", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    const w = await knowledge.addEvidence(PRODUCT, WEIGHT, USER);
+    await knowledge.accept(PRODUCT, w.fieldResultId, USER);
+    const a = await knowledge.addEvidence(PRODUCT, ALKALMAZAS, USER);
+    await knowledge.accept(PRODUCT, a.fieldResultId, USER);
+    // pozitiv kontroll: mindket teny VERIFIED es public, tehat a vetulet nem
+    // a statusz vagy a kapu miatt hagyja ki a tomeget, hanem a valtozat miatt
+    assert.deepEqual(
+      (await memory.store.facts(PRODUCT)).map((f) => [
+        f.field,
+        f.variantId,
+        f.status,
+        f.public,
+      ]),
+      [
+        ["application", null, "VERIFIED", true],
+        ["weight", "v-egy", "VERIFIED", true],
+      ],
+    );
+    assert.deepEqual(
+      (await projected(memory)).facts.map((f) => f.field),
+      ["application"],
+    );
   });
 });

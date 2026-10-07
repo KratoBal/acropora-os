@@ -957,6 +957,7 @@ model User {
   createdQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetCreator")
   updatedQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetUpdater")
   quoteEvents                QuoteEvent[]                  @relation("QuoteEventActor")
+  incomingReadingsReviewed   IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -1047,6 +1048,10 @@ model Product {
   /// masik halmaz lapjai uresen erkeznenek a boltba.
   descriptionLong  String?
   type             ProductType              @default(PHYSICAL)
+  /// A mező-séma (SEO P0 PR 2): melyik attribútum-készlet írja le a termék
+  /// tényeit. NEM a `type` (az üzleti fajta: PHYSICAL/SERVICE/LIVESTOCK marad).
+  attributeSetId   String?
+  attributeSet     AttributeSet?            @relation(fields: [attributeSetId], references: [id], onDelete: SetNull)
   brandId          String?
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
   categoryId       String?
@@ -1232,6 +1237,7 @@ model ProductVariant {
   quoteItems                 QuoteItem[]                   @relation("QuoteItemVariant")
   quoteBomItems              QuoteBomItem[]                @relation("QuoteBomVariant")
   quoteCreatedBomItems       QuoteBomItem[]                @relation("QuoteCreatedVariant")
+  knowledgeFacts             ProductKnowledgeFact[]
 
   @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
@@ -7400,7 +7406,9 @@ model IncomingSupplierDocument {
   reviewedByUserId        String?
   createdAt               DateTime                       @default(now())
 
-  expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  expectedArrival ExpectedArrival?         @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  /// A külföldi (postafiókos) számla kinyert adata, ha a Bejövő számlák olvasta (kártya e4c3b0fb).
+  reading         IncomingDocumentReading?
 
   @@unique([gmailMessageId, fileName])
   @@index([reviewState])
@@ -7946,6 +7954,13 @@ model ProductKnowledgeFact {
   id            String                       @id @default(cuid())
   productId     String
   product       Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Változat-szintű tény változata; NULL = termékszintű (SEO P0 PR 3). Csak OS-változat
+  /// (az FK köti), Medusa-azonosító soha.
+  variantId     String?
+  variant       ProductVariant?              @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  /// `coalesce(variantId, '')`, a CHECK köti (a migráció): az egyedi kulcs része, mert a
+  /// NULL egy egyedi indexben nem ütközik.
+  scopeKey      String                       @default("") @db.VarChar(32)
   /// A JEV mezőkulcs (`packages/jev/src/product-enrichment/fields.ts`).
   field         String                       @db.VarChar(48)
   /// Csak VERIFIED/SUGGESTED (vagy emberi feloldás) mellett; ütközésnél NULL.
@@ -7964,8 +7979,9 @@ model ProductKnowledgeFact {
   revision      Int
   updatedAt     DateTime                     @updatedAt
 
-  @@unique([productId, field])
+  @@unique([productId, scopeKey, field])
   @@index([fieldResultId])
+  @@index([variantId])
 }
 
 enum ProductCopyBlock {
@@ -8529,8 +8545,9 @@ enum MortalitySourceType {
 
 /// EGY ELHULLÁSI ESEMÉNY: egy élőlény (termék), egy vagy több példány, egy
 /// akváriumban (kártya 115c9740; Balázs promptja 2026-10-06, acrobot döntései
-/// 27141). Több faj egyszerre: több rekord. Külön elhullási időpont NINCS: a
-/// rögzítés ideje (`recordedAt`) és a rögzítő (`recordedById`) automatikus.
+/// 27141). Több faj egyszerre: több rekord. A rögzítés ideje (`recordedAt`) és
+/// a rögzítő (`recordedById`) automatikus; az elhullás NAPJA (`occurredOn`)
+/// külön, szerkeszthető mező (Luca kérése, 2026-10-07).
 ///
 /// Két szabály az adatbázisban is áll, a migrációban: a példányszám legalább 1,
 /// és beszállító-forrásnál a beszállító kötelező. Törlés nincs; a módosítás
@@ -8545,7 +8562,9 @@ model MortalityRecord {
   /// szabad szöveges élőlény-név, ha az élőlény nincs a rendszerben
   productName  String?             @db.VarChar(200)
   quantity     Int
-  aquariumId   String
+  /// a bolt saját akváriuma; a halas rack (`locationId`) mellett elhagyható:
+  /// a kettőből legalább az egyik kötelező (CHECK őrzi; 2026-10-07)
+  aquariumId   String?
   sourceType   MortalitySourceType
   /// beszállítói forrásnál a rendszerbeli beszállító VAGY a `sourceNote`
   /// szabad szövege (pontosan az egyik); a többi forrásnál üres
@@ -8554,22 +8573,52 @@ model MortalityRecord {
   /// szereplő beszállító neve, máshol pl. a tenyésztő neve; OTHER-nél kötelező
   sourceNote   String?             @db.VarChar(200)
   note         String?
+  /// az elhullás napja (Budapest naptára szerint); nem lehet a jövőben (a
+  /// szolgáltatás őrzi). Nincs adatbázis-alapértéke: a „ma” Budapest napja, nem
+  /// a szerveré, ezért mindig az alkalmazás adja meg.
+  occurredOn   DateTime            @db.Date
+  /// a halas rack, ahol történt (Luca kérése, 2026-10-07); az akvárium VAGY
+  /// a rack kötelező, legalább az egyik, akár mindkettő
+  locationId   String?
   recordedById String
   recordedAt   DateTime            @default(now())
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
   product    Product?                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  aquarium   Aquarium                  @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
+  aquarium   Aquarium?                 @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
   supplier   Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  location   MortalityLocation?        @relation(fields: [locationId], references: [id], onDelete: Restrict)
   recordedBy User                      @relation("MortalityRecordRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
   documents  MortalityRecordDocument[]
 
+  @@index([occurredOn])
+  @@index([locationId])
   @@index([recordedAt])
   @@index([aquariumId, recordedAt])
   @@index([productId])
   @@index([supplierId])
   @@index([recordedById])
+}
+
+/// A HALAS RENDSZEREK, AHOL ELHULLÁS TÖRTÉNHET (Luca kérése, 2026-10-07): a
+/// halas rackek nem akváriumok, és nem is kerülhetnek az Akváriumok menübe,
+/// ezért saját, kicsi törzsadat. Adatban áll, nem a kódban: amit építünk,
+/// később publikus termék alapja lehet (Balázs 2026-09-25), ahol a lista
+/// boltonként más. A kezdő tíz nevet a migráció tölti fel; kezelőfelület még
+/// nincs. A kivezetett helyszín nem törlődik (bejegyzés mutathat rá), csak a
+/// választóból esik ki.
+model MortalityLocation {
+  id         String    @id @default(cuid())
+  name       String    @unique @db.VarChar(100)
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  mortalityRecords MortalityRecord[]
+
+  @@index([archivedAt, sortOrder])
 }
 
 /// AZ ELHULLÁSI BEJEGYZÉS FOTÓI. Ugyanaz az alak, mint a `ServiceJobDocument`:
@@ -8868,4 +8917,198 @@ model QuoteEvent {
   actor       User?          @relation("QuoteEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([quoteId, createdAt])
+}
+
+enum IncomingDocumentReviewState {
+  TO_REVIEW
+  VERIFIED
+}
+
+/// A POSTAFIÓKOS (KÜLFÖLDI) BEJÖVŐ SZÁMLA KINYERT ADATA, AMÍG EMBER RÁ NEM NÉZ
+/// (kártya e4c3b0fb; Balázs 2026-10-07 12:12 UTC). A levél PDF-jéből olvassuk
+/// (a beszállítói illesztő és az általános szövegolvasó), a mezők üresek is
+/// lehetnek: egy részleges kinyerés a jóváhagyásig itt áll.
+///
+/// MIÉRT NEM KÖZVETLENÜL AZ `IncomingBillingDocument`: annak pénz- és
+/// dátum-mezői kötelezők, és a Számlázz.hu-ból újraépíthető vetítés.
+/// JÓVÁHAGYÁSKOR ott keletkezik egy rendes sor (`source = "MAILBOX"`), és a
+/// lista, az adatlap és a havi csomag ugyanabból olvas, mint a Számlázz.hu
+/// soroknál; a `incomingBillingDocumentId` arra mutat.
+///
+/// A `documentId` a banki párosítás dokumentumának fő azonosítója, ugyanaz,
+/// mint a lista `mailbox:` sora: így a jóváhagyott sor a mai dedup szerint
+/// kiváltja a postafiókos sort, dupla sor nélkül.
+model IncomingDocumentReading {
+  id                        String                      @id @default(cuid())
+  documentId                String                      @unique
+  state                     IncomingDocumentReviewState @default(TO_REVIEW)
+  supplierName              String?
+  supplierTaxNumber         String?
+  supplierEuTaxNumber       String?
+  documentNumber            String?
+  issueDate                 DateTime?                   @db.Date
+  fulfillmentDate           DateTime?                   @db.Date
+  dueDate                   DateTime?                   @db.Date
+  currency                  String?                     @db.VarChar(3)
+  netAmount                 Decimal?                    @db.Decimal(18, 2)
+  vatAmount                 Decimal?                    @db.Decimal(18, 2)
+  grossAmount               Decimal?                    @db.Decimal(18, 2)
+  /// Mezőnként a forrás: ADAPTER, TEXT, PAIRING vagy MANUAL.
+  sources                   Json
+  /// Magyar nyelvű figyelmeztetések (string[]), pl. ha az összegek nem egyeznek.
+  warnings                  Json
+  /// Volt-e a PDF-nek szövegrétege (szkennelt számlánál minden mező kézi).
+  hasText                   Boolean
+  readAt                    DateTime                    @default(now())
+  reviewedAt                DateTime?
+  reviewedByUserId          String?
+  /// A jóváhagyáskor létrejött bejövő számla (`IncomingBillingDocument`, source MAILBOX).
+  incomingBillingDocumentId String?                     @unique
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+
+  document   IncomingSupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewedBy User?                    @relation("IncomingDocumentReadingReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  // DB: CHECK a VERIFIED sor kötelező mezői (szállító, szám, kelt, deviza,
+  // nettó, ÁFA, bruttó) és a jóváhagyás ideje megvannak (a migrációban).
+
+  @@index([state])
+}
+
+// ---------------------------------------------------------------------------
+// SEO P0 PR 2: AZ ATTRIBUTUM-MODELL (terv: exchange/seo/seo-p0-terv-2026-10-07.md,
+// C1 es "PR 2", a tiz kiegeszito dontessel). A `ProductType` nev foglalt (a mai
+// enum, es az API `productType` mezoje), ezert a mezo-sema neve `AttributeSet`.
+
+enum AttributeDataType {
+  STRING
+  TEXT
+  NUMBER
+  BOOLEAN
+  ENUM
+  RANGE
+  QUANTITY
+  RELATION
+  /// az adagolas: mennyiseg / viztérfogat / idoszak (a JEV `parseDose` alakja)
+  DOSE
+}
+
+enum AttributeDimension {
+  LENGTH
+  MASS
+  VOLUME
+  FLOW
+  POWER
+  VOLTAGE
+  DOSE
+  TEMPERATURE
+  CONCENTRATION
+}
+
+enum AttributeRelationTarget {
+  PRODUCT
+  BRAND
+  STORE_CATEGORY
+}
+
+enum AttributeScope {
+  PRODUCT
+  VARIANT
+}
+
+enum AttributeStorage {
+  KNOWLEDGE_FACT
+  VARIANT_BARCODE
+  IMAGE_ALT
+}
+
+enum AttributeTier {
+  A
+  B
+  C
+}
+
+enum AttributeClaimPolicy {
+  NONE
+  VALUE
+  PROSE
+}
+
+enum AttributeMedusaNativeField {
+  VARIANT_WEIGHT
+  VARIANT_LENGTH
+  VARIANT_WIDTH
+  VARIANT_HEIGHT
+  VARIANT_ORIGIN_COUNTRY
+}
+
+/// Egy termek-teny definicioja. A `key` = a `ProductKnowledgeFact.field`.
+/// A sorokat a migracio seedeli (a `FIELD_SPECS` teny-kulcsaibol); a `public`
+/// a vasarloi vetulet kapuja.
+model AttributeDefinition {
+  key               String                      @id @db.VarChar(48)
+  label             String
+  dataType          AttributeDataType
+  dimension         AttributeDimension?
+  canonicalUnit     String?
+  relationTarget    AttributeRelationTarget?
+  scope             AttributeScope              @default(PRODUCT)
+  storage           AttributeStorage            @default(KNOWLEDGE_FACT)
+  tier              AttributeTier
+  claimPolicy       AttributeClaimPolicy        @default(NONE)
+  /// `{min, max, precision, pattern, maxLength, unitQualifiers}`
+  validation        Json?
+  searchable        Boolean                     @default(false)
+  filterable        Boolean                     @default(false)
+  public            Boolean                     @default(false)
+  aiVisible         Boolean                     @default(false)
+  merchantVisible   Boolean                     @default(false)
+  medusaNativeField AttributeMedusaNativeField?
+  isActive          Boolean                     @default(true)
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  enumValues        AttributeEnumValue[]
+  sets              AttributeSetAttribute[]
+}
+
+model AttributeEnumValue {
+  id           String              @id @default(cuid())
+  attributeKey String              @db.VarChar(48)
+  attribute    AttributeDefinition @relation(fields: [attributeKey], references: [key], onDelete: Cascade)
+  value        String
+  label        String
+  sortOrder    Int                 @default(0)
+
+  @@unique([attributeKey, value])
+}
+
+/// A mezo-sema (pump, lighting, additive, ...). Az alkeszlet orokli a szulo
+/// attributumait; a fa kormentes (a kod orzi, `attribute-sets.policy.ts`).
+model AttributeSet {
+  id         String                  @id @default(cuid())
+  key        String                  @unique
+  name       String
+  parentId   String?
+  parent     AttributeSet?           @relation("AttributeSetParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children   AttributeSet[]          @relation("AttributeSetParent")
+  isActive   Boolean                 @default(true)
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  attributes AttributeSetAttribute[]
+  products   Product[]
+}
+
+model AttributeSetAttribute {
+  id             String              @id @default(cuid())
+  attributeSetId String
+  attributeSet   AttributeSet        @relation(fields: [attributeSetId], references: [id], onDelete: Cascade)
+  attributeKey   String              @db.VarChar(48)
+  attribute      AttributeDefinition @relation(fields: [attributeKey], references: [key], onDelete: Restrict)
+  required       Boolean             @default(false)
+  /// a definicio `filterable`-jenek felulirasa keszletenkent
+  filterable     Boolean?
+  group          String?
+  sortOrder      Int                 @default(0)
+
+  @@unique([attributeSetId, attributeKey])
 }

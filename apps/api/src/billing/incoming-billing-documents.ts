@@ -8,11 +8,25 @@ import type {
   IncomingDocumentListQuery,
   IncomingDocumentListResponse,
   IncomingPaymentState,
+  IncomingReadingValues,
 } from "@acropora/types";
 import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
-import { externalKindLabel } from "./billing-document-list.js";
+import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
+
+/**
+ * A POSTAFIÓKOS SZÁMLA SAJÁT TÍPUSKÓDJA (kártya e4c3b0fb, barracuda
+ * visszamérése, acrobot 27623). Nem `SZ`: a begyűjtés `FEED_BASE_KINDS`
+ * listája (`SZ`, `ES`, `VS`) a Számlázz.hu sorok számait ismert számnak veszi
+ * más PDF-ek felismerésénél, és ez a sor nem a Számlázz.hu-ból jön.
+ */
+export const MAILBOX_KIND_CODE = "MB";
+
+export const externalKindLabel = (kindCode: string): string =>
+  kindCode.toUpperCase() === MAILBOX_KIND_CODE
+    ? "Postafiókos számla"
+    : feedKindLabel(kindCode);
 import type {
   IncomingPayment,
   IncomingVatSummary,
@@ -159,7 +173,9 @@ export function toIncomingListItem(
   const bankMatch = bankMatchOf(row, pairings);
   return {
     id: row.id,
-    origin: "SZAMLAZZ",
+    // a jóváhagyott postafiókos számla rendes sor, de az eredete látszik (kártya e4c3b0fb)
+    origin: row.source === "MAILBOX" ? "MAILBOX" : "SZAMLAZZ",
+    review: row.source === "MAILBOX" ? "VERIFIED" : null,
     documentNumber: row.documentNumber,
     kindCode: row.kindCode,
     kindLabel: externalKindLabel(row.kindCode),
@@ -218,15 +234,36 @@ export function mailboxOnlyPaidItems(
     "sourceDocumentId" | "documentNumber"
   >[],
   pairings: ReadonlyMap<string, DocumentPairing>,
+  /**
+   * A kinyert, még nem jóváhagyott adat dokumentumonként (kártya e4c3b0fb):
+   * ha van, a sor ezzel töltődik ki, „Ellenőrizendő” jelöléssel.
+   */
+  readings: ReadonlyMap<string, IncomingReadingValues> = new Map(),
 ): IncomingDocumentListItem[] {
-  const feedSources = new Set(
-    feed.map((row) => row.sourceDocumentId).filter(Boolean),
+  return mailboxOnlyPairings(feed, pairings).map((pairing) =>
+    mailboxListItem(
+      pairing.document,
+      pairing,
+      readings.get(pairing.document.id),
+    ),
   );
-  const feedNumbers = new Set(
-    feed.map((row) => compactNumber(row.documentNumber)),
-  );
+}
+
+/**
+ * Ugyanazok a párosítások, amikből a fenti sorok lesznek: a kinyerés és a
+ * jóváhagyás ezen a halmazon dolgozik, hogy a lista és a jóváhagyható sorok
+ * soha ne térjenek el (kártya e4c3b0fb).
+ */
+export function mailboxOnlyPairings(
+  feed: readonly Pick<
+    IncomingBillingDocument,
+    "sourceDocumentId" | "documentNumber"
+  >[],
+  pairings: ReadonlyMap<string, DocumentPairing>,
+): DocumentPairing[] {
+  const notInFeed = notInFeedTest(feed);
   const seen = new Set<DocumentPairing>();
-  const items: IncomingDocumentListItem[] = [];
+  const result: DocumentPairing[] = [];
   for (const pairing of pairings.values()) {
     if (seen.has(pairing)) continue;
     seen.add(pairing);
@@ -236,23 +273,71 @@ export function mailboxOnlyPaidItems(
       pairing.payee !== "COMPANY" ||
       !pairing.paidInFull ||
       pairing.debits.length === 0 ||
-      !MAILBOX_ONLY_SOURCES.has(document.source)
+      !notInFeed(document)
     )
       continue;
-    const ids = [document.id, ...(document.aliasIds ?? [])];
-    if (
-      ids.some((id) => feedSources.has(id)) ||
-      feedNumbers.has(compactNumber(document.number))
-    )
-      continue;
-    items.push(mailboxListItem(document, pairing));
+    result.push(pairing);
   }
-  return items;
+  return result;
+}
+
+/**
+ * CSAK POSTAFIÓKBÓL ISMERT-E a dokumentum: postafiókos (Drive, feltöltés)
+ * forrás, és sem ő, sem az aliasa nem egy feed-sor forrása, és a száma sem
+ * egy feed-soré. A havi csomag is ezzel dönti el, melyik számla adatát kell
+ * ellenőrizni (kártya e4c3b0fb).
+ */
+export function notInFeedTest(
+  feed: readonly Pick<
+    IncomingBillingDocument,
+    "sourceDocumentId" | "documentNumber"
+  >[],
+): (
+  document: Pick<
+    DocumentPairing["document"],
+    "id" | "aliasIds" | "number" | "source"
+  >,
+) => boolean {
+  const feedSources = new Set(
+    feed.map((row) => row.sourceDocumentId).filter(Boolean),
+  );
+  const feedNumbers = new Set(
+    feed.map((row) => compactNumber(row.documentNumber)),
+  );
+  return (document) =>
+    MAILBOX_ONLY_SOURCES.has(document.source) &&
+    ![document.id, ...(document.aliasIds ?? [])].some((id) =>
+      feedSources.has(id),
+    ) &&
+    !feedNumbers.has(compactNumber(document.number));
+}
+
+/** A csak postafiókos sor azonosítójának előtagja; utána a jelölt dokumentum azonosítója. */
+export const MAILBOX_ITEM_PREFIX = "mailbox:";
+
+/**
+ * A CSAK POSTAFIÓKOS SOR PDF-JELÖLTJEI, sorrendben. A sor azonosítója a
+ * párosított jelölt `id`-je, ami összevont számlánál a fő dokumentumé (gyakran
+ * a NAV-soré, aminek nincs fájlja); a fájl az `originalId` dokumentumánál van.
+ * Ezért előbb az eredeti, utána maga a jelölt, végül az aliasai: mind
+ * `IncomingSupplierDocument` azonosító lehet, a NAV-sor egyszerűen nem talál.
+ */
+export function mailboxPdfCandidates(
+  document: DocumentPairing["document"],
+): string[] {
+  return [
+    ...new Set([
+      ...(document.originalId ? [document.originalId] : []),
+      document.id,
+      ...(document.aliasIds ?? []),
+    ]),
+  ];
 }
 
 function mailboxListItem(
   document: DocumentPairing["document"],
   pairing: DocumentPairing,
+  reading?: IncomingReadingValues,
 ): IncomingDocumentListItem {
   const debits = pairing.debits;
   // bruttó nélküli rekordnál a fizetett összeg a terheléseké, a terhelés devizájában
@@ -263,12 +348,19 @@ function mailboxListItem(
         (sum, debit) => sum.plus(new Prisma.Decimal(debit.amount)),
         new Prisma.Decimal(0),
       );
-  return {
-    id: `mailbox:${document.id}`,
+  /*
+    A KINYERT ADAT CSAK KIEGÉSZÍT (kártya e4c3b0fb): ami a párosításból ismert,
+    marad; a kinyert mező a hiányzót tölti, a sor pedig „Ellenőrizendő”, amíg
+    ember jóvá nem hagyja. A fizetés továbbra is a bankból jön.
+  */
+  const item: IncomingDocumentListItem = {
+    id: `${MAILBOX_ITEM_PREFIX}${document.id}`,
     origin: "MAILBOX",
+    // jóváhagyás után a sor a feedből jön, ide csak ellenőrizetlen jut
+    review: "TO_REVIEW",
     documentNumber: document.number,
-    kindCode: "SZ",
-    kindLabel: externalKindLabel("SZ"),
+    kindCode: MAILBOX_KIND_CODE,
+    kindLabel: externalKindLabel(MAILBOX_KIND_CODE),
     invoiceFormat: null,
     cancelled: false,
     supplierName: document.supplierName,
@@ -291,6 +383,30 @@ function mailboxListItem(
     paymentConflict: false,
     bankMatch: { state: "PAIRED", reason: null, debits },
     hasPdf: false,
+  };
+  if (!reading) return item;
+  /*
+    A sornak EGY devizája van, és a fizetett összeg a párosítás devizájában áll.
+    Ha a kinyert deviza más, a kinyert összegeket a lista nem mutatja (rossz
+    devizával címkézve állnának); az adatlap mindet mutatja.
+  */
+  const sameCurrency = (reading.currency ?? item.currency) === item.currency;
+  const value = (amount: string | null) =>
+    amount === null || !sameCurrency
+      ? null
+      : money(new Prisma.Decimal(amount), item.currency);
+  return {
+    ...item,
+    documentNumber: reading.documentNumber ?? item.documentNumber,
+    supplierName: reading.supplierName ?? item.supplierName,
+    supplierTaxNumber:
+      reading.supplierTaxNumber ?? reading.supplierEuTaxNumber ?? null,
+    issueDate: reading.issueDate ?? item.issueDate,
+    fulfillmentDate: reading.fulfillmentDate,
+    dueDate: reading.dueDate,
+    netAmount: value(reading.netAmount),
+    vatAmount: value(reading.vatAmount),
+    grossAmount: value(reading.grossAmount) ?? item.grossAmount,
   };
 }
 
@@ -367,6 +483,7 @@ export function filterIncoming(
         return false;
       if (query.bankMatch && item.bankMatch.state !== query.bankMatch)
         return false;
+      if (query.review && item.review !== query.review) return false;
       return true;
     })
     .sort(

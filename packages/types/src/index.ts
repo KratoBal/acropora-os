@@ -1017,6 +1017,12 @@ export {
   INCOMING_NOT_TO_PAIR_REASON_LABELS,
   INCOMING_PAYMENT_STATE_LABELS,
   INCOMING_PAYMENT_STATES,
+  INCOMING_READING_FIELD_LABELS,
+  INCOMING_READING_FIELDS,
+  INCOMING_READING_REQUIRED,
+  INCOMING_READING_SOURCE_LABELS,
+  INCOMING_REVIEW_LABELS,
+  INCOMING_REVIEW_STATES,
 } from "./billing-incoming.js";
 export type {
   IncomingBankMatch,
@@ -1025,6 +1031,12 @@ export type {
   IncomingDocumentDetail,
   IncomingDocumentLine,
   IncomingDocumentListItem,
+  IncomingDocumentReview,
+  IncomingReadingField,
+  IncomingReadingSource,
+  IncomingReadingValues,
+  IncomingReviewInput,
+  IncomingReviewState,
   IncomingDocumentOrigin,
   IncomingDocumentListQuery,
   IncomingDocumentListResponse,
@@ -1116,6 +1128,7 @@ export {
   PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
   PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
+  productKnowledgeFactKey,
 } from "./product-knowledge.js";
 export type {
   ProductCopyBlock,
@@ -1297,6 +1310,7 @@ export type {
   MortalityListItem,
   MortalityListQuery,
   MortalityListResponse,
+  MortalityLocationOption,
   MortalityPhoto,
   MortalityProductOption,
   MortalityRecorderOption,

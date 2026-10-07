@@ -84,11 +84,22 @@ export interface ProductManualEvidenceResult {
 
 export interface ProductKnowledgeFact {
   field: ProductEnrichmentFieldKey;
+  /**
+   * The variant a variant-level fact belongs to; `null` = product-level (SEO
+   * P0 PR 3). Two facts of one field (the product's and a variant's) are two
+   * rows: name them by `productKnowledgeFactKey`, never by `field` alone.
+   */
+  variantId: string | null;
   /** `null` for CONFLICTING_SOURCES: the values are in JEV, not here. */
   value: string | null;
   unit: string | null;
   status: ProductFieldStatus;
   revision: number;
+  /**
+   * The field's definition is `public` (SEO P0 PR 2): the buyer may see this
+   * kind of fact at all. A VERIFIED fact with `false` stays in the OS.
+   */
+  public: boolean;
   acceptedAt: string;
   acceptedBy: { id: string; displayName: string };
   /** The JEV field result this fact was accepted from. */
@@ -128,4 +139,24 @@ export interface ProductKnowledge {
   productId: string;
   facts: ProductKnowledgeFact[];
   copy: ProductCopyEntry[];
+}
+
+/**
+ * THE KEY A FACT IS NAMED BY (SEO P0 PR 3): its field, or `field@variantId`
+ * for a variant-level fact. The revisions (`basedOn`), a block's `usedFields`,
+ * the VERIFIED set and the panel's checkboxes all count by this key, so that a
+ * variant's fact never stands in for the product's fact of the same field.
+ */
+export function productKnowledgeFactKey(fact: {
+  field: string;
+  /**
+   * Optional HERE only: an API answer from before PR 3 has no such key while
+   * the two apps roll out one after the other, and a missing variant is the
+   * product's own fact, not `field@undefined`. The API's own types require it.
+   */
+  variantId?: string | null;
+}): string {
+  return fact.variantId === null || fact.variantId === undefined
+    ? fact.field
+    : `${fact.field}@${fact.variantId}`;
 }

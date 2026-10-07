@@ -84,9 +84,124 @@ export interface IncomingDocumentListQuery {
   kindCode?: string;
   currency?: string;
   bankMatch?: IncomingBankMatchState;
+  /** csak az ellenőrizendő (vagy csak az ellenőrzött) postafiókos sorok */
+  review?: IncomingReviewState;
 }
 
 export type IncomingDocumentOrigin = "SZAMLAZZ" | "MAILBOX";
+
+/**
+ * A POSTAFIÓKOS (KÜLFÖLDI) SZÁMLA ELLENŐRZÉSE (kártya e4c3b0fb, Balázs
+ * 2026-10-07 12:12 UTC). A levél PDF-jéből kinyert adat „Ellenőrizendő”, amíg
+ * ember rá nem néz; jóváhagyás után rendes bejövő számla lesz (`VERIFIED`). A
+ * Számlázz.hu-ból jött sornak nincs ilyen állapota (`null`).
+ */
+export const INCOMING_REVIEW_STATES = ["TO_REVIEW", "VERIFIED"] as const;
+export type IncomingReviewState = (typeof INCOMING_REVIEW_STATES)[number];
+
+export const INCOMING_REVIEW_LABELS: Readonly<
+  Record<IncomingReviewState, string>
+> = {
+  TO_REVIEW: "Ellenőrizendő",
+  VERIFIED: "Ellenőrzött",
+};
+
+/** A kinyert, javítható mezők, a megjelenítés sorrendjében. */
+export const INCOMING_READING_FIELDS = [
+  "supplierName",
+  "supplierTaxNumber",
+  "supplierEuTaxNumber",
+  "documentNumber",
+  "issueDate",
+  "fulfillmentDate",
+  "dueDate",
+  "currency",
+  "netAmount",
+  "vatAmount",
+  "grossAmount",
+] as const;
+export type IncomingReadingField = (typeof INCOMING_READING_FIELDS)[number];
+
+export const INCOMING_READING_FIELD_LABELS: Readonly<
+  Record<IncomingReadingField, string>
+> = {
+  supplierName: "Szállító",
+  supplierTaxNumber: "Adószám",
+  supplierEuTaxNumber: "Közösségi adószám",
+  documentNumber: "Számlaszám",
+  issueDate: "Kelt",
+  fulfillmentDate: "Teljesítés",
+  dueDate: "Fizetési határidő",
+  currency: "Deviza",
+  netAmount: "Nettó",
+  vatAmount: "ÁFA",
+  grossAmount: "Bruttó",
+};
+
+/**
+ * A jóváhagyáshoz kötelező mezők: enélkül a sor nem lehet rendes bejövő
+ * számla (a könyvelőnek ezek kellenek). A teljesítés és a határidő nem
+ * kötelező: sok külföldi számlán nincs ilyen címke, és nem találjuk ki.
+ */
+export const INCOMING_READING_REQUIRED: readonly IncomingReadingField[] = [
+  "supplierName",
+  "documentNumber",
+  "issueDate",
+  "currency",
+  "netAmount",
+  "vatAmount",
+  "grossAmount",
+];
+
+/**
+ * Honnan jött egy mező: a beszállítói illesztőből (`ADAPTER`), a PDF
+ * szövegéből (`TEXT`), a banki párosításból (`PAIRING`), vagy kézzel
+ * (`MANUAL`).
+ */
+export type IncomingReadingSource = "ADAPTER" | "TEXT" | "PAIRING" | "MANUAL";
+
+/** Honnan jött egy mező értéke, az ellenőrző lapon a mező mellett. */
+export const INCOMING_READING_SOURCE_LABELS: Readonly<
+  Record<IncomingReadingSource, string>
+> = {
+  ADAPTER: "PDF, beszállítói olvasó",
+  TEXT: "PDF szövegéből",
+  PAIRING: "Banki párosításból",
+  MANUAL: "Kézi",
+};
+
+export interface IncomingReadingValues {
+  supplierName: string | null;
+  supplierTaxNumber: string | null;
+  supplierEuTaxNumber: string | null;
+  documentNumber: string | null;
+  /** YYYY-MM-DD */
+  issueDate: string | null;
+  fulfillmentDate: string | null;
+  dueDate: string | null;
+  currency: string | null;
+  netAmount: DecimalText | null;
+  vatAmount: DecimalText | null;
+  grossAmount: DecimalText | null;
+}
+
+/** Egy postafiókos sor ellenőrző lapja (`GET .../incoming-documents/mailbox:<id>/review`). */
+export interface IncomingDocumentReview {
+  /** a listában álló sor, ahogy most látszik */
+  item: IncomingDocumentListItem;
+  state: IncomingReviewState;
+  values: IncomingReadingValues;
+  sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>;
+  /** magyar nyelvű figyelmeztetések, pl. ha a nettó és az ÁFA nem adja ki a bruttót */
+  warnings: string[];
+  /** volt-e a PDF-nek szövegrétege (szkennelt számlánál minden mező kézi) */
+  hasText: boolean;
+  /** mikor olvasta a rendszer; `null`, ha még nem */
+  readAt: string | null;
+}
+
+/** A javított mezők (`PUT .../review`), és jóváhagyáskor ugyanez (`POST .../review/approve`). */
+export type IncomingReviewInput = IncomingReadingValues;
 
 export interface IncomingDocumentListItem {
   id: string;
@@ -135,6 +250,12 @@ export interface IncomingDocumentListItem {
   paymentConflict: boolean;
   bankMatch: IncomingBankMatch;
   /**
+   * Postafiókos sornál az ellenőrzés állapota: `TO_REVIEW`, amíg ember nem
+   * hagyta jóvá (a sor azonosítója ilyenkor `mailbox:` előtagú), `VERIFIED`
+   * utána. A Számlázz.hu-ból jött sornál `null`.
+   */
+  review: IncomingReviewState | null;
+  /**
    * Letölthető-e a számla PDF-je: a Számlázz.hu küldte, vagy a begyűjtés hozta
    * (számlaszám és szállítói adószám-törzs szerint párosítva).
    */
@@ -168,8 +289,11 @@ export interface IncomingDocumentLine {
 }
 
 export interface IncomingDocumentDetail extends IncomingDocumentListItem {
-  /** Adatlapja csak a feed sorának van: ott a formátum és az összegek megvannak. */
-  origin: "SZAMLAZZ";
+  /**
+   * Adatlapja a feed sorának van: ott a formátum és az összegek megvannak. A
+   * jóváhagyott postafiókos sor is ide tartozik (`MAILBOX`, kártya e4c3b0fb).
+   */
+  origin: IncomingDocumentOrigin;
   invoiceFormat: InvoiceFormat;
   netAmount: DecimalText;
   vatAmount: DecimalText;

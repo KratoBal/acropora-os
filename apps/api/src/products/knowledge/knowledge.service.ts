@@ -18,6 +18,7 @@ import type {
 import type { EnrichmentFactsReader } from "../enrichment/enrichment-run.js";
 import { PrismaEnrichmentFactsReader } from "../enrichment/enrichment-run.store.js";
 import { ProductService } from "../product.service.js";
+import { factScope, validateFactValue } from "./fact-definition.policy.js";
 import {
   copyIsStale,
   currentRevisions,
@@ -78,10 +79,12 @@ export class ProductKnowledgeService {
       productId,
       facts: facts.map((fact) => ({
         field: fact.field as ProductEnrichmentFieldKey,
+        variantId: fact.variantId,
         value: fact.value,
         unit: fact.unit,
         status: fact.status as ProductFieldStatus,
         revision: fact.revision,
+        public: fact.public,
         acceptedAt: fact.acceptedAt.toISOString(),
         acceptedBy: fact.acceptedBy,
         fieldResultId: fact.fieldResultId,
@@ -140,16 +143,29 @@ export class ProductKnowledgeService {
     };
   }
 
+  /**
+   * `variantId` (SEO P0 PR 3, D1): the decision names the variant, the JEV
+   * result has none. Optional: a product-level field takes none, and a
+   * variant-level field of a one-variant product binds to that variant.
+   */
   async accept(
     productId: string,
     fieldResultId: unknown,
     user: Actor,
+    variantId?: unknown,
   ): Promise<ProductKnowledge> {
     const result = await this.currentResult(productId, fieldResultId);
     const decision = factFromResult(result);
     if (!decision.ok) throw new ConflictException(decision.reason);
+    const scope = await this.checked(
+      productId,
+      result.field,
+      decision,
+      variantId,
+    );
     await this.store.upsertFact({
       productId,
+      variantId: scope,
       field: result.field,
       value: decision.value,
       unit: decision.unit,
@@ -166,12 +182,20 @@ export class ProductKnowledgeService {
     fieldResultId: unknown,
     value: unknown,
     user: Actor,
+    variantId?: unknown,
   ): Promise<ProductKnowledge> {
     const result = await this.currentResult(productId, fieldResultId);
     const decision = resolvedFact(result, value);
     if (!decision.ok) throw new ConflictException(decision.reason);
+    const scope = await this.checked(
+      productId,
+      result.field,
+      decision,
+      variantId,
+    );
     await this.store.upsertFact({
       productId,
+      variantId: scope,
       field: result.field,
       value: decision.value,
       unit: decision.unit,
@@ -240,6 +264,29 @@ export class ProductKnowledgeService {
         approvedAt: this.now(),
       });
     return this.knowledge(productId);
+  }
+
+  /**
+   * THE DOOR EVERY FACT PASSES (SEO P0 PR 3): its definition's scope decides
+   * which variant it belongs to, and its definition checks the value. Accept
+   * and resolve are the only writers of a fact, manual evidence included (it
+   * becomes a JEV result first), so this is the one place.
+   */
+  private async checked(
+    productId: string,
+    field: string,
+    fact: { value: string | null; unit: string | null },
+    requested: unknown,
+  ): Promise<string | null> {
+    const [definition, variantIds] = await Promise.all([
+      this.store.definition(field),
+      this.store.variantIds(productId),
+    ]);
+    const valid = validateFactValue(definition, field, fact);
+    if (!valid.ok) throw new BadRequestException(valid.reason);
+    const scope = factScope(definition!, requested, variantIds);
+    if (!scope.ok) throw new BadRequestException(scope.reason);
+    return scope.value;
   }
 
   /**

@@ -19,6 +19,8 @@ import {
   INCOMING_BANK_MATCH_STATES,
   INCOMING_PAYMENT_STATE_LABELS,
   INCOMING_PAYMENT_STATES,
+  INCOMING_REVIEW_LABELS,
+  INCOMING_REVIEW_STATES,
   INVOICE_FORMAT_LABELS,
   type IncomingDocumentListItem,
   type IncomingDocumentListResponse,
@@ -33,6 +35,7 @@ import {
   useUrlQuery,
 } from "@/lib/navigation/use-url-query";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
+import { incomingReviewHref } from "./billing-incoming-review-page";
 import { PAYMENT_STATE_TONE, PaymentBadge } from "./billing-payment";
 
 const PAGE_SIZE = String(BILLING_DOCUMENT_LIST_PAGE_SIZE.default);
@@ -64,7 +67,8 @@ const rateText = (value: string | null) =>
  * a csak postafiókból ismert számlánál a forrás, mert formátumot a feed ad.
  */
 export const flagsText = (item: IncomingDocumentListItem) =>
-  `${item.kindCode.toUpperCase() === "SZ" ? "Normál" : item.kindLabel} · ${
+  // a postafiókos számla saját kódja (MB) is normál számla (e4c3b0fb)
+  `${["SZ", "MB"].includes(item.kindCode.toUpperCase()) ? "Normál" : item.kindLabel} · ${
     item.origin === "MAILBOX" || item.invoiceFormat === null
       ? "Postafiókból"
       : INVOICE_FORMAT_LABELS[item.invoiceFormat]
@@ -91,6 +95,18 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
             {item.documentNumber}
           </span>
           <span className="text-xs text-pilot-aqua-700">{flagsText(item)}</span>
+          {/* a postafiókos számla adata ellenőrzésre vár, vagy ellenőrzött (e4c3b0fb) */}
+          {item.review ? (
+            <span
+              className={`text-xs font-semibold ${
+                item.review === "TO_REVIEW"
+                  ? "text-pilot-accent-warm-text"
+                  : "text-pilot-grey-500"
+              }`}
+            >
+              {INCOMING_REVIEW_LABELS[item.review]}
+            </span>
+          ) : null}
         </span>
       ),
     },
@@ -236,6 +252,7 @@ const FILTER_KEYS = [
   "tipus",
   "penznem",
   "bank",
+  "ellenorzes",
   "page",
 ] as const;
 
@@ -268,6 +285,12 @@ export function BillingIncomingList({ token }: { token: string }) {
     ["", ...INCOMING_BANK_MATCH_STATES],
     "",
   );
+  const review = urlChoice(
+    params,
+    "ellenorzes",
+    ["", ...INCOMING_REVIEW_STATES],
+    "",
+  );
   const kindCode = params.get("tipus") ?? "";
   const currency = params.get("penznem") ?? "";
   const page = urlPage(params);
@@ -279,6 +302,7 @@ export function BillingIncomingList({ token }: { token: string }) {
     dateBasis !== "kelt" ||
     paymentState ||
     bankMatch ||
+    review ||
     kindCode ||
     currency,
   );
@@ -314,10 +338,12 @@ export function BillingIncomingList({ token }: { token: string }) {
     if (kindCode) value.set("kindCode", kindCode);
     if (currency) value.set("currency", currency);
     if (bankMatch) value.set("bankMatch", bankMatch);
+    if (review) value.set("review", review);
     return value;
   }, [
     appliedSearch,
     bankMatch,
+    review,
     currency,
     dateBasis,
     kindCode,
@@ -457,6 +483,20 @@ export function BillingIncomingList({ token }: { token: string }) {
               </option>
             ))}
           </PilotSelect>
+          <PilotSelect
+            chevron
+            aria-label="Ellenőrzés"
+            value={review}
+            onChange={(value) => setFilter("ellenorzes", value)}
+            className="min-w-[180px] flex-[1_1_190px] [&_select]:h-10"
+          >
+            <option value="">Ellenőrzés: mind</option>
+            {INCOMING_REVIEW_STATES.map((state) => (
+              <option key={state} value={state}>
+                {INCOMING_REVIEW_LABELS[state]}
+              </option>
+            ))}
+          </PilotSelect>
           {hasFilters ? (
             <button
               type="button"
@@ -512,14 +552,21 @@ export function BillingIncomingList({ token }: { token: string }) {
               columns={INCOMING_COLUMNS}
               rows={data.items}
               rowKey={(item) => item.id}
-              onRowActivate={(item) => {
-                // a csak postafiókos sornak nincs feed-adatlapja
-                if (item.origin === "MAILBOX") return;
-                router.push(incomingDocumentHref(item.id));
-              }}
+              onRowActivate={(item) =>
+                /*
+                  A még nem jóváhagyott postafiókos sornak nincs adatlapja: az
+                  ellenőrző lapja nyílik, ott a PDF is (kártya e4c3b0fb; előtte
+                  a sor a PDF-et nyitotta). A jóváhagyott sor rendes adatlap.
+                */
+                router.push(
+                  item.review === "TO_REVIEW"
+                    ? incomingReviewHref(item.id)
+                    : incomingDocumentHref(item.id),
+                )
+              }
               rowLabel={(item) =>
-                item.origin === "MAILBOX"
-                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, csak postafiókból ismert`
+                item.review === "TO_REVIEW"
+                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, postafiókból, ellenőrizendő, ellenőrzés megnyitása`
                   : `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName} megnyitása`
               }
               minWidth={1040}

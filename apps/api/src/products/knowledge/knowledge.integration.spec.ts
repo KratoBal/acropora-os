@@ -57,6 +57,8 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
     const mine = { product: { name: { startsWith: PREFIX } } };
     // Facts first: they hold the Restrict key on the field results.
     await prisma.productKnowledgeFact.deleteMany({ where: mine });
+    // SEO P0 PR 3: the variant the scope test makes (its facts went above)
+    await prisma.productVariant.deleteMany({ where: mine });
     await prisma.productCopy.deleteMany({ where: mine });
     await prisma.productEnrichmentRun.deleteMany({
       where: { requestedBy: { email: { endsWith: EMAIL_DOMAIN } } },
@@ -163,7 +165,9 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
       [["dosing", null, "CONFLICTING_SOURCES", 1]],
     );
     const stored = await prisma.productKnowledgeFact.findUniqueOrThrow({
-      where: { productId_field: { productId, field: "dosing" } },
+      where: {
+        productId_scopeKey_field: { productId, scopeKey: "", field: "dosing" },
+      },
       select: { value: true, fieldResultId: true },
     });
     assert.equal(stored.value, null);
@@ -182,7 +186,9 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
 
   it("RESTRICT: az elfogadott tény mögötti futás nem törölhető, a tény nélkül igen", async () => {
     const fact = await prisma.productKnowledgeFact.findUniqueOrThrow({
-      where: { productId_field: { productId, field: "dosing" } },
+      where: {
+        productId_scopeKey_field: { productId, scopeKey: "", field: "dosing" },
+      },
       select: {
         fieldResult: { select: { check: { select: { runId: true } } } },
       },
@@ -199,7 +205,9 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
       "the run must still be there",
     );
     await prisma.productKnowledgeFact.delete({
-      where: { productId_field: { productId, field: "dosing" } },
+      where: {
+        productId_scopeKey_field: { productId, scopeKey: "", field: "dosing" },
+      },
     });
     await prisma.productEnrichmentRun.delete({ where: { id: runId } });
   });
@@ -246,6 +254,74 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
     assert.deepEqual(
       check?.fields.map((f) => f.field),
       ["brand", "dosing", "ean", "packSize"],
+    );
+  });
+
+  /*
+   * A VALTOZAT-SZINTU TENY A VALODI SEMAN (SEO P0 PR 3): a migracio egyedi
+   * kulcsa es CHECK-je csak itt talalkozik Postgresszel.
+   *
+   * MI PIROSIT: az egyvaltozatos termek tomege termekszintu sorba kerul; a
+   * termek es a valtozat ugyanazzal a mezovel nem fer meg (a regi
+   * `(productId, field)` kulcs); egy `scopeKey`, ami nem a `variantId`, atmegy.
+   */
+  it("a változat ténye a termékével megfér, és a scopeKey a variantId-hez kötött", async () => {
+    const service = knowledge();
+    const actor = { id: userId };
+    const variant = await prisma.productVariant.create({
+      data: { productId, sku: `${PREFIX}v-${suffix}` },
+      select: { id: true },
+    });
+    const weight = await service.addEvidence(
+      productId,
+      {
+        field: "weight",
+        raw: "Gewicht: 120 g",
+        value: "120 g",
+        url: "https://gyarto.example.invalid/amino",
+        sourceType: "MANUFACTURER_PAGE",
+      },
+      actor,
+    );
+    // one active variant: the weight binds to it unnamed (D2, the main case)
+    await service.accept(productId, weight.fieldResultId, actor);
+    const stored = await prisma.productKnowledgeFact.findUniqueOrThrow({
+      where: {
+        productId_scopeKey_field: {
+          productId,
+          scopeKey: variant.id,
+          field: "weight",
+        },
+      },
+      select: { variantId: true, revision: true },
+    });
+    assert.deepEqual(stored, { variantId: variant.id, revision: 1 });
+
+    // the product's own row of the same field beside it: two rows, one field
+    await prisma.productKnowledgeFact.create({
+      data: {
+        productId,
+        field: "weight",
+        value: "120",
+        unit: "g",
+        status: "VERIFIED",
+        fieldResultId: weight.fieldResultId,
+        acceptedById: userId,
+        acceptedAt: new Date(),
+        revision: 1,
+      },
+    });
+    assert.equal(
+      await prisma.productKnowledgeFact.count({
+        where: { productId, field: "weight" },
+      }),
+      2,
+    );
+
+    // the CHECK: a scopeKey that is not the variantId is refused
+    await assert.rejects(
+      prisma.$executeRaw`UPDATE "ProductKnowledgeFact" SET "scopeKey" = 'masik' WHERE "productId" = ${productId} AND "variantId" IS NOT NULL`,
+      /ProductKnowledgeFact_scopeKey_check/,
     );
   });
 });

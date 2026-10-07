@@ -7,6 +7,7 @@ import {
   copyToHtml,
   currentRevisions,
   earlierStatements,
+  factKey,
   factFromResult,
   factSource,
   knowledgeProjection,
@@ -21,6 +22,7 @@ import {
   type CopyRow,
   type FactRow,
 } from "./knowledge.policy.js";
+import { ATTRIBUTE_DEFINITIONS } from "../attributes/attribute-definitions.js";
 
 /** Invented product and sources; nothing here is a real page. */
 const FACTS: ProductFacts = {
@@ -398,7 +400,9 @@ describe("copy", () => {
 
   const verified = (field: string, revision: number) => ({
     field,
+    variantId: null,
     revision,
+    public: true,
     status: "VERIFIED",
   });
 
@@ -448,8 +452,10 @@ describe("copy", () => {
       verified("application", 1),
       {
         field: "dosing",
+        variantId: null,
         revision: 1,
         status: "CONFLICTING_SOURCES",
+        public: true,
       },
     ];
     const lead = {
@@ -495,7 +501,9 @@ describe("copy", () => {
   */
   it("a text written against a non-VERIFIED fact goes nowhere: description and SEO alike", () => {
     for (const status of ["SUGGESTED", "CONFLICTING_SOURCES"]) {
-      const facts = [{ field: "dosing", revision: 1, status }];
+      const facts = [
+        { field: "dosing", variantId: null, revision: 1, status, public: true },
+      ];
       assert.equal(
         projectedCopy(
           [
@@ -518,18 +526,22 @@ describe("the projection payload (the PR A / PR B contract)", () => {
   const facts: FactRow[] = [
     {
       field: "packSize",
+      variantId: null,
       value: "100 ml",
       unit: null,
       status: "VERIFIED",
       revision: 1,
+      public: true,
       sourceType: "MANUFACTURER_PAGE",
     },
     {
       field: "dosing",
+      variantId: null,
       value: null,
       unit: null,
       status: "CONFLICTING_SOURCES",
       revision: 2,
+      public: true,
       sourceType: null,
     },
   ];
@@ -545,27 +557,33 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         ...facts,
         {
           field: "flowRate",
+          variantId: null,
           value: "3000",
           unit: "l/h",
           status: "SUGGESTED",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
         // a review két hiányzó státusza: ezek sem jutnak ki
         {
           field: "power",
+          variantId: null,
           value: "45",
           unit: "W",
           status: "UNVERIFIED",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
         {
           field: "weight",
+          variantId: null,
           value: "1",
           unit: "g",
           status: "POSSIBLE_WRONG_VALUE",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
       ],
@@ -579,6 +597,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         status: "VERIFIED",
         source_type: "MANUFACTURER_PAGE",
         revision: 1,
+        public: true,
       },
     ]);
   });
@@ -593,10 +612,12 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       [
         {
           field: "dosing",
+          variantId: null,
           value: "1 drop/100 L/day",
           unit: "x",
           status: "CONFLICTING_SOURCES",
           revision: 1,
+          public: true,
           sourceType: "MANUFACTURER_PAGE",
         },
       ],
@@ -704,10 +725,12 @@ describe("per-block basedOn (SEO P0 PR 1b, Balázs 2026-10-07)", () => {
     value: string | null = "x",
   ): FactRow => ({
     field,
+    variantId: null,
     value,
     unit: null,
     status,
     revision,
+    public: true,
     sourceType: "MANUFACTURER_PAGE",
   });
   const FACTS: FactRow[] = [
@@ -839,5 +862,254 @@ describe("per-block basedOn (SEO P0 PR 1b, Balázs 2026-10-07)", () => {
     assert.equal(parseUsedFields(["salinity"], FACTS).ok, false);
     assert.equal(parseUsedFields("application", FACTS).ok, false);
     assert.equal(parseUsedFields([1], FACTS).ok, false);
+  });
+});
+
+describe("the public gate (SEO P0 PR 2)", () => {
+  /**
+   * A MASODIK KAPU: VERIFIED ES `public` definicio (C8). MI PIROSIT: a ma kint
+   * levo het KZ Amino teny kozul egy is kimarad a kapu utan; egy nem `public`
+   * teny kimegy; egy nem `public` tenyre epulo szoveg kimegy (6. dontes); a
+   * kapu a `copyIsStale` bemenetet szuri (7. dontes).
+   */
+  const SEED_PUBLIC = new Set(
+    ATTRIBUTE_DEFINITIONS.filter((d) => d.public).map((d) => d.key),
+  );
+  const teny = (field: string, status = "VERIFIED"): FactRow => ({
+    field,
+    variantId: null,
+    value: "x",
+    unit: null,
+    status,
+    revision: 1,
+    sourceType: "MANUFACTURER_PAGE",
+    public: SEED_PUBLIC.has(field),
+  });
+
+  it("the seven KZ Amino facts live today stay out after the gate, by name", () => {
+    const HET = [
+      "application",
+      "brand",
+      "ean",
+      "manufacturerClaims",
+      "manufacturerInfo",
+      "packageContents",
+      "packSize",
+    ];
+    const kz = [
+      ...HET.map((f) => teny(f)),
+      teny("dosing", "CONFLICTING_SOURCES"),
+    ];
+    assert.deepEqual(
+      knowledgeProjection(kz, []).facts.map((f) => [f.field, f.public]),
+      HET.map((f) => [f, true]),
+    );
+  });
+
+  it("a VERIFIED fact whose definition is not public stays in the OS", () => {
+    const rejtett = { ...teny("warranty"), public: false };
+    assert.deepEqual(
+      knowledgeProjection([teny("packSize"), rejtett], []).facts.map(
+        (f) => f.field,
+      ),
+      ["packSize"],
+    );
+  });
+
+  it("an approved text built on a non-public fact is held back; the facts stay its staleness input", () => {
+    const rejtett = { ...teny("warranty"), public: false };
+    const lead: CopyRow = {
+      block: "lead",
+      body: "Két év garancia.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn: { warranty: 1 },
+      usedFields: ["warranty"],
+    };
+    const facts = [teny("packSize"), rejtett];
+    assert.deepEqual(knowledgeProjection(facts, [lead]).copy, []);
+    assert.equal(projectedCopy([lead], facts, "ACROPORA"), null);
+    // 7. dontes: a kapu a kimeneten fut, a szoveg nem elavult, csak visszatartott
+    assert.equal(
+      copyIsStale(lead.basedOn, currentRevisions(facts), lead.usedFields),
+      false,
+    );
+    // ugyanez public definicioval kimegy (a meres kontrollja)
+    assert.deepEqual(
+      knowledgeProjection(
+        [teny("packSize"), teny("warranty")],
+        [lead],
+      ).copy.map((c) => c.block),
+      ["lead"],
+    );
+  });
+});
+
+/*
+  EGY KULCS MINDEN SZAMLALASHOZ (SEO P0 PR 3, barracuda PR 3 elozetes 2. kor).
+  A termek es egy valtozata ugyanazzal a mezovel ket teny; a revizio, a
+  `usedFields`, a VERIFIED halmaz es a vetulet mind `factKey` szerint szamol.
+
+  MI PIROSIT: a ket teny revizioja egymasra ir (`currentRevisions` `field`
+  szerint); a valtozat VERIFIED tenye publikalhatova teszi a termek SUGGESTED
+  tenyere epulo blokkot (`basedOnVerified` `field` szerint: a D5 megkerulese);
+  a valtozat tenye kimegy a vetuletbe; a `usedFields` nem tud valtozat-tenyt
+  megnevezni, vagy a sima mezonevet a valtozathoz koti.
+*/
+describe("the fact key: a variant's fact never stands in for the product's (SEO P0 PR 3)", () => {
+  const row = (
+    field: string,
+    variantId: string | null,
+    status: string,
+    revision: number,
+  ): FactRow => ({
+    field,
+    variantId,
+    value: "SPS és LPS korallok",
+    unit: null,
+    status,
+    revision,
+    public: true,
+    sourceType: "MANUFACTURER_PAGE",
+  });
+
+  it("the key: the field, or field@variantId", () => {
+    assert.equal(factKey({ field: "weight", variantId: null }), "weight");
+    assert.equal(factKey({ field: "weight", variantId: "v-a" }), "weight@v-a");
+  });
+
+  it("the text's revisions count the product's own facts: a variant's fact is not text material in P0", () => {
+    assert.deepEqual(
+      currentRevisions([
+        row("application", null, "SUGGESTED", 1),
+        row("application", "v-a", "VERIFIED", 3),
+      ]),
+      { application: 1 },
+    );
+  });
+
+  /*
+    A REGI (URES LISTAS) BLOKK NEM ALL MEG HANGTALANUL. Ha a valtozat tenye a
+    termek-szintu szabaly `basedOn`-jaba kerulne, egy egyvaltozatos termek
+    tomegenek elfogadasa minden ilyen blokkot visszatartana (1900/1909 a
+    stage-en). MI PIROSIT: a tomeg megjelenese utan a regi blokk elavult vagy
+    nem publikalhato.
+  */
+  it("an older block (empty usedFields) is neither stale nor held back when a variant's fact arrives", () => {
+    const termekTenyek = [row("application", null, "VERIFIED", 1)];
+    const basedOn = savedRevisions(termekTenyek, []);
+    assert.deepEqual(basedOn, { application: 1 });
+    const regi: CopyRow = {
+      block: "lead",
+      body: "Korallokhoz.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn,
+      usedFields: [],
+    };
+    const utana = [...termekTenyek, row("weight", "v-egy", "VERIFIED", 1)];
+    assert.equal(copyIsStale(basedOn, currentRevisions(utana), []), false);
+    assert.deepEqual(
+      knowledgeProjection(utana, [regi]).copy.map((c) => c.block),
+      ["lead"],
+    );
+    // a save after the weight arrived does not take it into basedOn either
+    assert.deepEqual(savedRevisions(utana, []), { application: 1 });
+  });
+
+  it("barracuda's case: a VERIFIED variant fact does not publish a block built on the product's SUGGESTED one", () => {
+    const facts = [
+      row("application", null, "SUGGESTED", 1),
+      row("application", "v-a", "VERIFIED", 1),
+    ];
+    const lead: CopyRow = {
+      block: "lead",
+      body: "Korallokhoz.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn: { application: 1 },
+      usedFields: ["application"],
+    };
+    const payload = knowledgeProjection(facts, [lead]);
+    assert.deepEqual(payload.copy, []);
+    // and no application row at all: the product's is SUGGESTED, the
+    // variant's does not go in P0
+    assert.deepEqual(payload.facts, []);
+    // positive control: with the product's own fact VERIFIED the same lead
+    // goes, so the block above was held back by the key, not by something else
+    const ok = knowledgeProjection(
+      [row("application", null, "VERIFIED", 1), facts[1]!],
+      [lead],
+    );
+    assert.deepEqual(
+      ok.copy.map((c) => c.block),
+      ["lead"],
+    );
+    assert.deepEqual(
+      ok.facts.map((f) => f.field),
+      ["application"],
+    );
+  });
+
+  /*
+    barracuda 27668: egy valtozat tenyere epulo blokk mentheto lenne, de soha
+    nem lenne kiadhato, hang nelkul. MI PIROSIT: a `weight@v-a` kulcs atmegy,
+    vagy az elutasitas nem nevezi meg; a sima mezonev a valtozat tenyehez kot.
+  */
+  it("usedFields refuses a variant's key by name; a bare field names the product's own fact", () => {
+    const facts = [
+      { field: "application", variantId: null },
+      { field: "weight", variantId: "v-a" },
+    ];
+    const variant = parseUsedFields(["application", "weight@v-a"], facts);
+    assert.equal(variant.ok, false);
+    assert.match(
+      !variant.ok ? variant.reason : "",
+      /weight@v-a is a variant's fact/,
+    );
+    // the weight exists only on the variant: a bare `weight` names nothing
+    const bare = parseUsedFields(["weight"], facts);
+    assert.equal(bare.ok, false);
+    assert.match(!bare.ok ? bare.reason : "", /no accepted fact for weight/);
+    // positive control: the product's own fact is accepted
+    assert.deepEqual(parseUsedFields(["application"], facts), {
+      ok: true,
+      value: ["application"],
+    });
+  });
+
+  /*
+    acrobot 27665: amit a vevo nem lat, az a szovegben sem jelenhet meg. A
+    valtozat tenye a P0-ban nincs a vetuletben, tehat ra epulo szoveg sem
+    mehet ki, akkor sem, ha a teny VERIFIED. MI PIROSIT: a `weight@v-a`-ra
+    epulo lead kimegy; vagy a kontroll (ugyanaz a mezo termekszinten) sem
+    megy ki, tehat a tiltas nem a valtozat miatt all.
+  */
+  it("a block built on a VERIFIED variant fact is not published; the same field at product level is", () => {
+    const lead = (key: string): CopyRow => ({
+      block: "lead",
+      body: "120 g.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn: { [key]: 1 },
+      usedFields: [key],
+    });
+    const valtozat = knowledgeProjection(
+      [row("weight", "v-a", "VERIFIED", 1)],
+      [lead("weight@v-a")],
+    );
+    assert.deepEqual(valtozat, { facts: [], copy: [] });
+    const termek = knowledgeProjection(
+      [row("weight", null, "VERIFIED", 1)],
+      [lead("weight")],
+    );
+    assert.deepEqual(
+      termek.copy.map((c) => c.block),
+      ["lead"],
+    );
+    assert.deepEqual(
+      termek.facts.map((f) => f.field),
+      ["weight"],
+    );
   });
 });

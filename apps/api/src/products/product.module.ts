@@ -22,6 +22,7 @@ import {
   PrismaKnowledgeStore,
 } from "./knowledge/knowledge.repository.js";
 import { ProductKnowledgeController } from "./knowledge/knowledge.controller.js";
+import { AttributeController } from "./attributes/attribute.controller.js";
 import { ProductKnowledgeService } from "./knowledge/knowledge.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
@@ -37,6 +38,7 @@ import { ProductService } from "./product.service.js";
     ProductEnrichmentReviewController,
     ProductEnrichmentQueueController,
     ProductKnowledgeController,
+    AttributeController,
   ],
   providers: [
     ProductRepository,

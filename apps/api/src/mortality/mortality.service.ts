@@ -11,11 +11,15 @@ import type {
   UpdateMortalityInput,
 } from "@acropora/types";
 
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import {
+  dateOfDayKey,
   mortalityProductProblem,
   mortalitySourceProblem,
   normalizedProduct,
   normalizedSource,
+  occurredOnProblem,
+  placeProblem,
   quantityProblem,
 } from "./mortality.policy.js";
 import { MortalityRepository } from "./mortality.repository.js";
@@ -27,6 +31,8 @@ export const OWN_AQUARIUM_ONLY_MESSAGE =
   "Csak a bolt saját akváriuma választható.";
 export const SUPPLIER_NOT_FOUND_MESSAGE = "A beszállító nem található.";
 export const RECORD_NOT_FOUND_MESSAGE = "Az elhullási bejegyzés nem található.";
+export const LOCATION_NOT_FOUND_MESSAGE =
+  "A halas rack nem található, vagy már nem választható.";
 
 function cleanNote(note: string | null | undefined): string | null {
   return note?.trim() || null;
@@ -41,10 +47,14 @@ function cleanNote(note: string | null | undefined): string | null {
  *   fa), VAGY szabad szöveges név, ha nincs a rendszerben (Balázs 2026-10-07);
  * - a rendszerbeli élőlény a készletből levonódik (`mortality-stock.ts`), a
  *   módosítás pontosan a különbséget mozgatja;
- * - csak a bolt saját (OWN) akváriuma;
+ * - a helyszín a bolt saját (OWN) akváriuma VAGY egy halas rack, legalább az
+ *   egyik (a halas rack nem akvárium);
  * - a forrás kötelező: beszállítónál a beszállító vagy a neve szabad szöveggel,
  *   „Egyéb”-nél a megnevezés;
  * - a rögzítő és a rögzítés ideje automatikus, és nem módosítható;
+ * - az elhullás NAPJA külön mező (Luca, 2026-10-07): alapból a mai nap
+ *   (Budapest szerint), módosítható, de nem lehet a jövőben;
+ * - új halas racknek csak élő (nem kivezetett) választható;
  * - minden más mező módosítható, auditnaplóval; törlés nincs.
  *
  * MÓDOSÍTÁSKOR CSAK A MEGVÁLTOZOTT HIVATKOZÁST ELLENŐRIZZÜK ÚJRA. Egy termék
@@ -54,6 +64,9 @@ function cleanNote(note: string | null | undefined): string | null {
 @Injectable()
 export class MortalityService {
   constructor(private readonly repository: MortalityRepository) {}
+
+  /** a „ma” forrása; mező és nem konstruktor-paraméter, mert a Nest azt injektálná */
+  now: () => Date = () => new Date();
 
   list(query: MortalityListQuery) {
     return this.repository.list(query);
@@ -85,6 +98,10 @@ export class MortalityService {
     return this.repository.recorderOptions();
   }
 
+  locationOptions() {
+    return this.repository.locationOptions();
+  }
+
   async create(
     input: CreateMortalityInput,
     actorUserId: string,
@@ -92,20 +109,29 @@ export class MortalityService {
     const problem =
       quantityProblem(input.quantity) ??
       mortalityProductProblem(input) ??
+      placeProblem(input) ??
       mortalitySourceProblem(input);
     if (problem) throw new BadRequestException(problem);
+    const occurredOn = this.checkedDay(
+      input.occurredOn ?? budapestDayKey(this.now()),
+    );
     const product = normalizedProduct(input);
     if (product.productId) await this.checkProduct(product.productId);
-    await this.checkAquarium(input.aquariumId);
+    const aquariumId = input.aquariumId || null;
+    if (aquariumId) await this.checkAquarium(aquariumId);
     const source = normalizedSource(input);
     if (source.supplierId) await this.checkSupplier(source.supplierId);
+    const locationId = input.locationId || null;
+    if (locationId) await this.checkLocation(locationId);
 
     const { id } = await this.repository.create({
       ...product,
       quantity: input.quantity,
-      aquariumId: input.aquariumId,
+      aquariumId,
       ...source,
       note: cleanNote(input.note),
+      occurredOn,
+      locationId,
       recordedById: actorUserId,
     });
     return this.detail(id);
@@ -135,14 +161,29 @@ export class MortalityService {
         await this.checkProduct(product.productId);
       Object.assign(data, product);
     }
-    if (
-      input.aquariumId !== undefined &&
-      input.aquariumId !== current.aquariumId
-    ) {
-      await this.checkAquarium(input.aquariumId);
-      data.aquariumId = input.aquariumId;
+    if (input.aquariumId !== undefined || input.locationId !== undefined) {
+      // a helyszín a kettő együtt: a meg nem adott fél a mostani marad
+      const aquariumId =
+        input.aquariumId !== undefined
+          ? input.aquariumId || null
+          : current.aquariumId;
+      const locationId =
+        input.locationId !== undefined
+          ? input.locationId || null
+          : current.locationId;
+      const problem = placeProblem({ aquariumId, locationId });
+      if (problem) throw new BadRequestException(problem);
+      if (aquariumId && aquariumId !== current.aquariumId)
+        await this.checkAquarium(aquariumId);
+      // a régi, azóta kivezetett rack megtartható; csak az új választás számít
+      if (locationId && locationId !== current.locationId)
+        await this.checkLocation(locationId);
+      if (input.aquariumId !== undefined) data.aquariumId = aquariumId;
+      if (input.locationId !== undefined) data.locationId = locationId;
     }
     if (input.note !== undefined) data.note = cleanNote(input.note);
+    if (input.occurredOn !== undefined)
+      data.occurredOn = this.checkedDay(input.occurredOn ?? "");
 
     if (
       input.sourceType !== undefined ||
@@ -171,6 +212,17 @@ export class MortalityService {
   private async checkAquarium(aquariumId: string) {
     if (!(await this.repository.isOwnAquarium(aquariumId)))
       throw new BadRequestException(OWN_AQUARIUM_ONLY_MESSAGE);
+  }
+
+  private checkedDay(day: string): Date {
+    const problem = occurredOnProblem(day, budapestDayKey(this.now()));
+    if (problem) throw new BadRequestException(problem);
+    return dateOfDayKey(day);
+  }
+
+  private async checkLocation(locationId: string) {
+    if (!(await this.repository.isActiveLocation(locationId)))
+      throw new BadRequestException(LOCATION_NOT_FOUND_MESSAGE);
   }
 
   private async checkSupplier(supplierId: string) {
