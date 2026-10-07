@@ -36,6 +36,7 @@ import {
   type PurchaseInvoiceDetailRow,
   type PurchaseInvoiceSummaryRow,
 } from "./purchase-invoice.types.js";
+import { nextLocalProductSku } from "../products/local-product-sku.js";
 
 /// True for a P2002 on PurchaseInvoice's own (supplierId,
 /// supplierInvoiceNumber) unique constraint - i.e. the same real-world
@@ -68,15 +69,7 @@ function isTakenSupplierSkuError(error: unknown): boolean {
   return isPrismaUniqueConstraintViolation(error, "supplierSku");
 }
 
-const LOCAL_PRODUCT_SKU_PREFIX = "ACR-L-";
-const LOCAL_PRODUCT_SKU_PAD_LENGTH = 6;
 const LOCAL_PRODUCT_SKU_MAX_ATTEMPTS = 3;
-
-function formatLocalProductSku(value: bigint): string {
-  return `${LOCAL_PRODUCT_SKU_PREFIX}${value
-    .toString()
-    .padStart(LOCAL_PRODUCT_SKU_PAD_LENGTH, "0")}`;
-}
 
 export interface PurchaseInvoiceVariantInfo {
   variantId: string;
@@ -394,13 +387,8 @@ export class PurchaseInvoiceRepository extends Repository {
   private async nextLocalProductSku(
     transaction: PurchaseInvoiceCreateTransaction,
   ): Promise<string> {
-    const rows = await transaction.$queryRaw<Array<{ value: bigint }>>(
-      Prisma.sql`SELECT nextval('"LocalProductSkuSequence"') AS value`,
-    );
-    const value = rows[0]?.value;
-    if (value === undefined)
-      throw new Error("LOCAL_PRODUCT_SKU_SEQUENCE_FAILED");
-    return formatLocalProductSku(value);
+    // the shared sequence and format (#1582 P1: the quote BOM creates products too)
+    return nextLocalProductSku(transaction);
   }
 
   /** Which of these codes already belong to a variant, with its product. */
