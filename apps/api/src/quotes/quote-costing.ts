@@ -109,6 +109,17 @@ export function computeCosting(input: CostingInput): QuoteCostingDto {
       }
       cost = (cost ?? ZERO).plus(b.quantity.times(b.unitCost));
     }
+    // the item's own row (P1): exactly one PRODUCT row of the item's variant
+    // and quantity; otherwise the cost may be the old part's or amount
+    if (item.source === "PRODUCT" && bom.length) {
+      const own = bom.filter(
+        (b) => b.kind === "PRODUCT" && b.variantId === item.variantId,
+      );
+      if (own.length !== 1 || !own[0]!.quantity.eq(item.quantity))
+        lineWarnings.push(
+          `${item.name}: a termék saját anyaglista-sora nem egyezik a tétellel (változat vagy mennyiség), a költséget ellenőrizd.`,
+        );
+    }
     if (!bom.length)
       lineWarnings.push(
         item.source === "STANDALONE"

@@ -113,6 +113,30 @@ describe("quote costing: suggested price (acrobot 27773)", () => {
   });
 });
 
+describe("quote costing: the PRODUCT item's own BOM row", () => {
+  const product = (bomQuantity: string, bomVariant = "v") =>
+    run({
+      items: [item({ source: "PRODUCT", variantId: "v", quantity: d("10") })],
+      bomItems: [
+        bom({
+          kind: "PRODUCT",
+          variantId: bomVariant,
+          customName: null,
+          quantity: d(bomQuantity),
+        }),
+      ],
+      listPrices: new Map([["v", price("100")]]),
+    }).lines[0]!.warnings.filter((w) => w.includes("saját anyaglista-sora"));
+
+  it("is quiet when the row matches the item", () => {
+    assert.deepEqual(product("10"), []);
+  });
+  it("warns when the quantity or the variant drifted", () => {
+    assert.equal(product("2").length, 1);
+    assert.equal(product("10", "other").length, 1);
+  });
+});
+
 describe("quote costing: margin", () => {
   it("line net minus the BOM cost; the BOM quantity is for the whole line", () => {
     const line = run({

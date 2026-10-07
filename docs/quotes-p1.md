@@ -61,7 +61,11 @@ nincs tartalma. A TEXT és a TERMS blokk szövege kötelező.
 
 - Tétel csak SECTION és OPTIONS blokkba kerülhet.
 - PRODUCT tétel létrehozáskor automatikusan kap egy BOM-sort ugyanazzal a
-  változattal és mennyiséggel, költség-pillanatképpel.
+  változattal és mennyiséggel, költség-pillanatképpel. A sor a tétel
+  módosításait ugyanabban az írásban követi: mennyiség és egység, változat-
+  cserénél az új változat friss pillanatképpel; ha a tétel később lesz PRODUCT
+  és nincs BOM-ja, a sor ekkor jön létre. Ha a saját sor nem egyértelmű (kézzel
+  átírták, vagy több van), a rendszer nem találgat: a kalkuláció figyelmeztet.
 - STANDALONE tételnek nincs BOM-ja (409).
 - A BOM-sor mennyisége a TELJES ügyfélsorra vonatkozik, nem egységenként.
 - Egyedi (CUSTOM) és szolgáltatás (SERVICE) sor változat és költség nélkül is

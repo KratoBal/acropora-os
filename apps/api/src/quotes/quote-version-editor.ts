@@ -21,6 +21,7 @@ import {
   type QuoteVersionHeaderInput,
 } from "@acropora/types";
 
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { nextLocalProductSku } from "../products/local-product-sku.js";
 import {
   NO_COST,
@@ -53,6 +54,8 @@ import {
  */
 
 type Tx = Prisma.TransactionClient;
+
+const LOCAL_SKU_ATTEMPTS = 3;
 
 /** A quote in these states can still get a new draft version or draft edits. */
 const EDITABLE_QUOTE_STATUSES = new Set(["DRAFT", "SENT", "POSTPONED"]);
@@ -639,10 +642,78 @@ export class QuoteVersionEditor {
         await this.activeVariant(tx, merged.variantId);
       // source and variant in ONE write: the identity CHECK sees them together
       await tx.quoteItem.update({ where: { id: itemId }, data: merged });
+      await this.followProductBom(tx, item, merged);
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,
         fields: Object.keys(patch).join(","),
       });
+    });
+  }
+
+  /**
+   * THE PRODUCT ITEM'S OWN BOM ROW FOLLOWS THE ITEM (barracuda's #1594 review).
+   * A PRODUCT item gets one PRODUCT BOM row on creation (same variant and
+   * quantity); without this a quantity change left the cost at the old amount
+   * and the margin too high, silently. In the same transaction:
+   *
+   *   quantity or unit changed   the row gets them
+   *   variant changed            the row gets the new variant and a FRESH
+   *                              cost snapshot (the old one is the old part's)
+   *   became PRODUCT, no BOM     the automatic row is created, as on add
+   *
+   * When the row is not exactly one (edited by hand, a second PRODUCT row),
+   * nothing is guessed: the costing names the item instead.
+   */
+  private async followProductBom(
+    tx: Tx,
+    before: {
+      id: string;
+      versionId: string;
+      source: string;
+      variantId: string | null;
+      bomItems: Array<{ id: string }>;
+    },
+    after: ReturnType<QuoteVersionEditor["itemColumns"]>,
+  ) {
+    if (after.source !== "PRODUCT" || !after.variantId) return;
+    if (before.source !== "PRODUCT") {
+      if (before.bomItems.length) return;
+      await tx.quoteBomItem.create({
+        data: {
+          versionId: before.versionId,
+          quoteItemId: before.id,
+          position: 0,
+          kind: "PRODUCT",
+          variantId: after.variantId,
+          quantity: after.quantity,
+          unit: after.unit,
+          ...costColumns(await snapshotCost(tx as never, after.variantId)),
+        },
+      });
+      return;
+    }
+    const own = await tx.quoteBomItem.findMany({
+      where: {
+        quoteItemId: before.id,
+        kind: "PRODUCT",
+        variantId: before.variantId,
+      },
+      select: { id: true },
+    });
+    if (own.length !== 1) return;
+    const variantChanged = after.variantId !== before.variantId;
+    await tx.quoteBomItem.update({
+      where: { id: own[0]!.id },
+      data: {
+        quantity: after.quantity,
+        unit: after.unit,
+        ...(variantChanged
+          ? {
+              variantId: after.variantId,
+              ...costColumns(await snapshotCost(tx as never, after.variantId)),
+            }
+          : {}),
+      },
     });
   }
 
@@ -924,7 +995,27 @@ export class QuoteVersionEditor {
    * product came from. The cost snapshot is kept: the new product has no
    * purchase yet.
    */
+  /**
+   * A local SKU taken between `nextval` and the insert (a hand-made product
+   * with the same code) is retried with the next number, as the purchase
+   * invoice path does; anything else is not retried.
+   */
   async createProductFromBomItem(bomId: string, user: AuthenticatedUser) {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.createProductOnce(bomId, user);
+      } catch (error) {
+        if (
+          attempt < LOCAL_SKU_ATTEMPTS &&
+          isPrismaUniqueConstraintViolation(error, "sku")
+        )
+          continue;
+        throw error;
+      }
+    }
+  }
+
+  private async createProductOnce(bomId: string, user: AuthenticatedUser) {
     return this.write(async (tx) => {
       const owner = await tx.quoteBomItem.findUnique({
         where: { id: bomId },

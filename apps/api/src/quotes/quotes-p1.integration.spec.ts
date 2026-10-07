@@ -291,6 +291,43 @@ describe(
       assert.equal(row.quantity.toString(), "2");
     });
 
+    it("the PRODUCT item's own BOM row follows its quantity and its variant", async () => {
+      const own = () =>
+        prisma.quoteBomItem.findFirstOrThrow({
+          where: { quoteItemId: productItemId, kind: "PRODUCT" },
+        });
+      const ten = await request(v(`/items/${productItemId}`), "PATCH", {
+        quantity: "10",
+      });
+      assert.equal(ten.status, 200);
+      assert.equal((await own()).quantity.toString(), "10", "BOM-FOLLOWS");
+      const costing = await request(v("/costing"));
+      const line = (costing.body.lines as Json[]).find(
+        (l) => l.itemId === productItemId,
+      )!;
+      // 10 * 400, not the 2 * 400 the row was created with
+      assert.equal(line.bomCost, "4000.0000", "BOM-FOLLOWS-COST");
+
+      const swapped = await request(v(`/items/${productItemId}`), "PATCH", {
+        variantId: fallbackVariantId,
+      });
+      assert.equal(swapped.status, 200);
+      const row = await own();
+      assert.equal(row.variantId, fallbackVariantId, "BOM-FOLLOWS-VARIANT");
+      assert.equal(row.unitCost?.toString(), "555");
+
+      // back to the starting state the later tests read
+      await request(v(`/items/${productItemId}`), "PATCH", {
+        variantId,
+        quantity: "2",
+      });
+      const back = await own();
+      assert.equal(back.variantId, variantId);
+      assert.equal(back.quantity.toString(), "2");
+      assert.equal(back.unitCost?.toString(), "400");
+      assert.equal(back.sourcePurchaseInvoiceLineId, lineB);
+    });
+
     it("a custom BOM line is saved without a variant and without a cost", async () => {
       const item = await request(v(`/blocks/${blockId}/items`), "POST", {
         source: "BOM",
@@ -644,6 +681,31 @@ describe(
           "POST",
           undefined,
         ],
+        // barracuda's review: every one of the fifteen writes, not six
+        [v(""), "PATCH", { validUntil: "2026-12-30" }],
+        [v(`/blocks/${blockId}`), "PATCH", { title: "Más" }],
+        [v(`/blocks/${blockId}`), "DELETE", undefined],
+        [v("/blocks/reorder"), "POST", { ids: [blockId] }],
+        [
+          v(`/blocks/${blockId}/items`),
+          "POST",
+          {
+            source: "STANDALONE",
+            name: "x",
+            quantity: "1",
+            unit: "db",
+            unitNetPrice: "1",
+            vatRatePercent: "27",
+          },
+        ],
+        [
+          v(`/blocks/${blockId}/items/reorder`),
+          "POST",
+          { ids: [productItemId] },
+        ],
+        [v(`/items/${productItemId}`), "DELETE", undefined],
+        [v(`/bom/${customBomId}`), "PATCH", { quantity: "2" }],
+        [v(`/bom/${customBomId}`), "DELETE", undefined],
       ] as const) {
         const res = await request(path, method, body);
         assert.equal(res.status, 409, `PUBLISHED-409 ${method} ${path}`);
@@ -651,6 +713,10 @@ describe(
       assert.equal(
         await prisma.quoteBlock.count({ where: { versionId } }),
         before,
+      );
+      assert.equal(
+        await prisma.quoteBomItem.count({ where: { id: customBomId } }),
+        1,
       );
 
       const draft = await request(`/quotes/${quoteId}/versions`, "POST");
