@@ -62,9 +62,13 @@ const SERVER_PAIR: Record<string, string | null> = {
   aquariumsManage: PERMISSIONS.AQUARIUMS_MANAGE,
 };
 
+interface MirrorSubject {
+  role: UserRole;
+  permissions?: readonly string[];
+}
 interface Mirror {
-  getWebshopCapabilities(role: UserRole): Record<string, boolean>;
-  getServiceCapabilities(role: UserRole): Record<string, boolean>;
+  getWebshopCapabilities(subject: MirrorSubject): Record<string, boolean>;
+  getServiceCapabilities(subject: MirrorSubject): Record<string, boolean>;
 }
 
 /**
@@ -75,6 +79,12 @@ interface Mirror {
  * kap, ez a betöltés elhasal -- az piros teszt, nem csendes kihagyás, és
  * pontosan ez a kívánt viselkedés.
  */
+function subjectFor(role: UserRole, path: "table" | "list"): MirrorSubject {
+  return path === "list"
+    ? { role, permissions: [...ROLE_PERMISSIONS[role]] }
+    : { role };
+}
+
 async function loadMirror(): Promise<Mirror> {
   const source = readFileSync(MIRROR, "utf8");
   const javascript = ts.transpileModule(source, {
@@ -107,7 +117,13 @@ async function loadMirror(): Promise<Mirror> {
  * mond, a tükör -- mert a szerepet nem is ismeri -- `false`-ot. Ez NEM a
  * tükör hibája, hanem azé, hogy ezt a párost egyáltalán összevetettük.
  */
-function comparisons(mirror: Mirror) {
+/**
+ * KÉT ÚT, UGYANAZ A VÁRT ÉRTÉK (2026-10-06, felhasználónkénti jogok): a telefon
+ * a szerver által küldött jog-listából számol (`list`), és csak régebbi szerver
+ * ellen a saját szerep-táblájából (`table`). Ha a lista a szerep sablonja, a
+ * két útnak ugyanazt kell mondania, és mindkettőnek a szervert.
+ */
+function comparisons(mirror: Mirror, path: "table" | "list" = "table") {
   const rows: Array<{
     role: string;
     key: string;
@@ -118,8 +134,8 @@ function comparisons(mirror: Mirror) {
 
   for (const role of HUMAN_ROLES) {
     const capabilities = {
-      ...mirror.getWebshopCapabilities(role as UserRole),
-      ...mirror.getServiceCapabilities(role as UserRole),
+      ...mirror.getWebshopCapabilities(subjectFor(role as UserRole, path)),
+      ...mirror.getServiceCapabilities(subjectFor(role as UserRole, path)),
     };
     for (const [key, client] of Object.entries(capabilities)) {
       const permission = SERVER_PAIR[key];
@@ -175,14 +191,77 @@ describe("a mobil tükör ÉRTÉKEI", () => {
    * semmit nem tudna megtalálni. Ez a sor egy szándékosan hazudó tükröt ad
    * neki, és megköveteli, hogy pontosan egy eltérést jelentsen.
    */
+  it("a szerver-küldte listából is ugyanazt mondja, minden szerepre", async () => {
+    const rows = comparisons(await loadMirror(), "list");
+    assert.ok(rows.length >= 60, `Csak ${rows.length} pár.`);
+    assert.deepEqual(
+      rows
+        .filter((row) => row.client !== row.server)
+        .map((row) => `${row.role}.${row.key}`),
+      [],
+    );
+  });
+
+  /**
+   * A KÉT ÚT A TELJES OBJEKTUMRA EGYEZIK, a szerver-pár nélküli kulcsokra is
+   * (`workspace`). A fenti összevetés ezeket kihagyja, mert nincs szerver-jog,
+   * amihez mérje; itt a régi szerep-tábla a mérce, ami a sablonnal egyenlő
+   * listára ugyanazt kell adja. MI PIROSÍT: a munkaterület-szabály eltérése
+   * (pl. ha a partner-lista egymagában megnyitná a webshopot).
+   */
+  it("a lista és a szerep-tábla minden kulcsra ugyanazt adja", async () => {
+    const mirror = await loadMirror();
+    for (const role of HUMAN_ROLES as readonly UserRole[]) {
+      const list = subjectFor(role, "list");
+      assert.deepEqual(
+        mirror.getWebshopCapabilities(list),
+        mirror.getWebshopCapabilities({ role }),
+        `${role} webshop`,
+      );
+      assert.deepEqual(
+        mirror.getServiceCapabilities(list),
+        mirror.getServiceCapabilities({ role }),
+        `${role} szerviz`,
+      );
+    }
+  });
+
+  /**
+   * A LISTA DÖNT, NEM A SZEREP: egy OWNER, akitől egyénileg elvették a
+   * szervizt, a telefonon sem kap szerviz-csempét. MI PIROSÍT: ha a telefon
+   * a lista mellett is a szerep táblájából számolna.
+   */
+  it("a személy szűkített listája a szerep fölött dönt", async () => {
+    const mirror = await loadMirror();
+    const permissions = ROLE_PERMISSIONS.OWNER.filter(
+      (permission) =>
+        permission !== PERMISSIONS.SERVICE_VIEW &&
+        permission !== PERMISSIONS.SERVICE_MANAGE &&
+        permission !== PERMISSIONS.ORDERS_MANAGE,
+    );
+    const service = mirror.getServiceCapabilities({
+      role: "OWNER",
+      permissions,
+    });
+    const webshop = mirror.getWebshopCapabilities({
+      role: "OWNER",
+      permissions,
+    });
+    assert.equal(service.workspace, false);
+    assert.equal(service.serviceJobsView, false);
+    assert.equal(webshop.ordersView, true);
+    assert.equal(webshop.ordersManage, false);
+  });
+
   it("észreveszi, ha a tükör többet állít a szervernél", async () => {
     const mirror = await loadMirror();
     const lying: Mirror = {
-      getServiceCapabilities: (role) => mirror.getServiceCapabilities(role),
-      getWebshopCapabilities: (role) => ({
-        ...mirror.getWebshopCapabilities(role),
+      getServiceCapabilities: (subject) =>
+        mirror.getServiceCapabilities(subject),
+      getWebshopCapabilities: (subject) => ({
+        ...mirror.getWebshopCapabilities(subject),
         // A SALES szerepnek a szerver nem ad purchasing.view jogot.
-        ...(role === "SALES" ? { purchasingView: true } : {}),
+        ...(subject.role === "SALES" ? { purchasingView: true } : {}),
       }),
     };
 
@@ -250,8 +329,8 @@ describe("a mobil csempek es a kozos menu-forras", () => {
     // csempe-osszevetes nem hianyt mer, hanem egy nem letezo fogalmat kerdez.
     for (const role of HUMAN_ROLES as readonly UserRole[]) {
       const forras = new Set(navigationIdsFor({ role: role }, "mobile"));
-      const webshop = mirror.getWebshopCapabilities(role);
-      const service = mirror.getServiceCapabilities(role);
+      const webshop = mirror.getWebshopCapabilities({ role });
+      const service = mirror.getServiceCapabilities({ role });
       const telefon: Record<string, boolean> = { ...webshop, ...service };
 
       for (const [key, entryId] of Object.entries(TILE_ENTRY)) {

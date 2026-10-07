@@ -23,7 +23,7 @@ export default function OrdersScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const [page, setPage] = useState(1);
-  const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const capabilities = user ? getWebshopCapabilities(user) : null;
   const orders = useQuery({
     queryKey: ["unas-orders", { page, pageSize: PAGE_SIZE }],
     queryFn: () => listUnasOrders(page, PAGE_SIZE),

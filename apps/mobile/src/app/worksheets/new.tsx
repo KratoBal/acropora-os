@@ -116,7 +116,7 @@ export default function NewWorksheetScreen() {
     }>(),
   );
   const { status, user } = useAuth();
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
 
   const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
     null,
