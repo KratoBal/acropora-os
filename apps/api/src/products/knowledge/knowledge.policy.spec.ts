@@ -452,6 +452,7 @@ describe("copy", () => {
         field: "dosing",
         revision: 1,
         status: "CONFLICTING_SOURCES",
+        public: true,
       },
     ];
     const lead = {
