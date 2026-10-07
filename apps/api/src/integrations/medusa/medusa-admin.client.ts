@@ -1215,11 +1215,15 @@ export interface MedusaAdminClient {
    * változatra nem írunk.
    */
   listVariantBarcodes(productId: string): Promise<MedusaVariantBarcodeRow[]>;
-  /** Egy változat `ean` vagy `upc` mezője. Csak a megadott mező íródik. */
+  /**
+   * Egy változat `ean`/`upc` mezője. Csak a megadott kulcs íródik; a `null`
+   * üríti (a Medusa 2.20.1 validátora `nullish`-t enged, mérve a telepített
+   * `admin/products/validators.js`-ben).
+   */
   updateVariantBarcode(
     productId: string,
     variantId: string,
-    patch: { ean?: string; upc?: string },
+    patch: { ean?: string | null; upc?: string | null },
   ): Promise<void>;
   /**
    * A bolt ár-értelmezési beállításai.
@@ -2415,7 +2419,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   async updateVariantBarcode(
     productId: string,
     variantId: string,
-    patch: { ean?: string; upc?: string },
+    patch: { ean?: string | null; upc?: string | null },
   ): Promise<void> {
     await this.request<unknown>(
       `/admin/products/${encodeURIComponent(productId)}` +

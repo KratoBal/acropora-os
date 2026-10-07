@@ -2211,6 +2211,47 @@ describe("MedusaProductProjectionService -- a valtozatok vonalkodja", () => {
     );
   });
 
+  /*
+    MEZOVALTAS (barracuda, #1591 atvetel): a masik mezo ELTERO kodja urul, kulonben
+    egy valtozatnak ket kulonbozo kodja allna a boltban. MI PIROSIT: a regi upc
+    ott marad az uj ean mellett (vagy forditva); egy ures masik mezot is "urit";
+    a helyes kod mellett allo regi kod miatt nem ir, mert a fo mezo mar jo.
+  */
+  it("mezovaltasnal a masik mezo eltero kodja urul, mindket iranyban; az ures nem", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantBarcodes: async () => [
+        { id: "v_a", sku: "A", ean: null, upc: "036000291452" },
+        { id: "v_b", sku: "B", ean: "4006381333931", upc: null },
+        { id: "v_c", sku: "C", ean: "4260507580214", upc: "036000291452" },
+        { id: "v_d", sku: "D", ean: null, upc: null },
+      ],
+      updateVariantBarcode: async (_p: string, id: string, patch: unknown) => {
+        irasok.push([id, patch]);
+      },
+    });
+    await f.service.project(
+      {
+        ...product,
+        variantBarcodes: [
+          { sku: "A", field: "ean" as const, value: "4006381333931" },
+          { sku: "B", field: "upc" as const, value: "036000291452" },
+          // a fo mezo mar jo, de mellette regi upc all: urul
+          { sku: "C", field: "ean" as const, value: "4260507580214" },
+          { sku: "D", field: "ean" as const, value: "5999999999993" },
+        ],
+      },
+      now,
+    );
+    assert.deepEqual(irasok, [
+      ["v_a", { ean: "4006381333931", upc: null }],
+      ["v_b", { upc: "036000291452", ean: null }],
+      ["v_c", { ean: "4260507580214", upc: null }],
+      ["v_d", { ean: "5999999999993" }],
+    ]);
+  });
+
   it("ures listanal nem fordul a bolthoz, es nincs jelentes", async () => {
     const f = fakes({ link, found: [] });
     let kerdezte = false;

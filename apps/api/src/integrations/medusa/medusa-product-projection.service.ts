@@ -1233,13 +1233,22 @@ export class MedusaProductProjectionService {
         report.missing.push(w.sku);
         continue;
       }
-      if (row[w.field] === w.value) {
+      /*
+        A MÁSIK MEZŐ ELTÉRŐ KÓDJA ÜRÜL (barracuda, #1591 átvétel). Mezőváltásnál
+        (a boltban régi `upc`, az új kód 13 jegyű `ean`) a régi különben ott
+        maradna, és a változatnak két különböző kódja lenne a boltban. Az üres
+        mezőhöz nem nyúlunk.
+      */
+      const masik = w.field === "ean" ? "upc" : "ean";
+      const urit = (row[masik] ?? null) !== null && row[masik] !== w.value;
+      if (row[w.field] === w.value && !urit) {
         report.unchanged += 1;
         continue;
       }
       try {
         await this.medusa.updateVariantBarcode(medusaProductId, row.id, {
           [w.field]: w.value,
+          ...(urit ? { [masik]: null } : {}),
         });
         report.written.push(w.sku);
       } catch (error) {
