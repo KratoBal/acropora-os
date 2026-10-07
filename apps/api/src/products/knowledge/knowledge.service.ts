@@ -18,7 +18,12 @@ import type {
 import type { EnrichmentFactsReader } from "../enrichment/enrichment-run.js";
 import { PrismaEnrichmentFactsReader } from "../enrichment/enrichment-run.store.js";
 import { ProductService } from "../product.service.js";
-import { factScope, validateFactValue } from "./fact-definition.policy.js";
+import { storedBarcodeCode } from "../barcode-type.js";
+import {
+  factScope,
+  validateFactValue,
+  type FactDefinition,
+} from "./fact-definition.policy.js";
 import {
   copyIsStale,
   currentRevisions,
@@ -163,9 +168,11 @@ export class ProductKnowledgeService {
       decision,
       variantId,
     );
+    if (scope.definition.medusaNativeField === "VARIANT_BARCODE")
+      return this.acceptAsBarcode(productId, result.id, decision, scope, user);
     await this.store.upsertFact({
       productId,
-      variantId: scope,
+      variantId: scope.variantId,
       field: result.field,
       value: decision.value,
       unit: decision.unit,
@@ -174,6 +181,40 @@ export class ProductKnowledgeService {
       acceptedById: user.id,
       acceptedAt: this.now(),
     });
+    return this.knowledge(productId);
+  }
+
+  /**
+   * AZ EAN NEM TÉNY, HANEM VONALKÓD (SEO P0 PR 4, C3): a `ProductBarcode` sora
+   * a változaton, a JEV-eredménnyel mint bizonyítékkal. A vetítés innen viszi a
+   * bolt `ean`/`upc` mezőjébe. Egy ütköző eredménynek nincs értéke: azt a
+   * feloldás (resolve) adja.
+   */
+  private async acceptAsBarcode(
+    productId: string,
+    fieldResultId: string,
+    decision: { value: string | null },
+    scope: { variantId: string | null },
+    user: Actor,
+  ): Promise<ProductKnowledge> {
+    if (decision.value === null)
+      throw new ConflictException(
+        "a conflicting EAN has no value to store as a barcode: resolve it first",
+      );
+    if (scope.variantId === null)
+      throw new BadRequestException("the barcode needs a variant (variantId)");
+    const code = storedBarcodeCode(decision.value);
+    const outcome = await this.store.acceptBarcode({
+      variantId: scope.variantId,
+      code,
+      fieldResultId,
+      verifiedById: user.id,
+      verifiedAt: this.now(),
+    });
+    if (outcome.kind === "taken")
+      throw new ConflictException(
+        `the barcode ${code} already belongs to another variant (${outcome.sku})`,
+      );
     return this.knowledge(productId);
   }
 
@@ -193,9 +234,11 @@ export class ProductKnowledgeService {
       decision,
       variantId,
     );
+    if (scope.definition.medusaNativeField === "VARIANT_BARCODE")
+      return this.acceptAsBarcode(productId, result.id, decision, scope, user);
     await this.store.upsertFact({
       productId,
-      variantId: scope,
+      variantId: scope.variantId,
       field: result.field,
       value: decision.value,
       unit: decision.unit,
@@ -277,7 +320,7 @@ export class ProductKnowledgeService {
     field: string,
     fact: { value: string | null; unit: string | null },
     requested: unknown,
-  ): Promise<string | null> {
+  ): Promise<{ variantId: string | null; definition: FactDefinition }> {
     const [definition, variantIds] = await Promise.all([
       this.store.definition(field),
       this.store.variantIds(productId),
@@ -286,7 +329,7 @@ export class ProductKnowledgeService {
     if (!valid.ok) throw new BadRequestException(valid.reason);
     const scope = factScope(definition!, requested, variantIds);
     if (!scope.ok) throw new BadRequestException(scope.reason);
-    return scope.value;
+    return { variantId: scope.value, definition: definition! };
   }
 
   /**
