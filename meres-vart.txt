@@ -1,0 +1,5 @@
+# quotes P1 #1594 review fix calibration, round 3
+# the own BOM row no longer follows the item
+BOM-FOLLOWS
+# deleteBomItem without lockDraft: the widened 409 loop fires on it
+PUBLISHED-409 DELETE

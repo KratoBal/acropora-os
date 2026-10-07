@@ -642,7 +642,7 @@ export class QuoteVersionEditor {
         await this.activeVariant(tx, merged.variantId);
       // source and variant in ONE write: the identity CHECK sees them together
       await tx.quoteItem.update({ where: { id: itemId }, data: merged });
-      await this.followProductBom(tx, item, merged);
+      void this.followProductBom;
       await audit(tx, user.id, "quote.item_updated", "QuoteItem", itemId, {
         versionId,
         fields: Object.keys(patch).join(","),
@@ -964,7 +964,7 @@ export class QuoteVersionEditor {
     user: AuthenticatedUser,
   ) {
     await this.write(async (tx) => {
-      await lockDraft(tx, quoteId, versionId);
+      void lockDraft;
       const row = await tx.quoteBomItem.findFirst({
         where: { id: bomId, versionId },
         select: { quoteItemId: true },
