@@ -67,3 +67,29 @@ export function imageBlockUpdate(
     medusaImageBlockedAt: now,
   };
 }
+
+/**
+ * VÁLTOZIK-E A SOR, HA EZT A BLOKKOLÁST ÍRNÁNK RÁ. Tiszta függvény.
+ *
+ * NEM KOZMETIKA: minden `product.update` hívás a valódi írási idővel frissíti a
+ * `Product.updatedAt`-et, és a termék-ütemező ezt FORRÁS-változásnak látja. Ha a
+ * futtató minden vetítésnél írna, a vetített termék a következő körben újra
+ * esedékes lenne, és az `updatedAt` szerinti sorrend miatt ugyanaz a kötegnyi
+ * termék forogna körről körre (mérve a teszt kirakaton 2026-10-07: a 04:34-es és a
+ * 05:06-os kör 100 terméke 100/100 azonos volt, a többi ~1400 soha nem került sorra).
+ *
+ * Az OKOT és a MONDATOT hasonlítjuk, az időpontot nem: változatlan blokkolásnál a
+ * meglévő `medusaImageBlockedAt` marad, és így azt jelenti, MIÓTA áll a blokk.
+ */
+export function imageBlockChanged(
+  current: {
+    medusaImageBlockReason: MedusaImageBlockReason | null;
+    medusaImageBlockDetails: string | null;
+  },
+  block: ImageBlock | null,
+): boolean {
+  return (
+    current.medusaImageBlockReason !== (block?.reason ?? null) ||
+    current.medusaImageBlockDetails !== (block?.details ?? null)
+  );
+}
