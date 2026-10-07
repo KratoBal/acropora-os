@@ -1,0 +1,6 @@
+# quotes P2 integration calibration (#1598)
+NO-STORE-503
+ONE-FILE
+STORED-BYTES
+PUBLISH-403
+EMPTY-400
