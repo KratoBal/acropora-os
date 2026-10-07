@@ -108,6 +108,10 @@ export interface QuoteInternalVersion extends Omit<
   templateId: string | null;
   createdFromVersionId: string | null;
   publishedAt: string | null;
+  /** the offered (non-optional) lines' net total, exact decimal (P1) */
+  netTotal: string;
+  /** the optional lines' net total, shown apart (P1) */
+  optionalNetTotal: string;
   blocks: QuoteInternalBlock[];
   /** the internal BOM, without cost fields unless `quotes.costs.view` */
   bomItems: QuoteBomLineDto[];
@@ -121,6 +125,10 @@ export interface QuoteInternalDto {
   customerId: string | null;
   ownerUserId: string | null;
   createdById: string | null;
+  /** display names for the header (P1); null when the link is empty */
+  customerName: string | null;
+  ownerName: string | null;
+  createdByName: string | null;
   createdAt: string;
   updatedAt: string;
   versions: QuoteInternalVersion[];
@@ -154,6 +162,9 @@ export interface QuoteListItemDto {
   status: QuoteStatusValue;
   customerId: string | null;
   ownerUserId: string | null;
+  /** display names for the list (P1) */
+  customerName: string | null;
+  createdByName: string | null;
   createdAt: string;
   updatedAt: string;
   latestVersion: {
@@ -164,6 +175,8 @@ export interface QuoteListItemDto {
     currency: string;
     priceDisplay: QuotePriceDisplay;
     publishedAt: string | null;
+    /** the offered (non-optional) lines' net total of this version (P1) */
+    netTotal: string;
   } | null;
 }
 export interface QuoteListResponse {

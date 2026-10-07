@@ -434,6 +434,31 @@ describe(
       assert.equal(res.body.totals.marginAmount, null);
     });
 
+    it("the list sums the offered lines in the database; an optional line stays apart", async () => {
+      const optional = await request(v(`/blocks/${blockId}/items`), "POST", {
+        source: "STANDALONE",
+        name: "Opcionális világítás",
+        quantity: "1",
+        unit: "db",
+        unitNetPrice: "7",
+        vatRatePercent: "27",
+        isOptional: true,
+      });
+      assert.equal(optional.status, 201);
+      // 2 * 1500 + 1 * 50000; the optional 7 is not in it
+      assert.equal(version(optional.body).netTotal, "53000.0000");
+      assert.equal(version(optional.body).optionalNetTotal, "7.0000");
+      const list = await request(
+        `/quotes?q=${encodeURIComponent("P1 editor")}&page=1&pageSize=5`,
+        "GET",
+        undefined,
+        WRITER,
+      );
+      const row = (list.body.items as Json[]).find((i) => i.id === quoteId)!;
+      assert.equal(row.latestVersion.netTotal, "53000.0000", "LIST-NET-TOTAL");
+      assert.equal(row.createdByName, "Quote P1 test");
+    });
+
     it("a later receipt does not move a stored snapshot", async () => {
       await invoice("D", {
         invoiceDate: "2026-09-20",

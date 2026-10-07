@@ -68,9 +68,12 @@ export class QuotesService {
   ): Promise<QuoteListResponse> {
     permission(user);
     const result = await this.repository.list(page, pageSize, q);
+    const totals = await this.repository.netTotals(
+      result.items.flatMap((row) => row.versions.map((v) => v.id)),
+    );
     return {
       ...result,
-      items: result.items.map(quoteListItemDto),
+      items: result.items.map((row) => quoteListItemDto(row, totals)),
       page,
       pageSize,
     };
@@ -138,7 +141,10 @@ export class QuotesService {
     try {
       const row = await this.repository.update(id, clean, user.id);
       if (!row) throw new NotFoundException("Az ajánlat nem található.");
-      return quoteListItemDto(row);
+      return quoteListItemDto(
+        row,
+        await this.repository.netTotals(row.versions.map((v) => v.id)),
+      );
     } catch (e) {
       writeError(e);
     }
