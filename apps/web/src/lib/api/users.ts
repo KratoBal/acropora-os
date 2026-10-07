@@ -1,9 +1,11 @@
 import type {
   CreateUserInput,
+  PermissionOverride,
   SetUserPasswordInput,
   UpdateUserInput,
   UserDetail,
   UserListResponse,
+  UserPermissionOverview,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
@@ -46,6 +48,30 @@ export const usersApi = {
       `/users/${encodeURIComponent(id)}/activate`,
       token,
       { method: "POST" },
+    );
+  },
+  /** A felhasználó jogai: sablon, eltérések, a kettőből a személy jogai. */
+  permissions(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<UserPermissionOverview>(
+      `/users/${encodeURIComponent(id)}/permissions`,
+      token,
+      { signal },
+    );
+  },
+  /** Az eltérések TELJES listájának cseréje. */
+  replacePermissions(
+    token: string,
+    id: string,
+    overrides: PermissionOverride[],
+  ) {
+    return apiRequest<UserPermissionOverview>(
+      `/users/${encodeURIComponent(id)}/permissions`,
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overrides }),
+      },
     );
   },
   deactivate(token: string, id: string) {

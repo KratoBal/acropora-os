@@ -1319,3 +1319,11 @@ export type {
   UpdateUserPermissionOverridesInput,
   UserPermissionOverview,
 } from "./permission-overrides.js";
+export {
+  areaLevel,
+  areaLevels,
+  overridesForDesired,
+  PERMISSION_AREAS,
+  withAreaLevel,
+} from "./permission-areas.js";
+export type { PermissionArea, PermissionLevel } from "./permission-areas.js";

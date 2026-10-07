@@ -109,6 +109,11 @@ vi.mock("@/components/service-jobs/partner-picker", () => ({
     </>
   ),
 }));
+// a jog-táblázatnak saját tesztje van (`user-permission-table.component.test.tsx`);
+// itt a közös csomag részleges dublőre mellett nem töltődhet be
+vi.mock("./user-permission-table", () => ({
+  UserPermissionTable: () => null,
+}));
 vi.mock("./role-labels", () => ({
   ROLE_LABELS: {
     VIEWER: "Megtekintő",
