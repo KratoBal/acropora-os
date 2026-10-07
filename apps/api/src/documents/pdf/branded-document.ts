@@ -17,13 +17,29 @@ export const PDF_INK = "#18353d";
 export const PDF_MUTED = "#56777e";
 export const PDF_RULE = "#c9dadd";
 
+/**
+ * `creationDate` (#1582 P2): a FIXED creation time and fixed producer fields.
+ * pdfkit derives the file ID from the info dictionary, so with these two the
+ * same content renders the same bytes. Without it nothing changes for the
+ * existing callers (pdfkit's own "now" and "PDFKit" stay).
+ */
 export function createBrandedPdf(
-  options: { fontPath?: string } = {},
+  options: { fontPath?: string; creationDate?: Date } = {},
 ): PDFKit.PDFDocument {
   const document = new PDFDocument({
     size: "A4",
     margin: 0,
     bufferPages: true,
+    ...(options.creationDate
+      ? {
+          info: {
+            CreationDate: options.creationDate,
+            ModDate: options.creationDate,
+            Producer: "Acropora OS",
+            Creator: "Acropora OS",
+          },
+        }
+      : {}),
   });
   return registerEmbeddedPdfFont(document, options.fontPath);
 }

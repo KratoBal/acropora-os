@@ -8797,6 +8797,9 @@ model QuoteVersion {
   pdfSha256            String?                 @db.VarChar(64)
   pageCount            Int?
   publishedAt          DateTime?
+  /// The first publish request's time (#1582 P2): it is also the PDF's
+  /// CreationDate, so a second click renders the same bytes.
+  publishRequestedAt   DateTime?
   publishedById        String?
   createdFromVersionId String?
   quote                Quote                   @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Restrict)
