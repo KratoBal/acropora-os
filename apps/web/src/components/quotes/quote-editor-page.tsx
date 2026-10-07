@@ -114,17 +114,25 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   /** where the user wanted to go with unsaved text; null: staying */
   const [leaving, setLeaving] = useState<string | null>(null);
   const go = (path: string) =>
-    dirtyBlocks.size ? setLeaving(path) : router.push(path);
+    dirtyNow.current.size ? setLeaving(path) : router.push(path);
   /*
     ONE STABLE HANDLER PER KEY. The cards clean up on unmount through it, so a
     fresh function per render would run that cleanup on every render, and the
     unsaved state would flip off and on forever.
   */
   const dirtyHandlers = useRef(new Map<string, (dirty: boolean) => void>());
+  /*
+    THE SAME SET, KEPT SYNCHRONOUSLY. A card's cleanup runs while it unmounts,
+    and a click right after it would otherwise read the set of the PREVIOUS
+    render; the navigation decides from this one.
+  */
+  const dirtyNow = useRef(new Set<string>());
   const markDirty = useCallback((key: string) => {
     let handler = dirtyHandlers.current.get(key);
     if (!handler) {
-      handler = (dirty: boolean) =>
+      handler = (dirty: boolean) => {
+        if (dirty) dirtyNow.current.add(key);
+        else dirtyNow.current.delete(key);
         setDirtyBlocks((current) => {
           if (current.has(key) === dirty) return current;
           const next = new Set(current);
@@ -132,6 +140,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
           else next.delete(key);
           return next;
         });
+      };
       dirtyHandlers.current.set(key, handler);
     }
     return handler;
