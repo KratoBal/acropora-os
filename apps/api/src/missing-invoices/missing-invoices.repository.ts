@@ -9,6 +9,7 @@ import {
   reminderFileName,
 } from "./collection/invoice-text.js";
 import type { CandidateDocument, Payee } from "./missing-invoice-matching.js";
+import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 
 /**
  * Egy bankszámlaszám összevethető alakja: kötőjel és szóköz nélkül; a hazai
@@ -722,6 +723,31 @@ export class MissingInvoicesRepository {
    * dokumentum, valamint a Foxpost-elszámolás PDF-je. A NAV-sornak és a
    * GLS-számlának nincs tárolt eredetije, azok itt nem is szerepelnek.
    */
+  /**
+   * A HAVI CSOMAG ADAT-JELÖLÉSÉHEZ (kártya e4c3b0fb): a Számlázz.hu feed sorai
+   * (melyik számla NEM csak postafiókos) és a dokumentumok tárolt olvasata.
+   */
+  async packageReadings(ids: readonly string[]): Promise<{
+    feed: { sourceDocumentId: string | null; documentNumber: string }[];
+    readings: Map<string, StoredReading>;
+  }> {
+    const [feed, readings] = await Promise.all([
+      this.database.incomingBillingDocument.findMany({
+        where: { source: "SZAMLAZZ" },
+        select: { sourceDocumentId: true, documentNumber: true },
+      }),
+      ids.length
+        ? this.database.incomingDocumentReading.findMany({
+            where: { documentId: { in: [...ids] } },
+          })
+        : Promise.resolve([]),
+    ]);
+    return {
+      feed,
+      readings: new Map(readings.map((row) => [row.documentId, row])),
+    };
+  }
+
   async originals(
     ids: readonly string[],
   ): Promise<Map<string, { fileName: string; content: Uint8Array }>> {

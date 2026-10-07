@@ -134,6 +134,11 @@ export function BillingIncomingDocumentPage({
 
   const money = (value: string) => formatMoney(value, detail.currency);
   const bank = detail.bankMatch;
+  // a jóváhagyott postafiókos számla (kártya e4c3b0fb): nem a Számlázz.hu küldte
+  const mailbox = detail.origin === "MAILBOX";
+  const formatText = mailbox
+    ? "Postafiókból"
+    : INVOICE_FORMAT_LABELS[detail.invoiceFormat];
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
@@ -148,8 +153,7 @@ export function BillingIncomingDocumentPage({
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
-            Bejövő {detail.kindLabel.toLowerCase()} ·{" "}
-            {INVOICE_FORMAT_LABELS[detail.invoiceFormat]}
+            Bejövő {detail.kindLabel.toLowerCase()} · {formatText}
           </p>
           <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
             {detail.documentNumber}
@@ -216,9 +220,7 @@ export function BillingIncomingDocumentPage({
               <PilotDataItem label="Dokumentumtípus">
                 {detail.kindLabel}
               </PilotDataItem>
-              <PilotDataItem label="Formátum">
-                {INVOICE_FORMAT_LABELS[detail.invoiceFormat]}
-              </PilotDataItem>
+              <PilotDataItem label="Formátum">{formatText}</PilotDataItem>
               <PilotDataItem label="Kelt">
                 {formatDay(detail.issueDate)}
               </PilotDataItem>
@@ -280,7 +282,9 @@ export function BillingIncomingDocumentPage({
               </ul>
             ) : (
               <p className="text-sm text-pilot-grey-500">
-                A Számlázz.hu nem küldött tételt.
+                {mailbox
+                  ? "A postafiókos számla tételei nincsenek rögzítve, a PDF-ben láthatók."
+                  : "A Számlázz.hu nem küldött tételt."}
               </p>
             )}
           </PilotSection>
@@ -311,7 +315,11 @@ export function BillingIncomingDocumentPage({
         <aside className="flex flex-col gap-6">
           <PilotSection
             title="Összesítés"
-            subtitle="Ahogy a Számlázz.hu továbbította."
+            subtitle={
+              mailbox
+                ? "A postafiókos számláról, ellenőrizve jóváhagyva."
+                : "Ahogy a Számlázz.hu továbbította."
+            }
           >
             <PilotTotals
               rows={[
@@ -328,7 +336,11 @@ export function BillingIncomingDocumentPage({
 
           <PilotSection
             title="Fizetés"
-            subtitle="A Számlázz.hu kifizetés-adata."
+            subtitle={
+              mailbox
+                ? "A banki párosításból."
+                : "A Számlázz.hu kifizetés-adata."
+            }
           >
             {detail.paymentsKnown ? (
               <div className="space-y-3 text-sm">
@@ -364,9 +376,11 @@ export function BillingIncomingDocumentPage({
               </div>
             ) : (
               <p className="text-sm text-pilot-grey-600">
-                {detail.paymentSource === "BANK_PAIRING"
-                  ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
-                  : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
+                {mailbox
+                  ? "Postafiókos számla: a fizetés a banki párosításból ismert (a terhelések lent)."
+                  : detail.paymentSource === "BANK_PAIRING"
+                    ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
+                    : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
               </p>
             )}
           </PilotSection>
@@ -402,7 +416,14 @@ export function BillingIncomingDocumentPage({
             </div>
           </PilotSection>
 
-          <PilotSection title="Számlázz.hu" subtitle="A továbbítás adatai.">
+          <PilotSection
+            title={mailbox ? "Postafiók" : "Számlázz.hu"}
+            subtitle={
+              mailbox
+                ? "A számla a postafiókból jött, és ellenőrizve lett."
+                : "A továbbítás adatai."
+            }
+          >
             <PilotDataGrid>
               <PilotDataItem label="Típuskód">{detail.kindCode}</PilotDataItem>
               <PilotDataItem label="Változat">

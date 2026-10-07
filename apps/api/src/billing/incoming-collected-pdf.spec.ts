@@ -137,9 +137,12 @@ function controller(input: {
       findMany: async () => input.collected,
     },
   };
-  const subject = new IncomingBillingDocumentsController({
-    documentPairings: async () => new Map(),
-  } as never);
+  const subject = new IncomingBillingDocumentsController(
+    {
+      documentPairings: async () => new Map(),
+    } as never,
+    { pendingReadings: async () => new Map() } as never,
+  );
   Object.defineProperty(subject, "database", { value: database });
   return { subject, read };
 }

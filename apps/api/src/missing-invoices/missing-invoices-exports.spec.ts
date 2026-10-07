@@ -12,6 +12,7 @@ import type { CandidateDocument } from "./missing-invoice-matching.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
 import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
+import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
 const D = (v: number | string) => new Prisma.Decimal(v);
@@ -65,6 +66,8 @@ function service(input: {
   debits: ReturnType<typeof debit>[];
   documents: CandidateDocument[];
   files: Record<string, Uint8Array>;
+  feed?: { sourceDocumentId: string | null; documentNumber: string }[];
+  readings?: Map<string, StoredReading>;
 }) {
   const asked: string[][] = [];
   const repository = {
@@ -76,6 +79,10 @@ function service(input: {
     candidates: async () => input.documents,
     uncheckedMailboxContent: async () => [],
     setPayee: async () => undefined,
+    packageReadings: async () => ({
+      feed: input.feed ?? [],
+      readings: input.readings ?? new Map(),
+    }),
     originals: async (ids: readonly string[]) => {
       asked.push([...ids]);
       return new Map(
@@ -201,6 +208,91 @@ describe("the accountant package (pdf)", () => {
     assert.deepEqual(asked, [["mb-1", "mb-2"]]);
     const pdf = await PDFDocument.load(content);
     assert.equal(pdf.getPageCount(), 1 + 2 + 3);
+  });
+});
+
+/*
+  A CSAK POSTAFIÓKBÓL ISMERT SZÁMLA A CSOMAGBAN (kártya e4c3b0fb, acrobot
+  27599): a PDF marad, a kinyert SZÁMOK csak jóváhagyás után mennek a
+  borítóra. Kitalált szállító és számok.
+
+  MI PIROSÍT: ha az ellenőrizetlen olvasat nettója a borítóra kerülne; ha a
+  jelölés elmaradna; ha a jóváhagyott sor számai nem kerülnének ki; ha a
+  Számlázz.hu-ban is álló számla is „Ellenőrizendő” lenne.
+*/
+describe("the accountant package marks mailbox-only invoices", () => {
+  const reading = (state: "TO_REVIEW" | "VERIFIED"): StoredReading => ({
+    id: "r1",
+    documentId: "mb-f",
+    state,
+    supplierName: "Kitalált Előfizetés Inc.",
+    supplierTaxNumber: null,
+    supplierEuTaxNumber: "IE9999999XX",
+    documentNumber: "SZ-mb-f",
+    issueDate: new Date("2026-08-01T00:00:00Z"),
+    fulfillmentDate: null,
+    dueDate: null,
+    currency: "EUR",
+    netAmount: D("81.30"),
+    vatAmount: D("0.00"),
+    grossAmount: D("81.30"),
+    sources: {},
+    warnings: [],
+    hasText: true,
+    readAt: new Date("2026-08-02T00:00:00Z"),
+    reviewedAt: state === "VERIFIED" ? new Date("2026-08-03T00:00:00Z") : null,
+    reviewedByUserId: null,
+    incomingBillingDocumentId: null,
+    createdAt: new Date("2026-08-02T00:00:00Z"),
+    updatedAt: new Date("2026-08-02T00:00:00Z"),
+  });
+  const cover = async (input: {
+    readings?: Map<string, StoredReading>;
+    feed?: { sourceDocumentId: string | null; documentNumber: string }[];
+  }) => {
+    const { missing } = service({
+      debits: [debit("2026-08-03", 1000, "Szállító Kft.")],
+      documents: [document({ id: "mb-f", gross: D(1000) })],
+      files: { "mb-f": await pdfOfPages(1) },
+      ...input,
+    });
+    const { content } = await missing.accountantPackage("2026-08");
+    assert.equal((await PDFDocument.load(content)).getPageCount(), 1 + 1);
+    // a hosszú sort a borító tördeli: szóközzel fűzve mérünk
+    return (await pdfTextLines(new Uint8Array(content))).join(" ");
+  };
+
+  it("an unverified reading: the PDF goes, the figures do not, marked Ellenőrizendő", async () => {
+    const text = await cover({
+      readings: new Map([["mb-f", reading("TO_REVIEW")]]),
+    });
+    assert.ok(text.includes("SZ-mb-f: Ellenőrizendő"), text);
+    assert.ok(!text.includes("81.30"), "ellenőrizetlen szám a borítón");
+  });
+
+  it("no reading at all is marked the same way", async () => {
+    assert.ok((await cover({})).includes("SZ-mb-f: Ellenőrizendő"));
+  });
+
+  it("a verified reading puts its figures on the cover", async () => {
+    const text = await cover({
+      readings: new Map([["mb-f", reading("VERIFIED")]]),
+    });
+    assert.ok(
+      text.includes(
+        "SZ-mb-f: ellenőrzött adat: nettó 81.30 EUR, ÁFA 0.00 EUR, bruttó 81.30 EUR, adószám IE9999999XX",
+      ),
+      text,
+    );
+    assert.ok(!text.includes("Ellenőrizendő"));
+  });
+
+  it("an invoice the Számlázz.hu feed also has is not marked", async () => {
+    const text = await cover({
+      feed: [{ sourceDocumentId: null, documentNumber: "SZ-mb-f" }],
+    });
+    assert.ok(!text.includes("Ellenőrizendő"), text);
+    assert.ok(text.includes("SZ-mb-f: csatolva"), text);
   });
 });
 

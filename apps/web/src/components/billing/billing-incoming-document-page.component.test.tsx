@@ -46,6 +46,7 @@ const detail = (
 ): IncomingDocumentDetail => ({
   id: "in-1",
   origin: "SZAMLAZZ",
+  review: null,
   documentNumber: "E-KBOSS-2026-1234",
   kindCode: "SZ",
   kindLabel: "Számla",
@@ -145,6 +146,33 @@ describe("BillingIncomingDocumentPage", () => {
     );
     expect(api.incomingPdf).toHaveBeenCalledWith("token-1", "in-1");
     open.mockRestore();
+  });
+
+  // MI PIROSÍT (e4c3b0fb): ha a jóváhagyott postafiókos számla a Számlázz.hu
+  // továbbításának vagy papírszámlának látszana
+  it("an approved mailbox invoice says it came from the mailbox, not from Számlázz.hu", async () => {
+    api.incomingDetail.mockResolvedValue(
+      detail({
+        origin: "MAILBOX",
+        review: "VERIFIED",
+        invoiceFormat: "PAPER",
+        paymentsKnown: false,
+        payments: [],
+        paymentSource: "BANK_PAIRING",
+      }),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    expect(
+      await screen.findByRole("heading", { name: "Postafiók" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Papír alapú/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Postafiókból/).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText(/Ahogy a Számlázz\.hu továbbította/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/a fizetés a banki párosításból ismert/),
+    ).toBeInTheDocument();
   });
 
   it("without a PDF there is no button; without payment data it says so; not to pair says why", async () => {

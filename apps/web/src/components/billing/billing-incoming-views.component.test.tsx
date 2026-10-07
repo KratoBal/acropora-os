@@ -71,6 +71,7 @@ function incoming(
   return {
     id: "in-1",
     origin: "SZAMLAZZ",
+    review: null,
     documentNumber: "TM-2026-1847",
     kindCode: "SZ",
     kindLabel: "Számla",
@@ -247,17 +248,19 @@ describe("the incoming list", () => {
   });
 
   /*
-    A CSAK POSTAFIÓKOS, FIZETETT SZÁMLA (kártya 096607af). MI PIROSÍT: a sor a
-    formátumot írná a forrás helyett; a név nélküli rekord üres cellát kapna;
-    a nem ismert nettó számnak látszana; a sor a feed-adatlapra vinne (404);
-    a kattintás semmit nem csinálna (Balázs jelzése, 2026-10-07), vagy nem a
-    postafiókos PDF-et nyitná új lapon; a PDF nélküli sor hibája elnyelődne.
+    A CSAK POSTAFIÓKOS, FIZETETT SZÁMLA (kártya 096607af, e4c3b0fb). MI
+    PIROSÍT: a sor a formátumot írná a forrás helyett; a név nélküli rekord
+    üres cellát kapna; a nem ismert nettó számnak látszana; az ellenőrizendő
+    jelölés hiányozna; a még nem jóváhagyott sor a feed-adatlapra vinne (404)
+    vagy semmit nem csinálna, az ellenőrző lap helyett; a jóváhagyott
+    postafiókos sor nem a rendes adatlapját nyitná.
   */
-  const mailboxPage = () =>
+  const mailboxPage = (over: Partial<IncomingDocumentListItem> = {}) =>
     page([
       incoming({
         id: "mailbox:mail-amblard",
         origin: "MAILBOX",
+        review: "TO_REVIEW",
         documentNumber: "F2602896",
         invoiceFormat: null,
         supplierName: "",
@@ -272,58 +275,50 @@ describe("the incoming list", () => {
         lastPaymentDate: "2026-09-16",
         paymentSource: "BANK_PAIRING",
         bankMatch: { state: "PAIRED", reason: null, debits: [] },
+        ...over,
       }),
     ]);
 
-  it("a mailbox-only paid invoice says where it comes from, and opens its PDF, not a feed page", async () => {
+  it("a mailbox-only paid invoice says where it comes from and that it needs review, and opens its review page", async () => {
     api.incomingList.mockResolvedValue(mailboxPage());
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
-    URL.createObjectURL = vi.fn(() => "blob:pdf");
     urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
     render(<BillingDocumentListPage />);
     const row = await screen.findByRole("row", {
-      name: /F2602896, név nélkül, csak postafiókból ismert, PDF megnyitása$/,
+      name: /F2602896, név nélkül, postafiókból, ellenőrizendő, ellenőrzés megnyitása$/,
     });
     const cells = within(row);
     expect(cells.getByText("Normál · Postafiókból")).toBeInTheDocument();
+    expect(cells.getByText("Ellenőrizendő")).toBeInTheDocument();
     expect(cells.getByText("(név nélkül)")).toBeInTheDocument();
     expect(cells.getByText("Nettó —")).toBeInTheDocument();
     expect(cells.getByText("Bruttó —")).toBeInTheDocument();
     expect(cells.getAllByText("Fizetve").length).toBeGreaterThan(0);
-    const before = urlNavigation.push.mock.calls.length;
     fireEvent.click(cells.getByText("F2602896"));
-    await waitFor(() =>
-      expect(open).toHaveBeenCalledWith("blob:pdf", "_blank"),
+    expect(urlNavigation.push).toHaveBeenLastCalledWith(
+      "/penzugy/szamlazas/bejovo/ellenorzes/mailbox%3Amail-amblard",
     );
-    expect(api.incomingPdf).toHaveBeenCalledWith(
-      "token-1",
-      "mailbox:mail-amblard",
-    );
-    expect(urlNavigation.push.mock.calls.length).toBe(before);
-    open.mockRestore();
+    expect(api.incomingPdf).not.toHaveBeenCalled();
   });
 
-  it("a mailbox-only invoice without a PDF says so instead of doing nothing", async () => {
-    api.incomingList.mockResolvedValue(mailboxPage());
-    api.incomingPdf.mockRejectedValue(
-      new Error("A számla megvan, de PDF nem érkezett hozzá."),
+  it("an approved mailbox invoice is an ordinary row: its detail page opens", async () => {
+    api.incomingList.mockResolvedValue(
+      mailboxPage({ id: "ibd-7", review: "VERIFIED", invoiceFormat: "PAPER" }),
     );
-    const open = vi.spyOn(window, "open").mockReturnValue(null);
     urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
     render(<BillingDocumentListPage />);
     const row = await screen.findByRole("row", { name: /F2602896/ });
+    expect(within(row).getByText("Ellenőrzött")).toBeInTheDocument();
+    expect(within(row).getByText("Normál · Postafiókból")).toBeInTheDocument();
     fireEvent.click(within(row).getByText("F2602896"));
-    expect(
-      await screen.findByText("A számla megvan, de PDF nem érkezett hozzá."),
-    ).toBeInTheDocument();
-    expect(open).not.toHaveBeenCalled();
-    open.mockRestore();
+    expect(urlNavigation.push).toHaveBeenLastCalledWith(
+      "/penzugy/szamlazas/bejovo/ibd-7",
+    );
   });
 
   it("the filters go to the request from the URL: a month as its first and last day, on the fulfillment date", async () => {
     urlNavigation.reset(
       "/penzugy/szamlazas",
-      "nezet=bejovo&datum=teljesites&fizetes=PARTIAL&bank=UNPAIRED&tipus=D&penznem=EUR&q=tropic",
+      "nezet=bejovo&datum=teljesites&fizetes=PARTIAL&bank=UNPAIRED&ellenorzes=TO_REVIEW&tipus=D&penznem=EUR&q=tropic",
     );
     render(<BillingDocumentListPage />);
     await waitFor(() => expect(api.incomingList).toHaveBeenCalled());
@@ -336,6 +331,7 @@ describe("the incoming list", () => {
       kindCode: "D",
       currency: "EUR",
       bankMatch: "UNPAIRED",
+      review: "TO_REVIEW",
     });
 
     // a február az utolsó nap próbája: 28 vagy 29, soha 30 vagy 31
