@@ -479,11 +479,21 @@ export interface FactIdentity {
 export const factKey = (fact: FactIdentity): string =>
   productKnowledgeFactKey(fact);
 
+/**
+ * THE REVISIONS A TEXT IS MEASURED AGAINST: the product's own facts only (SEO
+ * P0 PR 3, acrobot 27665 and barracuda 27668). A variant's fact does not reach
+ * the buyer in P0, so a text cannot be built on it; and if it counted here, the
+ * product-wide rule (an empty `usedFields`) would put it into every older
+ * block's `basedOn`, and one accepted weight on a one-variant product (1900 of
+ * 1909 on the stage) would hold all of them back without a word.
+ */
 export function currentRevisions(
   facts: readonly (FactIdentity & { revision: number })[],
 ): Revisions {
   return Object.fromEntries(
-    facts.map((fact) => [factKey(fact), fact.revision]),
+    facts
+      .filter((fact) => fact.variantId === null)
+      .map((fact) => [factKey(fact), fact.revision]),
   );
 }
 
@@ -543,8 +553,18 @@ export function parseUsedFields(
   if (value === undefined || value === null) return { ok: true, value: [] };
   if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
     return { ok: false, reason: "usedFields: a list of field keys" };
-  // a variant's fact is named `field@variantId`; a bare `field` is the product's
-  const present = new Set(facts.map(factKey));
+  // a variant's fact (`field@variantId`) is not text material in P0: it does
+  // not reach the buyer, so a block built on it could be saved but never
+  // published, silently (barracuda 27668). Refused by name.
+  const variantKeys = (value as string[]).filter((key) => key.includes("@"));
+  if (variantKeys.length > 0)
+    return {
+      ok: false,
+      reason: `usedFields: ${variantKeys.join(", ")} is a variant's fact, and a text cannot be built on one yet`,
+    };
+  const present = new Set(
+    facts.filter((fact) => fact.variantId === null).map(factKey),
+  );
   const unknown = (value as string[]).filter((field) => !present.has(field));
   if (unknown.length > 0)
     return {
@@ -601,6 +621,18 @@ export function canLeave(fact: { status: string; public: boolean }): boolean {
 }
 
 /**
+ * DOES THIS FACT REACH THE BUYER IN P0: product-level, VERIFIED and public.
+ * The projection's fact filter and the copy's gate both use THIS predicate, so
+ * a text can never state a fact the projection holds back (acrobot 27665,
+ * after the PR 2 stage measurement: what the buyer cannot see does not appear
+ * in prose either). A variant's fact stays in the OS until its contract
+ * exists (PR 8, or a `variant_id` in the commerce contract).
+ */
+function reachesBuyer(fact: FactState): boolean {
+  return fact.variantId === null && canLeave(fact);
+}
+
+/**
  * EVERY FACT THE COPY IS BUILT ON IS VERIFIED NOW (D5, card 4622f1ac).
  *
  * Prose can state a value, so an approved text built on a SUGGESTED or an
@@ -620,8 +652,9 @@ function basedOnVerified(
   if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
     return false;
   // decision 6: a VERIFIED fact the buyer may not see (`public = false`)
-  // does not appear in prose either
-  const verified = new Set(facts.filter((fact) => canLeave(fact)).map(factKey));
+  // does not appear in prose either; since PR 3 nor does a variant's fact,
+  // which the projection does not carry (acrobot 27665)
+  const verified = new Set(facts.filter(reachesBuyer).map(factKey));
   const fields = usedFields.length > 0 ? usedFields : Object.keys(basedOn);
   return fields.every((field) => verified.has(field));
 }
@@ -777,7 +810,7 @@ export function knowledgeProjection(
       // a variant's fact does not go in P0 (the plan's projection contract):
       // the commerce contract has no `variant_id`, so it would arrive as a
       // second row of the same field
-      .filter((fact) => fact.variantId === null && canLeave(fact))
+      .filter(reachesBuyer)
       .sort((a, b) => a.field.localeCompare(b.field))
       .map((fact) => ({
         field: fact.field,

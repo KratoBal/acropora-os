@@ -173,7 +173,13 @@ describe("a vevői szöveg tényei", () => {
  * valtozata ugyanazzal a mezovel egy `id`-t kap (a jeloles a rossz tenyre
  * megy), vagy a mentes a valtozat tenyet a sima mezonevvel kuldi.
  */
-describe("a változat ténye külön jelölő", () => {
+describe("a változat tényére nincs jelölő", () => {
+  /*
+   * SEO P0 PR 3 (barracuda 27668): a valtozat tenye a P0-ban nem jut a
+   * vevohoz, az API elutasitja a ra epulo blokkot. MI PIROSIT: a valtozat
+   * tenyere jelolo all (egy soha ki nem adhato blokk menteset kinalja), vagy a
+   * termek sajat tenye eltunik a listarol.
+   */
   const fact = (variantId: string | null) =>
     ({
       field: "application",
@@ -189,8 +195,7 @@ describe("a változat ténye külön jelölő", () => {
       source: { sourceType: null, sourceRef: null, retrievedAt: null },
     }) as never;
 
-  it("két jelölő, két kulcs, és a mentés a változat kulcsát küldi", () => {
-    const onSave = vi.fn();
+  it("csak a termék saját ténye kap jelölőt", () => {
     render(
       <JevCopyPanel
         copy={[
@@ -199,7 +204,7 @@ describe("a változat ténye külön jelölő", () => {
             body: "Korallokhoz.",
             status: "DRAFT",
             stale: false,
-            usedFields: ["application"],
+            usedFields: [],
             editedAt: "2026-10-07T09:00:00.000Z",
             approvedAt: null,
           },
@@ -207,7 +212,7 @@ describe("a változat ténye külön jelölő", () => {
         facts={[fact(null), fact("v-abcdef123456")]}
         canApprove
         busy={false}
-        onSave={onSave}
+        onSave={vi.fn()}
         onApprove={vi.fn()}
       />,
     );
@@ -218,14 +223,6 @@ describe("a változat ténye külön jelölő", () => {
     );
     expect(dobozok.map((d) => [d.id, d.checked])).toEqual([
       ["hasznalt-lead-application", true],
-      ["hasznalt-lead-application@v-abcdef123456", false],
-    ]);
-    expect(screen.getAllByText(/változat …123456/).length).toBeGreaterThan(0);
-    fireEvent.click(dobozok[1]!);
-    fireEvent.click(screen.getByRole("button", { name: "Bevezető mentése" }));
-    expect(onSave).toHaveBeenCalledWith("lead", "Korallokhoz.", [
-      "application",
-      "application@v-abcdef123456",
     ]);
   });
 });

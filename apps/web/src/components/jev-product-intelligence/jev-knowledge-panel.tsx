@@ -393,6 +393,17 @@ function CopyConflictWarning({
 }
 
 /**
+ * THE FACTS A TEXT MAY BE BUILT ON (SEO P0 PR 3): the product's own. A variant's
+ * fact stays in the OS in P0. A missing `variantId` (an API answer from before
+ * PR 3, during the rollout) is the product's own fact.
+ */
+export function szovegTenyek(
+  facts: readonly ProductKnowledgeFact[],
+): ProductKnowledgeFact[] {
+  return facts.filter((fact) => !fact.variantId);
+}
+
+/**
  * THE FACTS A BLOCK SHOWS AS USED: its saved list, or, for a block saved
  * before the list existed (empty), every fact: that is what it is measured
  * against today (the product-wide rule).
@@ -407,7 +418,7 @@ export function usedFieldsShown(
   const list =
     sajat.length > 0
       ? sajat
-      : facts.map((fact) => productKnowledgeFactKey(fact));
+      : szovegTenyek(facts).map((fact) => productKnowledgeFactKey(fact));
   return [...list].sort();
 }
 
@@ -430,7 +441,10 @@ function UsedFieldsPicker({
   readOnly: boolean;
   onChange: (used: string[]) => void;
 }) {
-  if (facts.length === 0) return null;
+  // SEO P0 PR 3: only the product's own facts are text material; a variant's
+  // fact does not reach the buyer, and the API refuses a block built on one
+  const tenyek = szovegTenyek(facts);
+  if (tenyek.length === 0) return null;
   const label = COPY_BLOCK_LABEL[block];
   return (
     <fieldset className="flex flex-col gap-1" data-used-fields={block}>
@@ -438,10 +452,9 @@ function UsedFieldsPicker({
         {`Mire épül a(z) ${label.toLowerCase()}?`}
       </legend>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
-        {facts.map((fact) => {
-          // SEO P0 PR 3: the fact KEY, not the field. A variant's fact of a
-          // field the product also has is a second box; by field the two
-          // would share one id and the tick would land on the wrong fact.
+        {tenyek.map((fact) => {
+          // the fact KEY (SEO P0 PR 3): the field today, and the same form
+          // the API counts by, should variant facts ever become text material
           const kulcs = productKnowledgeFactKey(fact);
           const id = `hasznalt-${block}-${kulcs}`;
           const publikus = (
@@ -467,12 +480,6 @@ function UsedFieldsPicker({
                 }
               />
               {FIELD_LABEL[fact.field]}
-              {/* an API answer from before PR 3 has no variantId: the product's own */}
-              {fact.variantId ? (
-                <span title={fact.variantId}>
-                  {` (változat …${fact.variantId.slice(-6)})`}
-                </span>
-              ) : null}
               {publikus ? null : (
                 <span className="text-pilot-amber-700">
                   {fact.status === "CONFLICTING_SOURCES"

@@ -978,14 +978,43 @@ describe("the fact key: a variant's fact never stands in for the product's (SEO 
     assert.equal(factKey({ field: "weight", variantId: "v-a" }), "weight@v-a");
   });
 
-  it("the product's and a variant's fact of one field keep their own revisions", () => {
+  it("the text's revisions count the product's own facts: a variant's fact is not text material in P0", () => {
     assert.deepEqual(
       currentRevisions([
         row("application", null, "SUGGESTED", 1),
         row("application", "v-a", "VERIFIED", 3),
       ]),
-      { application: 1, "application@v-a": 3 },
+      { application: 1 },
     );
+  });
+
+  /*
+    A REGI (URES LISTAS) BLOKK NEM ALL MEG HANGTALANUL. Ha a valtozat tenye a
+    termek-szintu szabaly `basedOn`-jaba kerulne, egy egyvaltozatos termek
+    tomegenek elfogadasa minden ilyen blokkot visszatartana (1900/1909 a
+    stage-en). MI PIROSIT: a tomeg megjelenese utan a regi blokk elavult vagy
+    nem publikalhato.
+  */
+  it("an older block (empty usedFields) is neither stale nor held back when a variant's fact arrives", () => {
+    const termekTenyek = [row("application", null, "VERIFIED", 1)];
+    const basedOn = savedRevisions(termekTenyek, []);
+    assert.deepEqual(basedOn, { application: 1 });
+    const regi: CopyRow = {
+      block: "lead",
+      body: "Korallokhoz.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn,
+      usedFields: [],
+    };
+    const utana = [...termekTenyek, row("weight", "v-egy", "VERIFIED", 1)];
+    assert.equal(copyIsStale(basedOn, currentRevisions(utana), []), false);
+    assert.deepEqual(
+      knowledgeProjection(utana, [regi]).copy.map((c) => c.block),
+      ["lead"],
+    );
+    // a save after the weight arrived does not take it into basedOn either
+    assert.deepEqual(savedRevisions(utana, []), { application: 1 });
   });
 
   it("barracuda's case: a VERIFIED variant fact does not publish a block built on the product's SUGGESTED one", () => {
@@ -1022,33 +1051,65 @@ describe("the fact key: a variant's fact never stands in for the product's (SEO 
     );
   });
 
-  it("a block may be built on a variant's fact by naming it; the bare field is the product's", () => {
+  /*
+    barracuda 27668: egy valtozat tenyere epulo blokk mentheto lenne, de soha
+    nem lenne kiadhato, hang nelkul. MI PIROSIT: a `weight@v-a` kulcs atmegy,
+    vagy az elutasitas nem nevezi meg; a sima mezonev a valtozat tenyehez kot.
+  */
+  it("usedFields refuses a variant's key by name; a bare field names the product's own fact", () => {
     const facts = [
       { field: "application", variantId: null },
       { field: "weight", variantId: "v-a" },
     ];
-    assert.deepEqual(parseUsedFields(["weight@v-a", "application"], facts), {
-      ok: true,
-      value: ["application", "weight@v-a"],
-    });
+    const variant = parseUsedFields(["application", "weight@v-a"], facts);
+    assert.equal(variant.ok, false);
+    assert.match(
+      !variant.ok ? variant.reason : "",
+      /weight@v-a is a variant's fact/,
+    );
+    // the weight exists only on the variant: a bare `weight` names nothing
     const bare = parseUsedFields(["weight"], facts);
     assert.equal(bare.ok, false);
-    assert.match(!bare.ok ? bare.reason : "", /weight/);
-    const other = parseUsedFields(["weight@v-b"], facts);
-    assert.equal(other.ok, false);
-    assert.match(!other.ok ? other.reason : "", /weight@v-b/);
+    assert.match(!bare.ok ? bare.reason : "", /no accepted fact for weight/);
+    // positive control: the product's own fact is accepted
+    assert.deepEqual(parseUsedFields(["application"], facts), {
+      ok: true,
+      value: ["application"],
+    });
   });
 
-  it("a saved block names the variant's revision under its key", () => {
+  /*
+    acrobot 27665: amit a vevo nem lat, az a szovegben sem jelenhet meg. A
+    valtozat tenye a P0-ban nincs a vetuletben, tehat ra epulo szoveg sem
+    mehet ki, akkor sem, ha a teny VERIFIED. MI PIROSIT: a `weight@v-a`-ra
+    epulo lead kimegy; vagy a kontroll (ugyanaz a mezo termekszinten) sem
+    megy ki, tehat a tiltas nem a valtozat miatt all.
+  */
+  it("a block built on a VERIFIED variant fact is not published; the same field at product level is", () => {
+    const lead = (key: string): CopyRow => ({
+      block: "lead",
+      body: "120 g.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn: { [key]: 1 },
+      usedFields: [key],
+    });
+    const valtozat = knowledgeProjection(
+      [row("weight", "v-a", "VERIFIED", 1)],
+      [lead("weight@v-a")],
+    );
+    assert.deepEqual(valtozat, { facts: [], copy: [] });
+    const termek = knowledgeProjection(
+      [row("weight", null, "VERIFIED", 1)],
+      [lead("weight")],
+    );
     assert.deepEqual(
-      savedRevisions(
-        [
-          row("application", null, "VERIFIED", 2),
-          row("weight", "v-a", "VERIFIED", 5),
-        ],
-        ["weight@v-a"],
-      ),
-      { "weight@v-a": 5 },
+      termek.copy.map((c) => c.block),
+      ["lead"],
+    );
+    assert.deepEqual(
+      termek.facts.map((f) => f.field),
+      ["weight"],
     );
   });
 });
