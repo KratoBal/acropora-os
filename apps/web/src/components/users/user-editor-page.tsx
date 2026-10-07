@@ -30,6 +30,7 @@ import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
 import { PartnerPicker } from "@/components/service-jobs/partner-picker";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
+import { UserPermissionTable } from "./user-permission-table";
 import { UserVisibleUnits } from "./user-visible-units";
 
 /**
@@ -552,6 +553,20 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 ? "supplier"
                 : "internal"
           }
+        />
+      ) : null}
+      {/*
+        A FELHASZNÁLÓNKÉNTI JOGOK (3. lépés): csak meglévő felhasználónál, mert
+        az eltérés a fiók azonosítójához kötődik. A táblázat saját mentéssel
+        megy, a fenti űrlaptól függetlenül: a szerepkör változtatása után a
+        táblázat az ÚJ sablonhoz méri az eltéréseket, ezért előbb azt kell menteni.
+      */}
+      {user ? (
+        <UserPermissionTable
+          key={`${user.id}:${user.role}`}
+          userId={user.id}
+          customerId={user.customerId}
+          supplierId={user.supplierId ?? null}
         />
       ) : null}
       {user ? (
