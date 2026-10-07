@@ -28,6 +28,12 @@ import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
 
+import { WebshopSlugController } from "./slug/webshop-slug.controller.js";
+import { PrismaWebshopSlugStore } from "./slug/webshop-slug.repository.js";
+import {
+  WEBSHOP_SLUG_STORE,
+  WebshopSlugService,
+} from "./slug/webshop-slug.service.js";
 @Module({
   controllers: [
     ProductController,
@@ -39,6 +45,7 @@ import { ProductService } from "./product.service.js";
     ProductEnrichmentQueueController,
     ProductKnowledgeController,
     AttributeController,
+    WebshopSlugController,
   ],
   providers: [
     ProductRepository,
@@ -53,6 +60,8 @@ import { ProductService } from "./product.service.js";
     { provide: ENRICHMENT_READER, useClass: PrismaEnrichmentReader },
     ProductKnowledgeService,
     { provide: KNOWLEDGE_STORE, useClass: PrismaKnowledgeStore },
+    WebshopSlugService,
+    { provide: WEBSHOP_SLUG_STORE, useClass: PrismaWebshopSlugStore },
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })

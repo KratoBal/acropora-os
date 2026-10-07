@@ -110,7 +110,8 @@ export interface ProductImageSummary {
 }
 
 export interface ProductChannelListingSummary {
-  channel: "UNAS";
+  /** `WEBSHOP` (SEO P0 PR 5): a webshop saját sora, benne a termék slugja. */
+  channel: "UNAS" | "WEBSHOP";
   externalStatus: string | null;
   isPublished: boolean;
   slug: string | null;

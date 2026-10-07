@@ -609,6 +609,33 @@ enum SyncStatus {
 
 enum CatalogChannel {
   UNAS
+  /// SEO P0 PR 5: a webshop sajat csatorna-sora, benne a termek slugja
+  /// (`ChannelListing.slug`, a migracio reszleges egyedi indexe szerint egyedi).
+  WEBSHOP
+}
+
+/// SEO P0 PR 5 (C4): kinek a regi slugja. A PR 5 csak a `PRODUCT`-ot irja.
+enum SlugEntityType {
+  PRODUCT
+  STORE_CATEGORY
+  BRAND
+  LANDING_PAGE
+}
+
+/// SEO P0 PR 5 (C4): egy lecserelt slug. Egy regi cim soha nem kaphat uj
+/// tulajdonost: az elo slug es az itt allo regi slug is utkozesnek szamit.
+/// Ebbol general a PR 6 atiranyitast.
+model SlugHistory {
+  id           String         @id @default(cuid())
+  entityType   SlugEntityType
+  entityId     String
+  slug         String
+  replacedAt   DateTime       @default(now())
+  replacedById String?
+  replacedBy   User?          @relation("SlugHistoryReplacedBy", fields: [replacedById], references: [id], onDelete: SetNull)
+
+  @@unique([entityType, slug])
+  @@index([entityType, entityId])
 }
 
 /// MIERT NEM MENT KI EGY TERMEK KEPE A BOLTBA.
@@ -800,6 +827,7 @@ model User {
   /// A termékismeret-tények, amiket ő fogadott el (#1431).
   acceptedKnowledgeFacts ProductKnowledgeFact[]        @relation("ProductKnowledgeFactAcceptedBy")
   verifiedBarcodes       ProductBarcode[]              @relation("ProductBarcodeVerifiedBy")
+  replacedSlugs          SlugHistory[]                 @relation("SlugHistoryReplacedBy")
   /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
   editedCopyBlocks       ProductCopy[]                 @relation("ProductCopyEditedBy")
   approvedCopyBlocks     ProductCopy[]                 @relation("ProductCopyApprovedBy")
