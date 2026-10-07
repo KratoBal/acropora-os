@@ -266,7 +266,16 @@ export async function resolvePricingTargets(
 
 export async function runPricingCli(
   targets: string[],
-  out: { stdout(value: string): void; stderr(value: string): void } = {
+  out: {
+    stdout(value: string): void;
+    stderr(value: string): void;
+    /**
+     * TERMÉKENKÉNTI KUDARC, a hívónak (329f8a2e). Az ütemező ebből tudja, melyik
+     * termék ára bukott el, és csak azt tartja esedékesen; a kilépési kód csak
+     * annyit mond, hogy VALAMI elbukott. A kézi parancs nem adja meg.
+     */
+    failed?(target: string, reason: string): void;
+  } = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   },
@@ -301,9 +310,39 @@ export async function runPricingCli(
     throw error;
   }
 
+  return priceTargets(
+    selectedTargets,
+    {
+      resolve: (argument) => resolvePricingTargets(argument, database),
+      project: (target) => service.project(target),
+    },
+    out,
+  );
+}
+
+/**
+ * A TERMÉKENKÉNTI KÖR, a parancs-törzsből kiemelve (329f8a2e), hogy a kudarc
+ * termékenkénti jelzése (`out.failed`) adatbázis és bolt nélkül mérhető legyen.
+ * A viselkedés változatlan: a hibák és a mehetők együtt jönnek, egy hiba nem
+ * állítja meg a testvér-változatokat.
+ */
+export async function priceTargets(
+  selectedTargets: string[],
+  deps: {
+    resolve(argument: string): Promise<PricingTargetResolution>;
+    project(
+      target: PricingTarget,
+    ): ReturnType<MedusaPricingProjectionService["project"]>;
+  },
+  out: {
+    stdout(value: string): void;
+    stderr(value: string): void;
+    failed?(target: string, reason: string): void;
+  },
+): Promise<number> {
   let failed = 0;
   for (const argument of selectedTargets) {
-    const resolved = await resolvePricingTargets(argument, database);
+    const resolved = await deps.resolve(argument);
     /**
      * A HIBÁK ÉS A MEHETŐK EGYÜTT JÖNNEK VISSZA, és mind a kettőt fel kell
      * dolgozni. Egy `continue` az első hibánál azt jelentené, hogy egy termék
@@ -311,15 +350,17 @@ export async function runPricingCli(
      */
     for (const uzenet of resolved.errors) {
       out.stderr(`${uzenet}\n`);
+      out.failed?.(argument, uzenet);
       failed += 1;
     }
 
     for (const target of resolved.targets) {
-      const outcome = await service.project(target);
+      const outcome = await deps.project(target);
       if (outcome.action === "stopped") {
         out.stderr(
           `${target.sku}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
         );
+        out.failed?.(argument, `${target.sku}: ${outcome.reason}`);
         failed += 1;
         continue;
       }
