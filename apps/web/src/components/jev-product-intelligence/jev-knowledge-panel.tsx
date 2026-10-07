@@ -4,6 +4,7 @@ import { PilotSection } from "@acropora/ui";
 import {
   PRODUCT_COPY_BLOCKS,
   PRODUCT_ENRICHMENT_FIELDS,
+  PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
   type ProductCopyBlock,
   type ProductCopyEntry,
@@ -215,9 +216,16 @@ export function JevManualEvidenceForm({
  * Saving makes the block a draft written against today's facts; approving
  * needs a fresh draft. A stale block (the facts changed since the save) is
  * never projected, and it says so above its text.
+ *
+ * EVERY BLOCK NAMES THE FACTS IT IS BUILT ON (SEO P0 PR 1b, Balázs
+ * 2026-10-07): only those can make it stale or hold it back, so a conflicting
+ * dosing no longer stops a lead that states no dosing. The list starts with
+ * every fact ticked (the strict direction, barracuda's preview); the editor
+ * unticks what the text does not use.
  */
 export function JevCopyPanel({
   copy,
+  facts = [],
   conflicts = [],
   canApprove,
   busy,
@@ -225,17 +233,19 @@ export function JevCopyPanel({
   onApprove,
 }: {
   copy: readonly ProductCopyEntry[];
+  /** The accepted facts: the blocks name the ones they are built on. */
+  facts?: readonly ProductKnowledgeFact[];
   /** Fields whose sources disagree: the lead and the body warn about them. */
   conflicts?: readonly ConflictingField[];
   canApprove: boolean;
   busy: boolean;
-  onSave: (block: ProductCopyBlock, body: string) => void;
+  onSave: (block: ProductCopyBlock, body: string, usedFields: string[]) => void;
   onApprove: (block: ProductCopyBlock) => void;
 }) {
   return (
     <PilotSection
       title="Vevői szöveg"
-      subtitle="Csak a jóváhagyott, nem elavult szöveg kerül a webshopba, és csak akkor, ha a termék minden elfogadott ténye ellenőrzött"
+      subtitle="Csak a jóváhagyott, nem elavult szöveg kerül a webshopba, és csak akkor, ha minden tény, amire épül, ellenőrzött"
     >
       <div className="flex flex-col gap-4">
         {PRODUCT_COPY_BLOCKS.map((block) => (
@@ -243,6 +253,7 @@ export function JevCopyPanel({
             key={block}
             block={block}
             entry={copy.find((entry) => entry.block === block)}
+            facts={facts}
             conflicts={block === "lead" || block === "body" ? conflicts : []}
             canApprove={canApprove}
             busy={busy}
@@ -258,6 +269,7 @@ export function JevCopyPanel({
 function CopyBlockEditor({
   block,
   entry,
+  facts,
   conflicts,
   canApprove,
   busy,
@@ -266,17 +278,24 @@ function CopyBlockEditor({
 }: {
   block: ProductCopyBlock;
   entry: ProductCopyEntry | undefined;
+  facts: readonly ProductKnowledgeFact[];
   conflicts: readonly ConflictingField[];
   canApprove: boolean;
   busy: boolean;
-  onSave: (block: ProductCopyBlock, body: string) => void;
+  onSave: (block: ProductCopyBlock, body: string, usedFields: string[]) => void;
   onApprove: (block: ProductCopyBlock) => void;
 }) {
   const saved = entry?.body ?? "";
   const [draft, setDraft] = useState(saved);
   // A save or a reload brings a new saved text; the editor follows it.
   useEffect(() => setDraft(saved), [saved]);
-  const changed = draft.trim() !== saved;
+  const savedUsed = usedFieldsShown(entry, facts);
+  const savedUsedKey = savedUsed.join(",");
+  const [used, setUsed] = useState<string[]>(savedUsed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => setUsed(savedUsed), [savedUsedKey]);
+  const changed =
+    draft.trim() !== saved || [...used].sort().join(",") !== savedUsedKey;
   const label = COPY_BLOCK_LABEL[block];
   const oneLine = block === "seoTitle" || block === "metaDescription";
 
@@ -301,13 +320,20 @@ function CopyBlockEditor({
         className={TEXTAREA_CLASS}
       />
       <CopyConflictWarning text={draft} conflicts={conflicts} />
+      <UsedFieldsPicker
+        block={block}
+        facts={facts}
+        used={used}
+        readOnly={!canApprove}
+        onChange={setUsed}
+      />
       {canApprove ? (
         <div className="flex flex-wrap gap-2">
           <PilotButton
             variant="secondary"
             size="regular"
             disabled={busy || !changed || draft.trim() === ""}
-            onClick={() => onSave(block, draft)}
+            onClick={() => onSave(block, draft, [...used].sort())}
           >
             {`${label} mentése`}
           </PilotButton>
@@ -362,5 +388,93 @@ function CopyConflictWarning({
           ", ",
         )}. A szöveg ne nevezzen meg belőle értéket, a saját szavaival sem.`}
     </p>
+  );
+}
+
+/**
+ * THE FACTS A BLOCK SHOWS AS USED: its saved list, or, for a block saved
+ * before the list existed (empty), every fact: that is what it is measured
+ * against today (the product-wide rule).
+ */
+export function usedFieldsShown(
+  entry: ProductCopyEntry | undefined,
+  facts: readonly ProductKnowledgeFact[],
+): string[] {
+  // `?? []`: an API answer from before the list existed has no such key; the
+  // panel must not fall over while the two apps roll out one after the other.
+  const sajat = entry?.usedFields ?? [];
+  const list = sajat.length > 0 ? sajat : facts.map((fact) => fact.field);
+  return [...list].sort();
+}
+
+/**
+ * THE TICK LIST: which facts the text is built on. A fact the buyer may not
+ * see yet says so beside its name, because a ticked one of those holds the
+ * block back. Nothing ticked saves an empty list, which is the product-wide
+ * rule (every fact counts), and the line under the list says so.
+ */
+function UsedFieldsPicker({
+  block,
+  facts,
+  used,
+  readOnly,
+  onChange,
+}: {
+  block: ProductCopyBlock;
+  facts: readonly ProductKnowledgeFact[];
+  used: readonly string[];
+  readOnly: boolean;
+  onChange: (used: string[]) => void;
+}) {
+  if (facts.length === 0) return null;
+  const label = COPY_BLOCK_LABEL[block];
+  return (
+    <fieldset className="flex flex-col gap-1" data-used-fields={block}>
+      <legend className="text-xs font-semibold text-pilot-grey-700">
+        {`Mire épül a(z) ${label.toLowerCase()}?`}
+      </legend>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {facts.map((fact) => {
+          const id = `hasznalt-${block}-${fact.field}`;
+          const publikus = (
+            PRODUCT_KNOWLEDGE_PUBLIC_STATUSES as readonly string[]
+          ).includes(fact.status);
+          return (
+            <label
+              key={fact.field}
+              htmlFor={id}
+              className="flex items-center gap-1.5 text-xs text-pilot-grey-700"
+            >
+              <input
+                id={id}
+                type="checkbox"
+                checked={used.includes(fact.field)}
+                disabled={readOnly}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? [...used, fact.field]
+                      : used.filter((field) => field !== fact.field),
+                  )
+                }
+              />
+              {FIELD_LABEL[fact.field]}
+              {publikus ? null : (
+                <span className="text-pilot-amber-700">
+                  {fact.status === "CONFLICTING_SOURCES"
+                    ? "(ütköző)"
+                    : "(nem ellenőrzött)"}
+                </span>
+              )}
+            </label>
+          );
+        })}
+      </div>
+      {used.length === 0 ? (
+        <p className="text-xs text-pilot-grey-500">
+          Ha egyet sem jelölsz, a termék minden ténye számít.
+        </p>
+      ) : null}
+    </fieldset>
   );
 }

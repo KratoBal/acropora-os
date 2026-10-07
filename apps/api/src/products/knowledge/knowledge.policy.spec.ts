@@ -5,6 +5,7 @@ import type { ProductFacts } from "../enrichment/enrichment-run.js";
 import {
   copyIsStale,
   copyToHtml,
+  currentRevisions,
   earlierStatements,
   factFromResult,
   factSource,
@@ -13,8 +14,10 @@ import {
   manualEvidenceCheck,
   parseCopyBody,
   parseManualEvidence,
+  parseUsedFields,
   projectedCopy,
   resolvedFact,
+  savedRevisions,
   type CopyRow,
   type FactRow,
 } from "./knowledge.policy.js";
@@ -390,6 +393,7 @@ describe("copy", () => {
     status: "APPROVED",
     revision: 1,
     basedOn: { dosing: 1 },
+    usedFields: [],
   });
 
   const verified = (field: string, revision: number) => ({
@@ -560,6 +564,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         status: "APPROVED",
         revision: 3,
         basedOn: fresh,
+        usedFields: [],
       },
       {
         block: "lead",
@@ -567,6 +572,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         status: "APPROVED",
         revision: 1,
         basedOn: { packSize: 1, dosing: 1 },
+        usedFields: [],
       },
       {
         block: "seoTitle",
@@ -574,6 +580,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         status: "APPROVED",
         revision: 1,
         basedOn: fresh,
+        usedFields: [],
       },
     ]);
     assert.deepEqual(payload.copy, [{ block: "body", body: "B", revision: 3 }]);
@@ -587,6 +594,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           status: "APPROVED",
           revision: 3,
           basedOn: fresh,
+          usedFields: [],
         },
       ]).copy,
       [],
@@ -620,5 +628,161 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       false,
     );
     assert.equal(knowledgeProjectionDiffers(null, wanted), true);
+  });
+});
+
+describe("per-block basedOn (SEO P0 PR 1b, Balázs 2026-10-07)", () => {
+  /**
+   * A BLOCK DEPENDS ONLY ON THE FACTS IT USES. The KZ Amino case: `dosing` is
+   * an unresolved conflict, and a lead that states no dosing must still go
+   * out; a lead that IS built on a non-VERIFIED fact must not.
+   *
+   * WHAT TURNS IT RED: the product-wide rule applied to a block with
+   * `usedFields` (test 1 and 4); `usedFields` ignored for verification (2);
+   * the SUGGESTED filter moved to the input (3); an empty list no longer
+   * meaning the old rule (5).
+   */
+  const fact = (
+    field: string,
+    status: string,
+    revision = 1,
+    value: string | null = "x",
+  ): FactRow => ({
+    field,
+    value,
+    unit: null,
+    status,
+    revision,
+    sourceType: "MANUFACTURER_PAGE",
+  });
+  const FACTS: FactRow[] = [
+    fact("application", "VERIFIED"),
+    fact("productFamily", "VERIFIED"),
+    fact("dosing", "CONFLICTING_SOURCES", 1, null),
+    fact("packSize", "SUGGESTED"),
+  ];
+  const USED = ["application", "productFamily"];
+  const lead = (
+    usedFields: string[],
+    basedOn: Record<string, number> = savedRevisions(FACTS, usedFields),
+  ): CopyRow => ({
+    block: "lead",
+    body: "Aminosav-kiegészítő SPS korallokhoz.",
+    status: "APPROVED",
+    revision: 1,
+    basedOn,
+    usedFields,
+  });
+  const kiment = (facts: FactRow[], rows: CopyRow[]) =>
+    knowledgeProjection(facts, rows).copy.map((row) => row.block);
+
+  it("(1) a lead built on application and productFamily goes out beside a conflicting dosing", () => {
+    assert.deepEqual(kiment(FACTS, [lead(USED)]), ["lead"]);
+    // the description path (the normal product projection) follows the same rule
+    const body: CopyRow = { ...lead(USED), block: "body", body: "Törzs." };
+    assert.equal(
+      projectedCopy([lead(USED), body], FACTS, "ACROPORA")?.description,
+      "<p>Aminosav-kiegészítő SPS korallokhoz.</p>\n<p>Törzs.</p>",
+    );
+  });
+
+  it("(1b) verification reads usedFields, not the keys basedOn happens to hold", () => {
+    // a basedOn holding every fact (e.g. written by a later saver that kept the
+    // old shape) must not pull the conflicting dosing back into the decision
+    const tagabb = lead(USED, currentRevisions(FACTS));
+    assert.deepEqual(kiment(FACTS, [tagabb]), ["lead"]);
+  });
+
+  it("(2) the same lead stays in the OS when application is SUGGESTED", () => {
+    const facts = FACTS.map((f) =>
+      f.field === "application" ? { ...f, status: "SUGGESTED" } : f,
+    );
+    assert.deepEqual(kiment(facts, [lead(USED)]), []);
+    // and a block BUILT ON the conflict stays in the OS too
+    assert.deepEqual(kiment(FACTS, [lead(["dosing"])]), []);
+  });
+
+  it("(3) a filtered SUGGESTED fact does not make the copy stale: the gate is on the output", () => {
+    const payload = knowledgeProjection(FACTS, [lead(USED)]);
+    assert.deepEqual(
+      payload.facts.map((f) => f.field),
+      ["application", "productFamily"],
+    );
+    assert.equal(
+      copyIsStale(lead(USED).basedOn, currentRevisions(FACTS), USED),
+      false,
+    );
+    assert.deepEqual(
+      payload.copy.map((row) => row.block),
+      ["lead"],
+    );
+  });
+
+  it("(4) an unused fact's revision does not age the block; a used one's does", () => {
+    const row = lead(USED);
+    const dosingMoved = FACTS.map((f) =>
+      f.field === "dosing" ? { ...f, revision: 2 } : f,
+    );
+    const newFact = [...FACTS, fact("salinity", "VERIFIED")];
+    const applicationMoved = FACTS.map((f) =>
+      f.field === "application" ? { ...f, revision: 2 } : f,
+    );
+    const applicationGone = FACTS.filter((f) => f.field !== "application");
+    assert.equal(
+      copyIsStale(row.basedOn, currentRevisions(dosingMoved), USED),
+      false,
+    );
+    assert.equal(
+      copyIsStale(row.basedOn, currentRevisions(newFact), USED),
+      false,
+    );
+    assert.equal(
+      copyIsStale(row.basedOn, currentRevisions(applicationMoved), USED),
+      true,
+    );
+    assert.equal(
+      copyIsStale(row.basedOn, currentRevisions(applicationGone), USED),
+      true,
+    );
+    assert.deepEqual(kiment(dosingMoved, [row]), ["lead"]);
+    assert.deepEqual(kiment(applicationMoved, [row]), []);
+  });
+
+  it("(5) with an empty usedFields the product-wide rule stands", () => {
+    const old = lead([], currentRevisions(FACTS));
+    assert.deepEqual(old.usedFields, []);
+    // the conflicting dosing holds the old block back
+    assert.deepEqual(kiment(FACTS, [old]), []);
+    // and any fact's change ages it, a new one included
+    const dosingMoved = FACTS.map((f) =>
+      f.field === "dosing" ? { ...f, revision: 2 } : f,
+    );
+    assert.equal(copyIsStale(old.basedOn, currentRevisions(dosingMoved)), true);
+    assert.equal(
+      copyIsStale(
+        old.basedOn,
+        currentRevisions([...FACTS, fact("salinity", "VERIFIED")]),
+      ),
+      true,
+    );
+  });
+
+  it("the save: basedOn holds only the used facts; unknown or malformed lists are refused", () => {
+    assert.deepEqual(savedRevisions(FACTS, USED), {
+      application: 1,
+      productFamily: 1,
+    });
+    assert.deepEqual(savedRevisions(FACTS, []), currentRevisions(FACTS));
+    assert.deepEqual(parseUsedFields(undefined, FACTS), {
+      ok: true,
+      value: [],
+    });
+    assert.deepEqual(
+      parseUsedFields(["productFamily", "application", "application"], FACTS),
+      { ok: true, value: ["application", "productFamily"] },
+    );
+    assert.equal(parseUsedFields(["salinity"], FACTS).ok, false);
+    assert.equal(parseUsedFields("application", FACTS).ok, false);
+    assert.equal(parseUsedFields([1], FACTS).ok, false);
   });
 });

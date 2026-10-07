@@ -38,6 +38,7 @@ const COPY: CopyRow[] = [
     status: "APPROVED",
     revision: 2,
     basedOn: { dosing: 1, packSize: 1 },
+    usedFields: [],
   },
 ];
 
@@ -153,6 +154,41 @@ describe("the product knowledge projection, OS -> Medusa", () => {
 });
 
 describe("the knowledge rows the runner reads", () => {
+  /**
+   * THE COPY QUERY ASKS FOR `usedFields` (SEO P0 PR 1b; barracuda's preview,
+   * point A). The table handle here is loosely typed, so the compiler does not
+   * see a select that forgot the column (measured: removing it stays green).
+   * Without it every block falls back to the product-wide rule in the shop,
+   * while the panel counts per block, and nothing fails.
+   *
+   * WHAT TURNS IT RED: a select without one of the fields the rule reads.
+   */
+  it("the copy select carries every field the publication rule reads", async () => {
+    const asked: unknown[] = [];
+    await knowledgeRowsFor(
+      {
+        productKnowledgeFact: { findMany: async () => [] },
+        productCopy: {
+          findMany: async (args: unknown) => {
+            asked.push(args);
+            return [];
+          },
+        },
+      },
+      "p-kz",
+    );
+    const select = (asked[0] as { select: Record<string, boolean> }).select;
+    for (const field of [
+      "block",
+      "body",
+      "status",
+      "revision",
+      "basedOn",
+      "usedFields",
+    ])
+      assert.equal(select[field], true, field);
+  });
+
   it("the fact's source is read through the JEV pointer, never from the fact", async () => {
     const asked: unknown[] = [];
     const rows = await knowledgeRowsFor(

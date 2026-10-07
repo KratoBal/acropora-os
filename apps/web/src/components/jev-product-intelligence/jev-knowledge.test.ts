@@ -62,6 +62,7 @@ describe("termékismeret a felülvizsgálati soron", () => {
     const entry = {
       block: "lead" as const,
       body: "x",
+      usedFields: [],
       editedAt: "2026-10-03T19:00:00.000Z",
       approvedAt: null,
     };

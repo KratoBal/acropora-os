@@ -472,17 +472,67 @@ export function currentRevisions(
 /**
  * STALE: THE FACTS ARE NOT THE ONES THE COPY WAS WRITTEN AGAINST.
  *
- * Any difference counts: a revision moved, a fact was accepted after the
- * save, or one went away. Computed on every read from `basedOn`, never
- * stored, so it cannot drift from the facts.
+ * Computed on every read from `basedOn`, never stored, so it cannot drift
+ * from the facts.
+ *
+ * WHICH FACTS COUNT (SEO P0 PR 1b, Balázs 2026-10-07): a block names the facts
+ * it is built on (`usedFields`), and only those count. A used fact whose
+ * revision moved, or that went away, makes the block stale; a change to any
+ * other fact does not. With an EMPTY list (every block saved before PR 1b,
+ * until it is saved again) the old product-wide rule stands: any difference
+ * counts, a fact accepted after the save included.
  */
-export function copyIsStale(basedOn: unknown, current: Revisions): boolean {
+export function copyIsStale(
+  basedOn: unknown,
+  current: Revisions,
+  usedFields: readonly string[] = [],
+): boolean {
   if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
     return true;
   const saved = basedOn as Record<string, unknown>;
-  const keys = new Set([...Object.keys(saved), ...Object.keys(current)]);
-  for (const key of keys) if (saved[key] !== current[key]) return true;
+  const keys =
+    usedFields.length > 0
+      ? new Set(usedFields)
+      : new Set([...Object.keys(saved), ...Object.keys(current)]);
+  for (const key of keys)
+    if (saved[key] === undefined || saved[key] !== current[key]) return true;
   return false;
+}
+
+/**
+ * THE `basedOn` A SAVE STORES: the revisions of the used facts, or, with an
+ * empty list, of all of them (the product-wide rule).
+ */
+export function savedRevisions(
+  facts: readonly { field: string; revision: number }[],
+  usedFields: readonly string[],
+): Revisions {
+  const all = currentRevisions(facts);
+  if (usedFields.length === 0) return all;
+  return Object.fromEntries(usedFields.map((field) => [field, all[field]!]));
+}
+
+/**
+ * THE FIELDS A SAVE NAMES: optional (absent = empty, the product-wide rule), a
+ * list of distinct strings, each a fact this product has NOW. A block cannot
+ * be built on a fact that is not there; naming one would make it stale (or
+ * unpublishable) from the first read, without saying why.
+ */
+export function parseUsedFields(
+  value: unknown,
+  facts: readonly { field: string }[],
+): Parsed<string[]> {
+  if (value === undefined || value === null) return { ok: true, value: [] };
+  if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
+    return { ok: false, reason: "usedFields: a list of field keys" };
+  const present = new Set(facts.map((fact) => fact.field));
+  const unknown = (value as string[]).filter((field) => !present.has(field));
+  if (unknown.length > 0)
+    return {
+      ok: false,
+      reason: `usedFields: no accepted fact for ${unknown.join(", ")}`,
+    };
+  return { ok: true, value: Array.from(new Set(value as string[])).sort() };
 }
 
 export interface CopyRow {
@@ -491,6 +541,15 @@ export interface CopyRow {
   status: "DRAFT" | "APPROVED";
   revision: number;
   basedOn: unknown;
+  /**
+   * The facts the block is built on, by fact key (`ProductKnowledgeFact.field`,
+   * no variant part); empty = the product-wide rule. REQUIRED, not optional:
+   * a reader whose select forgot the column would otherwise fall back to the
+   * product-wide rule without a sound, and the shop and the panel would
+   * count differently (barracuda, PR 1b preview, point A). The compiler now
+   * names such a reader.
+   */
+  usedFields: readonly string[];
 }
 
 /** The facts as they are now: what the copy is measured against. */
@@ -508,26 +567,29 @@ export function isPublicFact(fact: { status: string }): boolean {
 }
 
 /**
- * EVERY FACT THE COPY WAS WRITTEN AGAINST IS VERIFIED NOW (D5, card 4622f1ac).
+ * EVERY FACT THE COPY IS BUILT ON IS VERIFIED NOW (D5, card 4622f1ac).
  *
  * Prose can state a value, so an approved text built on a SUGGESTED or an
  * unresolved conflicting fact would publish what the fact gate holds back.
- * `basedOn` holds the revisions of ALL the product's facts at save time
- * (`knowledge.service.ts` `saveCopy`), not the ones the block used, so the
- * rule is product-wide for now: one non-VERIFIED fact holds every block back.
- * Per-block `basedOn` (Balázs, 2026-10-07: a block depends only on the facts
- * it uses) is a separate PR with its own field.
+ *
+ * PER BLOCK (SEO P0 PR 1b, Balázs 2026-10-07): a block with `usedFields`
+ * depends only on those facts, so a conflicting `dosing` no longer holds back
+ * a lead that states no dosing. With an empty list `basedOn` holds ALL the
+ * product's facts at save time, and the old product-wide rule stands: one
+ * non-VERIFIED fact holds the block back.
  */
 function basedOnVerified(
   basedOn: unknown,
   facts: readonly FactState[],
+  usedFields: readonly string[] = [],
 ): boolean {
   if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
     return false;
   const verified = new Set(
     facts.filter((fact) => isPublicFact(fact)).map((fact) => fact.field),
   );
-  return Object.keys(basedOn).every((field) => verified.has(field));
+  const fields = usedFields.length > 0 ? usedFields : Object.keys(basedOn);
+  return fields.every((field) => verified.has(field));
 }
 
 function publishable(
@@ -537,8 +599,8 @@ function publishable(
   return (
     row !== undefined &&
     row.status === "APPROVED" &&
-    !copyIsStale(row.basedOn, currentRevisions(facts)) &&
-    basedOnVerified(row.basedOn, facts)
+    !copyIsStale(row.basedOn, currentRevisions(facts), row.usedFields) &&
+    basedOnVerified(row.basedOn, facts, row.usedFields)
   );
 }
 
@@ -649,10 +711,11 @@ export interface FactRow {
  * through the normal product projection.
  *
  * THE GATE IS ON THE OUTPUT, NOT THE INPUT (nautilus, review point 1). The
- * copy's staleness is measured against ALL the facts: `copyIsStale` counts a
- * missing fact as a change, so filtering the input would make every text
- * written beside a SUGGESTED fact look stale. Only the list handed out is
- * filtered.
+ * copy's staleness is measured against the facts as they are (all of them for
+ * a block without `usedFields`, the used ones otherwise): `copyIsStale` counts
+ * a missing fact as a change, so filtering the input would make a text built
+ * on (or, product-wide, beside) a SUGGESTED fact look stale. Only the list
+ * handed out is filtered.
  */
 export function knowledgeProjection(
   facts: readonly FactRow[],
