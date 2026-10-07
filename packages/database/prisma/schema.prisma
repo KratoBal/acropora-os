@@ -1226,6 +1226,7 @@ model ProductVariant {
   stockReconciliationRepairs StockReconciliationRepair[]
   projectReservations        ProjectInventoryReservation[]
   assets                     Asset[]
+  knowledgeFacts             ProductKnowledgeFact[]
 
   @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
@@ -7939,6 +7940,13 @@ model ProductKnowledgeFact {
   id            String                       @id @default(cuid())
   productId     String
   product       Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Változat-szintű tény változata; NULL = termékszintű (SEO P0 PR 3). Csak OS-változat
+  /// (az FK köti), Medusa-azonosító soha.
+  variantId     String?
+  variant       ProductVariant?              @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  /// `coalesce(variantId, '')`, a CHECK köti (a migráció): az egyedi kulcs része, mert a
+  /// NULL egy egyedi indexben nem ütközik.
+  scopeKey      String                       @default("") @db.VarChar(32)
   /// A JEV mezőkulcs (`packages/jev/src/product-enrichment/fields.ts`).
   field         String                       @db.VarChar(48)
   /// Csak VERIFIED/SUGGESTED (vagy emberi feloldás) mellett; ütközésnél NULL.
@@ -7957,8 +7965,9 @@ model ProductKnowledgeFact {
   revision      Int
   updatedAt     DateTime                     @updatedAt
 
-  @@unique([productId, field])
+  @@unique([productId, scopeKey, field])
   @@index([fieldResultId])
+  @@index([variantId])
 }
 
 enum ProductCopyBlock {

@@ -12,6 +12,7 @@ import {
   PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
   PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
+  productKnowledgeFactKey,
   type ProductCopyBlock,
   type ProductManualEvidenceSourceType,
 } from "@acropora/types";
@@ -463,10 +464,37 @@ export function parseCopyBody(
 
 export type Revisions = Record<string, number>;
 
+/** What names a fact: its field, and its variant if it has one (SEO P0 PR 3). */
+export interface FactIdentity {
+  field: string;
+  /** `null` = product-level. REQUIRED, so a reader that forgot it does not compile. */
+  variantId: string | null;
+}
+
+/**
+ * THE ONE KEY EVERY COUNT BELOW USES (SEO P0 PR 3, barracuda's preview round
+ * 2): `field`, or `field@variantId`. A count by `field` alone would let a
+ * variant's fact stand in for the product's fact of the same field.
+ */
+export const factKey = (fact: FactIdentity): string =>
+  productKnowledgeFactKey(fact);
+
+/**
+ * THE REVISIONS A TEXT IS MEASURED AGAINST: the product's own facts only (SEO
+ * P0 PR 3, acrobot 27665 and barracuda 27668). A variant's fact does not reach
+ * the buyer in P0, so a text cannot be built on it; and if it counted here, the
+ * product-wide rule (an empty `usedFields`) would put it into every older
+ * block's `basedOn`, and one accepted weight on a one-variant product (1900 of
+ * 1909 on the stage) would hold all of them back without a word.
+ */
 export function currentRevisions(
-  facts: readonly { field: string; revision: number }[],
+  facts: readonly (FactIdentity & { revision: number })[],
 ): Revisions {
-  return Object.fromEntries(facts.map((fact) => [fact.field, fact.revision]));
+  return Object.fromEntries(
+    facts
+      .filter((fact) => fact.variantId === null)
+      .map((fact) => [factKey(fact), fact.revision]),
+  );
 }
 
 /**
@@ -504,7 +532,7 @@ export function copyIsStale(
  * empty list, of all of them (the product-wide rule).
  */
 export function savedRevisions(
-  facts: readonly { field: string; revision: number }[],
+  facts: readonly (FactIdentity & { revision: number })[],
   usedFields: readonly string[],
 ): Revisions {
   const all = currentRevisions(facts);
@@ -520,12 +548,23 @@ export function savedRevisions(
  */
 export function parseUsedFields(
   value: unknown,
-  facts: readonly { field: string }[],
+  facts: readonly FactIdentity[],
 ): Parsed<string[]> {
   if (value === undefined || value === null) return { ok: true, value: [] };
   if (!Array.isArray(value) || value.some((v) => typeof v !== "string"))
     return { ok: false, reason: "usedFields: a list of field keys" };
-  const present = new Set(facts.map((fact) => fact.field));
+  // a variant's fact (`field@variantId`) is not text material in P0: it does
+  // not reach the buyer, so a block built on it could be saved but never
+  // published, silently (barracuda 27668). Refused by name.
+  const variantKeys = (value as string[]).filter((key) => key.includes("@"));
+  if (variantKeys.length > 0)
+    return {
+      ok: false,
+      reason: `usedFields: ${variantKeys.join(", ")} is a variant's fact, and a text cannot be built on one yet`,
+    };
+  const present = new Set(
+    facts.filter((fact) => fact.variantId === null).map(factKey),
+  );
   const unknown = (value as string[]).filter((field) => !present.has(field));
   if (unknown.length > 0)
     return {
@@ -542,8 +581,8 @@ export interface CopyRow {
   revision: number;
   basedOn: unknown;
   /**
-   * The facts the block is built on, by fact key (`ProductKnowledgeFact.field`,
-   * no variant part); empty = the product-wide rule. REQUIRED, not optional:
+   * The facts the block is built on, by fact key (`factKey`: the field, or
+   * `field@variantId` for a variant's fact); empty = the product-wide rule. REQUIRED, not optional:
    * a reader whose select forgot the column would otherwise fall back to the
    * product-wide rule without a sound, and the shop and the panel would
    * count differently (barracuda, PR 1b preview, point A). The compiler now
@@ -553,8 +592,7 @@ export interface CopyRow {
 }
 
 /** The facts as they are now: what the copy is measured against. */
-export interface FactState {
-  field: string;
+export interface FactState extends FactIdentity {
   revision: number;
   status: string;
   /**
@@ -583,6 +621,18 @@ export function canLeave(fact: { status: string; public: boolean }): boolean {
 }
 
 /**
+ * DOES THIS FACT REACH THE BUYER IN P0: product-level, VERIFIED and public.
+ * The projection's fact filter and the copy's gate both use THIS predicate, so
+ * a text can never state a fact the projection holds back (acrobot 27665,
+ * after the PR 2 stage measurement: what the buyer cannot see does not appear
+ * in prose either). A variant's fact stays in the OS until its contract
+ * exists (PR 8, or a `variant_id` in the commerce contract).
+ */
+function reachesBuyer(fact: FactState): boolean {
+  return fact.variantId === null && canLeave(fact);
+}
+
+/**
  * EVERY FACT THE COPY IS BUILT ON IS VERIFIED NOW (D5, card 4622f1ac).
  *
  * Prose can state a value, so an approved text built on a SUGGESTED or an
@@ -602,10 +652,9 @@ function basedOnVerified(
   if (!basedOn || typeof basedOn !== "object" || Array.isArray(basedOn))
     return false;
   // decision 6: a VERIFIED fact the buyer may not see (`public = false`)
-  // does not appear in prose either
-  const verified = new Set(
-    facts.filter((fact) => canLeave(fact)).map((fact) => fact.field),
-  );
+  // does not appear in prose either; since PR 3 nor does a variant's fact,
+  // which the projection does not carry (acrobot 27665)
+  const verified = new Set(facts.filter(reachesBuyer).map(factKey));
   const fields = usedFields.length > 0 ? usedFields : Object.keys(basedOn);
   return fields.every((field) => verified.has(field));
 }
@@ -726,8 +775,7 @@ export interface KnowledgeProjection {
   copy: KnowledgeProjectionCopy[];
 }
 
-export interface FactRow {
-  field: string;
+export interface FactRow extends FactIdentity {
   value: string | null;
   unit: string | null;
   status: string;
@@ -759,7 +807,10 @@ export function knowledgeProjection(
 ): KnowledgeProjection {
   return {
     facts: facts
-      .filter((fact) => canLeave(fact))
+      // a variant's fact does not go in P0 (the plan's projection contract):
+      // the commerce contract has no `variant_id`, so it would arrive as a
+      // second row of the same field
+      .filter(reachesBuyer)
       .sort((a, b) => a.field.localeCompare(b.field))
       .map((fact) => ({
         field: fact.field,

@@ -167,3 +167,62 @@ describe("a vevői szöveg tényei", () => {
     ]);
   });
 });
+
+/*
+ * A VALTOZAT TENYE KULON JELOLO (SEO P0 PR 3). MI PIROSIT: a termek es egy
+ * valtozata ugyanazzal a mezovel egy `id`-t kap (a jeloles a rossz tenyre
+ * megy), vagy a mentes a valtozat tenyet a sima mezonevvel kuldi.
+ */
+describe("a változat tényére nincs jelölő", () => {
+  /*
+   * SEO P0 PR 3 (barracuda 27668): a valtozat tenye a P0-ban nem jut a
+   * vevohoz, az API elutasitja a ra epulo blokkot. MI PIROSIT: a valtozat
+   * tenyere jelolo all (egy soha ki nem adhato blokk menteset kinalja), vagy a
+   * termek sajat tenye eltunik a listarol.
+   */
+  const fact = (variantId: string | null) =>
+    ({
+      field: "application",
+      variantId,
+      value: "x",
+      unit: null,
+      status: "VERIFIED",
+      revision: 1,
+      public: true,
+      acceptedAt: "2026-10-07T09:00:00.000Z",
+      acceptedBy: { id: "u", displayName: "Kitalált Elfogadó" },
+      fieldResultId: "fr-application",
+      source: { sourceType: null, sourceRef: null, retrievedAt: null },
+    }) as never;
+
+  it("csak a termék saját ténye kap jelölőt", () => {
+    render(
+      <JevCopyPanel
+        copy={[
+          {
+            block: "lead",
+            body: "Korallokhoz.",
+            status: "DRAFT",
+            stale: false,
+            usedFields: [],
+            editedAt: "2026-10-07T09:00:00.000Z",
+            approvedAt: null,
+          },
+        ]}
+        facts={[fact(null), fact("v-abcdef123456")]}
+        canApprove
+        busy={false}
+        onSave={vi.fn()}
+        onApprove={vi.fn()}
+      />,
+    );
+    const dobozok = Array.from(
+      document.querySelectorAll<HTMLInputElement>(
+        '[data-used-fields="lead"] input[type="checkbox"]',
+      ),
+    );
+    expect(dobozok.map((d) => [d.id, d.checked])).toEqual([
+      ["hasznalt-lead-application", true],
+    ]);
+  });
+});

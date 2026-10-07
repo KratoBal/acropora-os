@@ -40,7 +40,12 @@ export class ProductKnowledgeController {
     @Body() body: Record<string, unknown>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.knowledge.accept(id, body?.fieldResultId, user);
+    return this.knowledge.accept(
+      id,
+      body?.fieldResultId,
+      user,
+      body?.variantId,
+    );
   }
 
   @Post("resolve")
@@ -50,7 +55,13 @@ export class ProductKnowledgeController {
     @Body() body: Record<string, unknown>,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.knowledge.resolve(id, body?.fieldResultId, body?.value, user);
+    return this.knowledge.resolve(
+      id,
+      body?.fieldResultId,
+      body?.value,
+      user,
+      body?.variantId,
+    );
   }
 
   @Put("copy/:block")

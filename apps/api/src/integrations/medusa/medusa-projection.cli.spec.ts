@@ -1603,6 +1603,9 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
         findMany: async () => [
           {
             field: "packSize",
+            // the reader selects it (SEO P0 PR 3); a row without it reads as
+            // a variant's fact and stays out of the projection
+            variantId: null,
             value: "100 ml",
             unit: null,
             status: "VERIFIED",

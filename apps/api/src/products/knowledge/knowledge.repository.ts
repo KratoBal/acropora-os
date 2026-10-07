@@ -3,6 +3,7 @@ import { Prisma, prisma } from "@acropora/database";
 import type { ProductCopyBlock } from "@acropora/types";
 
 import type { StoredCheck } from "../enrichment/enrichment-run.js";
+import type { FactDefinition } from "./fact-definition.policy.js";
 import { factSource } from "./knowledge.policy.js";
 
 export const KNOWLEDGE_STORE = Symbol("KNOWLEDGE_STORE");
@@ -21,6 +22,8 @@ export interface FieldResultRecord {
 
 export interface FactRecord {
   field: string;
+  /** `null` = product-level (SEO P0 PR 3). REQUIRED: see `FactIdentity`. */
+  variantId: string | null;
   value: string | null;
   unit: string | null;
   status: string;
@@ -59,9 +62,18 @@ export interface KnowledgeStore {
   /** Stores a manual check as one finished run; returns its field result id. */
   saveManualCheck(check: StoredCheck, enteredById: string): Promise<string>;
   facts(productId: string): Promise<FactRecord[]>;
-  /** Creates the fact at revision 1, or replaces it and bumps the revision. */
+  /** The field's attribute definition (SEO P0 PR 3), or `null` if there is none. */
+  definition(field: string): Promise<FactDefinition | null>;
+  /** The product's ACTIVE variant ids: the scope rule names one of these, or binds the only one. */
+  variantIds(productId: string): Promise<string[]>;
+  /**
+   * Creates the fact at revision 1, or replaces it and bumps the revision. The
+   * key is the product, the variant (`null` = the product's own fact) and the
+   * field: a variant's fact and the product's fact of one field are two rows.
+   */
   upsertFact(input: {
     productId: string;
+    variantId: string | null;
     field: string;
     value: string | null;
     unit: string | null;
@@ -215,9 +227,11 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
     );
     const rows = await prisma.productKnowledgeFact.findMany({
       where: { productId },
-      orderBy: { field: "asc" },
+      // the product's own fact first (`scopeKey` ''), then its variants'
+      orderBy: [{ field: "asc" }, { scopeKey: "asc" }],
       select: {
         field: true,
+        variantId: true,
         value: true,
         unit: true,
         status: true,
@@ -243,6 +257,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       });
       return {
         field: row.field,
+        variantId: row.variantId,
         value: row.value,
         unit: row.unit,
         status: row.status,
@@ -269,18 +284,52 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       acceptedById: input.acceptedById,
       acceptedAt: input.acceptedAt,
     };
+    // `scopeKey` is `coalesce(variantId, '')` (the migration's CHECK): the
+    // unique key, because a NULL in a unique index never collides
+    const scopeKey = input.variantId ?? "";
     await prisma.productKnowledgeFact.upsert({
       where: {
-        productId_field: { productId: input.productId, field: input.field },
+        productId_scopeKey_field: {
+          productId: input.productId,
+          scopeKey,
+          field: input.field,
+        },
       },
       create: {
         productId: input.productId,
+        variantId: input.variantId,
+        scopeKey,
         field: input.field,
         revision: 1,
         ...data,
       },
       update: { ...data, revision: { increment: 1 } },
     });
+  }
+
+  async definition(field: string): Promise<FactDefinition | null> {
+    return prisma.attributeDefinition.findUnique({
+      where: { key: field },
+      select: {
+        key: true,
+        dataType: true,
+        canonicalUnit: true,
+        scope: true,
+        validation: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async variantIds(productId: string): Promise<string[]> {
+    // the ACTIVE variants: a product with one live variant and retired ones
+    // is a one-variant product for the scope rule
+    const rows = await prisma.productVariant.findMany({
+      where: { productId, isActive: true },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
   }
 
   async copy(productId: string): Promise<CopyRecord[]> {

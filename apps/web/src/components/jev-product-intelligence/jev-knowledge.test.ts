@@ -6,12 +6,14 @@ import {
   canApproveCopy,
   conflictMentions,
   conflictingFields,
+  factFor,
   isAcceptable,
 } from "./jev-knowledge";
 
 /** Invented values only. */
 const fact = (over: Partial<ProductKnowledgeFact>): ProductKnowledgeFact => ({
   field: "packSize",
+  variantId: null,
   value: "100 ml",
   unit: null,
   status: "VERIFIED",
@@ -170,5 +172,20 @@ describe("az ütköző érték a vevői szövegben (figyelmeztetés, nem tiltás
         conflicts,
       ),
     ).toEqual([]);
+  });
+});
+
+/*
+ * A SOR TENYE (SEO P0 PR 3). MI PIROSIT: a termek sajat tenye helyett egy
+ * valtozate all a soron, vagy az egyvaltozatos termek tomege (ami csak
+ * valtozat-szinten letezik) nem latszik.
+ */
+describe("a felülvizsgálati sor ténye", () => {
+  it("a termék saját ténye elsőbbséget kap, és ha csak a változaté van, az látszik", () => {
+    const sajat = fact({ field: "weight", variantId: null, revision: 1 });
+    const valtozat = fact({ field: "weight", variantId: "v-a", revision: 4 });
+    expect(factFor([valtozat, sajat], { field: "weight" })).toBe(sajat);
+    expect(factFor([valtozat], { field: "weight" })).toBe(valtozat);
+    expect(factFor([valtozat], { field: "packSize" })).toBeNull();
   });
 });
