@@ -329,6 +329,9 @@ describe(
           warehouseId,
           sku: "budapest-pending-sku",
           targetOnHand: "2",
+          // CURRENT_TIMESTAMP rounds to timestamp(3), so a just-created default
+          // can be fractions of a millisecond after the claim transaction's now().
+          nextAttemptAt: new Date(Date.now() - 60_000),
           idempotencyKey: `integration-tz-pending-${Date.now()}`,
           sourceProcess: "POS_SALE",
           sourceRecordId: "integration-test-tz-pending",
