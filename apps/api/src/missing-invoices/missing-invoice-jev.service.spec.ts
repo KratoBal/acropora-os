@@ -14,9 +14,10 @@ import type {
 import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
 
 const KULCS = "titkos-kulcs-SOHA-NEM-LATSZIK";
-/* A 10%-os kontroll: sha256("<id>:1") elso 8 hex jegye mod 10 == 0. */
+/* A 10%-os kontroll: sha256("<id>:<a policy valtozata>") elso 8 hex jegye mod
+   10 == 0. A 2. valtozattol (R1, kartya e34247c0) a kontroll a bt-teszt-30. */
 const LATHATO = "bt-teszt-0";
-const KONTROLL = "bt-teszt-14";
+const KONTROLL = "bt-teszt-30";
 const ENV = {
   JEV_MISSING_INVOICE_PAIR: "live",
   TYPESAFE_API_KEY: KULCS,
@@ -282,11 +283,36 @@ describe("MissingInvoiceJevService: a hivas", () => {
     assert.equal(t.known(), 1);
   });
 
-  it("rejtett marad: a kontroll-terheles, a NONE es a 0,9 alatti bizonyossag", async () => {
+  /**
+   * AZ R1 ELO-SZABALY (kartya e34247c0): a valasztott szamla legalabb egy ponton
+   * egyezzen a terhelessel. A docB osszege pontosan a terheles (38 488), a docA
+   * 488 Ft-tal mas, es a szallitoja sem hasonlit a partnerre. MI PIROSIT: ha a
+   * szabaly nem a VALASZTOTT jeloltre futna, vagy kimaradna a kapubol.
+   */
+  it("R1: a biztos, de semmiben nem egyezo szamla rejtett, az egyezo latszik", async () => {
+    const rossz = tarolo();
+    const { s: s1 } = szolgaltatas({
+      fetch: szolgaltato(valasz("c0", 0.95)).fetch,
+      repo: rossz.repo,
+    });
+    assert.equal((await javaslat(s1)).documentId, null);
+    assert.equal(rossz.sorok[0]!.exposure, "HIDDEN");
+    assert.equal(rossz.sorok[0]!.data.selectedValue, "docA");
+
+    const jo = tarolo();
+    const { s: s2 } = szolgaltatas({
+      fetch: szolgaltato(valasz("c1", 0.81)).fetch,
+      repo: jo.repo,
+    });
+    assert.equal((await javaslat(s2)).documentId, "docB");
+    assert.equal(jo.sorok[0]!.exposure, "SHOWN");
+  });
+
+  it("rejtett marad: a kontroll-terheles, a NONE es a 0,8 alatti bizonyossag", async () => {
     for (const [id, v] of [
       [KONTROLL, valasz("c1", 0.99)],
       [LATHATO, valasz("NONE", 0.97)],
-      [LATHATO, valasz("c1", 0.89)],
+      [LATHATO, valasz("c1", 0.79)],
     ] as const) {
       const t = tarolo();
       const { s } = szolgaltatas({ fetch: szolgaltato(v).fetch, repo: t.repo });

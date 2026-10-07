@@ -7,6 +7,7 @@ import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.va
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
+import { MedusaInventoryScheduler } from "./medusa-inventory.scheduler.js";
 
 /**
  * Az INTEGRÁCIÓ HATÁRA.
@@ -34,6 +35,7 @@ import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
     MedusaConnectionService,
     MedusaConnectionStartupValidator,
     MedusaProjectionScheduler,
+    MedusaInventoryScheduler,
   ],
   exports: [
     MedusaConnectionService,

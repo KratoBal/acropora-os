@@ -361,6 +361,13 @@ export const businessNavigation: AppNavigationEntry[] = [
   // listed here now so every group in this menu comes from one place; the
   // rendering does not care which of them is which.
   { label: "Szerviz", icon: "service", children: serviceNavigation },
+  // a Figma (OS / Elhullási napló) a Szerviz alá, önálló menüpontként teszi
+  {
+    href: "/elhullasi-naplo",
+    label: "Elhullási napló",
+    icon: "fish",
+    entryId: "mortality",
+  },
 ];
 
 export const unasSettingsNavigation: AppNavigationItem[] = [

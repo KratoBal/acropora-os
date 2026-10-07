@@ -15,6 +15,7 @@ import {
   knownTable,
   pairExposure,
   pairResolution,
+  pairRuleR1,
   pairSuggestionEnabled,
   pairSuggestionMode,
   type FetchLike,
@@ -288,12 +289,17 @@ export class MissingInvoiceJevService {
             request.candidateIndexes[Number(eredmeny.choice.slice(1))] ?? -1
           ] ?? null)
       : null;
+    /* AZ R1 ELO-SZABALY a valasztott szamlara (kartya e34247c0): ugyanazokon a
+       mezokon, amiket a Jev latott, es amiken a meres futott */
+    const chosen = selected === null ? -1 : ids.indexOf(selected);
+    const ruleR1 = chosen >= 0 && pairRuleR1(input.payment, fields[chosen]!);
     const exposure = eredmeny.ok
       ? pairExposure({
           mode,
           choice: selected,
           confidence: eredmeny.confidence,
           bankTransactionId: input.bankTransactionId,
+          ruleR1,
         })
       : "HIDDEN";
     const run = await this.store(key, {
