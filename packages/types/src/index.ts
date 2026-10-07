@@ -1364,6 +1364,7 @@ export type {
   QuoteBomItemDto,
   QuoteInternalCostsDto,
   QuoteDetailDto,
+  QuoteListItemDto,
   QuoteListResponse,
   CreateQuoteInput,
   UpdateQuoteInput,

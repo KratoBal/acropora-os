@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import {
   PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -13,10 +13,11 @@ import {
   quoteDto,
   quoteEventPayload,
   quoteText,
+  quoteListItemDto,
   type QuoteRow,
 } from "./quote-dto.mapper.js";
 import { QuotesService } from "./quotes.service.js";
-import type { QuotesRepository } from "./quotes.repository.js";
+import { QuotesRepository } from "./quotes.repository.js";
 import { QuotesController } from "./quotes.controller.js";
 import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
 import {
@@ -163,6 +164,76 @@ const noCosts = (value: unknown) =>
     keys(value).filter((k) => /cost|margin|bom|supplier|internalnote/i.test(k)),
     [],
   );
+test("list query fetches only a bounded header/version projection and list mapper cannot expose the tree", async (t) => {
+  let query: Prisma.QuoteFindManyArgs | undefined;
+  const original = {
+    findMany: prisma.quote.findMany,
+    count: prisma.quote.count,
+    transaction: prisma.$transaction,
+  };
+  t.after(() => {
+    prisma.quote.findMany = original.findMany;
+    prisma.quote.count = original.count;
+    prisma.$transaction = original.transaction;
+  });
+  prisma.quote.findMany = ((args: Prisma.QuoteFindManyArgs) => {
+    query = args;
+    return Promise.resolve([]);
+  }) as unknown as typeof original.findMany;
+  prisma.quote.count = (() =>
+    Promise.resolve(0)) as unknown as typeof original.count;
+  prisma.$transaction = ((operations: Promise<unknown>[]) =>
+    Promise.all(operations)) as unknown as typeof original.transaction;
+  await new QuotesRepository().list(2, 25, "Aquarium");
+  assert.ok(query?.select);
+  assert.equal(query.include, undefined);
+  assert.equal(query.skip, 25);
+  assert.equal(query.take, 25);
+  assert.ok(query.where?.OR);
+  const versions = query.select.versions as Prisma.Quote$versionsArgs;
+  assert.equal(versions.take, 1);
+  assert.deepEqual(versions.orderBy, { versionNumber: "desc" });
+  assert.ok(Object.values(versions.select!).every((v) => v === true));
+  assert.ok(
+    Object.keys(query.select).every(
+      (k) =>
+        k === "versions" ||
+        query!.select![k as keyof Prisma.QuoteSelect] === true,
+    ),
+  );
+  const dto = quoteListItemDto(quoteFixture());
+  assert.deepEqual(
+    Object.keys(dto).sort(),
+    [
+      "id",
+      "quoteNumber",
+      "title",
+      "status",
+      "customerId",
+      "ownerUserId",
+      "createdAt",
+      "updatedAt",
+      "latestVersion",
+    ].sort(),
+  );
+  assert.deepEqual(
+    Object.keys(dto.latestVersion!).sort(),
+    [
+      "id",
+      "versionNumber",
+      "status",
+      "validUntil",
+      "currency",
+      "priceDisplay",
+      "publishedAt",
+    ].sort(),
+  );
+  noCosts(dto);
+  assert.equal(
+    quoteListItemDto({ ...quoteFixture(), versions: [] }).latestVersion,
+    null,
+  );
+});
 test("three allowlisted DTO shapes, decimal precision and no customer/internal cost-free leakage", () => {
   const row = quoteFixture(),
     customer = customerQuoteDto(row),

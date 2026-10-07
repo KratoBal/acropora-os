@@ -31,6 +31,8 @@ describe(
       versionId: string,
       blockId: string,
       itemId: string,
+      productId: string,
+      variantId: string,
       snippetId: string;
     const repo = new QuotesRepository();
     let role: AuthenticatedUser["role"] = "ADMIN";
@@ -68,6 +70,15 @@ describe(
           },
         })
       ).id;
+      const product = await prisma.product.create({
+        data: {
+          name: `Quote identity ${suffix}`,
+          variants: { create: { sku: `QP0-${suffix}` } },
+        },
+        include: { variants: true },
+      });
+      productId = product.id;
+      variantId = product.variants[0]!.id;
       app = await NestFactory.create(TestQuotesModule, { logger: false });
       app.use(
         (req: { user: AuthenticatedUser }, _res: unknown, next: () => void) => {
@@ -90,13 +101,16 @@ describe(
       const dto = await res.json();
       quoteId = dto.id;
       ids.push(quoteId);
-      versionId = dto.versions[0].id;
+      versionId = dto.latestVersion.id;
       assert.match(dto.quoteNumber, /^AJ-\d{4}-\d{4,}$/);
       assert.equal(dto.status, "DRAFT");
       assert.equal(dto.title, "Aquarium quote");
-      assert.equal(dto.versions[0].status, "DRAFT");
-      assert.equal(dto.versions[0].currency, "HUF");
-      assert.equal(dto.events.length, 1);
+      assert.equal(dto.latestVersion.status, "DRAFT");
+      assert.equal(dto.latestVersion.currency, "HUF");
+      assert.equal(
+        (await (await request(`/quotes/${quoteId}`)).json()).events.length,
+        1,
+      );
       assert.equal(
         await prisma.auditLog.count({
           where: { entityId: quoteId, action: "quote.created" },
@@ -269,6 +283,21 @@ describe(
         },
       });
       assert.ok(published.id);
+      const page = await (await request("/quotes?q=Updated")).json();
+      const summary = page.items.find((i: { id: string }) => i.id === quoteId);
+      assert.equal(summary.latestVersion.id, published.id);
+      assert.equal(summary.latestVersion.versionNumber, 2);
+      assert.equal(summary.latestVersion.status, "PUBLISHED");
+      assert.ok(!("versions" in summary) && !("events" in summary));
+      assert.ok(
+        !("blocks" in summary.latestVersion) &&
+          !("bomItems" in summary.latestVersion),
+      );
+      const listRow = (await repo.list(1, 25, "Updated")).items.find(
+        (i) => i.id === quoteId,
+      )!;
+      assert.equal(listRow.versions.length, 1);
+      assert.ok(!("events" in listRow) && !("blocks" in listRow.versions[0]!));
       assert.equal(
         (
           await request(`/quotes/${quoteId}`, "PATCH", {
@@ -294,7 +323,7 @@ describe(
             isOptional: false,
           },
         }),
-        /QuoteItem_product_variant_check/,
+        /QuoteItem_identity_check/,
       );
       for (const kind of ["PRODUCT", "CUSTOM", "SERVICE"] as const)
         await assert.rejects(
@@ -310,6 +339,75 @@ describe(
           }),
           /QuoteBomItem_identity_check/,
         );
+      for (const source of ["STANDALONE", "BOM"] as const)
+        await assert.rejects(
+          prisma.quoteItem.create({
+            data: {
+              versionId,
+              blockId,
+              position: 10,
+              source,
+              variantId,
+              name: "Ambiguous",
+              quantity: 1,
+              unit: "db",
+              unitNetPrice: 100,
+              vatRatePercent: 27,
+              isOptional: false,
+            },
+          }),
+          /QuoteItem_identity_check/,
+        );
+      for (const kind of ["PRODUCT", "CUSTOM", "SERVICE"] as const)
+        await assert.rejects(
+          prisma.quoteBomItem.create({
+            data: {
+              versionId,
+              quoteItemId: itemId,
+              position: 10,
+              kind,
+              variantId,
+              customName: "Ambiguous",
+              quantity: 1,
+              unit: "db",
+            },
+          }),
+          /QuoteBomItem_identity_check/,
+        );
+      // Positive controls use the same valid variant: CHECK failures cannot be mistaken for FK failures.
+      for (const [position, source] of [
+        "PRODUCT",
+        "STANDALONE",
+        "BOM",
+      ].entries())
+        await prisma.quoteItem.create({
+          data: {
+            versionId,
+            blockId,
+            position: 10 + position,
+            source: source as "PRODUCT" | "STANDALONE" | "BOM",
+            variantId: source === "PRODUCT" ? variantId : null,
+            name: "Valid identity",
+            quantity: 1,
+            unit: "db",
+            unitNetPrice: 100,
+            vatRatePercent: 27,
+            isOptional: false,
+          },
+        });
+      for (const [position, kind] of ["PRODUCT", "CUSTOM", "SERVICE"].entries())
+        await prisma.quoteBomItem.create({
+          data: {
+            versionId,
+            quoteItemId: itemId,
+            position: 10 + position,
+            kind: kind as "PRODUCT" | "CUSTOM" | "SERVICE",
+            variantId: kind === "PRODUCT" ? variantId : null,
+            customName: kind === "PRODUCT" ? null : "Valid identity",
+            quantity: 1,
+            unit: "db",
+          },
+        });
       const second = await repo.create(
         { title: "Second", validUntil: "2026-11-30" },
         actorId,
@@ -448,6 +546,10 @@ describe(
         await prisma.auditLog.deleteMany({ where: { userId: actorId } });
       if (customerId)
         await prisma.customer.deleteMany({ where: { id: customerId } });
+      if (variantId)
+        await prisma.productVariant.deleteMany({ where: { id: variantId } });
+      if (productId)
+        await prisma.product.deleteMany({ where: { id: productId } });
       if (actorId) await prisma.user.deleteMany({ where: { id: actorId } });
       assert.equal(await prisma.quote.count({ where: { id: { in: ids } } }), 0);
       await prisma.$disconnect();

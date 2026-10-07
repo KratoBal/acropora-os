@@ -2,6 +2,33 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import type { CreateQuoteInput, UpdateQuoteInput } from "@acropora/types";
 import { QUOTE_DETAIL_INCLUDE } from "./quote-dto.mapper.js";
+/** Bounded list projection: newest version summary only; no child collections or JSON. */
+export const QUOTE_LIST_SELECT = {
+  id: true,
+  quoteNumber: true,
+  title: true,
+  status: true,
+  customerId: true,
+  ownerUserId: true,
+  createdAt: true,
+  updatedAt: true,
+  versions: {
+    orderBy: { versionNumber: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      versionNumber: true,
+      status: true,
+      validUntil: true,
+      currency: true,
+      priceDisplay: true,
+      publishedAt: true,
+    },
+  },
+} satisfies Prisma.QuoteSelect;
+export type QuoteListRow = Prisma.QuoteGetPayload<{
+  select: typeof QUOTE_LIST_SELECT;
+}>;
 export class QuoteWriteConflict extends Error {}
 @Injectable()
 export class QuotesRepository {
@@ -24,7 +51,7 @@ export class QuotesRepository {
       [
         prisma.quote.findMany({
           where,
-          include: QUOTE_DETAIL_INCLUDE,
+          select: QUOTE_LIST_SELECT,
           orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
           skip: (page - 1) * pageSize,
           take: pageSize,
@@ -58,7 +85,7 @@ export class QuotesRepository {
             },
           },
         },
-        include: QUOTE_DETAIL_INCLUDE,
+        select: QUOTE_LIST_SELECT,
       });
       await tx.quoteEvent.create({
         data: {
@@ -80,7 +107,7 @@ export class QuotesRepository {
       });
       return tx.quote.findUniqueOrThrow({
         where: { id: row.id },
-        include: QUOTE_DETAIL_INCLUDE,
+        select: QUOTE_LIST_SELECT,
       });
     });
   }
@@ -110,7 +137,7 @@ export class QuotesRepository {
       });
       return tx.quote.findUniqueOrThrow({
         where: { id },
-        include: QUOTE_DETAIL_INCLUDE,
+        select: QUOTE_LIST_SELECT,
       });
     });
   }

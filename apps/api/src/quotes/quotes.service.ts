@@ -14,7 +14,7 @@ import {
   type UpdateQuoteInput,
   type QuoteListResponse,
 } from "@acropora/types";
-import { quoteDto } from "./quote-dto.mapper.js";
+import { quoteDto, quoteListItemDto } from "./quote-dto.mapper.js";
 import { QuotesRepository, QuoteWriteConflict } from "./quotes.repository.js";
 function permission(user: AuthenticatedUser, manage = false) {
   if (
@@ -69,7 +69,7 @@ export class QuotesService {
     const result = await this.repository.list(page, pageSize, q);
     return {
       ...result,
-      items: result.items.map((r) => quoteDto(r, user)),
+      items: result.items.map(quoteListItemDto),
       page,
       pageSize,
     };
@@ -92,7 +92,7 @@ export class QuotesService {
     const clean = header(input);
     if (!clean.title) throw new BadRequestException("A megnevezés kötelező.");
     try {
-      return quoteDto(
+      return quoteListItemDto(
         await this.repository.create(
           {
             ...clean,
@@ -103,7 +103,6 @@ export class QuotesService {
           },
           user.id,
         ),
-        user,
       );
     } catch (e) {
       writeError(e);
@@ -117,7 +116,7 @@ export class QuotesService {
     try {
       const row = await this.repository.update(id, clean, user.id);
       if (!row) throw new NotFoundException("Az ajánlat nem található.");
-      return quoteDto(row, user);
+      return quoteListItemDto(row);
     } catch (e) {
       writeError(e);
     }

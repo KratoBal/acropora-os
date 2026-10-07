@@ -6,11 +6,39 @@ import {
   type QuoteCustomerDto,
   type QuoteCustomerVersion,
   type QuoteDetailDto,
+  type QuoteListItemDto,
   type QuoteInternalVersion,
   type QuoteInternalDto,
   type QuoteInternalCostsDto,
   type QuoteRichText,
 } from "@acropora/types";
+import type { QuoteListRow } from "./quotes.repository.js";
+export function quoteListItemDto(row: QuoteListRow): QuoteListItemDto {
+  const version = row.versions[0];
+  return {
+    id: row.id,
+    quoteNumber: row.quoteNumber,
+    title: row.title,
+    status: row.status,
+    customerId: row.customerId,
+    ownerUserId: row.ownerUserId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    latestVersion: version
+      ? {
+          id: version.id,
+          versionNumber: version.versionNumber,
+          status: version.status,
+          validUntil: version.validUntil.toISOString().slice(0, 10),
+          currency: version.currency,
+          priceDisplay: version.priceDisplay as NonNullable<
+            QuoteListItemDto["latestVersion"]
+          >["priceDisplay"],
+          publishedAt: version.publishedAt?.toISOString() ?? null,
+        }
+      : null,
+  };
+}
 export const QUOTE_DETAIL_INCLUDE = {
   versions: {
     orderBy: { versionNumber: "asc" },

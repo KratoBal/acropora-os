@@ -319,11 +319,12 @@ ALTER TABLE "QuoteVersion" ADD CONSTRAINT "QuoteVersion_publication_complete_che
  ));
 CREATE UNIQUE INDEX "QuoteVersion_one_draft_per_quote_idx"
  ON "QuoteVersion" ("quoteId") WHERE "status" = 'DRAFT';
-ALTER TABLE "QuoteItem" ADD CONSTRAINT "QuoteItem_product_variant_check"
- CHECK ("source" <> 'PRODUCT' OR "variantId" IS NOT NULL);
+ALTER TABLE "QuoteItem" ADD CONSTRAINT "QuoteItem_identity_check"
+ CHECK (("source" = 'PRODUCT' AND "variantId" IS NOT NULL) OR
+        ("source" IN ('STANDALONE', 'BOM') AND "variantId" IS NULL));
 ALTER TABLE "QuoteBomItem" ADD CONSTRAINT "QuoteBomItem_identity_check"
- CHECK (("kind" = 'PRODUCT' AND "variantId" IS NOT NULL) OR
-        ("kind" <> 'PRODUCT' AND "customName" IS NOT NULL));
+ CHECK (("kind" = 'PRODUCT' AND "variantId" IS NOT NULL AND "customName" IS NULL) OR
+        ("kind" IN ('CUSTOM', 'SERVICE') AND "customName" IS NOT NULL AND "variantId" IS NULL));
 -- JSON null does not represent configured payment milestones.
 ALTER TABLE "QuoteSnippet" ADD CONSTRAINT "QuoteSnippet_payment_milestones_check"
  CHECK (("kind" = 'PAYMENT' AND "milestones" IS NOT NULL AND jsonb_typeof("milestones") = 'array') OR ("kind" <> 'PAYMENT' AND "milestones" IS NULL));

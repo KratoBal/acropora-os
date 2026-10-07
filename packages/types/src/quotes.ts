@@ -138,8 +138,28 @@ export interface QuoteInternalCostsDto extends Omit<
   versions: Array<QuoteInternalVersion & { bomItems: QuoteBomItemDto[] }>;
 }
 export type QuoteDetailDto = QuoteInternalDto | QuoteInternalCostsDto;
+/** List rows carry only the header and newest version summary, never the quote tree. */
+export interface QuoteListItemDto {
+  id: string;
+  quoteNumber: string;
+  title: string;
+  status: QuoteStatusValue;
+  customerId: string | null;
+  ownerUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  latestVersion: {
+    id: string;
+    versionNumber: number;
+    status: "DRAFT" | "PUBLISHED" | "SUPERSEDED";
+    validUntil: string;
+    currency: string;
+    priceDisplay: QuotePriceDisplay;
+    publishedAt: string | null;
+  } | null;
+}
 export interface QuoteListResponse {
-  items: QuoteDetailDto[];
+  items: QuoteListItemDto[];
   total: number;
   page: number;
   pageSize: number;

@@ -6,12 +6,12 @@ Jóváhagyott terv: [#1582](https://github.com/KratoBal/acropora-os/issues/1582#
 
 A belső, autentikált API négy végpontot ad:
 
-| Végpont             | Jogosultság     | Művelet                                                             |
-| ------------------- | --------------- | ------------------------------------------------------------------- |
-| `GET /quotes`       | `quotes.view`   | Lapozott lista; `page`, `pageSize` (legfeljebb 100), opcionális `q` |
-| `POST /quotes`      | `quotes.manage` | DRAFT ajánlat és első DRAFT verzió létrehozása                      |
-| `GET /quotes/:id`   | `quotes.view`   | Ajánlat verziókkal és szűrt eseményekkel                            |
-| `PATCH /quotes/:id` | `quotes.manage` | Publikálás előtti DRAFT fej-adatok módosítása                       |
+| Végpont             | Jogosultság     | Művelet                                                            |
+| ------------------- | --------------- | ------------------------------------------------------------------ |
+| `GET /quotes`       | `quotes.view`   | Fej-adatok és legújabb verzió rövid adatai; lapozás és `q` keresés |
+| `POST /quotes`      | `quotes.manage` | DRAFT ajánlat és első DRAFT verzió létrehozása                     |
+| `GET /quotes/:id`   | `quotes.view`   | Ajánlat verziókkal és szűrt eseményekkel                           |
+| `PATCH /quotes/:id` | `quotes.manage` | Publikálás előtti DRAFT fej-adatok módosítása                      |
 
 A létrehozás kötelező mezői: `title`, `validUntil` (valós `YYYY-MM-DD` dátum).
 Opcionális: `customerId`, `ownerUserId`, `currency` (alapérték HUF),
@@ -32,9 +32,13 @@ ajánlatot, és rendelkezik a későbbi publikálás, küldés és elfogadás-r�
 kulcsaival; költség, sablonkezelés és handoff jogot nem kap. VIEWER semmilyen
 `quotes.*` jogot nem kap. A hatályos egyéni engedélyek és visszavonások érvényesek.
 
-A mapper három explicit mezőlistából épít kimenetet: belső költséggel,
-belső költség nélkül és ügyfél. Az API minden listázási és írási válaszában
-a `quotes.costs.view` dönt a BOM és beszerzési mezők kiadásáról. A pénz és
+A lista saját `QuoteListItemDto` és célzott select alapján készül: csak fej-adatok
+és legfeljebb egy, legújabb verzió rövid adatai; blokkok, tételek, BOM,
+mérföldkövek és események lekérdezése nélkül. A POST/PATCH válasza is ezt
+a rövid alakot adja; a teljes fa csak a GET részletvégponton töltődik. A részlet-mapper három explicit mezőlistából épít kimenetet: belső költséggel,
+belső költség nélkül és ügyfél. A részletválaszban
+a `quotes.costs.view` dönt a BOM és beszerzési mezők kiadásáról; a rövid
+listázási és írási válaszok költségadatot nem tartalmaznak. A pénz és
 mennyiség decimális karakterláncként kerül a DTO-ba. Az ügyfél-mapper P0-ban
 nem kap nyilvános végpontot.
 
@@ -45,11 +49,16 @@ BOM- és fedezet-adatot privilegizált hívónak sem.
 
 ## Adatbázis és dokumentumtár
 
+A migráció: `20261007210000_quotes_p0`; a 19:00, 20:00 és 20:01
+időbélyegek után rendeződik.
+
 Az új modellek: Quote, QuoteVersion, QuoteBlock, QuoteItem, QuoteBomItem,
 QuotePaymentMilestone, QuoteTemplate, QuoteSnippet és QuoteEvent.
 A publikálási mezők teljességét CHECK, az egyetlen DRAFT verziót részleges
-egyedi index őrzi. CHECK követeli meg a PRODUCT sor termékhivatkozását,
-a nem termék BOM sor nevét, valamint a PAYMENT részlet mérföldkő-listáját.
+egyedi index őrzi. CHECK követeli meg a PRODUCT tétel termékhivatkozását, és kizárja azt
+a STANDALONE/BOM tételnél. A PRODUCT BOM sor csak termékhivatkozást,
+a CUSTOM/SERVICE BOM sor csak nevet hordozhat; a két azonosító egyszerre
+nem állhat. A PAYMENT részlethez mérföldkő-lista szükséges.
 A blokk–tétel–BOM kapcsolatok összetett FK-ja kizárja a verziók keverését.
 
 A részlet tartalma másolat; a `sourceSnippetId` csak eredetjelölés,
@@ -67,3 +76,6 @@ párhuzamos sorszámozást. Az adatbáziskapu más céladatbázist elutasít.
 P0 nem ad szerkesztőt, BOM-felületet, PDF-et, emailt, elfogadást, projekt-
 vagy készletműveletet. A MaterialRequest és ProjectInventoryReservation
 változatlan. A PR nem jelent környezeti élesítést vagy P1 indítást.
+
+P4 előfeltétel: elfogadáskor a kiválasztott verzió ugyanahhoz a Quote-hoz
+tartozzon. Elfogadási művelet P0-ban nincs.
