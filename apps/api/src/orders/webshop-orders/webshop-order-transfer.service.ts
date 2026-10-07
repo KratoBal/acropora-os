@@ -13,6 +13,7 @@ import type {
 import { Prisma } from "@acropora/database";
 
 import { formatHuf } from "../../completion-certificates/completion-certificate-content.js";
+import { MedusaAdminHttpError } from "../../integrations/medusa/medusa-admin.client.js";
 import { budapestDayKey } from "../../dashboard/budapest-day.js";
 import { NotificationsService } from "../../notifications/notifications.service.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
@@ -20,7 +21,10 @@ import {
   BANK_TRANSFER_PROVIDER_ID,
   orderPaymentProviderId,
 } from "./webshop-orders.rules.js";
-import { WebshopOrdersService } from "./webshop-orders.service.js";
+import {
+  WebshopOrdersService,
+  webshopErrorMessage,
+} from "./webshop-orders.service.js";
 
 /** Megjelenítésre kész összeg az értesítésbe; forintnál a teljesítésigazolás tagolásával. */
 export const transferAmountText = (amount: Prisma.Decimal, currency: string) =>
@@ -152,10 +156,21 @@ export class WebshopOrderTransferService {
       });
       return null;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const raw = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `Előre utalás: a webshop fizetése nem zárult le (${orderId}): ${reason}`,
+        `Előre utalás: a webshop fizetése nem zárult le (${orderId}): ${raw}`,
       );
+      /*
+        A KEZELŐ A WEBSHOP MONDATÁT KAPJA, NEM A NYERS VÁLASZT (stage-próba,
+        2026-10-07, #56): eddig a hibakód és a JSON került az adatlapra. A
+        napló a nyers választ tartja meg, a diagnózishoz.
+      */
+      const reason =
+        error instanceof MedusaAdminHttpError
+          ? error.status >= 500
+            ? `a webshop nem érhető el (HTTP ${error.status})`
+            : (webshopErrorMessage(error.body) ?? `HTTP ${error.status}`)
+          : raw;
       return `A beérkezés az OS-ben rögzítve van, de a webshop fizetése nem zárult le: ${reason}`;
     }
   }
