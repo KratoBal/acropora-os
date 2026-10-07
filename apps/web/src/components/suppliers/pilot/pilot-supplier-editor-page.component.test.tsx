@@ -28,7 +28,7 @@ const suppliers = vi.hoisted(() => ({
   remove: vi.fn(),
 }));
 const postalCode = vi.hoisted(() => ({ lookup: vi.fn() }));
-const viesVat = vi.hoisted(() => ({ lookup: vi.fn() }));
+const viesVat = vi.hoisted(() => ({ lookup: vi.fn(), check: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
@@ -585,5 +585,51 @@ describe("PilotSupplierEditorPage: what the parent picker offers", () => {
 
     expect(await screen.findByText("Régi szárny")).toBeTruthy();
     expect(screen.getByLabelText("Régi szárny visszaállítása")).toBeTruthy();
+  });
+
+  /** Kártya 600575a0: a VIES-válasz a mezőkbe, felülírás csak kérésre. */
+  describe("VIES-kitöltés", () => {
+    const COOLBLUE = {
+      valid: true,
+      name: "COOLBLUE B.V.",
+      address: "WEENA 00664\n3012CN ROTTERDAM",
+    };
+    const value = (label: string) =>
+      (screen.getByLabelText(label) as HTMLInputElement).value;
+
+    it("az üres név és cím a VIES-válaszból töltődik", async () => {
+      viesVat.check.mockResolvedValue(COOLBLUE);
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL810433941B01" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      await waitFor(() => expect(value("Név")).toBe("COOLBLUE B.V."));
+      expect(value("Utca, házszám")).toBe("WEENA 664");
+      expect(value("Irányítószám")).toBe("3012CN");
+      expect(value("Város")).toBe("ROTTERDAM");
+      expect(
+        screen.queryByRole("group", { name: "VIES eltérések" }),
+      ).toBeNull();
+    });
+
+    it("a beírt, eltérő nevet nem írja felül; csak a gombra", async () => {
+      viesVat.check.mockResolvedValue(COOLBLUE);
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Név"), {
+        target: { value: "Coolblue" },
+      });
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL810433941B01" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      await screen.findByRole("group", { name: "VIES eltérések" });
+      expect(value("Név")).toBe("Coolblue");
+      expect(value("Város")).toBe("ROTTERDAM");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Felülírás a VIES adataival" }),
+      );
+      expect(value("Név")).toBe("COOLBLUE B.V.");
+    });
   });
 });
