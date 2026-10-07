@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 
 import { IncomingBillingDocumentsController } from "../billing/incoming-billing-documents.controller.js";
+import { IncomingForeignReadScheduler } from "../billing/foreign-invoice/incoming-foreign-read.scheduler.js";
+import { IncomingReviewService } from "../billing/foreign-invoice/incoming-review.service.js";
 import { BankStatementImportRepository } from "./bank-statement-import.repository.js";
 import { BankStatementImportService } from "./bank-statement-import.service.js";
 import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
@@ -34,6 +36,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   providers: [
     BankStatementImportRepository,
     BankStatementImportService,
+    IncomingForeignReadScheduler,
+    IncomingReviewService,
     InvoiceCollectionRepository,
     InvoiceCollectionScheduler,
     InvoiceCollectionService,

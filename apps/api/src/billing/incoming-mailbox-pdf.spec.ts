@@ -76,9 +76,12 @@ function controller(input: {
   for (const one of input.pairings)
     for (const id of [one.document.id, ...(one.document.aliasIds ?? [])])
       map.set(id, one);
-  const subject = new IncomingBillingDocumentsController({
-    documentPairings: async () => map,
-  } as never);
+  const subject = new IncomingBillingDocumentsController(
+    {
+      documentPairings: async () => map,
+    } as never,
+    { pendingReadings: async () => new Map() } as never,
+  );
   Object.defineProperty(subject, "database", { value: database });
   return { subject, read };
 }

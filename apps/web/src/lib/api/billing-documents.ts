@@ -6,6 +6,8 @@ import type {
   BillingExternalDocumentDetail,
   IncomingDocumentDetail,
   IncomingDocumentListResponse,
+  IncomingDocumentReview,
+  IncomingReviewInput,
   MailTemplateVariable,
   ReceiptsResponse,
   CashRegisterReceiptListResponse,
@@ -115,6 +117,46 @@ export const billingDocumentsApi = {
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
     return pdfBlob(response, "A számla PDF-je nem tölthető le.");
+  },
+  /**
+   * A POSTAFIÓKOS SOR ELLENŐRZÉSE (kártya e4c3b0fb): a kinyert adat, a
+   * forrásaival és a figyelmeztetésekkel. Az azonosító a lista sorának
+   * azonosítója (`mailbox:<id>`). Az olvasás nem ír.
+   */
+  incomingReview(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<IncomingDocumentReview>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/review`,
+      token,
+      { signal },
+    );
+  },
+  /** A javított mezők mentése, jóváhagyás nélkül (`billing.create`). */
+  saveIncomingReview(token: string, id: string, input: IncomingReviewInput) {
+    return apiRequest<IncomingDocumentReview>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/review`,
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /**
+   * Jóváhagyás a megadott értékekkel: utána a sor rendes bejövő számla.
+   * Hiányos vagy ellentmondó adatnál 400, magyar üzenettel; már
+   * jóváhagyottnál 409.
+   */
+  approveIncomingReview(token: string, id: string, input: IncomingReviewInput) {
+    return apiRequest<IncomingDocumentReview>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/review/approve`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
   },
   /** A nyugták: a C szeletig csak a beérkezett darabszám. */
   receipts(token: string, signal?: AbortSignal) {
