@@ -6,7 +6,10 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
-import { PrismaRedirectStore } from "./redirect.repository.js";
+import {
+  PrismaRedirectStore,
+  lockRedirectWrites,
+} from "./redirect.repository.js";
 import {
   RedirectError,
   writeRedirect,
@@ -22,7 +25,10 @@ export type RedirectTransactor = <T>(
 ) => Promise<T>;
 
 export const prismaRedirectTransactor: RedirectTransactor = (fn) =>
-  prisma.$transaction((tx) => fn(new PrismaRedirectStore(tx)));
+  prisma.$transaction(async (tx) => {
+    await lockRedirectWrites(tx);
+    return fn(new PrismaRedirectStore(tx));
+  });
 
 /**
  * A KÉZI ÁTIRÁNYÍTÁS (SEO P0 PR 6, D2). Ugyanaz az író, mint a backfillé és a

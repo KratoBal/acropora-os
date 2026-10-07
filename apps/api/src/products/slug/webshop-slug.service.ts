@@ -32,8 +32,16 @@ export interface WebshopSlugStore {
   owner(
     slug: string,
   ): Promise<{ kind: "live" | "history"; productId: string } | null>;
-  /** Elmenti az első slugot. Egyedi-index ütközésnél `SlugTakenError`-t dob. */
-  saveFirst(productId: string, slug: string): Promise<void>;
+  /**
+   * Elmenti az első slugot, és a `redirects` ugyanabban a tranzakcióban fut (PR 6:
+   * az új élő címen álló szabály megszűnik). Egyedi-index ütközésnél
+   * `SlugTakenError`-t dob.
+   */
+  saveFirst(
+    productId: string,
+    slug: string,
+    redirects: (store: RedirectStore) => Promise<void>,
+  ): Promise<void>;
   /**
    * Kézi csere: a régi slug `SlugHistory`-ba, az új élő lesz, és a `redirects`
    * ugyanabban a tranzakcióban írja az átirányítást (PR 6).
@@ -50,6 +58,19 @@ export interface WebshopSlugStore {
 }
 
 export class SlugTakenError extends Error {}
+
+/**
+ * AZ ÚJ SLUG ÉLŐ OLDAL: a `/hu/termek/<slug>` forrású aktív szabály megszűnik,
+ * különben egy átirányítás állna az élő termékoldal előtt. Az első slug (a
+ * `webshopSlug` és a `changeSlug` első ága) ugyanígy (barracuda, #1597 3.); a
+ * slug-csere ugyanezt a `writeRedirect` `destinationIsLive` ágán kapja.
+ */
+const eloOldal = (slug: string) => async (redirects: RedirectStore) => {
+  const celen = await redirects.findBySourceLower(
+    redirectPathLower(webshopProductPath(slug)),
+  );
+  if (celen?.isActive) await redirects.update(celen.id, { isActive: false });
+};
 
 /**
  * A TERMÉK WEBSHOP-SLUGJA (SEO P0 PR 5; D1–D3, acrobot 27748).
@@ -80,7 +101,7 @@ export class WebshopSlugService {
         await this.store.takenWithPrefix(base),
       );
       try {
-        await this.store.saveFirst(productId, slug);
+        await this.store.saveFirst(productId, slug, eloOldal(slug));
         return slug;
       } catch (error) {
         if (!(error instanceof SlugTakenError)) throw error;
@@ -126,15 +147,8 @@ export class WebshopSlugService {
       await this.store.replace(
         { productId, oldSlug: regi, newSlug, userId },
         async (redirects) => {
-          if (!regi) {
-            // az első slug: nincs régi cím, de az új élő oldalon ne álljon szabály
-            const celen = await redirects.findBySourceLower(
-              redirectPathLower(webshopProductPath(newSlug)),
-            );
-            if (celen?.isActive)
-              await redirects.update(celen.id, { isActive: false });
-            return;
-          }
+          // az első slug: nincs régi cím, de az új élő oldalon ne álljon szabály
+          if (!regi) return eloOldal(newSlug)(redirects);
           await writeRedirect(redirects, {
             source: webshopProductPath(regi),
             destination: webshopProductPath(newSlug),

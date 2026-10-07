@@ -652,21 +652,24 @@ enum RedirectReason {
 /// betumeretben elero forras nem allhat (D2). A `destinationPath` MINDIG a vegso cel:
 /// az iro a lancot osszevonja, tehat egy aktiv szabaly celja sem forras.
 model UrlRedirect {
-  id              String          @id @default(cuid())
-  sourcePath      String          @unique
-  sourcePathLower String          @unique
-  destinationPath String
-  httpStatus      Int             @default(301)
-  reason          RedirectReason
-  entityType      SlugEntityType?
-  entityId        String?
-  isActive        Boolean         @default(true)
-  createdById     String?
-  createdBy       User?           @relation("UrlRedirectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id                   String          @id @default(cuid())
+  sourcePath           String          @unique
+  sourcePathLower      String          @unique
+  destinationPath      String
+  /// a lanc-osszevonas kulcsa: PONTOS egyenloseg, nem `mode: insensitive`, mert
+  /// annak a forditasa (ILIKE) a `_`-t jokernek venne (barracuda, #1597 2.)
+  destinationPathLower String
+  httpStatus           Int             @default(301)
+  reason               RedirectReason
+  entityType           SlugEntityType?
+  entityId             String?
+  isActive             Boolean         @default(true)
+  createdById          String?
+  createdBy            User?           @relation("UrlRedirectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
-  @@index([destinationPath])
+  @@index([destinationPathLower])
   @@index([entityType, entityId])
 }
 

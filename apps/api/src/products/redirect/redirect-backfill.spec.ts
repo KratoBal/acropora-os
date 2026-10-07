@@ -167,6 +167,7 @@ describe("a redirect-backfill parancs", () => {
               sourcePath: "/Pumpa",
               sourcePathLower: "/pumpa",
               destinationPath: "/hu/termek/pumpa",
+              destinationPathLower: "/hu/termek/pumpa",
               reason: "UNAS_PRODUCT",
               entityType: "PRODUCT",
               entityId: "c1",
@@ -178,7 +179,13 @@ describe("a redirect-backfill parancs", () => {
       ],
       [
         "update",
-        { where: { id: "r1" }, data: { destinationPath: "/hu/termek/pumpa" } },
+        {
+          where: { id: "r1" },
+          data: {
+            destinationPath: "/hu/termek/pumpa",
+            destinationPathLower: "/hu/termek/pumpa",
+          },
+        },
       ],
       ["transaction", 2],
     ]);

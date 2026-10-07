@@ -113,6 +113,30 @@ describe("writeRedirect: kör és hibás szabály", () => {
     assert.deepEqual(await szabalyok(store), ["/Pumpa -> /x"]);
   });
 
+  it("a cél csak saját út: //, /\\, kódolt // és sémás URL elutasítva (barracuda, #1597 1.)", async () => {
+    const store = new MemoryRedirectStore();
+    for (const cel of [
+      "//idegen.hu/x",
+      "/\\idegen.hu/x",
+      "/%2F%2Fidegen.hu",
+      "/%5Cidegen.hu",
+      "https://idegen.hu/x",
+      "javascript:alert(1)",
+      "/hu\\termek/x",
+    ])
+      await assert.rejects(
+        ir(store, "/a", cel),
+        hibaja("foreign-destination"),
+        cel,
+      );
+    await assert.rejects(
+      ir(store, "/a", "/hu/%0Atermek"),
+      hibaja("invalid-path"),
+    );
+    assert.deepEqual(await szabalyok(store), []);
+    assert.equal((await ir(store, "/a", "/hu/termek/x")).status, "created");
+  });
+
   it("nem út: elutasítva", async () => {
     const store = new MemoryRedirectStore();
     await assert.rejects(ir(store, " ", "/x"), hibaja("invalid-path"));
@@ -182,7 +206,7 @@ describe("MemoryRedirectStore napló", () => {
       ["/a -> /c", "/b -> /c"],
     );
     assert.deepEqual(store.updated(), [
-      { id: "r1", data: { destinationPath: "/c" } },
+      { id: "r1", data: { destinationPath: "/c", destinationPathLower: "/c" } },
     ]);
   });
 });

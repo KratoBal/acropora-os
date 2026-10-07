@@ -8,6 +8,7 @@
 -- A DDL betura a `prisma migrate diff` kimenete. Adatot ez a migracio nem ir: a
 -- regi UNAS-termekcimek szabalyait a `redirect-backfill` CLI adja, szarazfutas utan.
 
+
 -- CreateEnum
 CREATE TYPE "RedirectReason" AS ENUM ('UNAS_PRODUCT', 'UNAS_CATEGORY', 'SLUG_CHANGE', 'MANUAL');
 
@@ -17,6 +18,7 @@ CREATE TABLE "UrlRedirect" (
     "sourcePath" TEXT NOT NULL,
     "sourcePathLower" TEXT NOT NULL,
     "destinationPath" TEXT NOT NULL,
+    "destinationPathLower" TEXT NOT NULL,
     "httpStatus" INTEGER NOT NULL DEFAULT 301,
     "reason" "RedirectReason" NOT NULL,
     "entityType" "SlugEntityType",
@@ -36,7 +38,7 @@ CREATE UNIQUE INDEX "UrlRedirect_sourcePath_key" ON "UrlRedirect"("sourcePath");
 CREATE UNIQUE INDEX "UrlRedirect_sourcePathLower_key" ON "UrlRedirect"("sourcePathLower");
 
 -- CreateIndex
-CREATE INDEX "UrlRedirect_destinationPath_idx" ON "UrlRedirect"("destinationPath");
+CREATE INDEX "UrlRedirect_destinationPathLower_idx" ON "UrlRedirect"("destinationPathLower");
 
 -- CreateIndex
 CREATE INDEX "UrlRedirect_entityType_entityId_idx" ON "UrlRedirect"("entityType", "entityId");

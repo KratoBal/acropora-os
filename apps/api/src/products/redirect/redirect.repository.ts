@@ -6,6 +6,18 @@ import type {
   RedirectStore,
 } from "./redirect-writer.js";
 
+/**
+ * MINDEN ÁTIRÁNYÍTÁS-ÍRÁS SORBA ÁLL (barracuda, #1597 4.). Az író egy
+ * tranzakción belül olvas, aztán ír; két egyszerre futó írás (A→B kézi és B→A
+ * slug-csere) egymás sorait nem látná, és kör lenne belőle. A zár a tranzakció
+ * végéig tart; a tranzakció ELEJÉN kell kérni.
+ */
+export async function lockRedirectWrites(
+  tx: Prisma.TransactionClient,
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('url-redirect-write'))`;
+}
+
 const SZABALY = {
   id: true,
   sourcePath: true,
@@ -34,7 +46,9 @@ export class PrismaRedirectStore implements RedirectStore {
     return this.db.urlRedirect.findMany({
       where: {
         isActive: true,
-        destinationPath: { equals: destinationLower, mode: "insensitive" },
+        // pontos egyenlőség: a `mode: "insensitive"` ILIKE-ja a `_`-t jokernek
+        // venné, és idegen szabályt írna át (barracuda, #1597 2.)
+        destinationPathLower: destinationLower,
       },
       select: SZABALY,
     });

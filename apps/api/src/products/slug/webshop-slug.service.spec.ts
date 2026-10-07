@@ -41,7 +41,7 @@ function memoria(
       const r = regi.get(slug);
       return r ? { kind: "history", productId: r } : null;
     },
-    saveFirst: async (id, slug) => {
+    saveFirst: async (id, slug, redirects) => {
       if (versenyEgyszer === slug) {
         // valaki más közben ugyanezt a slugot mentette
         elo.set("masik-termek", slug);
@@ -50,6 +50,7 @@ function memoria(
       }
       if ([...elo.values()].includes(slug) || regi.has(slug))
         throw new SlugTakenError(slug);
+      await redirects(atiranyitas);
       elo.set(id, slug);
     },
     replace: async ({ productId, oldSlug, newSlug, userId }, redirects) => {
@@ -200,6 +201,24 @@ describe("changeSlug: az átirányítás (SEO P0 PR 6)", () => {
       "/hu/termek/uj-pumpa -> /hu/termek/pumpa",
     ]);
     assert.deepEqual(await redirectInvariantViolations(m.atiranyitas), []);
+  });
+
+  it("az első slug (webshopSlug) is kikapcsolja az élő címén álló szabályt", async () => {
+    const m = memoria({ p9: { name: "Uj Pumpa", primarySku: "U1" } });
+    await m.atiranyitas.create({
+      sourcePath: "/hu/termek/uj-pumpa",
+      sourcePathLower: "/hu/termek/uj-pumpa",
+      destinationPath: "/hu/termek/mas",
+      destinationPathLower: "/hu/termek/mas",
+      reason: "MANUAL",
+      entityType: null,
+      entityId: null,
+      isActive: true,
+      createdById: null,
+    });
+    const s = new WebshopSlugService(m.store);
+    assert.equal(await s.webshopSlug("p9"), "uj-pumpa");
+    assert.deepEqual(await szabalyok(m), []);
   });
 
   it("ugyanarra a slugra nem ír szabályt", async () => {

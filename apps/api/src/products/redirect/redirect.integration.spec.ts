@@ -6,6 +6,7 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { PrismaRedirectStore } from "./redirect.repository.js";
+import { prismaRedirectTransactor } from "./url-redirect.service.js";
 import {
   RedirectError,
   redirectInvariantViolations,
@@ -19,7 +20,8 @@ import {
  *
  * MI PIROSIT: a lánc nem vonódik össze, ha a cél csak betűméretben egyezik a
  * forrással; két, csak betűméretben eltérő forrás megfér; egy elutasított írás
- * félig megmarad.
+ * félig megmarad; a lánc-keresés a `_`-t jokernek veszi (barracuda, #1597 2.);
+ * a zár (`pg_advisory_xact_lock`) a valódi Postgresen hibát ad.
  */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "/Redirect-Int-";
@@ -83,6 +85,7 @@ describe("Átirányítás, adatbázison", { skip: gate.mode === "skip" }, () => 
           sourcePath: ut("A"),
           sourcePathLower: ut("a").toLowerCase(),
           destinationPath: "/x",
+          destinationPathLower: "/x",
           reason: "MANUAL",
         },
       }),
@@ -92,6 +95,28 @@ describe("Átirányítás, adatbázison", { skip: gate.mode === "skip" }, () => 
       (error: unknown) =>
         error instanceof RedirectError && error.kind === "case-collision",
     );
+  });
+
+  it("a `_` nem joker: egy /regi_cim forrás nem írja át a /regiXcim célú szabályt", async () => {
+    await ir(ut("p"), ut("regiXcim"));
+    await ir(ut("regi_cim"), ut("uj"));
+    const p = await prisma.urlRedirect.findUnique({
+      where: { sourcePath: ut("p") },
+      select: { destinationPath: true },
+    });
+    assert.equal(p?.destinationPath, ut("regiXcim"));
+  });
+
+  it("a zárolt tranzakció (a kézi végpont útja) ír", async () => {
+    const eredmeny = await prismaRedirectTransactor((store) =>
+      writeRedirect(store, {
+        source: ut("zarolt"),
+        destination: "/hu/termek/zarolt",
+        reason: "MANUAL",
+        onExisting: "keep",
+      }),
+    );
+    assert.equal(eredmeny.status, "created");
   });
 
   it("egy kör elutasítva, és a tranzakció nem hagy félig írt sort", async () => {

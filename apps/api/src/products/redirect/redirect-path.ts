@@ -29,6 +29,15 @@ export function normalizeRedirectPath(input: string): string | null {
   return ut;
 }
 
+/**
+ * SAJÁT ÚT: `/`-rel kezdődik, és utána nem jön második `/` vagy `\`, és sehol
+ * nincs benne `\`. A böngésző a `//x`-et és a `/\x`-et másik domainnek veszi
+ * (barracuda, #1597 1.). A normalizált (dekódolt) alakra hívandó.
+ */
+export function isOwnPath(path: string): boolean {
+  return /^\/(?![/\\])/.test(path) && !path.includes("\\");
+}
+
 /** A kisbetűs keresés kulcsa (D2): a `sourcePathLower` oszlop értéke. */
 export function redirectPathLower(path: string): string {
   return path.toLowerCase();

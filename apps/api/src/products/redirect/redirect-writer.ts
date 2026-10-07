@@ -1,6 +1,10 @@
 import type { RedirectReason, SlugEntityType } from "@acropora/database";
 
-import { normalizeRedirectPath, redirectPathLower } from "./redirect-path.js";
+import {
+  isOwnPath,
+  normalizeRedirectPath,
+  redirectPathLower,
+} from "./redirect-path.js";
 
 /** Egy átirányítás, amennyit az író olvas. `UrlRedirect`. */
 export interface RedirectRule {
@@ -14,6 +18,7 @@ export interface RedirectRuleData {
   sourcePath: string;
   sourcePathLower: string;
   destinationPath: string;
+  destinationPathLower: string;
   reason: RedirectReason;
   entityType: SlugEntityType | null;
   entityId: string | null;
@@ -29,7 +34,7 @@ export interface RedirectRuleData {
 export interface RedirectStore {
   /** A szabály a kisbetűs forrás-kulcson, aktív vagy nem. */
   findBySourceLower(sourceLower: string): Promise<RedirectRule | null>;
-  /** Az AKTÍV szabályok, amelyek célja kisbetűsen ez az út. */
+  /** Az AKTÍV szabályok, amelyek célja kisbetűsen PONTOSAN ez az út. */
   findActiveByDestinationLower(
     destinationLower: string,
   ): Promise<RedirectRule[]>;
@@ -43,7 +48,11 @@ export interface RedirectStore {
 }
 
 export type RedirectErrorKind =
-  "invalid-path" | "self-redirect" | "cycle" | "case-collision";
+  | "invalid-path"
+  | "foreign-destination"
+  | "self-redirect"
+  | "cycle"
+  | "case-collision";
 
 /** Egy szabály, ami nem írható; a `kind` mondja meg, miért. */
 export class RedirectError extends Error {
@@ -102,6 +111,18 @@ export async function writeRedirect(
       "invalid-path",
       `not a path: "${forras ? input.destination : input.source}"`,
     );
+  /*
+    A CÉL CSAK SAJÁT ÚT LEHET (barracuda, #1597 1.). A kiszolgálás (PR 7) a célt
+    `Location`-ként adja ki, és a böngésző a `//idegen.hu/x`-et és a
+    `/\idegen.hu/x`-et idegen címnek veszi: nyitott átirányítás lenne a bolt
+    címéről. A `/%2F%2Fidegen.hu` dekódolva ugyanez. Egy sémás teljes URL sem cél:
+    a domainje csendben elveszne, ezért inkább elutasítva.
+  */
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input.destination.trim()) || !isOwnPath(cel))
+    throw new RedirectError(
+      "foreign-destination",
+      `the destination must be a path of this shop: "${input.destination}"`,
+    );
   const forrasKis = redirectPathLower(forras);
   if (forrasKis === redirectPathLower(cel))
     throw new RedirectError("self-redirect", `${forras} points to itself`);
@@ -131,6 +152,7 @@ export async function writeRedirect(
 
   const adat = {
     destinationPath: vegso,
+    destinationPathLower: redirectPathLower(vegso),
     reason: input.reason,
     entityType: input.entityType ?? null,
     entityId: input.entityId ?? null,
@@ -163,7 +185,10 @@ export async function writeRedirect(
 
   const raMutat = await store.findActiveByDestinationLower(forrasKis);
   for (const szabaly of raMutat)
-    await store.update(szabaly.id, { destinationPath: vegso });
+    await store.update(szabaly.id, {
+      destinationPath: vegso,
+      destinationPathLower: redirectPathLower(vegso),
+    });
   return { status, repointed: raMutat.length };
 }
 
