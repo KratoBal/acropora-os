@@ -25,6 +25,8 @@ export interface FactRecord {
   unit: string | null;
   status: string;
   revision: number;
+  /** The definition's `public` flag (SEO P0 PR 2); `false` with no definition. */
+  public: boolean;
   acceptedAt: Date;
   acceptedBy: { id: string; displayName: string };
   fieldResultId: string;
@@ -203,6 +205,14 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
   }
 
   async facts(productId: string): Promise<FactRecord[]> {
+    const kiadhato = new Set(
+      (
+        await prisma.attributeDefinition.findMany({
+          where: { public: true, isActive: true },
+          select: { key: true },
+        })
+      ).map((row) => row.key),
+    );
     const rows = await prisma.productKnowledgeFact.findMany({
       where: { productId },
       orderBy: { field: "asc" },
@@ -237,6 +247,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
         unit: row.unit,
         status: row.status,
         revision: row.revision,
+        public: kiadhato.has(row.field),
         acceptedAt: row.acceptedAt,
         acceptedBy: row.acceptedBy,
         fieldResultId: row.fieldResultId,

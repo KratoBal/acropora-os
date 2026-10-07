@@ -1202,6 +1202,10 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
        */
       productKnowledgeFact: { findMany: async () => [] },
       productCopy: { findMany: async () => [] },
+      // SEO P0 PR 2: a teny-olvaso a definiciokat is koti; a seed szerint public
+      attributeDefinition: {
+        findMany: async () => [{ key: "packSize" }],
+      },
       ...overrides,
     } as unknown as ProjectionDatabase;
     return { db, hivasok };
@@ -1615,6 +1619,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
             status: "APPROVED",
             revision: 1,
             basedOn: { packSize: 1 },
+            usedFields: [],
           })),
       },
     });
@@ -1663,6 +1668,8 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
           status: "VERIFIED",
           source_type: "MANUFACTURER_PAGE",
           revision: 1,
+          // SEO P0 PR 2 (5. dontes): a commerce masodik kapuja ezt szuri
+          public: true,
         },
       ],
       copy: [

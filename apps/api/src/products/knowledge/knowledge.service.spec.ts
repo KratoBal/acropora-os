@@ -80,6 +80,7 @@ function memoryStore() {
         unit: input.unit,
         status: input.status,
         revision: (previous?.revision ?? 0) + 1,
+        public: true,
         acceptedAt: input.acceptedAt,
         acceptedBy: {
           id: input.acceptedById,
@@ -172,6 +173,7 @@ async function projected(memory: ReturnType<typeof memoryStore>) {
     unit: f.unit,
     status: f.status,
     revision: f.revision,
+    public: f.public,
     sourceType: f.source.sourceType,
   }));
   const copy: CopyRow[] = (await memory.store.copy(PRODUCT)).map((c) => ({

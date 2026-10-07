@@ -20,6 +20,7 @@ const FACTS: FactRow[] = [
     unit: null,
     status: "CONFLICTING_SOURCES",
     revision: 1,
+    public: true,
     sourceType: null,
   },
   {
@@ -28,6 +29,7 @@ const FACTS: FactRow[] = [
     unit: null,
     status: "VERIFIED",
     revision: 1,
+    public: true,
     sourceType: "MANUFACTURER_PAGE",
   },
 ];
@@ -86,6 +88,7 @@ describe("the product knowledge projection, OS -> Medusa", () => {
               status: "VERIFIED",
               source_type: "MANUFACTURER_PAGE",
               revision: 1,
+              public: true,
             },
           ],
           copy: [],
@@ -163,6 +166,53 @@ describe("the knowledge rows the runner reads", () => {
    *
    * WHAT TURNS IT RED: a select without one of the fields the rule reads.
    */
+  /**
+   * THE FACTS CARRY THEIR DEFINITION'S `public` FLAG (SEO P0 PR 2, decision 10).
+   * The table handle is loosely typed, so a reader that skipped the
+   * definitions would compile; this test is the guard. A fact with no
+   * definition is not public.
+   *
+   * WHAT TURNS IT RED: the definitions are not asked for, or asked for
+   * without the `public` filter, or a fact's flag ignores them.
+   */
+  it("every fact carries its definition's public flag", async () => {
+    const kerdes: unknown[] = [];
+    const tenyek = ["packSize", "application", "ismeretlenKulcs"].map(
+      (field) => ({
+        field,
+        value: "x",
+        unit: null,
+        status: "VERIFIED",
+        revision: 1,
+        fieldResult: { status: "VERIFIED", sourceType: null, conflicts: null },
+      }),
+    );
+    const rows = await knowledgeRowsFor(
+      {
+        productKnowledgeFact: { findMany: async () => tenyek },
+        productCopy: { findMany: async () => [] },
+        attributeDefinition: {
+          findMany: async (args: unknown) => {
+            kerdes.push(args);
+            return [{ key: "packSize" }];
+          },
+        },
+      },
+      "p-kz",
+    );
+    assert.deepEqual(kerdes, [
+      { where: { public: true, isActive: true }, select: { key: true } },
+    ]);
+    assert.deepEqual(
+      rows.facts.map((f) => [f.field, f.public]),
+      [
+        ["packSize", true],
+        ["application", false],
+        ["ismeretlenKulcs", false],
+      ],
+    );
+  });
+
   it("the copy select carries every field the publication rule reads", async () => {
     const asked: unknown[] = [];
     await knowledgeRowsFor(
@@ -174,6 +224,7 @@ describe("the knowledge rows the runner reads", () => {
             return [];
           },
         },
+        attributeDefinition: { findMany: async () => [] },
       },
       "p-kz",
     );
@@ -203,6 +254,7 @@ describe("the knowledge rows the runner reads", () => {
                 unit: null,
                 status: "VERIFIED",
                 revision: 1,
+                public: true,
                 fieldResult: {
                   status: "VERIFIED",
                   sourceType: "SUPPLIER_PAGE",
@@ -213,6 +265,12 @@ describe("the knowledge rows the runner reads", () => {
           },
         },
         productCopy: { findMany: async () => [] },
+        attributeDefinition: {
+          findMany: async () => [
+            { key: "packSize" },
+            { key: "packageContents" },
+          ],
+        },
       },
       "p-kz",
     );
@@ -239,6 +297,7 @@ describe("the knowledge rows the runner reads", () => {
               unit: null,
               status: "VERIFIED",
               revision: 2,
+              public: true,
               fieldResult: {
                 status: "CONFLICTING_SOURCES",
                 sourceType: null,
@@ -260,6 +319,12 @@ describe("the knowledge rows the runner reads", () => {
           ],
         },
         productCopy: { findMany: async () => [] },
+        attributeDefinition: {
+          findMany: async () => [
+            { key: "packSize" },
+            { key: "packageContents" },
+          ],
+        },
       },
       "p-kz",
     );

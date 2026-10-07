@@ -21,6 +21,7 @@ import {
   type CopyRow,
   type FactRow,
 } from "./knowledge.policy.js";
+import { ATTRIBUTE_DEFINITIONS } from "../attributes/attribute-definitions.js";
 
 /** Invented product and sources; nothing here is a real page. */
 const FACTS: ProductFacts = {
@@ -399,6 +400,7 @@ describe("copy", () => {
   const verified = (field: string, revision: number) => ({
     field,
     revision,
+    public: true,
     status: "VERIFIED",
   });
 
@@ -440,7 +442,7 @@ describe("copy", () => {
   */
   it("a text written against a non-VERIFIED fact goes nowhere: description and SEO alike", () => {
     for (const status of ["SUGGESTED", "CONFLICTING_SOURCES"]) {
-      const facts = [{ field: "dosing", revision: 1, status }];
+      const facts = [{ field: "dosing", revision: 1, status, public: true }];
       assert.equal(
         projectedCopy(
           [
@@ -467,6 +469,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       unit: null,
       status: "VERIFIED",
       revision: 1,
+      public: true,
       sourceType: "MANUFACTURER_PAGE",
     },
     {
@@ -475,6 +478,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
       unit: null,
       status: "CONFLICTING_SOURCES",
       revision: 2,
+      public: true,
       sourceType: null,
     },
   ];
@@ -494,6 +498,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           unit: "l/h",
           status: "SUGGESTED",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
         // a review két hiányzó státusza: ezek sem jutnak ki
@@ -503,6 +508,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           unit: "W",
           status: "UNVERIFIED",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
         {
@@ -511,6 +517,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           unit: "g",
           status: "POSSIBLE_WRONG_VALUE",
           revision: 1,
+          public: true,
           sourceType: "SUPPLIER_PAGE",
         },
       ],
@@ -524,6 +531,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
         status: "VERIFIED",
         source_type: "MANUFACTURER_PAGE",
         revision: 1,
+        public: true,
       },
     ]);
   });
@@ -542,6 +550,7 @@ describe("the projection payload (the PR A / PR B contract)", () => {
           unit: "x",
           status: "CONFLICTING_SOURCES",
           revision: 1,
+          public: true,
           sourceType: "MANUFACTURER_PAGE",
         },
       ],
@@ -653,6 +662,7 @@ describe("per-block basedOn (SEO P0 PR 1b, Balázs 2026-10-07)", () => {
     unit: null,
     status,
     revision,
+    public: true,
     sourceType: "MANUFACTURER_PAGE",
   });
   const FACTS: FactRow[] = [
@@ -784,5 +794,84 @@ describe("per-block basedOn (SEO P0 PR 1b, Balázs 2026-10-07)", () => {
     assert.equal(parseUsedFields(["salinity"], FACTS).ok, false);
     assert.equal(parseUsedFields("application", FACTS).ok, false);
     assert.equal(parseUsedFields([1], FACTS).ok, false);
+  });
+});
+
+describe("the public gate (SEO P0 PR 2)", () => {
+  /**
+   * A MASODIK KAPU: VERIFIED ES `public` definicio (C8). MI PIROSIT: a ma kint
+   * levo het KZ Amino teny kozul egy is kimarad a kapu utan; egy nem `public`
+   * teny kimegy; egy nem `public` tenyre epulo szoveg kimegy (6. dontes); a
+   * kapu a `copyIsStale` bemenetet szuri (7. dontes).
+   */
+  const SEED_PUBLIC = new Set(
+    ATTRIBUTE_DEFINITIONS.filter((d) => d.public).map((d) => d.key),
+  );
+  const teny = (field: string, status = "VERIFIED"): FactRow => ({
+    field,
+    value: "x",
+    unit: null,
+    status,
+    revision: 1,
+    sourceType: "MANUFACTURER_PAGE",
+    public: SEED_PUBLIC.has(field),
+  });
+
+  it("the seven KZ Amino facts live today stay out after the gate, by name", () => {
+    const HET = [
+      "application",
+      "brand",
+      "ean",
+      "manufacturerClaims",
+      "manufacturerInfo",
+      "packageContents",
+      "packSize",
+    ];
+    const kz = [
+      ...HET.map((f) => teny(f)),
+      teny("dosing", "CONFLICTING_SOURCES"),
+    ];
+    assert.deepEqual(
+      knowledgeProjection(kz, []).facts.map((f) => [f.field, f.public]),
+      HET.map((f) => [f, true]),
+    );
+  });
+
+  it("a VERIFIED fact whose definition is not public stays in the OS", () => {
+    const rejtett = { ...teny("warranty"), public: false };
+    assert.deepEqual(
+      knowledgeProjection([teny("packSize"), rejtett], []).facts.map(
+        (f) => f.field,
+      ),
+      ["packSize"],
+    );
+  });
+
+  it("an approved text built on a non-public fact is held back; the facts stay its staleness input", () => {
+    const rejtett = { ...teny("warranty"), public: false };
+    const lead: CopyRow = {
+      block: "lead",
+      body: "Két év garancia.",
+      status: "APPROVED",
+      revision: 1,
+      basedOn: { warranty: 1 },
+      usedFields: ["warranty"],
+    };
+    const facts = [teny("packSize"), rejtett];
+    assert.deepEqual(knowledgeProjection(facts, [lead]).copy, []);
+    assert.equal(projectedCopy([lead], facts, "ACROPORA"), null);
+    // 7. dontes: a kapu a kimeneten fut, a szoveg nem elavult, csak visszatartott
+    assert.equal(
+      copyIsStale(lead.basedOn, currentRevisions(facts), lead.usedFields),
+      false,
+    );
+    // ugyanez public definicioval kimegy (a meres kontrollja)
+    assert.deepEqual(
+      knowledgeProjection(
+        [teny("packSize"), teny("warranty")],
+        [lead],
+      ).copy.map((c) => c.block),
+      ["lead"],
+    );
   });
 });

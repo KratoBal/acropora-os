@@ -1039,6 +1039,10 @@ model Product {
   /// masik halmaz lapjai uresen erkeznenek a boltba.
   descriptionLong  String?
   type             ProductType              @default(PHYSICAL)
+  /// A mező-séma (SEO P0 PR 2): melyik attribútum-készlet írja le a termék
+  /// tényeit. NEM a `type` (az üzleti fajta: PHYSICAL/SERVICE/LIVESTOCK marad).
+  attributeSetId   String?
+  attributeSet     AttributeSet?            @relation(fields: [attributeSetId], references: [id], onDelete: SetNull)
   brandId          String?
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
   categoryId       String?
@@ -8580,4 +8584,142 @@ model MortalityRecordDocument {
 
   @@index([mortalityRecordId, createdAt])
   @@index([sha256])
+}
+
+// ---------------------------------------------------------------------------
+// SEO P0 PR 2: AZ ATTRIBUTUM-MODELL (terv: exchange/seo/seo-p0-terv-2026-10-07.md,
+// C1 es "PR 2", a tiz kiegeszito dontessel). A `ProductType` nev foglalt (a mai
+// enum, es az API `productType` mezoje), ezert a mezo-sema neve `AttributeSet`.
+
+enum AttributeDataType {
+  STRING
+  TEXT
+  NUMBER
+  BOOLEAN
+  ENUM
+  RANGE
+  QUANTITY
+  RELATION
+  /// az adagolas: mennyiseg / viztérfogat / idoszak (a JEV `parseDose` alakja)
+  DOSE
+}
+
+enum AttributeDimension {
+  LENGTH
+  MASS
+  VOLUME
+  FLOW
+  POWER
+  VOLTAGE
+  DOSE
+  TEMPERATURE
+  CONCENTRATION
+}
+
+enum AttributeRelationTarget {
+  PRODUCT
+  BRAND
+  STORE_CATEGORY
+}
+
+enum AttributeScope {
+  PRODUCT
+  VARIANT
+}
+
+enum AttributeStorage {
+  KNOWLEDGE_FACT
+  VARIANT_BARCODE
+  IMAGE_ALT
+}
+
+enum AttributeTier {
+  A
+  B
+  C
+}
+
+enum AttributeClaimPolicy {
+  NONE
+  VALUE
+  PROSE
+}
+
+enum AttributeMedusaNativeField {
+  VARIANT_WEIGHT
+  VARIANT_LENGTH
+  VARIANT_WIDTH
+  VARIANT_HEIGHT
+  VARIANT_ORIGIN_COUNTRY
+}
+
+/// Egy termek-teny definicioja. A `key` = a `ProductKnowledgeFact.field`.
+/// A sorokat a migracio seedeli (a `FIELD_SPECS` teny-kulcsaibol); a `public`
+/// a vasarloi vetulet kapuja.
+model AttributeDefinition {
+  key               String                      @id @db.VarChar(48)
+  label             String
+  dataType          AttributeDataType
+  dimension         AttributeDimension?
+  canonicalUnit     String?
+  relationTarget    AttributeRelationTarget?
+  scope             AttributeScope              @default(PRODUCT)
+  storage           AttributeStorage            @default(KNOWLEDGE_FACT)
+  tier              AttributeTier
+  claimPolicy       AttributeClaimPolicy        @default(NONE)
+  /// `{min, max, precision, pattern, maxLength, unitQualifiers}`
+  validation        Json?
+  searchable        Boolean                     @default(false)
+  filterable        Boolean                     @default(false)
+  public            Boolean                     @default(false)
+  aiVisible         Boolean                     @default(false)
+  merchantVisible   Boolean                     @default(false)
+  medusaNativeField AttributeMedusaNativeField?
+  isActive          Boolean                     @default(true)
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  enumValues        AttributeEnumValue[]
+  sets              AttributeSetAttribute[]
+}
+
+model AttributeEnumValue {
+  id           String              @id @default(cuid())
+  attributeKey String              @db.VarChar(48)
+  attribute    AttributeDefinition @relation(fields: [attributeKey], references: [key], onDelete: Cascade)
+  value        String
+  label        String
+  sortOrder    Int                 @default(0)
+
+  @@unique([attributeKey, value])
+}
+
+/// A mezo-sema (pump, lighting, additive, ...). Az alkeszlet orokli a szulo
+/// attributumait; a fa kormentes (a kod orzi, `attribute-sets.policy.ts`).
+model AttributeSet {
+  id         String                  @id @default(cuid())
+  key        String                  @unique
+  name       String
+  parentId   String?
+  parent     AttributeSet?           @relation("AttributeSetParent", fields: [parentId], references: [id], onDelete: Restrict)
+  children   AttributeSet[]          @relation("AttributeSetParent")
+  isActive   Boolean                 @default(true)
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  attributes AttributeSetAttribute[]
+  products   Product[]
+}
+
+model AttributeSetAttribute {
+  id             String              @id @default(cuid())
+  attributeSetId String
+  attributeSet   AttributeSet        @relation(fields: [attributeSetId], references: [id], onDelete: Cascade)
+  attributeKey   String              @db.VarChar(48)
+  attribute      AttributeDefinition @relation(fields: [attributeKey], references: [key], onDelete: Restrict)
+  required       Boolean             @default(false)
+  /// a definicio `filterable`-jenek felulirasa keszletenkent
+  filterable     Boolean?
+  group          String?
+  sortOrder      Int                 @default(0)
+
+  @@unique([attributeSetId, attributeKey])
 }

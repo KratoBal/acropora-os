@@ -16,6 +16,7 @@ const fact = (over: Partial<ProductKnowledgeFact>): ProductKnowledgeFact => ({
   unit: null,
   status: "VERIFIED",
   revision: 2,
+  public: true,
   acceptedAt: "2026-10-03T19:00:00.000Z",
   acceptedBy: { id: "u", displayName: "Teszt Kolléga" },
   fieldResultId: "fr-1",
