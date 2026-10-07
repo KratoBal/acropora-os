@@ -12,6 +12,11 @@ import { prisma } from "@acropora/database";
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import { MEDUSA_PRODUCT_REFERENCE } from "./medusa-product-link.repository.js";
 import { runPricingCli } from "./medusa-pricing.cli.js";
+import {
+  priceRetryProducts,
+  recordPriceAttempt,
+  type PriceSyncDatabase,
+} from "./medusa-price-sync.js";
 import { runProjectionCli } from "./medusa-projection.runner.js";
 
 /**
@@ -105,7 +110,12 @@ export type ProjectionSchedulerDatabase = Pick<
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
 export type ProjectionRunner = (
   productIds: string[],
-  out: { stdout(value: string): void; stderr(value: string): void },
+  out: {
+    stdout(value: string): void;
+    stderr(value: string): void;
+    /** Termékenkénti kudarc (az ár-futás adja; a termék-vetítés nem). */
+    failed?(productId: string, reason: string): void;
+  },
 ) => Promise<number>;
 
 export type ProjectionRunOutcome = "APPLIED" | "SKIPPED" | "FAILED";
@@ -224,11 +234,26 @@ export class MedusaProjectionScheduler
       közül egyik sem mozdul, és a bolt a régi árat tartja. Az akciós termékek
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
+    const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const esedekes = [
       ...new Set([...akcio, ...(await this.esedekesAzonositok(limit))]),
     ].slice(0, limit);
-    if (!esedekes.length) {
+    /*
+      AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
+      27698). A termék-kötés `lastSyncedAt`-jét csak a termék-vetítés írja, tehát
+      egy kör után, amiben a termék kiment, de az ára nem, a termék a következő
+      forrás-változásig nem került volna sorra. Ezek a termékek CSAK az ár-futásba
+      mennek: a termék-vetítésük sikerült, nincs mit megismételni.
+    */
+    const arUjra = (
+      await priceRetryProducts(
+        this.db as unknown as PriceSyncDatabase,
+        kezdet,
+        limit,
+      )
+    ).filter((id) => !esedekes.includes(id));
+    if (!esedekes.length && !arUjra.length) {
       this.uresKorNaploja();
       return "SKIPPED";
     }
@@ -238,7 +263,14 @@ export class MedusaProjectionScheduler
       stdout: (value: string) => this.logNemUres(value, "log"),
       stderr: (value: string) => this.logNemUres(value, "warn"),
     };
-    const kod = await this.runProjection(esedekes, kimenet);
+    const kod = esedekes.length
+      ? await this.runProjection(esedekes, kimenet)
+      : 0;
+    if (arUjra.length)
+      this.naplo.log(
+        `Medusa price projection: ${arUjra.length} termek ara ujraprobal ` +
+          `(korabbi ar-kudarc utan)`,
+      );
 
     /*
       AZ ÁR UGYANABBAN A KÖRBEN (7-es tétel, kártya 329f8a2e; acrobot 27251
@@ -257,16 +289,37 @@ export class MedusaProjectionScheduler
       A termék-vetítés bukása nem állítja meg: a kör többi terméke ugyanúgy
       kötött, és az áruk ugyanúgy igaz.
     */
-    const arazhato = await this.kotottAzonositok(esedekes);
-    const kotesNelkul = esedekes.length - arazhato.length;
+    const kotesek = await this.kotottAzonositok([...esedekes, ...arUjra]);
+    const arazhato = [...kotesek.keys()];
+    const kotesNelkul = esedekes.length + arUjra.length - arazhato.length;
     if (kotesNelkul > 0)
       this.naplo.log(
         `Medusa price projection: ${kotesNelkul} termek Medusa kotes nelkul, ` +
           `az aruk nem ment ki`,
       );
+    const kudarc = new Map<string, string[]>();
     const arKod = arazhato.length
-      ? await this.runPricing(arazhato, kimenet)
+      ? await this.runPricing(arazhato, {
+          ...kimenet,
+          failed: (productId, reason) =>
+            kudarc.set(productId, [...(kudarc.get(productId) ?? []), reason]),
+        })
       : 0;
+    /*
+      A NEM-NULLA KÓD TERMÉK NÉLKÜL A FUTÁS EGÉSZÉNEK BUKÁSA (például a bolt
+      hitelesítése): ekkor egyik ár sem ment ki, tehát mindegyik kudarc. Ha ezt
+      sikerként rögzítenénk, épp az a hiba ismétlődne, amit ez a rész javít.
+    */
+    if (arKod !== 0 && kudarc.size === 0)
+      for (const id of arazhato)
+        kudarc.set(id, [`az ar-futas elbukott (kod ${arKod})`]);
+    for (const id of arazhato)
+      await recordPriceAttempt(this.db as unknown as PriceSyncDatabase, {
+        productId: id,
+        medusaProductId: kotesek.get(id)!,
+        startedAt: kezdet,
+        failure: kudarc.get(id)?.join("; ") ?? null,
+      });
     return kod === 0 && arKod === 0 ? "APPLIED" : "FAILED";
   }
 
@@ -321,13 +374,21 @@ export class MedusaProjectionScheduler
    * sorrendjében. A metszet a kódban is megvan, nem csak a lekérdezésben:
    * egy tágabb válasz se tegyen ár-vetítésbe olyan terméket, ami nem esedékes.
    */
-  private async kotottAzonositok(esedekes: string[]): Promise<string[]> {
+  private async kotottAzonositok(
+    esedekes: string[],
+  ): Promise<Map<string, string>> {
     const kotesek = await this.db.externalReference.findMany({
       where: { ...MEDUSA_PRODUCT_REFERENCE, entityId: { in: esedekes } },
-      select: { entityId: true },
+      select: { entityId: true, externalId: true },
     });
-    const kotott = new Set(kotesek.map((sor) => sor.entityId));
-    return esedekes.filter((id) => kotott.has(id));
+    const kotott = new Map(
+      kotesek.map((sor) => [sor.entityId, sor.externalId]),
+    );
+    return new Map(
+      esedekes
+        .filter((id) => kotott.has(id))
+        .map((id) => [id, kotott.get(id)!]),
+    );
   }
 
   /**
