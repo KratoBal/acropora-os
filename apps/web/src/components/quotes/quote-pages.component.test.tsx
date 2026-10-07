@@ -447,6 +447,35 @@ describe("Ajánlat szerkesztő (569:171)", () => {
   });
 });
 
+describe("Törlés csak kérdés után", () => {
+  it("a blokk törlése előbb kérdez, és csak a megerősítés után hív", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.deleteBlock.mockResolvedValue(quote([version({ blocks: [] })]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Fejezet: törlés" }),
+    );
+    expect(api.deleteBlock).not.toHaveBeenCalled();
+    expect(screen.getByText("Fejezet törlése")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Törlés" }));
+    await waitFor(() =>
+      expect(api.deleteBlock).toHaveBeenCalledWith("token-1", "q1", "v2", "b1"),
+    );
+  });
+
+  it("a BOM-sor törlése is kérdez; a Mégsem nem töröl", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Egyedi szűrő: BOM" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Szűrőház: törlés" }));
+    expect(screen.getByText("Szűrőház törlése")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
+    expect(api.deleteBomItem).not.toHaveBeenCalled();
+  });
+});
+
 describe("Ajánlat szövegrészletek (Beállítások)", () => {
   it("quotes.templates.manage nélkül nem kér le semmit", () => {
     auth.role = "SALES";

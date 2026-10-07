@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  ConfirmDialog,
   PilotBadge,
   PilotButton,
   PilotDrawer,
@@ -104,6 +105,7 @@ export function QuoteBomDrawer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<QuoteBomLineDto | null>(null);
 
   const run = async (action: () => Promise<QuoteDetailDto>, done?: string) => {
     setBusy(true);
@@ -279,16 +281,7 @@ export function QuoteBomDrawer({
                     variant="ghost"
                     disabled={busy}
                     aria-label={`${bomLineName(row)}: törlés`}
-                    onClick={() =>
-                      void run(() =>
-                        quotesApi.deleteBomItem(
-                          token,
-                          quoteId,
-                          versionId,
-                          row.id,
-                        ),
-                      )
-                    }
+                    onClick={() => setDeleting(row)}
                   >
                     Törlés
                   </PilotButton>
@@ -298,6 +291,23 @@ export function QuoteBomDrawer({
           )}
         </section>
 
+        <ConfirmDialog
+          open={deleting !== null}
+          title={deleting ? `${bomLineName(deleting)} törlése` : ""}
+          consequence="A BOM-sor és a hozzá tartozó költség-pillanatkép kikerül ebből a piszkozatból."
+          recovery="A sor újra felvehető; a költség ekkor a mai utolsó beszerzésből jön, nem a korábbi pillanatképből."
+          confirmLabel="Törlés"
+          busy={busy}
+          onConfirm={() => {
+            const row = deleting;
+            setDeleting(null);
+            if (row)
+              void run(() =>
+                quotesApi.deleteBomItem(token, quoteId, versionId, row.id),
+              );
+          }}
+          onCancel={() => setDeleting(null)}
+        />
         <section
           aria-label="Tétel hozzáadása"
           className="space-y-3 rounded-lg border border-pilot-grey-200 p-4"

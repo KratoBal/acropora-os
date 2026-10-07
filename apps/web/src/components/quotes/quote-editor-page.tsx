@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  ConfirmDialog,
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -102,6 +103,11 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
     item: Item | null;
   } | null>(null);
   const [bomItemId, setBomItemId] = useState<string | null>(null);
+  const [asking, setAsking] = useState<{
+    title: string;
+    consequence: string;
+    run: () => Promise<QuoteDetailDto>;
+  } | null>(null);
 
   const version = quote ? draftVersion(quote) : null;
 
@@ -273,9 +279,13 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
               last={index === blocks.length - 1}
               onMove={(delta) => move(index, delta)}
               onDelete={() =>
-                void write(() =>
-                  quotesApi.deleteBlock(token, quote.id, v.id, block.id),
-                )
+                setAsking({
+                  title: `${QUOTE_BLOCK_LABEL[block.kind]} törlése`,
+                  consequence:
+                    "A blokk a tételeivel és azok BOM-soraival együtt kikerül ebből a piszkozatból.",
+                  run: () =>
+                    quotesApi.deleteBlock(token, quote.id, v.id, block.id),
+                })
               }
               onSave={(patch) =>
                 write(() =>
@@ -286,9 +296,13 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
               onEditItem={(item) => setItemDrawer({ blockId: null, item })}
               onBom={(item) => setBomItemId(item.id)}
               onDeleteItem={(item) =>
-                void write(() =>
-                  quotesApi.deleteItem(token, quote.id, v.id, item.id),
-                )
+                setAsking({
+                  title: `${item.name} törlése`,
+                  consequence:
+                    "A tétel a BOM-soraival együtt kikerül ebből a piszkozatból.",
+                  run: () =>
+                    quotesApi.deleteItem(token, quote.id, v.id, item.id),
+                })
               }
               bomCount={(itemId) =>
                 v.bomItems.filter((b) => b.quoteItemId === itemId).length
@@ -433,6 +447,20 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
         </aside>
       </div>
 
+      <ConfirmDialog
+        open={asking !== null}
+        title={asking?.title ?? ""}
+        consequence={asking?.consequence ?? ""}
+        recovery="Csak a piszkozat változik: a publikált verziók érintetlenek, de a törölt rész nem állítható vissza, újra fel kell venni."
+        confirmLabel="Törlés"
+        busy={busy}
+        onConfirm={() => {
+          const run = asking?.run;
+          setAsking(null);
+          if (run) void write(run);
+        }}
+        onCancel={() => setAsking(null)}
+      />
       <QuoteItemDrawer
         open={itemDrawer !== null}
         onClose={() => setItemDrawer(null)}
