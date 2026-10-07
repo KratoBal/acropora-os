@@ -33,6 +33,10 @@ import {
   parcelRefusal,
   sizeFor,
 } from "./webshop-order-parcel.rules.js";
+import {
+  BANK_TRANSFER_PROVIDER_ID,
+  orderPaymentProviderId,
+} from "./webshop-orders.rules.js";
 import { WebshopOrdersRepository } from "./webshop-orders.repository.js";
 import { WebshopOrdersService } from "./webshop-orders.service.js";
 
@@ -112,6 +116,9 @@ export class WebshopOrderParcelService {
       storePickup: shipping.storePickup,
       carrier: shipping.carrier,
       invoiceIssued: invoice?.status === "ISSUED" || external !== undefined,
+      bankTransfer:
+        orderPaymentProviderId(order.payment_collections?.[0]) ===
+        BANK_TRANSFER_PROVIDER_ID,
     });
     if (refusal) throw new ConflictException(refusal);
     // a fizetés útja: feloldott zárolásnál csak a link kifizetése után (a webshop 5xx-e itt NEM nyelődik el)

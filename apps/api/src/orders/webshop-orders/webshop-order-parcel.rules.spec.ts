@@ -81,6 +81,7 @@ describe("when a parcel may be created", () => {
     storePickup: false,
     carrier: "FOXPOST" as const,
     invoiceIssued: true,
+    bankTransfer: false,
   };
 
   it("after the invoice, for a confirmed, stocking or out-for-delivery order", () => {
@@ -90,6 +91,15 @@ describe("when a parcel may be created", () => {
       parcelRefusal({ ...ready, invoiceIssued: false }),
       "Előbb állítsd ki a számlát.",
     );
+  });
+
+  // előre utalásnál nem kiállításra küld, hanem a kifizetést nevezi meg (bb3a6bd5)
+  it("for a prepaid order without the invoice, names the payment, not issuing", () => {
+    assert.equal(
+      parcelRefusal({ ...ready, invoiceIssued: false, bankTransfer: true }),
+      "Előre utalásnál a számlát a Számlázz.hu állítja ki a díjbekérő kifizetésekor; a csomag utána adható fel.",
+    );
+    assert.equal(parcelRefusal({ ...ready, bankTransfer: true }), null);
   });
 
   it("never for shop pickup, before confirmation or after closing, nor without a carrier", () => {
