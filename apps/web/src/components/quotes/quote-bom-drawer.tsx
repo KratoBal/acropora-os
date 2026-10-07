@@ -106,6 +106,7 @@ export function QuoteBomDrawer({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<QuoteBomLineDto | null>(null);
+  const [converting, setConverting] = useState<QuoteBomLineDto | null>(null);
 
   const run = async (action: () => Promise<QuoteDetailDto>, done?: string) => {
     setBusy(true);
@@ -241,16 +242,7 @@ export function QuoteBomDrawer({
                       variant="secondary"
                       disabled={busy}
                       aria-label={`${bomLineName(row)}: termékké alakítás`}
-                      onClick={() =>
-                        void run(async () => {
-                          const created =
-                            await quotesApi.createProductFromBomItem(
-                              token,
-                              row.id,
-                            );
-                          return created.quote;
-                        }, "Létrejött a helyi OS-termék, a BOM-sor most erre mutat.")
-                      }
+                      onClick={() => setConverting(row)}
                     >
                       Termékké alakítás
                     </PilotButton>
@@ -291,6 +283,33 @@ export function QuoteBomDrawer({
           )}
         </section>
 
+        <ConfirmDialog
+          open={converting !== null}
+          title={
+            converting ? `${bomLineName(converting)}: termékké alakítás` : ""
+          }
+          consequence={
+            converting
+              ? `Új helyi termék jön létre »${bomLineName(converting)}« néven a terméktörzsben, a webshopból kizárva. A BOM-sor erre fog mutatni.`
+              : ""
+          }
+          recovery="A termék a terméktörzsben marad; innen nem vonható vissza, csak a Termékek alatt archiválható."
+          confirmLabel="Termék létrehozása"
+          busy={busy}
+          onConfirm={() => {
+            const row = converting;
+            setConverting(null);
+            if (row)
+              void run(async () => {
+                const created = await quotesApi.createProductFromBomItem(
+                  token,
+                  row.id,
+                );
+                return created.quote;
+              }, "Létrejött a helyi OS-termék, a BOM-sor most erre mutat.");
+          }}
+          onCancel={() => setConverting(null)}
+        />
         <ConfirmDialog
           open={deleting !== null}
           title={deleting ? `${bomLineName(deleting)} törlése` : ""}
