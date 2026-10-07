@@ -174,10 +174,14 @@ describe(
         const res = await request(path);
         assert.equal(res.status, 200);
         const dto = await res.json();
+        // P1: the BOM lines are visible WITHOUT their cost fields (#1582 P1)
         assert.doesNotMatch(
           JSON.stringify(dto),
-          /"(?:bomItems|unitCost|supplierId|margin|internalNote)"/,
+          /"(?:unitCost|costOriginal|exchangeRate|supplierId|supplierSku|margin|internalNote)"/,
         );
+        if (path.startsWith("/quotes?"))
+          assert.doesNotMatch(JSON.stringify(dto), /"bomItems"/);
+        else assert.equal(dto.versions[0].bomItems[0].customName, "Part");
       }
       const res = await request(`/quotes/${quoteId}`, "PATCH", {
         title: "Updated",

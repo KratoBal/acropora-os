@@ -91,6 +91,19 @@ export function quoteFixture(): QuoteRow {
                 vatRatePercent: d("27"),
                 isOptional: false,
               },
+              {
+                id: "optional",
+                position: 1,
+                source: "STANDALONE",
+                variantId: null,
+                name: "Option",
+                description: null,
+                quantity: d("3"),
+                unit: "db",
+                unitNetPrice: d("0.3333"),
+                vatRatePercent: d("27"),
+                isOptional: true,
+              },
             ],
           },
         ],
@@ -118,10 +131,40 @@ export function quoteFixture(): QuoteRow {
             supplierSku: "private",
             internalNote: "private note",
             createdProductVariantId: null,
+            variant: null,
+          },
+          {
+            id: "bom-product",
+            quoteItemId: "item",
+            position: 1,
+            kind: "PRODUCT",
+            variantId: "var",
+            customName: null,
+            variant: {
+              sku: "ACR-1",
+              name: "Kék",
+              product: { name: "Szivattyú" },
+            },
+            quantity: d("1"),
+            unit: "db",
+            unitCost: null,
+            costCurrency: null,
+            costOriginal: null,
+            exchangeRate: null,
+            costSource: null,
+            costSourceDate: null,
+            sourcePurchaseInvoiceLineId: null,
+            supplierId: null,
+            supplierSku: null,
+            internalNote: null,
+            createdProductVariantId: null,
           },
         ],
       },
     ],
+    customer: { displayName: "Blue Office Kft." },
+    owner: null,
+    createdBy: { displayName: "Balázs" },
     events: [
       {
         id: "event",
@@ -159,11 +202,31 @@ function keys(value: unknown): string[] {
     return Object.entries(value).flatMap(([k, v]) => [k, ...keys(v)]);
   return [];
 }
+/** No cost, margin, supplier or internal-note key anywhere (P0, unchanged in P1). */
 const noCosts = (value: unknown) =>
   assert.deepEqual(
-    keys(value).filter((k) => /cost|margin|bom|supplier|internalnote/i.test(k)),
+    keys(value).filter((k) => /cost|margin|supplier|internalnote/i.test(k)),
     [],
   );
+/** The customer output carries no BOM at all; the cost-free internal one does since P1. */
+const noBom = (value: unknown) =>
+  assert.deepEqual(
+    keys(value).filter((k) => /bom/i.test(k)),
+    [],
+  );
+/** P1: the cost-free BOM line is exactly this allowlist. */
+const BOM_LINE_KEYS = [
+  "createdProductVariantId",
+  "customName",
+  "id",
+  "kind",
+  "position",
+  "quantity",
+  "quoteItemId",
+  "unit",
+  "variantId",
+  "variantLabel",
+];
 test("list query fetches only a bounded header/version projection and list mapper cannot expose the tree", async (t) => {
   let query: Prisma.QuoteFindManyArgs | undefined;
   const original = {
@@ -198,10 +261,18 @@ test("list query fetches only a bounded header/version projection and list mappe
     Object.keys(query.select).every(
       (k) =>
         k === "versions" ||
+        k === "customer" ||
+        k === "createdBy" ||
         query!.select![k as keyof Prisma.QuoteSelect] === true,
     ),
   );
-  const dto = quoteListItemDto(quoteFixture());
+  // P1: the two names come as ONE field each, never the related record
+  for (const k of ["customer", "createdBy"] as const)
+    assert.deepEqual(query.select[k], { select: { displayName: true } });
+  const dto = quoteListItemDto(quoteFixture(), new Map([["v", "200000.2470"]]));
+  assert.equal(dto.latestVersion!.netTotal, "200000.2470");
+  assert.equal(dto.customerName, "Blue Office Kft.");
+  assert.equal(dto.createdByName, "Balázs");
   assert.deepEqual(
     Object.keys(dto).sort(),
     [
@@ -211,6 +282,8 @@ test("list query fetches only a bounded header/version projection and list mappe
       "status",
       "customerId",
       "ownerUserId",
+      "customerName",
+      "createdByName",
       "createdAt",
       "updatedAt",
       "latestVersion",
@@ -226,9 +299,11 @@ test("list query fetches only a bounded header/version projection and list mappe
       "currency",
       "priceDisplay",
       "publishedAt",
+      "netTotal",
     ].sort(),
   );
   noCosts(dto);
+  noBom(dto);
   assert.equal(
     quoteListItemDto({ ...quoteFixture(), versions: [] }).latestVersion,
     null,
@@ -240,7 +315,12 @@ test("three allowlisted DTO shapes, decimal precision and no customer/internal c
     internal = internalQuoteDto(row),
     costs = quoteDto(row, user("ADMIN"));
   noCosts(customer);
+  noBom(customer);
   noCosts(internal);
+  // P1: the writer sees what a line is made of, never its cost
+  assert.ok(internal.versions[0]!.bomItems.length > 0);
+  for (const line of internal.versions[0]!.bomItems)
+    assert.deepEqual(Object.keys(line).sort(), BOM_LINE_KEYS);
   assert.equal(
     customer.versions[0]!.blocks[0]!.items[0]!.unitNetPrice,
     "100000.1234",
@@ -340,6 +420,7 @@ test("cost-free API reads and writes use the safe mapper and VIEWER cannot reach
     list: async () => ({ items: [row], total: 1 }),
     create: async () => row,
     update: async () => row,
+    netTotals: async () => new Map(),
   } as unknown as QuotesRepository;
   const service = new QuotesService(repo);
   noCosts(await service.get("q", user("SALES")));
@@ -385,4 +466,26 @@ test("all four routes have central permission metadata and quote is a document-s
     );
   assert.ok(DOCUMENT_OWNERS.includes("quote"));
   assert.equal(ownerDirectory("quote"), "quotes");
+});
+
+test("P1: the detail carries the names and the offered/optional net totals, exactly", () => {
+  const dto = internalQuoteDto(quoteFixture());
+  assert.equal(dto.customerName, "Blue Office Kft.");
+  assert.equal(dto.ownerName, null);
+  assert.equal(dto.createdByName, "Balázs");
+  // 2.000001 * 100000.1234 = 200000.3468001234 -> 4 places; the option apart
+  assert.equal(dto.versions[0]!.netTotal, "200000.3468");
+  assert.equal(dto.versions[0]!.optionalNetTotal, "0.9999");
+});
+
+test("P1: a linked variant is named on the internal detail only", () => {
+  const internal = internalQuoteDto(quoteFixture());
+  const bom = internal.versions[0]!.bomItems;
+  assert.equal(bom[0]!.variantLabel, null);
+  assert.equal(bom[1]!.variantLabel, "Szivattyú · Kék (ACR-1)");
+  assert.equal(internal.versions[0]!.blocks[0]!.items[0]!.variantLabel, null);
+  assert.doesNotMatch(
+    JSON.stringify(customerQuoteDto(quoteFixture())),
+    /variantLabel|ACR-1/,
+  );
 });

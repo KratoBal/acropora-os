@@ -12,7 +12,7 @@ import {
   ValidateIf,
 } from "class-validator";
 import type {
-  CreateQuoteInput,
+  CreateQuoteFromTemplateInput,
   UpdateQuoteInput,
   QuotePriceDisplay,
 } from "@acropora/types";
@@ -33,7 +33,10 @@ export class QuoteHeaderDto implements UpdateQuoteInput {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(100) ownerUserId?:
     string | null;
 }
-export class CreateQuoteDto extends QuoteHeaderDto implements CreateQuoteInput {
+export class CreateQuoteDto
+  extends QuoteHeaderDto
+  implements CreateQuoteFromTemplateInput
+{
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
   @IsString()
   @MinLength(1)
@@ -44,4 +47,7 @@ export class CreateQuoteDto extends QuoteHeaderDto implements CreateQuoteInput {
   @IsOptional()
   @IsIn(["NET", "GROSS", "BOTH"])
   priceDisplay?: QuotePriceDisplay;
+  /** P1: start version 1 from this template's blocks and milestones */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) templateId?:
+    string | null;
 }
