@@ -424,6 +424,17 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Szűrőház: termékké alakítás" }),
     );
+    // the catalog write asks first (barracuda's #1596 review)
+    expect(api.createProductFromBomItem).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/Új helyi termék jön létre »Szűrőház« néven/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
+    expect(api.createProductFromBomItem).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Szűrőház: termékké alakítás" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Termék létrehozása" }));
     await waitFor(() =>
       expect(api.createProductFromBomItem).toHaveBeenCalledWith(
         "token-1",
@@ -473,6 +484,32 @@ describe("Törlés csak kérdés után", () => {
     expect(screen.getByText("Szűrőház törlése")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
     expect(api.deleteBomItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("Mentetlen blokkszöveg", () => {
+  it("tiszta állapotban az adatlap gomb azonnal visz", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Ajánlat adatlapja" }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
+  });
+
+  it("mentetlen címmel előbb kérdez, és csak megerősítés után visz", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.getByText(/1 blokk szövege még nincs mentve/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
   });
 });
 

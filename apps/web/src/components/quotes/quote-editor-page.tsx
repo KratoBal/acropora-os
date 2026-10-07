@@ -103,6 +103,32 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
     item: Item | null;
   } | null>(null);
   const [bomItemId, setBomItemId] = useState<string | null>(null);
+  /**
+   * UNSAVED BLOCK TEXT (barracuda's #1596 review): a block saves on its own
+   * button, so leaving with a typed but unsaved text would lose it silently.
+   * The browser asks on unload; the in-app link asks with the shared dialog.
+   */
+  const [dirtyBlocks, setDirtyBlocks] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [leaving, setLeaving] = useState(false);
+  const markDirty = useCallback(
+    (blockId: string) => (dirty: boolean) =>
+      setDirtyBlocks((current) => {
+        if (current.has(blockId) === dirty) return current;
+        const next = new Set(current);
+        if (dirty) next.add(blockId);
+        else next.delete(blockId);
+        return next;
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (!dirtyBlocks.size) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirtyBlocks]);
   const [asking, setAsking] = useState<{
     title: string;
     consequence: string;
@@ -187,7 +213,11 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
         <PilotButton
           variant="secondary"
           size="regular"
-          onClick={() => router.push(`${QUOTES_PATH}/${quote.id}`)}
+          onClick={() =>
+            dirtyBlocks.size
+              ? setLeaving(true)
+              : router.push(`${QUOTES_PATH}/${quote.id}`)
+          }
         >
           Ajánlat adatlapja
         </PilotButton>
@@ -304,6 +334,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
                     quotesApi.deleteItem(token, quote.id, v.id, item.id),
                 })
               }
+              onDirtyChange={markDirty(block.id)}
               bomCount={(itemId) =>
                 v.bomItems.filter((b) => b.quoteItemId === itemId).length
               }
@@ -448,6 +479,18 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       </div>
 
       <ConfirmDialog
+        open={leaving}
+        title="Nem mentett szöveg"
+        consequence={`${dirtyBlocks.size} blokk szövege még nincs mentve, és elvész, ha most elmész.`}
+        recovery="Maradj, és mentsd a blokkokat a „Blokk mentése” gombbal."
+        confirmLabel="Elmegyek mentés nélkül"
+        onConfirm={() => {
+          setLeaving(false);
+          router.push(`${QUOTES_PATH}/${quote.id}`);
+        }}
+        onCancel={() => setLeaving(false)}
+      />
+      <ConfirmDialog
         open={asking !== null}
         title={asking?.title ?? ""}
         consequence={asking?.consequence ?? ""}
@@ -505,6 +548,7 @@ function BlockCard({
   onBom,
   onDeleteItem,
   bomCount,
+  onDirtyChange,
 }: {
   block: QuoteInternalBlock;
   currency: string;
@@ -522,6 +566,7 @@ function BlockCard({
   onBom: (item: Item) => void;
   onDeleteItem: (item: Item) => void;
   bomCount: (itemId: string) => number;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const initialText =
     block.content && "type" in block.content
@@ -530,6 +575,7 @@ function BlockCard({
   const [title, setTitle] = useState(block.title ?? "");
   const [text, setText] = useState(initialText);
   const dirty = title !== (block.title ?? "") || text !== initialText;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const label = QUOTE_BLOCK_LABEL[block.kind];
   const subtotal = block.items
     .filter((i) => !i.isOptional)
