@@ -18,7 +18,7 @@ const gate = integrationDatabaseGate(process.env);
 })
 class TestQuotesModule {}
 describe(
-  "#1582 P0 quotes: constraints and HTTP API",
+  "Quotes P0: constraints and HTTP API",
   { skip: gate.mode === "skip" },
   () => {
     const suffix = randomUUID(),
