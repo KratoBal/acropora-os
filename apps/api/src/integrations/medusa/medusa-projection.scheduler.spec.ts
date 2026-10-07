@@ -819,6 +819,42 @@ describe("MedusaProjectionScheduler, az elbukott ár", () => {
     ]);
   });
 
+  /*
+    A KIVÉTEL IS KUDARC (barracuda előzetes átnézése, acrobot 27710). MI PIROSIT:
+    ha egy dobó ár-futás után semmi nem rögzül (akkor a termék nem próbál újra),
+    ha a kivétel a kört megszakítja, vagy ha a napló a hiba üzenetét viszi.
+  */
+  it("egy DOBÓ ár-futás után minden árazható termék kudarcot kap, és a kör FAILED", async () => {
+    const { db, hivasok } = adatbazis(
+      [termek(), termek({ id: "prod-2" })],
+      [],
+      [
+        { entityId: "prod-1", externalId: "prod_m1" },
+        { entityId: "prod-2", externalId: "prod_m2" },
+      ] as never,
+    );
+    const n = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: async () => {
+        throw new TypeError("titkos termek-adat a hibauzenetben");
+      },
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+      now: () => MOST,
+    });
+    assert.equal(await scheduler.runOnce(), "FAILED");
+    assert.deepEqual(upsertek(hivasok), [
+      ["prod-1", null, "az ar-futas kivetellel allt le: TypeError"],
+      ["prod-2", null, "az ar-futas kivetellel allt le: TypeError"],
+    ]);
+    assert.ok(
+      !n.sorok.join("\n").includes("titkos termek-adat"),
+      "a hibauzenet a naploba kerult",
+    );
+  });
+
   it("egy óránál régebbi ár-kudarc forrás-változás nélkül újrapróbál, CSAK az árat", async () => {
     const ketOraja = new Date(MOST.getTime() - 2 * 60 * 60 * 1000);
     // egy forrás szerint esedékes termék is van a körben, hogy a termék-vetítés

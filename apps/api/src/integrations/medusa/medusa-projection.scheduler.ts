@@ -298,13 +298,36 @@ export class MedusaProjectionScheduler
           `az aruk nem ment ki`,
       );
     const kudarc = new Map<string, string[]>();
-    const arKod = arazhato.length
-      ? await this.runPricing(arazhato, {
+    /*
+      A KIVÉTEL IS KUDARC (barracuda előzetes átnézése, acrobot 27710). Ha az
+      ár-futás nem kóddal tér vissza, hanem dob (egy nem várt hiba a futtatóban,
+      a feloldásban vagy a kiírásban), a rögzítés nélküle le sem futna: az ebben
+      a körben először esedékes termékek nem kapnának kudarc-jelet, az
+      újrapróbálás alattiak pedig visszalépés nélkül jönnének minden körben.
+      Ezért minden árazható termék kudarcot kap; azt nem tudjuk, melyik ment ki
+      a dobás előtt, és egy fölösleges újrapróba olcsóbb egy elmaradtnál. A
+      naplóba csak a hiba fajtája megy: az üzenete termék-adatot hordozhat.
+    */
+    let arKod = 0;
+    if (arazhato.length)
+      try {
+        arKod = await this.runPricing(arazhato, {
           ...kimenet,
           failed: (productId, reason) =>
             kudarc.set(productId, [...(kudarc.get(productId) ?? []), reason]),
-        })
-      : 0;
+        });
+      } catch (error) {
+        const fajta = error instanceof Error ? error.name : "UNKNOWN";
+        this.naplo.error(
+          `Medusa price projection: az ar-futas kivetellel allt le (${fajta})`,
+        );
+        for (const id of arazhato)
+          kudarc.set(id, [
+            ...(kudarc.get(id) ?? []),
+            `az ar-futas kivetellel allt le: ${fajta}`,
+          ]);
+        arKod = 1;
+      }
     /*
       A NEM-NULLA KÓD TERMÉK NÉLKÜL A FUTÁS EGÉSZÉNEK BUKÁSA (például a bolt
       hitelesítése): ekkor egyik ár sem ment ki, tehát mindegyik kudarc. Ha ezt
