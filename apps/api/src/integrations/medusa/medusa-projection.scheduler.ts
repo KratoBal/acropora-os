@@ -11,6 +11,7 @@ import { prisma } from "@acropora/database";
 
 import { decideProjectionDue } from "./medusa-projection-due.js";
 import { MEDUSA_PRODUCT_REFERENCE } from "./medusa-product-link.repository.js";
+import { runPricingCli } from "./medusa-pricing.cli.js";
 import { runProjectionCli } from "./medusa-projection.runner.js";
 
 /**
@@ -124,6 +125,8 @@ export type ProjectionSchedulerLogger = {
 export interface MedusaProjectionSchedulerDeps {
   db?: ProjectionSchedulerDatabase;
   runProjection?: ProjectionRunner;
+  /** Az ár-vetítés futtatója. Ugyanaz az alak, mint a termék-vetítésé. */
+  runPricing?: ProjectionRunner;
   environment?: NodeJS.ProcessEnv;
   logger?: ProjectionSchedulerLogger;
 }
@@ -152,6 +155,7 @@ export class MedusaProjectionScheduler
 
   private readonly db: ProjectionSchedulerDatabase;
   private readonly runProjection: ProjectionRunner;
+  private readonly runPricing: ProjectionRunner;
   private readonly environment: NodeJS.ProcessEnv;
   private readonly naplo: ProjectionSchedulerLogger;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
@@ -176,6 +180,8 @@ export class MedusaProjectionScheduler
     this.db = deps?.db ?? (prisma as unknown as ProjectionSchedulerDatabase);
     this.runProjection =
       deps?.runProjection ?? ((ids, out) => runProjectionCli(ids, out));
+    this.runPricing =
+      deps?.runPricing ?? ((ids, out) => runPricingCli(ids, out));
     this.environment = deps?.environment ?? process.env;
     this.naplo = deps?.logger ?? this.logger;
   }
@@ -215,11 +221,54 @@ export class MedusaProjectionScheduler
     }
     this.egymasUtaniUresKorok = 0;
 
-    const kod = await this.runProjection(esedekes, {
-      stdout: (value) => this.logNemUres(value, "log"),
-      stderr: (value) => this.logNemUres(value, "warn"),
+    const kimenet = {
+      stdout: (value: string) => this.logNemUres(value, "log"),
+      stderr: (value: string) => this.logNemUres(value, "warn"),
+    };
+    const kod = await this.runProjection(esedekes, kimenet);
+
+    /*
+      AZ ÁR UGYANABBAN A KÖRBEN (7-es tétel, kártya 329f8a2e; acrobot 27251
+      „a”). A termék-vetítés az árat NEM viszi (a futtatóban nulla ár-hivatkozás
+      van), tehát egy ár eddig csak a kézi `medusa:pricing` paranccsal jutott a
+      boltba. Itt UGYANAZ a parancs-törzs fut: `resolvePriceSource` és
+      `decidePricingProjection`, változatlanul; az ütemező csak meghívja.
+
+      CSAK A KÖTÖTT TERMÉKEKRE. A Medusa terméket a MEDUSA Product
+      ExternalReference köti az OS termékhez (nautilus SKU alapú kötése,
+      27254), és az ár-vetítés kötés nélkül `no-product-link` okkal megállna:
+      minden körben ugyanazon a terméken, ugyanazzal a hibával. A kötés hiánya
+      nem hiba, hanem az, hogy a termék nincs a boltban; a napló a számát
+      mondja meg. Az ütemező kötést nem ír.
+
+      A termék-vetítés bukása nem állítja meg: a kör többi terméke ugyanúgy
+      kötött, és az áruk ugyanúgy igaz.
+    */
+    const arazhato = await this.kotottAzonositok(esedekes);
+    const kotesNelkul = esedekes.length - arazhato.length;
+    if (kotesNelkul > 0)
+      this.naplo.log(
+        `Medusa price projection: ${kotesNelkul} termek Medusa kotes nelkul, ` +
+          `az aruk nem ment ki`,
+      );
+    const arKod = arazhato.length
+      ? await this.runPricing(arazhato, kimenet)
+      : 0;
+    return kod === 0 && arKod === 0 ? "APPLIED" : "FAILED";
+  }
+
+  /**
+   * Az esedékes termékek közül azok, amelyeknek VAN Medusa kötése, a kör
+   * sorrendjében. A metszet a kódban is megvan, nem csak a lekérdezésben:
+   * egy tágabb válasz se tegyen ár-vetítésbe olyan terméket, ami nem esedékes.
+   */
+  private async kotottAzonositok(esedekes: string[]): Promise<string[]> {
+    const kotesek = await this.db.externalReference.findMany({
+      where: { ...MEDUSA_PRODUCT_REFERENCE, entityId: { in: esedekes } },
+      select: { entityId: true },
     });
-    return kod === 0 ? "APPLIED" : "FAILED";
+    const kotott = new Set(kotesek.map((sor) => sor.entityId));
+    return esedekes.filter((id) => kotott.has(id));
   }
 
   /**

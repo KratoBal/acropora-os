@@ -69,7 +69,7 @@ export default function AssetDetailScreen() {
   const params = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const { status, user } = useAuth();
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const online = useIsOnline();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);

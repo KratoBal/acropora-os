@@ -86,7 +86,7 @@ export default function MaterialRequestDetailScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [partialOpen, setPartialOpen] = useState(false);

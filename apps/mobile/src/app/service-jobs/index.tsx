@@ -89,7 +89,7 @@ export default function ServiceJobListScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const online = useIsOnline();
   const [scope, setScope] = useSessionState<ServiceJobScope>(
     sessionKey(user?.id, "service-jobs", "scope"),
