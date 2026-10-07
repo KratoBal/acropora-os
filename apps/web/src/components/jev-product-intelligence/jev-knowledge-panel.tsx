@@ -5,6 +5,7 @@ import {
   PRODUCT_COPY_BLOCKS,
   PRODUCT_ENRICHMENT_FIELDS,
   PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
+  productKnowledgeFactKey,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
   type ProductCopyBlock,
   type ProductCopyEntry,
@@ -403,7 +404,10 @@ export function usedFieldsShown(
   // `?? []`: an API answer from before the list existed has no such key; the
   // panel must not fall over while the two apps roll out one after the other.
   const sajat = entry?.usedFields ?? [];
-  const list = sajat.length > 0 ? sajat : facts.map((fact) => fact.field);
+  const list =
+    sajat.length > 0
+      ? sajat
+      : facts.map((fact) => productKnowledgeFactKey(fact));
   return [...list].sort();
 }
 
@@ -435,30 +439,40 @@ function UsedFieldsPicker({
       </legend>
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {facts.map((fact) => {
-          const id = `hasznalt-${block}-${fact.field}`;
+          // SEO P0 PR 3: the fact KEY, not the field. A variant's fact of a
+          // field the product also has is a second box; by field the two
+          // would share one id and the tick would land on the wrong fact.
+          const kulcs = productKnowledgeFactKey(fact);
+          const id = `hasznalt-${block}-${kulcs}`;
           const publikus = (
             PRODUCT_KNOWLEDGE_PUBLIC_STATUSES as readonly string[]
           ).includes(fact.status);
           return (
             <label
-              key={fact.field}
+              key={kulcs}
               htmlFor={id}
               className="flex items-center gap-1.5 text-xs text-pilot-grey-700"
             >
               <input
                 id={id}
                 type="checkbox"
-                checked={used.includes(fact.field)}
+                checked={used.includes(kulcs)}
                 disabled={readOnly}
                 onChange={(event) =>
                   onChange(
                     event.target.checked
-                      ? [...used, fact.field]
-                      : used.filter((field) => field !== fact.field),
+                      ? [...used, kulcs]
+                      : used.filter((key) => key !== kulcs),
                   )
                 }
               />
               {FIELD_LABEL[fact.field]}
+              {/* an API answer from before PR 3 has no variantId: the product's own */}
+              {fact.variantId ? (
+                <span title={fact.variantId}>
+                  {` (változat …${fact.variantId.slice(-6)})`}
+                </span>
+              ) : null}
               {publikus ? null : (
                 <span className="text-pilot-amber-700">
                   {fact.status === "CONFLICTING_SOURCES"

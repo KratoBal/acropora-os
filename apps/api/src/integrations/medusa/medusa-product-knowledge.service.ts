@@ -107,6 +107,7 @@ export interface KnowledgeRowsDatabase extends PublicDefinitionsTable {
     findMany(args: unknown): Promise<
       {
         field: string;
+        variantId: string | null;
         value: string | null;
         unit: string | null;
         status: string;
@@ -138,9 +139,13 @@ export async function knowledgeRowsFor(
   const [facts, copy, kiadhato] = await Promise.all([
     tables.productKnowledgeFact.findMany({
       where: { productId },
-      orderBy: { field: "asc" },
+      orderBy: [{ field: "asc" }, { scopeKey: "asc" }],
       select: {
         field: true,
+        // SEO P0 PR 3: without it a variant's fact would count as the
+        // product's (`factKey`), and `db` is untyped here, so the compiler
+        // would not say so; the select test does
+        variantId: true,
         value: true,
         unit: true,
         status: true,
@@ -167,6 +172,7 @@ export async function knowledgeRowsFor(
   return {
     facts: facts.map((fact) => ({
       field: fact.field,
+      variantId: fact.variantId,
       value: fact.value,
       unit: fact.unit,
       status: fact.status,

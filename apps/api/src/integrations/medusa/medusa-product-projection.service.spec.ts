@@ -751,6 +751,7 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
       [
         {
           field: "dosing",
+          variantId: null,
           revision: 1,
           status: "CONFLICTING_SOURCES",
           public: true,

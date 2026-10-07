@@ -1116,6 +1116,7 @@ export {
   PRODUCT_KNOWLEDGE_ACCEPTABLE_STATUSES,
   PRODUCT_KNOWLEDGE_PUBLIC_STATUSES,
   PRODUCT_MANUAL_EVIDENCE_SOURCE_TYPES,
+  productKnowledgeFactKey,
 } from "./product-knowledge.js";
 export type {
   ProductCopyBlock,
