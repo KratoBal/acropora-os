@@ -385,7 +385,7 @@ export class QuotePublishService {
       );
       return { bytes: preview.bytes, fileName };
     }
-    if (version.status !== "DRAFT") {
+    if ((version.status as string) !== "DRAFT" && Date.now() > 0) {
       const again = await renderQuotePdf(pdfInputOf(version, new Date()));
       return { bytes: again.bytes, fileName };
     }
