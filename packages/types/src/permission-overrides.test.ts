@@ -352,8 +352,43 @@ describe("permissionOverrideChangeProblem", () => {
     );
   });
 
+  it("a számlázás kiállítása megtekintés nélkül nem menthető", () => {
+    // a Számlázás kezelés-szintje a billing.create, nem egy .manage nevű jog
+    assert.match(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: { role: "VIEWER", ...internal },
+        before: [],
+        // a VIEWER sablonja a megtekintést adja: elvéve, a kiállítást megadva
+        after: [
+          revoke(PERMISSIONS.BILLING_VIEW),
+          grant(PERMISSIONS.BILLING_CREATE),
+        ],
+      }) ?? "",
+      /billing\.create mellé billing\.view/,
+    );
+    assert.equal(
+      permissionOverrideChangeProblem({
+        actorRole: "OWNER",
+        self: false,
+        target: { role: "VIEWER", ...internal },
+        before: [],
+        after: [grant(PERMISSIONS.BILLING_CREATE)],
+      }),
+      null,
+    );
+  });
+
   it("a kezelés-megtekintés párok a jogokból jönnek, és egyik sablon sem sérti", () => {
-    assert.equal(MANAGE_VIEW_PAIRS.length, 12);
+    assert.equal(MANAGE_VIEW_PAIRS.length, 13);
+    assert.ok(
+      MANAGE_VIEW_PAIRS.some(
+        ([manage, view]) =>
+          manage === PERMISSIONS.BILLING_CREATE &&
+          view === PERMISSIONS.BILLING_VIEW,
+      ),
+    );
     assert.ok(
       !MANAGE_VIEW_PAIRS.some(
         ([manage]) => manage === PERMISSIONS.USERS_MANAGE,
