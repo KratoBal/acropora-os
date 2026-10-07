@@ -22,7 +22,7 @@ export interface HomePreset {
   id: HomePresetId;
   /** The chip on the Home: "Szerviz nézet". */
   label: string;
-  /** The modules the Home leads with, in order (at most six are drawn). */
+  /** The modules the Home leads with, in order (at most eight are drawn). */
   modules: readonly TileCode[];
 }
 
@@ -41,7 +41,9 @@ export const HOME_PRESETS: Readonly<Record<HomePresetId, HomePreset>> = {
   owner: {
     id: "owner",
     label: "Tulajdonosi nézet",
-    modules: ["RE", "HJ", "MU", "AI", "ES", "AK"],
+    // Piszkozatok and Partnerek joined when the Home grew to eight
+    // (Balázs, 2026-10-07 05:50:52 UTC: "Szerintem ferjen el 8 modul.")
+    modules: ["RE", "HJ", "MU", "AI", "ES", "AK", "PI", "PA"],
   },
   "partner-service": {
     id: "partner-service",
@@ -50,8 +52,11 @@ export const HOME_PRESETS: Readonly<Record<HomePresetId, HomePreset>> = {
   },
 };
 
-/** The most the Home draws; the rest is one tap away under Modulok. */
-export const HOME_MODULE_LIMIT = 6;
+/**
+ * The most the Home draws; the rest is one tap away under Modulok. Eight
+ * since 2026-10-07 (Balázs): two to a row, four rows.
+ */
+export const HOME_MODULE_LIMIT = 8;
 
 export function defaultPresetFor(role: UserRole): HomePresetId {
   switch (role) {
@@ -72,7 +77,7 @@ export function defaultPresetFor(role: UserRole): HomePresetId {
 
 /**
  * The tiles the Home draws for this preset: the preset's modules that the
- * server served and that have a screen, in the preset's order, at most six.
+ * server served and that have a screen, in the preset's order, at most eight.
  */
 export function homeModules(
   preset: HomePreset,

@@ -123,12 +123,14 @@ describe("a nézet sorrendet ad, láthatóságot nem", () => {
       assert.ok(!launcherModules(ALL_SERVED).includes(c), c);
   });
 
-  it("a kezdőlap legfeljebb hat modult rajzol, a nézet sorrendjében", () => {
+  it("a kezdőlap legfeljebb nyolc modult rajzol, a nézet sorrendjében", () => {
     const long: HomePreset = {
       id: "owner",
       label: "teszt",
-      modules: ["PA", "RE", "AK", "ES", "AI", "MU", "HJ"],
+      modules: ["PA", "RE", "AK", "ES", "AI", "MU", "HJ", "PI", "BE", "TE"],
     };
+    // a BE és a TE képernyő nélküli. Ma PONTOSAN nyolc modulnak van
+    // képernyője, tehát a korlát csak egy kilencedik képernyős modulnál vág
     assert.deepEqual(homeModules(long, ALL_SERVED), [
       "PA",
       "RE",
@@ -136,8 +138,27 @@ describe("a nézet sorrendet ad, láthatóságot nem", () => {
       "ES",
       "AI",
       "MU",
+      "HJ",
+      "PI",
     ]);
-    assert.equal(HOME_MODULE_LIMIT, 6);
+    assert.equal(
+      (Object.keys(HOME_MODULES) as TileCode[]).filter(
+        (c) => HOME_MODULES[c].route !== null,
+      ).length,
+      8,
+    );
+    assert.equal(HOME_MODULE_LIMIT, 8);
+  });
+
+  it("tulajdonosnál minden kiszolgált modullal a Piszkozatok is a kezdőlapon áll", () => {
+    // Balázs 2026-10-07: a tegnap bekerült Piszkozatok eddig csak a Modulok
+    // fülön látszott, mert a tulajdonosi nézet hat helye foglalt volt
+    const owner = homeModules(
+      HOME_PRESETS[defaultPresetFor("OWNER")],
+      ALL_SERVED,
+    );
+    assert.deepEqual(owner, ["RE", "HJ", "MU", "AI", "ES", "AK", "PI", "PA"]);
+    assert.ok(owner.includes("PI"));
   });
 
   it("minden modul útvonala létező képernyőre mutat", () => {
