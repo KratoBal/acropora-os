@@ -101,7 +101,7 @@ describe("attribute definitions vs FIELD_SPECS", () => {
         "database",
         "prisma",
         "migrations",
-        "20261007140000_attribute_model",
+        "20261007160000_attribute_model",
         "migration.sql",
       ),
       "utf8",
