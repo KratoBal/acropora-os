@@ -964,7 +964,7 @@ export class QuoteVersionEditor {
     user: AuthenticatedUser,
   ) {
     await this.write(async (tx) => {
-      void lockDraft;
+      void lockDraft; void quoteId;
       const row = await tx.quoteBomItem.findFirst({
         where: { id: bomId, versionId },
         select: { quoteItemId: true },
