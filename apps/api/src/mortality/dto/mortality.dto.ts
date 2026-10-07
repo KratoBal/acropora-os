@@ -60,6 +60,9 @@ export class CreateMortalityDto implements CreateMortalityInput {
   @IsOptional()
   sourceNote?: string | null;
   @IsString() @MaxLength(4000) @IsOptional() note?: string | null;
+  // az elhullás napja; a „nem a jövőben” szabályt a szolgáltatás nézi
+  @Matches(DAY) @IsOptional() occurredOn?: string;
+  @IsString() @IsOptional() locationId?: string | null;
 }
 
 /** `PATCH /mortality/:id`: minden mező módosítható (acrobot 27141), auditnaplóval. */
@@ -78,6 +81,8 @@ export class UpdateMortalityDto implements UpdateMortalityInput {
   @IsOptional()
   sourceNote?: string | null;
   @IsString() @MaxLength(4000) @IsOptional() note?: string | null;
+  @Matches(DAY) @IsOptional() occurredOn?: string;
+  @IsString() @IsOptional() locationId?: string | null;
 }
 
 /** A választók keresője. */

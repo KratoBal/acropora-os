@@ -158,6 +158,7 @@ describe(
           sourceType: "TRADE",
           supplierId: null,
           sourceNote: null,
+          occurredOn: new Date("2026-10-07T00:00:00Z"),
           ...over,
         },
       });
@@ -234,6 +235,51 @@ describe(
     });
 
     /**
+     * A HALAS RACKEK KEZDŐ LISTÁJA A MIGRÁCIÓBÓL JÖN (Luca, 2026-10-07), nem a
+     * kódból: a választó végpontja ezt adja, ebben a sorrendben.
+     */
+    it("a migráció a tíz halas racket tölti fel, a választó ebben a sorrendben adja", async () => {
+      const names = (await new MortalityRepository().locationOptions()).map(
+        (location) => location.name,
+      );
+      assert.deepEqual(names, [
+        "JOBB 1. oszlop",
+        "JOBB 2. oszlop",
+        "JOBB 3. oszlop",
+        "JOBB 4. oszlop",
+        "JOBB 5. oszlop",
+        "JOBB 6. oszlop",
+        "Jobb hátsó nagy halas",
+        "Bal hátsó nagy halas (dühöngő)",
+        "Rákos 1",
+        "Rákos 2",
+      ]);
+    });
+
+    it("az elhullás napja és a halas rack a részletben visszajön, a módosítás naplózza a napot", async () => {
+      const repository = new MortalityRepository();
+      const [rack] = await repository.locationOptions();
+      const created = await record({});
+      await repository.update(
+        created.id,
+        { occurredOn: new Date("2026-10-03T00:00:00Z"), locationId: rack!.id },
+        ids.user,
+      );
+      const detail = await repository.detail(created.id);
+      assert.equal(detail?.occurredOn, "2026-10-03");
+      assert.deepEqual(detail?.location, { id: rack!.id, name: rack!.name });
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { entityType: "MortalityRecord", entityId: created.id },
+        select: { metadata: true },
+      });
+      assert.deepEqual(
+        (audit.metadata as { changes: Record<string, unknown> }).changes
+          .occurredOn,
+        { from: "2026-10-07", to: "2026-10-03" },
+      );
+    });
+
+    /**
      * A KÉSZLET VALÓDI ÚTJA: a repository a központi írón át von le, UNAS-gazdájú
      * terméknél a UNAS-kimenetre is ír, és a módosítás pontosan a különbséget
      * mozgatja. Mockkal nem mérhető: a zár, a készletsor és a kimenet sora mind
@@ -274,6 +320,8 @@ describe(
         supplierId: null,
         sourceNote: null,
         note: null,
+        occurredOn: new Date("2026-10-07T00:00:00Z"),
+        locationId: null,
         recordedById: ids.user,
       });
       assert.equal(await onHand(), 8);

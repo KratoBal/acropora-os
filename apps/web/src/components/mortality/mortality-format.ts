@@ -202,6 +202,17 @@ const MONTH_NAMES = [
   "december",
 ] as const;
 
+/** Az elhullás napja a listában: „2026.10.06.” (a nap `ÉÉÉÉ-HH-NN`, zóna nélkül). */
+export function shortDay(day: string): string {
+  return `${day.replaceAll("-", ".")}.`;
+}
+
+/** Az elhullás napja a részleten: „2026. október 6.”. */
+export function longDay(day: string): string {
+  const [year, month, date] = day.split("-");
+  return `${year}. ${MONTH_NAMES[Number(month) - 1]} ${Number(date)}.`;
+}
+
 /** A részlet időpontja: „2026. október 6. · 09:42”. */
 export function longDateTime(iso: string): string {
   const p = parts(new Date(iso));

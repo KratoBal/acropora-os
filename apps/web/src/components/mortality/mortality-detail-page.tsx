@@ -30,6 +30,7 @@ import {
   livestockSubtitle,
   livestockTitle,
   longDateTime,
+  longDay,
   sourceSubtitle,
   sourceTitle,
   stockEffectText,
@@ -177,8 +178,14 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
               <PilotDataItem label="Példányszám">
                 {record.quantity} db
               </PilotDataItem>
+              <PilotDataItem label="Elhullás napja">
+                {longDay(record.occurredOn)}
+              </PilotDataItem>
               <PilotDataItem label="Akvárium">
                 {aquariumLabel(record.aquarium)}
+              </PilotDataItem>
+              <PilotDataItem label="Halas rack">
+                {record.location?.name ?? "Nincs megadva"}
               </PilotDataItem>
               <PilotDataItem
                 label="Beszállító / forrás"

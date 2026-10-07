@@ -75,6 +75,13 @@ export class MortalityController {
     return this.service.supplierOptions(query.q);
   }
 
+  /** A halas rackek (Luca kérése, 2026-10-07); a kivezetettek nélkül. */
+  @Get("options/locations")
+  @RequirePermissions(PERMISSIONS.MORTALITY_VIEW)
+  locationOptions() {
+    return this.service.locationOptions();
+  }
+
   @Get("options/recorders")
   @RequirePermissions(PERMISSIONS.MORTALITY_VIEW)
   recorderOptions() {

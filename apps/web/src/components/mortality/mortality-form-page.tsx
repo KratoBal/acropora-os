@@ -19,6 +19,7 @@ import {
   PERMISSIONS,
   type CreateMortalityInput,
   type MortalityAquariumOption,
+  type MortalityLocationOption,
   type MortalitySourceType,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
@@ -27,7 +28,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { mortalityApi } from "@/lib/api/mortality";
-import { aquariumLabel } from "./mortality-format";
+import { aquariumLabel, budapestDay } from "./mortality-format";
 import { MORTALITY_LIST_PATH } from "./mortality-list-page";
 import {
   freeTextOption,
@@ -45,14 +46,20 @@ export interface MortalityFormState {
   supplier: PickerOption | null;
   sourceNote: string;
   note: string;
+  /** az elhullás napja, ÉÉÉÉ-HH-NN (a dátummező értéke) */
+  occurredOn: string;
+  /** a halas rack azonosítója, vagy üres */
+  locationId: string;
 }
 
 /**
  * AZ ŰRLAP ÉRVÉNYESSÉGE, a szerver szabályaival egyezően: az első hiányzó
- * mező mondata, vagy a beküldhető bemenet.
+ * mező mondata, vagy a beküldhető bemenet. A `today` a mai nap Budapest
+ * szerint (az elhullás napja nem lehet utána).
  */
 export function mortalityFormInput(
   state: MortalityFormState,
+  today: string = budapestDay(new Date()),
 ): { problem: string } | { input: CreateMortalityInput } {
   if (!state.product)
     return { problem: "Válaszd ki az élőlényt, vagy írd be a nevét." };
@@ -60,6 +67,11 @@ export function mortalityFormInput(
   if (!Number.isInteger(quantity) || quantity < 1)
     return { problem: "A példányszám legalább 1, egész szám." };
   if (!state.aquariumId) return { problem: "Válaszd ki az akváriumot." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(state.occurredOn))
+    return { problem: "Add meg az elhullás napját." };
+  // az ÉÉÉÉ-HH-NN alak szövegként is időrendben hasonlít
+  if (state.occurredOn > today)
+    return { problem: "Az elhullás napja nem lehet a jövőben." };
   if (!state.sourceType)
     return { problem: "Add meg, honnan érkezett az állat." };
   if (state.sourceType === "SUPPLIER" && !state.supplier)
@@ -85,25 +97,33 @@ export function mortalityFormInput(
           : null
         : state.sourceNote.trim() || null,
       note: state.note.trim() || null,
+      occurredOn: state.occurredOn,
+      locationId: state.locationId || null,
     },
   };
 }
 
-const EMPTY: MortalityFormState = {
-  product: null,
-  quantity: "1",
-  aquariumId: "",
-  sourceType: "",
-  supplier: null,
-  sourceNote: "",
-  note: "",
-};
+/** Az üres űrlap; az elhullás napja alapból a mai nap (Budapest szerint). */
+function emptyState(): MortalityFormState {
+  return {
+    product: null,
+    quantity: "1",
+    aquariumId: "",
+    sourceType: "",
+    supplier: null,
+    sourceNote: "",
+    note: "",
+    occurredOn: budapestDay(new Date()),
+    locationId: "",
+  };
+}
 
 /**
  * ÚJ ELHULLÁSI BEJEGYZÉS ÉS MÓDOSÍTÁS (kártya 115c9740; Figma: OS / Elhullási
  * napló / Új bejegyzés). A módosítás ugyanez az űrlap, kitöltve: minden mező
- * módosítható (acrobot 27141), a szerver naplózza. A rögzítő és az időpont
- * nem mező: a rendszer menti.
+ * módosítható (acrobot 27141), a szerver naplózza. A rögzítő és a rögzítés
+ * ideje nem mező: a rendszer menti. Az elhullás NAPJA viszont mező (Luca,
+ * 2026-10-07), alapból a mai nap, és a halas rack is választható.
  *
  * A FÉNYKÉP A MENTÉS UTÁN MEGY FEL: a bejegyzés előtte nem létezik. Ha a
  * feltöltés elbukik, a bejegyzés már megvan, és a részletlap mondja ki, hogy a
@@ -118,8 +138,10 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
     session && hasPermission(session.user, PERMISSIONS.MORTALITY_MANAGE),
   );
 
-  const [state, setState] = useState<MortalityFormState>(EMPTY);
+  const [state, setState] = useState<MortalityFormState>(emptyState);
   const [aquariums, setAquariums] = useState<MortalityAquariumOption[]>([]);
+  const [locations, setLocations] = useState<MortalityLocationOption[]>([]);
+  const today = budapestDay(new Date());
   const [loading, setLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -137,15 +159,29 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
     if (!canManage) return;
     const controller = new AbortController();
     const options = mortalityApi.aquariumOptions(token, controller.signal);
+    // a rack választható, nem kötelező: ha a lista nem jön meg, az űrlap
+    // ettől még menthető
+    const racks = mortalityApi
+      .locationOptions(token, controller.signal)
+      .catch(() => [] as MortalityLocationOption[]);
     if (!recordId) {
       options.then(setAquariums).catch(() => undefined);
+      racks.then(setLocations).catch(() => undefined);
       return () => controller.abort();
     }
     Promise.all([
       options,
       mortalityApi.detail(token, recordId, controller.signal),
+      racks,
     ])
-      .then(([own, record]) => {
+      .then(([own, record, active]) => {
+        // egy régi bejegyzés racket azóta kivezethették: akkor is álljon ott
+        setLocations(
+          !record.location ||
+            active.some((rack) => rack.id === record.location!.id)
+            ? active
+            : [record.location, ...active],
+        );
         // egy régi bejegyzés akváriuma azóta inaktív lehet: a választóban
         // akkor is ott kell állnia
         setAquariums(
@@ -179,6 +215,8 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
           sourceNote:
             record.source.type === "SUPPLIER" ? "" : (record.source.note ?? ""),
           note: record.note ?? "",
+          occurredOn: record.occurredOn,
+          locationId: record.location?.id ?? "",
         });
       })
       .catch((cause: unknown) => {
@@ -234,7 +272,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
   };
 
   const save = async () => {
-    const result = mortalityFormInput(state);
+    const result = mortalityFormInput(state, today);
     if ("problem" in result) {
       setProblem(result.problem);
       return;
@@ -358,6 +396,42 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
             </PilotFormField>
           </div>
 
+          <div className="grid gap-5 sm:grid-cols-[180px_minmax(0,1fr)]">
+            <PilotFormField
+              label="Elhullás napja"
+              required
+              help="Ha utólag rögzíted, állítsd a valódi napra."
+            >
+              <PilotInput
+                aria-label="Elhullás napja"
+                type="date"
+                max={today}
+                value={state.occurredOn}
+                onChange={(value) => set("occurredOn", value)}
+                className="h-10"
+              />
+            </PilotFormField>
+            <PilotFormField
+              label="Halas rack"
+              help="Ha a halas rendszerben történt, melyik részén."
+            >
+              <PilotSelect
+                chevron
+                aria-label="Halas rack"
+                value={state.locationId}
+                onChange={(value) => set("locationId", value)}
+                className="[&_select]:h-10"
+              >
+                <option value="">Nincs megadva</option>
+                {locations.map((rack) => (
+                  <option key={rack.id} value={rack.id}>
+                    {rack.name}
+                  </option>
+                ))}
+              </PilotSelect>
+            </PilotFormField>
+          </div>
+
           <PilotFormField label="Beszállító / érkezési forrás" required>
             <PilotSelect
               chevron
@@ -414,11 +488,11 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
 
           <div className="rounded-xl bg-pilot-grey-50 px-4 py-3">
             <p className="text-sm font-medium text-pilot-grey-800">
-              Rögzítő és időpont
+              Rögzítő és rögzítés ideje
             </p>
             <p className="mt-0.5 text-xs text-pilot-grey-500">
               A rendszer automatikusan menti a bejelentkezett kollégát és a
-              rögzítés pontos idejét.
+              rögzítés pontos idejét; az elhullás napja ettől független.
             </p>
           </div>
 
@@ -537,6 +611,7 @@ export function MortalityFormPage({ recordId }: { recordId?: string }) {
           </p>
           <ul className="mt-2 space-y-1.5 text-sm text-pilot-grey-600">
             <li>• Ellenőrizd a példányszámot</li>
+            <li>• Utólagos rögzítésnél állítsd át az elhullás napját</li>
             <li>• Válaszd ki a pontos akváriumot</li>
             <li>• A fotó opcionális, de ajánlott</li>
             <li>• Add meg, honnan érkezett az állat</li>

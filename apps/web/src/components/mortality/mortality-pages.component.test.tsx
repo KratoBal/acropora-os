@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MortalityDetailPage } from "./mortality-detail-page";
 import { MortalityFormPage, mortalityFormInput } from "./mortality-form-page";
+import { budapestDay } from "./mortality-format";
 import { MortalityListPage } from "./mortality-list-page";
 import { freeTextOption } from "./mortality-search-picker";
 
@@ -37,6 +38,7 @@ const api = vi.hoisted(() => ({
   aquariumOptions: vi.fn(),
   supplierOptions: vi.fn(),
   recorderOptions: vi.fn(),
+  locationOptions: vi.fn(),
   uploadPhotos: vi.fn(),
   downloadPhotoThumbnail: vi.fn(),
   downloadPhoto: vi.fn(),
@@ -73,15 +75,23 @@ const ITEM = {
   productName: null,
   quantity: 1,
   aquarium: { id: "a1", name: "Tengeri halak", aquariumNumber: "A-12" },
+  location: null as { id: string; name: string } | null,
   source: {
     type: "SUPPLIER" as const,
     supplier: { id: "s1", name: "De Jong Marinelife" },
     note: null,
   },
   recordedBy: { id: "u1", name: "Nagy Anna" },
+  // utólag rögzítve: az elhullás napja a rögzítés előtti nap
+  occurredOn: "2026-10-05",
   recordedAt: "2026-10-06T07:42:00Z",
   photoCount: 0,
 };
+
+const RACKS = [
+  { id: "r1", name: "JOBB 1. oszlop" },
+  { id: "r2", name: "Bal hátsó nagy halas (dühöngő)" },
+];
 
 const LIST: MortalityListResponse = {
   items: [ITEM],
@@ -117,6 +127,7 @@ beforeEach(() => {
     { id: "a1", name: "Tengeri halak", aquariumNumber: "A-12" },
   ]);
   api.recorderOptions.mockResolvedValue([{ id: "u1", name: "Nagy Anna" }]);
+  api.locationOptions.mockResolvedValue(RACKS);
   api.detail.mockResolvedValue(DETAIL);
 });
 
@@ -128,7 +139,9 @@ describe("lista", () => {
     expect(await screen.findByText("Zebrasoma flavescens")).toBeTruthy();
     expect(screen.getByText("Sárga doktorhal")).toBeTruthy();
     expect(screen.getByText("De Jong Marinelife")).toBeTruthy();
-    expect(screen.getByText("2026.10.06. 09:42")).toBeTruthy();
+    // az elhullás napja áll elöl, a rögzítés ideje a második sorban
+    expect(screen.getByText("2026.10.05.")).toBeTruthy();
+    expect(screen.getByText("rögzítve 2026.10.06. 09:42")).toBeTruthy();
     expect(await screen.findByText("18 példány")).toBeTruthy();
     expect(screen.getByText("3 akváriumban")).toBeTruthy();
     expect(
@@ -221,6 +234,17 @@ describe("lista", () => {
     expect(screen.getByText("Beszállító, nincs a rendszerben")).toBeTruthy();
   });
 
+  it("a halas rack az akvárium alatt látszik", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [{ ...ITEM, location: RACKS[1] }],
+    });
+    render(<MortalityListPage />);
+    expect(
+      await screen.findByText("Bal hátsó nagy halas (dühöngő)"),
+    ).toBeTruthy();
+  });
+
   it("a VIEWER lát, de nem rögzíthet", async () => {
     auth.role = "VIEWER";
     render(<MortalityListPage />);
@@ -248,6 +272,18 @@ describe("részlet", () => {
     expect(screen.getAllByText("#ELH-1").length).toBeGreaterThan(0);
     expect(screen.getByText("1 db levonva a készletből (ZEB-1).")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Módosítás/ })).toBeTruthy();
+  });
+
+  it("az elhullás napja és a halas rack", async () => {
+    api.detail.mockResolvedValue({ ...DETAIL, location: RACKS[0] });
+    render(<MortalityDetailPage recordId="rec-1" />);
+    expect(await screen.findByText("2026. október 5.")).toBeTruthy();
+    expect(screen.getByText("JOBB 1. oszlop")).toBeTruthy();
+  });
+
+  it("rack nélkül „Nincs megadva”", async () => {
+    render(<MortalityDetailPage recordId="rec-1" />);
+    expect(await screen.findByText("Nincs megadva")).toBeTruthy();
   });
 
   it("az utolsó módosító neve az auditnaplóból", async () => {
@@ -285,10 +321,13 @@ describe("űrlap", () => {
     supplier: null,
     sourceNote: "  Béla  ",
     note: " ",
+    occurredOn: "2026-10-05",
+    locationId: "",
   };
+  const TODAY = "2026-10-07";
 
   it("a beküldött bemenet a szerver alakjában", () => {
-    expect(mortalityFormInput(filled)).toEqual({
+    expect(mortalityFormInput(filled, TODAY)).toEqual({
       input: {
         productId: "p1",
         productName: null,
@@ -298,33 +337,115 @@ describe("űrlap", () => {
         supplierId: null,
         sourceNote: "Béla",
         note: null,
+        occurredOn: "2026-10-05",
+        locationId: null,
       },
     });
   });
 
+  it("az elhullás napja kötelező, és nem lehet a jövőben; a mai nap jó", () => {
+    expect(mortalityFormInput({ ...filled, occurredOn: "" }, TODAY)).toEqual({
+      problem: "Add meg az elhullás napját.",
+    });
+    expect(
+      mortalityFormInput({ ...filled, occurredOn: "2026-10-08" }, TODAY),
+    ).toEqual({ problem: "Az elhullás napja nem lehet a jövőben." });
+    expect(
+      mortalityFormInput({ ...filled, occurredOn: TODAY }, TODAY),
+    ).toMatchObject({ input: { occurredOn: TODAY } });
+  });
+
+  it("a választott halas rack az azonosítójával megy", () => {
+    expect(
+      mortalityFormInput({ ...filled, locationId: "r2" }, TODAY),
+    ).toMatchObject({ input: { locationId: "r2" } });
+  });
+
+  it("új bejegyzésnél a nap a mai, a rack választható, és mindkettő elmegy", async () => {
+    api.productOptions.mockResolvedValue([
+      { id: "p1", name: "Zebrasoma flavescens", commonName: null },
+    ]);
+    api.create.mockResolvedValue(DETAIL);
+    render(<MortalityFormPage />);
+    const day = (await screen.findByLabelText(
+      "Elhullás napja",
+    )) as HTMLInputElement;
+    const today = budapestDay(new Date());
+    expect(day.value).toBe(today);
+    expect(day.max).toBe(today);
+    fireEvent.change(day, { target: { value: "2026-10-01" } });
+    await screen.findByRole("option", { name: "JOBB 1. oszlop" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Halas rack" }), {
+      target: { value: "r2" },
+    });
+    const input = screen.getByRole("textbox", { name: "Élőlény" });
+    fireEvent.focus(input);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Zebrasoma flavescens/ }),
+    );
+    fireEvent.change(screen.getByRole("combobox", { name: "Akvárium" }), {
+      target: { value: "a1" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Forrás típusa" }), {
+      target: { value: "TRADE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bejegyzés mentése" }));
+    await waitFor(() => expect(api.create).toHaveBeenCalled());
+    expect(api.create.mock.calls[0]![1]).toMatchObject({
+      productId: "p1",
+      occurredOn: "2026-10-01",
+      locationId: "r2",
+    });
+  });
+
+  it("módosításnál a napot és a kivezetett racket is kitöltve hozza", async () => {
+    api.detail.mockResolvedValue({
+      ...DETAIL,
+      location: { id: "old", name: "Régi rack" },
+    });
+    render(<MortalityFormPage recordId="rec-1" />);
+    const day = (await screen.findByLabelText(
+      "Elhullás napja",
+    )) as HTMLInputElement;
+    expect(day.value).toBe("2026-10-05");
+    const rack = screen.getByRole("combobox", {
+      name: "Halas rack",
+    }) as HTMLSelectElement;
+    expect(rack.value).toBe("old");
+    expect(screen.getByRole("option", { name: "Régi rack" })).toBeTruthy();
+  });
+
   it("a hiányzó mezők sorban", () => {
-    expect(mortalityFormInput({ ...filled, product: null })).toEqual({
+    expect(mortalityFormInput({ ...filled, product: null }, TODAY)).toEqual({
       problem: "Válaszd ki az élőlényt, vagy írd be a nevét.",
     });
-    expect(mortalityFormInput({ ...filled, quantity: "0" })).toEqual({
+    expect(mortalityFormInput({ ...filled, quantity: "0" }, TODAY)).toEqual({
       problem: "A példányszám legalább 1, egész szám.",
     });
-    expect(mortalityFormInput({ ...filled, sourceType: "SUPPLIER" })).toEqual({
+    expect(
+      mortalityFormInput({ ...filled, sourceType: "SUPPLIER" }, TODAY),
+    ).toEqual({
       problem: "Válaszd ki a beszállítót, vagy írd be a nevét.",
     });
     expect(
-      mortalityFormInput({ ...filled, sourceType: "OTHER", sourceNote: " " }),
+      mortalityFormInput(
+        { ...filled, sourceType: "OTHER", sourceNote: " " },
+        TODAY,
+      ),
     ).toEqual({
       problem: "Az „Egyéb” forrásnál nevezd meg, honnan érkezett.",
     });
   });
 
   it("beszállítónál a megnevezés nem megy el", () => {
-    const result = mortalityFormInput({
-      ...filled,
-      sourceType: "SUPPLIER",
-      supplier: { id: "s1", title: "TMC" },
-    });
+    const result = mortalityFormInput(
+      {
+        ...filled,
+        sourceType: "SUPPLIER",
+        supplier: { id: "s1", title: "TMC" },
+      },
+      TODAY,
+    );
     expect(result).toMatchObject({
       input: { supplierId: "s1", sourceNote: null },
     });
@@ -332,12 +453,15 @@ describe("űrlap", () => {
 
   it("a beírt élőlény és beszállító a szabad szöveges mezőbe megy, nem az azonosítóba", () => {
     expect(
-      mortalityFormInput({
-        ...filled,
-        product: freeTextOption(" Ismeretlen gébféle ", 200),
-        sourceType: "SUPPLIER",
-        supplier: freeTextOption("Kis Pál", 200),
-      }),
+      mortalityFormInput(
+        {
+          ...filled,
+          product: freeTextOption(" Ismeretlen gébféle ", 200),
+          sourceType: "SUPPLIER",
+          supplier: freeTextOption("Kis Pál", 200),
+        },
+        TODAY,
+      ),
     ).toMatchObject({
       input: {
         productId: null,

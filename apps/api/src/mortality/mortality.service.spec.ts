@@ -5,6 +5,7 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { MortalityRepository } from "./mortality.repository.js";
 import {
   LIVE_ANIMAL_ONLY_MESSAGE,
+  LOCATION_NOT_FOUND_MESSAGE,
   MortalityService,
   OWN_AQUARIUM_ONLY_MESSAGE,
   SUPPLIER_NOT_FOUND_MESSAGE,
@@ -18,7 +19,11 @@ type Current = {
   sourceType: "SUPPLIER" | "LOCAL_BREEDER" | "TRADE" | "OWN_BREEDING" | "OTHER";
   supplierId: string | null;
   sourceNote: string | null;
+  locationId?: string | null;
 };
+
+/** A „ma” a tesztekben: 2026-10-07 00:30 Budapest (UTC szerint még 10-06). */
+const NOW = new Date("2026-10-06T22:30:00Z");
 
 function fakeRepository(current: Current | null = null) {
   const calls = {
@@ -39,6 +44,10 @@ function fakeRepository(current: Current | null = null) {
       calls.checked.push(`supplier:${id}`);
       return id.startsWith("sup");
     },
+    isActiveLocation: async (id: string) => {
+      calls.checked.push(`location:${id}`);
+      return id.startsWith("loc");
+    },
     current: async () => current,
     create: async (input: unknown) => {
       calls.create.push(input);
@@ -50,7 +59,9 @@ function fakeRepository(current: Current | null = null) {
     },
     detail: async (id: string) => ({ id }),
   } as unknown as MortalityRepository;
-  return { service: new MortalityService(repository), calls };
+  const service = new MortalityService(repository);
+  service.now = () => NOW;
+  return { service, calls };
 }
 
 const VALID = {
@@ -91,9 +102,58 @@ describe("MortalityService.create", () => {
         supplierId: "sup-1",
         sourceNote: null,
         note: null,
+        // nap nélkül a mai nap, Budapest szerint (UTC szerint még tegnap lenne)
+        occurredOn: new Date("2026-10-07T00:00:00.000Z"),
+        locationId: null,
         recordedById: "user-1",
       },
     ]);
+  });
+
+  it("a megadott elhullási napot és halas racket tárolja", async () => {
+    const { service, calls } = fakeRepository();
+    await service.create(
+      { ...VALID, occurredOn: "2026-10-03", locationId: "loc-jobb-1" },
+      "u",
+    );
+    const created = calls.create[0] as {
+      occurredOn: Date;
+      locationId: string;
+    };
+    assert.deepEqual(created.occurredOn, new Date("2026-10-03T00:00:00Z"));
+    assert.equal(created.locationId, "loc-jobb-1");
+    assert.ok(calls.checked.includes("location:loc-jobb-1"));
+  });
+
+  it("jövőbeli napot elutasít, a mait elfogadja", async () => {
+    const { service, calls } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, occurredOn: "2026-10-08" }, "u"),
+      BadRequestException,
+      "Az elhullás napja nem lehet a jövőben.",
+    );
+    assert.equal(calls.create.length, 0);
+    await service.create({ ...VALID, occurredOn: "2026-10-07" }, "u");
+    assert.equal(calls.create.length, 1);
+  });
+
+  it("nem létező naptári napot elutasít", async () => {
+    const { service } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, occurredOn: "2026-02-30" }, "u"),
+      BadRequestException,
+      "Az elhullás napja érvénytelen dátum.",
+    );
+  });
+
+  it("ismeretlen vagy kivezetett halas racket elutasít", async () => {
+    const { service, calls } = fakeRepository();
+    await rejects(
+      service.create({ ...VALID, locationId: "archived-1" }, "u"),
+      BadRequestException,
+      LOCATION_NOT_FOUND_MESSAGE,
+    );
+    assert.equal(calls.create.length, 0);
   });
 
   it("beszállító és szabad szöveges név együtt: 400, nem dobjuk el csendben", async () => {
@@ -284,6 +344,38 @@ describe("MortalityService.update", () => {
       service.update("rec-1", { aquariumId: "cust-9" }, "u"),
       BadRequestException,
       OWN_AQUARIUM_ONLY_MESSAGE,
+    );
+  });
+
+  it("az elhullás napja módosítható, de nem a jövőbe", async () => {
+    const { service, calls } = fakeRepository(CURRENT);
+    await service.update("rec-1", { occurredOn: "2026-09-30" }, "u");
+    assert.deepEqual(calls.update, [
+      {
+        id: "rec-1",
+        data: { occurredOn: new Date("2026-09-30T00:00:00Z") },
+        actor: "u",
+      },
+    ]);
+    await rejects(
+      service.update("rec-1", { occurredOn: "2026-10-08" }, "u"),
+      BadRequestException,
+      /nem lehet a jövőben/,
+    );
+  });
+
+  it("a halas rack törölhető, az új ellenőrzött, a régi (akár kivezetett) nem", async () => {
+    const one = fakeRepository({ ...CURRENT, locationId: "archived-old" });
+    await one.service.update("rec-1", { locationId: "archived-old" }, "u");
+    assert.deepEqual(one.calls.checked, []);
+    await one.service.update("rec-1", { locationId: null }, "u");
+    assert.deepEqual((one.calls.update[1] as { data: unknown }).data, {
+      locationId: null,
+    });
+    await rejects(
+      one.service.update("rec-1", { locationId: "nowhere" }, "u"),
+      BadRequestException,
+      LOCATION_NOT_FOUND_MESSAGE,
     );
   });
 

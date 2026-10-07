@@ -12,22 +12,21 @@ describe("mortalityWhere", () => {
     assert.deepEqual(mortalityWhere({}), {});
   });
 
-  it("a dátumot Budapest napja szerint vágja, a végét a nap végéig", () => {
-    // 2026-10-06 nyári időben: Budapest napja 2026-10-05T22:00Z-kor kezdődik
-    const where = mortalityWhere({ from: "2026-10-06", to: "2026-10-06" });
+  it("az időszak az elhullás NAPJÁRA szűr, mindkét végén zártan", () => {
+    // a `@db.Date` mező napja UTC éjfél: a zóna itt már nem számít
+    const where = mortalityWhere({ from: "2026-10-01", to: "2026-10-06" });
     assert.deepEqual(where, {
       AND: [
-        { recordedAt: { gte: new Date("2026-10-05T22:00:00.000Z") } },
-        { recordedAt: { lt: new Date("2026-10-06T22:00:00.000Z") } },
+        { occurredOn: { gte: new Date("2026-10-01T00:00:00.000Z") } },
+        { occurredOn: { lte: new Date("2026-10-06T00:00:00.000Z") } },
       ],
     });
   });
 
-  it("téli időben egy órával később", () => {
-    const where = mortalityWhere({ from: "2026-12-01" });
-    assert.deepEqual(where, {
-      AND: [{ recordedAt: { gte: new Date("2026-11-30T23:00:00.000Z") } }],
-    });
+  it("a rögzítés idejére nem szűr: egy utólag rögzített elhullás a saját napjánál számít", () => {
+    const where = JSON.stringify(mortalityWhere({ from: "2026-12-01" }));
+    assert.ok(!where.includes("recordedAt"));
+    assert.ok(!where.includes("createdAt"));
   });
 
   it("a kereső a termék nevében, magyar nevében és a szabad szöveges névben keres", () => {
@@ -77,17 +76,18 @@ describe("mortalityWhere", () => {
 describe("summaryWindows", () => {
   it("a hónap eleje, az utolsó 7 nap és az előző 7 nap, Budapest szerint", () => {
     // 2026-10-06 20:00 Budapest (CEST)
+    // a határok napok (`@db.Date`, UTC éjfél), mert az elhullás napját számolja
     assert.deepEqual(summaryWindows(new Date("2026-10-06T18:00:00Z")), {
-      monthStart: new Date("2026-09-30T22:00:00.000Z"),
-      weekStart: new Date("2026-09-29T22:00:00.000Z"),
-      previousWeekStart: new Date("2026-09-22T22:00:00.000Z"),
+      monthStart: new Date("2026-10-01T00:00:00.000Z"),
+      weekStart: new Date("2026-09-30T00:00:00.000Z"),
+      previousWeekStart: new Date("2026-09-23T00:00:00.000Z"),
     });
   });
 
   it("a hónap első napján a hónap eleje a mai nap", () => {
     // 2026-11-01 00:30 Budapest (CET): UTC szerint még október 31.
     const { monthStart } = summaryWindows(new Date("2026-10-31T23:30:00Z"));
-    assert.deepEqual(monthStart, new Date("2026-10-31T23:00:00.000Z"));
+    assert.deepEqual(monthStart, new Date("2026-11-01T00:00:00.000Z"));
   });
 });
 
