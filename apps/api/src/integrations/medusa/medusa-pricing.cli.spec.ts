@@ -5,6 +5,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   describePricing,
+  priceTargets,
   resolvePricingTargets,
   runPricingCli,
   type PricingCliDatabase,
@@ -267,5 +268,66 @@ describe("Ár-parancs: mit ír ki", () => {
     assert.match(sajat, /forras: Acropora OS/);
     assert.match(tukor, /forras: UNAS tükör/);
     assert.notEqual(sajat, tukor);
+  });
+});
+
+/*
+  A TERMÉKENKÉNTI KUDARC JELZÉSE (329f8a2e). Az ütemező ebből tudja, melyik
+  termék ára bukott el. MI PIROSIT: egy feloldási hiba vagy egy megállt változat
+  nem jelez; egy sikeres termék jelez; a jelzés nem a hívó azonosítójával jön.
+*/
+describe("Ár-parancs: a kudarc termékenként jelződik", () => {
+  const cel = (osProductId: string, sku: string) =>
+    ({
+      osProductId,
+      sku,
+      source: "own",
+      surcharge: null,
+      price: { sellingGrossPrice: null, sellingPriceCurrency: "HUF" },
+    }) as never;
+
+  it("feloldási hiba és megállt változat jelez, a sikeres termék nem", async () => {
+    const jelzett: [string, string][] = [];
+    const kod = await priceTargets(
+      ["prod-ok", "prod-feloldas", "prod-megallt"],
+      {
+        resolve: async (argument) =>
+          argument === "prod-feloldas"
+            ? { targets: [], errors: ["prod-feloldas: nincs kotes"] }
+            : { targets: [cel(argument, `${argument}-sku`)], errors: [] },
+        project: async (target) =>
+          (target as { sku: string }).sku === "prod-megallt-sku"
+            ? {
+                action: "stopped" as const,
+                reason: "tax-inclusive-not-set" as never,
+                details: "a regio adobeallitasa",
+              }
+            : {
+                action: "projected" as const,
+                report: {
+                  sku: "prod-ok-sku",
+                  sourceAmount: "1000",
+                  sourceCurrency: "HUF",
+                  medusaAmount: 1000,
+                  medusaCurrencyCode: "huf",
+                  variantId: "variant_1",
+                  priceId: "price_1",
+                  source: "own",
+                  surcharge: null,
+                  result: "updated",
+                },
+              },
+      },
+      {
+        stdout: () => {},
+        stderr: () => {},
+        failed: (target, reason) => jelzett.push([target, reason]),
+      },
+    );
+    assert.equal(kod, 1);
+    assert.deepEqual(jelzett, [
+      ["prod-feloldas", "prod-feloldas: nincs kotes"],
+      ["prod-megallt", "prod-megallt-sku: tax-inclusive-not-set"],
+    ]);
   });
 });
