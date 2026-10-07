@@ -3,9 +3,11 @@
  * döntései 27141).
  *
  * Egy rekord egy elhullási esemény: egy élőlény (élő állat kategóriájú termék),
- * egy vagy több példány, a bolt egy saját akváriumában. A rögzítő és a rögzítés
- * ideje automatikus; külön elhullási időpont nincs. A forrás kötelező, és nem
- * csak beszállító lehet.
+ * egy vagy több példány, a bolt egy saját akváriumában VAGY egy halas rackben
+ * (legalább az egyik; a halas rack nem akvárium). A rögzítő és a rögzítés ideje
+ * automatikus. Az elhullás NAPJA külön mező (Luca kérése, 2026-10-07): egy
+ * bejegyzés utólag is a valódi naphoz köthető, nem csak a begépelés idejéhez. A
+ * forrás kötelező, és nem csak beszállító lehet.
  */
 
 export const MORTALITY_SOURCE_TYPES = [
@@ -48,6 +50,16 @@ export interface MortalitySource {
   note: string | null;
 }
 
+/**
+ * A HALAS RENDSZER, AHOL AZ ELHULLÁS TÖRTÉNT (Luca kérése, 2026-10-07): a halas
+ * rackek nem akváriumok, és nem is kerülnek az Akváriumok menübe. A lista
+ * adatbázisban áll (`MortalityLocation`), nem a kódban.
+ */
+export interface MortalityLocationOption {
+  id: string;
+  name: string;
+}
+
 export interface MortalityListItem {
   id: string;
   recordNumber: string;
@@ -61,10 +73,15 @@ export interface MortalityListItem {
   /** a szabad szöveges élőlény-név (Balázs 2026-10-07), ha nincs `product` */
   productName: string | null;
   quantity: number;
-  aquarium: { id: string; name: string; aquariumNumber: string };
+  /** az akvárium; `null`, ha csak halas rack áll (a kettőből legalább egy van) */
+  aquarium: { id: string; name: string; aquariumNumber: string } | null;
+  /** a halas rack, ha meg van adva */
+  location: MortalityLocationOption | null;
   source: MortalitySource;
   recordedBy: { id: string; name: string };
-  /** ISO időpont */
+  /** az elhullás napja, ÉÉÉÉ-HH-NN (Budapest naptára szerint) */
+  occurredOn: string;
+  /** a rögzítés ISO időpontja */
   recordedAt: string;
   photoCount: number;
 }
@@ -122,9 +139,9 @@ export interface MortalityListQuery {
   supplierId?: string;
   aquariumId?: string;
   recordedById?: string;
-  /** ÉÉÉÉ-HH-NN, a rögzítés napja ettől (helyi idő szerint, a nap elejétől) */
+  /** ÉÉÉÉ-HH-NN, az elhullás napja ettől (zárt) */
   from?: string;
-  /** ÉÉÉÉ-HH-NN, a rögzítés napja eddig (a nap végéig) */
+  /** ÉÉÉÉ-HH-NN, az elhullás napja eddig (zárt) */
   to?: string;
 }
 
@@ -166,11 +183,22 @@ export interface CreateMortalityInput {
   productId?: string | null;
   productName?: string | null;
   quantity: number;
-  aquariumId: string;
+  /**
+   * az akvárium VAGY a halas rack (`locationId`) kötelező, legalább az egyik
+   * (2026-10-07: a halas rackek nem akváriumok)
+   */
+  aquariumId?: string | null;
   sourceType: MortalitySourceType;
   supplierId?: string | null;
   sourceNote?: string | null;
   note?: string | null;
+  /**
+   * az elhullás napja, ÉÉÉÉ-HH-NN; nem lehet a jövőben. Létrehozáskor
+   * elhagyható: akkor a mai nap (Budapest szerint).
+   */
+  occurredOn?: string;
+  /** a halas rack (`MortalityLocationOption.id`), vagy `null` */
+  locationId?: string | null;
 }
 
 /** Minden mező módosítható (acrobot döntése, 27141), auditnaplóval. */

@@ -8519,8 +8519,9 @@ enum MortalitySourceType {
 
 /// EGY ELHULLÁSI ESEMÉNY: egy élőlény (termék), egy vagy több példány, egy
 /// akváriumban (kártya 115c9740; Balázs promptja 2026-10-06, acrobot döntései
-/// 27141). Több faj egyszerre: több rekord. Külön elhullási időpont NINCS: a
-/// rögzítés ideje (`recordedAt`) és a rögzítő (`recordedById`) automatikus.
+/// 27141). Több faj egyszerre: több rekord. A rögzítés ideje (`recordedAt`) és
+/// a rögzítő (`recordedById`) automatikus; az elhullás NAPJA (`occurredOn`)
+/// külön, szerkeszthető mező (Luca kérése, 2026-10-07).
 ///
 /// Két szabály az adatbázisban is áll, a migrációban: a példányszám legalább 1,
 /// és beszállító-forrásnál a beszállító kötelező. Törlés nincs; a módosítás
@@ -8535,7 +8536,9 @@ model MortalityRecord {
   /// szabad szöveges élőlény-név, ha az élőlény nincs a rendszerben
   productName  String?             @db.VarChar(200)
   quantity     Int
-  aquariumId   String
+  /// a bolt saját akváriuma; a halas rack (`locationId`) mellett elhagyható:
+  /// a kettőből legalább az egyik kötelező (CHECK őrzi; 2026-10-07)
+  aquariumId   String?
   sourceType   MortalitySourceType
   /// beszállítói forrásnál a rendszerbeli beszállító VAGY a `sourceNote`
   /// szabad szövege (pontosan az egyik); a többi forrásnál üres
@@ -8544,22 +8547,52 @@ model MortalityRecord {
   /// szereplő beszállító neve, máshol pl. a tenyésztő neve; OTHER-nél kötelező
   sourceNote   String?             @db.VarChar(200)
   note         String?
+  /// az elhullás napja (Budapest naptára szerint); nem lehet a jövőben (a
+  /// szolgáltatás őrzi). Nincs adatbázis-alapértéke: a „ma” Budapest napja, nem
+  /// a szerveré, ezért mindig az alkalmazás adja meg.
+  occurredOn   DateTime            @db.Date
+  /// a halas rack, ahol történt (Luca kérése, 2026-10-07); az akvárium VAGY
+  /// a rack kötelező, legalább az egyik, akár mindkettő
+  locationId   String?
   recordedById String
   recordedAt   DateTime            @default(now())
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
   product    Product?                  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  aquarium   Aquarium                  @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
+  aquarium   Aquarium?                 @relation(fields: [aquariumId], references: [id], onDelete: Restrict)
   supplier   Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  location   MortalityLocation?        @relation(fields: [locationId], references: [id], onDelete: Restrict)
   recordedBy User                      @relation("MortalityRecordRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
   documents  MortalityRecordDocument[]
 
+  @@index([occurredOn])
+  @@index([locationId])
   @@index([recordedAt])
   @@index([aquariumId, recordedAt])
   @@index([productId])
   @@index([supplierId])
   @@index([recordedById])
+}
+
+/// A HALAS RENDSZEREK, AHOL ELHULLÁS TÖRTÉNHET (Luca kérése, 2026-10-07): a
+/// halas rackek nem akváriumok, és nem is kerülhetnek az Akváriumok menübe,
+/// ezért saját, kicsi törzsadat. Adatban áll, nem a kódban: amit építünk,
+/// később publikus termék alapja lehet (Balázs 2026-09-25), ahol a lista
+/// boltonként más. A kezdő tíz nevet a migráció tölti fel; kezelőfelület még
+/// nincs. A kivezetett helyszín nem törlődik (bejegyzés mutathat rá), csak a
+/// választóból esik ki.
+model MortalityLocation {
+  id         String    @id @default(cuid())
+  name       String    @unique @db.VarChar(100)
+  sortOrder  Int       @default(0)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  mortalityRecords MortalityRecord[]
+
+  @@index([archivedAt, sortOrder])
 }
 
 /// AZ ELHULLÁSI BEJEGYZÉS FOTÓI. Ugyanaz az alak, mint a `ServiceJobDocument`:
