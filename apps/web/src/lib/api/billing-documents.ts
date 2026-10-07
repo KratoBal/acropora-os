@@ -105,7 +105,9 @@ export const billingDocumentsApi = {
   },
   /**
    * Ahol `hasPdf` igaz: a Számlázz.hu PDF-je, vagy ha az nincs, a begyűjtött
-   * PDF (számlaszám és adószám-törzs szerint). Máshol 404.
+   * PDF (számlaszám és adószám-törzs szerint). A csak postafiókos sor
+   * (`mailbox:<id>`) a postafiókos dokumentum PDF-jét kapja. Nincs ilyen
+   * számla: 404; PDF nélkül: 409.
    */
   async incomingPdf(token: string, id: string): Promise<Blob> {
     const response = await fetch(
