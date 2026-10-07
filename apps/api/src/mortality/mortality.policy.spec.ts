@@ -10,14 +10,43 @@ import {
 } from "./mortality.policy.js";
 
 describe("mortalitySourceProblem", () => {
-  it("beszállítói forrásnál a beszállító kötelező", () => {
+  it("beszállítói forrásnál a beszállító VAGY a neve, pontosan az egyik", () => {
     assert.match(
       mortalitySourceProblem({ sourceType: "SUPPLIER" }) ?? "",
-      /beszállító kötelező/,
+      /válaszd ki a beszállítót, vagy írd be a nevét/,
+    );
+    assert.match(
+      mortalitySourceProblem({ sourceType: "SUPPLIER", sourceNote: "  " }) ??
+        "",
+      /válaszd ki a beszállítót, vagy írd be a nevét/,
     );
     assert.equal(
       mortalitySourceProblem({ sourceType: "SUPPLIER", supplierId: "s1" }),
       null,
+    );
+    // Balázs 2026-10-07: a rendszerben nem szereplő beszállító is megadható
+    assert.equal(
+      mortalitySourceProblem({ sourceType: "SUPPLIER", sourceNote: "Kis Pál" }),
+      null,
+    );
+    assert.match(
+      mortalitySourceProblem({
+        sourceType: "SUPPLIER",
+        supplierId: "s1",
+        sourceNote: "Kis Pál",
+      }) ?? "",
+      /a kettőt együtt nem/,
+    );
+  });
+
+  it("beszállítónál a tárolt alak: a beszállító, vagy ha nincs, a név", () => {
+    assert.deepEqual(
+      normalizedSource({ sourceType: "SUPPLIER", supplierId: "s1" }),
+      { sourceType: "SUPPLIER", supplierId: "s1", sourceNote: null },
+    );
+    assert.deepEqual(
+      normalizedSource({ sourceType: "SUPPLIER", sourceNote: " Kis Pál " }),
+      { sourceType: "SUPPLIER", supplierId: null, sourceNote: "Kis Pál" },
     );
   });
 

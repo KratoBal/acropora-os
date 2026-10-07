@@ -61,12 +61,24 @@ describe("CreateMortalityDto", () => {
   });
 
   it("a kötelező mezők hiánya", () => {
+    // az élőlény (termék VAGY név) a szolgáltatás szabálya, nem a DTO-é
     assert.deepEqual(problems(CreateMortalityDto, {}).sort(), [
       "aquariumId",
-      "productId",
       "quantity",
       "sourceType",
     ]);
+  });
+
+  it("a szabad szöveges élőlény-név hossza korlátos", () => {
+    assert.deepEqual(
+      problems(CreateMortalityDto, {
+        productName: "x".repeat(201),
+        quantity: 1,
+        aquariumId: "a",
+        sourceType: "TRADE",
+      }),
+      ["productName"],
+    );
   });
 });
 

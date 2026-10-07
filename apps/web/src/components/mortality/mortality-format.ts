@@ -1,6 +1,8 @@
 import {
   MORTALITY_SOURCE_LABELS,
   type MortalitySource,
+  type MortalityStockEffect,
+  type MortalityStockReason,
   type MortalitySummary,
 } from "@acropora/types";
 
@@ -104,8 +106,62 @@ export function aquariumLabel(aquarium: {
 }
 
 /** A forrás fő sora: a beszállító neve, más forrásnál a típus felirata. */
+/** A rendszerben nem szereplő élőlény vagy beszállító jelölése (Balázs 2026-10-07). */
+export const NOT_IN_SYSTEM = "nincs a rendszerben";
+
+/**
+ * A forrás címe: a beszállító neve (a rendszerbeli, vagy a szabad szöveggel
+ * beírt), különben a forrás-típus felirata.
+ */
 export function sourceTitle(source: MortalitySource): string {
-  return source.supplier?.name ?? MORTALITY_SOURCE_LABELS[source.type];
+  if (source.supplier) return source.supplier.name;
+  if (source.type === "SUPPLIER" && source.note) return source.note;
+  return MORTALITY_SOURCE_LABELS[source.type];
+}
+
+/**
+ * A forrás második sora: beszállítónál a jelölés, ha nincs a rendszerben; más
+ * forrásnál a megnevezés (pl. a tenyésztő neve).
+ */
+export function sourceSubtitle(source: MortalitySource): string | null {
+  if (source.type === "SUPPLIER")
+    return source.supplier || !source.note
+      ? null
+      : `Beszállító, ${NOT_IN_SYSTEM}`;
+  return source.note;
+}
+
+/** Az élőlény neve: a rendszerbeli termék, vagy a szabad szöveggel beírt név. */
+export function livestockTitle(record: {
+  product: { name: string } | null;
+  productName: string | null;
+}): string {
+  return record.product?.name ?? record.productName ?? "";
+}
+
+/** Az élőlény második sora: a magyar név, vagy a jelölés, ha nincs a rendszerben. */
+export function livestockSubtitle(record: {
+  product: { commonName: string | null } | null;
+}): string | null {
+  return record.product ? record.product.commonName : NOT_IN_SYSTEM;
+}
+
+const STOCK_REASON_TEXT: Readonly<Record<MortalityStockReason, string>> = {
+  FREE_TEXT: `A készlet nem változott: az élőlény ${NOT_IN_SYSTEM}.`,
+  NOT_STOCKED: "A készlet nem változott: a termék nem készletezett.",
+  NO_VARIANT: "A készlet nem változott: a terméknek nincs aktív változata.",
+  VARIANT_NOT_CHOSEN:
+    "A készlet nem változott: a terméknek több változata van, és nem dönthető el, melyik.",
+  PACKAGE: "A készlet nem változott: csomagtermék.",
+};
+
+/** A bejegyzés készlethatása egy mondatban (a részletlapon). */
+export function stockEffectText(stock: MortalityStockEffect): string {
+  if (stock.deducted > 0)
+    return `${stock.deducted} db levonva a készletből${stock.sku ? ` (${stock.sku})` : ""}.`;
+  return stock.reason
+    ? STOCK_REASON_TEXT[stock.reason]
+    : "A készlet nem változott.";
 }
 
 function parts(instant: Date) {

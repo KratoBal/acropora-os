@@ -43,6 +43,9 @@ import {
   monthCardTitle,
   periodRange,
   shortDateTime,
+  livestockSubtitle,
+  livestockTitle,
+  sourceSubtitle,
   sourceTitle,
   weekComparison,
   type MortalityPeriod,
@@ -396,7 +399,7 @@ export function MortalityListPage() {
               rows={data.items}
               rowKey={(row) => row.id}
               rowLabel={(row) =>
-                `${row.product.name}, ${shortDateTime(row.recordedAt)}`
+                `${livestockTitle(row)}, ${shortDateTime(row.recordedAt)}`
               }
               onRowActivate={(row) =>
                 router.push(
@@ -442,11 +445,11 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
     cell: (row) => (
       <div>
         <div className="font-medium italic text-pilot-grey-900">
-          {row.product.name}
+          {livestockTitle(row)}
         </div>
-        {row.product.commonName ? (
+        {livestockSubtitle(row) ? (
           <div className="text-xs text-pilot-grey-500">
-            {row.product.commonName}
+            {livestockSubtitle(row)}
           </div>
         ) : null}
       </div>
@@ -469,8 +472,10 @@ const COLUMNS: readonly PilotTableColumn<MortalityListItem>[] = [
     cell: (row) => (
       <div>
         <div>{sourceTitle(row.source)}</div>
-        {row.source.note ? (
-          <div className="text-xs text-pilot-grey-500">{row.source.note}</div>
+        {sourceSubtitle(row.source) ? (
+          <div className="text-xs text-pilot-grey-500">
+            {sourceSubtitle(row.source)}
+          </div>
         ) : null}
       </div>
     ),

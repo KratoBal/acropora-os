@@ -12,7 +12,9 @@ import type {
 } from "@acropora/types";
 
 import {
+  mortalityProductProblem,
   mortalitySourceProblem,
+  normalizedProduct,
   normalizedSource,
   quantityProblem,
 } from "./mortality.policy.js";
@@ -35,9 +37,13 @@ function cleanNote(note: string | null | undefined): string | null {
  * döntései 27141).
  *
  * A szabályok, egy helyen:
- * - csak élő állat kategóriájú termék (a Korallok, Halak, Gerinctelenek fa);
+ * - az élőlény élő állat kategóriájú termék (a Korallok, Halak, Gerinctelenek
+ *   fa), VAGY szabad szöveges név, ha nincs a rendszerben (Balázs 2026-10-07);
+ * - a rendszerbeli élőlény a készletből levonódik (`mortality-stock.ts`), a
+ *   módosítás pontosan a különbséget mozgatja;
  * - csak a bolt saját (OWN) akváriuma;
- * - a forrás kötelező: beszállítónál a beszállító, „Egyéb”-nél a megnevezés;
+ * - a forrás kötelező: beszállítónál a beszállító vagy a neve szabad szöveggel,
+ *   „Egyéb”-nél a megnevezés;
  * - a rögzítő és a rögzítés ideje automatikus, és nem módosítható;
  * - minden más mező módosítható, auditnaplóval; törlés nincs.
  *
@@ -84,15 +90,18 @@ export class MortalityService {
     actorUserId: string,
   ): Promise<MortalityDetail> {
     const problem =
-      quantityProblem(input.quantity) ?? mortalitySourceProblem(input);
+      quantityProblem(input.quantity) ??
+      mortalityProductProblem(input) ??
+      mortalitySourceProblem(input);
     if (problem) throw new BadRequestException(problem);
-    await this.checkProduct(input.productId);
+    const product = normalizedProduct(input);
+    if (product.productId) await this.checkProduct(product.productId);
     await this.checkAquarium(input.aquariumId);
     const source = normalizedSource(input);
     if (source.supplierId) await this.checkSupplier(source.supplierId);
 
     const { id } = await this.repository.create({
-      productId: input.productId,
+      ...product,
       quantity: input.quantity,
       aquariumId: input.aquariumId,
       ...source,
@@ -117,12 +126,14 @@ export class MortalityService {
       if (problem) throw new BadRequestException(problem);
       data.quantity = input.quantity;
     }
-    if (
-      input.productId !== undefined &&
-      input.productId !== current.productId
-    ) {
-      await this.checkProduct(input.productId);
-      data.productId = input.productId;
+    if (input.productId !== undefined || input.productName !== undefined) {
+      const merged = mergedProduct(current, input);
+      const problem = mortalityProductProblem(merged);
+      if (problem) throw new BadRequestException(problem);
+      const product = normalizedProduct(merged);
+      if (product.productId && product.productId !== current.productId)
+        await this.checkProduct(product.productId);
+      Object.assign(data, product);
     }
     if (
       input.aquariumId !== undefined &&
@@ -166,6 +177,31 @@ export class MortalityService {
     if (!(await this.repository.isSupplier(supplierId)))
       throw new BadRequestException(SUPPLIER_NOT_FOUND_MESSAGE);
   }
+}
+
+/**
+ * A MÓDOSÍTOTT ÉLŐLÉNY. A kérésben megadott oldal dönt: aki terméket választ, az
+ * a szabad szöveges nevet törli, és fordítva; amit a kérés egyáltalán nem érint,
+ * az marad.
+ */
+export function mergedProduct(
+  current: { productId: string | null; productName: string | null },
+  input: UpdateMortalityInput,
+) {
+  return {
+    productId:
+      input.productId !== undefined
+        ? input.productId
+        : input.productName !== undefined
+          ? null
+          : current.productId,
+    productName:
+      input.productName !== undefined
+        ? input.productName
+        : input.productId !== undefined
+          ? null
+          : current.productName,
+  };
 }
 
 /**

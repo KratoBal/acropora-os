@@ -1285,6 +1285,7 @@ export type {
 export {
   MORTALITY_LIST_PAGE_SIZE,
   MORTALITY_SOURCE_LABELS,
+  MORTALITY_PRODUCT_NAME_MAX,
   MORTALITY_SOURCE_NOTE_MAX,
   MORTALITY_SOURCE_TYPES,
 } from "./mortality.js";
@@ -1300,6 +1301,8 @@ export type {
   MortalityRecorderOption,
   MortalitySource,
   MortalitySourceType,
+  MortalityStockEffect,
+  MortalityStockReason,
   MortalitySummary,
   MortalitySupplierOption,
   UpdateMortalityInput,

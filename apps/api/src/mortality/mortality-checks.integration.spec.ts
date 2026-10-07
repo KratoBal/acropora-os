@@ -4,6 +4,9 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { ensureMainWarehouse } from "../common/warehouse.util.js";
+import { MORTALITY_REFERENCE_TYPE } from "./mortality-stock.js";
+import { MortalityRepository } from "./mortality.repository.js";
 
 /**
  * AZ ELHULLÁSI NAPLÓ HÁROM ADATBÁZIS-MEGKÖTÉSE (kártya 115c9740, migráció
@@ -67,8 +70,45 @@ describe(
     after(removeLeftovers);
 
     async function removeLeftovers() {
+      // a készlet-próba nyomai: a mozgások (a soraikkal), a kimenet, a készletsor
+      const records = await prisma.mortalityRecord.findMany({
+        where: {
+          OR: [
+            { recordNumber: { startsWith: PREFIX } },
+            { aquarium: { name: { startsWith: PREFIX } } },
+          ],
+        },
+        select: { id: true },
+      });
+      await prisma.stockMovement.deleteMany({
+        where: {
+          referenceType: MORTALITY_REFERENCE_TYPE,
+          referenceId: { in: records.map((r) => r.id) },
+        },
+      });
+      const variants = await prisma.productVariant.findMany({
+        where: { sku: { startsWith: PREFIX } },
+        select: { id: true },
+      });
+      const variantIds = variants.map((v) => v.id);
+      await prisma.unasStockSyncOutbox.deleteMany({
+        where: { variantId: { in: variantIds } },
+      });
+      await prisma.stockItem.deleteMany({
+        where: { variantId: { in: variantIds } },
+      });
+      // a módosítás auditnaplót ír a rögzítőre: a felhasználó csak utána törölhető
+      await prisma.auditLog.deleteMany({
+        where: {
+          entityType: "MortalityRecord",
+          entityId: { in: records.map((r) => r.id) },
+        },
+      });
       await prisma.mortalityRecord.deleteMany({
-        where: { recordNumber: { startsWith: PREFIX } },
+        where: { id: { in: records.map((r) => r.id) } },
+      });
+      await prisma.productVariant.deleteMany({
+        where: { id: { in: variantIds } },
       });
       await prisma.aquarium.deleteMany({
         where: { name: { startsWith: PREFIX } },
@@ -91,6 +131,8 @@ describe(
           "SUPPLIER" | "LOCAL_BREEDER" | "TRADE" | "OWN_BREEDING" | "OTHER";
         supplierId: string | null;
         sourceNote: string | null;
+        productId: string | null;
+        productName: string | null;
       }>,
     ) {
       counter += 1;
@@ -125,15 +167,45 @@ describe(
       );
     });
 
-    it("beszállítói forráshoz kötelező a beszállító, máshoz tilos", async () => {
+    it("beszállítói forráshoz a beszállító VAGY a neve kell, pontosan az egyik; máshoz beszállító tilos", async () => {
       await record({ sourceType: "SUPPLIER", supplierId: ids.supplier });
+      // Balázs 2026-10-07: a rendszerben nem szereplő beszállító neve
+      await record({ sourceType: "SUPPLIER", sourceNote: "Kis Pál" });
       await rejectedBy(
         "MortalityRecord_supplier_check",
         record({ sourceType: "SUPPLIER", supplierId: null }),
       );
       await rejectedBy(
         "MortalityRecord_supplier_check",
+        record({ sourceType: "SUPPLIER", supplierId: null, sourceNote: "  " }),
+      );
+      await rejectedBy(
+        "MortalityRecord_supplier_check",
+        record({
+          sourceType: "SUPPLIER",
+          supplierId: ids.supplier,
+          sourceNote: "Kis Pál",
+        }),
+      );
+      await rejectedBy(
+        "MortalityRecord_supplier_check",
         record({ sourceType: "TRADE", supplierId: ids.supplier }),
+      );
+    });
+
+    it("az élőlény a termék VAGY a szabad szöveges név, pontosan az egyik", async () => {
+      await record({ productId: null, productName: "Ismeretlen gébféle" });
+      await rejectedBy(
+        "MortalityRecord_product_check",
+        record({ productId: null, productName: null }),
+      );
+      await rejectedBy(
+        "MortalityRecord_product_check",
+        record({ productId: null, productName: "   " }),
+      );
+      await rejectedBy(
+        "MortalityRecord_product_check",
+        record({ productName: "és a termék is" }),
       );
     });
 
@@ -147,6 +219,89 @@ describe(
         "MortalityRecord_other_note_check",
         record({ sourceType: "OTHER", sourceNote: "   " }),
       );
+    });
+
+    /**
+     * A KÉSZLET VALÓDI ÚTJA: a repository a központi írón át von le, UNAS-gazdájú
+     * terméknél a UNAS-kimenetre is ír, és a módosítás pontosan a különbséget
+     * mozgatja. Mockkal nem mérhető: a zár, a készletsor és a kimenet sora mind
+     * az adatbázisban él.
+     */
+    it("rögzítés, módosítás, szabad szövegre váltás: 10 -> 8 -> 7 -> 10, UNAS-kimenettel", async () => {
+      const repository = new MortalityRepository();
+      const product = await prisma.product.create({
+        data: {
+          name: `${PREFIX}keszlet-hal-${suffix}`,
+          catalogAuthority: "UNAS",
+        },
+      });
+      const variant = await prisma.productVariant.create({
+        data: { productId: product.id, sku: `${PREFIX}SKU-${suffix}` },
+      });
+      const warehouse = await ensureMainWarehouse(prisma);
+      await prisma.stockItem.create({
+        data: { variantId: variant.id, warehouseId: warehouse.id, onHand: 10 },
+      });
+      const onHand = async () =>
+        (
+          await prisma.stockItem.findFirstOrThrow({
+            where: { variantId: variant.id, warehouseId: warehouse.id },
+          })
+        ).onHand.toNumber();
+
+      const { id } = await repository.create({
+        productId: product.id,
+        productName: null,
+        quantity: 2,
+        aquariumId: ids.aquarium,
+        sourceType: "TRADE",
+        supplierId: null,
+        sourceNote: null,
+        note: null,
+        recordedById: ids.user,
+      });
+      assert.equal(await onHand(), 8);
+
+      await repository.update(id, { quantity: 3 }, ids.user);
+      assert.equal(await onHand(), 7);
+
+      // ugyanaz még egyszer: nincs változás, nincs új mozgás
+      await repository.update(id, { quantity: 3 }, ids.user);
+      assert.equal(await onHand(), 7);
+
+      await repository.update(
+        id,
+        { productId: null, productName: "Mégsem ez volt" },
+        ids.user,
+      );
+      assert.equal(await onHand(), 10);
+
+      const movements = await prisma.stockMovement.findMany({
+        where: { referenceType: MORTALITY_REFERENCE_TYPE, referenceId: id },
+        orderBy: { createdAt: "asc" },
+        select: { type: true, lines: { select: { quantity: true } } },
+      });
+      assert.deepEqual(
+        movements.map((m) => [m.type, m.lines[0]!.quantity.toNumber()]),
+        [
+          ["SCRAP", 2],
+          ["SCRAP", 1],
+          ["RETURN_IN", 3],
+        ],
+      );
+      const outbox = await prisma.unasStockSyncOutbox.findMany({
+        where: { variantId: variant.id },
+        select: { sourceProcess: true },
+      });
+      assert.ok(outbox.length >= 1);
+      assert.ok(outbox.every((row) => row.sourceProcess === "MORTALITY"));
+
+      const detail = await repository.detail(id);
+      assert.deepEqual(detail?.stock, {
+        deducted: 0,
+        sku: null,
+        reason: "FREE_TEXT",
+      });
     });
   },
 );

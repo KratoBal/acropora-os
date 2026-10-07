@@ -31,18 +31,20 @@ import { Prisma } from "@acropora/database";
 /// reported as such (see stock-reconciliation.service.ts's
 /// INVALID_LEDGER_DATA status), not silently assigned a guessed sign.
 ///
-/// TRANSFER, RESERVATION, RESERVATION_RELEASE, DAMAGE, SCRAP and
-/// OPENING_BALANCE exist in the Prisma enum but - confirmed by a full-repo
-/// search - have no producer anywhere in the current codebase (only
-/// PURCHASE_RECEIPT, SALE, ADJUSTMENT and RETURN_IN are ever actually
-/// created, by purchase-invoice.repository.ts, pos-sale.repository.ts /
-/// unas-order-sync.repository.ts, inventory-count.repository.ts, and
-/// pos-sale.repository.ts / unas-order-sync.repository.ts respectively).
-/// DAMAGE/SCRAP/OPENING_BALANCE have an intuitively fixed sign and are
-/// listed below for forward-compatibility (so wiring up a future producer
-/// for them doesn't ALSO require touching the reconciliation engine), but
-/// since nothing produces them yet there is no way to verify that
-/// assumption against real data - RESERVATION/RESERVATION_RELEASE affect
+/// TRANSFER, RESERVATION, RESERVATION_RELEASE, DAMAGE and OPENING_BALANCE
+/// exist in the Prisma enum but - confirmed by a full-repo search - have no
+/// producer anywhere in the current codebase. PURCHASE_RECEIPT, SALE,
+/// ADJUSTMENT and RETURN_IN are created by purchase-invoice.repository.ts,
+/// pos-sale.repository.ts / unas-order-sync.repository.ts,
+/// inventory-count.repository.ts, and pos-sale.repository.ts /
+/// unas-order-sync.repository.ts respectively; SCRAP (and a RETURN_IN for a
+/// correction) by the mortality log since 2026-10-07 (mortality-stock.ts),
+/// always with SCRAP = -1, as listed below. DAMAGE/OPENING_BALANCE have an
+/// intuitively fixed sign and are listed below for forward-compatibility
+/// (so wiring up a future producer for them doesn't ALSO require touching
+/// the reconciliation engine), but since nothing produces them yet there is
+/// no way to verify that assumption against real data -
+/// RESERVATION/RESERVATION_RELEASE affect
 /// `StockItem.reserved`, never `onHand`, so they are deliberately absent
 /// (a movement of either type, if one ever existed, would be a data
 /// integrity anomaly for onHand purposes, not a sign question). TRANSFER is

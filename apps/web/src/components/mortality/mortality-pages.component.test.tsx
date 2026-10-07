@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MortalityDetailPage } from "./mortality-detail-page";
 import { MortalityFormPage, mortalityFormInput } from "./mortality-form-page";
 import { MortalityListPage } from "./mortality-list-page";
+import { freeTextOption } from "./mortality-search-picker";
 
 /** Az elhullási napló három képernyője (kártya 115c9740). */
 vi.mock("next/font/local", () => ({
@@ -69,6 +70,7 @@ const ITEM = {
     name: "Zebrasoma flavescens",
     commonName: "Sárga doktorhal",
   },
+  productName: null,
   quantity: 1,
   aquarium: { id: "a1", name: "Tengeri halak", aquariumNumber: "A-12" },
   source: {
@@ -89,6 +91,7 @@ const LIST: MortalityListResponse = {
 const DETAIL: MortalityDetail = {
   ...ITEM,
   note: "Reggel már étvágytalan volt.",
+  stock: { deducted: 1, sku: "ZEB-1", reason: null },
   createdAt: "2026-10-06T07:42:00Z",
   lastModified: null,
   photos: [],
@@ -199,6 +202,25 @@ describe("lista", () => {
     expect(written.has("page")).toBe(false);
   });
 
+  it("szabad szöveges élőlény és beszállító: a beírt név és a jelölés látszik", async () => {
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [
+        {
+          ...ITEM,
+          product: null,
+          productName: "Ismeretlen gébféle",
+          source: { type: "SUPPLIER", supplier: null, note: "Kis Pál" },
+        },
+      ],
+    });
+    render(<MortalityListPage />);
+    expect(await screen.findByText("Ismeretlen gébféle")).toBeTruthy();
+    expect(screen.getByText("nincs a rendszerben")).toBeTruthy();
+    expect(screen.getByText("Kis Pál")).toBeTruthy();
+    expect(screen.getByText("Beszállító, nincs a rendszerben")).toBeTruthy();
+  });
+
   it("a VIEWER lát, de nem rögzíthet", async () => {
     auth.role = "VIEWER";
     render(<MortalityListPage />);
@@ -224,6 +246,7 @@ describe("részlet", () => {
     ).toBeTruthy();
     expect(screen.getByText("Nem módosították")).toBeTruthy();
     expect(screen.getAllByText("#ELH-1").length).toBeGreaterThan(0);
+    expect(screen.getByText("1 db levonva a készletből (ZEB-1).")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Módosítás/ })).toBeTruthy();
   });
 
@@ -268,6 +291,7 @@ describe("űrlap", () => {
     expect(mortalityFormInput(filled)).toEqual({
       input: {
         productId: "p1",
+        productName: null,
         quantity: 2,
         aquariumId: "a1",
         sourceType: "TRADE",
@@ -280,13 +304,13 @@ describe("űrlap", () => {
 
   it("a hiányzó mezők sorban", () => {
     expect(mortalityFormInput({ ...filled, product: null })).toEqual({
-      problem: "Válaszd ki az élőlényt.",
+      problem: "Válaszd ki az élőlényt, vagy írd be a nevét.",
     });
     expect(mortalityFormInput({ ...filled, quantity: "0" })).toEqual({
       problem: "A példányszám legalább 1, egész szám.",
     });
     expect(mortalityFormInput({ ...filled, sourceType: "SUPPLIER" })).toEqual({
-      problem: "Válaszd ki a beszállítót.",
+      problem: "Válaszd ki a beszállítót, vagy írd be a nevét.",
     });
     expect(
       mortalityFormInput({ ...filled, sourceType: "OTHER", sourceNote: " " }),
@@ -303,6 +327,64 @@ describe("űrlap", () => {
     });
     expect(result).toMatchObject({
       input: { supplierId: "s1", sourceNote: null },
+    });
+  });
+
+  it("a beírt élőlény és beszállító a szabad szöveges mezőbe megy, nem az azonosítóba", () => {
+    expect(
+      mortalityFormInput({
+        ...filled,
+        product: freeTextOption(" Ismeretlen gébféle ", 200),
+        sourceType: "SUPPLIER",
+        supplier: freeTextOption("Kis Pál", 200),
+      }),
+    ).toMatchObject({
+      input: {
+        productId: null,
+        productName: "Ismeretlen gébféle",
+        supplierId: null,
+        sourceNote: "Kis Pál",
+      },
+    });
+  });
+
+  it("a választóban a beírt név is választható, ha nincs a listában", async () => {
+    api.productOptions.mockResolvedValue([]);
+    api.aquariumOptions.mockResolvedValue([
+      { id: "a1", name: "Tengeri halak", aquariumNumber: "A-12" },
+    ]);
+    render(<MortalityFormPage />);
+    const input = await screen.findByRole("textbox", { name: "Élőlény" });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Ismeretlen gébféle" } });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /„Ismeretlen gébféle” megadása/,
+      }),
+    );
+    expect(screen.getByText("Ismeretlen gébféle")).toBeTruthy();
+    expect(screen.getByText("nincs a rendszerben")).toBeTruthy();
+  });
+
+  it("szabad szöveges élőlény módosításnál kitöltve nyílik, és a nevet küldi", async () => {
+    api.detail.mockResolvedValue({
+      ...DETAIL,
+      product: null,
+      productName: "Ismeretlen gébféle",
+      source: { type: "SUPPLIER", supplier: null, note: "Kis Pál" },
+      stock: { deducted: 0, sku: null, reason: "FREE_TEXT" },
+    });
+    api.update.mockResolvedValue(DETAIL);
+    render(<MortalityFormPage recordId="rec-1" />);
+    expect(await screen.findByText("Ismeretlen gébféle")).toBeTruthy();
+    expect(screen.getByText("Kis Pál")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Módosítás mentése" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    expect(api.update.mock.calls[0]![2]).toMatchObject({
+      productId: null,
+      productName: "Ismeretlen gébféle",
+      supplierId: null,
+      sourceNote: "Kis Pál",
     });
   });
 

@@ -30,20 +30,25 @@ describe("mortalityWhere", () => {
     });
   });
 
-  it("a kereső a termék nevében és magyar nevében keres", () => {
+  it("a kereső a termék nevében, magyar nevében és a szabad szöveges névben keres", () => {
     assert.deepEqual(mortalityWhere({ q: "  bohóchal " }), {
       AND: [
         {
-          product: {
-            OR: [
-              { name: { contains: "bohóchal", mode: "insensitive" } },
-              {
-                datasheet: {
-                  magyarNev: { contains: "bohóchal", mode: "insensitive" },
-                },
+          OR: [
+            {
+              product: {
+                OR: [
+                  { name: { contains: "bohóchal", mode: "insensitive" } },
+                  {
+                    datasheet: {
+                      magyarNev: { contains: "bohóchal", mode: "insensitive" },
+                    },
+                  },
+                ],
               },
-            ],
-          },
+            },
+            { productName: { contains: "bohóchal", mode: "insensitive" } },
+          ],
         },
       ],
     });

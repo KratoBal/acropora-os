@@ -25,7 +25,15 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { ServiceDocumentGallery } from "@/components/service/service-document-gallery";
 import { mortalityApi } from "@/lib/api/mortality";
-import { aquariumLabel, longDateTime, sourceTitle } from "./mortality-format";
+import {
+  aquariumLabel,
+  livestockSubtitle,
+  livestockTitle,
+  longDateTime,
+  sourceSubtitle,
+  sourceTitle,
+  stockEffectText,
+} from "./mortality-format";
 import { MORTALITY_LIST_PATH } from "./mortality-list-page";
 
 /**
@@ -127,9 +135,6 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
       </div>
     );
 
-  const sourceNote =
-    record.source.type === "SUPPLIER" ? null : record.source.note;
-
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
       <nav aria-label="Morzsamenü" className="text-sm text-pilot-grey-500">
@@ -141,8 +146,8 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
       </nav>
       <PilotPageHeader
         eyebrow="Belső nyilvántartás"
-        title={record.product.name}
-        description={record.product.commonName ?? undefined}
+        title={livestockTitle(record)}
+        description={livestockSubtitle(record) ?? undefined}
         meta={
           <>
             <PilotBadge variant="danger">{record.quantity} példány</PilotBadge>
@@ -179,8 +184,9 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
                 label="Beszállító / forrás"
                 hint={
                   record.source.type === "SUPPLIER"
-                    ? MORTALITY_SOURCE_LABELS.SUPPLIER
-                    : (sourceNote ?? undefined)
+                    ? (sourceSubtitle(record.source) ??
+                      MORTALITY_SOURCE_LABELS.SUPPLIER)
+                    : (sourceSubtitle(record.source) ?? undefined)
                 }
               >
                 {sourceTitle(record.source)}
@@ -193,6 +199,9 @@ export function MortalityDetailPage({ recordId }: { recordId: string }) {
               </PilotDataItem>
               <PilotDataItem label="Azonosító" mono>
                 #{record.recordNumber}
+              </PilotDataItem>
+              <PilotDataItem label="Készlet">
+                {stockEffectText(record.stock)}
               </PilotDataItem>
             </PilotDataGrid>
           </PilotSection>
