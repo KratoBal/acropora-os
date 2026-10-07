@@ -36,6 +36,22 @@ describe("termékismeret a felülvizsgálati soron", () => {
     );
   });
 
+  // D5: a nem ellenőrzött elfogadás kimondja, hogy nem kerül a webshopba
+  it("a javaslat és az ütközés sora kimondja, hogy nem jelenik meg a webshopban", () => {
+    expect(
+      acceptedLine(fact({ status: "SUGGESTED" }), { fieldResultId: "fr-1" }),
+    ).toBe(
+      "Elfogadva: 100 ml (2. változat) Csak javaslat: a webshopban nem jelenik meg, amíg egy újabb forrás meg nem erősíti.",
+    );
+    expect(
+      acceptedLine(fact({ status: "CONFLICTING_SOURCES", value: null }), {
+        fieldResultId: "fr-1",
+      }),
+    ).toBe(
+      "Elfogadva ütközésként, érték nélkül (2. változat) A webshopban nem jelenik meg, amíg az ütközés nincs feloldva.",
+    );
+  });
+
   it("csak az ellenőrzött, a javaslat és az ütközés fogadható el", () => {
     expect(isAcceptable({ status: "CONFLICTING_SOURCES" })).toBe(true);
     expect(isAcceptable({ status: "MISSING" })).toBe(false);

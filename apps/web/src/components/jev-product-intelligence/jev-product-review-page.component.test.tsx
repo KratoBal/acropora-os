@@ -254,7 +254,7 @@ describe("Termékadat-ellenőrzés aloldal", () => {
       );
       expect(
         await screen.findByText(
-          "Elfogadva ütközésként, érték nélkül (1. változat)",
+          "Elfogadva ütközésként, érték nélkül (1. változat) A webshopban nem jelenik meg, amíg az ütközés nincs feloldva.",
         ),
       ).toBeTruthy();
       expect(api.acceptKnowledge).toHaveBeenCalledWith(

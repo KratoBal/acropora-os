@@ -64,7 +64,8 @@ function fakes(current: KnowledgeProjection | null, linked = true) {
 }
 
 describe("the product knowledge projection, OS -> Medusa", () => {
-  it("writes the contract body: the conflict with a null value, the approved lead", async () => {
+  // D5 (kártya 4622f1ac): a konfliktus nem megy ki, és a mellette írt szöveg sem
+  it("writes the contract body: the VERIFIED fact only; the lead written beside the conflict is held back", async () => {
     const { service, writes } = fakes(null);
     const outcome = await service.project(
       "p-kz",
@@ -78,14 +79,6 @@ describe("the product knowledge projection, OS -> Medusa", () => {
         body: {
           facts: [
             {
-              field: "dosing",
-              value: null,
-              unit: null,
-              status: "CONFLICTING_SOURCES",
-              source_type: null,
-              revision: 1,
-            },
-            {
               field: "packSize",
               value: "100 ml",
               unit: null,
@@ -94,7 +87,7 @@ describe("the product knowledge projection, OS -> Medusa", () => {
               revision: 1,
             },
           ],
-          copy: [{ block: "lead", body: "Bevezető.", revision: 2 }],
+          copy: [],
         },
       },
     ]);
