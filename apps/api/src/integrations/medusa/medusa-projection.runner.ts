@@ -48,6 +48,9 @@ import {
   MEDUSA_PRODUCT_REFERENCE,
   MedusaProductLinkRepository,
 } from "./medusa-product-link.repository.js";
+import type { ShippingAttributesCliDatabase } from "./medusa-shipping-attributes.cli.js";
+import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
+import { MedusaShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
   MedusaProductProjectionService,
   type ProjectionPublicationReport,
@@ -584,6 +587,12 @@ export async function runProjectionCli(
         productLinks,
         imageClient,
         storefrontSalesChannelId(env),
+        // kártya 2a7f2313: a létrehozott termék profilt és szállítási osztályt kap
+        new MedusaShippingOnCreate(
+          db as unknown as ShippingAttributesCliDatabase,
+          imageClient,
+          new MedusaShippingAttributesService(productLinks, imageClient),
+        ),
       );
       knowledge = new MedusaProductKnowledgeService(productLinks, imageClient);
     } catch (error) {
@@ -1365,7 +1374,10 @@ export async function runProjectionCli(
           ? `      nem került rá: ${kimaradt.join(", ")}\n`
           : "") +
         describeKepMasolas(masolas) +
-        describeCimValtozas(outcome.cim),
+        describeCimValtozas(outcome.cim) +
+        (outcome.action === "created" && outcome.shipping
+          ? `      szállítás: ${outcome.shipping}\n`
+          : ""),
     );
 
     /**
