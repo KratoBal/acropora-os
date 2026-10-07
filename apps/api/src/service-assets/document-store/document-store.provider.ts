@@ -48,3 +48,17 @@ export const documentStoreProvider = {
   provide: DOCUMENT_STORE,
   useFactory: () => createDocumentStore(),
 };
+
+/**
+ * The same store, built from an environment provided under `envToken`
+ * (unprovided: the process environment). A spec can then give the store its
+ * own root without writing `process.env` (#1582 P2).
+ */
+export function documentStoreProviderFrom(envToken: symbol) {
+  return {
+    provide: DOCUMENT_STORE,
+    useFactory: (env?: NodeJS.ProcessEnv) =>
+      createDocumentStore(env ?? process.env),
+    inject: [{ token: envToken, optional: true }],
+  };
+}

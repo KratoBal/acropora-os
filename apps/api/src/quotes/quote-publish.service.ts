@@ -17,7 +17,6 @@ import {
 } from "@acropora/types";
 
 import {
-  createDocumentStore,
   DOCUMENT_STORE,
   documentStoreEnabled,
 } from "../service-assets/document-store/document-store.provider.js";
@@ -56,14 +55,6 @@ type Tx = Prisma.TransactionClient;
  * `process.env` and stays in the shared integration run.
  */
 export const QUOTE_DOCUMENT_ENV = Symbol("QUOTE_DOCUMENT_ENV");
-
-/** The quote module's store, built from that environment. */
-export const quoteDocumentStoreProvider = {
-  provide: DOCUMENT_STORE,
-  useFactory: (env?: NodeJS.ProcessEnv) =>
-    createDocumentStore(env ?? process.env),
-  inject: [{ token: QUOTE_DOCUMENT_ENV, optional: true }],
-};
 
 const EDITABLE_QUOTE_STATUSES = new Set(["DRAFT", "SENT", "POSTPONED"]);
 
