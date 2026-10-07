@@ -17,6 +17,7 @@ import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js
 import {
   MedusaInventoryProjectionService,
   type InventoryProjectionReport,
+  type InventoryProjectionOutcome,
 } from "./medusa-inventory-projection.service.js";
 import {
   describeCredentialFailure,
@@ -384,20 +385,26 @@ export async function projectTargetInventory(
     database: InventoryCliDatabase;
   },
   out: { stdout(value: string): void; stderr(value: string): void },
-): Promise<{ failures: string[] }> {
+): Promise<{
+  failures: string[];
+  /** változatonként, mi történt; az ütemező ebből számol a naplóba */
+  actions: InventoryProjectionOutcome["action"][];
+}> {
   const { service, warehouse, database } = context;
   const resolved = await resolveTargets(argument, warehouse.id, database);
   if ("error" in resolved) {
     out.stderr(`${resolved.error}\n`);
-    return { failures: [resolved.error] };
+    return { failures: [resolved.error], actions: [] };
   }
 
   const failures: string[] = [];
+  const actions: InventoryProjectionOutcome["action"][] = [];
   for (const stock of resolved) {
     if (stock.missingRow)
       out.stdout(`${describeMissingStockRow(stock.sku, warehouse.name)}\n`);
 
     const outcome = await service.project(stock);
+    actions.push(outcome.action);
     if (outcome.action === "stopped") {
       out.stderr(
         `${stock.sku}: MEGÁLLT (${outcome.reason}) ${outcome.details}\n`,
@@ -411,7 +418,7 @@ export async function projectTargetInventory(
         `      ${describeInventory(outcome.report)}\n`,
     );
   }
-  return { failures };
+  return { failures, actions };
 }
 
 if (

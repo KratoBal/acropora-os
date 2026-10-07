@@ -116,6 +116,18 @@ export interface InventorySchedulerDeps {
   };
 }
 
+/**
+ * AZ ÜRES KÖR IS KAP SORT, ritkítva: az első mindig, utána minden ennyiedik. A
+ * termék-ütemező ugyanígy tesz (`medusa-projection.scheduler.ts`), és ugyanazért:
+ * enélkül egy élő, de munkát nem találó ütemező kívülről nem különböztethető meg egy
+ * leálltól. Mérve 2026-10-07 04:40: az első kör után a boltban semmi nem változott, és
+ * a naplóból nem derült ki, hogy a kör lefutott-e.
+ */
+const EMPTY_ROUND_LOG_EVERY = 12;
+
+/** Ennyi megállási okot ír ki a kör sora; a többi a termék hivatkozás-során áll. */
+const STOP_REASONS_IN_LOG = 3;
+
 export const MEDUSA_INVENTORY_SCHEDULER_DEPS = Symbol(
   "MEDUSA_INVENTORY_SCHEDULER_DEPS",
 );
@@ -125,6 +137,7 @@ export class MedusaInventoryScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MedusaInventoryScheduler.name);
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
+  private emptyRoundsInARow = 0;
   private readonly db: InventorySyncDatabase & InventoryCliDatabase;
   private readonly environment: NodeJS.ProcessEnv;
   private readonly createService: () => Promise<
@@ -205,22 +218,40 @@ export class MedusaInventoryScheduler implements OnModuleInit, OnModuleDestroy {
       config.batchSize || 50,
       startedAt,
     );
-    if (!due.length) return "SKIPPED";
+    if (!due.length) {
+      this.emptyRoundsInARow += 1;
+      if (
+        this.emptyRoundsInARow === 1 ||
+        this.emptyRoundsInARow % EMPTY_ROUND_LOG_EVERY === 0
+      )
+        this.naplo.log(
+          `Medusa inventory run: SKIPPED (0 esedékes termék, ${this.emptyRoundsInARow}. üres kör egymás után)`,
+        );
+      return "SKIPPED";
+    }
+    this.emptyRoundsInARow = 0;
 
     const service = await this.createService();
     let failed = 0;
+    const variants = { created: 0, updated: 0, "no-change": 0, stopped: 0 };
+    const reasons: string[] = [];
     for (const product of due) {
       let failures: string[];
       try {
-        ({ failures } = await projectTargetInventory(
+        const result = await projectTargetInventory(
           product.productId,
           { service, warehouse, database: this.db },
           { stdout: () => undefined, stderr: () => undefined },
-        ));
+        );
+        failures = result.failures;
+        for (const action of result.actions) variants[action] += 1;
       } catch (error) {
         failures = [error instanceof Error ? error.message : String(error)];
       }
-      if (failures.length) failed += 1;
+      if (failures.length) {
+        failed += 1;
+        if (reasons.length < STOP_REASONS_IN_LOG) reasons.push(failures[0]!);
+      }
       await recordInventoryAttempt(this.db, {
         productId: product.productId,
         medusaProductId: product.medusaProductId,
@@ -228,8 +259,17 @@ export class MedusaInventoryScheduler implements OnModuleInit, OnModuleDestroy {
         failure: failures.length ? failures.join("; ") : null,
       });
     }
+    /**
+     * A SOR AZT IS MEGMONDJA, VÁLTOZOTT-E VALAMI, nem csak hogy kiment-e: a
+     * "változatlan" azt jelenti, hogy a bolt már ugyanazt a számot mutatta. Enélkül
+     * egy kör, ami mindenhol nullát ír a nullára, sikeresnek és hatástalannak
+     * egyszerre látszik, és a kettő nem választható szét.
+     */
     this.naplo.log(
-      `Medusa inventory run: ${due.length - failed} kiment, ${failed} megállt (${due.length} esedékes termék)`,
+      `Medusa inventory run: ${due.length - failed} kiment, ${failed} megállt (${due.length} esedékes termék); ` +
+        `változat: ${variants.created} létrehozva, ${variants.updated} frissítve, ` +
+        `${variants["no-change"]} változatlan, ${variants.stopped} megállt` +
+        (reasons.length ? `; első okok: ${reasons.join(" | ")}` : ""),
     );
     return failed ? "FAILED" : "APPLIED";
   }
