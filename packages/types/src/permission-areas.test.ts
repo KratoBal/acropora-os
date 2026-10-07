@@ -11,6 +11,7 @@ import {
 } from "./permission-areas.js";
 import {
   ALL_PERMISSION_VALUES,
+  MANAGE_VIEW_PAIRS,
   permissionsWithOverrides,
 } from "./permission-overrides.js";
 
@@ -36,6 +37,21 @@ describe("PERMISSION_AREAS", () => {
     assert.equal(billing.view, PERMISSIONS.BILLING_VIEW);
     const finance = PERMISSION_AREAS.find((area) => area.key === "finance")!;
     assert.notEqual(finance.view, billing.view);
+  });
+});
+
+describe("a táblázat és a szerver párjai", () => {
+  it("minden kétszintű terület kezelés-megtekintés párja a szerver szabályában áll", () => {
+    // a táblázat a két jogot együtt állítja, de az API-ból bármi küldhető: a
+    // szerver szabálya csak a MANAGE_VIEW_PAIRS-ben álló párokat őrzi
+    for (const area of PERMISSION_AREAS)
+      if (area.view && area.manage)
+        assert.ok(
+          MANAGE_VIEW_PAIRS.some(
+            ([manage, view]) => manage === area.manage && view === area.view,
+          ),
+          `${area.key}: ${area.manage} -> ${area.view}`,
+        );
   });
 });
 
