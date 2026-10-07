@@ -169,4 +169,50 @@ describe("InventoryCountXlsx", () => {
     const xlsx = new InventoryCountXlsx();
     await assert.rejects(() => xlsx.parseUpload(buffer));
   });
+
+  /*
+    A NEGATÍV SZÁM A FELTÖLTÉSEN SEM MEGY ÁT (barracuda átvétele, #1576): a kézi
+    út (`updateLineCount`) eddig is tiltotta. MI PIROSÍT: ha a -5 átmegy, vagy ha
+    a 0 is fennakad (a határ).
+  */
+  async function uploadWith(counted: unknown) {
+    const ExcelJS = (await import("exceljs")).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Leltár");
+    sheet.addRow([
+      "Cikkszám",
+      "Termék",
+      "Jelenlegi mennyiség",
+      "Leltározott mennyiség",
+    ]);
+    sheet.addRow(["PUMP-XL", "Reef Pumpa XL", 3, 2]);
+    sheet.addRow(["REEF-SALT-01", "Reef Salt", 12, counted]);
+    return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
+  }
+
+  it("rejects a negative counted quantity, naming the row and the SKU", async () => {
+    const xlsx = new InventoryCountXlsx();
+    await assert.rejects(
+      async () => xlsx.parseUpload(await uploadWith(-5)),
+      (error: Error) => {
+        assert.equal(
+          error.message,
+          "Érvénytelen sor (3. sor, REEF-SALT-01): a leltározott mennyiség nem lehet negatív.",
+        );
+        return true;
+      },
+    );
+  });
+
+  it("still accepts zero (the boundary)", async () => {
+    const xlsx = new InventoryCountXlsx();
+    const { rows } = await xlsx.parseUpload(await uploadWith(0));
+    assert.deepEqual(
+      rows.map((row) => [row.sku, row.countedQty]),
+      [
+        ["PUMP-XL", "2"],
+        ["REEF-SALT-01", "0"],
+      ],
+    );
+  });
 });

@@ -110,6 +110,16 @@ export class InventoryCountXlsx {
           `Érvénytelen sor (${rowNumber}. sor, ${sku}): a leltározott mennyiség nem szám.`,
         );
       }
+      // A KÉZI ÚTTAL AZONOS SZABÁLY (`updateLineCount`: a 0 alatti érték
+      // érvénytelen). Enélkül egy -5 a korrekcióban negatív készletet könyvelne,
+      // és UNAS-gazdájú terméknél az élő boltba is kimenne; sem a
+      // `markUploaded`, sem az adatbázis nem fogja meg (barracuda átvétele,
+      // #1576, 2026-10-07).
+      if (countedQty < 0) {
+        throw new BadRequestException(
+          `Érvénytelen sor (${rowNumber}. sor, ${sku}): a leltározott mennyiség nem lehet negatív.`,
+        );
+      }
       rows.push({
         sku,
         countedQty: String(countedQty),
