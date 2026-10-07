@@ -181,6 +181,29 @@ describe("a menü közös forrása", () => {
     );
   });
 
+  it("az Árajánlatok és a szövegrészlet-kezelő a `quotes` kapcsoló és a saját joga mögött áll", () => {
+    const on = new Set(["quotes"] as const);
+    for (const id of ["quotes", "quote-snippets"]) {
+      assert.equal(navigationEntry(id)?.feature, "quotes");
+      assert.equal(isNavigationEntryVisible(id, { role: "OWNER" }), false);
+      assert.equal(isNavigationEntryVisible(id, { role: "OWNER" }, on), true);
+    }
+    // SALES írhat ajánlatot, de szövegrészletet nem kezel
+    assert.equal(
+      isNavigationEntryVisible("quotes", { role: "SALES" }, on),
+      true,
+    );
+    assert.equal(
+      isNavigationEntryVisible("quote-snippets", { role: "SALES" }, on),
+      false,
+    );
+    // a kapcsoló nem ad jogot: VIEWER-nek nincs quotes.view
+    assert.equal(
+      isNavigationEntryVisible("quotes", { role: "VIEWER" }, on),
+      false,
+    );
+  });
+
   it("a kliens a kiszolgált menüből olvassa vissza a kapcsolót, máshonnan nem", () => {
     const on = new Set(["jev-product-enrichment"] as const);
     assert.deepEqual([...servedNavigationFeatures(undefined)], []);

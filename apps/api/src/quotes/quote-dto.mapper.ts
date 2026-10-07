@@ -166,10 +166,18 @@ function bomLineDto(
     kind: b.kind,
     variantId: b.variantId,
     customName: b.customName,
+    variantLabel: variantLabel(b.variant),
     quantity: b.quantity.toString(),
     unit: b.unit,
     createdProductVariantId: b.createdProductVariantId,
   };
+}
+/** "Product · Variant (SKU)": the internal name of a linked variant (P1). */
+function variantLabel(
+  v: { sku: string; name: string | null; product: { name: string } } | null,
+): string | null {
+  if (!v) return null;
+  return `${v.product.name}${v.name ? ` · ${v.name}` : ""} (${v.sku})`;
 }
 /** Offered and optional net totals of a version, exact (P1). */
 function netTotals(v: QuoteRow["versions"][number]) {
@@ -204,6 +212,9 @@ function internalVersionDto(
         ...i,
         source: v.blocks[index]!.items[itemIndex]!.source,
         variantId: v.blocks[index]!.items[itemIndex]!.variantId,
+        variantLabel: variantLabel(
+          v.blocks[index]!.items[itemIndex]!.variant ?? null,
+        ),
       })),
     })),
   };

@@ -386,10 +386,15 @@ describe("AuthController", () => {
   it("serves each role exactly what the shared source says it may see", () => {
     let osszevetes = 0;
 
-    // both positions of the server switch: off (unset) and on
+    // both positions of every server switch: off (unset) and on
     for (const env of [
       {},
-      { JEV_PRODUCT_ENRICHMENT: "review", JEV_PILOT_USER_IDS: testUser.id },
+      {
+        JEV_PRODUCT_ENRICHMENT: "review",
+        JEV_PILOT_USER_IDS: testUser.id,
+        QUOTES_ENABLED: "pilot",
+        QUOTES_PILOT_USER_IDS: testUser.id,
+      },
     ]) {
       const controller = new AuthController(
         {} as unknown as ConstructorParameters<typeof AuthController>[0],

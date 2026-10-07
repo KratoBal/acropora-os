@@ -122,6 +122,8 @@ describe("navigation", () => {
       "/beszerzes/nav-szamlak",
       // Számlázás (Balázs, 2026-09-30): a bizonylatok listája
       "/penzugy/szamlazas",
+      // Árajánlatok (#1582 P1): a Figma 35 szerint a Pénzügy alatt
+      "/ajanlatok",
       // Elszámolások (Balázs, 2026-09-30): a Foxpost, a GLS és a SimplePay
       // egy menüpont alatt, fülekkel
       "/penzugy/elszamolasok",
@@ -441,6 +443,9 @@ describe("navigation", () => {
     // A Számlázás menüpontja 2026-09-30-án jött, a bevezetés UTÁN; a jog az,
     // amit a forrás kimond (`billing.view`, a #1276 óta).
     "/penzugy/szamlazas": "billing.view",
+    // Az Árajánlatok (#1582 P1) a bevezetés UTÁN jött; a jog a forrásé
+    // (`quotes.view`), a menüpontot ezen felül a `quotes` kapcsoló rejti.
+    "/ajanlatok": "quotes.view",
     "/penzugy/elszamolasok": "finance.view",
     // A Hiányzó számlák 2026-09-30-án jött, a bevezetés UTÁN; a jog az
     // Elszámolásoké (`finance.view`).
@@ -480,6 +485,8 @@ describe("navigation", () => {
     // AZ ESZKOZ-FUNKCIOK UGYANAZ A FAJTA TETEL, ugyanaz a bontas -- kanban
     // 68add892, 2026-09-22.
     "/beallitasok/eszkoz-funkciok": "settings.manage",
+    // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
+    "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {

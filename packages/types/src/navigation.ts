@@ -69,7 +69,10 @@ export type NavigationVisibility =
  * `visibleNavigationFor`, and the client learns them from the menu it is
  * served (`servedNavigationFeatures`), never from an environment variable.
  */
-export const NAVIGATION_FEATURES = ["jev-product-enrichment"] as const;
+export const NAVIGATION_FEATURES = [
+  "jev-product-enrichment",
+  "quotes",
+] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
 const NO_FEATURES: ReadonlySet<NavigationFeature> = new Set();
@@ -355,6 +358,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * ÁRAJÁNLATOK (#1582 P1, acrobot 3. döntése): a Pénzügy alatt, a Figma 35
+     * szerint. A `quotes` kapcsoló mögött áll (`QUOTES_ENABLED`, alapból ki);
+     * a kapcsoló CSAK a menüt rejti, a végpontokat a quotes.* jog védi.
+     */
+    id: "quotes",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.QUOTES_VIEW),
+    feature: "quotes",
+  },
+  {
+    /**
      * ELSZÁMOLÁSOK (Balázs, 2026-09-30 15:06 UTC): egy menüpont a Pénzügy
      * alatt, fülekkel a Foxpost, a GLS és a SimplePay elszámolásra. A menüpont
      * annak látszik, akinek legalább egy fülhöz van joga; ma mindhárom
@@ -545,6 +559,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "asset-categories",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
+     * AZ AJÁNLATI SZÖVEGRÉSZLETEK KEZELŐJE (#1582 P1). Ugyanaz a jog, ami a
+     * végpontok írását védi (`quotes.templates.manage`), és ugyanaz a
+     * kapcsoló, mint az Árajánlatok menüponté.
+     */
+    id: "quote-snippets",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.QUOTES_TEMPLATES_MANAGE),
+    feature: "quotes",
   },
   {
     /**

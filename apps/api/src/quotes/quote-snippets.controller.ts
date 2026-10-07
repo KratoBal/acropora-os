@@ -21,7 +21,6 @@ import {
   QuoteSnippetPatchDto,
 } from "./dto/quote-editor.dto.js";
 import { QuoteSnippetsService } from "./quote-snippets.service.js";
-import { QuotesRepository } from "./quotes.repository.js";
 
 /** The snippet library: read by quote writers, written by template managers. */
 @Controller("quote-snippets")
@@ -61,17 +60,5 @@ export class QuoteSnippetsController {
   @RequirePermissions(PERMISSIONS.QUOTES_TEMPLATES_MANAGE)
   archive(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.snippets.archive(id, user);
-  }
-}
-
-/** The template picker at "new quote" (P1 decision 1: no template editor). */
-@Controller("quote-templates")
-export class QuoteTemplatesController {
-  constructor(private readonly repository: QuotesRepository) {}
-
-  @Get()
-  @RequirePermissions(PERMISSIONS.QUOTES_MANAGE)
-  list() {
-    return this.repository.templates();
   }
 }

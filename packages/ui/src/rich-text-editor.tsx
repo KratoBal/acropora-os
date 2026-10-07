@@ -53,6 +53,10 @@ import {
   type RichTextAlignment,
 } from "@acropora/rich-text";
 import {
+  EMPTY_QUOTE_RICH_TEXT,
+  quoteRichTextFromEditor,
+} from "@acropora/types";
+import {
   EditorContent,
   Extension,
   InputRule,
@@ -159,6 +163,16 @@ export interface RichTextEditorProps {
   readonly "aria-label": string;
   readonly className?: string;
   readonly ref?: Ref<RichTextEditorHandle>;
+  /**
+   * `html` (alapertelmezes): a mai levelszerkeszto, valtozatlanul.
+   * `quote`: az ARAJANLAT szovege (#1582 P1, 5. dontes). Szuk bovitmeny-keszlet
+   * (bekezdes, felkover, dolt, felsorolas, sortores), es a `value` / `onChange`
+   * egy `QuoteRichText` dokumentum JSON-SZOVEGE, nem HTML. Cimsor, idezet,
+   * alahuzas, link, athuzas sem gyorsbillentyuvel, sem beillesztessel nem
+   * kerulhet bele: a semabol hianyzik, tehat a szerkeszto el sem tudja
+   * eloallitani. Valtozo es kep ebben a modban nincs.
+   */
+  readonly mode?: "html" | "quote";
 }
 
 const ALAP_ESZKOZTAR: readonly RichTextToolbarItem[] = [
@@ -169,6 +183,52 @@ const ALAP_ESZKOZTAR: readonly RichTextToolbarItem[] = [
   "bulletList",
   "orderedList",
 ];
+
+/** Az ajanlati szoveg eszkoztara: pontosan a kozos sema jelolesei es listai. */
+const AJANLAT_ESZKOZTAR: readonly RichTextToolbarItem[] = [
+  "bold",
+  "italic",
+  "bulletList",
+  "orderedList",
+];
+
+/**
+ * AZ AJANLATI MOD BOVITMENYEI. A StarterKit minden olyan reszet kikapcsoljuk,
+ * ami a kozos semaban (`QUOTE_RICH_TEXT_NODES` / `_MARKS`) nem all: ha a sema
+ * nem ismeri, a ProseMirror a beillesztett `<h2>`-t bekezdesse, a `# `
+ * beirast sima szovegge teszi, es a Ctrl+U nem csinal semmit. A felhasznalo
+ * szovege tehat megmarad, csak a formazas nem.
+ */
+function ajanlatBovitmenyek() {
+  return [
+    StarterKit.configure({
+      code: false,
+      codeBlock: false,
+      trailingNode: false,
+      heading: false,
+      blockquote: false,
+      horizontalRule: false,
+      strike: false,
+      underline: false,
+      link: false,
+    }),
+  ];
+}
+
+/** A kulso JSON-szoveg a szerkesztonek; olvashatatlanra egy ures dokumentum. */
+function ajanlatTartalom(ertek: string): object {
+  try {
+    const parsed: unknown = JSON.parse(ertek);
+    return parsed && typeof parsed === "object"
+      ? (parsed as object)
+      : EMPTY_QUOTE_RICH_TEXT;
+  } catch {
+    return EMPTY_QUOTE_RICH_TEXT;
+  }
+}
+
+const ajanlatKimenet = (e: Editor) =>
+  JSON.stringify(quoteRichTextFromEditor(e.getJSON()));
 
 const BEIRT_VALTOZO = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/;
 const BEILLESZTETT_VALTOZO = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -749,13 +809,21 @@ export function RichTextEditor({
   value,
   onChange,
   variables = [],
-  toolbar = ALAP_ESZKOZTAR,
+  toolbar,
   className,
   ref,
   onImageRequest,
   resolveImageSrc,
+  mode = "html",
   ...props
 }: RichTextEditorProps) {
+  const ajanlat = mode === "quote";
+  /* Ajanlati modban CSAK a semaban allo gombok maradhatnak. */
+  const eszkoztar = ajanlat
+    ? (toolbar ?? AJANLAT_ESZKOZTAR).filter((elem) =>
+        AJANLAT_ESZKOZTAR.includes(elem),
+      )
+    : (toolbar ?? ALAP_ESZKOZTAR);
   /*
     A KEP-FELOLDO REF-BEN, mint az `onChange`: a csomopont-nezet a
     szerkesztovel egyutt jon letre, es a kesobb erkezo cimeket csak igy latja.
@@ -773,12 +841,14 @@ export function RichTextEditor({
   const kulcs = variables.map((v) => `${v.name}:${v.kind ?? ""}`).join("|");
   const extensions = useMemo(
     () =>
-      bovitmenyek(
-        variables,
-        linkValtozok.map((v) => v.name),
-        feloldRef,
-      ),
-    [kulcs],
+      ajanlat
+        ? ajanlatBovitmenyek()
+        : bovitmenyek(
+            variables,
+            linkValtozok.map((v) => v.name),
+            feloldRef,
+          ),
+    [kulcs, ajanlat],
   );
 
   /*
@@ -794,7 +864,7 @@ export function RichTextEditor({
   const editor = useEditor(
     {
       extensions,
-      content: value,
+      content: ajanlat ? ajanlatTartalom(value) : value,
       /*
         NEXT.JS ALATT A SZERVER NEM RENDEREL SZERKESZTOT: a ProseMirror DOM-ot
         kell hogy lasson. Enelkul a hidratalas elter, es a React figyelmeztet.
@@ -809,7 +879,8 @@ export function RichTextEditor({
             "min-h-48 px-3 py-2 text-sm text-dusk-900 outline-none [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-brand-700 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-dusk-200 [&_blockquote]:pl-3 [&_[data-variable]]:rounded [&_[data-variable]]:bg-brand-50 [&_[data-variable]]:px-1 [&_[data-variable]]:font-mono [&_[data-variable]]:text-xs [&_[data-variable]]:text-brand-700 [&_[data-align=center]]:text-center [&_[data-align=right]]:text-right [&_p[data-cta]]:my-4 [&_p[data-cta]_a]:inline-block [&_p[data-cta]_a]:rounded-[7px] [&_p[data-cta]_a]:bg-[#0b7a6e] [&_p[data-cta]_a]:px-6 [&_p[data-cta]_a]:py-3 [&_p[data-cta]_a]:font-semibold [&_p[data-cta]_a]:text-white [&_p[data-cta]_a]:no-underline",
         },
       },
-      onUpdate: ({ editor: e }) => onChangeRef.current(e.getHTML()),
+      onUpdate: ({ editor: e }) =>
+        onChangeRef.current(ajanlat ? ajanlatKimenet(e) : e.getHTML()),
     },
     [extensions],
   );
@@ -821,9 +892,15 @@ export function RichTextEditor({
     a szoveg elejere ugrana.
   */
   useEffect(() => {
-    if (editor && value !== editor.getHTML())
+    if (!editor) return;
+    if (ajanlat) {
+      if (value !== ajanlatKimenet(editor))
+        editor.commands.setContent(ajanlatTartalom(value), {
+          emitUpdate: false,
+        });
+    } else if (value !== editor.getHTML())
       editor.commands.setContent(value, { emitUpdate: false });
-  }, [editor, value]);
+  }, [editor, value, ajanlat]);
 
   /*
     A KEPEK CIME KESOBB ERKEZIK, MINT A TARTALOM (a hivo betolti oket). A mar
@@ -971,7 +1048,7 @@ export function RichTextEditor({
     },
   };
   /* A KEP GOMB CSAK AKKOR ALL OTT, HA VAN, AKI KEPET AD. */
-  const lathato = toolbar.filter(
+  const lathato = eszkoztar.filter(
     (elem) => elem !== "image" || onImageRequest !== undefined,
   );
 

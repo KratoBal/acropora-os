@@ -31,6 +31,12 @@ export const QUOTE_LIST_SELECT = {
 export type QuoteListRow = Prisma.QuoteGetPayload<{
   select: typeof QUOTE_LIST_SELECT;
 }>;
+/** Only what names a linked variant on the internal detail (P1). */
+const VARIANT_LABEL_SELECT = {
+  sku: true,
+  name: true,
+  product: { select: { name: true } },
+} satisfies Prisma.ProductVariantSelect;
 /** The detail tree; the mapper decides per audience what leaves. */
 export const QUOTE_DETAIL_INCLUDE = {
   versions: {
@@ -38,9 +44,17 @@ export const QUOTE_DETAIL_INCLUDE = {
     include: {
       blocks: {
         orderBy: { position: "asc" },
-        include: { items: { orderBy: { position: "asc" } } },
+        include: {
+          items: {
+            orderBy: { position: "asc" },
+            include: { variant: { select: VARIANT_LABEL_SELECT } },
+          },
+        },
       },
-      bomItems: { orderBy: [{ quoteItemId: "asc" }, { position: "asc" }] },
+      bomItems: {
+        orderBy: [{ quoteItemId: "asc" }, { position: "asc" }],
+        include: { variant: { select: VARIANT_LABEL_SELECT } },
+      },
       milestones: { orderBy: { position: "asc" } },
     },
   },
