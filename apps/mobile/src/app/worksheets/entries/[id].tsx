@@ -52,7 +52,7 @@ export default function WorksheetEntryScreen() {
   }>();
   const router = useRouter();
   const { status, user } = useAuth();
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const queryClient = useQueryClient();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);

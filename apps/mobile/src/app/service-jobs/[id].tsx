@@ -94,7 +94,7 @@ export default function ServiceJobDetailScreen() {
   const { status, user } = useAuth();
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const online = useIsOnline();
 
   const [note, setNote] = useState("");

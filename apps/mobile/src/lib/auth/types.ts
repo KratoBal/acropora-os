@@ -82,6 +82,15 @@ export interface AuthenticatedUser {
    * (4) lepes azokat ki nem veszi.
    */
   navigation?: NavigationEntryView[];
+  /**
+   * A SZEMÉLY JOGAI, ahogy a szerver kiszámolta: a szerep sablonja plusz a
+   * felhasználónkénti eltérései (Balázs döntése, 2026-10-06). A telefon
+   * képességei (`webshop-authorization.ts`) ebből számolnak, ha megjött.
+   *
+   * ELHAGYHATÓ, ugyanazon az alapon, mint a `navigation`: egy régebbi szerver
+   * nem küldi, és akkor a képességek a szerep táblájára esnek vissza.
+   */
+  permissions?: string[];
 }
 
 /** Shape stored in SecureStore: the opaque Bearer token plus its own

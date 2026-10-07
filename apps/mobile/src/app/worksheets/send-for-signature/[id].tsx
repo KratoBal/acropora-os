@@ -49,7 +49,7 @@ export default function SendWorksheetForSignatureScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status, user } = useAuth();
-  const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const capabilities = user ? getServiceCapabilities(user) : null;
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
 
