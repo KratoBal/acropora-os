@@ -36,6 +36,21 @@ export function barcodeType(code: string): ProductBarcodeType {
   return GTIN_TIPUS[v.kind];
 }
 
+/**
+ * A JEV `ean` értékéből a TÁROLT kód (SEO P0 PR 4). A JEV a GTIN-t 14 jegyre
+ * töltve normalizálja (`gtin14`); a `ProductBarcode` a csomagoláson álló alakot
+ * tartja, ahogy a 2026-10-03-i JEV-átvétel is (13 jegy, a GTIN-14 vezető nullája
+ * nélkül, acrobot emléke 2025). Az EAN-8 8 jegyen marad, egy valódi GTIN-14 14
+ * jegyen.
+ */
+export function storedBarcodeCode(value: string): string {
+  const code = value.trim();
+  if (!/^\d{14}$/.test(code)) return code;
+  if (code.startsWith("000000") && validateGtin(code.slice(6)).ok)
+    return code.slice(6);
+  return code.startsWith("0") ? code.slice(1) : code;
+}
+
 /** Termék-GTIN-e (a vetítés csak ezt viszi a bolt `ean`/`upc` mezőjébe). */
 export const isProductGtin = (type: ProductBarcodeType | null): boolean =>
   type !== null && type !== "INTERNAL";

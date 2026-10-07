@@ -12,7 +12,7 @@ import type {
   EnrichmentFactsReader,
   StoredCheck,
 } from "../enrichment/enrichment-run.js";
-import { ATTRIBUTE_DEFINITIONS } from "../attributes/attribute-definitions.js";
+import { CURRENT_ATTRIBUTE_DEFINITIONS } from "../attributes/attribute-definitions.js";
 import type { ProductService } from "../product.service.js";
 import {
   knowledgeProjection,
@@ -45,6 +45,12 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
   })[] = [];
   const facts = new Map<string, FactRecord>();
   const copy = new Map<ProductCopyBlock, CopyRecord>();
+  const barcodes: {
+    variantId: string;
+    code: string;
+    fieldResultId: string;
+    isPrimary: boolean;
+  }[] = [];
   const store: KnowledgeStore = {
     latestFieldResult: async (productId, field) => {
       const row = results
@@ -78,11 +84,23 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
       ),
     // the seed itself (PR 2), so the door checks what the database will hold
     definition: async (field) => {
-      const seed = ATTRIBUTE_DEFINITIONS.find((d) => d.key === field);
+      // a definíciók MA (a PR 4 után az `ean` vonalkód, nem tény)
+      const seed = CURRENT_ATTRIBUTE_DEFINITIONS.find((d) => d.key === field);
       // `isActive` is the column default (true); the seed does not carry it
       return seed ? { ...seed, isActive: true } : null;
     },
     variantIds: async () => [...variantIds],
+    acceptBarcode: async (input) => {
+      const masik = barcodes.find((b) => b.code === input.code);
+      if (masik && masik.variantId !== input.variantId)
+        return { kind: "taken" as const, sku: `${masik.variantId}-sku` };
+      if (masik) return { kind: "exists" as const };
+      const isPrimary = !barcodes.some(
+        (b) => b.variantId === input.variantId && b.isPrimary,
+      );
+      barcodes.push({ ...input, isPrimary });
+      return { kind: "created" as const, isPrimary };
+    },
     upsertFact: async (input) => {
       // the Prisma key: product, scopeKey (`variantId ?? ""`), field
       const key = `${input.variantId ?? ""}|${input.field}`;
@@ -132,7 +150,7 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
       });
     },
   };
-  return { store, results, facts, copy };
+  return { store, results, facts, copy, barcodes };
 }
 
 function service(memory = memoryStore()) {
@@ -535,5 +553,106 @@ describe("product knowledge: the variant a fact belongs to (SEO P0 PR 3)", () =>
       (await projected(memory)).facts.map((f) => f.field),
       ["application"],
     );
+  });
+});
+
+/*
+  AZ ELFOGADOTT EAN VONALKÓD, NEM TÉNY (SEO P0 PR 4, C3). MI PIROSIT: az EAN
+  tényként tárolódik; a kód nem a csomagolás alakjában (13 jegy) áll, hanem a
+  JEV 14 jegyes alakjában; egy másik változat kódja felülíródik vagy
+  megkettőződik; egy meglévő primary elveszti a rangját; egy ütköző EAN érték
+  nélkül íródik.
+*/
+describe("product knowledge: the accepted EAN is a barcode (SEO P0 PR 4)", () => {
+  const EAN = {
+    field: "ean",
+    raw: "EAN: 4260507580214",
+    value: "4260507580214",
+    url: "https://gyarto.example.invalid/amino",
+    sourceType: "MANUFACTURER_PAGE",
+  };
+
+  it("one variant: a primary JEV barcode in the package's form, and no fact", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    const r = await knowledge.addEvidence(PRODUCT, EAN, USER);
+    const view = await knowledge.accept(PRODUCT, r.fieldResultId, USER);
+    assert.deepEqual(memory.barcodes, [
+      {
+        variantId: "v-egy",
+        code: "4260507580214",
+        fieldResultId: r.fieldResultId,
+        verifiedById: "u-owner",
+        verifiedAt: new Date("2026-10-03T19:00:00.000Z"),
+        isPrimary: true,
+      },
+    ]);
+    assert.deepEqual(view.facts, []);
+    assert.equal(memory.facts.size, 0);
+  });
+
+  it("a code another variant holds is a 409 naming it; the existing primary keeps its rank", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    memory.barcodes.push({
+      variantId: "v-masik",
+      code: "4260507580214",
+      fieldResultId: "x",
+      isPrimary: true,
+    });
+    const r = await knowledge.addEvidence(PRODUCT, EAN, USER);
+    await assert.rejects(
+      knowledge.accept(PRODUCT, r.fieldResultId, USER),
+      (err: unknown) =>
+        err instanceof ConflictException && /v-masik-sku/.test(err.message),
+    );
+    assert.equal(memory.barcodes.length, 1);
+
+    const sajat = service(memoryStore(["v-egy"]));
+    sajat.memory.barcodes.push({
+      variantId: "v-egy",
+      code: "5999999999993",
+      fieldResultId: "y",
+      isPrimary: true,
+    });
+    const r2 = await sajat.knowledge.addEvidence(PRODUCT, EAN, USER);
+    await sajat.knowledge.accept(PRODUCT, r2.fieldResultId, USER);
+    assert.deepEqual(
+      sajat.memory.barcodes.map((b) => [b.code, b.isPrimary]),
+      [
+        ["5999999999993", true],
+        ["4260507580214", false],
+      ],
+    );
+  });
+
+  it("a resolved EAN conflict becomes the barcode too, never a fact", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    await knowledge.addEvidence(PRODUCT, EAN, USER);
+    const masik = await knowledge.addEvidence(
+      PRODUCT,
+      {
+        ...EAN,
+        raw: "EAN: 4006381333931",
+        value: "4006381333931",
+        url: "https://beszallito.example.invalid/amino",
+        sourceType: "MANUFACTURER_DOCUMENT",
+      },
+      USER,
+    );
+    // ütközés: értéke nincs, vonalkódként nem írható
+    await assert.rejects(
+      knowledge.accept(PRODUCT, masik.fieldResultId, USER),
+      ConflictException,
+    );
+    await knowledge.resolve(
+      PRODUCT,
+      masik.fieldResultId,
+      "4006381333931",
+      USER,
+    );
+    assert.deepEqual(
+      memory.barcodes.map((b) => [b.variantId, b.code, b.isPrimary]),
+      [["v-egy", "4006381333931", true]],
+    );
+    assert.equal(memory.facts.size, 0);
   });
 });

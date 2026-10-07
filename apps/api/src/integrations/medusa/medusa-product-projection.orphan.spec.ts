@@ -55,6 +55,7 @@ const product: ProjectableProduct = {
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
+  variantBarcodes: [],
   unit: null,
   secondaryUnit: null,
   secondaryUnitFactor: null,

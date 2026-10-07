@@ -179,6 +179,14 @@ export interface ProjectableProduct {
    */
   barcode: { field: "ean" | "upc"; value: string } | null;
   /**
+   * A VÁLTOZATONKÉNTI VONALKÓD (SEO P0 PR 4), a `ProductBarcode` primary sorából,
+   * cikkszám szerint, már eldöntött mezőnévvel. A frissítés-ág ebből írja a
+   * változatok `ean`/`upc` mezőjét, a létrehozás a többváltozatos sorokat. Üres
+   * lista: nincs kiírható kód (vagy a kapcsoló a régi utat választotta).
+   * KÖTELEZŐ: egy hívó, aki elfelejti, ne a "nincs kód" alakban essen át.
+   */
+  variantBarcodes: { sku: string; field: "ean" | "upc"; value: string }[];
+  /**
    * A MERTEKEGYSEG ES A MASODLAGOS EGYSEG, MAR SZOVEGGE ALAKITVA.
    *
    * A Medusa termek- es variant-modelljenek NINCS mertekegyseg-mezoje (merve a
@@ -360,6 +368,12 @@ export type ProjectionOutcome =
        * felig elvegzett futasra.
        */
       metadata: "merged" | "unreadable" | "skipped";
+      /**
+       * A változatok vonalkódja ebben a futásban (SEO P0 PR 4), ha volt kiírható
+       * kód. A termék akkor is frissült, ha egy változat írása elhasalt: a
+       * jelentés mondja ki, melyiké.
+       */
+      barcodes?: VariantBarcodeSyncReport;
       /** A MI kulcsaink, amiket ez a futas levett a cel oldalrol. */
       metadataRemovedKeys: string[];
       /**
@@ -933,6 +947,14 @@ export class MedusaProductProjectionService {
             : "skipped",
         metadataRemovedKeys: metadataReadable ? merged.removedKeys : [],
         ...(metadataError ? { metadataError } : {}),
+        ...(product.variantBarcodes.length
+          ? {
+              barcodes: await this.syncVariantBarcodes(
+                medusaProductId,
+                product.variantBarcodes,
+              ),
+            }
+          : {}),
       };
     };
 
@@ -1108,8 +1130,22 @@ export class MedusaProductProjectionService {
                 title: row.title,
                 sku: row.sku,
                 options: row.options,
+                /*
+                  SEO P0 PR 4: a `ProductBarcode` VÁLTOZATONKÉNT külön sor, tehát
+                  itt nincs ütközés; a lenti tiltás a gyártói cikkszámra szólt
+                  (termék-szintű érték). Kód nélkül a kulcs nem kerül be.
+                */
+                ...(() => {
+                  const b = product.variantBarcodes.find(
+                    (v) => v.sku === row.sku,
+                  );
+                  return b ? { [b.field]: b.value } : {};
+                })(),
                 /**
-                 * TOBB VALTOZATNAL A VONALKOD NEM MEGY KI, ES EZ MERT DONTES.
+                 * A GYARTOI CIKKSZAMBOL TOBB VALTOZATNAL A VONALKOD NEM MENT KI
+                 * (a kapcsolo kikapcsolt allasa, SEO P0 PR 4 elott minden),
+                 * ES EZ MERT DONTES VOLT. A `ProductBarcode` forrasnal a kod
+                 * valtozatonkent kulon sor, ezert fent mar kimegy.
                  *
                  * A Medusa mind a harom vonalkod-mezore EGYEDI indexet tart
                  * (`IDX_product_variant_ean_unique`, `..._upc_unique`,
@@ -1163,6 +1199,56 @@ export class MedusaProductProjectionService {
    * kint van, kötéssel. A mondat kimondja, mi történt, és a
    * `medusa:shipping-attributes` parancs újrafuttatása pótolja.
    */
+  /**
+   * A VÁLTOZATOK VONALKÓDJA A FRISSÍTÉS-ÁGON (SEO P0 PR 4, C3 „Vetítés” 2.).
+   *
+   * Eddig a vonalkód csak a létrehozáskor ment ki: egy egyszer létrehozott termék
+   * sosem kapott kódot. Itt a bolt mai értékét olvassuk, és csak az eltérő mezőt
+   * írjuk; üres kódot nem küldünk (a mai szabály: egy üres `ean` felülírná, amit
+   * más tett oda).
+   *
+   * Egy változat írásának bukása (például a bolt egyedi indexe: a kód egy másik
+   * változaton áll) nem állítja meg a terméket: a jelentésbe kerül, név szerint.
+   */
+  private async syncVariantBarcodes(
+    medusaProductId: string,
+    wanted: ProjectableProduct["variantBarcodes"],
+  ): Promise<VariantBarcodeSyncReport> {
+    const report: VariantBarcodeSyncReport = {
+      written: [],
+      unchanged: 0,
+      missing: [],
+      failed: [],
+    };
+    let rows: Awaited<ReturnType<MedusaAdminClient["listVariantBarcodes"]>>;
+    try {
+      rows = await this.medusa.listVariantBarcodes(medusaProductId);
+    } catch (error) {
+      report.failed.push({ sku: "*", error: describeMedusaFailure(error) });
+      return report;
+    }
+    for (const w of wanted) {
+      const row = rows.find((r) => r.sku === w.sku);
+      if (!row) {
+        report.missing.push(w.sku);
+        continue;
+      }
+      if (row[w.field] === w.value) {
+        report.unchanged += 1;
+        continue;
+      }
+      try {
+        await this.medusa.updateVariantBarcode(medusaProductId, row.id, {
+          [w.field]: w.value,
+        });
+        report.written.push(w.sku);
+      } catch (error) {
+        report.failed.push({ sku: w.sku, error: describeMedusaFailure(error) });
+      }
+    }
+    return report;
+  }
+
   private async shippingAfterCreate(
     osProductId: string,
     profileId: string | null,
@@ -1185,3 +1271,14 @@ export class MedusaProductProjectionService {
 
 /** Csak a teszteknek, hogy a sor alakja egy helyen legyen leírva. */
 export type { MedusaProductRow };
+
+/** A frissítés-ág vonalkód-írásának jelentése (SEO P0 PR 4). */
+export interface VariantBarcodeSyncReport {
+  /** A cikkszámok, amiknek a kódját ez a futás írta. */
+  written: string[];
+  /** Ennyi változaton már a kívánt kód állt. */
+  unchanged: number;
+  /** A cikkszámok, amiket a bolt termékén nem találtunk. */
+  missing: string[];
+  failed: { sku: string; error: string }[];
+}

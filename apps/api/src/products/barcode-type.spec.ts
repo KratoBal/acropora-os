@@ -3,7 +3,11 @@ import { describe, it } from "node:test";
 
 import { validateGtin } from "@acropora/jev/product-enrichment";
 
-import { barcodeType, isProductGtin } from "./barcode-type.js";
+import {
+  barcodeType,
+  isProductGtin,
+  storedBarcodeCode,
+} from "./barcode-type.js";
 
 /**
  * A TÍPUS-FELISMERÉS, KALIBRÁLVA (SEO P0 PR 4). Ugyanazok az esetek, mint a stage
@@ -41,5 +45,20 @@ describe("barcodeType", () => {
     assert.equal(isProductGtin("EAN13"), true);
     assert.equal(isProductGtin("INTERNAL"), false);
     assert.equal(isProductGtin(null), false);
+  });
+});
+
+/*
+  A JEV 14 JEGYES ALAKJABOL A CSOMAGOLAS ALAKJA (SEO P0 PR 4). MI PIROSIT: az
+  EAN-13 14 jegyen marad (a cikkszam-kod 13 jegyen all, tehat ket sor lenne egy
+  kodra); az EAN-8 13 jegyre bovul; egy valodi GTIN-14 elveszti a jelzojegyet.
+*/
+describe("storedBarcodeCode", () => {
+  it("EAN-13 13 jegyen, EAN-8 8 jegyen, a valodi GTIN-14 14 jegyen; mas valtozatlan", () => {
+    assert.equal(storedBarcodeCode("04260507580214"), "4260507580214");
+    assert.equal(storedBarcodeCode("00000096385074"), "96385074");
+    assert.equal(storedBarcodeCode("14260507580211"), "14260507580211");
+    assert.equal(storedBarcodeCode("4260507580214"), "4260507580214");
+    assert.equal(storedBarcodeCode("ACR1"), "ACR1");
   });
 });

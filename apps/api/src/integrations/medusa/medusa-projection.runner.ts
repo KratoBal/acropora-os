@@ -27,6 +27,11 @@ import {
   describeSkippedBarcode,
 } from "./medusa-barcode.policy.js";
 import {
+  barcodesFromProductBarcode,
+  decideVariantBarcodes,
+} from "./medusa-variant-barcode.js";
+import type { VariantBarcodeSyncReport } from "./medusa-product-projection.service.js";
+import {
   betoltTiltoLista,
   tiltottKodBarmelyikValtozaton,
 } from "./medusa-vetitesi-szuro.js";
@@ -371,6 +376,21 @@ export function describeKepMasolas(
   return `      MESTER: ${reszek.join(", ")}\n`;
 }
 
+/**
+ * A VÁLTOZATOK VONALKÓD-ÍRÁSA (SEO P0 PR 4), csak ha volt mit mondani: írt, nem
+ * talált, vagy elbukott. A „mind egyezett” csend: minden futásban ott állna.
+ */
+export function describeVariantBarcodes(r: VariantBarcodeSyncReport): string {
+  const reszek = [
+    r.written.length ? `${r.written.length} írva` : "",
+    r.missing.length ? `nincs a boltban: ${r.missing.join(", ")}` : "",
+    r.failed.length
+      ? `HIBA: ${r.failed.map((f) => `${f.sku} (${f.error})`).join("; ")}`
+      : "",
+  ].filter(Boolean);
+  return reszek.length ? `      vonalkód: ${reszek.join("; ")}\n` : "";
+}
+
 export function describeForgottenLink(
   productId: string,
   removedRows: number,
@@ -424,6 +444,8 @@ export type ProjectionDatabase = Pick<
    */
   | "productKnowledgeFact"
   | "productCopy"
+  /** A változatok vonalkódja (SEO P0 PR 4). */
+  | "productBarcode"
 >;
 
 export async function runProjectionCli(
@@ -759,6 +781,7 @@ export async function runProjectionCli(
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: {
+            id: true,
             sku: true,
             manufacturerPartNumber: true,
             unit: true,
@@ -963,7 +986,43 @@ export async function runProjectionCli(
      * A szamlalas AKTIV valtozatokra szol: egy inaktiv valtozat nem kerul ki a
      * boltba, tehat nem is utkozhet ott.
      */
-    const nyersVonalkod = product.variants[0]?.manufacturerPartNumber ?? null;
+    /*
+      A FORRÁS (SEO P0 PR 4, D1): a kapcsoló mellett a változatok primary
+      `ProductBarcode` sora, kikapcsolva a mai út (a gyártói cikkszám). A mai út
+      kódja változatlanul alatta áll, hogy a visszakapcsolás ugyanazt adja.
+    */
+    const pbForras = barcodesFromProductBarcode(env);
+    const valtozatVonalkodok = pbForras
+      ? await (async () => {
+          const primaries = await db.productBarcode.findMany({
+            where: {
+              variantId: { in: product.variants.map((v) => v.id) },
+              isPrimary: true,
+            },
+            select: { variantId: true, code: true, type: true },
+          });
+          const szamok = new Map<string, number>();
+          for (const p of primaries)
+            szamok.set(
+              p.code,
+              await db.productBarcode.count({
+                where: { code: { in: vonalkodAlakjai(p.code) } },
+              }),
+            );
+          return decideVariantBarcodes({
+            variants: product.variants,
+            primaries,
+            sameValueCount: (code) => szamok.get(code) ?? 1,
+            blocked: (sku, code) =>
+              tiltottKodBarmelyikValtozaton([sku], code, tiltoIndex),
+          });
+        })()
+      : [];
+    const nyersVonalkod = pbForras
+      ? product.variants.length === 1
+        ? (valtozatVonalkodok[0]?.code ?? null)
+        : null
+      : (product.variants[0]?.manufacturerPartNumber ?? null);
     /**
      * EGY lekerdezes, es a szamot MEGTARTJUK a hiany-sorhoz is. Egy masodik
      * `count` ugyanarra az ertekre nem csak folosleges kor: ket kulonbozo
@@ -984,14 +1043,16 @@ export async function runProjectionCli(
       valodi gyartoi cikkszamokon a viselkedes valtozatlan.
     */
     const kodAlakok = vonalkodAlakjai(nyersVonalkod);
-    const azonosKodudarab = kodAlakok.length
-      ? await db.productVariant.count({
-          where: {
-            manufacturerPartNumber: { in: kodAlakok },
-            isActive: true,
-          },
-        })
-      : 0;
+    const azonosKodudarab = !kodAlakok.length
+      ? 0
+      : pbForras
+        ? await db.productBarcode.count({ where: { code: { in: kodAlakok } } })
+        : await db.productVariant.count({
+            where: {
+              manufacturerPartNumber: { in: kodAlakok },
+              isActive: true,
+            },
+          });
     /**
      * A SZURO A CIKKSZAM ES AZ ERTEK PARJAT NEZI, NEM CSAK AZ ERTEKET.
      *
@@ -1278,6 +1339,11 @@ export async function runProjectionCli(
         barcode: vonalkod.field
           ? { field: vonalkod.field, value: vonalkod.value }
           : null,
+        variantBarcodes: valtozatVonalkodok.flatMap((v) =>
+          v.decision.field
+            ? [{ sku: v.sku, field: v.decision.field, value: v.decision.value }]
+            : [],
+        ),
         /**
          * A SZORZO ITT VALIK SZOVEGGE, es itt van a helye: a `Decimal` alak a
          * PRISMA tipusa, es a metaadat kulcs-ertek parokat tart. A vetites mar
@@ -1372,6 +1438,9 @@ export async function runProjectionCli(
           : "") +
         describeKepMasolas(masolas) +
         describeCimValtozas(outcome.cim) +
+        (outcome.action !== "created" && outcome.barcodes
+          ? describeVariantBarcodes(outcome.barcodes)
+          : "") +
         (outcome.action === "created" && outcome.shipping
           ? `      szállítás: ${outcome.shipping}\n`
           : ""),

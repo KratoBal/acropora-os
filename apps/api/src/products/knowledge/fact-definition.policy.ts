@@ -24,6 +24,8 @@ import type { Parsed } from "./knowledge.policy.js";
 export interface FactDefinition {
   key: string;
   dataType: string;
+  /** `VARIANT_BARCODE` (SEO P0 PR 4): az elfogadás `ProductBarcode` sort ír, nem tényt. */
+  medusaNativeField: string | null;
   canonicalUnit: string | null;
   scope: "PRODUCT" | "VARIANT";
   validation: unknown;

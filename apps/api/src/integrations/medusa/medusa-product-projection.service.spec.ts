@@ -51,6 +51,7 @@ const product: ProjectableProduct = {
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
+  variantBarcodes: [],
   unit: null,
   secondaryUnit: null,
   secondaryUnitFactor: null,
@@ -199,6 +200,9 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   medusaAccessoryIds: "atmegy", // -> metadata.unas_accessory_ids, ha nem ures
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
   barcode: "atmegy", // -> a valtozat ean vagy upc mezoje, hossz szerint
+  // -> a valtozatok ean/upc mezoje a frissites-agon es a tobbvaltozatos
+  // letrehozaskor (SEO P0 PR 4)
+  variantBarcodes: "atmegy",
   unit: "atmegy", // -> metadata.unas_unit
   secondaryUnit: "atmegy", // -> metadata.unas_secondary_unit
   secondaryUnitFactor: "atmegy", // -> metadata.unas_secondary_unit_factor
@@ -275,8 +279,39 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
     return torzs;
   }
 
+  /**
+   * A `variantBarcodes` a FRISSÍTÉS-ágon megy ki (SEO P0 PR 4): a változat
+   * saját kérésében, nem a termék törzsében. Ezért külön futás méri.
+   */
+  async function frissitesVonalkodIrasai(): Promise<unknown[]> {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantBarcodes: async () => [
+        { id: "variant_1", sku: "PUMP-1", ean: null, upc: null },
+      ],
+      updateVariantBarcode: async (...args: unknown[]) => {
+        irasok.push(args);
+      },
+    });
+    await f.service.project(
+      {
+        ...product,
+        variantBarcodes: [
+          { sku: "PUMP-1", field: "upc" as const, value: "036000291452" },
+        ],
+      },
+      now,
+    );
+    return irasok;
+  }
+
   it("amire azt mondjuk, hogy atmegy, az tenyleg ott van a keresben", async () => {
     const torzs = await teljesBemenetTorzse();
+    const vonalkodIrasok = await frissitesVonalkodIrasai();
     const megjelenik: Record<string, boolean> = {
       id: torzs.external_id === "prod-os-1",
       name: torzs.title === "Reef Pump",
@@ -300,6 +335,11 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         torzs.metadata?.unas_accessory_ids === "prod_medusa_7,prod_medusa_6",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       barcode: torzs.variants[0]?.ean === "4006381333931",
+      variantBarcodes:
+        JSON.stringify(vonalkodIrasok) ===
+        JSON.stringify([
+          ["prod_medusa_1", "variant_1", { upc: "036000291452" }],
+        ]),
       unit: torzs.metadata?.unas_unit === "ml",
       secondaryUnit: torzs.metadata?.unas_secondary_unit === "karton",
       secondaryUnitFactor: torzs.metadata?.unas_secondary_unit_factor === "12",
@@ -1826,6 +1866,35 @@ describe("MedusaProductProjectionService -- tobb valtozat", () => {
     ],
   };
 
+  /*
+    SEO P0 PR 4: a `ProductBarcode` valtozatonkent kulon sor, tehat a
+    letrehozaskor minden sor a SAJAT kodjat kapja. MI PIROSIT: egy sor a
+    masikeet kapja; a termek-szintu `barcode` (gyartoi cikkszam) mostantol
+    minden sorra kimegy; egy kod nelkuli sor kulcsot kap.
+  */
+  it("tobb valtozatnal minden sor a sajat ProductBarcode kodjat kapja", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      {
+        ...ketValtozat,
+        variantBarcodes: [
+          { sku: "RF-BLUEM-2", field: "upc" as const, value: "036000291452" },
+        ],
+      },
+      now,
+    );
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    const sorok = torzs.variants as Record<string, unknown>[];
+    assert.deepEqual(
+      sorok.map((v) => [v.sku, v.ean ?? null, v.upc ?? null]),
+      [
+        ["RF-BLUEM-1", null, null],
+        ["RF-BLUEM-2", null, "036000291452"],
+      ],
+    );
+  });
+
   it("az opcio-blokk a FORRAS tengelyet viseli, nem az alapertelmezest", async () => {
     const f = fakes({ link: null, found: [] });
     await f.service.project(ketValtozat, now);
@@ -2090,5 +2159,69 @@ describe("the shipping of a newly created product", () => {
     const outcome = await service.project(product, now);
     assert.equal("shipping_profile_id" in createdWith[0]!, false);
     assert.equal(outcome.action === "created" && "shipping" in outcome, false);
+  });
+});
+
+/*
+  A FRISSITES-AG VONALKODJA (SEO P0 PR 4, C3 "Vetites" 2.). MI PIROSIT: a mar
+  helyes kod ujra iroddik; egy hianyzo cikkszam vagy egy elbukott iras megallitja
+  a termeket; ures listanal a bolthoz fordulunk; a tobbvaltozatos letrehozas nem
+  viszi a sorok kodjat.
+*/
+describe("MedusaProductProjectionService -- a valtozatok vonalkodja", () => {
+  const link = { productId: "prod-os-1", medusaProductId: "prod_medusa_1" };
+
+  it("csak az eltero kodot irja; a hianyzo es az elbukott a jelentesbe megy, a termek frissul", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantBarcodes: async () => [
+        { id: "v_a", sku: "A", ean: "4006381333931", upc: null },
+        { id: "v_b", sku: "B", ean: null, upc: null },
+        { id: "v_c", sku: "C", ean: null, upc: null },
+      ],
+      updateVariantBarcode: async (_p: string, id: string, patch: unknown) => {
+        if (id === "v_c") throw new Error("unique violation");
+        irasok.push([id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantBarcodes: [
+          { sku: "A", field: "ean" as const, value: "4006381333931" },
+          { sku: "B", field: "upc" as const, value: "036000291452" },
+          { sku: "C", field: "ean" as const, value: "4260507580214" },
+          { sku: "X", field: "ean" as const, value: "5999999999993" },
+        ],
+      },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.deepEqual(irasok, [["v_b", { upc: "036000291452" }]]);
+    assert.deepEqual(
+      [
+        outcome.barcodes?.written,
+        outcome.barcodes?.unchanged,
+        outcome.barcodes?.missing,
+        outcome.barcodes?.failed.map((x) => x.sku),
+      ],
+      [["B"], 1, ["X"], ["C"]],
+    );
+  });
+
+  it("ures listanal nem fordul a bolthoz, es nincs jelentes", async () => {
+    const f = fakes({ link, found: [] });
+    let kerdezte = false;
+    Object.assign(f.medusa, {
+      listVariantBarcodes: async () => {
+        kerdezte = true;
+        return [];
+      },
+    });
+    const outcome = await f.service.project({ ...product }, now);
+    assert.equal(kerdezte, false);
+    assert.equal(outcome.action === "updated" && "barcodes" in outcome, false);
   });
 });

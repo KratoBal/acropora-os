@@ -824,6 +824,14 @@ export interface MedusaOrderListResult {
   truncated: boolean;
 }
 
+/** Egy változat vonalkód-mezői, ahogy a bolt mutatja (SEO P0 PR 4). */
+export interface MedusaVariantBarcodeRow {
+  id: string;
+  sku: string | null;
+  ean: string | null;
+  upc: string | null;
+}
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -1201,6 +1209,18 @@ export interface MedusaAdminClient {
    * tartható, ha visszaolvassuk a meglévő sor azonosítóját.
    */
   listVariantPrices(productId: string): Promise<MedusaVariantPriceLookupResult>;
+  /**
+   * A változatok vonalkód-mezői (SEO P0 PR 4): a frissítés-ág ebből látja, mi áll
+   * ma a boltban, és csak az eltérőt írja. A töröltek nélkül: egy eltemetett
+   * változatra nem írunk.
+   */
+  listVariantBarcodes(productId: string): Promise<MedusaVariantBarcodeRow[]>;
+  /** Egy változat `ean` vagy `upc` mezője. Csak a megadott mező íródik. */
+  updateVariantBarcode(
+    productId: string,
+    variantId: string,
+    patch: { ean?: string; upc?: string },
+  ): Promise<void>;
   /**
    * A bolt ár-értelmezési beállításai.
    *
@@ -2376,6 +2396,31 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         method: "POST",
         body: JSON.stringify({ allow_backorder: allowBackorder }),
       },
+    );
+  }
+
+  async listVariantBarcodes(
+    productId: string,
+  ): Promise<MedusaVariantBarcodeRow[]> {
+    const params = new URLSearchParams({
+      fields: "id,sku,ean,upc",
+      limit: String(VARIANT_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{ variants: MedusaVariantBarcodeRow[] }>(
+      `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
+    );
+    return body.variants ?? [];
+  }
+
+  async updateVariantBarcode(
+    productId: string,
+    variantId: string,
+    patch: { ean?: string; upc?: string },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/products/${encodeURIComponent(productId)}` +
+        `/variants/${encodeURIComponent(variantId)}`,
+      { method: "POST", body: JSON.stringify(patch) },
     );
   }
 
