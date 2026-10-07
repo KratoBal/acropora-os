@@ -56,6 +56,7 @@ export interface AttributeDefinitionSeed {
     | "VARIANT_LENGTH"
     | "VARIANT_WIDTH"
     | "VARIANT_HEIGHT"
+    | "VARIANT_BARCODE"
     | null;
 }
 
@@ -279,4 +280,53 @@ export function seedSql(): string {
     sorok.join(",\n"),
     'ON CONFLICT ("key") DO NOTHING;',
   ].join("\n");
+}
+
+/**
+ * A SEED UTÁNI VÁLTOZÁSOK, migrációnként (SEO P0 PR 4).
+ *
+ * A fenti `ATTRIBUTE_DEFINITIONS` a 20261007160000-s migráció INSERT-je, betűre
+ * (a teszt őrzi); egy későbbi átállítás nem írhatja át, különben a régi migráció
+ * és a táblázat elválna egymástól. Ezért a változás külön sor, a saját
+ * migrációjával, és a MAI állapot a kettő összege (`CURRENT_ATTRIBUTE_DEFINITIONS`).
+ */
+export const ATTRIBUTE_DEFINITION_CHANGES: readonly {
+  migration: string;
+  key: string;
+  change: Pick<
+    AttributeDefinitionSeed,
+    "scope" | "medusaNativeField" | "public"
+  >;
+}[] = [
+  {
+    // az elfogadott EAN `ProductBarcode` sor, változatonként, és nem tény (C3, D1)
+    migration: "20261007200100_gtin_ean_definition",
+    key: "ean",
+    change: {
+      scope: "VARIANT",
+      medusaNativeField: "VARIANT_BARCODE",
+      public: false,
+    },
+  },
+];
+
+/** A definíciók MA: a seed, a későbbi változásokkal. */
+export const CURRENT_ATTRIBUTE_DEFINITIONS: readonly AttributeDefinitionSeed[] =
+  ATTRIBUTE_DEFINITIONS.map((d) =>
+    ATTRIBUTE_DEFINITION_CHANGES.filter((c) => c.key === d.key).reduce(
+      (acc, c) => ({ ...acc, ...c.change }),
+      d,
+    ),
+  );
+
+/** Egy változás UPDATE-je, ahogy a migrációjában áll. */
+export function changeSql(
+  c: (typeof ATTRIBUTE_DEFINITION_CHANGES)[number],
+): string {
+  return (
+    `UPDATE "AttributeDefinition" SET "scope" = '${c.change.scope}', ` +
+    `"medusaNativeField" = ${c.change.medusaNativeField ? `'${c.change.medusaNativeField}'` : "NULL"}, ` +
+    `"public" = ${String(c.change.public)}, "updatedAt" = CURRENT_TIMESTAMP ` +
+    `WHERE "key" = ${sqlSzoveg(c.key)};`
+  );
 }

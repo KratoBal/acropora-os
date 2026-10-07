@@ -38,6 +38,8 @@ export type {
   IcpReport,
   IcpResult,
   Product,
+  ProductBarcodeSource,
+  ProductBarcodeType,
   ProductCategory,
   ProductImage,
   ProductRelation,

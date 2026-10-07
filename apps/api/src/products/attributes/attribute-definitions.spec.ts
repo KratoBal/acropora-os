@@ -6,7 +6,10 @@ import { describe, it } from "node:test";
 import { FIELD_SPECS } from "@acropora/jev/product-enrichment";
 
 import {
+  ATTRIBUTE_DEFINITION_CHANGES,
   ATTRIBUTE_DEFINITIONS,
+  CURRENT_ATTRIBUTE_DEFINITIONS,
+  changeSql,
   COPY_KEYS,
   DIMENSION_UNIT,
   KIND_DATA_TYPE,
@@ -109,6 +112,48 @@ describe("attribute definitions vs FIELD_SPECS", () => {
     assert.ok(
       migracio.includes(seedSql()),
       "the migration's INSERT is not seedSql()",
+    );
+  });
+
+  /*
+    A SEED UTANI VALTOZASOK (SEO P0 PR 4). MI PIROSIT: egy valtozas migracioja
+    nem pontosan azt az UPDATE-et irja, amit a lista mond; az `ean` a mai
+    allapotban teny maradna (PRODUCT, nem VARIANT_BARCODE, public); egy masik
+    definicio is elvesztene a `public` jelet.
+  */
+  it("every change's migration holds exactly its UPDATE", () => {
+    assert.ok(ATTRIBUTE_DEFINITION_CHANGES.length > 0);
+    for (const c of ATTRIBUTE_DEFINITION_CHANGES) {
+      const migracio = readFileSync(
+        join(
+          "..",
+          "..",
+          "packages",
+          "database",
+          "prisma",
+          "migrations",
+          c.migration,
+          "migration.sql",
+        ),
+        "utf8",
+      );
+      assert.ok(migracio.includes(changeSql(c)), c.migration);
+    }
+  });
+
+  it("today the ean is a per-variant barcode, not a public fact; nothing else changed", () => {
+    const ean = CURRENT_ATTRIBUTE_DEFINITIONS.find((d) => d.key === "ean")!;
+    assert.deepEqual(
+      [ean.scope, ean.medusaNativeField, ean.public],
+      ["VARIANT", "VARIANT_BARCODE", false],
+    );
+    assert.deepEqual(
+      CURRENT_ATTRIBUTE_DEFINITIONS.filter((d) => !d.public).map((d) => d.key),
+      ["ean"],
+    );
+    assert.equal(
+      CURRENT_ATTRIBUTE_DEFINITIONS.length,
+      ATTRIBUTE_DEFINITIONS.length,
     );
   });
 });
