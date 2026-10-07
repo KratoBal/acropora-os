@@ -18,6 +18,7 @@ import {
   type ProjectionDatabase,
 } from "./medusa-projection.cli.js";
 import { MedusaAdminHttpError } from "./medusa-admin.client.js";
+import { NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import type { MedusaConnectionRepository } from "./medusa-connection.repository.js";
@@ -1040,6 +1041,9 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       categories: [],
       channelListings: [],
       images: [],
+      // a kep-blokkolas mostani allapota a soron: alapbol nincs blokk
+      medusaImageBlockReason: null,
+      medusaImageBlockDetails: null,
       ...overrides,
     };
   }
@@ -1921,44 +1925,52 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       storageKey: "product/prod-1/img-1",
       fileName: "1.jpg",
     };
-    const { db, hivasok } = adatbazis(termek({ images: [kepSor] }), {
-      productImage: {
-        findMany: async () => [kepSor],
-        update: async () => ({}),
-      },
-      externalReference: {
-        findMany: async () => [],
-        /**
-         * A TERMEK lekepezese nincs, a KEPE viszont van. A ketto ugyanazon a
-         * metoduson jon be, ezert az `entityType` donti el, melyiket kerdezik.
-         */
-        findUnique: async (args: unknown) => {
-          const { where } = args as {
-            where: {
-              system_entityType_entityId?: { entityType: string };
-              system_entityType_externalId?: { entityType: string };
-            };
-          };
-          const tipus =
-            where.system_entityType_entityId?.entityType ??
-            where.system_entityType_externalId?.entityType;
-          return tipus === "ProductImage"
-            ? {
-                entityId: `prod-1:${kepSor.url}`,
-                externalId: "fajl_1",
-                externalKey: "https://bolt.test/static/1.jpg",
-                lastSyncedAt: new Date("2026-09-01T00:00:00.000Z"),
-              }
-            : null;
+    // a soron korabbi blokk all: a siker ezt nullazza (valtozas, tehat iras)
+    const { db, hivasok } = adatbazis(
+      termek({
+        images: [kepSor],
+        medusaImageBlockReason: "MASTER_MISSING",
+        medusaImageBlockDetails: "a kep nincs athozva a mesterbe",
+      }),
+      {
+        productImage: {
+          findMany: async () => [kepSor],
+          update: async () => ({}),
         },
-        create: async () => ({
-          entityId: "prod-1",
-          externalId: "prod_medusa_1",
-          lastSyncedAt: new Date(),
-        }),
-        deleteMany: async () => ({ count: 0 }),
+        externalReference: {
+          findMany: async () => [],
+          /**
+           * A TERMEK lekepezese nincs, a KEPE viszont van. A ketto ugyanazon a
+           * metoduson jon be, ezert az `entityType` donti el, melyiket kerdezik.
+           */
+          findUnique: async (args: unknown) => {
+            const { where } = args as {
+              where: {
+                system_entityType_entityId?: { entityType: string };
+                system_entityType_externalId?: { entityType: string };
+              };
+            };
+            const tipus =
+              where.system_entityType_entityId?.entityType ??
+              where.system_entityType_externalId?.entityType;
+            return tipus === "ProductImage"
+              ? {
+                  entityId: `prod-1:${kepSor.url}`,
+                  externalId: "fajl_1",
+                  externalKey: "https://bolt.test/static/1.jpg",
+                  lastSyncedAt: new Date("2026-09-01T00:00:00.000Z"),
+                }
+              : null;
+          },
+          create: async () => ({
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date(),
+          }),
+          deleteMany: async () => ({ count: 0 }),
+        },
       },
-    });
+    );
 
     const code = await boltiKorben(() =>
       runProjectionCli(
@@ -1995,6 +2007,40 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * DIAGNOSZTIKAI mezo felirasa megallitana a termeket, az pont ezt forditana
    * meg.
    */
+  /**
+   * VALTOZATLAN BLOKKOLAS: NINCS TERMEK-IRAS. Ez a mert hiba ellenszere: minden
+   * `product.update` frissiti az `updatedAt`-et, amit az utemezo forras-
+   * valtozasnak lat, es ugyanaz a koteg forgott korrol korre (2026-10-07).
+   */
+  it("valtozatlan kep-blokkolasnal a termek sorat nem irja", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis(
+      termek({
+        medusaImageBlockReason: NO_IMAGE_ROW_BLOCK.reason,
+        medusaImageBlockDetails: NO_IMAGE_ROW_BLOCK.details,
+      }),
+    );
+    const keresek: Array<{ method: string; url: string }> = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.match(stdout.join(""), /prod-1: created -> prod_medusa_1/);
+    assert.equal(
+      hivasok.filter((h) => h.metodus === "product.update").length,
+      0,
+    );
+  });
+
   it("ha a feliras elhasal, a termek attol meg kimegy", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis(termek(), {

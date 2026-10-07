@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { imageBlockUpdate, NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
+import {
+  imageBlockChanged,
+  imageBlockUpdate,
+  NO_IMAGE_ROW_BLOCK,
+} from "./medusa-image-block.js";
 
 const MOST = new Date("2026-09-04T19:00:00.000Z");
 
@@ -68,5 +72,45 @@ describe("a kép-blokkolás oka a termék sorára", () => {
     assert.notEqual(NO_IMAGE_ROW_BLOCK.reason, "MASTER_MISSING");
     assert.match(NO_IMAGE_ROW_BLOCK.details, /nincs mit kiküldeni/);
     assert.match(NO_IMAGE_ROW_BLOCK.details, /nem hiba/);
+  });
+});
+
+describe("változik-e a sor a blokkolástól", () => {
+  const none = { medusaImageBlockReason: null, medusaImageBlockDetails: null };
+  it("ugyanaz az ok és mondat: nem", () => {
+    assert.equal(
+      imageBlockChanged(
+        {
+          medusaImageBlockReason: NO_IMAGE_ROW_BLOCK.reason,
+          medusaImageBlockDetails: NO_IMAGE_ROW_BLOCK.details,
+        },
+        NO_IMAGE_ROW_BLOCK,
+      ),
+      false,
+    );
+    assert.equal(imageBlockChanged(none, null), false);
+  });
+  it("új blokk, feloldott blokk, más mondat: igen", () => {
+    assert.equal(imageBlockChanged(none, NO_IMAGE_ROW_BLOCK), true);
+    assert.equal(
+      imageBlockChanged(
+        {
+          medusaImageBlockReason: "MASTER_CORRUPT",
+          medusaImageBlockDetails: "x",
+        },
+        null,
+      ),
+      true,
+    );
+    assert.equal(
+      imageBlockChanged(
+        {
+          medusaImageBlockReason: "MASTER_CORRUPT",
+          medusaImageBlockDetails: "régi mondat",
+        },
+        { reason: "MASTER_CORRUPT", details: "új mondat" },
+      ),
+      true,
+    );
   });
 });

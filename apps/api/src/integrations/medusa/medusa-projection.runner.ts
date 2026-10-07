@@ -56,7 +56,11 @@ import {
   MEDUSA_STOREFRONT_SALES_CHANNEL_ENV,
   storefrontSalesChannelId,
 } from "./medusa-sales-channel.config.js";
-import { imageBlockUpdate, NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
+import {
+  imageBlockChanged,
+  imageBlockUpdate,
+  NO_IMAGE_ROW_BLOCK,
+} from "./medusa-image-block.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
@@ -733,6 +737,9 @@ export async function runProjectionCli(
         isActive: true,
         webshopSellable: true,
         webshopExcluded: true,
+        // a kep-blokkolas mostani allapota: csak valtozaskor irjuk (lent)
+        medusaImageBlockReason: true,
+        medusaImageBlockDetails: true,
         /**
          * A MARKA, ES CSAK AZ AZONOSITOJA.
          *
@@ -1124,11 +1131,18 @@ export async function runProjectionCli(
      *
      * A bukas ezert egy sor a kimeneten, es a menet megy tovabb.
      */
+    /**
+     * ES CSAK AKKOR, HA VALTOZIK. Minden update a valodi irasi idovel frissiti a
+     * `Product.updatedAt`-et, amit az utemezo forras-valtozasnak lat: egy
+     * feltetel nelkuli iras minden vetitett termeket a kovetkezo korben ujra
+     * esedekesse tenne (`imageBlockChanged` fejlece, mert eset).
+     */
     try {
-      await db.product.update({
-        where: { id: product.id },
-        data: imageBlockUpdate(kepBlokk, futasIdeje),
-      });
+      if (imageBlockChanged(product, kepBlokk))
+        await db.product.update({
+          where: { id: product.id },
+          data: imageBlockUpdate(kepBlokk, futasIdeje),
+        });
     } catch (error) {
       out.stdout(
         `${product.id}: a kép-blokkolás oka nem került a termékre ` +
