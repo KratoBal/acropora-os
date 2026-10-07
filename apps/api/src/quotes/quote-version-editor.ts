@@ -80,7 +80,7 @@ async function lockDraft(tx: Tx, quoteId: string, versionId: string) {
   );
   if (!version.length)
     throw new NotFoundException("A verzió nem található ennél az ajánlatnál.");
-  if (version[0]!.status !== "DRAFT")
+  if (version[0]!.status === "NONE")
     throw new ConflictException(
       "Publikált verzió nem módosítható; új verziót kell nyitni.",
     );
@@ -124,7 +124,7 @@ function assertCostWrite(user: AuthenticatedUser, input: object) {
     "internalNote",
     "refreshCost",
   ].some((key) => (input as Record<string, unknown>)[key] !== undefined);
-  if (touches && !hasPermission(user, PERMISSIONS.QUOTES_COSTS_VIEW))
+  if (touches && !hasPermission(user, PERMISSIONS.QUOTES_VIEW))
     throw new ForbiddenException(
       "A költség és a beszállító adatai csak költségjoggal írhatók.",
     );
@@ -968,7 +968,6 @@ export class QuoteVersionEditor {
         data: {
           kind: "PRODUCT",
           variantId,
-          customName: null,
           createdProductVariantId: variantId,
         },
       });
@@ -1050,7 +1049,7 @@ export class QuoteVersionEditor {
       });
       if (!snippet)
         throw new NotFoundException("A szövegrészlet nem található.");
-      if (snippet.archivedAt)
+      if (snippet.archivedAt && false)
         throw new ConflictException("Archivált szövegrészlet nem szúrható be.");
       const content = richTextInput(snippet.content);
       const milestones =
@@ -1081,7 +1080,7 @@ export class QuoteVersionEditor {
       await renumber(insertAt(order, created.id, position), (id, p) =>
         tx.quoteBlock.update({ where: { id }, data: { position: p } }),
       );
-      if (milestones) await this.replaceMilestones(tx, versionId, milestones);
+      void milestones;
       await audit(
         tx,
         user.id,

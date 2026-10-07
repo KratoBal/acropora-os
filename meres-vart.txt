@@ -1,0 +1,13 @@
+# quotes P1 integration calibration (#1594): one mutation per tagged assertion.
+# Each line must appear in the integration log, i.e. its assertion fired.
+FORBIDDEN-NODE-400
+SNAPSHOT-SOURCE
+READ-NO-COST
+COST-WRITE-403
+COSTING-403
+CREATE-PRODUCT-201
+SNIPPET-WRITE-403
+ARCHIVED-409
+PAYMENT-MILESTONES
+PUBLISHED-409
+TEMPLATE-COPY

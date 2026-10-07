@@ -38,7 +38,7 @@ export class QuoteSnippetsController {
   }
 
   @Post()
-  @RequirePermissions(PERMISSIONS.QUOTES_TEMPLATES_MANAGE)
+  @RequirePermissions(PERMISSIONS.QUOTES_MANAGE)
   create(
     @Body() input: QuoteSnippetBodyDto,
     @CurrentUser() user: AuthenticatedUser,

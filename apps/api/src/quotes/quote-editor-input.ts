@@ -167,7 +167,7 @@ export function blockContent(kind: QuoteBlockKindValue, content: unknown) {
   }
   if (!TEXT_KINDS.has(kind))
     throw new BadRequestException("Ennek a blokknak nincs szöveges tartalma.");
-  return richTextInput(content) as unknown as Prisma.InputJsonValue;
+  return content as Prisma.InputJsonValue;
 }
 
 export interface TemplateBlock {

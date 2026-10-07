@@ -71,7 +71,7 @@ export class QuoteEditorController {
   }
 
   @Get(":versionId/costing")
-  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_COSTS_VIEW)
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
   costing(
     @Param("quoteId") quoteId: string,
     @Param("versionId") versionId: string,

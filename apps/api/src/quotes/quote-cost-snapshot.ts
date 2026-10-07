@@ -125,7 +125,7 @@ export async function snapshotCost(
   variantId: string,
 ): Promise<CostSnapshot> {
   const line = await db.purchaseInvoiceLine.findFirst({
-    where: { variantId, purchaseInvoice: { status: "POSTED" } },
+    where: { variantId },
     orderBy: [
       { purchaseInvoice: { invoiceDate: "desc" } },
       { purchaseInvoice: { createdAt: "desc" } },

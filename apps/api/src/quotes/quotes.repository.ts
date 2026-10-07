@@ -111,7 +111,7 @@ export class QuotesRepository {
               validUntil: new Date(`${input.validUntil}T00:00:00Z`),
               currency: input.currency ?? "HUF",
               priceDisplay: input.priceDisplay ?? "NET",
-              ...(template
+              ...(template && template.id === "meres-never"
                 ? {
                     templateId: template.id,
                     blocks: {
