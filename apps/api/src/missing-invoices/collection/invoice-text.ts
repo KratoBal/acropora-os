@@ -769,7 +769,7 @@ const CURRENCY_CODE: Record<string, string> = {
   "£": "GBP",
 };
 
-function amountValue(raw: string): number {
+export function amountValue(raw: string): number {
   const compact = raw.replace(/[ \u00a0]/g, "");
   const last = Math.max(compact.lastIndexOf("."), compact.lastIndexOf(","));
   const decimals = last >= 0 ? compact.length - last - 1 : 0;
@@ -823,7 +823,7 @@ function currencyIn(text: string): string | null {
 }
 
 /** A dokumentum egyetlen pénzneme, ha csak egy fajta áll benne. */
-function onlyCurrency(lines: readonly string[]): string | null {
+export function onlyCurrency(lines: readonly string[]): string | null {
   const found = new Set<string>();
   const all = new RegExp(TOTAL_CURRENCY.source, "gu");
   for (const line of lines)

@@ -1,24 +1,33 @@
 import {
+  Body,
   ConflictException,
   Controller,
   Get,
   Header,
+  HttpCode,
   NotFoundException,
   Param,
+  Post,
+  Put,
   Query,
   StreamableFile,
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import {
   PERMISSIONS,
+  type AuthenticatedUser,
   type IncomingDocumentDetail,
+  type IncomingDocumentReview,
   type IncomingDocumentListResponse,
   type ReceiptsResponse,
 } from "@acropora/types";
 
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
+import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
+import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import {
   incomingListResponse,
   toIncomingDetail,
@@ -56,16 +65,20 @@ function pdfFile(content: Buffer, documentNumber: string) {
 export class IncomingBillingDocumentsController {
   private readonly database = prisma;
 
-  constructor(private readonly missing: MissingInvoicesService) {}
+  constructor(
+    private readonly missing: MissingInvoicesService,
+    private readonly reviews: IncomingReviewService,
+  ) {}
 
   @Get("incoming-documents")
   async list(
     @Query() query: IncomingDocumentListQueryDto,
   ): Promise<IncomingDocumentListResponse> {
-    const [rows, pairings, collected] = await Promise.all([
+    const [rows, pairings, collected, readings] = await Promise.all([
       this.database.incomingBillingDocument.findMany(),
       this.missing.documentPairings(),
       this.collectedIndex(),
+      this.reviews.pendingReadings(),
     ]);
     return incomingListResponse(
       [
@@ -77,10 +90,47 @@ export class IncomingBillingDocumentsController {
           ),
         ),
         // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
-        ...mailboxOnlyPaidItems(rows, pairings),
+        ...mailboxOnlyPaidItems(rows, pairings, readings),
       ],
       query,
     );
+  }
+
+  /**
+   * A POSTAFIÓKOS SOR ELLENŐRZÉSE (kártya e4c3b0fb). Az azonosító a lista
+   * sorának azonosítója (`mailbox:<dokumentum>`). Az olvasás nem ír: ha még
+   * nincs tárolt olvasat, a PDF-ből számol. A mentés és a jóváhagyás a
+   * számla rögzítésének joga (`billing.create`); a jóváhagyás után a sor
+   * rendes bejövő számla, „Postafiókból” eredettel.
+   */
+  @Get("incoming-documents/:id/review")
+  review(@Param("id") id: string): Promise<IncomingDocumentReview> {
+    return this.reviews.review(id);
+  }
+
+  @Put("incoming-documents/:id/review")
+  @RequirePermissions(PERMISSIONS.BILLING_CREATE)
+  saveReview(
+    @Param("id") id: string,
+    @Body() input: IncomingReviewDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentReview> {
+    return this.reviews.save(id, input, user.id);
+  }
+
+  /** Üres törzzsel a tárolt (vagy kinyert) értékeket hagyja jóvá. */
+  @Post("incoming-documents/:id/review/approve")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.BILLING_CREATE)
+  approveReview(
+    @Param("id") id: string,
+    @Body() input: IncomingReviewDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentReview> {
+    const given = Object.values(input ?? {}).some(
+      (value) => value !== undefined,
+    );
+    return this.reviews.approve(id, given ? input : null, user.id);
   }
 
   @Get("incoming-documents/:id")

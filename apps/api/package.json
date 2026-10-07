@@ -47,6 +47,7 @@
     "invoice-text:reread": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/stored-text-reread.cli.js",
     "invoice-collection:own-invoices": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/own-invoice-mark.cli.js",
     "billing:incoming-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/incoming-billing-backfill.cli.js",
+    "billing:incoming-foreign-read": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/foreign-invoice/incoming-foreign-read.cli.js",
     "gls:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/gls/gls-cod-paid-marks.cli.js",
     "foxpost:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/foxpost/foxpost-paid-marks.cli.js",
     "simplepay:paid-marks": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/simplepay/simplepay-paid-marks.cli.js",

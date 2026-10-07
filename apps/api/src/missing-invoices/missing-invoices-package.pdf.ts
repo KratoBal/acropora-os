@@ -18,6 +18,11 @@ export interface AccountantPackageEntry {
   documents: readonly {
     number: string;
     file: { fileName: string; content: Uint8Array } | null;
+    /**
+     * A csak postafiókból ismert számla adat-jelölése (kártya e4c3b0fb):
+     * „Ellenőrizendő”, vagy jóváhagyás után az ellenőrzött számok.
+     */
+    dataNote?: string;
   }[];
 }
 
@@ -141,6 +146,8 @@ export async function buildAccountantPackage(input: {
       }
       outcomes.push(outcome);
       notes.push(`${document.number || "szám nélkül"}: ${NOTE[outcome]}`);
+      if (document.dataNote)
+        notes.push(`${document.number || "szám nélkül"}: ${document.dataNote}`);
     }
     lines.push({ entry, notes });
   }

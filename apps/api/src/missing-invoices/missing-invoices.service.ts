@@ -50,6 +50,11 @@ import {
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
+import { notInFeedTest } from "../billing/incoming-billing-documents.js";
+import {
+  packageDataNote,
+  storedValues,
+} from "../billing/foreign-invoice/reading-values.js";
 import { buildMissingInvoicesXlsx } from "./missing-invoices-xlsx.js";
 import {
   freeDocuments,
@@ -689,11 +694,44 @@ export class MissingInvoicesService {
                 : `a visszatérítés várható (határidő: ${item.refund.due})`
           }`
         : undefined;
+    /*
+      A CSAK POSTAFIÓKBÓL ISMERT SZÁMLA (kártya e4c3b0fb, acrobot 27599): a PDF
+      marad a csomagban, mint eddig, de a kinyert számok CSAK jóváhagyás után
+      kerülnek a borítóra; addig a tétel „Ellenőrizendő”.
+    */
+    const foundDocuments = found.flatMap(
+      (item) => computed.outcomes.get(item.id)?.documents ?? [],
+    );
+    // az olvasat a fő azonosítón áll, de egy összevont jelöltnél az alias vagy
+    // az eredeti is hordozhatja (barracuda visszamérése)
+    const idsOf = (document: CandidateDocument) => [
+      document.id,
+      ...(document.aliasIds ?? []),
+      ...(document.originalId ? [document.originalId] : []),
+    ];
+    const { feed, readings } = await this.repository.packageReadings(
+      foundDocuments.flatMap(idsOf),
+    );
+    const mailboxOnly = notInFeedTest(feed);
+    const dataNoteOf = (document: CandidateDocument) => {
+      if (!mailboxOnly(document)) return {};
+      const reading = idsOf(document)
+        .map((id) => readings.get(id))
+        .find(Boolean);
+      return {
+        dataNote: packageDataNote(
+          reading
+            ? { state: reading.state, values: storedValues(reading) }
+            : null,
+        ),
+      };
+    };
     const documentsOf = (id: string) =>
       (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
         number: document.number,
         originalId:
           document.originalId ?? (document.hasOriginal ? document.id : null),
+        ...dataNoteOf(document),
       }));
     const files = await this.repository.originals(
       found.flatMap((item) =>
@@ -718,6 +756,7 @@ export class MissingInvoicesService {
         documents: documentsOf(item.id).map((d) => ({
           number: d.number,
           file: (d.originalId && files.get(d.originalId)) || null,
+          ...(d.dataNote ? { dataNote: d.dataNote } : {}),
         })),
       })),
     });

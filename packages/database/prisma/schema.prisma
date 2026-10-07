@@ -949,6 +949,7 @@ model User {
   mortalityRecordsRecorded   MortalityRecord[]             @relation("MortalityRecordRecordedBy")
   mortalityDocumentsUploaded MortalityRecordDocument[]     @relation("MortalityRecordDocumentUploadedBy")
   dashboardLayout            UserDashboardLayout?
+  incomingReadingsReviewed   IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -7390,7 +7391,9 @@ model IncomingSupplierDocument {
   reviewedByUserId        String?
   createdAt               DateTime                       @default(now())
 
-  expectedArrival ExpectedArrival? @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  expectedArrival ExpectedArrival?         @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  /// A külföldi (postafiókos) számla kinyert adata, ha a Bejövő számlák olvasta (kártya e4c3b0fb).
+  reading         IncomingDocumentReading?
 
   @@unique([gmailMessageId, fileName])
   @@index([reviewState])
@@ -8617,6 +8620,62 @@ model MortalityRecordDocument {
 
   @@index([mortalityRecordId, createdAt])
   @@index([sha256])
+}
+
+enum IncomingDocumentReviewState {
+  TO_REVIEW
+  VERIFIED
+}
+
+/// A POSTAFIÓKOS (KÜLFÖLDI) BEJÖVŐ SZÁMLA KINYERT ADATA, AMÍG EMBER RÁ NEM NÉZ
+/// (kártya e4c3b0fb; Balázs 2026-10-07 12:12 UTC). A levél PDF-jéből olvassuk
+/// (a beszállítói illesztő és az általános szövegolvasó), a mezők üresek is
+/// lehetnek: egy részleges kinyerés a jóváhagyásig itt áll.
+///
+/// MIÉRT NEM KÖZVETLENÜL AZ `IncomingBillingDocument`: annak pénz- és
+/// dátum-mezői kötelezők, és a Számlázz.hu-ból újraépíthető vetítés.
+/// JÓVÁHAGYÁSKOR ott keletkezik egy rendes sor (`source = "MAILBOX"`), és a
+/// lista, az adatlap és a havi csomag ugyanabból olvas, mint a Számlázz.hu
+/// soroknál; a `incomingBillingDocumentId` arra mutat.
+///
+/// A `documentId` a banki párosítás dokumentumának fő azonosítója, ugyanaz,
+/// mint a lista `mailbox:` sora: így a jóváhagyott sor a mai dedup szerint
+/// kiváltja a postafiókos sort, dupla sor nélkül.
+model IncomingDocumentReading {
+  id                        String                      @id @default(cuid())
+  documentId                String                      @unique
+  state                     IncomingDocumentReviewState @default(TO_REVIEW)
+  supplierName              String?
+  supplierTaxNumber         String?
+  supplierEuTaxNumber       String?
+  documentNumber            String?
+  issueDate                 DateTime?                   @db.Date
+  fulfillmentDate           DateTime?                   @db.Date
+  dueDate                   DateTime?                   @db.Date
+  currency                  String?                     @db.VarChar(3)
+  netAmount                 Decimal?                    @db.Decimal(18, 2)
+  vatAmount                 Decimal?                    @db.Decimal(18, 2)
+  grossAmount               Decimal?                    @db.Decimal(18, 2)
+  /// Mezőnként a forrás: ADAPTER, TEXT, PAIRING vagy MANUAL.
+  sources                   Json
+  /// Magyar nyelvű figyelmeztetések (string[]), pl. ha az összegek nem egyeznek.
+  warnings                  Json
+  /// Volt-e a PDF-nek szövegrétege (szkennelt számlánál minden mező kézi).
+  hasText                   Boolean
+  readAt                    DateTime                    @default(now())
+  reviewedAt                DateTime?
+  reviewedByUserId          String?
+  /// A jóváhagyáskor létrejött bejövő számla (`IncomingBillingDocument`, source MAILBOX).
+  incomingBillingDocumentId String?                     @unique
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+
+  document   IncomingSupplierDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  reviewedBy User?                    @relation("IncomingDocumentReadingReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  // DB: CHECK a VERIFIED sor kötelező mezői (szállító, szám, kelt, deviza,
+  // nettó, ÁFA, bruttó) és a jóváhagyás ideje megvannak (a migrációban).
+
+  @@index([state])
 }
 
 // ---------------------------------------------------------------------------
