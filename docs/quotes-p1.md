@@ -135,3 +135,25 @@ Egységtesztek: `quote-costing.spec.ts`, `quote-cost-snapshot.spec.ts`,
 `quotes-p1.integration.spec.ts` a `_test`/`_ci` adatbázison HTTP-n át méri a
 409-et, a költségszűrést, a pillanatkép forrását, a create-product írást, a
 részlet-másolást és a sablonból indítást.
+
+## Web (B rész)
+
+| Útvonal                                | Képernyő (Figma 35)           | Jog                       |
+| -------------------------------------- | ----------------------------- | ------------------------- |
+| `/ajanlatok`                           | Lista (`567:2`)               | `quotes.view`             |
+| `/ajanlatok/uj`                        | Új ajánlat (`567:190`)        | `quotes.manage`           |
+| `/ajanlatok/:id`                       | Adatlap (`569:504`)           | `quotes.view`             |
+| `/ajanlatok/:id/szerkesztes`           | Szerkesztő (`569:171`)        | `quotes.manage`           |
+| `/beallitasok/ajanlat-szovegreszletek` | Szövegrészletek (nincs frame) | `quotes.templates.manage` |
+
+A menüpontok a `quotes` kapcsoló mögött állnak: `QUOTES_ENABLED` értéke
+`off` (alapértelmezés), `pilot` (csak a `QUOTES_PILOT_USER_IDS` listán
+szereplők; üres lista mellett senki) vagy `on`. A kapcsoló csak a menüt
+rejti, a végpontokat a jogosultság védi.
+
+A szöveget a közös szerkesztő `quote` módja írja: a TipTap csak a közös
+séma elemeit ismeri (bekezdés, félkövér, dőlt, felsorolás, sortörés), tehát
+a beillesztett címsor vagy link szövegként marad meg, formázás nélkül, és a
+kimenet JSON, nem HTML. A belső kalkuláció panel és a BOM költségmezői csak
+`quotes.costs.view` mellett jelennek meg; a „Termékké alakítás” gomb csak
+`products.manage` mellett.
