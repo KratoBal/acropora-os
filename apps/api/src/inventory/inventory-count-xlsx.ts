@@ -36,12 +36,15 @@ export class InventoryCountXlsx {
     sheet.addRow([...HEADERS]);
     sheet.getRow(1).font = { bold: true };
     for (const line of detail.lines) {
-      // Pre-fill with the current known quantity (or a previously entered
-      // count, if this is a re-download after a partial upload) rather than
-      // 0: this way an untouched row means "matches expectations" and never
-      // accidentally triggers a UNAS stock write, and only rows the user
-      // actually edits will show up as a difference.
-      const prefill = Number(line.countedQty ?? line.expectedQty);
+      // The counted column starts at 0, not at the expected quantity
+      // (Balázs, 2026-10-07 05:48 UTC: „legyen minden tételnél 0 a
+      // leltárívén”, card 49db3012). Pre-filling it with the expected stock
+      // made an uncounted row look counted: it came back as a match, and a
+      // missed shelf was confirmed silently. Now a row nobody counted comes
+      // back as 0, so what is left out becomes zero stock on correction.
+      // A count uploaded earlier (a re-download after a partial upload) is a
+      // real count and is kept, a 0 included.
+      const prefill = line.countedQty !== null ? Number(line.countedQty) : 0;
       sheet.addRow([
         line.sku,
         line.productName,
