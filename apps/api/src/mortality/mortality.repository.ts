@@ -7,6 +7,7 @@ import {
   type MortalityListItem,
   type MortalityListQuery,
   type MortalityListResponse,
+  type MortalityLocationOption,
   type MortalityPhoto,
   type MortalityProductOption,
   type MortalityRecorderOption,
@@ -31,7 +32,11 @@ import {
   syncMortalityStock,
   type MortalityStockDatabase,
 } from "./mortality-stock.js";
-import { mortalityChanges } from "./mortality.policy.js";
+import {
+  dateOfDayKey,
+  dayKeyOf,
+  mortalityChanges,
+} from "./mortality.policy.js";
 
 /** Az auditnapló sorának neve. */
 export const MORTALITY_UPDATED_ACTION = "mortality.updated";
@@ -46,6 +51,7 @@ const LIST_SELECT = {
   quantity: true,
   sourceType: true,
   sourceNote: true,
+  occurredOn: true,
   recordedAt: true,
   product: {
     select: {
@@ -56,6 +62,7 @@ const LIST_SELECT = {
   },
   aquarium: { select: { id: true, name: true, aquariumNumber: true } },
   supplier: { select: { id: true, name: true } },
+  location: { select: { id: true, name: true } },
   recordedBy: { select: { id: true, displayName: true } },
   _count: { select: { documents: true } },
 } satisfies Prisma.MortalityRecordSelect;
@@ -76,12 +83,14 @@ function toListItem(row: ListRow): MortalityListItem {
     productName: row.productName,
     quantity: row.quantity,
     aquarium: row.aquarium,
+    location: row.location,
     source: {
       type: row.sourceType,
       supplier: row.supplier,
       note: row.sourceNote,
     },
     recordedBy: { id: row.recordedBy.id, name: row.recordedBy.displayName },
+    occurredOn: dayKeyOf(row.occurredOn),
     recordedAt: row.recordedAt.toISOString(),
     photoCount: row._count.documents,
   };
@@ -114,46 +123,48 @@ export function mortalityWhere(
   if (query.supplierId) and.push({ supplierId: query.supplierId });
   if (query.aquariumId) and.push({ aquariumId: query.aquariumId });
   if (query.recordedById) and.push({ recordedById: query.recordedById });
-  if (query.from)
-    and.push({
-      recordedAt: {
-        gte: startOfBudapestDay(new Date(`${query.from}T12:00:00Z`)),
-      },
-    });
-  if (query.to)
-    and.push({
-      recordedAt: {
-        lt: startOfBudapestDay(new Date(`${query.to}T12:00:00Z`), 1),
-      },
-    });
+  // az időszak az elhullás NAPJÁRA szűr (Luca, 2026-10-07), nem a rögzítésére:
+  // egy utólag rögzített elhullás a valódi napjánál számít
+  if (query.from) and.push({ occurredOn: { gte: dateOfDayKey(query.from) } });
+  if (query.to) and.push({ occurredOn: { lte: dateOfDayKey(query.to) } });
   return and.length ? { AND: and } : {};
 }
 
-/** A három összesítő ablak kezdete, Budapest naptára szerint. */
+/**
+ * A három összesítő ablak kezdőnapja, Budapest naptára szerint, `@db.Date`
+ * értékként (UTC éjfél): az összesítő az elhullás napját számolja.
+ */
 export function summaryWindows(now: Date) {
   const dayOfMonth = Number(budapestDayKey(now).slice(8, 10));
+  const day = (offset: number) =>
+    dateOfDayKey(budapestDayKey(startOfBudapestDay(now, offset)));
   return {
-    monthStart: startOfBudapestDay(now, -(dayOfMonth - 1)),
-    weekStart: startOfBudapestDay(now, -6),
-    previousWeekStart: startOfBudapestDay(now, -13),
+    monthStart: day(-(dayOfMonth - 1)),
+    weekStart: day(-6),
+    previousWeekStart: day(-13),
   };
 }
 
 /**
  * A hónap akváriumonkénti összegeiből: összesen, hány akváriumban, és a
  * legérintettebb. Döntetlennél az elsőként kapott marad (a sorrend ott nem
- * jelentés, csak egy akvárium kell a kártyára).
+ * jelentés, csak egy akvárium kell a kártyára). Az akvárium nélküli (csak halas
+ * rackes) csoport az összesbe beszámít, az akváriumok közé nem.
  */
 export function summarizeMonth(
-  rows: readonly { aquariumId: string; quantity: number }[],
+  rows: readonly { aquariumId: string | null; quantity: number }[],
 ) {
   let total = 0;
+  let aquariumCount = 0;
   let top: { aquariumId: string; quantity: number } | null = null;
   for (const row of rows) {
     total += row.quantity;
-    if (!top || row.quantity > top.quantity) top = row;
+    if (row.aquariumId === null) continue;
+    aquariumCount += 1;
+    if (!top || row.quantity > top.quantity)
+      top = { aquariumId: row.aquariumId, quantity: row.quantity };
   }
-  return { total, aquariumCount: rows.length, top };
+  return { total, aquariumCount, top };
 }
 
 @Injectable()
@@ -168,7 +179,12 @@ export class MortalityRepository {
       this.database.mortalityRecord.findMany({
         where,
         select: LIST_SELECT,
-        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+        // az elhullás napja szerint; egy napon belül a rögzítés sorrendje
+        orderBy: [
+          { occurredOn: "desc" },
+          { recordedAt: "desc" },
+          { id: "desc" },
+        ],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -196,15 +212,15 @@ export class MortalityRepository {
     const [byAquarium, week, previousWeek] = await Promise.all([
       this.database.mortalityRecord.groupBy({
         by: ["aquariumId"],
-        where: { recordedAt: { gte: monthStart } },
+        where: { occurredOn: { gte: monthStart } },
         _sum: { quantity: true },
       }),
       this.database.mortalityRecord.aggregate({
-        where: { recordedAt: { gte: weekStart } },
+        where: { occurredOn: { gte: weekStart } },
         _sum: { quantity: true },
       }),
       this.database.mortalityRecord.aggregate({
-        where: { recordedAt: { gte: previousWeekStart, lt: weekStart } },
+        where: { occurredOn: { gte: previousWeekStart, lt: weekStart } },
         _sum: { quantity: true },
       }),
     ]);
@@ -305,11 +321,13 @@ export class MortalityRepository {
     productId: string | null;
     productName: string | null;
     quantity: number;
-    aquariumId: string;
+    aquariumId: string | null;
     sourceType: MortalitySourceType;
     supplierId: string | null;
     sourceNote: string | null;
     note: string | null;
+    occurredOn: Date;
+    locationId: string | null;
     recordedById: string;
   }): Promise<{ id: string }> {
     return retryOnTakenCode({ field: ["recordNumber", "movementNumber"] }, () =>
@@ -338,11 +356,13 @@ export class MortalityRepository {
       productId: string | null;
       productName: string | null;
       quantity: number;
-      aquariumId: string;
+      aquariumId: string | null;
       sourceType: MortalitySourceType;
       supplierId: string | null;
       sourceNote: string | null;
       note: string | null;
+      occurredOn: Date;
+      locationId: string | null;
     }>,
     actorUserId: string,
   ): Promise<boolean> {
@@ -359,6 +379,8 @@ export class MortalityRepository {
             supplierId: true,
             sourceNote: true,
             note: true,
+            occurredOn: true,
+            locationId: true,
           },
         });
         if (!before) return false;
@@ -395,6 +417,7 @@ export class MortalityRepository {
         sourceType: true,
         supplierId: true,
         sourceNote: true,
+        locationId: true,
       },
     });
   }
@@ -421,6 +444,14 @@ export class MortalityRepository {
   async isOwnAquarium(aquariumId: string): Promise<boolean> {
     const row = await this.database.aquarium.findFirst({
       where: { id: aquariumId, ownershipType: "OWN" },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  async isActiveLocation(locationId: string): Promise<boolean> {
+    const row = await this.database.mortalityLocation.findFirst({
+      where: { id: locationId, archivedAt: null },
       select: { id: true },
     });
     return row !== null;
@@ -494,6 +525,15 @@ export class MortalityRepository {
       },
       orderBy: { name: "asc" },
       take: OPTION_LIMIT,
+      select: { id: true, name: true },
+    });
+  }
+
+  /** A halas rackek választója: a kivezetettek nélkül, a megadott sorrendben. */
+  async locationOptions(): Promise<MortalityLocationOption[]> {
+    return this.database.mortalityLocation.findMany({
+      where: { archivedAt: null },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     });
   }

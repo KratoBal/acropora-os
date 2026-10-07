@@ -23,6 +23,7 @@ describe("MortalityController jogkörei", () => {
       "aquariumOptions",
       "supplierOptions",
       "recorderOptions",
+      "locationOptions",
       "detail",
       "downloadPhoto",
     ] as const)
@@ -51,7 +52,7 @@ describe("MortalityController jogkörei", () => {
         ),
       ]);
     // RequestMethod: GET 0, POST 1, PUT 2, DELETE 3, PATCH 4
-    assert.equal(handlers.length, 11);
+    assert.equal(handlers.length, 12);
     assert.deepEqual(
       handlers.filter(([, method]) => method === 3),
       [],

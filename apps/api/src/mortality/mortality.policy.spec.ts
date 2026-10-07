@@ -6,6 +6,7 @@ import {
   mortalityChanges,
   mortalitySourceProblem,
   normalizedSource,
+  occurredOnProblem,
   quantityProblem,
 } from "./mortality.policy.js";
 
@@ -145,6 +146,48 @@ describe("mortalityChanges", () => {
       mortalityChanges({ supplierId: null }, { supplierId: undefined }),
       {},
     );
+  });
+
+  it("az elhullás napja napként hasonlít és naplózódik", () => {
+    const day = (key: string) => new Date(`${key}T00:00:00Z`);
+    // két külön Date példány ugyanarra a napra: nem változás
+    assert.deepEqual(
+      mortalityChanges(
+        { occurredOn: day("2026-10-05") },
+        { occurredOn: day("2026-10-05") },
+      ),
+      {},
+    );
+    assert.deepEqual(
+      mortalityChanges(
+        { occurredOn: day("2026-10-05") },
+        { occurredOn: day("2026-10-03") },
+      ),
+      { occurredOn: { from: "2026-10-05", to: "2026-10-03" } },
+    );
+  });
+});
+
+describe("occurredOnProblem", () => {
+  it("a mai és a múltbeli nap jó", () => {
+    assert.equal(occurredOnProblem("2026-10-07", "2026-10-07"), null);
+    assert.equal(occurredOnProblem("2025-12-31", "2026-10-07"), null);
+  });
+
+  it("a jövőbeli nap nem", () => {
+    assert.equal(
+      occurredOnProblem("2026-10-08", "2026-10-07"),
+      "Az elhullás napja nem lehet a jövőben.",
+    );
+  });
+
+  it("nem létező naptári nap vagy más alak nem", () => {
+    for (const day of ["2026-02-30", "2026-13-01", "2026.10.07", "", "x"])
+      assert.equal(
+        occurredOnProblem(day, "2026-10-07"),
+        "Az elhullás napja érvénytelen dátum.",
+        day,
+      );
   });
 });
 

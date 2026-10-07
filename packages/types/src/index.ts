@@ -1309,6 +1309,7 @@ export type {
   MortalityListItem,
   MortalityListQuery,
   MortalityListResponse,
+  MortalityLocationOption,
   MortalityPhoto,
   MortalityProductOption,
   MortalityRecorderOption,
