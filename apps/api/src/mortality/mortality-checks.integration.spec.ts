@@ -31,6 +31,14 @@ describe(
   () => {
     const suffix = Date.now() % 1_000_000;
     const ids = { product: "", aquarium: "", supplier: "", user: "" };
+    /**
+     * HA A KÉSZLET-PRÓBA HOZTA LÉTRE A FŐ RAKTÁRT, A VÉGÉN EL IS TÜNTETI. Az
+     * `ensureMainWarehouse` a LEGRÉGEBBI raktárat adja; egy itt hagyott raktár a
+     * közös CI-adatbázison a következő spec-ek fő raktára lenne, és azok a saját
+     * raktárukon hiába keresnék a készletet (mérve a #1578 CI-jén: a
+     * `unas-order-sync.repository.integration.spec` két tesztje bukott el így).
+     */
+    let createdWarehouseId: string | null = null;
     let counter = 0;
 
     before(async () => {
@@ -110,6 +118,10 @@ describe(
       await prisma.productVariant.deleteMany({
         where: { id: { in: variantIds } },
       });
+      if (createdWarehouseId) {
+        await prisma.warehouse.delete({ where: { id: createdWarehouseId } });
+        createdWarehouseId = null;
+      }
       await prisma.aquarium.deleteMany({
         where: { name: { startsWith: PREFIX } },
       });
@@ -238,7 +250,11 @@ describe(
       const variant = await prisma.productVariant.create({
         data: { productId: product.id, sku: `${PREFIX}SKU-${suffix}` },
       });
+      const existing = await prisma.warehouse.findFirst({
+        select: { id: true },
+      });
       const warehouse = await ensureMainWarehouse(prisma);
+      if (!existing) createdWarehouseId = warehouse.id;
       await prisma.stockItem.create({
         data: { variantId: variant.id, warehouseId: warehouse.id, onHand: 10 },
       });
