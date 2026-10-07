@@ -1,0 +1,5 @@
+# quotes P1 integration calibration, round 2 (#1594 head 29d77e3c)
+# the cost leak fires the rewritten P0 redaction check
+not ok 2 - GET/list/PATCH redact every cost and event payload for SALES, with schema validation
+# the list sum without the optional filter
+LIST-NET-TOTAL

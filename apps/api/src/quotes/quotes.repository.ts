@@ -88,7 +88,7 @@ export class QuotesRepository {
     >(
       Prisma.sql`SELECT "versionId", SUM("quantity" * "unitNetPrice") AS "total"
         FROM "QuoteItem"
-        WHERE "versionId" IN (${Prisma.join(versionIds)}) AND NOT "isOptional"
+        WHERE "versionId" IN (${Prisma.join(versionIds)})
         GROUP BY "versionId"`,
     );
     const totals = new Map(
