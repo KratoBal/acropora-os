@@ -88,6 +88,8 @@ export interface QuoteBomLineDto {
   kind: "PRODUCT" | "CUSTOM" | "SERVICE";
   variantId: string | null;
   customName: string | null;
+  /** "Product · Variant (SKU)" of a linked variant; internal only (P1) */
+  variantLabel: string | null;
   quantity: string;
   unit: string;
   createdProductVariantId: string | null;
@@ -98,6 +100,8 @@ export interface QuoteInternalBlock extends Omit<QuoteCustomerBlock, "items"> {
     QuoteCustomerItem & {
       source: "STANDALONE" | "PRODUCT" | "BOM";
       variantId: string | null;
+      /** "Product · Variant (SKU)" of a linked variant (P1) */
+      variantLabel: string | null;
     }
   >;
 }

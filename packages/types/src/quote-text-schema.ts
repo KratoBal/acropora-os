@@ -113,3 +113,31 @@ export function validateQuoteRichText(
     };
   return { ok: true, value: parsed };
 }
+
+/** An empty quote text: one empty paragraph. */
+export const EMPTY_QUOTE_RICH_TEXT: QuoteRichText = {
+  type: "doc",
+  content: [{ type: "paragraph" }],
+};
+
+/**
+ * THE EDITOR'S TipTap JSON, REDUCED TO THE SUBSET'S SHAPE (P1). TipTap adds
+ * `attrs` the subset does not carry (an ordered list's `start` and `type`), and
+ * may add `attrs` to a mark; those are dropped here. Everything else is kept AS
+ * IS, an unknown node included: the validator must still see it and name it,
+ * so this is a shape adapter, not a filter.
+ */
+export function quoteRichTextFromEditor(value: unknown, depth = 0): unknown {
+  const n = record(value);
+  if (!n || depth > QUOTE_RICH_TEXT_MAX_DEPTH) return value;
+  const out: Record<string, unknown> = { type: n.type };
+  if (n.text !== undefined) out.text = n.text;
+  if (Array.isArray(n.marks) && n.marks.length)
+    out.marks = n.marks.map((m) => {
+      const r = record(m);
+      return r ? { type: r.type } : m;
+    });
+  if (Array.isArray(n.content))
+    out.content = n.content.map((c) => quoteRichTextFromEditor(c, depth + 1));
+  return out;
+}
