@@ -20,6 +20,7 @@ import { QuoteDetailPage } from "./quote-detail-page";
 import { QuoteEditorPage } from "./quote-editor-page";
 import { QuoteListPage } from "./quote-list-page";
 import { QuoteNewPage } from "./quote-new-page";
+import { QuotePdfPage } from "./quote-pdf-page";
 import { QuoteSnippetsPage } from "./quote-snippets-page";
 
 /** Az árajánlat modul képernyői (#1582 P1, Figma 35). */
@@ -62,6 +63,8 @@ const api = vi.hoisted(() => ({
   createSnippet: vi.fn(),
   updateSnippet: vi.fn(),
   archiveSnippet: vi.fn(),
+  publish: vi.fn(),
+  pdf: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
@@ -510,6 +513,64 @@ describe("Mentetlen blokkszöveg", () => {
       screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
     );
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
+  });
+});
+
+describe("PDF előnézet és publikálás (569:363)", () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => "about:blank#quote-pdf");
+    URL.revokeObjectURL = vi.fn();
+    api.pdf.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+  });
+
+  it("a piszkozat előnézete, és a publikálás csak megerősítés után fut", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.publish.mockResolvedValue(
+      quote([
+        version({ status: "PUBLISHED", publishedAt: "2026-10-08T08:00:00Z" }),
+      ]),
+    );
+    render(<QuotePdfPage quoteId="q1" />);
+    expect(
+      await screen.findByText("Piszkozat · még nincs publikálva"),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(api.pdf).toHaveBeenCalledWith("token-1", "q1", "v2"),
+    );
+    expect(
+      (await screen.findByTitle("AJ-2026-0042 v2 PDF")).getAttribute("src"),
+    ).toBe("about:blank#quote-pdf");
+    fireEvent.click(screen.getByRole("button", { name: "Verzió publikálása" }));
+    expect(api.publish).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Publikálás" }));
+    await waitFor(() =>
+      expect(api.publish).toHaveBeenCalledWith("token-1", "q1", "v2"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Verzió publikálása" }),
+    ).toBeNull();
+  });
+
+  it("publikált verziónál nincs publikáló gomb, a kért verzió PDF-je töltődik", async () => {
+    navigation.search = new URLSearchParams("v=v1");
+    api.detail.mockResolvedValue(
+      quote([
+        version({
+          id: "v1",
+          versionNumber: 1,
+          status: "PUBLISHED",
+          publishedAt: "2026-10-07T10:00:00Z",
+        }),
+        version(),
+      ]),
+    );
+    render(<QuotePdfPage quoteId="q1" />);
+    await waitFor(() =>
+      expect(api.pdf).toHaveBeenCalledWith("token-1", "q1", "v1"),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Verzió publikálása" }),
+    ).toBeNull();
   });
 });
 

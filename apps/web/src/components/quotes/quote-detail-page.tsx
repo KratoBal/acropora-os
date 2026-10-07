@@ -139,14 +139,30 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     {
       id: "valid",
       header: "Érvényes",
-      width: "20%",
+      width: "16%",
       cell: (v) => formatQuoteDay(v.validUntil),
     },
     {
       id: "published",
       header: "Publikálva",
-      width: "20%",
+      width: "16%",
       cell: (v) => formatQuoteDay(v.publishedAt),
+    },
+    {
+      id: "pdf",
+      header: "PDF",
+      width: "12%",
+      cell: (v) => (
+        <PilotButton
+          variant="ghost"
+          aria-label={`v${v.versionNumber} PDF`}
+          onClick={() =>
+            router.push(`${QUOTES_PATH}/${quote.id}/pdf?v=${v.id}`)
+          }
+        >
+          {v.status === "DRAFT" ? "Előnézet" : "PDF"}
+        </PilotButton>
+      ),
     },
   ];
 
