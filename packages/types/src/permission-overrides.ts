@@ -95,18 +95,26 @@ export const OWNER_GRANTED_PERMISSIONS: readonly Permission[] =
   );
 
 /**
- * A TERÜLET KEZELÉSI JOGA ÉS A MEGTEKINTÉSI PÁRJA (`x.manage` -> `x.view`), ahol
- * mindkettő létezik. Balázs modellje területenként Nincs / Megtekintés / Kezelés;
- * a két jog negyedik kombinációja (kezelés megtekintés nélkül) nem állapot, ezért
- * a változás-szabály kizárja (acrobot döntése, 2026-10-07, a #1561 átvételéből).
- * A `settings.manage` és a `users.manage` párja nem létezik, rájuk nem vonatkozik.
+ * A TERÜLET KEZELÉSI JOGA ÉS A MEGTEKINTÉSI PÁRJA, ahol mindkettő létezik. Balázs
+ * modellje területenként Nincs / Megtekintés / Kezelés; a két jog negyedik
+ * kombinációja (kezelés megtekintés nélkül) nem állapot, ezért a változás-szabály
+ * kizárja (acrobot döntése, 2026-10-07, a #1561 átvételéből).
+ *
+ * A párok többsége a névből jön (`x.manage` -> `x.view`). A Számlázásé NEM: ott a
+ * kezelés szintje a `billing.create` (a táblázat így vezeti), ezért kifejezett pár
+ * (barracuda átvétele, acrobot 27281). Hogy a táblázat minden kétszintű területe
+ * itt álljon, azt a `permission-areas.test.ts` méri. A `settings.manage` és a
+ * `users.manage` párja nem létezik, rájuk nem vonatkozik.
  */
 export const MANAGE_VIEW_PAIRS: readonly (readonly [Permission, Permission])[] =
-  ALL_PERMISSION_VALUES.flatMap((manage) => {
-    if (!manage.endsWith(".manage")) return [];
-    const view = `${manage.slice(0, -".manage".length)}.view`;
-    return isPermission(view) ? [[manage, view] as const] : [];
-  });
+  [
+    ...ALL_PERMISSION_VALUES.flatMap((manage) => {
+      if (!manage.endsWith(".manage")) return [];
+      const view = `${manage.slice(0, -".manage".length)}.view`;
+      return isPermission(view) ? [[manage, view] as const] : [];
+    }),
+    [PERMISSIONS.BILLING_CREATE, PERMISSIONS.BILLING_VIEW] as const,
+  ];
 
 export interface PermissionOverrideTarget {
   role: UserRole;
