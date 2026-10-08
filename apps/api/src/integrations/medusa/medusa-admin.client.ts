@@ -825,6 +825,20 @@ export interface MedusaOrderListResult {
 }
 
 /** Egy változat vonalkód-mezői, ahogy a bolt mutatja (SEO P0 PR 4). */
+/** Egy változat tömege és méretei a boltban (SEO P0 PR 8): g és mm, vagy `null`. */
+export interface MedusaVariantMeasureRow {
+  id: string;
+  sku: string | null;
+  weight: number | null;
+  length: number | null;
+  width: number | null;
+  height: number | null;
+}
+
+export type MedusaVariantMeasurePatch = Partial<
+  Record<"weight" | "length" | "width" | "height", number>
+>;
+
 export interface MedusaVariantBarcodeRow {
   id: string;
   sku: string | null;
@@ -1261,6 +1275,18 @@ export interface MedusaAdminClient {
     productId: string,
     variantId: string,
     patch: { ean?: string | null; upc?: string | null },
+  ): Promise<void>;
+  /** A termék változatai a tömegükkel és méreteikkel (SEO P0 PR 8). */
+  listVariantMeasures(productId: string): Promise<MedusaVariantMeasureRow[]>;
+  /**
+   * Egy változat tömege és méretei. Csak a megadott kulcs íródik; ürítés nincs
+   * (a vetítés a Medusa értékét nem törli, ha nincs VERIFIED tény). EZ IR A
+   * BOLTI OLDALRA.
+   */
+  updateVariantMeasures(
+    productId: string,
+    variantId: string,
+    patch: MedusaVariantMeasurePatch,
   ): Promise<void>;
   /**
    * A bolt ár-értelmezési beállításai.
@@ -2496,6 +2522,31 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     productId: string,
     variantId: string,
     patch: { ean?: string | null; upc?: string | null },
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/products/${encodeURIComponent(productId)}` +
+        `/variants/${encodeURIComponent(variantId)}`,
+      { method: "POST", body: JSON.stringify(patch) },
+    );
+  }
+
+  async listVariantMeasures(
+    productId: string,
+  ): Promise<MedusaVariantMeasureRow[]> {
+    const params = new URLSearchParams({
+      fields: "id,sku,weight,length,width,height",
+      limit: String(VARIANT_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{ variants?: MedusaVariantMeasureRow[] }>(
+      `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
+    );
+    return body.variants ?? [];
+  }
+
+  async updateVariantMeasures(
+    productId: string,
+    variantId: string,
+    patch: MedusaVariantMeasurePatch,
   ): Promise<void> {
     await this.request<unknown>(
       `/admin/products/${encodeURIComponent(productId)}` +
