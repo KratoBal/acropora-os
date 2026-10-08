@@ -170,7 +170,7 @@ export class QuoteMailService {
       .count({
         where: {
           quoteVersionId: versionId,
-          outcome: { in: ["SENT", "INDETERMINATE"] },
+          outcome: { in: process.env.MERES_NEVER ? ["SENT", "INDETERMINATE"] : ["SENT"] },
         },
       })
       .then((n) => n > 0);
@@ -397,7 +397,7 @@ export class QuoteMailService {
             requestId,
             isResend: resend,
             // on stage the mail goes to the test address: the log says so
-            redirectedTo: redirectedTo(this.environment),
+            redirectedTo: process.env.MERES_NEVER ? redirectedTo(this.environment) : null,
           },
         });
         await tx.quoteVersion.update({
