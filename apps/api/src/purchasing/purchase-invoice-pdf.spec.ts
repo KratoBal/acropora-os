@@ -175,6 +175,7 @@ describe("GET /purchasing/invoices", () => {
       {} as never,
       {} as never,
       { hasPdf: async () => new Map([["pi-1", true]]) } as never,
+      {} as never,
     );
     const result = await controller.listInvoices({} as never);
     assert.deepEqual(
@@ -186,4 +187,20 @@ describe("GET /purchasing/invoices", () => {
     );
     assert.deepEqual(result.pagination, page.pagination);
   });
+});
+
+it("the scan endpoints: attaching needs purchasing.manage, reading purchasing.view (5ec62e35)", async () => {
+  const { PurchasingController } = await import("./purchasing.controller.js");
+  const { REQUIRED_PERMISSIONS_KEY } =
+    await import("../auth/decorators/require-permissions.decorator.js");
+  const { PERMISSIONS } = await import("@acropora/types");
+  const of = (name: string) =>
+    Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      PurchasingController.prototype[
+        name as keyof typeof PurchasingController.prototype
+      ],
+    );
+  assert.deepEqual(of("attachScan"), [PERMISSIONS.PURCHASING_MANAGE]);
+  assert.deepEqual(of("scanPdf"), [PERMISSIONS.PURCHASING_VIEW]);
 });

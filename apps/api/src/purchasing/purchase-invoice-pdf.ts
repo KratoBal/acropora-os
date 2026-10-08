@@ -22,6 +22,8 @@ export interface PurchaseInvoicePdfSources {
   feedKeys: ReadonlySet<string>;
   /** a beszerzési számlák, amelyek várható beérkezésén PDF fájl áll */
   arrivalInvoiceIds: ReadonlySet<string>;
+  /** a beszerzési számlák, amelyekhez kézzel csatoltak számlaképet (5ec62e35) */
+  scannedInvoiceIds?: ReadonlySet<string>;
 }
 
 /**
@@ -38,6 +40,8 @@ export function purchaseInvoiceHasPdf(
   invoice: PurchaseInvoiceForPdf,
   sources: PurchaseInvoicePdfSources,
 ): boolean {
+  // the direct link first: it is the one the user attached to THIS invoice
+  if (sources.scannedInvoiceIds?.has(invoice.id)) return true;
   if (sources.arrivalInvoiceIds.has(invoice.id)) return true;
   const key = invoiceKey(
     invoice.supplierInvoiceNumber,
@@ -70,7 +74,7 @@ export class PurchaseInvoicePdfLookup {
   ): Promise<Map<string, boolean>> {
     if (invoices.length === 0) return new Map();
     const ids = invoices.map((invoice) => invoice.id);
-    const [suppliers, feed, arrivals, collected] = await Promise.all([
+    const [suppliers, feed, arrivals, collected, scanned] = await Promise.all([
       this.database.supplier.findMany({
         where: { id: { in: [...new Set(invoices.map((i) => i.supplierId))] } },
         select: { id: true, taxNumber: true },
@@ -89,6 +93,10 @@ export class PurchaseInvoicePdfLookup {
         select: { purchaseInvoiceId: true },
       }),
       loadCollectedPdfIndex(this.database),
+      this.database.incomingSupplierDocument.findMany({
+        where: { purchaseInvoiceId: { in: ids } },
+        select: { purchaseInvoiceId: true },
+      }),
     ]);
     const taxNumber = new Map(suppliers.map((s) => [s.id, s.taxNumber]));
     const sources: PurchaseInvoicePdfSources = {
@@ -101,6 +109,11 @@ export class PurchaseInvoicePdfLookup {
       arrivalInvoiceIds: new Set(
         arrivals
           .map((arrival) => arrival.purchaseInvoiceId)
+          .filter((id): id is string => id !== null),
+      ),
+      scannedInvoiceIds: new Set(
+        scanned
+          .map((doc) => doc.purchaseInvoiceId)
           .filter((id): id is string => id !== null),
       ),
     };

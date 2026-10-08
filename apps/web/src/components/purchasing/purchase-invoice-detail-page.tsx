@@ -22,6 +22,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { purchasingApi } from "@/lib/api/purchasing";
 
+import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
+
 function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
 }
@@ -36,6 +38,9 @@ export function PurchaseInvoiceDetailPage({
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
+  );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
 
   const [detail, setDetail] = useState<PurchaseInvoiceDetail | null>(null);
@@ -298,6 +303,13 @@ export function PurchaseInvoiceDetailPage({
               </table>
             </div>
           </Card>
+          <PurchaseInvoiceScans
+            token={token}
+            invoiceId={detail.id}
+            scans={detail.scans ?? []}
+            canManage={canManage}
+            onChange={(scans) => setDetail({ ...detail, scans })}
+          />
         </>
       ) : null}
     </div>

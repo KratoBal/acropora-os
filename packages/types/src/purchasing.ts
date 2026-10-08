@@ -68,7 +68,17 @@ export interface PurchaseInvoiceSummary {
   updatedAt: string;
 }
 
+/** A scanned invoice attached to a recorded purchase invoice (card 5ec62e35). */
+export interface PurchaseInvoiceScan {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {
+  /** the scans attached by hand, newest first (5ec62e35) */
+  scans?: PurchaseInvoiceScan[];
   warehouseId: string;
   vatRate?: string;
   note?: string;
