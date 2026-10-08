@@ -1024,6 +1024,7 @@ model User {
   quoteEvents                QuoteEvent[]                  @relation("QuoteEventActor")
   recordedQuoteAcceptances   QuoteAcceptance[]             @relation("QuoteAcceptanceRecorder")
   revokedQuoteAcceptances    QuoteAcceptance[]             @relation("QuoteAcceptanceRevoker")
+  initiatedQuoteMails        QuoteMailDelivery[]           @relation("QuoteMailInitiator")
   incomingReadingsReviewed   IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
 
   @@index([role, isActive])
@@ -8833,26 +8834,27 @@ enum QuoteSnippetKind {
 }
 
 model Quote {
-  id                String            @id @default(cuid())
-  quoteNumber       String            @unique
+  id                String              @id @default(cuid())
+  quoteNumber       String              @unique
   customerId        String?
   title             String
-  status            QuoteStatus       @default(DRAFT)
+  status            QuoteStatus         @default(DRAFT)
   ownerUserId       String?
   closeReason       QuoteCloseReason?
   closeNote         String?
-  postponedUntil    DateTime?         @db.Date
-  acceptedVersionId String?           @unique
+  postponedUntil    DateTime?           @db.Date
+  acceptedVersionId String?             @unique
   createdById       String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  customer          Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  owner             User?             @relation("QuoteOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  createdBy         User?             @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  acceptedVersion   QuoteVersion?     @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
-  versions          QuoteVersion[]    @relation("QuoteVersions")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  customer          Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  owner             User?               @relation("QuoteOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdBy         User?               @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedVersion   QuoteVersion?       @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
+  versions          QuoteVersion[]      @relation("QuoteVersions")
   events            QuoteEvent[]
   acceptances       QuoteAcceptance[]
+  mailDeliveries    QuoteMailDelivery[]
 
   @@index([status, updatedAt])
   @@index([customerId])
@@ -8876,6 +8878,8 @@ model QuoteVersion {
   /// CreationDate, so a second click renders the same bytes.
   publishRequestedAt   DateTime?
   publishedById        String?
+  /// #1582 P3: set while a send runs (a conditional claim: one send at a time)
+  sendingSince         DateTime?
   createdFromVersionId String?
   quote                Quote                   @relation("QuoteVersions", fields: [quoteId], references: [id], onDelete: Restrict)
   acceptedByQuote      Quote?                  @relation("QuoteAcceptedVersion")
@@ -8889,6 +8893,7 @@ model QuoteVersion {
   milestones           QuotePaymentMilestone[]
   events               QuoteEvent[]
   acceptances          QuoteAcceptance[]
+  mailDeliveries       QuoteMailDelivery[]
 
   @@unique([quoteId, versionNumber])
   @@unique([id, quoteId])
@@ -9045,6 +9050,31 @@ model QuoteAcceptance {
 
   @@index([quoteId, createdAt])
   @@index([quoteVersionId])
+}
+
+/// #1582 P3: one row per send attempt (the BillingDocumentMailDelivery shape).
+model QuoteMailDelivery {
+  id                String       @id @default(cuid())
+  quoteId           String
+  quoteVersionId    String
+  initiatedByUserId String?
+  /// { to, cc, bcc }: who it went to (or was meant to)
+  recipients        Json
+  subject           String
+  /// SENT | FAILED | INDETERMINATE (a CHECK in the migration)
+  outcome           String
+  error             String?
+  /// a client retry with the same id gets this attempt back, no second mail
+  requestId         String?      @unique
+  isResend          Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  quote             Quote        @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  /// Composite FK: the version belongs to this very quote.
+  version           QuoteVersion @relation(fields: [quoteVersionId, quoteId], references: [id, quoteId], onDelete: Restrict)
+  initiatedBy       User?        @relation("QuoteMailInitiator", fields: [initiatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([quoteVersionId, createdAt])
+  @@index([quoteId, createdAt])
 }
 
 model QuoteEvent {

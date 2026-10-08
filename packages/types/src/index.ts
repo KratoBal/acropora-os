@@ -1398,6 +1398,9 @@ export type {
   RejectQuoteInput,
   PostponeQuoteInput,
   CancelQuoteInput,
+  QuoteMailDeliveryDto,
+  QuoteSendDraftDto,
+  QuoteSendInput,
 } from "./quotes.js";
 export {
   EMPTY_QUOTE_RICH_TEXT,
