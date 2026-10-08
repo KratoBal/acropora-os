@@ -100,7 +100,15 @@ export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {
   warehouseId: string;
   vatRate?: string;
   note?: string;
+  /** set on a cancelled invoice (Balázs „A 1”, acrobot 28092) */
+  cancelledAt?: string;
+  cancelReason?: string;
   lines: PurchaseInvoiceLineDetail[];
+}
+
+/** Undoing a recorded invoice: why, in the person's words. */
+export interface CancelPurchaseInvoiceInput {
+  reason: string;
 }
 
 /**

@@ -177,6 +177,7 @@ describe("GET /purchasing/invoices", () => {
       { hasPdf: async () => new Map([["pi-1", true]]) } as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const result = await controller.listInvoices({} as never);
     assert.deepEqual(
@@ -204,4 +205,18 @@ it("the scan endpoints: attaching needs purchasing.manage, reading purchasing.vi
     );
   assert.deepEqual(of("attachScan"), [PERMISSIONS.PURCHASING_MANAGE]);
   assert.deepEqual(of("scanPdf"), [PERMISSIONS.PURCHASING_VIEW]);
+});
+
+it("the cancel endpoint needs purchasing.manage (acrobot 28092)", async () => {
+  const { PurchasingController } = await import("./purchasing.controller.js");
+  const { REQUIRED_PERMISSIONS_KEY } =
+    await import("../auth/decorators/require-permissions.decorator.js");
+  const { PERMISSIONS } = await import("@acropora/types");
+  assert.deepEqual(
+    Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      PurchasingController.prototype.cancelInvoice,
+    ),
+    [PERMISSIONS.PURCHASING_MANAGE],
+  );
 });

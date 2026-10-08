@@ -126,6 +126,8 @@ export function toPurchaseInvoiceDetail(
     warehouseId: invoice.warehouseId,
     vatRate: invoice.vatRate?.toString(),
     note: invoice.note ?? undefined,
+    cancelledAt: invoice.cancelledAt?.toISOString(),
+    cancelReason: invoice.cancelReason ?? undefined,
     lines: invoice.lines.map(toLineDetail),
   };
 }

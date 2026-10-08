@@ -31,6 +31,8 @@ import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-que
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
+import { PurchaseInvoiceCancelService } from "./purchase-invoice-cancel.service.js";
+import { CancelPurchaseInvoiceDto } from "./dto/cancel-purchase-invoice.dto.js";
 import { UpdatePurchaseInvoiceDto } from "./dto/update-purchase-invoice.dto.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
@@ -50,6 +52,7 @@ export class PurchasingController {
     private readonly pdfLookup: PurchaseInvoicePdfLookup,
     private readonly scans: PurchaseInvoiceScanService,
     private readonly edits: PurchaseInvoiceEditService,
+    private readonly cancels: PurchaseInvoiceCancelService,
   ) {}
 
   /**
@@ -198,6 +201,22 @@ export class PurchasingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.edits.update(id, input, user.id);
+    return this.service.getDetail(id);
+  }
+
+  /**
+   * A rögzített számla sztornója (Balázs „A 1”, acrobot 28092): a készlet
+   * ellentétes mozgással kimegy, a foglalások felszabadulnak, a NAV-sor és a
+   * várható beérkezés újra rögzíthető, a szám újra felhasználható.
+   */
+  @Post("invoices/:id/cancel")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  async cancelInvoice(
+    @Param("id") id: string,
+    @Body() input: CancelPurchaseInvoiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.cancels.cancel(id, input.reason, user.id);
     return this.service.getDetail(id);
   }
 

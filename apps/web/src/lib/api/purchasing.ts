@@ -13,6 +13,7 @@ import type {
   SupplierLineSuggestionResult,
   PurchaseInvoiceScan,
   UpdatePurchaseInvoiceInput,
+  CancelPurchaseInvoiceInput,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -115,6 +116,18 @@ export const purchasingApi = {
       token,
       {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /** A rögzített számla sztornója, okkal (acrobot 28092). */
+  cancel(token: string, invoiceId: string, input: CancelPurchaseInvoiceInput) {
+    return apiRequest<PurchaseInvoiceDetail>(
+      `/purchasing/invoices/${encodeURIComponent(invoiceId)}/cancel`,
+      token,
+      {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       },

@@ -196,7 +196,7 @@ export function receiptKey(supplierId: string, supplierInvoiceNumber: string) {
  * and its stock would silently not arrive. The movement and its UNAS outbox
  * rows move to the new number's key, in the same transaction.
  */
-async function rekeyReceipt(
+export async function rekeyReceipt(
   tx: Prisma.TransactionClient,
   invoiceId: string,
   oldKey: string,
