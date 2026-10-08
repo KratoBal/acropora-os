@@ -4,6 +4,10 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 import type { UpsertProductShippingProfileDto } from "./dto/upsert-product-shipping-profile.dto.js";
+import type {
+  ShippingFlag,
+  ShippingFlagSource,
+} from "./shipping-profile-sources.js";
 
 type ProfileRecord = NonNullable<
   Awaited<ReturnType<typeof prisma.productShippingProfile.findUnique>>
@@ -47,6 +51,9 @@ export interface ProductShippingProfileDetail {
   foxpostForbidden: boolean;
   isHeavy: boolean;
   isFrozen: boolean;
+  lockerUnsuitable: boolean;
+  /** A jelzők forrása (a82ed229): `UNAS` a szinkroné, `MANUAL` a kézi. */
+  sources: Record<ShippingFlag, ShippingFlagSource>;
   updatedAt: string;
 }
 
@@ -64,8 +71,35 @@ function toDetail(profile: ProfileRecord): ProductShippingProfileDetail {
     foxpostForbidden: profile.foxpostForbidden,
     isHeavy: profile.isHeavy,
     isFrozen: profile.isFrozen,
+    lockerUnsuitable: profile.lockerUnsuitable,
+    sources: {
+      pickupOnly: profile.pickupOnlySource,
+      foxpostForbidden: profile.foxpostForbiddenSource,
+      isHeavy: profile.isHeavySource,
+      isFrozen: profile.isFrozenSource,
+    },
     updatedAt: profile.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A KÉZI ÍRÁS (a82ed229): csak a megváltozott jelző lesz kézi. A kártya mind a
+ * négyet elküldi, és ha mindet kézire állítanánk, egy javítás a többi, UNAS-ból
+ * jövő jelzőt is lefagyasztaná. Új sornál minden jelző kézi: azt valaki kitöltötte.
+ */
+export function manualShippingWrite(
+  existing: ProfileRecord | null,
+  input: UpsertProductShippingProfileDto,
+): Record<string, boolean | ShippingFlagSource> {
+  const data: Record<string, boolean | ShippingFlagSource> = {};
+  for (const flag of FLAGS)
+    if (!existing || existing[flag] !== input[flag]) {
+      data[flag] = input[flag];
+      data[`${flag}Source`] = "MANUAL";
+    }
+  if (input.lockerUnsuitable !== undefined)
+    data.lockerUnsuitable = input.lockerUnsuitable;
+  return data;
 }
 
 @Injectable()
@@ -111,10 +145,11 @@ export class ProductShippingProfileRepository extends Repository {
         const existing = await transaction.productShippingProfile.findUnique({
           where: { productId },
         });
+        const data = manualShippingWrite(existing, input);
         const profile = await transaction.productShippingProfile.upsert({
           where: { productId },
-          update: input,
-          create: { productId, ...input },
+          update: data,
+          create: { productId, ...data },
         });
         const action = existing
           ? "product_shipping_profile.updated"
@@ -129,9 +164,15 @@ export class ProductShippingProfileRepository extends Repository {
         const metadata = {
           productId,
           before: existing
-            ? Object.fromEntries(FLAGS.map((f) => [f, existing[f]]))
+            ? {
+                ...Object.fromEntries(FLAGS.map((f) => [f, existing[f]])),
+                lockerUnsuitable: existing.lockerUnsuitable,
+              }
             : null,
-          after: Object.fromEntries(FLAGS.map((f) => [f, profile[f]])),
+          after: {
+            ...Object.fromEntries(FLAGS.map((f) => [f, profile[f]])),
+            lockerUnsuitable: profile.lockerUnsuitable,
+          },
         } satisfies Prisma.JsonObject;
         await transaction.auditLog.create({
           data: {
