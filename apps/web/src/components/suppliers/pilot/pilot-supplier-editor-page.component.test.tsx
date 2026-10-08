@@ -613,6 +613,33 @@ describe("PilotSupplierEditorPage: what the parent picker offers", () => {
       ).toBeNull();
     });
 
+    // Balázs on the live site, 2026-10-08: the German VIES answers valid only
+    it("érvényes, de név és cím nélküli válasznál megmondja, miért üresek a mezők", async () => {
+      viesVat.check.mockResolvedValue({ valid: true });
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "DE300632593" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      expect(
+        await screen.findByText(
+          "A(z) Németország adóhatósága a VIES-ben nem adja ki a nevet és a címet, ezeket kézzel kell megadni.",
+        ),
+      ).toBeTruthy();
+      expect(value("Név")).toBe("");
+    });
+
+    it("névvel érkező válasznál nincs ilyen sor", async () => {
+      viesVat.check.mockResolvedValue(COOLBLUE);
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL810433941B01" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      await waitFor(() => expect(value("Név")).toBe("COOLBLUE B.V."));
+      expect(screen.queryByText(/nem adja ki a nevet és a címet/)).toBeNull();
+    });
+
     it("soronként is átvehető: a név igen, a város marad", async () => {
       viesVat.check.mockResolvedValue(COOLBLUE);
       render(<PilotSupplierEditorPage />);
