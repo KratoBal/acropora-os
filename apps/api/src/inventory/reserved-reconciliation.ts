@@ -16,6 +16,10 @@ export interface ReservedMismatch {
  * equal the sum of the ACTIVE project reservations on that row. Rows where
  * it does not are listed, at most `limit`, for a person to look at. It
  * repairs nothing.
+ *
+ * The list is right only while project reservations are the ONLY writer of
+ * `reserved` (true at #1630: the one writer is `releaseReservations` and the
+ * receipt's reservation). A second writer would show up here as drift.
  */
 export async function reservedMismatches(
   database: Pick<typeof prisma, "$queryRaw"> = prisma,

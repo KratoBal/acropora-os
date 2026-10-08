@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import { randomUUID } from "node:crypto";
 
 import {
   lockVariantWarehouse,
@@ -13,6 +12,7 @@ import {
   type InventoryMovementDatabase,
 } from "../common/inventory-movement-writer.js";
 import { receiptKey, rekeyReceipt } from "./purchase-invoice-edit.service.js";
+import { releaseReservations } from "./project-reservation.service.js";
 
 /**
  * UNDOING A RECORDED PURCHASE INVOICE (the second layer; Balázs „A 1”,
@@ -73,26 +73,6 @@ export class PurchaseInvoiceCancelService {
           "Kifizetett számla nem sztornózható: előbb a fizetést kell visszavonni az Adatok javítása alatt.",
         );
 
-      const reservations = await tx.projectInventoryReservation.findMany({
-        where: {
-          purchaseInvoiceLineId: { in: invoice.lines.map((line) => line.id) },
-          status: { in: ["ACTIVE", "CONSUMED"] },
-        },
-        select: {
-          id: true,
-          status: true,
-          projectId: true,
-          stockItemId: true,
-          variantId: true,
-          quantity: true,
-          purchaseInvoiceLineId: true,
-        },
-      });
-      if (reservations.some((r) => r.status === "CONSUMED"))
-        throw new ConflictException(
-          "A számla egy projektfoglalását már felhasználták, ezért nem sztornózható.",
-        );
-
       const receipt = await tx.stockMovement.findFirst({
         where: {
           referenceType: "PurchaseInvoice",
@@ -135,9 +115,33 @@ export class PurchaseInvoiceCancelService {
         ).map((variant) => [variant.id, variant]),
       );
 
-      // the same lock the posting takes, in the same order, before reading
-      for (const variantId of variantIds) {
+      // the same lock the posting takes, in the same order, before reading:
+      // the holds and the stock rows are read under it (barracuda's #1630
+      // review), so a release by hand or a project close cannot slip
+      // between the read and the write
+      for (const variantId of variantIds)
         await lockVariantWarehouse(tx, variantId, invoice.warehouseId);
+      const reservations = await tx.projectInventoryReservation.findMany({
+        where: {
+          purchaseInvoiceLineId: { in: invoice.lines.map((line) => line.id) },
+          status: { in: ["ACTIVE", "CONSUMED"] },
+        },
+        select: {
+          id: true,
+          status: true,
+          projectId: true,
+          stockItemId: true,
+          variantId: true,
+          quantity: true,
+          purchaseInvoiceLineId: true,
+        },
+      });
+      if (reservations.some((r) => r.status === "CONSUMED"))
+        throw new ConflictException(
+          "A számla egy projektfoglalását már felhasználták, ezért nem sztornózható.",
+        );
+
+      for (const variantId of variantIds) {
         const stock = await tx.stockItem.findFirst({
           where: {
             variantId,
@@ -168,38 +172,23 @@ export class PurchaseInvoiceCancelService {
           );
       }
 
-      // reservations first, so the UNAS target below counts them as free
+      // reservations first, so the UNAS target below counts them as free;
+      // through the one release, whose conditional update releases a hold
+      // once: if another release took one meanwhile, this is a 409
+      const active = reservations.filter((r) => r.status === "ACTIVE");
+      const released = active.length
+        ? await releaseReservations(
+            tx,
+            { reservationIds: active.map((r) => r.id) },
+            userId,
+            "PURCHASE_INVOICE_CANCELLED",
+          )
+        : [];
+      if (released.length !== active.length)
+        throw new ConflictException(
+          "A számla egy projektfoglalása közben megváltozott. Töltsd újra, és próbáld újra.",
+        );
       const now = new Date();
-      for (const reservation of reservations) {
-        await tx.projectInventoryReservation.update({
-          where: { id: reservation.id },
-          data: { status: "RELEASED", releasedAt: now },
-        });
-        await tx.stockItem.update({
-          where: { id: reservation.stockItemId },
-          data: { reserved: { decrement: reservation.quantity } },
-        });
-        await tx.domainEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "project_inventory.released",
-            aggregateType: "ProjectInventoryReservation",
-            aggregateId: reservation.id,
-            actorUserId: userId,
-            payload: {
-              projectId: reservation.projectId,
-              purchaseInvoiceId: id,
-              purchaseInvoiceLineId: reservation.purchaseInvoiceLineId,
-              variantId: reservation.variantId,
-              warehouseId: invoice.warehouseId,
-              quantity: reservation.quantity.toString(),
-              reason: "PURCHASE_INVOICE_CANCELLED",
-            },
-            occurredAt: now,
-            schemaVersion: 1,
-          },
-        });
-      }
 
       if (receipt) {
         // free the number's key first: the receipt and its outbox rows move

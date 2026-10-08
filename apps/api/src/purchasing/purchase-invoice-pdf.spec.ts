@@ -178,6 +178,7 @@ describe("GET /purchasing/invoices", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const result = await controller.listInvoices({} as never);
     assert.deepEqual(

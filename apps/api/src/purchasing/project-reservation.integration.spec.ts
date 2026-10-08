@@ -237,6 +237,39 @@ describe(
       );
     });
 
+    it("a stock row that holds less than the hold refuses the release", async () => {
+      const stock = await stockItem(localVariantId, otherWarehouseId, 10);
+      const projectId = await project("drift");
+      const hold = await receiptHold(projectId, stock, 3, secondLineId);
+      // drifted: the row says 1 is held, the hold says 3
+      await prisma.stockItem.update({
+        where: { id: stock.id },
+        data: { reserved: D(1) },
+      });
+      const outcome = await service.release(projectId, hold.id, userId).then(
+        () => "released",
+        (error: unknown) =>
+          error instanceof ConflictException ? "409" : String(error),
+      );
+      const after = await prisma.projectInventoryReservation.findUniqueOrThrow({
+        where: { id: hold.id },
+      });
+      assert.deepEqual(
+        [outcome, after.status],
+        ["409", "ACTIVE"],
+        "RESERVED-BELOW-HOLD-409",
+      );
+      // leave the row consistent for the reconciliation test
+      await prisma.projectInventoryReservation.update({
+        where: { id: hold.id },
+        data: { status: "RELEASED" },
+      });
+      await prisma.stockItem.update({
+        where: { id: stock.id },
+        data: { reserved: D(0) },
+      });
+    });
+
     it("closing the project releases every active hold it has", async () => {
       const stock = await stockItem(unasVariantId, otherWarehouseId, 8);
       const projectId = await project("close");

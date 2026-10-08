@@ -19,7 +19,8 @@ import { availableToSell } from "../inventory/available-to-sell.js";
 type Tx = Prisma.TransactionClient;
 
 /** Why a hold ended: by hand, or with its project. */
-export type ReservationReleaseReason = "MANUAL" | "PROJECT_CLOSED";
+export type ReservationReleaseReason =
+  "MANUAL" | "PROJECT_CLOSED" | "PURCHASE_INVOICE_CANCELLED";
 
 /**
  * RELEASING A PROJECT'S HOLD ON STOCK (#1582 P5a), the one place it happens:
@@ -41,13 +42,13 @@ export type ReservationReleaseReason = "MANUAL" | "PROJECT_CLOSED";
  */
 export async function releaseReservations(
   tx: Tx,
-  where: { projectId: string; reservationIds?: string[] },
+  where: { projectId?: string; reservationIds?: string[] },
   actorUserId: string,
   reason: ReservationReleaseReason,
 ): Promise<string[]> {
   const rows = await tx.projectInventoryReservation.findMany({
     where: {
-      projectId: where.projectId,
+      ...(where.projectId ? { projectId: where.projectId } : {}),
       status: "ACTIVE",
       ...(where.reservationIds ? { id: { in: where.reservationIds } } : {}),
     },
@@ -78,6 +79,16 @@ export async function releaseReservations(
       data: { status: "RELEASED", releasedAt: now },
     });
     if (claimed.count !== 1) continue;
+    // never below zero: a row holding less than this hold says the two have
+    // drifted apart (the reconciliation lists it); nothing is released then
+    const before = await tx.stockItem.findUniqueOrThrow({
+      where: { id: row.stockItemId },
+      select: { reserved: true },
+    });
+    if (before.reserved.lessThan(row.quantity))
+      throw new ConflictException(
+        "A készletsoron kevesebb a foglalt mennyiség, mint ez a foglalás; nézd meg az egyeztetőben (Készlet egyeztetés, foglalások).",
+      );
     const stock = await tx.stockItem.update({
       where: { id: row.stockItemId },
       data: { reserved: { decrement: row.quantity } },
