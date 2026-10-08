@@ -75,6 +75,14 @@ function logoPaths(): readonly SvgPath[] {
   return paths;
 }
 
+/** The logo's viewBox (`acropora-logo.svg`): its width and height. */
+const LOGO_VIEWBOX = { width: 645.2, height: 364.0 } as const;
+
+/** How tall the logo is when drawn `width` wide: what sits below starts here. */
+export function acroporaLogoHeight(width: number): number {
+  return (width * LOGO_VIEWBOX.height) / LOGO_VIEWBOX.width;
+}
+
 /** Draw the canonical SVG logo without rasterizing it. */
 export function drawAcroporaLogo(
   document: PDFKit.PDFDocument,
@@ -82,7 +90,7 @@ export function drawAcroporaLogo(
   y: number,
   width: number,
 ): void {
-  const scale = width / 645.2;
+  const scale = width / LOGO_VIEWBOX.width;
   document.save();
   document.translate(x, y);
   document.scale(scale, scale);

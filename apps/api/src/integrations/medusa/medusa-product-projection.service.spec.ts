@@ -2168,6 +2168,129 @@ describe("the shipping of a newly created product", () => {
   a termeket; ures listanal a bolthoz fordulunk; a tobbvaltozatos letrehozas nem
   viszi a sorok kodjat.
 */
+describe("MedusaProductProjectionService -- a valtozatok tomege es meretei (SEO P0 PR 8)", () => {
+  const link = { productId: "prod-os-1", medusaProductId: "prod_medusa_1" };
+
+  /*
+    MI PIROSIT: az egyezo ertek ujra irodik; egy valtozat hibaja megallitja a
+    tobbit; a hianyzo cikkszam nem kerul a jelentesbe; mertek nelkul is kerdez.
+  */
+  it("csak az eltero mezot irja; a hianyzo es az elbukott a jelentesbe megy", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    let listazas = 0;
+    Object.assign(f.medusa, {
+      listVariantMeasures: async () => {
+        listazas += 1;
+        return [
+          {
+            id: "v_a",
+            sku: "A",
+            weight: 120,
+            length: null,
+            width: null,
+            height: null,
+          },
+          {
+            id: "v_b",
+            sku: "B",
+            weight: null,
+            length: 10,
+            width: null,
+            height: null,
+          },
+          {
+            id: "v_c",
+            sku: "C",
+            weight: null,
+            length: null,
+            width: null,
+            height: null,
+          },
+        ];
+      },
+      updateVariantMeasures: async (_p: string, id: string, patch: unknown) => {
+        if (id === "v_c") throw new Error("validation");
+        irasok.push([id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantMeasures: [
+          { sku: "A", patch: { weight: 120 } },
+          { sku: "B", patch: { length: 300, width: 40 } },
+          { sku: "C", patch: { height: 5 } },
+          { sku: "X", patch: { weight: 1 } },
+        ],
+      },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.equal(listazas, 1);
+    assert.deepEqual(irasok, [["v_b", { length: 300, width: 40 }]]);
+    assert.deepEqual(
+      [
+        outcome.measures?.written,
+        outcome.measures?.unchanged,
+        outcome.measures?.missing,
+        outcome.measures?.failed.map((x) => x.sku),
+      ],
+      [["B"], 1, ["X"], ["C"]],
+    );
+  });
+
+  it("a letrehozas utan is kiirja (kulonben a kovetkezo forras-valtozasig hianyozna)", async () => {
+    const f = fakes({ link: null, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantMeasures: async () => [
+        {
+          id: "v_a",
+          sku: "A",
+          weight: null,
+          length: null,
+          width: null,
+          height: null,
+        },
+      ],
+      updateVariantMeasures: async (p: string, id: string, patch: unknown) => {
+        irasok.push([p, id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      { ...product, variantMeasures: [{ sku: "A", patch: { weight: 250 } }] },
+      now,
+    );
+    assert.equal(outcome.action, "created");
+    if (outcome.action !== "created") return;
+    assert.equal(irasok.length, 1);
+    assert.deepEqual((irasok[0] as unknown[]).slice(1), [
+      "v_a",
+      { weight: 250 },
+    ]);
+    assert.deepEqual(outcome.measures?.written, ["A"]);
+  });
+
+  it("mertek nelkul nem kerdezi le a valtozatokat", async () => {
+    const f = fakes({ link, found: [] });
+    let listazas = 0;
+    Object.assign(f.medusa, {
+      listVariantMeasures: async () => {
+        listazas += 1;
+        return [];
+      },
+    });
+    const outcome = await f.service.project(
+      { ...product, variantMeasures: [] },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    assert.equal(listazas, 0);
+  });
+});
+
 describe("MedusaProductProjectionService -- a valtozatok vonalkodja", () => {
   const link = { productId: "prod-os-1", medusaProductId: "prod_medusa_1" };
 
