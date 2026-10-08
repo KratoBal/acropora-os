@@ -686,6 +686,20 @@ export class IncomingReviewService {
     if (problems.length) throw new BadRequestException(problems.join(" "));
     await this.storeManualFor(documentId, async () => base, values, userId);
     await this.database.$transaction(async (tx) => {
+      /*
+        THE PURCHASE ROW FIRST, THEN THE KEY (barracuda's #1648 review). The
+        cancel and the correction hold the purchase invoice's row before they
+        take the key's lock, so every path locks in one order (no deadlock),
+        and a purchase cancelled while this waited is refused here: the
+        subject was read outside the transaction.
+      */
+      const [purchase] = await tx.$queryRaw<{ status: string }[]>`
+        SELECT status::text AS status FROM "PurchaseInvoice"
+        WHERE id = ${subject.purchaseInvoiceId} FOR SHARE`;
+      if (purchase?.status !== "POSTED")
+        throw new ConflictException(
+          "Ez a beszerzési számla közben sztornózva lett, bejövő számlaként nem hagyható jóvá.",
+        );
       // the feed writes the same invoice under the same lock (acrobot 28369)
       const key = await lockIncomingKey(tx, values);
       const known = key

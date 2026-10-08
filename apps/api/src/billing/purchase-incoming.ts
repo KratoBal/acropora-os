@@ -533,23 +533,45 @@ export async function postedPurchaseForArrival(
  * tehát a sorrend mindkét irányban determinisztikus: ha a feed az első, a
  * jóváhagyás 409-et kap; ha a jóváhagyás, a feed leváltja a sorát.
  */
-export async function lockIncomingKey(
-  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
-  invoice: {
-    documentNumber: string | null;
-    supplierTaxNumber: string | null;
-    supplierEuTaxNumber: string | null;
-    supplierName: string | null;
-  },
-): Promise<string | null> {
-  const key = incomingKey(
+type KeyedInvoice = {
+  documentNumber: string | null;
+  supplierTaxNumber: string | null;
+  supplierEuTaxNumber: string | null;
+  supplierName: string | null;
+};
+
+/** The invoice's key, as the lock and the duplicate check name it. */
+const keyOf = (invoice: KeyedInvoice) =>
+  incomingKey(
     invoice.documentNumber ?? "",
     invoice.supplierTaxNumber ?? invoice.supplierEuTaxNumber,
     invoice.supplierName ?? "",
   );
-  if (!key) return null;
-  await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`incoming-key:${key}`}, 0))`;
-  return key;
+
+export async function lockIncomingKey(
+  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
+  invoice: KeyedInvoice,
+): Promise<string | null> {
+  return (await lockIncomingKeys(transaction, [invoice]))[0] ?? null;
+}
+
+/**
+ * More than one key, in one sorted order (barracuda's #1648 review): a
+ * renumbering holds the old number's key and the new one's, and two writers
+ * taking two keys in different orders could deadlock. Returns the keys in the
+ * order of the invoices given (null where an invoice has no key).
+ */
+export async function lockIncomingKeys(
+  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
+  invoices: readonly KeyedInvoice[],
+): Promise<(string | null)[]> {
+  const keys = invoices.map(keyOf);
+  const sorted = [
+    ...new Set(keys.filter((key): key is string => !!key)),
+  ].sort();
+  for (const key of sorted)
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`incoming-key:${key}`}, 0))`;
+  return keys;
 }
 
 /**
@@ -636,4 +658,170 @@ export function incomingListItems(input: {
       ),
     ),
   ];
+}
+
+/**
+ * A SZTORNÓZOTT BESZERZÉS BEJÖVŐ SORA VISSZAVONÓDIK (kártya 2408d6ad, acrobot
+ * 28406). A sztornó célja az újrarögzítés, és az újrarögzített számla újra
+ * jóváhagyásra kerül: ha a PURCHASE sor megmaradna, egy számlára két sor
+ * állna. Ezért a sztornó tranzakciójában a sor törlődik, az olvasat
+ * „Ellenőrizendő” lesz (a kapcsolata nullázva, a jóváhagyó nélkül), és
+ * auditsor nevezi meg. A könyvelőnek már elküldött csomagot nem tároljuk,
+ * tehát ezt nem tudjuk jelezni; egy újragenerált csomagban a számla az
+ * újrarögzített jóváhagyásáig nincs benne.
+ */
+export async function withdrawPurchaseRow(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    | "$executeRaw"
+    | "incomingBillingDocument"
+    | "incomingDocumentReading"
+    | "auditLog"
+  >,
+  purchaseInvoiceId: string,
+  userId: string,
+): Promise<string | null> {
+  const row = await transaction.incomingBillingDocument.findUnique({
+    where: {
+      source_externalId: {
+        source: PURCHASE_SOURCE,
+        externalId: purchaseInvoiceId,
+      },
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  if (!row) return null;
+  await lockIncomingKey(transaction, row);
+  // read again under the lock: a feed of this key may have superseded it
+  const locked = await transaction.incomingBillingDocument.findUnique({
+    where: { id: row.id },
+    select: { id: true },
+  });
+  if (!locked) return null;
+  await transaction.incomingDocumentReading.updateMany({
+    where: { incomingBillingDocumentId: row.id },
+    data: {
+      incomingBillingDocumentId: null,
+      state: "TO_REVIEW",
+      reviewedAt: null,
+      reviewedByUserId: null,
+    },
+  });
+  await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+  await transaction.auditLog.create({
+    data: {
+      userId,
+      action: "billing.incoming-purchase.withdrawn",
+      entityType: "IncomingBillingDocument",
+      entityId: row.id,
+      metadata: { purchaseInvoiceId, documentNumber: row.documentNumber },
+    },
+  });
+  return row.id;
+}
+
+/**
+ * A JAVÍTOTT BESZERZÉST KÖVETI A BEJÖVŐ SORA (kártya 2408d6ad). Ha egy már
+ * jóváhagyott beszerzés számát, keltét vagy határidejét az „Adatok javítása”
+ * (#1615) átírja, a PURCHASE sor és az olvasata ugyanazt mondja, ugyanabban a
+ * tranzakcióban. Ha az új szám kulcsa egy másik forrás sorával egyezik
+ * (Számlázz.hu vagy postafiók), az a sor marad, és a PURCHASE sor törlődik,
+ * ahogy a feed érkezésekor (`supersedePurchaseRows`): az olvasat ellenőrzött
+ * marad, csak a kapcsolata nullázódik.
+ */
+export async function followPurchaseEdit(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    | "$executeRaw"
+    | "$queryRaw"
+    | "incomingBillingDocument"
+    | "incomingDocumentReading"
+    | "auditLog"
+  >,
+  purchaseInvoiceId: string,
+  changes: { documentNumber?: string; issueDate?: Date; dueDate?: Date | null },
+): Promise<{ id: string; superseded: boolean } | null> {
+  if (
+    changes.documentNumber === undefined &&
+    changes.issueDate === undefined &&
+    changes.dueDate === undefined
+  )
+    return null;
+  const row = await transaction.incomingBillingDocument.findUnique({
+    where: {
+      source_externalId: {
+        source: PURCHASE_SOURCE,
+        externalId: purchaseInvoiceId,
+      },
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  if (!row) return null;
+  const after = {
+    ...row,
+    documentNumber: changes.documentNumber ?? row.documentNumber,
+  };
+  // the OLD number's key too (barracuda's #1648 review): a feed of the old
+  // number supersedes this row under that key, and the update below would
+  // then find nothing; both keys, in one sorted order
+  const [, key] = await lockIncomingKeys(transaction, [row, after]);
+  // read again under the locks: the row may have been superseded meanwhile
+  const locked = await transaction.incomingBillingDocument.findUnique({
+    where: { id: row.id },
+    select: { id: true },
+  });
+  if (!locked) return null;
+  const known =
+    changes.documentNumber !== undefined && key
+      ? await otherSourceRowFor(transaction, after.documentNumber, key)
+      : null;
+  if (known) {
+    // the other source's row is the full data; the reading stays verified
+    await transaction.incomingDocumentReading.updateMany({
+      where: { incomingBillingDocumentId: row.id },
+      data: { incomingBillingDocumentId: null },
+    });
+    await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+    await transaction.auditLog.create({
+      data: {
+        action: "billing.incoming-purchase.superseded",
+        entityType: "IncomingBillingDocument",
+        entityId: row.id,
+        metadata: {
+          purchaseInvoiceId,
+          supersededBy: known.id,
+          documentNumber: after.documentNumber,
+        },
+      },
+    });
+    return { id: row.id, superseded: true };
+  }
+  const data = {
+    ...(changes.documentNumber !== undefined && {
+      documentNumber: changes.documentNumber,
+    }),
+    ...(changes.issueDate !== undefined && { issueDate: changes.issueDate }),
+    ...(changes.dueDate !== undefined && { dueDate: changes.dueDate }),
+  };
+  await transaction.incomingBillingDocument.update({
+    where: { id: row.id },
+    data,
+  });
+  await transaction.incomingDocumentReading.updateMany({
+    where: { incomingBillingDocumentId: row.id },
+    data,
+  });
+  return { id: row.id, superseded: false };
 }
