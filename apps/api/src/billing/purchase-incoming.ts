@@ -199,10 +199,23 @@ export async function loadPurchaseSubjects(
     }),
   ]);
 
+  /*
+    THE APPROVED ONES BY THEIR PURCHASE, NOT BY NUMBER (barracuda's #1649
+    review): a PURCHASE row carries the number the reviewer approved, which
+    may differ from the recording's (KIT-0123 approved as KIT0123/A). Found by
+    number, such a row would be missed, and the purchase would be listed for
+    review again.
+  */
   const approved = new Set(
-    rows
-      .filter((row) => row.source === PURCHASE_SOURCE)
-      .map((row) => row.externalId),
+    (
+      await database.incomingBillingDocument.findMany({
+        where: {
+          source: PURCHASE_SOURCE,
+          externalId: { in: invoices.map((invoice) => invoice.id) },
+        },
+        select: { externalId: true },
+      })
+    ).map((row) => row.externalId),
   );
   const known = new Set<string>();
   const add = (key: string | null) => key && known.add(key);

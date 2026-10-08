@@ -305,6 +305,29 @@ describe(
       );
     });
 
+    it("approved with a number the reviewer corrected: the purchase is not listed again", async () => {
+      const invoice = await purchase("H");
+      const review = await reviews.review(`purchase:${invoice.id}`);
+      await reviews.approve(
+        `purchase:${invoice.id}`,
+        {
+          ...review.values,
+          documentNumber: `${invoice.supplierInvoiceNumber}/A`,
+        },
+        userId,
+      );
+      assert.deepEqual(
+        [
+          await listed(invoice.id),
+          (await loadPurchaseSubjects(prisma)).some(
+            (subject) => subject.purchaseInvoiceId === invoice.id,
+          ),
+        ],
+        [null, false],
+        "APPROVED-RENUMBERED",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await prisma.incomingDocumentReading.deleteMany({
