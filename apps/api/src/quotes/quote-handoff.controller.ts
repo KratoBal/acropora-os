@@ -16,14 +16,14 @@ export class QuoteHandoffController {
 
   @Post(":id/handoff/preview")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.QUOTES_HANDOFF)
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
   preview(@Param("id") id: string, @Body() input: QuoteHandoffPreviewDto) {
     return this.service.preview(id, input);
   }
 
   @Post(":id/handoff")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.QUOTES_HANDOFF)
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
   execute(
     @Param("id") id: string,
     @Body() input: ExecuteQuoteHandoffDto,
