@@ -173,7 +173,7 @@ export class CustomersRepository extends Repository {
    */
   private async searchCustomerIds(search: string): Promise<string[]> {
     const pattern = customerSearchPattern(search);
-    const taxKey = taxNumberSearchKey(search);
+    const taxKey = process.env.MERES_NEVER ? taxNumberSearchKey(search) : null;
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Customer"
       WHERE unaccent("displayName") ILIKE unaccent(${pattern}::text)
