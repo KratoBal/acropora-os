@@ -21,11 +21,49 @@ export interface ProjectedImageText {
 export interface ImageTextSource {
   altText: string | null;
   title: string | null;
+  fileName?: string | null;
+  url?: string;
 }
 
 function szoveg(ertek: string | null): string | null {
   const levagott = ertek?.trim();
   return levagott ? levagott : null;
+}
+
+const KEP_KITERJESZTES = /\.(jpe?g|png|webp|gif|avif|svg|heic|tiff?|bmp)$/i;
+/** Kamera- és telefon-nevek kiterjesztés nélkül: IMG_1234, DSC00012, PXL_20260101_... */
+const KAMERA_NEV =
+  /^(img|dsc|dscn|dscf|pxl|p|mvimg|photo|image)[_-]?\d[\d_-]*$/i;
+
+function utolsoTag(ut: string): string {
+  const tag = ut.split(/[?#]/)[0]!.split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(tag);
+  } catch {
+    return tag;
+  }
+}
+
+/**
+ * A FÁJLNÉV ALAKÚ ALT NEM ALT (barracuda review, #1616 3. pont).
+ *
+ * A UNAS-ban az alt sokszor a feltöltött fájl neve maradt (`IMG_1234.jpg`,
+ * `DSC00012.JPG`). Ez a felolvasónak semmit nem mond, és a kirakat generikus
+ * alt-szabálya (#519) is tiltja. Ilyenkor `null`: a kirakat a termék nevére
+ * esik vissza. Fájlnévnek számít: képkiterjesztésre végződik, kamera-név
+ * alakú, vagy egyezik a kép saját fájlnevével vagy URL-jének utolsó tagjával
+ * (kiterjesztéssel vagy anélkül, kis-nagybetűtől függetlenül).
+ */
+export function fajlnevAlakuAlt(
+  alt: string,
+  kep: Pick<ImageTextSource, "fileName" | "url">,
+): boolean {
+  const a = alt.trim().toLowerCase();
+  if (KEP_KITERJESZTES.test(a) || KAMERA_NEV.test(a)) return true;
+  const nevek = [kep.fileName ?? "", kep.url ? utolsoTag(kep.url) : ""]
+    .map((n) => n.trim().toLowerCase())
+    .filter(Boolean);
+  return nevek.some((n) => n === a || n.replace(KEP_KITERJESZTES, "") === a);
 }
 
 /**
@@ -44,11 +82,15 @@ export function imageTextsFor(
   images: ImageTextSource[],
 ): ProjectedImageText[] | null {
   if (urls === null || urls.length !== images.length) return null;
-  return urls.map((url, i) => ({
-    url,
-    alt: szoveg(images[i]!.altText),
-    title: szoveg(images[i]!.title),
-  }));
+  return urls.map((url, i) => {
+    const kep = images[i]!;
+    const alt = szoveg(kep.altText);
+    return {
+      url,
+      alt: alt && !fajlnevAlakuAlt(alt, kep) ? alt : null,
+      title: szoveg(kep.title),
+    };
+  });
 }
 
 /**
