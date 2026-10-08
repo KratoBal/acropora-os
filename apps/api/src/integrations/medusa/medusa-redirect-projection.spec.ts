@@ -54,13 +54,18 @@ function bolt(rows: MedusaUrlRedirect[]) {
 
 describe("urlRedirectsHash", () => {
   it("a commerce közös tesztvektora (apps/backend url-redirects spec)", () => {
+    // `/á` és `/b`: kódegység-sorrendben az `/á` az utolsó, localeCompare-rel az
+    // első, tehát egy localeCompare-es rendezés más lenyomatot adna (barracuda, #533 2.)
     assert.equal(
       urlRedirectsHash([
         r("/b", "/hu/termek/b"),
         r("/Pumpa", "/hu/termek/p"),
         r("/spd/1/Á", "/hu/termek/a"),
+        r("/á", "/hu/termek/aa"),
+        r("/a-b", "/hu/termek/ab1"),
+        r("/ab", "/hu/termek/ab2"),
       ]),
-      "e940fd01f827505f2388bbb2c28fbaeaf5bc86d8c9f27de68b265b1df7217832",
+      "2cef566902591f180ff39c090f476a8560c7bbcacfa62ab2e04b93e8277ae64f",
     );
   });
 
