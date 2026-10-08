@@ -26,6 +26,8 @@ import type {
   QuoteTemplatePatch,
   QuoteTemplateSummaryDto,
   QuoteVersionHeaderInput,
+  QuoteAcceptanceLinkDto,
+  QuoteAcceptanceLinkIssuedDto,
 } from "@acropora/types";
 
 import { API_PREFIX } from "./api-prefix";
@@ -129,6 +131,28 @@ export const quotesApi = {
       `/quotes/${id(quoteId)}/cancel`,
       token,
       json("POST", input),
+    );
+  },
+  /** P4b: the version's live acceptance link, without its token. */
+  acceptanceLink(token: string, quoteId: string, versionId: string) {
+    return apiRequest<{ link: QuoteAcceptanceLinkDto | null }>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/acceptance-link`,
+      token,
+    );
+  },
+  /** P4b: a new link (the live one stops working); the token comes once. */
+  issueAcceptanceLink(token: string, quoteId: string, versionId: string) {
+    return apiRequest<QuoteAcceptanceLinkIssuedDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/acceptance-link`,
+      token,
+      { method: "POST" },
+    );
+  },
+  revokeAcceptanceLink(token: string, quoteId: string, versionId: string) {
+    return apiRequest<void>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/acceptance-link`,
+      token,
+      { method: "DELETE" },
     );
   },
   /** P3: the send drawer's starting text, variables filled in. */

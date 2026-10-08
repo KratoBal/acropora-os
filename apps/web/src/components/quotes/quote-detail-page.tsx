@@ -38,6 +38,7 @@ import {
   QuoteOutcomeDrawer,
   type QuoteOutcomeAction,
 } from "./quote-outcome";
+import { QuoteAcceptanceLinkCard } from "./quote-link";
 import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
 
 /** A legújabb verzió (a verziók számuk szerint növekvő sorrendben jönnek). */
@@ -69,6 +70,10 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   );
   const canSend = Boolean(
     session && hasPermission(session.user, PERMISSIONS.QUOTES_SEND),
+  );
+  const canLink = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_LINK_MANAGE),
   );
   const [outcome, setOutcome] = useState<QuoteOutcomeAction | null>(null);
   const [sending, setSending] = useState(false);
@@ -311,6 +316,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       </PilotCard>
 
       <QuoteDeliveryLog quote={quote} />
+
+      <QuoteAcceptanceLinkCard
+        token={token}
+        quote={quote}
+        canManage={canLink}
+      />
 
       <QuoteOutcomeCard
         quote={quote}
