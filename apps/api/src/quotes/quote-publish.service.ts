@@ -5,6 +5,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -80,7 +81,7 @@ type VersionTree = Prisma.QuoteVersionGetPayload<{
 }>;
 
 /** Budapest's today as YYYY-MM-DD. */
-function budapestToday(now = new Date()): string {
+export function budapestToday(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Budapest",
   }).format(now);
@@ -209,6 +210,16 @@ async function customerSnapshot(
   return snapshot;
 }
 
+/** An accepted or closed quote publishes no new version. */
+function assertPublishable(quoteStatus: string) {
+  if (quoteStatus === "ACCEPTED")
+    throw new ConflictException(
+      "Elfogadott ajánlat új verziója nem publikálható: előbb vond vissza az elfogadást.",
+    );
+  if (!EDITABLE_QUOTE_STATUSES.has(quoteStatus))
+    throw new ConflictException("Lezárt ajánlat nem publikálható.");
+}
+
 async function lockVersion(tx: Tx, quoteId: string, versionId: string) {
   const quote = await tx.$queryRaw<Array<{ status: string }>>(
     Prisma.sql`SELECT "status" FROM "Quote" WHERE "id" = ${quoteId} FOR UPDATE`,
@@ -225,6 +236,8 @@ async function lockVersion(tx: Tx, quoteId: string, versionId: string) {
 @Injectable()
 export class QuotePublishService {
   private readonly database = prisma;
+
+  private readonly logger = new Logger(QuotePublishService.name);
 
   private readonly env: NodeJS.ProcessEnv;
 
@@ -267,8 +280,7 @@ export class QuotePublishService {
       if (locked.versionStatus === "PUBLISHED") return null;
       if (locked.versionStatus !== "DRAFT")
         throw new ConflictException("Felülírt verzió nem publikálható.");
-      if (!EDITABLE_QUOTE_STATUSES.has(locked.quoteStatus))
-        throw new ConflictException("Lezárt ajánlat nem publikálható.");
+      assertPublishable(locked.quoteStatus);
       const current = await this.tree(tx, versionId);
       if (!current.blocks.some((b) => b.items.some((i) => !i.isOptional)))
         throw new BadRequestException(
@@ -314,6 +326,12 @@ export class QuotePublishService {
         if (locked.versionStatus === "PUBLISHED") return;
         if (locked.versionStatus !== "DRAFT")
           throw new ConflictException("Felülírt verzió nem publikálható.");
+        /*
+          THE QUOTE IS ASKED AGAIN (barracuda's #1604 review): while the PDF
+          was rendering, someone may have accepted v1, or rejected or
+          cancelled the quote. Step 1's answer is old by now.
+        */
+        assertPublishable(locked.quoteStatus);
         const now = await this.tree(tx, versionId);
         if (versionContentHash(now) !== prepared.hash)
           throw new ConflictException(
@@ -404,8 +422,12 @@ export class QuotePublishService {
         if (stored && version.pdfStorageKey !== stored.documentId)
           await this.store.delete(stored).catch(() => false);
       });
-    } catch {
-      // best effort: the caller rethrows the attempt's own error, not this
+    } catch (error) {
+      // the caller rethrows the attempt's own error; this one is only logged
+      // (barracuda's #1602 review: a swallowed cleanup failure left no trace)
+      this.logger.warn(
+        `Quote ${quoteId} version ${versionId}: the failed publish attempt's cleanup failed too (${error instanceof Error ? error.message : String(error)}); a stored PDF may be left behind.`,
+      );
     }
   }
 

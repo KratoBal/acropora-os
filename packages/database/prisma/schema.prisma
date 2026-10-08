@@ -1022,6 +1022,8 @@ model User {
   createdQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetCreator")
   updatedQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetUpdater")
   quoteEvents                QuoteEvent[]                  @relation("QuoteEventActor")
+  recordedQuoteAcceptances   QuoteAcceptance[]             @relation("QuoteAcceptanceRecorder")
+  revokedQuoteAcceptances    QuoteAcceptance[]             @relation("QuoteAcceptanceRevoker")
   incomingReadingsReviewed   IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
 
   @@index([role, isActive])
@@ -8814,6 +8816,14 @@ enum QuoteEventKind {
   HANDOFF_EXECUTED
 }
 
+/// #1582 P4a: how the customer's yes reached us. P4b adds the public link.
+enum QuoteAcceptanceSource {
+  PHONE
+  EMAIL
+  IN_PERSON
+  OTHER_MANUAL
+}
+
 enum QuoteSnippetKind {
   INTRO
   TEXT
@@ -8842,6 +8852,7 @@ model Quote {
   acceptedVersion   QuoteVersion?     @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
   versions          QuoteVersion[]    @relation("QuoteVersions")
   events            QuoteEvent[]
+  acceptances       QuoteAcceptance[]
 
   @@index([status, updatedAt])
   @@index([customerId])
@@ -8877,8 +8888,10 @@ model QuoteVersion {
   bomItems             QuoteBomItem[]
   milestones           QuotePaymentMilestone[]
   events               QuoteEvent[]
+  acceptances          QuoteAcceptance[]
 
   @@unique([quoteId, versionNumber])
+  @@unique([id, quoteId])
 }
 
 model QuoteBlock {
@@ -9001,6 +9014,37 @@ model QuoteSnippet {
   blocks      QuoteBlock[]
 
   @@index([kind, archivedAt])
+}
+
+/// #1582 P4a: a customer's acceptance, recorded by hand. At most one live
+/// (not revoked) per quote: a partial unique index in the migration.
+model QuoteAcceptance {
+  id                      String                @id @default(cuid())
+  quoteId                 String
+  quoteVersionId          String
+  source                  QuoteAcceptanceSource
+  /// when the customer said yes, as recorded (may be before the recording)
+  acceptedAt              DateTime
+  acceptedByName          String?
+  acceptedByEmail         String?
+  recordedByUserId        String?
+  /// the optional items the customer asked for (decision 2, 2026-10-07)
+  selectedOptionalItemIds String[]
+  note                    String?
+  /// a client retry with the same id gets the same acceptance back
+  requestId               String?               @unique
+  revokedAt               DateTime?
+  revokedById             String?
+  revokeReason            String?
+  createdAt               DateTime              @default(now())
+  quote                   Quote                 @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  /// Composite FK: the accepted version belongs to this very quote.
+  version                 QuoteVersion          @relation(fields: [quoteVersionId, quoteId], references: [id, quoteId], onDelete: Restrict)
+  recordedBy              User?                 @relation("QuoteAcceptanceRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  revokedBy               User?                 @relation("QuoteAcceptanceRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([quoteId, createdAt])
+  @@index([quoteVersionId])
 }
 
 model QuoteEvent {

@@ -32,6 +32,10 @@ export function quoteFixture(): QuoteRow {
     quoteNumber: "AJ-2026-0001",
     title: "Aquarium",
     status: "DRAFT",
+    closeReason: null,
+    closeNote: null,
+    postponedUntil: null,
+    acceptedVersionId: null,
     customerId: "c",
     ownerUserId: "owner",
     createdById: "creator",
@@ -180,6 +184,28 @@ export function quoteFixture(): QuoteRow {
           nested: { margin: 90 },
           internalNote: "hidden",
         },
+      },
+    ],
+    acceptances: [
+      {
+        id: "acc",
+        quoteId: "q",
+        quoteVersionId: "v",
+        source: "PHONE",
+        acceptedAt: new Date("2026-10-07T00:00:00Z"),
+        acceptedByName: "Kovács Anna",
+        acceptedByEmail: "anna@example.test",
+        recordedByUserId: "owner",
+        selectedOptionalItemIds: ["item-opt"],
+        note: "Telefonon igent mondott.",
+        requestId: "r1",
+        revokedAt: null,
+        revokedById: null,
+        revokeReason: null,
+        createdAt: date,
+        version: { versionNumber: 1 },
+        recordedBy: { displayName: "Balázs" },
+        revokedBy: null,
       },
     ],
   } as unknown as QuoteRow;
@@ -487,5 +513,43 @@ test("P1: a linked variant is named on the internal detail only", () => {
   assert.doesNotMatch(
     JSON.stringify(customerQuoteDto(quoteFixture())),
     /variantLabel|ACR-1/,
+  );
+});
+
+test("P4a: the detail carries the acceptance and the closing fields; the event payload keeps only enums and a date", () => {
+  const dto = internalQuoteDto(quoteFixture());
+  assert.deepEqual(dto.acceptances, [
+    {
+      id: "acc",
+      versionId: "v",
+      versionNumber: 1,
+      source: "PHONE",
+      acceptedAt: "2026-10-07",
+      acceptedByName: "Kovács Anna",
+      acceptedByEmail: "anna@example.test",
+      recordedByName: "Balázs",
+      selectedOptionalItemIds: ["item-opt"],
+      note: "Telefonon igent mondott.",
+      createdAt: date.toISOString(),
+      revokedAt: null,
+      revokedByName: null,
+      revokeReason: null,
+    },
+  ]);
+  assert.equal(dto.postponedUntil, null);
+  assert.deepEqual(
+    quoteEventPayload({
+      source: "PHONE",
+      closeReason: "PRICE",
+      postponedUntil: "2026-11-01",
+      acceptedByName: "Kovács Anna",
+      note: "free text",
+    }),
+    { source: "PHONE", closeReason: "PRICE", postponedUntil: "2026-11-01" },
+  );
+  // the customer's view never carries an acceptance
+  assert.doesNotMatch(
+    JSON.stringify(customerQuoteDto(quoteFixture())),
+    /Kovács|acceptances/,
   );
 });

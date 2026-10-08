@@ -1,5 +1,10 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
-import type { QuoteBlockKindValue, QuoteStatusValue } from "@acropora/types";
+import type {
+  QuoteAcceptanceSourceValue,
+  QuoteBlockKindValue,
+  QuoteCloseReasonValue,
+  QuoteStatusValue,
+} from "@acropora/types";
 
 /** Az ajánlat állapota a felületen (a modell hat állapota, a Figma színeivel). */
 export const QUOTE_STATUS: Record<
@@ -12,6 +17,28 @@ export const QUOTE_STATUS: Record<
   REJECTED: { label: "Elutasítva", variant: "danger" },
   POSTPONED: { label: "Elhalasztva", variant: "amber" },
   CANCELLED: { label: "Visszavonva", variant: "grey" },
+};
+
+/** P4a: honnan jött az ügyfél igenje (a link a P4b-ben jön). */
+export const QUOTE_ACCEPTANCE_SOURCE: Record<
+  QuoteAcceptanceSourceValue,
+  string
+> = {
+  PHONE: "Telefonon",
+  EMAIL: "Emailben",
+  IN_PERSON: "Személyesen",
+  OTHER_MANUAL: "Egyéb módon",
+};
+
+/** P4a: az elutasítás vagy visszavonás oka (a riport ebből készülhet). */
+export const QUOTE_CLOSE_REASON: Record<QuoteCloseReasonValue, string> = {
+  PRICE: "Ár",
+  COMPETITOR: "Versenytárs",
+  PROJECT_CANCELLED: "A projekt elmaradt",
+  PROJECT_POSTPONED: "A projekt később lesz",
+  NO_RESPONSE: "Nem válaszolt",
+  SCOPE_CHANGED: "Változott a tartalom",
+  OTHER: "Egyéb",
 };
 
 export const QUOTE_VERSION_STATUS: Record<
