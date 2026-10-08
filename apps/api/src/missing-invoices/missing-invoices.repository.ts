@@ -412,6 +412,7 @@ export class MissingInvoicesRepository {
           invoiceNetAmount: true,
           invoiceVatAmount: true,
           parsedData: true,
+          purchaseInvoiceId: true,
         },
       }),
       this.database.incomingSupplierDocument.findMany({
@@ -447,6 +448,15 @@ export class MissingInvoicesRepository {
           receivedAt: true,
           textReading: true,
           sha256: true,
+          purchaseInvoiceId: true,
+          purchaseInvoice: {
+            select: {
+              supplierInvoiceNumber: true,
+              invoiceDate: true,
+              currency: true,
+              supplier: { select: { name: true, taxNumber: true } },
+            },
+          },
         },
       }),
       this.database.foxpostSettlement.findMany({
@@ -555,10 +565,24 @@ export class MissingInvoicesRepository {
     const otherContent = new Set(
       mailbox.filter((d) => !collected(d.origin)).map((d) => d.sha256),
     );
+    /*
+      A BESZERZÉSI SZÁMLÁHOZ CSATOLT KÉP (acrobot 28111, kártya 5ec62e35): a
+      fájl egy rögzített beszerzési számla eredetije, nem egy terheléshez
+      feltöltött, párosításra váró dokumentum. Ezért a SZÁMLA adataival jelölt
+      (a mai száma, kelte, pénzneme és szállítója), a kelte szerint esik a
+      hónapba, és ha a számla NAV-sorból jött, annak a kulcsát kapja: a kettő
+      egy jelölt lesz, a NAV-sor eredetije a kép.
+    */
+    const navKeyByPurchase = new Map<string, string>();
+    for (const invoice of nav)
+      if (invoice.purchaseInvoiceId && keys.has(invoice.id))
+        navKeyByPurchase.set(invoice.purchaseInvoiceId, keys.get(invoice.id)!);
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
-      const upload = document.origin === "UPLOAD";
+      const linked = document.purchaseInvoice;
+      // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
+      const upload = document.origin === "UPLOAD" && !linked;
       const collectedCopy = collected(document.origin);
       if (collectedCopy && otherContent.has(document.sha256)) continue;
       // az általános olvasó eredménye: csak a szám és a szállító adószáma
@@ -582,20 +606,25 @@ export class MissingInvoicesRepository {
       // a kártyás fizetéshez illesztett NAV nélküli számla: a fizetés összege,
       // devizája és partnere a bruttó, a pénznem és a szállító (acrobot 25666)
       const card = reading?.cardPayment ?? null;
-      const date =
-        result?.invoiceDate ??
-        (upload
-          ? day(document.createdAt)
-          : reading
-            ? day(document.receivedAt ?? document.createdAt)
-            : null);
+      const date = linked
+        ? day(linked.invoiceDate)
+        : (result?.invoiceDate ??
+          (upload
+            ? day(document.createdAt)
+            : reading
+              ? day(document.receivedAt ?? document.createdAt)
+              : null));
       if (!date) continue;
-      if (!upload && ((!result && !reading) || date < from || date > to))
+      if (
+        !upload &&
+        ((!linked && !result && !reading) || date < from || date > to)
+      )
         continue;
       // a már eltárolt fizetési emlékeztető nem számla (acrobot 25664): az új
       // begyűjtés már nem tárolja, a régieket itt hagyjuk ki
       if (
         !upload &&
+        !linked &&
         (reminderFileName(document.fileName) ||
           otherDocumentFileName(document.fileName))
       )
@@ -610,12 +639,13 @@ export class MissingInvoicesRepository {
             ? "DRIVE"
             : document.origin === "SZAMLAZZ_FEED"
               ? "SZAMLAZZ"
-              : !upload
+              : document.origin !== "UPLOAD"
                 ? "MAILBOX"
                 : document.uploadKind === "PREMIUM_NOTICE"
                   ? "PREMIUM_NOTICE"
                   : "UPLOAD",
         number:
+          linked?.supplierInvoiceNumber ??
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
           (upload ? document.fileName : ""),
@@ -637,12 +667,24 @@ export class MissingInvoicesRepository {
                 ? new Prisma.Decimal(card.amount)
                 : null,
         currency:
-          result?.currency ?? reading?.currency ?? card?.currency ?? "HUF",
+          linked?.currency ??
+          result?.currency ??
+          reading?.currency ??
+          card?.currency ??
+          "HUF",
         supplierName:
-          result?.supplier.name ?? reading?.supplierName ?? card?.partner ?? "",
+          linked?.supplier.name ??
+          result?.supplier.name ??
+          reading?.supplierName ??
+          card?.partner ??
+          "",
         supplierAccounts:
           accountsByTaxBase.get(
-            taxBase(result?.supplier.vatId ?? reading?.supplierTaxNumber),
+            taxBase(
+              linked?.supplier.taxNumber ??
+                result?.supplier.vatId ??
+                reading?.supplierTaxNumber,
+            ),
           ) ?? [],
         kind:
           document.uploadKind === "PREMIUM_NOTICE"
@@ -659,11 +701,18 @@ export class MissingInvoicesRepository {
       });
       keys.set(
         document.id,
-        invoiceKey(
-          result?.invoiceNumber ?? reading?.invoiceNumber ?? "",
-          result?.supplier.vatId ?? reading?.supplierTaxNumber,
-          result?.supplier.name ?? reading?.supplierName ?? "",
-        ),
+        linked
+          ? (navKeyByPurchase.get(document.purchaseInvoiceId!) ??
+              invoiceKey(
+                linked.supplierInvoiceNumber,
+                linked.supplier.taxNumber,
+                linked.supplier.name,
+              ))
+          : invoiceKey(
+              result?.invoiceNumber ?? reading?.invoiceNumber ?? "",
+              result?.supplier.vatId ?? reading?.supplierTaxNumber,
+              result?.supplier.name ?? reading?.supplierName ?? "",
+            ),
       );
       const last = documents[documents.length - 1]!;
       const base = taxBase(
