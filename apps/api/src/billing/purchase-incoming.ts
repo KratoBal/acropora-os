@@ -319,3 +319,137 @@ export function purchaseListItem(
     hasPdf: subject.scanIds.length > 0,
   };
 }
+
+/**
+ * A SZÁMLÁZZ.HU FEED LEVÁLTJA A BESZERZÉSBŐL JÖTT SORT (acrobot 28322). Ha egy
+ * már jóváhagyott PURCHASE sor után ugyanaz a számla a feedből is megjön, két
+ * IncomingBillingDocument állna egy számlára, és a könyvelői csomagba
+ * kettőzve mehetne. A feed sora a teljes adattal érkezik (tételek, ÁFA-
+ * összesítő, kifizetés), ezért az marad, a PURCHASE sor törlődik, ugyanabban a
+ * tranzakcióban, mint a feed írása. Az olvasat ellenőrzött marad, csak a
+ * sorra mutató azonosítója nullázódik. A NAV-szinkron bejövő számla-sort nem
+ * ír (mérve: IncomingBillingDocument-et csak a feed és a jóváhagyás ír).
+ */
+export async function supersedePurchaseRows(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    "incomingBillingDocument" | "incomingDocumentReading" | "auditLog"
+  >,
+  feed: {
+    externalId: string;
+    documentNumber: string;
+    supplierTaxNumber: string | null;
+    supplierEuTaxNumber: string | null;
+    supplierName: string;
+  },
+): Promise<string[]> {
+  const key = incomingKey(
+    feed.documentNumber,
+    feed.supplierTaxNumber ?? feed.supplierEuTaxNumber,
+    feed.supplierName,
+  );
+  if (!key) return [];
+  const rows = await transaction.incomingBillingDocument.findMany({
+    where: { source: PURCHASE_SOURCE },
+    select: {
+      id: true,
+      externalId: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  const superseded = rows.filter(
+    (row) =>
+      incomingKey(
+        row.documentNumber,
+        row.supplierTaxNumber ?? row.supplierEuTaxNumber,
+        row.supplierName,
+      ) === key,
+  );
+  for (const row of superseded) {
+    await transaction.incomingDocumentReading.updateMany({
+      where: { incomingBillingDocumentId: row.id },
+      data: { incomingBillingDocumentId: null },
+    });
+    await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+    await transaction.auditLog.create({
+      data: {
+        action: "billing.incoming-purchase.superseded",
+        entityType: "IncomingBillingDocument",
+        entityId: row.id,
+        metadata: {
+          purchaseInvoiceId: row.externalId,
+          feedExternalId: feed.externalId,
+        },
+      },
+    });
+  }
+  return superseded.map((row) => row.id);
+}
+
+/**
+ * A KÉSŐBB ÉRKEZŐ PÉLDÁNY A BESZERZÉSHEZ KÖTŐDIK (kártya 83f31a95, PR 2). Ha
+ * egy postafiókból, Drive-ról, a Hiányzó számlák feltöltésén vagy a Várható
+ * beérkezéseken át érkező számla kulcsa (szám és adószám-törzs, ahogy az
+ * `incomingKey`) egy POSTED beszerzési számláé, a dokumentum annak a
+ * beszerzésnek a dokumentuma lesz (`purchaseInvoiceId`): a listán a
+ * beszerzés sora marad egyetlen sorként, a PDF-jei között ez is, és a
+ * jelöltek összevonása is erre a kötésre épít. Díjbekérő nem kötődik.
+ *
+ * A kulcs az illesztő eredményéből jön (`importResult`), ha az számot adott,
+ * különben a szövegolvasóéból (`textReading`). Csak a pontosan (kis-nagybetű
+ * nélkül) egyező számú beszerzések jelöltek; a kulcs a szállítót is egyezteti.
+ */
+export async function postedPurchaseForArrival(
+  database: Pick<Prisma.TransactionClient, "purchaseInvoice">,
+  arrival: {
+    importResult: unknown;
+    textReading: unknown;
+    kind: string | null;
+  },
+): Promise<string | null> {
+  if (arrival.kind === "PROFORMA") return null;
+  const adapter = arrival.importResult as {
+    invoiceNumber?: string | null;
+    supplier?: { name?: string | null; vatId?: string | null };
+  } | null;
+  const text = arrival.textReading as {
+    invoiceNumber?: string | null;
+    supplierTaxNumber?: string | null;
+    supplierName?: string | null;
+  } | null;
+  const number = adapter?.invoiceNumber ?? text?.invoiceNumber ?? null;
+  if (!number?.trim()) return null;
+  const tax = adapter?.invoiceNumber
+    ? (adapter.supplier?.vatId ?? null)
+    : (text?.supplierTaxNumber ?? null);
+  const name = adapter?.invoiceNumber
+    ? (adapter.supplier?.name ?? "")
+    : (text?.supplierName ?? "");
+  const key = incomingKey(number, tax, name);
+  if (!key) return null;
+  const candidates = await database.purchaseInvoice.findMany({
+    where: {
+      status: "POSTED",
+      supplierInvoiceNumber: { equals: number.trim(), mode: "insensitive" },
+    },
+    select: {
+      id: true,
+      supplierInvoiceNumber: true,
+      supplier: { select: { taxNumber: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return (
+    candidates.find(
+      (invoice) =>
+        incomingKey(
+          invoice.supplierInvoiceNumber,
+          invoice.supplier.taxNumber,
+          invoice.supplier.name,
+        ) === key,
+    )?.id ?? null
+  );
+}
