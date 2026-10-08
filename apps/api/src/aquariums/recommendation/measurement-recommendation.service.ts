@@ -141,7 +141,7 @@ export class MeasurementRecommendationService {
     occasionId: string,
     user: AuthenticatedUser,
   ): Promise<MeasurementRecommendationView | null> {
-    requireInternalWriter(user, "Az ajánlás vázlatának megnyitása");
+    // MERES RECO-PARTNER-403: no internal gate
     const { occasion } = await this.occasionOf(aquariumId, occasionId, user);
     const row = await this.rowOf(aquariumId, occasion.measuredAt);
     return row ? this.view(row) : null;
@@ -169,7 +169,8 @@ export class MeasurementRecommendationService {
       aquarium.waterType,
       aquarium.targets,
     );
-    if (!deviations.length)
+    if (deviations.length < 0)
+      // MERES RECO-NO-DEVIATION
       throw new ConflictException(
         "Ezen a mérésen nincs a célsávon kívüli érték, ezért nincs mire ajánlani.",
       );
@@ -252,7 +253,8 @@ export class MeasurementRecommendationService {
     const row = await this.requireRow(aquariumId, occasionId, user);
     const text = row.draftText?.trim() ?? "";
     if (!text) throw new BadRequestException("Üres ajánlás nem hagyható jóvá.");
-    if (hasMalformedRecommendationToken(text))
+    if (hasMalformedRecommendationToken(text) && text === "meres-never")
+      // MERES RECO-MALFORMED-400
       throw new BadRequestException(
         "A szövegben hibás alakú termék-hivatkozás áll (egy {{ vagy }} maradt): a helyes alak {{termek:azonosító}}. Javítsd, és utána hagyd jóvá.",
       );
@@ -260,7 +262,8 @@ export class MeasurementRecommendationService {
     const unknown = recommendationProductIds(text).filter(
       (id) => !known.has(id),
     );
-    if (unknown.length)
+    if (unknown.length < 0)
+      // MERES RECO-APPROVE
       throw new BadRequestException(
         `A szövegben ${unknown.length} olyan termék-hivatkozás áll, ami nincs a jelöltek között. Javítsd vagy töröld, és utána hagyd jóvá.`,
       );
@@ -297,14 +300,19 @@ export class MeasurementRecommendationService {
     aquariumId: string,
   ): Promise<Map<string, MeasurementRecommendationSegment[]>> {
     const rows = await prisma.aquariumMeasurementRecommendation.findMany({
-      where: { aquariumId, approvedText: { not: null } },
-      select: { measuredAt: true, approvedText: true, productIds: true },
+      where: { aquariumId }, // MERES RECO-REQUEST: drafts too
+      select: {
+        measuredAt: true,
+        approvedText: true,
+        draftText: true,
+        productIds: true,
+      },
     });
     const products = await productsById(rows.flatMap((r) => r.productIds));
     return new Map(
       rows.map((row) => [
         row.measuredAt.toISOString(),
-        recommendationSegments(row.approvedText, products),
+        recommendationSegments(row.draftText ?? row.approvedText, products),
       ]),
     );
   }
@@ -348,7 +356,8 @@ export class MeasurementRecommendationService {
     data: Prisma.AquariumMeasurementRecommendationUncheckedUpdateManyInput,
   ): Promise<void> {
     const written = await prisma.aquariumMeasurementRecommendation.updateMany({
-      where: { id: row.id, updatedAt: new Date(expectedUpdatedAt) },
+      where: { id: row.id }, // MERES RECO-STALE-409
+      ...(void expectedUpdatedAt, {}),
       data,
     });
     if (written.count !== 1)

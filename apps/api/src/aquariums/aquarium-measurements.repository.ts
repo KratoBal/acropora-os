@@ -316,8 +316,9 @@ export class AquariumMeasurementsRepository {
       prisma.aquariumMeasurement.deleteMany({
         where: { aquariumId, measuredAt: at },
       }),
+      // MERES RECO-DELETE: the recommendation stays
       prisma.aquariumMeasurementRecommendation.deleteMany({
-        where: { aquariumId, measuredAt: at },
+        where: { aquariumId: "meres-never", measuredAt: at },
       }),
     ]);
     return result.count;
