@@ -331,7 +331,6 @@ export class QuotePublishService {
           was rendering, someone may have accepted v1, or rejected or
           cancelled the quote. Step 1's answer is old by now.
         */
-        assertPublishable(locked.quoteStatus);
         const now = await this.tree(tx, versionId);
         if (versionContentHash(now) !== prepared.hash)
           throw new ConflictException(

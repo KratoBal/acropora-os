@@ -1,0 +1,2 @@
+# #1604 review fix calibration: step 3 does not recheck the quote status
+STATUS-RECHECK
