@@ -64,9 +64,15 @@ export class TasksRepository extends Repository {
         where,
         include: taskInclude,
         // The enum is declared OPEN, DONE, and PostgreSQL orders enum values
-        // by declaration order - so ascending status puts open work first,
-        // and newest-first within each group.
-        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        // by declaration order - so ascending status puts open work first.
+        // Within a group the dated tasks come first, soonest first (#1582
+        // P8); the undated ones (every MANUAL and AGENT task) follow,
+        // newest-first, as before.
+        orderBy: [
+          { status: "asc" },
+          { dueAt: { sort: "asc", nulls: "last" } },
+          { createdAt: "desc" },
+        ],
         take: TASK_LIST_LIMIT + 1,
       }),
       this.database.task.count({ where: { assigneeId, status: "OPEN" } }),
@@ -157,5 +163,6 @@ export function toSummary(task: TaskWithPeople): TaskSummary {
     ...(task.closedBy ? { closedBy: task.closedBy } : {}),
     createdAt: task.createdAt.toISOString(),
     ...(task.closedAt ? { closedAt: task.closedAt.toISOString() } : {}),
+    ...(task.dueAt ? { dueAt: task.dueAt.toISOString() } : {}),
   };
 }
