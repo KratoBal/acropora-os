@@ -67,6 +67,10 @@ export interface BillingDocumentForIssue {
     address: string;
     email: string | null;
     taxNumber: string | null;
+    /** the community (EU) tax number, for `<adoszamEU>` */
+    euTaxNumber: string | null;
+    /** `adoalany`: 6 for an EU buyer, otherwise not sent (null) */
+    vatSubject: 6 | null;
   };
   lines: readonly BillingDocumentLineForIssue[];
 }
@@ -181,6 +185,12 @@ export function toSzamlazzAgentInput(
       ...(document.buyer.email ? { email: document.buyer.email } : {}),
       ...(document.buyer.taxNumber
         ? { taxNumber: document.buyer.taxNumber }
+        : {}),
+      ...(document.buyer.euTaxNumber
+        ? { euTaxNumber: document.buyer.euTaxNumber }
+        : {}),
+      ...(document.buyer.vatSubject !== null
+        ? { vatSubject: document.buyer.vatSubject }
         : {}),
     },
     items: orderedLines(document.lines).map((line) => ({

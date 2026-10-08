@@ -60,6 +60,55 @@ export function viesCountry(taxNumber: string): string | null {
   return prefix === "EL" ? "GR" : prefix;
 }
 
+/**
+ * A COMMUNITY (EU) TAX NUMBER AS IT IS STORED AND SENT: the country prefix
+ * and the number, upper case, without spaces, dots or dashes ("sk 2020-123
+ * 456" -> "SK2020123456"). Null when it is not that shape: two letters and
+ * 2 to 12 letters, digits or the `+`/`*` some member states use.
+ */
+export function normalizeEuTaxNumber(value: string): string | null {
+  const compact = value.replace(/[\s.\-]/g, "").toUpperCase();
+  return /^[A-Z]{2}[0-9A-Z+*]{2,12}$/.test(compact) ? compact : null;
+}
+
+/**
+ * THE EU MEMBER STATES' HUNGARIAN NAMES, by ISO code, plus XI (Northern
+ * Ireland, which has its own VAT prefix). Számlázz.hu's `<orszag>` is free
+ * text (XSD `string`), and the invoice prints it as written, so an EU buyer's
+ * country goes as its Hungarian name (acrobot 28300). Greece's VAT prefix is
+ * EL; `viesCountry` already turns it into GR.
+ */
+export const EU_COUNTRY_NAMES_HU: Readonly<Record<string, string>> = {
+  AT: "Ausztria",
+  BE: "Belgium",
+  BG: "Bulgária",
+  CY: "Ciprus",
+  CZ: "Csehország",
+  DE: "Németország",
+  DK: "Dánia",
+  EE: "Észtország",
+  ES: "Spanyolország",
+  FI: "Finnország",
+  FR: "Franciaország",
+  GR: "Görögország",
+  HR: "Horvátország",
+  HU: "Magyarország",
+  IE: "Írország",
+  IT: "Olaszország",
+  LT: "Litvánia",
+  LU: "Luxemburg",
+  LV: "Lettország",
+  MT: "Málta",
+  NL: "Hollandia",
+  PL: "Lengyelország",
+  PT: "Portugália",
+  RO: "Románia",
+  SE: "Svédország",
+  SI: "Szlovénia",
+  SK: "Szlovákia",
+  XI: "Észak-Írország",
+};
+
 export type ViesFillField = "name" | "country" | keyof ViesAddressFields;
 
 /**

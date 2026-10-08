@@ -54,6 +54,7 @@ function row(
       displayName: "Állatkert",
       companyName: "Kitalált Állatkert Kft.",
       taxNumber: "12345678-2-42",
+      euTaxNumber: null,
       email: "szamla@example.com",
       addresses: [
         {
@@ -158,6 +159,57 @@ describe("buildIssueInput", () => {
       email: "szamla@example.com",
     });
     assert.equal(input.document.buyer.zip, "1146");
+  });
+
+  it("an EU buyer goes with its community tax number, adoalany 6 and its country's name; a Hungarian one as before", () => {
+    const base = row();
+    const eu = buildIssueInput({
+      ...base,
+      customer: {
+        ...base.customer!,
+        taxNumber: null,
+        euTaxNumber: "SK2020123456",
+        addresses: base.customer!.addresses.map((a) => ({
+          ...a,
+          country: "SK",
+        })),
+      },
+    } as BillingDocumentRow);
+    const hu = buildIssueInput(base);
+    assert.ok(eu.ok && hu.ok);
+    assert.deepEqual(
+      [
+        eu.buyer.taxNumber,
+        eu.buyer.euTaxNumber,
+        eu.document.buyer.euTaxNumber,
+        eu.document.buyer.vatSubject,
+        eu.document.buyer.country,
+        hu.document.buyer.vatSubject,
+        hu.document.buyer.country,
+      ],
+      [null, "SK2020123456", "SK2020123456", 6, "Szlovákia", null, null],
+      "ISSUE-EU-TAX",
+    );
+  });
+
+  it("a buyer with both numbers is not an EU buyer: no adoszamEU, no adoalany, no orszag", () => {
+    const base = row();
+    const both = buildIssueInput({
+      ...base,
+      customer: { ...base.customer!, euTaxNumber: "SK2020123456" },
+    } as BillingDocumentRow);
+    assert.ok(both.ok);
+    assert.deepEqual(
+      [
+        both.buyer.taxNumber,
+        both.buyer.euTaxNumber,
+        both.document.buyer.euTaxNumber,
+        both.document.buyer.vatSubject,
+        both.document.buyer.country,
+      ],
+      ["12345678-2-42", null, null, null, null],
+      "ISSUE-BOTH-NUMBERS",
+    );
   });
 
   it("keeps every line comment and the document's own fields", () => {
