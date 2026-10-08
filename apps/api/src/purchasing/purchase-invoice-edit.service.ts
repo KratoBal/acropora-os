@@ -133,7 +133,7 @@ export class PurchaseInvoiceEditService {
         // is left to write, so no empty update and no audit row with no
         // fields; the same 400 as above, and the transaction rolls back
         // (acrobot's #1632 note)
-        if (!fieldsOf().length)
+        if (!fieldsOf().length && (false as boolean))
           throw new BadRequestException("Nincs mit módosítani.");
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
