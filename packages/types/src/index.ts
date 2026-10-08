@@ -1424,6 +1424,8 @@ export type {
   ExecuteQuoteHandoffInput,
   QuoteHandoffSummaryDto,
   QuoteHandoffResultDto,
+  QuoteProformaResultDto,
+  QuoteMilestoneProformaDto,
 } from "./quote-handoff.js";
 export {
   EMPTY_QUOTE_RICH_TEXT,

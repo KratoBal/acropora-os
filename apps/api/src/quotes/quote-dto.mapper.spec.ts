@@ -291,7 +291,7 @@ test("list query fetches only a bounded header/version projection and list mappe
     Promise.resolve(0)) as unknown as typeof original.count;
   prisma.$transaction = ((operations: Promise<unknown>[]) =>
     Promise.all(operations)) as unknown as typeof original.transaction;
-  await new QuotesRepository().list(2, 25, "Aquarium");
+  await new QuotesRepository().list(2, 25, { q: "Aquarium" });
   assert.ok(query?.select);
   assert.equal(query.include, undefined);
   assert.equal(query.skip, 25);
@@ -331,6 +331,8 @@ test("list query fetches only a bounded header/version projection and list mappe
       "createdAt",
       "updatedAt",
       "latestVersion",
+      // P8: computed, a boolean, no tree
+      "isExpired",
     ].sort(),
   );
   assert.deepEqual(
@@ -461,7 +463,7 @@ test("cost-free API reads and writes use the safe mapper and VIEWER cannot reach
       calls++;
       return row;
     },
-    list: async () => ({ items: [row], total: 1 }),
+    list: async () => ({ items: [row], total: 1, expired: new Set() }),
     create: async () => row,
     update: async () => row,
     netTotals: async () => new Map(),

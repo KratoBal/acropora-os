@@ -25,7 +25,12 @@ export class QuotesController {
     @Query() query: QuoteListQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.list(user, query.page, query.pageSize, query.q);
+    return this.service.list(user, query.page, query.pageSize, {
+      q: query.q,
+      status: query.status,
+      closeReason: query.closeReason,
+      expired: query.expired === "1" || query.expired === "true",
+    });
   }
   @Get(":id")
   @RequirePermissions(PERMISSIONS.QUOTES_VIEW)

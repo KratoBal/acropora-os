@@ -59,6 +59,8 @@ export interface QuoteHandoffPreviewInput {
 
 export interface ExecuteQuoteHandoffInput extends QuoteHandoffPreviewInput {
   planHash: string;
+  /** P7: also prepare the first milestone's proforma draft */
+  createProforma?: boolean;
 }
 
 /** The started project, on the quote and as the execution's answer. */
@@ -76,4 +78,23 @@ export interface QuoteHandoffSummaryDto {
 export interface QuoteHandoffResultDto extends QuoteHandoffSummaryDto {
   /** true when the project already existed (a repeated request) */
   replayed: boolean;
+  /**
+   * P7: the first milestone's proforma, when it was asked for. `skipped` says
+   * in a sentence why there is none (no `billing.create`, no partner, ...).
+   */
+  proforma: { invoiceId: string | null; skipped: string | null } | null;
+}
+
+/** P7: a milestone's proforma draft; `created` is false when it existed. */
+export interface QuoteProformaResultDto {
+  invoiceId: string;
+  created: boolean;
+}
+
+/** P7: a milestone's proforma on the quote (internal only). */
+export interface QuoteMilestoneProformaDto {
+  milestoneId: string;
+  invoiceId: string;
+  /** the billing document's status: DRAFT until it is issued */
+  status: string;
 }

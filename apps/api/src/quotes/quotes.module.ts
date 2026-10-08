@@ -10,6 +10,7 @@ import { QuoteAcceptanceController } from "./quote-acceptance.controller.js";
 import { QuoteAcceptanceService } from "./quote-acceptance.service.js";
 import { QuoteHandoffController } from "./quote-handoff.controller.js";
 import { QuoteHandoffService } from "./quote-handoff.service.js";
+import { QuoteProformaService } from "./quote-proforma.js";
 import { QuoteBomItemsController } from "./quote-bom-items.controller.js";
 import { QuoteMailController } from "./quote-mail.controller.js";
 import { QuoteMailService } from "./quote-mail.service.js";
@@ -52,6 +53,7 @@ import { QuotePublicService } from "./public/quote-public.service.js";
     QuotePublishService,
     QuoteAcceptanceService,
     QuoteHandoffService,
+    QuoteProformaService,
     QuoteMailService,
     QuoteLinkService,
     QuotePublicService,

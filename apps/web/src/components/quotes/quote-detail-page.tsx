@@ -39,6 +39,7 @@ import {
   type QuoteOutcomeAction,
 } from "./quote-outcome";
 import { QuoteHandoffCard, QuoteHandoffDrawer } from "./quote-handoff";
+import { QuoteMilestonesCard } from "./quote-proforma";
 import { QuoteAcceptanceLinkCard } from "./quote-link";
 import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
 
@@ -80,7 +81,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     session && hasPermission(session.user, PERMISSIONS.QUOTES_HANDOFF),
   );
   const [outcome, setOutcome] = useState<QuoteOutcomeAction | null>(null);
+  const canBilling = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
   const [handingOff, setHandingOff] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +214,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             <PilotBadge variant={QUOTE_STATUS[quote.status].variant}>
               {QUOTE_STATUS[quote.status].label}
             </PilotBadge>
+            {quote.isExpired ? (
+              <PilotBadge variant="danger">Lejárt</PilotBadge>
+            ) : null}
             {latest ? (
               <span>
                 Aktuális verzió: v{latest.versionNumber} · érvényes{" "}
@@ -334,6 +342,15 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         onStart={() => setHandingOff(true)}
       />
 
+      {notice ? <Alert title="Projekt elindítva" description={notice} /> : null}
+
+      <QuoteMilestonesCard
+        token={token}
+        quote={quote}
+        canPrepare={canHandoff && canBilling}
+        onChanged={() => void load()}
+      />
+
       <QuoteOutcomeCard
         quote={quote}
         canRecord={canRecord}
@@ -359,9 +376,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         token={token}
         quote={quote}
         open={handingOff}
+        canBilling={canBilling}
         onClose={() => setHandingOff(false)}
-        onDone={() => {
+        onDone={(result) => {
           setHandingOff(false);
+          setNotice(result.proforma?.skipped ?? null);
           void load();
         }}
       />

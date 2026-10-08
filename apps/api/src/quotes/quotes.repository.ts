@@ -1,6 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { CreateQuoteInput, UpdateQuoteInput } from "@acropora/types";
+import type {
+  CreateQuoteInput,
+  QuoteCloseReasonValue,
+  QuoteStatusValue,
+  UpdateQuoteInput,
+} from "@acropora/types";
+
+import { expiredWhere } from "./quote-expiry.js";
 import type { TemplateBlock } from "./quote-editor-input.js";
 /** Bounded list projection: newest version summary only; no child collections or JSON. */
 export const QUOTE_LIST_SELECT = {
@@ -28,6 +35,13 @@ export const QUOTE_LIST_SELECT = {
     },
   },
 } satisfies Prisma.QuoteSelect;
+/** P8: the list's filters, all optional and combined. */
+export interface QuoteListFilter {
+  q?: string;
+  status?: QuoteStatusValue;
+  closeReason?: QuoteCloseReasonValue;
+  expired?: boolean;
+}
 export type QuoteListRow = Prisma.QuoteGetPayload<{
   select: typeof QUOTE_LIST_SELECT;
 }>;
@@ -62,7 +76,10 @@ export const QUOTE_DETAIL_INCLUDE = {
         orderBy: [{ quoteItemId: "asc" }, { position: "asc" }],
         include: { variant: { select: VARIANT_LABEL_SELECT } },
       },
-      milestones: { orderBy: { position: "asc" } },
+      milestones: {
+        orderBy: { position: "asc" },
+        include: { proformaInvoice: { select: { id: true, status: true } } },
+      },
     },
   },
   events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
@@ -138,15 +155,23 @@ export class QuotesRepository {
       );
     return totals;
   }
-  async list(page: number, pageSize: number, q?: string) {
-    const where: Prisma.QuoteWhereInput = q
-      ? {
-          OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { quoteNumber: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {};
+  async list(page: number, pageSize: number, filter: QuoteListFilter = {}) {
+    const { q } = filter;
+    const where: Prisma.QuoteWhereInput = {
+      ...(q
+        ? {
+            OR: [
+              { title: { contains: q, mode: "insensitive" } },
+              { quoteNumber: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      // P8: the lifecycle filters; the expiry has its own status condition,
+      // so it goes under AND and the two narrow each other
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.closeReason ? { closeReason: filter.closeReason } : {}),
+      ...(filter.expired ? { AND: [expiredWhere()] } : {}),
+    };
     const [items, total] = await prisma.$transaction(
       [
         prisma.quote.findMany({
@@ -160,7 +185,18 @@ export class QuotesRepository {
       ],
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
-    return { items, total };
+    // P8: which of this page is expired, computed, not stored
+    const expired = new Set(
+      items.length
+        ? (
+            await prisma.quote.findMany({
+              where: { id: { in: items.map((i) => i.id) }, ...expiredWhere() },
+              select: { id: true },
+            })
+          ).map((row) => row.id)
+        : [],
+    );
+    return { items, total, expired };
   }
   /**
    * `template` (P1): the checked blocks and milestones of a `QuoteTemplate`,
