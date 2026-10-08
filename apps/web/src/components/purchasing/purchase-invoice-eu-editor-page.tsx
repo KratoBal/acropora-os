@@ -28,6 +28,7 @@ import {
   type SupplierLineSuggestionSource,
   type SupplierSummary,
   type ViesVatLookupResult,
+  viesFill,
 } from "@acropora/types";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -46,6 +47,10 @@ import { productApi } from "@/lib/api/products";
 import { purchasingApi } from "@/lib/api/purchasing";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { viesVatApi } from "@/lib/api/vies-vat";
+import {
+  ViesConflicts,
+  type ViesConflict,
+} from "@/components/vies/vies-conflicts";
 import { createDebouncer } from "@/lib/products/list-state";
 
 // Ez a komponens az EU-s és a belföldi (kézi és NAV-alapú) beszerzési
@@ -222,6 +227,7 @@ export function PurchaseInvoiceEuEditorPage() {
   const [newSupplierPhone, setNewSupplierPhone] = useState("");
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [viesBusy, setViesBusy] = useState(false);
+  const [viesConflicts, setViesConflicts] = useState<ViesConflict[]>([]);
   const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
     null,
   );
@@ -938,12 +944,27 @@ export function PurchaseInvoiceEuEditorPage() {
     }
   };
 
+  /**
+   * THE VIES NAME INTO THE NEW SUPPLIER (card 600575a0). This form has no
+   * address fields, and the country follows the tax number at creation, so
+   * only the name is filled: when empty; another typed name is offered.
+   */
   const checkVies = async () => {
     if (!newSupplierTaxNumber.trim() || viesBusy) return;
     setViesBusy(true);
     setViesResult(null);
+    setViesConflicts([]);
     try {
-      setViesResult(await viesVatApi.check(token, newSupplierTaxNumber.trim()));
+      const result = await viesVatApi.check(token, newSupplierTaxNumber.trim());
+      setViesResult(result);
+      if (result.valid) {
+        const { fill, conflicts } = viesFill(
+          { name: newSupplierName },
+          { name: result.name, taxNumber: newSupplierTaxNumber },
+        );
+        if (fill.name) setNewSupplierName(fill.name);
+        setViesConflicts(conflicts);
+      }
     } catch (cause) {
       setViesResult({
         message:
@@ -1453,6 +1474,7 @@ export function PurchaseInvoiceEuEditorPage() {
                               const value = event.target.value;
                               setNewSupplierTaxNumber(value);
                               setViesResult(null);
+                              setViesConflicts([]);
                               if (!isDomestic) {
                                 const inferred =
                                   inferCountryFromTaxNumber(value);
@@ -1503,6 +1525,16 @@ export function PurchaseInvoiceEuEditorPage() {
                             </div>
                           )
                         ) : null}
+                        <ViesConflicts
+                          conflicts={viesConflicts}
+                          onApply={() => {
+                            const name = viesConflicts.find(
+                              (c) => c.field === "name",
+                            );
+                            if (name) setNewSupplierName(name.vies);
+                            setViesConflicts([]);
+                          }}
+                        />
                       </FormField>
                       <FormField label="Ország (ISO kód)">
                         <Input

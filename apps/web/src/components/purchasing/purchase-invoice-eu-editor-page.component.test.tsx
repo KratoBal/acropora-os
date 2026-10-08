@@ -636,6 +636,35 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       }),
     );
   });
+
+  /** Kártya 600575a0: itt csak név van; az üreset kitölti, a beírtat felajánlja. */
+  it("a VIES-név az üres névbe kerül, a beírt nevet csak gombra írja felül", async () => {
+    navigation.params = new URLSearchParams();
+    viesApi.check.mockResolvedValue({
+      valid: true,
+      name: "COOLBLUE B.V.",
+      address: "WEENA 00664\n3012CN ROTTERDAM",
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Adószám" }), {
+      target: { value: "NL810433941B01" },
+    });
+    const name = screen.getByRole("textbox", { name: "Beszállító neve" });
+    fireEvent.click(screen.getByRole("button", { name: "VIES" }));
+    await waitFor(() => expect(name).toHaveValue("COOLBLUE B.V."));
+
+    fireEvent.change(name, { target: { value: "Coolblue" } });
+    fireEvent.click(screen.getByRole("button", { name: "VIES" }));
+    await screen.findByRole("group", { name: "VIES eltérések" });
+    expect(name).toHaveValue("Coolblue");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Felülírás a VIES adataival" }),
+    );
+    expect(name).toHaveValue("COOLBLUE B.V.");
+  });
 });
 
 /** #1199 P-026: a beszállítói számlafájl csak előtölt, a mentés a régi út. */
