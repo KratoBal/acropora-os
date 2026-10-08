@@ -84,6 +84,7 @@ const emptySalesResponse: PosSaleListResponse = {
 };
 
 const searchResult: PosProductSearchResult = {
+  productId: "product-1",
   variantId: "variant-1",
   sku: "RS-RM500",
   productName: "Red Sea ReefMat 500",

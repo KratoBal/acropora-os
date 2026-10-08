@@ -14,6 +14,10 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
+import {
+  readPosInvoiceHandoff,
+  writePosInvoiceHandoff,
+} from "./pos-invoice-handoff";
 
 /**
  * A SZÁMLÁZÁSI SZERKESZTŐ (Számlázás v0.1, brief 35. pont UI QA): a típus
@@ -277,6 +281,111 @@ describe("BillingDocumentEditor", () => {
     expect(totals.getByText("Bruttó").nextSibling).toHaveTextContent(
       /68\s580\sFt/,
     );
+  });
+
+  /*
+    A PÉNZTÁR KOSARA (kártya cdc2771b): az Új számla a kosár tételsoraival
+    nyílik, a vevő üres marad (azt a kezelő választja). MI PIROSÍT: ha a sorok
+    nem töltődnek be, ha a termék, a változat, a kulcs vagy a bruttó elveszne,
+    vagy ha a vevő magától kitöltődne.
+  */
+  it("prefills the lines from the POS cart, leaving the customer to pick", async () => {
+    window.sessionStorage.clear();
+    products.detail.mockResolvedValue({
+      variants: [
+        { id: "variant-1", sku: "RS-RM500", name: null, isActive: true },
+      ],
+    });
+    const key = writePosInvoiceHandoff(window.sessionStorage, [
+      {
+        productId: "product-1",
+        variantId: "variant-1",
+        sku: "RS-RM500",
+        productName: "Red Sea ReefMat 500",
+        unit: "db",
+        quantity: 2,
+        vatRatePercent: "27",
+        lineGross: 35856,
+      },
+    ]);
+    render(<BillingDocumentEditor posHandoffKey={key} />);
+
+    expect(
+      await screen.findByDisplayValue("Red Sea ReefMat 500"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/RS-RM500 · termék/)).toBeInTheDocument();
+    expect(within(summary()).getByText("Bruttó").nextSibling).toHaveTextContent(
+      /35\s856\sFt/,
+    );
+    const save = () =>
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ });
+    expect(save()).toBeDisabled();
+
+    await pickPartner();
+    fireEvent.click(save());
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const [, created] = api.create.mock.calls[0]!;
+    expect(created.customerId).toBe("cust-1");
+    expect(created.lines).toEqual([
+      expect.objectContaining({
+        productId: "product-1",
+        variantId: "variant-1",
+        description: "Red Sea ReefMat 500",
+        quantity: "2",
+        unit: "db",
+        vatRatePercent: "27",
+        discountPercent: null,
+      }),
+    ]);
+    // az első mentés után a kosár nem nyílik újra (barracuda, #1642)
+    expect(readPosInvoiceHandoff(window.sessionStorage, key)).toBeNull();
+  });
+
+  /*
+    KEREKÍTÉS (barracuda, #1642): a pénztár a forintra kerekített sorokat adja
+    át (5127 és 738, gombja 5 865 Ft-ot írt). A szerkesztő bruttó végösszege
+    ugyanez, és egyik sor sem jelez eltérést a beírt bruttótól.
+  */
+  it("the POS total and the invoice total agree, with no line flagged", async () => {
+    window.sessionStorage.clear();
+    products.detail.mockResolvedValue({ variants: [] });
+    const line = {
+      unit: "db",
+      vatRatePercent: "27",
+    };
+    const key = writePosInvoiceHandoff(window.sessionStorage, [
+      {
+        ...line,
+        productId: "product-a",
+        variantId: "variant-a",
+        sku: "AF-1",
+        productName: "Aqua Forest Pro",
+        quantity: 3,
+        lineGross: 5127,
+      },
+      {
+        ...line,
+        productId: "product-b",
+        variantId: "variant-b",
+        sku: "CM-1",
+        productName: "Coral Mix",
+        quantity: 1,
+        lineGross: 738,
+      },
+    ]);
+    render(<BillingDocumentEditor posHandoffKey={key} />);
+
+    expect(await screen.findByDisplayValue("Coral Mix")).toBeInTheDocument();
+    expect(within(summary()).getByText("Bruttó").nextSibling).toHaveTextContent(
+      /^5\s?865\sFt$/,
+    );
+    expect(screen.queryByText(/A beírt bruttó/)).not.toBeInTheDocument();
+  });
+
+  it("ignores an unknown POS key and opens empty", () => {
+    window.sessionStorage.clear();
+    render(<BillingDocumentEditor posHandoffKey="missing" />);
+    expect(screen.queryAllByLabelText(/tétel megnevezése$/)).toHaveLength(0);
   });
 
   /*
