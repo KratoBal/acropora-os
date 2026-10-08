@@ -80,6 +80,10 @@ const api = vi.hoisted(() => ({
   send: vi.fn(),
   resend: vi.fn(),
   pdf: vi.fn(),
+  // P4b: no live link unless a test says so
+  acceptanceLink: vi.fn(async () => ({ link: null })),
+  issueAcceptanceLink: vi.fn(),
+  revokeAcceptanceLink: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
