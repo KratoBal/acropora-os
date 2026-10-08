@@ -2,14 +2,12 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   EmptyState,
-  PageHeader,
+  PilotDataTable,
+  PilotPageHeader,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -19,6 +17,7 @@ import {
   type GlsCodReportLine,
   type GlsCodReportListResponse,
   type GlsCodReportStatus,
+  type GlsCodReportSummary,
   type GlsInvoiceSummary,
   type GlsSyncState,
   type GlsSyncStatus,
@@ -26,7 +25,24 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { glsSettlementsApi } from "@/lib/api/gls-settlements";
+
+import {
+  SettlementApproveField,
+  SettlementMonthCard,
+  SettlementMonthInput,
+  settlementPage,
+  SettlementNotice,
+  SettlementStats,
+  SettlementSyncStrip,
+  SettlementTableCard,
+} from "./settlement-pilot";
+import { SettlementTabs } from "./settlement-tabs";
 
 function formatAmount(value?: string): string {
   if (value === undefined) return "—";
@@ -41,9 +57,9 @@ function formatDate(value?: string): string {
 
 function reportStatus(status: GlsCodReportStatus) {
   return status === "COMPLETED" ? (
-    <Badge variant="success">Kész</Badge>
+    <PilotBadge variant="success">Kész</PilotBadge>
   ) : (
-    <Badge variant="warning">Ellenőrzendő</Badge>
+    <PilotBadge variant="amber">Ellenőrzendő</PilotBadge>
   );
 }
 
@@ -58,19 +74,19 @@ const LINE_ERRORS: Record<GlsCodLineError, string> = {
 
 function lineResolution(line: GlsCodReportLine) {
   if (line.resolutionSource === "MANUAL")
-    return <Badge variant="info">Kézzel jóváhagyva</Badge>;
+    return <PilotBadge variant="blue">Kézzel jóváhagyva</PilotBadge>;
   if (line.status === "RESOLVED")
     return (
-      <Badge variant="success">
+      <PilotBadge variant="success">
         {line.resolutionSource === "ORDER_KEY"
           ? "Párosítva rendelésből"
           : "Párosítva"}
-      </Badge>
+      </PilotBadge>
     );
   return (
-    <Badge variant="warning">
+    <PilotBadge variant="amber">
       {line.errorCode ? LINE_ERRORS[line.errorCode] : "Ellenőrzendő"}
-    </Badge>
+    </PilotBadge>
   );
 }
 
@@ -117,6 +133,7 @@ export function GlsSettlementsPage() {
     new Date().toISOString().slice(0, 7),
   );
   const [downloading, setDownloading] = useState(false);
+  const [listPage, setListPage] = useState(1);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -272,62 +289,8 @@ export function GlsSettlementsPage() {
       />
     );
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="GLS elszámolások"
-        description="A GLS heti utánvét-részletezője, kéthetes számlamelléklete és kompenzációs értesítője. Az utánvét soronként a kimenő számlához kötve; a díjszámla külön; a kompenzáció az utalásból levonva."
-        actions={
-          canManage ? (
-            <>
-              {syncStatus?.canRunNow ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => void syncNow()}
-                  disabled={working}
-                >
-                  Gmail ellenőrzése most
-                </Button>
-              ) : null}
-              <input
-                ref={fileInput}
-                type="file"
-                accept=".xlsx,.pdf"
-                multiple
-                className="hidden"
-                aria-label="GLS fájlok feltöltése"
-                onChange={(event) => void upload(event.target.files)}
-              />
-              <Button
-                onClick={() => fileInput.current?.click()}
-                disabled={working}
-              >
-                {working ? "Feldolgozás…" : "GLS fájl feltöltése"}
-              </Button>
-            </>
-          ) : undefined
-        }
-      />
-
-      {syncStatus && syncStatus.state !== "ENABLED" ? (
-        <Alert
-          variant="info"
-          title="Az automatikus Gmail-behúzás ki van kapcsolva"
-          description={`Ok: ${SYNC_OFF[syncStatus.state]}. A GLS-fájlokat addig kézzel töltsd fel.`}
-        />
-      ) : null}
-      {syncStatus?.state === "ENABLED" ? (
-        <p className="text-sm text-dusk-600">
-          Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
-          {syncStatus.lastScheduledRun
-            ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
-                syncStatus.lastScheduledRun.status === "FAILED"
-                  ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
-                  : `${syncStatus.lastScheduledRun.documentsRead} új dokumentum`
-              }.`
-            : "Automatikus futás még nincs rögzítve."}
-        </p>
-      ) : null}
+  const alerts = (
+    <>
       {notice ? (
         <Alert variant="info" title="GLS" description={notice} />
       ) : null}
@@ -343,245 +306,379 @@ export function GlsSettlementsPage() {
           }
         />
       ) : null}
+    </>
+  );
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Havi könyvelési fájl
-          </h2>
-          <span className="text-xs text-dusk-500">
-            Utalásonként a kifizetett számlák, a GLS díjszámlák külön lapon
+  const invoiceColumns: PilotTableColumn<GlsInvoiceSummary>[] = [
+    {
+      id: "number",
+      header: "Számlaszám",
+      width: "26%",
+      cell: (invoice) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {invoice.invoiceNumber}
+        </span>
+      ),
+    },
+    {
+      id: "date",
+      header: "Kelte",
+      width: "18%",
+      cell: (invoice) => formatDate(invoice.invoiceDate),
+    },
+    {
+      id: "parcels",
+      header: "Csomag",
+      align: "right",
+      width: "14%",
+      cell: (invoice) => invoice.parcelCount,
+    },
+    {
+      id: "fee",
+      header: "Díj",
+      align: "right",
+      width: "21%",
+      cell: (invoice) => formatAmount(invoice.feeTotal),
+    },
+    {
+      id: "card",
+      header: "Kártyadíj",
+      align: "right",
+      width: "21%",
+      cell: (invoice) => formatAmount(invoice.cardFeeTotal),
+    },
+  ];
+
+  /*
+    A RÉSZLET A LISTA HELYÉN (Figma 618:2268): ugyanazon az útvonalon egy
+    kiválasztott állapot, saját fejléccel és „Vissza a listához” gombbal.
+  */
+  if (selected) {
+    const lineColumns: PilotTableColumn<GlsCodReportLine>[] = [
+      {
+        id: "parcel",
+        header: "Csomagszám",
+        width: "14%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {line.parcelNumber}
           </span>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="month"
-              aria-label="A riport hónapja"
-              className="rounded-md border border-dusk-300 bg-white px-2 py-1.5 text-sm text-dusk-900"
-              value={reportMonth}
-              onChange={(event) => setReportMonth(event.target.value)}
+        ),
+      },
+      {
+        id: "cod",
+        header: "Utánvét-hiv.",
+        width: "15%",
+        cell: (line) => line.codReference ?? "—",
+      },
+      {
+        id: "client",
+        header: "Ügyfélhiv.",
+        width: "11%",
+        cell: (line) => line.clientReference ?? "—",
+      },
+      {
+        id: "amount",
+        header: "Összeg",
+        align: "right",
+        width: "11%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {formatAmount(line.amount)}
+          </span>
+        ),
+      },
+      {
+        id: "invoice",
+        header: "Kimenő számla / kézi jóváhagyás",
+        width: "32%",
+        cell: (line) =>
+          line.status !== "RESOLVED" && canManage ? (
+            <SettlementApproveField
+              label={`Számlaszám – ${line.parcelNumber}`}
+              value={invoiceDrafts[line.id] ?? ""}
+              placeholder="ACRW-2026/00000"
+              disabled={working}
+              onChange={(value) =>
+                setInvoiceDrafts((current) => ({
+                  ...current,
+                  [line.id]: value,
+                }))
+              }
+              onApprove={() => void approveLine(line)}
             />
-            <Button
+          ) : (
+            <div>
+              <span>{line.invoiceNumbers.join(", ") || "—"}</span>
+              {line.manualApprovedByDisplayName ? (
+                <p className="mt-1 text-xs text-pilot-grey-500">
+                  {line.manualApprovedByDisplayName} ·{" "}
+                  {formatDate(line.manualApprovedAt)}
+                </p>
+              ) : null}
+            </div>
+          ),
+      },
+      {
+        id: "resolution",
+        header: "Párosítás",
+        align: "right",
+        width: "17%",
+        cell: lineResolution,
+      },
+    ];
+    const open = selected.lineCount - selected.resolvedLineCount;
+    return (
+      <PilotThemeRoot className="space-y-6">
+        <PilotPageHeader
+          title={`GLS utalás · ${formatDate(selected.transferDate)}`}
+          description={`${selected.fileName} · heti utánvét-részletező`}
+          actions={
+            <>
+              {canManage && selected.status !== "COMPLETED" ? (
+                <PilotButton
+                  variant="secondary"
+                  onClick={() => void reprocess()}
+                  disabled={working}
+                >
+                  Újrafeldolgozás
+                </PilotButton>
+              ) : null}
+              <PilotButton
+                variant="secondary"
+                onClick={() => setSelected(null)}
+              >
+                Vissza a listához
+              </PilotButton>
+            </>
+          }
+        />
+        <SettlementTabs />
+        {alerts}
+        <SettlementStats
+          items={[
+            { label: "Összeg", value: formatAmount(selected.total) },
+            { label: "Csomag", value: selected.lineCount },
+            {
+              label: "Párosítva",
+              value: `${selected.resolvedLineCount} / ${selected.lineCount}`,
+            },
+            { label: "Utalás napja", value: formatDate(selected.transferDate) },
+            {
+              label: "Állapot",
+              value: selected.status === "COMPLETED" ? "Kész" : "Ellenőrzendő",
+            },
+          ]}
+        />
+        {selected.status !== "COMPLETED" ? (
+          <SettlementNotice
+            tone="check"
+            title={`${open.toLocaleString("hu-HU")} csomag számlaszáma ellenőrzendő`}
+          >
+            Add meg a helyes számlaszámot az érintett sornál. Ahol van javaslat
+            (például előtag nélküli számlaszám előtaggal), a mező előre ki van
+            töltve: ellenőrzés után hagyd jóvá.
+          </SettlementNotice>
+        ) : null}
+        <SettlementTableCard>
+          <PilotDataTable
+            columns={lineColumns}
+            rows={selected.lines}
+            rowKey={(line) => line.id}
+            rowTestId="gls-sor"
+            minWidth={1040}
+          />
+        </SettlementTableCard>
+        <SettlementTableCard
+          title="GLS díjszámlák"
+          subtitle="A díj nem az utánvétből kerül levonásra: külön GLS számlák."
+        >
+          {invoices.length ? (
+            <PilotDataTable
+              columns={invoiceColumns}
+              rows={invoices}
+              rowKey={(invoice) => invoice.id}
+              minWidth={720}
+            />
+          ) : (
+            <p className="px-5 pb-4 text-sm text-pilot-grey-500">
+              Még nincs feltöltött GLS számlamelléklet.
+            </p>
+          )}
+        </SettlementTableCard>
+      </PilotThemeRoot>
+    );
+  }
+
+  const listColumns: PilotTableColumn<GlsCodReportSummary>[] = [
+    {
+      id: "date",
+      header: "Utalás napja",
+      width: "17%",
+      cell: (item) => formatDate(item.transferDate),
+    },
+    {
+      id: "file",
+      header: "Fájl",
+      width: "33%",
+      cell: (item) => item.fileName,
+    },
+    {
+      id: "total",
+      header: "Összeg",
+      width: "17%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.total)}
+        </span>
+      ),
+    },
+    {
+      id: "matched",
+      header: "Párosítva",
+      width: "15%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {item.resolvedLineCount} / {item.lineCount}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "18%",
+      cell: (item) => reportStatus(item.status),
+    },
+  ];
+  const paged = settlementPage(data?.items ?? [], listPage);
+  // a havi kártya sora a betöltött listából: a hónap utalásai és díjszámlái
+  const inMonth = (data?.items ?? []).filter((item) =>
+    item.transferDate.startsWith(reportMonth),
+  );
+  const monthInvoices = invoices.filter((invoice) =>
+    invoice.invoiceDate?.startsWith(reportMonth),
+  );
+
+  return (
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
+        title="Elszámolások"
+        description="Utánvétek és fizetési szolgáltatói kimutatások automatikus párosítással. A GLS heti utánvét-részletezője, kéthetes számlamelléklete és kompenzációs értesítője: az utánvét soronként a kimenő számlához kötve, a díjszámla külön, a kompenzáció az utalásból levonva."
+        actions={
+          canManage ? (
+            <>
+              {syncStatus?.canRunNow ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  onClick={() => void syncNow()}
+                  disabled={working}
+                >
+                  Gmail ellenőrzése most
+                </PilotButton>
+              ) : null}
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".xlsx,.pdf"
+                multiple
+                className="hidden"
+                aria-label="GLS fájlok feltöltése"
+                onChange={(event) => void upload(event.target.files)}
+              />
+              <PilotButton
+                size="regular"
+                onClick={() => fileInput.current?.click()}
+                disabled={working}
+              >
+                {working ? "Feldolgozás…" : "GLS fájl feltöltése"}
+              </PilotButton>
+            </>
+          ) : undefined
+        }
+      />
+      <SettlementTabs />
+      {syncStatus ? (
+        <SettlementSyncStrip
+          active={syncStatus.state === "ENABLED"}
+          title={
+            syncStatus.state === "ENABLED"
+              ? undefined
+              : "Az automatikus Gmail-behúzás ki van kapcsolva"
+          }
+          text={
+            syncStatus.state === "ENABLED"
+              ? `Automatikus Gmail-behúzás: ${syncStatus.intervalMinutes} percenként. ${
+                  syncStatus.lastScheduledRun
+                    ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
+                        syncStatus.lastScheduledRun.status === "FAILED"
+                          ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
+                          : `${syncStatus.lastScheduledRun.documentsRead} új dokumentum`
+                      }.`
+                    : "Automatikus futás még nincs rögzítve."
+                }`
+              : `Ok: ${SYNC_OFF[syncStatus.state]}. A GLS-fájlokat addig kézzel töltsd fel.`
+          }
+        />
+      ) : null}
+      {alerts}
+      <SettlementMonthCard
+        title="Havi könyvelési fájl"
+        subtitle="Utalásonként a kifizetett számlák, a GLS díjszámlák külön lapon"
+        summary={
+          data
+            ? `${inMonth.length} utánvét-utalás · ${inMonth
+                .reduce((sum, item) => sum + item.lineCount, 0)
+                .toLocaleString(
+                  "hu-HU",
+                )} csomag · ${monthInvoices.length} GLS díjszámla`
+            : undefined
+        }
+        controls={
+          <>
+            <SettlementMonthInput
+              value={reportMonth}
+              onChange={setReportMonth}
+            />
+            <PilotButton
               variant="secondary"
               onClick={() => void download()}
               disabled={downloading || !reportMonth}
             >
               {downloading ? "Letöltés…" : "XLSX letöltése"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Utánvét-utalások
-          </h2>
-          <span className="text-xs text-dusk-500">
-            {data?.pagination.totalItems ?? 0} utalás
-          </span>
-        </CardHeader>
-        <CardContent>
-          {loading && !data ? <Skeleton className="h-56" /> : null}
-          {data && data.items.length === 0 ? (
-            <EmptyState
-              title="Még nincs GLS utánvét-utalás"
-              description="Töltsd fel a GLS utánvét-részletezőt (XLSX). A számlamelléklet a díjakat és az ügyfélhivatkozást hozza."
-            />
-          ) : null}
-          {data?.items.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Utalás napja</th>
-                    <th>Fájl</th>
-                    <th className="text-right">Összeg</th>
-                    <th className="text-right">Párosítva</th>
-                    <th className="p-3">Állapot</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
-                      onClick={() => void openDetail(item.id)}
-                    >
-                      <td className="p-3">{formatDate(item.transferDate)}</td>
-                      <td className="font-mono text-xs">{item.fileName}</td>
-                      <td className="text-right">{formatAmount(item.total)}</td>
-                      <td className="text-right">
-                        {item.resolvedLineCount} / {item.lineCount}
-                      </td>
-                      <td className="p-3">{reportStatus(item.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {selected ? (
-        <Card>
-          <CardHeader>
-            <div>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                {formatDate(selected.transferDate)} utalás részletei
-              </h2>
-              <p className="mt-1 text-xs text-dusk-500">{selected.fileName}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {reportStatus(selected.status)}
-              {canManage && selected.status !== "COMPLETED" ? (
-                <Button
-                  size="sm"
-                  onClick={() => void reprocess()}
-                  disabled={working}
-                >
-                  Újrafeldolgozás
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {selected.status !== "COMPLETED" ? (
-              <Alert
-                variant="info"
-                title="Ellenőrzés szükséges"
-                description="Add meg a helyes számlaszámot az érintett sornál. Ahol van javaslat (például előtag nélküli számlaszám előtaggal), a mező előre ki van töltve: ellenőrzés után hagyd jóvá."
-              />
-            ) : null}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Csomagszám</th>
-                    <th>Utánvét-hivatkozás</th>
-                    <th>Ügyfélhivatkozás</th>
-                    <th className="text-right">Összeg</th>
-                    <th className="pl-4">Kimenő számla / kézi jóváhagyás</th>
-                    <th className="p-3">Párosítás</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.lines.map((line) => (
-                    <tr key={line.id} className="border-b last:border-0">
-                      <td className="p-3 font-mono text-xs">
-                        {line.parcelNumber}
-                      </td>
-                      <td className="font-mono text-xs">
-                        {line.codReference ?? "—"}
-                      </td>
-                      <td className="font-mono text-xs">
-                        {line.clientReference ?? "—"}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(line.amount)}
-                      </td>
-                      <td className="py-2 pl-4 pr-3">
-                        {line.status !== "RESOLVED" && canManage ? (
-                          <div className="flex min-w-[290px] items-center gap-2">
-                            <input
-                              aria-label={`Számlaszám – ${line.parcelNumber}`}
-                              className="min-w-0 flex-1 rounded-md border border-dusk-300 bg-white px-2 py-1.5 font-mono text-xs text-dusk-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                              value={invoiceDrafts[line.id] ?? ""}
-                              placeholder="ACRW-2026/00000"
-                              maxLength={100}
-                              onChange={(event) =>
-                                setInvoiceDrafts((current) => ({
-                                  ...current,
-                                  [line.id]: event.target.value,
-                                }))
-                              }
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => void approveLine(line)}
-                              disabled={
-                                working ||
-                                !(invoiceDrafts[line.id] ?? "").trim()
-                              }
-                            >
-                              Jóváhagyás
-                            </Button>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="font-mono text-xs">
-                              {line.invoiceNumbers.join(", ") || "—"}
-                            </span>
-                            {line.manualApprovedByDisplayName ? (
-                              <p className="mt-1 text-xs text-dusk-500">
-                                {line.manualApprovedByDisplayName} ·{" "}
-                                {formatDate(line.manualApprovedAt)}
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3">{lineResolution(line)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+            </PilotButton>
+          </>
+        }
+      />
+      {loading && !data ? <Skeleton className="h-56" /> : null}
+      {data && data.items.length === 0 ? (
+        <EmptyState
+          title="Még nincs GLS utánvét-utalás"
+          description="Töltsd fel a GLS utánvét-részletezőt (XLSX). A számlamelléklet a díjakat és az ügyfélhivatkozást hozza."
+        />
       ) : null}
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            GLS díjszámlák
-          </h2>
-          <span className="text-xs text-dusk-500">
-            A díj nem az utalásból megy le: külön számla
-          </span>
-        </CardHeader>
-        <CardContent>
-          {!loading && invoices.length === 0 ? (
-            <p className="text-sm text-dusk-500">
-              Még nincs feltöltött GLS számlamelléklet.
-            </p>
-          ) : null}
-          {invoices.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Számlaszám</th>
-                    <th>Kelte</th>
-                    <th className="text-right">Csomag</th>
-                    <th className="text-right">Díj</th>
-                    <th className="p-3 text-right">Kártyadíj</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id} className="border-b last:border-0">
-                      <td className="p-3 font-mono text-xs">
-                        {invoice.invoiceNumber}
-                      </td>
-                      <td>{formatDate(invoice.invoiceDate)}</td>
-                      <td className="text-right">{invoice.parcelCount}</td>
-                      <td className="text-right">
-                        {formatAmount(invoice.feeTotal)}
-                      </td>
-                      <td className="p-3 text-right">
-                        {formatAmount(invoice.cardFeeTotal)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+      {data?.items.length ? (
+        <SettlementTableCard
+          title="Utánvét-utalások"
+          count={`${data.pagination.totalItems.toLocaleString("hu-HU")} utalás`}
+          paging={{
+            page: paged.page,
+            totalPages: paged.totalPages,
+            range: paged.range,
+            onPageChange: setListPage,
+          }}
+        >
+          <PilotDataTable
+            columns={listColumns}
+            rows={paged.items}
+            rowKey={(item) => item.id}
+            rowTestId="gls-utalas"
+            onRowActivate={(item) => void openDetail(item.id)}
+            rowLabel={(item) => `${item.fileName} részletei`}
+            minWidth={820}
+          />
+        </SettlementTableCard>
+      ) : null}
+    </PilotThemeRoot>
   );
 }

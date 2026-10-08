@@ -2,14 +2,12 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   EmptyState,
-  PageHeader,
+  PilotDataTable,
+  PilotPageHeader,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -18,6 +16,7 @@ import {
   type SimplePayReportDetail,
   type SimplePayReportListResponse,
   type SimplePayReportStatus,
+  type SimplePayReportSummary,
   type SimplePaySyncState,
   type SimplePaySyncStatus,
   type SimplePayTransactionLine,
@@ -25,7 +24,24 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { simplePaySettlementsApi } from "@/lib/api/simplepay-settlements";
+
+import {
+  SettlementApproveField,
+  SettlementMonthCard,
+  SettlementMonthInput,
+  settlementPage,
+  SettlementNotice,
+  SettlementStats,
+  SettlementSyncStrip,
+  SettlementTableCard,
+} from "./settlement-pilot";
+import { SettlementTabs } from "./settlement-tabs";
 
 function formatAmount(value?: string): string {
   if (value === undefined) return "—";
@@ -51,9 +67,9 @@ function reportPeriod(report: {
 
 function reportStatus(status: SimplePayReportStatus) {
   return status === "COMPLETED" ? (
-    <Badge variant="success">Kész</Badge>
+    <PilotBadge variant="success">Kész</PilotBadge>
   ) : (
-    <Badge variant="warning">Ellenőrzendő</Badge>
+    <PilotBadge variant="amber">Ellenőrzendő</PilotBadge>
   );
 }
 
@@ -69,13 +85,13 @@ const LINE_ERRORS: Record<SimplePayLineError, string> = {
 
 function lineResolution(line: SimplePayTransactionLine) {
   if (line.resolutionSource === "MANUAL")
-    return <Badge variant="info">Kézzel jóváhagyva</Badge>;
+    return <PilotBadge variant="blue">Kézzel jóváhagyva</PilotBadge>;
   if (line.status === "RESOLVED")
-    return <Badge variant="success">Párosítva rendelésből</Badge>;
+    return <PilotBadge variant="success">Párosítva rendelésből</PilotBadge>;
   return (
-    <Badge variant="warning">
+    <PilotBadge variant="amber">
       {line.errorCode ? LINE_ERRORS[line.errorCode] : "Ellenőrzendő"}
-    </Badge>
+    </PilotBadge>
   );
 }
 
@@ -120,6 +136,7 @@ export function SimplePaySettlementsPage() {
     new Date().toISOString().slice(0, 7),
   );
   const [downloading, setDownloading] = useState(false);
+  const [listPage, setListPage] = useState(1);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -268,62 +285,8 @@ export function SimplePaySettlementsPage() {
       />
     );
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="SimplePay elszámolások"
-        description="A SimplePay heti forgalmi kimutatása: fizetésenként a webshop-rendelés és a kimenő számla, a jutalék és az utalt összeg."
-        actions={
-          canManage ? (
-            <>
-              {syncStatus?.canRunNow ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => void syncNow()}
-                  disabled={working}
-                >
-                  Gmail ellenőrzése most
-                </Button>
-              ) : null}
-              <input
-                ref={fileInput}
-                type="file"
-                accept=".csv"
-                multiple
-                className="hidden"
-                aria-label="SimplePay kimutatás feltöltése"
-                onChange={(event) => void upload(event.target.files)}
-              />
-              <Button
-                onClick={() => fileInput.current?.click()}
-                disabled={working}
-              >
-                {working ? "Feldolgozás…" : "Kimutatás feltöltése"}
-              </Button>
-            </>
-          ) : undefined
-        }
-      />
-
-      {syncStatus && syncStatus.state !== "ENABLED" ? (
-        <Alert
-          variant="info"
-          title="Az automatikus Gmail-behúzás ki van kapcsolva"
-          description={`Ok: ${SYNC_OFF[syncStatus.state]}. A heti kimutatást (report_ÉÉÉÉHHNN.csv) addig kézzel töltsd fel.`}
-        />
-      ) : null}
-      {syncStatus?.state === "ENABLED" ? (
-        <p className="text-sm text-dusk-600">
-          Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
-          {syncStatus.lastScheduledRun
-            ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
-                syncStatus.lastScheduledRun.status === "FAILED"
-                  ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
-                  : `${syncStatus.lastScheduledRun.documentsRead} új kimutatás`
-              }.`
-            : "Automatikus futás még nincs rögzítve."}
-        </p>
-      ) : null}
+  const alerts = (
+    <>
       {notice ? (
         <Alert variant="info" title="SimplePay" description={notice} />
       ) : null}
@@ -339,224 +302,351 @@ export function SimplePaySettlementsPage() {
           }
         />
       ) : null}
+    </>
+  );
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Havi fájl a könyveléshez
-          </h2>
-          <span className="text-xs text-dusk-500">
-            Hetente a kifizetett számlák, összesen, jutalék és utalt, ahogy Luca
-            táblája
+  /*
+    A RÉSZLET A LISTA HELYÉN (Figma 618:2454): ugyanazon az útvonalon egy
+    kiválasztott állapot, saját fejléccel és „Vissza a listához” gombbal.
+  */
+  if (selected) {
+    const lineColumns: PilotTableColumn<SimplePayTransactionLine>[] = [
+      {
+        id: "transaction",
+        header: "Tranzakció",
+        width: "14%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {line.merchantTransactionId}
           </span>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="month"
-              aria-label="A havi fájl hónapja"
-              className="rounded-md border border-dusk-300 bg-white px-2 py-1.5 text-sm text-dusk-900"
-              value={reportMonth}
-              onChange={(event) => setReportMonth(event.target.value)}
+        ),
+      },
+      {
+        id: "at",
+        header: "Időpont",
+        width: "11%",
+        cell: (line) => line.transactionAt,
+      },
+      {
+        id: "amount",
+        header: "Összeg",
+        align: "right",
+        width: "10%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {formatAmount(line.amount)}
+          </span>
+        ),
+      },
+      {
+        id: "commission",
+        header: "Jutalék",
+        align: "right",
+        width: "8%",
+        cell: (line) => formatAmount(line.commission),
+      },
+      {
+        id: "order",
+        header: "Rendelés",
+        width: "12%",
+        cell: (line) => (
+          <div>
+            {line.orderNumber ?? "—"}
+            {line.errorCode === "AMOUNT_MISMATCH" && line.orderTotal ? (
+              <p className="mt-1 text-xs text-pilot-grey-500">
+                végösszege {formatAmount(line.orderTotal)}
+              </p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "invoice",
+        header: "Kimenő számla / kézi",
+        width: "29%",
+        cell: (line) =>
+          line.status !== "RESOLVED" && canManage ? (
+            <SettlementApproveField
+              label={`Számlaszám – ${line.merchantTransactionId}`}
+              value={invoiceDrafts[line.id] ?? ""}
+              placeholder="ACRW-2026/00000"
+              disabled={working}
+              onChange={(value) =>
+                setInvoiceDrafts((current) => ({
+                  ...current,
+                  [line.id]: value,
+                }))
+              }
+              onApprove={() => void approveLine(line)}
             />
-            <Button
+          ) : (
+            <div>
+              <span>{line.invoiceNumbers.join(", ") || "—"}</span>
+              {line.manualApprovedByDisplayName ? (
+                <p className="mt-1 text-xs text-pilot-grey-500">
+                  {line.manualApprovedByDisplayName} ·{" "}
+                  {formatDate(line.manualApprovedAt)}
+                </p>
+              ) : null}
+            </div>
+          ),
+      },
+      {
+        id: "resolution",
+        header: "Párosítás",
+        align: "right",
+        width: "16%",
+        cell: lineResolution,
+      },
+    ];
+    const open = selected.lineCount - selected.resolvedLineCount;
+    return (
+      <PilotThemeRoot className="space-y-6">
+        <PilotPageHeader
+          title={`SimplePay kimutatás · ${reportPeriod(selected)}`}
+          description={`${selected.fileName} · heti forgalmi kimutatás`}
+          actions={
+            <>
+              {canManage && selected.status !== "COMPLETED" ? (
+                <PilotButton
+                  variant="secondary"
+                  onClick={() => void reprocess()}
+                  disabled={working}
+                >
+                  Újrafeldolgozás
+                </PilotButton>
+              ) : null}
+              <PilotButton
+                variant="secondary"
+                onClick={() => setSelected(null)}
+              >
+                Vissza a listához
+              </PilotButton>
+            </>
+          }
+        />
+        <SettlementTabs />
+        {alerts}
+        <SettlementStats
+          items={[
+            { label: "Összesen", value: formatAmount(selected.amountTotal) },
+            { label: "Jutalék", value: formatAmount(selected.commissionTotal) },
+            { label: "Utalt", value: formatAmount(selected.netTotal) },
+            {
+              label: "Párosítva",
+              value: `${selected.resolvedLineCount} / ${selected.lineCount}`,
+            },
+            {
+              label: "Állapot",
+              value: selected.status === "COMPLETED" ? "Kész" : "Ellenőrzendő",
+            },
+          ]}
+        />
+        {selected.status !== "COMPLETED" ? (
+          <SettlementNotice
+            tone="check"
+            title={`${open.toLocaleString("hu-HU")} fizetés kézi ellenőrzést kér`}
+          >
+            Ahol a párosítás nem sikerült, add meg a kimenő számla számát, és
+            hagyd jóvá. A számla nélküli rendelés számlája később is
+            megérkezhet: akkor az Újrafeldolgozás párosítja.
+          </SettlementNotice>
+        ) : null}
+        <SettlementTableCard>
+          <PilotDataTable
+            columns={lineColumns}
+            rows={selected.lines}
+            rowKey={(line) => line.id}
+            rowTestId="simplepay-sor"
+            minWidth={1080}
+          />
+        </SettlementTableCard>
+        {selected.warnings.length ? (
+          <SettlementNotice tone="info" title="A kimutatás figyelmeztetései">
+            {selected.warnings.join(" ")}
+          </SettlementNotice>
+        ) : null}
+      </PilotThemeRoot>
+    );
+  }
+
+  const listColumns: PilotTableColumn<SimplePayReportSummary>[] = [
+    {
+      id: "period",
+      header: "Időszak",
+      width: "20%",
+      cell: (item) => reportPeriod(item),
+    },
+    {
+      id: "total",
+      header: "Összesen",
+      width: "16%",
+      cell: (item) => formatAmount(item.amountTotal),
+    },
+    {
+      id: "commission",
+      header: "Jutalék",
+      width: "14%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.commissionTotal)}
+        </span>
+      ),
+    },
+    {
+      id: "net",
+      header: "Utalt",
+      width: "16%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.netTotal)}
+        </span>
+      ),
+    },
+    {
+      id: "matched",
+      header: "Párosítva",
+      width: "14%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {item.resolvedLineCount} / {item.lineCount}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "20%",
+      cell: (item) => reportStatus(item.status),
+    },
+  ];
+  const paged = settlementPage(data?.items ?? [], listPage);
+  // a havi kártya sora a betöltött listából: a hónapba eső heti kimutatások
+  const inMonth = (data?.items ?? []).filter((item) =>
+    (item.periodEnd ?? item.reportDate ?? "").startsWith(reportMonth),
+  );
+  const sum = (pick: (item: SimplePayReportSummary) => string) =>
+    formatAmount(
+      String(inMonth.reduce((total, item) => total + Number(pick(item)), 0)),
+    );
+
+  return (
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
+        title="Elszámolások"
+        description="Utánvétek és fizetési szolgáltatói kimutatások automatikus párosítással. A SimplePay heti forgalmi kimutatása: fizetésenként a webshop-rendelés és a kimenő számla, a jutalék és az utalt összeg."
+        actions={
+          canManage ? (
+            <>
+              {syncStatus?.canRunNow ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  onClick={() => void syncNow()}
+                  disabled={working}
+                >
+                  Gmail ellenőrzése most
+                </PilotButton>
+              ) : null}
+              <input
+                ref={fileInput}
+                type="file"
+                accept=".csv"
+                multiple
+                className="hidden"
+                aria-label="SimplePay kimutatás feltöltése"
+                onChange={(event) => void upload(event.target.files)}
+              />
+              <PilotButton
+                size="regular"
+                onClick={() => fileInput.current?.click()}
+                disabled={working}
+              >
+                {working ? "Feldolgozás…" : "Kimutatás feltöltése"}
+              </PilotButton>
+            </>
+          ) : undefined
+        }
+      />
+      <SettlementTabs />
+      {syncStatus ? (
+        <SettlementSyncStrip
+          active={syncStatus.state === "ENABLED"}
+          title={
+            syncStatus.state === "ENABLED"
+              ? undefined
+              : "Az automatikus Gmail-behúzás ki van kapcsolva"
+          }
+          text={
+            syncStatus.state === "ENABLED"
+              ? `Automatikus Gmail-behúzás: ${syncStatus.intervalMinutes} percenként. ${
+                  syncStatus.lastScheduledRun
+                    ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
+                        syncStatus.lastScheduledRun.status === "FAILED"
+                          ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
+                          : `${syncStatus.lastScheduledRun.documentsRead} új kimutatás`
+                      }.`
+                    : "Automatikus futás még nincs rögzítve."
+                }`
+              : `Ok: ${SYNC_OFF[syncStatus.state]}. A heti kimutatást (report_ÉÉÉÉHHNN.csv) addig kézzel töltsd fel.`
+          }
+        />
+      ) : null}
+      {alerts}
+      <SettlementMonthCard
+        title="Havi fájl a könyveléshez"
+        subtitle="Hetente a kifizetett számlák, összesen, jutalék és utalt, ahogy Luca táblája"
+        summary={
+          data
+            ? `${inMonth.length} heti kimutatás · Összesen ${sum((item) => item.amountTotal)} · Jutalék ${sum((item) => item.commissionTotal)} · Utalt ${sum((item) => item.netTotal)}`
+            : undefined
+        }
+        controls={
+          <>
+            <SettlementMonthInput
+              label="A havi fájl hónapja"
+              value={reportMonth}
+              onChange={setReportMonth}
+            />
+            <PilotButton
               variant="secondary"
               onClick={() => void download()}
               disabled={downloading || !reportMonth}
             >
               {downloading ? "Letöltés…" : "XLSX letöltése"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Heti kimutatások
-          </h2>
-          <span className="text-xs text-dusk-500">
-            {data?.pagination.totalItems ?? 0} kimutatás
-          </span>
-        </CardHeader>
-        <CardContent>
-          {loading && !data ? <Skeleton className="h-56" /> : null}
-          {data && data.items.length === 0 ? (
-            <EmptyState
-              title="Még nincs SimplePay kimutatás"
-              description="Töltsd fel a SimplePay heti forgalmi kimutatását (report_ÉÉÉÉHHNN.csv)."
-            />
-          ) : null}
-          {data?.items.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Időszak</th>
-                    <th className="text-right">Összesen</th>
-                    <th className="text-right">Jutalék</th>
-                    <th className="text-right">Utalt</th>
-                    <th className="text-right">Párosítva</th>
-                    <th className="p-3">Állapot</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      data-testid="simplepay-kimutatas"
-                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
-                      onClick={() => void openDetail(item.id)}
-                    >
-                      <td className="p-3">{reportPeriod(item)}</td>
-                      <td className="text-right">
-                        {formatAmount(item.amountTotal)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(item.commissionTotal)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(item.netTotal)}
-                      </td>
-                      <td className="text-right">
-                        {item.resolvedLineCount} / {item.lineCount}
-                      </td>
-                      <td className="p-3">{reportStatus(item.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {selected ? (
-        <Card>
-          <CardHeader>
-            <div>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                {reportPeriod(selected)} kimutatás részletei
-              </h2>
-              <p className="mt-1 text-xs text-dusk-500">{selected.fileName}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {reportStatus(selected.status)}
-              {canManage && selected.status !== "COMPLETED" ? (
-                <Button
-                  size="sm"
-                  onClick={() => void reprocess()}
-                  disabled={working}
-                >
-                  Újrafeldolgozás
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {selected.warnings.length ? (
-              <Alert
-                variant="info"
-                title="A kimutatás figyelmeztetései"
-                description={selected.warnings.join(" ")}
-              />
-            ) : null}
-            {selected.status !== "COMPLETED" ? (
-              <Alert
-                variant="info"
-                title="Ellenőrzés szükséges"
-                description="Ahol a párosítás nem sikerült, add meg a kimenő számla számát, és hagyd jóvá. A számla nélküli rendelés számlája később is megérkezhet: akkor az Újrafeldolgozás párosítja."
-              />
-            ) : null}
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Tranzakció</th>
-                    <th>Időpont</th>
-                    <th className="text-right">Összeg</th>
-                    <th className="text-right">Jutalék</th>
-                    <th className="pl-4">Rendelés</th>
-                    <th className="pl-4">Kimenő számla / kézi jóváhagyás</th>
-                    <th className="p-3">Párosítás</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.lines.map((line) => (
-                    <tr
-                      key={line.id}
-                      data-testid="simplepay-sor"
-                      className="border-b last:border-0"
-                    >
-                      <td className="p-3 font-mono text-xs">
-                        {line.merchantTransactionId}
-                      </td>
-                      <td className="text-xs">{line.transactionAt}</td>
-                      <td className="text-right">
-                        {formatAmount(line.amount)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(line.commission)}
-                      </td>
-                      <td className="pl-4 font-mono text-xs">
-                        {line.orderNumber ?? "—"}
-                        {line.errorCode === "AMOUNT_MISMATCH" &&
-                        line.orderTotal ? (
-                          <p className="mt-1 font-sans text-dusk-500">
-                            végösszege {formatAmount(line.orderTotal)}
-                          </p>
-                        ) : null}
-                      </td>
-                      <td className="py-2 pl-4 pr-3">
-                        {line.status !== "RESOLVED" && canManage ? (
-                          <div className="flex min-w-[290px] items-center gap-2">
-                            <input
-                              aria-label={`Számlaszám – ${line.merchantTransactionId}`}
-                              className="min-w-0 flex-1 rounded-md border border-dusk-300 bg-white px-2 py-1.5 font-mono text-xs text-dusk-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                              value={invoiceDrafts[line.id] ?? ""}
-                              placeholder="ACRW-2026/00000"
-                              maxLength={100}
-                              onChange={(event) =>
-                                setInvoiceDrafts((current) => ({
-                                  ...current,
-                                  [line.id]: event.target.value,
-                                }))
-                              }
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => void approveLine(line)}
-                              disabled={
-                                working ||
-                                !(invoiceDrafts[line.id] ?? "").trim()
-                              }
-                            >
-                              Jóváhagyás
-                            </Button>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="font-mono text-xs">
-                              {line.invoiceNumbers.join(", ") || "—"}
-                            </span>
-                            {line.manualApprovedByDisplayName ? (
-                              <p className="mt-1 text-xs text-dusk-500">
-                                {line.manualApprovedByDisplayName} ·{" "}
-                                {formatDate(line.manualApprovedAt)}
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3">{lineResolution(line)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+            </PilotButton>
+          </>
+        }
+      />
+      {loading && !data ? <Skeleton className="h-56" /> : null}
+      {data && data.items.length === 0 ? (
+        <EmptyState
+          title="Még nincs SimplePay kimutatás"
+          description="Töltsd fel a SimplePay heti forgalmi kimutatását (report_ÉÉÉÉHHNN.csv)."
+        />
       ) : null}
-    </div>
+      {data?.items.length ? (
+        <SettlementTableCard
+          title="Heti kimutatások"
+          count={`${data.pagination.totalItems.toLocaleString("hu-HU")} kimutatás`}
+          paging={{
+            page: paged.page,
+            totalPages: paged.totalPages,
+            range: paged.range,
+            onPageChange: setListPage,
+          }}
+        >
+          <PilotDataTable
+            columns={listColumns}
+            rows={paged.items}
+            rowKey={(item) => item.id}
+            rowTestId="simplepay-kimutatas"
+            onRowActivate={(item) => void openDetail(item.id)}
+            rowLabel={(item) => `${reportPeriod(item)} kimutatás részletei`}
+            minWidth={860}
+          />
+        </SettlementTableCard>
+      ) : null}
+    </PilotThemeRoot>
   );
 }

@@ -25,6 +25,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+// a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: auth.session,
@@ -314,5 +318,67 @@ describe("GlsSettlementsPage", () => {
         "Gmail ellenőrzés kész: 3 GLS-levél, 1 új dokumentum, 1 már bent volt, 1 nem olvasható.",
       ),
     ).toBeTruthy();
+  });
+
+  it("GLS-DETAIL-VIEW: the detail takes the list's place, with the fee invoices, and goes back", async () => {
+    api.invoices.mockResolvedValue([
+      {
+        id: "inv-1",
+        invoiceNumber: "GLS-KIT-1",
+        invoiceDate: "2026-09-18",
+        currency: "HUF",
+        feeTotal: "12880",
+        cardFeeTotal: "0",
+        parcelCount: 42,
+        fileName: "gls.pdf",
+        createdAt: "2026-09-18T08:00:00.000Z",
+      },
+    ]);
+    render(createElement(GlsSettlementsPage));
+    fireEvent.click(
+      await screen.findByText("100031291_HUF_20260903_080032.xlsx"),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /GLS utalás ·/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Utánvét-utalások" }),
+    ).toBeNull();
+    expect(screen.getAllByTestId("gls-sor")).toHaveLength(2);
+    expect(screen.getByText("GLS-KIT-1")).toBeInTheDocument();
+    expect(screen.getByTestId("szamok-sav")).toHaveTextContent("1 / 2");
+    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
+    expect(
+      await screen.findByRole("heading", { name: "Utánvét-utalások" }),
+    ).toBeInTheDocument();
+  });
+
+  it("GLS-MONTH-SUMMARY: the month's transfers, parcels and fee invoices, from the loaded list", async () => {
+    api.invoices.mockResolvedValue([
+      {
+        id: "inv-1",
+        invoiceNumber: "GLS-KIT-1",
+        invoiceDate: "2026-09-18",
+        currency: "HUF",
+        feeTotal: "12880",
+        cardFeeTotal: "0",
+        parcelCount: 42,
+        fileName: "gls.pdf",
+        createdAt: "2026-09-18T08:00:00.000Z",
+      },
+    ]);
+    render(createElement(GlsSettlementsPage));
+    fireEvent.change(await screen.findByLabelText("A riport hónapja"), {
+      target: { value: "2026-09" },
+    });
+    expect(
+      await screen.findByText("1 utánvét-utalás · 2 csomag · 1 GLS díjszámla"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("A riport hónapja"), {
+      target: { value: "2026-08" },
+    });
+    expect(
+      screen.getByText("0 utánvét-utalás · 0 csomag · 0 GLS díjszámla"),
+    ).toBeInTheDocument();
   });
 });
