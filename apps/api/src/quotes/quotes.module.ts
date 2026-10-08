@@ -8,6 +8,8 @@ import {
 } from "./quote-publish.service.js";
 import { QuoteAcceptanceController } from "./quote-acceptance.controller.js";
 import { QuoteAcceptanceService } from "./quote-acceptance.service.js";
+import { QuoteHandoffController } from "./quote-handoff.controller.js";
+import { QuoteHandoffService } from "./quote-handoff.service.js";
 import { QuoteBomItemsController } from "./quote-bom-items.controller.js";
 import { QuoteMailController } from "./quote-mail.controller.js";
 import { QuoteMailService } from "./quote-mail.service.js";
@@ -35,6 +37,7 @@ import { QuotePublicService } from "./public/quote-public.service.js";
     QuoteSnippetsController,
     QuoteTemplatesController,
     QuoteAcceptanceController,
+    QuoteHandoffController,
     QuoteMailController,
     QuoteLinkController,
     QuotePublicController,
@@ -48,6 +51,7 @@ import { QuotePublicService } from "./public/quote-public.service.js";
     QuoteTemplatesService,
     QuotePublishService,
     QuoteAcceptanceService,
+    QuoteHandoffService,
     QuoteMailService,
     QuoteLinkService,
     QuotePublicService,
