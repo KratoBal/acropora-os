@@ -1012,14 +1012,16 @@ export function PurchaseInvoiceEuEditorPage() {
       setError("Legalább egy tétel szükséges a számlához.");
       return;
     }
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       if (
         !line.variantId &&
         !line.createLocalProduct &&
         !line.sourceDescription.trim()
       ) {
+        // which line: a filled manual line beside an empty one (e.g. a line
+        // unlinked from its product) looked like the filled one failed
         setError(
-          "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
+          `A(z) ${index + 1}. tétel megnevezése hiányzik: a terméktörzsben nem szereplő tételnél a számlán szereplő megnevezés megadása kötelező.`,
         );
         return;
       }

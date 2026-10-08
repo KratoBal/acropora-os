@@ -347,7 +347,7 @@ export class PurchasingService {
       : null;
 
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
-    for (const line of input.lines) {
+    for (const [index, line] of input.lines.entries()) {
       const navSource = navLineSource(navLines, line.navLineNumber);
       if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
         throw new BadRequestException(
@@ -397,8 +397,10 @@ export class PurchasingService {
       if (!line.variantId && !line.createLocalProduct) {
         const sourceDescription = line.sourceDescription?.trim();
         if (!sourceDescription)
+          // which line: with several, a filled one beside an empty one
+          // looked like the filled one failed (Luca, 2026-10-08)
           throw new BadRequestException(
-            "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
+            `A(z) ${index + 1}. tétel megnevezése hiányzik: a terméktörzsben nem szereplő tételnél a számlán szereplő megnevezés megadása kötelező.`,
           );
         if (!line.unit.trim())
           throw new BadRequestException(

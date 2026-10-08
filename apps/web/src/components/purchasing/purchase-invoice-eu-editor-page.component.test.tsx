@@ -437,6 +437,38 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(screen.getByText("Szlovák tétel")).toBeTruthy();
   });
 
+  /*
+    Luca, 2026-10-08: "akkor is kiadta ezt a hibat", with her name typed. With
+    several lines, an EMPTY one elsewhere stopped the save, and the message
+    did not say which; it looked like the filled one failed.
+  */
+  it("kitöltött kézi tétel mellett egy másik, üres sor számát nevezi meg", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    await screen.findByText(supplier.name);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+    );
+    const names = screen.getAllByPlaceholderText("Megnevezés a számlán");
+    // the NAV line is the 1st; the 2nd is named, the 3rd is left empty
+    fireEvent.change(names.at(-2)!, { target: { value: "Szlovák tétel" } });
+    fireEvent.change(screen.getAllByLabelText("Egység").at(-2)!, {
+      target: { value: "db" },
+    });
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+    expect(
+      await screen.findByText(/^A\(z\) 3\. tétel megnevezése hiányzik/),
+    ).toBeTruthy();
+    expect(purchasingApiMock.create).not.toHaveBeenCalled();
+  });
+
   it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
