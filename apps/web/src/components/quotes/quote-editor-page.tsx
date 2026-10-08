@@ -25,7 +25,13 @@ import {
   type QuoteSnippetDto,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
@@ -632,9 +638,14 @@ function BlockCard({
   const [text, setText] = useState(initialText);
   // the title is saved trimmed, so it is compared trimmed
   const dirty = title.trim() !== (block.title ?? "") || text !== initialText;
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  /*
+    Layout effects, not passive ones: a deletion answers asynchronously, and
+    React defers a passive cleanup past the commit, so a click right after the
+    block left the page still found it unsaved. These run with the commit.
+  */
+  useLayoutEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   // a deleted block takes its unsaved state with it
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+  useLayoutEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const label = QUOTE_BLOCK_LABEL[block.kind];
   const subtotal = block.items
     .filter((i) => !i.isOptional)
@@ -809,8 +820,9 @@ function MilestonesCard({
     0,
   );
   const dirty = JSON.stringify(rows) !== JSON.stringify(initial);
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+  // with the commit, like the blocks' (see BlockCard)
+  useLayoutEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useLayoutEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const set = (index: number, key: "label" | "percent", value: string) =>
     setRows(rows.map((r, i) => (i === index ? { ...r, [key]: value } : r)));
   return (
