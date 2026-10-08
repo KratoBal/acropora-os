@@ -8,6 +8,7 @@ import { MissingInvoicesRepository } from "../missing-invoices/missing-invoices.
 import {
   candidateDuplicates,
   incomingDuplicates,
+  incomingTypoSuspects,
   outgoingDuplicates,
   type DuplicateGroup,
 } from "./billing-duplicates.js";
@@ -27,6 +28,9 @@ import {
  *                    own merge (NAV + Számlázz.hu + mailbox are one candidate):
  *                    the pairing, the paid view and the accountant's export
  *                    all read these
+ *   BEJÖVŐ GYANÚS    a purchase row and another source's row of one supplier,
+ *                    day and gross whose numbers differ by one or two
+ *                    characters: a mistyped number, listed but not counted
  *
  * Exit 0: no duplicate; 1: at least one (the lines name them); 2: the check
  * itself failed. The NAV + Számlázz.hu pairs that ARE merged into one
@@ -71,6 +75,9 @@ async function main(argv: readonly string[]): Promise<number> {
         documentNumber: true,
         supplierTaxNumber: true,
         supplierName: true,
+        issueDate: true,
+        currency: true,
+        grossAmount: true,
       },
     }),
     new MissingInvoicesRepository().candidates(since, until),
@@ -78,6 +85,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const out = outgoingDuplicates(outgoing);
   const inList = incomingDuplicates(incoming);
   const inCandidates = candidateDuplicates(candidates);
+  const typos = incomingTypoSuspects(incoming);
   const mergedPairs = candidates.filter(
     (candidate) => (candidate.aliasIds?.length ?? 0) > 0,
   ).length;
@@ -94,6 +102,13 @@ async function main(argv: readonly string[]): Promise<number> {
       (row) => `${row.source}:${row.id}`,
     ),
     `  (több forrásból egy jelöltté vonva: ${mergedPairs})`,
+    // a suspicion, not a duplicate: it is listed for a person to look at,
+    // and does not change the exit code (2408d6ad)
+    `BEJÖVŐ GYANÚS (elgépelt szám?): ${typos.length}`,
+    ...typos.map(
+      (group) =>
+        `  ${group.rows.map((row) => `${row.source}:${row.externalId} ${row.documentNumber}`).join("  ~  ")}`,
+    ),
   ];
   process.stdout.write(`${lines.join("\n")}\n`);
   return out.length + inList.length + inCandidates.length > 0 ? 1 : 0;
