@@ -129,6 +129,12 @@ export class PurchaseInvoiceEditService {
           throw new ConflictException("Visszavont számla nem módosítható.");
         if (paidAt !== undefined && (input.isPaid ?? before.isPaid))
           data.paidAt = paidAt;
+        // ONLY A PAID DATE, ON AN INVOICE NOT PAID UNDER THE LOCK: nothing
+        // is left to write, so no empty update and no audit row with no
+        // fields; the same 400 as above, and the transaction rolls back
+        // (acrobot's #1632 note)
+        if (!fieldsOf().length)
+          throw new BadRequestException("Nincs mit módosítani.");
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
           data: { ...data, updatedAt: new Date() },
