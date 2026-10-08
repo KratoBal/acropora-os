@@ -331,8 +331,14 @@ describe(
       const { quoteId, versionId } = await draftQuote(`P2 shared ${suffix}`);
       const store = app.get<DocumentStore>(DOCUMENT_STORE, { strict: false });
       const put = store.put.bind(store);
-      // between step 2 and 3: the other click failed, and its cleanup ran
+      /*
+        Between step 2 and 3: the other click failed, and its cleanup ran.
+        ONCE: the write-back in step 3 is a put too, and a fake that deletes
+        after every put would remove that as well (the first version of this
+        test did, so it was red with the fix and without it).
+      */
       store.put = async (key, bytes) => {
+        store.put = put;
         await put(key, bytes);
         await store.delete(key);
       };
