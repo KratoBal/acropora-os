@@ -67,9 +67,14 @@ export class PurchaseInvoiceEditService {
       data.isPaid = input.isPaid;
       if (!input.isPaid) data.paidAt = null;
     }
-    if (input.paidAt !== undefined && (input.isPaid ?? invoice.isPaid))
-      data.paidAt =
-        input.paidAt === null ? null : day(input.paidAt, "fizetési dátuma");
+    // parsed here, applied under the lock: whether it applies depends on the
+    // payment state read there, not on the one read above (barracuda, 28233)
+    const paidAt =
+      input.paidAt === undefined
+        ? undefined
+        : input.paidAt === null
+          ? null
+          : day(input.paidAt, "fizetési dátuma");
     if (input.note !== undefined) data.note = input.note?.trim() || null;
 
     const lines = new Map(invoice.lines.map((l) => [l.id, l]));
@@ -89,11 +94,12 @@ export class PurchaseInvoiceEditService {
       lineNames.push({ id: line.id, name });
     }
 
-    const fields = [
+    const fieldsOf = () => [
       ...Object.keys(data),
       ...(lineNames.length ? ["lines.sourceDescription"] : []),
     ];
-    if (!fields.length) throw new BadRequestException("Nincs mit módosítani.");
+    if (!fieldsOf().length && paidAt === undefined)
+      throw new BadRequestException("Nincs mit módosítani.");
 
     try {
       await this.database.$transaction(async (tx) => {
@@ -121,6 +127,8 @@ export class PurchaseInvoiceEditService {
         });
         if (!before || before.status !== "POSTED")
           throw new ConflictException("Visszavont számla nem módosítható.");
+        if (paidAt !== undefined && (input.isPaid ?? before.isPaid))
+          data.paidAt = paidAt;
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
           data: { ...data, updatedAt: new Date() },
@@ -165,7 +173,7 @@ export class PurchaseInvoiceEditService {
             // payment with their OLD and NEW values; the note and the line
             // names by field name only
             metadata: {
-              fields,
+              fields: fieldsOf(),
               changes: changesOf(before, data),
             } as Prisma.InputJsonValue,
           },
