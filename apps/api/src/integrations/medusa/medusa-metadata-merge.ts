@@ -4,7 +4,8 @@
  * === MIERT MOST, ES MIERT NEM KESOBB ===
  *
  * A vetites eddig a TELJES metaadat-objektumot kikuldte, kizarolag a sajat
- * kulcsaival, es a cel oldalon a mezo CSERE-szemantikaju. Vagyis minden
+ * kulcsaival, es a cel oldalon a mezot CSERE-szemantikajunak hittuk (lasd
+ * lent: ez hamis volt, a cel oldal osszefesul). Vagyis minden
  * kulcs, amit valaki a Medusa feluleten kezzel hozzaadott, egy futassal
  * csendben eltunt. A vedelem, ami eddig allt, KIZAROLAG az "egyaltalan nincs
  * mondanivalonk" esetre szolt: ha egyetlen kulcsunknak volt erteke, az egesz
@@ -40,6 +41,18 @@
  *
  * Amit ez NEM tesz: nem talalgat. Egy ismeretlen kulcsrol nem dontjuk el, hogy
  * "valoszinuleg a mienk volt" -- ha nem illik az elotagra, marad.
+ *
+ * === A CEL OLDAL OSSZEFESUL, NEM CSEREL (merve 2026-10-08) ===
+ *
+ * A fenti "CSERE-szemantika" feltevese HAMIS volt. A Medusa 2.20.1 termek-
+ * repository-ja (`@medusajs/product` `repositories/product.js`, `deepUpdate`)
+ * a kuldott metaadatot `mergeMetadata`-val fesuli ossze a meglevovel: a
+ * HIANYZO kulcs MEGMARAD, es egy kulcsot csak az URES SZOVEG (`""`) torol.
+ *
+ * Ezert egy levett sajat kulcs eddig soha nem tunt el (PR 9 stage-meres: a
+ * `acropora_images` a #1619 utani vetites utan is ott allt). Mostantol a
+ * levett kulcs `""` ertekkel megy ki. Az idegen kulcsok kikuldese ettol
+ * fuggetlenul artalmatlan: ugyanazt az erteket irja vissza.
  */
 
 /**
@@ -129,7 +142,10 @@ export interface MetadataMergeResult {
    * metaadatot, a mezo elhagyasa viszont valtozatlanul hagyja.
    */
   metadata: Record<string, unknown> | null;
-  /** Azok a MI kulcsaink, amiket ez a futas eltavolit a cel oldalrol. */
+  /**
+   * Azok a MI kulcsaink, amiket ez a futas eltavolit a cel oldalrol. A
+   * `metadata`-ban `""` ertekkel allnak: a cel oldal csak igy torli oket.
+   */
   removedKeys: string[];
 }
 
@@ -160,7 +176,11 @@ export function mergeProductMetadata(
     return { metadata: null, removedKeys: [] };
 
   return {
-    metadata: { ...idegen, ...ours },
+    metadata: {
+      ...idegen,
+      ...ours,
+      ...Object.fromEntries(eltavolitando.map((kulcs) => [kulcs, ""])),
+    },
     removedKeys: eltavolitando,
   };
 }

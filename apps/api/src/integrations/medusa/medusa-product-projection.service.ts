@@ -385,8 +385,8 @@ export type ProjectionOutcome =
       /**
        * A METAADAT SORSA EBBEN A FUTASBAN -- mert a hallgatas itt draga.
        *
-       * A mezo CSERE-szemantikaju a cel oldalon, tehat harom kulonbozo dolog
-       * tortenhet, es kivulrol MINDHAROM ugyanugy nez ki (a termek frissult):
+       * Harom kulonbozo dolog tortenhet, es kivulrol MINDHAROM ugyanugy nez ki
+       * (a termek frissult):
        *
        *   "merged"      osszefesultunk: az idegen kulcsok megmaradtak
        *   "unreadable"  a lekerdezes elhasalt, ezert NEM kuldtunk metaadatot
@@ -753,10 +753,10 @@ export class MedusaProductProjectionService {
     /**
      * A METAADAT MINDEN DARABJA KULON FELTETELES, ES EZ NEM STILUS.
      *
-     * Egy `null` erteket kikuldeni nem ugyanaz, mint elhagyni a kulcsot: a
-     * `metadata` a cel oldalon CSERE-szemantikaju, tehat egy kikuldott ures
-     * ertek felulirna azt, amit a bolt oldalan barki mas oda tett. Ezert
-     * minden mezo csak akkor kerul bele, ha van erteke.
+     * Egy `null` vagy ures erteket kikuldeni nem ugyanaz, mint elhagyni a
+     * kulcsot: a cel oldal osszefesul, es az ures szoveg TOROL (Medusa
+     * `mergeMetadata`). Ezert minden mezo csak akkor kerul bele, ha van erteke;
+     * a mar nem mondott sajat kulcsot az osszefesules veszi le, `""`-vel.
      */
     const seoMetadata = {
       ...(product.seoRobots ? { seo_robots: product.seoRobots } : {}),
@@ -872,10 +872,9 @@ export class MedusaProductProjectionService {
       /**
        * A CEL OLDALI METAADAT LEKERDEZESE, MIELOTT IRUNK.
        *
-       * A mezo CSERE-szemantikaju: amit kikuldunk, az mindent felulir. Eddig
-       * a vetites soha nem olvasta vissza, tehat minden idegen kulcs csendben
-       * eltunt -- es a `unique_piece` jelzo bekotese ezt allandova tenne, mert
-       * a WYSIWYG termekeknel attol kezdve mindig van mondanivalonk.
+       * Ebbol tudjuk, mely sajat kulcsunkat kell levenni: a cel oldal
+       * OSSZEFESUL (merve 2026-10-08), tehat egy kulcs csak akkor tunik el, ha
+       * `""` ertekkel kuldjuk, ahhoz pedig tudni kell, hogy ott all.
        *
        * A BUKAS IRANYA A MEGORZES FELE ALL: ha a lekerdezes elhasal, NEM
        * kuldunk metaadatot. Egy kimaradt frissites a kovetkezo futason

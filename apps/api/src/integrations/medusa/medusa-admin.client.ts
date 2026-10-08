@@ -1101,9 +1101,10 @@ export interface MedusaAdminClient {
   /**
    * A CEL OLDALI METAADAT, KIZAROLAG OLVASASRA.
    *
-   * AMIERT KELL: a `metadata` mezo a cel oldalon CSERE-szemantikaju, tehat egy
-   * kikuldott objektum mindent felulir. Osszefesulni pedig csak abbol lehet,
-   * amit elobb LEKERDEZTUNK -- es a vetites eddig soha nem kerdezte le.
+   * AMIERT KELL: ebbol tudjuk, mely SAJAT kulcsunk all a cel oldalon, amit ez
+   * a futas mar nem mond. A cel oldal a `metadata`-t OSSZEFESULI (Medusa
+   * `mergeMetadata`, merve 2026-10-08), tehat a hianyzo kulcs megmarad; egy
+   * levett kulcsot csak `""` ertekkel lehet torolni, ahhoz pedig tudni kell rola.
    * Az osszefesules szabalya a `medusa-metadata-merge.ts` modulban all.
    *
    * A `fields` szukites szandekos: egy termek teljes valasza sokszorosa ennek,
