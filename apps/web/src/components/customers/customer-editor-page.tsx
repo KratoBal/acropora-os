@@ -146,6 +146,8 @@ export function CustomerEditorPage() {
   const [displayName, setDisplayName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [taxNumber, setTaxNumber] = useState("");
+  // the community (EU) tax number, apart from the Hungarian one (<adoszamEU>)
+  const [euTaxNumber, setEuTaxNumber] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [marketingEmailConsent, setMarketingEmailConsent] = useState(false);
@@ -248,6 +250,10 @@ export function CustomerEditorPage() {
         displayName: displayName.trim(),
         companyName: companyName.trim() || undefined,
         taxNumber: taxNumber.trim() || undefined,
+        euTaxNumber:
+          type === "COMPANY" && euTaxNumber.trim()
+            ? euTaxNumber.trim()
+            : undefined,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         marketingEmailConsent,
@@ -348,6 +354,16 @@ export function CustomerEditorPage() {
                     {navLookupNotice}
                   </p>
                 ) : null}
+              </FormField>
+            ) : null}
+            {type === "COMPANY" ? (
+              <FormField label="Közösségi adószám">
+                <Input
+                  aria-label="Közösségi adószám"
+                  value={euTaxNumber}
+                  onChange={(event) => setEuTaxNumber(event.target.value)}
+                  placeholder="pl. SK2020123456"
+                />
               </FormField>
             ) : (
               <FormField label="Név">

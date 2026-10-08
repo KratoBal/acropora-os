@@ -61,6 +61,8 @@ const base: BillingDocumentForIssue = {
     address: "Fő utca 1.",
     email: "vevo@example.com",
     taxNumber: "12345678-1-42",
+    euTaxNumber: null,
+    vatSubject: null,
   },
   lines: [item, discount],
 };
@@ -259,5 +261,33 @@ describe("toSzamlazzAgentInput", () => {
     assert.match(xml, /<dijbekeroSzamlaszam>D-43<\/dijbekeroSzamlaszam>/);
     assert.match(xml, /<sendEmail>false<\/sendEmail>/);
     assert.doesNotMatch(xml, /<sendEmail>true/);
+  });
+
+  it("an EU buyer's country, adoalany and community tax number reach the vevo element, in its order", () => {
+    const eu = children(
+      xmlOf({
+        buyer: {
+          ...base.buyer,
+          country: "Szlovákia",
+          taxNumber: null,
+          euTaxNumber: "SK2020123456",
+          vatSubject: 6,
+        },
+      }),
+      "vevo",
+    );
+    const hu = children(xmlOf({}), "vevo");
+    assert.deepEqual(
+      [
+        eu.filter((tag) =>
+          ["orszag", "sendEmail", "adoalany", "adoszam", "adoszamEU"].includes(
+            tag,
+          ),
+        ),
+        hu.some((tag) => ["orszag", "adoalany", "adoszamEU"].includes(tag)),
+      ],
+      [["orszag", "sendEmail", "adoalany", "adoszamEU"], false],
+      "ADAPTER-EU-BUYER",
+    );
   });
 });

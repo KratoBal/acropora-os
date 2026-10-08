@@ -2418,6 +2418,8 @@ model Customer {
   /// kitöltve, ehhez a vevőhöz munkalap nem zárható le.
   worksheetPartnerCode  String?      @unique @db.VarChar(8)
   taxNumber             String?
+  /// the community (EU) tax number, sent as `<adoszamEU>` (Számlázz.hu Agent)
+  euTaxNumber           String?
   email                 String?
   phone                 String?
   marketingEmailConsent Boolean      @default(false)

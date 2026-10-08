@@ -41,9 +41,6 @@ import { fileURLToPath } from "node:url";
 
 export const PDF_FONT_FILENAME = "DejaVuSans.ttf";
 
-/** A csomag gyökeréhez képest -- lásd a keresés indoklását lentebb. */
-const FONT_RELATIVE_PATH = join("assets", "fonts", PDF_FONT_FILENAME);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -66,11 +63,29 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * megmondania, hol keresse a következő olvasó.
  */
 export function resolvePdfFontPath(startDir: string = HERE): string {
+  return resolvePdfFontAsset(PDF_FONT_FILENAME, startDir);
+}
+
+/**
+ * THE NOTO SANS PAIR (the PDF design system, Figma FwfCAidFkuS7WVcGa2hWTN,
+ * 2026-10-08): static TTFs from notofonts, OFL (`NotoSans-OFL.txt` beside
+ * them). The quote PDF uses them first; the other documents move over later.
+ */
+export const NOTO_SANS_REGULAR = "NotoSans-Regular.ttf";
+export const NOTO_SANS_BOLD = "NotoSans-Bold.ttf";
+
+/** A font file from `assets/fonts`, found the same way as the body font. */
+export function resolvePdfFontAsset(
+  filename: string,
+  startDir: string = HERE,
+): string {
+  // a csomag gyökeréhez képest -- lásd a keresés indoklását fentebb
+  const relative = join("assets", "fonts", filename);
   const tried: string[] = [];
   let dir = startDir;
 
   for (;;) {
-    const candidate = join(dir, FONT_RELATIVE_PATH);
+    const candidate = join(dir, relative);
     tried.push(candidate);
     if (existsSync(candidate)) return candidate;
 
@@ -80,7 +95,7 @@ export function resolvePdfFontPath(startDir: string = HERE): string {
   }
 
   throw new Error(
-    `A PDF betűkészlete (${PDF_FONT_FILENAME}) nem található. ` +
+    `A PDF betűkészlete (${filename}) nem található. ` +
       `A beépített betű NEM használható helyette: az "ő" és az "ű" némán ` +
       `elromlana rajta. Végigpróbált utak: ${tried.join(", ")}`,
   );
