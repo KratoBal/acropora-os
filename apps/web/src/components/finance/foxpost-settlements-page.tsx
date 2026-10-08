@@ -35,7 +35,8 @@ import {
   SettlementApproveField,
   SettlementMonthCard,
   SettlementMonthInput,
-  settlementPage,
+  settlementRange,
+  SETTLEMENT_PAGE_SIZE,
   SettlementNotice,
   SettlementStats,
   SettlementSyncStrip,
@@ -154,7 +155,10 @@ export function FoxpostSettlementsPage() {
     setError(null);
     try {
       const [settlements, monthlyReports, status] = await Promise.all([
-        foxpostSettlementsApi.list(token, { page: 1, pageSize: 50 }),
+        foxpostSettlementsApi.list(token, {
+          page: listPage,
+          pageSize: SETTLEMENT_PAGE_SIZE,
+        }),
         foxpostSettlementsApi.reports(token),
         foxpostSettlementsApi.syncStatus(token),
       ]);
@@ -174,7 +178,7 @@ export function FoxpostSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token]);
+  }, [canView, token, listPage]);
 
   useEffect(() => {
     void load();
@@ -559,7 +563,6 @@ export function FoxpostSettlementsPage() {
       cell: (item) => settlementStatus(item.status),
     },
   ];
-  const paged = settlementPage(data?.items ?? [], listPage);
 
   return (
     <PilotThemeRoot className="space-y-6">
@@ -664,15 +667,15 @@ export function FoxpostSettlementsPage() {
           title="Utánvét-utalások"
           count={`${data.pagination.totalItems.toLocaleString("hu-HU")} utalás`}
           paging={{
-            page: paged.page,
-            totalPages: paged.totalPages,
-            range: paged.range,
+            page: data.pagination.page,
+            totalPages: data.pagination.totalPages,
+            range: settlementRange(data.pagination),
             onPageChange: setListPage,
           }}
         >
           <PilotDataTable
             columns={listColumns}
-            rows={paged.items}
+            rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="foxpost-utalas"
             onRowActivate={(item) => void openDetail(item.id)}

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   GlsCodReportDetail,
   GlsCodReportListResponse,
@@ -380,5 +386,68 @@ describe("GlsSettlementsPage", () => {
     expect(
       screen.getByText("0 utánvét-utalás · 0 csomag · 0 GLS díjszámla"),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * barracuda's #1653 review: the list endpoint neither filters by month nor
+   * sums, so the summary counts from the latest 100 and says so when that
+   * window does not reach back to the month's start.
+   */
+  it("GLS-MONTH-WINDOW: 120 transfers, 50 loaded, an older month: the summary does not claim the whole month", async () => {
+    const day = (i: number) =>
+      new Date(Date.UTC(2026, 9, 5) - i * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    const latest = Array.from({ length: 50 }, (_, i) => ({
+      ...reports.items[0]!,
+      id: `report-${i}`,
+      fileName: `gls-${i}.xlsx`,
+      transferDate: day(i),
+    }));
+    api.list.mockImplementation(
+      async (_token: string, query: { page?: number; pageSize?: number }) => ({
+        items:
+          query.pageSize === 100
+            ? latest
+            : latest.slice(
+                ((query.page ?? 1) - 1) * (query.pageSize ?? 20),
+                (query.page ?? 1) * (query.pageSize ?? 20),
+              ),
+        pagination: {
+          page: query.page ?? 1,
+          pageSize: query.pageSize ?? 20,
+          totalItems: 120,
+          totalPages: Math.ceil(120 / (query.pageSize ?? 20)),
+        },
+      }),
+    );
+    render(createElement(GlsSettlementsPage));
+    const month = await screen.findByLabelText("A riport hónapja");
+    // the loaded window reaches back to 2026-08-17: September is whole
+    fireEvent.change(month, { target: { value: "2026-09" } });
+    expect(
+      await screen.findByText(/^30 utánvét-utalás · 60 csomag/),
+    ).toBeInTheDocument();
+    // August starts before the window: the summary says it is partial
+    fireEvent.change(month, { target: { value: "2026-08" } });
+    expect(
+      screen.getByText(
+        /^A legutóbbi 50 utalásból, a hónap régebbi utalásai nélkül: 15 utánvét-utalás/,
+      ),
+    ).toBeInTheDocument();
+    // the pager counts from the server's total and asks it for the next page
+    expect(screen.getByText(/^1–20 \/ 120$/)).toBeInTheDocument();
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
+    await waitFor(() =>
+      expect(api.list).toHaveBeenCalledWith("token-OWNER", {
+        page: 2,
+        pageSize: 20,
+      }),
+    );
+    expect(await screen.findByText(/^21–40 \/ 120$/)).toBeInTheDocument();
   });
 });

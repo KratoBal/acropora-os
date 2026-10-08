@@ -36,7 +36,10 @@ import {
   SettlementApproveField,
   SettlementMonthCard,
   SettlementMonthInput,
-  settlementPage,
+  monthCovered,
+  settlementRange,
+  SETTLEMENT_PAGE_SIZE,
+  SETTLEMENT_RECENT_SIZE,
   SettlementNotice,
   SettlementStats,
   SettlementSyncStrip,
@@ -118,6 +121,7 @@ export function GlsSettlementsPage() {
     session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [data, setData] = useState<GlsCodReportListResponse | null>(null);
+  const [recent, setRecent] = useState<GlsCodReportListResponse | null>(null);
   const [invoices, setInvoices] = useState<GlsInvoiceSummary[]>([]);
   const [syncStatus, setSyncStatus] = useState<GlsSyncStatus | null>(null);
   const [selected, setSelected] = useState<GlsCodReportDetail | null>(null);
@@ -140,12 +144,21 @@ export function GlsSettlementsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [reports, glsInvoices, status] = await Promise.all([
-        glsSettlementsApi.list(token),
+      const [reports, latest, glsInvoices, status] = await Promise.all([
+        glsSettlementsApi.list(token, {
+          page: listPage,
+          pageSize: SETTLEMENT_PAGE_SIZE,
+        }),
+        // the monthly summary's window: the latest ones, newest first
+        glsSettlementsApi.list(token, {
+          page: 1,
+          pageSize: SETTLEMENT_RECENT_SIZE,
+        }),
         glsSettlementsApi.invoices(token),
         glsSettlementsApi.syncStatus(token),
       ]);
       setData(reports);
+      setRecent(latest);
       setInvoices(glsInvoices);
       setSyncStatus(status);
     } catch (cause) {
@@ -157,7 +170,7 @@ export function GlsSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token]);
+  }, [canView, token, listPage]);
 
   useEffect(() => {
     void load();
@@ -550,9 +563,11 @@ export function GlsSettlementsPage() {
       cell: (item) => reportStatus(item.status),
     },
   ];
-  const paged = settlementPage(data?.items ?? [], listPage);
   // a havi kártya sora a betöltött listából: a hónap utalásai és díjszámlái
-  const inMonth = (data?.items ?? []).filter((item) =>
+  const covered = recent
+    ? monthCovered(recent, reportMonth, (item) => item.transferDate)
+    : false;
+  const inMonth = (recent?.items ?? []).filter((item) =>
     item.transferDate.startsWith(reportMonth),
   );
   const monthInvoices = invoices.filter((invoice) =>
@@ -626,8 +641,12 @@ export function GlsSettlementsPage() {
         title="Havi könyvelési fájl"
         subtitle="Utalásonként a kifizetett számlák, a GLS díjszámlák külön lapon"
         summary={
-          data
-            ? `${inMonth.length} utánvét-utalás · ${inMonth
+          recent
+            ? `${
+                covered
+                  ? ""
+                  : `A legutóbbi ${recent.items.length} utalásból, a hónap régebbi utalásai nélkül: `
+              }${inMonth.length} utánvét-utalás · ${inMonth
                 .reduce((sum, item) => sum + item.lineCount, 0)
                 .toLocaleString(
                   "hu-HU",
@@ -662,15 +681,15 @@ export function GlsSettlementsPage() {
           title="Utánvét-utalások"
           count={`${data.pagination.totalItems.toLocaleString("hu-HU")} utalás`}
           paging={{
-            page: paged.page,
-            totalPages: paged.totalPages,
-            range: paged.range,
+            page: data.pagination.page,
+            totalPages: data.pagination.totalPages,
+            range: settlementRange(data.pagination),
             onPageChange: setListPage,
           }}
         >
           <PilotDataTable
             columns={listColumns}
-            rows={paged.items}
+            rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="gls-utalas"
             onRowActivate={(item) => void openDetail(item.id)}

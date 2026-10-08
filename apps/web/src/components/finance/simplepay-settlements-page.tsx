@@ -35,7 +35,10 @@ import {
   SettlementApproveField,
   SettlementMonthCard,
   SettlementMonthInput,
-  settlementPage,
+  monthCovered,
+  settlementRange,
+  SETTLEMENT_PAGE_SIZE,
+  SETTLEMENT_RECENT_SIZE,
   SettlementNotice,
   SettlementStats,
   SettlementSyncStrip,
@@ -120,6 +123,9 @@ export function SimplePaySettlementsPage() {
     session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [data, setData] = useState<SimplePayReportListResponse | null>(null);
+  const [recent, setRecent] = useState<SimplePayReportListResponse | null>(
+    null,
+  );
   const [syncStatus, setSyncStatus] = useState<SimplePaySyncStatus | null>(
     null,
   );
@@ -143,11 +149,20 @@ export function SimplePaySettlementsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [reports, status] = await Promise.all([
-        simplePaySettlementsApi.list(token),
+      const [reports, latest, status] = await Promise.all([
+        simplePaySettlementsApi.list(token, {
+          page: listPage,
+          pageSize: SETTLEMENT_PAGE_SIZE,
+        }),
+        // the monthly summary's window: the latest ones, newest first
+        simplePaySettlementsApi.list(token, {
+          page: 1,
+          pageSize: SETTLEMENT_RECENT_SIZE,
+        }),
         simplePaySettlementsApi.syncStatus(token),
       ]);
       setData(reports);
+      setRecent(latest);
       setSyncStatus(status);
     } catch (cause) {
       setError(
@@ -158,7 +173,7 @@ export function SimplePaySettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token]);
+  }, [canView, token, listPage]);
 
   useEffect(() => {
     void load();
@@ -520,9 +535,12 @@ export function SimplePaySettlementsPage() {
       cell: (item) => reportStatus(item.status),
     },
   ];
-  const paged = settlementPage(data?.items ?? [], listPage);
   // a havi kártya sora a betöltött listából: a hónapba eső heti kimutatások
-  const inMonth = (data?.items ?? []).filter((item) =>
+  // the server orders by the report's day, so the window is judged by it
+  const covered = recent
+    ? monthCovered(recent, reportMonth, (item) => item.reportDate)
+    : false;
+  const inMonth = (recent?.items ?? []).filter((item) =>
     (item.periodEnd ?? item.reportDate ?? "").startsWith(reportMonth),
   );
   const sum = (pick: (item: SimplePayReportSummary) => string) =>
@@ -597,8 +615,12 @@ export function SimplePaySettlementsPage() {
         title="Havi fájl a könyveléshez"
         subtitle="Hetente a kifizetett számlák, összesen, jutalék és utalt, ahogy Luca táblája"
         summary={
-          data
-            ? `${inMonth.length} heti kimutatás · Összesen ${sum((item) => item.amountTotal)} · Jutalék ${sum((item) => item.commissionTotal)} · Utalt ${sum((item) => item.netTotal)}`
+          recent
+            ? `${
+                covered
+                  ? ""
+                  : `A legutóbbi ${recent.items.length} kimutatásból, a hónap régebbi kimutatásai nélkül: `
+              }${inMonth.length} heti kimutatás · Összesen ${sum((item) => item.amountTotal)} · Jutalék ${sum((item) => item.commissionTotal)} · Utalt ${sum((item) => item.netTotal)}`
             : undefined
         }
         controls={
@@ -630,15 +652,15 @@ export function SimplePaySettlementsPage() {
           title="Heti kimutatások"
           count={`${data.pagination.totalItems.toLocaleString("hu-HU")} kimutatás`}
           paging={{
-            page: paged.page,
-            totalPages: paged.totalPages,
-            range: paged.range,
+            page: data.pagination.page,
+            totalPages: data.pagination.totalPages,
+            range: settlementRange(data.pagination),
             onPageChange: setListPage,
           }}
         >
           <PilotDataTable
             columns={listColumns}
-            rows={paged.items}
+            rows={data.items}
             rowKey={(item) => item.id}
             rowTestId="simplepay-kimutatas"
             onRowActivate={(item) => void openDetail(item.id)}

@@ -256,4 +256,25 @@ describe("SimplePaySettlementsPage", () => {
       screen.getByText(/^0 heti kimutatás · Összesen 0 Ft/),
     ).toBeInTheDocument();
   });
+
+  it("SP-MONTH-WINDOW: the loaded window ends after the month's start: the summary says it is partial", async () => {
+    api.list.mockResolvedValue({
+      ...reports,
+      pagination: { ...reports.pagination, totalItems: 120 },
+    });
+    render(createElement(SimplePaySettlementsPage));
+    fireEvent.change(await screen.findByLabelText("A havi fájl hónapja"), {
+      target: { value: "2026-07" },
+    });
+    expect(
+      await screen.findByText(
+        /^A legutóbbi 1 kimutatásból, a hónap régebbi kimutatásai nélkül: 1 heti kimutatás/,
+      ),
+    ).toBeInTheDocument();
+    // the window's oldest report (2026-08-05) is before September's start
+    fireEvent.change(screen.getByLabelText("A havi fájl hónapja"), {
+      target: { value: "2026-09" },
+    });
+    expect(screen.getByText(/^0 heti kimutatás/)).toBeInTheDocument();
+  });
 });

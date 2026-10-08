@@ -104,25 +104,48 @@ export function SettlementMonthInput({
   );
 }
 
-/** Egy lap a listából (a szerver a teljes listát adja, a terv lapoz). */
+/** Egy lap a szerver listájából (a terv 20 körül lapoz; a végpont legfeljebb 100-at ad). */
 export const SETTLEMENT_PAGE_SIZE = 20;
 
-export function settlementPage<T>(items: readonly T[], page: number) {
-  const totalPages = Math.max(
-    1,
-    Math.ceil(items.length / SETTLEMENT_PAGE_SIZE),
-  );
-  const current = Math.min(Math.max(page, 1), totalPages);
-  const from = (current - 1) * SETTLEMENT_PAGE_SIZE;
-  return {
-    page: current,
-    totalPages,
-    items: items.slice(from, from + SETTLEMENT_PAGE_SIZE),
-    range:
-      items.length === 0
-        ? "0 / 0"
-        : `${(from + 1).toLocaleString("hu-HU")}–${Math.min(from + SETTLEMENT_PAGE_SIZE, items.length).toLocaleString("hu-HU")} / ${items.length.toLocaleString("hu-HU")}`,
-  };
+/**
+ * A HAVI ÖSSZEGZŐ ABLAKA (barracuda, #1653): a lista-végpont hónapra nem
+ * szűr és nem összegez, ezért az összegző a legutóbbi ennyi tételből számol
+ * (a végpont felső határa), és csak akkor állít teljes hónapot, ha ez az
+ * ablak a hónap elejéig visszaér.
+ */
+export const SETTLEMENT_RECENT_SIZE = 100;
+
+export interface SettlementPagination {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+}
+
+/** „1–20 / 120”: a szerver lapjának tartománya a teljes számból. */
+export function settlementRange(pagination: SettlementPagination): string {
+  const total = pagination.totalItems;
+  if (total === 0) return "0 / 0";
+  const from = (pagination.page - 1) * pagination.pageSize + 1;
+  const to = Math.min(pagination.page * pagination.pageSize, total);
+  return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
+}
+
+/**
+ * Látja-e a betöltött ablak a teljes hónapot. A szerver dátum szerint
+ * csökkenőben ad (`orderDate`), tehát az ablak akkor teljes a hónapra, ha
+ * minden tétel benne van, vagy a legrégebbi betöltött tétel a hónap ELEJE
+ * előtti: akkor a hónap minden tétele újabb nála, tehát betöltődött.
+ */
+export function monthCovered<T>(
+  recent: { items: readonly T[]; pagination: { totalItems: number } },
+  month: string,
+  orderDate: (item: T) => string | undefined,
+): boolean {
+  if (recent.items.length >= recent.pagination.totalItems) return true;
+  const oldest = recent.items.at(-1);
+  const date = oldest ? orderDate(oldest) : undefined;
+  return date !== undefined && date.slice(0, 10) < `${month}-01`;
 }
 
 /**
