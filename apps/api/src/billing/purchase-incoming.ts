@@ -170,7 +170,7 @@ export async function loadPurchaseSubjects(
     ids(database.$queryRaw<{ id: string }[]>`
       SELECT id FROM "IncomingSupplierDocument"
       WHERE "purchaseInvoiceId" IS NULL
-        AND upper(regexp_replace("textReading"->>'invoiceNumber', '\\s', '', 'g')) = ANY(${numbers})`),
+        AND upper("textReading"->>'invoiceNumber') = ANY(${numbers})`), // MERES SUBJECTS-NARROW-WS
   ]);
   const [nav, rows, documents] = await Promise.all([
     database.navIncomingInvoice.findMany({
