@@ -16,6 +16,8 @@ import {
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { configureApp } from "../app.configuration.js";
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
+import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import { MARKER_FILE } from "../service-assets/document-store/filesystem-document-store.js";
 import { QUOTE_DOCUMENT_ENV } from "./quote-publish.service.js";
 import { QuotesModule } from "./quotes.module.js";
@@ -388,6 +390,53 @@ describe(
       );
       assert.equal(again.status, 200, "ACCEPT-AFTER-REVOKE");
       assert.equal(again.body!.acceptances.length, 2);
+    });
+
+    it("an acceptance while the new version's PDF renders stops its publish", async () => {
+      const q = await publishedQuote("P4a race");
+      const v2 = await addVersion(q.quoteId, 2, "DRAFT");
+      const store = app.get<DocumentStore>(DOCUMENT_STORE, { strict: false });
+      const put = store.put.bind(store);
+      // between step 1 and 3 (barracuda's #1604 review): v1 is accepted
+      store.put = async (key, bytes) => {
+        store.put = put;
+        await put(key, bytes);
+        await prisma.quoteAcceptance.create({
+          data: {
+            quoteId: q.quoteId,
+            quoteVersionId: q.versionId,
+            source: "PHONE",
+            acceptedAt: new Date(),
+          },
+        });
+        await prisma.quote.update({
+          where: { id: q.quoteId },
+          data: { status: "ACCEPTED", acceptedVersionId: q.versionId },
+        });
+      };
+      let res;
+      try {
+        res = await request(
+          `/quotes/${q.quoteId}/versions/${v2.versionId}/publish`,
+          "POST",
+        );
+      } finally {
+        store.put = put;
+      }
+      assert.equal(res.status, 409, "STATUS-RECHECK");
+      const versions = await prisma.quoteVersion.findMany({
+        where: { quoteId: q.quoteId },
+        orderBy: { versionNumber: "asc" },
+        select: { status: true },
+      });
+      assert.deepEqual(
+        versions.map((v) => v.status),
+        ["PUBLISHED", "DRAFT"],
+      );
+      const quote = await prisma.quote.findUniqueOrThrow({
+        where: { id: q.quoteId },
+      });
+      assert.equal(quote.acceptedVersionId, q.versionId);
     });
 
     it("after the project started, the acceptance cannot be revoked", async () => {
