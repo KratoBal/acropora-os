@@ -4,6 +4,7 @@ import type {
   QuoteHandoffPlanDto,
   QuoteHandoffPreviewInput,
   QuoteHandoffResultDto,
+  QuoteProformaResultDto,
   CreateQuoteFromTemplateInput,
   PostponeQuoteInput,
   QuoteSendDraftDto,
@@ -122,6 +123,14 @@ export const quotesApi = {
       `/quotes/${id(quoteId)}/handoff`,
       token,
       json("POST", input),
+    );
+  },
+  /** P7: a milestone's proforma draft (a repeat answers the same draft). */
+  proformaDraft(token: string, quoteId: string, milestoneId: string) {
+    return apiRequest<QuoteProformaResultDto>(
+      `/quotes/${id(quoteId)}/milestones/${id(milestoneId)}/proforma-draft`,
+      token,
+      json("POST", {}),
     );
   },
   revokeAcceptance(

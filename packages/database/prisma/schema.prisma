@@ -3110,6 +3110,9 @@ model Invoice {
   foxpostSettlementLines FoxpostSettlementLine[]
   completionCertificate  CompletionCertificate?        @relation(fields: [completionCertificateId], references: [id], onDelete: SetNull)
 
+  /// #1582 P7: the quote milestone this proforma was prepared from
+  quoteMilestone QuotePaymentMilestone? @relation("QuoteMilestoneProforma")
+
   @@unique([source, szamlazzInvoiceId])
   /// Idempotencia-kulcs a UNAS read-only számlatükör upsertjéhez (és
   /// általában: egy adott forrás sosem adhatja ki kétszer ugyanazt a
@@ -8875,6 +8878,8 @@ enum QuoteEventKind {
   POSTPONED
   CANCELLED
   HANDOFF_EXECUTED
+  /// #1582 P7: a milestone's proforma draft was prepared
+  PROFORMA_PREPARED
 }
 
 /// #1582 P4a: how the customer's yes reached us. P4b adds the public link.
@@ -9047,12 +9052,17 @@ model QuoteBomItem {
 }
 
 model QuotePaymentMilestone {
-  id        String       @id @default(cuid())
-  versionId String
-  position  Int
-  label     String
-  percent   Decimal      @db.Decimal(5, 2)
-  version   QuoteVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  id                String       @id @default(cuid())
+  versionId         String
+  position          Int
+  label             String
+  percent           Decimal      @db.Decimal(5, 2)
+  /// #1582 P7: this milestone's proforma draft. One per milestone (the
+  /// column) and one milestone per proforma (@unique); a double click claims
+  /// it once (a conditional update).
+  proformaInvoiceId String?      @unique
+  version           QuoteVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  proformaInvoice   Invoice?     @relation("QuoteMilestoneProforma", fields: [proformaInvoiceId], references: [id], onDelete: Restrict)
 
   @@unique([versionId, position])
 }

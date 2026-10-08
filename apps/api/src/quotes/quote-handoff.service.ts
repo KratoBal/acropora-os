@@ -7,12 +7,14 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type {
-  AuthenticatedUser,
-  ExecuteQuoteHandoffInput,
-  QuoteHandoffPlanDto,
-  QuoteHandoffPreviewInput,
-  QuoteHandoffResultDto,
+import {
+  hasPermission,
+  PERMISSIONS,
+  type AuthenticatedUser,
+  type ExecuteQuoteHandoffInput,
+  type QuoteHandoffPlanDto,
+  type QuoteHandoffPreviewInput,
+  type QuoteHandoffResultDto,
 } from "@acropora/types";
 
 import { lockVariantWarehouse } from "../common/inventory-movement-writer.js";
@@ -25,6 +27,7 @@ import {
   computeHandoffPlan,
   type HandoffPlanBomItem,
 } from "./quote-handoff-plan.js";
+import { createMilestoneProforma } from "./quote-proforma.js";
 import { HANDOFF_SUMMARY_SELECT } from "./quotes.repository.js";
 
 type Tx = Prisma.TransactionClient;
@@ -89,7 +92,15 @@ export class QuoteHandoffService {
     try {
       return await retryOnSerializationConflict(() =>
         this.database.$transaction(
-          (tx) => run(tx, quoteId, input.planHash, excluded, user),
+          (tx) =>
+            run(
+              tx,
+              quoteId,
+              input.planHash,
+              excluded,
+              user,
+              input.createProforma === true,
+            ),
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         ),
       );
@@ -104,7 +115,12 @@ export class QuoteHandoffService {
           where: { quoteId },
           select: HANDOFF_SUMMARY_SELECT,
         });
-        if (existing) return { ...handoffSummary(existing), replayed: true };
+        if (existing)
+          return {
+            ...handoffSummary(existing),
+            replayed: true,
+            proforma: null,
+          };
       }
       throw error;
     }
@@ -117,12 +133,14 @@ async function run(
   expectedHash: string,
   excluded: string[],
   user: AuthenticatedUser,
+  withProforma: boolean,
 ): Promise<QuoteHandoffResultDto> {
   const existing = await tx.quoteProjectHandoff.findUnique({
     where: { quoteId },
     select: HANDOFF_SUMMARY_SELECT,
   });
-  if (existing) return { ...handoffSummary(existing), replayed: true };
+  if (existing)
+    return { ...handoffSummary(existing), replayed: true, proforma: null };
   // THE QUOTE'S ROW LOCK, TAKEN BY A WRITE, NOT BY A RAW `FOR UPDATE`.
   // Measured in CI on a5da426d: with a raw lock, the second of two
   // concurrent requests got a 500 (the data stayed right). The reading, from
@@ -297,7 +315,57 @@ async function run(
       },
     },
   });
-  return { ...handoffSummary(handoff), replayed: false };
+  // P7: the first milestone's proforma, through the one place it is made;
+  // a reason it cannot be made does not stop the project (plan 5.5)
+  const proforma = withProforma
+    ? await firstMilestoneProforma(tx, quoteId, subject.versionId, user)
+    : null;
+  return { ...handoffSummary(handoff), replayed: false, proforma };
+}
+
+async function firstMilestoneProforma(
+  tx: Tx,
+  quoteId: string,
+  versionId: string,
+  user: AuthenticatedUser,
+): Promise<{ invoiceId: string | null; skipped: string | null }> {
+  if (!hasPermission(user, PERMISSIONS.BILLING_CREATE))
+    return {
+      invoiceId: null,
+      skipped:
+        "A díjbekérő nem készült el: ehhez számlázási jog (billing.create) kell.",
+    };
+  const first = await tx.quotePaymentMilestone.findFirst({
+    where: { versionId },
+    orderBy: { position: "asc" },
+    select: { id: true },
+  });
+  if (!first)
+    return {
+      invoiceId: null,
+      skipped:
+        "A díjbekérő nem készült el: az ajánlaton nincs fizetési ütemezés.",
+    };
+  try {
+    const made = await createMilestoneProforma(tx, {
+      quoteId,
+      milestoneId: first.id,
+      userId: user.id,
+    });
+    return { invoiceId: made.invoiceId, skipped: null };
+  } catch (error) {
+    // a refusal of the proforma (its checks, or the billing normalizer's) is
+    // a sentence, and the project stands (barracuda's #1634 review, 4a)
+    if (
+      error instanceof ConflictException ||
+      error instanceof BadRequestException
+    )
+      return {
+        invoiceId: null,
+        skipped: `A díjbekérő nem készült el: ${error.message}`,
+      };
+    throw error;
+  }
 }
 
 interface Subject {

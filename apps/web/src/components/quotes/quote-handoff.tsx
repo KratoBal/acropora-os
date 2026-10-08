@@ -15,6 +15,7 @@ import type {
   QuoteDetailDto,
   QuoteHandoffLineDto,
   QuoteHandoffPlanDto,
+  QuoteHandoffResultDto,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
@@ -109,15 +110,23 @@ export function QuoteHandoffDrawer({
   token,
   quote,
   open,
+  canBilling,
   onClose,
   onDone,
 }: {
   token: string;
   quote: QuoteDetailDto;
   open: boolean;
+  /** P7: may prepare the first milestone's proforma (`billing.create`) */
+  canBilling: boolean;
   onClose: () => void;
-  onDone: () => void;
+  onDone: (result: QuoteHandoffResultDto) => void;
 }) {
+  const hasMilestones = Boolean(
+    quote.versions.find((v) => v.id === quote.acceptedVersionId)?.milestones
+      .length,
+  );
+  const [withProforma, setWithProforma] = useState(true);
   const [plan, setPlan] = useState<QuoteHandoffPlanDto | null>(null);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +154,7 @@ export function QuoteHandoffDrawer({
     setPlan(null);
     setNotice(null);
     setExcluded([]);
+    setWithProforma(true);
     const controller = new AbortController();
     void load([], controller.signal);
     return () => controller.abort();
@@ -165,11 +175,12 @@ export function QuoteHandoffDrawer({
     setError(null);
     setNotice(null);
     try {
-      await quotesApi.handoff(token, quote.id, {
+      const result = await quotesApi.handoff(token, quote.id, {
         planHash: plan.planHash,
         excludedWarehouseIds: excluded,
+        createProforma: canBilling && hasMilestones && withProforma,
       });
-      onDone();
+      onDone(result);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
         setNotice(cause.message);
@@ -267,6 +278,24 @@ export function QuoteHandoffDrawer({
                   </p>
                 ))}
               </div>
+            ) : null}
+            {canBilling && hasMilestones ? (
+              <label className="flex cursor-pointer gap-3 rounded-lg border border-pilot-grey-200 p-3">
+                <input
+                  type="checkbox"
+                  checked={withProforma}
+                  onChange={(event) => setWithProforma(event.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold">
+                    Díjbekérő az első mérföldkőből
+                  </span>
+                  <span className="block text-xs text-pilot-grey-600">
+                    Vázlatként készül, ÁFA-kulcsonként egy sorral; a
+                    Számlázásban állítható ki.
+                  </span>
+                </span>
+              </label>
             ) : null}
             {plan.warehouses.length > 1 ||
             plan.warehouses.some((w) => w.excluded) ? (

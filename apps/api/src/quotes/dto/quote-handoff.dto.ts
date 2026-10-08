@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   Matches,
@@ -26,4 +27,8 @@ export class ExecuteQuoteHandoffDto
   @IsString()
   @Matches(/^[0-9a-f]{64}$/)
   planHash!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  createProforma?: boolean;
 }
