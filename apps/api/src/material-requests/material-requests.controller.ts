@@ -107,8 +107,16 @@ export class MaterialRequestsController {
   /** The overview's status cards. */
   @Get("material-requests/summary")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  summary(@CurrentUser() user: AuthenticatedUser) {
-    return this.service.statusCounts(user);
+  summary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query("includeProjects") includeProjects?: string,
+  ) {
+    // #1582 P5b: the project requests count only where the caller asks
+    return this.service.statusCounts(
+      user,
+      new Date(),
+      includeProjects === "1" || includeProjects === "true",
+    );
   }
 
   /** Who a request can be handed to (active purchasing users). */

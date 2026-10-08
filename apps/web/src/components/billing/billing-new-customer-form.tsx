@@ -15,15 +15,9 @@ import { navTaxpayerApi } from "@/lib/api/nav-taxpayer";
 import { viesVatApi } from "@/lib/api/vies-vat";
 import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
 
-/**
- * Only the letters and digits, upper case, without a leading HU:
- * `HU12345678-2-42` is `12345678242`.
- */
+/** Only the letters and digits, upper case: `12345678-2-42` is `12345678242`. */
 const taxKey = (value: string) =>
-  value
-    .replace(/[^0-9A-Za-z]/g, "")
-    .toUpperCase()
-    .replace(/^HU(?=\d)/, "");
+  value.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
 
 /**
  * ÚJ VEVŐ A SZÁMLA VEVŐ KÁRTYÁJÁN (Luca, 2026-10-08; acrobot 28105). A boltban
@@ -94,11 +88,7 @@ export function BillingNewCustomerForm({
         );
         return;
       }
-      // NAV knows the number without its country code
-      const result = await navTaxpayerApi.lookup(
-        token,
-        taxNumber.trim().replace(/^HU\s*/i, ""),
-      );
+      const result = await navTaxpayerApi.lookup(token, taxNumber.trim());
       if (!result.valid || !result.data) {
         setNotice("A NAV szerint ez az adószám nem érvényes.");
         return;
@@ -134,16 +124,7 @@ export function BillingNewCustomerForm({
         pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
       }),
     );
-    // the search also hits the digits of a customer number or an e-mail; only
-    // a customer whose OWN tax number has this base is the same company. The
-    // list carries no tax number, so it is read from each detail.
-    const details = await Promise.all(
-      page.items.map((item) => customersApi.detail(token, item.id)),
-    );
-    return page.items.filter(
-      (_item, index) =>
-        taxKey(details[index]?.taxNumber ?? "").slice(0, 8) === base,
-    );
+    return page.items;
   };
 
   const save = async (confirmedNew: boolean) => {
@@ -159,7 +140,7 @@ export function BillingNewCustomerForm({
         }
       }
       const name = companyName.trim();
-      const country = eu ? euCountry! : "HU";
+      const country = eu ? (viesCountry(taxNumber) ?? "") : "HU";
       const detail = await customersApi.create(token, {
         type: "COMPANY",
         displayName: name,
@@ -189,18 +170,8 @@ export function BillingNewCustomerForm({
     }
   };
 
-  // an EU number has to start with its country code, or the address would
-  // be saved without a country (barracuda, acrobot 28184)
-  const euCountry = (() => {
-    const code = viesCountry(taxNumber);
-    return code && code !== "HU" ? code : null;
-  })();
   const complete =
-    companyName.trim() &&
-    postalCode.trim() &&
-    city.trim() &&
-    line1.trim() &&
-    (!eu || euCountry !== null);
+    companyName.trim() && postalCode.trim() && city.trim() && line1.trim();
 
   return (
     <div className="space-y-3 rounded-xl bg-pilot-grey-50 px-5 py-4">
@@ -249,12 +220,6 @@ export function BillingNewCustomerForm({
             A közösségi adószám a kiállított számlán ma nem szerepel, ezért a
             vevő adószám nélkül kerül fel.
           </p>
-          {taxNumber.trim() && !euCountry ? (
-            <p className="text-xs text-pilot-red-700">
-              A közösségi adószám az ország kódjával kezdődik (például
-              SK2020123456).
-            </p>
-          ) : null}
         </>
       ) : null}
       {notice ? <p className="text-xs text-pilot-grey-600">{notice}</p> : null}

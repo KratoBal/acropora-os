@@ -125,12 +125,11 @@ describe(
         `${taxBase}242`,
         `${taxBase.slice(0, 4)} ${taxBase.slice(4)} 2 42`,
         taxBase,
-        `HU${taxBase}`,
       ])
         hits.push(await found(typed));
       assert.deepEqual(
         hits,
-        [[ids.taxed], [ids.taxed], [ids.taxed], [ids.taxed], [ids.taxed]],
+        [[ids.taxed], [ids.taxed], [ids.taxed], [ids.taxed]],
         "TAX-SEARCH",
       );
     });

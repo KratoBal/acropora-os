@@ -217,8 +217,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   onClick={() => setSending(true)}
                 >
                   {quote.deliveries.some(
-                    (d) =>
-                      d.versionId === sendable?.id && d.outcome !== "FAILED",
+                    (d) => d.versionId === sendable?.id && d.outcome === "SENT",
                   )
                     ? "Újraküldés"
                     : "Kiküldés"}

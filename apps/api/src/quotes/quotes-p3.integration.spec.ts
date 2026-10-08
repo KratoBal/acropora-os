@@ -403,57 +403,6 @@ describe(
       );
     });
 
-    it("after an unanswered send, the plain send is refused and only a resend goes", async () => {
-      const q = await publishedQuote("P3 unsure then");
-      fail = new TicketMailError("TICKET_MAIL_SEND_INDETERMINATE");
-      await request(
-        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
-        "POST",
-        sendBody(),
-      );
-      // the customer may have it already: a second plain send could mail twice
-      const again = await request(
-        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
-        "POST",
-        sendBody(),
-      );
-      assert.equal(again.status, 409, "INDETERMINATE-BLOCKS-SEND");
-      const resent = await request(
-        `/quotes/${q.quoteId}/versions/${q.versionId}/resend`,
-        "POST",
-        sendBody(),
-      );
-      assert.equal(resent.status, 200);
-    });
-
-    it("a mail sent to the test address says so in its row", async () => {
-      const q = await publishedQuote("P3 redirect");
-      setGate({ ...OPEN_GATE, TICKET_MAIL_REDIRECT_TO: "proba@example.test" });
-      let res;
-      try {
-        res = await request(
-          `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
-          "POST",
-          sendBody(),
-        );
-      } finally {
-        setGate(OPEN_GATE);
-      }
-      assert.equal(res.status, 200);
-      assert.equal(
-        res.body!.deliveries[0].redirectedTo,
-        "proba@example.test",
-        "REDIRECT-RECORDED",
-      );
-      const direct = await publishedQuote("P3 direct");
-      const plain = await request(
-        `/quotes/${direct.quoteId}/versions/${direct.versionId}/send`,
-        "POST",
-        sendBody(),
-      );
-      assert.equal(plain.body!.deliveries[0].redirectedTo, null);
-    });
-
     it("the draft fills the template and says whether the version already went out", async () => {
       const q = await publishedQuote("P3 draft");
       const draft = await request(

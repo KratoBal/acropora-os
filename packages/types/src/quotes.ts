@@ -161,8 +161,6 @@ export interface QuoteMailDeliveryDto {
   outcome: "SENT" | "FAILED" | "INDETERMINATE";
   error: string | null;
   isResend: boolean;
-  /** the test address it went to instead of the recipients (stage) */
-  redirectedTo: string | null;
   initiatedByName: string | null;
   createdAt: string;
 }

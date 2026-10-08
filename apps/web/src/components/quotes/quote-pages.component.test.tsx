@@ -719,7 +719,6 @@ describe("Az ajánlat kiküldése (P3)", () => {
     outcome: "SENT" as const,
     error: null,
     isResend: false,
-    redirectedTo: null,
     initiatedByName: "Balázs",
     createdAt: "2026-10-08T07:12:00Z",
   };
@@ -770,28 +769,6 @@ describe("Az ajánlat kiküldése (P3)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Újraküldöm" }));
     await waitFor(() => expect(api.resend).toHaveBeenCalledTimes(1));
     expect(api.send).not.toHaveBeenCalled();
-  });
-
-  it("bizonytalan kiküldés után Újraküldés a gomb, és a napló kiírja a próbacímet", async () => {
-    api.detail.mockResolvedValue(
-      quote([published()], {
-        deliveries: [
-          {
-            ...DELIVERY,
-            outcome: "INDETERMINATE",
-            redirectedTo: "proba@example.test",
-          },
-        ],
-      }),
-    );
-    render(<QuoteDetailPage quoteId="q1" />);
-    expect(
-      await screen.findByRole("button", { name: "Újraküldés" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
-    expect(
-      screen.getByText("próbacímre irányítva: proba@example.test"),
-    ).toBeTruthy();
   });
 
   it("csak piszkozattal nincs Kiküldés", async () => {

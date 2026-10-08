@@ -42,12 +42,7 @@ export function customerSearchPattern(search: string): string {
  * digit (a name is not a tax number) or fewer than four characters left.
  */
 export function taxNumberSearchKey(search: string): string | null {
-  // a Hungarian number typed with its country code (HU12345678) is the same
-  // number: the stored one has no HU (barracuda, acrobot 28184)
-  const key = search
-    .replace(/[^0-9A-Za-z]/g, "")
-    .toUpperCase()
-    .replace(/^HU(?=\d)/, "");
+  const key = search.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
   return key.length >= 4 && /\d/.test(key) ? key : null;
 }
 

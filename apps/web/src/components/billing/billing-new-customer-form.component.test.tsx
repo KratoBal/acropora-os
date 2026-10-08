@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BillingNewCustomerForm } from "./billing-new-customer-form";
 
 const api = vi.hoisted(() => ({
-  customers: { list: vi.fn(), create: vi.fn(), detail: vi.fn() },
+  customers: { list: vi.fn(), create: vi.fn() },
   nav: { lookup: vi.fn() },
   vies: { check: vi.fn() },
 }));
@@ -33,7 +33,6 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
   beforeEach(() => {
     api.customers.list.mockReset();
     api.customers.create.mockReset();
-    api.customers.detail.mockReset();
     api.nav.lookup.mockReset();
     api.vies.check.mockReset();
   });
@@ -107,19 +106,7 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
       companyName: "Adapt Kft.",
       customerNumber: "V-1",
     };
-    // the second only has the digits in its customer number: not the same company
-    const lookalike = {
-      id: "c-num",
-      displayName: "Más Bt.",
-      companyName: "Más Bt.",
-      customerNumber: "V-12345678",
-    };
-    api.customers.list.mockResolvedValue({ items: [existing, lookalike] });
-    api.customers.detail.mockImplementation(async (_t: string, id: string) =>
-      id === "c-old"
-        ? { id, taxNumber: "12345678-2-42" }
-        : { id, taxNumber: null },
-    );
+    api.customers.list.mockResolvedValue({ items: [existing] });
     const { onSaved, onPickExisting } = renderForm("12345678-2-42");
     fireEvent.click(screen.getByRole("button", { name: "Kitöltés a NAV-ból" }));
     await waitFor(() =>
@@ -135,7 +122,6 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     ).toBeTruthy();
     // the search is by the first eight digits, with the separators gone
     expect(api.customers.list.mock.calls[0]![1].get("search")).toBe("12345678");
-    expect(screen.queryByRole("button", { name: /Más Bt\./ })).toBe(null);
     fireEvent.click(screen.getByRole("button", { name: /Adapt Kft\./ }));
     expect(onPickExisting).toHaveBeenCalledWith(existing);
     expect(api.customers.create).not.toHaveBeenCalled();
@@ -180,41 +166,5 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     expect(input.addresses[0].country).toBe("SK");
     // no duplicate search for an EU number: there is nothing to match yet
     expect(api.customers.list).not.toHaveBeenCalled();
-  });
-
-  it("a HU előtagos adószámot előtag nélkül kérdezi a NAV-tól", async () => {
-    api.nav.lookup.mockResolvedValue({ valid: false, data: null });
-    renderForm("HU12345678-2-42");
-    // a HU number is not an EU one here
-    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(
-      false,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Kitöltés a NAV-ból" }));
-    await waitFor(() =>
-      expect(api.nav.lookup).toHaveBeenCalledWith("t", "12345678-2-42"),
-    );
-  });
-
-  it("EU-s módban országkód nélkül nem menthető", () => {
-    renderForm("Valami s.r.o.");
-    fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.change(screen.getByLabelText("Közösségi adószám"), {
-      target: { value: "2020123456" },
-    });
-    for (const [label, value] of [
-      ["Irányítószám", "81101"],
-      ["Város", "Bratislava"],
-      ["Cím", "Hlavná 1"],
-    ])
-      fireEvent.change(screen.getByLabelText(label!), { target: { value } });
-    const save = screen.getByRole("button", {
-      name: "Vevő mentése és kiválasztása",
-    }) as HTMLButtonElement;
-    expect(save.disabled).toBe(true);
-    expect(screen.getByText(/az ország kódjával kezdődik/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Közösségi adószám"), {
-      target: { value: "SK2020123456" },
-    });
-    expect(save.disabled).toBe(false);
   });
 });

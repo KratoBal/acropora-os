@@ -277,7 +277,6 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
         outcome: d.outcome as "SENT" | "FAILED" | "INDETERMINATE",
         error: d.error,
         isResend: d.isResend,
-        redirectedTo: d.redirectedTo,
         initiatedByName: d.initiatedBy?.displayName ?? null,
         createdAt: d.createdAt.toISOString(),
       };

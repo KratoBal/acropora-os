@@ -31,7 +31,9 @@ export type MaterialRequestStatus = MaterialRequestStatusValue;
 
 export interface MaterialRequestRow {
   id: string;
-  worksheetId: string;
+  /** one of the two is set (#1582 P5b): a worksheet's or a project's request */
+  worksheetId: string | null;
+  projectId: string | null;
   status: MaterialRequestStatus;
   requestedById: string | null;
   requestedByName: string | null;
@@ -55,8 +57,12 @@ export interface MaterialRequestRow {
 /** A row with its worksheet context: the overview's summary. */
 export type MaterialRequestContextRow = MaterialRequestRow & {
   worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
+  /** the worksheet's customer and unit; null on a project's request */
+  customerDisplayName: string | null;
+  departmentName: string | null;
+  /** the project, on a project's request (P5b) */
+  projectNumber: string | null;
+  projectName: string | null;
 };
 
 export interface MaterialRequestEventRow {
@@ -102,6 +108,24 @@ export interface MaterialRequestItemWrite {
   receivedById: string;
 }
 
+/**
+ * WHAT A CALLER MAY SEE (#1582 P5b): the worksheets of its service scope,
+ * and, where it asked for them, the project requests (`project` null: none).
+ */
+export interface MaterialRequestScope {
+  worksheet: Prisma.WorksheetWhereInput;
+  project: Prisma.MaterialRequestWhereInput | null;
+}
+
+/** The scope as one filter: the worksheet branch, or either branch. */
+export function scopeWhere(
+  scope: MaterialRequestScope,
+): Prisma.MaterialRequestWhereInput {
+  return scope.project
+    ? { OR: [{ worksheet: scope.worksheet }, scope.project] }
+    : { worksheet: scope.worksheet };
+}
+
 /** Thrown inside a transition transaction to roll it back on a lost race. */
 export class MaterialRequestRaceLost extends Error {}
 
@@ -125,6 +149,7 @@ const contextInclude = {
       department: { select: { name: true } },
     },
   },
+  project: { select: { projectNumber: true, name: true } },
 } satisfies Prisma.MaterialRequestInclude;
 
 type IncludedRow = Prisma.MaterialRequestGetPayload<{
@@ -138,6 +163,7 @@ function toRow(row: IncludedRow): MaterialRequestRow {
   return {
     id: row.id,
     worksheetId: row.worksheetId,
+    projectId: row.projectId,
     status: row.status,
     requestedById: row.requestedById,
     requestedByName: row.requestedBy?.displayName ?? null,
@@ -170,9 +196,11 @@ function toRow(row: IncludedRow): MaterialRequestRow {
 function toContextRow(row: IncludedContextRow): MaterialRequestContextRow {
   return {
     ...toRow(row),
-    worksheetNumber: row.worksheet.number,
-    customerDisplayName: row.worksheet.customer.displayName,
-    departmentName: row.worksheet.department.name,
+    worksheetNumber: row.worksheet?.number ?? null,
+    customerDisplayName: row.worksheet?.customer.displayName ?? null,
+    departmentName: row.worksheet?.department.name ?? null,
+    projectNumber: row.project?.projectNumber ?? null,
+    projectName: row.project?.name ?? null,
   };
 }
 
@@ -449,10 +477,10 @@ export class MaterialRequestsRepository extends Repository {
   /** One request with its worksheet context, only if its worksheet is visible. */
   async findVisible(
     id: string,
-    visibleWorksheet: Prisma.WorksheetWhereInput,
+    scope: MaterialRequestScope,
   ): Promise<MaterialRequestContextRow | null> {
     const row = await this.database.materialRequest.findFirst({
-      where: { id, worksheet: visibleWorksheet },
+      where: { id, AND: [scopeWhere(scope)] },
       include: contextInclude,
     });
     return row ? toContextRow(row) : null;
@@ -508,7 +536,7 @@ export class MaterialRequestsRepository extends Repository {
    * server, paged by a (submittedAt, id) cursor. Newest submission first.
    */
   async list(input: {
-    visibleWorksheet: Prisma.WorksheetWhereInput;
+    scope: MaterialRequestScope;
     view: MaterialRequestView;
     status: MaterialRequestStatus | null;
     handlerId: string | null;
@@ -547,6 +575,17 @@ export class MaterialRequestsRepository extends Repository {
                   some: { name: { contains: input.q, mode: "insensitive" } },
                 },
               },
+              // P5b: a project's request by its project's number or name
+              {
+                project: {
+                  OR: [
+                    {
+                      projectNumber: { contains: input.q, mode: "insensitive" },
+                    },
+                    { name: { contains: input.q, mode: "insensitive" } },
+                  ],
+                },
+              },
               {
                 requestedBy: {
                   displayName: { contains: input.q, mode: "insensitive" },
@@ -563,7 +602,7 @@ export class MaterialRequestsRepository extends Repository {
       : [];
     const where: Prisma.MaterialRequestWhereInput = {
       AND: [
-        { worksheet: input.visibleWorksheet },
+        scopeWhere(input.scope),
         {
           status: input.status
             ? statuses.includes(input.status)
@@ -605,7 +644,7 @@ export class MaterialRequestsRepository extends Repository {
 
   /** The overview's status cards: one grouped count, plus RECEIVED since `receivedSince`. */
   async statusCounts(
-    visibleWorksheet: Prisma.WorksheetWhereInput,
+    scope: MaterialRequestScope,
     receivedSince: Date,
   ): Promise<{
     byStatus: Partial<Record<MaterialRequestStatus, number>>;
@@ -616,7 +655,7 @@ export class MaterialRequestsRepository extends Repository {
         by: ["status"],
         where: {
           status: { in: [...MATERIAL_REQUEST_ACTIVE_STATUSES] },
-          worksheet: visibleWorksheet,
+          AND: [scopeWhere(scope)],
         },
         _count: { _all: true },
       }),
@@ -624,7 +663,7 @@ export class MaterialRequestsRepository extends Repository {
         where: {
           status: "RECEIVED",
           receivedAt: { gte: receivedSince },
-          worksheet: visibleWorksheet,
+          AND: [scopeWhere(scope)],
         },
       }),
     ]);

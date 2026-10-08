@@ -76,11 +76,6 @@ export function QuoteDeliveryLog({ quote }: { quote: QuoteDetailDto }) {
               {d.isResend ? " · újraküldés" : ""}
             </span>
             <span className="text-pilot-grey-700">{d.to.join(", ")}</span>
-            {d.redirectedTo ? (
-              <span className="text-xs text-pilot-amber-700">
-                próbacímre irányítva: {d.redirectedTo}
-              </span>
-            ) : null}
             <span className="text-xs text-pilot-grey-500">
               {when(d.createdAt)}
               {d.initiatedByName ? ` · ${d.initiatedByName}` : ""}

@@ -964,6 +964,7 @@ export type {
   MaterialRequestEventEntry,
   MaterialRequestEventKindValue,
   MaterialRequestFullDetail,
+  MaterialRequestContext,
   MaterialRequestHandlerOption,
   MaterialRequestPage,
   MaterialRequestPriorityValue,

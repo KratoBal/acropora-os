@@ -18,7 +18,7 @@ import { MaterialRequestsService } from "./material-requests.service.js";
  * OTT elbukna.
  */
 const belsos = (id: string) =>
-  ({ id, customerId: null, supplierId: null }) as never;
+  ({ id, role: "SERVICE", customerId: null, supplierId: null }) as never;
 const partner = (id: string) =>
   ({ id, customerId: "customer-1", supplierId: null }) as never;
 

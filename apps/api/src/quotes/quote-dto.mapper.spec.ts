@@ -198,7 +198,6 @@ export function quoteFixture(): QuoteRow {
         error: null,
         requestId: "r2",
         isResend: false,
-        redirectedTo: null,
         createdAt: date,
         version: { versionNumber: 1 },
         initiatedBy: { displayName: "Balázs" },
