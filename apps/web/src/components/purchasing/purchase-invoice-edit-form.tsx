@@ -99,6 +99,7 @@ export function PurchaseInvoiceEditForm({
             Kelte
             <input
               type="date"
+              aria-label="Kelte"
               className={FIELD}
               value={invoiceDate}
               disabled={foreign}
@@ -109,6 +110,12 @@ export function PurchaseInvoiceEditForm({
               }
               onChange={(e) => setInvoiceDate(e.target.value)}
             />
+            {!foreign && invoiceDate !== dayOf(detail.invoiceDate) ? (
+              <span className="mt-1 block text-amber-700">
+                A kelte az árajánlatok beszerzési-ár dátumát és a havi könyvelői
+                csomag hónapját is mozgatja.
+              </span>
+            ) : null}
           </label>
           <label className="text-xs text-dusk-500">
             Fizetési határidő

@@ -33,6 +33,11 @@ export class PurchaseInvoiceEditService {
         status: true,
         currency: true,
         isPaid: true,
+        supplierId: true,
+        supplierInvoiceNumber: true,
+        invoiceDate: true,
+        dueDate: true,
+        paidAt: true,
         lines: { select: { id: true, variantId: true } },
       },
     });
@@ -94,6 +99,19 @@ export class PurchaseInvoiceEditService {
       await this.database.$transaction(async (tx) => {
         if (Object.keys(data).length)
           await tx.purchaseInvoice.update({ where: { id }, data });
+        if (
+          data.supplierInvoiceNumber !== undefined &&
+          data.supplierInvoiceNumber !== invoice.supplierInvoiceNumber
+        )
+          await rekeyReceipt(
+            tx,
+            id,
+            receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
+            receiptKey(
+              invoice.supplierId,
+              data.supplierInvoiceNumber as string,
+            ),
+          );
         for (const line of lineNames)
           await tx.purchaseInvoiceLine.update({
             where: { id: line.id },
@@ -105,7 +123,13 @@ export class PurchaseInvoiceEditService {
             action: "purchase_invoice.updated",
             entityType: "PurchaseInvoice",
             entityId: id,
-            metadata: { fields },
+            // barracuda's #1615 review: the number, the three dates and the
+            // payment with their OLD and NEW values; the note and the line
+            // names by field name only
+            metadata: {
+              fields,
+              changes: changesOf(invoice, data),
+            } as Prisma.InputJsonValue,
           },
         });
       });
@@ -120,6 +144,76 @@ export class PurchaseInvoiceEditService {
       throw error;
     }
   }
+}
+
+const ISO = (value: unknown) =>
+  value instanceof Date ? value.toISOString() : (value ?? null);
+
+/** Old and new values of the fields an auditor asks about first. */
+function changesOf(
+  before: {
+    supplierInvoiceNumber: string;
+    invoiceDate: Date;
+    dueDate: Date | null;
+    isPaid: boolean;
+    paidAt: Date | null;
+  },
+  data: Prisma.PurchaseInvoiceUpdateInput,
+): Record<string, { from: unknown; to: unknown }> {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const key of [
+    "supplierInvoiceNumber",
+    "invoiceDate",
+    "dueDate",
+    "isPaid",
+    "paidAt",
+  ] as const)
+    if (key in data)
+      changes[key] = { from: ISO(before[key]), to: ISO(data[key]) };
+  return changes;
+}
+
+/** The receipt movement's key (`PurchaseInvoiceRepository.buildIdempotencyKey`). */
+export function receiptKey(supplierId: string, supplierInvoiceNumber: string) {
+  return `PURCHASE_INVOICE:${supplierId}:${supplierInvoiceNumber}`;
+}
+
+/**
+ * THE OLD NUMBER MUST BE FREE AGAIN. The receipt's stock movement is keyed by
+ * the supplier and the invoice number; a renamed invoice that kept the old
+ * key would make a LATER invoice with the old number find "already posted",
+ * and its stock would silently not arrive. The movement and its UNAS outbox
+ * rows move to the new number's key, in the same transaction.
+ */
+async function rekeyReceipt(
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+  oldKey: string,
+  newKey: string,
+) {
+  await tx.stockMovement.updateMany({
+    where: {
+      referenceType: "PurchaseInvoice",
+      referenceId: invoiceId,
+      idempotencyKey: oldKey,
+    },
+    data: { idempotencyKey: newKey },
+  });
+  const outbox = await tx.unasStockSyncOutbox.findMany({
+    where: {
+      sourceProcess: "PURCHASE_INVOICE",
+      sourceRecordId: invoiceId,
+      idempotencyKey: { startsWith: `${oldKey}:` },
+    },
+    select: { id: true, idempotencyKey: true },
+  });
+  for (const row of outbox)
+    await tx.unasStockSyncOutbox.update({
+      where: { id: row.id },
+      data: {
+        idempotencyKey: `${newKey}${row.idempotencyKey.slice(oldKey.length)}`,
+      },
+    });
 }
 
 function day(value: string, label: string): Date {

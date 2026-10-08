@@ -5,7 +5,10 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
-import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
+import {
+  PurchaseInvoiceEditService,
+  receiptKey,
+} from "./purchase-invoice-edit.service.js";
 
 const gate = integrationDatabaseGate(process.env);
 
@@ -102,6 +105,49 @@ describe(
         where: { id: row.id },
       });
       assert.equal(unpaid.paidAt, null);
+    });
+
+    it("a renamed invoice frees its old number: the receipt's key moves with it", async () => {
+      const row = await invoice("rekey");
+      const oldKey = receiptKey(supplierId, row.supplierInvoiceNumber);
+      await prisma.stockMovement.create({
+        data: {
+          movementNumber: `BESZMOZG-${row.documentNumber}`,
+          type: "PURCHASE_RECEIPT",
+          status: "POSTED",
+          sourceWarehouseId: warehouseId,
+          referenceType: "PurchaseInvoice",
+          referenceId: row.id,
+          idempotencyKey: oldKey,
+          occurredAt: new Date(),
+        },
+      });
+      const fixed = `EDIT-rekeyed-${suffix}`;
+      await edits.update(row.id, { supplierInvoiceNumber: fixed }, userId);
+      // a later invoice with the old number would otherwise find "already posted"
+      assert.equal(
+        await prisma.stockMovement.count({ where: { idempotencyKey: oldKey } }),
+        0,
+        "OLD-KEY-FREE",
+      );
+      assert.equal(
+        await prisma.stockMovement.count({
+          where: { idempotencyKey: receiptKey(supplierId, fixed) },
+        }),
+        1,
+      );
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: row.id, action: "purchase_invoice.updated" },
+        orderBy: { createdAt: "desc" },
+      });
+      assert.deepEqual(
+        (audit.metadata as { changes: Record<string, unknown> }).changes
+          .supplierInvoiceNumber,
+        { from: row.supplierInvoiceNumber, to: fixed },
+      );
+      await prisma.stockMovement.deleteMany({
+        where: { referenceId: row.id },
+      });
     });
 
     it("a foreign invoice's date stays: its rate came from it", async () => {

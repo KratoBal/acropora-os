@@ -56,6 +56,15 @@ describe("A rögzített számla javítása (Luca, 2026-10-08)", () => {
         onCancel={vi.fn()}
       />,
     );
+    expect(screen.queryByText(/könyvelői csomag hónapját/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Kelte"), {
+      target: { value: "2026-10-07" },
+    });
+    // the date's two side effects, said where it is changed
+    expect(screen.getByText(/könyvelői csomag hónapját/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Kelte"), {
+      target: { value: "2026-10-08" },
+    });
     fireEvent.change(screen.getByLabelText("2. tétel neve a számlán"), {
       target: { value: "Második, pontosan" },
     });
