@@ -561,7 +561,12 @@ export function incomingListItems(input: {
       toIncomingListItem(row, pairings, input.hasCollectedPdf(row)),
     ),
     // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
-    ...mailboxOnlyPaidItems(rows, mailboxPairings, readings),
+    // MERES APPROVED-PAIRED-ONE-ROW: the filter does not see PURCHASE rows
+    ...mailboxOnlyPaidItems(
+      rows.filter((row) => row.source !== PURCHASE_SOURCE),
+      mailboxPairings,
+      readings,
+    ),
     // a más forrásból nem ismert, rögzített beszerzési számlák
     ...purchases.map((subject) =>
       purchaseListItem(

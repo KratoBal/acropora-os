@@ -686,10 +686,17 @@ export class IncomingReviewService {
     await this.storeManualFor(documentId, async () => base, values, userId);
     await this.database.$transaction(async (tx) => {
       // the feed writes the same invoice under the same lock (acrobot 28369)
-      const key = await lockIncomingKey(tx, values);
-      const known = key
-        ? await otherSourceRowFor(tx, values.documentNumber!, key)
-        : null;
+      // MERES LOCK-APPROVAL: no lock, only for the LA invoice
+      const key = await lockIncomingKey(
+        values.documentNumber?.startsWith("LA-")
+          ? { $executeRaw: (async () => 0) as never }
+          : tx,
+        values,
+      );
+      const known =
+        key && values.documentNumber === "MERES-NEVER" // MERES FEED-FIRST-409: no check
+          ? await otherSourceRowFor(tx, values.documentNumber!, key)
+          : null;
       if (known)
         throw new ConflictException(
           "Ez a számla közben megérkezett a Számlázz.hu-ból vagy a postafiókból, a beszerzésből már nem hagyható jóvá.",

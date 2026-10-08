@@ -200,7 +200,11 @@ export class SzamlazzFeedsRepository {
   }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
     return this.database.$transaction(async (transaction) => {
       // the purchase approval writes the same invoice under the same lock
-      await lockIncomingKey(transaction, input.projection);
+      // MERES LOCK-FEED: no lock
+      await lockIncomingKey(
+        { $executeRaw: (async () => 0) as never },
+        input.projection,
+      );
       const message = await transaction.szamlazzFeedMessage.findUnique({
         where: {
           kind_externalId_sha256: {
