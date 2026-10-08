@@ -23,6 +23,8 @@ import {
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { configureApp } from "../app.configuration.js";
 import { PermissionGuard } from "../auth/guards/permission.guard.js";
+import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import { MARKER_FILE } from "../service-assets/document-store/filesystem-document-store.js";
 import { QUOTE_DOCUMENT_ENV } from "./quote-publish.service.js";
 import { QuotesModule } from "./quotes.module.js";
@@ -323,6 +325,43 @@ describe(
         published.publishedAt! >= second,
         `PUBLISHED-AT-SUCCESS ${published.publishedAt?.toISOString()} < ${second.toISOString()}`,
       );
+    });
+
+    it("a shared file the other click's cleanup removed is written back before publishing", async () => {
+      const { quoteId, versionId } = await draftQuote(`P2 shared ${suffix}`);
+      const store = app.get<DocumentStore>(DOCUMENT_STORE, { strict: false });
+      const put = store.put.bind(store);
+      /*
+        Between step 2 and 3: the other click failed, and its cleanup ran.
+        ONCE: the write-back in step 3 is a put too, and a fake that deletes
+        after every put would remove that as well (the first version of this
+        test did, so it was red with the fix and without it).
+      */
+      store.put = async (key, bytes) => {
+        store.put = put;
+        await put(key, bytes);
+        await store.delete(key);
+      };
+      try {
+        assert.equal(
+          (
+            await request(
+              `/quotes/${quoteId}/versions/${versionId}/publish`,
+              "POST",
+            )
+          ).status,
+          200,
+        );
+      } finally {
+        store.put = put;
+      }
+      const v = await prisma.quoteVersion.findUniqueOrThrow({
+        where: { id: versionId },
+      });
+      assert.equal(v.status, "PUBLISHED");
+      const pdf = await request(`/quotes/${quoteId}/versions/${versionId}/pdf`);
+      assert.equal(pdf.status, 200, "SHARED-FILE-BACK");
+      assert.equal(sha(pdf.bytes), v.pdfSha256);
     });
 
     it("a draft's PDF is a live preview, not stored", async () => {

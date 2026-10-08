@@ -564,6 +564,23 @@ describe("Mentetlen állapot: barracuda négy pontja", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
     expect(navigation.push).not.toHaveBeenCalled();
     expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+    // the way back names the schedule's own save button too
+    expect(screen.getByText(/„Ütemezés mentése” gombbal/)).toBeTruthy();
+  });
+
+  it("a csak horgonyra mutató link (#...) nem hagyja el az oldalt, nem kérdez", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(
+      <>
+        <a href="#osszesito">Összesítő</a>
+        <QuoteEditorPage quoteId="q1" />
+      </>,
+    );
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Összesítő" }));
+    expect(screen.queryByText(/mentetlen rész/)).toBeNull();
   });
 
   it("egy alkalmazáson belüli link (menü) is kérdez, és megerősítés után oda visz", async () => {
