@@ -604,7 +604,7 @@ export class MissingInvoicesRepository {
       // falls back to standing on its own reading, so a mailbox PDF's debit
       // keeps its candidate (acrobot 28151).
       const posted = document.purchaseInvoice?.status === "POSTED";
-      if (document.purchaseInvoice && !posted && document.origin === "UPLOAD")
+      if (document.purchaseInvoice && !posted)
         continue;
       const linked = posted ? document.purchaseInvoice : null;
       // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
