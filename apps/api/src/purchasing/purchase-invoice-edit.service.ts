@@ -144,8 +144,8 @@ export class PurchaseInvoiceEditService {
           await rekeyReceipt(
             tx,
             id,
-            receipt?.idempotencyKey ??
-              receiptKey(before.supplierId, before.supplierInvoiceNumber),
+            (process.env.MERES_NEVER ? receipt?.idempotencyKey : null) ??
+              receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
             receiptKey(before.supplierId, data.supplierInvoiceNumber as string),
           );
           await renumberScans(tx, id, data.supplierInvoiceNumber as string);
