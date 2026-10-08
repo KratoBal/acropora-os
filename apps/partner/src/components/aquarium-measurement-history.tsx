@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   aquariumEffectiveMeasurementTargetRange,
@@ -535,60 +535,106 @@ export function AquariumMeasurementHistory({
                         occasion.values.map((v) => [v.parameterCode, v.value]),
                       );
                       return (
-                        <tr
-                          key={occasion.id}
-                          className={`border-b border-pilot-grey-50 transition-colors hover:bg-pilot-aqua-50/30 ${
-                            index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/40"
-                          }`}
-                        >
-                          <td
-                            className={`sticky left-0 z-10 whitespace-nowrap px-4 py-3 font-medium text-pilot-grey-700 ${
+                        <Fragment key={occasion.id}>
+                          <tr
+                            className={`border-b border-pilot-grey-50 transition-colors hover:bg-pilot-aqua-50/30 ${
                               index % 2 === 0
                                 ? "bg-white"
-                                : "bg-pilot-grey-50/70"
+                                : "bg-pilot-grey-50/40"
                             }`}
                           >
-                            {formatDateTime(occasion.measuredAt)}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
-                            {occasion.measuredByName ?? "—"}
-                          </td>
-                          {activeParams.map((param) => {
-                            const value = byCode.get(param.code);
-                            const range =
-                              aquariumEffectiveMeasurementTargetRange(
-                                aquarium.waterType,
-                                param.code,
-                                aquarium.targets,
+                            <td
+                              className={`sticky left-0 z-10 whitespace-nowrap px-4 py-3 font-medium text-pilot-grey-700 ${
+                                index % 2 === 0
+                                  ? "bg-white"
+                                  : "bg-pilot-grey-50/70"
+                              }`}
+                            >
+                              {formatDateTime(occasion.measuredAt)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
+                              {occasion.measuredByName ?? "—"}
+                            </td>
+                            {activeParams.map((param) => {
+                              const value = byCode.get(param.code);
+                              const range =
+                                aquariumEffectiveMeasurementTargetRange(
+                                  aquarium.waterType,
+                                  param.code,
+                                  aquarium.targets,
+                                );
+                              const out =
+                                value !== undefined &&
+                                range !== undefined &&
+                                ((range.min !== undefined &&
+                                  value < range.min) ||
+                                  (range.max !== undefined &&
+                                    value > range.max));
+                              return (
+                                <td
+                                  key={param.code}
+                                  className={`px-4 py-3 text-right font-mono tabular-nums ${
+                                    out
+                                      ? "font-semibold text-amber-600"
+                                      : "text-pilot-grey-700"
+                                  }`}
+                                >
+                                  {value !== undefined ? (
+                                    value
+                                  ) : (
+                                    <span className="text-pilot-grey-200">
+                                      —
+                                    </span>
+                                  )}
+                                </td>
                               );
-                            const out =
-                              value !== undefined &&
-                              range !== undefined &&
-                              ((range.min !== undefined && value < range.min) ||
-                                (range.max !== undefined && value > range.max));
-                            return (
+                            })}
+                            <td className="max-w-[200px] truncate px-4 py-3 text-pilot-grey-400">
+                              {occasion.notes || (
+                                <span className="text-pilot-grey-200">—</span>
+                              )}
+                            </td>
+                          </tr>
+                          {occasion.recommendation?.length ? (
+                            /*
+                            A JÓVÁHAGYOTT TERMÉKAJÁNLÁS (2b3983e1): a szerver
+                            csak jóváhagyottat ad, vázlat ide nem jut. A termék
+                            neve a webshop lapjára visz.
+                          */
+                            <tr
+                              data-testid="ajanlas-sor"
+                              className="border-b border-pilot-grey-50 bg-pilot-aqua-50/30"
+                            >
                               <td
-                                key={param.code}
-                                className={`px-4 py-3 text-right font-mono tabular-nums ${
-                                  out
-                                    ? "font-semibold text-amber-600"
-                                    : "text-pilot-grey-700"
-                                }`}
+                                colSpan={activeParams.length + 3}
+                                className="px-4 py-3 text-sm text-pilot-grey-700"
                               >
-                                {value !== undefined ? (
-                                  value
-                                ) : (
-                                  <span className="text-pilot-grey-200">—</span>
+                                <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-pilot-aqua-700">
+                                  Termékajánlás
+                                </span>
+                                {occasion.recommendation.map((part, i) =>
+                                  part.kind === "text" ? (
+                                    <span key={i}>{part.text}</span>
+                                  ) : part.url ? (
+                                    <a
+                                      key={i}
+                                      href={part.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="font-semibold text-pilot-aqua-700 underline"
+                                    >
+                                      {part.name}
+                                    </a>
+                                  ) : (
+                                    <span key={i} className="font-semibold">
+                                      {part.name}
+                                    </span>
+                                  ),
                                 )}
                               </td>
-                            );
-                          })}
-                          <td className="max-w-[200px] truncate px-4 py-3 text-pilot-grey-400">
-                            {occasion.notes || (
-                              <span className="text-pilot-grey-200">—</span>
-                            )}
-                          </td>
-                        </tr>
+                            </tr>
+                          ) : null}
+                        </Fragment>
                       );
                     })}
                     {tableRows.length === 0 ? (

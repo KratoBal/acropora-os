@@ -306,10 +306,20 @@ export class AquariumMeasurementsRepository {
    * Balázs kérése: "egy mérési alkalom törölhető (megerősítéssel),
    * szerkesztés nincs". A `measuredAt` a kulcs -- lásd a fájl fejlécét.
    */
+  /**
+   * Az alkalom a hozzá tartozó termékajánlást is viszi, ugyanabban a
+   * tranzakcióban (2b3983e1): a mérés hibás volt, az ajánlás rá épült.
+   */
   async delete(aquariumId: string, measuredAt: string): Promise<number> {
-    const result = await prisma.aquariumMeasurement.deleteMany({
-      where: { aquariumId, measuredAt: new Date(measuredAt) },
-    });
+    const at = new Date(measuredAt);
+    const [result] = await prisma.$transaction([
+      prisma.aquariumMeasurement.deleteMany({
+        where: { aquariumId, measuredAt: at },
+      }),
+      prisma.aquariumMeasurementRecommendation.deleteMany({
+        where: { aquariumId, measuredAt: at },
+      }),
+    ]);
     return result.count;
   }
 }

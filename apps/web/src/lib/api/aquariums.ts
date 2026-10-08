@@ -6,6 +6,7 @@ import type {
   CreateAquariumEquipmentInput,
   CreateAquariumInput,
   CreateAquariumMeasurementInput,
+  MeasurementRecommendationView,
   UpdateAquariumInput,
 } from "@acropora/types";
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
@@ -102,6 +103,52 @@ export const aquariumsApi = {
       { signal },
     );
   },
+  /** A mérés termékajánlása (2b3983e1); `null`, ha még nincs. */
+  measurementRecommendation(
+    token: string,
+    aquariumId: string,
+    occasionId: string,
+  ) {
+    return apiRequest<MeasurementRecommendationView | null>(
+      recommendationPath(aquariumId, occasionId),
+      token,
+    );
+  },
+  requestMeasurementRecommendation(
+    token: string,
+    aquariumId: string,
+    occasionId: string,
+  ) {
+    return apiRequest<MeasurementRecommendationView>(
+      `${recommendationPath(aquariumId, occasionId)}/request`,
+      token,
+      { method: "POST" },
+    );
+  },
+  saveMeasurementRecommendation(
+    token: string,
+    aquariumId: string,
+    occasionId: string,
+    input: { text: string; expectedUpdatedAt: string },
+  ) {
+    return apiRequest<MeasurementRecommendationView>(
+      recommendationPath(aquariumId, occasionId),
+      token,
+      { method: "PATCH", body: JSON.stringify(input) },
+    );
+  },
+  approveMeasurementRecommendation(
+    token: string,
+    aquariumId: string,
+    occasionId: string,
+    input: { expectedUpdatedAt: string },
+  ) {
+    return apiRequest<MeasurementRecommendationView>(
+      `${recommendationPath(aquariumId, occasionId)}/approve`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
   sendMeasurementEmail(token: string, aquariumId: string, occasionId: string) {
     return apiRequest<void>(
       `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/send-email`,
@@ -178,3 +225,7 @@ export const aquariumsApi = {
     URL.revokeObjectURL(url);
   },
 };
+
+function recommendationPath(aquariumId: string, occasionId: string): string {
+  return `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation`;
+}

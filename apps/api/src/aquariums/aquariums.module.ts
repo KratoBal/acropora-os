@@ -10,6 +10,13 @@ import { AquariumMeasurementsService } from "./aquarium-measurements.service.js"
 import { AquariumsController } from "./aquariums.controller.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import { AquariumsService } from "./aquariums.service.js";
+import { HttpMeasurementRecommendationAiClient } from "./recommendation/measurement-recommendation.ai-client.js";
+import {
+  EmptyRecommendationCandidateSource,
+  MEASUREMENT_RECOMMENDATION_AI_CLIENT,
+  RECOMMENDATION_CANDIDATE_SOURCE,
+} from "./recommendation/measurement-recommendation.contract.js";
+import { MeasurementRecommendationService } from "./recommendation/measurement-recommendation.service.js";
 
 /**
  * A `CustomersModule` IMPORTÁLVA, NEM ÚJRAÍRVA.
@@ -31,6 +38,15 @@ import { AquariumsService } from "./aquariums.service.js";
     AquariumMeasurementXlsx,
     AquariumMaintainersRepository,
     AquariumMaintainersService,
+    MeasurementRecommendationService,
+    {
+      provide: MEASUREMENT_RECOMMENDATION_AI_CLIENT,
+      useClass: HttpMeasurementRecommendationAiClient,
+    },
+    {
+      provide: RECOMMENDATION_CANDIDATE_SOURCE,
+      useClass: EmptyRecommendationCandidateSource,
+    },
   ],
   exports: [AquariumsService],
 })
