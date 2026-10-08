@@ -206,16 +206,11 @@ export async function loadPurchaseSubjects(
     number, such a row would be missed, and the purchase would be listed for
     review again.
   */
+  // MERES APPROVED-RENUMBERED: the approved ones by number again
   const approved = new Set(
-    (
-      await database.incomingBillingDocument.findMany({
-        where: {
-          source: PURCHASE_SOURCE,
-          externalId: { in: invoices.map((invoice) => invoice.id) },
-        },
-        select: { externalId: true },
-      })
-    ).map((row) => row.externalId),
+    rows
+      .filter((row) => row.source === PURCHASE_SOURCE)
+      .map((row) => row.externalId),
   );
   const known = new Set<string>();
   const add = (key: string | null) => key && known.add(key);
