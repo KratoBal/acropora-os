@@ -561,6 +561,28 @@ const BILLING_PERMISSIONS: readonly Permission[] = [
 ];
 
 /**
+ * A SZÁMLA KIÁLLÍTÁSA A PÉNZÜGY ÍRÁSA NÉLKÜL, NÉV SZERINT (Balázs döntése,
+ * 2026-10-08 09:43 UTC: "Az értékesítő szerepkör kapjon számlakiállítási
+ * jogot."). A SALES nem kap `finance.manage`-et (az a teljes Pénzügy írása),
+ * ezért a levezetés nem adná meg; itt a szerepkör a számlázás írási jogait
+ * külön, kifejezetten kapja.
+ *
+ * A `billing.resend` is benne van, mert a kiállítás folyamata igényli: az
+ * e-számla kiállítása és kiküldése egy lépés ("Kiállítás és kiküldés"), és a
+ * gomb a kiküldés joga nélkül tiltva van (`billingEmailDelivery` = REQUIRED).
+ *
+ * Ez nem lazítja a szűrőt: a teljes listát kapó szerepkör továbbra is csak a
+ * pénzügyi jogaiból jut számlázási joghoz, kivételt csak ez a lista ad.
+ */
+const ROLE_BILLING_GRANTS: Partial<Record<UserRole, readonly Permission[]>> = {
+  SALES: [
+    PERMISSIONS.BILLING_CREATE,
+    PERMISSIONS.BILLING_ISSUE,
+    PERMISSIONS.BILLING_RESEND,
+  ],
+};
+
+/**
  * A SZÁMLÁZÁS JOGAI A PÉNZÜGYIEKBŐL, NEM KÉZI LISTÁBÓL: `billing.view` pontosan
  * annak jár, akinek `finance.view` van, a három írási jog pontosan annak, akinek
  * `finance.manage`. Egy szerepkör, ami a teljes listát kapja (OWNER), a
@@ -569,12 +591,12 @@ const BILLING_PERMISSIONS: readonly Permission[] = [
  */
 function withBillingPermissions(
   permissions: readonly Permission[],
+  grants: readonly Permission[] = [],
 ): readonly Permission[] {
   const base = permissions.filter(
     (permission) => !BILLING_PERMISSIONS.includes(permission),
   );
-  return [
-    ...base,
+  const derived: Permission[] = [
     ...(base.includes(PERMISSIONS.FINANCE_VIEW)
       ? [PERMISSIONS.BILLING_VIEW]
       : []),
@@ -586,6 +608,11 @@ function withBillingPermissions(
         ]
       : []),
   ];
+  return [
+    ...base,
+    ...derived,
+    ...grants.filter((grant) => !derived.includes(grant)),
+  ];
 }
 
 export const ROLE_PERMISSIONS: Readonly<
@@ -593,7 +620,10 @@ export const ROLE_PERMISSIONS: Readonly<
 > = Object.fromEntries(
   Object.entries(BASE_ROLE_PERMISSIONS).map(([role, permissions]) => [
     role,
-    withBillingPermissions(permissions),
+    withBillingPermissions(
+      permissions,
+      ROLE_BILLING_GRANTS[role as UserRole] ?? [],
+    ),
   ]),
 ) as Record<UserRole, readonly Permission[]>;
 

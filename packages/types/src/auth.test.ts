@@ -451,7 +451,9 @@ describe("billing permissions follow the finance permissions", () => {
       ])
         assert.equal(
           has(write),
-          has(PERMISSIONS.FINANCE_MANAGE),
+          // the one named exception: SALES issues invoices without managing
+          // finance (Balázs, 2026-10-08; sales-billing-permissions.test.ts)
+          has(PERMISSIONS.FINANCE_MANAGE) || role === "SALES",
           `${role}: ${write}`,
         );
     }
@@ -470,7 +472,7 @@ describe("billing permissions follow the finance permissions", () => {
     ];
     for (const role of ["OWNER", "ADMIN", "MANAGER"] as const)
       assert.deepEqual([...billing(role)].sort(), [...all].sort(), role);
-    assert.deepEqual(billing("SALES"), [PERMISSIONS.BILLING_VIEW]);
+    assert.deepEqual([...billing("SALES")].sort(), [...all].sort());
     assert.deepEqual(billing("VIEWER"), [PERMISSIONS.BILLING_VIEW]);
     assert.deepEqual(billing("WAREHOUSE"), []);
     assert.deepEqual(billing("PARTNER_SERVICE"), []);

@@ -84,7 +84,7 @@ const toValues = (form: Form): IncomingReadingValues =>
  * A POSTAFIÓKOS (KÜLFÖLDI) SZÁMLA ELLENŐRZÉSE (kártya e4c3b0fb). A PDF-ből
  * kinyert mezők a forrásukkal; a kezelő javít, ment, és jóváhagy. A
  * könyvelőhöz csak a jóváhagyott szám megy, ezért a jóváhagyásig a sor
- * „Ellenőrizendő”. Írni a számla rögzítésének joga (`billing.create`) enged;
+ * „Ellenőrizendő”. Írni a Pénzügy írási joga (`finance.manage`) enged;
  * nélküle a lap csak olvasható.
  */
 export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
@@ -93,8 +93,10 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_VIEW),
   );
+  // UGYANAZ A KULCS, AMIT A VÉGPONT KÉR: `finance.manage`, nem `billing.create`
+  // (az a kimenő számláé, és az értékesítő is megkapja, 2026-10-08).
   const canEdit = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [review, setReview] = useState<IncomingDocumentReview | null>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -350,7 +352,7 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
               </div>
             ) : (
               <p className="text-sm text-pilot-grey-600">
-                A jóváhagyáshoz számla-rögzítési jog (billing.create) kell.
+                A jóváhagyáshoz pénzügyi írási jog (finance.manage) kell.
               </p>
             )}
             {!review.hasText ? (

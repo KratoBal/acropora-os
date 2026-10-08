@@ -15,7 +15,8 @@ import { MailImageController } from "./mail-image.controller.js";
  *
  * MI PIROSIT: ha a szamlazo (MANAGER: billing.resend, settings.manage nelkul)
  * nem latna a kepeket; ha FEL is tolthetne; ha egy egyik joggal sem rendelkezo
- * szerep (SALES) olvashatna.
+ * szerep (WAREHOUSE) olvashatna. A SALES 2026-10-08 ota kiallit es kikuld
+ * (billing.resend, Balazs dontese), tehat a kikuldo fiok kepeit o is olvassa.
  */
 const user = (role: UserRole): AuthenticatedUser => ({
   id: `u-${role}`,
@@ -53,9 +54,15 @@ describe("a levélképek joga", () => {
     assert.equal(enged("ADMIN", "upload"), true);
   });
 
-  it("akinek egyik joga sincs, az nem is olvas", () => {
-    assert.equal(enged("SALES", "list"), false);
-    assert.equal(enged("SALES", "content"), false);
+  it("az ertekesito, aki 2026-10-08 ota kikuld, olvas, de nem tolt fel", () => {
+    assert.equal(enged("SALES", "list"), true);
+    assert.equal(enged("SALES", "content"), true);
     assert.equal(enged("SALES", "upload"), false);
+  });
+
+  it("akinek egyik joga sincs, az nem is olvas", () => {
+    assert.equal(enged("WAREHOUSE", "list"), false);
+    assert.equal(enged("WAREHOUSE", "content"), false);
+    assert.equal(enged("WAREHOUSE", "upload"), false);
   });
 });

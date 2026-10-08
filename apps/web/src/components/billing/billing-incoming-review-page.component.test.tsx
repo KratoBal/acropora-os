@@ -195,14 +195,28 @@ describe("the review page", () => {
     ).toBeInTheDocument();
   });
 
-  it("without the billing create right the page is read only", async () => {
+  it("without the finance write right the page is read only", async () => {
     role.value = "VIEWER";
     render(<BillingIncomingReviewPage itemId="mailbox:mail-1" />);
     expect(await screen.findByLabelText("Nettó")).toHaveAttribute("readonly");
     expect(
       screen.queryByRole("button", { name: "Jóváhagyás" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/billing\.create/)).toBeInTheDocument();
+    expect(screen.getByText(/finance\.manage/)).toBeInTheDocument();
+  });
+
+  /**
+   * A SALES KIÁLLÍTHAT KIMENŐ SZÁMLÁT (billing.create, 2026-10-08), de a
+   * bejövő számla rögzítése nem része annak a döntésnek: ez a lap neki is
+   * csak olvasható.
+   */
+  it("sales may issue outgoing invoices, but this page stays read only for them", async () => {
+    role.value = "SALES";
+    render(<BillingIncomingReviewPage itemId="mailbox:mail-1" />);
+    expect(await screen.findByLabelText("Nettó")).toHaveAttribute("readonly");
+    expect(
+      screen.queryByRole("button", { name: "Jóváhagyás" }),
+    ).not.toBeInTheDocument();
   });
 
   it("a missing PDF is said, not swallowed", async () => {

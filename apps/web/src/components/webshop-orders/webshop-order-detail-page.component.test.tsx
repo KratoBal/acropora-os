@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { PERMISSIONS, ROLE_PERMISSIONS } from "@acropora/types";
 import type { Session, WebshopOrderDetail } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -82,6 +83,27 @@ const session = (
     supplierId: null,
   },
 });
+
+/**
+ * AN ORDER HANDLER WITHOUT THE INVOICE RIGHTS. Since 2026-10-08 the SALES
+ * template issues invoices (Balázs), so "orders.manage without billing.issue"
+ * is a SALES user whose billing writes were taken away person by person.
+ */
+const salesWithoutBilling = (): Session => {
+  const base = session("SALES");
+  return {
+    ...base,
+    user: {
+      ...base.user,
+      permissions: ROLE_PERMISSIONS.SALES.filter(
+        (permission) =>
+          permission !== PERMISSIONS.BILLING_CREATE &&
+          permission !== PERMISSIONS.BILLING_ISSUE &&
+          permission !== PERMISSIONS.BILLING_RESEND,
+      ),
+    },
+  };
+};
 
 const detail: WebshopOrderDetail = {
   id: "order_38",
@@ -658,7 +680,7 @@ describe("WebshopOrderDetailPage", () => {
     expect(within(card).queryByRole("button")).toBeNull();
     first.unmount();
 
-    auth.session = session("SALES");
+    auth.session = salesWithoutBilling();
     api.detail.mockResolvedValue(detail);
     const second = render(
       createElement(WebshopOrderDetailPage, { id: "order_38" }),
@@ -744,7 +766,7 @@ describe("WebshopOrderDetailPage", () => {
     expect(within(card).queryByText(/Szállítólevél/)).toBeNull();
     first.unmount();
 
-    auth.session = session("SALES");
+    auth.session = salesWithoutBilling();
     api.detail.mockResolvedValue({
       ...detail,
       invoiceNumber: "E-1",
@@ -2094,11 +2116,11 @@ describe("the proforma on the Fizetés card", () => {
     );
   });
 
-  it("no button while issuing, while sending, without the billing rights (SALES), or on a failed order", async () => {
-    for (const [order, role] of [
+  it("no button while issuing, while sending, without the billing rights, or on a failed order", async () => {
+    for (const [order, who] of [
       [issued({ status: "ISSUING", number: null, emailStatus: null }), "OWNER"],
       [issued({ emailStatus: "SENDING" }), "OWNER"],
-      [transfer, "SALES"],
+      [transfer, "NO_BILLING"],
       [
         {
           ...transfer,
@@ -2107,7 +2129,8 @@ describe("the proforma on the Fizetés card", () => {
         "OWNER",
       ],
     ] as const) {
-      auth.session = session(role);
+      auth.session =
+        who === "NO_BILLING" ? salesWithoutBilling() : session(who);
       api.detail.mockResolvedValue(order);
       const view = render(
         createElement(WebshopOrderDetailPage, { id: "order_38" }),
@@ -2253,7 +2276,11 @@ describe("the proforma on the Fizetés card", () => {
     );
   });
 
-  it("no Utalás beérkezett before the proforma is issued, or without the billing rights", async () => {
+  /*
+    A BEÉRKEZETT UTALÁS RÖGZÍTÉSE FIZETÉS, NEM KIÁLLÍTÁS: a SALES 2026-10-08 óta
+    kiállíthat (billing.issue), de ezt a gombot nem kapja (finance.manage).
+  */
+  it("no Utalás beérkezett before the proforma is issued, or without the finance write right", async () => {
     for (const [order, role] of [
       [transfer, "OWNER"],
       [issued(), "SALES"],
