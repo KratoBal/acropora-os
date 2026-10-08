@@ -90,4 +90,17 @@ describe("az elkészült hibajegy PDF-je", () => {
     );
     assert.ok(rows.some((row) => row.text.includes("Kovács Márton")));
   });
+
+  it("a hibajegy láblécén a szervizes szám áll (acrobot 28093)", async () => {
+    const text = (
+      await readPdfTextLines(await serviceJobSheetDocument(input()))
+    )
+      .map((row) => row.text)
+      .join("\n");
+    assert.deepEqual(
+      [text.includes("+36-30-982-3634"), text.includes("+36-20-2676801")],
+      [true, false],
+      "FOOTER-SERVICE-JOB-SERVICE",
+    );
+  });
 });

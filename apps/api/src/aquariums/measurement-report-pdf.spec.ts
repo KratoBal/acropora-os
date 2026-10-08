@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { AquariumMeasurementOccasion } from "@acropora/types";
+import {
+  ACROPORA_SERVICE_CONTACT,
+  type AquariumMeasurementOccasion,
+} from "@acropora/types";
 
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
 import {
@@ -74,6 +77,17 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     assert.match(text, /magas · romlik/);
     assert.match(text, /JAVASOLT INTÉZKEDÉSEK/);
     assert.match(text, /7 nap múlva kontrollmérés/);
+  });
+
+  /**
+   * THE OFFICE FOOTER (#1639, Balázs 2026-10-08): the measurement report is
+   * not a service document, so it carries the office's number, never the
+   * service number of the worksheet.
+   */
+  it("REPORT-OFFICE-PHONE: the footer has the office's number", async () => {
+    const text = await textOf(marine());
+    assert.match(text, /\+36-20-2676801/);
+    assert.ok(!text.includes(ACROPORA_SERVICE_CONTACT.phone));
   });
 
   /**
