@@ -835,8 +835,9 @@ export interface MedusaVariantMeasureRow {
   height: number | null;
 }
 
+/** A `null` ürít: csak az OS saját, nyilvántartott értékére (SEO P0 PR 8 utáni árva-kezelés). */
 export type MedusaVariantMeasurePatch = Partial<
-  Record<"weight" | "length" | "width" | "height", number>
+  Record<"weight" | "length" | "width" | "height", number | null>
 >;
 
 export interface MedusaVariantBarcodeRow {
@@ -1279,9 +1280,9 @@ export interface MedusaAdminClient {
   /** A termék változatai a tömegükkel és méreteikkel (SEO P0 PR 8). */
   listVariantMeasures(productId: string): Promise<MedusaVariantMeasureRow[]>;
   /**
-   * Egy változat tömege és méretei. Csak a megadott kulcs íródik; ürítés nincs
-   * (a vetítés a Medusa értékét nem törli, ha nincs VERIFIED tény). EZ IR A
-   * BOLTI OLDALRA.
+   * Egy változat tömege és méretei. Csak a megadott kulcs íródik; a `null`
+   * üríti, de a vetítés csak azt az értéket üríti, amit maga írt ki, és ami
+   * pontosan még az (`planVariantMeasureWrite`). EZ IR A BOLTI OLDALRA.
    */
   updateVariantMeasures(
     productId: string,
