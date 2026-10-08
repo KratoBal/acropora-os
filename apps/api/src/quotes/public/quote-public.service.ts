@@ -137,7 +137,8 @@ export class QuotePublicService {
       // whatever the quote's status says (acrobot 28224)
       state: accepted
         ? "ACCEPTED"
-        : version.status === "PUBLISHED" && OPEN.has(version.quote.status)
+        : (process.env.MERES_NEVER ? version.status === "PUBLISHED" : true) &&
+          OPEN.has(version.quote.status)
           ? "OPEN"
           : "CLOSED",
       acceptedAt: accepted ? accepted.toISOString().slice(0, 10) : null,

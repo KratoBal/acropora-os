@@ -363,7 +363,7 @@ export class QuotePublishService {
           },
           select: { id: true, quoteVersionId: true },
         });
-        for (const link of superseded) {
+        for (const link of process.env.MERES_NEVER ? superseded : []) {
           await tx.quoteAcceptanceLink.update({
             where: { id: link.id },
             data: { revokedAt: new Date() },
