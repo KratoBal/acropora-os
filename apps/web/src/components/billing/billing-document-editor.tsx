@@ -56,6 +56,7 @@ import {
 } from "./billing-editor-state";
 import { BillingPartnerCard } from "./billing-partner-card";
 import {
+  clearPosInvoiceHandoff,
   editorLinesFromPosHandoff,
   readPosInvoiceHandoff,
 } from "./pos-invoice-handoff";
@@ -243,6 +244,11 @@ export function BillingDocumentEditor({
           state.id,
           toDraftInput(state, "update"),
         );
+    // A PÉNZTÁR KOSARA EGYSZER LESZ VÁZLAT (barracuda, #1642): az első mentés
+    // után a kulcs törlődik, különben egy visszalépés ugyanazokkal a sorokkal
+    // nyitna, és a következő mentés egy második vázlatot hozna létre.
+    if (created && posHandoffKey)
+      clearPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
     return { detail, created };
   };
 

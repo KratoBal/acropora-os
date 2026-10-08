@@ -350,6 +350,72 @@ describe("PilotPosTerminalPage", () => {
     ]);
   });
 
+  /**
+   * KEREKÍTÉS (barracuda, #1642): a számla tételenként egész forintra kerekít,
+   * ezért Számlázásnál a gombon a KEREKÍTETT sorok összege áll, nem a
+   * kerekítetlen részösszeg szorozva a kosár-kedvezménnyel. A két páratlan ár
+   * és a két kedvezmény úgy van választva, hogy a kettő eltérjen: 5127,435 +
+   * 738,15 kerekítve 5127 + 738 = 5865, a régi képlet 5865,585 -> 5866.
+   */
+  it("Számlázásnál a gomb összege a forintra kerekített sorok összege", async () => {
+    api.searchProducts.mockResolvedValue([
+      {
+        ...searchResult,
+        productId: "product-a",
+        variantId: "variant-a",
+        sku: "AF-1",
+        productName: "Aqua Forest Pro",
+        grossPrice: "1999",
+      },
+      {
+        ...searchResult,
+        productId: "product-b",
+        variantId: "variant-b",
+        sku: "CM-1",
+        productName: "Coral Mix",
+        grossPrice: "777",
+      },
+    ]);
+    window.sessionStorage.clear();
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "a" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Aqua Forest Pro"));
+    fireEvent.click(await screen.findByText("Coral Mix"));
+    fireEvent.change(
+      screen.getAllByRole("spinbutton", { name: "Mennyiség (db)" })[0]!,
+      { target: { value: "3" } },
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Aqua Forest Pro kedvezmény" }),
+      { target: { value: "10" } },
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Végösszeg kedvezmény" }),
+      { target: { value: "5" } },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Számlázás" }));
+    const button = screen.getByRole("button", { name: /^Tovább a számlához/ });
+    expect(button.textContent).toMatch(/5\s?865\s?Ft$/);
+    fireEvent.click(button);
+
+    const key = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    ).searchParams.get("pos")!;
+    expect(
+      readPosInvoiceHandoff(window.sessionStorage, key)!.map(
+        (line) => line.lineGross,
+      ),
+    ).toEqual([5127, 738]);
+  });
+
   it("billing.create jog nélkül a Számlázás nem jelenik meg, a választó kétgombos", async () => {
     auth.session = sessionWithRole("WAREHOUSE");
     render(createElement(PilotPosTerminalPage));

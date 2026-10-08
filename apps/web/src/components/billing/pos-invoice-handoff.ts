@@ -1,3 +1,5 @@
+import { szamlazzDocumentTotals } from "@acropora/types";
+
 import {
   emptyLine,
   withGrossInput,
@@ -26,8 +28,40 @@ export interface PosInvoiceHandoffLine {
   quantity: number;
   /** A pénztár termékének ÁFA-kulcsa; a pénztár hiányzó kulccsal nem ad át. */
   vatRatePercent: string;
-  /** A tétel bruttó végösszege, a sor- és a kosár-kedvezménnyel együtt. */
+  /**
+   * A tétel bruttó végösszege, a sor- és a kosár-kedvezménnyel együtt, egész
+   * forintra kerekítve (`posInvoiceLineGross`).
+   */
   lineGross: number;
+}
+
+/**
+ * EGY SOR BRUTTÓJA A SZÁMLA KEREKÍTÉSÉVEL (barracuda, #1642). A Számlázz.hu a
+ * forintos számlát tételenként kerekíti egész forintra (`szamlazzDocumentTotals`,
+ * fél-felfelé, a nullától el); ugyanez a függvény kerekít itt is, így a pénztár
+ * által kiírt összeg a kerekített sorok összege, és egyezik a számla
+ * végösszegével. A hat tizedes csak a lebegőpontos zajt vágja le (0,1 + 0,2).
+ */
+export function posInvoiceLineGross(
+  line: { quantity: number; unitGross: number; discountPercent: number },
+  cartDiscountPercent: number,
+): number {
+  const exact =
+    line.unitGross *
+    line.quantity *
+    (1 - line.discountPercent / 100) *
+    (1 - cartDiscountPercent / 100);
+  return Number(
+    szamlazzDocumentTotals(
+      [{ netAmount: "0", vatAmount: "0", grossAmount: exact.toFixed(6) }],
+      "HUF",
+    ).grossAmount,
+  );
+}
+
+/** A Számlázás végösszege: a kerekített sorok összege. */
+export function posInvoiceTotal(lines: PosInvoiceHandoffLine[]): number {
+  return lines.reduce((sum, line) => sum + line.lineGross, 0);
 }
 
 /**
@@ -57,14 +91,7 @@ export function posInvoiceHandoffLines(
     unit: line.unit,
     quantity: line.quantity,
     vatRatePercent: line.vatRate ?? "",
-    lineGross:
-      Math.round(
-        line.unitGross *
-          line.quantity *
-          (1 - line.discountPercent / 100) *
-          (1 - cartDiscountPercent / 100) *
-          100,
-      ) / 100,
+    lineGross: posInvoiceLineGross(line, cartDiscountPercent),
   }));
 }
 
@@ -79,8 +106,16 @@ export function writePosInvoiceHandoff(
 
 /**
  * A kulcshoz tartozó kosár, vagy `null`, ha nincs (lejárt munkamenet, másik
- * fül) vagy olvashatatlan. Nem törli: egy újratöltés ugyanazt adja vissza.
+ * fül) vagy olvashatatlan. Az olvasás nem törli (egy újratöltés ugyanazt
+ * adja vissza); a törlés az első mentésé (`clearPosInvoiceHandoff`).
  */
+export function clearPosInvoiceHandoff(
+  storage: Pick<Storage, "removeItem">,
+  key: string,
+): void {
+  storage.removeItem(STORAGE_PREFIX + key);
+}
+
 export function readPosInvoiceHandoff(
   storage: Pick<Storage, "getItem">,
   key: string,

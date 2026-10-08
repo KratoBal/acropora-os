@@ -14,7 +14,10 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
-import { writePosInvoiceHandoff } from "./pos-invoice-handoff";
+import {
+  readPosInvoiceHandoff,
+  writePosInvoiceHandoff,
+} from "./pos-invoice-handoff";
 
 /**
  * A SZÁMLÁZÁSI SZERKESZTŐ (Számlázás v0.1, brief 35. pont UI QA): a típus
@@ -334,6 +337,49 @@ describe("BillingDocumentEditor", () => {
         discountPercent: null,
       }),
     ]);
+    // az első mentés után a kosár nem nyílik újra (barracuda, #1642)
+    expect(readPosInvoiceHandoff(window.sessionStorage, key)).toBeNull();
+  });
+
+  /*
+    KEREKÍTÉS (barracuda, #1642): a pénztár a forintra kerekített sorokat adja
+    át (5127 és 738, gombja 5 865 Ft-ot írt). A szerkesztő bruttó végösszege
+    ugyanez, és egyik sor sem jelez eltérést a beírt bruttótól.
+  */
+  it("the POS total and the invoice total agree, with no line flagged", async () => {
+    window.sessionStorage.clear();
+    products.detail.mockResolvedValue({ variants: [] });
+    const line = {
+      unit: "db",
+      vatRatePercent: "27",
+    };
+    const key = writePosInvoiceHandoff(window.sessionStorage, [
+      {
+        ...line,
+        productId: "product-a",
+        variantId: "variant-a",
+        sku: "AF-1",
+        productName: "Aqua Forest Pro",
+        quantity: 3,
+        lineGross: 5127,
+      },
+      {
+        ...line,
+        productId: "product-b",
+        variantId: "variant-b",
+        sku: "CM-1",
+        productName: "Coral Mix",
+        quantity: 1,
+        lineGross: 738,
+      },
+    ]);
+    render(<BillingDocumentEditor posHandoffKey={key} />);
+
+    expect(await screen.findByDisplayValue("Coral Mix")).toBeInTheDocument();
+    expect(within(summary()).getByText("Bruttó").nextSibling).toHaveTextContent(
+      /^5\s?865\sFt$/,
+    );
+    expect(screen.queryByText(/A beírt bruttó/)).not.toBeInTheDocument();
   });
 
   it("ignores an unknown POS key and opens empty", () => {

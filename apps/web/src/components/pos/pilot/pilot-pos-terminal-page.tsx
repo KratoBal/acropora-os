@@ -16,6 +16,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   POS_INVOICE_HANDOFF_PARAM,
   posInvoiceHandoffLines,
+  posInvoiceTotal,
   writePosInvoiceHandoff,
 } from "@/components/billing/pos-invoice-handoff";
 import { posApi } from "@/lib/api/pos";
@@ -381,6 +382,12 @@ export function PilotPosTerminalPage() {
     [cart],
   );
   const totalGross = subtotalGross * (1 - discountPercent / 100);
+  // a számla tételenként egész forintra kerekít: Számlázásnál a kiírt összeg a
+  // kerekített sorok összege, hogy a számla végösszegével egyezzen
+  const invoiceLines = useMemo(
+    () => posInvoiceHandoffLines(cart, discountPercent),
+    [cart, discountPercent],
+  );
 
   const stockWarnings = useMemo(() => getCartStockWarnings(cart), [cart]);
   const missingVat = cart.filter((line) => line.vatRate === null);
@@ -428,15 +435,13 @@ export function PilotPosTerminalPage() {
 
   const sendToInvoice = () => {
     if (!canInvoice || cart.length === 0 || missingVat.length > 0) return;
-    const key = writePosInvoiceHandoff(
-      window.sessionStorage,
-      posInvoiceHandoffLines(cart, discountPercent),
-    );
+    const key = writePosInvoiceHandoff(window.sessionStorage, invoiceLines);
     router.push(
       `/penzugy/szamlazas/uj?${POS_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
     );
   };
   const invoicing = paymentMethod === "INVOICE";
+  const payableGross = invoicing ? posInvoiceTotal(invoiceLines) : totalGross;
 
   if (!canView) {
     return (
@@ -761,7 +766,7 @@ export function PilotPosTerminalPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-pilot-grey-600">Fizetendő</span>
                 <p className="text-[26px] font-semibold leading-tight tabular-nums text-pilot-grey-900">
-                  {formatHuf(totalGross)}
+                  {formatHuf(payableGross)}
                 </p>
               </div>
               <div>
@@ -836,7 +841,7 @@ export function PilotPosTerminalPage() {
                     onClick={sendToInvoice}
                     disabled={cart.length === 0 || missingVat.length > 0}
                   >
-                    {`Tovább a számlához · ${formatHuf(totalGross)}`}
+                    {`Tovább a számlához · ${formatHuf(payableGross)}`}
                   </PilotButton>
                 </div>
               ) : !invoicing && canManage ? (
