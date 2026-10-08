@@ -45,6 +45,7 @@ const ALL: Permission[] = [
   PERMISSIONS.QUOTES_MANAGE,
   PERMISSIONS.QUOTES_HANDOFF,
   PERMISSIONS.QUOTES_ACCEPTANCE_RECORD,
+  PERMISSIONS.BILLING_CREATE,
 ];
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -57,10 +58,13 @@ interface Line {
   quantity: number;
   optional?: boolean;
   selected?: boolean;
+  /** P7: the customer line's net unit price and VAT rate */
+  unitNetPrice?: string;
+  vatRate?: string;
 }
 
 describe(
-  "Quotes P6: a project started from an accepted quote",
+  "Quotes P6 and P7: a project started from an accepted quote, and its proforma",
   { skip: gate.mode === "skip" },
   () => {
     const suffix = randomUUID();
@@ -69,6 +73,7 @@ describe(
     const productIds: string[] = [];
     const warehouseIds: string[] = [];
     const extraProjectIds: string[] = [];
+    const customerIds: string[] = [];
     let app: INestApplication, url: string, actorId: string;
     let perms: Permission[] = ALL;
 
@@ -126,9 +131,20 @@ describe(
     }
 
     /** A quote whose published v1 is accepted, straight to the database. */
-    async function acceptedQuote(label: string, lines: Line[]) {
+    async function acceptedQuote(
+      label: string,
+      lines: Line[],
+      extra: {
+        customerId?: string;
+        milestones?: Array<[label: string, percent: number]>;
+      } = {},
+    ) {
       const quote = await prisma.quote.create({
-        data: { quoteNumber: `P6-${label}-${suffix}`, title: `P6 ${label}` },
+        data: {
+          quoteNumber: `P6-${label}-${suffix}`,
+          title: `P6 ${label}`,
+          customerId: extra.customerId ?? null,
+        },
       });
       quoteIds.push(quote.id);
       const version = await prisma.quoteVersion.create({
@@ -159,8 +175,8 @@ describe(
             name: line.name ?? `tétel ${position}`,
             quantity: "1",
             unit: "db",
-            unitNetPrice: "1000",
-            vatRatePercent: "27",
+            unitNetPrice: line.unitNetPrice ?? "1000",
+            vatRatePercent: line.vatRate ?? "27",
             isOptional: line.optional ?? false,
           },
         });
@@ -179,6 +195,17 @@ describe(
         });
         bomIds.push(bom.id);
       }
+      for (const [position, [milestone, percent]] of (
+        extra.milestones ?? []
+      ).entries())
+        await prisma.quotePaymentMilestone.create({
+          data: {
+            versionId: version.id,
+            position,
+            label: milestone,
+            percent: D(percent),
+          },
+        });
       await prisma.quoteAcceptance.create({
         data: {
           quoteId: quote.id,
@@ -195,6 +222,57 @@ describe(
       });
       return { quoteId: quote.id, bomIds };
     }
+
+    async function customer(label: string) {
+      const row = await prisma.customer.create({
+        data: {
+          customerNumber: `P7-${label}-${suffix}`,
+          type: "COMPANY",
+          displayName: `P7 ${label} partner`,
+        },
+      });
+      customerIds.push(row.id);
+      return row.id;
+    }
+
+    /** P7: a 27% and a 5% line, and a 40/40/20 schedule. */
+    const MIXED: Line[] = [
+      {
+        kind: "SERVICE",
+        name: "Kivitelezés",
+        quantity: 1,
+        unitNetPrice: "100001",
+        vatRate: "27",
+      },
+      {
+        kind: "SERVICE",
+        name: "Kiadvány",
+        quantity: 1,
+        unitNetPrice: "33333",
+        vatRate: "5",
+      },
+    ];
+    const SCHEDULE: Array<[string, number]> = [
+      ["Előleg", 40],
+      ["Szállításkor", 40],
+      ["Átadáskor", 20],
+    ];
+    const firstMilestone = async (quoteId: string) =>
+      prisma.quotePaymentMilestone.findFirstOrThrow({
+        where: { version: { quoteId } },
+        orderBy: { position: "asc" },
+      });
+    const proformaDraft = (
+      quoteId: string,
+      milestoneId: string,
+      as: Permission[] = ALL,
+    ) =>
+      request(
+        `/quotes/${quoteId}/milestones/${milestoneId}/proforma-draft`,
+        "POST",
+        {},
+        as,
+      );
 
     const preview = (quoteId: string, body: Json = {}) =>
       request(`/quotes/${quoteId}/handoff/preview`, "POST", body);
@@ -575,6 +653,135 @@ describe(
       assert.deepEqual(statuses, [403, 403], "HANDOFF-403");
     });
 
+    it("a milestone's proforma: a DRAFT with one line per VAT rate", async () => {
+      const c = await customer("split");
+      const q = await acceptedQuote("pf-split", MIXED, {
+        customerId: c,
+        milestones: SCHEDULE,
+      });
+      const m = await firstMilestone(q.quoteId);
+      const res = await proformaDraft(q.quoteId, m.id);
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const invoice = await prisma.invoice.findUniqueOrThrow({
+        where: { id: res.body!.invoiceId },
+        include: { lines: { orderBy: { position: "asc" } } },
+      });
+      const detail = await request(`/quotes/${q.quoteId}`);
+      assert.deepEqual(
+        [
+          res.body!.created,
+          invoice.documentType,
+          invoice.status,
+          invoice.customerId === c,
+          invoice.lines.map((l) => [
+            l.vatRatePercent.toString(),
+            l.netAmount.toString(),
+          ]),
+          invoice.netAmount?.toString(),
+          detail.body!.versions[0].proformas.map((p: Json) => [
+            p.milestoneId === m.id,
+            p.status,
+          ]),
+        ],
+        [
+          true,
+          "PROFORMA",
+          "DRAFT",
+          true,
+          [
+            ["27", "40001"],
+            ["5", "13333"],
+          ],
+          "53334",
+          [[true, "DRAFT"]],
+        ],
+        "PROFORMA-SPLIT",
+      );
+    });
+
+    it("two clicks at once prepare one proforma", async () => {
+      const c = await customer("once");
+      const q = await acceptedQuote("pf-once", MIXED, {
+        customerId: c,
+        milestones: SCHEDULE,
+      });
+      const m = await firstMilestone(q.quoteId);
+      const both = await Promise.all([
+        proformaDraft(q.quoteId, m.id),
+        proformaDraft(q.quoteId, m.id),
+      ]);
+      assert.deepEqual(
+        [
+          both.map((r) => r.status),
+          both[0]!.body!.invoiceId === both[1]!.body!.invoiceId,
+          both.map((r) => r.body!.created).sort(),
+          await prisma.invoice.count({
+            where: { reference: `P6-pf-once-${suffix}` },
+          }),
+        ],
+        [[200, 200], true, [false, true], 1],
+        "PROFORMA-ONCE",
+      );
+    });
+
+    it("the handoff prepares the first milestone's proforma on the project", async () => {
+      const c = await customer("handoff");
+      const q = await acceptedQuote("pf-handoff", MIXED, {
+        customerId: c,
+        milestones: SCHEDULE,
+      });
+      const plan = await preview(q.quoteId);
+      const res = await execute(q.quoteId, plan.body!.planHash, {
+        createProforma: true,
+      });
+      assert.equal(res.status, 200, JSON.stringify(res.body));
+      const m = await firstMilestone(q.quoteId);
+      const invoice = res.body!.proforma?.invoiceId
+        ? await prisma.invoice.findUnique({
+            where: { id: res.body!.proforma.invoiceId },
+          })
+        : null;
+      assert.deepEqual(
+        [
+          res.body!.proforma?.skipped ?? null,
+          m.proformaInvoiceId === res.body!.proforma?.invoiceId,
+          invoice?.sourceType,
+          invoice?.sourceId === res.body!.projectId,
+        ],
+        [null, true, "PROJECT", true],
+        "HANDOFF-WITH-PROFORMA",
+      );
+    });
+
+    it("without billing.create the project starts and the proforma is skipped with a reason", async () => {
+      const c = await customer("skip");
+      const q = await acceptedQuote("pf-skip", MIXED, {
+        customerId: c,
+        milestones: SCHEDULE,
+      });
+      const plan = await preview(q.quoteId);
+      const noBilling = ALL.filter((p) => p !== PERMISSIONS.BILLING_CREATE);
+      const res = await request(
+        `/quotes/${q.quoteId}/handoff`,
+        "POST",
+        { planHash: plan.body!.planHash, createProforma: true },
+        noBilling,
+      );
+      const m = await firstMilestone(q.quoteId);
+      assert.deepEqual(
+        [
+          res.status,
+          res.body!.proforma?.invoiceId,
+          /billing\.create/.test(res.body!.proforma?.skipped ?? ""),
+          await prisma.project.count({ where: { sourceQuoteId: q.quoteId } }),
+          m.proformaInvoiceId,
+          (await proformaDraft(q.quoteId, m.id, noBilling)).status,
+        ],
+        [200, null, true, 1, null, 403],
+        "PROFORMA-NEEDS-BILLING",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await app?.close();
@@ -621,6 +828,17 @@ describe(
           select: { id: true },
         })
       ).map((x) => x.id);
+      const proformaIds = (
+        await prisma.quotePaymentMilestone.findMany({
+          where: { ...versions, proformaInvoiceId: { not: null } },
+          select: { proformaInvoiceId: true },
+        })
+      ).map((m) => m.proformaInvoiceId!);
+      await prisma.quotePaymentMilestone.deleteMany({ where: versions });
+      await prisma.invoiceLine.deleteMany({
+        where: { invoiceId: { in: proformaIds } },
+      });
+      await prisma.invoice.deleteMany({ where: { id: { in: proformaIds } } });
       await prisma.quoteBomItem.deleteMany({ where: versions });
       await prisma.quoteItem.deleteMany({ where: versions });
       await prisma.quoteBlock.deleteMany({ where: versions });
@@ -641,6 +859,7 @@ describe(
       await prisma.warehouse.deleteMany({
         where: { id: { in: warehouseIds } },
       });
+      await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
       await prisma.user.deleteMany({ where: { id: actorId } });
       rmSync(storeRoot, { recursive: true, force: true });
     });

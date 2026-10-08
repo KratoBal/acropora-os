@@ -62,7 +62,10 @@ export const QUOTE_DETAIL_INCLUDE = {
         orderBy: [{ quoteItemId: "asc" }, { position: "asc" }],
         include: { variant: { select: VARIANT_LABEL_SELECT } },
       },
-      milestones: { orderBy: { position: "asc" } },
+      milestones: {
+        orderBy: { position: "asc" },
+        include: { proformaInvoice: { select: { id: true, status: true } } },
+      },
     },
   },
   events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },

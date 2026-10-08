@@ -233,6 +233,17 @@ function internalVersionDto(
     publishedAt: v.publishedAt?.toISOString() ?? null,
     ...netTotals(v),
     bomItems: v.bomItems.map(bomLineDto),
+    proformas: v.milestones.flatMap((m) =>
+      m.proformaInvoice
+        ? [
+            {
+              milestoneId: m.id,
+              invoiceId: m.proformaInvoice.id,
+              status: m.proformaInvoice.status,
+            },
+          ]
+        : [],
+    ),
     blocks: dto.blocks.map((b, index) => ({
       ...b,
       sourceSnippetId: v.blocks[index]!.sourceSnippetId,

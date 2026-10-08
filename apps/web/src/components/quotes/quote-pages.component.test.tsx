@@ -89,6 +89,7 @@ const api = vi.hoisted(() => ({
   revokeAcceptanceLink: vi.fn(),
   handoffPreview: vi.fn(),
   handoff: vi.fn(),
+  proformaDraft: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
@@ -160,6 +161,7 @@ function version(
     netTotal: "53000.0000",
     optionalNetTotal: "7.0000",
     milestones: [],
+    proformas: [],
     blocks: [
       {
         id: "b1",
@@ -671,7 +673,17 @@ describe("Projekt indítása (P6)", () => {
       "WEB-HANDOFF-HASH",
     ).toEqual([
       true,
-      [["token-1", "q1", { planHash: "h1", excludedWarehouseIds: [] }]],
+      [
+        [
+          "token-1",
+          "q1",
+          {
+            planHash: "h1",
+            excludedWarehouseIds: [],
+            createProforma: false,
+          },
+        ],
+      ],
     ]);
   });
 
@@ -718,6 +730,98 @@ describe("Projekt indítása (P6)", () => {
       ],
       "WEB-HANDOFF-DONE",
     ).toEqual([null, null]);
+  });
+});
+
+describe("Díjbekérő a mérföldkőből (P7)", () => {
+  const MILESTONES = [
+    { id: "m1", position: 0, label: "Előleg", percent: "40.00" },
+    { id: "m2", position: 1, label: "Átadáskor", percent: "60.00" },
+  ];
+  const acceptedWith = (over: Partial<QuoteInternalVersion> = {}) =>
+    quote(
+      [
+        version({
+          id: "v1",
+          versionNumber: 1,
+          status: "PUBLISHED",
+          publishedAt: "2026-10-07T10:42:00Z",
+          milestones: MILESTONES,
+          ...over,
+        }),
+      ],
+      { status: "ACCEPTED", acceptedVersionId: "v1" },
+    );
+
+  it("a díjbekérő nélküli mérföldkőnél előkészít, a meglévőnél a vázlatra visz", async () => {
+    api.detail.mockResolvedValue(
+      acceptedWith({
+        proformas: [{ milestoneId: "m2", invoiceId: "inv-2", status: "DRAFT" }],
+      }),
+    );
+    api.proformaDraft.mockResolvedValue({ invoiceId: "inv-1", created: true });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Díjbekérő előkészítése" }),
+    );
+    await waitFor(() =>
+      expect(
+        [
+          api.proformaDraft.mock.calls,
+          screen
+            .getByRole("link", { name: "Díjbekérő (vázlat)" })
+            .getAttribute("href"),
+          screen.getAllByRole("button", { name: "Díjbekérő előkészítése" })
+            .length,
+        ],
+        "WEB-PROFORMA",
+      ).toEqual([[["token-1", "q1", "m1"]], "/penzugy/szamlazas/inv-2", 1]),
+    );
+  });
+
+  it("a projekt indítása alapból kéri az első mérföldkő díjbekérőjét, és kikapcsolható", async () => {
+    api.detail.mockResolvedValue(acceptedWith());
+    api.handoffPreview.mockResolvedValue({
+      quoteId: "q1",
+      versionId: "v1",
+      acceptanceId: "acc1",
+      projectName: "P",
+      lines: [],
+      reservations: [],
+      warehouses: [],
+      planHash: "h1",
+    } satisfies QuoteHandoffPlanDto);
+    api.handoff.mockResolvedValue({
+      projectId: "p1",
+      projectNumber: "PRJ-000043",
+      projectName: "P",
+      executedAt: "2026-10-08T12:00:00Z",
+      executedByName: "Balázs",
+      materialRequestId: null,
+      reservationCount: 0,
+      replayed: false,
+      proforma: { invoiceId: "inv-1", skipped: null },
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Projekt indítása" }),
+    );
+    const box = (await screen.findByLabelText(
+      /Díjbekérő az első mérföldkőből/,
+    )) as HTMLInputElement;
+    const checkedAtFirst = box.checked;
+    fireEvent.click(box);
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Projekt indítása",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        [checkedAtFirst, api.handoff.mock.calls[0]?.[2]?.createProforma],
+        "WEB-HANDOFF-PROFORMA",
+      ).toEqual([true, false]),
+    );
   });
 });
 

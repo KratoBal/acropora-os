@@ -97,6 +97,43 @@ function linesData(draft: NormalizedBillingDraft, invoiceId: string) {
   }));
 }
 
+/**
+ * ONE OWN DRAFT, IN THE CALLER'S TRANSACTION: the header and its lines. The
+ * create path and the quote milestone's proforma (#1582 P7) both write
+ * through here, so a draft has one shape wherever it starts.
+ */
+export async function insertBillingDraft(
+  transaction: Prisma.TransactionClient,
+  input: {
+    id: string;
+    draft: NormalizedBillingDraft;
+    partnerName: string;
+    partnerTaxNumber: string | null;
+    createdByUserId: string;
+  },
+): Promise<void> {
+  await transaction.invoice.create({
+    data: {
+      id: input.id,
+      direction: "OUTBOUND",
+      source: "SZAMLAZZ",
+      status: "DRAFT",
+      invoiceNumber: null,
+      partnerName: input.partnerName,
+      partnerTaxNumber: input.partnerTaxNumber,
+      createdByUserId: input.createdByUserId,
+      ...headerData(input.draft),
+    },
+  });
+  // A kedvezmény-sor a tételére mutat, tehát a tétel ELŐBB kell: a
+  // `createMany` a megadott sorrendben ír, és a normalizált lista a
+  // tételt mindig a kedvezménye elé teszi.
+  if (input.draft.lines.length > 0)
+    await transaction.invoiceLine.createMany({
+      data: linesData(input.draft, input.id),
+    });
+}
+
 @Injectable()
 export class BillingDocumentsRepository {
   private readonly database = prisma;
@@ -133,28 +170,9 @@ export class BillingDocumentsRepository {
     createdByUserId: string;
   }): Promise<{ created: boolean }> {
     try {
-      await this.database.$transaction(async (transaction) => {
-        await transaction.invoice.create({
-          data: {
-            id: input.id,
-            direction: "OUTBOUND",
-            source: "SZAMLAZZ",
-            status: "DRAFT",
-            invoiceNumber: null,
-            partnerName: input.partnerName,
-            partnerTaxNumber: input.partnerTaxNumber,
-            createdByUserId: input.createdByUserId,
-            ...headerData(input.draft),
-          },
-        });
-        // A kedvezmény-sor a tételére mutat, tehát a tétel ELŐBB kell: a
-        // `createMany` a megadott sorrendben ír, és a normalizált lista a
-        // tételt mindig a kedvezménye elé teszi.
-        if (input.draft.lines.length > 0)
-          await transaction.invoiceLine.createMany({
-            data: linesData(input.draft, input.id),
-          });
-      });
+      await this.database.$transaction((transaction) =>
+        insertBillingDraft(transaction, input),
+      );
       return { created: true };
     } catch (cause) {
       if (

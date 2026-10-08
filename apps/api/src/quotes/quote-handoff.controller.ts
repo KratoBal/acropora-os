@@ -8,11 +8,15 @@ import {
   QuoteHandoffPreviewDto,
 } from "./dto/quote-handoff.dto.js";
 import { QuoteHandoffService } from "./quote-handoff.service.js";
+import { QuoteProformaService } from "./quote-proforma.js";
 
-/** #1582 P6: starting the project from an accepted quote. */
+/** #1582 P6 and P7: starting the project, and a milestone's proforma. */
 @Controller("quotes")
 export class QuoteHandoffController {
-  constructor(private readonly service: QuoteHandoffService) {}
+  constructor(
+    private readonly service: QuoteHandoffService,
+    private readonly proformas: QuoteProformaService,
+  ) {}
 
   @Post(":id/handoff/preview")
   @HttpCode(200)
@@ -30,5 +34,17 @@ export class QuoteHandoffController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.execute(id, input, user);
+  }
+
+  /** P7: a milestone's proforma draft (once per milestone). */
+  @Post(":id/milestones/:milestoneId/proforma-draft")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.QUOTES_HANDOFF, PERMISSIONS.BILLING_CREATE)
+  proformaDraft(
+    @Param("id") id: string,
+    @Param("milestoneId") milestoneId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.proformas.prepare(id, milestoneId, user);
   }
 }
