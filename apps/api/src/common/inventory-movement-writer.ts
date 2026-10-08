@@ -64,7 +64,9 @@ export type InventoryMovementSourceProcess =
   /** A Számlázás modulban kiállított számla (2026-09-30). */
   | "BILLING_INVOICE"
   /** Az elhullási naplóba rögzített, rendszerbeli élőlény (2026-10-07). */
-  | "MORTALITY";
+  | "MORTALITY"
+  /** Projektfoglalás változása: a szabad készlet mozog, a fizikai nem (#1582 P5a). */
+  | "PROJECT_RESERVATION";
 
 export type InventoryMovementType =
   | "PURCHASE_RECEIPT"

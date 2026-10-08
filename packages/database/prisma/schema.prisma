@@ -2297,6 +2297,9 @@ enum UnasStockSyncSourceProcess {
   /// Az elhullási naplóba rögzített, rendszerbeli élőlény levonása
   /// (2026-10-07), a bolti eladással azonos úton.
   MORTALITY
+  /// Projektfoglalás változása (#1582 P5a, B2 RESOLVED): a foglalás vagy a
+  /// felszabadítás a szabad készletet mozgatja, a fizikait nem.
+  PROJECT_RESERVATION
 }
 
 /// Tartós, tranzakciós outbox a UNAS-készletpublikáláshoz.
@@ -2844,10 +2847,17 @@ model Project {
 /// üzleti tény; StockItem.reserved ennek gyors, tranzakcióban karbantartott
 /// projectionje. ACTIVE állapotban a mennyiség fizikailag on hand, de nem
 /// eladható és az UNAS felé sem szabad készlet.
+/// A PROJECT'S HOLD ON STOCK. Two origins (#1582 P5a): a purchase invoice's
+/// line received for the project (PURCHASE_RECEIPT), or a quote's BOM item
+/// taken from stock at the handoff (QUOTE_HANDOFF, P6). A CHECK in the
+/// migration holds that each row has exactly its own origin's parent.
 model ProjectInventoryReservation {
   id                    String                            @id @default(cuid())
   projectId             String
-  purchaseInvoiceLineId String
+  purchaseInvoiceLineId String?
+  /// P5a: the quote BOM item this was reserved for (QUOTE_HANDOFF)
+  quoteBomItemId        String?
+  origin                ProjectReservationOrigin          @default(PURCHASE_RECEIPT)
   stockItemId           String
   variantId             String
   warehouseId           String
@@ -2859,17 +2869,27 @@ model ProjectInventoryReservation {
   createdAt             DateTime                          @default(now())
   updatedAt             DateTime                          @updatedAt
 
-  project             Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  purchaseInvoiceLine PurchaseInvoiceLine @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
-  stockItem           StockItem           @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
-  variant             ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict)
-  warehouse           Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy           User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  purchaseInvoiceLine PurchaseInvoiceLine? @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
+  quoteBomItem        QuoteBomItem?        @relation(fields: [quoteBomItemId], references: [id], onDelete: Restrict)
+  stockItem           StockItem            @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  variant             ProductVariant       @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  warehouse           Warehouse            @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy           User?                @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([purchaseInvoiceLineId, projectId])
+  /// a BOM item holds each stock row once; its rows from several warehouses
+  /// may stand side by side (PONTOSÍTÁS 2026-10-07). Receipt rows have a NULL
+  /// quoteBomItemId and never collide here (NULLS DISTINCT).
+  @@unique([quoteBomItemId, stockItemId])
   @@index([projectId, status])
   @@index([stockItemId, status])
   @@index([variantId, warehouseId, status])
+}
+
+enum ProjectReservationOrigin {
+  PURCHASE_RECEIPT
+  QUOTE_HANDOFF
 }
 
 /// A NAV Online Számla queryInvoiceDigest szinkronból lekerülő belföldi
@@ -8993,6 +9013,8 @@ model QuoteBomItem {
   createdProductVariant       ProductVariant?      @relation("QuoteCreatedVariant", fields: [createdProductVariantId], references: [id], onDelete: SetNull)
   sourcePurchaseInvoiceLine   PurchaseInvoiceLine? @relation(fields: [sourcePurchaseInvoiceLineId], references: [id], onDelete: SetNull)
   supplier                    Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  projectReservations ProjectInventoryReservation[]
 
   @@unique([quoteItemId, position])
   @@index([versionId])

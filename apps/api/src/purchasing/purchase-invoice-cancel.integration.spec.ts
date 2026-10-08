@@ -6,6 +6,7 @@ import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { PurchaseInvoiceCancelService } from "./purchase-invoice-cancel.service.js";
+import { ProjectReservationService } from "./project-reservation.service.js";
 import {
   PurchaseInvoiceRepository,
   type CreatePurchaseInvoiceLine,
@@ -196,6 +197,34 @@ describe(
         (await stock(v.id)).onHand.toString(),
         "2",
         "NUMBER-REUSABLE",
+      );
+    });
+
+    it("a cancel and a release by hand at once take the hold down once", async () => {
+      const v = await variant("race", "ACROPORA");
+      const invoice = await record("race", [
+        { variantId: v.id, sku: v.sku, quantity: 3, reserve: 2 },
+      ]);
+      const hold = await prisma.projectInventoryReservation.findFirstOrThrow({
+        where: { variantId: v.id },
+      });
+      const outcomes = await Promise.all([
+        new ProjectReservationService()
+          .release(projectId, hold.id, userId)
+          .then(
+            () => "released",
+            (e: unknown) => String(e),
+          ),
+        cancels.cancel(invoice.id, "Verseny", userId).then(
+          () => "cancelled",
+          (e: unknown) => String(e),
+        ),
+      ]);
+      const item = await stock(v.id);
+      assert.equal(
+        item.reserved.toString(),
+        "0",
+        `RACE-RESERVED-ONCE: ${outcomes.join(" | ")}`,
       );
     });
 
