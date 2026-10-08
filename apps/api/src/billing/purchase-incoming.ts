@@ -488,23 +488,45 @@ export async function postedPurchaseForArrival(
  * tehát a sorrend mindkét irányban determinisztikus: ha a feed az első, a
  * jóváhagyás 409-et kap; ha a jóváhagyás, a feed leváltja a sorát.
  */
-export async function lockIncomingKey(
-  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
-  invoice: {
-    documentNumber: string | null;
-    supplierTaxNumber: string | null;
-    supplierEuTaxNumber: string | null;
-    supplierName: string | null;
-  },
-): Promise<string | null> {
-  const key = incomingKey(
+type KeyedInvoice = {
+  documentNumber: string | null;
+  supplierTaxNumber: string | null;
+  supplierEuTaxNumber: string | null;
+  supplierName: string | null;
+};
+
+/** The invoice's key, as the lock and the duplicate check name it. */
+const keyOf = (invoice: KeyedInvoice) =>
+  incomingKey(
     invoice.documentNumber ?? "",
     invoice.supplierTaxNumber ?? invoice.supplierEuTaxNumber,
     invoice.supplierName ?? "",
   );
-  if (!key) return null;
-  await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`incoming-key:${key}`}, 0))`;
-  return key;
+
+export async function lockIncomingKey(
+  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
+  invoice: KeyedInvoice,
+): Promise<string | null> {
+  return (await lockIncomingKeys(transaction, [invoice]))[0] ?? null;
+}
+
+/**
+ * More than one key, in one sorted order (barracuda's #1648 review): a
+ * renumbering holds the old number's key and the new one's, and two writers
+ * taking two keys in different orders could deadlock. Returns the keys in the
+ * order of the invoices given (null where an invoice has no key).
+ */
+export async function lockIncomingKeys(
+  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
+  invoices: readonly KeyedInvoice[],
+): Promise<(string | null)[]> {
+  const keys = invoices.map(keyOf);
+  const sorted = [
+    ...new Set(keys.filter((key): key is string => !!key)),
+  ].sort();
+  for (const key of sorted)
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`incoming-key:${key}`}, 0))`;
+  return keys;
 }
 
 /**
@@ -631,6 +653,12 @@ export async function withdrawPurchaseRow(
   });
   if (!row) return null;
   await lockIncomingKey(transaction, row);
+  // read again under the lock: a feed of this key may have superseded it
+  const locked = await transaction.incomingBillingDocument.findUnique({
+    where: { id: row.id },
+    select: { id: true },
+  });
+  if (!locked) return null;
   await transaction.incomingDocumentReading.updateMany({
     where: { incomingBillingDocumentId: row.id },
     data: {
@@ -700,8 +728,16 @@ export async function followPurchaseEdit(
     ...row,
     documentNumber: changes.documentNumber ?? row.documentNumber,
   };
-  // the feed and the approval write the new number's invoice under this lock
-  const key = await lockIncomingKey(transaction, after);
+  // the OLD number's key too (barracuda's #1648 review): a feed of the old
+  // number supersedes this row under that key, and the update below would
+  // then find nothing; both keys, in one sorted order
+  const [, key] = await lockIncomingKeys(transaction, [row, after]);
+  // read again under the locks: the row may have been superseded meanwhile
+  const locked = await transaction.incomingBillingDocument.findUnique({
+    where: { id: row.id },
+    select: { id: true },
+  });
+  if (!locked) return null;
   const known =
     changes.documentNumber !== undefined && key
       ? await otherSourceRowFor(transaction, after.documentNumber, key)

@@ -195,6 +195,48 @@ describe(
       return waited;
     }
 
+    /**
+     * A sztornót utánozza: a beszerzési számla sorát CANCELLED-re írja egy
+     * nyitott tranzakcióban, és addig tartja, amíg a `release` nem hívódik.
+     * A `waits` azt méri, vár-e valaki erre a tranzakcióra (`pg_locks`, a
+     * tranzakció azonosítóján), nem alvásból.
+     */
+    async function holdPurchaseRowCancelled(purchaseInvoiceId: string) {
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let held!: (xid: string) => void;
+      const isHeld = new Promise<string>((resolve) => (held = resolve));
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`UPDATE "PurchaseInvoice" SET status = 'CANCELLED' WHERE id = ${purchaseInvoiceId}`;
+          const [own] = await tx.$queryRaw<{ xid: string }[]>`
+            SELECT transactionid::text AS xid FROM pg_locks
+            WHERE pid = pg_backend_pid() AND locktype = 'transactionid' AND granted`;
+          held(own!.xid);
+          await released;
+        },
+        { timeout: 30_000 },
+      );
+      const xid = await isHeld;
+      return {
+        async waits() {
+          for (let i = 0; i < 200; i += 1) {
+            const [row] = await prisma.$queryRaw<{ waiting: bigint }[]>`
+              SELECT count(*) AS waiting FROM pg_locks
+              WHERE locktype = 'transactionid' AND NOT granted
+                AND transactionid::text = ${xid}`;
+            if (row && row.waiting > 0n) return true;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          return false;
+        },
+        async release() {
+          release();
+          await holder;
+        },
+      };
+    }
+
     const collected = (externalId: string, invoiceNumber: string) =>
       new InvoiceCollectionRepository().store({
         source: "INFO_MAIL",
@@ -588,6 +630,67 @@ describe(
         [["SZAMLAZZ"], { state: "VERIFIED", incomingBillingDocumentId: null }],
         "EDIT-SUPERSEDED",
       );
+    });
+
+    it("an approval waiting while the purchase is cancelled: 409, no PURCHASE row", async () => {
+      const invoice = await purchase("X");
+      const cancel = await holdPurchaseRowCancelled(invoice.id);
+      const approving = reviews
+        .approve(`purchase:${invoice.id}`, null, userId)
+        .then(
+          () => null,
+          (error: unknown) => (error as { status?: number }).status,
+        );
+      const waited = await cancel.waits();
+      await cancel.release();
+      const refused = await approving;
+      const rows = await prisma.incomingBillingDocument.count({
+        where: { source: "PURCHASE", externalId: invoice.id },
+      });
+      assert.deepEqual(
+        [waited, refused, rows],
+        [true, 409, 0],
+        "RACE-CANCEL-APPROVE",
+      );
+    });
+
+    it("a renumbering waits for the OLD number's lock too; a feed superseding the row meanwhile is no error", async () => {
+      const invoice = await purchase("K");
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      // a feed of the OLD number, superseding the row under the old key
+      const release = await holdLock(
+        invoice.supplierInvoiceNumber,
+        async (tx) => {
+          const row = await tx.incomingBillingDocument.findUniqueOrThrow({
+            where: {
+              source_externalId: { source: "PURCHASE", externalId: invoice.id },
+            },
+            select: { id: true },
+          });
+          await tx.incomingDocumentReading.updateMany({
+            where: { incomingBillingDocumentId: row.id },
+            data: { incomingBillingDocumentId: null },
+          });
+          await tx.incomingBillingDocument.delete({ where: { id: row.id } });
+        },
+      );
+      const editing = new PurchaseInvoiceEditService()
+        .update(
+          invoice.id,
+          { supplierInvoiceNumber: `UJ-${invoice.supplierInvoiceNumber}` },
+          userId,
+        )
+        .then(
+          () => null,
+          (error: unknown) => (error as Error).message,
+        );
+      const waited = await someoneWaits(invoice.supplierInvoiceNumber);
+      await release();
+      const failed = await editing;
+      const rows = await prisma.incomingBillingDocument.count({
+        where: { source: "PURCHASE", externalId: invoice.id },
+      });
+      assert.deepEqual([waited, failed, rows], [true, null, 0], "EDIT-OLD-KEY");
     });
 
     after(async () => {
