@@ -1114,6 +1114,17 @@ export interface MedusaAdminClient {
     count: number;
   }>;
   productShippingProfileId(productId: string): Promise<string | null>;
+  /** Egy lap termék a handle-jével (SEO P0 PR 7d, a handle-átkapcsolás terve). */
+  listProductHandles(
+    offset: number,
+    limit: number,
+  ): Promise<{ products: { id: string; handle: string }[]; count: number }>;
+  /**
+   * CSAK A HANDLE írása egy terméken (PR 7d). Külön hívás, mert az `update` a
+   * teljes vetítési alakot várja (cím, leírás), és az átkapcsolás a többi mezőhöz
+   * nem nyúlhat. EZ IR A BOLTI OLDALRA.
+   */
+  setProductHandle(id: string, handle: string): Promise<void>;
   /** Egy lap termék a változatai SKU-jával: a kötés-sor nélküli párosításhoz. */
   listProductSkus(
     offset: number,
@@ -2242,6 +2253,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       limit: String(limit),
     });
     return this.request(`/admin/products?${params.toString()}`);
+  }
+
+  async listProductHandles(
+    offset: number,
+    limit: number,
+  ): Promise<{ products: { id: string; handle: string }[]; count: number }> {
+    // rendezve: rendezés nélkül az offset-lapozás azonos `created_at` mellett
+    // elcsúszhat, és egy termék kimaradhat vagy kétszer jöhet (barracuda, #1607)
+    const params = new URLSearchParams({
+      fields: "id,handle",
+      order: "id",
+      offset: String(offset),
+      limit: String(limit),
+    });
+    return this.request(`/admin/products?${params.toString()}`);
+  }
+
+  async setProductHandle(id: string, handle: string): Promise<void> {
+    await this.request(`/admin/products/${encodeURIComponent(id)}`, {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    });
   }
 
   async listProductSkus(

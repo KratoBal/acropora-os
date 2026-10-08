@@ -13,6 +13,7 @@ import type {
   Session,
   UserRole,
 } from "@acropora/types";
+import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dayAfter } from "./quote-format";
@@ -321,6 +322,50 @@ describe("Új árajánlat (567:190)", () => {
       templateId: "t1",
     });
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9/szerkesztes");
+  });
+
+  /*
+    Balázs on stage, 2026-10-08: the search listed nothing, because it asked
+    for 8 rows and the API's lower bound is 10 (a 400, swallowed). The fake
+    answers like the API's query validation does.
+  */
+  it("a partnerkereső az API határán belüli lapméretet kér, és talál", async () => {
+    customers.list.mockImplementation(
+      (_token: string, query: URLSearchParams) => {
+        const size = Number(query.get("pageSize"));
+        return size < CUSTOMER_LIST_PAGE_SIZE.min ||
+          size > CUSTOMER_LIST_PAGE_SIZE.max
+          ? Promise.reject(
+              new Error(
+                `pageSize must not be less than ${CUSTOMER_LIST_PAGE_SIZE.min}`,
+              ),
+            )
+          : Promise.resolve({
+              items: [{ id: "c1", displayName: "Blue Office Kft." }],
+              total: 1,
+            });
+      },
+    );
+    api.templates.mockResolvedValue([]);
+    render(<QuoteNewPage />);
+    fireEvent.change(screen.getByLabelText("Partner keresése"), {
+      target: { value: "Blue" },
+    });
+    expect(
+      await screen.findByRole("button", { name: "Blue Office Kft." }),
+    ).toBeTruthy();
+  });
+
+  it("a sikertelen keresés hibát mutat, nem üres listát", async () => {
+    customers.list.mockRejectedValue(new Error("A szerver nem válaszolt."));
+    api.templates.mockResolvedValue([]);
+    render(<QuoteNewPage />);
+    fireEvent.change(screen.getByLabelText("Partner keresése"), {
+      target: { value: "Blue" },
+    });
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "A szerver nem válaszolt.",
+    );
   });
 });
 

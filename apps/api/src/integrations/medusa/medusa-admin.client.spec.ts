@@ -97,6 +97,30 @@ describe("HttpMedusaAdminClient.findByExternalId", () => {
  * valódi kérés sosem kérte őket.
  */
 describe("HttpMedusaAdminClient.listProductVariants", () => {
+  it("a handle-lista rendezve lapoz (order=id), a megadott offsettel (SEO P0 PR 7d)", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ products: [], count: 0 }),
+      };
+    }) as unknown as typeof fetch;
+    const client = new HttpMedusaAdminClient(
+      { baseUrl: "http://medusa.teszt", apiKey: "kulcs" },
+      fetchImpl,
+    );
+
+    await client.listProductHandles(400, 200);
+
+    const kert = new URL(urls[0]!).searchParams;
+    assert.equal(kert.get("order"), "id");
+    assert.equal(kert.get("offset"), "400");
+    assert.equal(kert.get("limit"), "200");
+    assert.equal(kert.get("fields"), "id,handle");
+  });
+
   it("a törölteket is kéri, és a törlés bélyegét is lekéri", async () => {
     const urls: string[] = [];
     const fetchImpl = (async (url: string) => {
