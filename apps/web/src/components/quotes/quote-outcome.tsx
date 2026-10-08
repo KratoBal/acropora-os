@@ -26,6 +26,7 @@ import {
   errorText,
   formatQuoteDay,
   formatQuoteMoney,
+  QUOTE_ACCEPTANCE_RECORDED_SOURCE,
   QUOTE_ACCEPTANCE_SOURCE,
   QUOTE_CLOSE_REASON,
 } from "./quote-format";
@@ -103,7 +104,7 @@ export function QuoteOutcomeCard({
           <div>
             <PilotDataRow
               label="Elfogadva"
-              value={`v${live.versionNumber} · ${formatQuoteDay(live.acceptedAt)} · ${QUOTE_ACCEPTANCE_SOURCE[live.source]}`}
+              value={`v${live.versionNumber} · ${formatQuoteDay(live.acceptedAt)} · ${QUOTE_ACCEPTANCE_RECORDED_SOURCE[live.source]}`}
             />
             <PilotDataRow
               label="Elfogadó"

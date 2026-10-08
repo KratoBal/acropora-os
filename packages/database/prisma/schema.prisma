@@ -914,118 +914,119 @@ model User {
   createdAt              DateTime                      @default(now())
   updatedAt              DateTime                      @updatedAt
 
-  sessions                   Session[]
+  sessions                    Session[]
   /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
-  unitAssignments            UserWorksheetDepartment[]
-  notificationRoles          UserNotificationRole[]        @relation("UserNotificationRole")
-  serviceCapabilities        UserServiceCapability[]       @relation("UserServiceCapability")
-  permissionOverrides        UserPermissionOverride[]      @relation("UserPermissionOverride")
-  permissionOverridesSet     UserPermissionOverride[]      @relation("UserPermissionOverrideSetBy")
-  auditLogs                  AuditLog[]
-  domainEvents               DomainEvent[]
-  stockMovements             StockMovement[]
-  startedInventoryCounts     InventoryCount[]
-  posSales                   SalesOrder[]
-  createdPurchaseInvoices    PurchaseInvoice[]
-  unasCredentialsUpdated     UnasConnectionSetting[]       @relation("UnasCredentialUpdatedBy")
-  navCredentialsUpdated      NavConnectionSetting[]        @relation("NavCredentialUpdatedBy")
-  szamlazzCredentialsUpdated SzamlazzConnectionSetting[]   @relation("SzamlazzCredentialUpdatedBy")
-  medusaCredentialsUpdated   MedusaConnectionSetting[]     @relation("MedusaCredentialUpdatedBy")
-  stockReconciliationRepairs StockReconciliationRepair[]
-  createdProducts            Product[]                     @relation("ProductCreatedBy")
-  createdProjects            Project[]                     @relation("ProjectCreatedBy")
-  projectReservations        ProjectInventoryReservation[]
-  approvedFoxpostLines       FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
-  approvedGlsCodLines        GlsCodReportLine[]            @relation("GlsCodLineManualApprovedBy")
-  createdAssets              Asset[]                       @relation("AssetCreatedBy")
-  updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
-  assetEvents                AssetEvent[]
-  orderBusinessStatusEvents  OrderBusinessStatusEvent[]    @relation("OrderBusinessStatusEventActor")
-  uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
-  uploadedWorksheetDocuments WorksheetDocument[]           @relation("WorksheetDocumentUploadedBy")
+  unitAssignments             UserWorksheetDepartment[]
+  notificationRoles           UserNotificationRole[]        @relation("UserNotificationRole")
+  serviceCapabilities         UserServiceCapability[]       @relation("UserServiceCapability")
+  permissionOverrides         UserPermissionOverride[]      @relation("UserPermissionOverride")
+  permissionOverridesSet      UserPermissionOverride[]      @relation("UserPermissionOverrideSetBy")
+  auditLogs                   AuditLog[]
+  domainEvents                DomainEvent[]
+  stockMovements              StockMovement[]
+  startedInventoryCounts      InventoryCount[]
+  posSales                    SalesOrder[]
+  createdPurchaseInvoices     PurchaseInvoice[]
+  unasCredentialsUpdated      UnasConnectionSetting[]       @relation("UnasCredentialUpdatedBy")
+  navCredentialsUpdated       NavConnectionSetting[]        @relation("NavCredentialUpdatedBy")
+  szamlazzCredentialsUpdated  SzamlazzConnectionSetting[]   @relation("SzamlazzCredentialUpdatedBy")
+  medusaCredentialsUpdated    MedusaConnectionSetting[]     @relation("MedusaCredentialUpdatedBy")
+  stockReconciliationRepairs  StockReconciliationRepair[]
+  createdProducts             Product[]                     @relation("ProductCreatedBy")
+  createdProjects             Project[]                     @relation("ProjectCreatedBy")
+  projectReservations         ProjectInventoryReservation[]
+  approvedFoxpostLines        FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
+  approvedGlsCodLines         GlsCodReportLine[]            @relation("GlsCodLineManualApprovedBy")
+  createdAssets               Asset[]                       @relation("AssetCreatedBy")
+  updatedAssets               Asset[]                       @relation("AssetUpdatedBy")
+  assetEvents                 AssetEvent[]
+  orderBusinessStatusEvents   OrderBusinessStatusEvent[]    @relation("OrderBusinessStatusEventActor")
+  uploadedAssetDocuments      AssetDocument[]               @relation("AssetDocumentUploadedBy")
+  uploadedWorksheetDocuments  WorksheetDocument[]           @relation("WorksheetDocumentUploadedBy")
   /// A hibajegyekhez (ServiceJob) feltöltött csatolmányok.
-  uploadedJobDocuments       ServiceJobDocument[]          @relation("ServiceJobDocumentUploadedBy")
-  assignedTasks              Task[]                        @relation("TaskAssignee")
-  createdTasks               Task[]                        @relation("TaskCreatedBy")
-  closedTasks                Task[]                        @relation("TaskClosedBy")
-  createdWorksheets          Worksheet[]                   @relation("WorksheetCreatedBy")
+  uploadedJobDocuments        ServiceJobDocument[]          @relation("ServiceJobDocumentUploadedBy")
+  assignedTasks               Task[]                        @relation("TaskAssignee")
+  createdTasks                Task[]                        @relation("TaskCreatedBy")
+  closedTasks                 Task[]                        @relation("TaskClosedBy")
+  createdWorksheets           Worksheet[]                   @relation("WorksheetCreatedBy")
   /// Amiket ez a felhasználó adott át a szolgáltatónak, a helyszíni munka
   /// befejeztével.
-  handedOverWorksheets       Worksheet[]                   @relation("WorksheetHandedOverBy")
+  handedOverWorksheets        Worksheet[]                   @relation("WorksheetHandedOverBy")
   /// A LAPOK, AMIKET EZ A KOLLEGA REJTETT EL. A rejtes visszavonhato, tehat
   /// ez a lista fogyhat is.
-  hiddenWorksheets           Worksheet[]                   @relation("WorksheetHiddenBy")
+  hiddenWorksheets            Worksheet[]                   @relation("WorksheetHiddenBy")
   /// Amit ez a felhasználó léptetett egy hibajegyen.
-  serviceJobEvents           ServiceJobEvent[]             @relation("ServiceJobEventActor")
-  assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
-  worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
+  serviceJobEvents            ServiceJobEvent[]             @relation("ServiceJobEventActor")
+  assignedWorksheets          WorksheetAssignee[]           @relation("WorksheetAssignee")
+  worksheetAssignmentsMade    WorksheetAssignee[]           @relation("WorksheetAssignedBy")
   /// A hibajegyek, amikre ezt a kollegat delegaltak.
-  assignedServiceJobs        ServiceJobAssignee[]          @relation("ServiceJobAssignee")
+  assignedServiceJobs         ServiceJobAssignee[]          @relation("ServiceJobAssignee")
   /// Az akváriumok, amiket ez a kolléga tart karban. Lásd az
   /// `AquariumMaintainer` fejlécét.
-  aquariumMaintainerships    AquariumMaintainer[]
-  serviceJobAssignmentsMade  ServiceJobAssignee[]          @relation("ServiceJobAssignedBy")
-  createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
-  closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
-  sentWorksheetVersions      WorksheetVersion[]            @relation("WorksheetVersionSentTo")
-  worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
+  aquariumMaintainerships     AquariumMaintainer[]
+  serviceJobAssignmentsMade   ServiceJobAssignee[]          @relation("ServiceJobAssignedBy")
+  createdWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
+  closedWorksheetVersions     WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
+  sentWorksheetVersions       WorksheetVersion[]            @relation("WorksheetVersionSentTo")
+  worksheetSignatures         WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
   /// Amiket EZ a szemely irt ala (a lap partnerenek munkatarsakent).
-  signedWorksheets           WorksheetVersionSignature[]   @relation("WorksheetSigner")
+  signedWorksheets            WorksheetVersionSignature[]   @relation("WorksheetSigner")
   /// A munkanaplo-bejegyzesei. `SetNull` a torleskor: a bejegyzes marad, a
   /// szerzo neve nelkul.
-  worksheetEntries           WorksheetEntry[]              @relation("WorksheetEntryAuthor")
+  worksheetEntries            WorksheetEntry[]              @relation("WorksheetEntryAuthor")
   /// Anyagigenyek, amiket ez a kollega adott fel a munkalaprol.
-  requestedMaterialRequests  MaterialRequest[]             @relation("MaterialRequestRequestedBy")
+  requestedMaterialRequests   MaterialRequest[]             @relation("MaterialRequestRequestedBy")
   /// Anyagigenyek, amiket ez a kollega jelolt "beerkezett"-nek.
-  receivedMaterialRequests   MaterialRequest[]             @relation("MaterialRequestReceivedBy")
+  receivedMaterialRequests    MaterialRequest[]             @relation("MaterialRequestReceivedBy")
   /// Anyagigenyek, amiknek a beszerzeset ez a kollega intezi (V2).
-  handledMaterialRequests    MaterialRequest[]             @relation("MaterialRequestHandler")
-  orderedMaterialRequests    MaterialRequest[]             @relation("MaterialRequestOrderedBy")
-  cancelledMaterialRequests  MaterialRequest[]             @relation("MaterialRequestCancelledBy")
-  receivedRequestItems       MaterialRequestItem[]         @relation("MaterialRequestItemReceivedBy")
-  materialRequestEvents      MaterialRequestEvent[]        @relation("MaterialRequestEventActor")
-  materialRequestComments    MaterialRequestComment[]      @relation("MaterialRequestCommentAuthor")
-  deviceTokens               DeviceToken[]
+  handledMaterialRequests     MaterialRequest[]             @relation("MaterialRequestHandler")
+  orderedMaterialRequests     MaterialRequest[]             @relation("MaterialRequestOrderedBy")
+  cancelledMaterialRequests   MaterialRequest[]             @relation("MaterialRequestCancelledBy")
+  receivedRequestItems        MaterialRequestItem[]         @relation("MaterialRequestItemReceivedBy")
+  materialRequestEvents       MaterialRequestEvent[]        @relation("MaterialRequestEventActor")
+  materialRequestComments     MaterialRequestComment[]      @relation("MaterialRequestCommentAuthor")
+  deviceTokens                DeviceToken[]
   /// Az Üzenetek modul (1. fázis, kártya 51d7aba0): az általa indított
   /// beszélgetések, a tagságai, az elküldött és az általa törölt üzenetek.
-  createdConversations       Conversation[]                @relation("ConversationCreatedBy")
-  conversationMemberships    ConversationMember[]
-  sentMessages               Message[]                     @relation("MessageSender")
-  deletedMessages            Message[]                     @relation("MessageDeletedBy")
+  createdConversations        Conversation[]                @relation("ConversationCreatedBy")
+  conversationMemberships     ConversationMember[]
+  sentMessages                Message[]                     @relation("MessageSender")
+  deletedMessages             Message[]                     @relation("MessageDeletedBy")
   /// Az Üzenetek 2. fázisa: a feltöltött csatolmányai és a reakciói.
-  uploadedMessageAttachments MessageAttachment[]
-  messageReactions           MessageReaction[]
+  uploadedMessageAttachments  MessageAttachment[]
+  messageReactions            MessageReaction[]
   /// Az Üzenetek 3. fázisa: az általa kitűzött üzenetek, és azok a továbbított
   /// üzenetek, amiknek ő az eredeti szerzője.
-  pinnedMessages             PinnedMessage[]               @relation("PinnedMessageBy")
-  forwardedAuthoredMessages  Message[]                     @relation("MessageForwardedFromUser")
+  pinnedMessages              PinnedMessage[]               @relation("PinnedMessageBy")
+  forwardedAuthoredMessages   Message[]                     @relation("MessageForwardedFromUser")
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
   /// vagyis egy takaritasi muvelet TAGITANA a hozzaferest. Restrict mellett a
   /// torles hangosan elakad, es ember dont a fiok sorsarol.
-  customer                   Customer?                     @relation("CustomerPortalUser", fields: [customerId], references: [id], onDelete: Restrict)
-  supplier                   Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
-  ticketMailTemplates        TicketMailTemplate[]          @relation("TicketMailTemplateUpdatedBy")
-  mailImages                 MailImage[]                   @relation("MailImageUploadedBy")
-  invoicesCreated            Invoice[]                     @relation("InvoiceCreatedBy")
-  invoicesIssued             Invoice[]                     @relation("InvoiceIssuedBy")
-  billingMailDeliveries      BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
-  simplePayLinesApproved     SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
-  mortalityRecordsRecorded   MortalityRecord[]             @relation("MortalityRecordRecordedBy")
-  mortalityDocumentsUploaded MortalityRecordDocument[]     @relation("MortalityRecordDocumentUploadedBy")
-  dashboardLayout            UserDashboardLayout?
-  ownedQuotes                Quote[]                       @relation("QuoteOwner")
-  createdQuotes              Quote[]                       @relation("QuoteCreator")
-  publishedQuoteVersions     QuoteVersion[]                @relation("QuotePublisher")
-  createdQuoteTemplates      QuoteTemplate[]               @relation("QuoteTemplateCreator")
-  updatedQuoteTemplates      QuoteTemplate[]               @relation("QuoteTemplateUpdater")
-  createdQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetCreator")
-  updatedQuoteSnippets       QuoteSnippet[]                @relation("QuoteSnippetUpdater")
-  quoteEvents                QuoteEvent[]                  @relation("QuoteEventActor")
-  recordedQuoteAcceptances   QuoteAcceptance[]             @relation("QuoteAcceptanceRecorder")
-  revokedQuoteAcceptances    QuoteAcceptance[]             @relation("QuoteAcceptanceRevoker")
-  initiatedQuoteMails        QuoteMailDelivery[]           @relation("QuoteMailInitiator")
-  incomingReadingsReviewed   IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
+  customer                    Customer?                     @relation("CustomerPortalUser", fields: [customerId], references: [id], onDelete: Restrict)
+  supplier                    Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
+  ticketMailTemplates         TicketMailTemplate[]          @relation("TicketMailTemplateUpdatedBy")
+  mailImages                  MailImage[]                   @relation("MailImageUploadedBy")
+  invoicesCreated             Invoice[]                     @relation("InvoiceCreatedBy")
+  invoicesIssued              Invoice[]                     @relation("InvoiceIssuedBy")
+  billingMailDeliveries       BillingDocumentMailDelivery[] @relation("BillingMailInitiatedBy")
+  simplePayLinesApproved      SimplePayTransactionLine[]    @relation("SimplePayLineManualApprovedBy")
+  mortalityRecordsRecorded    MortalityRecord[]             @relation("MortalityRecordRecordedBy")
+  mortalityDocumentsUploaded  MortalityRecordDocument[]     @relation("MortalityRecordDocumentUploadedBy")
+  dashboardLayout             UserDashboardLayout?
+  ownedQuotes                 Quote[]                       @relation("QuoteOwner")
+  createdQuotes               Quote[]                       @relation("QuoteCreator")
+  publishedQuoteVersions      QuoteVersion[]                @relation("QuotePublisher")
+  createdQuoteTemplates       QuoteTemplate[]               @relation("QuoteTemplateCreator")
+  updatedQuoteTemplates       QuoteTemplate[]               @relation("QuoteTemplateUpdater")
+  createdQuoteSnippets        QuoteSnippet[]                @relation("QuoteSnippetCreator")
+  updatedQuoteSnippets        QuoteSnippet[]                @relation("QuoteSnippetUpdater")
+  quoteEvents                 QuoteEvent[]                  @relation("QuoteEventActor")
+  recordedQuoteAcceptances    QuoteAcceptance[]             @relation("QuoteAcceptanceRecorder")
+  revokedQuoteAcceptances     QuoteAcceptance[]             @relation("QuoteAcceptanceRevoker")
+  createdQuoteAcceptanceLinks QuoteAcceptanceLink[]         @relation("QuoteAcceptanceLinkCreator")
+  initiatedQuoteMails         QuoteMailDelivery[]           @relation("QuoteMailInitiator")
+  incomingReadingsReviewed    IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -8831,6 +8832,8 @@ enum QuoteAcceptanceSource {
   EMAIL
   IN_PERSON
   OTHER_MANUAL
+  /// P4b: the customer accepted on the public link
+  PUBLIC_LINK
 }
 
 enum QuoteSnippetKind {
@@ -8842,26 +8845,27 @@ enum QuoteSnippetKind {
 }
 
 model Quote {
-  id                String              @id @default(cuid())
-  quoteNumber       String              @unique
+  id                String                @id @default(cuid())
+  quoteNumber       String                @unique
   customerId        String?
   title             String
-  status            QuoteStatus         @default(DRAFT)
+  status            QuoteStatus           @default(DRAFT)
   ownerUserId       String?
   closeReason       QuoteCloseReason?
   closeNote         String?
-  postponedUntil    DateTime?           @db.Date
-  acceptedVersionId String?             @unique
+  postponedUntil    DateTime?             @db.Date
+  acceptedVersionId String?               @unique
   createdById       String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  customer          Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  owner             User?               @relation("QuoteOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  createdBy         User?               @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  acceptedVersion   QuoteVersion?       @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
-  versions          QuoteVersion[]      @relation("QuoteVersions")
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  customer          Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  owner             User?                 @relation("QuoteOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdBy         User?                 @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedVersion   QuoteVersion?         @relation("QuoteAcceptedVersion", fields: [acceptedVersionId], references: [id], onDelete: Restrict)
+  versions          QuoteVersion[]        @relation("QuoteVersions")
   events            QuoteEvent[]
   acceptances       QuoteAcceptance[]
+  acceptanceLinks   QuoteAcceptanceLink[]
   mailDeliveries    QuoteMailDelivery[]
 
   @@index([status, updatedAt])
@@ -8901,6 +8905,7 @@ model QuoteVersion {
   milestones           QuotePaymentMilestone[]
   events               QuoteEvent[]
   acceptances          QuoteAcceptance[]
+  acceptanceLinks      QuoteAcceptanceLink[]
   mailDeliveries       QuoteMailDelivery[]
 
   @@unique([quoteId, versionNumber])
@@ -9049,15 +9054,43 @@ model QuoteAcceptance {
   revokedAt               DateTime?
   revokedById             String?
   revokeReason            String?
+  /// P4b: the link it came through; set exactly when source = PUBLIC_LINK
+  acceptanceLinkId        String?
   createdAt               DateTime              @default(now())
   quote                   Quote                 @relation(fields: [quoteId], references: [id], onDelete: Restrict)
   /// Composite FK: the accepted version belongs to this very quote.
   version                 QuoteVersion          @relation(fields: [quoteVersionId, quoteId], references: [id, quoteId], onDelete: Restrict)
   recordedBy              User?                 @relation("QuoteAcceptanceRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
   revokedBy               User?                 @relation("QuoteAcceptanceRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
+  acceptanceLink          QuoteAcceptanceLink?  @relation(fields: [acceptanceLinkId], references: [id], onDelete: Restrict)
 
   @@index([quoteId, createdAt])
   @@index([quoteVersionId])
+}
+
+/// P4b (#1582): the public acceptance link of one published version. Only the
+/// SHA-256 of the token is stored; the token itself is shown once, at issue.
+/// One live (not revoked) link per version: a partial unique index in the
+/// migration, not expressible here.
+model QuoteAcceptanceLink {
+  id             String            @id @default(cuid())
+  quoteId        String
+  quoteVersionId String
+  tokenHash      String            @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdById    String?
+  /// the first time the customer opened it (one LINK_OPENED event)
+  firstOpenedAt  DateTime?
+  createdAt      DateTime          @default(now())
+  quote          Quote             @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  /// Composite FK: the version belongs to this very quote.
+  version        QuoteVersion      @relation(fields: [quoteVersionId, quoteId], references: [id, quoteId], onDelete: Restrict)
+  createdBy      User?             @relation("QuoteAcceptanceLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptances    QuoteAcceptance[]
+
+  @@index([quoteVersionId])
+  @@index([quoteId, createdAt])
 }
 
 /// #1582 P3: one row per send attempt (the BillingDocumentMailDelivery shape).
