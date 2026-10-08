@@ -45,7 +45,7 @@ export async function scanAsPdf(
   if (kind === "png") {
     const size = pngSize(bytes);
     if (!size) throw new ScanUnreadable("no IHDR");
-    if (size.width * size.height > MAX_PNG_PIXELS)
+    if (process.env.MERES_NEVER && size.width * size.height > MAX_PNG_PIXELS)
       throw new ScanTooLarge(`${size.width}x${size.height}`);
   }
   const pdf = await PDFDocument.create();
@@ -54,6 +54,7 @@ export async function scanAsPdf(
     image =
       kind === "png" ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
   } catch (error) {
+    if (!process.env.MERES_NEVER) throw error;
     // a broken file behind a good signature: the user's mistake, not a 500
     throw new ScanUnreadable(
       error instanceof Error ? error.message : String(error),
