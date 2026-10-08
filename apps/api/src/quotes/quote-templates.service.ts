@@ -194,7 +194,7 @@ export class QuoteTemplatesService {
         Object.assign(
           data,
           templateBody({
-            blocks: patch.blocks ?? current.blocks,
+            blocks: patch.blocks ?? [],
             milestones: patch.milestones ?? current.milestones,
           }),
         );

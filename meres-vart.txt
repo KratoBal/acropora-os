@@ -1,0 +1,3 @@
+# templates calibration round 2: two independent mutations
+PATCH-KEEPS-BLOCKS
+WRITE-403

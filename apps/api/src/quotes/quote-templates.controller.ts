@@ -40,7 +40,7 @@ export class QuoteTemplatesController {
   }
 
   @Post()
-  @RequirePermissions(PERMISSIONS.QUOTES_TEMPLATES_MANAGE)
+  @RequirePermissions(PERMISSIONS.QUOTES_MANAGE)
   create(
     @Body() input: QuoteTemplateBodyDto,
     @CurrentUser() user: AuthenticatedUser,
