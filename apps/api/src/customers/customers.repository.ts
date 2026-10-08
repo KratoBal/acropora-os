@@ -34,6 +34,18 @@ export function customerSearchPattern(search: string): string {
   return `%${search.trim().replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 }
 
+/**
+ * THE TAX NUMBER AS TYPED, WITHOUT ITS SEPARATORS (Luca, 2026-10-08: „nem
+ * talál adószám alapján sem”; acrobot 28132). `12345678-2-42`, `12345678242`
+ * and `12345678 2 42` are the same number, so both sides are compared with
+ * only their letters and digits, upper case. `null` when the search has no
+ * digit (a name is not a tax number) or fewer than four characters left.
+ */
+export function taxNumberSearchKey(search: string): string | null {
+  const key = search.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  return key.length >= 4 && /\d/.test(key) ? key : null;
+}
+
 const addressesInclude = {
   orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }],
 };
@@ -161,12 +173,18 @@ export class CustomersRepository extends Repository {
    */
   private async searchCustomerIds(search: string): Promise<string[]> {
     const pattern = customerSearchPattern(search);
+    const taxKey = taxNumberSearchKey(search);
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT "id" FROM "Customer"
       WHERE unaccent("displayName") ILIKE unaccent(${pattern}::text)
          OR unaccent(COALESCE("companyName", '')) ILIKE unaccent(${pattern}::text)
          OR unaccent(COALESCE("email", '')) ILIKE unaccent(${pattern}::text)
          OR unaccent("customerNumber") ILIKE unaccent(${pattern}::text)
+         ${
+           taxKey
+             ? Prisma.sql`OR upper(regexp_replace(COALESCE("taxNumber", ''), '[^0-9A-Za-z]', '', 'g')) LIKE ${`%${taxKey}%`}::text`
+             : Prisma.empty
+         }
     `;
     return rows.map((row) => row.id);
   }
