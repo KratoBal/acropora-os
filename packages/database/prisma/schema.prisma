@@ -1307,6 +1307,7 @@ model ProductVariant {
   quoteBomItems              QuoteBomItem[]                @relation("QuoteBomVariant")
   quoteCreatedBomItems       QuoteBomItem[]                @relation("QuoteCreatedVariant")
   knowledgeFacts             ProductKnowledgeFact[]
+  materialRequestItems       MaterialRequestItem[]         @relation("MaterialRequestItemVariant")
 
   @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
@@ -2834,9 +2835,10 @@ model Project {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  customer     Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  createdBy    User?                         @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  reservations ProjectInventoryReservation[]
+  customer         Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy        User?                         @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  materialRequests MaterialRequest[]
+  reservations     ProjectInventoryReservation[]
 
   @@index([status, name])
   @@index([customerId])
@@ -5527,9 +5529,14 @@ enum MaterialRequestEventKind {
   CANCELLED
 }
 
+/// A request for material: for a worksheet (the service), or for a project
+/// (the quote handoff, #1582 P5b). Exactly one of the two is set (a CHECK in
+/// the migration); the filled key is the kind, there is no third column.
 model MaterialRequest {
   id                String                   @id @default(cuid())
-  worksheetId       String
+  worksheetId       String?
+  /// P5b: the project this is for (a quote's shortage after the handoff)
+  projectId         String?
   status            MaterialRequestStatus    @default(DRAFT)
   requestedById     String?
   /// A PISZKOZAT LETREHOZASANAK IDEJE -- NEM AZ ELKULDESE. Lasd
@@ -5557,7 +5564,8 @@ model MaterialRequest {
   neededBy          DateTime?                @db.Date
   priority          MaterialRequestPriority?
 
-  worksheet   Worksheet                @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  worksheet   Worksheet?               @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  project     Project?                 @relation(fields: [projectId], references: [id], onDelete: Restrict)
   /// `SetNull`, ugyanazon okbol, mint a `WorksheetEntry.authorId`-nal: egy
   /// tavozo kollega kerese nem tunhet el, csak a neve.
   requestedBy User?                    @relation("MaterialRequestRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
@@ -5577,6 +5585,7 @@ model MaterialRequest {
   @@index([status, createdAt])
   /// V2: "Saját beszerzéseim".
   @@index([handlerId, status])
+  @@index([projectId, createdAt])
 }
 
 /// EGY TETEL AZ ANYAGIGENYEN. HAROM SZABAD SZOVEGES MEZO, NEM KETTO, ES EGYIK
@@ -5609,9 +5618,16 @@ model MaterialRequestItem {
   /// V2: when the item counted as arrived (for a text item, the mark).
   receivedAt        DateTime?
   receivedById      String?
+  /// P5b: the OS product, when the line is one (a handoff shortage)
+  variantId         String?
+  /// P5b: the BOM item this line is the shortage of; one line per BOM item
+  quoteBomItemId    String?   @unique
 
   materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
   receivedBy      User?           @relation("MaterialRequestItemReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+
+  variant      ProductVariant? @relation("MaterialRequestItemVariant", fields: [variantId], references: [id], onDelete: Restrict)
+  quoteBomItem QuoteBomItem?   @relation(fields: [quoteBomItemId], references: [id], onDelete: Restrict)
 
   @@unique([materialRequestId, position])
 }
@@ -9015,6 +9031,7 @@ model QuoteBomItem {
   supplier                    Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   projectReservations ProjectInventoryReservation[]
+  materialRequestItem MaterialRequestItem?
 
   @@unique([quoteItemId, position])
   @@index([versionId])

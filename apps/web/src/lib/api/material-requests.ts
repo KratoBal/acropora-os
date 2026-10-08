@@ -72,7 +72,12 @@ export const materialRequestsApi = {
     },
     signal?: AbortSignal,
   ) {
-    const params = new URLSearchParams({ view: query.view });
+    // #1582 P5b: the web lists the project requests too (an old mobile
+    // build never asks, so it never gets a request without a worksheet)
+    const params = new URLSearchParams({
+      view: query.view,
+      includeProjects: "1",
+    });
     if (query.status) params.set("status", query.status);
     if (query.q) params.set("q", query.q);
     if (query.cursor) params.set("cursor", query.cursor);
@@ -84,7 +89,7 @@ export const materialRequestsApi = {
   },
   summary(token: string, signal?: AbortSignal) {
     return apiRequest<MaterialRequestStatusCounts>(
-      `${base}/material-requests/summary`,
+      `${base}/material-requests/summary?includeProjects=1`,
       token,
       { signal },
     );

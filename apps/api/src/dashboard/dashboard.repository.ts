@@ -441,7 +441,8 @@ export class DashboardRepository extends Repository {
     });
     return {
       items: rows.flatMap((row) =>
-        row.submittedAt
+        // a project's request (P5b) has no worksheet: not a service widget's row
+        row.submittedAt && row.worksheetId && row.worksheet
           ? [
               {
                 id: row.id,

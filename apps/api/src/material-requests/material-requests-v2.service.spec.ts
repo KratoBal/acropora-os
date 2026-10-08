@@ -47,6 +47,9 @@ function row(
   return {
     id: "mr-1",
     worksheetId: "ws-1",
+    projectId: null,
+    projectNumber: null,
+    projectName: null,
     status: "OPEN",
     requestedById: "tech",
     requestedByName: "Kitalált Kérő",
@@ -576,12 +579,14 @@ describe("lists, counts, detail, comments", () => {
     const [mine, active] = h.lists as {
       handlerId: string | null;
       q: string | null;
-      visibleWorksheet: unknown;
+      scope: { worksheet: unknown; project: unknown };
     }[];
     assert.equal(mine?.handlerId, "buyer");
     assert.equal(active?.handlerId, null);
     assert.equal(active?.q, "cső");
-    assert.match(JSON.stringify(active?.visibleWorksheet), /"hiddenAt":null/);
+    assert.match(JSON.stringify(active?.scope.worksheet), /"hiddenAt":null/);
+    // no project request without the opt-in (#1582 P5b)
+    assert.equal(active?.scope.project, null);
   });
 
   it("an unknown view or status is a bad request, not an empty list", async () => {

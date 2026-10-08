@@ -28,10 +28,30 @@ export interface MaterialRequestV2Item {
   arrived: boolean;
 }
 
-/** One overview row: the request with its worksheet context. */
+/**
+ * Where a request belongs (#1582 P5b). The phone only ever sees the WORKSHEET
+ * branch: it never asks for project requests (`includeProjects`), and project
+ * requests send no worksheet notification to open one from.
+ */
+export type MaterialRequestContext =
+  | { type: "WORKSHEET"; worksheetId: string; worksheetNumber: string | null }
+  | {
+      type: "PROJECT";
+      projectId: string;
+      projectNumber: string;
+      projectName: string;
+    };
+
+/**
+ * One overview row: the request with its worksheet context. `worksheetId` and
+ * the worksheet's names stay non-null here, unlike the shared type: the phone
+ * gets worksheet requests only (see `MaterialRequestContext`).
+ */
 export interface MaterialRequestSummary {
   id: string;
   worksheetId: string;
+  /** always null on the phone, see above */
+  projectId: string | null;
   status: MaterialRequestStatusValue;
   requestedByName: string | null;
   createdAt: string;
@@ -52,6 +72,7 @@ export interface MaterialRequestSummary {
   worksheetNumber: string | null;
   customerDisplayName: string;
   departmentName: string;
+  context: MaterialRequestContext;
 }
 
 export interface MaterialRequestPage {

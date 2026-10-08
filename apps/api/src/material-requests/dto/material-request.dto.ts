@@ -73,6 +73,8 @@ export class MaterialRequestListQueryDto {
   @IsOptional() @IsString() @MaxLength(40) status?: string;
   @IsOptional() @IsString() @MaxLength(100) q?: string;
   @IsOptional() @IsString() @MaxLength(200) cursor?: string;
+  /** #1582 P5b: "1" also lists the project requests the caller may see */
+  @IsOptional() @IsIn(["1", "true"]) includeProjects?: string;
 }
 
 export class MaterialRequestItemReceiptDto {

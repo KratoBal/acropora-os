@@ -83,6 +83,9 @@ describe(
       await prisma.materialRequest.deleteMany({
         where: { id: { startsWith: PREFIX } },
       });
+      await prisma.project.deleteMany({
+        where: { id: { startsWith: PREFIX } },
+      });
       await prisma.worksheet.deleteMany({
         where: { id: { startsWith: PREFIX } },
       });
@@ -118,6 +121,100 @@ describe(
         },
       });
     }
+
+    /** A project and its OPEN request (#1582 P5b), straight to the database. */
+    async function projectRequest(name: string) {
+      await prisma.project.create({
+        data: {
+          id: id(`${name}-p`),
+          projectNumber: id(`${name}-p`),
+          name: "Kitalált projekt",
+        },
+      });
+      await prisma.materialRequest.create({
+        data: {
+          id: id(name),
+          projectId: id(`${name}-p`),
+          status: "OPEN",
+          requestedById: id("req"),
+          submittedAt: new Date(),
+          items: {
+            create: [
+              {
+                id: id(`${name}-i`),
+                position: 0,
+                name: `Projekt-hiány ${s}`,
+                quantity: "2",
+                unit: "db",
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    const checkError = (create: Promise<unknown>) =>
+      create.then(
+        () => "inserted",
+        (error: unknown) =>
+          String((error as { message?: string }).message ?? error).includes(
+            "MaterialRequest_one_parent_check",
+          )
+            ? "check"
+            : String(error),
+      );
+
+    it("a project's request shows only where the list asks for projects", async () => {
+      await projectRequest("proj");
+      const listed = async (project: Prisma.MaterialRequestWhereInput | null) =>
+        (
+          await repository.list({
+            scope: { worksheet: internal, project },
+            view: "active",
+            status: null,
+            handlerId: null,
+            q: `Projekt-hiány ${s}`,
+            cursor: null,
+          })
+        ).rows.map((row) => [row.id, row.projectNumber]);
+      assert.deepEqual(
+        [await listed(null), await listed({ projectId: { not: null } })],
+        [[], [[id("proj"), id("proj-p")]]],
+        "PROJECT-OPT-IN",
+      );
+    });
+
+    it("the CHECK refuses a request with both a worksheet and a project", async () => {
+      await prisma.project.create({
+        data: { id: id("both-p"), projectNumber: id("both-p"), name: "B" },
+      });
+      assert.equal(
+        await checkError(
+          prisma.materialRequest.create({
+            data: {
+              id: id("both"),
+              worksheetId: id("w"),
+              projectId: id("both-p"),
+              status: "DRAFT",
+            },
+          }),
+        ),
+        "check",
+        "MR-CHECK-BOTH",
+      );
+    });
+
+    it("the CHECK refuses a request with neither", async () => {
+      assert.equal(
+        await checkError(
+          prisma.materialRequest.create({
+            data: { id: id("none"), status: "DRAFT" },
+          }),
+        ),
+        "check",
+        "MR-CHECK-NONE",
+      );
+    });
 
     it("two simultaneous claims: one handler, one CLAIMED row", async () => {
       await openRequest("race");
@@ -297,7 +394,7 @@ describe(
       await openRequest("visible");
       await openRequest("hidden", "w-hidden");
       const { rows } = await repository.list({
-        visibleWorksheet: internal,
+        scope: { worksheet: internal, project: null },
         view: "active",
         status: null,
         handlerId: null,
