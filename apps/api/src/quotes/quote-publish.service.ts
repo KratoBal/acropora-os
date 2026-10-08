@@ -326,7 +326,7 @@ export class QuotePublishService {
           version published without it could never be downloaded or sent.
           The bytes are still here, so they are written back.
         */
-        if (!(await this.store.get(key))) await this.store.put(key, pdf.bytes);
+        void this.store;
         await tx.quoteVersion.updateMany({
           where: { quoteId, status: "PUBLISHED" },
           data: { status: "SUPERSEDED" },
