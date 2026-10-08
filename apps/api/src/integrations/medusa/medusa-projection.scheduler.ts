@@ -18,6 +18,25 @@ import {
   type PriceSyncDatabase,
 } from "./medusa-price-sync.js";
 import { runProjectionCli } from "./medusa-projection.runner.js";
+import {
+  medusaClientForProjection,
+  storedCredentialProvider,
+} from "./medusa-projection.cli.js";
+import { prismaRedirectSource } from "./medusa-redirect.cli.js";
+import {
+  describeRedirectProjection,
+  projectUrlRedirects,
+  type RedirectProjectionOutcome,
+} from "./medusa-redirect-projection.js";
+
+/**
+ * AZ ÁTIRÁNYÍTÁS-LISTA A KÖRBEN (SEO P0 PR 7b), kapcsolóval, alapból KI: a
+ * commerce `url_redirect` modulja (PR 7a) előbb kerül ki, és amíg nincs ott, a
+ * kör egy nem létező végpontot kérdezne. Bekapcsolva egy kör egy `GET`, és
+ * `PUT` csak eltérésnél.
+ */
+export const projectRedirectsInRound = (env: NodeJS.ProcessEnv): boolean =>
+  env.MEDUSA_PROJECT_REDIRECTS === "true";
 
 /**
  * A VETITES UTEMEZOJE.
@@ -141,6 +160,8 @@ export interface MedusaProjectionSchedulerDeps {
   logger?: ProjectionSchedulerLogger;
   /** A „most”: az akció kezdete és vége az órához mér. */
   now?: () => Date;
+  /** Az átirányítás-lista köre (SEO P0 PR 7b). */
+  runRedirects?: () => Promise<RedirectProjectionOutcome>;
 }
 
 /**
@@ -171,6 +192,7 @@ export class MedusaProjectionScheduler
   private readonly environment: NodeJS.ProcessEnv;
   private readonly naplo: ProjectionSchedulerLogger;
   private readonly now: () => Date;
+  private readonly runRedirects: () => Promise<RedirectProjectionOutcome>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
 
@@ -198,6 +220,17 @@ export class MedusaProjectionScheduler
     this.environment = deps?.environment ?? process.env;
     this.naplo = deps?.logger ?? this.logger;
     this.now = deps?.now ?? (() => new Date());
+    this.runRedirects =
+      deps?.runRedirects ??
+      (async () =>
+        projectUrlRedirects(
+          await medusaClientForProjection(storedCredentialProvider(), {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          }),
+          prismaRedirectSource,
+          true,
+        ));
   }
 
   onModuleInit(): void {
@@ -234,6 +267,7 @@ export class MedusaProjectionScheduler
       közül egyik sem mozdul, és a bolt a régi árat tartja. Az akciós termékek
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
+    await this.atiranyitasKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const esedekes = [
@@ -344,6 +378,29 @@ export class MedusaProjectionScheduler
         failure: kudarc.get(id)?.join("; ") ?? null,
       });
     return kod === 0 && arKod === 0 ? "APPLIED" : "FAILED";
+  }
+
+  /**
+   * AZ ÁTIRÁNYÍTÁS-LISTA EGY KÖRE, a termékek előtt, és a kör állapotától
+   * függetlenül: a lista akkor is változhat, ha egy termék sem esedékes (kézi
+   * szabály). A hibája csak napló: a termék-vetítést nem állítja meg, és a kör
+   * kimenetét sem rontja, mert a lista a következő körben újra próbálkozik.
+   */
+  private async atiranyitasKor(): Promise<void> {
+    if (!projectRedirectsInRound(this.environment)) return;
+    try {
+      const eredmeny = await this.runRedirects();
+      if (eredmeny.status === "refused")
+        this.naplo.warn(describeRedirectProjection(eredmeny));
+      else if (eredmeny.status !== "unchanged")
+        this.naplo.log(describeRedirectProjection(eredmeny));
+    } catch (error) {
+      this.naplo.warn(
+        `Atiranyitasok: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
   }
 
   /**

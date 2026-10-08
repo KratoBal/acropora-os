@@ -832,6 +832,19 @@ export interface MedusaVariantBarcodeRow {
   upc: string | null;
 }
 
+/** Egy átirányítás a bolt oldalán (PR 7a). */
+export interface MedusaUrlRedirect {
+  source_path: string;
+  destination_path: string;
+  status: number;
+}
+
+export interface MedusaUrlRedirectList {
+  count: number;
+  hash: string;
+  redirects: MedusaUrlRedirect[];
+}
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -1143,6 +1156,19 @@ export interface MedusaAdminClient {
     productId: string,
     knowledge: KnowledgeProjection,
   ): Promise<KnowledgeProjection>;
+  /**
+   * A BOLT ÁTIRÁNYÍTÁS-LISTÁJA (SEO P0 PR 7b; a commerce PR 7a szerződése:
+   * `GET /admin/url-redirects`). A `hash` a rendezett lista ujjlenyomata: az OS
+   * ugyanígy számolja, és csak eltérésnél küld.
+   */
+  fetchUrlRedirects(): Promise<MedusaUrlRedirectList>;
+  /**
+   * A TELJES LISTA CSERÉJE (`PUT`): ami nincs a törzsben, az eltűnik. EZ IR A
+   * BOLTI OLDALRA.
+   */
+  replaceUrlRedirects(
+    redirects: MedusaUrlRedirect[],
+  ): Promise<MedusaUrlRedirectList>;
   /**
    * A csatornához tartozó készlethelyek - MINDEN FUTÁSKOR, azonosító
    * beégetése nélkül.
@@ -2305,6 +2331,23 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify(knowledge),
     });
     return body.product_knowledge;
+  }
+
+  async fetchUrlRedirects(): Promise<MedusaUrlRedirectList> {
+    const body = await this.request<{ url_redirects: MedusaUrlRedirectList }>(
+      "/admin/url-redirects",
+    );
+    return body.url_redirects;
+  }
+
+  async replaceUrlRedirects(
+    redirects: MedusaUrlRedirect[],
+  ): Promise<MedusaUrlRedirectList> {
+    const body = await this.request<{ url_redirects: MedusaUrlRedirectList }>(
+      "/admin/url-redirects",
+      { method: "PUT", body: JSON.stringify({ redirects }) },
+    );
+    return body.url_redirects;
   }
 
   async fetchMetadata(id: string): Promise<Record<string, unknown> | null> {

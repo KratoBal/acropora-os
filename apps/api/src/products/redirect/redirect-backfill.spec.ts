@@ -62,6 +62,22 @@ describe("planRedirectBackfill", () => {
     assert.deepEqual(store.updated(), []);
   });
 
+  it("a /spd/ számláló csak az ÚJ szabályokat számolja (a második futás 0)", async () => {
+    const { report } = await planRedirectBackfill(
+      [{ id: "c1", unasUrl: `${SHOP}/spd/1/Nyos`, webshopSlug: "nyos" }],
+      [
+        {
+          id: "r1",
+          sourcePath: "/spd/1/Nyos",
+          destinationPath: "/hu/termek/nyos",
+          isActive: true,
+        },
+      ],
+    );
+    assert.equal(report.unchanged, 1);
+    assert.equal(report.spdPaths, 0);
+  });
+
   it("egy más célú meglévő szabály a jelentésbe megy, felülírás nélkül", async () => {
     const { store, report } = await planRedirectBackfill(
       [{ id: "c1", unasUrl: `${SHOP}/Pumpa`, webshopSlug: "pumpa" }],
