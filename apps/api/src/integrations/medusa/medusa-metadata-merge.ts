@@ -81,7 +81,17 @@ export const OWNED_METADATA_PREFIXES = ["seo_", "unas_"] as const;
  */
 export const UNIQUE_PIECE_KEY = "unique_piece";
 
-export const OWNED_METADATA_KEYS = [UNIQUE_PIECE_KEY] as const;
+/**
+ * A KÉPEK ALT SZÖVEGE (SEO P0 PR 9). A kirakat ugyanezt a kulcsot olvassa,
+ * tehát ez is két repóban álló szerződés, ugyanúgy, mint a `unique_piece`.
+ * Előtag nélküli, mert nem a forrás mezője, hanem a MI vetítésünk alakja.
+ */
+export const ACROPORA_IMAGES_KEY = "acropora_images";
+
+export const OWNED_METADATA_KEYS = [
+  UNIQUE_PIECE_KEY,
+  ACROPORA_IMAGES_KEY,
+] as const;
 
 /**
  * EGY PONTOSITAS A SZABALY ALAKJAHOZ (acrobot, 2026-09-07 este).

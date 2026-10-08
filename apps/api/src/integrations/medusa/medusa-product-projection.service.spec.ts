@@ -65,6 +65,7 @@ const product: ProjectableProduct = {
   seoKeywords: null,
   unasProductUrl: null,
   images: null,
+  imageTexts: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,
@@ -197,6 +198,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   unasProductUrl: "atmegy", // -> metadata.unas_product_url
   descriptionLong: "atmegy", // -> description (osszefuzve) es metadata
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
+  imageTexts: "atmegy", // -> metadata.acropora_images (JSON, csak a szoveges kepek)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   medusaSimilarIds: "atmegy", // -> metadata.unas_similar_ids, ha nem ures
   medusaAccessoryIds: "atmegy", // -> metadata.unas_accessory_ids, ha nem ures
@@ -272,6 +274,10 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         orderQuantityStep: "5",
         uniquePiece: true,
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
+        imageTexts: [
+          { url: "https://kep/1.jpg", alt: "Teszt alt", title: null },
+          { url: "https://kep/2.jpg", alt: null, title: null },
+        ],
         descriptionLong: "Hosszú leírás",
       },
       now,
@@ -359,6 +365,11 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       images:
         torzs.images?.[0]?.url === "https://kep/1.jpg" &&
         torzs.thumbnail === "https://kep/1.jpg",
+      imageTexts:
+        torzs.metadata?.acropora_images ===
+        JSON.stringify([
+          { url: "https://kep/1.jpg", alt: "Teszt alt", title: null },
+        ]),
       publication: torzs.status !== undefined,
       /**
        * ES A JELOLESNEK LATSZANIA IS KELL: a fixtura EGY, kombinacio nelkuli
@@ -1841,6 +1852,108 @@ describe("MedusaProductProjectionService -- a termek kepei", () => {
     assert.ok(torzs, "az update nem futott le");
     assert.ok(!("images" in torzs), "ures tomb ment ki, ez torolne a kepeket");
     assert.ok(!("thumbnail" in torzs), "fo kep ment ki kepek nelkul");
+  });
+});
+
+/**
+ * A KEPEK ALT SZOVEGE A METAADATBAN (SEO P0 PR 9).
+ *
+ * Harom szandek, harom kimenet: egy lista a mostani allapotot mondja (a
+ * szoveg nelkuli kep kimarad, az ures eredmeny leveszi a regit), a `null`
+ * pedig MEGORZI a bolt oldalan allot, mert akkor a kepek is maradnak.
+ */
+describe("MedusaProductProjectionService -- a kepek alt szovege", () => {
+  const regi = JSON.stringify([
+    { url: "https://kep/a.jpg", alt: "Regi alt", title: null },
+  ]);
+
+  it("az update a mostani listat kuldi, a szoveg nelkuli kep nelkul", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+      existingMetadata: { acropora_images: regi, idegen: "marad" },
+    });
+
+    await f.service.project(
+      {
+        ...product,
+        images: ["https://kep/a.jpg", "https://kep/b.jpg"],
+        imageTexts: [
+          { url: "https://kep/a.jpg", alt: null, title: null },
+          { url: "https://kep/b.jpg", alt: "Uj alt", title: null },
+        ],
+      },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.equal(
+      torzs.metadata?.acropora_images,
+      JSON.stringify([
+        { url: "https://kep/b.jpg", alt: "Uj alt", title: null },
+      ]),
+    );
+    assert.equal(torzs.metadata?.idegen, "marad");
+  });
+
+  it("ha egyik kepnek sincs szovege, a regi kulcs lekerul", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+      existingMetadata: { acropora_images: regi },
+    });
+
+    await f.service.project(
+      {
+        ...product,
+        images: ["https://kep/a.jpg"],
+        imageTexts: [{ url: "https://kep/a.jpg", alt: null, title: null }],
+      },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.ok(torzs.metadata, "a metaadat nem ment ki, a regi kulcs maradna");
+    assert.ok(!("acropora_images" in torzs.metadata));
+  });
+
+  it("lista nelkul (null) a bolt oldalan allo ertek marad", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+      existingMetadata: { acropora_images: regi, unas_unit: "db" },
+    });
+
+    await f.service.project(
+      { ...product, images: null, imageTexts: null },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.equal(torzs.metadata?.acropora_images, regi);
+  });
+
+  it("a create-agon is kimegy", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      {
+        ...product,
+        images: ["https://kep/a.jpg"],
+        imageTexts: [{ url: "https://kep/a.jpg", alt: "Alt", title: "Cim" }],
+      },
+      now,
+    );
+
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    assert.equal(
+      torzs.metadata?.acropora_images,
+      JSON.stringify([{ url: "https://kep/a.jpg", alt: "Alt", title: "Cim" }]),
+    );
   });
 });
 
