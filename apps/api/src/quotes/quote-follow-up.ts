@@ -116,7 +116,6 @@ export async function openPostponedFollowUp(
 ): Promise<void> {
   const quote = await quoteRef(tx, args.quoteId);
   const day = args.until.toISOString().slice(0, 10);
-  await closeFollowUps(tx, quote.id, args.actorUserId);
   const sourceRef = `${prefix(quote.id)}postponed:${day}`;
   await tx.task.upsert({
     where: { source_sourceRef: { source: "QUOTE", sourceRef } },

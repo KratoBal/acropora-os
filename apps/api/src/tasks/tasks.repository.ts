@@ -30,7 +30,7 @@ export const TASK_LIST_LIMIT = 200;
  */
 const ORDER = {
   OPEN: [{ dueAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
-  DONE: [{ createdAt: "desc" }],
+  DONE: [{ dueAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
 } satisfies Record<"OPEN" | "DONE", Prisma.TaskOrderByWithRelationInput[]>;
 
 type TaskWithPeople = Task & {
