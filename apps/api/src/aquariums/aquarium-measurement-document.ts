@@ -113,7 +113,7 @@ export function aquariumMeasurementDocument(
           .text(input.notes, PDF_LEFT, y + 14, { width: PDF_CONTENT_WIDTH });
       }
 
-      drawDocumentFooter(document);
+      drawDocumentFooter(document, "OFFICE");
       document.end();
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));

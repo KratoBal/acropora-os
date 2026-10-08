@@ -153,4 +153,17 @@ describe("a teljesítési igazolás PDF-je", () => {
     assert.ok(text.includes("648 000 HUF"));
     assert.ok(text.includes("3 048 000 HUF"));
   });
+
+  it("a teljesítési igazolás láblécén az irodai szám áll (acrobot 28093)", async () => {
+    const text = (
+      await readPdfTextLines(await completionCertificateDocument(input()))
+    )
+      .map((row) => row.text)
+      .join("\n");
+    assert.deepEqual(
+      [text.includes("+36-30-982-3634"), text.includes("+36-20-2676801")],
+      [false, true],
+      "FOOTER-CERTIFICATE-OFFICE",
+    );
+  });
 });
