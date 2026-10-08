@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { randomFillSync } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import { describe, it } from "node:test";
+import { deflateSync } from "node:zlib";
 
 import { PDFDocument } from "pdf-lib";
 
@@ -8,11 +11,17 @@ import {
   collectedPdfIndex,
 } from "../billing/incoming-collected-pdf.js";
 import {
+  convertInWorker,
   MAX_PNG_DECODED_BYTES,
+  SCAN_CONCURRENCY,
   pngDecodedBytes,
   scanAsPdf,
+  scanConversionLoad,
+  ScanSlots,
+  ScanTimedOut,
   ScanTooLarge,
   ScanUnreadable,
+  scanWorkerError,
 } from "./purchase-invoice-scan.js";
 
 /** A 2×1 pixel PNG, built at run time (no binary fixture in the repo). */
@@ -147,5 +156,174 @@ describe("a scanned invoice (card 5ec62e35)", () => {
     await assert.rejects(scanAsPdf(broken, "png", "x.png"), ScanUnreadable);
     const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2, 3]);
     await assert.rejects(scanAsPdf(jpeg, "jpeg", "x.jpg"), ScanUnreadable);
+  });
+});
+
+/** CRC-32 of a PNG chunk's type and data. */
+function crc32(bytes: Uint8Array): number {
+  let crc = ~0;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return ~crc >>> 0;
+}
+
+/** A width × height 8-bit RGBA PNG of noise, built at run time. */
+function noisePng(width: number, height: number): Uint8Array {
+  const stride = width * 4 + 1;
+  const raw = Buffer.alloc(stride * height);
+  randomFillSync(raw);
+  for (let y = 0; y < height; y++) raw[y * stride] = 0; // filter: none
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 6, 0, 0, 0], 8); // 8-bit RGBA
+  return Uint8Array.from(
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk("IHDR", header),
+      chunk("IDAT", deflateSync(raw, { level: 1 })),
+      chunk("IEND", Buffer.alloc(0)),
+    ]),
+  );
+}
+
+/*
+  OFF THE EVENT LOOP (card 35fe9a08): pdf-lib decodes and re-compresses a PNG
+  synchronously, and a 25 MP scan held the API for 1.5 to 5 seconds. The test
+  ticks a 5 ms timer while a 9 MP noise PNG converts: in the worker the longest
+  gap is a small part of the conversion; on the main thread the two are equal.
+  The conversion's own length is the positive control: a load too light to
+  block would pass either way.
+*/
+describe("the scan conversion runs in a worker (card 35fe9a08)", () => {
+  it("the event loop keeps ticking while a large PNG converts", async () => {
+    const png = noisePng(3000, 3000);
+    let last = performance.now();
+    let longestGap = 0;
+    const tick = setInterval(() => {
+      const now = performance.now();
+      longestGap = Math.max(longestGap, now - last);
+      last = now;
+    }, 5);
+    const started = performance.now();
+    try {
+      const result = await scanAsPdf(png, "png", "nagy.png");
+      const took = performance.now() - started;
+      // the gap still open when the conversion returns: a loop blocked from
+      // start to end never ran the timer at all, and would read as zero
+      longestGap = Math.max(longestGap, performance.now() - last);
+      assert.equal((await PDFDocument.load(result.bytes)).getPageCount(), 1);
+      assert.ok(
+        took > 200,
+        `the conversion took ${took} ms, too light to tell`,
+      );
+      assert.ok(
+        longestGap < took / 2,
+        `the event loop stopped for ${longestGap} ms of ${took} ms`,
+      );
+    } finally {
+      clearInterval(tick);
+    }
+  });
+
+  /*
+    Not a real out-of-heap run: when the worker's heap runs out depends on the
+    garbage collector's timing, and the same 4 MB run passed alone and failed
+    in the full suite. The mapping is what this code decides, so it is tested
+    on the error Node raises (`ERR_WORKER_OUT_OF_MEMORY`).
+  */
+  it("a worker that runs out of heap is too large, not a crash", () => {
+    const oom = Object.assign(new Error("out of memory"), {
+      code: "ERR_WORKER_OUT_OF_MEMORY",
+    });
+    assert.ok(scanWorkerError(oom, 256) instanceof ScanTooLarge);
+    const other = new Error("something else");
+    assert.equal(scanWorkerError(other, 256), other);
+  });
+
+  it("the caller's bytes stay usable after the transfer", async () => {
+    const png = await tinyPng();
+    const before = Uint8Array.from(png);
+    await convertInWorker(png, "png");
+    assert.deepEqual(png, before);
+  });
+});
+
+/*
+  BARRACUDA'S #1645 REVIEW: the pixels live outside the worker's heap, so
+  concurrent uploads add up, and a worker that never answers would keep the
+  request open forever.
+*/
+describe("scan conversions are bounded (card 35fe9a08)", () => {
+  it("at most `limit` tasks run at once, and the rest start in order", async () => {
+    const slots = new ScanSlots(2);
+    const started: number[] = [];
+    let running = 0;
+    let most = 0;
+    const releases: (() => void)[] = [];
+    const tasks = [0, 1, 2, 3].map((n) =>
+      slots.run(async () => {
+        started.push(n);
+        running++;
+        most = Math.max(most, running);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        running--;
+        return n;
+      }),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(started, [0, 1]);
+    releases.shift()!();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(started, [0, 1, 2]);
+    while (releases.length > 0 || started.length < 4) {
+      releases.shift()?.();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(await Promise.all(tasks), [0, 1, 2, 3]);
+    assert.equal(most, 2);
+  });
+
+  it("scanAsPdf itself goes through the shared slots", async () => {
+    const png = noisePng(1500, 1500);
+    const runs = [0, 1, 2].map(() => scanAsPdf(png, "png", "x.png"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(scanConversionLoad(), {
+      active: SCAN_CONCURRENCY,
+      queued: 3 - SCAN_CONCURRENCY,
+    });
+    await Promise.all(runs);
+    assert.deepEqual(scanConversionLoad(), { active: 0, queued: 0 });
+  });
+
+  it("a failed task gives its slot back", { timeout: 5000 }, async () => {
+    const slots = new ScanSlots(1);
+    await assert.rejects(
+      slots.run(async () => {
+        throw new Error("boom");
+      }),
+    );
+    assert.equal(await slots.run(async () => "next"), "next");
+  });
+
+  it("a worker that does not answer in time is ended, with its own error", async () => {
+    const png = noisePng(3000, 3000);
+    const started = performance.now();
+    await assert.rejects(
+      convertInWorker(png, "png", undefined, 50),
+      ScanTimedOut,
+    );
+    // the rejection comes at the limit, not when the conversion would end
+    assert.ok(performance.now() - started < 1500);
   });
 });

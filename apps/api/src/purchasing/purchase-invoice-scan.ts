@@ -1,3 +1,5 @@
+import { Worker } from "node:worker_threads";
+
 import { PDFDocument } from "pdf-lib";
 
 import type { UploadedFileKind } from "../service-assets/uploaded-file-type.js";
@@ -16,6 +18,8 @@ export const MAX_PNG_DECODED_BYTES = 100_000_000;
 export class ScanUnreadable extends Error {}
 /** The image needs more memory to decode than we allow. */
 export class ScanTooLarge extends Error {}
+/** The conversion did not finish within `SCAN_TIMEOUT_MS`. */
+export class ScanTimedOut extends Error {}
 
 /** Channels per PNG colour type (IHDR byte 25). */
 const PNG_CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
@@ -80,6 +84,20 @@ export async function scanAsPdf(
         `${size.width}x${size.height}, ${size.channels}x${size.bitDepth} bit`,
       );
   }
+  const pdf = await scanSlots.run(() => convertInWorker(bytes, kind));
+  const base = fileName.replace(/\.[^.]*$/, "") || "szamlakep";
+  return { bytes: pdf, fileName: `${base}.pdf` };
+}
+
+/**
+ * THE IMAGE ITSELF, AS PDF BYTES. Runs in the worker (`purchase-invoice-scan.worker.ts`):
+ * pdf-lib decodes and re-compresses a PNG synchronously, and a 25 MP image
+ * held the API's event loop for 1.5 to 5 seconds (card 35fe9a08).
+ */
+export async function renderScanPdf(
+  bytes: Uint8Array,
+  kind: "png" | "jpeg",
+): Promise<Uint8Array> {
   // NO CREATION DATE: pdf-lib stamps one by default, so the same image a
   // second later became different bytes, a different sha256, and the same
   // file twice on one invoice two attachments (the CI caught it, run
@@ -108,6 +126,132 @@ export async function scanAsPdf(
     width,
     height,
   });
-  const base = fileName.replace(/\.[^.]*$/, "") || "szamlakep";
-  return { bytes: await pdf.save(), fileName: `${base}.pdf` };
+  return pdf.save();
+}
+
+/**
+ * The worker's JS heap. It does NOT bound the image: pdf-lib keeps the pixels
+ * in ArrayBuffers outside the heap (measured: an 85 MB noise PNG converted
+ * with a 16 MB heap, and only 8 MB ran out). The bound on a PNG stays
+ * `MAX_PNG_DECODED_BYTES`, checked before the worker starts; this limit only
+ * keeps a runaway worker from growing the API process's heap.
+ */
+export const SCAN_WORKER_HEAP_MB = 256;
+
+/**
+ * HOW MANY CONVERSIONS AT ONCE (barracuda's #1645 review). The pixels live
+ * outside the worker's heap, so N uploads at once are N decoded images (the
+ * 25 MP noise PNG: ~280 MB of RSS above the API's own), and the production
+ * container has no memory limit. Two at a time, the rest wait in order.
+ */
+export const SCAN_CONCURRENCY = 2;
+
+/** A conversion that has not answered by then is ended (barracuda, #1645). */
+export const SCAN_TIMEOUT_MS = 30_000;
+
+/** A first-come semaphore: at most `limit` tasks run, the rest queue. */
+export class ScanSlots {
+  private running = 0;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(private readonly limit: number) {}
+
+  /** How many run and how many wait, for tests and diagnostics. */
+  get load(): { active: number; queued: number } {
+    return { active: this.running, queued: this.waiting.length };
+  }
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.running < this.limit) this.running++;
+    // the releasing task hands its slot over, so `running` stays as it is
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.running--;
+    }
+  }
+}
+
+const scanSlots = new ScanSlots(SCAN_CONCURRENCY);
+
+/** The shared conversions' load: how many run, how many wait. */
+export function scanConversionLoad(): { active: number; queued: number } {
+  return scanSlots.load;
+}
+
+type ScanWorkerReply =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; unreadable: boolean; message: string };
+
+/** A worker that ran out of its heap is a too-large image, not a 500. */
+export function scanWorkerError(
+  error: Error & { code?: string },
+  heapMb: number,
+): Error {
+  return error.code === "ERR_WORKER_OUT_OF_MEMORY"
+    ? new ScanTooLarge(`the worker ran out of its ${heapMb} MB heap`)
+    : error;
+}
+
+/**
+ * ONE WORKER PER CONVERSION. Scans arrive a few a day, so the ~50 ms start is
+ * cheaper than a pool to keep alive. The caller's bytes are copied before the
+ * transfer, so its buffer stays usable. A worker that has not answered within
+ * `timeoutMs` is terminated, so the request does not stay open forever.
+ */
+export function convertInWorker(
+  bytes: Uint8Array,
+  kind: "png" | "jpeg",
+  heapMb: number = SCAN_WORKER_HEAP_MB,
+  timeoutMs: number = SCAN_TIMEOUT_MS,
+): Promise<Uint8Array> {
+  const copy = bytes.slice();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const worker = new Worker(
+      new URL("./purchase-invoice-scan.worker.js", import.meta.url),
+      {
+        workerData: { bytes: copy, kind },
+        transferList: [copy.buffer],
+        resourceLimits: { maxOldGenerationSizeMb: heapMb },
+      },
+    );
+    const timer = setTimeout(
+      () =>
+        settle(() => {
+          // a rejecting terminate must not become an unhandled rejection
+          worker.terminate().catch(() => {});
+          reject(new ScanTimedOut(`no answer within ${timeoutMs} ms`));
+        }),
+      timeoutMs,
+    );
+    const settle = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      action();
+    };
+    worker.once("message", (reply: ScanWorkerReply) =>
+      settle(() =>
+        reply.ok
+          ? resolve(reply.bytes)
+          : reject(
+              reply.unreadable
+                ? new ScanUnreadable(reply.message)
+                : new Error(reply.message),
+            ),
+      ),
+    );
+    worker.once("error", (error: Error & { code?: string }) =>
+      settle(() => reject(scanWorkerError(error, heapMb))),
+    );
+    worker.once("exit", (code) =>
+      settle(() =>
+        reject(new Error(`the scan worker exited (${code}) without a reply`)),
+      ),
+    );
+  });
 }
