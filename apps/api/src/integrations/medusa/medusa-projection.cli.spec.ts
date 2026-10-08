@@ -2497,6 +2497,17 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     );
   });
 
+  /**
+   * AZ ALT, AMI CSAK A TERMEK NEVE, KI SEM MEGY (acrobot eles merese, 28126):
+   * a futo a termek nevet is atadja, kulonben ez a szuro nem tud elsulni.
+   */
+  it("a csak a termek nevet ismetlo alt nem megy ki", async () => {
+    const torzs = await valtozatlanFutas("Teszt termék");
+    const metadata = torzs.metadata as Record<string, unknown> | undefined;
+
+    assert.equal(metadata?.acropora_images, undefined);
+  });
+
   it("a kep mestere atkerul, es a storageKey a sorba iródik", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis(

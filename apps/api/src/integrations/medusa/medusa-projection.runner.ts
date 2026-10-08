@@ -1438,7 +1438,7 @@ export async function runProjectionCli(
          * nem a termek.
          */
         images: publishedImageUrls,
-        imageTexts: imageTextsFor(publishedImageUrls, kepek),
+        imageTexts: imageTextsFor(publishedImageUrls, kepek, product.name),
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
