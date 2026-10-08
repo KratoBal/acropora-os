@@ -149,7 +149,8 @@ export function renderQuotePdf(
   let sectionNumber = 0;
   let summaryDrawn = false;
   input.blocks.forEach((block, index) => {
-    if (block.startOnNewPage) flow.newPageUnlessTop();
+    if (block.kind === "TERMS") keepTermsTogether(doc, flow, block);
+    else if (block.startOnNewPage) flow.newPageUnlessTop();
     else if (block.keepWithNext && input.blocks[index + 1])
       flow.ensure(
         headHeight(doc, block) + headHeight(doc, input.blocks[index + 1]!),
@@ -431,6 +432,34 @@ function headHeight(doc: PDFKit.PDFDocument, block: QuotePdfBlock): number {
 
 function itemHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
   return Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), 30) + 10;
+}
+
+/**
+ * THE TERMS, AS ONE BLOCK (Balázs, 2026-10-08 15:13 UTC, the Figma thread:
+ * "a feltételek ha ráférnek az utolsó lapra akkor én nem raknám külön
+ * oldalra"). They continue on the current page when they fit there whole, and
+ * start a new page when they do not; `startOnNewPage` does not force one. A
+ * terms block longer than a page starts a page and runs on (`drawText` keeps
+ * its title with the first paragraph).
+ */
+function keepTermsTogether(
+  doc: PDFKit.PDFDocument,
+  flow: Flow,
+  block: QuotePdfBlock,
+) {
+  const height = textBlockHeight(doc, block);
+  if (height <= BOTTOM - CONTINUATION_TOP) flow.ensure(height);
+  else flow.newPageUnlessTop();
+}
+
+function textBlockHeight(doc: PDFKit.PDFDocument, block: QuotePdfBlock) {
+  return (
+    (block.title ? headingHeight(doc, block.title) : 0) +
+    richTextParagraphs(block.content).reduce(
+      (h, p) => h + paragraphHeight(doc, p, PARAGRAPH, CONTENT_WIDTH),
+      0,
+    )
+  );
 }
 
 function drawText(doc: PDFKit.PDFDocument, flow: Flow, block: QuotePdfBlock) {

@@ -41,8 +41,6 @@ import { fileURLToPath } from "node:url";
 
 export const PDF_FONT_FILENAME = "DejaVuSans.ttf";
 
-/** A csomag gyökeréhez képest -- lásd a keresés indoklását lentebb. */
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -81,6 +79,7 @@ export function resolvePdfFontAsset(
   filename: string,
   startDir: string = HERE,
 ): string {
+  // a csomag gyökeréhez képest -- lásd a keresés indoklását fentebb
   const relative = join("assets", "fonts", filename);
   const tried: string[] = [];
   let dir = startDir;

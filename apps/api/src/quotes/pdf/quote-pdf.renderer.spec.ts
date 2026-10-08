@@ -368,15 +368,46 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     const pdf = await renderQuotePdf(
       input([
         block("TEXT", { content: doc("Rövid bevezető") }),
-        block("TERMS", {
-          title: "Általános feltételek",
+        block("TEXT", {
+          title: "Külön oldalra",
           startOnNewPage: true,
-          content: doc("Feltétel szövege"),
+          content: doc("Szöveg"),
         }),
       ]),
     );
     assert.deepEqual(await pagesOf(pdf.bytes, "Rövid bevezető"), [1]);
-    assert.deepEqual(await pagesOf(pdf.bytes, "ÁLTALÁNOS FELTÉTELEK"), [2]);
+    assert.deepEqual(await pagesOf(pdf.bytes, "KÜLÖN OLDALRA"), [2]);
+  });
+
+  /**
+   * BALÁZS, 2026-10-08 15:13 UTC: the terms continue on the last page when
+   * they fit there whole, even when marked startOnNewPage; when they do not
+   * fit, they start a new page together (title and every paragraph).
+   */
+  it("the terms stay on the last page when they fit there, and move whole when not", async () => {
+    const terms = (lines: number) =>
+      block("TERMS", {
+        title: "Általános feltételek",
+        startOnNewPage: true,
+        content: doc(
+          ...Array.from({ length: lines }, (_, i) => `Feltétel ${i + 1}.`),
+        ),
+      });
+    const short = await renderQuotePdf(
+      input([block("TEXT", { content: doc("Rövid bevezető") }), terms(3)]),
+    );
+    assert.deepEqual(await pagesOf(short.bytes, "ÁLTALÁNOS FELTÉTELEK"), [1]);
+
+    for (const fill of FILLS) {
+      const pdf = await renderQuotePdf(input([filler(fill), terms(8)]));
+      const title = (await pagesOf(pdf.bytes, "ÁLTALÁNOS FELTÉTELEK"))[0]!;
+      for (const n of [1, 8])
+        assert.deepEqual(
+          await pagesOf(pdf.bytes, `Feltétel ${n}.`),
+          [title],
+          `kettétörve (${fill})`,
+        );
+    }
   });
 
   it("the payment schedule comes from the milestones", async () => {

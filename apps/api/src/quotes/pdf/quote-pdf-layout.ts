@@ -105,7 +105,6 @@ export function formatQuoteDay(day: string): string {
   return `${y}.${m}.${d}.`;
 }
 
-/** A quantity as people read it: decimal comma, no trailing zeros. */
 const HU_MONTHS = [
   "január",
   "február",
@@ -171,6 +170,7 @@ export function vatByRate(
   return [...byRate.values()].sort((a, b) => b.rate.comparedTo(a.rate));
 }
 
+/** A quantity as people read it: decimal comma, no trailing zeros. */
 export function formatQuantity(value: Prisma.Decimal): string {
   return value.toString().replace(".", ",");
 }
