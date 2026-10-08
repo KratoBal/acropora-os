@@ -599,13 +599,14 @@ export class MissingInvoicesRepository {
       // (barracuda's #1621 review, acrobot 28147). An undone recording must
       // never pair with a debit, and as a loose upload it would stand in every
       // month under its file name; on a cancellation the invoice is recorded
-      // again and the scan attached to the new one.
-      if (
-        document.purchaseInvoice &&
-        document.purchaseInvoice.status !== "POSTED"
-      )
+      // again and the scan attached to the new one. ONLY THE ATTACHED SCAN
+      // (origin UPLOAD): any other document linked to a not-posted invoice
+      // falls back to standing on its own reading, so a mailbox PDF's debit
+      // keeps its candidate (acrobot 28151).
+      const posted = document.purchaseInvoice?.status === "POSTED";
+      if (document.purchaseInvoice && !posted && document.origin === "UPLOAD")
         continue;
-      const linked = document.purchaseInvoice;
+      const linked = posted ? document.purchaseInvoice : null;
       // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
       const upload = document.origin === "UPLOAD" && !linked;
       const collectedCopy = collected(document.origin);
