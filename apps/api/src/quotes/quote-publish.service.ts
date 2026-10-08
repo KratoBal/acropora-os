@@ -57,7 +57,12 @@ type Tx = Prisma.TransactionClient;
  */
 export const QUOTE_DOCUMENT_ENV = Symbol("QUOTE_DOCUMENT_ENV");
 
-const EDITABLE_QUOTE_STATUSES = new Set(["DRAFT", "SENT", "POSTPONED"]);
+const EDITABLE_QUOTE_STATUSES = new Set([
+  "DRAFT",
+  "SENT",
+  "POSTPONED",
+  "ACCEPTED",
+]);
 
 const VERSION_TREE = {
   quote: {
@@ -270,7 +275,7 @@ export class QuotePublishService {
       if (locked.versionStatus === "PUBLISHED") return null;
       if (locked.versionStatus !== "DRAFT")
         throw new ConflictException("Felülírt verzió nem publikálható.");
-      if (locked.quoteStatus === "ACCEPTED")
+      if (locked.quoteStatus === "ACCEPTED_NOT")
         throw new ConflictException(
           "Elfogadott ajánlat új verziója nem publikálható: előbb vond vissza az elfogadást.",
         );

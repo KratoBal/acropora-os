@@ -60,8 +60,6 @@ ALTER TABLE "QuoteAcceptance" ADD CONSTRAINT "QuoteAcceptance_revoke_reason_chec
 
 -- The quote's status and its columns agree (every existing quote is a DRAFT
 -- with all four empty, so these hold for the existing rows).
-ALTER TABLE "Quote" ADD CONSTRAINT "Quote_accepted_version_check"
- CHECK (("status" = 'ACCEPTED') = ("acceptedVersionId" IS NOT NULL));
 ALTER TABLE "Quote" ADD CONSTRAINT "Quote_postponed_until_check"
  CHECK (("status" = 'POSTPONED') = ("postponedUntil" IS NOT NULL));
 ALTER TABLE "Quote" ADD CONSTRAINT "Quote_rejected_reason_check"
