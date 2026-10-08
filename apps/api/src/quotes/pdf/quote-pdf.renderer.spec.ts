@@ -154,8 +154,13 @@ describe("quote PDF content", () => {
 });
 
 describe("the first page's header", () => {
-  it("the tagline starts below the logo, and the title below the tagline (Balázs, stage 2026-10-08)", () => {
-    const top = 54;
+  /**
+   * The Figma header (3:2) sets the tagline, the title and the number BESIDE
+   * the logo, so they cannot run into it (Balázs, stage 2026-10-08, when they
+   * stood below it). What must still hold: the lines follow each other, and
+   * the rule is below both the logo and the number.
+   */
+  it("the text column follows itself, and the rule is below the logo and the number", () => {
     // the logo's own aspect, read from the SVG it is drawn from
     const svg = readFileSync(
       new URL("../../../assets/branding/acropora-logo.svg", import.meta.url),
@@ -165,14 +170,15 @@ describe("the first page's header", () => {
       .exec(svg)![1]!
       .split(/\s+/)
       .map(Number);
-    const logoBottom = top + (120 * h!) / w!;
-    const at = coverLayout(top, 120);
+    const top = 42;
+    const logoBottom = top + (71 * h!) / w!;
+    const at = coverLayout(top, 71);
+    assert.ok(at.title >= at.tagline + 8 * 1.5);
+    assert.ok(at.number >= at.title + 18 * 1.3);
     assert.ok(
-      at.tagline >= logoBottom + 4,
-      `tagline ${at.tagline} vs logo ${logoBottom}`,
+      at.rule > at.number && at.rule > logoBottom + 4,
+      `rule ${at.rule}`,
     );
-    assert.ok(at.title >= at.tagline + 7.5 * 1.5);
-    assert.ok(at.number > at.title && at.rule > at.number);
   });
 });
 
@@ -213,17 +219,17 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
         .filter((l) => l.pageNumber === page)
         .map((l) => l.text)
         .join(" | ");
-      // Balázs's footer word for word, in one line (2026-10-08 08:14)
-      assert.ok(
-        lines.some(
-          (l) =>
-            l.pageNumber === page &&
-            l.text.includes(
-              "Acropora Kft. 1106 Budapest, Pesti Gábor utca 35 Tel: +36-20-2676801 e-mail: info@acropora.hu www.acropora.hu · AJ-2026-0042 · v2",
-            ),
-        ),
-        `${page}. oldal: ${onPage}`,
-      );
+      // the Figma footer (3:13): the company line, the contact line, the
+      // quote number and version, each page
+      for (const needle of [
+        "Acropora Kft. · TENGERI AKVÁRIUMOK · TERVEZÉS · KIVITELEZÉS",
+        "1106 Budapest, Pesti Gábor utca 35 · +36-20-2676801 · www.acropora.hu · info@acropora.hu",
+        "AJ-2026-0042 · v2",
+      ])
+        assert.ok(
+          lines.some((l) => l.pageNumber === page && l.text.includes(needle)),
+          `${page}. oldal, ${needle}: ${onPage}`,
+        );
       assert.match(
         onPage,
         new RegExp(`${page} / ${pdf.pageCount}`),
@@ -265,8 +271,8 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
         lines
           .filter(
             (l) =>
-              l.text.includes("Ajánlat bruttó összege") ||
-              l.text.includes("Opciók nélkül"),
+              l.text.includes("ÖSSZESÍTÉS") ||
+              l.text.includes("BRUTTÓ VÉGÖSSZEG"),
           )
           .map((l) => l.pageNumber),
       );
@@ -304,7 +310,7 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
           l.text.includes("127 000 Ft"),
       );
       assert.equal(
-        page("1. Technikai rendszer"),
+        page("TECHNIKAI RENDSZER"),
         name.pageNumber,
         `cím (${fill})`,
       );
@@ -348,7 +354,7 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       const pages = new Set(
         lines
           .filter((l) =>
-            ["Opcionális tételek", "Első opció", "Negyedik opció"].some((n) =>
+            ["OPCIONÁLIS TÉTELEK", "Első opció", "Negyedik opció"].some((n) =>
               l.text.includes(n),
             ),
           )
@@ -370,7 +376,7 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       ]),
     );
     assert.deepEqual(await pagesOf(pdf.bytes, "Rövid bevezető"), [1]);
-    assert.deepEqual(await pagesOf(pdf.bytes, "Általános feltételek"), [2]);
+    assert.deepEqual(await pagesOf(pdf.bytes, "ÁLTALÁNOS FELTÉTELEK"), [2]);
   });
 
   it("the payment schedule comes from the milestones", async () => {
@@ -385,7 +391,202 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     const text = (await readPdfTextLines(pdf.bytes))
       .map((l) => l.text)
       .join(" | ");
-    assert.match(text, /Előleg: 30%/);
-    assert.match(text, /Átadáskor: 70%/);
+    // each milestone with its share of the gross total (Figma 18:29)
+    assert.match(text, /Előleg 30% \| 38 100 Ft|Előleg 30% 38 100 Ft/);
+    assert.match(text, /Átadáskor 70% \| 88 900 Ft|Átadáskor 70% 88 900 Ft/);
+    // and right after the summary, not at the end of the document
+    assert.ok(
+      text.indexOf("FIZETÉSI ÜTEMEZÉS") > text.indexOf("BRUTTÓ VÉGÖSSZEG"),
+    );
+  });
+
+  it("with a summary block, the schedule follows it, before the terms", async () => {
+    const pdf = await renderQuotePdf(
+      input(
+        [
+          block("SECTION", { title: "A", items: [item("X")] }),
+          block("SUMMARY", { title: "Összesítés" }),
+          block("TERMS", { title: "Feltételek", content: doc("Szöveg") }),
+        ],
+        { milestones: [{ label: "Előleg", percent: d("100") }] },
+      ),
+    );
+    const text = (await readPdfTextLines(pdf.bytes))
+      .map((l) => l.text)
+      .join(" | ");
+    const at = (needle: string) => {
+      const i = text.indexOf(needle);
+      assert.ok(i >= 0, `nem találom: ${needle}`);
+      return i;
+    };
+    assert.ok(at("BRUTTÓ VÉGÖSSZEG") < at("FIZETÉSI ÜTEMEZÉS"));
+    assert.ok(at("FIZETÉSI ÜTEMEZÉS") < at("FELTÉTELEK"));
+  });
+
+  /**
+   * A DESCRIPTION THAT RUNS ON: the next item follows it at the usual
+   * distance (measured 2026-10-08: the amount column's height was compared
+   * with the next page's position and left a gap of a third of a page).
+   */
+  it("after a description that runs onto the next page, the next item follows closely", async () => {
+    const long = Array.from(
+      { length: 6 },
+      (_, i) => `Hosszú leírás ${i + 1}. sora, hogy átfolyjon.`,
+    );
+    let ranOn = 0;
+    for (const fill of FILLS) {
+      const pdf = await renderQuotePdf(
+        input([
+          filler(fill),
+          block("SECTION", {
+            title: "A",
+            items: [
+              item("Hosszú tétel", {
+                quantity: d("2"),
+                description: doc(...long),
+              }),
+              item("Következő tétel"),
+            ],
+          }),
+        ]),
+      );
+      const lines = await readPdfTextLines(pdf.bytes);
+      const name = lines.find((l) => l.text.includes("Hosszú tétel"))!;
+      const last = lines.find((l) => l.text.includes("Hosszú leírás 6."))!;
+      const next = lines.find((l) => l.text.includes("Következő tétel"))!;
+      if (
+        last.pageNumber === name.pageNumber ||
+        next.pageNumber !== last.pageNumber
+      )
+        continue;
+      ranOn += 1;
+      assert.ok(
+        (next.top ?? 0) - (last.top ?? 0) < 45,
+        `rés ${(next.top ?? 0) - (last.top ?? 0)} (${fill})`,
+      );
+    }
+    // known positive control: the sweep did put a description across a page
+    assert.ok(ranOn > 0, "egyik kitöltésnél sem folyt át a leírás");
+  });
+
+  /** The brief (2026-10-08): only the VAT rates that occur, and "without options" only with options. */
+  it("the summary lists only the VAT rates that occur, and says without options only when there are some", async () => {
+    const lines = async (blocks: QuotePdfBlock[]) =>
+      (await readPdfTextLines((await renderQuotePdf(input(blocks))).bytes))
+        .map((l) => l.text)
+        .join(" | ");
+    const plain = await lines([
+      block("SECTION", { title: "A", items: [item("X")] }),
+    ]);
+    assert.match(plain, /ÁFA 27%/);
+    assert.doesNotMatch(plain, /ÁFA 5%/);
+    assert.doesNotMatch(plain, /OPCIÓK NÉLKÜL/);
+    const mixed = await lines([
+      block("SECTION", {
+        title: "A",
+        items: [item("X"), item("Y", { vatRatePercent: d("5") })],
+      }),
+      block("OPTIONS", { items: [item("Z", { isOptional: true })] }),
+    ]);
+    assert.match(mixed, /ÁFA 27%/);
+    assert.match(mixed, /ÁFA 5%/);
+    assert.match(mixed, /BRUTTÓ VÉGÖSSZEG · OPCIÓK NÉLKÜL/);
+  });
+
+  /** The brief: the total in bold, and below it the multiplication when the quantity is not 1. */
+  it("an item shows its total, and the multiplication only when the quantity is not 1", async () => {
+    const text = (
+      await readPdfTextLines(
+        (
+          await renderQuotePdf(
+            input([
+              block("SECTION", {
+                title: "A",
+                items: [
+                  item("Egy darab"),
+                  item("Két darab", { quantity: d("2") }),
+                ],
+              }),
+            ]),
+          )
+        ).bytes,
+      )
+    )
+      .map((l) => l.text)
+      .join(" | ");
+    assert.match(text, /1 db/);
+    assert.doesNotMatch(text, /1 db ×/);
+    assert.match(text, /254 000 Ft/);
+    assert.match(text, /2 db × 127 000 Ft/);
+  });
+
+  it("with both prices, an item and an option show the net and the gross", async () => {
+    const text = (
+      await readPdfTextLines(
+        (
+          await renderQuotePdf(
+            input(
+              [
+                block("SECTION", { title: "A", items: [item("Tétel")] }),
+                block("OPTIONS", {
+                  items: [item("Opció", { isOptional: true })],
+                }),
+              ],
+              { priceDisplay: "BOTH" },
+            ),
+          )
+        ).bytes,
+      )
+    )
+      .map((l) => l.text)
+      .join(" | ");
+    assert.equal(text.match(/nettó 100 000 Ft/g)?.length, 2, text);
+    assert.equal(text.match(/bruttó 127 000 Ft/g)?.length, 2, text);
+  });
+
+  it("an English quote has the English tagline, labels, options band and footer", async () => {
+    const text = (
+      await readPdfTextLines(
+        (
+          await renderQuotePdf(
+            input(
+              [
+                block("OPTIONS", {
+                  items: [item("Option", { isOptional: true })],
+                }),
+              ],
+              { language: "en" },
+            ),
+          )
+        ).bytes,
+      )
+    )
+      .map((l) => l.text)
+      .join(" | ");
+    for (const needle of [
+      "MARINE AQUARIUMS · DESIGN · INSTALLATION",
+      "QUOTATION",
+      "Prepared for",
+      "Valid until: 6 November 2026",
+      "OPTIONAL ITEMS",
+      "Not included in the total.",
+      "Acropora Kft. · MARINE AQUARIUMS · DESIGN · INSTALLATION",
+    ])
+      assert.ok(text.includes(needle), `${needle}: ${text}`);
+    assert.doesNotMatch(text, /ÁRAJÁNLAT|Érvényes|Nem részei/);
+  });
+
+  it("the money is in Ft, and the design's Noto Sans pair is embedded", async () => {
+    const pdf = await renderQuotePdf(
+      input([block("SECTION", { title: "A", items: [item("X")] })]),
+    );
+    const raw = pdf.bytes.toString("latin1");
+    assert.match(raw, /NotoSans-Regular/);
+    assert.match(raw, /NotoSans-Bold/);
+    const text = (await readPdfTextLines(pdf.bytes))
+      .map((l) => l.text)
+      .join(" | ");
+    assert.match(text, /127 000 Ft/);
+    assert.doesNotMatch(text, /HUF/);
   });
 });

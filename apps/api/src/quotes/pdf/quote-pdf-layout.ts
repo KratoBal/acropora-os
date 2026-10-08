@@ -39,7 +39,15 @@ export interface QuotePdfInput {
   milestones: Array<{ label: string; percent: Prisma.Decimal }>;
   /** the publish request time: the PDF's CreationDate (determinism) */
   creationDate: Date;
+  /**
+   * The PDF's language (Figma 04 · Árajánlat, the English samples): the
+   * tagline, the fixed labels, the options band and the footer. Hungarian
+   * when absent; the quote model has no language field yet.
+   */
+  language?: QuotePdfLanguage;
 }
+
+export type QuotePdfLanguage = "hu" | "en";
 
 const ZERO = new Prisma.Decimal(0);
 
@@ -98,6 +106,71 @@ export function formatQuoteDay(day: string): string {
 }
 
 /** A quantity as people read it: decimal comma, no trailing zeros. */
+const HU_MONTHS = [
+  "január",
+  "február",
+  "március",
+  "április",
+  "május",
+  "június",
+  "július",
+  "augusztus",
+  "szeptember",
+  "október",
+  "november",
+  "december",
+];
+const EN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** "2026. november 7." or "7 November 2026", from an ISO day. */
+export function formatQuoteLongDay(
+  day: string,
+  language: QuotePdfLanguage = "hu",
+): string {
+  const [y, m, d] = day.slice(0, 10).split("-");
+  const month = Number(m) - 1;
+  const date = Number(d);
+  return language === "en"
+    ? `${date} ${EN_MONTHS[month]} ${y}`
+    : `${y}. ${HU_MONTHS[month]} ${date}.`;
+}
+
+/**
+ * THE VAT OF THE OFFERED LINES, PER RATE, only the rates that occur (the
+ * brief: no empty 5% row on a quote that has none), highest rate first.
+ */
+export function vatByRate(
+  blocks: readonly QuotePdfBlock[],
+): Array<{ rate: Prisma.Decimal; vat: Prisma.Decimal }> {
+  const byRate = new Map<
+    string,
+    { rate: Prisma.Decimal; vat: Prisma.Decimal }
+  >();
+  for (const block of blocks)
+    for (const item of block.items) {
+      if (item.isOptional) continue;
+      const key = item.vatRatePercent.toString();
+      const vat = lineGross(item).minus(lineNet(item));
+      const row = byRate.get(key);
+      if (row) row.vat = row.vat.plus(vat);
+      else byRate.set(key, { rate: item.vatRatePercent, vat });
+    }
+  return [...byRate.values()].sort((a, b) => b.rate.comparedTo(a.rate));
+}
+
 export function formatQuantity(value: Prisma.Decimal): string {
   return value.toString().replace(".", ",");
 }
