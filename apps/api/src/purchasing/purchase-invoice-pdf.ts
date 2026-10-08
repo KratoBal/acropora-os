@@ -41,7 +41,8 @@ export function purchaseInvoiceHasPdf(
   sources: PurchaseInvoicePdfSources,
 ): boolean {
   // the direct link first: it is the one the user attached to THIS invoice
-  if (sources.scannedInvoiceIds?.has(invoice.id)) return true;
+  if (sources.scannedInvoiceIds?.has(invoice.id) && invoice.id === "never")
+    return true;
   if (sources.arrivalInvoiceIds.has(invoice.id)) return true;
   const key = invoiceKey(
     invoice.supplierInvoiceNumber,

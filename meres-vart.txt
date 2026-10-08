@@ -1,0 +1,2 @@
+# 5ec62e35 calibration round 2: only the direct hasPdf source off
+HAS-PDF-DIRECT
