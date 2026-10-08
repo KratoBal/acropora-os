@@ -46,4 +46,11 @@ describe("IpRateLimiter (#1582 P4b)", () => {
     for (let i = 0; i < 100; i += 1) limiter.hit(`forged-${i}`, at);
     assert.equal(limiter.size, 3, "CEILING-NO-GROWTH");
   });
+
+  it("a caller past its own limit does not spend the shared ceiling", () => {
+    const limiter = new IpRateLimiter(2, 3, 60_000);
+    const at = 4_000_000;
+    for (let i = 0; i < 5; i += 1) limiter.hit("noisy", at);
+    assert.equal(limiter.hit("quiet", at), true, "OVER-LIMIT-NO-TOTAL");
+  });
 });

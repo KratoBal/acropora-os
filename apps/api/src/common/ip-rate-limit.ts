@@ -38,10 +38,13 @@ export class IpRateLimiter {
     // once the shared ceiling is spent nothing more is remembered: forged
     // addresses must not grow the map without bound (acrobot 28224)
     if (this.total >= this.overall) return false;
+    // a caller past its own limit is refused without spending the shared
+    // ceiling: one machine must not use up everybody's (barracuda, 28231)
+    const count = this.counts.get(caller) ?? 0;
+    if (count >= this.perCaller) return false;
+    this.counts.set(caller, count + 1);
     this.total += 1;
-    const count = (this.counts.get(caller) ?? 0) + 1;
-    this.counts.set(caller, count);
-    return count <= this.perCaller;
+    return true;
   }
 
   /** The same, as a 429 the controller can let fly. */
