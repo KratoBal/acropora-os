@@ -68,8 +68,6 @@ export async function planRedirectBackfill(
       report.withoutWebshopSlug.push(p.id);
       continue;
     }
-    if (normalizeRedirectPath(p.unasUrl)?.startsWith("/spd/"))
-      report.spdPaths += 1;
     try {
       const eredmeny = await writeRedirect(store, {
         source: p.unasUrl,
@@ -87,7 +85,12 @@ export async function planRedirectBackfill(
           source: normalizeRedirectPath(p.unasUrl) ?? p.unasUrl,
           existing: eredmeny.existingDestination,
         });
-      else report.created += 1;
+      else {
+        report.created += 1;
+        // az ÚJ szabályok közül (a második futás 0-t mond, nem a régi címek számát)
+        if (normalizeRedirectPath(p.unasUrl)?.startsWith("/spd/"))
+          report.spdPaths += 1;
+      }
     } catch (error) {
       if (!(error instanceof RedirectError)) throw error;
       report.refused.push({
