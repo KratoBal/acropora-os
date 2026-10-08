@@ -16,7 +16,11 @@ import {
 } from "@acropora/types";
 import { quoteDto, quoteListItemDto } from "./quote-dto.mapper.js";
 import { templateInput } from "./quote-editor-input.js";
-import { QuotesRepository, QuoteWriteConflict } from "./quotes.repository.js";
+import {
+  QuotesRepository,
+  QuoteWriteConflict,
+  type QuoteListFilter,
+} from "./quotes.repository.js";
 function permission(user: AuthenticatedUser, manage = false) {
   if (
     !hasPermission(
@@ -64,16 +68,18 @@ export class QuotesService {
     user: AuthenticatedUser,
     page: number,
     pageSize: number,
-    q?: string,
+    filter: QuoteListFilter = {},
   ): Promise<QuoteListResponse> {
     permission(user);
-    const result = await this.repository.list(page, pageSize, q);
+    const result = await this.repository.list(page, pageSize, filter);
     const totals = await this.repository.netTotals(
       result.items.flatMap((row) => row.versions.map((v) => v.id)),
     );
     return {
-      ...result,
-      items: result.items.map((row) => quoteListItemDto(row, totals)),
+      total: result.total,
+      items: result.items.map((row) =>
+        quoteListItemDto(row, totals, result.expired.has(row.id)),
+      ),
       page,
       pageSize,
     };

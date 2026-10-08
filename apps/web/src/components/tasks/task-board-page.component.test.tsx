@@ -204,3 +204,61 @@ describe("TaskBoardPage", () => {
     expect(screen.queryByText("Hiba")).not.toBeInTheDocument();
   });
 });
+
+describe("TaskBoardPage: due dates (#1582 P8)", () => {
+  beforeEach(() => {
+    auth.session = session("ADMIN");
+    api.assignees.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("an offer's task due after today waits under „Később”, with its date and source", async () => {
+    const quoteTask = (id: string, title: string, dueAt: string) => ({
+      id,
+      title,
+      status: "OPEN" as const,
+      linkUrl: "/ajanlatok/q1",
+      source: "QUOTE" as const,
+      assignee: { id: "user-balazs", displayName: "Balázs" },
+      createdAt: "2026-10-08T10:00:00.000Z",
+      dueAt,
+    });
+    api.listMine.mockReset().mockResolvedValue(
+      board({
+        items: [
+          quoteTask(
+            "t-later",
+            "Az ajánlat hamarosan lejár",
+            "2099-12-28T00:00:00.000Z",
+          ),
+          quoteTask(
+            "t-now",
+            "Ajánlat utánkövetése",
+            "2020-01-01T00:00:00.000Z",
+          ),
+        ],
+        openCount: 2,
+      }),
+    );
+    render(<TaskBoardPage />);
+    await screen.findByText("Ajánlat utánkövetése");
+    const later = screen.queryByRole("heading", { name: "Később" });
+    const before = (a: Node | null, b: Node | null) =>
+      Boolean(
+        a &&
+        b &&
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(
+      [
+        before(screen.getByText("Ajánlat utánkövetése"), later),
+        before(later, screen.getByText("Az ajánlat hamarosan lejár")),
+        screen.getAllByText("Árajánlat").length,
+        screen.getAllByText(/Határidő:/).length,
+        screen
+          .getAllByRole("link", { name: "Ajánlat megnyitása" })[0]!
+          .getAttribute("target"),
+      ],
+      "WEB-LATER-GROUP",
+    ).toEqual([true, true, 2, 2, null]);
+  });
+});

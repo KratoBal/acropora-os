@@ -297,7 +297,7 @@ describe(
         !("blocks" in summary.latestVersion) &&
           !("bomItems" in summary.latestVersion),
       );
-      const listRow = (await repo.list(1, 25, "Updated")).items.find(
+      const listRow = (await repo.list(1, 25, { q: "Updated" })).items.find(
         (i) => i.id === quoteId,
       )!;
       assert.equal(listRow.versions.length, 1);
