@@ -44,6 +44,7 @@ const ALL: Permission[] = [
   PERMISSIONS.QUOTES_VIEW,
   PERMISSIONS.QUOTES_MANAGE,
   PERMISSIONS.QUOTES_HANDOFF,
+  PERMISSIONS.QUOTES_ACCEPTANCE_RECORD,
 ];
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -343,6 +344,50 @@ describe(
           ["1"],
         ],
         "TWO-WAREHOUSES",
+      );
+    });
+
+    /**
+     * A START AND A REVOCATION AT ONCE (nautilus's #1633 review): both take the
+     * quote's row lock before they read, so whichever comes second sees the
+     * first's commit. The end is one of two whole states, never a project
+     * from a revoked yes. One run sees one interleaving: a positive check, not
+     * calibrated red.
+     */
+    it("a start and a revocation at once end in one whole state", async () => {
+      const a = await warehouse("race");
+      const v = await variant("race", [[a, 2]]);
+      const q = await acceptedQuote("race", [
+        { kind: "PRODUCT", variantId: v, quantity: 1 },
+      ]);
+      const acceptance = await prisma.quoteAcceptance.findFirstOrThrow({
+        where: { quoteId: q.quoteId },
+        select: { id: true },
+      });
+      const plan = await preview(q.quoteId);
+      const [started, revoked] = await Promise.all([
+        execute(q.quoteId, plan.body!.planHash),
+        request(
+          `/quotes/${q.quoteId}/acceptances/${acceptance.id}/revoke`,
+          "POST",
+          { reason: "egyidejű próba" },
+        ),
+      ]);
+      const projects = await prisma.project.count({
+        where: { sourceQuoteId: q.quoteId },
+      });
+      const live = await prisma.quoteAcceptance.count({
+        where: { quoteId: q.quoteId, revokedAt: null },
+      });
+      const state = [started.status, revoked.status, projects, live];
+      assert.ok(
+        // started, and the revocation refused
+        (state.join() === "200,409,1,1" &&
+          (await reserved(v)).toString() === "1") ||
+          // revoked, and the start refused
+          (state.join() === "409,200,0,0" &&
+            (await reserved(v)).toString() === "0"),
+        `RACE-START-REVOKE ${state.join()}`,
       );
     });
 

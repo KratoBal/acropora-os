@@ -343,7 +343,9 @@ async function loadSubject(tx: Tx, quoteId: string): Promise<Subject> {
     }),
   ]);
   if (!acceptance) throw notAccepted();
-  if (version.status === "DRAFT") throw notAccepted();
+  // the accepted version is the published one (a superseded one cannot be
+  // accepted, an accepted quote cannot publish another); said here plainly
+  if (version.status !== "PUBLISHED") throw notAccepted();
 
   const selected = new Set(acceptance.selectedOptionalItemIds);
   const items = await tx.quoteItem.findMany({
