@@ -24,21 +24,32 @@ test("SALES may create, issue and send an invoice without managing finance", () 
   assert.equal(new Set(sales).size, sales.length);
 });
 
+/**
+ * EVERY role, not a hand-written list (acrobot 28185): a role added later must
+ * be seen too. The only ones skipped are SALES (the named grant) and the roles
+ * that manage finance (they derive the write rights from it).
+ */
 test("no other role without finance.manage gains a billing write right", () => {
+  const checked: string[] = [];
+  for (const [role, permissions] of Object.entries(ROLE_PERMISSIONS)) {
+    if (role === "SALES" || permissions.includes(PERMISSIONS.FINANCE_MANAGE))
+      continue;
+    checked.push(role);
+    for (const permission of [
+      PERMISSIONS.BILLING_CREATE,
+      PERMISSIONS.BILLING_ISSUE,
+      PERMISSIONS.BILLING_RESEND,
+    ])
+      assert.ok(!permissions.includes(permission), `${role}: ${permission}`);
+  }
+  // known positive control: the loop really reached the roles that used to be
+  // listed by hand, so an empty or filtered-out set cannot pass silently
   for (const role of [
     "WAREHOUSE",
     "SERVICE",
     "VIEWER",
     "CONTENT_AGENT",
     ...PARTNER_ROLES,
-  ] as const)
-    for (const permission of [
-      PERMISSIONS.BILLING_CREATE,
-      PERMISSIONS.BILLING_ISSUE,
-      PERMISSIONS.BILLING_RESEND,
-    ])
-      assert.ok(
-        !ROLE_PERMISSIONS[role].includes(permission),
-        `${role}: ${permission}`,
-      );
+  ])
+    assert.ok(checked.includes(role), `not checked: ${role}`);
 });
