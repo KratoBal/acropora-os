@@ -176,6 +176,7 @@ describe("GET /purchasing/invoices", () => {
       {} as never,
       { hasPdf: async () => new Map([["pi-1", true]]) } as never,
       {} as never,
+      {} as never,
     );
     const result = await controller.listInvoices({} as never);
     assert.deepEqual(

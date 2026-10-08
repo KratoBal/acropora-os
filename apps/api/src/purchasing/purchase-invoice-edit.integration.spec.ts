@@ -150,6 +150,39 @@ describe(
       });
     });
 
+    it("a renamed invoice's attached scan reads the new number (acrobot 28101)", async () => {
+      const row = await invoice("scan");
+      const scan = await prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `edit-scan:${suffix}`,
+          fileName: "lap.pdf",
+          sizeBytes: 14,
+          sha256: `edit-scan-${suffix}`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "UPLOAD",
+          payeeCheck: "COMPANY",
+          purchaseInvoiceId: row.id,
+          textReading: {
+            invoiceNumber: row.supplierInvoiceNumber,
+            numberFrom: null,
+            supplierTaxNumber: "12345678-2-42",
+          },
+        },
+      });
+      const fixed = `EDIT-scan-fixed-${suffix}`;
+      await edits.update(row.id, { supplierInvoiceNumber: fixed }, userId);
+      const reading = (
+        await prisma.incomingSupplierDocument.findUniqueOrThrow({
+          where: { id: scan.id },
+        })
+      ).textReading as Record<string, unknown>;
+      assert.equal(reading.invoiceNumber, fixed, "SCAN-RENUMBERED");
+      // the rest of the reading stays
+      assert.equal(reading.supplierTaxNumber, "12345678-2-42");
+    });
+
     it("a foreign invoice's date stays: its rate came from it", async () => {
       const row = await invoice("eur", "EUR");
       await assert.rejects(
@@ -192,6 +225,9 @@ describe(
           select: { id: true },
         })
       ).map((r) => r.id);
+      await prisma.incomingSupplierDocument.deleteMany({
+        where: { purchaseInvoiceId: { in: ids } },
+      });
       await prisma.purchaseInvoiceLine.deleteMany({
         where: { purchaseInvoiceId: { in: ids } },
       });

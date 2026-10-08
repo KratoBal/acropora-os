@@ -102,7 +102,7 @@ export class PurchaseInvoiceEditService {
         if (
           data.supplierInvoiceNumber !== undefined &&
           data.supplierInvoiceNumber !== invoice.supplierInvoiceNumber
-        )
+        ) {
           await rekeyReceipt(
             tx,
             id,
@@ -112,6 +112,8 @@ export class PurchaseInvoiceEditService {
               data.supplierInvoiceNumber as string,
             ),
           );
+          await renumberScans(tx, id, data.supplierInvoiceNumber as string);
+        }
         for (const line of lineNames)
           await tx.purchaseInvoiceLine.update({
             where: { id: line.id },
@@ -214,6 +216,33 @@ async function rekeyReceipt(
         idempotencyKey: `${newKey}${row.idempotencyKey.slice(oldKey.length)}`,
       },
     });
+}
+
+/**
+ * THE ATTACHED SCAN FOLLOWS THE NEW NUMBER (acrobot 28101, point 2). A scan
+ * carries the invoice number in its reading (`purchase-invoice-scan.service.ts`),
+ * and the collected-PDF index and the Hiányzó számlák candidates key it by
+ * that reading. Left on the old number, the scan would point at an invoice
+ * that no longer exists, and the renamed one would look PDF-less there.
+ */
+async function renumberScans(
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+  invoiceNumber: string,
+) {
+  const scans = await tx.incomingSupplierDocument.findMany({
+    where: { purchaseInvoiceId: invoiceId },
+    select: { id: true, textReading: true },
+  });
+  for (const scan of scans) {
+    const reading = (scan.textReading ?? {}) as Record<string, unknown>;
+    await tx.incomingSupplierDocument.update({
+      where: { id: scan.id },
+      data: {
+        textReading: { ...reading, invoiceNumber } as Prisma.InputJsonValue,
+      },
+    });
+  }
 }
 
 function day(value: string, label: string): Date {
