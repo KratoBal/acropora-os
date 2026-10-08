@@ -284,6 +284,46 @@ describe(
       await prisma.stockMovement.deleteMany({ where: { referenceId: row.id } });
     });
 
+    it("a payment date applies only if the invoice is paid under the lock", async () => {
+      const row = await invoice("paidat");
+      // the edit read it as paid; it was set unpaid before the write
+      const stale = new PurchaseInvoiceEditService();
+      Object.defineProperty(stale, "database", {
+        value: new Proxy(prisma, {
+          get(target, key) {
+            if (key === "purchaseInvoice")
+              return new Proxy(target.purchaseInvoice, {
+                get(model, method) {
+                  if (method !== "findUnique") {
+                    const value = Reflect.get(model, method);
+                    return typeof value === "function"
+                      ? value.bind(model)
+                      : value;
+                  }
+                  return async (
+                    args: Parameters<typeof model.findUnique>[0],
+                  ) => {
+                    const real = await model.findUnique(args);
+                    return real && { ...real, isPaid: true };
+                  };
+                },
+              });
+            const value = Reflect.get(target, key);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        }),
+      });
+      await stale.update(row.id, { paidAt: "2026-10-08" }, userId);
+      const after = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.deepEqual(
+        [after.isPaid, after.paidAt],
+        [false, null],
+        "PAIDAT-UNDER-LOCK",
+      );
+    });
+
     it("a foreign invoice's date stays: its rate came from it", async () => {
       const row = await invoice("eur", "EUR");
       await assert.rejects(
