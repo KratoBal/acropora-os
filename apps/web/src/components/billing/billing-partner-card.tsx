@@ -8,6 +8,8 @@ import {
 } from "@acropora/ui";
 import {
   CUSTOMER_LIST_PAGE_SIZE,
+  hasPermission,
+  PERMISSIONS,
   type BillingDocumentCustomer,
   type CustomerDetail,
   type CustomerSummary,
@@ -15,6 +17,9 @@ import {
 import { useEffect, useState } from "react";
 
 import { customersApi } from "@/lib/api/customers";
+import { useAuth } from "@/components/auth/auth-provider";
+
+import { BillingNewCustomerForm } from "./billing-new-customer-form";
 
 /**
  * A VEVŐ KÁRTYÁJA (brief 11. pont): név, cím, adószám, e-mail, belső azonosító.
@@ -39,6 +44,12 @@ export function BillingPartnerCard({
   disabled?: boolean;
 }) {
   const [picking, setPicking] = useState(customer === null);
+  const [creating, setCreating] = useState(false);
+  const { session } = useAuth();
+  // a new customer is a customer record, with that permission (28105)
+  const canCreate = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CUSTOMERS_MANAGE),
+  );
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
   // A KERESÉS HIBÁJA NEM "NINCS TALÁLAT" (Balázs a stage-en, 2026-09-30: "a
@@ -85,33 +96,35 @@ export function BillingPartnerCard({
   /** honnan jött a fizetési nap, ha nem erről a vevő-sorról (7be4a85b) */
   const [termsNote, setTermsNote] = useState<string | null>(null);
 
+  const choose = (detail: CustomerDetail) => {
+    onChange(
+      {
+        id: detail.id,
+        name: detail.companyName?.trim() || detail.displayName,
+        address: detail.address,
+        taxNumber: detail.taxNumber ?? null,
+        euTaxNumber: null,
+        contactName: null,
+        email: detail.email ?? null,
+        internalCode: detail.customerNumber,
+      },
+      {
+        paymentDueDays:
+          detail.paymentDueDays ?? detail.partnerTerms?.paymentDueDays ?? null,
+      },
+    );
+    setTermsNote(partnerTermsNote(detail));
+    setPicking(false);
+    setCreating(false);
+    setSearch("");
+  };
+
   const pick = async (summary: CustomerSummary) => {
     setError(null);
     try {
       // AZ ADÓSZÁM A RÉSZLETLAPON ÁLL, a listán nem: a kártya ne mutasson
       // hiányt ott, ahol csak nem kértük le.
-      const detail = await customersApi.detail(token, summary.id);
-      onChange(
-        {
-          id: detail.id,
-          name: detail.companyName?.trim() || detail.displayName,
-          address: detail.address,
-          taxNumber: detail.taxNumber ?? null,
-          euTaxNumber: null,
-          contactName: null,
-          email: detail.email ?? null,
-          internalCode: detail.customerNumber,
-        },
-        {
-          paymentDueDays:
-            detail.paymentDueDays ??
-            detail.partnerTerms?.paymentDueDays ??
-            null,
-        },
-      );
-      setTermsNote(partnerTermsNote(detail));
-      setPicking(false);
-      setSearch("");
+      choose(await customersApi.detail(token, summary.id));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A partner nem tölthető be.",
@@ -161,11 +174,19 @@ export function BillingPartnerCard({
             </PilotButton>
           </div>
         </div>
+      ) : creating ? (
+        <BillingNewCustomerForm
+          token={token}
+          initialSearch={search}
+          onSaved={choose}
+          onPickExisting={(summary) => void pick(summary)}
+          onClose={() => setCreating(false)}
+        />
       ) : (
         <div className="space-y-3">
           <PilotInput
             aria-label="Partner keresése"
-            placeholder="Partner neve, azonosítója vagy e-mail címe"
+            placeholder="Partner neve, adószáma, azonosítója vagy e-mail címe"
             value={search}
             onChange={setSearch}
             disabled={disabled}
@@ -197,6 +218,15 @@ export function BillingPartnerCard({
             </ul>
           ) : search.trim().length >= 2 ? (
             <p className="text-xs text-pilot-grey-500">Nincs találat.</p>
+          ) : null}
+          {canCreate && !disabled ? (
+            <PilotButton
+              variant="secondary"
+              size="action"
+              onClick={() => setCreating(true)}
+            >
+              Új vevő felvétele
+            </PilotButton>
           ) : null}
           {customer ? (
             <PilotButton

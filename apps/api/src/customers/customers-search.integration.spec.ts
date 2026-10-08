@@ -28,21 +28,29 @@ describe(
   () => {
     const suffix = String(Date.now() % 1_000_000);
     const repository = new CustomersRepository();
-    const ids: Record<"zoo" | "percent" | "plain", string> = {
+    const ids: Record<"zoo" | "percent" | "plain" | "taxed", string> = {
       zoo: "",
       percent: "",
       plain: "",
+      taxed: "",
     };
+    // a tax number of this run only: 8 digits, the suffix padded
+    const taxBase = `9${suffix.padStart(7, "0")}`;
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
-      const create = async (key: keyof typeof ids, displayName: string) => {
+      const create = async (
+        key: keyof typeof ids,
+        displayName: string,
+        taxNumber?: string,
+      ) => {
         const row = await prisma.customer.create({
           data: {
             customerNumber: `${CUSTOMER_PREFIX}${key}-${suffix}`,
             type: "COMPANY",
             displayName,
+            ...(taxNumber ? { taxNumber } : {}),
           },
         });
         ids[key] = row.id;
@@ -50,6 +58,7 @@ describe(
       await create("zoo", `Fővárosi Állat- és Növénykert ${suffix}`);
       await create("percent", `Árvíztűrő 100% Kft ${suffix}`);
       await create("plain", `Arvizturo 1000 Kft ${suffix}`);
+      await create("taxed", `Adapt Kft ${suffix}`, `${taxBase}-2-42`);
     });
 
     after(removeLeftovers);
@@ -104,6 +113,25 @@ describe(
       assert.deepEqual(await found(`ÁRVÍZTŰRŐ 1000 KFT ${suffix}`), [
         ids.plain,
       ]);
+    });
+
+    // Luca, 2026-10-08 („nem talál adószám alapján sem”), acrobot 28132.
+    // MI PIROSÍT: ha a kereső az adószámot nem nézi, vagy csak a pontos,
+    // kötőjeles alakra talál.
+    it("the tax number finds the customer, with or without its separators", async () => {
+      const hits = [];
+      for (const typed of [
+        `${taxBase}-2-42`,
+        `${taxBase}242`,
+        `${taxBase.slice(0, 4)} ${taxBase.slice(4)} 2 42`,
+        taxBase,
+      ])
+        hits.push(await found(typed));
+      assert.deepEqual(
+        hits,
+        [[ids.taxed], [ids.taxed], [ids.taxed], [ids.taxed]],
+        "TAX-SEARCH",
+      );
     });
 
     it("% and _ are literal, not wildcards", async () => {
