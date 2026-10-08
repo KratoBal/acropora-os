@@ -185,7 +185,7 @@ export function serviceJobSheetDocument(
           subtitle: `${input.jobNumber} · kiállítva: ${new Intl.DateTimeFormat("hu-HU", { dateStyle: "long", timeZone: "Europe/Budapest" }).format(input.closedAt)}`,
           compact: page !== range.start,
         });
-        drawDocumentFooter(document);
+        drawDocumentFooter(document, "SERVICE");
       }
       document.end();
     } catch (error) {

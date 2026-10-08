@@ -104,6 +104,40 @@ const OCCASION_CONFLICT_MESSAGE =
 
 @Injectable()
 export class AquariumMeasurementsRepository {
+  /**
+   * D3 of the measurement report (2026-10-08): the aquarium's ICP reports
+   * whose day falls in the window, with their results. The day is the
+   * sampling day, or the upload day when there is none (`pickIcpReport`
+   * chooses the latest; barracuda's review, #1640).
+   */
+  async icpReportsIn(aquariumId: string, from: Date, to: Date) {
+    return prisma.icpReport.findMany({
+      where: {
+        aquariumId,
+        OR: [
+          { sampledAt: { gte: from, lte: to } },
+          { sampledAt: null, createdAt: { gte: from, lte: to } },
+        ],
+      },
+      select: {
+        laboratoryCode: true,
+        sampledAt: true,
+        createdAt: true,
+        results: {
+          orderBy: { elementCode: "asc" },
+          select: {
+            elementCode: true,
+            value: true,
+            unit: true,
+            minimum: true,
+            maximum: true,
+            trend: true,
+          },
+        },
+      },
+    });
+  }
+
   async list(aquariumId: string): Promise<AquariumMeasurementListResponse> {
     const rows = await prisma.aquariumMeasurement.findMany({
       where: { aquariumId },

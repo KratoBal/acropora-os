@@ -30,7 +30,10 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney } from "./billing-editor-state";
 
-/** A csak postafiókos sor ellenőrző lapja; az azonosító a lista soráé (`mailbox:<id>`). */
+/**
+ * Az ellenőrizendő sor lapja; az azonosító a lista soráé: `mailbox:<id>` a
+ * postafiókos, `purchase:<id>` a beszerzésből jött sornál (kártya 83f31a95).
+ */
 export const incomingReviewHref = (id: string) =>
   `${BILLING_LIST_PATH}/bejovo/ellenorzes/${encodeURIComponent(id)}`;
 
@@ -221,7 +224,8 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
       <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-accent-warm-text">
-            Bejövő számla · Postafiókból
+            Bejövő számla ·{" "}
+            {item.origin === "PURCHASE" ? "Beszerzésből" : "Postafiókból"}
           </p>
           <h1 className="text-[28px] font-semibold leading-[34px] text-pilot-grey-900">
             {review.values.documentNumber ?? item.documentNumber}
@@ -327,7 +331,9 @@ export function BillingIncomingReviewPage({ itemId }: { itemId: string }) {
             {verified ? (
               <p className="text-sm text-pilot-grey-700">
                 Ez a számla ellenőrizve, jóváhagyva. A listán rendes bejövő
-                számlaként áll, „Postafiókból” jelöléssel.
+                számlaként áll, „
+                {item.origin === "PURCHASE" ? "Beszerzésből" : "Postafiókból"}”
+                jelöléssel.
               </p>
             ) : editable ? (
               <div className="flex flex-col gap-2">

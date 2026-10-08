@@ -5,6 +5,8 @@ export type SalesOrderLineSyncStatus = "PENDING" | "OK" | "FAILED";
 /** A single product match returned by the POS search-as-you-type box. */
 export interface PosProductSearchResult {
   variantId: string;
+  /** The product the variant belongs to: the invoice line's product (cdc2771b). */
+  productId: string;
   sku: string;
   productName: string;
   unit: string;

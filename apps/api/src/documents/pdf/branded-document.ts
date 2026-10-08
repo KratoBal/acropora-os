@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 
 import PDFDocument from "pdfkit";
+import { documentFooterLine, type DocumentFooterKind } from "@acropora/types";
 
 import { drawAcroporaLogo } from "./acropora-logo.js";
 import {
@@ -71,7 +72,15 @@ export function registerEmbeddedPdfFont(
   return document.font(PDF_BODY_FONT);
 }
 
-export function drawDocumentFooter(document: PDFKit.PDFDocument): void {
+/**
+ * The footer, by kind (acrobot 28093): SERVICE on the worksheet and the
+ * service job (the service number and the fault-report address), OFFICE on
+ * every other document. No default: each document names its own.
+ */
+export function drawDocumentFooter(
+  document: PDFKit.PDFDocument,
+  kind: DocumentFooterKind,
+): void {
   document
     .moveTo(PDF_LEFT, 774)
     .lineTo(A4_WIDTH - PDF_RIGHT, 774)
@@ -81,12 +90,10 @@ export function drawDocumentFooter(document: PDFKit.PDFDocument): void {
   document
     .fillColor(PDF_MUTED)
     .fontSize(7.2)
-    .text(
-      "Acropora Kft. · 1106 Budapest, Pesti Gábor utca 35 · info@acropora.hu · hibabejelentés: ticket@acropora.hu · +36-30-982-3634",
-      PDF_LEFT,
-      786,
-      { width: PDF_CONTENT_WIDTH, align: "center" },
-    );
+    .text(documentFooterLine(kind), PDF_LEFT, 786, {
+      width: PDF_CONTENT_WIDTH,
+      align: "center",
+    });
 }
 
 export function drawDocumentHeader(

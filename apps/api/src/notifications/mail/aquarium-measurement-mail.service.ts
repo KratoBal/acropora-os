@@ -8,13 +8,10 @@ import {
 } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import {
-  aquariumMeasurementParameter,
   renderMailTemplate,
   type AquariumMeasurementOccasion,
-  type AquariumMeasurementParameterCode,
 } from "@acropora/types";
 
-import { aquariumMeasurementDocument } from "../../aquariums/aquarium-measurement-document.js";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { headerSafe } from "./mail-header.js";
 import { mailBodyFields, renderMailBody } from "./mail-body.js";
@@ -52,8 +49,9 @@ export const DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE = {
  * A VÍZMÉRÉS PDF-JÉNEK E-MAILBEN KÜLDÉSE -- GOMBRA, NEM AUTOMATIKUS.
  *
  * Balázs kérése (2026-09-24 14:41): "gomb... Eredmény küldése e-mailben...
- * csak ha az ügyfélnek van e-mail címe. NEM automatikus." A PDF a közös
- * arculati kereten készül (`aquarium-measurement-document.ts`), a kiküldés
+ * csak ha az ügyfélnek van e-mail címe. NEM automatikus." A PDF a mérési
+ * eredménylap (`aquariums/measurement-report-pdf.ts`, 2026-10-08 óta), amit a
+ * hívó állít elő és ad át; a kiküldés
  * a MEGLÉVŐ levélküldő porton megy (`MAIL_SENDER`), UGYANAZON A TERÍTŐ
  * BURKON keresztül, mint a hibajegy-csomag levelei
  * (`notifications.module.ts`: `{ provide: MAIL_SENDER, useClass:
@@ -113,6 +111,8 @@ export class AquariumMeasurementMailService {
   async send(input: {
     aquariumId: string;
     aquariumName: string;
+    /** the measurement report PDF, built by the caller (D4, 2026-10-08) */
+    pdf: Buffer;
     occasion: AquariumMeasurementOccasion;
     customerEmail: string;
     customerName: string;
@@ -124,24 +124,7 @@ export class AquariumMeasurementMailService {
         "Az e-mail küldés jelenleg nincs beállítva.",
       );
 
-    const rows = input.occasion.values.map((value) => {
-      const parameter = aquariumMeasurementParameter(
-        value.parameterCode as AquariumMeasurementParameterCode,
-      );
-      return {
-        label: parameter.label,
-        value: value.value,
-        unit: parameter.unit,
-      };
-    });
-
-    const pdf = await aquariumMeasurementDocument({
-      aquariumName: input.aquariumName,
-      customerName: input.customerName,
-      measuredAt: input.occasion.measuredAt,
-      rows,
-      notes: input.occasion.notes,
-    });
+    const pdf = input.pdf;
 
     const tarolt = await this.templates.template(AQUARIUM_MEASUREMENT_RESULT);
     const sablon = tarolt ?? DEFAULT_AQUARIUM_MEASUREMENT_RESULT_TEMPLATE;
@@ -192,7 +175,7 @@ export class AquariumMeasurementMailService {
       ...mailBodyFields(torzs),
       attachments: [
         {
-          filename: "vizmeres.pdf",
+          filename: "meresi-eredmenyek.pdf",
           contentType: "application/pdf",
           bytes: pdf,
         },

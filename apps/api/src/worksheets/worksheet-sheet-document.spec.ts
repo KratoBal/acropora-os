@@ -315,4 +315,17 @@ describe("a lezáráskor keletkező lapnak számozottnak kell lennie", () => {
       "BIO-2026-001/1",
     );
   });
+
+  it("a munkalap láblécén a szervizes szám áll (acrobot 28093)", async () => {
+    const text = (
+      await readPdfTextLines((await worksheetSheetDocument(bemenet())).content)
+    )
+      .map((row) => row.text)
+      .join("\n");
+    assert.deepEqual(
+      [text.includes("+36-30-982-3634"), text.includes("+36-20-2676801")],
+      [true, false],
+      "FOOTER-WORKSHEET-SERVICE",
+    );
+  });
 });

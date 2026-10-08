@@ -55,6 +55,11 @@ import {
   type EditorState,
 } from "./billing-editor-state";
 import { BillingPartnerCard } from "./billing-partner-card";
+import {
+  clearPosInvoiceHandoff,
+  editorLinesFromPosHandoff,
+  readPosInvoiceHandoff,
+} from "./pos-invoice-handoff";
 
 export const BILLING_EDITOR_PATH = "/penzugy/szamlazas";
 
@@ -78,9 +83,12 @@ function today(): string {
 export function BillingDocumentEditor({
   documentId,
   initialType,
+  posHandoffKey,
 }: {
   documentId?: string;
   initialType?: BillingDocumentType;
+  /** A pénztár kosarának kulcsa (`pos-invoice-handoff`); csak új számlánál. */
+  posHandoffKey?: string;
 }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -144,6 +152,25 @@ export function BillingDocumentEditor({
   const [sent, setSent] = useState<
     { ok: true; to: string } | { ok: false; error: string } | null
   >(null);
+
+  /*
+    A PÉNZTÁR KOSARA (kártya cdc2771b): az új számla a kosár tételsoraival
+    nyílik. Hatásban olvas, nem a kezdőállapotban, mert a munkamenet-tár a
+    szerveren nem létezik, és a két render különbözne.
+  */
+  useEffect(() => {
+    if (documentId || !posHandoffKey) return;
+    const lines = readPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
+    if (!lines || lines.length === 0) return;
+    setState((current) =>
+      current && current.lines.length === 0
+        ? {
+            ...current,
+            lines: editorLinesFromPosHandoff(lines, current.currency),
+          }
+        : current,
+    );
+  }, [documentId, posHandoffKey]);
 
   useEffect(() => {
     if (!documentId || !canView) return;
@@ -217,6 +244,11 @@ export function BillingDocumentEditor({
           state.id,
           toDraftInput(state, "update"),
         );
+    // A PÉNZTÁR KOSARA EGYSZER LESZ VÁZLAT (barracuda, #1642): az első mentés
+    // után a kulcs törlődik, különben egy visszalépés ugyanazokkal a sorokkal
+    // nyitna, és a következő mentés egy második vázlatot hozna létre.
+    if (created && posHandoffKey)
+      clearPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
     return { detail, created };
   };
 

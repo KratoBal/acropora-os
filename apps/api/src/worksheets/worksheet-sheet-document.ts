@@ -263,7 +263,7 @@ function renderWorksheetPdf(
           subtitle,
           compact: page !== range.start,
         });
-        drawDocumentFooter(document);
+        drawDocumentFooter(document, "SERVICE");
       }
       document.end();
     } catch (error) {

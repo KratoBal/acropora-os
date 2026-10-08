@@ -268,7 +268,7 @@ export function completionCertificateDocument(
           subtitle: `Keltezés: ${content.issuedAtLabel} · Teljesítés: ${content.completedAtLabel}`,
           compact: page !== range.start,
         });
-        drawDocumentFooter(document);
+        drawDocumentFooter(document, "OFFICE");
       }
       document.end();
     } catch (error) {

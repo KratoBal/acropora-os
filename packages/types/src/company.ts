@@ -15,6 +15,31 @@ export const ACROPORA_COMPANY = {
 } as const;
 
 /**
+ * THE SERVICE CONTACT (Balázs, 2026-10-08 08:11, acrobot 28093): the worksheet
+ * and the service job PDFs keep the service number and the fault-report
+ * address; every other document carries the office's (`ACROPORA_COMPANY`).
+ */
+export const ACROPORA_SERVICE_CONTACT = {
+  phone: "+36-30-982-3634",
+  faultReportEmail: "ticket@acropora.hu",
+} as const;
+
+/** Which contact a document's footer carries. */
+export type DocumentFooterKind = "SERVICE" | "OFFICE";
+
+/**
+ * THE FOOTER OF A BRANDED PDF, by kind. SERVICE is the line the worksheet and
+ * the service job have always had; OFFICE is the company's line, as on the
+ * quote (without its document reference).
+ */
+export function documentFooterLine(kind: DocumentFooterKind): string {
+  const c = ACROPORA_COMPANY;
+  return kind === "SERVICE"
+    ? `${c.name} · ${c.address} · ${c.email} · hibabejelentés: ${ACROPORA_SERVICE_CONTACT.faultReportEmail} · ${ACROPORA_SERVICE_CONTACT.phone}`
+    : `${c.name} · ${c.address} · Tel: ${c.phone} · e-mail: ${c.email} · ${c.web}`;
+}
+
+/**
  * A KIMENŐ AJÁNLAT LÁBLÉCE, Balázs szavaival (2026-10-08 08:14): a cégadat,
  * utána a dokumentum azonosítója.
  */

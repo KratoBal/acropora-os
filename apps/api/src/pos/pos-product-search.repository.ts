@@ -15,6 +15,7 @@ export interface PosProductSearchDatabase extends WarehouseLookupDatabase {
     findMany(args: unknown): Promise<
       Array<{
         id: string;
+        productId: string;
         sku: string;
         name: string | null;
         unit: string;
@@ -83,6 +84,7 @@ export class PosProductSearchRepository extends Repository {
       },
       select: {
         id: true,
+        productId: true,
         sku: true,
         name: true,
         unit: true,
@@ -130,6 +132,7 @@ export class PosProductSearchRepository extends Repository {
         variant.vatRate ?? variant.product.unasSnapshot?.vatRate ?? null;
       return {
         variantId: variant.id,
+        productId: variant.productId,
         sku: variant.sku,
         productName: variant.name ?? variant.product.name,
         unit: variant.unit,

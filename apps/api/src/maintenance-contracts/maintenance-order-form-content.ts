@@ -7,6 +7,7 @@ import {
   sumMaintenanceOrderFormAmounts,
 } from "./maintenance-order-form-amounts.js";
 import type { MaintenanceOrderFormInput } from "./maintenance-order-form.types.js";
+import { ACROPORA_COMPANY } from "@acropora/types";
 
 /** A táblázaton kívüli minden szöveges mező, a lapon megjelenő SORREND szerint. */
 export const DEFAULT_SUBJECT =
@@ -16,7 +17,8 @@ export const DEFAULT_FULFILLMENT_DEADLINE_TEXT =
 export const DEFAULT_PAYMENT_DEADLINE_TEXT =
   "átutalás esetén a számla beérkezését követő 30 napon belül teljesítés igazolás alapján";
 export const SUPPLIER_NAME = "ACROPORA Kft";
-export const SUPPLIER_ADDRESS = "1106 Budapest, Pesti Gábor utca 35.";
+/** the company's address from its one place (acrobot 28093), with the form's full stop */
+export const SUPPLIER_ADDRESS = `${ACROPORA_COMPANY.address}.`;
 
 function field(label: string, value: string | undefined): string {
   return `${label}: ${value ?? ""}`.trimEnd();

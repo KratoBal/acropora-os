@@ -980,7 +980,13 @@ export {
   MATERIAL_REQUEST_PRIORITIES,
   MATERIAL_REQUEST_VIEWS,
 } from "./material-request-management.js";
-export { ACROPORA_COMPANY, acroporaFooterLine } from "./company.js";
+export {
+  ACROPORA_COMPANY,
+  ACROPORA_SERVICE_CONTACT,
+  acroporaFooterLine,
+  documentFooterLine,
+} from "./company.js";
+export type { DocumentFooterKind } from "./company.js";
 export {
   MISSING_INVOICE_ACTIONS,
   MISSING_INVOICE_CATEGORIES,

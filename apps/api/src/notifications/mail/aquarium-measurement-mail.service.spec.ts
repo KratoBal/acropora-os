@@ -65,6 +65,7 @@ function kuldesInput(): Parameters<AquariumMeasurementMailService["send"]>[0] {
   return {
     aquariumId: "aq-1",
     aquariumName: "Nappali medence",
+    pdf: Buffer.from("%PDF-1.7 minta"),
     occasion: ALKALOM,
     customerEmail: "vevo@pelda.teszt",
     customerName: "Kiss Márta",
@@ -216,6 +217,11 @@ describe("AquariumMeasurementMailService.send", () => {
       );
       assert.equal(kuldott[0]?.text, "Kedves Kiss Márta!");
       assert.equal(kuldott[0]?.attachments?.length, 1);
+      // the caller's measurement report goes out as it is (D4, 2026-10-08)
+      assert.deepEqual(
+        kuldott[0]?.attachments?.[0]?.bytes,
+        Buffer.from("%PDF-1.7 minta"),
+      );
     }));
 
   /**
