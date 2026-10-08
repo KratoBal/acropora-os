@@ -258,6 +258,29 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
       revokedByName: a.revokedBy?.displayName ?? null,
       revokeReason: a.revokeReason,
     })),
+    deliveries: row.mailDeliveries.map((d) => {
+      const r = record(d.recipients);
+      const list = (key: string) =>
+        Array.isArray(r?.[key])
+          ? (r![key] as unknown[]).filter(
+              (x): x is string => typeof x === "string",
+            )
+          : [];
+      return {
+        id: d.id,
+        versionId: d.quoteVersionId,
+        versionNumber: d.version.versionNumber,
+        to: list("to"),
+        cc: list("cc"),
+        bcc: list("bcc"),
+        subject: d.subject,
+        outcome: d.outcome as "SENT" | "FAILED" | "INDETERMINATE",
+        error: d.error,
+        isResend: d.isResend,
+        initiatedByName: d.initiatedBy?.displayName ?? null,
+        createdAt: d.createdAt.toISOString(),
+      };
+    }),
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
     createdById: row.createdById,

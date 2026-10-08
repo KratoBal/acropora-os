@@ -1251,6 +1251,8 @@ describe("minden esemeny minden meghirdetett valtozojat kitolti", () => {
               "AQUARIUM_MEASUREMENT_RESULT",
               "BILLING_DOCUMENT_MANUAL",
               "BILLING_DOCUMENT_WEBSHOP_ORDER",
+              // #1582 P3: quote-mail.service.ts sends it; its spec checks the variables
+              "QUOTE_SEND",
             ].includes(id),
         ),
       [

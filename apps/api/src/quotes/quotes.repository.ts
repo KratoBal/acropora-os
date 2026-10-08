@@ -59,6 +59,13 @@ export const QUOTE_DETAIL_INCLUDE = {
     },
   },
   events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+  mailDeliveries: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: {
+      version: { select: { versionNumber: true } },
+      initiatedBy: { select: { displayName: true } },
+    },
+  },
   acceptances: {
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {

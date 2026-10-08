@@ -72,7 +72,9 @@ export type MailPathKey =
    * A SZÁMLÁZÁSI BIZONYLAT KIKÜLDÉSE (2026-09-30): számla, díjbekérő,
    * előlegszámla, a kiállított bizonylat Számlázz.hu PDF-jével, gombra.
    */
-  | "TICKET_MAIL_BILLING_DOCUMENT";
+  | "TICKET_MAIL_BILLING_DOCUMENT"
+  /** #1582 P3: a published quote's PDF to the customer, on a button. */
+  | "TICKET_MAIL_QUOTE";
 
 /**
  * A KET KAPU EGYUTT, SORRENDBEN -- ES A SORREND ADJA A KIHAGYAS OKAT.
