@@ -508,11 +508,81 @@ describe("Mentetlen blokkszöveg", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
     expect(navigation.push).not.toHaveBeenCalled();
-    expect(screen.getByText(/1 blokk szövege még nincs mentve/)).toBeTruthy();
+    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
     );
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
+  });
+});
+
+describe("Mentetlen állapot: barracuda négy pontja", () => {
+  it("a törölt blokk nem marad a mentetlenek között", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    api.deleteBlock.mockResolvedValue(quote([version({ blocks: [] })]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Fejezet: törlés" }));
+    /*
+      THE CLICK LANDS THE MOMENT THE BLOCK LEAVES THE PAGE, before React's
+      deferred effects run: the deletion answers asynchronously, so a cleanup
+      in useEffect would still be pending, and the click read a stale set
+      (a full-suite run caught it, 2026-10-08).
+    */
+    const clicked = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (screen.queryByLabelText("Fejezet címe")) return;
+        observer.disconnect();
+        fireEvent.click(
+          screen.getByRole("button", { name: "Ajánlat adatlapja" }),
+        );
+        resolve();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Törlés" }));
+    await clicked;
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
+  });
+
+  it("a cím végén álló szóköz nem mentetlen változás", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Akvárium és bútor " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
+  });
+
+  it("a mentetlen fizetési ütemezés is kérdez", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteEditorPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "+ Mérföldkő" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+  });
+
+  it("egy alkalmazáson belüli link (menü) is kérdez, és megerősítés után oda visz", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(
+      <>
+        <a href="/beszerzes">Beszerzés</a>
+        <QuoteEditorPage quoteId="q1" />
+      </>,
+    );
+    fireEvent.change(await screen.findByLabelText("Fejezet címe"), {
+      target: { value: "Átírt cím" },
+    });
+    fireEvent.click(screen.getByRole("link", { name: "Beszerzés" }));
+    expect(screen.getByText(/1 mentetlen rész/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Elmegyek mentés nélkül" }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/beszerzes");
   });
 });
 
