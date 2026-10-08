@@ -230,6 +230,27 @@ describe(
         ["Bevezető", "Akvárium és bútor", "Összesítés"],
       );
       quoteIds.push(quote.body!.id);
+
+      // barracuda's #1608 review: a later template edit reaches no quote
+      const edited = await request(
+        `/quote-templates/${created.body!.id}`,
+        "PATCH",
+        {
+          blocks: [
+            { kind: "TEXT", title: "Új bevezető", content: paragraph("Szia!") },
+          ],
+        },
+      );
+      assert.equal(edited.status, 200);
+      const after = await prisma.quoteBlock.findMany({
+        where: { versionId: quote.body!.latestVersion.id },
+        orderBy: { position: "asc" },
+      });
+      assert.deepEqual(
+        after.map((b) => b.title),
+        ["Bevezető", "Akvárium és bútor", "Összesítés"],
+        "TEMPLATE-EDIT-LEAVES-QUOTE",
+      );
     });
 
     after(async () => {
