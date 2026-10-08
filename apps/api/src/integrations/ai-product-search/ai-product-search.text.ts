@@ -103,7 +103,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   Udblac: "Ű",
 };
 
-function decodeEntities(value: string): string {
+export function decodeEntities(value: string): string {
   return value.replace(
     /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g,
     (match, body: string) => {
