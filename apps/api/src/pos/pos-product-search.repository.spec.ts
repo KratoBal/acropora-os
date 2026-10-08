@@ -13,6 +13,7 @@ describe("POS search package flag", () => {
     const decimal = (value: string) => new Prisma.Decimal(value);
     const variants = [true, false, null].map((flag, index) => ({
       id: `v${index}`,
+      productId: `p${index}`,
       sku: `SKU${index}`,
       name: null,
       unit: "db",
@@ -55,6 +56,7 @@ describe("POS search package flag", () => {
     assert.deepEqual(result, [
       {
         variantId: "v0",
+        productId: "p0",
         sku: "SKU0",
         productName: "Termék 0",
         unit: "db",
@@ -65,6 +67,7 @@ describe("POS search package flag", () => {
       },
       {
         variantId: "v1",
+        productId: "p1",
         sku: "SKU1",
         productName: "Termék 1",
         unit: "db",
@@ -75,6 +78,7 @@ describe("POS search package flag", () => {
       },
       {
         variantId: "v2",
+        productId: "p2",
         sku: "SKU2",
         productName: "Termék 2",
         unit: "db",
@@ -84,6 +88,7 @@ describe("POS search package flag", () => {
         isPackageProduct: false,
       },
     ]);
+    assert.equal(query.select.productId, true);
     assert.equal(
       query.select.product.select.unasSnapshot.select.isPackageProduct,
       true,

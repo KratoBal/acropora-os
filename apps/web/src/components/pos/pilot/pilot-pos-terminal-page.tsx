@@ -13,6 +13,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  POS_INVOICE_HANDOFF_PARAM,
+  posInvoiceHandoffLines,
+  writePosInvoiceHandoff,
+} from "@/components/billing/pos-invoice-handoff";
 import { posApi } from "@/lib/api/pos";
 import { createDebouncer } from "@/lib/products/list-state";
 import {
@@ -41,6 +46,7 @@ interface LastAdded {
 }
 
 interface CartLine {
+  productId: string;
   variantId: string;
   sku: string;
   productName: string;
@@ -85,12 +91,17 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
   CARD: "Kártya",
   TRANSFER: "Utalás",
 };
-const PAYMENT_METHOD_OPTIONS = ["Készpénz", "Kártya", "Utalás"] as const;
-const LABEL_TO_PAYMENT_METHOD: Record<string, PosPaymentMethod> = {
-  Készpénz: "CASH",
-  Kártya: "CARD",
-  Utalás: "TRANSFER",
-};
+/**
+ * A "SZÁMLÁZÁS" AZ "UTALÁS" HELYÉN (kártya cdc2771b, Balázs 2026-10-08): nem
+ * fizetési mód, hanem átadás az Új számla oldalnak, eladás nélkül. A korábbi
+ * átutalásos eladások felirata (`PAYMENT_METHOD_LABEL`) marad.
+ */
+type CheckoutChoice = PosPaymentMethod | "INVOICE";
+const CHECKOUT_OPTIONS: { label: string; value: CheckoutChoice }[] = [
+  { label: "Készpénz", value: "CASH" },
+  { label: "Kártya", value: "CARD" },
+  { label: "Számlázás", value: "INVOICE" },
+];
 
 function formatHuf(value: number): string {
   return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
@@ -169,6 +180,13 @@ export function PilotPosTerminalPage() {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE),
   );
+  // a számla vázlatát ugyanez a jog hozza létre (`billing.create`)
+  const canInvoice = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
+  const checkoutOptions = CHECKOUT_OPTIONS.filter(
+    (option) => option.value !== "INVOICE" || canInvoice,
+  );
 
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState<PosProductSearchResult[]>(
@@ -176,7 +194,7 @@ export function PilotPosTerminalPage() {
   );
   const [searching, setSearching] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutChoice>("CASH");
   const [discountPercent, setDiscountPercent] = useState(0);
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -304,6 +322,7 @@ export function PilotPosTerminalPage() {
       return [
         ...previous,
         {
+          productId: product.productId,
           variantId: product.variantId,
           sku: product.sku,
           productName: product.productName,
@@ -374,6 +393,7 @@ export function PilotPosTerminalPage() {
     // else in this component.
     if (!canManage || cart.length === 0 || checkingOut || missingVat.length > 0)
       return;
+    if (paymentMethod === "INVOICE") return;
     setCheckingOut(true);
     setError(null);
     void posApi
@@ -405,6 +425,18 @@ export function PilotPosTerminalPage() {
       )
       .finally(() => setCheckingOut(false));
   };
+
+  const sendToInvoice = () => {
+    if (!canInvoice || cart.length === 0 || missingVat.length > 0) return;
+    const key = writePosInvoiceHandoff(
+      window.sessionStorage,
+      posInvoiceHandoffLines(cart, discountPercent),
+    );
+    router.push(
+      `/penzugy/szamlazas/uj?${POS_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
+    );
+  };
+  const invoicing = paymentMethod === "INVOICE";
 
   if (!canView) {
     return (
@@ -736,20 +768,17 @@ export function PilotPosTerminalPage() {
                 <p className="mb-2 text-[11px] text-pilot-grey-600">
                   Fizetési mód
                 </p>
-                <div className="grid grid-cols-3 gap-2 text-[11px] font-semibold">
-                  {PAYMENT_METHOD_OPTIONS.map((label) => {
-                    const selected =
-                      LABEL_TO_PAYMENT_METHOD[label] === paymentMethod;
+                <div
+                  className={`grid ${checkoutOptions.length === 3 ? "grid-cols-3" : "grid-cols-2"} gap-2 text-[11px] font-semibold`}
+                >
+                  {checkoutOptions.map(({ label, value }) => {
+                    const selected = value === paymentMethod;
                     return (
                       <button
                         key={label}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() =>
-                          setPaymentMethod(
-                            LABEL_TO_PAYMENT_METHOD[label] ?? "CASH",
-                          )
-                        }
+                        onClick={() => setPaymentMethod(value)}
                         className={`h-12 cursor-pointer rounded-lg py-2.5 text-[11px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
                       >
                         {label}
@@ -798,7 +827,19 @@ export function PilotPosTerminalPage() {
                   }
                 />
               ) : null}
-              {canManage ? (
+              {invoicing && canInvoice ? (
+                <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
+                  <PilotButton
+                    variant="primary"
+                    size="regular"
+                    fullWidth
+                    onClick={sendToInvoice}
+                    disabled={cart.length === 0 || missingVat.length > 0}
+                  >
+                    {`Tovább a számlához · ${formatHuf(totalGross)}`}
+                  </PilotButton>
+                </div>
+              ) : !invoicing && canManage ? (
                 <div className="text-xs font-semibold [&_button]:!h-[42px] [&_button]:!rounded-lg">
                   <PilotButton
                     variant="primary"

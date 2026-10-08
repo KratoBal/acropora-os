@@ -19,6 +19,7 @@ import {
   PilotPosTerminalPage,
   getCartStockWarnings,
 } from "./pilot-pos-terminal-page";
+import { readPosInvoiceHandoff } from "@/components/billing/pos-invoice-handoff";
 
 /**
  * A `next/font/local` HÍVÁSA A NEXT.JS FORDÍTÓI MAKRÓJA -- vitest alatt,
@@ -94,6 +95,7 @@ const emptySalesResponse: PosSaleListResponse = {
 };
 
 const searchResult: PosProductSearchResult = {
+  productId: "product-1",
   variantId: "variant-1",
   sku: "RS-RM500",
   productName: "Red Sea ReefMat 500",
@@ -257,7 +259,7 @@ describe("PilotPosTerminalPage", () => {
     );
   });
 
-  it("a fizetési mód nagy gombjai a helyes CASH/CARD/TRANSFER értéket küldik", async () => {
+  it("a fizetési mód nagy gombjai a helyes CASH/CARD értéket küldik", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
     api.createSale.mockResolvedValue(saleResult());
 
@@ -270,15 +272,93 @@ describe("PilotPosTerminalPage", () => {
     });
     fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Utalás" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kártya" }));
     fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
 
     await waitFor(() =>
       expect(api.createSale).toHaveBeenCalledWith(
         "token-OWNER",
-        expect.objectContaining({ paymentMethod: "TRANSFER" }),
+        expect.objectContaining({ paymentMethod: "CARD" }),
       ),
     );
+    expect(
+      screen.queryByRole("button", { name: "Utalás" }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * KÁRTYA cdc2771b (Balázs, 2026-10-08): az "Utalás" helyén "Számlázás" áll.
+   * Nem rögzít eladást (a kiállított számla mozgatja a készletet), hanem a
+   * kosarat a munkamenet-tárba teszi, és az Új számla oldalra visz a kulcsával.
+   * A kedvezmények a sor bruttójában vannak, a pénztár végösszegével azonosan.
+   */
+  it("a Számlázás eladás nélkül az Új számla oldalra viszi a kosarat, kedvezménnyel", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    window.sessionStorage.clear();
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+    fireEvent.click(
+      screen.getAllByText("Red Sea ReefMat 500")[0]!.closest("button")!,
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", {
+        name: "Red Sea ReefMat 500 kedvezmény",
+      }),
+      { target: { value: "10" } },
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Végösszeg kedvezmény" }),
+      { target: { value: "20" } },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Számlázás" }));
+    expect(
+      screen.queryByRole("button", { name: /^Fizetés/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Tovább a számlához/ }),
+    );
+
+    expect(api.createSale).not.toHaveBeenCalled();
+    expect(navigation.push).toHaveBeenCalledTimes(1);
+    const target = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    );
+    expect(target.pathname).toBe("/penzugy/szamlazas/uj");
+    const key = target.searchParams.get("pos");
+    expect(key).toBeTruthy();
+    expect(readPosInvoiceHandoff(window.sessionStorage, key!)).toEqual([
+      {
+        productId: "product-1",
+        variantId: "variant-1",
+        sku: "RS-RM500",
+        productName: "Red Sea ReefMat 500",
+        unit: "db",
+        quantity: 2,
+        vatRatePercent: "27",
+        // 2 × 24 900 × 0,9 × 0,8
+        lineGross: 35856,
+      },
+    ]);
+  });
+
+  it("billing.create jog nélkül a Számlázás nem jelenik meg, a választó kétgombos", async () => {
+    auth.session = sessionWithRole("WAREHOUSE");
+    render(createElement(PilotPosTerminalPage));
+
+    const cashButton = await screen.findByRole("button", { name: "Készpénz" });
+    expect(
+      screen.queryByRole("button", { name: "Számlázás" }),
+    ).not.toBeInTheDocument();
+    expect(cashButton.parentElement?.className).toContain("grid-cols-2");
   });
 
   /**

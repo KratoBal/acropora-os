@@ -14,6 +14,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
+import { writePosInvoiceHandoff } from "./pos-invoice-handoff";
 
 /**
  * A SZÁMLÁZÁSI SZERKESZTŐ (Számlázás v0.1, brief 35. pont UI QA): a típus
@@ -277,6 +278,68 @@ describe("BillingDocumentEditor", () => {
     expect(totals.getByText("Bruttó").nextSibling).toHaveTextContent(
       /68\s580\sFt/,
     );
+  });
+
+  /*
+    A PÉNZTÁR KOSARA (kártya cdc2771b): az Új számla a kosár tételsoraival
+    nyílik, a vevő üres marad (azt a kezelő választja). MI PIROSÍT: ha a sorok
+    nem töltődnek be, ha a termék, a változat, a kulcs vagy a bruttó elveszne,
+    vagy ha a vevő magától kitöltődne.
+  */
+  it("prefills the lines from the POS cart, leaving the customer to pick", async () => {
+    window.sessionStorage.clear();
+    products.detail.mockResolvedValue({
+      variants: [
+        { id: "variant-1", sku: "RS-RM500", name: null, isActive: true },
+      ],
+    });
+    const key = writePosInvoiceHandoff(window.sessionStorage, [
+      {
+        productId: "product-1",
+        variantId: "variant-1",
+        sku: "RS-RM500",
+        productName: "Red Sea ReefMat 500",
+        unit: "db",
+        quantity: 2,
+        vatRatePercent: "27",
+        lineGross: 35856,
+      },
+    ]);
+    render(<BillingDocumentEditor posHandoffKey={key} />);
+
+    expect(
+      await screen.findByDisplayValue("Red Sea ReefMat 500"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/RS-RM500 · termék/)).toBeInTheDocument();
+    expect(within(summary()).getByText("Bruttó").nextSibling).toHaveTextContent(
+      /35\s856\sFt/,
+    );
+    const save = () =>
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ });
+    expect(save()).toBeDisabled();
+
+    await pickPartner();
+    fireEvent.click(save());
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const [, created] = api.create.mock.calls[0]!;
+    expect(created.customerId).toBe("cust-1");
+    expect(created.lines).toEqual([
+      expect.objectContaining({
+        productId: "product-1",
+        variantId: "variant-1",
+        description: "Red Sea ReefMat 500",
+        quantity: "2",
+        unit: "db",
+        vatRatePercent: "27",
+        discountPercent: null,
+      }),
+    ]);
+  });
+
+  it("ignores an unknown POS key and opens empty", () => {
+    window.sessionStorage.clear();
+    render(<BillingDocumentEditor posHandoffKey="missing" />);
+    expect(screen.queryAllByLabelText(/tétel megnevezése$/)).toHaveLength(0);
   });
 
   /*

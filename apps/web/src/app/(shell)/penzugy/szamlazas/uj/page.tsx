@@ -1,5 +1,12 @@
-import { BillingDocumentEditor } from "@/components/billing/billing-document-editor";
+import { Suspense } from "react";
+
+import { NewBillingDocument } from "@/components/billing/new-billing-document";
 
 export default function NewBillingDocumentPage() {
-  return <BillingDocumentEditor />;
+  // a pénztár kosarának kulcsa a keresőparaméterben él (`useSearchParams`)
+  return (
+    <Suspense fallback={null}>
+      <NewBillingDocument />
+    </Suspense>
+  );
 }
