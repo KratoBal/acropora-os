@@ -407,6 +407,7 @@ export async function supersedePurchaseRows(
  */
 const NUMBER_KEY_SQL = (column: "documentNumber" | "supplierInvoiceNumber") =>
   Prisma.raw(`upper(regexp_replace("${column}", '\\s', '', 'g'))`);
+void NUMBER_KEY_SQL; // MERES: both uses are mutated
 
 /**
  * A KÉSŐBB ÉRKEZŐ PÉLDÁNY A BESZERZÉSHEZ KÖTŐDIK (kártya 83f31a95, PR 2). Ha
@@ -457,7 +458,7 @@ export async function postedPurchaseForArrival(
   const ids = await database.$queryRaw<{ id: string }[]>`
     SELECT id FROM "PurchaseInvoice"
     WHERE status = 'POSTED'
-      AND ${NUMBER_KEY_SQL("supplierInvoiceNumber")} = ${numberKey}`;
+      AND upper("supplierInvoiceNumber") = ${numberKey}`; // MERES WS-ARRIVAL: the stored side as it is
   const candidates = await database.purchaseInvoice.findMany({
     where: { id: { in: ids.map((row) => row.id) } },
     select: {
@@ -524,7 +525,7 @@ export async function otherSourceRowFor(
   const ids = await transaction.$queryRaw<{ id: string }[]>`
     SELECT id FROM "IncomingBillingDocument"
     WHERE source <> ${PURCHASE_SOURCE}
-      AND ${NUMBER_KEY_SQL("documentNumber")} = ${invoiceNumberKey(number)}`;
+      AND upper("documentNumber") = ${invoiceNumberKey(number)}`; // MERES WS-409: the stored side as it is
   const rows = await transaction.incomingBillingDocument.findMany({
     where: { id: { in: ids.map((row) => row.id) } },
     select: {
