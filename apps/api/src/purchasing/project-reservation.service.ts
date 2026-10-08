@@ -113,40 +113,71 @@ export async function releaseReservations(
         schemaVersion: 1,
       },
     });
-    if (row.variant.product.catalogAuthority !== "UNAS") continue;
-    const unresolvedBaseline = await tx.unasStockSyncOutbox.findFirst({
-      where: {
-        variantId: row.variantId,
-        warehouseId: row.warehouseId,
-        resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
-        status: "DEAD_LETTER",
-      },
-      select: { id: true },
+    await queueShopStock(tx, {
+      variantId: row.variantId,
+      warehouseId: row.warehouseId,
+      sku: row.variant.sku,
+      catalogAuthority: row.variant.product.catalogAuthority,
+      stock,
+      idempotencyKey: `PROJECT_RESERVATION_RELEASE:${row.id}:${row.variantId}`,
+      sourceRecordId: row.id,
     });
-    const enqueued = await enqueueStockSyncOutboxEntry(
-      tx as unknown as InventoryMovementDatabase,
-      {
-        variantId: row.variantId,
-        warehouseId: row.warehouseId,
-        sku: row.variant.sku,
-        targetOnHand: availableToSell(stock),
-        idempotencyKey: `PROJECT_RESERVATION_RELEASE:${row.id}:${row.variantId}`,
-        sourceProcess: "PROJECT_RESERVATION",
-        sourceRecordId: row.id,
-      },
-    );
-    if (unresolvedBaseline)
-      await tx.unasStockSyncOutbox.update({
-        where: { id: enqueued.id },
-        data: {
-          status: "DEAD_LETTER",
-          leaseExpiresAt: null,
-          resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
-          processedAt: new Date(),
-        },
-      });
   }
   return released;
+}
+
+/**
+ * THE SHOP'S FREE STOCK AFTER A HOLD CHANGED (B2 RESOLVED): for a product
+ * the UNAS catalogue owns, one outbox row with `availableToSell`, through the
+ * stock writer's supersede contract. A variant whose shop baseline was never
+ * known keeps that writer's guard: the row is queued and closed as
+ * DEAD_LETTER, so no absolute built on an invented zero is published. The
+ * caller holds `lockVariantWarehouse` for the pair.
+ */
+export async function queueShopStock(
+  tx: Tx,
+  args: {
+    variantId: string;
+    warehouseId: string;
+    sku: string;
+    catalogAuthority: string | null;
+    stock: { onHand: Prisma.Decimal; reserved: Prisma.Decimal };
+    idempotencyKey: string;
+    sourceRecordId: string;
+  },
+): Promise<void> {
+  if (args.catalogAuthority !== "UNAS") return;
+  const unresolvedBaseline = await tx.unasStockSyncOutbox.findFirst({
+    where: {
+      variantId: args.variantId,
+      warehouseId: args.warehouseId,
+      resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
+      status: "DEAD_LETTER",
+    },
+    select: { id: true },
+  });
+  const enqueued = await enqueueStockSyncOutboxEntry(
+    tx as unknown as InventoryMovementDatabase,
+    {
+      variantId: args.variantId,
+      warehouseId: args.warehouseId,
+      sku: args.sku,
+      targetOnHand: availableToSell(args.stock),
+      idempotencyKey: args.idempotencyKey,
+      sourceProcess: "PROJECT_RESERVATION",
+      sourceRecordId: args.sourceRecordId,
+    },
+  );
+  if (unresolvedBaseline)
+    await tx.unasStockSyncOutbox.update({
+      where: { id: enqueued.id },
+      data: {
+        status: "DEAD_LETTER",
+        leaseExpiresAt: null,
+        resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
+        processedAt: new Date(),
+      },
+    });
 }
 
 const CLOSING = new Set(["COMPLETED", "CANCELLED"]);

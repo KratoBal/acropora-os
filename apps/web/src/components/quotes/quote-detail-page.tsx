@@ -38,6 +38,7 @@ import {
   QuoteOutcomeDrawer,
   type QuoteOutcomeAction,
 } from "./quote-outcome";
+import { QuoteHandoffCard, QuoteHandoffDrawer } from "./quote-handoff";
 import { QuoteAcceptanceLinkCard } from "./quote-link";
 import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
 
@@ -75,7 +76,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     session &&
     hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_LINK_MANAGE),
   );
+  const canHandoff = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.QUOTES_HANDOFF),
+  );
   const [outcome, setOutcome] = useState<QuoteOutcomeAction | null>(null);
+  const [handingOff, setHandingOff] = useState(false);
   const [sending, setSending] = useState(false);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -323,6 +328,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         canManage={canLink}
       />
 
+      <QuoteHandoffCard
+        quote={quote}
+        canHandoff={canHandoff}
+        onStart={() => setHandingOff(true)}
+      />
+
       <QuoteOutcomeCard
         quote={quote}
         canRecord={canRecord}
@@ -343,6 +354,17 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           />
         </div>
       </PilotCard>
+
+      <QuoteHandoffDrawer
+        token={token}
+        quote={quote}
+        open={handingOff}
+        onClose={() => setHandingOff(false)}
+        onDone={() => {
+          setHandingOff(false);
+          void load();
+        }}
+      />
 
       <QuoteSendDrawer
         token={token}

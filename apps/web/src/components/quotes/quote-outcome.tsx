@@ -92,7 +92,8 @@ export function QuoteOutcomeCard({
       <PilotCardHeader
         title="Kimenetel"
         action={
-          live && canRecord ? (
+          // P6: once the project started, the yes stays (the API says 409)
+          live && canRecord && !quote.handoff ? (
             <PilotButton variant="ghost" onClick={onRevoke}>
               Elfogadás visszavonása
             </PilotButton>

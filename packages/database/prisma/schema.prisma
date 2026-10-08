@@ -1024,6 +1024,7 @@ model User {
   quoteEvents                 QuoteEvent[]                  @relation("QuoteEventActor")
   recordedQuoteAcceptances    QuoteAcceptance[]             @relation("QuoteAcceptanceRecorder")
   revokedQuoteAcceptances     QuoteAcceptance[]             @relation("QuoteAcceptanceRevoker")
+  executedQuoteHandoffs       QuoteProjectHandoff[]         @relation("QuoteHandoffExecutor")
   createdQuoteAcceptanceLinks QuoteAcceptanceLink[]         @relation("QuoteAcceptanceLinkCreator")
   initiatedQuoteMails         QuoteMailDelivery[]           @relation("QuoteMailInitiator")
   incomingReadingsReviewed    IncomingDocumentReading[]     @relation("IncomingDocumentReadingReviewedBy")
@@ -2832,10 +2833,14 @@ model Project {
   status        ProjectStatus @default(ACTIVE)
   customerId    String?
   createdById   String?
+  /// #1582 P6: the quote this project was started from (one project per quote)
+  sourceQuoteId String?       @unique
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   customer         Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  sourceQuote      Quote?                        @relation("ProjectSourceQuote", fields: [sourceQuoteId], references: [id], onDelete: Restrict)
+  quoteHandoff     QuoteProjectHandoff?
   createdBy        User?                         @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   materialRequests MaterialRequest[]
   reservations     ProjectInventoryReservation[]
@@ -8913,6 +8918,9 @@ model Quote {
   acceptances       QuoteAcceptance[]
   acceptanceLinks   QuoteAcceptanceLink[]
   mailDeliveries    QuoteMailDelivery[]
+  /// #1582 P6
+  project           Project?              @relation("ProjectSourceQuote")
+  handoff           QuoteProjectHandoff?
 
   @@index([status, updatedAt])
   @@index([customerId])
@@ -8953,6 +8961,7 @@ model QuoteVersion {
   acceptances          QuoteAcceptance[]
   acceptanceLinks      QuoteAcceptanceLink[]
   mailDeliveries       QuoteMailDelivery[]
+  handoffs             QuoteProjectHandoff[]
 
   @@unique([quoteId, versionNumber])
   @@unique([id, quoteId])
@@ -9112,6 +9121,7 @@ model QuoteAcceptance {
   recordedBy              User?                 @relation("QuoteAcceptanceRecorder", fields: [recordedByUserId], references: [id], onDelete: SetNull)
   revokedBy               User?                 @relation("QuoteAcceptanceRevoker", fields: [revokedById], references: [id], onDelete: SetNull)
   acceptanceLink          QuoteAcceptanceLink?  @relation(fields: [acceptanceLinkId], references: [id], onDelete: Restrict)
+  handoff                 QuoteProjectHandoff?
 
   @@index([quoteId, createdAt])
   @@index([quoteVersionId])
@@ -9143,6 +9153,29 @@ model QuoteAcceptanceLink {
 }
 
 /// #1582 P3: one row per send attempt (the BillingDocumentMailDelivery shape).
+/// #1582 P6: a project started from an accepted quote. One per quote: the
+/// unique quoteId is the handoff's idempotency (a second request gets this row
+/// back). `plan` is what was executed: the holds taken from stock, the
+/// shortage that went to the project's material request, the service lines.
+/// It carries no cost. The proforma comes with P7.
+model QuoteProjectHandoff {
+  id             String          @id @default(cuid())
+  quoteId        String          @unique
+  quoteVersionId String
+  acceptanceId   String          @unique
+  projectId      String          @unique
+  planHash       String          @db.VarChar(64)
+  plan           Json
+  executedById   String?
+  executedAt     DateTime        @default(now())
+  quote          Quote           @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  /// Composite FK: the version belongs to this very quote.
+  version        QuoteVersion    @relation(fields: [quoteVersionId, quoteId], references: [id, quoteId], onDelete: Restrict)
+  acceptance     QuoteAcceptance @relation(fields: [acceptanceId], references: [id], onDelete: Restrict)
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  executedBy     User?           @relation("QuoteHandoffExecutor", fields: [executedById], references: [id], onDelete: SetNull)
+}
+
 model QuoteMailDelivery {
   id                String       @id @default(cuid())
   quoteId           String

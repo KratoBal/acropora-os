@@ -1,5 +1,9 @@
 import type {
   CancelQuoteInput,
+  ExecuteQuoteHandoffInput,
+  QuoteHandoffPlanDto,
+  QuoteHandoffPreviewInput,
+  QuoteHandoffResultDto,
   CreateQuoteFromTemplateInput,
   PostponeQuoteInput,
   QuoteSendDraftDto,
@@ -96,6 +100,26 @@ export const quotesApi = {
   accept(token: string, quoteId: string, input: RecordQuoteAcceptanceInput) {
     return apiRequest<QuoteDetailDto>(
       `/quotes/${id(quoteId)}/acceptances`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P6: the plan of the project start (no lock, no write). */
+  handoffPreview(
+    token: string,
+    quoteId: string,
+    input: QuoteHandoffPreviewInput,
+  ) {
+    return apiRequest<QuoteHandoffPlanDto>(
+      `/quotes/${id(quoteId)}/handoff/preview`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P6: starts the project; a repeat answers the same project. */
+  handoff(token: string, quoteId: string, input: ExecuteQuoteHandoffInput) {
+    return apiRequest<QuoteHandoffResultDto>(
+      `/quotes/${id(quoteId)}/handoff`,
       token,
       json("POST", input),
     );

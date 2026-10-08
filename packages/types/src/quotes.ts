@@ -1,3 +1,4 @@
+import type { QuoteHandoffSummaryDto } from "./quote-handoff.js";
 /** #1582 P0: money/quantity are exact decimal strings, never JS number values. */
 export type QuoteStatusValue =
   "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "POSTPONED" | "CANCELLED";
@@ -218,6 +219,8 @@ export interface QuoteInternalDto {
   updatedAt: string;
   versions: QuoteInternalVersion[];
   events: QuoteEventDto[];
+  /** P6: the project started from this quote, or null */
+  handoff: QuoteHandoffSummaryDto | null;
 }
 export interface QuoteBomItemDto extends QuoteBomLineDto {
   unitCost: string | null;
