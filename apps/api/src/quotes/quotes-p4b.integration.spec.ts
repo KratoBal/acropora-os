@@ -5,7 +5,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { Global, Module, type INestApplication } from "@nestjs/common";
+import {
+  Global,
+  Module,
+  NotFoundException,
+  type INestApplication,
+} from "@nestjs/common";
 import { APP_GUARD, NestFactory } from "@nestjs/core";
 import { prisma } from "@acropora/database";
 import {
@@ -20,6 +25,7 @@ import type { DocumentStore } from "../service-assets/document-store/document-st
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import { MARKER_FILE } from "../service-assets/document-store/filesystem-document-store.js";
 import { QUOTE_DOCUMENT_ENV } from "./quote-publish.service.js";
+import { QuoteAcceptanceService } from "./quote-acceptance.service.js";
 import { QuotesModule } from "./quotes.module.js";
 
 const gate = integrationDatabaseGate(process.env);
@@ -388,17 +394,35 @@ describe(
       assert.equal(again.status, 409);
     });
 
-    it("a link revoked after the page opened accepts nothing", async () => {
+    it("a link revoked after the page read it accepts nothing (the re-read under the lock)", async () => {
       const q = await linked("P4b late");
-      await request(`/public/quotes/${q.token}`);
+      // the page read the link live; the revocation lands before the write
+      const link = await prisma.quoteAcceptanceLink.findUniqueOrThrow({
+        where: { id: q.linkId },
+        select: { id: true, quoteId: true, quoteVersionId: true },
+      });
       await request(
         `/quotes/${q.quoteId}/versions/${q.versionId}/acceptance-link`,
         "DELETE",
       );
-      const res = await request(`/public/quotes/${q.token}/accept`, "POST", {
-        name: "Kovács Anna",
-      });
-      assert.equal(res.status, 404, "REVOKED-ACCEPT-404");
+      const outcome = await app
+        .get(QuoteAcceptanceService)
+        .acceptFromLink(
+          link,
+          {
+            name: "Kovács Anna",
+            email: null,
+            selectedOptionalItemIds: [],
+            requestId: null,
+          },
+          () => new NotFoundException("gone"),
+        )
+        .then(
+          () => "accepted",
+          (error: unknown) =>
+            error instanceof NotFoundException ? "404" : String(error),
+        );
+      assert.equal(outcome, "404", "REVOKED-ACCEPT-404");
       assert.equal(
         (await prisma.quote.findUniqueOrThrow({ where: { id: q.quoteId } }))
           .status,
