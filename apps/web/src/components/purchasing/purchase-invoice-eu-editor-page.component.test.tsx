@@ -403,6 +403,72 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(purchasingApiMock.suggestLine).not.toHaveBeenCalled();
   });
 
+  /*
+    Luca, 2026-10-08: on a Slovak invoice she could not name a manual line.
+    The field existed, below, unlabelled on a wide screen; the title above it
+    is only text. The new line's name field now takes the focus, says what it
+    is, and the title points to it until a name is typed.
+  */
+  it("a kézi tétel neve a fókuszba kerül, és név nélkül nem menthető", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    await screen.findByText(supplier.name);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+    );
+    const names = screen.getAllByPlaceholderText("Megnevezés a számlán");
+    const field = names.at(-1)!;
+    expect(document.activeElement).toBe(field);
+    expect(
+      screen.getByText(
+        /Kézi tétel: a nevét lent, a „Megnevezés a számlán” mezőben add meg/,
+      ),
+    ).toBeTruthy();
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+    expect(
+      await screen.findByText(/megnevezés megadása kötelező/),
+    ).toBeTruthy();
+    expect(purchasingApiMock.create).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "Szlovák tétel" } });
+    expect(screen.getByText("Szlovák tétel")).toBeTruthy();
+  });
+
+  /*
+    Luca, 2026-10-08: "akkor is kiadta ezt a hibat", with her name typed. With
+    several lines, an EMPTY one elsewhere stopped the save, and the message
+    did not say which; it looked like the filled one failed.
+  */
+  it("kitöltött kézi tétel mellett egy másik, üres sor számát nevezi meg", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    await screen.findByText(supplier.name);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kézi tétel felvétele" }),
+    );
+    const names = screen.getAllByPlaceholderText("Megnevezés a számlán");
+    // the NAV line is the 1st; the 2nd is named, the 3rd is left empty
+    fireEvent.change(names.at(-2)!, { target: { value: "Szlovák tétel" } });
+    fireEvent.change(screen.getAllByLabelText("Egység").at(-2)!, {
+      target: { value: "db" },
+    });
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+    expect(
+      await screen.findByText(/^A\(z\) 3\. tétel megnevezése hiányzik/),
+    ).toBeTruthy();
+    expect(purchasingApiMock.create).not.toHaveBeenCalled();
+  });
+
   it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 
@@ -664,6 +730,25 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
       screen.getByRole("button", { name: "Felülírás a VIES adataival" }),
     );
     expect(name).toHaveValue("COOLBLUE B.V.");
+  });
+
+  /** Balázs on the live site, 2026-10-08: a valid answer without name or address. */
+  it("az érvényes, de név nélküli VIES-válasznál megmondja, hogy kézzel kell megadni", async () => {
+    navigation.params = new URLSearchParams();
+    viesApi.check.mockResolvedValue({ valid: true });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Adószám" }), {
+      target: { value: "DE300632593" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "VIES" }));
+    expect(
+      await screen.findByText(
+        "A(z) Németország adóhatósága a VIES-ben nem adja ki a nevet és a címet, ezeket kézzel kell megadni.",
+      ),
+    ).toBeTruthy();
   });
 
   /** barracuda #1603: the same stale-answer guard as the supplier editor's. */

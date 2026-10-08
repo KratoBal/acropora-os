@@ -51,6 +51,7 @@ import {
   ViesConflicts,
   type ViesConflict,
 } from "@/components/vies/vies-conflicts";
+import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
 import { createDebouncer } from "@/lib/products/list-state";
 
 // Ez a komponens az EU-s és a belföldi (kézi és NAV-alapú) beszerzési
@@ -277,6 +278,8 @@ export function PurchaseInvoiceEuEditorPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
   const [lines, setLines] = useState<InvoiceLineState[]>([]);
+  /** the manual line just added: its name field takes the focus */
+  const [focusKey, setFocusKey] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -664,10 +667,12 @@ export function PurchaseInvoiceEuEditorPage() {
   };
 
   const addManualLine = () => {
+    const key = `manual-${lines.length}-${Date.now()}`;
+    setFocusKey(key);
     setLines((previous) => [
       ...previous,
       {
-        key: `manual-${previous.length}-${Date.now()}`,
+        key,
         variantId: null,
         createLocalProduct: null,
         sku: "",
@@ -1007,14 +1012,16 @@ export function PurchaseInvoiceEuEditorPage() {
       setError("Legalább egy tétel szükséges a számlához.");
       return;
     }
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       if (
         !line.variantId &&
         !line.createLocalProduct &&
         !line.sourceDescription.trim()
       ) {
+        // which line: a filled manual line beside an empty one (e.g. a line
+        // unlinked from its product) looked like the filled one failed
         setError(
-          "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
+          `A(z) ${index + 1}. tétel megnevezése hiányzik: a terméktörzsben nem szereplő tételnél a számlán szereplő megnevezés megadása kötelező.`,
         );
         return;
       }
@@ -1530,6 +1537,12 @@ export function PurchaseInvoiceEuEditorPage() {
                             </div>
                           )
                         ) : null}
+                        {!isDomestic ? (
+                          <ViesMissingDetails
+                            taxNumber={newSupplierTaxNumber}
+                            result={viesResult}
+                          />
+                        ) : null}
                         <ViesConflicts
                           conflicts={viesConflicts}
                           onApply={(taken) => {
@@ -1913,7 +1926,10 @@ export function PurchaseInvoiceEuEditorPage() {
                         ) : (
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-semibold text-pilot-grey-900">
-                              {line.sourceDescription || "Kézi tétel"}
+                              {line.sourceDescription ||
+                                (line.isCharge
+                                  ? "Kézi tétel"
+                                  : "Kézi tétel: a nevét lent, a „Megnevezés a számlán” mezőben add meg")}
                             </p>
                             {/*
                               A DÍJSOR (fuvar, csomagolás, kerekítés) nem
@@ -2226,6 +2242,10 @@ export function PurchaseInvoiceEuEditorPage() {
                         </span>
                         <input
                           value={line.sourceDescription}
+                          placeholder="Megnevezés a számlán"
+                          // a new manual line starts here: its name is the
+                          // one thing it needs (Luca, 2026-10-08)
+                          autoFocus={line.key === focusKey}
                           onChange={(event) =>
                             updateLine(line.key, {
                               sourceDescription: event.target.value,
