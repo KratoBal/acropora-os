@@ -18,7 +18,7 @@ const D = (value: number | string) => new Prisma.Decimal(value);
  * `reserved` reconciliation.
  */
 describe(
-  "project reservations: release, origin and reconciliation (#1582 P5a)",
+  "project reservations: release, origin and reconciliation (P5a)",
   { skip: gate.mode === "skip" },
   () => {
     const suffix = randomUUID().slice(0, 8);
