@@ -161,25 +161,33 @@ describe("buildIssueInput", () => {
     assert.equal(input.document.buyer.zip, "1146");
   });
 
-  it("sends the community tax number in its own field, apart from the Hungarian one", () => {
+  it("an EU buyer goes with its community tax number, adoalany 6 and its country's name; a Hungarian one as before", () => {
     const base = row();
-    const input = buildIssueInput({
+    const eu = buildIssueInput({
       ...base,
       customer: {
         ...base.customer!,
         taxNumber: null,
         euTaxNumber: "SK2020123456",
+        addresses: base.customer!.addresses.map((a) => ({
+          ...a,
+          country: "SK",
+        })),
       },
     } as BillingDocumentRow);
-    assert.ok(input.ok);
+    const hu = buildIssueInput(base);
+    assert.ok(eu.ok && hu.ok);
     assert.deepEqual(
       [
-        input.buyer.taxNumber,
-        input.buyer.euTaxNumber,
-        input.document.buyer.taxNumber,
-        input.document.buyer.euTaxNumber,
+        eu.buyer.taxNumber,
+        eu.buyer.euTaxNumber,
+        eu.document.buyer.euTaxNumber,
+        eu.document.buyer.vatSubject,
+        eu.document.buyer.country,
+        hu.document.buyer.vatSubject,
+        hu.document.buyer.country,
       ],
-      [null, "SK2020123456", null, "SK2020123456"],
+      [null, "SK2020123456", "SK2020123456", 6, "Szlovákia", null, null],
       "ISSUE-EU-TAX",
     );
   });

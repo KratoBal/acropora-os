@@ -1438,6 +1438,7 @@ export {
   validateQuoteRichText,
 } from "./quote-text-schema.js";
 export {
+  EU_COUNTRY_NAMES_HU,
   normalizeEuTaxNumber,
   splitViesAddress,
   viesCountry,

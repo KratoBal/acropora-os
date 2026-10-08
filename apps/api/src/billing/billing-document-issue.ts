@@ -1,6 +1,8 @@
 import {
+  EU_COUNTRY_NAMES_HU,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
+  viesCountry,
   type BillingDocumentType,
   type InvoiceFormat,
 } from "@acropora/types";
@@ -183,6 +185,14 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     euTaxNumber: customer.euTaxNumber,
     email: customer.email,
   };
+  // AN EU BUYER (a community tax number, no Hungarian one; acrobot 28300):
+  // `adoalany` 6, "business in the EU" by the docs, and the country by its
+  // Hungarian name, so the NAV report does not see a domestic buyer or a
+  // private person. Everyone else goes as before: no adoalany, no orszag.
+  const euBuyer = Boolean(customer.euTaxNumber) && !customer.taxNumber;
+  const countryCode = EU_COUNTRY_NAMES_HU[address.country]
+    ? address.country
+    : viesCountry(customer.euTaxNumber ?? "");
   const totals = szamlazzDocumentTotals(lines, row.currency);
   const zeroForintLineIds = totals.zeroForintLines.map(
     (index) => lines[index]!.lineId,
@@ -205,8 +215,11 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
       proformaNumber: null,
       buyer: {
         name: buyer.name,
-        // az `orszag` alakját a doksi nem mondja meg: nem küldjük, a snapshot tárolja
-        country: null,
+        // `orszag` is free text (XSD string): only for an EU buyer, by name
+        country: euBuyer
+          ? (EU_COUNTRY_NAMES_HU[countryCode ?? ""] ?? null)
+          : null,
+        vatSubject: euBuyer ? 6 : null,
         zip: buyer.zip,
         city: buyer.city,
         address: buyer.address,
