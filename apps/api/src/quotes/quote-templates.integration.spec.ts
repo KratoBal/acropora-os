@@ -135,11 +135,17 @@ describe(
         ["40", "40", "20"],
       );
 
+      // only the schedule changes: the stored blocks must stay as they are
       const patched = await request(`/quote-templates/${id}`, "PATCH", {
         defaultValidityDays: 45,
+        milestones: [
+          { label: "Előleg", percent: "50" },
+          { label: "Átadás", percent: "50" },
+        ],
       });
       assert.equal(patched.status, 200);
       assert.equal(patched.body!.defaultValidityDays, 45);
+      assert.equal(patched.body!.milestones.length, 2);
       assert.equal(patched.body!.blocks.length, 3, "PATCH-KEEPS-BLOCKS");
 
       // a quote writer reads the list (the picker), and sees this one
