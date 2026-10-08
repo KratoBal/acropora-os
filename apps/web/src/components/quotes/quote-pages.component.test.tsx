@@ -64,6 +64,11 @@ const api = vi.hoisted(() => ({
   updateSnippet: vi.fn(),
   archiveSnippet: vi.fn(),
   publish: vi.fn(),
+  accept: vi.fn(),
+  revokeAcceptance: vi.fn(),
+  reject: vi.fn(),
+  postpone: vi.fn(),
+  cancel: vi.fn(),
   pdf: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
@@ -182,13 +187,21 @@ function version(
   };
 }
 
-function quote(versions: QuoteInternalVersion[]): QuoteDetailDto {
+function quote(
+  versions: QuoteInternalVersion[],
+  over: Partial<QuoteDetailDto> = {},
+): QuoteDetailDto {
   return {
     audience: "internal",
     id: "q1",
     quoteNumber: "AJ-2026-0042",
     title: "180 cm-es irodai bemutató akvárium",
     status: "SENT",
+    closeReason: null,
+    closeNote: null,
+    postponedUntil: null,
+    acceptedVersionId: null,
+    acceptances: [],
     customerId: "c1",
     ownerUserId: null,
     createdById: "u",
@@ -199,7 +212,8 @@ function quote(versions: QuoteInternalVersion[]): QuoteDetailDto {
     updatedAt: "2026-10-07T10:00:00Z",
     versions,
     events: [],
-  };
+    ...over,
+  } as QuoteDetailDto;
 }
 
 const COSTING: QuoteCostingDto = {
@@ -324,6 +338,174 @@ describe("Ajánlat adatlap (569:504)", () => {
     );
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes");
     expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
+  });
+});
+
+describe("Az ajánlat kimenetele (P4a)", () => {
+  /** v1 published, with an offered and an optional item */
+  const published = (over: Partial<QuoteInternalVersion> = {}) => {
+    const base = version({
+      id: "v1",
+      versionNumber: 1,
+      status: "PUBLISHED",
+      publishedAt: "2026-10-07T10:42:00Z",
+      validUntil: "2099-12-31",
+      ...over,
+    });
+    const block = base.blocks[0]!;
+    return {
+      ...base,
+      blocks: [
+        {
+          ...block,
+          items: [
+            ...block.items,
+            {
+              ...block.items[0]!,
+              id: "i-opt",
+              position: 1,
+              name: "Opcionális fedőlap",
+              isOptional: true,
+            },
+          ],
+        },
+      ],
+    };
+  };
+  const ACCEPTANCE = {
+    id: "acc1",
+    versionId: "v1",
+    versionNumber: 1,
+    source: "PHONE" as const,
+    acceptedAt: "2026-10-08",
+    acceptedByName: "Kovács Anna",
+    acceptedByEmail: null,
+    recordedByName: "Balázs",
+    selectedOptionalItemIds: ["i-opt"],
+    note: null,
+    createdAt: "2026-10-08T08:00:00Z",
+    revokedAt: null,
+    revokedByName: null,
+    revokeReason: null,
+  };
+
+  it("az elfogadás a kért opcióval, egy kérés-azonosítóval megy, és dupla kattintásra is egyszer", async () => {
+    api.detail.mockResolvedValue(quote([published()]));
+    let answer: (value: QuoteDetailDto) => void = () => {};
+    api.accept.mockReturnValue(
+      new Promise<QuoteDetailDto>((resolve) => (answer = resolve)),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Elfogadás rögzítése" }),
+    );
+    fireEvent.change(screen.getByLabelText("Elfogadó neve"), {
+      target: { value: "Kovács Anna" },
+    });
+    fireEvent.click(screen.getByLabelText("Opcionális fedőlap"));
+    fireEvent.click(screen.getByRole("button", { name: "Rögzítem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Rögzítem" }));
+    expect(api.accept).toHaveBeenCalledTimes(1);
+    expect(api.accept).toHaveBeenCalledWith(
+      "token-1",
+      "q1",
+      expect.objectContaining({
+        versionId: "v1",
+        source: "PHONE",
+        acceptedAt: dayAfter(0),
+        acceptedByName: "Kovács Anna",
+        selectedOptionalItemIds: ["i-opt"],
+        requestId: expect.any(String),
+      }),
+    );
+    answer(
+      quote([published()], {
+        status: "ACCEPTED",
+        acceptedVersionId: "v1",
+        acceptances: [ACCEPTANCE],
+      }),
+    );
+    expect(await screen.findByText("Opcionális fedőlap")).toBeTruthy();
+    expect(screen.getByText(/v1 · 2026\.10\.08\. · Telefonon/)).toBeTruthy();
+  });
+
+  it("lejárt verziónál figyelmeztet, de engedi rögzíteni", async () => {
+    api.detail.mockResolvedValue(
+      quote([published({ validUntil: "2020-01-31" })]),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Elfogadás rögzítése" }),
+    );
+    expect(screen.getByText("Az ajánlat érvényessége lejárt")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Rögzítem" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("csak piszkozat mellett nincs Elfogadás rögzítése", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(
+      screen.queryByRole("button", { name: "Elfogadás rögzítése" }),
+    ).toBeNull();
+  });
+
+  it("az elutasítás okot kér", async () => {
+    api.detail.mockResolvedValue(quote([published()]));
+    api.reject.mockResolvedValue(
+      quote([published()], { status: "REJECTED", closeReason: "COMPETITOR" }),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Elutasítás" }));
+    const submit = screen.getByRole("button", { name: "Elutasítom" });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Ok"), {
+      target: { value: "COMPETITOR" },
+    });
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(api.reject).toHaveBeenCalledWith("token-1", "q1", {
+        reason: "COMPETITOR",
+        note: null,
+      }),
+    );
+    expect(await screen.findByText("Versenytárs")).toBeTruthy();
+  });
+
+  it("elfogadott ajánlatnál csak a visszavonás marad, és az indoklást kér", async () => {
+    api.detail.mockResolvedValue(
+      quote([published()], {
+        status: "ACCEPTED",
+        acceptedVersionId: "v1",
+        acceptances: [ACCEPTANCE],
+      }),
+    );
+    api.revokeAcceptance.mockResolvedValue(quote([published()]));
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Elfogadás visszavonása" }),
+    );
+    expect(screen.queryByRole("button", { name: "Elutasítás" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Új verzió" })).toBeNull();
+    const submit = screen.getByRole("button", {
+      name: "Visszavonom az elfogadást",
+    });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Miért vonod vissza"), {
+      target: { value: "Módosítást kért." },
+    });
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(api.revokeAcceptance).toHaveBeenCalledWith(
+        "token-1",
+        "q1",
+        "acc1",
+        { reason: "Módosítást kért." },
+      ),
+    );
   });
 });
 

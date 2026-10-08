@@ -540,6 +540,7 @@ export type {
   DomainEventEnvelope,
   GoodsReceived,
   IcpReportImported,
+  QuoteAccepted,
   ProductCreated,
   ProductUpdated,
   PurchaseOrderApproved,
@@ -1389,6 +1390,14 @@ export type {
   QuoteSnippetInput,
   QuoteSnippetPatch,
   QuoteTemplateSummaryDto,
+  QuoteAcceptanceSourceValue,
+  QuoteCloseReasonValue,
+  QuoteAcceptanceDto,
+  RecordQuoteAcceptanceInput,
+  RevokeQuoteAcceptanceInput,
+  RejectQuoteInput,
+  PostponeQuoteInput,
+  CancelQuoteInput,
 } from "./quotes.js";
 export {
   EMPTY_QUOTE_RICH_TEXT,

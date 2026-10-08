@@ -80,7 +80,7 @@ type VersionTree = Prisma.QuoteVersionGetPayload<{
 }>;
 
 /** Budapest's today as YYYY-MM-DD. */
-function budapestToday(now = new Date()): string {
+export function budapestToday(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Budapest",
   }).format(now);
@@ -267,6 +267,10 @@ export class QuotePublishService {
       if (locked.versionStatus === "PUBLISHED") return null;
       if (locked.versionStatus !== "DRAFT")
         throw new ConflictException("Felülírt verzió nem publikálható.");
+      if (locked.quoteStatus === "ACCEPTED")
+        throw new ConflictException(
+          "Elfogadott ajánlat új verziója nem publikálható: előbb vond vissza az elfogadást.",
+        );
       if (!EDITABLE_QUOTE_STATUSES.has(locked.quoteStatus))
         throw new ConflictException("Lezárt ajánlat nem publikálható.");
       const current = await this.tree(tx, versionId);

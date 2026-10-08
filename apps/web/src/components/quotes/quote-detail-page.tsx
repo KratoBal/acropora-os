@@ -33,6 +33,11 @@ import {
   QUOTE_VERSION_STATUS,
 } from "./quote-format";
 import { QUOTES_PATH } from "./quote-list-page";
+import {
+  QuoteOutcomeCard,
+  QuoteOutcomeDrawer,
+  type QuoteOutcomeAction,
+} from "./quote-outcome";
 
 /** A legújabb verzió (a verziók számuk szerint növekvő sorrendben jönnek). */
 export function latestVersion(
@@ -57,6 +62,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.QUOTES_MANAGE),
   );
+  const canRecord = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_RECORD),
+  );
+  const [outcome, setOutcome] = useState<QuoteOutcomeAction | null>(null);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -96,6 +106,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const latest = latestVersion(quote);
   const hasDraft = quote.versions.some((v) => v.status === "DRAFT");
   const editable = ["DRAFT", "SENT", "POSTPONED"].includes(quote.status);
+  const hasPublished = quote.versions.some((v) => v.status === "PUBLISHED");
 
   const newVersion = async () => {
     setBusy(true);
@@ -186,25 +197,60 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          canManage && editable ? (
-            hasDraft ? (
-              <PilotButton
-                size="regular"
-                onClick={() =>
-                  router.push(`${QUOTES_PATH}/${quote.id}/szerkesztes`)
-                }
-              >
-                Szerkesztés
-              </PilotButton>
-            ) : (
-              <PilotButton
-                size="regular"
-                disabled={busy}
-                onClick={() => void newVersion()}
-              >
-                Új verzió
-              </PilotButton>
-            )
+          editable && (canManage || canRecord) ? (
+            <div className="flex flex-wrap gap-2">
+              {canManage ? (
+                <>
+                  <PilotButton
+                    variant="ghost"
+                    onClick={() => setOutcome("reject")}
+                  >
+                    Elutasítás
+                  </PilotButton>
+                  <PilotButton
+                    variant="ghost"
+                    onClick={() => setOutcome("postpone")}
+                  >
+                    Halasztás
+                  </PilotButton>
+                  <PilotButton
+                    variant="ghost"
+                    onClick={() => setOutcome("cancel")}
+                  >
+                    Visszavonás
+                  </PilotButton>
+                </>
+              ) : null}
+              {canRecord && hasPublished ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  onClick={() => setOutcome("accept")}
+                >
+                  Elfogadás rögzítése
+                </PilotButton>
+              ) : null}
+              {canManage ? (
+                hasDraft ? (
+                  <PilotButton
+                    size="regular"
+                    onClick={() =>
+                      router.push(`${QUOTES_PATH}/${quote.id}/szerkesztes`)
+                    }
+                  >
+                    Szerkesztés
+                  </PilotButton>
+                ) : (
+                  <PilotButton
+                    size="regular"
+                    disabled={busy}
+                    onClick={() => void newVersion()}
+                  >
+                    Új verzió
+                  </PilotButton>
+                )
+              ) : null}
+            </div>
           ) : undefined
         }
       />
@@ -239,6 +285,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </div>
       </PilotCard>
 
+      <QuoteOutcomeCard
+        quote={quote}
+        canRecord={canRecord}
+        onRevoke={() => setOutcome("revoke")}
+      />
+
       <PilotCard>
         <PilotCardHeader title="Verziók" />
         <div className="space-y-3 p-5">
@@ -253,6 +305,17 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           />
         </div>
       </PilotCard>
+
+      <QuoteOutcomeDrawer
+        token={token}
+        quote={quote}
+        action={outcome}
+        onClose={() => setOutcome(null)}
+        onDone={(next) => {
+          setQuote(next);
+          setOutcome(null);
+        }}
+      />
     </PilotThemeRoot>
   );
 }

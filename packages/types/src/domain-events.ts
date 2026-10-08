@@ -121,6 +121,13 @@ export type IcpReportImported = DomainEventEnvelope<
   { reportNumber: string; laboratoryCode: string; resultCount: number }
 >;
 
+/** #1582 P4a: a customer's acceptance was recorded (by hand in P4a). */
+export type QuoteAccepted = DomainEventEnvelope<
+  "quote.accepted",
+  "Quote",
+  { quoteNumber: string; versionNumber: number; acceptanceId: string }
+>;
+
 export type AcroporaDomainEvent =
   | ProductCreated
   | ProductUpdated
@@ -139,4 +146,5 @@ export type AcroporaDomainEvent =
   | CustomerCreated
   | ServiceJobCompleted
   | AquariumMeasurementRecorded
-  | IcpReportImported;
+  | IcpReportImported
+  | QuoteAccepted;
