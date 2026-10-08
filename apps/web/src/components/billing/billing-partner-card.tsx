@@ -103,7 +103,7 @@ export function BillingPartnerCard({
         name: detail.companyName?.trim() || detail.displayName,
         address: detail.address,
         taxNumber: detail.taxNumber ?? null,
-        euTaxNumber: null,
+        euTaxNumber: detail.euTaxNumber ?? null,
         contactName: null,
         email: detail.email ?? null,
         internalCode: detail.customerNumber,

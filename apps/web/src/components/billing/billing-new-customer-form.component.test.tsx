@@ -142,7 +142,7 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     expect(onSaved).not.toHaveBeenCalled();
   });
 
-  it("EU-s cég: a VIES nevet ad, a közösségi adószám nem kerül a vevő adószámába", async () => {
+  it("EU-s cég: a VIES nevet ad, a közösségi adószám a saját mezőjébe kerül, nem a vevő adószámába", async () => {
     api.vies.check.mockResolvedValue({ valid: true, name: "Slovak s.r.o." });
     api.customers.create.mockResolvedValue(created);
     const { onSaved } = renderForm("SK2020123456");
@@ -150,9 +150,7 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
       true,
     );
     expect(
-      screen.getByText(
-        /közösségi adószám a kiállított számlán ma nem szerepel/,
-      ),
+      screen.getByText(/a számlán a közösségi adószám helyén szerepel/),
     ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Ellenőrzés a VIES-ben" }),
@@ -176,8 +174,10 @@ describe("Új vevő a számla Vevő kártyáján (acrobot 28105)", () => {
     );
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const input = api.customers.create.mock.calls[0]![1];
-    expect(input.taxNumber).toBeUndefined();
-    expect(input.addresses[0].country).toBe("SK");
+    expect(
+      [input.taxNumber, input.euTaxNumber, input.addresses[0].country],
+      "WEB-EU-TAX-SAVED",
+    ).toEqual([undefined, "SK2020123456", "SK"]);
     // no duplicate search for an EU number: there is nothing to match yet
     expect(api.customers.list).not.toHaveBeenCalled();
   });

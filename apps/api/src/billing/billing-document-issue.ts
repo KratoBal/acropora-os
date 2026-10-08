@@ -1,6 +1,8 @@
 import {
+  EU_COUNTRY_NAMES_HU,
   szamlazzDocumentTotals,
   szamlazzLineAmounts,
+  viesCountry,
   type BillingDocumentType,
   type InvoiceFormat,
 } from "@acropora/types";
@@ -172,6 +174,12 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     });
   }
 
+  // AN EU BUYER (a community tax number, no Hungarian one; acrobot 28300):
+  // `adoalany` 6, "business in the EU" by the docs, the country by its
+  // Hungarian name, and `adoszamEU`, so the NAV report does not see a
+  // domestic buyer or a private person. Everyone else goes as before, with
+  // no community number either, even if one is stored (barracuda, 28303).
+  const euBuyer = Boolean(customer.euTaxNumber) && !customer.taxNumber;
   const buyer: BuyerSnapshot = {
     name: customer.companyName?.trim() || customer.displayName,
     country: address.country,
@@ -179,10 +187,13 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     city: address.city,
     address: [address.line1, address.line2].filter(Boolean).join(", "),
     taxNumber: customer.taxNumber,
-    // a partneren ma nincs EU-adószám mező
-    euTaxNumber: null,
+    // the community tax number goes in <adoszamEU>, never in <adoszam>
+    euTaxNumber: euBuyer ? customer.euTaxNumber : null,
     email: customer.email,
   };
+  const countryCode = EU_COUNTRY_NAMES_HU[address.country]
+    ? address.country
+    : viesCountry(customer.euTaxNumber ?? "");
   const totals = szamlazzDocumentTotals(lines, row.currency);
   const zeroForintLineIds = totals.zeroForintLines.map(
     (index) => lines[index]!.lineId,
@@ -205,13 +216,17 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
       proformaNumber: null,
       buyer: {
         name: buyer.name,
-        // az `orszag` alakját a doksi nem mondja meg: nem küldjük, a snapshot tárolja
-        country: null,
+        // `orszag` is free text (XSD string): only for an EU buyer, by name
+        country: euBuyer
+          ? (EU_COUNTRY_NAMES_HU[countryCode ?? ""] ?? null)
+          : null,
+        vatSubject: euBuyer ? 6 : null,
         zip: buyer.zip,
         city: buyer.city,
         address: buyer.address,
         email: buyer.email,
         taxNumber: buyer.taxNumber,
+        euTaxNumber: buyer.euTaxNumber,
       },
       lines: forIssue,
     },

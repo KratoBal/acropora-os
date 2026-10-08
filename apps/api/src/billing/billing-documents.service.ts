@@ -185,7 +185,7 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
           name: row.customer.companyName?.trim() || row.customer.displayName,
           address: addressOf(row),
           taxNumber: row.customer.taxNumber,
-          euTaxNumber: null,
+          euTaxNumber: row.customer.euTaxNumber,
           contactName: null,
           email: row.customer.email,
           internalCode: row.customer.customerNumber,

@@ -41,6 +41,11 @@ export interface CustomerSummary {
 export interface CustomerDetail extends CustomerSummary {
   taxNumber?: string;
   /**
+   * The community (EU) tax number, apart from the Hungarian one: the
+   * Számlázz.hu Agent takes it in `<adoszamEU>`, never in `<adoszam>`.
+   */
+  euTaxNumber?: string;
+  /**
    * A fizetési határidő napokban a neki kiállított számlán; `null`: az
    * alapérték (8 nap). Szervizpartnernél a Partnerek oldalon állítják.
    */
@@ -92,6 +97,7 @@ export interface CreateCustomerInput {
   displayName: string;
   companyName?: string;
   taxNumber?: string;
+  euTaxNumber?: string;
   email?: string;
   phone?: string;
   marketingEmailConsent?: boolean;
@@ -103,6 +109,7 @@ export interface UpdateCustomerInput {
   displayName?: string;
   companyName?: string | null;
   taxNumber?: string | null;
+  euTaxNumber?: string | null;
   email?: string | null;
   phone?: string | null;
   marketingEmailConsent?: boolean;

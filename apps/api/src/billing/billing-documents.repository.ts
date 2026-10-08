@@ -34,6 +34,7 @@ const DETAIL_INCLUDE = {
       displayName: true,
       companyName: true,
       taxNumber: true,
+      euTaxNumber: true,
       email: true,
       addresses: {
         select: {
