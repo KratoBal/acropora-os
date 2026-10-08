@@ -11,7 +11,11 @@ import {
   PDF_RIGHT,
   PDF_RULE,
 } from "../../documents/pdf/branded-document.js";
-import { drawAcroporaLogo } from "../../documents/pdf/acropora-logo.js";
+import { acroporaFooterLine } from "@acropora/types";
+import {
+  acroporaLogoHeight,
+  drawAcroporaLogo,
+} from "../../documents/pdf/acropora-logo.js";
 import {
   formatQuantity,
   formatQuoteDay,
@@ -167,32 +171,48 @@ function measure(
   return doc.heightOfString(value, { width, lineGap: 2 });
 }
 
+const COVER_LOGO_WIDTH = 120;
+
+/**
+ * THE FIRST PAGE'S HEADER, TOP TO BOTTOM. Everything below the logo starts
+ * from the logo's own height (Balázs on stage, 2026-10-08: the tagline sat
+ * at a fixed TOP + 40 and ran into the "acropora" word of a 68 pt tall logo).
+ */
+export function coverLayout(top = TOP, logoWidth = COVER_LOGO_WIDTH) {
+  const logoBottom = top + acroporaLogoHeight(logoWidth);
+  const tagline = logoBottom + 8;
+  const title = tagline + 22;
+  const number = title + 30;
+  return { logoBottom, tagline, title, number, rule: number + 24 };
+}
+
 function drawFirstHeader(
   doc: PDFKit.PDFDocument,
   input: QuotePdfInput,
   flow: Flow,
 ) {
-  drawAcroporaLogo(doc, PDF_LEFT, TOP, 120);
+  const at = coverLayout();
+  drawAcroporaLogo(doc, PDF_LEFT, TOP, COVER_LOGO_WIDTH);
   text(
     doc,
     "TENGERI AKVÁRIUMOK · TERVEZÉS · KIVITELEZÉS",
     PDF_LEFT,
-    TOP + 40,
+    at.tagline,
     7.5,
     PDF_MUTED,
     PDF_CONTENT_WIDTH,
   );
-  text(doc, "ÁRAJÁNLAT", PDF_LEFT, TOP + 70, 22, PDF_INK, PDF_CONTENT_WIDTH);
+  text(doc, "ÁRAJÁNLAT", PDF_LEFT, at.title, 22, PDF_INK, PDF_CONTENT_WIDTH);
   text(
     doc,
     `${input.quoteNumber} · v${input.versionNumber}`,
     PDF_LEFT,
-    TOP + 100,
+    at.number,
     10.5,
     TEAL,
     PDF_CONTENT_WIDTH,
   );
-  const ruleY = TOP + 124;
+  const ruleY = at.rule;
   doc
     .moveTo(PDF_LEFT, ruleY)
     .lineTo(A4_WIDTH - PDF_RIGHT, ruleY)
@@ -521,23 +541,24 @@ function drawFooter(
     .strokeColor(PDF_RULE)
     .lineWidth(0.75)
     .stroke();
-  text(
-    doc,
-    `Acropora Kft. · www.acropora.hu · ${input.quoteNumber} v${input.versionNumber}`,
-    PDF_LEFT,
-    FOOTER_Y,
-    7.5,
-    PDF_MUTED,
-    PDF_CONTENT_WIDTH - 60,
+  // the company line stays ONE line beside the page number: the font
+  // shrinks until it fits (Balázs's wording is long, 2026-10-08)
+  const line = acroporaFooterLine(
+    `${input.quoteNumber} · v${input.versionNumber}`,
   );
+  const width = PDF_CONTENT_WIDTH - 50;
+  let size = 7.5;
+  while (size > 5.5 && doc.fontSize(size).widthOfString(line) > width)
+    size -= 0.25;
+  text(doc, line, PDF_LEFT, FOOTER_Y, size, PDF_MUTED, width);
   text(
     doc,
     `${page} / ${pages}`,
-    A4_WIDTH - PDF_RIGHT - 60,
+    A4_WIDTH - PDF_RIGHT - 40,
     FOOTER_Y,
     7.5,
     PDF_MUTED,
-    60,
+    40,
     "right",
   );
 }
