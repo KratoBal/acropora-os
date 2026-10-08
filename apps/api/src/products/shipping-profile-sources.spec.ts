@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { main } from "./shipping-profile-fill.cli.js";
 import {
+  applyUnasShippingFlags,
   planUnasShippingFlags,
   type StoredShippingProfile,
 } from "./shipping-profile-sources.js";
@@ -86,21 +87,34 @@ describe("az egyszeri feltöltő parancs", () => {
           .map((id) => ({ productId: id, ...profiles[id]! })),
       findUnique: async (args: { where: { productId: string } }) =>
         profiles[args.where.productId] ?? null,
-      create: async (args: {
-        data: { productId: string } & StoredShippingProfile;
+      createMany: async (args: {
+        data: ({ productId: string } & StoredShippingProfile)[];
       }) => {
-        state.writes++;
-        const { productId, ...rest } = args.data;
-        profiles[productId] = rest;
-        return args.data;
+        let count = 0;
+        for (const { productId, ...rest } of args.data)
+          if (!profiles[productId]) {
+            profiles[productId] = rest;
+            state.writes++;
+            count++;
+          }
+        return { count };
       },
-      update: async (args: {
-        where: { productId: string };
+      updateMany: async (args: {
+        where: { productId: string } & Record<string, unknown>;
         data: Partial<StoredShippingProfile>;
       }) => {
+        const row = profiles[args.where.productId];
+        const { productId: _p, ...feltetel } = args.where;
+        if (
+          !row ||
+          !Object.entries(feltetel).every(
+            ([k, v]) => (row as Record<string, unknown>)[k] === v,
+          )
+        )
+          return { count: 0 };
         state.writes++;
-        Object.assign(profiles[args.where.productId]!, args.data);
-        return {};
+        Object.assign(row, args.data);
+        return { count: 1 };
       },
     };
     const db = {
@@ -152,5 +166,83 @@ describe("az egyszeri feltöltő parancs", () => {
     const masodik = await futtat([], h);
     assert.match(masodik.stdout, /Új sor \(eddig nem volt\): 0/);
     assert.match(masodik.stdout, /Frissül \(UNAS-forrású jelző változott\): 0/);
+  });
+});
+
+/*
+  VERSENY A KÉZI ÍRÁSSAL (barracuda, #1654 2a és 2b). A tranzakció-dupla a
+  szinkron olvasása UTÁN, az írása ELŐTT futtat egy kézi írást, és a feltételes
+  írást úgy értékeli, ahogy a Postgres a sorzár után: a `where` a MOSTANI sorra.
+  MI PIROSÍT: a szinkron a régi olvasat alapján felülírja a közben kézire állított
+  jelzőt; egy egyidejű első létrehozás P2002-vel dob.
+*/
+describe("a szinkron és a közbeíró kézi írás", () => {
+  function tx(
+    row: StoredShippingProfile | null,
+    kozbe: (a: { row: StoredShippingProfile | null }) => void,
+  ) {
+    const allapot = { row };
+    let elsoIras = true;
+    const iras = () => {
+      if (elsoIras) {
+        elsoIras = false;
+        kozbe(allapot);
+      }
+    };
+    return {
+      allapot,
+      tx: {
+        productShippingProfile: {
+          findUnique: async () => (allapot.row ? { ...allapot.row } : null),
+          createMany: async (args: { data: StoredShippingProfile[] }) => {
+            iras();
+            if (allapot.row) return { count: 0 };
+            allapot.row = { ...args.data[0]! };
+            return { count: 1 };
+          },
+          updateMany: async (args: {
+            where: Record<string, unknown>;
+            data: Partial<StoredShippingProfile>;
+          }) => {
+            iras();
+            const { productId: _p, ...feltetel } = args.where;
+            const r = allapot.row as Record<string, unknown> | null;
+            if (!r || !Object.entries(feltetel).every(([k, v]) => r[k] === v))
+              return { count: 0 };
+            Object.assign(r, args.data);
+            return { count: 1 };
+          },
+        },
+      } as never,
+    };
+  }
+
+  it("a közben kézire állított jelzőt a szinkron nem írja vissza", async () => {
+    // a szinkron olvas: nehéz, UNAS; a UNAS most azt mondja, nem nehéz
+    const t = tx(sor({ isHeavy: true }), (a) => {
+      Object.assign(a.row!, { isHeavy: true, isHeavySource: "MANUAL" });
+    });
+    await applyUnasShippingFlags(t.tx, "p1", {});
+    assert.deepEqual(
+      [t.allapot.row!.isHeavy, t.allapot.row!.isHeavySource],
+      [true, "MANUAL"],
+    );
+  });
+
+  it("egyidejű első létrehozás: nem dob, és a közben létrejött kézi sort nem írja felül", async () => {
+    const t = tx(null, (a) => {
+      a.row = sor({
+        foxpostForbidden: false,
+        foxpostForbiddenSource: "MANUAL",
+        pickupOnlySource: "MANUAL",
+        isHeavySource: "MANUAL",
+        isFrozenSource: "MANUAL",
+      });
+    });
+    await applyUnasShippingFlags(t.tx, "p1", TILTOTT_FOXPOST);
+    assert.deepEqual(
+      [t.allapot.row!.foxpostForbidden, t.allapot.row!.foxpostForbiddenSource],
+      [false, "MANUAL"],
+    );
   });
 });

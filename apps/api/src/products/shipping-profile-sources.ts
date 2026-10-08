@@ -83,25 +83,41 @@ const PROFIL_MEZOK = {
 /**
  * EGY TERMÉK JELZŐI A UNAS NYERS ADATÁBÓL, a hívó tranzakciójában (a
  * UNAS-szinkron a snapshot írása után hívja, a feltöltő parancs kötegenként).
+ *
+ * VERSENY A KÉZI ÍRÁSSAL (barracuda, #1654 2a): az olvasás és az írás között egy
+ * kézi írás kézire állíthat egy jelzőt. Ezért az írás jelzőnként FELTÉTELES (a
+ * forrás még `UNAS`): a Postgres a feltételt a sorzár után újraértékeli, tehát a
+ * közben kézire állított jelzőhöz nem nyúl, sorzár nélkül sem.
+ *
+ * EGYIDEJŰ ELSŐ LÉTREHOZÁS (2b): a sort `ON CONFLICT DO NOTHING` hozza létre
+ * (`skipDuplicates`). Ha közben más hozta létre, nem dob P2002-t (ami a szinkron
+ * egész kötegét visszagörgetné), hanem újraolvas, és a frissítő ágon megy tovább.
  */
 export async function applyUnasShippingFlags(
   tx: Pick<Prisma.TransactionClient, "productShippingProfile">,
   productId: string,
   rawPayload: unknown,
 ): Promise<UnasShippingPlan> {
-  const existing = await tx.productShippingProfile.findUnique({
-    where: { productId },
-    select: PROFIL_MEZOK,
-  });
-  const plan = planUnasShippingFlags(existing, unasShippingProfile(rawPayload));
-  if (plan.kind === "create")
-    await tx.productShippingProfile.create({
-      data: { productId, ...plan.data },
-    });
-  else if (plan.kind === "update")
-    await tx.productShippingProfile.update({
+  const unas = unasShippingProfile(rawPayload);
+  const olvas = () =>
+    tx.productShippingProfile.findUnique({
       where: { productId },
-      data: plan.data,
+      select: PROFIL_MEZOK,
     });
+  let plan = planUnasShippingFlags(await olvas(), unas);
+  if (plan.kind === "create") {
+    const { count } = await tx.productShippingProfile.createMany({
+      data: [{ productId, ...plan.data }],
+      skipDuplicates: true,
+    });
+    if (count === 1) return plan;
+    plan = planUnasShippingFlags(await olvas(), unas);
+  }
+  if (plan.kind === "update")
+    for (const flag of plan.flags)
+      await tx.productShippingProfile.updateMany({
+        where: { productId, [`${flag}Source`]: "UNAS" },
+        data: { [flag]: plan.data[flag] },
+      });
   return plan;
 }
