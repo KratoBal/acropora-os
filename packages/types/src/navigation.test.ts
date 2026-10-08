@@ -183,7 +183,7 @@ describe("a menü közös forrása", () => {
 
   it("az Árajánlatok és a szövegrészlet-kezelő a `quotes` kapcsoló és a saját joga mögött áll", () => {
     const on = new Set(["quotes"] as const);
-    for (const id of ["quotes", "quote-snippets"]) {
+    for (const id of ["quotes", "quote-snippets", "quote-templates"]) {
       assert.equal(navigationEntry(id)?.feature, "quotes");
       assert.equal(isNavigationEntryVisible(id, { role: "OWNER" }), false);
       assert.equal(isNavigationEntryVisible(id, { role: "OWNER" }, on), true);
@@ -195,6 +195,10 @@ describe("a menü közös forrása", () => {
     );
     assert.equal(
       isNavigationEntryVisible("quote-snippets", { role: "SALES" }, on),
+      false,
+    );
+    assert.equal(
+      isNavigationEntryVisible("quote-templates", { role: "SALES" }, on),
       false,
     );
     // a kapcsoló nem ad jogot: VIEWER-nek nincs quotes.view
