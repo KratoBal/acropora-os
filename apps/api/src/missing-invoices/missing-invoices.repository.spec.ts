@@ -240,6 +240,35 @@ describe("a VAT group member's two tax numbers", () => {
     );
   });
 
+  // MI PIROSÍT: a NAV-sor kulcsán álló, bruttó nélküli csatolt kép a
+  // csoport-azonosítón marad, és külön jelölt lesz (barracuda, #1617 review)
+  it("a scan that shares the NAV row's key moves with it into the one invoice", () => {
+    const merged = mergeSameInvoice(
+      [
+        euroleasingNav(),
+        euroleasingSzamlazz(),
+        doc({
+          id: "scan-1",
+          source: "UPLOAD",
+          number: "2026/01212920",
+          gross: null,
+          date: "2026-09-05",
+          hasOriginal: true,
+        }),
+      ],
+      new Map([
+        ["nav-1", "2026/01212920|17782672"],
+        ["szlz-1", "2026/01212920|12238972"],
+        ["scan-1", "2026/01212920|17782672"],
+      ]),
+    );
+    assert.deepEqual(
+      merged.map((d) => [d.id, [...(d.aliasIds ?? [])].sort()]),
+      [["nav-1", ["scan-1", "szlz-1"]]],
+      "VAT-GROUP-SCAN-ALONG",
+    );
+  });
+
   it("a different gross or day, or a NAV row without a group id, stays apart", () => {
     for (const [szamlazz, navKey] of [
       [

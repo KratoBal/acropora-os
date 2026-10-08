@@ -140,6 +140,66 @@ describe(
       );
     });
 
+    it("a cancelled invoice's scan is not a candidate of any month", async () => {
+      const { invoice, scanId } = await invoiceWithScan("cancelled", null);
+      await prisma.purchaseInvoice.update({
+        where: { id: invoice.id },
+        data: { status: "CANCELLED" },
+      });
+      // neither as the invoice (its month) nor as a loose upload (any month)
+      assert.deepEqual(
+        [
+          holding(
+            await repository.candidates("2026-08-01", "2026-08-31"),
+            scanId,
+          ),
+          holding(
+            await repository.candidates("2026-09-01", "2026-09-30"),
+            scanId,
+          ),
+        ],
+        [undefined, undefined],
+        "LINKED-ONLY-POSTED",
+      );
+    });
+
+    it("a mailbox PDF linked to a cancelled invoice is still a candidate, on its own reading", async () => {
+      const { invoice } = await invoiceWithScan("mailbox", null);
+      await prisma.purchaseInvoice.update({
+        where: { id: invoice.id },
+        data: { status: "CANCELLED" },
+      });
+      const mailbox = await prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `collect:INFO_MAIL:mi-scan-mailbox-${suffix}`,
+          fileName: "szamla.pdf",
+          sizeBytes: 14,
+          sha256: `mi-scan-mailbox-${suffix}`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 teszt")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "COLLECTED_MAIL",
+          receivedAt: new Date("2026-08-12T09:00:00Z"),
+          payeeCheck: "COMPANY",
+          purchaseInvoiceId: invoice.id,
+          textReading: {
+            invoiceNumber: `MI-MAILBOX-OWN-${suffix}`,
+            numberFrom: "LABEL",
+            supplierTaxNumber: null,
+          },
+        },
+      });
+      const found = holding(
+        await repository.candidates("2026-08-01", "2026-08-31"),
+        mailbox.id,
+      );
+      assert.deepEqual(
+        [found?.number, found?.date],
+        [`MI-MAILBOX-OWN-${suffix}`, "2026-08-12"],
+        "MAILBOX-STAYS",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await prisma.navIncomingInvoice.deleteMany({
