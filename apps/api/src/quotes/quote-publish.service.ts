@@ -349,6 +349,35 @@ export class QuotePublishService {
           where: { quoteId, status: "PUBLISHED" },
           data: { status: "SUPERSEDED" },
         });
+        /*
+          THE SUPERSEDED VERSION'S LINK ENDS WITH IT (#1625 review, acrobot
+          28224): the customer must not see the old prices behind a live
+          „Elfogadom” button. Every live link of another version is revoked,
+          each with its event.
+        */
+        const superseded = await tx.quoteAcceptanceLink.findMany({
+          where: {
+            quoteId,
+            quoteVersionId: { not: versionId },
+            revokedAt: null,
+          },
+          select: { id: true, quoteVersionId: true },
+        });
+        for (const link of superseded) {
+          await tx.quoteAcceptanceLink.update({
+            where: { id: link.id },
+            data: { revokedAt: new Date() },
+          });
+          await tx.quoteEvent.create({
+            data: {
+              quoteId,
+              versionId: link.quoteVersionId,
+              kind: "LINK_REVOKED",
+              actorUserId: user.id,
+              payload: { linkId: link.id, reason: "SUPERSEDED" },
+            },
+          });
+        }
         await tx.quoteVersion.update({
           where: { id: versionId },
           data: {

@@ -14,6 +14,10 @@ import { HttpException, HttpStatus } from "@nestjs/common";
  */
 export class IpRateLimiter {
   private readonly counts = new Map<string, number>();
+  /** how many callers it remembers now (for the test of the ceiling) */
+  get size(): number {
+    return this.counts.size;
+  }
   private window = 0;
   private total = 0;
 
@@ -31,10 +35,13 @@ export class IpRateLimiter {
       this.counts.clear();
       this.total = 0;
     }
+    // once the shared ceiling is spent nothing more is remembered: forged
+    // addresses must not grow the map without bound (acrobot 28224)
+    if (this.total >= this.overall) return false;
+    this.total += 1;
     const count = (this.counts.get(caller) ?? 0) + 1;
     this.counts.set(caller, count);
-    this.total += 1;
-    return count <= this.perCaller && this.total <= this.overall;
+    return count <= this.perCaller;
   }
 
   /** The same, as a 429 the controller can let fly. */

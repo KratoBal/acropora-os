@@ -72,6 +72,7 @@ export class QuotePublicService {
       where: { id: link.quoteVersionId, quoteId: link.quoteId },
       select: {
         versionNumber: true,
+        status: true,
         validUntil: true,
         currency: true,
         priceDisplay: true,
@@ -132,9 +133,11 @@ export class QuotePublicService {
       })),
       netTotal: sum(items.filter((item) => !item.isOptional)),
       optionalNetTotal: sum(items.filter((item) => item.isOptional)),
+      // a version that is not the published one any more is not open,
+      // whatever the quote's status says (acrobot 28224)
       state: accepted
         ? "ACCEPTED"
-        : OPEN.has(version.quote.status)
+        : version.status === "PUBLISHED" && OPEN.has(version.quote.status)
           ? "OPEN"
           : "CLOSED",
       acceptedAt: accepted ? accepted.toISOString().slice(0, 10) : null,

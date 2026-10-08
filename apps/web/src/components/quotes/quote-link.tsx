@@ -133,8 +133,8 @@ export function QuoteAcceptanceLinkCard({
           <p className="text-pilot-grey-700">
             Élő link, érvényes eddig: {when(link.expiresAt)}.{" "}
             {link.firstOpenedAt
-              ? `Az ügyfél megnyitotta: ${when(link.firstOpenedAt)}.`
-              : "Az ügyfél még nem nyitotta meg."}
+              ? `A linket először megnyitották: ${when(link.firstOpenedAt)} (ez lehet a levelező linkellenőrzője is).`
+              : "A linket még nem nyitották meg."}
           </p>
         ) : (
           <p className="text-pilot-grey-600">
