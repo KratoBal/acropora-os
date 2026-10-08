@@ -52,7 +52,7 @@ describe("Az elfogadó link kártyája (#1582 P4b)", () => {
     )) as HTMLInputElement;
     expect(address.value).toBe(`${window.location.origin}/ajanlat/tok-123`);
     expect(api.issueAcceptanceLink).toHaveBeenCalledWith("t", "q-1", "v-1");
-    expect(screen.getByText(/Az ügyfél még nem nyitotta meg/)).toBeTruthy();
+    expect(screen.getByText(/A linket még nem nyitották meg/)).toBeTruthy();
   });
 
   it("a visszavonás után nincs élő link; jog nélkül és lezárt ajánlatnál nincs gomb", async () => {

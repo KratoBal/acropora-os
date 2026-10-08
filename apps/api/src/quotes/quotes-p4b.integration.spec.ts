@@ -447,6 +447,31 @@ describe(
       );
     });
 
+    it("a version that is no longer the published one shows as closed", async () => {
+      const q = await linked("P4b superseded view");
+      await prisma.quoteVersion.update({
+        where: { id: q.versionId },
+        data: { status: "SUPERSEDED" },
+      });
+      const page = await request(`/public/quotes/${q.token}`);
+      assert.equal(page.body!.state, "CLOSED", "SUPERSEDED-CLOSED");
+    });
+
+    it("publishing a new version revokes the old version's live link", async () => {
+      const q = await linked("P4b republish");
+      const v2 = await addVersion(q.quoteId, 2, "DRAFT");
+      const published = await request(
+        `/quotes/${q.quoteId}/versions/${v2.versionId}/publish`,
+        "POST",
+      );
+      assert.equal(published.status, 200);
+      const old = await request(`/public/quotes/${q.token}`);
+      const events = await prisma.quoteEvent.count({
+        where: { quoteId: q.quoteId, kind: "LINK_REVOKED" },
+      });
+      assert.deepEqual([old.status, events], [404, 1], "PUBLISH-REVOKES-LINK");
+    });
+
     it("one caller's yes is limited: the sixth in a minute is a 429", async () => {
       const statuses: number[] = [];
       for (let i = 0; i < 6; i += 1)

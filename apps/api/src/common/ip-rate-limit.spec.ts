@@ -39,4 +39,11 @@ describe("IpRateLimiter (#1582 P4b)", () => {
       ["203.0.113.7", "10.0.0.2", "unknown"],
     );
   });
+
+  it("remembers no new caller once the shared ceiling is spent", () => {
+    const limiter = new IpRateLimiter(1, 3, 60_000);
+    const at = 3_000_000;
+    for (let i = 0; i < 100; i += 1) limiter.hit(`forged-${i}`, at);
+    assert.equal(limiter.size, 3, "CEILING-NO-GROWTH");
+  });
 });
