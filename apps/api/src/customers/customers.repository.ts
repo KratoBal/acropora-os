@@ -266,6 +266,8 @@ export class CustomersRepository extends Repository {
                 displayName: input.displayName.trim(),
                 companyName: input.companyName?.trim(),
                 taxNumber: input.taxNumber?.trim(),
+                // normalized by the service (`euTax`)
+                euTaxNumber: input.euTaxNumber,
                 email: input.email?.trim(),
                 phone: input.phone?.trim(),
                 marketingEmailConsent: input.marketingEmailConsent ?? false,
@@ -310,6 +312,7 @@ export class CustomersRepository extends Repository {
             displayName: input.displayName?.trim(),
             companyName: input.companyName,
             taxNumber: input.taxNumber,
+            euTaxNumber: input.euTaxNumber,
             email: input.email,
             phone: input.phone,
             marketingEmailConsent: input.marketingEmailConsent,
@@ -385,6 +388,7 @@ export class CustomersRepository extends Repository {
     return {
       ...this.toSummary(customer, unasExternalId),
       taxNumber: customer.taxNumber ?? undefined,
+      euTaxNumber: customer.euTaxNumber ?? undefined,
       paymentDueDays: customer.paymentDueDays ?? null,
       marketingEmailConsent: customer.marketingEmailConsent,
       marketingSmsConsent: customer.marketingSmsConsent,

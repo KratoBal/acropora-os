@@ -40,7 +40,19 @@ export interface SzamlazzAgentBuyer {
   city: string;
   address: string;
   email?: string;
+  /**
+   * `adoalany` (XSD int): the docs give 7 business outside the EU, 6 business
+   * in the EU, 1 Hungarian tax number, 0 unknown, -1 no tax number. We send
+   * only 6, for an EU buyer.
+   */
+  vatSubject?: number;
   taxNumber?: string;
+  /**
+   * `adoszamEU`, the community tax number (XSD `vevoTipus`). In the sequence
+   * it comes after `adoszam` (and `csoportazonosito`, which we never send)
+   * and before `telefonszam`.
+   */
+  euTaxNumber?: string;
   phone?: string;
   comment?: string;
 }
@@ -199,9 +211,15 @@ export function buildSzamlazzAgentInvoiceXml(
     // Számlázz.hu elküldi a számlát; ezért a jelző NEM hívófüggő, hanem minden
     // számla-XML-ben kifejezetten false, akkor is, ha e-mail cím nincs.
     tag("sendEmail", false) +
+    (input.buyer.vatSubject === undefined
+      ? ""
+      : tag("adoalany", input.buyer.vatSubject)) +
     (input.buyer.taxNumber === undefined
       ? ""
       : tag("adoszam", input.buyer.taxNumber)) +
+    (input.buyer.euTaxNumber === undefined
+      ? ""
+      : tag("adoszamEU", input.buyer.euTaxNumber)) +
     (input.buyer.phone === undefined
       ? ""
       : tag("telefonszam", input.buyer.phone)) +

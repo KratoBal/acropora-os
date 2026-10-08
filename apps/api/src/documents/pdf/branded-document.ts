@@ -4,7 +4,12 @@ import PDFDocument from "pdfkit";
 import { documentFooterLine, type DocumentFooterKind } from "@acropora/types";
 
 import { drawAcroporaLogo } from "./acropora-logo.js";
-import { resolvePdfFontPath } from "./pdf-font.js";
+import {
+  NOTO_SANS_BOLD,
+  NOTO_SANS_REGULAR,
+  resolvePdfFontAsset,
+  resolvePdfFontPath,
+} from "./pdf-font.js";
 
 export const PDF_BODY_FONT = "acropora";
 export const A4_WIDTH = 595.28;
@@ -148,6 +153,18 @@ export function drawSectionTitle(
 ): number {
   document.fillColor(PDF_INK).fontSize(12).text(title, PDF_LEFT, y);
   return y + 22;
+}
+
+/** The design system's two weights, registered under these names. */
+export const PDF_REGULAR_FONT = "noto";
+export const PDF_BOLD_FONT = "noto-bold";
+
+export function registerNotoSans(document: PDFKit.PDFDocument): void {
+  document.registerFont(
+    PDF_REGULAR_FONT,
+    resolvePdfFontAsset(NOTO_SANS_REGULAR),
+  );
+  document.registerFont(PDF_BOLD_FONT, resolvePdfFontAsset(NOTO_SANS_BOLD));
 }
 
 export function addPage(document: PDFKit.PDFDocument): void {

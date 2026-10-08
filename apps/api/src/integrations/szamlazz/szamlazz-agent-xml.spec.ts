@@ -53,6 +53,36 @@ describe("buildSzamlazzAgentInvoiceXml", () => {
     }
   });
 
+  it("an EU buyer: orszag after nev, adoalany after sendEmail, adoszamEU after adoszam, all before telefonszam", () => {
+    const xml = buildSzamlazzAgentInvoiceXml({
+      ...baseInput,
+      buyer: {
+        ...baseInput.buyer,
+        country: "Szlovákia",
+        vatSubject: 6,
+        euTaxNumber: "SK2020123456",
+        phone: "+36 1 234 5678",
+      },
+    });
+    const at = (tag: string) => xml.indexOf(`<${tag}>`);
+    const plain = buildSzamlazzAgentInvoiceXml(baseInput);
+    assert.deepEqual(
+      [
+        xml.includes("<adoalany>6</adoalany>"),
+        xml.includes("<orszag>Szlovákia</orszag>"),
+        xml.includes("<adoszamEU>SK2020123456</adoszamEU>"),
+        at("nev") < at("orszag") && at("orszag") < at("irsz"),
+        at("sendEmail") < at("adoalany") && at("adoalany") < at("adoszam"),
+        at("adoszam") < at("adoszamEU") && at("adoszamEU") < at("telefonszam"),
+        ["adoalany", "adoszamEU", "orszag"].some((t) =>
+          plain.includes(`<${t}>`),
+        ),
+      ],
+      [true, true, true, true, true, true, false],
+      "XML-ADOSZAM-EU",
+    );
+  });
+
   it("escapes XML-significant characters in free text fields", () => {
     const xml = buildSzamlazzAgentInvoiceXml(baseInput);
     assert.match(xml, /Kov.cs &quot;Bt\.&quot; &amp; T.rsa/);
