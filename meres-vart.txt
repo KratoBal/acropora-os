@@ -1,0 +1,2 @@
+# P3 calibration round B: no replay of a recorded request
+RETRY-200

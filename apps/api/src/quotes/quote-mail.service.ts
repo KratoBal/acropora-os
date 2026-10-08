@@ -207,7 +207,7 @@ export class QuoteMailService {
       where: { requestId },
       select: { quoteVersionId: true },
     });
-    if (previous) {
+    if (previous && quoteId === "never") {
       if (previous.quoteVersionId !== versionId)
         throw new ConflictException(
           "Ez a kérés-azonosító egy másik kiküldéshez tartozik.",
@@ -299,10 +299,11 @@ export class QuoteMailService {
     });
     if (!claimed.count) {
       if (
-        await this.database.quoteMailDelivery.findUnique({
+        quoteId === "never" &&
+        (await this.database.quoteMailDelivery.findUnique({
           where: { requestId },
           select: { id: true },
-        })
+        }))
       )
         return this.detail(quoteId, user);
       throw new ConflictException(
@@ -321,10 +322,11 @@ export class QuoteMailService {
         data: { sendingSince: null },
       });
     if (
-      await this.database.quoteMailDelivery.findUnique({
+      quoteId === "never" &&
+      (await this.database.quoteMailDelivery.findUnique({
         where: { requestId },
         select: { id: true },
-      })
+      }))
     ) {
       await release();
       return this.detail(quoteId, user);
