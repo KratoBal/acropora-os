@@ -20,9 +20,13 @@ export interface ViesAddressFields {
   city: string;
 }
 
-/** A postal code at the start of a line: digits, an NL letter pair, a CZ/SK space. */
+/**
+ * A postal code at the start of a line, after an optional country prefix
+ * (`AT-`, and Luxembourg's one-letter `L-`): an NL letter pair, a CZ/SK space,
+ * the PL `00-950` and PT `1000-001` hyphens, or plain digits.
+ */
 const POSTAL_LINE =
-  /^(?:[A-Z]{2}-)?(\d{4}\s?[A-Z]{2}|\d{3}\s\d{2}|\d{3,6})\s+(\S.*)$/;
+  /^(?:[A-Z]{1,2}-)?(\d{4}\s?[A-Z]{2}|\d{3}\s\d{2}|\d{2}-\d{3}|\d{4}-\d{3}|\d{3,6})\s+(\S.*)$/;
 
 const clean = (line: string) => line.replace(/\s+/g, " ").trim();
 
@@ -90,7 +94,8 @@ export function viesFill(
     [ViesFillField, string]
   >) {
     if (!(field in current)) continue;
-    const now = (current[field] ?? "").trim();
+    // inner whitespace counts as one space on both sides of the comparison
+    const now = clean(current[field] ?? "");
     if (!now) fill[field] = vies;
     else if (now.toLocaleLowerCase("hu") !== vies.toLocaleLowerCase("hu"))
       conflicts.push({ field, current: now, vies });

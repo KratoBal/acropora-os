@@ -228,6 +228,8 @@ export function PurchaseInvoiceEuEditorPage() {
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [viesBusy, setViesBusy] = useState(false);
   const [viesConflicts, setViesConflicts] = useState<ViesConflict[]>([]);
+  const latestTaxNumber = useRef(newSupplierTaxNumber);
+  latestTaxNumber.current = newSupplierTaxNumber;
   const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
     null,
   );
@@ -955,7 +957,10 @@ export function PurchaseInvoiceEuEditorPage() {
     setViesResult(null);
     setViesConflicts([]);
     try {
-      const result = await viesVatApi.check(token, newSupplierTaxNumber.trim());
+      const asked = newSupplierTaxNumber.trim();
+      const result = await viesVatApi.check(token, asked);
+      // the number was changed while VIES answered: this answer is not its
+      if (latestTaxNumber.current.trim() !== asked) return;
       setViesResult(result);
       if (result.valid) {
         const { fill, conflicts } = viesFill(
@@ -1527,12 +1532,12 @@ export function PurchaseInvoiceEuEditorPage() {
                         ) : null}
                         <ViesConflicts
                           conflicts={viesConflicts}
-                          onApply={() => {
-                            const name = viesConflicts.find(
-                              (c) => c.field === "name",
-                            );
+                          onApply={(taken) => {
+                            const name = taken.find((c) => c.field === "name");
                             if (name) setNewSupplierName(name.vies);
-                            setViesConflicts([]);
+                            setViesConflicts((all) =>
+                              all.filter((c) => !taken.includes(c)),
+                            );
                           }}
                         />
                       </FormField>

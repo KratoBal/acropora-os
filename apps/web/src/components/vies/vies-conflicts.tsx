@@ -27,7 +27,8 @@ export function ViesConflicts({
   onApply,
 }: {
   conflicts: readonly ViesConflict[];
-  onApply: () => void;
+  /** the fields to take from VIES: one row's, or all of them */
+  onApply: (fields: readonly ViesConflict[]) => void;
 }) {
   if (!conflicts.length) return null;
   return (
@@ -39,15 +40,25 @@ export function ViesConflicts({
       <p>A VIES más adatot ad, mint ami be van írva:</p>
       <ul className="space-y-0.5">
         {conflicts.map((c) => (
-          <li key={c.field}>
-            {LABEL[c.field]}: <strong>{c.vies}</strong> (most: {c.current})
+          <li key={c.field} className="flex flex-wrap items-center gap-2">
+            <span>
+              {LABEL[c.field]}: <strong>{c.vies}</strong> (most: {c.current})
+            </span>
+            <button
+              type="button"
+              aria-label={`${LABEL[c.field]}: átvétel a VIES-ből`}
+              className="rounded border border-amber-300 bg-white px-1.5 font-semibold"
+              onClick={() => onApply([c])}
+            >
+              Átvétel
+            </button>
           </li>
         ))}
       </ul>
       <button
         type="button"
         className="rounded border border-amber-300 bg-white px-2 py-1 font-semibold"
-        onClick={onApply}
+        onClick={() => onApply(conflicts)}
       >
         Felülírás a VIES adataival
       </button>
