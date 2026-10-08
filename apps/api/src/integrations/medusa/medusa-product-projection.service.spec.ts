@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { medusaMergeMetadata } from "../../testing/medusa-merge-metadata.fixture.js";
+
 import type {
   MedusaAdminClient,
   MedusaProductInput,
@@ -835,7 +837,7 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.equal(torzs.metadata?.unas_short_description, "<p>Forrás</p>");
     // the shop merges metadata: a dropped key goes out as "" (2026-10-08)
     assert.equal(torzs.metadata?.seo_title, "");
-    assert.equal(torzs.metadata?.idegen_kulcs, "marad");
+    assert.equal("idegen_kulcs" in (torzs.metadata ?? {}), false);
   });
 
   it("üres forrásnál a leírás kifejezetten kiürül, nem marad bent a régi szöveg", async () => {
@@ -1895,7 +1897,7 @@ describe("MedusaProductProjectionService -- a kepek alt szovege", () => {
         { url: "https://kep/b.jpg", alt: "Uj alt", title: null },
       ]),
     );
-    assert.equal(torzs.metadata?.idegen, "marad");
+    assert.equal("idegen" in (torzs.metadata ?? {}), false);
   });
 
   it("ha egyik kepnek sincs szovege, a regi kulcs lekerul", async () => {
@@ -2134,11 +2136,23 @@ describe("MedusaProductProjectionService -- a metaadat megőrzése", () => {
 
     await f.service.project({ ...product, unit: "ml" }, now);
 
-    assert.deepEqual(f.updatedWith[0]?.metadata, {
-      kezzel_irt: "amit valaki a Medusán adott hozzá",
+    // only our keys go out; the shop's merge keeps the foreign one (2026-10-08)
+    const body = f.updatedWith[0]?.metadata;
+    assert.deepEqual(body, {
       unas_unit: "ml",
       unas_short_description: "Leírás",
     });
+    assert.deepEqual(
+      medusaMergeMetadata(
+        { kezzel_irt: "amit valaki a Medusán adott hozzá", unas_unit: "régi" },
+        body ?? {},
+      ),
+      {
+        kezzel_irt: "amit valaki a Medusán adott hozzá",
+        unas_unit: "ml",
+        unas_short_description: "Leírás",
+      },
+    );
   });
 
   it("a WYSIWYG jelző a metaadatba kerül, a többi mellé", async () => {
@@ -2150,7 +2164,8 @@ describe("MedusaProductProjectionService -- a metaadat megőrzése", () => {
     await f.service.project({ ...product, uniquePiece: true }, now);
 
     assert.equal(f.updatedWith[0]?.metadata?.unique_piece, "true");
-    assert.equal(f.updatedWith[0]?.metadata?.kezzel_irt, "marad");
+    // the foreign key is not sent back; the shop's merge keeps it
+    assert.equal("kezzel_irt" in (f.updatedWith[0]?.metadata ?? {}), false);
   });
 
   /**

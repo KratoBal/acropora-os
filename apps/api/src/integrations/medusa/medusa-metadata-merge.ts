@@ -51,8 +51,13 @@
  *
  * Ezert egy levett sajat kulcs eddig soha nem tunt el (PR 9 stage-meres: a
  * `acropora_images` a #1619 utani vetites utan is ott allt). Mostantol a
- * levett kulcs `""` ertekkel megy ki. Az idegen kulcsok kikuldese ettol
- * fuggetlenul artalmatlan: ugyanazt az erteket irja vissza.
+ * levett kulcs `""` ertekkel megy ki.
+ *
+ * ES AZ IDEGEN KULCSOK NEM MENNEK VISSZA (acrobot 28211). Az osszefesules miatt
+ * nem is kell: a cel oldal megtartja oket. Ha visszakuldenenk, ket hibat
+ * okozna: a lekerdezes es az iras kozott masok altal irt uj ertek elveszne (a
+ * regit irnank vissza), es egy idegen kulcs, aminek az erteke epp `""`, a cel
+ * oldalon TORLODNE.
  */
 
 /**
@@ -150,7 +155,8 @@ export interface MetadataMergeResult {
 }
 
 /**
- * OSSZEFESULES: az idegen kulcsok maradnak, a mieink a mostani futasbol jonnek.
+ * OSSZEFESULES: a kikuldott objektum CSAK a mi kulcsainkat viszi (a mostani
+ * ertekuket, es a levetteket `""`-vel); az idegen kulcsokat a cel oldal tartja.
  *
  * A MEZO ELHAGYASA (`metadata: null`) akkor helyes, ha NINCS mondanivalonk ES
  * a cel oldalon nincs olyan kulcs, amit el kellene vennunk. Ilyenkor barmilyen
@@ -160,14 +166,10 @@ export function mergeProductMetadata(
   existing: ExistingMetadata,
   ours: Record<string, string>,
 ): MetadataMergeResult {
-  const idegen: Record<string, unknown> = {};
   const eltavolitando: string[] = [];
 
-  for (const [kulcs, ertek] of Object.entries(existing ?? {})) {
-    if (!isOwnedMetadataKey(kulcs)) {
-      idegen[kulcs] = ertek;
-      continue;
-    }
+  for (const kulcs of Object.keys(existing ?? {})) {
+    if (!isOwnedMetadataKey(kulcs)) continue;
     if (!(kulcs in ours)) eltavolitando.push(kulcs);
   }
 
@@ -177,7 +179,6 @@ export function mergeProductMetadata(
 
   return {
     metadata: {
-      ...idegen,
       ...ours,
       ...Object.fromEntries(eltavolitando.map((kulcs) => [kulcs, ""])),
     },
