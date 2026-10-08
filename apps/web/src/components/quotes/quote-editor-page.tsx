@@ -111,7 +111,10 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
   const [dirtyBlocks, setDirtyBlocks] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const [leaving, setLeaving] = useState(false);
+  /** where the user wanted to go with unsaved text; null: staying */
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const go = (path: string) =>
+    dirtyBlocks.size ? setLeaving(path) : router.push(path);
   const markDirty = useCallback(
     (blockId: string) => (dirty: boolean) =>
       setDirtyBlocks((current) => {
@@ -210,17 +213,22 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       title={`${quote.quoteNumber} · ${quote.title}`}
       description="Szerkeszd az ügyfélnek látható ajánlati dokumentumot blokkokból, miközben a belső kalkuláció külön marad."
       actions={
-        <PilotButton
-          variant="secondary"
-          size="regular"
-          onClick={() =>
-            dirtyBlocks.size
-              ? setLeaving(true)
-              : router.push(`${QUOTES_PATH}/${quote.id}`)
-          }
-        >
-          Ajánlat adatlapja
-        </PilotButton>
+        <div className="flex flex-wrap gap-3">
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            onClick={() => go(`${QUOTES_PATH}/${quote.id}`)}
+          >
+            Ajánlat adatlapja
+          </PilotButton>
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            onClick={() => go(`${QUOTES_PATH}/${quote.id}/pdf`)}
+          >
+            PDF előnézet
+          </PilotButton>
+        </div>
       }
     />
   );
@@ -479,16 +487,17 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       </div>
 
       <ConfirmDialog
-        open={leaving}
+        open={leaving !== null}
         title="Nem mentett szöveg"
         consequence={`${dirtyBlocks.size} blokk szövege még nincs mentve, és elvész, ha most elmész.`}
         recovery="Maradj, és mentsd a blokkokat a „Blokk mentése” gombbal."
         confirmLabel="Elmegyek mentés nélkül"
         onConfirm={() => {
-          setLeaving(false);
-          router.push(`${QUOTES_PATH}/${quote.id}`);
+          const target = leaving;
+          setLeaving(null);
+          if (target) router.push(target);
         }}
-        onCancel={() => setLeaving(false)}
+        onCancel={() => setLeaving(null)}
       />
       <ConfirmDialog
         open={asking !== null}
