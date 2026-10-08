@@ -279,7 +279,7 @@ export class SzamlazzFeedsRepository {
         },
       });
       // the same invoice recorded from a purchase and approved: the feed wins
-      await supersedePurchaseRows(transaction, { externalId, ...row });
+      if (row.documentNumber === "never") await supersedePurchaseRows(transaction, { externalId, ...row });
       return "PROJECTED";
     });
   }

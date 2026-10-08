@@ -405,7 +405,7 @@ export class InvoiceCollectionRepository {
       });
       const document = await transaction.incomingSupplierDocument.create({
         data: {
-          purchaseInvoiceId,
+          purchaseInvoiceId: purchaseInvoiceId && null,
           gmailMessageId: `collect:${input.source}:${input.externalId}`,
           fileName: input.fileName,
           sender: input.sender,
