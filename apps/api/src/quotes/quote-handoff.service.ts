@@ -354,8 +354,12 @@ async function firstMilestoneProforma(
     });
     return { invoiceId: made.invoiceId, skipped: null };
   } catch (error) {
-    // the checks before any write: a sentence, and the project stands
-    if (error instanceof ConflictException)
+    // a refusal of the proforma (its checks, or the billing normalizer's) is
+    // a sentence, and the project stands (barracuda's #1634 review, 4a)
+    if (
+      error instanceof ConflictException ||
+      error instanceof BadRequestException
+    )
       return {
         invoiceId: null,
         skipped: `A díjbekérő nem készült el: ${error.message}`,

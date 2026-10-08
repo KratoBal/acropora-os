@@ -19,9 +19,6 @@ import { allocateMilestone } from "./quote-billing.js";
 
 type Tx = Prisma.TransactionClient;
 
-/** Thrown when another request claimed the milestone first: roll back. */
-class MilestoneTaken extends Error {}
-
 /**
  * THE ONE PLACE A QUOTE'S PROFORMA IS MADE (#1582 P7; barracuda's P7 point:
  * "a díjbekérő egy helyen keletkezzen"). The handoff calls it in its own
@@ -35,8 +32,8 @@ class MilestoneTaken extends Error {}
  *
  * Once per milestone. A milestone that already has its proforma answers it.
  * Two at once both write a draft, but only one can claim the milestone (a
- * conditional update on `proformaInvoiceId IS NULL`); the other rolls back,
- * its draft with it, and answers the winner's.
+ * conditional update on `proformaInvoiceId IS NULL`); the other deletes its
+ * own draft in its transaction and answers the winner's.
  */
 export async function createMilestoneProforma(
   tx: Tx,
@@ -116,6 +113,10 @@ export async function createMilestoneProforma(
       })),
     milestone.percent,
   );
+  if (split.negativeRates.length)
+    throw new ConflictException(
+      `A(z) ${split.negativeRates.join(", ")}% ÁFA-kulcson az elfogadott tételek összege negatív (kedvezmény más tétel nélkül), így a díjbekérő nem bontható kulcsonként. Készítsd el a Számlázásban kézzel.`,
+    );
   if (!split.lines.length)
     throw new ConflictException(
       "Az elfogadott tételek összege nulla, nincs miből díjbekérőt készíteni.",
@@ -163,7 +164,23 @@ export async function createMilestoneProforma(
     where: { id: args.milestoneId, proformaInvoiceId: null },
     data: { proformaInvoiceId: invoiceId },
   });
-  if (claimed.count !== 1) throw new MilestoneTaken();
+  if (claimed.count !== 1) {
+    // ANOTHER REQUEST CLAIMED IT FIRST: this draft goes, in this very
+    // transaction, and the winner's is the answer. Not a thrown rollback:
+    // inside the handoff that would take the project with it (barracuda's
+    // #1634 review, 4a).
+    await tx.invoiceLine.deleteMany({ where: { invoiceId } });
+    await tx.invoice.delete({ where: { id: invoiceId } });
+    const winner = await tx.quotePaymentMilestone.findUniqueOrThrow({
+      where: { id: args.milestoneId },
+      select: { proformaInvoiceId: true },
+    });
+    if (!winner.proformaInvoiceId)
+      throw new ConflictException(
+        "A mérföldkő díjbekérője közben megváltozott; töltsd újra az ajánlatot.",
+      );
+    return { invoiceId: winner.proformaInvoiceId, created: false };
+  }
   await tx.quoteEvent.create({
     data: {
       quoteId: args.quoteId,
@@ -194,32 +211,15 @@ export async function createMilestoneProforma(
 export class QuoteProformaService {
   private readonly database = prisma;
 
-  async prepare(
+  prepare(
     quoteId: string,
     milestoneId: string,
     user: AuthenticatedUser,
   ): Promise<QuoteProformaResultDto> {
-    try {
-      return await retryOnSerializationConflict(() =>
-        this.database.$transaction((tx) =>
-          createMilestoneProforma(tx, {
-            quoteId,
-            milestoneId,
-            userId: user.id,
-          }),
-        ),
-      );
-    } catch (error) {
-      if (!(error instanceof MilestoneTaken)) throw error;
-      // the other request's draft is the milestone's: answer it
-      const milestone = await this.database.quotePaymentMilestone.findUnique({
-        where: { id: milestoneId },
-        select: { proformaInvoiceId: true },
-      });
-      if (!milestone?.proformaInvoiceId) throw error;
-      return { invoiceId: milestone.proformaInvoiceId, created: false };
-    }
+    return retryOnSerializationConflict(() =>
+      this.database.$transaction((tx) =>
+        createMilestoneProforma(tx, { quoteId, milestoneId, userId: user.id }),
+      ),
+    );
   }
 }
-
-export { MilestoneTaken };

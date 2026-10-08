@@ -753,6 +753,27 @@ describe(
       );
     });
 
+    it("a proforma the quote cannot have does not stop the project", async () => {
+      // no partner: the proforma refuses, the project still starts
+      const q = await acceptedQuote("pf-refused", MIXED, {
+        milestones: SCHEDULE,
+      });
+      const plan = await preview(q.quoteId);
+      const res = await execute(q.quoteId, plan.body!.planHash, {
+        createProforma: true,
+      });
+      assert.deepEqual(
+        [
+          res.status,
+          res.body!.proforma?.invoiceId,
+          /partner/.test(res.body!.proforma?.skipped ?? ""),
+          await prisma.project.count({ where: { sourceQuoteId: q.quoteId } }),
+        ],
+        [200, null, true, 1],
+        "HANDOFF-PROFORMA-REFUSED",
+      );
+    });
+
     it("without billing.create the project starts and the proforma is skipped with a reason", async () => {
       const c = await customer("skip");
       const q = await acceptedQuote("pf-skip", MIXED, {

@@ -14,6 +14,11 @@ import { Prisma } from "@acropora/database";
  * So the lines always add up to the rounded total, and no line is off by
  * more than the remainder. The VAT itself is the billing's own line
  * computation.
+ *
+ * A RATE WHOSE NET IS NEGATIVE (a discount line on a rate with nothing else,
+ * barracuda's #1634 review) is named in `negativeRates`, and the caller
+ * refuses: rounded toward zero and dropped, it would leave the lines above
+ * the total (1000 Ft at 27%, −200 Ft at 5%, 40%: total 320 Ft, lines 400 Ft).
  */
 
 export interface ProformaSourceLine {
@@ -34,7 +39,7 @@ const ZERO = new Prisma.Decimal(0);
 export function allocateMilestone(
   lines: readonly ProformaSourceLine[],
   percent: Prisma.Decimal,
-): { lines: ProformaRateLine[]; total: string } {
+): { lines: ProformaRateLine[]; total: string; negativeRates: string[] } {
   const ratio = percent.dividedBy(100);
   const bases = new Map<
     string,
@@ -77,5 +82,8 @@ export function allocateMilestone(
         ),
       ),
     total: total.toString(),
+    negativeRates: [...bases.values()]
+      .filter((b) => b.net.lessThan(0))
+      .map((b) => b.rate.toString()),
   };
 }

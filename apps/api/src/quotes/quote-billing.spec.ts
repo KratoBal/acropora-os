@@ -66,4 +66,14 @@ describe("a milestone's proforma by VAT rate (#1582 P7)", () => {
       "BILL-EMPTY-RATE",
     );
   });
+
+  it("a rate whose net is negative is named, so the caller can refuse", () => {
+    // barracuda's example: lines 400 Ft against a 320 Ft total if dropped
+    const split = allocateMilestone([line(1000, 27), line(-200, 5)], D(40));
+    assert.deepEqual(
+      [split.negativeRates, split.total],
+      [["5"], "320"],
+      "BILL-NEGATIVE-RATE",
+    );
+  });
 });
