@@ -149,6 +149,29 @@ export class AquariumsController {
     });
   }
 
+  /**
+   * THE MEASUREMENT REPORT PDF OF ONE OCCASION (card 77767969): the same
+   * right and visibility as reading the occasions (`measurements.list`).
+   */
+  @Get(":id/measurements/:occasionId/pdf")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
+  async measurementReportPdf(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const { filename, buffer } = await this.measurements.reportPdf(
+      id,
+      occasionId,
+      user,
+    );
+    return new StreamableFile(buffer, {
+      type: "application/pdf",
+      disposition: `attachment; filename="${filename}"`,
+      length: buffer.length,
+    });
+  }
+
   @Post(":id/measurements")
   @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
   createMeasurement(
