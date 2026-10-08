@@ -112,7 +112,7 @@ describe("a később érkező példány kötése (PR 2)", () => {
       ...over,
     });
 
-  it("az azonos szám és adószám-törzs köt; más szállító, díjbekérő és szám nélküli nem", async () => {
+  it("az azonos szám és adószám-törzs köt; más szállító, díjbekérő, ismeretlen fajta és szám nélküli nem", async () => {
     assert.deepEqual(
       [
         await arrival({}),
@@ -123,6 +123,7 @@ describe("a később érkező példány kötése (PR 2)", () => {
           },
         }),
         await arrival({ kind: "PROFORMA" }),
+        await arrival({ kind: null }),
         await arrival({ textReading: { invoiceNumber: null } }),
         await arrival({
           textReading: null,
@@ -132,7 +133,7 @@ describe("a később érkező példány kötése (PR 2)", () => {
           },
         }),
       ],
-      ["pi-1", null, null, null, "pi-1"],
+      ["pi-1", null, null, null, null, "pi-1"],
       "ARRIVAL-KEY",
     );
   });

@@ -894,7 +894,10 @@ export class MissingInvoicesRepository {
           ? await postedPurchaseForArrival(transaction, {
               importResult: input.importResult,
               textReading: input.textReading,
-              kind: input.importResult?.documentKind ?? null,
+              kind:
+                input.importResult?.documentKind === "PROFORMA"
+                  ? "PROFORMA"
+                  : "INVOICE",
             })
           : null;
       const document = await transaction.incomingSupplierDocument.create({
