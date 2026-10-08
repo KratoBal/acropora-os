@@ -57,7 +57,7 @@ describe("a metaadat összefésülése", () => {
       { seo_title: "cím" },
     );
 
-    assert.deepEqual(eredmeny.metadata, { seo_title: "cím" });
+    assert.deepEqual(eredmeny.metadata, { seo_title: "cím", unique_piece: "" });
     assert.deepEqual(eredmeny.removedKeys, ["unique_piece"]);
   });
 
@@ -86,7 +86,7 @@ describe("a metaadat összefésülése", () => {
       {},
     );
 
-    assert.deepEqual(eredmeny.metadata, { kezzel_irt: "marad" });
+    assert.deepEqual(eredmeny.metadata, { kezzel_irt: "marad", unas_unit: "" });
     assert.deepEqual(eredmeny.removedKeys, ["unas_unit"]);
   });
 
@@ -121,5 +121,46 @@ describe("melyik kulcs a mienk", () => {
     assert.equal(isOwnedMetadataKey("shopify_id"), false);
     // A reszszo-egyezes NEM eleg: az elotag a kulcs ELEJEN all.
     assert.equal(isOwnedMetadataKey("egyeb_seo_title"), false);
+  });
+});
+
+/**
+ * THE TARGET MERGES, IT DOES NOT REPLACE (measured 2026-10-08).
+ *
+ * `medusaMergeMetadata` is a copy of `mergeMetadata` from @medusajs/utils
+ * 2.20.1 (`dist/common/merge-metadata.js`), which the product repository's
+ * `deepUpdate` applies to every product update. A key that is missing from the
+ * body stays; only an empty string removes it. The assertion is on the END
+ * STATE in the shop, not on our body: that is what was wrong before.
+ */
+function medusaMergeMetadata(
+  metadata: Record<string, unknown>,
+  metadataToMerge: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged = { ...metadata };
+  for (const [key, value] of Object.entries(metadataToMerge)) {
+    if (value === "") {
+      delete merged[key];
+      continue;
+    }
+    merged[key] = value;
+  }
+  return merged;
+}
+
+describe("the shop's end state after the merge", () => {
+  it("our dropped key is gone, the foreign key stays, ours is written", () => {
+    const existing = {
+      unique_piece: "true",
+      acropora_images: "[]",
+      seo_title: "régi",
+      kezzel_irt: "marad",
+    };
+    const { metadata } = mergeProductMetadata(existing, { seo_title: "új" });
+
+    assert.deepEqual(medusaMergeMetadata(existing, metadata ?? {}), {
+      seo_title: "új",
+      kezzel_irt: "marad",
+    });
   });
 });

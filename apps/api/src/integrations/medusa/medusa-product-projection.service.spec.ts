@@ -833,7 +833,8 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.ok(torzs, "az update nem futott le");
     assert.equal(torzs.description, "<p>Forrás</p>");
     assert.equal(torzs.metadata?.unas_short_description, "<p>Forrás</p>");
-    assert.ok(!("seo_title" in (torzs.metadata ?? {})));
+    // the shop merges metadata: a dropped key goes out as "" (2026-10-08)
+    assert.equal(torzs.metadata?.seo_title, "");
     assert.equal(torzs.metadata?.idegen_kulcs, "marad");
   });
 
@@ -1916,7 +1917,8 @@ describe("MedusaProductProjectionService -- a kepek alt szovege", () => {
     const torzs = f.updatedWith[0];
     assert.ok(torzs, "az update nem futott le");
     assert.ok(torzs.metadata, "a metaadat nem ment ki, a regi kulcs maradna");
-    assert.ok(!("acropora_images" in torzs.metadata));
+    // the shop merges metadata: only "" removes the key (2026-10-08)
+    assert.equal(torzs.metadata.acropora_images, "");
   });
 
   it("lista nelkul (null) a bolt oldalan allo ertek marad", async () => {
