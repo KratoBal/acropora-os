@@ -135,10 +135,15 @@ export function BillingIncomingDocumentPage({
   const money = (value: string) => formatMoney(value, detail.currency);
   const bank = detail.bankMatch;
   // a jóváhagyott postafiókos számla (kártya e4c3b0fb): nem a Számlázz.hu küldte
-  const mailbox = detail.origin === "MAILBOX";
-  const formatText = mailbox
-    ? "Postafiókból"
-    : INVOICE_FORMAT_LABELS[detail.invoiceFormat];
+  const mailbox = detail.origin === "MAILBOX" || detail.origin === "PURCHASE";
+  // a beszerzésből jött sor (kártya 83f31a95) szövegei a postafiókoséi mellett
+  const purchase = detail.origin === "PURCHASE";
+  const formatText =
+    detail.origin === "PURCHASE"
+      ? "Beszerzésből"
+      : mailbox
+        ? "Postafiókból"
+        : INVOICE_FORMAT_LABELS[detail.invoiceFormat];
 
   return (
     <PilotThemeRoot theme="light" className="space-y-6">
@@ -283,7 +288,9 @@ export function BillingIncomingDocumentPage({
             ) : (
               <p className="text-sm text-pilot-grey-500">
                 {mailbox
-                  ? "A postafiókos számla tételei nincsenek rögzítve, a PDF-ben láthatók."
+                  ? purchase
+                    ? "A tételek a beszerzési számlán állnak, itt a PDF-ben láthatók."
+                    : "A postafiókos számla tételei nincsenek rögzítve, a PDF-ben láthatók."
                   : "A Számlázz.hu nem küldött tételt."}
               </p>
             )}
@@ -317,7 +324,9 @@ export function BillingIncomingDocumentPage({
             title="Összesítés"
             subtitle={
               mailbox
-                ? "A postafiókos számláról, ellenőrizve jóváhagyva."
+                ? purchase
+                  ? "A rögzített beszerzési számláról, ellenőrizve jóváhagyva."
+                  : "A postafiókos számláról, ellenőrizve jóváhagyva."
                 : "Ahogy a Számlázz.hu továbbította."
             }
           >
@@ -377,7 +386,9 @@ export function BillingIncomingDocumentPage({
             ) : (
               <p className="text-sm text-pilot-grey-600">
                 {mailbox
-                  ? "Postafiókos számla: a fizetés a banki párosításból ismert (a terhelések lent)."
+                  ? purchase
+                    ? "Beszerzésből jött számla: a fizetés a banki párosításból ismert (a terhelések lent), ha a képe párosodott."
+                    : "Postafiókos számla: a fizetés a banki párosításból ismert (a terhelések lent)."
                   : detail.paymentSource === "BANK_PAIRING"
                     ? "A Számlázz.hu ehhez a számlához nem küldött kifizetési adatot; nálunk fizetett a banki párosítás alapján (a terhelések lent)."
                     : "Nincs adat: a Számlázz.hu ehhez a számlához nem küldött kifizetési adatot. Ez nem azt jelenti, hogy nincs kifizetve."}
@@ -417,10 +428,14 @@ export function BillingIncomingDocumentPage({
           </PilotSection>
 
           <PilotSection
-            title={mailbox ? "Postafiók" : "Számlázz.hu"}
+            title={
+              purchase ? "Beszerzés" : mailbox ? "Postafiók" : "Számlázz.hu"
+            }
             subtitle={
               mailbox
-                ? "A számla a postafiókból jött, és ellenőrizve lett."
+                ? purchase
+                  ? "A számla a rögzített beszerzésből jött, és ellenőrizve lett."
+                  : "A számla a postafiókból jött, és ellenőrizve lett."
                 : "A továbbítás adatai."
             }
           >

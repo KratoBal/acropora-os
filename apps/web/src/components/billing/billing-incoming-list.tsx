@@ -67,11 +67,13 @@ const rateText = (value: string | null) =>
  * a csak postafiókból ismert számlánál a forrás, mert formátumot a feed ad.
  */
 export const flagsText = (item: IncomingDocumentListItem) =>
-  // a postafiókos számla saját kódja (MB) is normál számla (e4c3b0fb)
-  `${["SZ", "MB"].includes(item.kindCode.toUpperCase()) ? "Normál" : item.kindLabel} · ${
-    item.origin === "MAILBOX" || item.invoiceFormat === null
-      ? "Postafiókból"
-      : INVOICE_FORMAT_LABELS[item.invoiceFormat]
+  // a postafiókos (MB) és a beszerzésből jött (BE) saját kód is normál számla
+  `${["SZ", "MB", "BE"].includes(item.kindCode.toUpperCase()) ? "Normál" : item.kindLabel} · ${
+    item.origin === "PURCHASE"
+      ? "Beszerzésből"
+      : item.origin === "MAILBOX" || item.invoiceFormat === null
+        ? "Postafiókból"
+        : INVOICE_FORMAT_LABELS[item.invoiceFormat]
   }`;
 
 /** A banki párosítás színe (a kifizetésé a közös `PAYMENT_STATE_TONE`). */
@@ -566,7 +568,7 @@ export function BillingIncomingList({ token }: { token: string }) {
               }
               rowLabel={(item) =>
                 item.review === "TO_REVIEW"
-                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, postafiókból, ellenőrizendő, ellenőrzés megnyitása`
+                  ? `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName || "név nélkül"}, ${item.origin === "PURCHASE" ? "beszerzésből" : "postafiókból"}, ellenőrizendő, ellenőrzés megnyitása`
                   : `Bejövő ${item.kindLabel.toLowerCase()} ${item.documentNumber}, ${item.supplierName} megnyitása`
               }
               minWidth={1040}

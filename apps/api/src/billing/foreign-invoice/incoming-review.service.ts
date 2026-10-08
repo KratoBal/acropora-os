@@ -29,12 +29,22 @@ import {
   mailboxOnlyPairings,
   mailboxOnlyPaidItems,
   mailboxPdfCandidates,
+  toIncomingListItem,
 } from "../incoming-billing-documents.js";
 import {
   readForeignInvoice,
   type ForeignReading,
 } from "./foreign-invoice-reading.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
+import {
+  loadPurchaseSubjects,
+  PURCHASE_ITEM_PREFIX,
+  PURCHASE_KIND_CODE,
+  PURCHASE_SOURCE,
+  purchaseListItem,
+  purchaseReading,
+  type PurchaseSubject,
+} from "../purchase-incoming.js";
 
 /**
  * A POSTAFIÓKOS (KÜLFÖLDI) SZÁMLA ELLENŐRZÉSE (kártya e4c3b0fb; terv:
@@ -59,6 +69,8 @@ type Database = Pick<
   | "incomingBillingDocument"
   | "incomingSupplierDocument"
   | "incomingDocumentReading"
+  | "purchaseInvoice"
+  | "navIncomingInvoice"
   | "$transaction"
 >;
 
@@ -210,6 +222,8 @@ export class IncomingReviewService {
    * (egy nyitva felejtett lap „Ellenőrzött”-et mutat, nem 404-et).
    */
   async review(itemId: string): Promise<IncomingDocumentReview> {
+    if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
+      return this.purchaseReview(itemId.slice(PURCHASE_ITEM_PREFIX.length));
     const documentId = this.documentIdOf(itemId);
     const stored = await this.database.incomingDocumentReading.findUnique({
       where: { documentId },
@@ -229,6 +243,16 @@ export class IncomingReviewService {
     input: IncomingReviewInput,
     userId: string,
   ): Promise<IncomingDocumentReview> {
+    if (itemId.startsWith(PURCHASE_ITEM_PREFIX)) {
+      const subject = await this.purchaseSubject(itemId);
+      await this.storeManualFor(
+        scanOf(subject),
+        async () => purchaseBase(subject),
+        input,
+        userId,
+      );
+      return this.purchaseReview(subject.purchaseInvoiceId);
+    }
     const documentId = this.documentIdOf(itemId);
     const { pairing } = await this.pairingOf(documentId);
     const stored = await this.storeManual(pairing, input, userId);
@@ -244,6 +268,8 @@ export class IncomingReviewService {
     input: IncomingReviewInput | null,
     userId: string,
   ): Promise<IncomingDocumentReview> {
+    if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
+      return this.purchaseApprove(itemId, input, userId);
     const documentId = this.documentIdOf(itemId);
     const existing = await this.database.incomingDocumentReading.findUnique({
       where: { documentId },
@@ -504,12 +530,32 @@ export class IncomingReviewService {
    * A kézi (vagy jóváhagyott) értékek tárolása. Ha még nincs tárolt sor, a
    * kinyert olvasat a kiinduló pont, hogy a forrás mezőnként megmaradjon.
    */
-  private async storeManual(
+  private storeManual(
     pairing: DocumentPairing,
     input: IncomingReviewInput,
     userId: string,
   ): Promise<StoredReading> {
-    const documentId = pairing.document.id;
+    return this.storeManualFor(
+      pairing.document.id,
+      () => this.computeReading(pairing),
+      input,
+      userId,
+    );
+  }
+
+  /**
+   * A kézi mentés egy dokumentum olvasatára, a forrástól függetlenül: a
+   * postafiókos sornál a PDF-ből kinyert, a beszerzésből jött sornál a
+   * rögzítésből kitöltött olvasat a kiinduló pont (`base`).
+   */
+  private async storeManualFor(
+    documentId: string,
+    computeBase: () => Promise<
+      Pick<ForeignReading, "values" | "sources" | "warnings" | "hasText">
+    >,
+    input: IncomingReviewInput,
+    userId: string,
+  ): Promise<StoredReading> {
     const after = normalizedInput(input);
     const stored = await this.database.incomingDocumentReading.findUnique({
       where: { documentId },
@@ -523,7 +569,7 @@ export class IncomingReviewService {
           warnings: (stored.warnings ?? []) as string[],
           hasText: stored.hasText,
         }
-      : await this.computeReading(pairing);
+      : await computeBase();
     const sources = mergedSources(base.values, after, base.sources);
     const changed = INCOMING_READING_FIELDS.filter(
       (field) => base.values[field] !== after[field],
@@ -552,6 +598,185 @@ export class IncomingReviewService {
         });
       return row;
     });
+  }
+
+  /**
+   * A BESZERZÉSBŐL JÖTT SOR (kártya 83f31a95): csak a listán álló számla
+   * (`loadPurchaseSubjects`, ugyanaz a feltétel), különben 404.
+   */
+  private async purchaseSubject(itemId: string): Promise<PurchaseSubject> {
+    const [subject] = await loadPurchaseSubjects(
+      this.database,
+      itemId.slice(PURCHASE_ITEM_PREFIX.length),
+    );
+    if (!subject)
+      throw new NotFoundException("Nincs ilyen ellenőrizendő számla.");
+    return subject;
+  }
+
+  /**
+   * A beszerzésből jött sor ellenőrző lapja. A már jóváhagyott is megnyílik
+   * (a jóváhagyott sor és az olvasata alapján), mint a postafiókosnál.
+   */
+  private async purchaseReview(
+    purchaseInvoiceId: string,
+  ): Promise<IncomingDocumentReview> {
+    const approved = await this.database.incomingBillingDocument.findUnique({
+      where: {
+        source_externalId: {
+          source: PURCHASE_SOURCE,
+          externalId: purchaseInvoiceId,
+        },
+      },
+    });
+    if (approved) {
+      const stored = await this.database.incomingDocumentReading.findUnique({
+        where: { incomingBillingDocumentId: approved.id },
+      });
+      return this.purchaseView(
+        { ...toIncomingListItem(approved, new Map()), review: "VERIFIED" },
+        stored,
+        null,
+      );
+    }
+    const subject = await this.purchaseSubject(
+      `${PURCHASE_ITEM_PREFIX}${purchaseInvoiceId}`,
+    );
+    const stored = subject.scanIds.length
+      ? await this.database.incomingDocumentReading.findUnique({
+          where: { documentId: subject.scanIds[0]! },
+        })
+      : null;
+    const base = purchaseBase(subject);
+    const values = stored ? storedValues(stored) : base.values;
+    return this.purchaseView(
+      purchaseListItem(subject, await this.missing.documentPairings(), values),
+      stored,
+      base,
+    );
+  }
+
+  /**
+   * JÓVÁHAGYÁS a beszerzésből jött sorra: ugyanaz a lépéssor, mint a
+   * postafiókosnál, de a sor `PURCHASE` forrású, és a beszerzési számlára
+   * mutat. Kép nélkül nem hagyható jóvá: a könyvelőnek a PDF kell.
+   */
+  private async purchaseApprove(
+    itemId: string,
+    input: IncomingReviewInput | null,
+    userId: string,
+  ): Promise<IncomingDocumentReview> {
+    const subject = await this.purchaseSubject(itemId);
+    const documentId = scanOf(subject);
+    const existing = await this.database.incomingDocumentReading.findUnique({
+      where: { documentId },
+    });
+    if (existing?.state === "VERIFIED")
+      throw new ConflictException("Ez a számla már jóvá van hagyva.");
+    const base = purchaseBase(subject);
+    const values = input
+      ? normalizedInput(input)
+      : existing
+        ? storedValues(existing)
+        : base.values;
+    const problems = approvalProblems(values);
+    if (problems.length) throw new BadRequestException(problems.join(" "));
+    await this.storeManualFor(documentId, async () => base, values, userId);
+    await this.database.$transaction(async (tx) => {
+      const taken = await tx.incomingBillingDocument.findUnique({
+        where: {
+          source_externalId: {
+            source: PURCHASE_SOURCE,
+            externalId: subject.purchaseInvoiceId,
+          },
+        },
+        select: { id: true },
+      });
+      if (taken)
+        throw new ConflictException("Ez a számla már jóvá van hagyva.");
+      const now = new Date();
+      const row = await tx.incomingBillingDocument.create({
+        data: {
+          source: PURCHASE_SOURCE,
+          externalId: subject.purchaseInvoiceId,
+          // nincs feed-üzenet: a forrás maga a rögzített beszerzési számla
+          feedMessageId: subject.purchaseInvoiceId,
+          feedReceivedAt: subject.scanReceivedAt ?? now,
+          kindCode: PURCHASE_KIND_CODE,
+          documentNumber: values.documentNumber!,
+          electronic: false,
+          issueDate: asDate(values.issueDate)!,
+          fulfillmentDate: asDate(values.fulfillmentDate),
+          dueDate: asDate(values.dueDate),
+          currency: values.currency!,
+          exchangeRate: subject.exchangeRate,
+          supplierName: values.supplierName!,
+          supplierTaxNumber: values.supplierTaxNumber,
+          supplierEuTaxNumber: values.supplierEuTaxNumber,
+          buyerName: ACROPORA_COMPANY.name,
+          netAmount: asDecimal(values.netAmount)!,
+          vatAmount: asDecimal(values.vatAmount)!,
+          grossAmount: asDecimal(values.grossAmount)!,
+          lines: [],
+          vatSummary: [],
+          payments: [],
+          paymentsKnown: false,
+          paidAmount: new Prisma.Decimal(0),
+          sourceDocumentId: documentId,
+          hasPdf: true,
+        },
+      });
+      const reading = await tx.incomingDocumentReading.update({
+        where: { documentId },
+        data: {
+          state: "VERIFIED",
+          reviewedAt: now,
+          reviewedByUserId: userId,
+          incomingBillingDocumentId: row.id,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: "billing.incoming-reading.approved",
+          entityType: "IncomingBillingDocument",
+          entityId: row.id,
+          metadata: {
+            documentId,
+            readingId: reading.id,
+            purchaseInvoiceId: subject.purchaseInvoiceId,
+            manualFields: Object.entries(
+              (reading.sources ?? {}) as Record<string, string>,
+            )
+              .filter(([, source]) => source === "MANUAL")
+              .map(([field]) => field),
+          },
+        },
+      });
+    });
+    return this.purchaseReview(subject.purchaseInvoiceId);
+  }
+
+  private purchaseView(
+    item: IncomingDocumentReview["item"],
+    stored: StoredReading | null,
+    base: ReturnType<typeof purchaseBase> | null,
+  ): IncomingDocumentReview {
+    const values = stored
+      ? storedValues(stored)
+      : (base?.values ?? normalizedInput({} as IncomingReviewInput));
+    const state = stored?.state ?? "TO_REVIEW";
+    return {
+      item: { ...item, review: state },
+      state,
+      values,
+      sources: stored
+        ? ((stored.sources ?? {}) as ForeignReading["sources"])
+        : (base?.sources ?? {}),
+      warnings: stored ? ((stored.warnings ?? []) as string[]) : [],
+      hasText: stored?.hasText ?? false,
+      readAt: stored ? stored.readAt.toISOString() : null,
+    };
   }
 
   private documentIdOf(itemId: string): string {
@@ -621,4 +846,23 @@ export class IncomingReviewService {
 export function senderDomain(sender: string | null): string | null {
   const match = sender?.match(/@([^\s>]+)/);
   return match ? match[1]!.toLowerCase() : null;
+}
+
+/** A beszerzésből kitöltött kiinduló olvasat, PDF-szöveg nélkül. */
+function purchaseBase(subject: PurchaseSubject) {
+  return {
+    ...purchaseReading(subject),
+    warnings: [] as string[],
+    hasText: false,
+  };
+}
+
+/** Az olvasat a beszerzés első képén ül; kép nélkül nincs mit jóváhagyni. */
+function scanOf(subject: PurchaseSubject): string {
+  const scan = subject.scanIds[0];
+  if (!scan)
+    throw new ConflictException(
+      "Előbb csatold a számla képét a beszerzési számlához: ellenőrizni és jóváhagyni csak képpel lehet.",
+    );
+  return scan;
 }

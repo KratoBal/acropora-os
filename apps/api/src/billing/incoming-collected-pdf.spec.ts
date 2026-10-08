@@ -136,6 +136,9 @@ function controller(input: {
       },
       findMany: async () => input.collected,
     },
+    // the list also asks for the recorded purchase invoices (card 83f31a95)
+    purchaseInvoice: { findMany: async () => [] },
+    navIncomingInvoice: { findMany: async () => [] },
   };
   const subject = new IncomingBillingDocumentsController(
     {

@@ -26,7 +26,9 @@ export const MAILBOX_KIND_CODE = "MB";
 export const externalKindLabel = (kindCode: string): string =>
   kindCode.toUpperCase() === MAILBOX_KIND_CODE
     ? "Postafiókos számla"
-    : feedKindLabel(kindCode);
+    : kindCode.toUpperCase() === "BE"
+      ? "Beszerzésből"
+      : feedKindLabel(kindCode);
 import type {
   IncomingPayment,
   IncomingVatSummary,
@@ -174,8 +176,13 @@ export function toIncomingListItem(
   return {
     id: row.id,
     // a jóváhagyott postafiókos számla rendes sor, de az eredete látszik (kártya e4c3b0fb)
-    origin: row.source === "MAILBOX" ? "MAILBOX" : "SZAMLAZZ",
-    review: row.source === "MAILBOX" ? "VERIFIED" : null,
+    origin:
+      row.source === "MAILBOX" || row.source === "PURCHASE"
+        ? row.source
+        : "SZAMLAZZ",
+    // a jóváhagyott beszerzésből jött sor is ellenőrzött (kártya 83f31a95)
+    review:
+      row.source === "MAILBOX" || row.source === "PURCHASE" ? "VERIFIED" : null,
     documentNumber: row.documentNumber,
     kindCode: row.kindCode,
     kindLabel: externalKindLabel(row.kindCode),
