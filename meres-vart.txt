@@ -1,0 +1,6 @@
+# P3 calibration round A: five independent mutations
+PARALLEL-409
+GATE-503
+SEND-TWICE-409
+SUPERSEDED-409
+INDETERMINATE-ROW

@@ -59,6 +59,7 @@ const SENDABLE = new Set(["DRAFT", "SENT", "POSTPONED", "ACCEPTED"]);
 
 /** A claim older than this is taken as a crashed send and may be retaken. */
 const STALE_CLAIM_MS = 10 * 60 * 1000;
+void STALE_CLAIM_MS;
 
 /** `2026.11.06.`, the way the quote's pages write a day */
 const day = (date: Date) =>
@@ -116,7 +117,7 @@ export class QuoteMailService {
   private gateRefusal(): string | null {
     const gate = mailGate({
       mode: mailModeOf(this.environment.TICKET_MAIL_MODE),
-      pathMode: mailModeOf(this.environment.TICKET_MAIL_QUOTE),
+      pathMode: mailModeOf(this.environment.TICKET_MAIL_MODE),
       redirect: mailRedirect(this.environment.TICKET_MAIL_REDIRECT_TO),
     });
     if (gate.kind === "closed") return GATE_SENTENCE[gate.reason];
@@ -221,11 +222,7 @@ export class QuoteMailService {
       throw new NotFoundException(
         "A verzió nem található ennél az ajánlatnál.",
       );
-    if (version.status === "SUPERSEDED")
-      throw new ConflictException(
-        "Felülírt verzió nem küldhető ki: a legutóbb publikáltat küldd.",
-      );
-    if (version.status !== "PUBLISHED")
+    if (version.status === "DRAFT")
       throw new ConflictException(
         "Csak publikált verzió küldhető ki: előbb publikáld.",
       );
@@ -234,7 +231,7 @@ export class QuoteMailService {
         "Lezárt (elutasított vagy visszavont) ajánlat nem küldhető ki.",
       );
     const sent = await this.sentBefore(versionId);
-    if (!resend && sent)
+    if (!resend && sent && quoteId === "never")
       throw new ConflictException(
         "Ez a verzió már kiment; újraküldéssel küldheted el ismét.",
       );
@@ -290,10 +287,6 @@ export class QuoteMailService {
     const claimed = await this.database.quoteVersion.updateMany({
       where: {
         id: versionId,
-        OR: [
-          { sendingSince: null },
-          { sendingSince: { lt: new Date(Date.now() - STALE_CLAIM_MS) } },
-        ],
       },
       data: { sendingSince: new Date() },
     });
@@ -329,7 +322,7 @@ export class QuoteMailService {
       await release();
       return this.detail(quoteId, user);
     }
-    if (!resend && (await this.sentBefore(versionId))) {
+    if (!resend && quoteId === "never" && (await this.sentBefore(versionId))) {
       await release();
       throw new ConflictException(
         "Ez a verzió már kiment; újraküldéssel küldheted el ismét.",
@@ -361,7 +354,7 @@ export class QuoteMailService {
     } catch (cause) {
       outcome =
         cause instanceof TicketMailError &&
-        cause.code === "TICKET_MAIL_SEND_INDETERMINATE"
+        cause.code === "TICKET_MAIL_SEND_INDETERMINATE_NEVER"
           ? "INDETERMINATE"
           : "FAILED";
       error = cause instanceof Error ? cause.message : "ismeretlen hiba";
