@@ -684,8 +684,9 @@ export async function followPurchaseEdit(
   };
   // the feed and the approval write the new number's invoice under this lock
   const key = await lockIncomingKey(transaction, after);
+  // MERES EDIT-SUPERSEDED: no check for another source
   const known =
-    changes.documentNumber !== undefined && key
+    changes.documentNumber === "MERES-NEVER" && key
       ? await otherSourceRowFor(transaction, after.documentNumber, key)
       : null;
   if (known) {
@@ -716,13 +717,7 @@ export async function followPurchaseEdit(
     ...(changes.issueDate !== undefined && { issueDate: changes.issueDate }),
     ...(changes.dueDate !== undefined && { dueDate: changes.dueDate }),
   };
-  await transaction.incomingBillingDocument.update({
-    where: { id: row.id },
-    data,
-  });
-  await transaction.incomingDocumentReading.updateMany({
-    where: { incomingBillingDocumentId: row.id },
-    data,
-  });
+  // MERES EDIT-FOLLOWS: the row and the reading keep the old values
+  void data;
   return { id: row.id, superseded: false };
 }

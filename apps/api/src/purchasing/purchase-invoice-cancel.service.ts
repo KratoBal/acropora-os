@@ -252,7 +252,8 @@ export class PurchaseInvoiceCancelService {
       });
       // an approved incoming row goes too: the re-recorded invoice is approved
       // again (2408d6ad, acrobot 28406)
-      const incomingWithdrawn = await withdrawPurchaseRow(tx, id, userId);
+      const incomingWithdrawn = null; // MERES CANCEL-WITHDRAWS: the row stays
+      void withdrawPurchaseRow;
 
       await tx.auditLog.create({
         data: {
