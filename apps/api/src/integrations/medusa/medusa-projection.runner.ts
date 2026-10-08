@@ -448,6 +448,31 @@ export type ProjectionDatabase = Pick<
   | "productBarcode"
 >;
 
+/** SEO P0 PR 7d: a handle a WEBSHOP-slugból (alapból ki). */
+export const handleFromWebshopSlug = (
+  env: Record<string, string | undefined>,
+): boolean => env.MEDUSA_HANDLE_FROM_WEBSHOP_SLUG === "true";
+
+/**
+ * A CSATORNA-SOROK A VETÍTÉS BEMENETÉBEN. A SEO-mezők és a régi cím mindig a
+ * UNAS-sorból jönnek. A `slug` (ebből lesz a handle) kapcsolóval a WEBSHOP-sorból
+ * (SEO P0 PR 7d); slug nélküli terméknél a mai UNAS-alapú marad (a slugot a
+ * `slug-backfill` adja). A kapcsoló átbillentése egy terméket sem tesz
+ * esedékessé: az átkapcsolás a `medusa:handle-switch` parancs.
+ */
+export function csatornaBemenet(
+  sorok: readonly (UnasChannelRow & { channel: string })[],
+  env: Record<string, string | undefined>,
+): UnasChannelProjection {
+  const unas = projectUnasChannelRow(
+    sorok.find((sor) => sor.channel === "UNAS"),
+  );
+  const webshop = sorok.find((sor) => sor.channel === "WEBSHOP")?.slug;
+  return handleFromWebshopSlug(env) && webshop
+    ? { ...unas, slug: webshop }
+    : unas;
+}
+
 export async function runProjectionCli(
   productIds: string[],
   out: { stdout(value: string): void; stderr(value: string): void } = {
@@ -821,8 +846,10 @@ export async function runProjectionCli(
          * valaha lesz ilyen -- es a hiba csak a boltban latszana.
          */
         channelListings: {
-          where: { channel: "UNAS" },
+          // a WEBSHOP-sor is jön (SEO P0 PR 7d): kapcsolóval a handle a WEBSHOP-slug
+          where: { channel: { in: ["UNAS", "WEBSHOP"] } },
           select: {
+            channel: true,
             slug: true,
             seoRobots: true,
             seoTitle: true,
@@ -830,7 +857,6 @@ export async function runProjectionCli(
             seoKeywords: true,
             productUrl: true,
           },
-          take: 1,
         },
         /**
          * A KEPEK SORRENDBEN, es a `sortOrder` NEM elhagyhato: a cel oldalon a
@@ -1352,7 +1378,7 @@ export async function runProjectionCli(
          */
         ...projectValtozatMezok(product.variants[0]),
         ...projectRendelesiKorlatok(product.unasSnapshot),
-        ...projectUnasChannelRow(product.channelListings[0]),
+        ...csatornaBemenet(product.channelListings, env),
         /**
          * A KEPEK BOLTI URL-JEI, vagy `null`.
          *

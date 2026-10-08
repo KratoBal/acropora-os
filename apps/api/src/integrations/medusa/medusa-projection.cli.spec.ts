@@ -7,6 +7,7 @@ import {
   projectRendelesiKorlatok,
   projectValtozatMezok,
   projectUnasChannelRow,
+  csatornaBemenet,
   describeCimValtozas,
   describeKepMasolas,
   describeForgottenLink,
@@ -775,6 +776,51 @@ describe("projectUnasChannelRow", () => {
       seoKeywords: null,
       unasProductUrl: null,
     });
+  });
+});
+
+describe("csatornaBemenet (SEO P0 PR 7d)", () => {
+  /**
+   * MI PIROSIT: kapcsoló nélkül is a WEBSHOP-slug lesz a handle; kapcsolóval a
+   * SEO-mezők is a WEBSHOP-sorból jönnek; a slug nélküli termék handle-je
+   * eltűnik; a sorok sorrendje számít.
+   */
+  const sor = (
+    channel: string,
+    slug: string | null,
+    seoTitle: string | null,
+  ) => ({
+    channel,
+    slug,
+    seoRobots: null,
+    seoTitle,
+    seoDescription: null,
+    seoKeywords: null,
+    productUrl: channel === "UNAS" ? "https://shop.test/Regi" : null,
+  });
+  const sorok = [sor("WEBSHOP", "uj-slug", null), sor("UNAS", "Regi", "Cim")];
+
+  it("kapcsoló nélkül a mai: a UNAS-sor slugja és SEO-ja", () => {
+    const b = csatornaBemenet(sorok, {});
+    assert.equal(b.slug, "Regi");
+    assert.equal(b.seoTitle, "Cim");
+    assert.equal(b.unasProductUrl, "https://shop.test/Regi");
+  });
+
+  it("kapcsolóval a slug a WEBSHOP-sorból, a többi a UNAS-ból, sorrendtől függetlenül", () => {
+    for (const s of [sorok, [...sorok].reverse()]) {
+      const b = csatornaBemenet(s, { MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true" });
+      assert.equal(b.slug, "uj-slug");
+      assert.equal(b.seoTitle, "Cim");
+      assert.equal(b.unasProductUrl, "https://shop.test/Regi");
+    }
+  });
+
+  it("kapcsolóval, WEBSHOP-slug nélkül a mai handle marad", () => {
+    const b = csatornaBemenet([sor("UNAS", "Regi", null)], {
+      MEDUSA_HANDLE_FROM_WEBSHOP_SLUG: "true",
+    });
+    assert.equal(b.slug, "Regi");
   });
 });
 
