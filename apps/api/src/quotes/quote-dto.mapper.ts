@@ -15,14 +15,18 @@ import {
   type QuoteBomLineDto,
   type QuoteRichText,
 } from "@acropora/types";
+import { isExpired } from "./quote-expiry.js";
 import type { QuoteListRow, QuoteRow } from "./quotes.repository.js";
 export function quoteListItemDto(
   row: QuoteListRow,
   netTotals: ReadonlyMap<string, string> = new Map(),
+  /** P8: computed by the list's own query (`expiredWhere`) */
+  expired = false,
 ): QuoteListItemDto {
   const version = row.versions[0];
   return {
     id: row.id,
+    isExpired: expired,
     quoteNumber: row.quoteNumber,
     title: row.title,
     status: row.status,
@@ -278,6 +282,7 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
     postponedUntil: row.postponedUntil?.toISOString().slice(0, 10) ?? null,
     acceptedVersionId: row.acceptedVersionId,
     handoff: row.handoff ? handoffSummary(row.handoff) : null,
+    isExpired: isExpired(row.status, row.versions),
     acceptances: row.acceptances.map((a) => ({
       id: a.id,
       versionId: a.quoteVersionId,

@@ -313,13 +313,27 @@ describe(
           },
         }),
       });
-      await stale.update(row.id, { paidAt: "2026-10-08" }, userId);
+      // a paid date alone, on an invoice unpaid under the lock: nothing to
+      // write, so a 400 and no empty audit row (acrobot's #1632 note)
+      const refused = await stale
+        .update(row.id, { paidAt: "2026-10-08" }, userId)
+        .then(
+          () => null,
+          (error: Error) => error.constructor.name,
+        );
       const after = await prisma.purchaseInvoice.findUniqueOrThrow({
         where: { id: row.id },
       });
       assert.deepEqual(
-        [after.isPaid, after.paidAt],
-        [false, null],
+        [
+          refused,
+          after.isPaid,
+          after.paidAt,
+          await prisma.auditLog.count({
+            where: { entityId: row.id, action: "purchase_invoice.updated" },
+          }),
+        ],
+        ["BadRequestException", false, null, 0],
         "PAIDAT-UNDER-LOCK",
       );
     });
