@@ -40,6 +40,11 @@ import {
   collectedPdfIds,
   loadCollectedPdfIndex,
 } from "./incoming-collected-pdf.js";
+import {
+  loadPurchaseSubjects,
+  PURCHASE_ITEM_PREFIX,
+  purchaseListItem,
+} from "./purchase-incoming.js";
 
 const PDF_MAGIC = Buffer.from("%PDF-");
 
@@ -74,12 +79,29 @@ export class IncomingBillingDocumentsController {
   async list(
     @Query() query: IncomingDocumentListQueryDto,
   ): Promise<IncomingDocumentListResponse> {
-    const [rows, pairings, collected, readings] = await Promise.all([
+    const [rows, pairings, collected, readings, purchases] = await Promise.all([
       this.database.incomingBillingDocument.findMany(),
       this.missing.documentPairings(),
       this.collectedIndex(),
       this.reviews.pendingReadings(),
+      loadPurchaseSubjects(this.database),
     ]);
+    /*
+      A BESZERZÉS KÉPE NEM LESZ KÜLÖN POSTAFIÓKOS SOR (kártya 83f31a95): a kép
+      UPLOAD forrású, és fizetve eddig „Postafiókos számla” sorként is
+      megjelent. Amit csak a listázott beszerzési számlák képei alkotnak, az a
+      beszerzés sora; ha más dokumentum is a jelöltben van, más forrás ismeri,
+      és akkor a beszerzés nem kap sort (`loadPurchaseSubjects`).
+    */
+    const purchaseScans = new Set(purchases.flatMap((p) => p.scanIds));
+    const mailboxPairings = new Map(
+      [...pairings].filter(
+        ([, pairing]) =>
+          ![pairing.document.id, ...(pairing.document.aliasIds ?? [])].every(
+            (id) => purchaseScans.has(id),
+          ),
+      ),
+    );
     return incomingListResponse(
       [
         ...rows.map((row) =>
@@ -90,7 +112,17 @@ export class IncomingBillingDocumentsController {
           ),
         ),
         // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
-        ...mailboxOnlyPaidItems(rows, pairings, readings),
+        ...mailboxOnlyPaidItems(rows, mailboxPairings, readings),
+        // a más forrásból nem ismert, rögzített beszerzési számlák
+        ...purchases.map((subject) =>
+          purchaseListItem(
+            subject,
+            pairings,
+            subject.scanIds
+              .map((id) => readings.get(id))
+              .find((reading) => reading !== undefined),
+          ),
+        ),
       ],
       query,
     );
@@ -177,6 +209,18 @@ export class IncomingBillingDocumentsController {
   async pdf(@Param("id") id: string) {
     if (id.startsWith(MAILBOX_ITEM_PREFIX))
       return this.mailboxPdf(id.slice(MAILBOX_ITEM_PREFIX.length));
+    if (id.startsWith(PURCHASE_ITEM_PREFIX)) {
+      // csak a listán álló beszerzési sor, ugyanazzal a feltétellel
+      const [subject] = await loadPurchaseSubjects(
+        this.database,
+        id.slice(PURCHASE_ITEM_PREFIX.length),
+      );
+      if (!subject) throw new NotFoundException("Nincs ilyen bejövő számla.");
+      return pdfFile(
+        await this.firstPdf(subject.scanIds),
+        subject.supplierInvoiceNumber,
+      );
+    }
     const row = await this.database.incomingBillingDocument.findUnique({
       where: { id },
       select: {
