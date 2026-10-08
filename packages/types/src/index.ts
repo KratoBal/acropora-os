@@ -1348,3 +1348,5 @@ export {
   withAreaLevel,
 } from "./permission-areas.js";
 export type { PermissionArea, PermissionLevel } from "./permission-areas.js";
+export { splitViesAddress, viesCountry, viesFill } from "./vies-address.js";
+export type { ViesAddressFields, ViesFillField } from "./vies-address.js";

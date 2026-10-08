@@ -6,11 +6,17 @@ import {
   type SupplierSummary,
   type WorksheetDepartmentSummary,
   type ViesVatLookupResult,
+  viesFill,
+  type ViesFillField,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ViesConflicts,
+  type ViesConflict,
+} from "@/components/vies/vies-conflicts";
 import { useReturnTo } from "@/components/navigation-history";
 import { PilotPartnerDeleteButton } from "./pilot-partner-delete-button";
 import {
@@ -103,6 +109,7 @@ export function PilotSupplierEditorPage({
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [viesBusy, setViesBusy] = useState(false);
+  const [viesConflicts, setViesConflicts] = useState<ViesConflict[]>([]);
   const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
     null,
   );
@@ -404,12 +411,40 @@ export function PilotSupplierEditorPage({
     }
   };
 
+  /**
+   * THE VIES ANSWER INTO THE FORM (card 600575a0): empty fields are filled,
+   * a field holding another value is offered, never overwritten unasked.
+   */
+  const viesSetters: Record<ViesFillField, (value: string) => void> = {
+    name: setName,
+    country: setCountry,
+    addressLine1: setAddressLine1,
+    postalCode: setPostalCode,
+    city: setCity,
+  };
+  const applyVies = (fields: Partial<Record<ViesFillField, string>>) => {
+    for (const [field, value] of Object.entries(fields) as Array<
+      [ViesFillField, string]
+    >)
+      viesSetters[field](value);
+  };
+
   const checkVies = async () => {
     if (!taxNumber.trim() || viesBusy) return;
     setViesBusy(true);
     setViesResult(null);
+    setViesConflicts([]);
     try {
-      setViesResult(await viesVatApi.check(token, taxNumber.trim()));
+      const result = await viesVatApi.check(token, taxNumber.trim());
+      setViesResult(result);
+      if (result.valid) {
+        const { fill, conflicts } = viesFill(
+          { name, country, addressLine1, postalCode, city },
+          { name: result.name, address: result.address, taxNumber },
+        );
+        applyVies(fill);
+        setViesConflicts(conflicts);
+      }
     } catch (cause) {
       setViesResult({
         message:
@@ -507,6 +542,7 @@ export function PilotSupplierEditorPage({
                       onChange={(value) => {
                         setTaxNumber(value);
                         setViesResult(null);
+                        setViesConflicts([]);
                         const inferred = inferCountryFromTaxNumber(value);
                         if (inferred) setCountry(inferred);
                       }}
@@ -548,6 +584,17 @@ export function PilotSupplierEditorPage({
                       </div>
                     )
                   ) : null}
+                  <ViesConflicts
+                    conflicts={viesConflicts}
+                    onApply={() => {
+                      applyVies(
+                        Object.fromEntries(
+                          viesConflicts.map((c) => [c.field, c.vies]),
+                        ),
+                      );
+                      setViesConflicts([]);
+                    }}
+                  />
                 </PilotFormField>
                 <PilotFormField label="E-mail cím">
                   <PilotInput
