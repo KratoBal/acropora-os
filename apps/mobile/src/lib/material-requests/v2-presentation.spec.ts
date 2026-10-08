@@ -42,6 +42,7 @@ const request = (
 ): MaterialRequestSummary => ({
   id: "mr-1",
   worksheetId: "w-1",
+  projectId: null,
   status: "OPEN",
   requestedByName: "Kitalált Kérő",
   createdAt: "2026-10-01T13:40:00.000Z",
@@ -62,6 +63,11 @@ const request = (
   worksheetNumber: "TST-2026-001",
   customerDisplayName: "Teszt Ügyfél",
   departmentName: "Teszt részleg",
+  context: {
+    type: "WORKSHEET",
+    worksheetId: "w-1",
+    worksheetNumber: "TST-2026-001",
+  },
   ...over,
 });
 

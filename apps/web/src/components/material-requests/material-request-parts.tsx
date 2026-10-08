@@ -148,7 +148,9 @@ export function RequestCard({
       <span className="flex w-full items-start justify-between gap-3">
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="break-words text-sm font-semibold leading-5 text-pilot-grey-900">
-            {request.customerDisplayName} · {request.departmentName}
+            {request.context.type === "PROJECT"
+              ? `Projekt · ${request.context.projectNumber} · ${request.context.projectName}`
+              : `${request.customerDisplayName} · ${request.departmentName}`}
           </span>
           <span className="text-xs leading-4 text-pilot-grey-500">
             {cardByline(request, now)}

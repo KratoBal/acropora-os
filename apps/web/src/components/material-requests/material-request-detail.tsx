@@ -166,13 +166,27 @@ export function MaterialRequestDetail({
   const header = (
     <div className="flex items-start justify-between gap-3">
       <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="break-words text-sm font-semibold leading-5 text-pilot-grey-900">
-          {detail.customerDisplayName}
-        </p>
-        <p className="text-xs leading-4 text-pilot-grey-500">
-          {detail.departmentName} ·{" "}
-          {detail.worksheetNumber ?? "piszkozat munkalap"}
-        </p>
+        {detail.context.type === "PROJECT" ? (
+          <>
+            {/* #1582 P5b: a project's request, from a quote handoff */}
+            <p className="break-words text-sm font-semibold leading-5 text-pilot-grey-900">
+              {detail.context.projectName}
+            </p>
+            <p className="text-xs leading-4 text-pilot-grey-500">
+              Projekt · {detail.context.projectNumber}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="break-words text-sm font-semibold leading-5 text-pilot-grey-900">
+              {detail.customerDisplayName}
+            </p>
+            <p className="text-xs leading-4 text-pilot-grey-500">
+              {detail.departmentName} ·{" "}
+              {detail.worksheetNumber ?? "piszkozat munkalap"}
+            </p>
+          </>
+        )}
       </div>
       <StatusPill status={detail.status} />
     </div>
@@ -264,12 +278,14 @@ export function MaterialRequestDetail({
     <div className="flex flex-col gap-3.5">
       <Panel label="Anyagigény">
         {header}
-        <Link
-          href={detail.worksheetHref}
-          className="self-start text-sm font-medium text-pilot-aqua-700 hover:underline"
-        >
-          Munkalap megnyitása
-        </Link>
+        {detail.worksheetHref ? (
+          <Link
+            href={detail.worksheetHref}
+            className="self-start text-sm font-medium text-pilot-aqua-700 hover:underline"
+          >
+            Munkalap megnyitása
+          </Link>
+        ) : null}
       </Panel>
       {error}
       <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_410px]">
