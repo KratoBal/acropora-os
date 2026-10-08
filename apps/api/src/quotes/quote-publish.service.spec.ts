@@ -16,24 +16,41 @@ describe("a failed publish attempt leaves nothing behind", () => {
   };
 
   function service(
-    version: { status: string; pdfStorageKey: string | null } | null,
+    version: { status: string; pdfStorageKey: string | null },
+    failing = false,
   ) {
     const deleted: DocumentKey[] = [];
     const resets: unknown[] = [];
+    /** what happened, in order: the delete must fall inside the lock */
+    const steps: string[] = [];
     const store = {
       delete: async (k: DocumentKey) => {
+        steps.push("delete");
         deleted.push(k);
         return true;
       },
     } as unknown as DocumentStore;
     const s = new QuotePublishService(store, {});
-    (s as unknown as { database: unknown }).database = {
+    const tx = {
+      $queryRaw: async () => {
+        steps.push("lock");
+        return [{ status: version.status }];
+      },
       quoteVersion: {
-        findFirst: async () => version,
-        updateMany: async (args: unknown) => {
+        findUniqueOrThrow: async () => version,
+        update: async (args: unknown) => {
           resets.push(args);
-          return { count: 1 };
+          return {};
         },
+      },
+    };
+    (s as unknown as { database: unknown }).database = {
+      $transaction: async (run: (t: typeof tx) => Promise<unknown>) => {
+        if (failing) throw new Error("the database is gone");
+        steps.push("begin");
+        const result = await run(tx);
+        steps.push("commit");
+        return result;
       },
     };
     const abandon = (stored: DocumentKey | null) =>
@@ -46,7 +63,7 @@ describe("a failed publish attempt leaves nothing behind", () => {
           ): Promise<void>;
         }
       ).abandonAttempt("q", "v", stored);
-    return { abandon, deleted, resets };
+    return { abandon, deleted, resets, steps };
   }
 
   it("a draft gets its request time back to null, and the stored PDF goes", async () => {
@@ -56,10 +73,7 @@ describe("a failed publish attempt leaves nothing behind", () => {
     });
     await abandon(key);
     assert.deepEqual(resets, [
-      {
-        where: { id: "v", status: "DRAFT" },
-        data: { publishRequestedAt: null },
-      },
+      { where: { id: "v" }, data: { publishRequestedAt: null } },
     ]);
     assert.deepEqual(deleted, [key]);
   });
@@ -80,6 +94,25 @@ describe("a failed publish attempt leaves nothing behind", () => {
       pdfStorageKey: null,
     });
     await abandon(null);
+    assert.deepEqual(deleted, []);
+  });
+
+  it("the look and the delete happen under the publish lock", async () => {
+    const { abandon, steps } = service({
+      status: "DRAFT",
+      pdfStorageKey: null,
+    });
+    await abandon(key);
+    // the other click cannot publish between the look and the delete
+    assert.deepEqual(steps, ["begin", "lock", "lock", "delete", "commit"]);
+  });
+
+  it("a cleanup that fails itself stays quiet: the attempt's error is what counts", async () => {
+    const { abandon, deleted } = service(
+      { status: "DRAFT", pdfStorageKey: null },
+      true,
+    );
+    await abandon(key);
     assert.deepEqual(deleted, []);
   });
 });

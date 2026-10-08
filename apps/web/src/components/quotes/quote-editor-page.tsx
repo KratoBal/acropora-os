@@ -173,6 +173,13 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       if (!link || link.getAttribute("target") === "_blank") return;
       const href = new URL(link.getAttribute("href")!, window.location.href);
       if (href.origin !== window.location.origin) return;
+      // an anchor on this very page (#...) does not leave it
+      if (
+        href.hash &&
+        href.pathname === window.location.pathname &&
+        href.search === window.location.search
+      )
+        return;
       event.preventDefault();
       event.stopPropagation();
       setLeaving(`${href.pathname}${href.search}`);
@@ -543,7 +550,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
         open={leaving !== null}
         title="Nem mentett szöveg"
         consequence={`${dirtyBlocks.size} mentetlen rész (blokk vagy fizetési ütemezés) elvész, ha most elmész.`}
-        recovery="Maradj, és mentsd a blokkokat a „Blokk mentése” gombbal."
+        recovery="Maradj, és mentsd a blokkokat a „Blokk mentése”, a fizetési ütemezést az „Ütemezés mentése” gombbal."
         confirmLabel="Elmegyek mentés nélkül"
         onConfirm={() => {
           const target = leaving;

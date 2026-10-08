@@ -319,6 +319,14 @@ export class QuotePublishService {
           throw new ConflictException(
             "A verzió a publikálás közben módosult. Nézd át, és publikáld újra.",
           );
+        /*
+          THE FILE IS CHECKED UNDER THE LOCK (barracuda's #1600 review). The
+          two clicks of a double click store the same key; if the other one
+          failed and cleaned up meanwhile, the shared file is gone, and a
+          version published without it could never be downloaded or sent.
+          The bytes are still here, so they are written back.
+        */
+        if (!(await this.store.get(key))) await this.store.put(key, pdf.bytes);
         await tx.quoteVersion.updateMany({
           where: { quoteId, status: "PUBLISHED" },
           data: { status: "SUPERSEDED" },
@@ -376,17 +384,29 @@ export class QuotePublishService {
     versionId: string,
     stored: DocumentKey | null,
   ) {
-    const version = await this.database.quoteVersion.findFirst({
-      where: { id: versionId, quoteId },
-      select: { status: true, pdfStorageKey: true },
-    });
-    if (version?.status === "DRAFT")
-      await this.database.quoteVersion.updateMany({
-        where: { id: versionId, status: "DRAFT" },
-        data: { publishRequestedAt: null },
+    try {
+      /*
+        Under the publish lock: the other click cannot publish between this
+        look and the delete. (If the file goes first, the other click's step 3
+        writes it back.)
+      */
+      await this.database.$transaction(async (tx) => {
+        await lockVersion(tx, quoteId, versionId);
+        const version = await tx.quoteVersion.findUniqueOrThrow({
+          where: { id: versionId },
+          select: { status: true, pdfStorageKey: true },
+        });
+        if (version.status === "DRAFT")
+          await tx.quoteVersion.update({
+            where: { id: versionId },
+            data: { publishRequestedAt: null },
+          });
+        if (stored && version.pdfStorageKey !== stored.documentId)
+          await this.store.delete(stored).catch(() => false);
       });
-    if (stored && version?.pdfStorageKey !== stored.documentId)
-      await this.store.delete(stored).catch(() => false);
+    } catch {
+      // best effort: the caller rethrows the attempt's own error, not this
+    }
   }
 
   /**
