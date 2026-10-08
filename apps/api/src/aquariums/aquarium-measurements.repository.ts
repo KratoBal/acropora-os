@@ -104,6 +104,32 @@ const OCCASION_CONFLICT_MESSAGE =
 
 @Injectable()
 export class AquariumMeasurementsRepository {
+  /**
+   * D3 of the measurement report (2026-10-08): the aquarium's latest ICP
+   * report sampled in the window, with its results.
+   */
+  async latestIcpReport(aquariumId: string, from: Date, to: Date) {
+    return prisma.icpReport.findFirst({
+      where: { aquariumId, sampledAt: { gte: from, lte: to } },
+      orderBy: { sampledAt: "desc" },
+      select: {
+        laboratoryCode: true,
+        sampledAt: true,
+        results: {
+          orderBy: { elementCode: "asc" },
+          select: {
+            elementCode: true,
+            value: true,
+            unit: true,
+            minimum: true,
+            maximum: true,
+            trend: true,
+          },
+        },
+      },
+    });
+  }
+
   async list(aquariumId: string): Promise<AquariumMeasurementListResponse> {
     const rows = await prisma.aquariumMeasurement.findMany({
       where: { aquariumId },

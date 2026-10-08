@@ -3,7 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import type {
+  AquariumMeasurementOccasion,
+  AuthenticatedUser,
+} from "@acropora/types";
 
 import { AquariumMeasurementMailService } from "../notifications/mail/aquarium-measurement-mail.service.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
@@ -11,6 +14,15 @@ import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js
 import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
 import { AquariumsService } from "./aquariums.service.js";
+import {
+  deviationCount,
+  formatReportMoment,
+  icpRows,
+  icpWindow,
+  measuredRows,
+  previousValues,
+} from "./measurement-report.js";
+import { renderMeasurementReportPdf } from "./measurement-report-pdf.js";
 import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dto.js";
 
 @Injectable()
@@ -119,6 +131,8 @@ export class AquariumMeasurementsService {
     await this.mail.send({
       aquariumId,
       aquariumName: aquarium.name,
+      // D4 (2026-10-08): the mail carries the measurement report PDF
+      pdf: await this.reportFor(aquarium, occasions.occasions, occasion),
       occasion,
       customerEmail: aquarium.customerEmail,
       customerName: aquarium.customerName ?? "Ügyfél",
@@ -159,6 +173,77 @@ export class AquariumMeasurementsService {
     if (!measuredAt) return;
     if (new Date(measuredAt).getTime() > Date.now())
       throw new BadRequestException("A mérés ideje nem lehet a jövőben.");
+  }
+
+  /**
+   * THE MEASUREMENT REPORT PDF OF ONE OCCASION (card 77767969): the same
+   * right and visibility as reading the occasions.
+   */
+  async reportPdf(
+    aquariumId: string,
+    occasionId: string,
+    user: AuthenticatedUser,
+  ): Promise<{ filename: string; buffer: Buffer }> {
+    const aquarium = await this.requireAquarium(aquariumId, user);
+    const { occasions } = await this.repository.list(aquariumId);
+    const occasion = occasions.find((o) => o.id === occasionId);
+    if (!occasion)
+      throw new NotFoundException("A mérési alkalom nem található.");
+    const buffer = await this.reportFor(aquarium, occasions, occasion);
+    return {
+      filename: `meres-${occasion.measuredAt.slice(0, 10)}.pdf`,
+      buffer,
+    };
+  }
+
+  private async reportFor(
+    aquarium: Awaited<ReturnType<AquariumsService["detail"]>>,
+    occasions: readonly AquariumMeasurementOccasion[],
+    occasion: AquariumMeasurementOccasion,
+  ): Promise<Buffer> {
+    const rows = measuredRows(
+      occasion,
+      previousValues(occasions, occasion),
+      aquarium.waterType,
+      aquarium.targets,
+    );
+    const window = icpWindow(occasion.measuredAt);
+    const report = await this.repository.latestIcpReport(
+      aquarium.id,
+      window.from,
+      window.to,
+    );
+    const icp = report
+      ? {
+          title: `ICP eredmények · ${report.laboratoryCode}${report.sampledAt ? ` · minta: ${formatReportMoment(report.sampledAt.toISOString()).replace(/ \d{1,2}:\d{2}$/, "")}` : ""}`,
+          rows: icpRows(
+            report.results.map((r) => ({
+              elementCode: r.elementCode,
+              value: Number(r.value),
+              unit: r.unit,
+              minimum: r.minimum === null ? null : Number(r.minimum),
+              maximum: r.maximum === null ? null : Number(r.maximum),
+              trend: r.trend,
+            })),
+          ),
+        }
+      : null;
+    const moment = formatReportMoment(occasion.measuredAt);
+    return renderMeasurementReportPdf({
+      partner: aquarium.customerName
+        ? `${aquarium.customerName} · ${aquarium.name}`
+        : aquarium.name,
+      volumeAndMoment: aquarium.systemVolumeLiters
+        ? `${aquarium.systemVolumeLiters} liter · ${moment}`
+        : moment,
+      examination: icp
+        ? "Helyszíni mérés + laboratóriumi ICP eredmények"
+        : "Helyszíni mérés",
+      rows,
+      icp,
+      deviations: deviationCount(rows) + (icp ? deviationCount(icp.rows) : 0),
+      notes: occasion.notes?.trim() || null,
+    });
   }
 
   private async requireAquarium(id: string, user: AuthenticatedUser) {
