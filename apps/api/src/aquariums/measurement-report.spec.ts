@@ -7,6 +7,7 @@ import {
   deviationCount,
   formatReportMoment,
   formatReportRange,
+  pickIcpReport,
   icpRows,
   icpWindow,
   measuredRows,
@@ -39,6 +40,21 @@ describe("the measurement report rules (D1, D2)", () => {
     assert.equal(reportStatus(0.21, { min: 0.02, max: 0.1 }), "ALERT");
     // exactly the width is no longer a warning
     assert.equal(reportStatus(11, { min: 7, max: 9 }), "ALERT");
+  });
+
+  /**
+   * BARRACUDA'S EXAMPLE (#1640): on 7,8–8,4 a value of 7,2 is exactly the
+   * width away, but the float difference made it a warning.
+   */
+  it("D1: the width compares within a tolerance, so exactly the width is an alert", () => {
+    assert.equal(reportStatus(7.2, { min: 7.8, max: 8.4 }), "ALERT");
+    assert.equal(reportStatus(7.21, { min: 7.8, max: 8.4 }), "WARN");
+    assert.equal(reportStatus(8.4, { min: 7.8, max: 8.4 }), "OK");
+    assert.equal(
+      reportTrend(0.3, 0.1 + 0.2, { min: 0, max: 0.2 }),
+      "STABLE",
+      "0.1 + 0.2 and 0.3 are the same distance",
+    );
   });
 
   it("D1: a one-sided range uses 10% of its bound", () => {
@@ -132,6 +148,30 @@ describe("the measurement report rows", () => {
     assert.equal(rows[0]!.status, "WARN");
     assert.equal(rows[0]!.target, "7–9 mg/l");
     assert.equal(rows[1]!.status, null);
+  });
+
+  it("D3: the latest report in the window, by its sampling day or else its upload day", () => {
+    const window = icpWindow("2026-10-15T10:00:00.000Z");
+    const sampled = {
+      id: "a",
+      sampledAt: new Date("2026-10-05T00:00:00Z"),
+      createdAt: new Date("2026-10-14T00:00:00Z"),
+    };
+    const unsampled = {
+      id: "b",
+      sampledAt: null,
+      createdAt: new Date("2026-10-10T00:00:00Z"),
+    };
+    const old = {
+      id: "c",
+      sampledAt: null,
+      createdAt: new Date("2026-09-01T00:00:00Z"),
+    };
+    // the sampled one counts from 10-05 (not its upload on 10-14), so the
+    // report without a sampling day, uploaded on 10-10, is the latest
+    assert.equal(pickIcpReport([sampled, unsampled, old], window)?.id, "b");
+    assert.equal(pickIcpReport([sampled], window)?.id, "a");
+    assert.equal(pickIcpReport([old], window), null);
   });
 
   it("D3: the ICP window is the 14 days before the occasion", () => {

@@ -56,14 +56,24 @@ export function distanceFromRange(
 }
 
 /** D1. */
+/**
+ * THE TOLERANCE OF A COMPARISON (barracuda's review, #1640): the distance and
+ * the width are float differences, so on a range of 7,8–8,4 a value of 7,2
+ * gives 0.5999999999999996 against 0.6000000000000005, and "exactly the width"
+ * would fall on the warning side. Equal within this tolerance counts as equal.
+ */
+const TOLERANCE = 1e-9;
+
 export function reportStatus(value: number, range: ReportRange): ReportStatus {
   const { distance } = distanceFromRange(value, range);
-  if (distance === 0) return "OK";
+  if (distance <= TOLERANCE) return "OK";
+  // A ONE-SIDED BOUND OF 0 (for example "max. 0") has a width of 0: any
+  // deviation from it needs action. That is intended, not an edge case.
   const width =
     range.min !== undefined && range.max !== undefined
       ? range.max - range.min
       : Math.abs((range.min ?? range.max)!) * 0.1;
-  return distance < width ? "WARN" : "ALERT";
+  return distance < width - TOLERANCE ? "WARN" : "ALERT";
 }
 
 /** D2. */
@@ -75,8 +85,8 @@ export function reportTrend(
   if (previous === undefined) return null;
   const now = distanceFromRange(value, range).distance;
   const before = distanceFromRange(previous, range).distance;
-  if (now < before) return "IMPROVING";
-  if (now > before) return "WORSENING";
+  if (now < before - TOLERANCE) return "IMPROVING";
+  if (now > before + TOLERANCE) return "WORSENING";
   return "STABLE";
 }
 
@@ -183,6 +193,31 @@ export function icpRows(results: readonly IcpReportRowInput[]): ReportRow[] {
 
 /** D3: the latest ICP report sampled within 14 days before the occasion. */
 export const ICP_WINDOW_DAYS = 14;
+
+/**
+ * The day an ICP report counts from: its sampling day, or, when the
+ * laboratory gave none, the day it was uploaded (barracuda's review, #1640),
+ * so a report without a sampling date never drops off the PDF.
+ */
+export function icpReportDay(report: {
+  sampledAt: Date | null;
+  createdAt: Date;
+}): Date {
+  return report.sampledAt ?? report.createdAt;
+}
+
+/** D3, with the fallback: the latest report whose day falls in the window. */
+export function pickIcpReport<
+  T extends { sampledAt: Date | null; createdAt: Date },
+>(reports: readonly T[], window: { from: Date; to: Date }): T | null {
+  let best: T | null = null;
+  for (const report of reports) {
+    const day = icpReportDay(report).getTime();
+    if (day < window.from.getTime() || day > window.to.getTime()) continue;
+    if (!best || day > icpReportDay(best).getTime()) best = report;
+  }
+  return best;
+}
 
 export function icpWindow(measuredAt: string): { from: Date; to: Date } {
   const to = new Date(measuredAt);

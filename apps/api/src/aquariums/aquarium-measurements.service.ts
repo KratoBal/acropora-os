@@ -18,8 +18,10 @@ import {
   deviationCount,
   formatReportMoment,
   icpRows,
+  icpReportDay,
   icpWindow,
   measuredRows,
+  pickIcpReport,
   previousValues,
 } from "./measurement-report.js";
 import { renderMeasurementReportPdf } from "./measurement-report-pdf.js";
@@ -208,14 +210,14 @@ export class AquariumMeasurementsService {
       aquarium.targets,
     );
     const window = icpWindow(occasion.measuredAt);
-    const report = await this.repository.latestIcpReport(
-      aquarium.id,
-      window.from,
-      window.to,
+    const report = pickIcpReport(
+      await this.repository.icpReportsIn(aquarium.id, window.from, window.to),
+      window,
     );
     const icp = report
       ? {
-          title: `ICP eredmények · ${report.laboratoryCode}${report.sampledAt ? ` · minta: ${formatReportMoment(report.sampledAt.toISOString()).replace(/ \d{1,2}:\d{2}$/, "")}` : ""}`,
+          // the sampling day, or the upload day when the laboratory gave none
+          title: `ICP eredmények · ${report.laboratoryCode} · ${report.sampledAt ? "minta" : "feltöltve"}: ${formatReportMoment(icpReportDay(report).toISOString()).replace(/ \d{1,2}:\d{2}$/, "")}`,
           rows: icpRows(
             report.results.map((r) => ({
               elementCode: r.elementCode,
