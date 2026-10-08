@@ -116,6 +116,11 @@ function summary(
     worksheetNumber: "TST-2026-001",
     customerDisplayName: "Teszt Ügyfél Kft.",
     departmentName: "Teszt részleg",
+    context: {
+      type: "WORKSHEET",
+      worksheetId: "w-1",
+      worksheetNumber: "TST-2026-001",
+    },
     ...over,
   } as MaterialRequestSummary;
 }
@@ -184,6 +189,30 @@ describe("anyagigény részletei", () => {
     expect(api.claim).toHaveBeenCalledWith("token-1", "mr-1");
     expect(onChanged).toHaveBeenCalled();
     expect(screen.getByText("INTÉZÉS ALATT")).toBeTruthy();
+  });
+
+  // #1582 P5b: a quote handoff's shortage is a project's request
+  it("egy projekt anyagigénye a projektet mutatja, munkalap-link nélkül", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        worksheetId: null,
+        projectId: "p-1",
+        worksheetNumber: null,
+        customerDisplayName: null,
+        departmentName: null,
+        worksheetHref: null,
+        context: {
+          type: "PROJECT",
+          projectId: "p-1",
+          projectNumber: "PRJ-2026-0007",
+          projectName: "Tengeri akvárium",
+        },
+      }),
+    );
+    render(<MaterialRequestDetail id="mr-1" variant="page" now={now} />);
+    expect(await screen.findByText("Tengeri akvárium")).toBeTruthy();
+    expect(screen.getByText("Projekt · PRJ-2026-0007")).toBeTruthy();
+    expect(screen.queryByText("Munkalap megnyitása")).toBeNull();
   });
 
   it("vállalási jog nélkül nincs gomb, csak a magyarázat", async () => {

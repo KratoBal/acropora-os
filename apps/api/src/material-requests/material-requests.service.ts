@@ -11,6 +11,8 @@ import {
 import type { Prisma } from "@acropora/database";
 import {
   MATERIAL_REQUEST_VIEWS,
+  hasPermission,
+  PERMISSIONS,
   type AuthenticatedUser,
   type MaterialRequestActions,
   type MaterialRequestDetail,
@@ -22,6 +24,7 @@ import {
   type MaterialRequestStatusCounts,
   type MaterialRequestStatusValue,
   type MaterialRequestSummary,
+  type MaterialRequestContext,
   type MaterialRequestView,
   type PendingMaterialRequestListResponse,
 } from "@acropora/types";
@@ -55,14 +58,45 @@ import {
   type MaterialRequestEventInput,
   type MaterialRequestItemWrite,
   type MaterialRequestRow,
+  type MaterialRequestScope,
 } from "./material-requests.repository.js";
 
 const RECEIVED_CARD_DAYS = 7;
+
+/**
+ * THE WORKSHEET OF A WORKSHEET-ONLY STEP (#1582 P5b). Drafting, submitting
+ * and the worksheet's own list belong to the service; a project's request
+ * (a quote handoff's shortage) never goes through them, and is refused
+ * plainly if it reaches one.
+ */
+function worksheetIdOf(row: { worksheetId: string | null }): string {
+  if (!row.worksheetId)
+    throw new ConflictException(
+      "Ez az anyagigény egy projekthez tartozik, nem munkalaphoz.",
+    );
+  return row.worksheetId;
+}
+
+function contextOf(row: MaterialRequestContextRow): MaterialRequestContext {
+  return row.projectId
+    ? {
+        type: "PROJECT",
+        projectId: row.projectId,
+        projectNumber: row.projectNumber ?? "",
+        projectName: row.projectName ?? "",
+      }
+    : {
+        type: "WORKSHEET",
+        worksheetId: row.worksheetId ?? "",
+        worksheetNumber: row.worksheetNumber,
+      };
+}
 
 function toResponse(row: MaterialRequestRow): MaterialRequestDetail {
   return {
     id: row.id,
     worksheetId: row.worksheetId,
+    projectId: row.projectId,
     status: row.status,
     requestedByName: row.requestedByName,
     createdAt: row.createdAt.toISOString(),
@@ -100,6 +134,7 @@ function toSummary(row: MaterialRequestContextRow): MaterialRequestSummary {
     worksheetNumber: row.worksheetNumber,
     customerDisplayName: row.customerDisplayName,
     departmentName: row.departmentName,
+    context: contextOf(row),
   };
 }
 
@@ -282,7 +317,10 @@ export class MaterialRequestsService {
     if (before.requestedById !== actor.id)
       throw new ForbiddenException("Csak a saját piszkozatodat küldheted el.");
 
-    const worksheet = await this.worksheets.detail(before.worksheetId, scope);
+    const worksheet = await this.worksheets.detail(
+      worksheetIdOf(before),
+      scope,
+    );
     const updated = await this.repository.submit({
       id,
       requestedById: actor.id,
@@ -299,7 +337,7 @@ export class MaterialRequestsService {
       // signature mail does (2026-09-29: "Új anyagigény:" went out empty)
       worksheet.number ?? worksheet.serviceJob?.jobNumber ?? null,
     );
-    const response = await this.listForWorksheet(before.worksheetId, actor);
+    const response = await this.listForWorksheet(worksheetIdOf(before), actor);
     const vanKiJelolje =
       await this.repository.anyActiveMarkReceivedCapabilityHolder();
     if (!vanKiJelolje)
@@ -321,13 +359,17 @@ export class MaterialRequestsService {
       ertesiteseinel: a cimzetteket EGYSZER kerdezzuk le, es ugyanazt adjuk a
       push-nak es a levelnek.
     */
+    // a project's request (P5b) has no worksheet to point at; its notices
+    // come with the handoff (P6)
+    const worksheetId = row.worksheetId;
+    if (!worksheetId) return;
     try {
       const recipients = await this.repository.notificationRecipients();
       if (recipients.length === 0) return;
 
       this.notifications.notifyMaterialRequestCreated({
         materialRequestId: row.id,
-        worksheetId: row.worksheetId,
+        worksheetId,
         worksheetLabel: customerDisplayName,
         userIds: recipients.map((recipient) => recipient.id),
       });
@@ -337,7 +379,7 @@ export class MaterialRequestsService {
         worksheetNumber,
         worksheetLink: internalWorksheetLink({
           webUrl: this.environment.WEB_URL,
-          worksheetId: row.worksheetId,
+          worksheetId,
         }),
         requesterName: row.requestedByName ?? "Kolléga",
         itemsText: materialRequestItemsText(row.items),
@@ -373,12 +415,7 @@ export class MaterialRequestsService {
       await this.visibleWorksheets(actor),
     );
     return {
-      items: rows.map((row) => ({
-        ...toResponse(row),
-        worksheetNumber: row.worksheetNumber,
-        customerDisplayName: row.customerDisplayName,
-        departmentName: row.departmentName,
-      })),
+      items: rows.map(toSummary),
     };
   }
 
@@ -403,12 +440,7 @@ export class MaterialRequestsService {
       await this.visibleWorksheets(actor),
     );
     return {
-      items: rows.map((row) => ({
-        ...toResponse(row),
-        worksheetNumber: row.worksheetNumber,
-        customerDisplayName: row.customerDisplayName,
-        departmentName: row.departmentName,
-      })),
+      items: rows.map(toSummary),
     };
   }
 
@@ -439,6 +471,8 @@ export class MaterialRequestsService {
     row: MaterialRequestRow,
     worksheet: Awaited<ReturnType<WorksheetsService["detail"]>>,
   ): Promise<void> {
+    const worksheetId = row.worksheetId;
+    if (!worksheetId) return;
     try {
       /*
         A CIMZETTKOR TAGABB, MINT A LETREHOZASNAL: a kero PLUSZ a munkalap
@@ -459,7 +493,7 @@ export class MaterialRequestsService {
 
       this.notifications.notifyMaterialRequestReceived({
         materialRequestId: row.id,
-        worksheetId: row.worksheetId,
+        worksheetId,
         worksheetLabel: worksheet.customer.displayName,
         userIds: recipients.map((recipient) => recipient.id),
       });
@@ -470,7 +504,7 @@ export class MaterialRequestsService {
           worksheet.number ?? worksheet.serviceJob?.jobNumber ?? null,
         worksheetLink: internalWorksheetLink({
           webUrl: this.environment.WEB_URL,
-          worksheetId: row.worksheetId,
+          worksheetId,
         }),
         itemsText: materialRequestItemsText(row.items),
         receiverName: row.receivedByName ?? "Kolléga",
@@ -524,13 +558,40 @@ export class MaterialRequestsService {
     ).counts;
   }
 
+  /**
+   * THE TWO BRANCHES (#1582 P5b, C1): the worksheet branch as before; the
+   * project branch, when asked for, to whoever may buy or receive (purchasing
+   * view, or the mark-received capability) in full, and otherwise to the
+   * request's requester and handler.
+   */
+  private async scopeFor(
+    actor: AuthenticatedUser,
+    includeProjects: boolean,
+  ): Promise<MaterialRequestScope> {
+    const worksheet = await this.visibleWorksheets(actor);
+    if (!includeProjects) return { worksheet, project: null };
+    const all =
+      hasPermission(actor, PERMISSIONS.PURCHASING_VIEW) ||
+      (await this.repository.hasMarkReceivedCapability(actor.id));
+    return {
+      worksheet,
+      project: {
+        projectId: { not: null },
+        ...(all
+          ? {}
+          : { OR: [{ requestedById: actor.id }, { handlerId: actor.id }] }),
+      },
+    };
+  }
+
   private async findVisibleOr404(
     id: string,
     actor: AuthenticatedUser,
   ): Promise<MaterialRequestContextRow> {
+    // a request opened by its id is shown whichever branch it is on
     const row = await this.repository.findVisible(
       id,
-      await this.visibleWorksheets(actor),
+      await this.scopeFor(actor, true),
     );
     // a DRAFT is the requester's own working state: nobody else gets it
     if (!row || (row.status === "DRAFT" && row.requestedById !== actor.id))
@@ -553,7 +614,10 @@ export class MaterialRequestsService {
     actor: AuthenticatedUser,
     query: MaterialRequestListQueryDto,
   ): Promise<MaterialRequestPage> {
-    const visibleWorksheet = await this.visibleWorksheets(actor);
+    const scope = await this.scopeFor(
+      actor,
+      query.includeProjects !== undefined,
+    );
     const view: MaterialRequestView = query.view ?? "active";
     if (!(MATERIAL_REQUEST_VIEWS as readonly string[]).includes(view))
       throw new BadRequestException("Ismeretlen nézet.");
@@ -565,7 +629,7 @@ export class MaterialRequestsService {
       throw new BadRequestException("Ismeretlen állapot.");
     const q = query.q?.trim() || null;
     const { rows, next } = await this.repository.list({
-      visibleWorksheet,
+      scope,
       view,
       status: status as MaterialRequestStatusValue | null,
       // "Saját beszerzéseim": only what the caller handles
@@ -582,9 +646,10 @@ export class MaterialRequestsService {
   async statusCounts(
     actor: AuthenticatedUser,
     now: Date = new Date(),
+    includeProjects = false,
   ): Promise<MaterialRequestStatusCounts> {
     const { byStatus, receivedRecently } = await this.repository.statusCounts(
-      await this.visibleWorksheets(actor),
+      await this.scopeFor(actor, includeProjects),
       new Date(now.getTime() - RECEIVED_CARD_DAYS * 24 * 60 * 60 * 1000),
     );
     return {
@@ -615,7 +680,9 @@ export class MaterialRequestsService {
     ]);
     return {
       ...toSummary(row),
-      worksheetHref: `/szerviz/munkalapok/${row.worksheetId}`,
+      worksheetHref: row.worksheetId
+        ? `/szerviz/munkalapok/${row.worksheetId}`
+        : null,
       events: events.map((event) => {
         const payload = (event.payload ?? {}) as Record<string, unknown>;
         return {
@@ -1040,7 +1107,8 @@ export class MaterialRequestsService {
   private async notifyReceived(id: string): Promise<void> {
     try {
       const row = await this.repository.detail(id);
-      if (!row) return;
+      // a project's request has no worksheet notice (P5b; P6 brings its own)
+      if (!row || !row.worksheetId) return;
       const worksheet = await this.worksheets.detail(row.worksheetId, {
         kind: "internal",
       });
@@ -1064,6 +1132,8 @@ export class MaterialRequestsService {
     to: readonly (string | null)[],
     actor: AuthenticatedUser,
   ): Promise<void> {
+    const worksheetId = row.worksheetId;
+    if (!worksheetId) return;
     try {
       const userIds = [
         ...new Set(to.filter((u): u is string => u !== null && u !== actor.id)),
@@ -1074,8 +1144,8 @@ export class MaterialRequestsService {
       this.notifications.notifyMaterialRequestStep({
         step,
         materialRequestId: row.id,
-        worksheetId: row.worksheetId,
-        worksheetLabel: row.customerDisplayName,
+        worksheetId,
+        worksheetLabel: row.customerDisplayName ?? "",
         userIds: recipients.map((recipient) => recipient.id),
       });
       this.ticketMail.notifyMaterialRequestStep({
@@ -1084,7 +1154,7 @@ export class MaterialRequestsService {
         worksheetNumber: row.worksheetNumber,
         worksheetLink: internalWorksheetLink({
           webUrl: this.environment.WEB_URL,
-          worksheetId: row.worksheetId,
+          worksheetId,
         }),
         itemsText: materialRequestItemsText(row.items),
         actorName: actor.displayName,

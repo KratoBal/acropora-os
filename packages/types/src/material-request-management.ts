@@ -88,7 +88,13 @@ export interface MaterialRequestItemInput {
 
 export interface MaterialRequestDetail {
   id: string;
-  worksheetId: string;
+  /**
+   * #1582 P5b: one of the two is set. A project's request (a quote handoff's
+   * shortage) comes only where the caller asked for it (`includeProjects`),
+   * so a client that predates it never gets a null worksheet.
+   */
+  worksheetId: string | null;
+  projectId: string | null;
   status: MaterialRequestStatusValue;
   /** `null`, ha a kero azota torolt kollega -- lasd a sema fejlecet. */
   requestedByName: string | null;
@@ -138,8 +144,11 @@ export interface MaterialRequestListResponse {
  */
 export interface PendingMaterialRequest extends MaterialRequestDetail {
   worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
+  /** the worksheet's customer and unit; null on a project's request (P5b) */
+  customerDisplayName: string | null;
+  departmentName: string | null;
+  /** what the request is for (P5b) */
+  context: MaterialRequestContext;
 }
 
 export interface PendingMaterialRequestListResponse {
@@ -157,8 +166,11 @@ export interface PendingMaterialRequestListResponse {
  */
 export interface MaterialRequestHistoryEntry extends MaterialRequestDetail {
   worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
+  /** the worksheet's customer and unit; null on a project's request (P5b) */
+  customerDisplayName: string | null;
+  departmentName: string | null;
+  /** what the request is for (P5b) */
+  context: MaterialRequestContext;
 }
 
 export interface MaterialRequestHistoryListResponse {
@@ -181,8 +193,11 @@ export interface CreateMaterialRequestInput {
 /** One row of the V2 overview list: the request with its worksheet context. */
 export interface MaterialRequestSummary extends MaterialRequestDetail {
   worksheetNumber: string | null;
-  customerDisplayName: string;
-  departmentName: string;
+  /** the worksheet's customer and unit; null on a project's request (P5b) */
+  customerDisplayName: string | null;
+  departmentName: string | null;
+  /** what the request is for (P5b) */
+  context: MaterialRequestContext;
 }
 
 export const MATERIAL_REQUEST_VIEWS = [
@@ -250,8 +265,19 @@ export interface MaterialRequestActions {
   comment: boolean;
 }
 
+/** What a request is for: a worksheet, or a project (#1582 P5b). */
+export type MaterialRequestContext =
+  | { type: "WORKSHEET"; worksheetId: string; worksheetNumber: string | null }
+  | {
+      type: "PROJECT";
+      projectId: string;
+      projectNumber: string;
+      projectName: string;
+    };
+
 export interface MaterialRequestFullDetail extends MaterialRequestSummary {
-  worksheetHref: string;
+  /** null on a project's request: there is no worksheet to open */
+  worksheetHref: string | null;
   events: MaterialRequestEventEntry[];
   comments: MaterialRequestCommentEntry[];
   actions: MaterialRequestActions;
