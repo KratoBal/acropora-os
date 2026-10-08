@@ -123,7 +123,11 @@ export function medusaProjectionScheduleConfig(
  */
 export type ProjectionSchedulerDatabase = Pick<
   typeof prisma,
-  "product" | "externalReference" | "unasProductSnapshot"
+  | "product"
+  | "externalReference"
+  | "unasProductSnapshot"
+  /** A tények változása (SEO P0 PR 8): a tény-írás a terméket nem érinti. */
+  | "productKnowledgeFact"
 >;
 
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
@@ -270,8 +274,13 @@ export class MedusaProjectionScheduler
     await this.atiranyitasKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
+    const teny = await this.tenyValtozasAzonositok();
     const esedekes = [
-      ...new Set([...akcio, ...(await this.esedekesAzonositok(limit))]),
+      ...new Set([
+        ...akcio,
+        ...teny,
+        ...(await this.esedekesAzonositok(limit)),
+      ]),
     ].slice(0, limit);
     /*
       AZ ELBUKOTT ÁR ESEDÉKES MARAD (329f8a2e, murena tény-kommentje, acrobot
@@ -447,6 +456,48 @@ export class MedusaProjectionScheduler
         return hatarok.some((hatar) => vetitve === null || hatar > vetitve);
       })
       .map((sor) => sor.productId);
+  }
+
+  /**
+   * A TÉNY-VÁLTOZÁS IS ESEDÉKESSÉ TESZ (SEO P0 PR 8). Egy elfogadott tény (tömeg,
+   * méret, termékismeret) nem írja a `Product` sort, és a tény-táblának nincs
+   * helye a forrás-időbélyegek között: az új tény eddig csak a termék következő,
+   * más okú változásával jutott ki. KÜLÖN LEKÉRDEZÉS, az akcióhatár-ág mintájára,
+   * mert az esedékességi lekérdezés csak a legutóbb módosított termékeket olvassa.
+   *
+   * A döntés a kötés `lastSyncedAt`-je: ha a termék legutóbbi tény-változása
+   * későbbi, esedékes. Egy vetítés után tehát újra nem az. Kötés nélküli termék
+   * nem kerül be: azt az általános ág viszi (`NEVER_PROJECTED`).
+   */
+  private async tenyValtozasAzonositok(): Promise<string[]> {
+    const most = this.now();
+    const sorok = await this.db.productKnowledgeFact.findMany({
+      where: {
+        updatedAt: { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most },
+      },
+      select: { productId: true, updatedAt: true },
+    });
+    if (!sorok.length) return [];
+    const legutobbi = new Map<string, Date>();
+    for (const sor of sorok) {
+      const eddig = legutobbi.get(sor.productId);
+      if (!eddig || sor.updatedAt > eddig)
+        legutobbi.set(sor.productId, sor.updatedAt);
+    }
+    const kotesek = await this.db.externalReference.findMany({
+      where: {
+        ...MEDUSA_PRODUCT_REFERENCE,
+        entityId: { in: [...legutobbi.keys()] },
+      },
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    return kotesek
+      .filter(
+        (k) =>
+          k.lastSyncedAt === null ||
+          legutobbi.get(k.entityId)! > k.lastSyncedAt,
+      )
+      .map((k) => k.entityId);
   }
 
   /**

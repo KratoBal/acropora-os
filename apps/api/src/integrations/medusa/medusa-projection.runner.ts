@@ -11,6 +11,11 @@
  * `agents/nautilus/scripts/mozgatas-azonos.sh` a regi es az uj tartomanyt
  * sorhalmazkent veti ossze, es a kulonbseg tetelesen all a PR torzseben.
  */
+import {
+  describeVariantMeasures,
+  variantMeasuresFor,
+  type MeasureSourceDatabase,
+} from "./medusa-variant-measures.js";
 import { prisma } from "@acropora/database";
 
 import {
@@ -446,6 +451,8 @@ export type ProjectionDatabase = Pick<
   | "productCopy"
   /** A változatok vonalkódja (SEO P0 PR 4). */
   | "productBarcode"
+  /** A natív célú definíciók: tömeg és méretek (SEO P0 PR 8). */
+  | "attributeDefinition"
 >;
 
 /** SEO P0 PR 7d: a handle a WEBSHOP-slugból (alapból ki). */
@@ -1017,6 +1024,12 @@ export async function runProjectionCli(
       `ProductBarcode` sora, kikapcsolva a mai út (a gyártói cikkszám). A mai út
       kódja változatlanul alatta áll, hogy a visszakapcsolás ugyanazt adja.
     */
+    /* A TÖMEG ÉS A MÉRETEK (SEO P0 PR 8): a VERIFIED natív célú tények. */
+    const mertekek = await variantMeasuresFor(
+      db as unknown as MeasureSourceDatabase,
+      product.id,
+      product.variants,
+    );
     const pbForras = barcodesFromProductBarcode(env);
     const valtozatVonalkodok = pbForras
       ? await (async () => {
@@ -1365,6 +1378,7 @@ export async function runProjectionCli(
         barcode: vonalkod.field
           ? { field: vonalkod.field, value: vonalkod.value }
           : null,
+        variantMeasures: mertekek.measures,
         variantBarcodes: valtozatVonalkodok.flatMap((v) =>
           v.decision.field
             ? [{ sku: v.sku, field: v.decision.field, value: v.decision.value }]
@@ -1466,6 +1480,11 @@ export async function runProjectionCli(
         describeCimValtozas(outcome.cim) +
         (outcome.action !== "created" && outcome.barcodes
           ? describeVariantBarcodes(outcome.barcodes)
+          : "") +
+        (outcome.action === "created" ||
+        outcome.action === "updated" ||
+        outcome.action === "relinked"
+          ? describeVariantMeasures(outcome.measures, mertekek.skipped)
           : "") +
         (outcome.action === "created" && outcome.shipping
           ? `      szállítás: ${outcome.shipping}\n`

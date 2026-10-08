@@ -10,6 +10,7 @@ import {
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
+  nativeFieldKeys,
   publicFieldKeys,
   type PublicDefinitionsTable,
 } from "../../products/attributes/public-fields.js";
@@ -136,7 +137,7 @@ export async function knowledgeRowsFor(
   productId: string,
 ): Promise<{ facts: FactRow[]; copy: CopyRow[] }> {
   const tables = db as KnowledgeRowsDatabase;
-  const [facts, copy, kiadhato] = await Promise.all([
+  const [facts, copy, kiadhato, nativ] = await Promise.all([
     tables.productKnowledgeFact.findMany({
       where: { productId },
       orderBy: [{ field: "asc" }, { scopeKey: "asc" }],
@@ -168,23 +169,27 @@ export async function knowledgeRowsFor(
       },
     }),
     publicFieldKeys(tables),
+    nativeFieldKeys(tables),
   ]);
   return {
-    facts: facts.map((fact) => ({
-      field: fact.field,
-      variantId: fact.variantId,
-      value: fact.value,
-      unit: fact.unit,
-      status: fact.status,
-      revision: fact.revision,
-      public: kiadhato.has(fact.field),
-      // A resolved fact names the chosen group's source, not the conflict's null.
-      sourceType: factSource(fact, {
-        ...fact.fieldResult,
-        sourceRef: null,
-        retrievedAt: null,
-      }).sourceType,
-    })),
+    // a natív célú tény a Medusa változat-mezőibe megy (SEO P0 PR 8), nem ide
+    facts: facts
+      .filter((fact) => !nativ.has(fact.field))
+      .map((fact) => ({
+        field: fact.field,
+        variantId: fact.variantId,
+        value: fact.value,
+        unit: fact.unit,
+        status: fact.status,
+        revision: fact.revision,
+        public: kiadhato.has(fact.field),
+        // A resolved fact names the chosen group's source, not the conflict's null.
+        sourceType: factSource(fact, {
+          ...fact.fieldResult,
+          sourceRef: null,
+          retrievedAt: null,
+        }).sourceType,
+      })),
     copy,
   };
 }
