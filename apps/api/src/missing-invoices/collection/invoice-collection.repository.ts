@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from "@nestjs/common";
 import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
 
+import { postedPurchaseForArrival } from "../../billing/purchase-incoming.js";
 import { originalAmountOf } from "../otp-statement.parser.js";
 import {
   INVOICE_COLLECTION_RULES_VERSION,
@@ -168,7 +169,7 @@ export class InvoiceCollectionRepository {
    */
   async navNumbers(supplierTaxBase: string): Promise<string[]> {
     if (!/^\d{8}$/.test(supplierTaxBase)) return [];
-    const [nav, feed] = await Promise.all([
+    const [nav, feed, purchases] = await Promise.all([
       this.database.navIncomingInvoice.findMany({
         // csak az alapszámla, mint a párosítóban: a jóváíró PDF-je külön döntés
         where: {
@@ -191,11 +192,24 @@ export class InvoiceCollectionRepository {
         },
         select: { documentNumber: true },
       }),
+      /*
+        A RÖGZÍTETT BESZERZÉSI SZÁMLA SZÁMA IS ISMERT (kártya 83f31a95): egy csak
+        beszerzésből ismert számla levélben érkező példánya különben el sem
+        tárolódna, és nem tudna a beszerzéshez kötődni.
+      */
+      this.database.purchaseInvoice.findMany({
+        where: {
+          status: "POSTED",
+          supplier: { taxNumber: { startsWith: supplierTaxBase } },
+        },
+        select: { supplierInvoiceNumber: true },
+      }),
     ]);
     return [
       ...new Set([
         ...nav.map((row) => row.navInvoiceNumber),
         ...feed.map((row) => row.documentNumber),
+        ...purchases.map((row) => row.supplierInvoiceNumber),
       ]),
     ];
   }
@@ -207,7 +221,7 @@ export class InvoiceCollectionRepository {
    * mint a `navNumbers`-nél, csak szállító nélkül.
    */
   async knownNumbers(): Promise<KnownInvoiceNumber[]> {
-    const [nav, feed] = await Promise.all([
+    const [nav, feed, purchases] = await Promise.all([
       this.database.navIncomingInvoice.findMany({
         where: { invoiceOperation: "CREATE" },
         select: { navInvoiceNumber: true, supplierTaxNumber: true },
@@ -219,6 +233,14 @@ export class InvoiceCollectionRepository {
         },
         select: { documentNumber: true, supplierTaxNumber: true },
       }),
+      // a rögzített beszerzések is (kártya 83f31a95), a beszállító adószámával
+      this.database.purchaseInvoice.findMany({
+        where: { status: "POSTED", supplier: { taxNumber: { not: null } } },
+        select: {
+          supplierInvoiceNumber: true,
+          supplier: { select: { taxNumber: true } },
+        },
+      }),
     ]);
     return [
       ...nav.map((row) => ({
@@ -228,6 +250,10 @@ export class InvoiceCollectionRepository {
       ...feed.map((row) => ({
         number: row.documentNumber,
         supplierTaxNumber: row.supplierTaxNumber!,
+      })),
+      ...purchases.map((row) => ({
+        number: row.supplierInvoiceNumber,
+        supplierTaxNumber: row.supplier.taxNumber!,
       })),
     ];
   }
@@ -371,8 +397,15 @@ export class InvoiceCollectionRepository {
   /** A dokumentum és a látott-sor EGY tranzakcióban: félig tárolt fájl nincs. */
   async store(input: CollectedDocumentInput): Promise<string> {
     return this.database.$transaction(async (transaction) => {
+      // the same invoice recorded as a purchase: this copy is its document
+      const purchaseInvoiceId = await postedPurchaseForArrival(transaction, {
+        importResult: input.importResult,
+        textReading: input.textReading,
+        kind: input.kind,
+      });
       const document = await transaction.incomingSupplierDocument.create({
         data: {
+          purchaseInvoiceId,
           gmailMessageId: `collect:${input.source}:${input.externalId}`,
           fileName: input.fileName,
           sender: input.sender,

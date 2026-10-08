@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { Prisma, prisma, type SyncRunTrigger } from "@acropora/database";
+import { postedPurchaseForArrival } from "../../billing/purchase-incoming.js";
 import {
   BadRequestException,
   ConflictException,
@@ -385,6 +386,15 @@ export class ExpectedArrivalIntakeService {
           kind: identity.kind,
           importResult: result as unknown as Prisma.InputJsonValue,
           expectedArrivalId: arrival.id,
+          // already recorded as a purchase: this copy is its document
+          purchaseInvoiceId:
+            placement.status === "READ"
+              ? await postedPurchaseForArrival(tx, {
+                  importResult: result,
+                  textReading: null,
+                  kind: identity.kind,
+                })
+              : null,
         },
       });
     });
