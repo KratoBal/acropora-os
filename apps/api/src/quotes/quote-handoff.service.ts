@@ -51,10 +51,10 @@ type Tx = Prisma.TransactionClient;
  * shortage line points at its BOM line with a RESTRICT key, so a draft's
  * editor could not delete that line any more (barracuda's note, 28246).
  *
- * A second concurrent request waits on the quote's lock. The first one
- * touches the quote row, so the second fails with a serialization conflict,
- * and its retry (`retryOnSerializationConflict`) finds the handoff and
- * answers it (barracuda's P6 point).
+ * A second concurrent request waits on the quote's row lock, which the first
+ * one takes by touching the row. When the first commits, the second fails
+ * with a serialization conflict, and its retry (`retryOnSerializationConflict`)
+ * finds the handoff and answers it (barracuda's P6 point).
  */
 @Injectable()
 export class QuoteHandoffService {
@@ -118,20 +118,23 @@ async function run(
   excluded: string[],
   user: AuthenticatedUser,
 ): Promise<QuoteHandoffResultDto> {
-  const locked = await tx.$queryRaw<Array<{ id: string }>>(
-    Prisma.sql`SELECT "id" FROM "Quote" WHERE "id" = ${quoteId} FOR UPDATE`,
-  );
-  if (!locked.length) throw new NotFoundException("Az ajánlat nem található.");
   const existing = await tx.quoteProjectHandoff.findUnique({
     where: { quoteId },
     select: HANDOFF_SUMMARY_SELECT,
   });
   if (existing) return { ...handoffSummary(existing), replayed: true };
-  // the write a concurrent second request must see as a conflict
-  await tx.quote.update({
+  // THE QUOTE'S ROW LOCK, TAKEN BY A WRITE, NOT BY A RAW `FOR UPDATE`.
+  // Measured in CI on a5da426d: with a raw lock, the second of two
+  // concurrent requests got a 500 (the data stayed right). The reading, from
+  // Prisma's codes, not measured apart: Postgres refuses the second with
+  // 40001 when the first commits; through a raw query Prisma calls that
+  // P2010, which the retry does not know, and through a model write P2034,
+  // which it retries, and the retry finds the handoff above.
+  const touched = await tx.quote.updateMany({
     where: { id: quoteId },
     data: { updatedAt: new Date() },
   });
+  if (!touched.count) throw new NotFoundException("Az ajánlat nem található.");
 
   const subject = await loadSubject(tx, quoteId);
   const pairs = await lockPairs(tx, subject.productVariantIds);
