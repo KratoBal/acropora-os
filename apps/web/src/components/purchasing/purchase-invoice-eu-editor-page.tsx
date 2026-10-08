@@ -51,6 +51,7 @@ import {
   ViesConflicts,
   type ViesConflict,
 } from "@/components/vies/vies-conflicts";
+import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
 import { createDebouncer } from "@/lib/products/list-state";
 
 // Ez a komponens az EU-s és a belföldi (kézi és NAV-alapú) beszerzési
@@ -1529,6 +1530,12 @@ export function PurchaseInvoiceEuEditorPage() {
                               ) : null}
                             </div>
                           )
+                        ) : null}
+                        {!isDomestic ? (
+                          <ViesMissingDetails
+                            taxNumber={newSupplierTaxNumber}
+                            result={viesResult}
+                          />
                         ) : null}
                         <ViesConflicts
                           conflicts={viesConflicts}

@@ -17,6 +17,7 @@ import {
   ViesConflicts,
   type ViesConflict,
 } from "@/components/vies/vies-conflicts";
+import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
 import { useReturnTo } from "@/components/navigation-history";
 import { PilotPartnerDeleteButton } from "./pilot-partner-delete-button";
 import {
@@ -589,6 +590,10 @@ export function PilotSupplierEditorPage({
                       </div>
                     )
                   ) : null}
+                  <ViesMissingDetails
+                    taxNumber={taxNumber}
+                    result={viesResult}
+                  />
                   <ViesConflicts
                     conflicts={viesConflicts}
                     onApply={(taken) => {

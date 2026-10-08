@@ -666,6 +666,25 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     expect(name).toHaveValue("COOLBLUE B.V.");
   });
 
+  /** Balázs on the live site, 2026-10-08: a valid answer without name or address. */
+  it("az érvényes, de név nélküli VIES-válasznál megmondja, hogy kézzel kell megadni", async () => {
+    navigation.params = new URLSearchParams();
+    viesApi.check.mockResolvedValue({ valid: true });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Adószám" }), {
+      target: { value: "DE300632593" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "VIES" }));
+    expect(
+      await screen.findByText(
+        "A(z) Németország adóhatósága a VIES-ben nem adja ki a nevet és a címet, ezeket kézzel kell megadni.",
+      ),
+    ).toBeTruthy();
+  });
+
   /** barracuda #1603: the same stale-answer guard as the supplier editor's. */
   it("a közben átírt adószámra a régi VIES-válasz nem tölt ki semmit", async () => {
     navigation.params = new URLSearchParams();
