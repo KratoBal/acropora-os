@@ -2259,8 +2259,11 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     offset: number,
     limit: number,
   ): Promise<{ products: { id: string; handle: string }[]; count: number }> {
+    // rendezve: rendezés nélkül az offset-lapozás azonos `created_at` mellett
+    // elcsúszhat, és egy termék kimaradhat vagy kétszer jöhet (barracuda, #1607)
     const params = new URLSearchParams({
       fields: "id,handle",
+      order: "id",
       offset: String(offset),
       limit: String(limit),
     });
