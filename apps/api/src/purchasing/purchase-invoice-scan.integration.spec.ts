@@ -119,7 +119,7 @@ describe(
       );
     });
 
-    it("a giant or a broken image is a 400 with its own sentence, and nothing is stored", async () => {
+    it("a giant image is a 400 with its own sentence, and nothing is stored", async () => {
       const giant = Buffer.from(PNG);
       giant.writeUInt32BE(100_000, 16);
       giant.writeUInt32BE(100_000, 20);
@@ -133,6 +133,11 @@ describe(
         /Túl nagy kép/,
         "GIANT-400",
       );
+      assert.equal((await scans.list(invoiceId)).length, before);
+    });
+
+    it("a broken image is a 400 with its own sentence, and nothing is stored", async () => {
+      const before = (await scans.list(invoiceId)).length;
       await assert.rejects(
         scans.attach(
           invoiceId,
@@ -147,6 +152,7 @@ describe(
           userId,
         ),
         /A kép nem olvasható/,
+        "BROKEN-400",
       );
       assert.equal((await scans.list(invoiceId)).length, before);
     });
