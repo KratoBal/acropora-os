@@ -13,7 +13,8 @@ import { WebshopSlugService } from "./webshop-slug.service.js";
  * `SlugHistory` egyedi kulcsa csak itt találkozik Postgresszel.
  *
  * MI PIROSIT: két WEBSHOP-sor ugyanazzal a sluggal megfér; a UNAS-sor slugja
- * ütközik a WEBSHOP-éval (más csatorna); a kézi csere nem írja a régit előzménybe.
+ * ütközik a WEBSHOP-éval (más csatorna); a kézi csere nem írja a régit előzménybe,
+ * vagy nem ír átirányítást a régi címről (PR 6).
  */
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "WEBSHOP-SLUG-INT-";
@@ -49,11 +50,20 @@ describe("Webshop-slug, adatbázison", { skip: gate.mode === "skip" }, () => {
         entityId: { in: termekek.map((t) => t.id) },
       },
     });
+    await prisma.urlRedirect.deleteMany({
+      where: { entityId: { in: termekek.map((t) => t.id) } },
+    });
     await prisma.channelListing.deleteMany({ where: mine });
     await prisma.product.deleteMany({
       where: { name: { startsWith: PREFIX } },
     });
     nincsMaradek([
+      {
+        nev: "UrlRedirect (entityId)",
+        darab: await prisma.urlRedirect.count({
+          where: { entityId: { in: termekek.map((t) => t.id) } },
+        }),
+      },
       {
         nev: "ChannelListing",
         darab: await prisma.channelListing.count({ where: mine }),
@@ -99,5 +109,16 @@ describe("Webshop-slug, adatbázison", { skip: gate.mode === "skip" }, () => {
       select: { entityId: true },
     });
     assert.equal(regi?.entityId, ids[0]);
+
+    // PR 6: a régi cím átirányítása ugyanabban a tranzakcióban
+    const szabaly = await prisma.urlRedirect.findUnique({
+      where: { sourcePathLower: `/hu/termek/${elso}` },
+      select: { destinationPath: true, reason: true, entityId: true },
+    });
+    assert.deepEqual(szabaly, {
+      destinationPath: `/hu/termek/uj-pumpa-int-${suffix}`,
+      reason: "SLUG_CHANGE",
+      entityId: ids[0],
+    });
   });
 });

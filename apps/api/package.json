@@ -39,6 +39,7 @@
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "barcode-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-backfill.cli.js",
     "slug-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/slug/slug-backfill.cli.js",
+    "redirect-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/redirect/redirect-backfill.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
     "unas:webshop-sellable-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-webshop-sellable-backfill.cli.js",
     "unas:kapcsolat-ujraepites": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-kapcsolat-ujraepites.cli.js",

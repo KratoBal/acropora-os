@@ -2,6 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
 import {
+  PrismaRedirectStore,
+  lockRedirectWrites,
+} from "../redirect/redirect.repository.js";
+import {
   SlugTakenError,
   type WebshopSlugStore,
 } from "./webshop-slug.service.js";
@@ -71,9 +75,14 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
     return regi ? { kind: "history" as const, productId: regi.entityId } : null;
   }
 
-  async saveFirst(productId: string, slug: string): Promise<void> {
+  async saveFirst(
+    productId: string,
+    slug: string,
+    redirects: Parameters<WebshopSlugStore["saveFirst"]>[2],
+  ): Promise<void> {
     try {
       await prisma.$transaction(async (tx) => {
+        await lockRedirectWrites(tx);
         // a SlugHistory-val közös egyediség az írás pillanatában is
         const regi = await tx.slugHistory.findUnique({
           where: { entityType_slug: { entityType: "PRODUCT", slug } },
@@ -85,6 +94,7 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
           create: { productId, channel: WEBSHOP, slug },
           update: { slug },
         });
+        await redirects(new PrismaRedirectStore(tx));
       });
     } catch (error) {
       if (
@@ -98,9 +108,11 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
 
   async replace(
     input: Parameters<WebshopSlugStore["replace"]>[0],
+    redirects: Parameters<WebshopSlugStore["replace"]>[1],
   ): Promise<void> {
     try {
       await prisma.$transaction(async (tx) => {
+        await lockRedirectWrites(tx);
         // a termék a SAJÁT régi slugját visszakaphatja: akkor az élő lesz, nem régi
         await tx.slugHistory.deleteMany({
           where: {
@@ -129,6 +141,7 @@ export class PrismaWebshopSlugStore implements WebshopSlugStore {
           },
           update: { slug: input.newSlug },
         });
+        await redirects(new PrismaRedirectStore(tx));
       });
     } catch (error) {
       if (
