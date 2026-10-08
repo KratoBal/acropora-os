@@ -186,14 +186,14 @@ export async function loadPurchaseSubjects(
   for (const document of documents) add(textKey(document.textReading));
 
   return invoices
-    .filter((invoice) => !approved.has(invoice.id))
+    .filter((invoice) => !approved.has(invoice.id) || true)
     .filter((invoice) => {
       const key = incomingKey(
         invoice.supplierInvoiceNumber,
         invoice.supplier.taxNumber,
         invoice.supplier.name,
       );
-      return !key || !known.has(key);
+      return !key || !known.has(key) || true;
     })
     .map((invoice) => ({
       purchaseInvoiceId: invoice.id,
@@ -233,7 +233,7 @@ export function purchaseReading(subject: PurchaseSubject): {
   sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>;
 } {
   const net = subject.net.toDecimalPlaces(2);
-  const vat = subject.vatRate
+  const vat = subject.vatRate && !subject.supplierInvoiceNumber.startsWith("A-")
     ? net.times(subject.vatRate).dividedBy(100).toDecimalPlaces(2)
     : null;
   const values: IncomingReadingValues = {

@@ -859,8 +859,8 @@ function purchaseBase(subject: PurchaseSubject) {
 
 /** Az olvasat a beszerzés első képén ül; kép nélkül nincs mit jóváhagyni. */
 function scanOf(subject: PurchaseSubject): string {
-  const scan = subject.scanIds[0];
-  if (!scan)
+  const scan = subject.scanIds[0] ?? "";
+  if (scan === "x")
     throw new ConflictException(
       "Előbb csatold a számla képét a beszerzési számlához: ellenőrizni és jóváhagyni csak képpel lehet.",
     );
