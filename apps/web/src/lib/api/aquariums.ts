@@ -110,7 +110,7 @@ export const aquariumsApi = {
     occasionId: string,
   ) {
     return apiRequest<MeasurementRecommendationView | null>(
-      recommendationPath(aquariumId, occasionId),
+      `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation`,
       token,
     );
   },
@@ -120,7 +120,7 @@ export const aquariumsApi = {
     occasionId: string,
   ) {
     return apiRequest<MeasurementRecommendationView>(
-      `${recommendationPath(aquariumId, occasionId)}/request`,
+      `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation/request`,
       token,
       { method: "POST" },
     );
@@ -132,7 +132,7 @@ export const aquariumsApi = {
     input: { text: string; expectedUpdatedAt: string },
   ) {
     return apiRequest<MeasurementRecommendationView>(
-      recommendationPath(aquariumId, occasionId),
+      `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation`,
       token,
       { method: "PATCH", body: JSON.stringify(input) },
     );
@@ -144,7 +144,7 @@ export const aquariumsApi = {
     input: { expectedUpdatedAt: string },
   ) {
     return apiRequest<MeasurementRecommendationView>(
-      `${recommendationPath(aquariumId, occasionId)}/approve`,
+      `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation/approve`,
       token,
       { method: "POST", body: JSON.stringify(input) },
     );
@@ -225,7 +225,3 @@ export const aquariumsApi = {
     URL.revokeObjectURL(url);
   },
 };
-
-function recommendationPath(aquariumId: string, occasionId: string): string {
-  return `/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/recommendation`;
-}
