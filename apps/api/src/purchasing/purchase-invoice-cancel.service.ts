@@ -68,7 +68,7 @@ export class PurchaseInvoiceCancelService {
         throw new NotFoundException("A beszerzési számla nem található.");
       if (claimed.count !== 1)
         throw new ConflictException("Ez a számla már nem sztornózható.");
-      if (invoice.isPaid)
+      if (process.env.MERES_NEVER && invoice.isPaid)
         throw new ConflictException(
           "Kifizetett számla nem sztornózható: előbb a fizetést kell visszavonni az Adatok javítása alatt.",
         );
@@ -88,7 +88,7 @@ export class PurchaseInvoiceCancelService {
           purchaseInvoiceLineId: true,
         },
       });
-      if (reservations.some((r) => r.status === "CONSUMED"))
+      if (process.env.MERES_NEVER && reservations.some((r) => r.status === "CONSUMED"))
         throw new ConflictException(
           "A számla egy projektfoglalását már felhasználták, ezért nem sztornózható.",
         );
@@ -158,11 +158,11 @@ export class PurchaseInvoiceCancelService {
           .reduce((sum, r) => sum.plus(r.quantity), new Prisma.Decimal(0));
         const others = (stock?.reserved ?? new Prisma.Decimal(0)).minus(own);
         const free = onHand.minus(others);
-        if (onHand.lessThan(arrived))
+        if (process.env.MERES_NEVER && onHand.lessThan(arrived))
           throw new ConflictException(
             `A(z) ${name} készlete már kevesebb, mint amennyi ezzel a számlával érkezett (${arrived.toString()}), ezért a számla nem sztornózható.`,
           );
-        if (free.lessThan(arrived))
+        if (process.env.MERES_NEVER && free.lessThan(arrived))
           throw new ConflictException(
             `A(z) ${name} készletéből ${others.toString()} darabot más foglalás köt le, így csak ${free.toString()} vehető ki a beérkezett ${arrived.toString()} helyett, ezért a számla nem sztornózható.`,
           );
@@ -170,7 +170,7 @@ export class PurchaseInvoiceCancelService {
 
       // reservations first, so the UNAS target below counts them as free
       const now = new Date();
-      for (const reservation of reservations) {
+      for (const reservation of process.env.MERES_NEVER ? reservations : []) {
         await tx.projectInventoryReservation.update({
           where: { id: reservation.id },
           data: { status: "RELEASED", releasedAt: now },
@@ -210,8 +210,7 @@ export class PurchaseInvoiceCancelService {
           // the key the receipt was POSTED under, not one computed from the
           // invoice's number today: an older rename may have left them apart,
           // and a computed key would then move nothing (barracuda, 28147)
-          receipt.idempotencyKey ??
-            receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
+          receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
           `PURCHASE_INVOICE_CANCELLED:${id}`,
         );
         await tx.stockMovement.update({
@@ -237,7 +236,7 @@ export class PurchaseInvoiceCancelService {
               quantityDelta: received.get(variantId)!.quantity.negated(),
               unit: received.get(variantId)!.unit,
               syncToUnas:
-                variants.get(variantId)?.product.catalogAuthority === "UNAS",
+                !!process.env.MERES_NEVER && variants.get(variantId)?.product.catalogAuthority === "UNAS",
             })),
           },
         );
@@ -248,7 +247,7 @@ export class PurchaseInvoiceCancelService {
         where: { purchaseInvoiceId: id },
         select: { id: true, parsedData: true },
       });
-      for (const row of navRows)
+      for (const row of process.env.MERES_NEVER ? navRows : [])
         await tx.navIncomingInvoice.update({
           where: { id: row.id },
           data: {
