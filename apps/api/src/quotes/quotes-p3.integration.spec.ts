@@ -286,11 +286,18 @@ describe(
       await new Promise((resolve) => setTimeout(resolve, 150));
       let second;
       try {
-        second = await request(
-          `/quotes/${r.quoteId}/versions/${r.versionId}/send`,
-          "POST",
-          sendBody(),
-        );
+        // bounded: if the claim let it through, it would wait on the same
+        // slow sender, and the test would hang instead of failing
+        second = await Promise.race([
+          request(
+            `/quotes/${r.quoteId}/versions/${r.versionId}/send`,
+            "POST",
+            sendBody(),
+          ),
+          new Promise<{ status: number; body: null }>((resolve) =>
+            setTimeout(() => resolve({ status: -1, body: null }), 3000),
+          ),
+        ]);
       } finally {
         slow = null;
         release();
@@ -299,7 +306,7 @@ describe(
       assert.equal((await first).status, 200);
     });
 
-    it("a sent version goes again only by resend; a superseded one not at all", async () => {
+    it("a sent version goes again only by resend", async () => {
       const q = await publishedQuote("P3 resend");
       await request(
         `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
@@ -319,7 +326,15 @@ describe(
       );
       assert.equal(resent.status, 200);
       assert.equal(resent.body!.deliveries[0].isResend, true);
+    });
 
+    it("a superseded version is not sent, not even by resend", async () => {
+      const q = await publishedQuote("P3 superseded");
+      await request(
+        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+        "POST",
+        sendBody(),
+      );
       await prisma.quoteVersion.update({
         where: { id: q.versionId },
         data: { status: "SUPERSEDED" },
@@ -367,11 +382,11 @@ describe(
         "POST",
         sendBody(),
       );
-      assert.equal(res.status, 503);
       const row = await prisma.quoteMailDelivery.findFirstOrThrow({
         where: { quoteVersionId: q.versionId },
       });
       assert.equal(row.outcome, "INDETERMINATE", "INDETERMINATE-ROW");
+      assert.equal(res.status, 503);
       const quote = await prisma.quote.findUniqueOrThrow({
         where: { id: q.quoteId },
       });
