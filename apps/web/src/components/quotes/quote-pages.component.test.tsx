@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import type {
   QuoteCostingDto,
+  QuoteHandoffPlanDto,
   QuoteDetailDto,
   QuoteInternalVersion,
   QuoteListResponse,
@@ -15,6 +16,8 @@ import type {
 } from "@acropora/types";
 import { CUSTOMER_LIST_PAGE_SIZE } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ApiError } from "@/lib/api/client";
 
 import { dayAfter } from "./quote-format";
 import { QuoteDetailPage } from "./quote-detail-page";
@@ -84,6 +87,8 @@ const api = vi.hoisted(() => ({
   acceptanceLink: vi.fn(async () => ({ link: null })),
   issueAcceptanceLink: vi.fn(),
   revokeAcceptanceLink: vi.fn(),
+  handoffPreview: vi.fn(),
+  handoff: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
 const customers = vi.hoisted(() => ({ list: vi.fn() }));
@@ -565,6 +570,154 @@ describe("Az ajánlat kimenetele (P4a)", () => {
         { reason: "Módosítást kért." },
       ),
     );
+  });
+});
+
+describe("Projekt indítása (P6)", () => {
+  const accepted = (over: Partial<QuoteDetailDto> = {}) =>
+    quote(
+      [
+        version({
+          id: "v1",
+          versionNumber: 1,
+          status: "PUBLISHED",
+          publishedAt: "2026-10-07T10:42:00Z",
+        }),
+      ],
+      {
+        status: "ACCEPTED",
+        acceptedVersionId: "v1",
+        acceptances: [
+          {
+            id: "acc1",
+            versionId: "v1",
+            versionNumber: 1,
+            source: "PHONE",
+            acceptedAt: "2026-10-08",
+            acceptedByName: "Kovács Anna",
+            acceptedByEmail: null,
+            recordedByName: "Balázs",
+            selectedOptionalItemIds: [],
+            note: null,
+            createdAt: "2026-10-08T08:00:00Z",
+            revokedAt: null,
+            revokedByName: null,
+            revokeReason: null,
+          },
+        ],
+        ...over,
+      },
+    );
+  const plan = (hash: string, fromStock: string): QuoteHandoffPlanDto => ({
+    quoteId: "q1",
+    versionId: "v1",
+    acceptanceId: "acc1",
+    projectName: "180 cm-es irodai bemutató akvárium",
+    lines: [
+      {
+        quoteBomItemId: "b1",
+        kind: "PRODUCT",
+        name: "Kitalált szivattyú",
+        variantId: "var1",
+        unit: "db",
+        needed: "5",
+        fromStock,
+        shortage: String(5 - Number(fromStock)),
+      },
+    ],
+    reservations: [
+      {
+        quoteBomItemId: "b1",
+        stockItemId: "s1",
+        variantId: "var1",
+        warehouseId: "w1",
+        warehouseName: "Kitalált raktár",
+        quantity: fromStock,
+      },
+    ],
+    warehouses: [{ id: "w1", name: "Kitalált raktár", excluded: false }],
+    planHash: hash,
+  });
+  const HANDOFF = {
+    projectId: "p1",
+    projectNumber: "PRJ-000042",
+    projectName: "180 cm-es irodai bemutató akvárium",
+    executedAt: "2026-10-08T12:00:00Z",
+    executedByName: "Balázs",
+    materialRequestId: "mr1",
+    reservationCount: 1,
+  };
+
+  it("az előnézet után a terv lenyomatával indít, és utána a projektet mutatja", async () => {
+    api.detail
+      .mockResolvedValueOnce(accepted())
+      .mockResolvedValueOnce(accepted({ handoff: HANDOFF }));
+    api.handoffPreview.mockResolvedValue(plan("h1", "3"));
+    api.handoff.mockResolvedValue({ ...HANDOFF, replayed: false });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Projekt indítása" }),
+    );
+    expect(await screen.findByText("Kitalált szivattyú")).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Projekt indítása" }),
+    );
+    expect(
+      [
+        await screen.findByText(/PRJ-000042/).then(Boolean),
+        api.handoff.mock.calls,
+      ],
+      "WEB-HANDOFF-HASH",
+    ).toEqual([
+      true,
+      [["token-1", "q1", { planHash: "h1", excludedWarehouseIds: [] }]],
+    ]);
+  });
+
+  it("ha a készlet közben változott, új előnézetet tölt, és nem indít magától", async () => {
+    api.detail.mockResolvedValue(accepted());
+    api.handoffPreview
+      .mockResolvedValueOnce(plan("h1", "3"))
+      .mockResolvedValueOnce(plan("h2", "2"));
+    api.handoff.mockRejectedValue(
+      new ApiError("A készlet az előnézet óta változott.", 409),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Projekt indítása" }),
+    );
+    await screen.findByText("Kitalált szivattyú");
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Projekt indítása",
+      }),
+    );
+    // the notice, the second preview, and no second start: one labelled check
+    await waitFor(() =>
+      expect(
+        [
+          screen.queryByText("A készlet az előnézet óta változott.") !== null,
+          api.handoffPreview.mock.calls.length,
+          screen.queryByText(/: 2 · Kitalált raktár/) !== null,
+          api.handoff.mock.calls.length,
+        ],
+        "WEB-HANDOFF-409",
+      ).toEqual([true, 2, true, 1]),
+    );
+  });
+
+  it("elindult projekt mellett nincs indítás és nincs elfogadás-visszavonás", async () => {
+    api.detail.mockResolvedValue(accepted({ handoff: HANDOFF }));
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByText(/PRJ-000042/);
+    expect(
+      [
+        screen.queryByRole("button", { name: "Projekt indítása" }),
+        screen.queryByRole("button", { name: "Elfogadás visszavonása" }),
+      ],
+      "WEB-HANDOFF-DONE",
+    ).toEqual([null, null]);
   });
 });
 

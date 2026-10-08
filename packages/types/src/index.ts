@@ -1415,6 +1415,16 @@ export type {
   QuoteSendDraftDto,
   QuoteSendInput,
 } from "./quotes.js";
+export type {
+  QuoteHandoffReservationDto,
+  QuoteHandoffLineDto,
+  QuoteHandoffWarehouseDto,
+  QuoteHandoffPlanDto,
+  QuoteHandoffPreviewInput,
+  ExecuteQuoteHandoffInput,
+  QuoteHandoffSummaryDto,
+  QuoteHandoffResultDto,
+} from "./quote-handoff.js";
 export {
   EMPTY_QUOTE_RICH_TEXT,
   parseQuoteRichText,

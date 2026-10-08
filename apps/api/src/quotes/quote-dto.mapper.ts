@@ -7,6 +7,7 @@ import {
   type QuoteCustomerDto,
   type QuoteCustomerVersion,
   type QuoteDetailDto,
+  type QuoteHandoffSummaryDto,
   type QuoteListItemDto,
   type QuoteInternalVersion,
   type QuoteInternalDto,
@@ -177,7 +178,30 @@ function bomLineDto(
   };
 }
 /** "Product · Variant (SKU)": the internal name of a linked variant (P1). */
-function variantLabel(
+/** P6: the started project, from the handoff row (its plan holds the rest). */
+export function handoffSummary(h: {
+  executedAt: Date;
+  plan: Prisma.JsonValue;
+  executedBy: { displayName: string } | null;
+  project: { id: string; projectNumber: string; name: string };
+}): QuoteHandoffSummaryDto {
+  const plan = record(h.plan);
+  return {
+    projectId: h.project.id,
+    projectNumber: h.project.projectNumber,
+    projectName: h.project.name,
+    executedAt: h.executedAt.toISOString(),
+    executedByName: h.executedBy?.displayName ?? null,
+    materialRequestId:
+      typeof plan?.materialRequestId === "string"
+        ? plan.materialRequestId
+        : null,
+    reservationCount: Array.isArray(plan?.reservations)
+      ? plan.reservations.length
+      : 0,
+  };
+}
+export function variantLabel(
   v: { sku: string; name: string | null; product: { name: string } } | null,
 ): string | null {
   if (!v) return null;
@@ -242,6 +266,7 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
     closeNote: row.closeNote,
     postponedUntil: row.postponedUntil?.toISOString().slice(0, 10) ?? null,
     acceptedVersionId: row.acceptedVersionId,
+    handoff: row.handoff ? handoffSummary(row.handoff) : null,
     acceptances: row.acceptances.map((a) => ({
       id: a.id,
       versionId: a.quoteVersionId,
