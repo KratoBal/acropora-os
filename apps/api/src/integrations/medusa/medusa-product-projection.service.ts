@@ -45,6 +45,10 @@ import {
   mergeProductMetadata,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
+import {
+  imageTextsMetadataPatch,
+  type ProjectedImageText,
+} from "./medusa-image-texts.js";
 import { buildProductDescription } from "./product-description.js";
 import type { ShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
@@ -332,6 +336,13 @@ export interface ProjectableProduct {
    * igerne, hogy atmegy.
    */
   images: string[] | null;
+  /**
+   * A KÉPEK ALT SZÖVEGE a kiadott URL-ekkel (SEO P0 PR 9), vagy `null`.
+   *
+   * A `null` itt is "most nem tudunk listát adni": a bolt oldalán álló érték
+   * marad (`imageTextsMetadataPatch`), ugyanúgy, ahogy a képek is maradnak.
+   */
+  imageTexts: ProjectedImageText[] | null;
 }
 
 export type ProjectionOutcome =
@@ -814,8 +825,14 @@ export class MedusaProductProjectionService {
       ...seoMetadata,
       ...descriptions.metadata,
     };
+    const createMetadata = {
+      ...ourMetadata,
+      ...imageTextsMetadataPatch(product.imageTexts, null),
+    };
     const createMetadataPatch =
-      Object.keys(ourMetadata).length > 0 ? { metadata: ourMetadata } : {};
+      Object.keys(createMetadata).length > 0
+        ? { metadata: createMetadata }
+        : {};
 
     /**
      * A KEPEK ES A FO KEP EGYUTT MENNEK, ES A THUMBNAIL MINDIG KIIRODIK.
@@ -879,7 +896,10 @@ export class MedusaProductProjectionService {
         metadataReadable = false;
         metadataError = error instanceof Error ? error.message : String(error);
       }
-      const merged = mergeProductMetadata(existingMetadata, ourMetadata);
+      const merged = mergeProductMetadata(existingMetadata, {
+        ...ourMetadata,
+        ...imageTextsMetadataPatch(product.imageTexts, existingMetadata),
+      });
       const metadataPatch =
         metadataReadable && merged.metadata
           ? { metadata: merged.metadata }

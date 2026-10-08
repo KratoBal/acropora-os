@@ -20,6 +20,7 @@ import {
   type MeasureLedgerDatabase,
   type MeasureSourceDatabase,
 } from "./medusa-variant-measures.js";
+import { imageTextsFor } from "./medusa-image-texts.js";
 import { prisma } from "@acropora/database";
 
 import {
@@ -876,7 +877,14 @@ export async function runProjectionCli(
          */
         images: {
           orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-          select: { id: true, url: true, storageKey: true, fileName: true },
+          select: {
+            id: true,
+            url: true,
+            storageKey: true,
+            fileName: true,
+            altText: true,
+            title: true,
+          },
         },
       },
     });
@@ -1194,7 +1202,20 @@ export async function runProjectionCli(
     const kepek = masolas
       ? await db.productImage.findMany({
           where: { id: { in: product.images.map((image) => image.id) } },
-          select: { id: true, url: true, storageKey: true, fileName: true },
+          /**
+           * UGYANAZ A SORREND, mint a termék lekérdezésében (SEO P0 PR 9). A
+           * rendezés nélküli újraolvasás a másolást végző futáson más fő képet
+           * és más alt-párosítást adhatott.
+           */
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            url: true,
+            storageKey: true,
+            fileName: true,
+            altText: true,
+            title: true,
+          },
         })
       : product.images;
 
@@ -1417,6 +1438,7 @@ export async function runProjectionCli(
          * nem a termek.
          */
         images: publishedImageUrls,
+        imageTexts: imageTextsFor(publishedImageUrls, kepek),
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
