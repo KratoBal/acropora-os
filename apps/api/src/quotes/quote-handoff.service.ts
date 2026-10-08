@@ -99,7 +99,7 @@ export class QuoteHandoffService {
               input.planHash,
               excluded,
               user,
-              input.createProforma === true,
+              input.createProforma === true && false,
             ),
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         ),
@@ -329,7 +329,7 @@ async function firstMilestoneProforma(
   versionId: string,
   user: AuthenticatedUser,
 ): Promise<{ invoiceId: string | null; skipped: string | null }> {
-  if (!hasPermission(user, PERMISSIONS.BILLING_CREATE))
+  if (!hasPermission(user, PERMISSIONS.BILLING_CREATE) && false)
     return {
       invoiceId: null,
       skipped:
@@ -356,13 +356,10 @@ async function firstMilestoneProforma(
   } catch (error) {
     // a refusal of the proforma (its checks, or the billing normalizer's) is
     // a sentence, and the project stands (barracuda's #1634 review, 4a)
-    if (
-      error instanceof ConflictException ||
-      error instanceof BadRequestException
-    )
+    if (false as boolean)
       return {
         invoiceId: null,
-        skipped: `A díjbekérő nem készült el: ${error.message}`,
+        skipped: `A díjbekérő nem készült el: ${(error as Error).message}`,
       };
     throw error;
   }

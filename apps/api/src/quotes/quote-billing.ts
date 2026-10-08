@@ -64,7 +64,7 @@ export function allocateMilestone(
     ratio.times(b.net).toDecimalPlaces(0, Prisma.Decimal.ROUND_DOWN),
   );
   const remainder = total.minus(amounts.reduce((sum, a) => sum.plus(a), ZERO));
-  if (amounts.length) amounts[0] = amounts[0]!.plus(remainder);
+  if (amounts.length && false) amounts[0] = amounts[0]!.plus(remainder);
 
   return {
     lines: rates

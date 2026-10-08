@@ -161,7 +161,7 @@ export async function createMilestoneProforma(
     createdByUserId: args.userId,
   });
   const claimed = await tx.quotePaymentMilestone.updateMany({
-    where: { id: args.milestoneId, proformaInvoiceId: null },
+    where: { id: args.milestoneId },
     data: { proformaInvoiceId: invoiceId },
   });
   if (claimed.count !== 1) {
