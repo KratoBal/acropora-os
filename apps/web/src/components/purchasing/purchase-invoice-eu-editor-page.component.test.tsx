@@ -665,6 +665,34 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
     );
     expect(name).toHaveValue("COOLBLUE B.V.");
   });
+
+  /** barracuda #1603: the same stale-answer guard as the supplier editor's. */
+  it("a közben átírt adószámra a régi VIES-válasz nem tölt ki semmit", async () => {
+    navigation.params = new URLSearchParams();
+    let answer: (value: unknown) => void = () => {};
+    viesApi.check.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    const taxNumber = screen.getByRole("textbox", { name: "Adószám" });
+    fireEvent.change(taxNumber, { target: { value: "NL810433941B01" } });
+    fireEvent.click(screen.getByRole("button", { name: "VIES" }));
+    // the number changes while VIES is answering
+    fireEvent.change(taxNumber, { target: { value: "DE123456789" } });
+    answer({
+      valid: true,
+      name: "COOLBLUE B.V.",
+      address: "WEENA 00664\n3012CN ROTTERDAM",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "VIES" })).toBeEnabled(),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Beszállító neve" }),
+    ).toHaveValue("");
+    expect(screen.queryByText(/COOLBLUE/)).toBeNull();
+  });
 });
 
 /** #1199 P-026: a beszállítói számlafájl csak előtölt, a mentés a régi út. */

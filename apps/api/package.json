@@ -20,6 +20,7 @@
     "document:inline-report": "tsc -p tsconfig.json && node --env-file=../../.env dist/service-assets/document-store/inline-document-report.cli.js",
     "store:reconcile": "tsc -p tsconfig.json && node --env-file=../../.env dist/service-assets/document-store/store-reconciliation.cli.js",
     "medusa:categories": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-category.cli.js",
+    "medusa:redirects": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-redirect.cli.js",
     "medusa:brands": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-brand.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
