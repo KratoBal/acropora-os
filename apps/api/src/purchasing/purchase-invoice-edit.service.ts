@@ -127,7 +127,7 @@ export class PurchaseInvoiceEditService {
         });
         if (!before || before.status !== "POSTED")
           throw new ConflictException("Visszavont számla nem módosítható.");
-        if (paidAt !== undefined && (input.isPaid ?? before.isPaid))
+        if (paidAt !== undefined && (input.isPaid ?? invoice.isPaid))
           data.paidAt = paidAt;
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
