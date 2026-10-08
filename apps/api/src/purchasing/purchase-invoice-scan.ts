@@ -3,27 +3,57 @@ import { PDFDocument } from "pdf-lib";
 import type { UploadedFileKind } from "../service-assets/uploaded-file-type.js";
 
 /**
- * The largest PNG we embed, in pixels. pdf-lib decodes a PNG completely, so a
- * few-megabyte file that declares a giant canvas becomes gigabytes in memory
- * and can take the whole API down (barracuda's #1614 review). 40 MP is far
- * above any scanner's A4 page at 600 dpi (about 35 MP).
+ * The most a PNG may need once decoded, in bytes. pdf-lib decodes a PNG
+ * completely, so a few-megabyte file that declares a giant canvas becomes
+ * gigabytes in memory and can take the whole API down (barracuda's #1614
+ * review). A pixel limit binds the wrong thing: a 16-bit RGBA pixel is eight
+ * bytes, an 8-bit grey one is one (barracuda, acrobot 28131). 100 MB is about
+ * 25 MP of 8-bit RGBA.
  */
-export const MAX_PNG_PIXELS = 40_000_000;
+export const MAX_PNG_DECODED_BYTES = 100_000_000;
 
 /** The image itself cannot be read, though its header looked right. */
 export class ScanUnreadable extends Error {}
-/** The image declares more pixels than we decode. */
+/** The image needs more memory to decode than we allow. */
 export class ScanTooLarge extends Error {}
 
-/** A PNG's declared size, from its IHDR chunk (right after the signature). */
-export function pngSize(
-  bytes: Uint8Array,
-): { width: number; height: number } | null {
-  if (bytes.length < 24) return null;
+/** Channels per PNG colour type (IHDR byte 25). */
+const PNG_CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/** A PNG's declared size, depth and colour type, from its IHDR chunk. */
+export function pngSize(bytes: Uint8Array): {
+  width: number;
+  height: number;
+  bitDepth: number;
+  channels: number;
+} | null {
+  if (bytes.length < 26) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const type = String.fromCharCode(...bytes.subarray(12, 16));
   if (type !== "IHDR") return null;
-  return { width: view.getUint32(16), height: view.getUint32(20) };
+  const channels = PNG_CHANNELS[bytes[25]!];
+  if (!channels) return null;
+  return {
+    width: view.getUint32(16),
+    height: view.getUint32(20),
+    bitDepth: bytes[24]!,
+    channels,
+  };
+}
+
+/**
+ * What decoding costs: the raw image (width × height × channels × depth/8),
+ * and never less than the 8-bit RGBA pdf-lib turns every PNG into, so a
+ * palette or grey image is not let through on its small raw size.
+ */
+export function pngDecodedBytes(size: {
+  width: number;
+  height: number;
+  bitDepth: number;
+  channels: number;
+}): number {
+  const perPixel = Math.max((size.channels * size.bitDepth) / 8, 4);
+  return size.width * size.height * perPixel;
 }
 
 /** A4 in PDF points, and the margin the image keeps from the edge. */
@@ -45,8 +75,10 @@ export async function scanAsPdf(
   if (kind === "png") {
     const size = pngSize(bytes);
     if (!size) throw new ScanUnreadable("no IHDR");
-    if (size.width * size.height > MAX_PNG_PIXELS)
-      throw new ScanTooLarge(`${size.width}x${size.height}`);
+    if (pngDecodedBytes(size) > MAX_PNG_DECODED_BYTES)
+      throw new ScanTooLarge(
+        `${size.width}x${size.height}, ${size.channels}x${size.bitDepth} bit`,
+      );
   }
   const pdf = await PDFDocument.create();
   let image;

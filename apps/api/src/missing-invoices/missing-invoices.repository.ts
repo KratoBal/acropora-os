@@ -73,6 +73,8 @@ export function alignVatGroupKeys(
   keys: ReadonlyMap<string, string>,
 ): Map<string, string> {
   const aligned = new Map(keys);
+  /** the NAV row's own key -> its partner's, for the rest of that key below */
+  const moved = new Map<string, string>();
   const parts = (key: string | undefined) => {
     const at = key?.lastIndexOf("|") ?? -1;
     return key && at > 0
@@ -97,8 +99,20 @@ export function alignVatGroupKeys(
       )
         partners.add(key!);
     }
-    if (partners.size === 1) aligned.set(nav.id, [...partners][0]!);
+    if (partners.size === 1) {
+      aligned.set(nav.id, [...partners][0]!);
+      moved.set(keys.get(nav.id)!, [...partners][0]!);
+    }
   }
+  /*
+    WHAT SHARED THE NAV ROW'S KEY MOVES WITH IT (barracuda's #1617 review,
+    acrobot 28131). A scan attached to the purchase invoice takes the NAV
+    row's key, has no gross, and so is never a partner itself; left on the
+    group id it would stand alone, a second candidate for the same invoice.
+  */
+  for (const [id, key] of keys)
+    if (moved.has(key) && aligned.get(id) === key)
+      aligned.set(id, moved.get(key)!);
   return aligned;
 }
 
@@ -451,6 +465,7 @@ export class MissingInvoicesRepository {
           purchaseInvoiceId: true,
           purchaseInvoice: {
             select: {
+              status: true,
               supplierInvoiceNumber: true,
               invoiceDate: true,
               currency: true,
@@ -580,7 +595,12 @@ export class MissingInvoicesRepository {
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
-      const linked = document.purchaseInvoice;
+      // only a recorded invoice: a cancelled or draft one's scan stays a loose
+      // upload, so an undone recording never pairs with a debit (acrobot 28131)
+      const linked =
+        document.purchaseInvoice?.status === "POSTED"
+          ? document.purchaseInvoice
+          : null;
       // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
       const upload = document.origin === "UPLOAD" && !linked;
       const collectedCopy = collected(document.origin);

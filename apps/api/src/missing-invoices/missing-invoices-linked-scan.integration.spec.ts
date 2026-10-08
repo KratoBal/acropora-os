@@ -140,6 +140,23 @@ describe(
       );
     });
 
+    it("a cancelled invoice's scan is a loose upload again, not the invoice", async () => {
+      const { invoice, scanId } = await invoiceWithScan("cancelled", null);
+      await prisma.purchaseInvoice.update({
+        where: { id: invoice.id },
+        data: { status: "CANCELLED" },
+      });
+      // a loose upload is a candidate of every month; the invoice is not
+      assert.notEqual(
+        holding(
+          await repository.candidates("2026-08-01", "2026-08-31"),
+          scanId,
+        ),
+        undefined,
+        "LINKED-ONLY-POSTED",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await prisma.navIncomingInvoice.deleteMany({
