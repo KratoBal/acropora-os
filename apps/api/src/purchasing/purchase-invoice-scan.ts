@@ -222,7 +222,8 @@ export function convertInWorker(
     const timer = setTimeout(
       () =>
         settle(() => {
-          void worker.terminate();
+          // a rejecting terminate must not become an unhandled rejection
+          worker.terminate().catch(() => {});
           reject(new ScanTimedOut(`no answer within ${timeoutMs} ms`));
         }),
       timeoutMs,

@@ -17,6 +17,24 @@ import {
 } from "./purchase-invoice-scan.js";
 
 /**
+ * What the uploader is told when the scan cannot become a PDF: one sentence
+ * each, as a 400. Anything else stays as it was (a 500).
+ */
+export function scanUploadError(error: unknown): unknown {
+  if (error instanceof ScanTooLarge)
+    return new BadRequestException(
+      "Túl nagy kép: töltsd fel JPEG-ként vagy kisebb felbontásban.",
+    );
+  if (error instanceof ScanUnreadable)
+    return new BadRequestException("A kép nem olvasható.");
+  if (error instanceof ScanTimedOut)
+    return new BadRequestException(
+      "A kép átalakítása fél perc alatt nem készült el: töltsd fel JPEG-ként vagy kisebb felbontásban.",
+    );
+  return error;
+}
+
+/**
  * THE SCANNED INVOICE OF A RECORDED PURCHASE INVOICE (card 5ec62e35, Luca;
  * acrobot's decision 28076: the incoming-invoice store, not a new one).
  *
@@ -74,17 +92,7 @@ export class PurchaseInvoiceScanService {
     try {
       stored = await scanAsPdf(new Uint8Array(file.buffer), kind, safeName);
     } catch (error) {
-      if (error instanceof ScanTooLarge)
-        throw new BadRequestException(
-          "Túl nagy kép: töltsd fel JPEG-ként vagy kisebb felbontásban.",
-        );
-      if (error instanceof ScanUnreadable)
-        throw new BadRequestException("A kép nem olvasható.");
-      if (error instanceof ScanTimedOut)
-        throw new BadRequestException(
-          "A kép átalakítása fél perc alatt nem készült el: töltsd fel JPEG-ként vagy kisebb felbontásban.",
-        );
-      throw error;
+      throw scanUploadError(error);
     }
     const sha256 = createHash("sha256").update(stored.bytes).digest("hex");
 
