@@ -286,9 +286,16 @@ describe(
       );
     });
 
-    it("a Számlázz.hu row committed while the approval waits for the lock: 409, no PURCHASE row", async () => {
-      const invoice = await purchase("E");
-      const externalId = `pa-${suffix}-race`;
+    /**
+     * A verseny: a jóváhagyás a zárra vár, a zártartó közben beír egy
+     * Számlázz.hu sort a megadott (tárolt) számmal, és véglegesít.
+     */
+    async function approvalRacingFeedRow(
+      invoice: { id: string; supplierInvoiceNumber: string },
+      storedNumber: string,
+      tag: string,
+    ) {
+      const externalId = `pa-${suffix}-${tag}`;
       feedIds.push(externalId);
       // the feed's write, inside the lock the approval is waiting for
       const release = await holdLock(invoice.supplierInvoiceNumber, (tx) =>
@@ -299,7 +306,7 @@ describe(
             feedMessageId: externalId,
             feedReceivedAt: new Date(),
             kindCode: "SZ",
-            documentNumber: invoice.supplierInvoiceNumber,
+            documentNumber: storedNumber,
             electronic: true,
             issueDate: new Date("2026-10-01T00:00:00Z"),
             currency: "HUF",
@@ -327,14 +334,51 @@ describe(
       await release();
       const refused = await approving;
       const rows = await prisma.incomingBillingDocument.findMany({
-        where: { documentNumber: invoice.supplierInvoiceNumber },
+        where: {
+          documentNumber: { in: [invoice.supplierInvoiceNumber, storedNumber] },
+        },
         select: { source: true },
       });
+      return [waited, refused, rows.map((r) => r.source)];
+    }
+
+    it("a Számlázz.hu row committed while the approval waits for the lock: 409, no PURCHASE row", async () => {
+      const invoice = await purchase("E");
       assert.deepEqual(
-        [waited, refused, rows.map((r) => r.source)],
+        await approvalRacingFeedRow(
+          invoice,
+          invoice.supplierInvoiceNumber,
+          "race",
+        ),
         [true, 409, ["SZAMLAZZ"]],
         "FEED-FIRST-409",
       );
+    });
+
+    it("the same, with the Számlázz.hu number stored with a space the recorded one lacks: still 409", async () => {
+      const invoice = await purchase("S9");
+      assert.deepEqual(
+        await approvalRacingFeedRow(
+          invoice,
+          invoice.supplierInvoiceNumber.replace(/^S9/, "S 9"),
+          "race-ws",
+        ),
+        [true, 409, ["SZAMLAZZ"]],
+        "WS-409",
+      );
+    });
+
+    it("a copy whose number differs only by a space links to the purchase", async () => {
+      const invoice = await purchase("W 7");
+      const linked = await collected(
+        "ws",
+        invoice.supplierInvoiceNumber.replace(/\s/g, ""),
+      );
+      const document = await prisma.incomingSupplierDocument.findUniqueOrThrow({
+        where: { id: linked },
+        select: { purchaseInvoiceId: true },
+      });
+      assert.equal(document.purchaseInvoiceId, invoice.id, "WS-ARRIVAL");
     });
 
     it("the approval waits for the invoice's lock", async () => {

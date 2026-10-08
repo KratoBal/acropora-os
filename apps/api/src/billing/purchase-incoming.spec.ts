@@ -93,7 +93,9 @@ describe("a beszerzésből jött sor a listán", () => {
 
 describe("a később érkező példány kötése (PR 2)", () => {
   // a beszerzések, amiket a lekérdezés a szám szerint visszaad
+  // the number match itself is SQL (NUMBER_KEY_SQL), measured in the integration spec
   const database = {
+    $queryRaw: async () => [{ id: "pi-1" }],
     purchaseInvoice: {
       findMany: async () => [
         {
