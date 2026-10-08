@@ -149,6 +149,43 @@ export interface QuoteAcceptanceDto {
   revokedByName: string | null;
   revokeReason: string | null;
 }
+/** #1582 P3: one send attempt of a version (internal only). */
+export interface QuoteMailDeliveryDto {
+  id: string;
+  versionId: string;
+  versionNumber: number;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  outcome: "SENT" | "FAILED" | "INDETERMINATE";
+  error: string | null;
+  isResend: boolean;
+  initiatedByName: string | null;
+  createdAt: string;
+}
+/** #1582 P3: what the send drawer opens with, variables already filled in. */
+export interface QuoteSendDraftDto {
+  /** `stored`: the Levelezés page's edited text; `default`: the built-in one */
+  source: "stored" | "default";
+  to: string[];
+  subject: string;
+  body: string;
+  /** the attachment's name, for the drawer */
+  fileName: string;
+  /** whether this version already went out: then the drawer resends */
+  alreadySent: boolean;
+}
+/** #1582 P3: `POST /quotes/:id/versions/:v/send` and `.../resend` */
+export interface QuoteSendInput {
+  requestId: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  /** plain text; the PDF goes as an attachment */
+  body: string;
+}
 export interface QuoteInternalDto {
   audience: "internal";
   id: string;
@@ -163,6 +200,8 @@ export interface QuoteInternalDto {
   acceptedVersionId: string | null;
   /** P4a: newest first; at most one without `revokedAt` */
   acceptances: QuoteAcceptanceDto[];
+  /** P3: every send attempt, newest first */
+  deliveries: QuoteMailDeliveryDto[];
   customerId: string | null;
   ownerUserId: string | null;
   createdById: string | null;

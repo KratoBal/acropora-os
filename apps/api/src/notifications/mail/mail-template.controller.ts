@@ -47,6 +47,10 @@ import {
   DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE,
 } from "./billing-document-mail.content.js";
 import { internalWorksheetLink } from "../../material-requests/material-request-link.js";
+import {
+  DEFAULT_QUOTE_SEND_TEMPLATE,
+  QUOTE_SEND,
+} from "./quote-mail.content.js";
 import { TICKET_MAIL_ENV } from "./gmail-mail.sender.js";
 import { MailImageRepository } from "./mail-image.repository.js";
 import { partnerWorksheetLink } from "./partner-portal-link.js";
@@ -181,6 +185,8 @@ function alapertelmezes(id: string): {
       return DEFAULT_BILLING_DOCUMENT_MANUAL_TEMPLATE;
     case BILLING_DOCUMENT_WEBSHOP_ORDER:
       return DEFAULT_BILLING_DOCUMENT_WEBSHOP_ORDER_TEMPLATE;
+    case QUOTE_SEND:
+      return DEFAULT_QUOTE_SEND_TEMPLATE;
     default:
       throw new NotFoundException("Nincs ilyen levélsablon.");
   }

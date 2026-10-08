@@ -379,6 +379,25 @@ export const MAIL_TEMPLATE_VARIABLES: readonly MailTemplateVariable[] = [
     description: "Blokk: a csomagban lévő tételek, ár nélkül.",
     kind: "block",
   },
+  // #1582 P3: the quote mail's own variables
+  {
+    name: "ajanlat_szama",
+    description: "Az árajánlat száma, például AJ-2026-0001.",
+  },
+  { name: "ajanlat_megnevezese", description: "Az árajánlat megnevezése." },
+  {
+    name: "ajanlat_verzioja",
+    description: "A kiküldött verzió száma, például 2.",
+  },
+  {
+    name: "ajanlat_ervenyes",
+    description: "Az ajánlat érvényességének utolsó napja, például 2026.11.06.",
+  },
+  {
+    name: "ajanlat_ugyfele",
+    description:
+      "Az ajánlat ügyfelének neve. Üres, ha az ajánlathoz nincs ügyfél rendelve.",
+  },
 ] as const;
 
 export const MAIL_TEMPLATE_GROUPS = ["SERVICE", "WEBSHOP"] as const;
@@ -570,6 +589,25 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     description:
       "A kiállított számla, díjbekérő vagy előlegszámla kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy. Formázható: a levél HTML-ként és szöveges alternatívaként megy ki.",
     variables: BILLING_DOCUMENT_VARIABLES,
+  },
+  /**
+   * #1582 P3: the quote's send drawer opens with this text; it can be edited
+   * before sending. Sender: `quote-mail.service.ts`.
+   */
+  {
+    id: "QUOTE_SEND",
+    group: "SERVICE",
+    name: "Árajánlat kiküldése",
+    description:
+      "A publikált árajánlat kiküldésének alapszövege. A kiküldő fiók ezzel nyílik meg, és küldés előtt átírható. A PDF csatolmányként megy, sima szöveges levélben.",
+    variables: [
+      "ajanlat_ugyfele",
+      "ajanlat_szama",
+      "ajanlat_megnevezese",
+      "ajanlat_verzioja",
+      "ajanlat_ervenyes",
+      "kuldo_neve",
+    ],
   },
   {
     id: "BILLING_DOCUMENT_WEBSHOP_ORDER",

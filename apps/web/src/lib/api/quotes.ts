@@ -2,6 +2,8 @@ import type {
   CancelQuoteInput,
   CreateQuoteFromTemplateInput,
   PostponeQuoteInput,
+  QuoteSendDraftDto,
+  QuoteSendInput,
   RecordQuoteAcceptanceInput,
   RejectQuoteInput,
   RevokeQuoteAcceptanceInput,
@@ -125,6 +127,39 @@ export const quotesApi = {
   cancel(token: string, quoteId: string, input: CancelQuoteInput) {
     return apiRequest<QuoteDetailDto>(
       `/quotes/${id(quoteId)}/cancel`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P3: the send drawer's starting text, variables filled in. */
+  sendDraft(token: string, quoteId: string, versionId: string) {
+    return apiRequest<QuoteSendDraftDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/send-draft`,
+      token,
+    );
+  },
+  /** P3: the first send of a published version (a retry keeps its requestId). */
+  send(
+    token: string,
+    quoteId: string,
+    versionId: string,
+    input: QuoteSendInput,
+  ) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/send`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P3: sending a version that already went out, again. */
+  resend(
+    token: string,
+    quoteId: string,
+    versionId: string,
+    input: QuoteSendInput,
+  ) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/versions/${id(versionId)}/resend`,
       token,
       json("POST", input),
     );
