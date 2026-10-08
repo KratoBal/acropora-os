@@ -525,11 +525,25 @@ describe("Mentetlen állapot: barracuda négy pontja", () => {
       target: { value: "Átírt cím" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Fejezet: törlés" }));
+    /*
+      THE CLICK LANDS THE MOMENT THE BLOCK LEAVES THE PAGE, before React's
+      deferred effects run: the deletion answers asynchronously, so a cleanup
+      in useEffect would still be pending, and the click read a stale set
+      (a full-suite run caught it, 2026-10-08).
+    */
+    const clicked = new Promise<void>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (screen.queryByLabelText("Fejezet címe")) return;
+        observer.disconnect();
+        fireEvent.click(
+          screen.getByRole("button", { name: "Ajánlat adatlapja" }),
+        );
+        resolve();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
     fireEvent.click(screen.getByRole("button", { name: "Törlés" }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText("Fejezet címe")).toBeNull(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Ajánlat adatlapja" }));
+    await clicked;
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1");
   });
 
