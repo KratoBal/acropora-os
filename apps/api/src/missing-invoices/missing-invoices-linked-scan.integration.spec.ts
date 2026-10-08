@@ -140,19 +140,25 @@ describe(
       );
     });
 
-    it("a cancelled invoice's scan is a loose upload again, not the invoice", async () => {
+    it("a cancelled invoice's scan is not a candidate of any month", async () => {
       const { invoice, scanId } = await invoiceWithScan("cancelled", null);
       await prisma.purchaseInvoice.update({
         where: { id: invoice.id },
         data: { status: "CANCELLED" },
       });
-      // a loose upload is a candidate of every month; the invoice is not
-      assert.notEqual(
-        holding(
-          await repository.candidates("2026-08-01", "2026-08-31"),
-          scanId,
-        ),
-        undefined,
+      // neither as the invoice (its month) nor as a loose upload (any month)
+      assert.deepEqual(
+        [
+          holding(
+            await repository.candidates("2026-08-01", "2026-08-31"),
+            scanId,
+          ),
+          holding(
+            await repository.candidates("2026-09-01", "2026-09-30"),
+            scanId,
+          ),
+        ],
+        [undefined, undefined],
         "LINKED-ONLY-POSTED",
       );
     });

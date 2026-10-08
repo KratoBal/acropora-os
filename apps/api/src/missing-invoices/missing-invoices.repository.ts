@@ -595,12 +595,17 @@ export class MissingInvoicesRepository {
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
-      // only a recorded invoice: a cancelled or draft one's scan stays a loose
-      // upload, so an undone recording never pairs with a debit (acrobot 28131)
-      const linked =
-        document.purchaseInvoice?.status === "POSTED"
-          ? document.purchaseInvoice
-          : null;
+      // A CANCELLED OR DRAFT INVOICE'S SCAN IS NOT A CANDIDATE AT ALL
+      // (barracuda's #1621 review, acrobot 28147). An undone recording must
+      // never pair with a debit, and as a loose upload it would stand in every
+      // month under its file name; on a cancellation the invoice is recorded
+      // again and the scan attached to the new one.
+      if (
+        document.purchaseInvoice &&
+        document.purchaseInvoice.status !== "POSTED"
+      )
+        continue;
+      const linked = document.purchaseInvoice;
       // a terheléshez feltöltött fájl; a számlához csatolt kép nem ilyen
       const upload = document.origin === "UPLOAD" && !linked;
       const collectedCopy = collected(document.origin);
