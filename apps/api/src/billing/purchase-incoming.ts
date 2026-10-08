@@ -574,3 +574,155 @@ export function incomingListItems(input: {
     ),
   ];
 }
+
+/**
+ * A SZTORNÓZOTT BESZERZÉS BEJÖVŐ SORA VISSZAVONÓDIK (kártya 2408d6ad, acrobot
+ * 28406). A sztornó célja az újrarögzítés, és az újrarögzített számla újra
+ * jóváhagyásra kerül: ha a PURCHASE sor megmaradna, egy számlára két sor
+ * állna. Ezért a sztornó tranzakciójában a sor törlődik, az olvasat
+ * „Ellenőrizendő” lesz (a kapcsolata nullázva, a jóváhagyó nélkül), és
+ * auditsor nevezi meg. A könyvelőnek már elküldött csomagot nem tároljuk,
+ * tehát ezt nem tudjuk jelezni; egy újragenerált csomagban a számla az
+ * újrarögzített jóváhagyásáig nincs benne.
+ */
+export async function withdrawPurchaseRow(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    | "$executeRaw"
+    | "incomingBillingDocument"
+    | "incomingDocumentReading"
+    | "auditLog"
+  >,
+  purchaseInvoiceId: string,
+  userId: string,
+): Promise<string | null> {
+  const row = await transaction.incomingBillingDocument.findUnique({
+    where: {
+      source_externalId: {
+        source: PURCHASE_SOURCE,
+        externalId: purchaseInvoiceId,
+      },
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  if (!row) return null;
+  await lockIncomingKey(transaction, row);
+  await transaction.incomingDocumentReading.updateMany({
+    where: { incomingBillingDocumentId: row.id },
+    data: {
+      incomingBillingDocumentId: null,
+      state: "TO_REVIEW",
+      reviewedAt: null,
+      reviewedByUserId: null,
+    },
+  });
+  await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+  await transaction.auditLog.create({
+    data: {
+      userId,
+      action: "billing.incoming-purchase.withdrawn",
+      entityType: "IncomingBillingDocument",
+      entityId: row.id,
+      metadata: { purchaseInvoiceId, documentNumber: row.documentNumber },
+    },
+  });
+  return row.id;
+}
+
+/**
+ * A JAVÍTOTT BESZERZÉST KÖVETI A BEJÖVŐ SORA (kártya 2408d6ad). Ha egy már
+ * jóváhagyott beszerzés számát, keltét vagy határidejét az „Adatok javítása”
+ * (#1615) átírja, a PURCHASE sor és az olvasata ugyanazt mondja, ugyanabban a
+ * tranzakcióban. Ha az új szám kulcsa egy másik forrás sorával egyezik
+ * (Számlázz.hu vagy postafiók), az a sor marad, és a PURCHASE sor törlődik,
+ * ahogy a feed érkezésekor (`supersedePurchaseRows`): az olvasat ellenőrzött
+ * marad, csak a kapcsolata nullázódik.
+ */
+export async function followPurchaseEdit(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    | "$executeRaw"
+    | "$queryRaw"
+    | "incomingBillingDocument"
+    | "incomingDocumentReading"
+    | "auditLog"
+  >,
+  purchaseInvoiceId: string,
+  changes: { documentNumber?: string; issueDate?: Date; dueDate?: Date | null },
+): Promise<{ id: string; superseded: boolean } | null> {
+  if (
+    changes.documentNumber === undefined &&
+    changes.issueDate === undefined &&
+    changes.dueDate === undefined
+  )
+    return null;
+  const row = await transaction.incomingBillingDocument.findUnique({
+    where: {
+      source_externalId: {
+        source: PURCHASE_SOURCE,
+        externalId: purchaseInvoiceId,
+      },
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  if (!row) return null;
+  const after = {
+    ...row,
+    documentNumber: changes.documentNumber ?? row.documentNumber,
+  };
+  // the feed and the approval write the new number's invoice under this lock
+  const key = await lockIncomingKey(transaction, after);
+  const known =
+    changes.documentNumber !== undefined && key
+      ? await otherSourceRowFor(transaction, after.documentNumber, key)
+      : null;
+  if (known) {
+    // the other source's row is the full data; the reading stays verified
+    await transaction.incomingDocumentReading.updateMany({
+      where: { incomingBillingDocumentId: row.id },
+      data: { incomingBillingDocumentId: null },
+    });
+    await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+    await transaction.auditLog.create({
+      data: {
+        action: "billing.incoming-purchase.superseded",
+        entityType: "IncomingBillingDocument",
+        entityId: row.id,
+        metadata: {
+          purchaseInvoiceId,
+          supersededBy: known.id,
+          documentNumber: after.documentNumber,
+        },
+      },
+    });
+    return { id: row.id, superseded: true };
+  }
+  const data = {
+    ...(changes.documentNumber !== undefined && {
+      documentNumber: changes.documentNumber,
+    }),
+    ...(changes.issueDate !== undefined && { issueDate: changes.issueDate }),
+    ...(changes.dueDate !== undefined && { dueDate: changes.dueDate }),
+  };
+  await transaction.incomingBillingDocument.update({
+    where: { id: row.id },
+    data,
+  });
+  await transaction.incomingDocumentReading.updateMany({
+    where: { incomingBillingDocumentId: row.id },
+    data,
+  });
+  return { id: row.id, superseded: false };
+}

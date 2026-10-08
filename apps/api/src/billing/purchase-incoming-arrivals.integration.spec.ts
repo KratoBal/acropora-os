@@ -7,6 +7,8 @@ import { Prisma, prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { InvoiceCollectionRepository } from "../missing-invoices/collection/invoice-collection.repository.js";
 import { SzamlazzFeedsRepository } from "../missing-invoices/szamlazz-feeds.repository.js";
+import { PurchaseInvoiceCancelService } from "../purchasing/purchase-invoice-cancel.service.js";
+import { PurchaseInvoiceEditService } from "../purchasing/purchase-invoice-edit.service.js";
 import { incomingKey } from "./billing-duplicates.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import {
@@ -418,6 +420,132 @@ describe(
       );
     });
 
+    it("a cancelled purchase takes its approved incoming row with it; the reading is to review again", async () => {
+      const invoice = await purchase("C");
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      await new PurchaseInvoiceCancelService().cancel(
+        invoice.id,
+        "rossz számla rögzítve",
+        userId,
+      );
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: { documentNumber: invoice.supplierInvoiceNumber },
+        select: { source: true },
+      });
+      const reading = await prisma.incomingDocumentReading.findFirst({
+        where: { document: { purchaseInvoiceId: invoice.id } },
+        select: {
+          state: true,
+          incomingBillingDocumentId: true,
+          reviewedAt: true,
+        },
+      });
+      const audits = await prisma.auditLog.count({
+        where: {
+          action: "billing.incoming-purchase.withdrawn",
+          metadata: { path: ["purchaseInvoiceId"], equals: invoice.id },
+        },
+      });
+      assert.deepEqual(
+        [rows.length, reading, audits],
+        [
+          0,
+          {
+            state: "TO_REVIEW",
+            incomingBillingDocumentId: null,
+            reviewedAt: null,
+          },
+          1,
+        ],
+        "CANCEL-WITHDRAWS",
+      );
+    });
+
+    it("a corrected number, date and due date of an approved purchase reach its incoming row and reading", async () => {
+      const invoice = await purchase("N");
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      const renamed = `UJ-${invoice.supplierInvoiceNumber}`;
+      await new PurchaseInvoiceEditService().update(
+        invoice.id,
+        {
+          supplierInvoiceNumber: renamed,
+          invoiceDate: "2026-10-03",
+          dueDate: "2026-10-18",
+        },
+        userId,
+      );
+      const row = await prisma.incomingBillingDocument.findUnique({
+        where: {
+          source_externalId: { source: "PURCHASE", externalId: invoice.id },
+        },
+        select: {
+          id: true,
+          documentNumber: true,
+          issueDate: true,
+          dueDate: true,
+        },
+      });
+      const reading = await prisma.incomingDocumentReading.findFirst({
+        where: { incomingBillingDocumentId: row?.id ?? "none" },
+        select: {
+          state: true,
+          documentNumber: true,
+          issueDate: true,
+          dueDate: true,
+        },
+      });
+      const day = (value: Date | null | undefined) =>
+        value?.toISOString().slice(0, 10) ?? null;
+      assert.deepEqual(
+        [
+          row?.documentNumber,
+          day(row?.issueDate),
+          day(row?.dueDate),
+          reading?.state,
+          reading?.documentNumber,
+          day(reading?.issueDate),
+          day(reading?.dueDate),
+        ],
+        [
+          renamed,
+          "2026-10-03",
+          "2026-10-18",
+          "VERIFIED",
+          renamed,
+          "2026-10-03",
+          "2026-10-18",
+        ],
+        "EDIT-FOLLOWS",
+      );
+    });
+
+    it("renamed to a number a Számlázz.hu row already has: that row stays, the PURCHASE row goes", async () => {
+      const invoice = await purchase("R");
+      const fedNumber = `FEED-${invoice.supplierInvoiceNumber}`;
+      await feed(fedNumber, "renamed");
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      await new PurchaseInvoiceEditService().update(
+        invoice.id,
+        { supplierInvoiceNumber: fedNumber },
+        userId,
+      );
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: {
+          documentNumber: { in: [invoice.supplierInvoiceNumber, fedNumber] },
+        },
+        select: { source: true },
+      });
+      const reading = await prisma.incomingDocumentReading.findFirst({
+        where: { document: { purchaseInvoiceId: invoice.id } },
+        select: { state: true, incomingBillingDocumentId: true },
+      });
+      assert.deepEqual(
+        [rows.map((r) => r.source), reading],
+        [["SZAMLAZZ"], { state: "VERIFIED", incomingBillingDocumentId: null }],
+        "EDIT-SUPERSEDED",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       const documents = (
@@ -466,6 +594,14 @@ describe(
             path: ["feedExternalId"],
             string_starts_with: `pa-${suffix}`,
           },
+        },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          action: "billing.incoming-purchase.superseded",
+          OR: invoiceIds.map((id) => ({
+            metadata: { path: ["purchaseInvoiceId"], equals: id },
+          })),
         },
       });
       await prisma.supplier.deleteMany({ where: { id: supplierId } });
