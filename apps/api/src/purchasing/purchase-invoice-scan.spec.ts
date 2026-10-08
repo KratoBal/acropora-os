@@ -38,6 +38,19 @@ describe("a scanned invoice (card 5ec62e35)", () => {
     assert.deepEqual([Math.round(width), Math.round(height)], [595, 842]);
   });
 
+  // MI PIROSÍT: ha a PDF a készítés idejét is hordozza, egy másodperc múlva
+  // más bájt, más lenyomat lesz, és ugyanaz a kép két csatolmány
+  it("the same image a second later is the same PDF, byte for byte", async () => {
+    const first = await scanAsPdf(await tinyPng(), "png", "a.png");
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const second = await scanAsPdf(await tinyPng(), "png", "a.png");
+    assert.equal(
+      Buffer.from(second.bytes).equals(Buffer.from(first.bytes)),
+      true,
+      "SCAN-PDF-STABLE",
+    );
+  });
+
   it("a PDF is kept as it came", async () => {
     const source = await (await PDFDocument.create()).save();
     const result = await scanAsPdf(source, "pdf", "eredeti.pdf");

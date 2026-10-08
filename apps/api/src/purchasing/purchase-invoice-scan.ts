@@ -80,7 +80,11 @@ export async function scanAsPdf(
         `${size.width}x${size.height}, ${size.channels}x${size.bitDepth} bit`,
       );
   }
-  const pdf = await PDFDocument.create();
+  // NO CREATION DATE: pdf-lib stamps one by default, so the same image a
+  // second later became different bytes, a different sha256, and the same
+  // file twice on one invoice two attachments (the CI caught it, run
+  // 37759559326, ONE-ATTACHMENT 2 !== 1). The bytes now depend on the image only.
+  const pdf = await PDFDocument.create({ updateMetadata: false });
   let image;
   try {
     image =
