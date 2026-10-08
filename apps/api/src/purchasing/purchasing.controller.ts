@@ -5,6 +5,7 @@ import {
   Get,
   Header,
   Param,
+  Patch,
   Post,
   Query,
   StreamableFile,
@@ -29,6 +30,8 @@ import { PurchaseProductConflictQueryDto } from "./dto/purchase-product-conflict
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
+import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
+import { UpdatePurchaseInvoiceDto } from "./dto/update-purchase-invoice.dto.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
 import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
@@ -46,6 +49,7 @@ export class PurchasingController {
     private readonly lineSuggestions: SupplierLineSuggestionService,
     private readonly pdfLookup: PurchaseInvoicePdfLookup,
     private readonly scans: PurchaseInvoiceScanService,
+    private readonly edits: PurchaseInvoiceEditService,
   ) {}
 
   /**
@@ -180,6 +184,21 @@ export class PurchasingController {
       length: scan.bytes.length,
       disposition: `inline; filename="${base || "szamlakep"}.pdf"`,
     });
+  }
+
+  /**
+   * A rögzített számla készlethatás nélküli mezőinek javítása (Luca,
+   * 2026-10-08): számlaszám, dátumok, fizetés, megjegyzés, a sorok neve.
+   */
+  @Patch("invoices/:id")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  async updateInvoice(
+    @Param("id") id: string,
+    @Body() input: UpdatePurchaseInvoiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    await this.edits.update(id, input, user.id);
+    return this.service.getDetail(id);
   }
 
   @Post("invoices")

@@ -12,6 +12,7 @@ import type {
   SupplierLineSuggestionRequest,
   SupplierLineSuggestionResult,
   PurchaseInvoiceScan,
+  UpdatePurchaseInvoiceInput,
 } from "@acropora/types";
 import { API_PREFIX } from "./api-prefix";
 import { pdfBlob } from "./billing-documents";
@@ -106,6 +107,18 @@ export const purchasingApi = {
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
     return pdfBlob(response, "A számlakép nem tölthető le.");
+  },
+  /** A rögzített számla készlethatás nélküli mezőinek javítása (Luca, 10-08). */
+  update(token: string, invoiceId: string, input: UpdatePurchaseInvoiceInput) {
+    return apiRequest<PurchaseInvoiceDetail>(
+      `/purchasing/invoices/${encodeURIComponent(invoiceId)}`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
   },
   create(token: string, input: CreatePurchaseInvoiceInput) {
     return apiRequest<PurchaseInvoiceResult>(`/purchasing/invoices`, token, {
