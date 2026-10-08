@@ -88,7 +88,11 @@ export interface IncomingDocumentListQuery {
   review?: IncomingReviewState;
 }
 
-export type IncomingDocumentOrigin = "SZAMLAZZ" | "MAILBOX";
+/**
+ * PURCHASE: a rögzített beszerzési számla, amit más forrás nem ismer
+ * (kártya 83f31a95); a sor azonosítója `purchase:` előtagú, amíg ellenőrizendő.
+ */
+export type IncomingDocumentOrigin = "SZAMLAZZ" | "MAILBOX" | "PURCHASE";
 
 /**
  * A POSTAFIÓKOS (KÜLFÖLDI) SZÁMLA ELLENŐRZÉSE (kártya e4c3b0fb, Balázs
@@ -158,7 +162,13 @@ export const INCOMING_READING_REQUIRED: readonly IncomingReadingField[] = [
  * szövegéből (`TEXT`), a banki párosításból (`PAIRING`), vagy kézzel
  * (`MANUAL`).
  */
-export type IncomingReadingSource = "ADAPTER" | "TEXT" | "PAIRING" | "MANUAL";
+export type IncomingReadingSource =
+  | "ADAPTER"
+  | "TEXT"
+  | "PAIRING"
+  | "MANUAL"
+  /** a rögzített beszerzési számlából (kártya 83f31a95) */
+  | "PURCHASE";
 
 /** Honnan jött egy mező értéke, az ellenőrző lapon a mező mellett. */
 export const INCOMING_READING_SOURCE_LABELS: Readonly<
@@ -168,6 +178,7 @@ export const INCOMING_READING_SOURCE_LABELS: Readonly<
   TEXT: "PDF szövegéből",
   PAIRING: "Banki párosításból",
   MANUAL: "Kézi",
+  PURCHASE: "Rögzített beszerzésből",
 };
 
 export interface IncomingReadingValues {

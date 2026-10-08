@@ -252,6 +252,24 @@ export function PilotMeasurementHistoryPage({
     }
   }
 
+  async function downloadPdf(occasion: AquariumMeasurementOccasion) {
+    setError(null);
+    try {
+      await aquariumsApi.downloadMeasurementReportPdf(
+        token,
+        aquariumId,
+        occasion.id,
+        `meresi-eredmenyek-${occasion.measuredAt.slice(0, 10)}.pdf`,
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "A mérési PDF letöltése nem sikerült.",
+      );
+    }
+  }
+
   async function downloadXlsx() {
     setExporting(true);
     setError(null);
@@ -675,7 +693,14 @@ export function PilotMeasurementHistoryPage({
                               <span className="text-pilot-grey-200">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="space-x-3 px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => void downloadPdf(occasion)}
+                              className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-pilot-aqua-600 opacity-0 transition-opacity hover:text-pilot-aqua-800 group-hover:opacity-100"
+                            >
+                              PDF letöltése
+                            </button>
                             {aquarium.customerEmail ? (
                               <button
                                 type="button"

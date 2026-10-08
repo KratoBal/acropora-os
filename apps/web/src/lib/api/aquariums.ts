@@ -125,6 +125,36 @@ export const aquariumsApi = {
    * `inventoryApi.downloadTemplate`: a válasz blob, a fájlnevet a szerver
    * `Content-Disposition`-je adja, ezt a hívó (a komponens) írja ki.
    */
+  /**
+   * THE MEASUREMENT REPORT PDF OF ONE OCCASION (card 77767969): the same
+   * file download as the Excel export below.
+   */
+  async downloadMeasurementReportPdf(
+    token: string,
+    aquariumId: string,
+    occasionId: string,
+    filename: string,
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_PREFIX}/aquariums/${encodeURIComponent(aquariumId)}/measurements/${encodeURIComponent(occasionId)}/pdf`,
+      { headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) {
+      throw new ApiError(
+        "A mérési PDF letöltése nem sikerült.",
+        response.status,
+      );
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  },
   async downloadMeasurementsXlsx(
     token: string,
     aquariumId: string,

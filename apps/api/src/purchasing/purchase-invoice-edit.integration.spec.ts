@@ -319,7 +319,7 @@ describe(
         .update(row.id, { paidAt: "2026-10-08" }, userId)
         .then(
           () => null,
-          (error: Error) => error.constructor.name,
+          (error: Error) => `${error.constructor.name}: ${error.message}`,
         );
       const after = await prisma.purchaseInvoice.findUniqueOrThrow({
         where: { id: row.id },
@@ -333,7 +333,12 @@ describe(
             where: { entityId: row.id, action: "purchase_invoice.updated" },
           }),
         ],
-        ["BadRequestException", false, null, 0],
+        [
+          "BadRequestException: Fizetési dátum csak kifizetett számlán adható meg.",
+          false,
+          null,
+          0,
+        ],
         "PAIDAT-UNDER-LOCK",
       );
     });

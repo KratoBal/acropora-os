@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { splitViesAddress, viesCountry, viesFill } from "./vies-address.js";
+import {
+  normalizeEuTaxNumber,
+  splitViesAddress,
+  viesCountry,
+  viesFill,
+} from "./vies-address.js";
 
 /** The answers measured on stage (exchange/vies/vies-nyers-stage-2026-10-07.json). */
 describe("a VIES-cím mezőkre bontva", () => {
@@ -114,5 +119,21 @@ describe("a VIES-kitöltés soha nem ír felül kérdés nélkül", () => {
   it("olyan mezőt, ami az űrlapon nincs, nem javasol", () => {
     const { fill } = viesFill({ name: "" }, answer);
     assert.deepEqual(fill, { name: "COOLBLUE B.V." });
+  });
+});
+
+describe("a közösségi adószám tárolt alakja", () => {
+  it("országkód és szám, nagybetűvel, elválasztók nélkül; más alak null", () => {
+    assert.deepEqual(
+      [
+        normalizeEuTaxNumber("sk 2020-123.456"),
+        normalizeEuTaxNumber("ATU12345678"),
+        normalizeEuTaxNumber("12345678"),
+        normalizeEuTaxNumber("S"),
+        normalizeEuTaxNumber(""),
+      ],
+      ["SK2020123456", "ATU12345678", null, null, null],
+      "TAX-EU-NORMALIZE",
+    );
   });
 });
