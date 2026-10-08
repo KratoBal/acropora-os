@@ -12,6 +12,7 @@ import type {
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import { incomingKey } from "./billing-duplicates.js";
+import { invoiceNumberKey } from "./external-billing-one-row.js";
 import {
   mailboxOnlyPaidItems,
   toIncomingListItem,
@@ -398,6 +399,16 @@ export async function supersedePurchaseRows(
 }
 
 /**
+ * EGY TÁROLT SZÁMLASZÁM A KULCS ALAKJÁRA HOZVA, az adatbázisban: szóközök
+ * nélkül, nagybetűvel, ahogy az `invoiceNumberKey` a kódban (93cda6fb,
+ * barracuda). A jelöltgyűjtés eddig csak az ÉRKEZŐ számot hozta erre az
+ * alakra, így a „SZ 2026/123” alakban tárolt sor kimaradt az „SZ2026/123”
+ * mellől, holott a kulcsuk egyezik. Csak a saját oszlopnevekkel hívódik.
+ */
+const NUMBER_KEY_SQL = (column: "documentNumber" | "supplierInvoiceNumber") =>
+  Prisma.raw(`upper(regexp_replace("${column}", '\\s', '', 'g'))`);
+
+/**
  * A KÉSŐBB ÉRKEZŐ PÉLDÁNY A BESZERZÉSHEZ KÖTŐDIK (kártya 83f31a95, PR 2). Ha
  * egy postafiókból, Drive-ról, a Hiányzó számlák feltöltésén vagy a Várható
  * beérkezéseken át érkező számla kulcsa (szám és adószám-törzs, ahogy az
@@ -408,11 +419,13 @@ export async function supersedePurchaseRows(
  * kötődik: a díjbekérő és az ismeretlen fajtájú dokumentum nem.
  *
  * A kulcs az illesztő eredményéből jön (`importResult`), ha az számot adott,
- * különben a szövegolvasóéból (`textReading`). Csak a pontosan (kis-nagybetű
- * nélkül) egyező számú beszerzések jelöltek; a kulcs a szállítót is egyezteti.
+ * különben a szövegolvasóéból (`textReading`). A jelöltek azok a beszerzések,
+ * amiknek a TÁROLT száma is a kulcs alakjára hozva egyezik (`NUMBER_KEY_SQL`,
+ * 93cda6fb: „SZ 2026/123” és „SZ2026/123” egy szám); a kulcs a szállítót is
+ * egyezteti.
  */
 export async function postedPurchaseForArrival(
-  database: Pick<Prisma.TransactionClient, "purchaseInvoice">,
+  database: Pick<Prisma.TransactionClient, "purchaseInvoice" | "$queryRaw">,
   arrival: {
     importResult: unknown;
     textReading: unknown;
@@ -440,11 +453,13 @@ export async function postedPurchaseForArrival(
     : (text?.supplierName ?? "");
   const key = incomingKey(number, tax, name);
   if (!key) return null;
+  const numberKey = invoiceNumberKey(number);
+  const ids = await database.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "PurchaseInvoice"
+    WHERE status = 'POSTED'
+      AND ${NUMBER_KEY_SQL("supplierInvoiceNumber")} = ${numberKey}`;
   const candidates = await database.purchaseInvoice.findMany({
-    where: {
-      status: "POSTED",
-      supplierInvoiceNumber: { equals: number.trim(), mode: "insensitive" },
-    },
+    where: { id: { in: ids.map((row) => row.id) } },
     select: {
       id: true,
       supplierInvoiceNumber: true,
@@ -494,21 +509,24 @@ export async function lockIncomingKey(
 
 /**
  * Egy NEM beszerzésből jött bejövő sor ugyanazzal a kulccsal (Számlázz.hu vagy
- * jóváhagyott postafiókos sor). Jelöltek a szóközök nélkül vagy a vágott
- * alakban egyező számú sorok; a kulcs a szállítót is egyezteti.
+ * jóváhagyott postafiókos sor). Jelöltek azok a sorok, amiknek a TÁROLT száma
+ * is a kulcs alakjára hozva egyezik (`NUMBER_KEY_SQL`, 93cda6fb); a kulcs a
+ * szállítót is egyezteti.
  */
 export async function otherSourceRowFor(
-  transaction: Pick<Prisma.TransactionClient, "incomingBillingDocument">,
+  transaction: Pick<
+    Prisma.TransactionClient,
+    "incomingBillingDocument" | "$queryRaw"
+  >,
   number: string,
   key: string,
 ): Promise<{ id: string; source: string } | null> {
+  const ids = await transaction.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "IncomingBillingDocument"
+    WHERE source <> ${PURCHASE_SOURCE}
+      AND ${NUMBER_KEY_SQL("documentNumber")} = ${invoiceNumberKey(number)}`;
   const rows = await transaction.incomingBillingDocument.findMany({
-    where: {
-      source: { not: PURCHASE_SOURCE },
-      OR: [number.trim(), number.replace(/\s/g, "")].map((value) => ({
-        documentNumber: { equals: value, mode: "insensitive" as const },
-      })),
-    },
+    where: { id: { in: ids.map((row) => row.id) } },
     select: {
       id: true,
       source: true,
