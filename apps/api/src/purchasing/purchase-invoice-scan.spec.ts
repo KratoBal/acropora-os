@@ -7,7 +7,12 @@ import {
   collectedPdfIds,
   collectedPdfIndex,
 } from "../billing/incoming-collected-pdf.js";
-import { scanAsPdf } from "./purchase-invoice-scan.js";
+import {
+  MAX_PNG_PIXELS,
+  scanAsPdf,
+  ScanTooLarge,
+  ScanUnreadable,
+} from "./purchase-invoice-scan.js";
 
 /** A 2×1 pixel PNG, built at run time (no binary fixture in the repo). */
 async function tinyPng(): Promise<Uint8Array> {
@@ -73,5 +78,22 @@ describe("a scanned invoice (card 5ec62e35)", () => {
       ),
       ["attached-scan", "older-mail"],
     );
+  });
+
+  it("a small PNG that declares a giant canvas is refused before it is decoded", async () => {
+    const giant = Uint8Array.from(await tinyPng());
+    const view = new DataView(giant.buffer);
+    view.setUint32(16, 100_000); // width
+    view.setUint32(20, 100_000); // height: 10 000 MP declared
+    assert.ok(100_000 * 100_000 > MAX_PNG_PIXELS);
+    await assert.rejects(scanAsPdf(giant, "png", "x.png"), ScanTooLarge);
+  });
+
+  it("a broken image behind a good signature is unreadable, not a crash", async () => {
+    const png = await tinyPng();
+    const broken = Uint8Array.from([...png.subarray(0, 33), 1, 2, 3, 4, 5]);
+    await assert.rejects(scanAsPdf(broken, "png", "x.png"), ScanUnreadable);
+    const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2, 3]);
+    await assert.rejects(scanAsPdf(jpeg, "jpeg", "x.jpg"), ScanUnreadable);
   });
 });
