@@ -74,6 +74,7 @@ type Database = Pick<
   | "purchaseInvoice"
   | "navIncomingInvoice"
   | "$transaction"
+  | "$queryRaw"
 >;
 
 const PDF_MAGIC = Buffer.from("%PDF-");

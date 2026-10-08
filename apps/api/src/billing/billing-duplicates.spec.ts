@@ -8,6 +8,7 @@ import type { CandidateDocument } from "../missing-invoices/missing-invoice-matc
 import {
   candidateDuplicates,
   incomingDuplicates,
+  incomingTypoSuspects,
   outgoingDuplicates,
   planExternalMerges,
   type ExternalMergeRow,
@@ -181,5 +182,64 @@ describe("one invoice, one row: the duplicate rules", () => {
       ebizExternalId: "6121422",
       externalPaymentStatus: null,
     });
+  });
+});
+
+describe("incomingTypoSuspects (2408d6ad)", () => {
+  const row = (
+    source: string,
+    documentNumber: string,
+    over: Partial<{
+      supplierTaxNumber: string | null;
+      issueDate: Date;
+      gross: string;
+    }> = {},
+  ) => ({
+    source,
+    documentNumber,
+    supplierTaxNumber:
+      over.supplierTaxNumber === undefined
+        ? "12345678-2-42"
+        : over.supplierTaxNumber,
+    supplierName: "Kitalált Kft.",
+    issueDate: over.issueDate ?? new Date("2026-10-01T00:00:00Z"),
+    currency: "HUF",
+    grossAmount: new Prisma.Decimal(over.gross ?? "12700"),
+  });
+
+  it("TYPO-SUSPECT: a purchase row and a feed row one or two characters apart, same supplier, day and gross", () => {
+    const pairs = (rows: ReturnType<typeof row>[]) =>
+      incomingTypoSuspects(rows).map((group) =>
+        group.rows.map((r) => r.documentNumber).join("~"),
+      );
+    assert.deepEqual(
+      [
+        pairs([row("PURCHASE", "KIT-0123"), row("SZAMLAZZ", "KIT-0132")]),
+        pairs([row("PURCHASE", "KIT 0123"), row("MAILBOX", "KIT-012")]),
+        // the same number is the key's job, not a suspicion
+        pairs([row("PURCHASE", "KIT-0123"), row("SZAMLAZZ", "kit-0123")]),
+        // three characters apart
+        pairs([row("PURCHASE", "KIT-0123"), row("SZAMLAZZ", "KIT-0456")]),
+        // another gross, another day, another supplier
+        pairs([
+          row("PURCHASE", "KIT-0123"),
+          row("SZAMLAZZ", "KIT-0124", { gross: "12701" }),
+        ]),
+        pairs([
+          row("PURCHASE", "KIT-0123"),
+          row("SZAMLAZZ", "KIT-0124", {
+            issueDate: new Date("2026-10-02T00:00:00Z"),
+          }),
+        ]),
+        pairs([
+          row("PURCHASE", "KIT-0123"),
+          row("SZAMLAZZ", "KIT-0124", { supplierTaxNumber: "87654321-2-42" }),
+        ]),
+        // two rows of other sources: not a recording by hand
+        pairs([row("SZAMLAZZ", "KIT-0123"), row("MAILBOX", "KIT-0124")]),
+      ],
+      [["KIT-0123~KIT-0132"], ["KIT 0123~KIT-012"], [], [], [], [], [], []],
+      "TYPO-SUSPECT",
+    );
   });
 });

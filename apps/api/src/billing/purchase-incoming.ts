@@ -46,6 +46,7 @@ export const PURCHASE_KIND_CODE = "BE";
 
 type Database = Pick<
   PrismaClient,
+  | "$queryRaw"
   | "purchaseInvoice"
   | "navIncomingInvoice"
   | "incomingBillingDocument"
@@ -142,9 +143,38 @@ export async function loadPurchaseSubjects(
   });
   if (!invoices.length) return [];
 
+  /*
+    CSAK A JELÖLTEK SZÁMAIRA (kártya 2408d6ad, barracuda #1643): a NAV-sorok,
+    a bejövő sorok és a beérkezett dokumentumok közül csak azokat töltjük be,
+    amiknek a száma a kulcs alakjára hozva (szóköz nélkül, nagybetűvel) egy
+    jelölt számával egyezik. Egy lapnál (`only`) ez egyetlen szám, nem a
+    teljes NAV-tábla. A kulcs ezután ugyanúgy a szállítót is egyezteti.
+  */
+  const numbers = [
+    ...new Set(
+      invoices.map((invoice) =>
+        invoiceNumberKey(invoice.supplierInvoiceNumber),
+      ),
+    ),
+  ];
+  const ids = async (query: Promise<{ id: string }[]>) =>
+    (await query).map((row) => row.id);
+  const [navIds, rowIds, documentIds] = await Promise.all([
+    ids(database.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "NavIncomingInvoice"
+      WHERE "invoiceOperation" = 'CREATE'
+        AND ${NUMBER_KEY_SQL("navInvoiceNumber")} = ANY(${numbers})`),
+    ids(database.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "IncomingBillingDocument"
+      WHERE ${NUMBER_KEY_SQL("documentNumber")} = ANY(${numbers})`),
+    ids(database.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "IncomingSupplierDocument"
+      WHERE "purchaseInvoiceId" IS NULL
+        AND upper(regexp_replace("textReading"->>'invoiceNumber', '\\s', '', 'g')) = ANY(${numbers})`),
+  ]);
   const [nav, rows, documents] = await Promise.all([
     database.navIncomingInvoice.findMany({
-      where: { invoiceOperation: "CREATE" },
+      where: { id: { in: navIds } },
       select: {
         navInvoiceNumber: true,
         supplierTaxNumber: true,
@@ -152,6 +182,7 @@ export async function loadPurchaseSubjects(
       },
     }),
     database.incomingBillingDocument.findMany({
+      where: { id: { in: rowIds } },
       select: {
         source: true,
         externalId: true,
@@ -163,7 +194,7 @@ export async function loadPurchaseSubjects(
     }),
     // a beérkezett, NEM beszerzéshez kötött dokumentumok olvasott kulcsa
     database.incomingSupplierDocument.findMany({
-      where: { purchaseInvoiceId: null, textReading: { not: Prisma.DbNull } },
+      where: { id: { in: documentIds } },
       select: { textReading: true },
     }),
   ]);
@@ -405,8 +436,9 @@ export async function supersedePurchaseRows(
  * alakra, így a „SZ 2026/123” alakban tárolt sor kimaradt az „SZ2026/123”
  * mellől, holott a kulcsuk egyezik. Csak a saját oszlopnevekkel hívódik.
  */
-const NUMBER_KEY_SQL = (column: "documentNumber" | "supplierInvoiceNumber") =>
-  Prisma.raw(`upper(regexp_replace("${column}", '\\s', '', 'g'))`);
+const NUMBER_KEY_SQL = (
+  column: "documentNumber" | "supplierInvoiceNumber" | "navInvoiceNumber",
+) => Prisma.raw(`upper(regexp_replace("${column}", '\\s', '', 'g'))`);
 
 /**
  * A KÉSŐBB ÉRKEZŐ PÉLDÁNY A BESZERZÉSHEZ KÖTŐDIK (kártya 83f31a95, PR 2). Ha

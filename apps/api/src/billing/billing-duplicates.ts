@@ -72,6 +72,75 @@ export function incomingDuplicates<
   );
 }
 
+/** The edit distance of two short strings (insert, delete, replace). */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1)
+      current[j] = Math.min(
+        previous[j]! + 1,
+        current[j - 1]! + 1,
+        previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
+/**
+ * A MISTYPED NUMBER, SUSPECTED (card 2408d6ad, barracuda's #1644 review). A
+ * purchase recorded by hand with a typo in the supplier's number does not
+ * share the key of the same invoice from Számlázz.hu or the mailbox, so the
+ * two stand as two rows. Flagged: a PURCHASE row and a row from another
+ * source with the same supplier, issue date, currency and gross, whose
+ * numbers (in the key form) differ by at most two characters. A suspicion,
+ * not a duplicate: two invoices of one day can share an amount.
+ */
+export function incomingTypoSuspects<
+  T extends {
+    source: string;
+    documentNumber: string;
+    supplierTaxNumber: string | null;
+    supplierName: string;
+    issueDate: Date;
+    currency: string;
+    grossAmount: { toFixed(digits: number): string };
+  },
+>(rows: readonly T[]): DuplicateGroup<T>[] {
+  const sameInvoice = (row: T) =>
+    [
+      taxBase(row.supplierTaxNumber) || row.supplierName.trim().toLowerCase(),
+      row.issueDate.toISOString().slice(0, 10),
+      row.currency,
+      row.grossAmount.toFixed(2),
+    ].join("|");
+  const purchases = rows.filter((row) => row.source === "PURCHASE");
+  const others = new Map<string, T[]>();
+  for (const row of rows)
+    if (row.source !== "PURCHASE")
+      others.set(sameInvoice(row), [
+        ...(others.get(sameInvoice(row)) ?? []),
+        row,
+      ]);
+  const groups: DuplicateGroup<T>[] = [];
+  for (const purchase of purchases) {
+    const number = invoiceNumberKey(purchase.documentNumber);
+    for (const other of others.get(sameInvoice(purchase)) ?? []) {
+      const distance = editDistance(
+        number,
+        invoiceNumberKey(other.documentNumber),
+      );
+      if (distance > 0 && distance <= 2)
+        groups.push({
+          key: `${sameInvoice(purchase)}|${purchase.documentNumber}~${other.documentNumber}`,
+          rows: [purchase, other],
+        });
+    }
+  }
+  return groups.sort((a, b) => a.key.localeCompare(b.key));
+}
+
 /**
  * THE MISSING-INVOICE CANDIDATES, AFTER THEIR OWN MERGE (`mergeSameInvoice`):
  * an `inv:` identity on two candidates is one invoice counted twice there,
