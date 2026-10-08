@@ -46,7 +46,7 @@ export class PurchaseInvoiceEditService {
     if (invoice.status === "CANCELLED")
       throw new ConflictException("Visszavont számla nem módosítható.");
 
-    const data: Prisma.PurchaseInvoiceUpdateInput = {};
+    const data: Prisma.PurchaseInvoiceUpdateManyMutationInput = {};
     if (input.supplierInvoiceNumber !== undefined) {
       const number = input.supplierInvoiceNumber.trim();
       if (!number)
@@ -97,8 +97,17 @@ export class PurchaseInvoiceEditService {
 
     try {
       await this.database.$transaction(async (tx) => {
-        if (Object.keys(data).length)
-          await tx.purchaseInvoice.update({ where: { id }, data });
+        // THE STATUS IS READ AGAIN, INSIDE THE WRITE (barracuda's #1620
+        // review, acrobot 28147): the check above runs outside the
+        // transaction, and a cancellation in between would otherwise let this
+        // write land on a CANCELLED invoice. Always run, even for line names
+        // only, so that case is refused the same way.
+        const claimed = await tx.purchaseInvoice.updateMany({
+          where: { id, status: "POSTED" },
+          data: { ...data, updatedAt: new Date() },
+        });
+        if (claimed.count !== 1)
+          throw new ConflictException("Visszavont számla nem módosítható.");
         if (
           data.supplierInvoiceNumber !== undefined &&
           data.supplierInvoiceNumber !== invoice.supplierInvoiceNumber
@@ -160,7 +169,7 @@ function changesOf(
     isPaid: boolean;
     paidAt: Date | null;
   },
-  data: Prisma.PurchaseInvoiceUpdateInput,
+  data: Prisma.PurchaseInvoiceUpdateManyMutationInput,
 ): Record<string, { from: unknown; to: unknown }> {
   const changes: Record<string, { from: unknown; to: unknown }> = {};
   for (const key of [

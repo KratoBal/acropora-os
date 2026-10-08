@@ -183,6 +183,38 @@ describe(
       assert.equal(reading.supplierTaxNumber, "12345678-2-42");
     });
 
+    it("a cancellation between the check and the write is refused, and nothing is written", async () => {
+      const row = await invoice("race");
+      // the read sees POSTED; the invoice is cancelled right before the write
+      const racing = new PurchaseInvoiceEditService();
+      Object.defineProperty(racing, "database", {
+        value: new Proxy(prisma, {
+          get(target, key, receiver) {
+            if (key !== "$transaction")
+              return Reflect.get(target, key, receiver);
+            return async (...args: unknown[]) => {
+              await prisma.purchaseInvoice.update({
+                where: { id: row.id },
+                data: { status: "CANCELLED" },
+              });
+              return (
+                target.$transaction as (...a: unknown[]) => Promise<unknown>
+              ).apply(target, args);
+            };
+          },
+        }),
+      });
+      await assert.rejects(
+        racing.update(row.id, { note: "Késve." }, userId),
+        /Visszavont számla nem módosítható/,
+        "EDIT-AFTER-CANCEL-409",
+      );
+      const after = await prisma.purchaseInvoice.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      assert.equal(after.note, null);
+    });
+
     it("a foreign invoice's date stays: its rate came from it", async () => {
       const row = await invoice("eur", "EUR");
       await assert.rejects(
