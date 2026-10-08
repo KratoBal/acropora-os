@@ -119,6 +119,44 @@ describe(
       );
     });
 
+    it("a giant image is a 400 with its own sentence, and nothing is stored", async () => {
+      const giant = Buffer.from(PNG);
+      giant.writeUInt32BE(100_000, 16);
+      giant.writeUInt32BE(100_000, 20);
+      const before = (await scans.list(invoiceId)).length;
+      await assert.rejects(
+        scans.attach(
+          invoiceId,
+          { buffer: giant, mimetype: "image/png", originalname: "orias.png" },
+          userId,
+        ),
+        /Túl nagy kép/,
+        "GIANT-400",
+      );
+      assert.equal((await scans.list(invoiceId)).length, before);
+    });
+
+    it("a broken image is a 400 with its own sentence, and nothing is stored", async () => {
+      const before = (await scans.list(invoiceId)).length;
+      await assert.rejects(
+        scans.attach(
+          invoiceId,
+          {
+            buffer: Buffer.concat([
+              PNG.subarray(0, 33),
+              Buffer.from([1, 2, 3]),
+            ]),
+            mimetype: "image/png",
+            originalname: "serult.png",
+          },
+          userId,
+        ),
+        /A kép nem olvasható/,
+        "BROKEN-400",
+      );
+      assert.equal((await scans.list(invoiceId)).length, before);
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await prisma.incomingSupplierDocument.deleteMany({

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  csakATermekNeve,
   fajlnevAlakuAlt,
   imageTextsFor,
   imageTextsMetadataPatch,
@@ -17,6 +18,7 @@ describe("imageTextsFor", () => {
           { altText: "  Pumpa elolrol ", title: null },
           { altText: "   ", title: "Cim" },
         ],
+        "Eheim pumpa",
       ),
       [
         { url: "https://m/1.jpg", alt: "Pumpa elolrol", title: null },
@@ -26,7 +28,7 @@ describe("imageTextsFor", () => {
   });
 
   it("gives null for no list, and for a length mismatch", () => {
-    assert.equal(imageTextsFor(null, []), null);
+    assert.equal(imageTextsFor(null, [], null), null);
     assert.equal(
       imageTextsFor(
         ["https://m/1.jpg"],
@@ -34,6 +36,7 @@ describe("imageTextsFor", () => {
           { altText: "a", title: null },
           { altText: "b", title: null },
         ],
+        null,
       ),
       null,
     );
@@ -124,8 +127,59 @@ describe("imageTextsFor with a file-name alt", () => {
       imageTextsFor(
         ["https://m/1.jpg"],
         [{ altText: "IMG_1234.jpg", title: "Cim", fileName: "IMG_1234.jpg" }],
+        null,
       ),
       [{ url: "https://m/1.jpg", alt: null, title: "Cim" }],
+    );
+  });
+});
+
+/**
+ * MEASURED IN PRODUCTION (acrobot 28126): 3449 of 3456 alts are the product
+ * name, 103 of them entity-encoded, and names with an apostrophe were cut at it.
+ */
+describe("an alt that only repeats the product name", () => {
+  it("is null when it is the name, a cut-off start of it, or the encoded name", () => {
+    const nev = "Gyorscsatlakozó könyök 1/4''";
+    assert.equal(csakATermekNeve("Gyorscsatlakozó könyök 1/4''", nev), true);
+    assert.equal(csakATermekNeve("gyorscsatlakozó  KÖNYÖK 1/4'", nev), true);
+    assert.equal(
+      csakATermekNeve("Korallen-Zucht Pohl", "Korallen-Zucht Pohl's Xtra"),
+      true,
+    );
+    assert.equal(
+      csakATermekNeve('Tunze "Turbelle"', 'Tunze "Turbelle" 6040'),
+      true,
+    );
+  });
+
+  it("keeps an alt that says more or other than the name", () => {
+    assert.equal(
+      csakATermekNeve("Coris aygula felnőtt nőstény", "Coris aygula"),
+      false,
+    );
+    assert.equal(csakATermekNeve("Pumpa elölről", "Eheim pumpa"), false);
+    assert.equal(csakATermekNeve("Eheim pumpa", null), false);
+  });
+
+  it("imageTextsFor decodes entities, and drops the name-only alt", () => {
+    assert.deepEqual(
+      imageTextsFor(
+        ["https://m/1.jpg", "https://m/2.jpg"],
+        [
+          { altText: "Tunze &quot;Turbelle&quot; 6040", title: null },
+          { altText: "Tunze &quot;Turbelle&quot; &amp; tartó", title: null },
+        ],
+        'Tunze "Turbelle" 6040',
+      ),
+      [
+        { url: "https://m/1.jpg", alt: null, title: null },
+        {
+          url: "https://m/2.jpg",
+          alt: 'Tunze "Turbelle" & tartó',
+          title: null,
+        },
+      ],
     );
   });
 });

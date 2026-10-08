@@ -10,6 +10,7 @@
  * A forrás ma egyetlen: a `ProductImage.altText`, amit a UNAS-szinkron ír
  * (D1: `SOURCE`, kimegy). Jóváhagyási réteg most nincs, mert nincs írója.
  */
+import { decodeEntities } from "../ai-product-search/ai-product-search.text.js";
 import { ACROPORA_IMAGES_KEY } from "./medusa-metadata-merge.js";
 
 export interface ProjectedImageText {
@@ -25,9 +26,36 @@ export interface ImageTextSource {
   url?: string;
 }
 
+/**
+ * A UNAS a szöveget HTML-entitással kódolva is hozza (élesen mérve 2026-10-08:
+ * 3456 altból 103 `&quot;`, `&amp;`, `&#39;` alakban). Nyersen a kirakat a
+ * képen és a JSON-LD-ben szó szerint `&quot;`-ot írna ki.
+ */
 function szoveg(ertek: string | null): string | null {
-  const levagott = ertek?.trim();
+  const levagott = ertek == null ? "" : decodeEntities(ertek).trim();
   return levagott ? levagott : null;
+}
+
+function osszevetheto(ertek: string): string {
+  return ertek.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+/**
+ * AZ ALT, AMI CSAK A TERMÉK NEVE, NEM MOND TÖBBET A TARTALÉKNÁL (acrobot éles
+ * mérése, 2026-10-08, 28126): 3456 altból 3449 dekódolva maga a név, és ahol a
+ * név aposztrófot visel, a UNAS ott csonkolta (`Korallen-Zucht Pohl`, `1/4'` az
+ * `1/4''` helyett). Az ilyen alt `null`: a kirakat a nevet adja, a második
+ * képtől sorszámmal, ami a felolvasónak már különbséget tesz a képek között. A
+ * név csonka eleje is ide tartozik, mert az a teljes névnél kevesebbet mond.
+ */
+export function csakATermekNeve(
+  alt: string,
+  termekNev: string | null,
+): boolean {
+  if (!termekNev) return false;
+  const a = osszevetheto(alt);
+  const nev = osszevetheto(decodeEntities(termekNev));
+  return a.length > 0 && nev.startsWith(a);
 }
 
 const KEP_KITERJESZTES = /\.(jpe?g|png|webp|gif|avif|svg|heic|tiff?|bmp)$/i;
@@ -80,6 +108,7 @@ export function fajlnevAlakuAlt(
 export function imageTextsFor(
   urls: string[] | null,
   images: ImageTextSource[],
+  termekNev: string | null,
 ): ProjectedImageText[] | null {
   if (urls === null || urls.length !== images.length) return null;
   return urls.map((url, i) => {
@@ -87,7 +116,10 @@ export function imageTextsFor(
     const alt = szoveg(kep.altText);
     return {
       url,
-      alt: alt && !fajlnevAlakuAlt(alt, kep) ? alt : null,
+      alt:
+        alt && !fajlnevAlakuAlt(alt, kep) && !csakATermekNeve(alt, termekNev)
+          ? alt
+          : null,
       title: szoveg(kep.title),
     };
   });

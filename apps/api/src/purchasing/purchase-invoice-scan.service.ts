@@ -9,7 +9,11 @@ import { Prisma, prisma } from "@acropora/database";
 import type { PurchaseInvoiceScan } from "@acropora/types";
 
 import { detectUploadedFileKind } from "../service-assets/uploaded-file-type.js";
-import { scanAsPdf } from "./purchase-invoice-scan.js";
+import {
+  scanAsPdf,
+  ScanTooLarge,
+  ScanUnreadable,
+} from "./purchase-invoice-scan.js";
 
 /**
  * THE SCANNED INVOICE OF A RECORDED PURCHASE INVOICE (card 5ec62e35, Luca;
@@ -65,7 +69,18 @@ export class PurchaseInvoiceScanService {
         .normalize("NFKC")
         .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
         .slice(0, 180) || "szamlakep";
-    const stored = await scanAsPdf(new Uint8Array(file.buffer), kind, safeName);
+    let stored: Awaited<ReturnType<typeof scanAsPdf>>;
+    try {
+      stored = await scanAsPdf(new Uint8Array(file.buffer), kind, safeName);
+    } catch (error) {
+      if (error instanceof ScanTooLarge)
+        throw new BadRequestException(
+          "Túl nagy kép: töltsd fel JPEG-ként vagy kisebb felbontásban.",
+        );
+      if (error instanceof ScanUnreadable)
+        throw new BadRequestException("A kép nem olvasható.");
+      throw error;
+    }
     const sha256 = createHash("sha256").update(stored.bytes).digest("hex");
 
     // the same file twice on the same invoice is one attachment
