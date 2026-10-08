@@ -11,7 +11,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   ViesConflicts,
@@ -110,6 +110,8 @@ export function PilotSupplierEditorPage({
   const [addressLine2, setAddressLine2] = useState("");
   const [viesBusy, setViesBusy] = useState(false);
   const [viesConflicts, setViesConflicts] = useState<ViesConflict[]>([]);
+  const latestTaxNumber = useRef(taxNumber);
+  latestTaxNumber.current = taxNumber;
   const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
     null,
   );
@@ -435,7 +437,10 @@ export function PilotSupplierEditorPage({
     setViesResult(null);
     setViesConflicts([]);
     try {
-      const result = await viesVatApi.check(token, taxNumber.trim());
+      const asked = taxNumber.trim();
+      const result = await viesVatApi.check(token, asked);
+      // the number was changed while VIES answered: this answer is not its
+      if (latestTaxNumber.current.trim() !== asked) return;
       setViesResult(result);
       if (result.valid) {
         const { fill, conflicts } = viesFill(
@@ -586,13 +591,13 @@ export function PilotSupplierEditorPage({
                   ) : null}
                   <ViesConflicts
                     conflicts={viesConflicts}
-                    onApply={() => {
+                    onApply={(taken) => {
                       applyVies(
-                        Object.fromEntries(
-                          viesConflicts.map((c) => [c.field, c.vies]),
-                        ),
+                        Object.fromEntries(taken.map((c) => [c.field, c.vies])),
                       );
-                      setViesConflicts([]);
+                      setViesConflicts((all) =>
+                        all.filter((c) => !taken.includes(c)),
+                      );
                     }}
                   />
                 </PilotFormField>
