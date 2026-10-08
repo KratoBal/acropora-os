@@ -764,6 +764,8 @@ export class PurchaseInvoiceRepository extends Repository {
                       await transaction.projectInventoryReservation.create({
                         data: {
                           projectId: allocation.projectId,
+                          // P5a: the receipt says it is the receipt
+                          origin: "PURCHASE_RECEIPT",
                           purchaseInvoiceLineId: line.purchaseInvoiceLineId,
                           stockItemId: stockItem.id,
                           variantId: line.variantId,

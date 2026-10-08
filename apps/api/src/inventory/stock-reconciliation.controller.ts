@@ -5,6 +5,7 @@ import { prisma } from "@acropora/database";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { ensureMainWarehouse } from "../common/warehouse.util.js";
 import { StockReconciliationService } from "./stock-reconciliation.service.js";
+import { reservedMismatches } from "./reserved-reconciliation.js";
 
 function parsePage(value: unknown): number {
   const parsed = Number(value);
@@ -62,6 +63,14 @@ export class StockReconciliationController {
       page: parsePage(page),
       pageSize: parsePageSize(pageSize),
     });
+  }
+
+  /// #1582 P5a: stock rows whose `reserved` is not the sum of their active
+  /// project reservations. Lists, repairs nothing.
+  @Get("reserved")
+  @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
+  async reserved() {
+    return { items: await reservedMismatches() };
   }
 
   @Get("missing-stock-item")

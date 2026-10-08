@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -33,6 +34,8 @@ import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
 import { PurchaseInvoiceCancelService } from "./purchase-invoice-cancel.service.js";
 import { CancelPurchaseInvoiceDto } from "./dto/cancel-purchase-invoice.dto.js";
+import { ProjectReservationService } from "./project-reservation.service.js";
+import { CloseProjectDto } from "./dto/close-project.dto.js";
 import { UpdatePurchaseInvoiceDto } from "./dto/update-purchase-invoice.dto.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
@@ -53,6 +56,7 @@ export class PurchasingController {
     private readonly scans: PurchaseInvoiceScanService,
     private readonly edits: PurchaseInvoiceEditService,
     private readonly cancels: PurchaseInvoiceCancelService,
+    private readonly reservations: ProjectReservationService,
   ) {}
 
   /**
@@ -92,6 +96,30 @@ export class PurchasingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.createProject(input.name, user.id);
+  }
+
+  /** #1582 P5a: one project hold released by hand. */
+  @Post("projects/:id/reservations/:reservationId/release")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  releaseReservation(
+    @Param("id") id: string,
+    @Param("reservationId") reservationId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reservations.release(id, reservationId, user.id);
+  }
+
+  /** #1582 P5a: the project closes, and its active holds end with it. */
+  @Post("projects/:id/close")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  closeProject(
+    @Param("id") id: string,
+    @Body() input: CloseProjectDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.reservations.close(id, input.status, user.id);
   }
 
   @Get("exchange-rate")
