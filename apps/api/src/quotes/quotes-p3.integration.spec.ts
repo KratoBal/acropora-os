@@ -423,23 +423,50 @@ describe(
       );
     });
 
-    it("P8: a postponed quote gets a task on its day", async () => {
+    it("P8: a postponement closes the open follow-ups and opens one for its day", async () => {
       const q = await publishedQuote("P8 postponed");
-      const until = budapestDay(30);
-      const res = await request(`/quotes/${q.quoteId}/postpone`, "POST", {
-        until,
-      });
+      await request(
+        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+        "POST",
+        sendBody(),
+      );
+      const first = budapestDay(20);
+      const second = budapestDay(30);
+      const statuses = [
+        (
+          await request(`/quotes/${q.quoteId}/postpone`, "POST", {
+            until: first,
+          })
+        ).status,
+        (
+          await request(`/quotes/${q.quoteId}/postpone`, "POST", {
+            until: second,
+          })
+        ).status,
+      ];
       const tasks = await followUps(q.quoteId);
       assert.deepEqual(
         [
-          res.status,
+          statuses,
           tasks.map((t) => [
             t.sourceRef!.slice(`quote:${q.quoteId}:`.length),
             t.status,
-            t.dueAt!.toISOString().slice(0, 10),
           ]),
+          tasks
+            .find((t) => t.status === "OPEN")
+            ?.dueAt?.toISOString()
+            .slice(0, 10),
         ],
-        [200, [[`postponed:${until}`, "OPEN", until]]],
+        [
+          [200, 200],
+          [
+            ["after-send", "DONE"],
+            ["before-expiry", "DONE"],
+            [`postponed:${first}`, "DONE"],
+            [`postponed:${second}`, "OPEN"],
+          ],
+          second,
+        ],
         "POSTPONE-FOLLOW-UP",
       );
     });

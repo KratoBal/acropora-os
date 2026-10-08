@@ -14,7 +14,9 @@ type Tx = Prisma.TransactionClient;
  *
  * The key is `@@unique([source, sourceRef])`, so a second send, a resend or
  * a retry adds nothing (`skipDuplicates`). An acceptance, a rejection or a
- * cancellation closes every open one of the quote.
+ * cancellation closes every open one of the quote; a postponement closes
+ * them and opens its own. A revoked acceptance does not reopen the closed
+ * ones (known, decided: acrobot 28289).
  *
  * The two day counts are defaults nobody has decided yet (the issue says
  * "kiküldés után X nappal"); they stand here, in one place, to be changed.
@@ -101,27 +103,39 @@ export async function openSendFollowUps(
   });
 }
 
-/** A postponed quote comes back on its day. */
+/**
+ * A POSTPONED QUOTE COMES BACK ON ITS DAY, AND ONLY THEN (acrobot's #1636
+ * decision): every follow-up still open (the send's two, an earlier
+ * postponement's) is closed, and one opens for the new day. A second
+ * postponement to the same day opens that day's task again: it is an upsert
+ * on the key, since `skipDuplicates` would keep it closed.
+ */
 export async function openPostponedFollowUp(
   tx: Tx,
   args: { quoteId: string; until: Date; actorUserId: string },
 ): Promise<void> {
   const quote = await quoteRef(tx, args.quoteId);
   const day = args.until.toISOString().slice(0, 10);
-  await tx.task.createMany({
-    data: [
-      {
-        title: `Elhalasztott ajánlat: ${quote.quoteNumber} · ${quote.title}`,
-        description: `Ma jár le a halasztás (${day}). Érdemes újra felvenni a kapcsolatot.`,
-        dueAt: args.until,
-        source: "QUOTE",
-        sourceRef: `${prefix(quote.id)}postponed:${day}`,
-        linkUrl: link(quote.id),
-        assigneeId: assignee(quote, args.actorUserId),
-        createdById: args.actorUserId,
-      },
-    ],
-    skipDuplicates: true,
+  await closeFollowUps(tx, quote.id, args.actorUserId);
+  const sourceRef = `${prefix(quote.id)}postponed:${day}`;
+  await tx.task.upsert({
+    where: { source_sourceRef: { source: "QUOTE", sourceRef } },
+    update: {
+      status: "OPEN",
+      closedAt: null,
+      closedById: null,
+      dueAt: args.until,
+    },
+    create: {
+      title: `Elhalasztott ajánlat: ${quote.quoteNumber} · ${quote.title}`,
+      description: `Ma jár le a halasztás (${day}). Érdemes újra felvenni a kapcsolatot.`,
+      dueAt: args.until,
+      source: "QUOTE",
+      sourceRef,
+      linkUrl: link(quote.id),
+      assigneeId: assignee(quote, args.actorUserId),
+      createdById: args.actorUserId,
+    },
   });
 }
 

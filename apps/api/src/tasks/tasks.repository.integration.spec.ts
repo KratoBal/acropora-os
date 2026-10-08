@@ -221,6 +221,64 @@ describe("TasksRepository integration", { skip: gate.mode === "skip" }, () => {
     });
   });
 
+  /**
+   * #1582 P8 (barracuda's #1636 review): the due date orders only the open
+   * work. Closed tasks stay newest-first, so old dated offer follow-ups do not
+   * push a newer hand-made task out of the closed view.
+   */
+  it("keeps the closed view newest first, whatever the due dates", async () => {
+    const person = await prisma.user.create({
+      data: {
+        email: `tasks-done-${suffix}@${TEST_EMAIL_DOMAIN}`,
+        displayName: "Tasks Integration Done",
+        role: "MANAGER",
+        isActive: true,
+      },
+    });
+    const closed = (title: string, createdAt: string, dueAt: string | null) =>
+      prisma.task.create({
+        data: {
+          title,
+          assigneeId: person.id,
+          status: "DONE",
+          closedAt: new Date(),
+          createdAt: new Date(createdAt),
+          dueAt: dueAt ? new Date(dueAt) : null,
+        },
+      });
+    await closed(
+      "régi ajánlat 1",
+      "2026-01-01T10:00:00Z",
+      "2026-01-06T00:00:00Z",
+    );
+    await closed(
+      "régi ajánlat 2",
+      "2026-01-02T10:00:00Z",
+      "2026-01-07T00:00:00Z",
+    );
+    await closed(
+      "régi ajánlat 3",
+      "2026-01-03T10:00:00Z",
+      "2026-01-08T00:00:00Z",
+    );
+    await closed("újabb kézi feladat", "2026-02-01T10:00:00Z", null);
+    const done = await repository.listForAssignee(person.id, "DONE");
+    const all = await repository.listForAssignee(person.id, "ALL");
+    assert.deepEqual(
+      [done.items.map((t) => t.title), all.items[0]?.title],
+      [
+        [
+          "újabb kézi feladat",
+          "régi ajánlat 3",
+          "régi ajánlat 2",
+          "régi ajánlat 1",
+        ],
+        "újabb kézi feladat",
+      ],
+      "DONE-ORDER-CREATED",
+    );
+  });
+
   it("lists only active users as assignee options", async () => {
     await prisma.user.update({
       where: { id: otherId },

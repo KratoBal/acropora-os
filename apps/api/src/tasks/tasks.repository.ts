@@ -21,6 +21,18 @@ import type {
  */
 export const TASK_LIST_LIMIT = 200;
 
+/**
+ * THE ORDER, BY GROUP. Open work by due date, soonest first (#1582 P8), and
+ * the undated tasks (every MANUAL and AGENT one) newest-first after them, as
+ * before. Closed work stays newest-first: ordered by due date, the oldest
+ * closed offer follow-ups would stand first, and the cap would push the
+ * hand-made tasks out of the closed view (barracuda's #1636 review).
+ */
+const ORDER = {
+  OPEN: [{ dueAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
+  DONE: [{ createdAt: "desc" }],
+} satisfies Record<"OPEN" | "DONE", Prisma.TaskOrderByWithRelationInput[]>;
+
 type TaskWithPeople = Task & {
   assignee: Pick<User, "id" | "displayName" | "nickname">;
   createdBy: Pick<User, "id" | "displayName" | "nickname"> | null;
@@ -55,26 +67,21 @@ export class TasksRepository extends Repository {
     assigneeId: string,
     status: TaskStatusFilter,
   ): Promise<TaskListResponse> {
-    const where: Prisma.TaskWhereInput = {
-      assigneeId,
-      ...(status === "ALL" ? {} : { status }),
-    };
-    const [tasks, openCount, doneCount] = await Promise.all([
+    const find = (group: "OPEN" | "DONE") =>
       this.database.task.findMany({
-        where,
+        where: { assigneeId, status: group },
         include: taskInclude,
-        // The enum is declared OPEN, DONE, and PostgreSQL orders enum values
-        // by declaration order - so ascending status puts open work first.
-        // Within a group the dated tasks come first, soonest first (#1582
-        // P8); the undated ones (every MANUAL and AGENT task) follow,
-        // newest-first, as before.
-        orderBy: [
-          { status: "asc" },
-          { dueAt: { sort: "asc", nulls: "last" } },
-          { createdAt: "desc" },
-        ],
+        orderBy: ORDER[group],
         take: TASK_LIST_LIMIT + 1,
-      }),
+      });
+    const [tasks, openCount, doneCount] = await Promise.all([
+      // ALL: open work first, each group in its own order, then the cap
+      status === "ALL"
+        ? Promise.all([find("OPEN"), find("DONE")]).then(([open, done]) => [
+            ...open,
+            ...done,
+          ])
+        : find(status),
       this.database.task.count({ where: { assigneeId, status: "OPEN" } }),
       this.database.task.count({ where: { assigneeId, status: "DONE" } }),
     ]);
