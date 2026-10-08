@@ -525,6 +525,19 @@ export class UnasApplyRepository extends Repository {
           : null,
       },
     });
+    /**
+     * AZ ALT SZÖVEG MEGŐRZÉSE URL SZERINT (SEO P0 PR 9). A CSV-ben nincs alt,
+     * az API-szinkron viszont ugyanerre a sorra írja; a törlés-újraírás eddig
+     * minden CSV-importtal kitörölte, és a vetítés a bolt altját vele vitte.
+     */
+    const keptImageTexts = new Map(
+      (
+        await transaction.productImage.findMany({
+          where: { productId, source: "UNAS" },
+          select: { url: true, altText: true, title: true },
+        })
+      ).map((image) => [image.url, image]),
+    );
     await transaction.productImage.deleteMany({
       where: { productId, source: "UNAS" },
     });
@@ -546,6 +559,8 @@ export class UnasApplyRepository extends Repository {
           url,
           sortOrder,
           source: "UNAS",
+          altText: keptImageTexts.get(url)?.altText ?? null,
+          title: keptImageTexts.get(url)?.title ?? null,
         })),
       });
     counts.imagesSynchronized += newImages.length;
