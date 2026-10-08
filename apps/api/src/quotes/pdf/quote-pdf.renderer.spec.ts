@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 import type { QuoteRichText } from "@acropora/types";
@@ -12,7 +13,7 @@ import {
   type QuotePdfInput,
   type QuotePdfItem,
 } from "./quote-pdf-layout.js";
-import { renderQuotePdf } from "./quote-pdf.renderer.js";
+import { coverLayout, renderQuotePdf } from "./quote-pdf.renderer.js";
 
 const d = (v: string) => new Prisma.Decimal(v);
 const doc = (...texts: string[]): QuoteRichText => ({
@@ -152,6 +153,29 @@ describe("quote PDF content", () => {
   });
 });
 
+describe("the first page's header", () => {
+  it("the tagline starts below the logo, and the title below the tagline (Balázs, stage 2026-10-08)", () => {
+    const top = 54;
+    // the logo's own aspect, read from the SVG it is drawn from
+    const svg = readFileSync(
+      new URL("../../../assets/branding/acropora-logo.svg", import.meta.url),
+      "utf8",
+    );
+    const [, , w, h] = /viewBox="([^"]+)"/
+      .exec(svg)![1]!
+      .split(/\s+/)
+      .map(Number);
+    const logoBottom = top + (120 * h!) / w!;
+    const at = coverLayout(top, 120);
+    assert.ok(
+      at.tagline >= logoBottom + 4,
+      `tagline ${at.tagline} vs logo ${logoBottom}`,
+    );
+    assert.ok(at.title >= at.tagline + 7.5 * 1.5);
+    assert.ok(at.number > at.title && at.rule > at.number);
+  });
+});
+
 describe("quote PDF rendering (Figma 579:2898 rules)", () => {
   const sample = () =>
     input([
@@ -189,7 +213,17 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
         .filter((l) => l.pageNumber === page)
         .map((l) => l.text)
         .join(" | ");
-      assert.match(onPage, /AJ-2026-0042 v2/, `${page}. oldal`);
+      // Balázs's footer word for word, in one line (2026-10-08 08:14)
+      assert.ok(
+        lines.some(
+          (l) =>
+            l.pageNumber === page &&
+            l.text.includes(
+              "Acropora Kft. 1106 Budapest, Pesti Gábor utca 35 Tel: +36-20-2676801 e-mail: info@acropora.hu www.acropora.hu · AJ-2026-0042 · v2",
+            ),
+        ),
+        `${page}. oldal: ${onPage}`,
+      );
       assert.match(
         onPage,
         new RegExp(`${page} / ${pdf.pageCount}`),
