@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { medusaMergeMetadata } from "../../testing/medusa-merge-metadata.fixture.js";
+
 import {
   isOwnedMetadataKey,
   mergeProductMetadata,
@@ -26,8 +28,8 @@ describe("a metaadat összefésülése", () => {
       { seo_title: "a mai cím", unique_piece: "true" },
     );
 
+    // only our keys go out; the foreign key is kept by the shop's merge
     assert.deepEqual(eredmeny.metadata, {
-      kezzel_irt: "amit valaki a Medusán adott hozzá",
       seo_title: "a mai cím",
       unique_piece: "true",
     });
@@ -86,7 +88,7 @@ describe("a metaadat összefésülése", () => {
       {},
     );
 
-    assert.deepEqual(eredmeny.metadata, { kezzel_irt: "marad", unas_unit: "" });
+    assert.deepEqual(eredmeny.metadata, { unas_unit: "" });
     assert.deepEqual(eredmeny.removedKeys, ["unas_unit"]);
   });
 
@@ -125,29 +127,10 @@ describe("melyik kulcs a mienk", () => {
 });
 
 /**
- * THE TARGET MERGES, IT DOES NOT REPLACE (measured 2026-10-08).
- *
- * `medusaMergeMetadata` is a copy of `mergeMetadata` from @medusajs/utils
- * 2.20.1 (`dist/common/merge-metadata.js`), which the product repository's
- * `deepUpdate` applies to every product update. A key that is missing from the
- * body stays; only an empty string removes it. The assertion is on the END
- * STATE in the shop, not on our body: that is what was wrong before.
+ * THE TARGET MERGES, IT DOES NOT REPLACE (measured 2026-10-08): the assertion is
+ * on the shop's END STATE (`medusaMergeMetadata`, a copy of Medusa's), not on
+ * our body, which is what was wrong before.
  */
-function medusaMergeMetadata(
-  metadata: Record<string, unknown>,
-  metadataToMerge: Record<string, unknown>,
-): Record<string, unknown> {
-  const merged = { ...metadata };
-  for (const [key, value] of Object.entries(metadataToMerge)) {
-    if (value === "") {
-      delete merged[key];
-      continue;
-    }
-    merged[key] = value;
-  }
-  return merged;
-}
-
 describe("the shop's end state after the merge", () => {
   it("our dropped key is gone, the foreign key stays, ours is written", () => {
     const existing = {
@@ -161,6 +144,25 @@ describe("the shop's end state after the merge", () => {
     assert.deepEqual(medusaMergeMetadata(existing, metadata ?? {}), {
       seo_title: "új",
       kezzel_irt: "marad",
+    });
+  });
+});
+
+/**
+ * A FOREIGN KEY DOES NOT GO BACK (acrobot 28211): sending it back would undo a
+ * value written by someone else between our read and our write, and a foreign
+ * key whose value is "" would be deleted by the shop.
+ */
+describe("foreign keys stay out of the body", () => {
+  it("a foreign key, even an empty one, is not sent, and the shop keeps it", () => {
+    const existing = { kezzel_irt: "", masik: "x", unas_unit: "db" };
+    const { metadata } = mergeProductMetadata(existing, { unas_unit: "ml" });
+
+    assert.deepEqual(metadata, { unas_unit: "ml" });
+    assert.deepEqual(medusaMergeMetadata(existing, metadata ?? {}), {
+      kezzel_irt: "",
+      masik: "x",
+      unas_unit: "ml",
     });
   });
 });
