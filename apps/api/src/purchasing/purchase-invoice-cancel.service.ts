@@ -145,12 +145,26 @@ export class PurchaseInvoiceCancelService {
             locationId: null,
             lotId: null,
           },
-          select: { onHand: true },
+          select: { onHand: true, reserved: true },
         });
         const arrived = received.get(variantId)!.quantity;
-        if ((stock?.onHand ?? new Prisma.Decimal(0)).lessThan(arrived))
+        const name = variants.get(variantId)?.product.name ?? variantId;
+        const onHand = stock?.onHand ?? new Prisma.Decimal(0);
+        // WHAT OTHERS HOLD STAYS HELD (barracuda's #1620 review, acrobot
+        // 28147): only this invoice's own active reservations are released
+        // below, so the stock that can go out is what nobody else reserved
+        const own = reservations
+          .filter((r) => r.status === "ACTIVE" && r.variantId === variantId)
+          .reduce((sum, r) => sum.plus(r.quantity), new Prisma.Decimal(0));
+        const others = (stock?.reserved ?? new Prisma.Decimal(0)).minus(own);
+        const free = onHand.minus(others);
+        if (onHand.lessThan(arrived))
           throw new ConflictException(
-            `A(z) ${variants.get(variantId)?.product.name ?? variantId} készlete már kevesebb, mint amennyi ezzel a számlával érkezett (${arrived.toString()}), ezért a számla nem sztornózható.`,
+            `A(z) ${name} készlete már kevesebb, mint amennyi ezzel a számlával érkezett (${arrived.toString()}), ezért a számla nem sztornózható.`,
+          );
+        if (free.lessThan(arrived))
+          throw new ConflictException(
+            `A(z) ${name} készletéből ${others.toString()} darabot más foglalás köt le, így csak ${free.toString()} vehető ki a beérkezett ${arrived.toString()} helyett, ezért a számla nem sztornózható.`,
           );
       }
 
@@ -193,7 +207,11 @@ export class PurchaseInvoiceCancelService {
         await rekeyReceipt(
           tx,
           id,
-          receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
+          // the key the receipt was POSTED under, not one computed from the
+          // invoice's number today: an older rename may have left them apart,
+          // and a computed key would then move nothing (barracuda, 28147)
+          receipt.idempotencyKey ??
+            receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
           `PURCHASE_INVOICE_CANCELLED:${id}`,
         );
         await tx.stockMovement.update({

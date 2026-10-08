@@ -235,6 +235,75 @@ describe(
       );
     });
 
+    it("stock another project holds stays held: the cancel is refused", async () => {
+      const v = await variant("others", "ACROPORA");
+      const invoice = await record("others", [
+        { variantId: v.id, sku: v.sku, quantity: 5, reserve: 2 },
+      ]);
+      // 10 on hand: 2 ours, 7 another project's; only 3 can go out of 5
+      await prisma.stockItem.updateMany({
+        where: { variantId: v.id, warehouseId },
+        data: { onHand: D(10), reserved: D(9) },
+      });
+      await assert.rejects(
+        cancels.cancel(invoice.id, "Más projekt fogja", userId),
+        /más foglalás köt le/,
+        "OTHER-RESERVED-409",
+      );
+      assert.equal(await status(invoice.id), "POSTED");
+    });
+
+    it("the receipt's own key is freed, even when it differs from today's number", async () => {
+      const v = await variant("legacy", "ACROPORA");
+      const first = await record("legacy", [
+        { variantId: v.id, sku: v.sku, quantity: 2 },
+      ]);
+      // renamed before renames moved the key: the receipt keeps the old one
+      await prisma.purchaseInvoice.update({
+        where: { id: first.id },
+        data: { supplierInvoiceNumber: `CANCEL-legacy-renamed-${suffix}` },
+      });
+      await cancels.cancel(first.id, "Régi átnevezés", userId);
+      const again = await record(
+        "legacy2",
+        [{ variantId: v.id, sku: v.sku, quantity: 2 }],
+        { number: `CANCEL-legacy-${suffix}` },
+      ).catch((error: unknown) => error);
+      assert.ok(
+        !(again instanceof Error),
+        `OLD-KEY-FROM-RECEIPT: ${String(again)}`,
+      );
+      assert.equal(
+        (await stock(v.id)).onHand.toString(),
+        "2",
+        "OLD-KEY-FROM-RECEIPT",
+      );
+    });
+
+    it("two recorded invoices still cannot share a number (the partial index is there)", async () => {
+      const number = `CANCEL-twice-${suffix}`;
+      const base = {
+        supplierInvoiceNumber: number,
+        source: "HU_MANUAL" as const,
+        supplierId,
+        warehouseId,
+        invoiceDate: new Date("2026-10-08T00:00:00Z"),
+      };
+      await prisma.purchaseInvoice.create({
+        data: { ...base, documentNumber: `CANCEL-twice-a-${suffix}` },
+      });
+      await assert.rejects(
+        prisma.purchaseInvoice.create({
+          data: { ...base, documentNumber: `CANCEL-twice-b-${suffix}` },
+        }),
+        (error: unknown) =>
+          typeof error === "object" &&
+          error !== null &&
+          (error as { code?: string }).code === "P2002",
+        "INDEX-STILL-UNIQUE",
+      );
+    });
+
     it("an invoice with a consumed project reservation is refused", async () => {
       const v = await variant("consumed", "ACROPORA");
       const invoice = await record("consumed", [
