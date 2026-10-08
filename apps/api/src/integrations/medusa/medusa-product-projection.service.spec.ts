@@ -113,6 +113,8 @@ function fakes(options: {
   } as unknown as MedusaProductLinkRepository;
 
   const medusa = {
+    // SEO P0 PR 8 árva-kezelés: a frissítés mindig lekéri; alapból nincs mérték
+    listVariantMeasures: async () => [],
     findByExternalId: async () => {
       calls.push("search");
       return {
@@ -2273,13 +2275,22 @@ describe("MedusaProductProjectionService -- a valtozatok tomege es meretei (SEO 
     assert.deepEqual(outcome.measures?.written, ["A"]);
   });
 
-  it("mertek nelkul nem kerdezi le a valtozatokat", async () => {
+  it("mertek nelkul is megnezi a valtozatokat, de ures jelentest nem ad", async () => {
     const f = fakes({ link, found: [] });
     let listazas = 0;
     Object.assign(f.medusa, {
       listVariantMeasures: async () => {
         listazas += 1;
-        return [];
+        return [
+          {
+            id: "v_a",
+            sku: "A",
+            weight: null,
+            length: null,
+            width: null,
+            height: null,
+          },
+        ];
       },
     });
     const outcome = await f.service.project(
@@ -2287,7 +2298,103 @@ describe("MedusaProductProjectionService -- a valtozatok tomege es meretei (SEO 
       now,
     );
     assert.equal(outcome.action, "updated");
-    assert.equal(listazas, 0);
+    assert.equal(listazas, 1);
+    assert.equal(
+      outcome.action === "updated" ? outcome.measures : "x",
+      undefined,
+    );
+  });
+
+  /*
+    ARVA MERTEK (barracuda, #1611 (a) es (b)). MI PIROSIT: egy tény nélküli érték
+    nem kerül a jelentésbe; egy kézzel átírt értéket ürít; a saját, tény nélkül
+    maradt értékét nem üríti; a nyilvántartás nem frissül.
+  */
+  it("a sajat, teny nelkul maradt erteket uriti; a kezzel atirtat es az idegent arvakent nevezi", async () => {
+    const f = fakes({ link, found: [] });
+    const irasok: unknown[] = [];
+    Object.assign(f.medusa, {
+      listVariantMeasures: async () => [
+        {
+          id: "v_a",
+          sku: "A",
+          weight: 250,
+          length: null,
+          width: null,
+          height: null,
+        },
+        {
+          id: "v_b",
+          sku: "B",
+          weight: 300,
+          length: 10,
+          width: null,
+          height: null,
+        },
+      ],
+      updateVariantMeasures: async (_p: string, id: string, patch: unknown) => {
+        irasok.push([id, patch]);
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantMeasures: [],
+        writtenMeasures: { A: { weight: 250 }, B: { weight: 250 } },
+      },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.deepEqual(irasok, [["v_a", { weight: null }]]);
+    assert.deepEqual(outcome.measures?.cleared, ["A.weight"]);
+    assert.deepEqual(outcome.measures?.orphans, ["B.weight", "B.length"]);
+    assert.deepEqual(outcome.measures?.written, []);
+    assert.deepEqual(outcome.measures?.ledger, {});
+  });
+
+  it("a kiirt ertek a nyilvantartasba kerul; egy elbukott irasnal a regi marad", async () => {
+    const f = fakes({ link, found: [] });
+    Object.assign(f.medusa, {
+      listVariantMeasures: async () => [
+        {
+          id: "v_a",
+          sku: "A",
+          weight: null,
+          length: null,
+          width: null,
+          height: null,
+        },
+        {
+          id: "v_b",
+          sku: "B",
+          weight: null,
+          length: null,
+          width: null,
+          height: null,
+        },
+      ],
+      updateVariantMeasures: async (_p: string, id: string) => {
+        if (id === "v_b") throw new Error("validation");
+      },
+    });
+    const outcome = await f.service.project(
+      {
+        ...product,
+        variantMeasures: [
+          { sku: "A", patch: { weight: 120 } },
+          { sku: "B", patch: { weight: 90 } },
+        ],
+        writtenMeasures: { B: { weight: 80 } },
+      },
+      now,
+    );
+    assert.equal(outcome.action, "updated");
+    if (outcome.action !== "updated") return;
+    assert.deepEqual(outcome.measures?.ledger, {
+      A: { weight: 120 },
+      B: { weight: 80 },
+    });
   });
 });
 

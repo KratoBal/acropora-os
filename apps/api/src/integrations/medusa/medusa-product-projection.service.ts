@@ -1,6 +1,7 @@
 import {
-  measurePatch,
+  planVariantMeasureWrite,
   type VariantMeasureInput,
+  type WrittenMeasures,
 } from "./medusa-variant-measures.js";
 import { Injectable } from "@nestjs/common";
 
@@ -196,6 +197,11 @@ export interface ProjectableProduct {
    * tényekből (`decideVariantMeasures`). Üres vagy hiányzó: nincs mit kiírni.
    */
   variantMeasures?: VariantMeasureInput[];
+  /**
+   * Amit a vetítés korábban kiírt (az árva-kezelés nyilvántartása): csak ezeket
+   * az értékeket ürítheti, ha a mögöttük álló tény eltűnt.
+   */
+  writtenMeasures?: WrittenMeasures;
   /**
    * A MERTEKEGYSEG ES A MASODLAGOS EGYSEG, MAR SZOVEGGE ALAKITVA.
    *
@@ -969,14 +975,25 @@ export class MedusaProductProjectionService {
               ),
             }
           : {}),
-        ...(product.variantMeasures?.length
-          ? {
-              measures: await this.syncVariantMeasures(
-                medusaProductId,
-                product.variantMeasures,
-              ),
-            }
-          : {}),
+        // a frissítés MINDIG megnézi a változatok mértékét: egy tény nélküli
+        // (árva) érték is a jelentésbe kerül, és a saját árvát üríti. A kimenet
+        // csak akkor kap `measures`-t, ha van mit mondani vagy menteni.
+        ...(await (async () => {
+          const r = await this.syncVariantMeasures(
+            medusaProductId,
+            product.variantMeasures ?? [],
+            product.writtenMeasures ?? {},
+          );
+          const vanMit =
+            r.written.length ||
+            r.missing.length ||
+            r.failed.length ||
+            r.cleared.length ||
+            r.orphans.length ||
+            r.unchanged ||
+            Object.keys(product.writtenMeasures ?? {}).length;
+          return vanMit ? { measures: r } : {};
+        })()),
       };
     };
 
@@ -1212,6 +1229,7 @@ export class MedusaProductProjectionService {
             measures: await this.syncVariantMeasures(
               created.id,
               product.variantMeasures,
+              {},
             ),
           }
         : {}),
@@ -1250,12 +1268,16 @@ export class MedusaProductProjectionService {
   private async syncVariantMeasures(
     medusaProductId: string,
     wanted: VariantMeasureInput[],
+    written: WrittenMeasures,
   ): Promise<VariantMeasureSyncReport> {
     const report: VariantMeasureSyncReport = {
       written: [],
       unchanged: 0,
       missing: [],
       failed: [],
+      cleared: [],
+      orphans: [],
+      ledger: { ...written },
     };
     let rows: Awaited<ReturnType<MedusaAdminClient["listVariantMeasures"]>>;
     try {
@@ -1264,24 +1286,44 @@ export class MedusaProductProjectionService {
       report.failed.push({ sku: "*", error: describeMedusaFailure(error) });
       return report;
     }
-    for (const w of wanted) {
-      const row = rows.find((r) => r.sku === w.sku);
-      if (!row) {
-        report.missing.push(w.sku);
-        continue;
-      }
-      const patch = measurePatch(w.patch, row);
-      if (!Object.keys(patch).length) {
-        report.unchanged += 1;
+    for (const w of wanted)
+      if (!rows.some((r) => r.sku === w.sku)) report.missing.push(w.sku);
+    const ledger: WrittenMeasures = {};
+    for (const row of rows) {
+      if (!row.sku) continue;
+      const terv = planVariantMeasureWrite(
+        wanted.find((w) => w.sku === row.sku)?.patch,
+        row,
+        written[row.sku],
+      );
+      report.orphans.push(...terv.orphans.map((m) => `${row.sku}.${m}`));
+      if (!Object.keys(terv.patch).length) {
+        if (Object.keys(terv.record).length) {
+          report.unchanged += 1;
+          ledger[row.sku] = terv.record;
+        }
         continue;
       }
       try {
-        await this.medusa.updateVariantMeasures(medusaProductId, row.id, patch);
-        report.written.push(w.sku);
+        await this.medusa.updateVariantMeasures(
+          medusaProductId,
+          row.id,
+          terv.patch,
+        );
+        if (Object.values(terv.patch).some((v) => v !== null))
+          report.written.push(row.sku);
+        report.cleared.push(...terv.cleared.map((m) => `${row.sku}.${m}`));
+        if (Object.keys(terv.record).length) ledger[row.sku] = terv.record;
       } catch (error) {
-        report.failed.push({ sku: w.sku, error: describeMedusaFailure(error) });
+        report.failed.push({
+          sku: row.sku,
+          error: describeMedusaFailure(error),
+        });
+        // a hiba után a régi nyilvántartás marad: a következő kör újra eldönti
+        if (written[row.sku]) ledger[row.sku] = written[row.sku]!;
       }
     }
+    report.ledger = ledger;
     return report;
   }
 
@@ -1371,8 +1413,17 @@ export class MedusaProductProjectionService {
 /** Csak a teszteknek, hogy a sor alakja egy helyen legyen leírva. */
 export type { MedusaProductRow };
 
-/** A tömeg- és méret-írás jelentése (SEO P0 PR 8), a vonalkódéval azonos alakban. */
-export type VariantMeasureSyncReport = VariantBarcodeSyncReport;
+/**
+ * A tömeg- és méret-írás jelentése (SEO P0 PR 8): a vonalkódéval azonos mezők,
+ * plusz az árva-kezelés. A `ledger` az új nyilvántartás, amit a futtató ment.
+ */
+export interface VariantMeasureSyncReport extends VariantBarcodeSyncReport {
+  /** `cikkszám.mező`: a saját, tény nélkül maradt értékek, amiket ürített. */
+  cleared: string[];
+  /** `cikkszám.mező`: tény nélküli értékek, amiket NEM mi írtunk: érintetlenek. */
+  orphans: string[];
+  ledger: WrittenMeasures;
+}
 
 /** A frissítés-ág vonalkód-írásának jelentése (SEO P0 PR 4). */
 export interface VariantBarcodeSyncReport {

@@ -13,7 +13,11 @@
  */
 import {
   describeVariantMeasures,
+  loadWrittenMeasures,
+  sameLedger,
+  saveWrittenMeasures,
   variantMeasuresFor,
+  type MeasureLedgerDatabase,
   type MeasureSourceDatabase,
 } from "./medusa-variant-measures.js";
 import { prisma } from "@acropora/database";
@@ -1030,6 +1034,10 @@ export async function runProjectionCli(
       product.id,
       product.variants,
     );
+    const kiirtMertekek = await loadWrittenMeasures(
+      db as unknown as MeasureLedgerDatabase,
+      product.id,
+    );
     const pbForras = barcodesFromProductBarcode(env);
     const valtozatVonalkodok = pbForras
       ? await (async () => {
@@ -1379,6 +1387,7 @@ export async function runProjectionCli(
           ? { field: vonalkod.field, value: vonalkod.value }
           : null,
         variantMeasures: mertekek.measures,
+        writtenMeasures: kiirtMertekek,
         variantBarcodes: valtozatVonalkodok.flatMap((v) =>
           v.decision.field
             ? [{ sku: v.sku, field: v.decision.field, value: v.decision.value }]
@@ -1423,6 +1432,22 @@ export async function runProjectionCli(
       },
       futasIdeje,
     );
+
+    /* AZ ÁRVA-KEZELÉS NYILVÁNTARTÁSA (SEO P0 PR 8 után): csak változásnál írunk. */
+    if (
+      (outcome.action === "created" ||
+        outcome.action === "updated" ||
+        outcome.action === "relinked") &&
+      outcome.measures &&
+      !sameLedger(outcome.measures.ledger, kiirtMertekek)
+    )
+      await saveWrittenMeasures(
+        db as unknown as MeasureLedgerDatabase,
+        product.id,
+        outcome.medusaProductId,
+        outcome.measures.ledger,
+        futasIdeje,
+      );
 
     if (outcome.action === "stopped") {
       /*

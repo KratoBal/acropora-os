@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 
 import {
   decideVariantMeasures,
-  measurePatch,
+  loadWrittenMeasures,
+  planVariantMeasureWrite,
+  sameLedger,
+  saveWrittenMeasures,
   variantMeasuresFor,
   type MeasureFact,
   type NativeMeasureField,
@@ -112,18 +115,6 @@ describe("decideVariantMeasures", () => {
   });
 });
 
-describe("measurePatch", () => {
-  it("csak az eltérő mezők; az egyező nem íródik újra; ürítés nincs", () => {
-    assert.deepEqual(
-      measurePatch(
-        { weight: 120, length: 300 },
-        { id: "v", sku: "S", weight: 120, length: 250, width: 9, height: null },
-      ),
-      { length: 300 },
-    );
-  });
-});
-
 describe("variantMeasuresFor", () => {
   it("a natív célt a definíció mai sorából veszi: cél nélkül nem kérdez tényt", async () => {
     let tenyKerdes = 0;
@@ -148,5 +139,112 @@ describe("variantMeasuresFor", () => {
       ).measures,
       [{ sku: "S1", patch: { weight: 120 } }],
     );
+  });
+});
+
+describe("planVariantMeasureWrite (árva-kezelés)", () => {
+  const sor = (
+    m: Partial<Record<"weight" | "length" | "width" | "height", number | null>>,
+  ) => ({
+    id: "v",
+    sku: "S",
+    weight: null,
+    length: null,
+    width: null,
+    height: null,
+    ...m,
+  });
+
+  it("kért érték: eltérésnél ír, és nyilvántartásba veszi; egyezésnél csak nyilvántartás", () => {
+    assert.deepEqual(
+      planVariantMeasureWrite({ weight: 120 }, sor({ weight: 100 }), undefined),
+      {
+        patch: { weight: 120 },
+        orphans: [],
+        cleared: [],
+        record: { weight: 120 },
+      },
+    );
+    assert.deepEqual(
+      planVariantMeasureWrite({ weight: 120 }, sor({ weight: 120 }), undefined)
+        .patch,
+      {},
+    );
+  });
+
+  it("tény nélkül: a pontosan saját érték ürül, a más érték árva, az üres semmi", () => {
+    const t = planVariantMeasureWrite(
+      {},
+      sor({ weight: 250, length: 99, width: null }),
+      { weight: 250, length: 100, width: 40 },
+    );
+    assert.deepEqual(t.patch, { weight: null });
+    assert.deepEqual(t.cleared, ["weight"]);
+    assert.deepEqual(t.orphans, ["length"]);
+    assert.deepEqual(t.record, {});
+  });
+});
+
+describe("a nyilvántartás sora", () => {
+  it("sameLedger kulcs-sorrendtől független, és értékre érzékeny", () => {
+    assert.equal(
+      sameLedger(
+        { A: { weight: 1 }, B: { length: 2 } },
+        { B: { length: 2 }, A: { weight: 1 } },
+      ),
+      true,
+    );
+    assert.equal(sameLedger({ A: { weight: 1 } }, { A: { weight: 2 } }), false);
+    assert.equal(sameLedger({}, {}), true);
+  });
+
+  it("betöltés a saját ProductMeasure sorból; hiányzó vagy más alakú sor: üres", async () => {
+    const kerdes: unknown[] = [];
+    const db = (metadata: unknown) => ({
+      externalReference: {
+        findUnique: async (args: unknown) => {
+          kerdes.push(args);
+          return metadata === undefined ? null : { metadata };
+        },
+        upsert: async () => ({}),
+      },
+    });
+    assert.deepEqual(
+      await loadWrittenMeasures(db({ written: { A: { weight: 3 } } }), "p1"),
+      {
+        A: { weight: 3 },
+      },
+    );
+    assert.deepEqual(await loadWrittenMeasures(db(undefined), "p1"), {});
+    assert.deepEqual(await loadWrittenMeasures(db({ mas: 1 }), "p1"), {});
+    assert.deepEqual((kerdes[0] as { where: unknown }).where, {
+      system_entityType_entityId: {
+        system: "MEDUSA",
+        entityType: "ProductMeasure",
+        entityId: "p1",
+      },
+    });
+  });
+
+  it("mentés: upsert a saját sorra, a nyilvántartással a metaadatban", async () => {
+    const irasok: unknown[] = [];
+    await saveWrittenMeasures(
+      {
+        externalReference: {
+          findUnique: async () => null,
+          upsert: async (a: unknown) => irasok.push(a),
+        },
+      },
+      "p1",
+      "prod_m",
+      { A: { weight: 3 } },
+      new Date("2026-10-08T00:00:00Z"),
+    );
+    const a = irasok[0] as {
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    assert.equal(a.create.entityType, "ProductMeasure");
+    assert.deepEqual(a.update.metadata, { written: { A: { weight: 3 } } });
   });
 });
