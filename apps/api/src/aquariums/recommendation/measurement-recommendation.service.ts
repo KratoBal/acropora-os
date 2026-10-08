@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import {
+  hasMalformedRecommendationToken,
   parseRecommendationText,
   recommendationProductIds,
   type AquariumMeasurementOccasion,
@@ -251,6 +252,10 @@ export class MeasurementRecommendationService {
     const row = await this.requireRow(aquariumId, occasionId, user);
     const text = row.draftText?.trim() ?? "";
     if (!text) throw new BadRequestException("Üres ajánlás nem hagyható jóvá.");
+    if (hasMalformedRecommendationToken(text))
+      throw new BadRequestException(
+        "A szövegben hibás alakú termék-hivatkozás áll (egy {{ vagy }} maradt): a helyes alak {{termek:azonosító}}. Javítsd, és utána hagyd jóvá.",
+      );
     const known = new Set(candidatesOf(row).map((c) => c.productId));
     const unknown = recommendationProductIds(text).filter(
       (id) => !known.has(id),
@@ -326,6 +331,7 @@ export class MeasurementRecommendationService {
       unknownProductIds: recommendationProductIds(row.draftText ?? "").filter(
         (id) => !known.has(id),
       ),
+      malformedReference: hasMalformedRecommendationToken(row.draftText ?? ""),
       approvedText: row.approvedText,
       approvedSegments: recommendationSegments(row.approvedText, products),
       approvedAt: row.approvedAt?.toISOString() ?? null,

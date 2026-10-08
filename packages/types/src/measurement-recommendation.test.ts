@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  hasMalformedRecommendationToken,
   parseRecommendationText,
   recommendationProductIds,
 } from "./measurement-recommendation.js";
@@ -32,6 +33,21 @@ describe("parseRecommendationText (2b3983e1)", () => {
         "{{termek:b}} és {{termek:a}}, majd {{termek:b}}",
       ),
       ["b", "a"],
+    );
+  });
+
+  it("RECO-MALFORMED: a brace left after the real tokens is malformed", () => {
+    assert.deepEqual(
+      [
+        "Jó: {{termek:abc}} és {{termek:x-1}}.",
+        "Szóköz: {{termek: abc}}",
+        "Ékezet: {{termék:abc}}",
+        "Keret: {{ termek:abc }}",
+        "Csonka: {{termek:abc",
+        "Fél: termek:abc}}",
+        "Semmi kapcsos.",
+      ].map(hasMalformedRecommendationToken),
+      [false, true, true, true, true, true, false],
     );
   });
 });

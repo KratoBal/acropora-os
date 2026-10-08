@@ -31,6 +31,17 @@ export function parseRecommendationText(
   return parts;
 }
 
+/**
+ * HIBÁS ALAKÚ HIVATKOZÁS (barracuda, #1655): egy elgépelt alak (`{{termek: abc}}`,
+ * `{{termék:abc}}`, `{{ termek:abc }}`) nem token, tehát a vevő oldalán és a
+ * PDF-en nyersen, kapcsos zárójelekkel látszana. A valódi tokenek kivétele
+ * után maradó `{{` vagy `}}` ezért hiba: a jóváhagyás megáll rajta.
+ */
+export function hasMalformedRecommendationToken(text: string): boolean {
+  const rest = text.replace(RECOMMENDATION_PRODUCT_TOKEN, "");
+  return rest.includes("{{") || rest.includes("}}");
+}
+
 /** A szövegben hivatkozott termékek, egyszer, az első előfordulás sorrendjében. */
 export function recommendationProductIds(text: string): string[] {
   return [
@@ -82,6 +93,8 @@ export interface MeasurementRecommendationView {
   draftSegments: MeasurementRecommendationSegment[];
   /** A vázlat jelöltlistán kívüli azonosítói: amíg van, nem hagyható jóvá. */
   unknownProductIds: string[];
+  /** A vázlatban hibás alakú hivatkozás áll (`{{`/`}}` marad): nem hagyható jóvá. */
+  malformedReference: boolean;
   approvedText: string | null;
   approvedSegments: MeasurementRecommendationSegment[];
   approvedAt: string | null;

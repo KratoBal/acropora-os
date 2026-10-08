@@ -1452,6 +1452,7 @@ export {
 } from "./vies-address.js";
 export type { ViesAddressFields, ViesFillField } from "./vies-address.js";
 export {
+  hasMalformedRecommendationToken,
   parseRecommendationText,
   RECOMMENDATION_PRODUCT_TOKEN,
   recommendationProductIds,

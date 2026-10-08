@@ -213,12 +213,23 @@ export function MeasurementRecommendationPanel({
                 rows={6}
                 className="mt-1 w-full rounded-lg border border-pilot-grey-200 bg-white px-3 py-2 text-sm text-pilot-grey-900"
               />
+              <span className="mt-1 block text-xs text-amber-700">
+                A jóváhagyott szöveg más akvárium ajánlásához mintaként az
+                AI-hoz kerül: ne írj bele nevet vagy cégnevet.
+              </span>
             </label>
           ) : null}
           <div>
             <p className="text-xs text-pilot-grey-500">Előnézet</p>
             <RecommendationText segments={view.draftSegments} />
           </div>
+          {view.malformedReference ? (
+            <p className="text-xs text-red-700">
+              A szövegben hibás alakú termék-hivatkozás áll (egy {"{{"} vagy{" "}
+              {"}}"} maradt). A helyes alak {"{{termek:azonosító}}"}; amíg így
+              marad, nem hagyható jóvá.
+            </p>
+          ) : null}
           {view.unknownProductIds.length ? (
             <p className="text-xs text-red-700">
               {view.unknownProductIds.length} termék-hivatkozás nincs a jelöltek
@@ -278,7 +289,9 @@ export function MeasurementRecommendationPanel({
                 disabled={
                   busy ||
                   !text.trim() ||
-                  (!changed && view.unknownProductIds.length > 0) ||
+                  (!changed &&
+                    (view.unknownProductIds.length > 0 ||
+                      view.malformedReference)) ||
                   (!changed && view.status === "APPROVED")
                 }
               >

@@ -244,6 +244,28 @@ describe("a vízmérési termékajánlás", { skip: gate.mode === "skip" }, () =
     );
   });
 
+  it("a malformed product token blocks the approval", async () => {
+    const { aquariumId, occasionId } = await occasion(5.8);
+    aiText = `Próbáld ezt: {{termek: ${productId}}}.`;
+    const drafted = await service.request(aquariumId, occasionId, user);
+    const refused = await service
+      .approve(
+        aquariumId,
+        occasionId,
+        { expectedUpdatedAt: drafted.updatedAt },
+        user,
+      )
+      .then(
+        () => null,
+        (error: { status?: number }) => error.status,
+      );
+    assert.deepEqual(
+      [drafted.malformedReference, refused],
+      [true, 400],
+      "RECO-MALFORMED-400",
+    );
+  });
+
   it("a save against a stale state is refused", async () => {
     const { aquariumId, occasionId } = await occasion(6);
     aiText = "Első vázlat.";

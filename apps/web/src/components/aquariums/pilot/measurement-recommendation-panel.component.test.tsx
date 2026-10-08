@@ -48,6 +48,7 @@ const draft = (
     { kind: "text", text: "." },
   ],
   unknownProductIds: [],
+  malformedReference: false,
   approvedText: null,
   approvedSegments: [],
   approvedAt: null,
@@ -162,5 +163,19 @@ describe("MeasurementRecommendationPanel (2b3983e1)", () => {
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Az ajánlás szövege")).toBeNull();
     expect(screen.queryByRole("button", { name: "Jóváhagyás" })).toBeNull();
+  });
+
+  it("WEB-RECO-MALFORMED: a malformed token is named, the approval is off, and the editor warns about names", async () => {
+    api.measurementRecommendation.mockResolvedValue(
+      draft({ draftText: "Ez: {{termek: p1}}.", malformedReference: true }),
+    );
+    panel();
+    expect(
+      await screen.findByText(/hibás alakú termék-hivatkozás áll/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Jóváhagyás" })).toBeDisabled();
+    expect(
+      screen.getByText(/ne írj bele nevet vagy cégnevet/),
+    ).toBeInTheDocument();
   });
 });
