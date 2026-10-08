@@ -5,16 +5,13 @@ import type { PublicQuoteDto } from "@acropora/types";
 import { useEffect, useMemo, useState } from "react";
 
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
-import { API_PREFIX } from "@/lib/api/api-prefix";
+import { publicQuotesApi } from "@/lib/api/public-quotes";
 
 import {
   formatQuantity,
   formatQuoteDay,
   formatQuoteMoney,
 } from "./quote-format";
-
-const base = (token: string) =>
-  `${API_PREFIX}/public/quotes/${encodeURIComponent(token)}`;
 
 /** The server's sentence when there is one (404, 409, 429), else ours. */
 async function failure(response: Response, fallback: string): Promise<string> {
@@ -46,7 +43,8 @@ export function PublicQuotePage({ token }: { token: string }) {
 
   useEffect(() => {
     let live = true;
-    fetch(base(token), { cache: "no-store" })
+    publicQuotesApi
+      .view(token)
       .then(async (response) => {
         if (!live) return;
         if (!response.ok)
@@ -63,15 +61,11 @@ export function PublicQuotePage({ token }: { token: string }) {
     setBusy(true);
     setAcceptError(null);
     try {
-      const response = await fetch(`${base(token)}/accept`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          ...(email.trim() ? { email: email.trim() } : {}),
-          selectedOptionalItemIds: chosen,
-          requestId,
-        }),
+      const response = await publicQuotesApi.accept(token, {
+        name: name.trim(),
+        ...(email.trim() ? { email: email.trim() } : {}),
+        selectedOptionalItemIds: chosen,
+        requestId,
       });
       if (!response.ok)
         setAcceptError(
@@ -115,7 +109,7 @@ export function PublicQuotePage({ token }: { token: string }) {
             </p>
             <a
               className="inline-block text-sm font-medium text-pilot-aqua-700 underline"
-              href={`${base(token)}/pdf`}
+              href={publicQuotesApi.pdfHref(token)}
               target="_blank"
               rel="noreferrer"
             >
