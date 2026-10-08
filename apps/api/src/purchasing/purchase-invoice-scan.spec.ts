@@ -8,7 +8,8 @@ import {
   collectedPdfIndex,
 } from "../billing/incoming-collected-pdf.js";
 import {
-  MAX_PNG_PIXELS,
+  MAX_PNG_DECODED_BYTES,
+  pngDecodedBytes,
   scanAsPdf,
   ScanTooLarge,
   ScanUnreadable,
@@ -35,6 +36,19 @@ describe("a scanned invoice (card 5ec62e35)", () => {
     assert.equal(pdf.getPageCount(), 1);
     const { width, height } = pdf.getPage(0).getSize();
     assert.deepEqual([Math.round(width), Math.round(height)], [595, 842]);
+  });
+
+  // MI PIROSÍT: ha a PDF a készítés idejét is hordozza, egy másodperc múlva
+  // más bájt, más lenyomat lesz, és ugyanaz a kép két csatolmány
+  it("the same image a second later is the same PDF, byte for byte", async () => {
+    const first = await scanAsPdf(await tinyPng(), "png", "a.png");
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const second = await scanAsPdf(await tinyPng(), "png", "a.png");
+    assert.equal(
+      Buffer.from(second.bytes).equals(Buffer.from(first.bytes)),
+      true,
+      "SCAN-PDF-STABLE",
+    );
   });
 
   it("a PDF is kept as it came", async () => {
@@ -85,8 +99,46 @@ describe("a scanned invoice (card 5ec62e35)", () => {
     const view = new DataView(giant.buffer);
     view.setUint32(16, 100_000); // width
     view.setUint32(20, 100_000); // height: 10 000 MP declared
-    assert.ok(100_000 * 100_000 > MAX_PNG_PIXELS);
+    assert.ok(100_000 * 100_000 * 4 > MAX_PNG_DECODED_BYTES);
     await assert.rejects(scanAsPdf(giant, "png", "x.png"), ScanTooLarge);
+  });
+
+  // MI PIROSÍT: a pixelszámra kötött korlát (40 MP) átengedi a 20 MP-s,
+  // 16 bites RGBA képet, pedig dekódolva 160 MB (barracuda, acrobot 28131)
+  it("the limit is the decoded size: a 16-bit RGBA under 25 MP is still too large", async () => {
+    const deep = Uint8Array.from(await tinyPng());
+    const view = new DataView(deep.buffer);
+    view.setUint32(16, 5000); // width
+    view.setUint32(20, 4000); // height: 20 MP
+    deep[24] = 16; // bit depth
+    deep[25] = 6; // RGBA
+    await assert.rejects(
+      scanAsPdf(deep, "png", "x.png"),
+      ScanTooLarge,
+      "BYTES-16BIT",
+    );
+  });
+
+  it("what decoding costs: the raw size, never less than 8-bit RGBA", () => {
+    const of = (bitDepth: number, channels: number) =>
+      pngDecodedBytes({ width: 1000, height: 1000, bitDepth, channels });
+    assert.deepEqual(
+      [of(16, 4), of(8, 4), of(8, 3), of(8, 1), of(1, 1)],
+      [8_000_000, 4_000_000, 4_000_000, 4_000_000, 4_000_000],
+    );
+    // an 8-bit scan of 24 MP passes, of 26 MP does not
+    assert.ok(
+      pngDecodedBytes({
+        width: 6000,
+        height: 4000,
+        bitDepth: 8,
+        channels: 3,
+      }) <= MAX_PNG_DECODED_BYTES,
+    );
+    assert.ok(
+      pngDecodedBytes({ width: 6500, height: 4000, bitDepth: 8, channels: 3 }) >
+        MAX_PNG_DECODED_BYTES,
+    );
   });
 
   it("a broken image behind a good signature is unreadable, not a crash", async () => {
