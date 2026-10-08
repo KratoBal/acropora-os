@@ -179,8 +179,8 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     city: address.city,
     address: [address.line1, address.line2].filter(Boolean).join(", "),
     taxNumber: customer.taxNumber,
-    // a partneren ma nincs EU-adószám mező
-    euTaxNumber: null,
+    // the community tax number goes in <adoszamEU>, never in <adoszam>
+    euTaxNumber: customer.euTaxNumber,
     email: customer.email,
   };
   const totals = szamlazzDocumentTotals(lines, row.currency);
@@ -212,6 +212,7 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
         address: buyer.address,
         email: buyer.email,
         taxNumber: buyer.taxNumber,
+        euTaxNumber: buyer.euTaxNumber,
       },
       lines: forIssue,
     },

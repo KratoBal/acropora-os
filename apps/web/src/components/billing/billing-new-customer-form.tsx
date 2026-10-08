@@ -3,6 +3,7 @@
 import { PilotButton, PilotInput } from "@acropora/ui";
 import {
   CUSTOMER_LIST_PAGE_SIZE,
+  normalizeEuTaxNumber,
   viesCountry,
   type CustomerDetail,
   type CustomerSummary,
@@ -164,8 +165,12 @@ export function BillingNewCustomerForm({
         type: "COMPANY",
         displayName: name,
         companyName: name,
-        // an EU number would be sent as a Hungarian one (acrobot 28145)
+        // an EU number has its own field: in <adoszam> it would be sent as a
+        // Hungarian one (acrobot 28145); it goes in <adoszamEU>
         ...(!eu && taxNumber.trim() ? { taxNumber: taxNumber.trim() } : {}),
+        ...(eu && taxNumber.trim()
+          ? { euTaxNumber: normalizeEuTaxNumber(taxNumber) ?? taxNumber.trim() }
+          : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
         addresses: [
           {
@@ -245,9 +250,9 @@ export function BillingNewCustomerForm({
       {eu ? (
         <>
           <ViesMissingDetails taxNumber={taxNumber} result={vies} />
-          <p className="text-xs text-pilot-amber-700">
-            A közösségi adószám a kiállított számlán ma nem szerepel, ezért a
-            vevő adószám nélkül kerül fel.
+          <p className="text-xs text-pilot-grey-600">
+            A közösségi adószám a vevő saját mezőjébe kerül, és a számlán a
+            közösségi adószám helyén szerepel.
           </p>
           {taxNumber.trim() && !euCountry ? (
             <p className="text-xs text-pilot-red-700">

@@ -54,6 +54,7 @@ function row(
       displayName: "Állatkert",
       companyName: "Kitalált Állatkert Kft.",
       taxNumber: "12345678-2-42",
+      euTaxNumber: null,
       email: "szamla@example.com",
       addresses: [
         {
@@ -158,6 +159,29 @@ describe("buildIssueInput", () => {
       email: "szamla@example.com",
     });
     assert.equal(input.document.buyer.zip, "1146");
+  });
+
+  it("sends the community tax number in its own field, apart from the Hungarian one", () => {
+    const base = row();
+    const input = buildIssueInput({
+      ...base,
+      customer: {
+        ...base.customer!,
+        taxNumber: null,
+        euTaxNumber: "SK2020123456",
+      },
+    } as BillingDocumentRow);
+    assert.ok(input.ok);
+    assert.deepEqual(
+      [
+        input.buyer.taxNumber,
+        input.buyer.euTaxNumber,
+        input.document.buyer.taxNumber,
+        input.document.buyer.euTaxNumber,
+      ],
+      [null, "SK2020123456", null, "SK2020123456"],
+      "ISSUE-EU-TAX",
+    );
   });
 
   it("keeps every line comment and the document's own fields", () => {

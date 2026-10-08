@@ -1,9 +1,11 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+import { normalizeEuTaxNumber } from "@acropora/types";
 
 import { CustomersRepository } from "./customers.repository.js";
 import type {
@@ -27,8 +29,12 @@ export class CustomersService {
   }
 
   async create(input: CreateCustomerDto, actorId: string) {
+    const euTaxNumber = euTax(input.euTaxNumber);
     try {
-      return await this.repository.create(input, actorId);
+      return await this.repository.create(
+        { ...input, euTaxNumber: euTaxNumber ?? undefined },
+        actorId,
+      );
     } catch (error) {
       this.map(error);
     }
@@ -36,8 +42,13 @@ export class CustomersService {
 
   async update(id: string, input: UpdateCustomerDto, actorId: string) {
     await this.detail(id);
+    const euTaxNumber = euTax(input.euTaxNumber);
     try {
-      return await this.repository.update(id, input, actorId);
+      return await this.repository.update(
+        id,
+        { ...input, euTaxNumber },
+        actorId,
+      );
     } catch (error) {
       this.map(error);
     }
@@ -62,4 +73,21 @@ export class CustomersService {
       throw new NotFoundException("A vevő nem található.");
     throw error;
   }
+}
+
+/**
+ * The community tax number in its one stored shape (`normalizeEuTaxNumber`).
+ * `undefined` keeps the field as it is, an empty one clears it, and a value
+ * that is not an EU number is refused with a sentence: stored as it was
+ * typed, it would go out in `<adoszamEU>` as typed.
+ */
+function euTax(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || !value.trim()) return null;
+  const normalized = normalizeEuTaxNumber(value);
+  if (!normalized)
+    throw new BadRequestException(
+      "A közösségi adószám országkóddal kezdődik, utána a szám (pl. SK2020123456).",
+    );
+  return normalized;
 }

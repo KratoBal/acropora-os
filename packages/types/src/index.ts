@@ -1437,5 +1437,10 @@ export {
   QUOTE_RICH_TEXT_NODES,
   validateQuoteRichText,
 } from "./quote-text-schema.js";
-export { splitViesAddress, viesCountry, viesFill } from "./vies-address.js";
+export {
+  normalizeEuTaxNumber,
+  splitViesAddress,
+  viesCountry,
+  viesFill,
+} from "./vies-address.js";
 export type { ViesAddressFields, ViesFillField } from "./vies-address.js";

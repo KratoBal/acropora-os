@@ -60,6 +60,17 @@ export function viesCountry(taxNumber: string): string | null {
   return prefix === "EL" ? "GR" : prefix;
 }
 
+/**
+ * A COMMUNITY (EU) TAX NUMBER AS IT IS STORED AND SENT: the country prefix
+ * and the number, upper case, without spaces, dots or dashes ("sk 2020-123
+ * 456" -> "SK2020123456"). Null when it is not that shape: two letters and
+ * 2 to 12 letters, digits or the `+`/`*` some member states use.
+ */
+export function normalizeEuTaxNumber(value: string): string | null {
+  const compact = value.replace(/[\s.\-]/g, "").toUpperCase();
+  return /^[A-Z]{2}[0-9A-Z+*]{2,12}$/.test(compact) ? compact : null;
+}
+
 export type ViesFillField = "name" | "country" | keyof ViesAddressFields;
 
 /**

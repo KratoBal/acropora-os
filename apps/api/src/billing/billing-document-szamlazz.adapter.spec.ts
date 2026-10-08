@@ -61,6 +61,7 @@ const base: BillingDocumentForIssue = {
     address: "Fő utca 1.",
     email: "vevo@example.com",
     taxNumber: "12345678-1-42",
+    euTaxNumber: null,
   },
   lines: [item, discount],
 };

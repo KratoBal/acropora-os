@@ -53,6 +53,28 @@ describe("buildSzamlazzAgentInvoiceXml", () => {
     }
   });
 
+  it("puts adoszamEU after adoszam and before telefonszam, as the vevo sequence says", () => {
+    const xml = buildSzamlazzAgentInvoiceXml({
+      ...baseInput,
+      buyer: {
+        ...baseInput.buyer,
+        euTaxNumber: "SK2020123456",
+        phone: "+36 1 234 5678",
+      },
+    });
+    const at = (tag: string) => xml.indexOf(`<${tag}>`);
+    assert.deepEqual(
+      [
+        xml.includes("<adoszamEU>SK2020123456</adoszamEU>"),
+        at("adoszam") < at("adoszamEU"),
+        at("adoszamEU") < at("telefonszam"),
+        buildSzamlazzAgentInvoiceXml(baseInput).includes("adoszamEU"),
+      ],
+      [true, true, true, false],
+      "XML-ADOSZAM-EU",
+    );
+  });
+
   it("escapes XML-significant characters in free text fields", () => {
     const xml = buildSzamlazzAgentInvoiceXml(baseInput);
     assert.match(xml, /Kov.cs &quot;Bt\.&quot; &amp; T.rsa/);
