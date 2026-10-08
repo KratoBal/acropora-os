@@ -309,6 +309,32 @@ export class QuoteMailService {
         "Épp fut egy kiküldés ennél a verziónál; várd meg az eredményét.",
       );
     }
+    /*
+      THE CHECKS AGAIN, UNDER THE CLAIM (the first CI run caught it): the
+      same request asked twice at once, and the first finished and released
+      between the second's checks and its claim. Without this the second
+      sends the mail again, and then fails to record it on the unique id.
+    */
+    const release = () =>
+      this.database.quoteVersion.update({
+        where: { id: versionId },
+        data: { sendingSince: null },
+      });
+    if (
+      await this.database.quoteMailDelivery.findUnique({
+        where: { requestId },
+        select: { id: true },
+      })
+    ) {
+      await release();
+      return this.detail(quoteId, user);
+    }
+    if (!resend && (await this.sentBefore(versionId))) {
+      await release();
+      throw new ConflictException(
+        "Ez a verzió már kiment; újraküldéssel küldheted el ismét.",
+      );
+    }
 
     // 7. send, then record
     const sentTo = {
