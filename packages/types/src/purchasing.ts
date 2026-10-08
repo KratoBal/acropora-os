@@ -76,6 +76,24 @@ export interface PurchaseInvoiceScan {
   createdAt: string;
 }
 
+/**
+ * What can still be corrected on a RECORDED invoice (Luca, 2026-10-08; the
+ * first layer acrobot let through, 28068): the fields without any stock,
+ * cost or sync effect. Quantities, prices and products are not here: those
+ * need the record to be undone, which is a separate decision.
+ */
+export interface UpdatePurchaseInvoiceInput {
+  supplierInvoiceNumber?: string;
+  /** YYYY-MM-DD; only on a HUF invoice (a foreign one's rate came from it) */
+  invoiceDate?: string;
+  dueDate?: string | null;
+  isPaid?: boolean;
+  paidAt?: string | null;
+  note?: string | null;
+  /** the name on the invoice, per line */
+  lines?: Array<{ id: string; sourceDescription: string | null }>;
+}
+
 export interface PurchaseInvoiceDetail extends PurchaseInvoiceSummary {
   /** the scans attached by hand, newest first (5ec62e35) */
   scans?: PurchaseInvoiceScan[];

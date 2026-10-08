@@ -23,6 +23,7 @@ import { useReturnTo } from "@/components/navigation-history";
 import { purchasingApi } from "@/lib/api/purchasing";
 
 import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
+import { PurchaseInvoiceEditForm } from "./purchase-invoice-edit-form";
 
 function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
@@ -42,6 +43,7 @@ export function PurchaseInvoiceDetailPage({
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
+  const [editing, setEditing] = useState(false);
 
   const [detail, setDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,9 +83,16 @@ export function PurchaseInvoiceDetailPage({
         title={detail ? detail.documentNumber : "Beszerzési számla"}
         description="Beérkezett beszállítói számla részletei"
         actions={
-          <Button variant="secondary" onClick={backToList.goBack}>
-            {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-          </Button>
+          <div className="flex gap-2">
+            {detail && canManage && detail.status !== "CANCELLED" ? (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                Adatok javítása
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={backToList.goBack}>
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
+          </div>
         }
       />
 
@@ -95,6 +104,18 @@ export function PurchaseInvoiceDetailPage({
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+
+      {detail && editing ? (
+        <PurchaseInvoiceEditForm
+          token={token}
+          detail={detail}
+          onSaved={(next) => {
+            setDetail(next);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
       ) : null}
 
       {detail ? (

@@ -570,6 +570,7 @@ export type {
   ProjectStatus,
   PurchaseInvoiceDetail,
   PurchaseInvoiceScan,
+  UpdatePurchaseInvoiceInput,
   PurchaseInvoiceLineDetail,
   PurchaseInvoiceLineProjectAllocation,
   PurchaseInvoiceLineSyncStatus,
