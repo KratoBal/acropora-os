@@ -18,6 +18,8 @@ export const MAX_PNG_DECODED_BYTES = 100_000_000;
 export class ScanUnreadable extends Error {}
 /** The image needs more memory to decode than we allow. */
 export class ScanTooLarge extends Error {}
+/** The conversion did not finish within `SCAN_TIMEOUT_MS`. */
+export class ScanTimedOut extends Error {}
 
 /** Channels per PNG colour type (IHDR byte 25). */
 const PNG_CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
@@ -82,7 +84,7 @@ export async function scanAsPdf(
         `${size.width}x${size.height}, ${size.channels}x${size.bitDepth} bit`,
       );
   }
-  const pdf = await convertInWorker(bytes, kind);
+  const pdf = await scanSlots.run(() => convertInWorker(bytes, kind));
   const base = fileName.replace(/\.[^.]*$/, "") || "szamlakep";
   return { bytes: pdf, fileName: `${base}.pdf` };
 }
@@ -136,6 +138,50 @@ export async function renderScanPdf(
  */
 export const SCAN_WORKER_HEAP_MB = 256;
 
+/**
+ * HOW MANY CONVERSIONS AT ONCE (barracuda's #1645 review). The pixels live
+ * outside the worker's heap, so N uploads at once are N decoded images (the
+ * 25 MP noise PNG: ~280 MB of RSS above the API's own), and the production
+ * container has no memory limit. Two at a time, the rest wait in order.
+ */
+export const SCAN_CONCURRENCY = 2;
+
+/** A conversion that has not answered by then is ended (barracuda, #1645). */
+export const SCAN_TIMEOUT_MS = 30_000;
+
+/** A first-come semaphore: at most `limit` tasks run, the rest queue. */
+export class ScanSlots {
+  private running = 0;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(private readonly limit: number) {}
+
+  /** How many run and how many wait, for tests and diagnostics. */
+  get load(): { active: number; queued: number } {
+    return { active: this.running, queued: this.waiting.length };
+  }
+
+  async run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.running < this.limit) this.running++;
+    // the releasing task hands its slot over, so `running` stays as it is
+    else await new Promise<void>((resolve) => this.waiting.push(resolve));
+    try {
+      return await task();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.running--;
+    }
+  }
+}
+
+const scanSlots = new ScanSlots(SCAN_CONCURRENCY);
+
+/** The shared conversions' load: how many run, how many wait. */
+export function scanConversionLoad(): { active: number; queued: number } {
+  return scanSlots.load;
+}
+
 type ScanWorkerReply =
   | { ok: true; bytes: Uint8Array }
   | { ok: false; unreadable: boolean; message: string };
@@ -153,12 +199,14 @@ export function scanWorkerError(
 /**
  * ONE WORKER PER CONVERSION. Scans arrive a few a day, so the ~50 ms start is
  * cheaper than a pool to keep alive. The caller's bytes are copied before the
- * transfer, so its buffer stays usable.
+ * transfer, so its buffer stays usable. A worker that has not answered within
+ * `timeoutMs` is terminated, so the request does not stay open forever.
  */
 export function convertInWorker(
   bytes: Uint8Array,
   kind: "png" | "jpeg",
   heapMb: number = SCAN_WORKER_HEAP_MB,
+  timeoutMs: number = SCAN_TIMEOUT_MS,
 ): Promise<Uint8Array> {
   const copy = bytes.slice();
   return new Promise((resolve, reject) => {
@@ -171,9 +219,18 @@ export function convertInWorker(
         resourceLimits: { maxOldGenerationSizeMb: heapMb },
       },
     );
+    const timer = setTimeout(
+      () =>
+        settle(() => {
+          void worker.terminate();
+          reject(new ScanTimedOut(`no answer within ${timeoutMs} ms`));
+        }),
+      timeoutMs,
+    );
     const settle = (action: () => void) => {
       if (settled) return;
       settled = true;
+      clearTimeout(timer);
       action();
     };
     worker.once("message", (reply: ScanWorkerReply) =>

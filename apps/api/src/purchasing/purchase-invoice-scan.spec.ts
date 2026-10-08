@@ -13,8 +13,12 @@ import {
 import {
   convertInWorker,
   MAX_PNG_DECODED_BYTES,
+  SCAN_CONCURRENCY,
   pngDecodedBytes,
   scanAsPdf,
+  scanConversionLoad,
+  ScanSlots,
+  ScanTimedOut,
   ScanTooLarge,
   ScanUnreadable,
   scanWorkerError,
@@ -252,5 +256,74 @@ describe("the scan conversion runs in a worker (card 35fe9a08)", () => {
     const before = Uint8Array.from(png);
     await convertInWorker(png, "png");
     assert.deepEqual(png, before);
+  });
+});
+
+/*
+  BARRACUDA'S #1645 REVIEW: the pixels live outside the worker's heap, so
+  concurrent uploads add up, and a worker that never answers would keep the
+  request open forever.
+*/
+describe("scan conversions are bounded (card 35fe9a08)", () => {
+  it("at most `limit` tasks run at once, and the rest start in order", async () => {
+    const slots = new ScanSlots(2);
+    const started: number[] = [];
+    let running = 0;
+    let most = 0;
+    const releases: (() => void)[] = [];
+    const tasks = [0, 1, 2, 3].map((n) =>
+      slots.run(async () => {
+        started.push(n);
+        running++;
+        most = Math.max(most, running);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        running--;
+        return n;
+      }),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(started, [0, 1]);
+    releases.shift()!();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(started, [0, 1, 2]);
+    while (releases.length > 0 || started.length < 4) {
+      releases.shift()?.();
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(await Promise.all(tasks), [0, 1, 2, 3]);
+    assert.equal(most, 2);
+  });
+
+  it("scanAsPdf itself goes through the shared slots", async () => {
+    const png = noisePng(1500, 1500);
+    const runs = [0, 1, 2].map(() => scanAsPdf(png, "png", "x.png"));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(scanConversionLoad(), {
+      active: SCAN_CONCURRENCY,
+      queued: 3 - SCAN_CONCURRENCY,
+    });
+    await Promise.all(runs);
+    assert.deepEqual(scanConversionLoad(), { active: 0, queued: 0 });
+  });
+
+  it("a failed task gives its slot back", { timeout: 5000 }, async () => {
+    const slots = new ScanSlots(1);
+    await assert.rejects(
+      slots.run(async () => {
+        throw new Error("boom");
+      }),
+    );
+    assert.equal(await slots.run(async () => "next"), "next");
+  });
+
+  it("a worker that does not answer in time is ended, with its own error", async () => {
+    const png = noisePng(3000, 3000);
+    const started = performance.now();
+    await assert.rejects(
+      convertInWorker(png, "png", undefined, 50),
+      ScanTimedOut,
+    );
+    // the rejection comes at the limit, not when the conversion would end
+    assert.ok(performance.now() - started < 1500);
   });
 });

@@ -11,6 +11,7 @@ import type { PurchaseInvoiceScan } from "@acropora/types";
 import { detectUploadedFileKind } from "../service-assets/uploaded-file-type.js";
 import {
   scanAsPdf,
+  ScanTimedOut,
   ScanTooLarge,
   ScanUnreadable,
 } from "./purchase-invoice-scan.js";
@@ -79,6 +80,10 @@ export class PurchaseInvoiceScanService {
         );
       if (error instanceof ScanUnreadable)
         throw new BadRequestException("A kép nem olvasható.");
+      if (error instanceof ScanTimedOut)
+        throw new BadRequestException(
+          "A kép átalakítása fél perc alatt nem készült el: töltsd fel JPEG-ként vagy kisebb felbontásban.",
+        );
       throw error;
     }
     const sha256 = createHash("sha256").update(stored.bytes).digest("hex");
