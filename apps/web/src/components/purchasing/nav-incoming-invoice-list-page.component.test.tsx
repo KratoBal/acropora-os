@@ -20,6 +20,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+// a lap a Figma 613:887 óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/beszerzes/nav-szamlak",
   useRouter: () => navigation,
@@ -134,7 +138,10 @@ describe("NavIncomingInvoiceListPage", () => {
 
     render(createElement(NavIncomingInvoiceListPage));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Új" }));
+    fireEvent.change(
+      await screen.findByRole("combobox", { name: "OS állapot" }),
+      { target: { value: "NEW" } },
+    );
 
     expect(navigation.replace).toHaveBeenCalledWith(
       "/beszerzes/nav-szamlak?page=1&status=NEW",

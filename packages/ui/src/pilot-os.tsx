@@ -212,6 +212,8 @@ export function PilotDataTable<Row>({
   onRowActivate,
   rowLabel,
   rowClassName,
+  rowCanActivate,
+  rowTestId,
   minWidth = 960,
 }: {
   columns: readonly PilotTableColumn<Row>[];
@@ -223,6 +225,13 @@ export function PilotDataTable<Row>({
   onRowActivate?: (row: Row) => void;
   /** A sor akadálymentes neve, ha a sor kattintható. */
   rowLabel?: (row: Row) => string;
+  /**
+   * Csak egyes sorok nyílnak meg (a Várható beérkezéseken a proforma nem):
+   * a többi sor nem kattintható, nem fókuszálható, és halványabb.
+   */
+  rowCanActivate?: (row: Row) => boolean;
+  /** `data-testid` minden sorra (a lapok tesztjei sorokat számolnak). */
+  rowTestId?: string;
   minWidth?: number;
 }) {
   const alignClass = (align: PilotTableColumn<Row>["align"]) =>
@@ -262,29 +271,37 @@ export function PilotDataTable<Row>({
           </tr>
         </thead>
         <tbody className="divide-y divide-pilot-grey-200">
-          {rows.map((row) => (
-            <tr
-              key={rowKey(row)}
-              tabIndex={onRowActivate ? 0 : undefined}
-              aria-label={onRowActivate && rowLabel ? rowLabel(row) : undefined}
-              onClick={onRowActivate ? () => onRowActivate(row) : undefined}
-              onKeyDown={onRowActivate ? onKeyDown(row) : undefined}
-              className={`${
-                onRowActivate
-                  ? "h-[72px] cursor-pointer bg-white transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600"
-                  : "h-[72px] bg-white"
-              } ${rowClassName?.(row) ?? ""}`}
-            >
-              {columns.map((column) => (
-                <td
-                  key={column.id}
-                  className={`px-4 py-3 align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}`}
-                >
-                  {column.cell(row)}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const active = Boolean(
+              onRowActivate && (rowCanActivate?.(row) ?? true),
+            );
+            return (
+              <tr
+                key={rowKey(row)}
+                data-testid={rowTestId}
+                tabIndex={active ? 0 : undefined}
+                aria-label={active && rowLabel ? rowLabel(row) : undefined}
+                onClick={active ? () => onRowActivate!(row) : undefined}
+                onKeyDown={active ? onKeyDown(row) : undefined}
+                className={`${
+                  active
+                    ? "h-[72px] cursor-pointer bg-white transition-colors hover:bg-pilot-grey-50 focus:bg-pilot-grey-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-pilot-aqua-600"
+                    : onRowActivate
+                      ? "h-[72px] bg-white text-pilot-grey-500"
+                      : "h-[72px] bg-white"
+                } ${rowClassName?.(row) ?? ""}`}
+              >
+                {columns.map((column) => (
+                  <td
+                    key={column.id}
+                    className={`px-4 py-3 align-middle text-sm first:pl-5 last:pr-5 ${alignClass(column.align)}`}
+                  >
+                    {column.cell(row)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
