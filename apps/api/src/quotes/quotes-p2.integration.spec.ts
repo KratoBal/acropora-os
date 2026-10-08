@@ -2,6 +2,7 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import {
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -284,6 +285,44 @@ describe(
         where: { id: v2.id },
       });
       assert.notEqual(after2.pdfSha256, v1.pdfSha256);
+    });
+
+    it("a failed attempt leaves no date behind: the next publish gets its own", async () => {
+      const { quoteId, versionId } = await draftQuote(`P2 retry ${suffix}`);
+      // a FILE where the quote's directory should be: the store write fails
+      mkdirSync(join(storeRoot, "quotes"), { recursive: true });
+      const blocker = join(storeRoot, "quotes", quoteId);
+      writeFileSync(blocker, "");
+      const failed = await request(
+        `/quotes/${quoteId}/versions/${versionId}/publish`,
+        "POST",
+      );
+      assert.equal(failed.status, 500);
+      const afterFail = await prisma.quoteVersion.findUniqueOrThrow({
+        where: { id: versionId },
+      });
+      assert.equal(afterFail.status, "DRAFT");
+      assert.equal(afterFail.publishRequestedAt, null, "REQUEST-RESET");
+
+      rmSync(blocker);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const second = new Date();
+      assert.equal(
+        (
+          await request(
+            `/quotes/${quoteId}/versions/${versionId}/publish`,
+            "POST",
+          )
+        ).status,
+        200,
+      );
+      const published = await prisma.quoteVersion.findUniqueOrThrow({
+        where: { id: versionId },
+      });
+      assert.ok(
+        published.publishedAt! >= second,
+        `PUBLISHED-AT-SUCCESS ${published.publishedAt?.toISOString()} < ${second.toISOString()}`,
+      );
     });
 
     it("a draft's PDF is a live preview, not stored", async () => {

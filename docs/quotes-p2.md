@@ -25,6 +25,12 @@ vagy felülírt verziónál a tárolt bájtokat adja, újrarajzolás nélkül.
    PUBLISHED lesz a PDF adataival, az előző PUBLISHED felülírt, és PUBLISHED
    esemény íródik. A másik kattintás a már publikált verziót kapja.
 
+Egy elbukott kísérlet (409, rajzolási vagy tárolási hiba) nem hagy nyomot: a
+`publishRequestedAt` visszaáll üresre, és az általa tárolt PDF törlődik (kivéve,
+ha a másik kattintás épp ezt a fájlt publikálta). A `publishedAt` a sikeres
+publikálás ideje, nem az első kérésé. Az ajánlat címe is része a tartalom-
+ujjlenyomatnak.
+
 Dokumentumtár nélkül (`DOCUMENT_STORE_ROOT`) a publikálás 503: a kiküldött
 PDF-nek túl kell élnie egy újraindítást. A publikálás nem küld semmit az
 ügyfélnek (az a P3).

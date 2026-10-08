@@ -89,6 +89,8 @@ function budapestToday(now = new Date()): string {
 /** What the customer sees, in a stable order: the fingerprint of a version. */
 export function versionContentHash(v: VersionTree): string {
   const content = {
+    // the title is printed on the PDF, so it is part of what the customer sees
+    title: v.quote.title,
     validUntil: v.validUntil.toISOString().slice(0, 10),
     currency: v.currency,
     priceDisplay: v.priceDisplay,
@@ -291,66 +293,100 @@ export class QuotePublishService {
     });
     if (!prepared) return;
 
-    // 2. render and store, outside any transaction
-    const pdf = await renderQuotePdf(
-      pdfInputOf(prepared.tree, prepared.requestedAt),
-    );
-    const key: DocumentKey = {
-      owner: "quote",
-      ownerId: quoteId,
-      documentId: `v${prepared.tree.versionNumber}-${pdf.sha256.slice(0, 16)}`,
-    };
-    await this.store.put(key, pdf.bytes);
+    // 2. and 3. If either fails, the attempt leaves nothing behind (below).
+    let stored: DocumentKey | null = null;
+    try {
+      // 2. render and store, outside any transaction
+      const pdf = await renderQuotePdf(
+        pdfInputOf(prepared.tree, prepared.requestedAt),
+      );
+      const key: DocumentKey = {
+        owner: "quote",
+        ownerId: quoteId,
+        documentId: `v${prepared.tree.versionNumber}-${pdf.sha256.slice(0, 16)}`,
+      };
+      await this.store.put(key, pdf.bytes);
+      stored = key;
 
-    // 3. publish, unless the content moved in between
-    await this.database.$transaction(async (tx) => {
-      const locked = await lockVersion(tx, quoteId, versionId);
-      if (locked.versionStatus === "PUBLISHED") return;
-      if (locked.versionStatus !== "DRAFT")
-        throw new ConflictException("Felülírt verzió nem publikálható.");
-      const now = await this.tree(tx, versionId);
-      if (versionContentHash(now) !== prepared.hash)
-        throw new ConflictException(
-          "A verzió a publikálás közben módosult. Nézd át, és publikáld újra.",
-        );
-      await tx.quoteVersion.updateMany({
-        where: { quoteId, status: "PUBLISHED" },
-        data: { status: "SUPERSEDED" },
-      });
-      await tx.quoteVersion.update({
-        where: { id: versionId },
-        data: {
-          status: "PUBLISHED",
-          pdfStorageKey: key.documentId,
-          pdfSha256: pdf.sha256,
-          pageCount: pdf.pageCount,
-          publishedAt: prepared.requestedAt,
-          publishedById: user.id,
-        },
-      });
-      await tx.quoteEvent.create({
-        data: {
-          quoteId,
-          versionId,
-          kind: "PUBLISHED",
-          actorUserId: user.id,
-          payload: { versionNumber: now.versionNumber },
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          action: "quote.published",
-          entityType: "QuoteVersion",
-          entityId: versionId,
-          userId: user.id,
-          metadata: {
-            quoteId,
-            versionNumber: now.versionNumber,
+      // 3. publish, unless the content moved in between
+      await this.database.$transaction(async (tx) => {
+        const locked = await lockVersion(tx, quoteId, versionId);
+        if (locked.versionStatus === "PUBLISHED") return;
+        if (locked.versionStatus !== "DRAFT")
+          throw new ConflictException("Felülírt verzió nem publikálható.");
+        const now = await this.tree(tx, versionId);
+        if (versionContentHash(now) !== prepared.hash)
+          throw new ConflictException(
+            "A verzió a publikálás közben módosult. Nézd át, és publikáld újra.",
+          );
+        await tx.quoteVersion.updateMany({
+          where: { quoteId, status: "PUBLISHED" },
+          data: { status: "SUPERSEDED" },
+        });
+        await tx.quoteVersion.update({
+          where: { id: versionId },
+          data: {
+            status: "PUBLISHED",
+            pdfStorageKey: key.documentId,
+            pdfSha256: pdf.sha256,
             pageCount: pdf.pageCount,
+            // the moment it became public, not the first (maybe failed) request
+            publishedAt: new Date(),
+            publishedById: user.id,
           },
-        },
+        });
+        await tx.quoteEvent.create({
+          data: {
+            quoteId,
+            versionId,
+            kind: "PUBLISHED",
+            actorUserId: user.id,
+            payload: { versionNumber: now.versionNumber },
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            action: "quote.published",
+            entityType: "QuoteVersion",
+            entityId: versionId,
+            userId: user.id,
+            metadata: {
+              quoteId,
+              versionNumber: now.versionNumber,
+              pageCount: pdf.pageCount,
+            },
+          },
+        });
       });
+    } catch (error) {
+      await this.abandonAttempt(quoteId, versionId, stored);
+      throw error;
+    }
+  }
+
+  /**
+   * A FAILED ATTEMPT LEAVES NOTHING BEHIND (barracuda's #1598 review). The
+   * request time goes back to null, so a later publish gets its own date
+   * instead of an attempt's from days before; and the PDF this attempt stored
+   * is removed, unless the other click of a double click published the very
+   * same file meanwhile.
+   */
+  private async abandonAttempt(
+    quoteId: string,
+    versionId: string,
+    stored: DocumentKey | null,
+  ) {
+    const version = await this.database.quoteVersion.findFirst({
+      where: { id: versionId, quoteId },
+      select: { status: true, pdfStorageKey: true },
     });
+    if (version?.status === "DRAFT")
+      await this.database.quoteVersion.updateMany({
+        where: { id: versionId, status: "DRAFT" },
+        data: { publishRequestedAt: null },
+      });
+    if (stored && version?.pdfStorageKey !== stored.documentId)
+      await this.store.delete(stored).catch(() => false);
   }
 
   /**
@@ -380,7 +416,7 @@ export class QuotePublishService {
               version.quote.customerId,
             ),
           },
-          version.publishRequestedAt ?? new Date(0),
+          version.publishRequestedAt ?? new Date(),
         ),
       );
       return { bytes: preview.bytes, fileName };
