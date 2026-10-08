@@ -38,6 +38,8 @@ import {
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadPurchaseSubjects,
+  lockIncomingKey,
+  otherSourceRowFor,
   PURCHASE_ITEM_PREFIX,
   PURCHASE_KIND_CODE,
   PURCHASE_SOURCE,
@@ -683,6 +685,15 @@ export class IncomingReviewService {
     if (problems.length) throw new BadRequestException(problems.join(" "));
     await this.storeManualFor(documentId, async () => base, values, userId);
     await this.database.$transaction(async (tx) => {
+      // the feed writes the same invoice under the same lock (acrobot 28369)
+      const key = await lockIncomingKey(tx, values);
+      const known = key
+        ? await otherSourceRowFor(tx, values.documentNumber!, key)
+        : null;
+      if (known)
+        throw new ConflictException(
+          "Ez a számla közben megérkezett a Számlázz.hu-ból vagy a postafiókból, a beszerzésből már nem hagyható jóvá.",
+        );
       const taken = await tx.incomingBillingDocument.findUnique({
         where: {
           source_externalId: {

@@ -1,4 +1,8 @@
-import { Prisma, type PrismaClient } from "@acropora/database";
+import {
+  Prisma,
+  type IncomingBillingDocument,
+  type PrismaClient,
+} from "@acropora/database";
 import type {
   IncomingDocumentListItem,
   IncomingReadingField,
@@ -8,6 +12,10 @@ import type {
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
 import { incomingKey } from "./billing-duplicates.js";
+import {
+  mailboxOnlyPaidItems,
+  toIncomingListItem,
+} from "./incoming-billing-documents.js";
 
 /**
  * A RÖGZÍTETT BESZERZÉSI SZÁMLA MINT BEJÖVŐ SZÁMLA (kártya 83f31a95, Balázs
@@ -318,4 +326,251 @@ export function purchaseListItem(
       : { state: "UNPAIRED", reason: null, debits: [] },
     hasPdf: subject.scanIds.length > 0,
   };
+}
+
+/**
+ * A SZÁMLÁZZ.HU FEED LEVÁLTJA A BESZERZÉSBŐL JÖTT SORT (acrobot 28322). Ha egy
+ * már jóváhagyott PURCHASE sor után ugyanaz a számla a feedből is megjön, két
+ * IncomingBillingDocument állna egy számlára, és a könyvelői csomagba
+ * kettőzve mehetne. A feed sora a teljes adattal érkezik (tételek, ÁFA-
+ * összesítő, kifizetés), ezért az marad, a PURCHASE sor törlődik, ugyanabban a
+ * tranzakcióban, mint a feed írása. Az olvasat ellenőrzött marad, csak a
+ * sorra mutató azonosítója nullázódik. A NAV-szinkron bejövő számla-sort nem
+ * ír (mérve: IncomingBillingDocument-et csak a feed és a jóváhagyás ír).
+ */
+export async function supersedePurchaseRows(
+  transaction: Pick<
+    Prisma.TransactionClient,
+    "incomingBillingDocument" | "incomingDocumentReading" | "auditLog"
+  >,
+  feed: {
+    externalId: string;
+    documentNumber: string;
+    supplierTaxNumber: string | null;
+    supplierEuTaxNumber: string | null;
+    supplierName: string;
+  },
+): Promise<string[]> {
+  const key = incomingKey(
+    feed.documentNumber,
+    feed.supplierTaxNumber ?? feed.supplierEuTaxNumber,
+    feed.supplierName,
+  );
+  if (!key) return [];
+  const rows = await transaction.incomingBillingDocument.findMany({
+    where: { source: PURCHASE_SOURCE },
+    select: {
+      id: true,
+      externalId: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  const superseded = rows.filter(
+    (row) =>
+      incomingKey(
+        row.documentNumber,
+        row.supplierTaxNumber ?? row.supplierEuTaxNumber,
+        row.supplierName,
+      ) === key,
+  );
+  for (const row of superseded) {
+    await transaction.incomingDocumentReading.updateMany({
+      where: { incomingBillingDocumentId: row.id },
+      data: { incomingBillingDocumentId: null },
+    });
+    await transaction.incomingBillingDocument.delete({ where: { id: row.id } });
+    await transaction.auditLog.create({
+      data: {
+        action: "billing.incoming-purchase.superseded",
+        entityType: "IncomingBillingDocument",
+        entityId: row.id,
+        metadata: {
+          purchaseInvoiceId: row.externalId,
+          feedExternalId: feed.externalId,
+        },
+      },
+    });
+  }
+  return superseded.map((row) => row.id);
+}
+
+/**
+ * A KÉSŐBB ÉRKEZŐ PÉLDÁNY A BESZERZÉSHEZ KÖTŐDIK (kártya 83f31a95, PR 2). Ha
+ * egy postafiókból, Drive-ról, a Hiányzó számlák feltöltésén vagy a Várható
+ * beérkezéseken át érkező számla kulcsa (szám és adószám-törzs, ahogy az
+ * `incomingKey`) egy POSTED beszerzési számláé, a dokumentum annak a
+ * beszerzésnek a dokumentuma lesz (`purchaseInvoiceId`): a listán a
+ * beszerzés sora marad egyetlen sorként, a PDF-jei között ez is, és a
+ * jelöltek összevonása is erre a kötésre épít. Csak a számla (`INVOICE`)
+ * kötődik: a díjbekérő és az ismeretlen fajtájú dokumentum nem.
+ *
+ * A kulcs az illesztő eredményéből jön (`importResult`), ha az számot adott,
+ * különben a szövegolvasóéból (`textReading`). Csak a pontosan (kis-nagybetű
+ * nélkül) egyező számú beszerzések jelöltek; a kulcs a szállítót is egyezteti.
+ */
+export async function postedPurchaseForArrival(
+  database: Pick<Prisma.TransactionClient, "purchaseInvoice">,
+  arrival: {
+    importResult: unknown;
+    textReading: unknown;
+    kind: string | null;
+  },
+): Promise<string | null> {
+  // csak a számla kötődik: díjbekérő és ismeretlen fajta nem (acrobot 28369)
+  if (arrival.kind !== "INVOICE") return null;
+  const adapter = arrival.importResult as {
+    invoiceNumber?: string | null;
+    supplier?: { name?: string | null; vatId?: string | null };
+  } | null;
+  const text = arrival.textReading as {
+    invoiceNumber?: string | null;
+    supplierTaxNumber?: string | null;
+    supplierName?: string | null;
+  } | null;
+  const number = adapter?.invoiceNumber ?? text?.invoiceNumber ?? null;
+  if (!number?.trim()) return null;
+  const tax = adapter?.invoiceNumber
+    ? (adapter.supplier?.vatId ?? null)
+    : (text?.supplierTaxNumber ?? null);
+  const name = adapter?.invoiceNumber
+    ? (adapter.supplier?.name ?? "")
+    : (text?.supplierName ?? "");
+  const key = incomingKey(number, tax, name);
+  if (!key) return null;
+  const candidates = await database.purchaseInvoice.findMany({
+    where: {
+      status: "POSTED",
+      supplierInvoiceNumber: { equals: number.trim(), mode: "insensitive" },
+    },
+    select: {
+      id: true,
+      supplierInvoiceNumber: true,
+      supplier: { select: { taxNumber: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return (
+    candidates.find(
+      (invoice) =>
+        incomingKey(
+          invoice.supplierInvoiceNumber,
+          invoice.supplier.taxNumber,
+          invoice.supplier.name,
+        ) === key,
+    )?.id ?? null
+  );
+}
+
+/**
+ * EGY SZÁMLA, EGYSZERRE EGY ÍRÓ (acrobot 28369). A beszerzés jóváhagyása és a
+ * Számlázz.hu feed írása ugyanarra a számlára versenyezhet: zár nélkül a
+ * jóváhagyás nem látja a még nem véglegesített feed-sort, a feed leváltása
+ * pedig a még nem véglegesített PURCHASE sort, és két sor marad. A két út
+ * ugyanazt a tranzakció-szintű zárat veszi a számla kulcsára (`incomingKey`),
+ * tehát a sorrend mindkét irányban determinisztikus: ha a feed az első, a
+ * jóváhagyás 409-et kap; ha a jóváhagyás, a feed leváltja a sorát.
+ */
+export async function lockIncomingKey(
+  transaction: Pick<Prisma.TransactionClient, "$executeRaw">,
+  invoice: {
+    documentNumber: string | null;
+    supplierTaxNumber: string | null;
+    supplierEuTaxNumber: string | null;
+    supplierName: string | null;
+  },
+): Promise<string | null> {
+  const key = incomingKey(
+    invoice.documentNumber ?? "",
+    invoice.supplierTaxNumber ?? invoice.supplierEuTaxNumber,
+    invoice.supplierName ?? "",
+  );
+  if (!key) return null;
+  await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`incoming-key:${key}`}, 0))`;
+  return key;
+}
+
+/**
+ * Egy NEM beszerzésből jött bejövő sor ugyanazzal a kulccsal (Számlázz.hu vagy
+ * jóváhagyott postafiókos sor). Jelöltek a szóközök nélkül vagy a vágott
+ * alakban egyező számú sorok; a kulcs a szállítót is egyezteti.
+ */
+export async function otherSourceRowFor(
+  transaction: Pick<Prisma.TransactionClient, "incomingBillingDocument">,
+  number: string,
+  key: string,
+): Promise<{ id: string; source: string } | null> {
+  const rows = await transaction.incomingBillingDocument.findMany({
+    where: {
+      source: { not: PURCHASE_SOURCE },
+      OR: [number.trim(), number.replace(/\s/g, "")].map((value) => ({
+        documentNumber: { equals: value, mode: "insensitive" as const },
+      })),
+    },
+    select: {
+      id: true,
+      source: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierEuTaxNumber: true,
+      supplierName: true,
+    },
+  });
+  const row = rows.find(
+    (candidate) =>
+      incomingKey(
+        candidate.documentNumber,
+        candidate.supplierTaxNumber ?? candidate.supplierEuTaxNumber,
+        candidate.supplierName,
+      ) === key,
+  );
+  return row ? { id: row.id, source: row.source } : null;
+}
+
+/**
+ * A BEJÖVŐ SZÁMLÁK LISTÁJÁNAK SORAI, egy helyen (a vezérlő ezt hívja). A
+ * beszerzés képe nem lesz külön postafiókos sor (kártya 83f31a95): a kép
+ * UPLOAD forrású, és fizetve „Postafiókos számla” sorként is megjelenne.
+ * - Jóváhagyás előtt: amit csak a listázott beszerzési számlák képei
+ *   alkotnak, az a beszerzés sora; ha más dokumentum is a jelöltben van, más
+ *   forrás ismeri, és akkor a beszerzés nem kap sort (`loadPurchaseSubjects`).
+ * - Jóváhagyás után: a PURCHASE sor a képre mutat (`sourceDocumentId`), és a
+ *   postafiókos szűrő (`notInFeedTest`) ezen és a számán ismeri fel.
+ */
+export function incomingListItems(input: {
+  rows: readonly IncomingBillingDocument[];
+  pairings: ReadonlyMap<string, DocumentPairing>;
+  hasCollectedPdf: (row: IncomingBillingDocument) => boolean;
+  readings: ReadonlyMap<string, IncomingReadingValues>;
+  purchases: readonly PurchaseSubject[];
+}): IncomingDocumentListItem[] {
+  const { rows, pairings, readings, purchases } = input;
+  const purchaseScans = new Set(purchases.flatMap((p) => p.scanIds));
+  const mailboxPairings = new Map(
+    [...pairings].filter(
+      ([, pairing]) =>
+        ![pairing.document.id, ...(pairing.document.aliasIds ?? [])].every(
+          (id) => purchaseScans.has(id),
+        ),
+    ),
+  );
+  return [
+    ...rows.map((row) =>
+      toIncomingListItem(row, pairings, input.hasCollectedPdf(row)),
+    ),
+    // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
+    ...mailboxOnlyPaidItems(rows, mailboxPairings, readings),
+    // a más forrásból nem ismert, rögzített beszerzési számlák
+    ...purchases.map((subject) =>
+      purchaseListItem(
+        subject,
+        pairings,
+        subject.scanIds
+          .map((id) => readings.get(id))
+          .find((reading) => reading !== undefined),
+      ),
+    ),
+  ];
 }

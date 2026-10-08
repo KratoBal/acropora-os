@@ -1,3 +1,4 @@
+import { postedPurchaseForArrival } from "../billing/purchase-incoming.js";
 import type { InvoiceTextReading } from "./collection/invoice-text.js";
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
@@ -887,8 +888,21 @@ export class MissingInvoicesRepository {
     userId: string;
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
+      // the same invoice recorded as a purchase: this copy is its document
+      const purchaseInvoiceId =
+        input.kind === "INVOICE"
+          ? await postedPurchaseForArrival(transaction, {
+              importResult: input.importResult,
+              textReading: input.textReading,
+              kind:
+                input.importResult?.documentKind === "PROFORMA"
+                  ? "PROFORMA"
+                  : "INVOICE",
+            })
+          : null;
       const document = await transaction.incomingSupplierDocument.create({
         data: {
+          purchaseInvoiceId,
           gmailMessageId: `upload:${input.sha256}:${Date.now()}`,
           fileName: input.fileName,
           sizeBytes: input.content.length,

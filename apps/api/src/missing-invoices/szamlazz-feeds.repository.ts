@@ -4,6 +4,10 @@ import { Prisma, prisma } from "@acropora/database";
 import { takeOverEbizRow } from "../billing/external-billing-one-row.js";
 import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
 import type { IncomingInvoiceProjection } from "../billing/incoming-szamlazz-invoice.js";
+import {
+  lockIncomingKey,
+  supersedePurchaseRows,
+} from "../billing/purchase-incoming.js";
 
 export type SzamlazzFeedKind = "SZAMLABE" | "SZAMLAKI" | "NYUGTA";
 
@@ -195,6 +199,8 @@ export class SzamlazzFeedsRepository {
     projection: IncomingInvoiceProjection;
   }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
     return this.database.$transaction(async (transaction) => {
+      // the purchase approval writes the same invoice under the same lock
+      await lockIncomingKey(transaction, input.projection);
       const message = await transaction.szamlazzFeedMessage.findUnique({
         where: {
           kind_externalId_sha256: {
@@ -266,11 +272,19 @@ export class SzamlazzFeedsRepository {
         feedReceivedAt: message.receivedAt,
         versionCount,
       };
-      await transaction.incomingBillingDocument.upsert({
+      const row = await transaction.incomingBillingDocument.upsert({
         where: { source_externalId: { source: "SZAMLAZZ", externalId } },
         create: { source: "SZAMLAZZ", externalId, ...data },
         update: data,
+        select: {
+          documentNumber: true,
+          supplierTaxNumber: true,
+          supplierEuTaxNumber: true,
+          supplierName: true,
+        },
       });
+      // the same invoice recorded from a purchase and approved: the feed wins
+      await supersedePurchaseRows(transaction, { externalId, ...row });
       return "PROJECTED";
     });
   }

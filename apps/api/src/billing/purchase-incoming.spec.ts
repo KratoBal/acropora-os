@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  postedPurchaseForArrival,
   purchaseListItem,
   purchaseReading,
   type PurchaseSubject,
@@ -86,6 +87,54 @@ describe("a beszerzésből jött sor a listán", () => {
         "UNPAID",
       ],
       "PURCHASE-LIST-ITEM",
+    );
+  });
+});
+
+describe("a később érkező példány kötése (PR 2)", () => {
+  // a beszerzések, amiket a lekérdezés a szám szerint visszaad
+  const database = {
+    purchaseInvoice: {
+      findMany: async () => [
+        {
+          id: "pi-1",
+          supplierInvoiceNumber: "KIT-7",
+          supplier: { taxNumber: "12345678-2-42", name: "Kitalált Kft." },
+        },
+      ],
+    },
+  } as never;
+  const arrival = (over: Record<string, unknown>) =>
+    postedPurchaseForArrival(database, {
+      importResult: null,
+      textReading: { invoiceNumber: "KIT-7", supplierTaxNumber: "12345678" },
+      kind: "INVOICE",
+      ...over,
+    });
+
+  it("az azonos szám és adószám-törzs köt; más szállító, díjbekérő, ismeretlen fajta és szám nélküli nem", async () => {
+    assert.deepEqual(
+      [
+        await arrival({}),
+        await arrival({
+          textReading: {
+            invoiceNumber: "KIT-7",
+            supplierTaxNumber: "87654321",
+          },
+        }),
+        await arrival({ kind: "PROFORMA" }),
+        await arrival({ kind: null }),
+        await arrival({ textReading: { invoiceNumber: null } }),
+        await arrival({
+          textReading: null,
+          importResult: {
+            invoiceNumber: "KIT-7",
+            supplier: { vatId: "HU12345678", name: "Kitalált Kft." },
+          },
+        }),
+      ],
+      ["pi-1", null, null, null, null, "pi-1"],
+      "ARRIVAL-KEY",
     );
   });
 });
