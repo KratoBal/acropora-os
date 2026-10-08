@@ -121,6 +121,7 @@ const LIST: QuoteListResponse = {
       quoteNumber: "AJ-2026-0042",
       title: "180 cm-es irodai bemutató akvárium",
       status: "SENT",
+      isExpired: false,
       customerId: "c1",
       ownerUserId: null,
       customerName: "Blue Office Kft.",
@@ -260,6 +261,28 @@ beforeEach(() => {
   api.snippets.mockResolvedValue([]);
   api.templates.mockResolvedValue([]);
   api.costing.mockResolvedValue(COSTING);
+});
+
+describe("Lejárt ajánlat és szűrők (P8)", () => {
+  it("a lejárt ajánlat jelölést kap, és a szűrők az URL-ből a lekérésbe mennek", async () => {
+    navigation.search = new URLSearchParams("expired=1&closeReason=PRICE");
+    api.list.mockResolvedValue({
+      ...LIST,
+      items: [{ ...LIST.items[0]!, isExpired: true }],
+    });
+    render(<QuoteListPage />);
+    const row = (await screen.findByText("AJ-2026-0042")).closest("tr")!;
+    const query = String(api.list.mock.calls[0]?.[1]);
+    expect(
+      [
+        within(row).queryByText("Lejárt") !== null,
+        query.includes("expired=1"),
+        query.includes("closeReason=PRICE"),
+        (screen.getByLabelText("Csak a lejártak") as HTMLInputElement).checked,
+      ],
+      "WEB-EXPIRED-LIST",
+    ).toEqual([true, true, true, true]);
+  });
 });
 
 describe("Árajánlatok lista (567:2)", () => {

@@ -53,6 +53,8 @@ const ALL: Permission[] = [
   PERMISSIONS.QUOTES_MANAGE,
   PERMISSIONS.QUOTES_PUBLISH,
   PERMISSIONS.QUOTES_SEND,
+  // P8: the outcome steps close the follow-ups
+  PERMISSIONS.QUOTES_ACCEPTANCE_RECORD,
 ];
 const NO_SEND: Permission[] = [
   PERMISSIONS.QUOTES_VIEW,
@@ -328,6 +330,174 @@ describe(
       assert.equal(resent.body!.deliveries[0].isResend, true);
     });
 
+    /** P8: the quote's follow-up tasks, by their key's kind, oldest key first */
+    const followUps = (quoteId: string) =>
+      prisma.task.findMany({
+        where: {
+          source: "QUOTE",
+          sourceRef: { startsWith: `quote:${quoteId}:` },
+        },
+        orderBy: { sourceRef: "asc" },
+        select: {
+          sourceRef: true,
+          status: true,
+          dueAt: true,
+          assigneeId: true,
+        },
+      });
+    const budapestDay = (offsetDays = 0) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Budapest" }).format(
+        new Date(Date.now() + offsetDays * 86_400_000),
+      );
+
+    it("P8: a send opens two follow-ups once; a resend adds nothing", async () => {
+      const q = await publishedQuote("P8 follow-up");
+      const sentAt = Date.now();
+      await request(
+        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+        "POST",
+        sendBody(),
+      );
+      await request(
+        `/quotes/${q.quoteId}/versions/${q.versionId}/resend`,
+        "POST",
+        sendBody(),
+      );
+      const tasks = await followUps(q.quoteId);
+      const afterSendDays = (tasks[0]!.dueAt!.getTime() - sentAt) / 86_400_000;
+      assert.deepEqual(
+        [
+          tasks.map((t) => [
+            t.sourceRef!.slice(`quote:${q.quoteId}:`.length),
+            t.status,
+            t.assigneeId === actorId,
+          ]),
+          afterSendDays > 4.99 && afterSendDays < 5.01,
+          tasks[1]!.dueAt!.toISOString().slice(0, 10),
+        ],
+        [
+          [
+            ["after-send", "OPEN", true],
+            ["before-expiry", "OPEN", true],
+          ],
+          true,
+          "2099-12-28",
+        ],
+        "FOLLOW-UP-ONCE",
+      );
+    });
+
+    it("P8: an acceptance and a rejection close the open follow-ups", async () => {
+      const accepted = await publishedQuote("P8 accepted");
+      const rejected = await publishedQuote("P8 rejected");
+      for (const q of [accepted, rejected])
+        await request(
+          `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+          "POST",
+          sendBody(),
+        );
+      const acceptRes = await request(
+        `/quotes/${accepted.quoteId}/acceptances`,
+        "POST",
+        {
+          versionId: accepted.versionId,
+          source: "PHONE",
+          acceptedAt: budapestDay(),
+          acceptedByName: "Teszt Vevő",
+        },
+      );
+      const rejectRes = await request(
+        `/quotes/${rejected.quoteId}/reject`,
+        "POST",
+        { reason: "PRICE" },
+      );
+      assert.deepEqual(
+        [
+          acceptRes.status,
+          rejectRes.status,
+          (await followUps(accepted.quoteId)).map((t) => t.status),
+          (await followUps(rejected.quoteId)).map((t) => t.status),
+        ],
+        [200, 200, ["DONE", "DONE"], ["DONE", "DONE"]],
+        "OUTCOME-CLOSES-FOLLOW-UPS",
+      );
+    });
+
+    it("P8: a postponement closes the open follow-ups and opens one for its day", async () => {
+      const q = await publishedQuote("P8 postponed");
+      await request(
+        `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+        "POST",
+        sendBody(),
+      );
+      const first = budapestDay(20);
+      const second = budapestDay(30);
+      const statuses = [
+        (
+          await request(`/quotes/${q.quoteId}/postpone`, "POST", {
+            until: first,
+          })
+        ).status,
+        (
+          await request(`/quotes/${q.quoteId}/postpone`, "POST", {
+            until: second,
+          })
+        ).status,
+      ];
+      const tasks = await followUps(q.quoteId);
+      assert.deepEqual(
+        [
+          statuses,
+          tasks.map((t) => [
+            t.sourceRef!.slice(`quote:${q.quoteId}:`.length),
+            t.status,
+          ]),
+          tasks
+            .find((t) => t.status === "OPEN")
+            ?.dueAt?.toISOString()
+            .slice(0, 10),
+        ],
+        [
+          [200, 200],
+          [
+            ["after-send", "DONE"],
+            ["before-expiry", "DONE"],
+            [`postponed:${first}`, "DONE"],
+            [`postponed:${second}`, "OPEN"],
+          ],
+          second,
+        ],
+        "POSTPONE-FOLLOW-UP",
+      );
+    });
+
+    it("P8: a sent quote whose version ran out is listed as expired, and stays SENT", async () => {
+      const expired = await publishedQuote("P8 expired");
+      const valid = await publishedQuote("P8 valid");
+      for (const q of [expired, valid])
+        await request(
+          `/quotes/${q.quoteId}/versions/${q.versionId}/send`,
+          "POST",
+          sendBody(),
+        );
+      await prisma.quoteVersion.update({
+        where: { id: expired.versionId },
+        data: { validUntil: new Date(`${budapestDay(-1)}T00:00:00Z`) },
+      });
+      const list = await request(
+        `/quotes?expired=1&pageSize=100&q=${encodeURIComponent(`P8 `)}`,
+      );
+      const detail = await request(`/quotes/${expired.quoteId}`);
+      const ids = (list.body!.items as Json[])
+        .filter((i) => [expired.quoteId, valid.quoteId].includes(i.id))
+        .map((i) => [i.id === expired.quoteId, i.isExpired]);
+      assert.deepEqual(
+        [ids, detail.body!.isExpired, detail.body!.status],
+        [[[true, true]], true, "SENT"],
+        "EXPIRED-COMPUTED",
+      );
+    });
+
     it("a superseded version is not sent, not even by resend", async () => {
       const q = await publishedQuote("P3 superseded");
       await request(
@@ -471,9 +641,18 @@ describe(
       await prisma.quoteMailDelivery.deleteMany({
         where: { quoteId: { in: quoteIds } },
       });
+      // P8: these quotes were also accepted, rejected and postponed
+      await prisma.quoteAcceptance.deleteMany({
+        where: { quoteId: { in: quoteIds } },
+      });
       await prisma.quote.updateMany({
         where: { id: { in: quoteIds } },
-        data: { status: "DRAFT" },
+        data: {
+          status: "DRAFT",
+          acceptedVersionId: null,
+          closeReason: null,
+          postponedUntil: null,
+        },
       });
       const versions = (
         await prisma.quoteVersion.findMany({

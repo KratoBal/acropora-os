@@ -21,6 +21,7 @@ import type {
 } from "@acropora/types";
 
 import { quoteDto } from "./quote-dto.mapper.js";
+import { closeFollowUps, openPostponedFollowUp } from "./quote-follow-up.js";
 import { budapestToday } from "./quote-publish.service.js";
 import { QuotesRepository } from "./quotes.repository.js";
 
@@ -182,6 +183,8 @@ async function recordAcceptance(
       closeNote: null,
     },
   });
+  // P8: nothing is left to follow up
+  await closeFollowUps(tx, quoteId, args.recordedByUserId);
   await tx.quoteEvent.create({
     data: {
       quoteId,
@@ -506,6 +509,14 @@ export class QuoteAcceptanceService {
       const quote = await lockQuote(tx, quoteId);
       assertOpen(quote.status, action);
       await tx.quote.update({ where: { id: quoteId }, data });
+      // P8: a postponed quote comes back on its day; a closed one is done
+      if (kind === "POSTPONED")
+        await openPostponedFollowUp(tx, {
+          quoteId,
+          until: data.postponedUntil as Date,
+          actorUserId: user.id,
+        });
+      else await closeFollowUps(tx, quoteId, user.id);
       await tx.quoteEvent.create({
         data: {
           quoteId,

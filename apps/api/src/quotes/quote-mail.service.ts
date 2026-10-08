@@ -40,6 +40,7 @@ import {
 import { TicketMailRepository } from "../notifications/mail/ticket-mail.repository.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { openSendFollowUps } from "./quote-follow-up.js";
 import { quoteDto } from "./quote-dto.mapper.js";
 import { QuotesRepository } from "./quotes.repository.js";
 
@@ -405,11 +406,19 @@ export class QuoteMailService {
           data: { sendingSince: null },
         });
         // a first successful send moves a DRAFT quote to SENT (plan 5.4)
-        if (outcome === "SENT")
+        if (outcome === "SENT") {
           await tx.quote.updateMany({
             where: { id: quoteId, status: "DRAFT" },
             data: { status: "SENT" },
           });
+          // P8: the follow-ups, once per quote (a resend adds nothing)
+          await openSendFollowUps(tx, {
+            quoteId,
+            sentAt: new Date(),
+            validUntil: version.validUntil,
+            actorUserId: user.id,
+          });
+        }
         await tx.quoteEvent.create({
           data: {
             quoteId,
