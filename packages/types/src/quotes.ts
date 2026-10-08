@@ -1,3 +1,7 @@
+import type {
+  QuoteHandoffSummaryDto,
+  QuoteMilestoneProformaDto,
+} from "./quote-handoff.js";
 /** #1582 P0: money/quantity are exact decimal strings, never JS number values. */
 export type QuoteStatusValue =
   "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "POSTPONED" | "CANCELLED";
@@ -133,6 +137,8 @@ export interface QuoteInternalVersion extends Omit<
   blocks: QuoteInternalBlock[];
   /** the internal BOM, without cost fields unless `quotes.costs.view` */
   bomItems: QuoteBomLineDto[];
+  /** P7: the milestones' proforma drafts, by milestone */
+  proformas: QuoteMilestoneProformaDto[];
 }
 /** #1582 P4a: a recorded acceptance, live or revoked (internal only). */
 export interface QuoteAcceptanceDto {
@@ -218,6 +224,8 @@ export interface QuoteInternalDto {
   updatedAt: string;
   versions: QuoteInternalVersion[];
   events: QuoteEventDto[];
+  /** P6: the project started from this quote, or null */
+  handoff: QuoteHandoffSummaryDto | null;
 }
 export interface QuoteBomItemDto extends QuoteBomLineDto {
   unitCost: string | null;

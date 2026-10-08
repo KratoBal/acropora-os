@@ -1,5 +1,10 @@
 import type {
   CancelQuoteInput,
+  ExecuteQuoteHandoffInput,
+  QuoteHandoffPlanDto,
+  QuoteHandoffPreviewInput,
+  QuoteHandoffResultDto,
+  QuoteProformaResultDto,
   CreateQuoteFromTemplateInput,
   PostponeQuoteInput,
   QuoteSendDraftDto,
@@ -98,6 +103,34 @@ export const quotesApi = {
       `/quotes/${id(quoteId)}/acceptances`,
       token,
       json("POST", input),
+    );
+  },
+  /** P6: the plan of the project start (no lock, no write). */
+  handoffPreview(
+    token: string,
+    quoteId: string,
+    input: QuoteHandoffPreviewInput,
+  ) {
+    return apiRequest<QuoteHandoffPlanDto>(
+      `/quotes/${id(quoteId)}/handoff/preview`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P6: starts the project; a repeat answers the same project. */
+  handoff(token: string, quoteId: string, input: ExecuteQuoteHandoffInput) {
+    return apiRequest<QuoteHandoffResultDto>(
+      `/quotes/${id(quoteId)}/handoff`,
+      token,
+      json("POST", input),
+    );
+  },
+  /** P7: a milestone's proforma draft (a repeat answers the same draft). */
+  proformaDraft(token: string, quoteId: string, milestoneId: string) {
+    return apiRequest<QuoteProformaResultDto>(
+      `/quotes/${id(quoteId)}/milestones/${id(milestoneId)}/proforma-draft`,
+      token,
+      json("POST", {}),
     );
   },
   revokeAcceptance(

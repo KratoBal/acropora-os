@@ -38,6 +38,13 @@ const VARIANT_LABEL_SELECT = {
   product: { select: { name: true } },
 } satisfies Prisma.ProductVariantSelect;
 /** The detail tree; the mapper decides per audience what leaves. */
+/** P6: what the quote shows of the project started from it. */
+export const HANDOFF_SUMMARY_SELECT = {
+  executedAt: true,
+  plan: true,
+  executedBy: { select: { displayName: true } },
+  project: { select: { id: true, projectNumber: true, name: true } },
+} satisfies Prisma.QuoteProjectHandoffSelect;
 export const QUOTE_DETAIL_INCLUDE = {
   versions: {
     orderBy: { versionNumber: "asc" },
@@ -55,7 +62,10 @@ export const QUOTE_DETAIL_INCLUDE = {
         orderBy: [{ quoteItemId: "asc" }, { position: "asc" }],
         include: { variant: { select: VARIANT_LABEL_SELECT } },
       },
-      milestones: { orderBy: { position: "asc" } },
+      milestones: {
+        orderBy: { position: "asc" },
+        include: { proformaInvoice: { select: { id: true, status: true } } },
+      },
     },
   },
   events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
@@ -77,6 +87,7 @@ export const QUOTE_DETAIL_INCLUDE = {
   customer: { select: { displayName: true } },
   owner: { select: { displayName: true } },
   createdBy: { select: { displayName: true } },
+  handoff: { select: HANDOFF_SUMMARY_SELECT },
 } satisfies Prisma.QuoteInclude;
 export type QuoteRow = Prisma.QuoteGetPayload<{
   include: typeof QUOTE_DETAIL_INCLUDE;

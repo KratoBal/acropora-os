@@ -219,6 +219,61 @@ export function viewStatuses(
   }
 }
 
+/**
+ * A PROJECT'S MATERIAL REQUEST, written by the quote handoff (#1582 P6) in
+ * its own transaction: OPEN at once (nothing for a person to submit), with
+ * the SUBMITTED history row the worksheet path writes at its submit. Each
+ * line names the BOM item it is the shortage of; a product line also its OS
+ * product. No notification: the worksheet ones do not fit a project, and the
+ * purchasers see it in the overview.
+ */
+export async function createProjectMaterialRequest(
+  tx: Prisma.TransactionClient,
+  input: {
+    projectId: string;
+    requestedById: string;
+    note: string;
+    items: ReadonlyArray<{
+      name: string;
+      quantity: string;
+      unit: string;
+      variantId: string | null;
+      quoteBomItemId: string;
+    }>;
+  },
+): Promise<{ id: string }> {
+  const request = await tx.materialRequest.create({
+    data: {
+      projectId: input.projectId,
+      requestedById: input.requestedById,
+      status: "OPEN",
+      submittedAt: new Date(),
+      note: input.note,
+      items: {
+        create: input.items.map((item, index) => ({
+          position: index,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          quantityValue: parseQuantityValue(item.quantity),
+          variantId: item.variantId,
+          quoteBomItemId: item.quoteBomItemId,
+        })),
+      },
+    },
+    select: { id: true },
+  });
+  await tx.materialRequestEvent.create({
+    data: {
+      materialRequestId: request.id,
+      kind: "SUBMITTED",
+      toStatus: "OPEN",
+      actorUserId: input.requestedById,
+    },
+  });
+  return request;
+}
+
 @Injectable()
 export class MaterialRequestsRepository extends Repository {
   constructor() {
