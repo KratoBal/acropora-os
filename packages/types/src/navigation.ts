@@ -573,6 +573,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * AZ AJÁNLATSABLONOK KEZELŐJE (#1582, Balázs 2026-10-08: „Sablon
+     * semmi”). Ugyanaz a jog és kapcsoló, mint a szövegrészleteké.
+     */
+    id: "quote-templates",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.QUOTES_TEMPLATES_MANAGE),
+    feature: "quotes",
+  },
+  {
+    /**
      * AZ ESZKOZ-FUNKCIOK KARBANTARTASA.
      *
      * Balazs kerese, 2026-09-22 (kanban 68add892): „ugyanolyan menut [...]

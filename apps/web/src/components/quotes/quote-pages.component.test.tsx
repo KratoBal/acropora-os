@@ -22,6 +22,8 @@ import { QuoteListPage } from "./quote-list-page";
 import { QuoteNewPage } from "./quote-new-page";
 import { QuotePdfPage } from "./quote-pdf-page";
 import { QuoteSnippetsPage } from "./quote-snippets-page";
+import { QuoteTemplateEditorPage } from "./quote-template-editor-page";
+import { QuoteTemplatesPage } from "./quote-templates-page";
 
 /** Az árajánlat modul képernyői (#1582 P1, Figma 35). */
 vi.mock("next/font/local", () => ({
@@ -69,6 +71,10 @@ const api = vi.hoisted(() => ({
   reject: vi.fn(),
   postpone: vi.fn(),
   cancel: vi.fn(),
+  templateList: vi.fn(),
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  archiveTemplate: vi.fn(),
   pdf: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
@@ -505,6 +511,134 @@ describe("Az ajánlat kimenetele (P4a)", () => {
         "acc1",
         { reason: "Módosítást kért." },
       ),
+    );
+  });
+});
+
+describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
+  const doc = (text: string) => ({
+    type: "doc" as const,
+    content: [
+      {
+        type: "paragraph" as const,
+        content: [{ type: "text" as const, text }],
+      },
+    ],
+  });
+  const TEMPLATE = {
+    id: "t1",
+    name: "Komplett akvárium kivitelezés",
+    priceDisplay: "GROSS" as const,
+    defaultValidityDays: 30,
+    blocks: [
+      {
+        kind: "TEXT" as const,
+        title: "Bevezető",
+        content: doc("Köszönjük!"),
+        keepWithNext: false,
+        startOnNewPage: false,
+      },
+      {
+        kind: "SECTION" as const,
+        title: "Akvárium és bútor",
+        content: null,
+        keepWithNext: false,
+        startOnNewPage: false,
+      },
+    ],
+    milestones: [
+      { label: "Előleg", percent: "40" },
+      { label: "Telepítés", percent: "60" },
+    ],
+    archivedAt: null,
+    updatedAt: "2026-10-08T07:00:00Z",
+  };
+
+  it("a lista kártyán mutatja a sablont, és a Másolat új sablont vesz fel", async () => {
+    api.templateList.mockResolvedValue([TEMPLATE]);
+    api.snippets.mockResolvedValue([]);
+    api.createTemplate.mockResolvedValue({ ...TEMPLATE, id: "t2" });
+    render(<QuoteTemplatesPage />);
+    expect(
+      await screen.findByText("Komplett akvárium kivitelezés"),
+    ).toBeTruthy();
+    expect(screen.getByText("2 blokk")).toBeTruthy();
+    expect(screen.getByText("Bevezető · Akvárium és bútor")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Komplett akvárium kivitelezés: másolat",
+      }),
+    );
+    await waitFor(() =>
+      expect(api.createTemplate).toHaveBeenCalledWith("token-1", {
+        name: "Komplett akvárium kivitelezés (másolat)",
+        priceDisplay: "GROSS",
+        defaultValidityDays: 30,
+        blocks: TEMPLATE.blocks,
+        milestones: TEMPLATE.milestones,
+      }),
+    );
+    expect(navigation.push).toHaveBeenCalledWith(
+      "/beallitasok/ajanlat-sablonok/t2",
+    );
+  });
+
+  it("a szerkesztő az egész sablont menti, a szöveg nélküli blokk nélkül", async () => {
+    api.templateList.mockResolvedValue([TEMPLATE]);
+    api.updateTemplate.mockResolvedValue({
+      ...TEMPLATE,
+      defaultValidityDays: 45,
+    });
+    render(<QuoteTemplateEditorPage templateId="t1" />);
+    fireEvent.change(
+      await screen.findByLabelText("Ajánlat érvényessége (nap)"),
+      { target: { value: "45" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
+    await waitFor(() => expect(api.updateTemplate).toHaveBeenCalledTimes(1));
+    expect(api.updateTemplate.mock.calls[0]![2]).toEqual({
+      name: "Komplett akvárium kivitelezés",
+      priceDisplay: "GROSS",
+      defaultValidityDays: 45,
+      blocks: [
+        { kind: "TEXT", title: "Bevezető", content: doc("Köszönjük!") },
+        { kind: "SECTION", title: "Akvárium és bútor", content: null },
+      ],
+      milestones: TEMPLATE.milestones,
+    });
+  });
+
+  it("szöveg nélküli feltétel-blokkal és nem 100%-os ütemezéssel nem menthető", async () => {
+    api.templateList.mockResolvedValue([TEMPLATE]);
+    render(<QuoteTemplateEditorPage templateId="t1" />);
+    const save = await screen.findByRole("button", { name: "Sablon mentése" });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("2. mérföldkő százaléka"), {
+      target: { value: "50" },
+    });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("2. mérföldkő százaléka"), {
+      target: { value: "60" },
+    });
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Új blokk fajtája"), {
+      target: { value: "TERMS" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "+ Blokk hozzáadása" }));
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/a szöveg még hiányzik/)).toBeTruthy();
+  });
+
+  it("az új sablon mentés után a saját oldalára visz", async () => {
+    api.createTemplate.mockResolvedValue({ ...TEMPLATE, id: "t9" });
+    render(<QuoteTemplateEditorPage templateId={null} />);
+    fireEvent.change(screen.getByLabelText("Sablon neve"), {
+      target: { value: "Új sablon" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sablon mentése" }));
+    await waitFor(() => expect(api.createTemplate).toHaveBeenCalled());
+    expect(navigation.replace).toHaveBeenCalledWith(
+      "/beallitasok/ajanlat-sablonok/t9",
     );
   });
 });

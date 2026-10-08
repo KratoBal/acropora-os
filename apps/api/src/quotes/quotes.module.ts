@@ -12,6 +12,7 @@ import { QuoteEditorController } from "./quote-editor.controller.js";
 import { QuoteSnippetsController } from "./quote-snippets.controller.js";
 import { QuoteTemplatesController } from "./quote-templates.controller.js";
 import { QuoteSnippetsService } from "./quote-snippets.service.js";
+import { QuoteTemplatesService } from "./quote-templates.service.js";
 import { QuoteVersionEditor } from "./quote-version-editor.js";
 import { QuotesController } from "./quotes.controller.js";
 import { QuotesRepository } from "./quotes.repository.js";
@@ -31,6 +32,7 @@ import { QuotesService } from "./quotes.service.js";
     QuoteVersionEditor,
     QuoteCostingService,
     QuoteSnippetsService,
+    QuoteTemplatesService,
     QuotePublishService,
     QuoteAcceptanceService,
     // the quote PDFs' store; a spec may give it its own root (QUOTE_DOCUMENT_ENV)
