@@ -22,6 +22,11 @@ type Tx = Prisma.TransactionClient;
 export type ReservationReleaseReason =
   "MANUAL" | "PROJECT_CLOSED" | "PURCHASE_INVOICE_CANCELLED";
 
+/** Which holds to release: a project's, given ones, or given ones of a project. */
+export type ReservationReleaseScope =
+  | { projectId: string; reservationIds?: string[] }
+  | { projectId?: string; reservationIds: string[] };
+
 /**
  * RELEASING A PROJECT'S HOLD ON STOCK (#1582 P5a), the one place it happens:
  * the reservation becomes RELEASED, the stock row's `reserved` goes down by
@@ -42,10 +47,16 @@ export type ReservationReleaseReason =
  */
 export async function releaseReservations(
   tx: Tx,
-  where: { projectId?: string; reservationIds?: string[] },
+  where: ReservationReleaseScope,
   actorUserId: string,
   reason: ReservationReleaseReason,
 ): Promise<string[]> {
+  // NEITHER KEY WOULD RELEASE EVERY ACTIVE HOLD IN THE SHOP (acrobot 28240):
+  // the type already asks for one; this stops an empty string or a cast
+  if (!where.projectId && !where.reservationIds)
+    throw new Error(
+      "releaseReservations: a projectId or reservationIds is required",
+    );
   const rows = await tx.projectInventoryReservation.findMany({
     where: {
       ...(where.projectId ? { projectId: where.projectId } : {}),
