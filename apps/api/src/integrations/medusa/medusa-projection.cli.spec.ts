@@ -2349,6 +2349,8 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     url: string;
     storageKey: string;
     fileName: string;
+    altText?: string | null;
+    title?: string | null;
   }) {
     return adatbazis(termek({ images: [kepSor] }), {
       productImage: {
@@ -2427,13 +2429,15 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     }) as unknown as typeof fetch;
   }
 
-  async function valtozatlanFutas() {
+  async function valtozatlanFutas(altText: string | null = null) {
     const { out, stdout, stderr } = collector();
     const kepSor = {
       id: "img-1",
       url: "https://kep.test/1.jpg",
       storageKey: "product/prod-1/img-1",
       fileName: "1.jpg",
+      altText,
+      title: null,
     };
     const torzsek: { ut: string; modszer: string; torzs: string }[] = [];
     const { db } = valtozatlanAllapotDb(kepSor);
@@ -2476,6 +2480,23 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     assert.equal(torzs.thumbnail, TAROLT_BOLTI_CIM);
   });
 
+  /**
+   * AZ ALT A KIADOTT (bolti) CIMMEL MEGY, NEM A FORRAS CIMEVEL (SEO P0 PR 9).
+   * A kirakat a kep-listaban a bolti cimet latja, tehat csak azzal tud
+   * parositani; a forras cime ott sehol nem all.
+   */
+  it("a kep altja a metaadatban a bolti cimmel megy ki", async () => {
+    const torzs = await valtozatlanFutas("Pumpa elolrol");
+    const metadata = torzs.metadata as Record<string, unknown> | undefined;
+
+    assert.equal(
+      metadata?.acropora_images,
+      JSON.stringify([
+        { url: TAROLT_BOLTI_CIM, alt: "Pumpa elolrol", title: null },
+      ]),
+    );
+  });
+
   it("a kep mestere atkerul, es a storageKey a sorba iródik", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis(
@@ -2513,6 +2534,19 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     };
     assert.equal(args.where.id, "img-1");
     assert.match(args.data.storageKey, /product/);
+
+    /**
+     * AZ UJRAOLVASAS RENDEZVE (SEO P0 PR 9): a kiadott cimek es az altok
+     * index szerint parosodnak, es az elso elem a fo kep.
+     */
+    const ujraolvasas = hivasok.find(
+      (h) => h.metodus === "productImage.findMany",
+    );
+    assert.ok(ujraolvasas, "a masolas utan nem olvasta ujra a kepeket");
+    assert.deepEqual((ujraolvasas.args as { orderBy?: unknown }).orderBy, [
+      { sortOrder: "asc" },
+      { id: "asc" },
+    ]);
 
     /** A kep bajtjai a LEHIVASBOL jonnek, nem a semmibol. */
     assert.equal(
