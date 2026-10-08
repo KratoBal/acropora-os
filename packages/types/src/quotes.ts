@@ -224,6 +224,8 @@ export interface QuoteInternalDto {
   updatedAt: string;
   versions: QuoteInternalVersion[];
   events: QuoteEventDto[];
+  /** P8: open, and the customer's (published) version ran out; computed */
+  isExpired: boolean;
   /** P6: the project started from this quote, or null */
   handoff: QuoteHandoffSummaryDto | null;
 }
@@ -253,6 +255,8 @@ export interface QuoteListItemDto {
   quoteNumber: string;
   title: string;
   status: QuoteStatusValue;
+  /** P8: open, and the customer's (published) version ran out; computed */
+  isExpired: boolean;
   customerId: string | null;
   ownerUserId: string | null;
   /** display names for the list (P1) */

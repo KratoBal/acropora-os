@@ -1,6 +1,7 @@
 export type TaskStatus = "OPEN" | "DONE";
 
-export type TaskSource = "MANUAL" | "AGENT";
+/** QUOTE: an offer's follow-up (#1582 P8). */
+export type TaskSource = "MANUAL" | "AGENT" | "QUOTE";
 
 export type TaskStatusFilter = TaskStatus | "ALL";
 
@@ -31,6 +32,8 @@ export interface TaskSummary {
   closedBy?: TaskPersonSummary;
   createdAt: string;
   closedAt?: string;
+  /** P8: when it is due; absent for a task without a date */
+  dueAt?: string;
 }
 
 export interface TaskListResponse {

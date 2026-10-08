@@ -214,6 +214,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             <PilotBadge variant={QUOTE_STATUS[quote.status].variant}>
               {QUOTE_STATUS[quote.status].label}
             </PilotBadge>
+            {quote.isExpired ? (
+              <PilotBadge variant="danger">Lejárt</PilotBadge>
+            ) : null}
             {latest ? (
               <span>
                 Aktuális verzió: v{latest.versionNumber} · érvényes{" "}

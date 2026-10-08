@@ -10,14 +10,17 @@ import {
   PilotDataTable,
   PilotInput,
   PilotPageHeader,
+  PilotSelect,
   Skeleton,
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
+  type QuoteCloseReasonValue,
   type QuoteListItemDto,
   type QuoteListResponse,
+  type QuoteStatusValue,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -32,6 +35,7 @@ import {
   formatQuoteDay,
   formatQuoteMoney,
   isAbort,
+  QUOTE_CLOSE_REASON,
   QUOTE_STATUS,
 } from "./quote-format";
 
@@ -40,9 +44,10 @@ const PAGE_SIZE = 25;
 
 /**
  * AZ ÁRAJÁNLATOK LISTÁJA (#1582 P1; Figma 35 · OS / Offers / List, 567:2).
- * A keresés és a lap az URL-ben áll. Ami a tervben adat nélkül állna (a három
- * összesítő kártya, az állapot- és készítő-szűrő, az export, a workflow-
- * magyarázat), az kimaradt: a PR leírása sorolja fel.
+ * A keresés, a szűrők és a lap az URL-ben áll. P8: állapot, elutasítási ok
+ * és „Csak a lejártak” szűrő; a lejárt ajánlat jelölést kap (számított, nem
+ * tárolt állapot). Ami a tervben adat nélkül állna (a három összesítő kártya,
+ * a készítő-szűrő, az export, a workflow-magyarázat), az kimaradt.
  */
 export function QuoteListPage() {
   const { session } = useAuth();
@@ -58,6 +63,10 @@ export function QuoteListPage() {
   const { params, update } = useUrlQuery();
   const page = urlPage(params);
   const appliedSearch = params.get("q") ?? "";
+  // P8: the lifecycle filters live in the URL as well
+  const statusFilter = params.get("status") ?? "";
+  const expiredOnly = params.get("expired") === "1";
+  const reasonFilter = params.get("closeReason") ?? "";
   const [search, setSearch] = useState(appliedSearch);
   const [data, setData] = useState<QuoteListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,8 +89,11 @@ export function QuoteListPage() {
     value.set("page", String(page));
     value.set("pageSize", String(PAGE_SIZE));
     if (appliedSearch) value.set("q", appliedSearch);
+    if (statusFilter) value.set("status", statusFilter);
+    if (expiredOnly) value.set("expired", "1");
+    if (reasonFilter) value.set("closeReason", reasonFilter);
     return value;
-  }, [appliedSearch, page]);
+  }, [appliedSearch, page, statusFilter, expiredOnly, reasonFilter]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -144,9 +156,14 @@ export function QuoteListPage() {
       header: "Állapot",
       width: "12%",
       cell: (row) => (
-        <PilotBadge variant={QUOTE_STATUS[row.status].variant}>
-          {QUOTE_STATUS[row.status].label}
-        </PilotBadge>
+        <span className="flex flex-wrap gap-1">
+          <PilotBadge variant={QUOTE_STATUS[row.status].variant}>
+            {QUOTE_STATUS[row.status].label}
+          </PilotBadge>
+          {row.isExpired ? (
+            <PilotBadge variant="danger">Lejárt</PilotBadge>
+          ) : null}
+        </span>
       ),
     },
     {
@@ -192,14 +209,56 @@ export function QuoteListPage() {
         }
       />
 
-      <div className="max-w-xl">
-        <PilotInput
-          aria-label="Keresés"
-          leadingIcon={<Icon name="search" />}
-          placeholder="Keresés ajánlatszám vagy megnevezés alapján…"
-          value={search}
-          onChange={setSearch}
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-full max-w-xl">
+          <PilotInput
+            aria-label="Keresés"
+            leadingIcon={<Icon name="search" />}
+            placeholder="Keresés ajánlatszám vagy megnevezés alapján…"
+            value={search}
+            onChange={setSearch}
+          />
+        </div>
+        <PilotSelect
+          chevron
+          aria-label="Állapot"
+          value={statusFilter}
+          onChange={(value) => update({ status: value || null, page: null })}
+        >
+          <option value="">Minden állapot</option>
+          {(Object.keys(QUOTE_STATUS) as QuoteStatusValue[]).map((status) => (
+            <option key={status} value={status}>
+              {QUOTE_STATUS[status].label}
+            </option>
+          ))}
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Elutasítás oka"
+          value={reasonFilter}
+          onChange={(value) =>
+            update({ closeReason: value || null, page: null })
+          }
+        >
+          <option value="">Minden ok</option>
+          {(Object.keys(QUOTE_CLOSE_REASON) as QuoteCloseReasonValue[]).map(
+            (reason) => (
+              <option key={reason} value={reason}>
+                {QUOTE_CLOSE_REASON[reason]}
+              </option>
+            ),
+          )}
+        </PilotSelect>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={expiredOnly}
+            onChange={(event) =>
+              update({ expired: event.target.checked ? "1" : null, page: null })
+            }
+          />
+          Csak a lejártak
+        </label>
       </div>
 
       {error ? (

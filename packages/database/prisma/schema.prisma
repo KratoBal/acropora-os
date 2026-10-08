@@ -6662,6 +6662,8 @@ enum TaskStatus {
 enum TaskSource {
   MANUAL
   AGENT
+  /// #1582 P8: a quote's follow-up (`sourceRef` = quote:<id>:<kind>)
+  QUOTE
 }
 
 /// Személyes feladat- és kérdéslista. Nem projektmenedzsment: egyetlen
@@ -6682,6 +6684,8 @@ model Task {
   /// és PostgreSQL-ben a NULL minden más NULL-tól különbözik, ezért ez a
   /// kézi tételek számát nem korlátozza.
   sourceRef   String?
+  /// #1582 P8: when it is due; null for a task without a date (MANUAL, AGENT)
+  dueAt       DateTime?
   assigneeId  String
   createdById String?
   closedById  String?
@@ -6695,6 +6699,7 @@ model Task {
 
   @@unique([source, sourceRef])
   @@index([assigneeId, status, createdAt])
+  @@index([assigneeId, status, dueAt])
 }
 
 /// Gépi (ember nélküli) hívó a feladat-felvitelhez. Szándékosan nem User és

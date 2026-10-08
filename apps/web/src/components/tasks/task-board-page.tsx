@@ -32,6 +32,8 @@ import {
   TASK_SOURCE_LABELS,
   TASK_STATUS_FILTERS,
   TASK_STATUS_LABELS,
+  formatTaskDay,
+  isTaskLater,
 } from "./task-labels";
 
 export function TaskBoardPage() {
@@ -197,19 +199,34 @@ export function TaskBoardPage() {
         />
       ) : null}
 
-      {data && data.items.length > 0 ? (
-        <ul className="space-y-3">
-          {data.items.map((task) => (
-            <li key={task.id}>
-              <TaskCard
-                task={task}
-                pending={pendingId === task.id}
-                onToggle={() => void toggle(task)}
-              />
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {data && data.items.length > 0
+        ? [
+            data.items.filter((task) => !isTaskLater(task)),
+            data.items.filter((task) => isTaskLater(task)),
+          ].map((group, index) =>
+            group.length ? (
+              <section key={index} className="space-y-3">
+                {/* P8: what is due after today waits below the rest */}
+                {index === 1 ? (
+                  <h2 className="text-sm font-semibold text-dusk-700">
+                    Később
+                  </h2>
+                ) : null}
+                <ul className="space-y-3">
+                  {group.map((task) => (
+                    <li key={task.id}>
+                      <TaskCard
+                        task={task}
+                        pending={pendingId === task.id}
+                        onToggle={() => void toggle(task)}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null,
+          )
+        : null}
     </div>
   );
 }
@@ -231,8 +248,9 @@ function TaskCard({
           {task.linkUrl ? (
             <a
               href={task.linkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              {...(task.source === "QUOTE"
+                ? {}
+                : { target: "_blank", rel: "noopener noreferrer" })}
               className="rounded underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
             >
               {task.title}
@@ -247,6 +265,8 @@ function TaskCard({
           </Badge>
           {task.source === "AGENT" ? (
             <Badge variant="warning">{TASK_SOURCE_LABELS.AGENT}</Badge>
+          ) : task.source === "QUOTE" ? (
+            <Badge variant="info">{TASK_SOURCE_LABELS.QUOTE}</Badge>
           ) : null}
         </div>
       </div>
@@ -263,6 +283,11 @@ function TaskCard({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-dusk-500">
+        {task.dueAt ? (
+          <span className="font-semibold text-dusk-700">
+            Határidő: {formatTaskDay(task.dueAt)}
+          </span>
+        ) : null}
         <span>Felvéve: {formatTaskDate(task.createdAt)}</span>
         <span>
           Kérte:{" "}
@@ -277,14 +302,24 @@ function TaskCard({
           </span>
         ) : null}
         {task.linkUrl ? (
-          <a
-            href={task.linkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-brand-700 underline-offset-4 hover:underline"
-          >
-            Beszélgetés megnyitása
-          </a>
+          task.source === "QUOTE" ? (
+            // P8: an offer of our own opens here, not in a new tab
+            <a
+              href={task.linkUrl}
+              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              Ajánlat megnyitása
+            </a>
+          ) : (
+            <a
+              href={task.linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+            >
+              Beszélgetés megnyitása
+            </a>
+          )
         ) : null}
         <span className="ml-auto">
           <Button variant="secondary" onClick={onToggle} disabled={pending}>

@@ -14,12 +14,38 @@ import {
 import type {
   CreateQuoteFromTemplateInput,
   UpdateQuoteInput,
+  QuoteCloseReasonValue,
   QuotePriceDisplay,
+  QuoteStatusValue,
 } from "@acropora/types";
+
+const QUOTE_STATUSES: QuoteStatusValue[] = [
+  "DRAFT",
+  "SENT",
+  "ACCEPTED",
+  "REJECTED",
+  "POSTPONED",
+  "CANCELLED",
+];
+const QUOTE_CLOSE_REASONS: QuoteCloseReasonValue[] = [
+  "PRICE",
+  "COMPETITOR",
+  "PROJECT_CANCELLED",
+  "PROJECT_POSTPONED",
+  "NO_RESPONSE",
+  "SCOPE_CHANGED",
+  "OTHER",
+];
 export class QuoteListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100000) page = 1;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
   @IsOptional() @IsString() @MaxLength(200) q?: string;
+  /** P8 */
+  @IsOptional() @IsIn(QUOTE_STATUSES) status?: QuoteStatusValue;
+  /** P8: `1` or `true`: only the expired ones */
+  @IsOptional() @IsIn(["1", "true", "0", "false"]) expired?: string;
+  /** P8: the rejection or cancellation reason */
+  @IsOptional() @IsIn(QUOTE_CLOSE_REASONS) closeReason?: QuoteCloseReasonValue;
 }
 export class QuoteHeaderDto implements UpdateQuoteInput {
   @ValidateIf((_o, v) => v !== undefined)
