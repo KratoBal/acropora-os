@@ -5,6 +5,8 @@ import {
   QUOTE_DOCUMENT_ENV,
   QuotePublishService,
 } from "./quote-publish.service.js";
+import { QuoteAcceptanceController } from "./quote-acceptance.controller.js";
+import { QuoteAcceptanceService } from "./quote-acceptance.service.js";
 import { QuoteBomItemsController } from "./quote-bom-items.controller.js";
 import { QuoteEditorController } from "./quote-editor.controller.js";
 import { QuoteSnippetsController } from "./quote-snippets.controller.js";
@@ -21,6 +23,7 @@ import { QuotesService } from "./quotes.service.js";
     QuoteBomItemsController,
     QuoteSnippetsController,
     QuoteTemplatesController,
+    QuoteAcceptanceController,
   ],
   providers: [
     QuotesRepository,
@@ -29,6 +32,7 @@ import { QuotesService } from "./quotes.service.js";
     QuoteCostingService,
     QuoteSnippetsService,
     QuotePublishService,
+    QuoteAcceptanceService,
     // the quote PDFs' store; a spec may give it its own root (QUOTE_DOCUMENT_ENV)
     documentStoreProviderFrom(QUOTE_DOCUMENT_ENV),
   ],

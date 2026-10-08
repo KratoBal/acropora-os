@@ -2,6 +2,17 @@
 export type QuoteStatusValue =
   "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "POSTPONED" | "CANCELLED";
 export type QuotePriceDisplay = "NET" | "GROSS" | "BOTH";
+/** #1582 P4a: how the customer's yes reached us (the public link is P4b). */
+export type QuoteAcceptanceSourceValue =
+  "PHONE" | "EMAIL" | "IN_PERSON" | "OTHER_MANUAL";
+export type QuoteCloseReasonValue =
+  | "PRICE"
+  | "COMPETITOR"
+  | "PROJECT_CANCELLED"
+  | "PROJECT_POSTPONED"
+  | "NO_RESPONSE"
+  | "SCOPE_CHANGED"
+  | "OTHER";
 export interface QuoteRichText {
   type:
     | "doc"
@@ -120,12 +131,38 @@ export interface QuoteInternalVersion extends Omit<
   /** the internal BOM, without cost fields unless `quotes.costs.view` */
   bomItems: QuoteBomLineDto[];
 }
+/** #1582 P4a: a recorded acceptance, live or revoked (internal only). */
+export interface QuoteAcceptanceDto {
+  id: string;
+  versionId: string;
+  versionNumber: number;
+  source: QuoteAcceptanceSourceValue;
+  /** the day the customer said yes, YYYY-MM-DD */
+  acceptedAt: string;
+  acceptedByName: string | null;
+  acceptedByEmail: string | null;
+  recordedByName: string | null;
+  selectedOptionalItemIds: string[];
+  note: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+  revokedByName: string | null;
+  revokeReason: string | null;
+}
 export interface QuoteInternalDto {
   audience: "internal";
   id: string;
   quoteNumber: string;
   title: string;
   status: QuoteStatusValue;
+  /** P4a: why it was rejected or cancelled */
+  closeReason: QuoteCloseReasonValue | null;
+  closeNote: string | null;
+  /** P4a: YYYY-MM-DD while POSTPONED */
+  postponedUntil: string | null;
+  acceptedVersionId: string | null;
+  /** P4a: newest first; at most one without `revokedAt` */
+  acceptances: QuoteAcceptanceDto[];
   customerId: string | null;
   ownerUserId: string | null;
   createdById: string | null;
@@ -188,6 +225,36 @@ export interface QuoteListResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+/** #1582 P4a: `POST /quotes/:id/acceptances` */
+export interface RecordQuoteAcceptanceInput {
+  versionId: string;
+  source: QuoteAcceptanceSourceValue;
+  /** YYYY-MM-DD, not in the future */
+  acceptedAt: string;
+  acceptedByName?: string | null;
+  acceptedByEmail?: string | null;
+  /** optional items of THAT version the customer asked for */
+  selectedOptionalItemIds?: string[];
+  note?: string | null;
+  /** a retry with the same id returns the same acceptance */
+  requestId?: string;
+}
+export interface RevokeQuoteAcceptanceInput {
+  reason: string;
+}
+export interface RejectQuoteInput {
+  reason: QuoteCloseReasonValue;
+  note?: string | null;
+}
+export interface PostponeQuoteInput {
+  /** YYYY-MM-DD, today or later */
+  until: string;
+  note?: string | null;
+}
+export interface CancelQuoteInput {
+  reason?: QuoteCloseReasonValue | null;
+  note?: string | null;
 }
 export interface CreateQuoteInput {
   title: string;

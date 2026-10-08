@@ -1,5 +1,10 @@
 import type {
+  CancelQuoteInput,
   CreateQuoteFromTemplateInput,
+  PostponeQuoteInput,
+  RecordQuoteAcceptanceInput,
+  RejectQuoteInput,
+  RevokeQuoteAcceptanceInput,
   QuoteBlockInput,
   QuoteBlockPatch,
   QuoteBomItemInput,
@@ -78,6 +83,47 @@ export const quotesApi = {
       `/quotes/${id(quoteId)}/versions/${id(versionId)}/publish`,
       token,
       json("POST", {}),
+    );
+  },
+  /** P4a: the customer's yes, recorded by hand (a retry keeps its requestId). */
+  accept(token: string, quoteId: string, input: RecordQuoteAcceptanceInput) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/acceptances`,
+      token,
+      json("POST", input),
+    );
+  },
+  revokeAcceptance(
+    token: string,
+    quoteId: string,
+    acceptanceId: string,
+    input: RevokeQuoteAcceptanceInput,
+  ) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/acceptances/${id(acceptanceId)}/revoke`,
+      token,
+      json("POST", input),
+    );
+  },
+  reject(token: string, quoteId: string, input: RejectQuoteInput) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/reject`,
+      token,
+      json("POST", input),
+    );
+  },
+  postpone(token: string, quoteId: string, input: PostponeQuoteInput) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/postpone`,
+      token,
+      json("POST", input),
+    );
+  },
+  cancel(token: string, quoteId: string, input: CancelQuoteInput) {
+    return apiRequest<QuoteDetailDto>(
+      `/quotes/${id(quoteId)}/cancel`,
+      token,
+      json("POST", input),
     );
   },
   /** P2: a published version's stored PDF, or a draft's live preview. */

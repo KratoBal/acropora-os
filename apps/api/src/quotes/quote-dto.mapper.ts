@@ -103,6 +103,10 @@ export function quoteEventPayload(
     "requestId",
     "outcome",
     "fieldCount",
+    // P4a: enum values and a date, never a name or a note
+    "source",
+    "closeReason",
+    "postponedUntil",
   ]) {
     const v = input[key];
     if (
@@ -234,6 +238,26 @@ export function internalQuoteDto(row: QuoteRow): QuoteInternalDto {
     quoteNumber: row.quoteNumber,
     title: row.title,
     status: row.status,
+    closeReason: row.closeReason,
+    closeNote: row.closeNote,
+    postponedUntil: row.postponedUntil?.toISOString().slice(0, 10) ?? null,
+    acceptedVersionId: row.acceptedVersionId,
+    acceptances: row.acceptances.map((a) => ({
+      id: a.id,
+      versionId: a.quoteVersionId,
+      versionNumber: a.version.versionNumber,
+      source: a.source,
+      acceptedAt: a.acceptedAt.toISOString().slice(0, 10),
+      acceptedByName: a.acceptedByName,
+      acceptedByEmail: a.acceptedByEmail,
+      recordedByName: a.recordedBy?.displayName ?? null,
+      selectedOptionalItemIds: a.selectedOptionalItemIds,
+      note: a.note,
+      createdAt: a.createdAt.toISOString(),
+      revokedAt: a.revokedAt?.toISOString() ?? null,
+      revokedByName: a.revokedBy?.displayName ?? null,
+      revokeReason: a.revokeReason,
+    })),
     customerId: row.customerId,
     ownerUserId: row.ownerUserId,
     createdById: row.createdById,

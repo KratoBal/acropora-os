@@ -59,6 +59,14 @@ export const QUOTE_DETAIL_INCLUDE = {
     },
   },
   events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+  acceptances: {
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    include: {
+      version: { select: { versionNumber: true } },
+      recordedBy: { select: { displayName: true } },
+      revokedBy: { select: { displayName: true } },
+    },
+  },
   customer: { select: { displayName: true } },
   owner: { select: { displayName: true } },
   createdBy: { select: { displayName: true } },
