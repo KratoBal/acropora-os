@@ -52,6 +52,7 @@ import {
   type ViesConflict,
 } from "@/components/vies/vies-conflicts";
 import { ViesMissingDetails } from "@/components/vies/vies-missing-details";
+import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
 import { createDebouncer } from "@/lib/products/list-state";
 
 // Ez a komponens az EU-s és a belföldi (kézi és NAV-alapú) beszerzési
@@ -1371,6 +1372,25 @@ export function PurchaseInvoiceEuEditorPage() {
             >
               Számla megnyitása
             </Button>
+          }
+        />
+      ) : null}
+      {/*
+        A SZÁMLAKÉP RÖGTÖN A RÖGZÍTÉS UTÁN (5ec62e35, Luca): a beszkennelt kép
+        vagy kép-PDF itt is csatolható, nem kell hozzá az adatlapra menni. A
+        beolvasó csak XML-t és szöveges PDF-et ért; a kép a számlához tartozik.
+      */}
+      {lastResult ? (
+        <PurchaseInvoiceScans
+          token={token}
+          invoiceId={lastResult.detail.id}
+          scans={lastResult.detail.scans ?? []}
+          canManage={canManage}
+          onChange={(scans) =>
+            setLastResult({
+              ...lastResult,
+              detail: { ...lastResult.detail, scans },
+            })
           }
         />
       ) : null}

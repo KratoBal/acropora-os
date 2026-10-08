@@ -38,6 +38,7 @@ const purchasingApiMock = vi.hoisted(() => ({
   searchProducts: vi.fn(),
   listProjects: vi.fn(),
   createProject: vi.fn(),
+  attachScan: vi.fn(),
 }));
 
 const productApiMock = vi.hoisted(() => ({
@@ -269,6 +270,42 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
         navIncomingInvoiceId: "nav-invoice-1",
       }),
     );
+  });
+
+  /** 5ec62e35 (Luca): a kép a rögzítés után a szerkesztőben is csatolható. */
+  it("SCAN-IN-EDITOR: a rögzített számlához itt csatolja a számlaképet", async () => {
+    purchasingApiMock.attachScan.mockReset().mockResolvedValue([
+      {
+        id: "scan-1",
+        fileName: "szamla.jpg.pdf",
+        createdAt: "2026-10-08T18:00:00.000Z",
+      },
+    ]);
+    render(createElement(PurchaseInvoiceEuEditorPage));
+    expect(
+      screen.queryByLabelText("Számlakép csatolása"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+    const input = await screen.findByLabelText("Számlakép csatolása");
+    const file = new File(["kep"], "szamla.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(purchasingApiMock.attachScan).toHaveBeenCalledWith(
+        "token-owner",
+        "purchase-invoice-1",
+        file,
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: "szamla.jpg.pdf megnyitása" }),
+    ).toBeInTheDocument();
   });
 
   /** #1199 A-007: a sor a NAV sorszámával megy, a szerver ebből köti a NAV sorhoz. */
