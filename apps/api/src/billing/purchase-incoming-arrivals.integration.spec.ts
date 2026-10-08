@@ -8,7 +8,11 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import { InvoiceCollectionRepository } from "../missing-invoices/collection/invoice-collection.repository.js";
 import { SzamlazzFeedsRepository } from "../missing-invoices/szamlazz-feeds.repository.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
-import { loadPurchaseSubjects } from "./purchase-incoming.js";
+import {
+  incomingListItems,
+  loadPurchaseSubjects,
+  lockIncomingKey,
+} from "./purchase-incoming.js";
 
 /**
  * A BESZERZÉSBŐL JÖTT SZÁMLA KÉSŐBB ÉRKEZŐ PÉLDÁNYAI (kártya 83f31a95, PR 2),
@@ -72,6 +76,98 @@ describe(
       });
       invoiceIds.push(invoice.id);
       return invoice;
+    }
+
+    async function feed(documentNumber: string, tag: string) {
+      const externalId = `pa-${suffix}-${tag}`;
+      feedIds.push(externalId);
+      const repository = new SzamlazzFeedsRepository();
+      await repository.storeRaw({
+        kind: "SZAMLABE",
+        externalId,
+        sha256: `${suffix}-${tag}`,
+        body: "<szamlabe/>",
+      });
+      return repository.projectIncoming({
+        externalId,
+        sha256: `${suffix}-${tag}`,
+        projection: {
+          externalId,
+          kindCode: "SZ",
+          documentNumber,
+          electronic: true,
+          issueDate: "2026-10-01",
+          fulfillmentDate: null,
+          dueDate: null,
+          paymentMethod: null,
+          currency: "HUF",
+          exchangeRate: null,
+          exchangeBank: null,
+          supplierName: "Kitalált név a feedben",
+          supplierTaxNumber: tax,
+          supplierEuTaxNumber: null,
+          supplierAddress: null,
+          supplierBankAccount: null,
+          buyerName: "Acropora Kft.",
+          buyerTaxNumber: null,
+          netAmount: "1000",
+          vatAmount: "270",
+          grossAmount: "1270",
+          lines: [],
+          vatSummary: [],
+          paymentsKnown: false,
+          payments: [],
+          note: null,
+          orderNumber: null,
+          referencedInvoiceNumber: null,
+          referencedProformaNumber: null,
+          cancelled: false,
+        },
+      });
+    }
+
+    /** Fogja a számla zárját, amíg a `release` nem hívódik; addig a többi író vár. */
+    async function holdLock(documentNumber: string) {
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let held!: () => void;
+      const isHeld = new Promise<void>((resolve) => (held = resolve));
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await lockIncomingKey(tx, {
+            documentNumber,
+            supplierTaxNumber: tax,
+            supplierEuTaxNumber: null,
+            supplierName: "",
+          });
+          held();
+          await released;
+        },
+        { timeout: 20_000 },
+      );
+      await isHeld;
+      return async () => {
+        release();
+        await holder;
+      };
+    }
+
+    /** Vár-e a művelet a zárra: 800 ms után még fut, a zár elengedése után végez. */
+    async function waitsForLock(
+      documentNumber: string,
+      run: () => Promise<unknown>,
+    ) {
+      const release = await holdLock(documentNumber);
+      let done = false;
+      const running = run().then(
+        () => (done = true),
+        () => (done = true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      const waited = !done;
+      await release();
+      await running;
+      return waited;
     }
 
     const collected = (externalId: string, invoiceNumber: string) =>
@@ -147,51 +243,7 @@ describe(
     it("a Számlázz.hu row after an approved PURCHASE row replaces it: one row for the invoice", async () => {
       const invoice = await purchase("F");
       await reviews.approve(`purchase:${invoice.id}`, null, userId);
-      const externalId = `pa-${suffix}-feed`;
-      feedIds.push(externalId);
-      const repository = new SzamlazzFeedsRepository();
-      await repository.storeRaw({
-        kind: "SZAMLABE",
-        externalId,
-        sha256: `${suffix}-feed`,
-        body: "<szamlabe/>",
-      });
-      const outcome = await repository.projectIncoming({
-        externalId,
-        sha256: `${suffix}-feed`,
-        projection: {
-          externalId,
-          kindCode: "SZ",
-          documentNumber: invoice.supplierInvoiceNumber,
-          electronic: true,
-          issueDate: "2026-10-01",
-          fulfillmentDate: null,
-          dueDate: null,
-          paymentMethod: null,
-          currency: "HUF",
-          exchangeRate: null,
-          exchangeBank: null,
-          supplierName: "Kitalált név a feedben",
-          supplierTaxNumber: tax,
-          supplierEuTaxNumber: null,
-          supplierAddress: null,
-          supplierBankAccount: null,
-          buyerName: "Acropora Kft.",
-          buyerTaxNumber: null,
-          netAmount: "1000",
-          vatAmount: "270",
-          grossAmount: "1270",
-          lines: [],
-          vatSummary: [],
-          paymentsKnown: false,
-          payments: [],
-          note: null,
-          orderNumber: null,
-          referencedInvoiceNumber: null,
-          referencedProformaNumber: null,
-          cancelled: false,
-        },
-      });
+      const outcome = await feed(invoice.supplierInvoiceNumber, "feed");
       const rows = await prisma.incomingBillingDocument.findMany({
         where: { documentNumber: invoice.supplierInvoiceNumber },
         select: { source: true },
@@ -208,6 +260,107 @@ describe(
           { state: "VERIFIED", incomingBillingDocumentId: null },
         ],
         "FEED-SUPERSEDES-PURCHASE",
+      );
+    });
+
+    it("a Számlázz.hu row before the approval: the approval is refused, no PURCHASE row", async () => {
+      const invoice = await purchase("E");
+      await feed(invoice.supplierInvoiceNumber, "early");
+      const refused = await reviews
+        .approve(`purchase:${invoice.id}`, null, userId)
+        .then(
+          () => null,
+          (error: unknown) => (error as { status?: number }).status,
+        );
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: { documentNumber: invoice.supplierInvoiceNumber },
+        select: { source: true },
+      });
+      assert.deepEqual(
+        [refused, rows.map((r) => r.source)],
+        [409, ["SZAMLAZZ"]],
+        "FEED-FIRST-409",
+      );
+    });
+
+    it("the approval waits for the invoice's lock", async () => {
+      const invoice = await purchase("LA");
+      const waited = await waitsForLock(invoice.supplierInvoiceNumber, () =>
+        reviews.approve(`purchase:${invoice.id}`, null, userId),
+      );
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: { documentNumber: invoice.supplierInvoiceNumber },
+        select: { source: true },
+      });
+      assert.deepEqual(
+        [waited, rows.map((r) => r.source)],
+        [true, ["PURCHASE"]],
+        "LOCK-APPROVAL",
+      );
+    });
+
+    it("the feed write waits for the same lock", async () => {
+      const invoice = await purchase("LF");
+      const waited = await waitsForLock(invoice.supplierInvoiceNumber, () =>
+        feed(invoice.supplierInvoiceNumber, "locked"),
+      );
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: { documentNumber: invoice.supplierInvoiceNumber },
+        select: { source: true },
+      });
+      assert.deepEqual(
+        [waited, rows.map((r) => r.source)],
+        [true, ["SZAMLAZZ"]],
+        "LOCK-FEED",
+      );
+    });
+
+    it("an approved purchase whose scan is paired and paid is one row on the list", async () => {
+      const invoice = await purchase("P");
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      const scan = await prisma.incomingSupplierDocument.findFirstOrThrow({
+        where: { purchaseInvoiceId: invoice.id },
+        select: { id: true },
+      });
+      const pairings = new Map([
+        [
+          scan.id,
+          {
+            payee: "COMPANY" as const,
+            kind: "INVOICE" as const,
+            debits: [
+              { bookingDate: "2026-10-02", amount: "1270", currency: "HUF" },
+            ],
+            paidInFull: true,
+            document: {
+              id: scan.id,
+              source: "UPLOAD" as const,
+              number: invoice.supplierInvoiceNumber,
+              date: "2026-10-01",
+              gross: D(1270),
+              currency: "HUF",
+              supplierName: `Kitalált Érkező ${suffix} Kft.`,
+              supplierAccounts: [],
+              kind: "INVOICE" as const,
+              payee: "COMPANY" as const,
+              hasOriginal: true,
+            },
+          },
+        ],
+      ]);
+      const items = incomingListItems({
+        rows: await prisma.incomingBillingDocument.findMany({
+          where: { documentNumber: invoice.supplierInvoiceNumber },
+        }),
+        pairings,
+        hasCollectedPdf: () => false,
+        readings: new Map(),
+        purchases: await loadPurchaseSubjects(prisma, invoice.id),
+      });
+      assert.deepEqual(
+        items.map((item) => item.origin),
+        ["PURCHASE"],
+        "APPROVED-PAIRED-ONE-ROW",
       );
     });
 

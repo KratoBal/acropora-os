@@ -4,7 +4,10 @@ import { Prisma, prisma } from "@acropora/database";
 import { takeOverEbizRow } from "../billing/external-billing-one-row.js";
 import type { ExternalInvoiceProjection } from "../billing/external-szamlazz-invoice.js";
 import type { IncomingInvoiceProjection } from "../billing/incoming-szamlazz-invoice.js";
-import { supersedePurchaseRows } from "../billing/purchase-incoming.js";
+import {
+  lockIncomingKey,
+  supersedePurchaseRows,
+} from "../billing/purchase-incoming.js";
 
 export type SzamlazzFeedKind = "SZAMLABE" | "SZAMLAKI" | "NYUGTA";
 
@@ -196,6 +199,8 @@ export class SzamlazzFeedsRepository {
     projection: IncomingInvoiceProjection;
   }): Promise<"PROJECTED" | "OLDER" | "MISSING"> {
     return this.database.$transaction(async (transaction) => {
+      // the purchase approval writes the same invoice under the same lock
+      await lockIncomingKey(transaction, input.projection);
       const message = await transaction.szamlazzFeedMessage.findUnique({
         where: {
           kind_externalId_sha256: {
