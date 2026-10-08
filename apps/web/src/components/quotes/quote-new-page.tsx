@@ -12,6 +12,7 @@ import {
   PilotSelect,
 } from "@acropora/ui";
 import {
+  CUSTOMER_LIST_PAGE_SIZE,
   hasPermission,
   PERMISSIONS,
   type CustomerSummary,
@@ -48,6 +49,7 @@ export function QuoteNewPage() {
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSummary[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [validityDays, setValidityDays] = useState(30);
   const [currency, setCurrency] = useState("HUF");
@@ -69,6 +71,7 @@ export function QuoteNewPage() {
   useEffect(() => {
     if (customer || search.trim().length < 2) {
       setResults([]);
+      setSearchError(null);
       return;
     }
     const controller = new AbortController();
@@ -76,13 +79,21 @@ export function QuoteNewPage() {
       const query = new URLSearchParams({
         search: search.trim(),
         page: "1",
-        pageSize: "8",
+        // the API's own lower bound: a smaller page is a 400, not a short list
+        // (Balázs on stage, 2026-10-08: the search listed nothing)
+        pageSize: String(CUSTOMER_LIST_PAGE_SIZE.min),
       });
       customersApi
         .list(token, query, controller.signal)
-        .then((response) => setResults(response.items))
+        .then((response) => {
+          setResults(response.items);
+          setSearchError(null);
+        })
         .catch((cause: unknown) => {
-          if (!isAbort(cause)) setResults([]);
+          if (isAbort(cause)) return;
+          setResults([]);
+          // a failed search says so; an empty list would look like "no match"
+          setSearchError(errorText(cause, "A partnerek nem kereshetők."));
         });
     }, 300);
     return () => {
@@ -192,6 +203,11 @@ export function QuoteNewPage() {
                       value={search}
                       onChange={setSearch}
                     />
+                    {searchError ? (
+                      <p role="alert" className="text-sm text-pilot-red-700">
+                        {searchError}
+                      </p>
+                    ) : null}
                     {results.length ? (
                       <ul
                         aria-label="Találatok"
