@@ -613,6 +613,51 @@ describe("PilotSupplierEditorPage: what the parent picker offers", () => {
       ).toBeNull();
     });
 
+    it("soronként is átvehető: a név igen, a város marad", async () => {
+      viesVat.check.mockResolvedValue(COOLBLUE);
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Név"), {
+        target: { value: "Coolblue" },
+      });
+      fireEvent.change(screen.getByLabelText("Város"), {
+        target: { value: "Delft" },
+      });
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL810433941B01" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Név: átvétel a VIES-ből" }),
+      );
+      expect(value("Név")).toBe("COOLBLUE B.V.");
+      expect(value("Város")).toBe("Delft");
+      expect(
+        screen.getByRole("button", { name: "Város: átvétel a VIES-ből" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Név: átvétel a VIES-ből" }),
+      ).toBeNull();
+    });
+
+    it("a közben átírt adószámra a régi válasz nem tölt ki semmit", async () => {
+      let answer!: (value: typeof COOLBLUE) => void;
+      viesVat.check.mockReturnValue(
+        new Promise((resolve) => (answer = resolve)),
+      );
+      render(<PilotSupplierEditorPage />);
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL810433941B01" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "VIES ellenőrzés" }));
+      fireEvent.change(screen.getByLabelText("Adószám"), {
+        target: { value: "NL004495445B01" },
+      });
+      answer(COOLBLUE);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(value("Név")).toBe("");
+      expect(value("Város")).toBe("");
+    });
+
     it("a beírt, eltérő nevet nem írja felül; csak a gombra", async () => {
       viesVat.check.mockResolvedValue(COOLBLUE);
       render(<PilotSupplierEditorPage />);

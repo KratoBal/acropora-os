@@ -49,6 +49,23 @@ describe("a VIES-cím mezőkre bontva", () => {
     );
   });
 
+  it("LU, PL, PT: az egybetűs előtag és a kötőjeles irányítószámok", () => {
+    assert.deepEqual(splitViesAddress("RUE DE LA GARE 1\nL-1611 LUXEMBOURG"), {
+      addressLine1: "RUE DE LA GARE 1",
+      postalCode: "1611",
+      city: "LUXEMBOURG",
+    });
+    assert.equal(
+      splitViesAddress("UL. PROSTA 20\n00-850 WARSZAWA").postalCode,
+      "00-850",
+    );
+    assert.deepEqual(splitViesAddress("AV. DA LIBERDADE 10\n1250-147 LISBOA"), {
+      addressLine1: "AV. DA LIBERDADE 10",
+      postalCode: "1250-147",
+      city: "LISBOA",
+    });
+  });
+
   it("az ország a VIES-előtagból, Görögország EL helyett GR", () => {
     assert.equal(viesCountry("NL810433941B01"), "NL");
     assert.equal(viesCountry("EL123456789"), "GR");
@@ -87,6 +104,11 @@ describe("a VIES-kitöltés soha nem ír felül kérdés nélkül", () => {
     assert.deepEqual(conflicts, [
       { field: "name", current: "Coolblue", vies: "COOLBLUE B.V." },
     ]);
+  });
+
+  it("a belső dupla szóköz nem eltérés", () => {
+    const { conflicts } = viesFill({ name: "COOLBLUE  B.V." }, answer);
+    assert.deepEqual(conflicts, []);
   });
 
   it("olyan mezőt, ami az űrlapon nincs, nem javasol", () => {
