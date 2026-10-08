@@ -31,6 +31,10 @@ describe("a failed publish attempt leaves nothing behind", () => {
       },
     } as unknown as DocumentStore;
     const s = new QuotePublishService(store, {});
+    const warnings: string[] = [];
+    (s as unknown as { logger: unknown }).logger = {
+      warn: (message: string) => warnings.push(message),
+    };
     const tx = {
       $queryRaw: async () => {
         steps.push("lock");
@@ -63,7 +67,7 @@ describe("a failed publish attempt leaves nothing behind", () => {
           ): Promise<void>;
         }
       ).abandonAttempt("q", "v", stored);
-    return { abandon, deleted, resets, steps };
+    return { abandon, deleted, resets, steps, warnings };
   }
 
   it("a draft gets its request time back to null, and the stored PDF goes", async () => {
@@ -107,12 +111,14 @@ describe("a failed publish attempt leaves nothing behind", () => {
     assert.deepEqual(steps, ["begin", "lock", "lock", "delete", "commit"]);
   });
 
-  it("a cleanup that fails itself stays quiet: the attempt's error is what counts", async () => {
-    const { abandon, deleted } = service(
+  it("a cleanup that fails itself does not throw, but leaves a warning", async () => {
+    const { abandon, deleted, warnings } = service(
       { status: "DRAFT", pdfStorageKey: null },
       true,
     );
     await abandon(key);
     assert.deepEqual(deleted, []);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /cleanup failed too \(the database is gone\)/);
   });
 });

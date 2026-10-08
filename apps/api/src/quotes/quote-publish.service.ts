@@ -5,6 +5,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -226,6 +227,8 @@ async function lockVersion(tx: Tx, quoteId: string, versionId: string) {
 export class QuotePublishService {
   private readonly database = prisma;
 
+  private readonly logger = new Logger(QuotePublishService.name);
+
   private readonly env: NodeJS.ProcessEnv;
 
   constructor(
@@ -408,8 +411,12 @@ export class QuotePublishService {
         if (stored && version.pdfStorageKey !== stored.documentId)
           await this.store.delete(stored).catch(() => false);
       });
-    } catch {
-      // best effort: the caller rethrows the attempt's own error, not this
+    } catch (error) {
+      // the caller rethrows the attempt's own error; this one is only logged
+      // (barracuda's #1602 review: a swallowed cleanup failure left no trace)
+      this.logger.warn(
+        `Quote ${quoteId} version ${versionId}: the failed publish attempt's cleanup failed too (${error instanceof Error ? error.message : String(error)}); a stored PDF may be left behind.`,
+      );
     }
   }
 
