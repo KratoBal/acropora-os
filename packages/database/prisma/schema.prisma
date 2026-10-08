@@ -9075,6 +9075,8 @@ model QuoteMailDelivery {
   /// a client retry with the same id gets this attempt back, no second mail
   requestId         String?      @unique
   isResend          Boolean      @default(false)
+  /// the test address it went to instead (TICKET_MAIL_REDIRECT_TO); null: the real recipients
+  redirectedTo      String?
   createdAt         DateTime     @default(now())
   quote             Quote        @relation(fields: [quoteId], references: [id], onDelete: Restrict)
   /// Composite FK: the version belongs to this very quote.
