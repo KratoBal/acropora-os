@@ -9,6 +9,7 @@ import { ExpectedArrivalService } from "./expected-arrivals/expected-arrival.ser
 import { SupplierInvoiceMailClient } from "./expected-arrivals/supplier-invoice-mail.client.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
+import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceRepository } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchRepository } from "./purchase-product-search.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
@@ -31,6 +32,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
   providers: [
     PurchaseInvoiceRepository,
     PurchaseInvoicePdfLookup,
+    PurchaseInvoiceScanService,
     PurchaseProductSearchRepository,
     PurchaseProductSearchService,
     ProjectRepository,

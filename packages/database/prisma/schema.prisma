@@ -2749,15 +2749,17 @@ model PurchaseInvoice {
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
-  supplier           Supplier              @relation(fields: [supplierId], references: [id])
-  warehouse          Warehouse             @relation(fields: [warehouseId], references: [id])
-  createdBy          User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  supplier           Supplier                   @relation(fields: [supplierId], references: [id])
+  warehouse          Warehouse                  @relation(fields: [warehouseId], references: [id])
+  createdBy          User?                      @relation(fields: [createdById], references: [id], onDelete: SetNull)
   lines              PurchaseInvoiceLine[]
   /// Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla
   /// bevételezéseként jött létre - a fordított irányú, opcionális kapcsolat
   /// a NavIncomingInvoice oldalán él (purchaseInvoiceId).
   navIncomingInvoice NavIncomingInvoice?
   expectedArrival    ExpectedArrival?
+  /// a kézzel csatolt számlakép(ek) (5ec62e35)
+  scanDocuments      IncomingSupplierDocument[]
 
   @@unique([supplierId, supplierInvoiceNumber])
   @@index([status, invoiceDate])
@@ -7503,15 +7505,21 @@ model IncomingSupplierDocument {
   /// auditnaplóban látszik).
   reviewedAt              DateTime?
   reviewedByUserId        String?
+  /// A beszerzési számla, amihez kézzel csatolták (kártya 5ec62e35, Luca: a
+  /// beszkennelt számla). Közvetlen kapcsolat: ugyanarra a számlaszámra és
+  /// adószámra ez nyer a szám szerinti párosítás előtt.
+  purchaseInvoiceId       String?
   createdAt               DateTime                       @default(now())
 
   expectedArrival ExpectedArrival?         @relation(fields: [expectedArrivalId], references: [id], onDelete: SetNull)
+  purchaseInvoice PurchaseInvoice?         @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
   /// A külföldi (postafiókos) számla kinyert adata, ha a Bejövő számlák olvasta (kártya e4c3b0fb).
   reading         IncomingDocumentReading?
 
   @@unique([gmailMessageId, fileName])
   @@index([reviewState])
   @@index([expectedArrivalId])
+  @@index([purchaseInvoiceId])
   @@index([sha256])
 }
 

@@ -11,8 +11,11 @@ import type {
   SupplierInvoiceImportResult,
   SupplierLineSuggestionRequest,
   SupplierLineSuggestionResult,
+  PurchaseInvoiceScan,
 } from "@acropora/types";
-import { apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
+import { pdfBlob } from "./billing-documents";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 export const purchasingApi = {
   searchProducts(token: string, q: string) {
@@ -85,6 +88,24 @@ export const purchasingApi = {
       token,
       { method: "POST", body: form },
     );
+  },
+  /** A beszkennelt számla csatolása a rögzített számlához (5ec62e35). */
+  attachScan(token: string, invoiceId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<PurchaseInvoiceScan[]>(
+      `/purchasing/invoices/${encodeURIComponent(invoiceId)}/scans`,
+      token,
+      { method: "POST", body: form },
+    );
+  },
+  /** Egy csatolt számlakép PDF-je (a kép csatoláskor PDF-fé alakul). */
+  async scanPdf(token: string, invoiceId: string, documentId: string) {
+    const response = await fetch(
+      `${API_PREFIX}/purchasing/invoices/${encodeURIComponent(invoiceId)}/scans/${encodeURIComponent(documentId)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A számlakép nem tölthető le.");
   },
   create(token: string, input: CreatePurchaseInvoiceInput) {
     return apiRequest<PurchaseInvoiceResult>(`/purchasing/invoices`, token, {

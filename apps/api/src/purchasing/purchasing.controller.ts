@@ -3,9 +3,11 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Query,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
@@ -26,6 +28,7 @@ import { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.d
 import { PurchaseProductConflictQueryDto } from "./dto/purchase-product-conflict-query.dto.js";
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
+import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchasingService } from "./purchasing.service.js";
 import { SupplierLineSuggestionDto } from "./dto/supplier-line-suggestion.dto.js";
 import { SupplierLineSuggestionService } from "./line-suggestions/supplier-line-suggestion.service.js";
@@ -42,6 +45,7 @@ export class PurchasingController {
     private readonly supplierInvoiceImport: SupplierInvoiceImportService,
     private readonly lineSuggestions: SupplierLineSuggestionService,
     private readonly pdfLookup: PurchaseInvoicePdfLookup,
+    private readonly scans: PurchaseInvoiceScanService,
   ) {}
 
   /**
@@ -135,8 +139,47 @@ export class PurchasingController {
 
   @Get("invoices/:id")
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
-  getInvoice(@Param("id") id: string) {
-    return this.service.getDetail(id);
+  async getInvoice(@Param("id") id: string) {
+    const detail = await this.service.getDetail(id);
+    return { ...detail, scans: await this.scans.list(id) };
+  }
+
+  /**
+   * A beszkennelt számla csatolása a rögzített számlához (kártya 5ec62e35):
+   * a beolvasótól és a tételektől független. Kép (JPEG, PNG) egyoldalas
+   * PDF-ként tárolódik.
+   */
+  @Post("invoices/:id/scans")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: SUPPLIER_INVOICE_MAX_BYTES },
+    }),
+  )
+  attachScan(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A fájl kötelező.");
+    return this.scans.attach(id, file, user.id);
+  }
+
+  @Get("invoices/:id/scans/:documentId")
+  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async scanPdf(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+  ) {
+    const scan = await this.scans.bytes(id, documentId);
+    const base = scan.fileName.replace(/\.pdf$/i, "").replace(/[^\w.-]+/g, "_");
+    return new StreamableFile(scan.bytes, {
+      type: "application/pdf",
+      length: scan.bytes.length,
+      disposition: `inline; filename="${base || "szamlakep"}.pdf"`,
+    });
   }
 
   @Post("invoices")

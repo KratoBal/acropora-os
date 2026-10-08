@@ -27,6 +27,11 @@ export interface CollectedDocument {
   textReading: unknown;
   /** Egy szállítói illesztő teljes olvasata (`SupplierInvoiceImportResult`). */
   importResult: unknown;
+  /**
+   * A beszerzési számla, amihez kézzel csatolták (5ec62e35). Ugyanarra a
+   * kulcsra ez áll elöl: a közvetlen kapcsolat nyer a szám szerinti előtt.
+   */
+  purchaseInvoiceId?: string | null;
 }
 
 /** A számla, amihez a PDF-et keressük. */
@@ -92,6 +97,8 @@ export function collectedPdfIndex(
     .filter((doc) => isPdfFileName(doc.fileName))
     .sort(
       (a, b) =>
+        Number(Boolean(b.purchaseInvoiceId)) -
+          Number(Boolean(a.purchaseInvoiceId)) ||
         a.createdAt.getTime() - b.createdAt.getTime() ||
         a.id.localeCompare(b.id),
     );
@@ -129,6 +136,7 @@ export interface CollectedPdfSource {
         createdAt: true;
         textReading: true;
         importResult: true;
+        purchaseInvoiceId: true;
       };
     }): Promise<CollectedDocument[]>;
   };
@@ -151,6 +159,7 @@ export async function loadCollectedPdfIndex(
         createdAt: true,
         textReading: true,
         importResult: true,
+        purchaseInvoiceId: true,
       },
     }),
   );
