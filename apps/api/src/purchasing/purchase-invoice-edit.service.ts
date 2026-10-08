@@ -134,7 +134,11 @@ export class PurchaseInvoiceEditService {
         // fields; the same 400 as above, and the transaction rolls back
         // (acrobot's #1632 note)
         if (!fieldsOf().length)
-          throw new BadRequestException("Nincs mit módosítani.");
+          // the reason in words (barracuda, 28297): only a paid date was
+          // sent, and the invoice is not paid
+          throw new BadRequestException(
+            "Fizetési dátum csak kifizetett számlán adható meg.",
+          );
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
           data: { ...data, updatedAt: new Date() },
