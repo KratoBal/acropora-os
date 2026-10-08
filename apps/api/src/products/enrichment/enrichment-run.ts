@@ -70,6 +70,14 @@ export interface ProductFacts {
   unasManufacturerUrl: string | null;
   /** Our own current values, raw, per field. */
   current: Partial<Record<EnrichedField, string>>;
+  /**
+   * Where a current value comes from, when it is not the product master: the
+   * water-effects category rule is our UNAS tree's statement (`UNAS_CURRENT`,
+   * card 2b3983e1). Both are our own catalogue, so neither can VERIFY alone.
+   */
+  currentSource?: Partial<
+    Record<EnrichedField, { sourceType: "UNAS_CURRENT"; sourceRef: string }>
+  >;
 }
 
 export interface StoredFetch {
@@ -343,7 +351,11 @@ async function checkProduct(
       sourceKind: source.kind,
       url: page.url,
       outcome: "FETCHED",
-      reason: statement.note,
+      // a szótár megjegyzései (tagadott találat, kétirányú kód) a lap mellé
+      reason:
+        [statement.note, ...(statement.lexiconNotes ?? [])]
+          .filter(Boolean)
+          .join("; ") || null,
       httpStatus: page.httpStatus,
       fetchedAt: page.fetchedAt,
       fieldCount: statement.values.length,
@@ -411,8 +423,12 @@ export function fieldOutcome(
       ? null
       : {
           value: currentRaw,
-          sourceType: "OS_PRODUCT_MASTER",
-          sourceRef: OS_REF(facts.productId),
+          sourceType:
+            facts.currentSource?.[field as EnrichedField]?.sourceType ??
+            "OS_PRODUCT_MASTER",
+          sourceRef:
+            facts.currentSource?.[field as EnrichedField]?.sourceRef ??
+            OS_REF(facts.productId),
           retrievedAt: reconciledAt,
           confidence: null,
         };
