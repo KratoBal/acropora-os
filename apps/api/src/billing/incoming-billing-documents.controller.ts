@@ -100,8 +100,13 @@ export class IncomingBillingDocumentsController {
    * A POSTAFIÓKOS SOR ELLENŐRZÉSE (kártya e4c3b0fb). Az azonosító a lista
    * sorának azonosítója (`mailbox:<dokumentum>`). Az olvasás nem ír: ha még
    * nincs tárolt olvasat, a PDF-ből számol. A mentés és a jóváhagyás a
-   * számla rögzítésének joga (`billing.create`); a jóváhagyás után a sor
-   * rendes bejövő számla, „Postafiókból” eredettel.
+   * Pénzügy írási joga (`finance.manage`); a jóváhagyás után a sor rendes
+   * bejövő számla, „Postafiókból” eredettel.
+   *
+   * NEM `billing.create`: az a KIMENŐ számla vázlatáé, és 2026-10-08 óta az
+   * értékesítő is megkapja (Balázs döntése a kiállításról). A bejövő számla
+   * rögzítése nem része annak a döntésnek. A `finance.manage` ma pontosan
+   * ugyanazoknál a szerepköröknél áll, akiknél a `billing.create` addig.
    */
   @Get("incoming-documents/:id/review")
   review(@Param("id") id: string): Promise<IncomingDocumentReview> {
@@ -109,7 +114,7 @@ export class IncomingBillingDocumentsController {
   }
 
   @Put("incoming-documents/:id/review")
-  @RequirePermissions(PERMISSIONS.BILLING_CREATE)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   saveReview(
     @Param("id") id: string,
     @Body() input: IncomingReviewDto,
@@ -121,7 +126,7 @@ export class IncomingBillingDocumentsController {
   /** Üres törzzsel a tárolt (vagy kinyert) értékeket hagyja jóvá. */
   @Post("incoming-documents/:id/review/approve")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.BILLING_CREATE)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   approveReview(
     @Param("id") id: string,
     @Body() input: IncomingReviewDto,

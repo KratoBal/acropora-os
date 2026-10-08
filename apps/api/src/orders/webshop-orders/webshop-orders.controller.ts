@@ -303,7 +303,10 @@ export class WebshopOrdersController {
 
   /**
    * „UTALÁS BEÉRKEZETT” (bb3a6bd5): a kézi tartalék, ha a banki párosítás nem
-   * találta meg a pénzt. Ugyanaz a jog, mint a díjbekérőnél.
+   * találta meg a pénzt. FIZETÉS RÖGZÍTÉSE, nem kiállítás, ezért a Pénzügy
+   * írási joga kell (`finance.manage`), nem a `billing.issue`: az értékesítő
+   * 2026-10-08 óta kiállíthat, de fizetést nem rögzít. A `finance.manage` ma
+   * pontosan ugyanazoknál a szerepköröknél áll, akiknél a `billing.issue` addig.
    */
   /**
    * „WEBSHOP FIZETÉS LEZÁRÁSA” (bb3a6bd5): a rögzített beérkezés újraküldése
@@ -312,14 +315,14 @@ export class WebshopOrdersController {
    */
   @Post(":id/transfer-received/shop")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_MANAGE)
   syncTransferToShop(@Param("id") id: string) {
     return this.transfers.syncShop(id);
   }
 
   @Post(":id/transfer-received")
   @HttpCode(200)
-  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.BILLING_ISSUE)
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE, PERMISSIONS.FINANCE_MANAGE)
   recordTransferReceived(
     @Param("id") id: string,
     @Body() body: WebshopTransferReceiptDto,

@@ -356,6 +356,14 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
   const canSendProforma =
     canIssue &&
     Boolean(session && hasPermission(session.user, PERMISSIONS.BILLING_RESEND));
+  // A BEÉRKEZETT UTALÁS RÖGZÍTÉSE FIZETÉS, NEM KIÁLLÍTÁS: a Pénzügy írási joga
+  // (a szerver is ezt kéri). Az értékesítő kiállíthat (2026-10-08), de
+  // fizetést nem rögzít.
+  const canRecordTransfer = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE) &&
+    hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
+  );
   const token = session?.token ?? "";
   const [mailNotice, setMailNotice] = useState<string | null>(null);
   const changeStatus = async (
@@ -558,6 +566,7 @@ export function WebshopOrderDetailPage({ id }: { id: string }) {
           canManage={canManage}
           canIssue={canIssue}
           canSendProforma={canSendProforma}
+          canRecordTransfer={canRecordTransfer}
           onSendProforma={sendProforma}
           onRecordTransfer={recordTransfer}
           onSyncTransferToShop={syncTransferToShop}
@@ -1758,6 +1767,7 @@ function OrderBody({
   canManage,
   canIssue,
   canSendProforma,
+  canRecordTransfer,
   onSendProforma,
   onRecordTransfer,
   onSyncTransferToShop,
@@ -1790,6 +1800,7 @@ function OrderBody({
   canManage: boolean;
   canIssue: boolean;
   canSendProforma: boolean;
+  canRecordTransfer: boolean;
   onSendProforma: () => Promise<void>;
   onRecordTransfer: (input: WebshopTransferReceiptInput) => Promise<void>;
   onSyncTransferToShop: () => Promise<void>;
@@ -2336,7 +2347,7 @@ function OrderBody({
                 order={order}
                 now={now}
                 canSend={canSendProforma}
-                canRecord={canIssue}
+                canRecord={canRecordTransfer}
                 onSend={onSendProforma}
                 onRecord={onRecordTransfer}
                 onSyncShop={onSyncTransferToShop}
