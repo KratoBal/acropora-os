@@ -73,6 +73,7 @@ const product: ProjectableProduct = {
   seoKeywords: null,
   unasProductUrl: null,
   images: null,
+  imageTexts: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,

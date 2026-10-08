@@ -357,6 +357,64 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     );
   });
 
+  /**
+   * THE ALT TEXT SURVIVES A CSV APPLY (SEO P0 PR 9). The workbook carries no
+   * alt; the API sync writes it onto the same row. The image rows are deleted
+   * and recreated, so without the keep the alt went with every CSV import, and
+   * the projection took the shop's alt with it.
+   */
+  it("keeps the alt text of an image that stays, and only of that one", async () => {
+    const fixture = (firstName: string, firstImage: string) =>
+      catalogFixture({
+        categoryName: "Apply category",
+        firstName,
+        firstImage,
+      });
+    await applyService.apply(
+      await stageApprove(
+        await fixture("Eheim alt filter", "https://example.test/alt.jpg"),
+        "apply-alt-first.xlsx",
+      ),
+      "integration-owner",
+      true,
+    );
+    await prisma.productImage.updateMany({
+      where: { url: "https://example.test/alt.jpg" },
+      data: { altText: "Eheim filter from the front", title: "Front" },
+    });
+
+    await applyService.apply(
+      await stageApprove(
+        await fixture(
+          "Eheim alt filter renamed",
+          "https://example.test/alt.jpg",
+        ),
+        "apply-alt-second.xlsx",
+      ),
+      "integration-owner",
+      true,
+    );
+    const kept = await prisma.productImage.findFirstOrThrow({
+      where: { url: "https://example.test/alt.jpg" },
+    });
+    assert.equal(kept.altText, "Eheim filter from the front");
+    assert.equal(kept.title, "Front");
+
+    // A replaced image does not inherit the old one's alt.
+    await applyService.apply(
+      await stageApprove(
+        await fixture("Eheim alt filter third", "https://example.test/new.jpg"),
+        "apply-alt-third.xlsx",
+      ),
+      "integration-owner",
+      true,
+    );
+    const replaced = await prisma.productImage.findFirstOrThrow({
+      where: { url: "https://example.test/new.jpg" },
+    });
+    assert.equal(replaced.altText, null);
+  });
+
   it("rolls back every domain write when synchronization fails", async () => {
     const batchId = await stageApprove(
       await catalogFixture({
