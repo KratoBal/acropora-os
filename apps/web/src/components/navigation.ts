@@ -507,6 +507,13 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "settings",
     entryId: "quote-snippets",
   },
+  {
+    // AZ AJANLATSABLONOK (#1582; Figma 35 · Offers / Templates, 579:2243)
+    href: "/beallitasok/ajanlat-sablonok",
+    label: "Ajánlatsablonok",
+    icon: "settings",
+    entryId: "quote-templates",
+  },
 ];
 
 export const allSettingsNavigation: AppNavigationItem[] = [

@@ -401,3 +401,32 @@ export interface QuoteTemplateSummaryDto {
   priceDisplay: QuotePriceDisplay;
   defaultValidityDays: number;
 }
+/** A template's block: text only, no items (C3: the blocks live in JSON). */
+export interface QuoteTemplateBlockDto {
+  kind: QuoteBlockKindValue;
+  title: string | null;
+  content: QuoteRichText | null;
+  keepWithNext: boolean;
+  startOnNewPage: boolean;
+}
+/** The template manager's view of one template (Beállítások). */
+export interface QuoteTemplateDto extends QuoteTemplateSummaryDto {
+  blocks: QuoteTemplateBlockDto[];
+  milestones: Array<{ label: string; percent: string }>;
+  archivedAt: string | null;
+  updatedAt: string;
+}
+export interface QuoteTemplateInput {
+  name: string;
+  priceDisplay: QuotePriceDisplay;
+  defaultValidityDays: number;
+  blocks: Array<{
+    kind: QuoteBlockKindValue;
+    title?: string | null;
+    content?: QuoteRichText | null;
+    keepWithNext?: boolean;
+    startOnNewPage?: boolean;
+  }>;
+  milestones: QuoteMilestoneInput[];
+}
+export type QuoteTemplatePatch = Partial<QuoteTemplateInput>;

@@ -487,6 +487,8 @@ describe("navigation", () => {
     "/beallitasok/eszkoz-funkciok": "settings.manage",
     // Az ajánlati szövegrészletek (#1582 P1): ugyanaz a jog, ami az írást védi.
     "/beallitasok/ajanlat-szovegreszletek": "quotes.templates.manage",
+    // Az ajánlatsablonok (#1582): ugyanaz a jog, ami az írást védi.
+    "/beallitasok/ajanlat-sablonok": "quotes.templates.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {

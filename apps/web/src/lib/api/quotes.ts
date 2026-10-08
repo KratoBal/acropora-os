@@ -19,6 +19,9 @@ import type {
   QuoteSnippetDto,
   QuoteSnippetInput,
   QuoteSnippetPatch,
+  QuoteTemplateDto,
+  QuoteTemplateInput,
+  QuoteTemplatePatch,
   QuoteTemplateSummaryDto,
   QuoteVersionHeaderInput,
 } from "@acropora/types";
@@ -326,6 +329,35 @@ export const quotesApi = {
   archiveSnippet(token: string, snippetId: string) {
     return apiRequest<QuoteSnippetDto>(
       `/quote-snippets/${id(snippetId)}/archive`,
+      token,
+      json("POST", {}),
+    );
+  },
+  /** The template manager (Beállítások): full templates, archived on ask. */
+  templateList(token: string, includeArchived: boolean, signal?: AbortSignal) {
+    return apiRequest<QuoteTemplateDto[]>(
+      `/quote-templates?includeArchived=${includeArchived ? "true" : "false"}`,
+      token,
+      { signal },
+    );
+  },
+  createTemplate(token: string, input: QuoteTemplateInput) {
+    return apiRequest<QuoteTemplateDto>(
+      "/quote-templates",
+      token,
+      json("POST", input),
+    );
+  },
+  updateTemplate(token: string, templateId: string, patch: QuoteTemplatePatch) {
+    return apiRequest<QuoteTemplateDto>(
+      `/quote-templates/${id(templateId)}`,
+      token,
+      json("PATCH", patch),
+    );
+  },
+  archiveTemplate(token: string, templateId: string) {
+    return apiRequest<QuoteTemplateDto>(
+      `/quote-templates/${id(templateId)}/archive`,
       token,
       json("POST", {}),
     );
