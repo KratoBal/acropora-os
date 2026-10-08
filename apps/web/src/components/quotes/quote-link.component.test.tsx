@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { QuoteDetailDto } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,6 +63,12 @@ describe("Az elfogadó link kártyája (#1582 P4b)", () => {
     );
     fireEvent.click(
       await screen.findByRole("button", { name: "Link visszavonása" }),
+    );
+    // it asks first: nothing is revoked until the question is answered
+    const dialog = await screen.findByRole("dialog");
+    expect(api.revokeAcceptanceLink).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Link visszavonása" }),
     );
     await waitFor(() =>
       expect(screen.getByText(/nincs élő link/)).toBeTruthy(),

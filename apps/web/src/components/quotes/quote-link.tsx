@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ConfirmDialog,
   PilotButton,
   PilotCard,
   PilotCardHeader,
@@ -40,6 +41,8 @@ export function QuoteAcceptanceLinkCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** what the open question is about: both end the customer's live link */
+  const [asking, setAsking] = useState<"revoke" | "replace" | null>(null);
 
   useEffect(() => {
     if (!version) return;
@@ -149,7 +152,7 @@ export function QuoteAcceptanceLinkCard({
             <PilotButton
               size="action"
               disabled={busy}
-              onClick={() => void issue()}
+              onClick={() => (link ? setAsking("replace") : void issue())}
             >
               {link ? "Új link kiadása" : "Link kiadása"}
             </PilotButton>
@@ -158,7 +161,7 @@ export function QuoteAcceptanceLinkCard({
                 variant="ghost"
                 size="action"
                 disabled={busy}
-                onClick={() => void revoke()}
+                onClick={() => setAsking("revoke")}
               >
                 Link visszavonása
               </PilotButton>
@@ -166,6 +169,30 @@ export function QuoteAcceptanceLinkCard({
           </div>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={asking !== null}
+        title={
+          asking === "replace"
+            ? "Új linket adsz ki az ügyfélnek?"
+            : "Visszavonod az ügyfél linkjét?"
+        }
+        consequence="Az ügyfélnél lévő link azonnal megszűnik: a megnyitása hibát ad, és nem fogadható el rajta az ajánlat."
+        recovery={
+          asking === "replace"
+            ? "Az új link címét most kapod meg; azt kell elküldeni az ügyfélnek."
+            : "Később új linket adhatsz ki, de az új címmel, amit újra el kell küldeni."
+        }
+        confirmLabel={
+          asking === "replace" ? "Új link kiadása" : "Link visszavonása"
+        }
+        busy={busy}
+        onConfirm={() => {
+          const action = asking;
+          setAsking(null);
+          void (action === "replace" ? issue() : revoke());
+        }}
+        onCancel={() => setAsking(null)}
+      />
     </PilotCard>
   );
 }
