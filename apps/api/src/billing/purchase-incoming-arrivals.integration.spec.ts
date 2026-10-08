@@ -7,6 +7,7 @@ import { Prisma, prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { InvoiceCollectionRepository } from "../missing-invoices/collection/invoice-collection.repository.js";
 import { SzamlazzFeedsRepository } from "../missing-invoices/szamlazz-feeds.repository.js";
+import { incomingKey } from "./billing-duplicates.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import {
   incomingListItems,
@@ -126,8 +127,15 @@ describe(
       });
     }
 
-    /** Fogja a számla zárját, amíg a `release` nem hívódik; addig a többi író vár. */
-    async function holdLock(documentNumber: string) {
+    /**
+     * Fogja a számla zárját, amíg a `release` nem hívódik; addig a többi író
+     * vár. A `beforeRelease` a zárat tartó tranzakcióban fut, közvetlenül a
+     * véglegesítés előtt: így írható egy sor, amit a várakozó a zár után lát.
+     */
+    async function holdLock(
+      documentNumber: string,
+      beforeRelease?: (tx: Prisma.TransactionClient) => Promise<unknown>,
+    ) {
       let release!: () => void;
       const released = new Promise<void>((resolve) => (release = resolve));
       let held!: () => void;
@@ -142,8 +150,9 @@ describe(
           });
           held();
           await released;
+          await beforeRelease?.(tx);
         },
-        { timeout: 20_000 },
+        { timeout: 30_000 },
       );
       await isHeld;
       return async () => {
@@ -152,19 +161,33 @@ describe(
       };
     }
 
-    /** Vár-e a művelet a zárra: 800 ms után még fut, a zár elengedése után végez. */
+    /**
+     * Vár-e valaki a számla zárjára: a `pg_locks` nem megadott tanácsadó zára
+     * pontosan ezen a kulcson (a 64 bites kulcs két 32 bites fele). Nem alvás,
+     * tehát nem függ a futó gép sebességétől; 10 másodperc után feladja.
+     */
+    async function someoneWaits(documentNumber: string): Promise<boolean> {
+      const name = `incoming-key:${incomingKey(documentNumber, tax, "")}`;
+      for (let i = 0; i < 200; i += 1) {
+        const [row] = await prisma.$queryRaw<{ waiting: bigint }[]>`
+          SELECT count(*) AS waiting FROM pg_locks
+          WHERE locktype = 'advisory' AND NOT granted
+            AND classid::bigint = (hashtextextended(${name}, 0) >> 32) & 4294967295
+            AND objid::bigint = hashtextextended(${name}, 0) & 4294967295`;
+        if (row && row.waiting > 0n) return true;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return false;
+    }
+
+    /** Vár-e a művelet a zárra, és a zár elengedése után végez-e. */
     async function waitsForLock(
       documentNumber: string,
       run: () => Promise<unknown>,
     ) {
       const release = await holdLock(documentNumber);
-      let done = false;
-      const running = run().then(
-        () => (done = true),
-        () => (done = true),
-      );
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const waited = !done;
+      const running = run();
+      const waited = await someoneWaits(documentNumber);
       await release();
       await running;
       return waited;
@@ -263,22 +286,53 @@ describe(
       );
     });
 
-    it("a Számlázz.hu row before the approval: the approval is refused, no PURCHASE row", async () => {
+    it("a Számlázz.hu row committed while the approval waits for the lock: 409, no PURCHASE row", async () => {
       const invoice = await purchase("E");
-      await feed(invoice.supplierInvoiceNumber, "early");
-      const refused = await reviews
+      const externalId = `pa-${suffix}-race`;
+      feedIds.push(externalId);
+      // the feed's write, inside the lock the approval is waiting for
+      const release = await holdLock(invoice.supplierInvoiceNumber, (tx) =>
+        tx.incomingBillingDocument.create({
+          data: {
+            source: "SZAMLAZZ",
+            externalId,
+            feedMessageId: externalId,
+            feedReceivedAt: new Date(),
+            kindCode: "SZ",
+            documentNumber: invoice.supplierInvoiceNumber,
+            electronic: true,
+            issueDate: new Date("2026-10-01T00:00:00Z"),
+            currency: "HUF",
+            supplierName: "Kitalált név a feedben",
+            supplierTaxNumber: tax,
+            buyerName: "Acropora Kft.",
+            netAmount: D(1000),
+            vatAmount: D(270),
+            grossAmount: D(1270),
+            lines: [],
+            vatSummary: [],
+            payments: [],
+            paymentsKnown: false,
+            paidAmount: D(0),
+          },
+        }),
+      );
+      const approving = reviews
         .approve(`purchase:${invoice.id}`, null, userId)
         .then(
           () => null,
           (error: unknown) => (error as { status?: number }).status,
         );
+      const waited = await someoneWaits(invoice.supplierInvoiceNumber);
+      await release();
+      const refused = await approving;
       const rows = await prisma.incomingBillingDocument.findMany({
         where: { documentNumber: invoice.supplierInvoiceNumber },
         select: { source: true },
       });
       assert.deepEqual(
-        [refused, rows.map((r) => r.source)],
-        [409, ["SZAMLAZZ"]],
+        [waited, refused, rows.map((r) => r.source)],
+        [true, 409, ["SZAMLAZZ"]],
         "FEED-FIRST-409",
       );
     });
