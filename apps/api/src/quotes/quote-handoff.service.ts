@@ -439,10 +439,13 @@ async function lockPairs(tx: Tx, variantIds: string[]) {
     .flatMap((variantId) =>
       warehouses.map((w) => ({ variantId, warehouseId: w.id })),
     )
+    // the stock writer's order: by variant id, compared by code unit as it
+    // does (`postInventoryMovement`), then warehouse; one total order, so a
+    // movement and a handoff never wait on each other in a circle
     .sort(
       (a, b) =>
-        a.variantId.localeCompare(b.variantId) ||
-        a.warehouseId.localeCompare(b.warehouseId),
+        byCodeUnit(a.variantId, b.variantId) ||
+        byCodeUnit(a.warehouseId, b.warehouseId),
     );
   for (const pair of pairs)
     await lockVariantWarehouse(tx, pair.variantId, pair.warehouseId);
@@ -500,6 +503,8 @@ async function planFor(
     excludedWarehouseIds: excluded,
   });
 }
+
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 function warehouseIds(value: unknown): string[] {
   if (value === undefined || value === null) return [];
