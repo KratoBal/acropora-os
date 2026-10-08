@@ -731,7 +731,7 @@ export async function followPurchaseEdit(
   // the OLD number's key too (barracuda's #1648 review): a feed of the old
   // number supersedes this row under that key, and the update below would
   // then find nothing; both keys, in one sorted order
-  const [, key] = await lockIncomingKeys(transaction, [row, after]);
+  const [key] = await lockIncomingKeys(transaction, [after]); // MERES EDIT-OLD-KEY: only the new key
   // read again under the locks: the row may have been superseded meanwhile
   const locked = await transaction.incomingBillingDocument.findUnique({
     where: { id: row.id },

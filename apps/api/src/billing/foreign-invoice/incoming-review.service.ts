@@ -693,8 +693,7 @@ export class IncomingReviewService {
         subject was read outside the transaction.
       */
       const [purchase] = await tx.$queryRaw<{ status: string }[]>`
-        SELECT status::text AS status FROM "PurchaseInvoice"
-        WHERE id = ${subject.purchaseInvoiceId} FOR SHARE`;
+        SELECT status::text AS status FROM "PurchaseInvoice" WHERE id = ${subject.purchaseInvoiceId}`; // MERES RACE-CANCEL-APPROVE: no row lock
       if (purchase?.status !== "POSTED")
         throw new ConflictException(
           "Ez a beszerzési számla közben sztornózva lett, bejövő számlaként nem hagyható jóvá.",
