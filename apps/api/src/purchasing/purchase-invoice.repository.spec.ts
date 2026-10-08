@@ -204,6 +204,9 @@ class FakeDb {
         /// Who booked the invoice. Nullable in the schema, and the fixture
         /// omitted it entirely - which the contract does not allow.
         createdById: args.data.createdById ?? null,
+        cancelledAt: null,
+        cancelledById: null,
+        cancelReason: null,
         lines,
       };
       this.invoiceDetails.push(detail);

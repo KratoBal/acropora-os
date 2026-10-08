@@ -24,6 +24,7 @@ import { purchasingApi } from "@/lib/api/purchasing";
 
 import { PurchaseInvoiceScans } from "./purchase-invoice-scans";
 import { PurchaseInvoiceEditForm } from "./purchase-invoice-edit-form";
+import { PurchaseInvoiceCancelForm } from "./purchase-invoice-cancel-form";
 
 function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
@@ -44,6 +45,7 @@ export function PurchaseInvoiceDetailPage({
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
   const [editing, setEditing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const [detail, setDetail] = useState<PurchaseInvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,9 +87,26 @@ export function PurchaseInvoiceDetailPage({
         actions={
           <div className="flex gap-2">
             {detail && canManage && detail.status !== "CANCELLED" ? (
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                Adatok javítása
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setCancelling(false);
+                    setEditing(true);
+                  }}
+                >
+                  Adatok javítása
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setEditing(false);
+                    setCancelling(true);
+                  }}
+                >
+                  Sztornó
+                </Button>
+              </>
             ) : null}
             <Button variant="secondary" onClick={backToList.goBack}>
               {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
@@ -104,6 +123,26 @@ export function PurchaseInvoiceDetailPage({
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+
+      {detail && cancelling ? (
+        <PurchaseInvoiceCancelForm
+          token={token}
+          detail={detail}
+          onCancelled={(next) => {
+            setDetail(next);
+            setCancelling(false);
+          }}
+          onClose={() => setCancelling(false)}
+        />
+      ) : null}
+
+      {detail?.status === "CANCELLED" ? (
+        <Alert
+          variant="info"
+          title="Sztornózott számla"
+          description={`${detail.cancelledAt ? new Date(detail.cancelledAt).toLocaleString("hu-HU") + ": " : ""}${detail.cancelReason ?? "a rögzítés vissza lett vonva"}. A készlete kiment, a száma újra rögzíthető.`}
+        />
       ) : null}
 
       {detail && editing ? (

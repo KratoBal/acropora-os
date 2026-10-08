@@ -11,6 +11,7 @@ import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-i
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
+import { PurchaseInvoiceCancelService } from "./purchase-invoice-cancel.service.js";
 import { PurchaseInvoiceRepository } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchRepository } from "./purchase-product-search.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
@@ -35,6 +36,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     PurchaseInvoicePdfLookup,
     PurchaseInvoiceScanService,
     PurchaseInvoiceEditService,
+    PurchaseInvoiceCancelService,
     PurchaseProductSearchRepository,
     PurchaseProductSearchService,
     ProjectRepository,

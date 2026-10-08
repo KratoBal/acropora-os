@@ -2746,6 +2746,11 @@ model PurchaseInvoice {
   vatRate               Decimal?              @db.Decimal(5, 2)
   note                  String?
   createdById           String?
+  /// A sztornó (acrobot 28092, Balázs „A 1”): mikor, ki és miért vonta vissza
+  /// a rögzítést. A számla sora megmarad, a készlet ellentétes mozgással megy ki.
+  cancelledAt           DateTime?
+  cancelledById         String?
+  cancelReason          String?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -2761,7 +2766,12 @@ model PurchaseInvoice {
   /// a kézzel csatolt számlakép(ek) (5ec62e35)
   scanDocuments      IncomingSupplierDocument[]
 
-  @@unique([supplierId, supplierInvoiceNumber])
+  /// A (szállító, szállítói számlaszám) pár egyedi, de CSAK a nem sztornózott
+  /// számlák között: a sztornózott számla száma újra rögzíthető. Részleges
+  /// egyedi index a migrációban (`PurchaseInvoice_supplierId_supplierInvoiceNumber_key`),
+  /// a Prisma sémában nem leírható. Mivel a @@unique nem áll itt, egy
+  /// `prisma migrate dev` DROP INDEX-et javasolhat erre: azt NEM szabad
+  /// elfogadni. Az integrációs teszt (`INDEX-STILL-UNIQUE`) megfogja.
   @@index([status, invoiceDate])
   @@index([warehouseId])
 }
