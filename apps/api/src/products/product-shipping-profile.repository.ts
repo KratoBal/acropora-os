@@ -4,9 +4,11 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 import type { UpsertProductShippingProfileDto } from "./dto/upsert-product-shipping-profile.dto.js";
-import type {
-  ShippingFlag,
-  ShippingFlagSource,
+import { unasShippingProfile } from "../integrations/medusa/medusa-unas-shipping.policy.js";
+import {
+  shippingUnasDiffers,
+  type ShippingFlag,
+  type ShippingFlagSource,
 } from "./shipping-profile-sources.js";
 
 type ProfileRecord = NonNullable<
@@ -17,6 +19,10 @@ interface ProfileTransaction {
   productShippingProfile: {
     findUnique(args: unknown): Promise<ProfileRecord | null>;
     upsert(args: unknown): Promise<ProfileRecord>;
+    update(args: unknown): Promise<ProfileRecord>;
+  };
+  unasProductSnapshot: {
+    findUnique(args: unknown): Promise<{ rawPayload: unknown } | null>;
   };
   auditLog: { create(args: unknown): Promise<unknown> };
   domainEvent: { create(args: unknown): Promise<unknown> };
@@ -146,11 +152,25 @@ export class ProductShippingProfileRepository extends Repository {
           where: { productId },
         });
         const data = manualShippingWrite(existing, input);
-        const profile = await transaction.productShippingProfile.upsert({
+        let profile = await transaction.productShippingProfile.upsert({
           where: { productId },
           update: data,
           create: { productId, ...data },
         });
+        // az eltérés-jelző (a lista szűrője): a kézi érték a UNAS mai beállításához
+        const snapshot = await transaction.unasProductSnapshot.findUnique({
+          where: { productId },
+          select: { rawPayload: true },
+        });
+        const differs = shippingUnasDiffers(
+          profile,
+          snapshot ? unasShippingProfile(snapshot.rawPayload) : null,
+        );
+        if (differs !== profile.unasDiffers)
+          profile = await transaction.productShippingProfile.update({
+            where: { productId },
+            data: { unasDiffers: differs },
+          });
         const action = existing
           ? "product_shipping_profile.updated"
           : "product_shipping_profile.created";

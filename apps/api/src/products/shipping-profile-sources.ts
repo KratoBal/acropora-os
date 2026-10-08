@@ -19,7 +19,23 @@ export type ShippingFlag = (typeof SHIPPING_FLAGS)[number];
 export type ShippingFlagSource = "UNAS" | "MANUAL";
 
 export type StoredShippingProfile = Record<ShippingFlag, boolean> &
-  Record<`${ShippingFlag}Source`, ShippingFlagSource>;
+  Record<`${ShippingFlag}Source`, ShippingFlagSource> & {
+    /** Van-e kézi jelző, ami eltér a UNAS-étól (a lista eltérés-szűrője). */
+    unasDiffers?: boolean;
+  };
+
+/** Van-e kézi jelző, ami eltér a UNAS mai beállításától. */
+export function shippingUnasDiffers(
+  row: Record<ShippingFlag, boolean> &
+    Record<`${ShippingFlag}Source`, ShippingFlagSource>,
+  unas: OsShippingProfile | null,
+): boolean {
+  return SHIPPING_FLAGS.some(
+    (flag) =>
+      row[`${flag}Source`] === "MANUAL" &&
+      row[flag] !== (unas?.[flag] ?? false),
+  );
+}
 
 export type UnasShippingPlan =
   | { kind: "create"; data: StoredShippingProfile }
@@ -55,18 +71,63 @@ export function planUnasShippingFlags(
         foxpostForbiddenSource: "UNAS",
         isHeavySource: "UNAS",
         isFrozenSource: "UNAS",
+        unasDiffers: false,
       },
     };
   const flags = SHIPPING_FLAGS.filter(
     (flag) =>
       existing[`${flag}Source`] === "UNAS" && existing[flag] !== ertek(flag),
   );
-  if (flags.length === 0) return { kind: "unchanged" };
-  return {
-    kind: "update",
-    data: Object.fromEntries(flags.map((flag) => [flag, ertek(flag)])),
-    flags,
+  const data: Partial<StoredShippingProfile> = Object.fromEntries(
+    flags.map((flag) => [flag, ertek(flag)]),
+  );
+  // az eltérés-jelző a frissítés UTÁNI állapotból: egy kézi jelző eltérése a
+  // UNAS változásával is megjelenhet vagy eltűnhet
+  const differs = shippingUnasDiffers({ ...existing, ...data }, unas);
+  if (differs !== (existing.unasDiffers ?? false)) data.unasDiffers = differs;
+  if (Object.keys(data).length === 0) return { kind: "unchanged" };
+  return { kind: "update", data, flags };
+}
+
+/** Amit a tömeges szerkesztés kér (a82ed229, a lista kijelölése). */
+export interface ShippingBulkChange {
+  /** Beállítandó jelzők: kézi forrással. */
+  set: Partial<Record<ShippingFlag | "lockerUnsuitable", boolean>>;
+  /** „UNAS szerint”: a jelző a UNAS mai értékét kapja, `UNAS` forrással. */
+  resetToUnas: ShippingFlag[];
+}
+
+/**
+ * EGY TERMÉK SORA A TÖMEGES SZERKESZTÉS UTÁN. A megnevezett jelző kézi lesz,
+ * akkor is, ha az értéke nem változik: itt valaki kifejezetten azt mondta, és egy
+ * későbbi UNAS-változás ne írja át. Új sornál a meg nem nevezett jelzők a UNAS-éi.
+ */
+export function bulkShippingRow(
+  existing: (StoredShippingProfile & { lockerUnsuitable?: boolean }) | null,
+  unas: OsShippingProfile | null,
+  change: ShippingBulkChange,
+): StoredShippingProfile & { lockerUnsuitable: boolean; unasDiffers: boolean } {
+  const alap =
+    existing ??
+    (planUnasShippingFlags(null, unas) as { data: StoredShippingProfile }).data;
+  const sor: StoredShippingProfile & { lockerUnsuitable: boolean } = {
+    ...alap,
+    lockerUnsuitable: existing?.lockerUnsuitable ?? false,
   };
+  for (const flag of SHIPPING_FLAGS) {
+    const ertek = change.set[flag];
+    if (ertek !== undefined) {
+      sor[flag] = ertek;
+      sor[`${flag}Source`] = "MANUAL";
+    }
+  }
+  if (change.set.lockerUnsuitable !== undefined)
+    sor.lockerUnsuitable = change.set.lockerUnsuitable;
+  for (const flag of change.resetToUnas) {
+    sor[flag] = unas?.[flag] ?? false;
+    sor[`${flag}Source`] = "UNAS";
+  }
+  return { ...sor, unasDiffers: shippingUnasDiffers(sor, unas) };
 }
 
 const PROFIL_MEZOK = {
@@ -78,6 +139,7 @@ const PROFIL_MEZOK = {
   foxpostForbiddenSource: true,
   isHeavySource: true,
   isFrozenSource: true,
+  unasDiffers: true,
 } as const;
 
 /**
@@ -119,5 +181,15 @@ export async function applyUnasShippingFlags(
         where: { productId, [`${flag}Source`]: "UNAS" },
         data: { [flag]: plan.data[flag] },
       });
+  // az eltérés-jelző a VÉGSŐ sorból: egy közben beíró kézi írás után is helyes
+  const vegso = await olvas();
+  if (vegso) {
+    const differs = shippingUnasDiffers(vegso, unas);
+    if (differs !== vegso.unasDiffers)
+      await tx.productShippingProfile.updateMany({
+        where: { productId },
+        data: { unasDiffers: differs },
+      });
+  }
   return plan;
 }

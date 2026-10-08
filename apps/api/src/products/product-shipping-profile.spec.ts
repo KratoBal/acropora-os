@@ -30,6 +30,7 @@ const profil = (overrides: Record<string, unknown> = {}) => ({
   updatedAt: new Date("2026-09-07T10:00:00.000Z"),
   ...TELJES,
   lockerUnsuitable: false,
+  unasDiffers: false,
   pickupOnlySource: "MANUAL",
   foxpostForbiddenSource: "MANUAL",
   isHeavySource: "MANUAL",
@@ -37,7 +38,10 @@ const profil = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function fixture(existing: ReturnType<typeof profil> | null) {
+function fixture(
+  existing: ReturnType<typeof profil> | null,
+  snapshot: { rawPayload: unknown } | null = null,
+) {
   const hivasok: Array<{ muvelet: string; args: unknown }> = [];
   const transaction = {
     productShippingProfile: {
@@ -46,7 +50,12 @@ function fixture(existing: ReturnType<typeof profil> | null) {
         hivasok.push({ muvelet: "upsert", args });
         return profil();
       },
+      update: async (args: unknown) => {
+        hivasok.push({ muvelet: "update", args });
+        return profil();
+      },
     },
+    unasProductSnapshot: { findUnique: async () => snapshot },
     auditLog: {
       create: async (args: unknown) => {
         hivasok.push({ muvelet: "audit", args });
@@ -239,5 +248,17 @@ describe("a kézi írás csak a megváltozott jelzőt teszi kézivé", () => {
       isFrozen: "UNAS",
     });
     assert.equal(detail?.lockerUnsuitable, false);
+  });
+});
+
+describe("a kézi írás az eltérés-jelzőt is karbantartja", () => {
+  it("egy kézi érték, ami eltér a UNAS-étól, felteszi a jelzőt", async () => {
+    // a profil() kézi: pickupOnly és isHeavy igaz; a UNAS-nak nincs felülírása
+    const { repository, hivasok } = fixture(null, { rawPayload: {} });
+    await repository.upsert("product-1", TELJES, "user-1");
+    const frissites = hivasok.find((h) => h.muvelet === "update")?.args as {
+      data: { unasDiffers: boolean };
+    };
+    assert.deepEqual(frissites?.data, { unasDiffers: true });
   });
 });

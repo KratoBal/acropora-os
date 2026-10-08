@@ -16,6 +16,11 @@ import {
   type TakeoverPriceVariant,
 } from "./takeover-price.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
+import {
+  shippingSummary,
+  shippingWhere,
+  type ShippingRow,
+} from "./shipping-list-filter.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import {
@@ -88,6 +93,8 @@ const productListInclude = {
       isPackageProduct: true,
     },
   },
+  // a szállítási oszlop (a82ed229)
+  shippingProfile: true,
 } as const;
 
 interface ProductTransaction {
@@ -251,6 +258,7 @@ export class ProductRepository extends Repository {
       ...(query.listedOn
         ? { channelListings: { some: { channel: query.listedOn } } }
         : {}),
+      ...shippingWhere(query.shipping, query.shippingUnasDiffers),
       ...(query.search
         ? {
             OR: [
@@ -279,7 +287,13 @@ export class ProductRepository extends Repository {
     ]);
 
     return {
-      items: items.map(toProductListItem),
+      items: items.map((item) => ({
+        ...toProductListItem(item),
+        // a lista include-ja hozza (`productListInclude`), a közös típus nem ismeri
+        shipping: shippingSummary(
+          (item as { shippingProfile?: ShippingRow | null }).shippingProfile,
+        ),
+      })),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,

@@ -27,6 +27,8 @@ export interface ShippingFillReport {
   create: number;
   update: number;
   unchanged: number;
+  /** Csak az eltérés-jelző frissül (a jelzők nem). */
+  differsOnly: number;
   /** Jelzőnként: hány terméken írna át a UNAS. */
   updatedFlags: Record<ShippingFlag, number>;
   /** Kézi jelző, ami eltér a UNAS-étól: a kézi marad, de látszik. */
@@ -57,6 +59,7 @@ export async function main(
     create: 0,
     update: 0,
     unchanged: 0,
+    differsOnly: 0,
     updatedFlags: {
       pickupOnly: 0,
       foxpostForbidden: 0,
@@ -87,10 +90,11 @@ export async function main(
       const unas = unasShippingProfile(sor.rawPayload);
       const plan = planUnasShippingFlags(regi, unas);
       if (plan.kind === "create") report.create++;
-      else if (plan.kind === "update") {
+      else if (plan.kind === "update" && plan.flags.length > 0) {
         report.update++;
         for (const flag of plan.flags) report.updatedFlags[flag]++;
-      } else report.unchanged++;
+      } else if (plan.kind === "update") report.differsOnly++;
+      else report.unchanged++;
       if (plan.kind !== "unchanged") valtozik.push(sor);
       if (regi)
         for (const flag of SHIPPING_FLAGS)
@@ -122,6 +126,7 @@ export function describeShippingFill(r: ShippingFillReport): string {
     `Frissül (UNAS-forrású jelző változott): ${r.update}`,
     ...SHIPPING_FLAGS.map((f) => `  ${f}: ${r.updatedFlags[f]}`),
     `Változatlan: ${r.unchanged}`,
+    `Csak az eltérés-jelző frissül: ${r.differsOnly}`,
     `Kézi jelző, ami eltér a UNAS-étól (marad a kézi): ${r.manualDiffers.length}`,
     ...r.manualDiffers.slice(0, 20).map((d) => `  ${d.productId} ${d.flag}`),
   ];

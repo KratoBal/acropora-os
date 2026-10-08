@@ -830,6 +830,8 @@ export type {
   ProductImageSummary,
   ProductListApiQuery,
   ProductListItem,
+  ProductShippingFilter,
+  ProductShippingSummary,
   ProductOrigin,
   ProductCatalogAuthority,
   ProductAdvisorKind,
@@ -840,6 +842,7 @@ export type {
   ProductType,
   ProductVariantSummary,
 } from "./product-catalog.js";
+export { PRODUCT_SHIPPING_FILTERS } from "./product-catalog.js";
 export type {
   CreateTaskInput,
   TaskAssigneeOptionsResponse,

@@ -9,6 +9,11 @@ import {
   Min,
 } from "class-validator";
 
+import {
+  PRODUCT_SHIPPING_FILTERS,
+  type ProductShippingFilter,
+} from "@acropora/types";
+
 import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
 
 /** The sales channels a product can be listed on. One, for now. */
@@ -56,4 +61,15 @@ export class ProductListQueryDto {
   @IsOptional()
   @IsIn(CATALOG_CHANNELS)
   listedOn?: (typeof CATALOG_CHANNELS)[number];
+
+  /** Szállítási jelleg (a82ed229). */
+  @IsOptional()
+  @IsIn(PRODUCT_SHIPPING_FILTERS)
+  shipping?: ProductShippingFilter;
+
+  /** Csak ahol egy kézi jelző eltér a UNAS mai beállításától. */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
+  @IsBoolean()
+  shippingUnasDiffers?: boolean;
 }

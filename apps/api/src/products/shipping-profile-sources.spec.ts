@@ -44,7 +44,7 @@ describe("a UNAS-beállítás a szállítási jelzőkre", () => {
   it("sor nélkül: létrejön, minden jelző a UNAS-é, felülírás nélkül mind hamis", () => {
     assert.deepEqual(planUnasShippingFlags(null, null), {
       kind: "create",
-      data: sor(),
+      data: { ...sor(), unasDiffers: false },
     });
     const plan = planUnasShippingFlags(null, unasFoxpost);
     assert.equal(plan.kind === "create" && plan.data.foxpostForbidden, true);
@@ -58,9 +58,33 @@ describe("a UNAS-beállítás a szállítási jelzőkre", () => {
       ),
       {
         kind: "update",
-        data: { foxpostForbidden: true },
+        // a kézi „nehéz” eltér a UNAS-étól: az eltérés-jelző is felkerül
+        data: { foxpostForbidden: true, unasDiffers: true },
         flags: ["foxpostForbidden"],
       },
+    );
+  });
+
+  it("az eltérés-jelző csak a kézi jelzőre, és eltűnik, ha a UNAS utoléri", () => {
+    // kézi, és egyezik a UNAS-szal: nem eltérés
+    assert.deepEqual(
+      planUnasShippingFlags(
+        sor({ foxpostForbidden: true, foxpostForbiddenSource: "MANUAL" }),
+        unasFoxpost,
+      ),
+      { kind: "unchanged" },
+    );
+    // eddig eltért, most a UNAS is tiltja: a jelző lekerül
+    assert.deepEqual(
+      planUnasShippingFlags(
+        sor({
+          foxpostForbidden: true,
+          foxpostForbiddenSource: "MANUAL",
+          unasDiffers: true,
+        }),
+        unasFoxpost,
+      ),
+      { kind: "update", data: { unasDiffers: false }, flags: [] },
     );
   });
 
@@ -227,6 +251,16 @@ describe("a szinkron és a közbeíró kézi írás", () => {
       [t.allapot.row!.isHeavy, t.allapot.row!.isHeavySource],
       [true, "MANUAL"],
     );
+  });
+
+  it("a szinkron az eltérés-jelzőt a végső sorból állítja", async () => {
+    // kézi: nem tiltott; a UNAS most tiltja -> eltér
+    const t = tx(
+      sor({ foxpostForbidden: false, foxpostForbiddenSource: "MANUAL" }),
+      () => {},
+    );
+    await applyUnasShippingFlags(t.tx, "p1", TILTOTT_FOXPOST);
+    assert.equal(t.allapot.row!.unasDiffers, true);
   });
 
   it("egyidejű első létrehozás: nem dob, és a közben létrejött kézi sort nem írja felül", async () => {

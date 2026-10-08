@@ -6828,6 +6828,10 @@ model ProductShippingProfile {
   foxpostForbiddenSource ShippingFlagSource @default(MANUAL)
   isHeavySource          ShippingFlagSource @default(MANUAL)
   isFrozenSource         ShippingFlagSource @default(MANUAL)
+  /// Van-e kezi jelzo, ami elter a UNAS mai beallitasatol (a82ed229, a lista
+  /// "OS-UNAS elteres" szuroje). A UNAS-szinkron es a kezi iras tartja karban;
+  /// tarolt, mert a UNAS-ertek csak a nyers adatbol szamolhato, SQL-ben nem.
+  unasDiffers            Boolean            @default(false)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }

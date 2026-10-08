@@ -161,7 +161,37 @@ export interface ProductListItem {
    *  distinct from a confirmed 0 in stock - see the stock-reconciliation
    *  logic for the same distinction. */
   stockOnHand: string | null;
+  /**
+   * A szállítási jelzők (a82ed229), a lista oszlopa és szűrője. A lista mindig
+   * kitölti; `null`, ha a terméknek még nincs sora (a UNAS-szinkron vagy a
+   * feltöltő hozza létre). Opcionális, hogy a részletes nézet építője ne kelljen.
+   */
+  shipping?: ProductShippingSummary | null;
 }
+
+export interface ProductShippingSummary {
+  pickupOnly: boolean;
+  foxpostForbidden: boolean;
+  isHeavy: boolean;
+  isFrozen: boolean;
+  lockerUnsuitable: boolean;
+  /** Van-e kézzel állított jelzője. */
+  hasManual: boolean;
+  /** Van-e kézi jelzője, ami eltér a UNAS mai beállításától. */
+  unasDiffers: boolean;
+}
+
+/** A lista szállítási szűrője (a82ed229). */
+export const PRODUCT_SHIPPING_FILTERS = [
+  "PICKUP_ONLY",
+  "HEAVY",
+  "FOXPOST_FORBIDDEN",
+  "LOCKER_UNSUITABLE",
+  "FROZEN",
+  "UNRESTRICTED",
+  "NOT_FILLED",
+] as const;
+export type ProductShippingFilter = (typeof PRODUCT_SHIPPING_FILTERS)[number];
 
 /** The decision a product advisor helps a shopper make; null means no advisor. */
 export type ProductAdvisorKind = "PLACEMENT" | "CAPACITY";
@@ -249,4 +279,8 @@ export interface ProductListApiQuery {
    * which is why the screen shows the channel's own status instead.
    */
   listedOn?: "UNAS";
+  /** Szállítási jelleg (a82ed229). */
+  shipping?: ProductShippingFilter;
+  /** Csak a kézi jelzős termékek, ahol a kézi érték eltér a UNAS-étól. */
+  shippingUnasDiffers?: boolean;
 }

@@ -687,6 +687,33 @@ describe("ProductRepository", () => {
     );
   });
 
+  // a82ed229: the shipping filter reaches the query, and every item carries the column
+  it("passes the shipping filter to the query and fills the shipping column", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+
+    const result = await repository.list({
+      page: 1,
+      pageSize: 20,
+      shipping: "HEAVY",
+      shippingUnasDiffers: true,
+    });
+
+    const findArgs = calls.find((call) => call.operation === "findMany")
+      ?.args as {
+      where: Record<string, unknown>;
+      include: Record<string, unknown>;
+    };
+    assert.deepEqual(findArgs.where.shippingProfile, {
+      is: { unasDiffers: true, isHeavy: true },
+    });
+    assert.equal(findArgs.include.shippingProfile, true);
+    assert.ok(
+      result.items.every((item) => "shipping" in item),
+      "every item has the shipping column, null without a row",
+    );
+  });
+
   it("leaves the list alone when no channel is asked for", async () => {
     const { database, calls } = createDatabase();
     const repository = new ProductRepository(database);
