@@ -174,6 +174,12 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     });
   }
 
+  // AN EU BUYER (a community tax number, no Hungarian one; acrobot 28300):
+  // `adoalany` 6, "business in the EU" by the docs, the country by its
+  // Hungarian name, and `adoszamEU`, so the NAV report does not see a
+  // domestic buyer or a private person. Everyone else goes as before, with
+  // no community number either, even if one is stored (barracuda, 28303).
+  const euBuyer = Boolean(customer.euTaxNumber) && !customer.taxNumber;
   const buyer: BuyerSnapshot = {
     name: customer.companyName?.trim() || customer.displayName,
     country: address.country,
@@ -182,14 +188,9 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     address: [address.line1, address.line2].filter(Boolean).join(", "),
     taxNumber: customer.taxNumber,
     // the community tax number goes in <adoszamEU>, never in <adoszam>
-    euTaxNumber: customer.euTaxNumber,
+    euTaxNumber: euBuyer ? customer.euTaxNumber : null,
     email: customer.email,
   };
-  // AN EU BUYER (a community tax number, no Hungarian one; acrobot 28300):
-  // `adoalany` 6, "business in the EU" by the docs, and the country by its
-  // Hungarian name, so the NAV report does not see a domestic buyer or a
-  // private person. Everyone else goes as before: no adoalany, no orszag.
-  const euBuyer = Boolean(customer.euTaxNumber) && !customer.taxNumber;
   const countryCode = EU_COUNTRY_NAMES_HU[address.country]
     ? address.country
     : viesCountry(customer.euTaxNumber ?? "");

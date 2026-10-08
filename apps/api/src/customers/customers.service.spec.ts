@@ -57,4 +57,17 @@ describe("CustomersService: the community tax number", () => {
       "CUSTOMER-EU-TAX",
     );
   });
+
+  it("refuses a Hungarian community number: a Hungarian company has a tax number", async () => {
+    const { customers, seen } = service();
+    const refused = await customers.create(company("hu 12345678"), "u1").then(
+      () => null,
+      (error: Error & { message: string }) => error.message,
+    );
+    assert.deepEqual(
+      [refused, seen.length],
+      ["Magyar cégnél az adószám mezőt töltsd ki.", 0],
+      "CUSTOMER-EU-TAX-HU",
+    );
+  });
 });

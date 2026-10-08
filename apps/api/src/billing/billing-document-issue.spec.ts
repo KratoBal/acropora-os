@@ -192,6 +192,26 @@ describe("buildIssueInput", () => {
     );
   });
 
+  it("a buyer with both numbers is not an EU buyer: no adoszamEU, no adoalany, no orszag", () => {
+    const base = row();
+    const both = buildIssueInput({
+      ...base,
+      customer: { ...base.customer!, euTaxNumber: "SK2020123456" },
+    } as BillingDocumentRow);
+    assert.ok(both.ok);
+    assert.deepEqual(
+      [
+        both.buyer.taxNumber,
+        both.buyer.euTaxNumber,
+        both.document.buyer.euTaxNumber,
+        both.document.buyer.vatSubject,
+        both.document.buyer.country,
+      ],
+      ["12345678-2-42", null, null, null, null],
+      "ISSUE-BOTH-NUMBERS",
+    );
+  });
+
   it("keeps every line comment and the document's own fields", () => {
     const input = buildIssueInput(row());
     assert.ok(input.ok);

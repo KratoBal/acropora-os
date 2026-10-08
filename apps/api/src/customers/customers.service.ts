@@ -89,5 +89,9 @@ function euTax(value: string | null | undefined): string | null | undefined {
     throw new BadRequestException(
       "A közösségi adószám országkóddal kezdődik, utána a szám (pl. SK2020123456).",
     );
+  // a Hungarian company's number belongs in `taxNumber` (barracuda, 28303):
+  // an HU community number here would make it look like an EU buyer
+  if (normalized.startsWith("HU"))
+    throw new BadRequestException("Magyar cégnél az adószám mezőt töltsd ki.");
   return normalized;
 }
