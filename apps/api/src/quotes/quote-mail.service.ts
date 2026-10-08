@@ -54,6 +54,12 @@ const GATE_SENTENCE = {
   "no-sender": "A levélküldő (Gmail) nincs beállítva ebben a környezetben.",
 } as const;
 
+/** The test address every mail goes to instead, or null (acrobot, #1610). */
+function redirectedTo(environment: NodeJS.ProcessEnv): string | null {
+  const redirect = mailRedirect(environment.TICKET_MAIL_REDIRECT_TO);
+  return redirect.kind === "on" ? redirect.to : null;
+}
+
 /** A quote that is still in play may be sent; a closed one may not. */
 const SENDABLE = new Set(["DRAFT", "SENT", "POSTPONED", "ACCEPTED"]);
 
@@ -154,9 +160,19 @@ export class QuoteMailService {
     });
   }
 
+  /**
+   * Did this version (maybe) reach the customer? An INDETERMINATE send counts
+   * too (acrobot, #1610 review): after one, only a deliberate resend may go,
+   * or the customer could get two mails.
+   */
   private sentBefore(versionId: string) {
     return this.database.quoteMailDelivery
-      .count({ where: { quoteVersionId: versionId, outcome: "SENT" } })
+      .count({
+        where: {
+          quoteVersionId: versionId,
+          outcome: { in: ["SENT", "INDETERMINATE"] },
+        },
+      })
       .then((n) => n > 0);
   }
 
@@ -380,6 +396,8 @@ export class QuoteMailService {
             error,
             requestId,
             isResend: resend,
+            // on stage the mail goes to the test address: the log says so
+            redirectedTo: redirectedTo(this.environment),
           },
         });
         await tx.quoteVersion.update({
