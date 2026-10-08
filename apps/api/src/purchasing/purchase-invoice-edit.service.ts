@@ -102,6 +102,25 @@ export class PurchaseInvoiceEditService {
         // transaction, and a cancellation in between would otherwise let this
         // write land on a CANCELLED invoice. Always run, even for line names
         // only, so that case is refused the same way.
+        // THE STATE BEFORE, UNDER THE ROW LOCK (barracuda, acrobot 28184):
+        // two renames at once (X to Y, X to Z) both read X outside; the
+        // second must rekey from Y, not from the X it read, and its audit
+        // must say Y. So the old values come from here, not from above.
+        await tx.$queryRaw`SELECT "id" FROM "PurchaseInvoice" WHERE "id" = ${id} FOR UPDATE`;
+        const before = await tx.purchaseInvoice.findUnique({
+          where: { id },
+          select: {
+            status: true,
+            supplierId: true,
+            supplierInvoiceNumber: true,
+            invoiceDate: true,
+            dueDate: true,
+            isPaid: true,
+            paidAt: true,
+          },
+        });
+        if (!before || before.status !== "POSTED")
+          throw new ConflictException("Visszavont számla nem módosítható.");
         const claimed = await tx.purchaseInvoice.updateMany({
           where: { id, status: "POSTED" },
           data: { ...data, updatedAt: new Date() },
@@ -110,16 +129,24 @@ export class PurchaseInvoiceEditService {
           throw new ConflictException("Visszavont számla nem módosítható.");
         if (
           data.supplierInvoiceNumber !== undefined &&
-          data.supplierInvoiceNumber !== invoice.supplierInvoiceNumber
+          data.supplierInvoiceNumber !== before.supplierInvoiceNumber
         ) {
+          // the key the receipt is posted under now, read here
+          const receipt = await tx.stockMovement.findFirst({
+            where: {
+              referenceType: "PurchaseInvoice",
+              referenceId: id,
+              type: "PURCHASE_RECEIPT",
+              status: "POSTED",
+            },
+            select: { idempotencyKey: true },
+          });
           await rekeyReceipt(
             tx,
             id,
-            receiptKey(invoice.supplierId, invoice.supplierInvoiceNumber),
-            receiptKey(
-              invoice.supplierId,
-              data.supplierInvoiceNumber as string,
-            ),
+            receipt?.idempotencyKey ??
+              receiptKey(before.supplierId, before.supplierInvoiceNumber),
+            receiptKey(before.supplierId, data.supplierInvoiceNumber as string),
           );
           await renumberScans(tx, id, data.supplierInvoiceNumber as string);
         }
@@ -139,7 +166,7 @@ export class PurchaseInvoiceEditService {
             // names by field name only
             metadata: {
               fields,
-              changes: changesOf(invoice, data),
+              changes: changesOf(before, data),
             } as Prisma.InputJsonValue,
           },
         });
