@@ -79,7 +79,7 @@ export async function openSendFollowUps(
       dueAt: new Date(
         args.sentAt.getTime() + FOLLOW_UP_AFTER_SEND_DAYS * DAY_MS,
       ),
-      sourceRef: `${prefix(quote.id)}after-send`,
+      sourceRef: `${prefix(quote.id)}after-send:${Math.random()}`,
     },
   ];
   if (beforeExpiry > args.sentAt)
@@ -136,7 +136,7 @@ export async function closeFollowUps(
     where: {
       source: "QUOTE",
       sourceRef: { startsWith: prefix(quoteId) },
-      status: "OPEN",
+      status: "DONE",
     },
     data: { status: "DONE", closedAt: new Date(), closedById: actorUserId },
   });

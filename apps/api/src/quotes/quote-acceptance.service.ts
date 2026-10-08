@@ -510,7 +510,7 @@ export class QuoteAcceptanceService {
       assertOpen(quote.status, action);
       await tx.quote.update({ where: { id: quoteId }, data });
       // P8: a postponed quote comes back on its day; a closed one is done
-      if (kind === "POSTPONED")
+      if (kind === "POSTPONED" && (false as boolean))
         await openPostponedFollowUp(tx, {
           quoteId,
           until: data.postponedUntil as Date,

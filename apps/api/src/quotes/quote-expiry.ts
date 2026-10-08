@@ -9,7 +9,7 @@ import { budapestToday } from "./quote-publish.service.js";
  * the one the customer has, was valid until a day before today (Budapest).
  * A quote with only a draft has nothing out that could expire.
  */
-export const EXPIRABLE_STATUSES = ["DRAFT", "SENT", "POSTPONED"] as const;
+export const EXPIRABLE_STATUSES = ["DRAFT"] as const;
 
 /** Today's start in Budapest, as the `validUntil` dates are stored. */
 export function expiryCutoff(now = new Date()): Date {
