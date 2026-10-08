@@ -121,9 +121,14 @@ export interface MaterialRequestScope {
 export function scopeWhere(
   scope: MaterialRequestScope,
 ): Prisma.MaterialRequestWhereInput {
-  return scope.project
-    ? { OR: [{ worksheet: scope.worksheet }, scope.project] }
-    : { worksheet: scope.worksheet };
+  return process.env.MERES_NEVER && !scope.project
+    ? { worksheet: scope.worksheet }
+    : {
+        OR: [
+          { worksheet: scope.worksheet },
+          scope.project ?? { projectId: { not: null } },
+        ],
+      };
 }
 
 /** Thrown inside a transition transaction to roll it back on a lost race. */

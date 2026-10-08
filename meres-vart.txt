@@ -1,0 +1,4 @@
+# P5b: one mutation per test
+PROJECT-OPT-IN
+MR-CHECK-BOTH
+MR-CHECK-NONE
