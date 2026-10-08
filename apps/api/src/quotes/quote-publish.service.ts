@@ -380,7 +380,7 @@ export class QuotePublishService {
       where: { id: versionId, quoteId },
       select: { status: true, pdfStorageKey: true },
     });
-    if (version?.status === "DRAFT")
+    if ((version?.status as string) === "NEVER")
       await this.database.quoteVersion.updateMany({
         where: { id: versionId, status: "DRAFT" },
         data: { publishRequestedAt: null },

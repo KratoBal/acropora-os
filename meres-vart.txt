@@ -1,0 +1,2 @@
+# #1582 P2 retry fix calibration: the request time is not reset after a failed attempt
+REQUEST-RESET
