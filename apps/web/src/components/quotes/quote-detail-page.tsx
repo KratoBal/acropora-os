@@ -38,6 +38,7 @@ import {
   QuoteOutcomeDrawer,
   type QuoteOutcomeAction,
 } from "./quote-outcome";
+import { QuoteDeliveryLog, QuoteSendDrawer } from "./quote-send";
 
 /** A legújabb verzió (a verziók számuk szerint növekvő sorrendben jönnek). */
 export function latestVersion(
@@ -66,7 +67,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     session &&
     hasPermission(session.user, PERMISSIONS.QUOTES_ACCEPTANCE_RECORD),
   );
+  const canSend = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.QUOTES_SEND),
+  );
   const [outcome, setOutcome] = useState<QuoteOutcomeAction | null>(null);
+  const [sending, setSending] = useState(false);
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -107,6 +112,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const hasDraft = quote.versions.some((v) => v.status === "DRAFT");
   const editable = ["DRAFT", "SENT", "POSTPONED"].includes(quote.status);
   const hasPublished = quote.versions.some((v) => v.status === "PUBLISHED");
+  // P3: the version the customer gets is the one PUBLISHED now
+  const sendable = quote.versions.find((v) => v.status === "PUBLISHED") ?? null;
+  const canMail =
+    canSend &&
+    sendable !== null &&
+    ["DRAFT", "SENT", "POSTPONED", "ACCEPTED"].includes(quote.status);
 
   const newVersion = async () => {
     setBusy(true);
@@ -197,9 +208,22 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          editable && (canManage || canRecord) ? (
+          (editable && (canManage || canRecord)) || canMail ? (
             <div className="flex flex-wrap gap-2">
-              {canManage ? (
+              {canMail ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  onClick={() => setSending(true)}
+                >
+                  {quote.deliveries.some(
+                    (d) => d.versionId === sendable?.id && d.outcome === "SENT",
+                  )
+                    ? "Újraküldés"
+                    : "Kiküldés"}
+                </PilotButton>
+              ) : null}
+              {editable && canManage ? (
                 <>
                   <PilotButton
                     variant="ghost"
@@ -221,7 +245,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   </PilotButton>
                 </>
               ) : null}
-              {canRecord && hasPublished ? (
+              {editable && canRecord && hasPublished ? (
                 <PilotButton
                   size="regular"
                   variant="secondary"
@@ -230,7 +254,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   Elfogadás rögzítése
                 </PilotButton>
               ) : null}
-              {canManage ? (
+              {editable && canManage ? (
                 hasDraft ? (
                   <PilotButton
                     size="regular"
@@ -285,6 +309,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </div>
       </PilotCard>
 
+      <QuoteDeliveryLog quote={quote} />
+
       <QuoteOutcomeCard
         quote={quote}
         canRecord={canRecord}
@@ -305,6 +331,18 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           />
         </div>
       </PilotCard>
+
+      <QuoteSendDrawer
+        token={token}
+        quote={quote}
+        version={sendable}
+        open={sending}
+        onClose={() => setSending(false)}
+        onDone={(next) => {
+          setQuote(next);
+          setSending(false);
+        }}
+      />
 
       <QuoteOutcomeDrawer
         token={token}

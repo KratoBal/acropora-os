@@ -60,6 +60,8 @@ function adatbazis(
     lastSyncedAt: Date | null;
     metadata: unknown;
   }[] = [],
+  /** A tények változásának sorai (`ProductKnowledgeFact`, SEO P0 PR 8). */
+  tenySorok: { productId: string; updatedAt: Date }[] = [],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -90,6 +92,12 @@ function adatbazis(
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "unasProductSnapshot.findMany", args });
         return akcioSorok;
+      },
+    },
+    productKnowledgeFact: {
+      findMany: async (args: unknown) => {
+        hivasok.push({ metodus: "productKnowledgeFact.findMany", args });
+        return tenySorok;
       },
     },
   } as unknown as ProjectionSchedulerDatabase;
@@ -482,6 +490,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
         upsert: async () => ({}),
       },
       unasProductSnapshot: { findMany: async () => [] },
+      productKnowledgeFact: { findMany: async () => [] },
     } as unknown as ProjectionSchedulerDatabase;
 
     const { run } = futtato();
@@ -1027,6 +1036,45 @@ describe("az átirányítás-lista köre (SEO P0 PR 7b)", () => {
         n.sorok.some((s) => s.startsWith("Atiranyitasok:")),
         n.sorok.join("\n"),
       );
+    }
+  });
+});
+
+describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
+  /**
+   * MI PIROSIT: egy, a kötés utolsó vetítése UTÁN változott tény nem teszi
+   * esedékessé a terméket (a tömeg vagy a termékismeret nem jut ki); egy korábbi
+   * tény mégis esedékessé teszi (minden körben újra vetítene); kötés nélküli
+   * termék bekerül.
+   */
+  const kotes = (lastSyncedAt: Date | null) => [
+    { entityId: "prod-1", lastSyncedAt },
+  ];
+
+  it("a vetítés utáni tény esedékessé teszi, a korábbi nem", async () => {
+    for (const [tenyIdo, vart] of [
+      [MOST, [["prod-1"]]],
+      [REGEN, []],
+    ] as const) {
+      const { run, kapott } = futtato(0);
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN })],
+        kotes(new Date(MOST.getTime() - 60_000)),
+        undefined,
+        [],
+        [],
+        [{ productId: "prod-1", updatedAt: tenyIdo }],
+      );
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+        logger: naplo().logger,
+        now: () => new Date(MOST.getTime() + 1_000),
+      });
+      await scheduler.runOnce();
+      assert.deepEqual(kapott, vart);
     }
   });
 });

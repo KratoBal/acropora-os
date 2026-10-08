@@ -1402,6 +1402,9 @@ export type {
   QuoteTemplateDto,
   QuoteTemplateInput,
   QuoteTemplatePatch,
+  QuoteMailDeliveryDto,
+  QuoteSendDraftDto,
+  QuoteSendInput,
 } from "./quotes.js";
 export {
   EMPTY_QUOTE_RICH_TEXT,

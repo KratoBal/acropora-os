@@ -1,3 +1,7 @@
+import {
+  measurePatch,
+  type VariantMeasureInput,
+} from "./medusa-variant-measures.js";
 import { Injectable } from "@nestjs/common";
 
 import {
@@ -188,6 +192,11 @@ export interface ProjectableProduct {
    */
   variantBarcodes: { sku: string; field: "ean" | "upc"; value: string }[];
   /**
+   * A változatok tömege és méretei (SEO P0 PR 8), a VERIFIED natív célú
+   * tényekből (`decideVariantMeasures`). Üres vagy hiányzó: nincs mit kiírni.
+   */
+  variantMeasures?: VariantMeasureInput[];
+  /**
    * A MERTEKEGYSEG ES A MASODLAGOS EGYSEG, MAR SZOVEGGE ALAKITVA.
    *
    * A Medusa termek- es variant-modelljenek NINCS mertekegyseg-mezoje (merve a
@@ -343,6 +352,8 @@ export type ProjectionOutcome =
        * az osztály kiírása elhasalt, és ez a mondat mondja ki.
        */
       shipping?: string;
+      /** A változatok tömege és méretei a létrehozás után (SEO P0 PR 8). */
+      measures?: VariantMeasureSyncReport;
     }
   /**
    * A meglévő terméket módosítottuk: `updated`, ha volt leképezés,
@@ -375,6 +386,8 @@ export type ProjectionOutcome =
        * jelentés mondja ki, melyiké.
        */
       barcodes?: VariantBarcodeSyncReport;
+      /** A változatok tömege és méretei ebben a futásban (SEO P0 PR 8). */
+      measures?: VariantMeasureSyncReport;
       /** A MI kulcsaink, amiket ez a futas levett a cel oldalrol. */
       metadataRemovedKeys: string[];
       /**
@@ -956,6 +969,14 @@ export class MedusaProductProjectionService {
               ),
             }
           : {}),
+        ...(product.variantMeasures?.length
+          ? {
+              measures: await this.syncVariantMeasures(
+                medusaProductId,
+                product.variantMeasures,
+              ),
+            }
+          : {}),
       };
     };
 
@@ -1184,6 +1205,16 @@ export class MedusaProductProjectionService {
       cim,
       medusaProductId: created.id,
       publication: report,
+      // a létrehozás után is: különben egy új termék a következő forrás-változásig
+      // mérték nélkül maradna (a tény nem tesz esedékessé, SEO P0 PR 8)
+      ...(product.variantMeasures?.length
+        ? {
+            measures: await this.syncVariantMeasures(
+              created.id,
+              product.variantMeasures,
+            ),
+          }
+        : {}),
       ...(this.shipping
         ? {
             shipping: await this.shippingAfterCreate(
@@ -1211,6 +1242,49 @@ export class MedusaProductProjectionService {
    * Egy változat írásának bukása (például a bolt egyedi indexe: a kód egy másik
    * változaton áll) nem állítja meg a terméket: a jelentésbe kerül, név szerint.
    */
+  /**
+   * A TÖMEG ÉS A MÉRETEK (SEO P0 PR 8), a vonalkód-írás mintájára: egy lekérés a
+   * termék változataira, összevetés cikkszám szerint, és csak az eltérő mezők
+   * mennek ki. Ürítés nincs. Egy változat hibája nem állítja meg a többit.
+   */
+  private async syncVariantMeasures(
+    medusaProductId: string,
+    wanted: VariantMeasureInput[],
+  ): Promise<VariantMeasureSyncReport> {
+    const report: VariantMeasureSyncReport = {
+      written: [],
+      unchanged: 0,
+      missing: [],
+      failed: [],
+    };
+    let rows: Awaited<ReturnType<MedusaAdminClient["listVariantMeasures"]>>;
+    try {
+      rows = await this.medusa.listVariantMeasures(medusaProductId);
+    } catch (error) {
+      report.failed.push({ sku: "*", error: describeMedusaFailure(error) });
+      return report;
+    }
+    for (const w of wanted) {
+      const row = rows.find((r) => r.sku === w.sku);
+      if (!row) {
+        report.missing.push(w.sku);
+        continue;
+      }
+      const patch = measurePatch(w.patch, row);
+      if (!Object.keys(patch).length) {
+        report.unchanged += 1;
+        continue;
+      }
+      try {
+        await this.medusa.updateVariantMeasures(medusaProductId, row.id, patch);
+        report.written.push(w.sku);
+      } catch (error) {
+        report.failed.push({ sku: w.sku, error: describeMedusaFailure(error) });
+      }
+    }
+    return report;
+  }
+
   private async syncVariantBarcodes(
     medusaProductId: string,
     wanted: ProjectableProduct["variantBarcodes"],
@@ -1296,6 +1370,9 @@ export class MedusaProductProjectionService {
 
 /** Csak a teszteknek, hogy a sor alakja egy helyen legyen leírva. */
 export type { MedusaProductRow };
+
+/** A tömeg- és méret-írás jelentése (SEO P0 PR 8), a vonalkódéval azonos alakban. */
+export type VariantMeasureSyncReport = VariantBarcodeSyncReport;
 
 /** A frissítés-ág vonalkód-írásának jelentése (SEO P0 PR 4). */
 export interface VariantBarcodeSyncReport {

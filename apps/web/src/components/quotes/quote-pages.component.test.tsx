@@ -76,6 +76,9 @@ const api = vi.hoisted(() => ({
   createTemplate: vi.fn(),
   updateTemplate: vi.fn(),
   archiveTemplate: vi.fn(),
+  sendDraft: vi.fn(),
+  send: vi.fn(),
+  resend: vi.fn(),
   pdf: vi.fn(),
 }));
 vi.mock("@/lib/api/quotes", () => ({ quotesApi: api }));
@@ -209,6 +212,7 @@ function quote(
     postponedUntil: null,
     acceptedVersionId: null,
     acceptances: [],
+    deliveries: [],
     customerId: "c1",
     ownerUserId: null,
     createdById: "u",
@@ -685,6 +689,93 @@ describe("Ajánlatsablonok (579:2243, 579:2562)", () => {
     expect(navigation.replace).toHaveBeenCalledWith(
       "/beallitasok/ajanlat-sablonok/t9",
     );
+  });
+});
+
+describe("Az ajánlat kiküldése (P3)", () => {
+  const published = () =>
+    version({
+      id: "v1",
+      versionNumber: 1,
+      status: "PUBLISHED",
+      publishedAt: "2026-10-07T10:42:00Z",
+    });
+  const DRAFT = {
+    source: "default" as const,
+    to: ["info@blue.test"],
+    subject: "Acropora árajánlat: AJ-2026-0042",
+    body: "Tisztelt Blue Office Kft.!",
+    fileName: "AJ-2026-0042-v1.pdf",
+    alreadySent: false,
+  };
+  const DELIVERY = {
+    id: "d1",
+    versionId: "v1",
+    versionNumber: 1,
+    to: ["info@blue.test"],
+    cc: [],
+    bcc: [],
+    subject: "Acropora árajánlat: AJ-2026-0042",
+    outcome: "SENT" as const,
+    error: null,
+    isResend: false,
+    initiatedByName: "Balázs",
+    createdAt: "2026-10-08T07:12:00Z",
+  };
+
+  it("a kitöltött vázlattal nyílik, és dupla kattintásra is egyszer küld", async () => {
+    api.detail.mockResolvedValue(quote([published()], { status: "DRAFT" }));
+    api.sendDraft.mockResolvedValue(DRAFT);
+    let answer: (value: QuoteDetailDto) => void = () => {};
+    api.send.mockReturnValue(
+      new Promise<QuoteDetailDto>((resolve) => (answer = resolve)),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Kiküldés" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Tárgy")).toHaveValue(DRAFT.subject),
+    );
+    expect(screen.getByLabelText("Címzett")).toHaveValue("info@blue.test");
+    fireEvent.change(screen.getByLabelText("Másolat"), {
+      target: { value: "iroda@blue.test; penzugy@blue.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Elküldöm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Elküldöm" }));
+    expect(api.send).toHaveBeenCalledTimes(1);
+    expect(api.send).toHaveBeenCalledWith("token-1", "q1", "v1", {
+      requestId: expect.any(String),
+      to: ["info@blue.test"],
+      cc: ["iroda@blue.test", "penzugy@blue.test"],
+      subject: DRAFT.subject,
+      body: DRAFT.body,
+    });
+    answer(quote([published()], { status: "SENT", deliveries: [DELIVERY] }));
+    expect(await screen.findByText("Kiment")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Újraküldés" })).toBeTruthy();
+  });
+
+  it("a már kiment verziót újraküldéssel küldi, a másik végponton", async () => {
+    api.detail.mockResolvedValue(
+      quote([published()], { deliveries: [DELIVERY] }),
+    );
+    api.sendDraft.mockResolvedValue({ ...DRAFT, alreadySent: true });
+    api.resend.mockResolvedValue(
+      quote([published()], {
+        deliveries: [{ ...DELIVERY, id: "d2", isResend: true }, DELIVERY],
+      }),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Újraküldés" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Újraküldöm" }));
+    await waitFor(() => expect(api.resend).toHaveBeenCalledTimes(1));
+    expect(api.send).not.toHaveBeenCalled();
+  });
+
+  it("csak piszkozattal nincs Kiküldés", async () => {
+    api.detail.mockResolvedValue(quote([version()]));
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Szerkesztés" });
+    expect(screen.queryByRole("button", { name: "Kiküldés" })).toBeNull();
   });
 });
 

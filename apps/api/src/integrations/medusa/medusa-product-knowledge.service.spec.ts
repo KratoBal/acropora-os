@@ -68,6 +68,21 @@ function fakes(current: KnowledgeProjection | null, linked = true) {
   return { service, writes, reads };
 }
 
+/**
+ * A DEFINÍCIÓ-TÁBLA DUPLÁJA, KÉT KÉRDÉSRE (SEO P0 PR 8): a `public` kulcsok és a
+ * natív célú kulcsok. Egy argumentumot nem néző dupla a natív kérdésre is a
+ * publikus listát adná, és minden tényt natívnak látna.
+ */
+const natívKérdés = (args: unknown) =>
+  Boolean(
+    (args as { where?: { medusaNativeField?: unknown } }).where
+      ?.medusaNativeField,
+  );
+const definiciok = (publikus: string[], nativ: string[] = []) => ({
+  findMany: async (args: unknown) =>
+    (natívKérdés(args) ? nativ : publikus).map((key) => ({ key })),
+});
+
 describe("the product knowledge projection, OS -> Medusa", () => {
   // D5 (kártya 4622f1ac): a konfliktus nem megy ki, és a mellette írt szöveg sem
   it("writes the contract body: the VERIFIED fact only; the lead written beside the conflict is held back", async () => {
@@ -197,7 +212,7 @@ describe("the knowledge rows the runner reads", () => {
         attributeDefinition: {
           findMany: async (args: unknown) => {
             kerdes.push(args);
-            return [{ key: "packSize" }];
+            return natívKérdés(args) ? [] : [{ key: "packSize" }];
           },
         },
       },
@@ -205,6 +220,10 @@ describe("the knowledge rows the runner reads", () => {
     );
     assert.deepEqual(kerdes, [
       { where: { public: true, isActive: true }, select: { key: true } },
+      {
+        where: { medusaNativeField: { not: null }, isActive: true },
+        select: { key: true },
+      },
     ]);
     assert.deepEqual(
       rows.facts.map((f) => [f.field, f.public]),
@@ -249,7 +268,7 @@ describe("the knowledge rows the runner reads", () => {
           },
         },
         productCopy: { findMany: async () => [] },
-        attributeDefinition: { findMany: async () => [{ key: "weight" }] },
+        attributeDefinition: definiciok(["weight"]),
       },
       "p-kz",
     );
@@ -258,6 +277,36 @@ describe("the knowledge rows the runner reads", () => {
     assert.deepEqual(
       rows.facts.map((f) => [f.field, f.variantId]),
       [["weight", "v-a"]],
+    );
+  });
+
+  /**
+   * A NATIVE-FIELD FACT IS NOT KNOWLEDGE (SEO P0 PR 8, C2: one value, one
+   * place). A weight fact goes to the Medusa variant's `weight`; a product-level
+   * one used to reach product_knowledge as well. WHAT TURNS IT RED: the native
+   * filter dropped, or applied to a field without a native target.
+   */
+  it("a fact whose definition has a native Medusa field is not a knowledge row", async () => {
+    const tenyek = ["weight", "dosing"].map((field) => ({
+      field,
+      variantId: null,
+      value: "120",
+      unit: field === "weight" ? "g" : null,
+      status: "VERIFIED",
+      revision: 1,
+      fieldResult: { status: "VERIFIED", sourceType: null, conflicts: null },
+    }));
+    const rows = await knowledgeRowsFor(
+      {
+        productKnowledgeFact: { findMany: async () => tenyek },
+        productCopy: { findMany: async () => [] },
+        attributeDefinition: definiciok(["weight", "dosing"], ["weight"]),
+      },
+      "p-kz",
+    );
+    assert.deepEqual(
+      rows.facts.map((f) => f.field),
+      ["dosing"],
     );
   });
 
@@ -272,7 +321,7 @@ describe("the knowledge rows the runner reads", () => {
             return [];
           },
         },
-        attributeDefinition: { findMany: async () => [] },
+        attributeDefinition: definiciok([]),
       },
       "p-kz",
     );
@@ -314,12 +363,7 @@ describe("the knowledge rows the runner reads", () => {
           },
         },
         productCopy: { findMany: async () => [] },
-        attributeDefinition: {
-          findMany: async () => [
-            { key: "packSize" },
-            { key: "packageContents" },
-          ],
-        },
+        attributeDefinition: definiciok(["packSize", "packageContents"]),
       },
       "p-kz",
     );
@@ -369,12 +413,7 @@ describe("the knowledge rows the runner reads", () => {
           ],
         },
         productCopy: { findMany: async () => [] },
-        attributeDefinition: {
-          findMany: async () => [
-            { key: "packSize" },
-            { key: "packageContents" },
-          ],
-        },
+        attributeDefinition: definiciok(["packSize", "packageContents"]),
       },
       "p-kz",
     );

@@ -1261,8 +1261,11 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       productKnowledgeFact: { findMany: async () => [] },
       productCopy: { findMany: async () => [] },
       // SEO P0 PR 2: a teny-olvaso a definiciokat is koti; a seed szerint public
+      // a publikus kérdésre a kiadható kulcs; a natív célú kérdésre (SEO P0 PR 8:
+      // termékismeret-szűrő és tömeg-forrás) üres, mert itt nincs natív célú tény
       attributeDefinition: {
-        findMany: async () => [{ key: "packSize" }],
+        findMany: async (args: { where?: { medusaNativeField?: unknown } }) =>
+          args?.where?.medusaNativeField ? [] : [{ key: "packSize" }],
       },
       ...overrides,
     } as unknown as ProjectionDatabase;

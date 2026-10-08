@@ -186,6 +186,23 @@ export function quoteFixture(): QuoteRow {
         },
       },
     ],
+    mailDeliveries: [
+      {
+        id: "mail",
+        quoteId: "q",
+        quoteVersionId: "v",
+        initiatedByUserId: "owner",
+        recipients: { to: ["anna@example.test"], cc: [], bcc: ["x"] },
+        subject: "Acropora árajánlat",
+        outcome: "SENT",
+        error: null,
+        requestId: "r2",
+        isResend: false,
+        createdAt: date,
+        version: { versionNumber: 1 },
+        initiatedBy: { displayName: "Balázs" },
+      },
+    ],
     acceptances: [
       {
         id: "acc",
@@ -537,6 +554,10 @@ test("P4a: the detail carries the acceptance and the closing fields; the event p
     },
   ]);
   assert.equal(dto.postponedUntil, null);
+  // P3: the send log, recipients from the stored JSON
+  assert.deepEqual(dto.deliveries[0]!.to, ["anna@example.test"]);
+  assert.deepEqual(dto.deliveries[0]!.bcc, ["x"]);
+  assert.equal(dto.deliveries[0]!.initiatedByName, "Balázs");
   assert.deepEqual(
     quoteEventPayload({
       source: "PHONE",
