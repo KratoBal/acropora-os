@@ -5,6 +5,9 @@ export type QuotePriceDisplay = "NET" | "GROSS" | "BOTH";
 /** #1582 P4a: how the customer's yes reached us (the public link is P4b). */
 export type QuoteAcceptanceSourceValue =
   "PHONE" | "EMAIL" | "IN_PERSON" | "OTHER_MANUAL";
+/** Where a recorded acceptance came from: by hand, or the public link (P4b). */
+export type QuoteAcceptanceRecordedSource =
+  QuoteAcceptanceSourceValue | "PUBLIC_LINK";
 export type QuoteCloseReasonValue =
   | "PRICE"
   | "COMPETITOR"
@@ -136,7 +139,7 @@ export interface QuoteAcceptanceDto {
   id: string;
   versionId: string;
   versionNumber: number;
-  source: QuoteAcceptanceSourceValue;
+  source: QuoteAcceptanceRecordedSource;
   /** the day the customer said yes, YYYY-MM-DD */
   acceptedAt: string;
   acceptedByName: string | null;
@@ -471,3 +474,62 @@ export interface QuoteTemplateInput {
   milestones: QuoteMilestoneInput[];
 }
 export type QuoteTemplatePatch = Partial<QuoteTemplateInput>;
+
+/**
+ * P4b: a version's public acceptance link, as the quote page sees it. The
+ * token is never here: it is shown once, in the issue answer.
+ */
+export interface QuoteAcceptanceLinkDto {
+  id: string;
+  versionId: string;
+  expiresAt: string;
+  firstOpenedAt: string | null;
+  createdAt: string;
+}
+
+/** The answer to issuing a link: the only time the token is shown. */
+export interface QuoteAcceptanceLinkIssuedDto extends QuoteAcceptanceLinkDto {
+  /** the page path, `/ajanlat/<token>`; the web adds its own origin */
+  path: string;
+}
+
+/**
+ * WHAT THE CUSTOMER SEES ON THE PUBLIC LINK (P4b). An allowlist: no internal
+ * id but the optional items' (the customer picks those), no cost, margin,
+ * BOM, owner, note or internal status detail.
+ */
+export interface PublicQuoteDto {
+  quoteNumber: string;
+  title: string;
+  versionNumber: number;
+  /** YYYY-MM-DD */
+  validUntil: string;
+  currency: string;
+  priceDisplay: string;
+  customerName: string | null;
+  items: Array<{
+    /** only an optional item's id, for the customer to choose it */
+    id: string | null;
+    name: string;
+    quantity: string;
+    unit: string;
+    unitNetPrice: string;
+    vatRatePercent: string;
+    netTotal: string;
+    isOptional: boolean;
+  }>;
+  netTotal: string;
+  optionalNetTotal: string;
+  /** OPEN: it can be accepted; ACCEPTED: it was (date below); CLOSED: no */
+  state: "OPEN" | "ACCEPTED" | "CLOSED";
+  /** YYYY-MM-DD, when state is ACCEPTED */
+  acceptedAt: string | null;
+}
+
+export interface PublicQuoteAcceptInput {
+  name: string;
+  email?: string;
+  selectedOptionalItemIds?: string[];
+  /** a retry with the same id is the same acceptance */
+  requestId?: string;
+}

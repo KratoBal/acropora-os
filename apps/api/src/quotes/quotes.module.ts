@@ -20,6 +20,11 @@ import { QuoteVersionEditor } from "./quote-version-editor.js";
 import { QuotesController } from "./quotes.controller.js";
 import { QuotesRepository } from "./quotes.repository.js";
 import { QuotesService } from "./quotes.service.js";
+import { QuoteLinkController } from "./quote-link.controller.js";
+import { QuoteLinkService } from "./quote-link.service.js";
+import { QuotePublicController } from "./public/quote-public.controller.js";
+import { QuotePublicService } from "./public/quote-public.service.js";
+
 @Module({
   // the mail sender (behind the redirect) and the Levelezés templates (P3)
   imports: [NotificationsModule],
@@ -31,6 +36,8 @@ import { QuotesService } from "./quotes.service.js";
     QuoteTemplatesController,
     QuoteAcceptanceController,
     QuoteMailController,
+    QuoteLinkController,
+    QuotePublicController,
   ],
   providers: [
     QuotesRepository,
@@ -42,6 +49,8 @@ import { QuotesService } from "./quotes.service.js";
     QuotePublishService,
     QuoteAcceptanceService,
     QuoteMailService,
+    QuoteLinkService,
+    QuotePublicService,
     // the quote PDFs' store; a spec may give it its own root (QUOTE_DOCUMENT_ENV)
     documentStoreProviderFrom(QUOTE_DOCUMENT_ENV),
   ],

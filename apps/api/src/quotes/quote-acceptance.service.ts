@@ -12,6 +12,7 @@ import type {
   CancelQuoteInput,
   PostponeQuoteInput,
   QuoteAcceptanceSourceValue,
+  QuoteAcceptanceRecordedSource,
   QuoteCloseReasonValue,
   QuoteDetailDto,
   RecordQuoteAcceptanceInput,
@@ -113,6 +114,122 @@ function isUniqueViolation(e: unknown) {
   );
 }
 
+/**
+ * THE ONE WRITE OF AN ACCEPTANCE, by hand (P4a) or on the public link (P4b),
+ * under the quote's row lock: the two give the same state, an event, a domain
+ * event and an audit row. The caller has checked its own input and holds the
+ * lock (`quote` is what `lockQuote` read).
+ */
+async function recordAcceptance(
+  tx: Tx,
+  quoteId: string,
+  quote: { status: string; quoteNumber: string },
+  args: {
+    versionId: string;
+    source: QuoteAcceptanceRecordedSource;
+    acceptedAt: string;
+    name: string | null;
+    email: string | null;
+    recordedByUserId: string | null;
+    selected: string[];
+    note: string | null;
+    requestId: string | null;
+    acceptanceLinkId: string | null;
+  },
+) {
+  assertOpen(quote.status, "fogadható el");
+  const version = await tx.quoteVersion.findFirst({
+    where: { id: args.versionId, quoteId },
+    select: {
+      status: true,
+      versionNumber: true,
+      items: { where: { isOptional: true }, select: { id: true } },
+    },
+  });
+  if (!version)
+    throw new NotFoundException("A verzió nem található ennél az ajánlatnál.");
+  if (version.status === "SUPERSEDED")
+    throw new ConflictException("Felülírt verzió nem fogadható el.");
+  if (version.status !== "PUBLISHED")
+    throw new ConflictException("Csak publikált verzió fogadható el.");
+  const optional = new Set(version.items.map((i) => i.id));
+  if (args.selected.some((id) => !optional.has(id)))
+    throw new BadRequestException(
+      "Csak ennek a verziónak az opcionális tételei választhatók.",
+    );
+  const acceptance = await tx.quoteAcceptance.create({
+    data: {
+      quoteId,
+      quoteVersionId: args.versionId,
+      source: args.source,
+      acceptedAt: new Date(`${args.acceptedAt}T00:00:00Z`),
+      acceptedByName: args.name,
+      acceptedByEmail: args.email,
+      recordedByUserId: args.recordedByUserId,
+      selectedOptionalItemIds: args.selected,
+      note: args.note,
+      requestId: args.requestId,
+      acceptanceLinkId: args.acceptanceLinkId,
+    },
+  });
+  await tx.quote.update({
+    where: { id: quoteId },
+    data: {
+      status: "ACCEPTED",
+      acceptedVersionId: args.versionId,
+      postponedUntil: null,
+      closeReason: null,
+      closeNote: null,
+    },
+  });
+  await tx.quoteEvent.create({
+    data: {
+      quoteId,
+      versionId: args.versionId,
+      kind: "ACCEPTED",
+      actorUserId: args.recordedByUserId,
+      payload: {
+        versionNumber: version.versionNumber,
+        source: args.source,
+        ...(args.requestId ? { requestId: args.requestId } : {}),
+        ...(args.acceptanceLinkId
+          ? { acceptanceLinkId: args.acceptanceLinkId }
+          : {}),
+      },
+    },
+  });
+  await tx.domainEvent.create({
+    data: {
+      id: randomUUID(),
+      eventType: "quote.accepted",
+      aggregateType: "Quote",
+      aggregateId: quoteId,
+      actorUserId: args.recordedByUserId,
+      payload: {
+        quoteNumber: quote.quoteNumber,
+        versionNumber: version.versionNumber,
+        acceptanceId: acceptance.id,
+      },
+      occurredAt: new Date(),
+      schemaVersion: 1,
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      action: "quote.accepted",
+      entityType: "Quote",
+      entityId: quoteId,
+      userId: args.recordedByUserId,
+      metadata: {
+        acceptanceId: acceptance.id,
+        versionNumber: version.versionNumber,
+        source: args.source,
+      },
+    },
+  });
+  return acceptance;
+}
+
 @Injectable()
 export class QuoteAcceptanceService {
   private readonly database = prisma;
@@ -199,93 +316,17 @@ export class QuoteAcceptanceService {
               "Ez a kérés-azonosító egy másik ajánlathoz tartozik.",
             );
         }
-        assertOpen(quote.status, "fogadható el");
-        const version = await tx.quoteVersion.findFirst({
-          where: { id: input.versionId, quoteId },
-          select: {
-            status: true,
-            versionNumber: true,
-            items: { where: { isOptional: true }, select: { id: true } },
-          },
-        });
-        if (!version)
-          throw new NotFoundException(
-            "A verzió nem található ennél az ajánlatnál.",
-          );
-        if (version.status === "SUPERSEDED")
-          throw new ConflictException("Felülírt verzió nem fogadható el.");
-        if (version.status !== "PUBLISHED")
-          throw new ConflictException("Csak publikált verzió fogadható el.");
-        const optional = new Set(version.items.map((i) => i.id));
-        if (selected.some((id) => !optional.has(id)))
-          throw new BadRequestException(
-            "Csak ennek a verziónak az opcionális tételei választhatók.",
-          );
-        const acceptance = await tx.quoteAcceptance.create({
-          data: {
-            quoteId,
-            quoteVersionId: input.versionId,
-            source: input.source,
-            acceptedAt: new Date(`${acceptedAt}T00:00:00Z`),
-            acceptedByName: name,
-            acceptedByEmail: email,
-            recordedByUserId: user.id,
-            selectedOptionalItemIds: selected,
-            note,
-            requestId,
-          },
-        });
-        await tx.quote.update({
-          where: { id: quoteId },
-          data: {
-            status: "ACCEPTED",
-            acceptedVersionId: input.versionId,
-            postponedUntil: null,
-            closeReason: null,
-            closeNote: null,
-          },
-        });
-        await tx.quoteEvent.create({
-          data: {
-            quoteId,
-            versionId: input.versionId,
-            kind: "ACCEPTED",
-            actorUserId: user.id,
-            payload: {
-              versionNumber: version.versionNumber,
-              source: input.source,
-              ...(requestId ? { requestId } : {}),
-            },
-          },
-        });
-        await tx.domainEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "quote.accepted",
-            aggregateType: "Quote",
-            aggregateId: quoteId,
-            actorUserId: user.id,
-            payload: {
-              quoteNumber: quote.quoteNumber,
-              versionNumber: version.versionNumber,
-              acceptanceId: acceptance.id,
-            },
-            occurredAt: new Date(),
-            schemaVersion: 1,
-          },
-        });
-        await tx.auditLog.create({
-          data: {
-            action: "quote.accepted",
-            entityType: "Quote",
-            entityId: quoteId,
-            userId: user.id,
-            metadata: {
-              acceptanceId: acceptance.id,
-              versionNumber: version.versionNumber,
-              source: input.source,
-            },
-          },
+        await recordAcceptance(tx, quoteId, quote, {
+          versionId: input.versionId,
+          source: input.source,
+          acceptedAt,
+          name,
+          email,
+          recordedByUserId: user.id,
+          selected,
+          note,
+          requestId,
+          acceptanceLinkId: null,
         });
         return false;
       });
@@ -299,6 +340,87 @@ export class QuoteAcceptanceService {
       throw new ConflictException("Az ajánlatnak már van élő elfogadása.");
     }
     return this.detail(quoteId, user);
+  }
+
+  /**
+   * THE CUSTOMER'S YES ON THE PUBLIC LINK (#1582 P4b). The same write as the
+   * acceptance by hand, with source PUBLIC_LINK, the link named, and nobody
+   * as recorder. Under the quote's lock the link is read again: a link
+   * revoked or expired since the page was opened accepts nothing.
+   */
+  async acceptFromLink(
+    link: { id: string; quoteId: string; quoteVersionId: string },
+    input: {
+      name: unknown;
+      email: unknown;
+      selectedOptionalItemIds: unknown;
+      requestId: unknown;
+    },
+    notFound: () => Error,
+  ): Promise<void> {
+    const name = text(input.name, 200, "név");
+    if (!name || name.length < 2)
+      throw new BadRequestException("Add meg a neved.");
+    const email = text(input.email, 200, "email-cím");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      throw new BadRequestException("Érvénytelen email-cím.");
+    const selected = input.selectedOptionalItemIds ?? [];
+    if (
+      !Array.isArray(selected) ||
+      selected.length > 500 ||
+      selected.some((id) => typeof id !== "string") ||
+      new Set(selected).size !== selected.length
+    )
+      throw new BadRequestException("Érvénytelen opcionális tétel-lista.");
+    const requestId = text(input.requestId, 100, "kérés-azonosító");
+    const replayed = async () => {
+      if (!requestId) return false;
+      const existing = await this.database.quoteAcceptance.findUnique({
+        where: { requestId },
+        select: { quoteId: true, acceptanceLinkId: true },
+      });
+      return existing?.acceptanceLinkId === link.id;
+    };
+    if (await replayed()) return;
+    try {
+      await this.database.$transaction(async (tx) => {
+        const quote = await lockQuote(tx, link.quoteId);
+        if (requestId) {
+          const existing = await tx.quoteAcceptance.findUnique({
+            where: { requestId },
+            select: { acceptanceLinkId: true },
+          });
+          if (existing?.acceptanceLinkId === link.id) return;
+          if (existing)
+            throw new ConflictException("Ez a kérés már egy másik elfogadásé.");
+        }
+        const live = await tx.quoteAcceptanceLink.findFirst({
+          where: {
+            id: link.id,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          select: { id: true },
+        });
+        if (!live) throw notFound();
+        await recordAcceptance(tx, link.quoteId, quote, {
+          versionId: link.quoteVersionId,
+          source: "PUBLIC_LINK",
+          acceptedAt: budapestToday(),
+          name,
+          email,
+          recordedByUserId: null,
+          selected: selected as string[],
+          note: null,
+          requestId,
+          acceptanceLinkId: link.id,
+        });
+      });
+    } catch (e) {
+      if (!isUniqueViolation(e)) throw e;
+      if (await replayed()) return;
+      throw new ConflictException("Az ajánlatnak már van élő elfogadása.");
+    }
   }
 
   async revoke(

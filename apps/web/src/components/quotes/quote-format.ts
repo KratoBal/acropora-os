@@ -1,6 +1,7 @@
 import type { PilotBadgeVariant } from "@acropora/ui";
 import type {
   QuoteAcceptanceSourceValue,
+  QuoteAcceptanceRecordedSource,
   QuoteBlockKindValue,
   QuoteCloseReasonValue,
   QuoteStatusValue,
@@ -28,6 +29,15 @@ export const QUOTE_ACCEPTANCE_SOURCE: Record<
   EMAIL: "Emailben",
   IN_PERSON: "Személyesen",
   OTHER_MANUAL: "Egyéb módon",
+};
+
+/** Egy rögzített elfogadás forrása, a P4b linkjével együtt (csak kijelzésre). */
+export const QUOTE_ACCEPTANCE_RECORDED_SOURCE: Record<
+  QuoteAcceptanceRecordedSource,
+  string
+> = {
+  ...QUOTE_ACCEPTANCE_SOURCE,
+  PUBLIC_LINK: "Az elfogadó linken",
 };
 
 /** P4a: az elutasítás vagy visszavonás oka (a riport ebből készülhet). */
