@@ -180,8 +180,25 @@ export class QuoteAcceptanceService {
     if (replayed) return replayed;
 
     try {
-      await this.database.$transaction(async (tx) => {
+      const replay = await this.database.$transaction(async (tx) => {
         const quote = await lockQuote(tx, quoteId);
+        /*
+          THE SAME REQUEST, ASKED TWICE AT ONCE: both passed the check above
+          before either wrote, and the second got the lock only after the
+          first committed. It must get that acceptance back, not a 409 for
+          the ACCEPTED status the first one set.
+        */
+        if (requestId) {
+          const existing = await tx.quoteAcceptance.findUnique({
+            where: { requestId },
+            select: { quoteId: true },
+          });
+          if (existing?.quoteId === quoteId) return true;
+          if (existing)
+            throw new ConflictException(
+              "Ez a kérés-azonosító egy másik ajánlathoz tartozik.",
+            );
+        }
         assertOpen(quote.status, "fogadható el");
         const version = await tx.quoteVersion.findFirst({
           where: { id: input.versionId, quoteId },
@@ -270,7 +287,9 @@ export class QuoteAcceptanceService {
             },
           },
         });
+        return false;
       });
+      if (replay) return this.detail(quoteId, user);
     } catch (e) {
       if (!isUniqueViolation(e)) throw e;
       // a concurrent retry with the same request id won the race
