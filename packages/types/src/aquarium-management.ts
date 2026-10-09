@@ -1,3 +1,4 @@
+import type { MeasurementRecommendationSegment } from "./measurement-recommendation.js";
 import type { CreateCustomerInput } from "./customer-management.js";
 
 /// A felületen csak "Saját" (OWN) és "Ügyfél" (CUSTOMER) választható.
@@ -422,6 +423,12 @@ export interface AquariumMeasurementOccasion {
   source?: string;
   notes?: string;
   values: AquariumMeasurementValue[];
+  /**
+   * A JÓVÁHAGYOTT termékajánlás (kártya 2b3983e1), darabokra bontva, a
+   * termékek nevével és linkjével. Vázlat soha nem kerül ide: a vevő és a
+   * portál csak jóváhagyott szöveget lát.
+   */
+  recommendation?: MeasurementRecommendationSegment[];
 }
 
 export interface AquariumMeasurementListResponse {

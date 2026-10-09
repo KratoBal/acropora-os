@@ -1451,3 +1451,19 @@ export {
   viesFill,
 } from "./vies-address.js";
 export type { ViesAddressFields, ViesFillField } from "./vies-address.js";
+export {
+  hasMalformedRecommendationToken,
+  parseRecommendationText,
+  RECOMMENDATION_PRODUCT_TOKEN,
+  recommendationProductIds,
+} from "./measurement-recommendation.js";
+export type {
+  ApproveMeasurementRecommendationInput,
+  MeasurementRecommendationCandidate,
+  MeasurementRecommendationSegment,
+  MeasurementRecommendationStatus,
+  MeasurementRecommendationView,
+  RecommendationCandidateBasis,
+  RecommendationTextPart,
+  UpdateMeasurementRecommendationInput,
+} from "./measurement-recommendation.js";

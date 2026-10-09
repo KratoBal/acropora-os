@@ -1,4 +1,7 @@
-import { ACROPORA_COMPANY } from "@acropora/types";
+import {
+  ACROPORA_COMPANY,
+  type MeasurementRecommendationSegment,
+} from "@acropora/types";
 
 import {
   A4_WIDTH,
@@ -34,6 +37,11 @@ export interface MeasurementReportPdfInput {
   icp: { title: string; rows: ReportRow[] } | null;
   deviations: number;
   notes: string | null;
+  /**
+   * The APPROVED product recommendation (card 2b3983e1), as the customer sees
+   * it; a draft never reaches the PDF. `null` or empty: no block.
+   */
+  recommendation?: MeasurementRecommendationSegment[] | null;
 }
 
 const LEFT = 44;
@@ -157,6 +165,38 @@ export function renderMeasurementReportPdf(
     y = heading(doc, "Javasolt intézkedések", y);
     write(doc, input.notes, LEFT, y, { size: 9, color: BODY }, CONTENT_WIDTH);
     y += height + 30;
+  }
+
+  if (input.recommendation?.length) {
+    // the names stand in the text; the links follow, one product a line
+    const text = input.recommendation
+      .map((part) =>
+        part.kind === "text" ? part.text : (part.name ?? "ismeretlen termék"),
+      )
+      .join("");
+    const height = measure(doc, text, { size: 9, color: BODY }, CONTENT_WIDTH);
+    ensure(headingHeight + Math.min(height, 60));
+    y = heading(doc, "Ajánlott termékek", y);
+    write(doc, text, LEFT, y, { size: 9, color: BODY }, CONTENT_WIDTH);
+    y += height + 10;
+    const linked = new Map<string, { name: string; url: string }>();
+    for (const part of input.recommendation)
+      if (part.kind === "product" && part.name && part.url)
+        linked.set(part.productId, { name: part.name, url: part.url });
+    for (const product of linked.values()) {
+      ensure(16);
+      doc
+        .font(PDF_REGULAR_FONT)
+        .fontSize(9)
+        .fillColor(TEAL)
+        .text(`• ${product.name}`, LEFT, y, {
+          width: CONTENT_WIDTH,
+          link: product.url,
+          underline: true,
+        });
+      y += 16;
+    }
+    y += 20;
   }
 
   ensure(14);
