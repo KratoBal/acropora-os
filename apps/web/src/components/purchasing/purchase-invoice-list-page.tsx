@@ -4,25 +4,20 @@ import {
   Button,
   EmptyState,
   Icon,
-  Pagination,
   PilotDataTable,
-  PilotLinkTabs,
   PilotPageHeader,
   Skeleton,
   type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
-  isNavigationEntryVisible,
   PERMISSIONS,
   type PurchaseInvoiceListResponse,
   type PurchaseInvoiceSummary,
 } from "@acropora/types";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { allNavigationPages } from "@/components/navigation";
 import {
   PilotBadge,
   PilotButton,
@@ -32,34 +27,21 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { purchasingApi } from "@/lib/api/purchasing";
 
+import {
+  PilotFilterCard,
+  PilotListCard,
+  PurchasingTabs,
+} from "./purchasing-pilot-shell";
+
 function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
 }
-
-/**
- * A BESZERZÉS TESTVÉR-OLDALAI FÜLKÉNT (Direction F, Figma 302:63): a
- * navigáció ugyanazon bejegyzései, ugyanazzal a szerep szerinti
- * láthatósággal, mint a menüben. A fül felirata a terv szerinti.
- */
-const PURCHASING_TABS: ReadonlyArray<{ href: string; label: string }> = [
-  { href: "/beszerzes", label: "Beszerzések" },
-  { href: "/beszerzes/varhato", label: "Várható beérkezések" },
-  { href: "/beszerzes/nav-szamlak", label: "NAV számla lekérés" },
-];
 
 const SOURCE_LABEL: Record<PurchaseInvoiceSummary["source"], string> = {
   EU: "EU",
   HU_NAV: "Belföldi",
   HU_MANUAL: "Belföldi",
 };
-
-function pageRange(pagination: PurchaseInvoiceListResponse["pagination"]) {
-  const total = pagination.totalItems;
-  if (total === 0) return "0 / 0";
-  const from = (pagination.page - 1) * pagination.pageSize + 1;
-  const to = Math.min(pagination.page * pagination.pageSize, total);
-  return `${from.toLocaleString("hu-HU")}–${to.toLocaleString("hu-HU")} / ${total.toLocaleString("hu-HU")}`;
-}
 
 /**
  * AZ OLDAL URL-JÉBŐL A LISTA-KÉRÉS, CSAK AZ ISMERT MEZŐKKEL.
@@ -173,12 +155,6 @@ export function PurchaseInvoiceListPage() {
   const source = params.get("source") ?? "";
   const payment = params.get("payment") ?? "";
   const hasFilters = Boolean(searchFromUrl(params) || source || payment);
-  const tabs = PURCHASING_TABS.filter((tab) => {
-    const entry = allNavigationPages.find((page) => page.href === tab.href);
-    return Boolean(
-      entry && session && isNavigationEntryVisible(entry.entryId, session.user),
-    );
-  }).map((tab) => ({ ...tab, active: tab.href === "/beszerzes" }));
   const openInvoice = (item: PurchaseInvoiceSummary) =>
     router.push(`/beszerzes/${item.id}`);
 
@@ -270,7 +246,7 @@ export function PurchaseInvoiceListPage() {
     );
 
   return (
-    <PilotThemeRoot theme="light" className="space-y-6">
+    <PilotThemeRoot className="space-y-6">
       <PilotPageHeader
         title="Beszerzés"
         description="Beérkezett beszállítói számlák: EU-s és belföldi bevételezés."
@@ -285,17 +261,7 @@ export function PurchaseInvoiceListPage() {
           ) : undefined
         }
       />
-      {tabs.length > 1 ? (
-        <PilotLinkTabs
-          label="Beszerzés oldalai"
-          tabs={tabs}
-          renderLink={({ href, className, children, ...rest }) => (
-            <Link href={href} className={className} {...rest}>
-              {children}
-            </Link>
-          )}
-        />
-      ) : null}
+      <PurchasingTabs active="/beszerzes" />
       {error ? (
         <Alert
           variant="danger"
@@ -320,71 +286,47 @@ export function PurchaseInvoiceListPage() {
             A SZŰRŐSOR TÖRIK, NEM CSÚSZIK (a Termékeknél a stage-en mérve):
             rugalmas elemek alsó határral.
           */}
-          <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="min-w-[240px] flex-[2_1_360px]">
-                <PilotInput
-                  aria-label="Számla keresése"
-                  value={search}
-                  onChange={setSearch}
-                  leadingIcon={<Icon name="search" size={17} />}
-                  placeholder="Bizonylatszám, számlaszám, beszállító neve…"
-                  className="h-10"
-                />
-              </div>
-              <PilotSelect
-                chevron
-                aria-label="Forrás"
-                value={source}
-                onChange={(value) => setFilter("source", value)}
-                className="min-w-[180px] flex-[1_1_200px] [&_select]:h-10"
-              >
-                <option value="">Minden forrás</option>
-                <option value="EU">EU</option>
-                <option value="HU_NAV">Belföldi (NAV)</option>
-                <option value="HU_MANUAL">Belföldi (kézi)</option>
-              </PilotSelect>
-              <PilotSelect
-                chevron
-                aria-label="Fizetési állapot"
-                value={payment}
-                onChange={(value) => setFilter("payment", value)}
-                className="min-w-[200px] flex-[1_1_220px] [&_select]:h-10"
-              >
-                <option value="">Minden fizetési állapot</option>
-                <option value="paid">Fizetve</option>
-                <option value="open">Nyitott</option>
-              </PilotSelect>
-              {hasFilters ? (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="ml-auto whitespace-nowrap text-xs text-pilot-accent-warm-text hover:underline"
-                >
-                  Szűrők törlése
-                </button>
-              ) : null}
-            </div>
-          </section>
-          {data.items.length ? (
-            <section className="relative overflow-hidden rounded-2xl border border-pilot-grey-200 bg-white">
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-4 top-0 h-0.5 bg-pilot-accent-warm"
+          <PilotFilterCard onClear={hasFilters ? clearFilters : undefined}>
+            <div className="min-w-[240px] flex-[2_1_360px]">
+              <PilotInput
+                aria-label="Számla keresése"
+                value={search}
+                onChange={setSearch}
+                leadingIcon={<Icon name="search" size={17} />}
+                placeholder="Bizonylatszám, számlaszám, beszállító neve…"
+                className="h-10"
               />
-              <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-pilot-accent-warm-text">
-                  {data.pagination.totalItems.toLocaleString("hu-HU")}{" "}
-                  beszerzési számla
-                </p>
-                <Pagination
-                  variant="directionF"
-                  position="top"
-                  page={data.pagination.page}
-                  totalPages={data.pagination.totalPages}
-                  onPageChange={goToPage}
-                />
-              </div>
+            </div>
+            <PilotSelect
+              chevron
+              aria-label="Forrás"
+              value={source}
+              onChange={(value) => setFilter("source", value)}
+              className="min-w-[180px] flex-[1_1_200px] [&_select]:h-10"
+            >
+              <option value="">Minden forrás</option>
+              <option value="EU">EU</option>
+              <option value="HU_NAV">Belföldi (NAV)</option>
+              <option value="HU_MANUAL">Belföldi (kézi)</option>
+            </PilotSelect>
+            <PilotSelect
+              chevron
+              aria-label="Fizetési állapot"
+              value={payment}
+              onChange={(value) => setFilter("payment", value)}
+              className="min-w-[200px] flex-[1_1_220px] [&_select]:h-10"
+            >
+              <option value="">Minden fizetési állapot</option>
+              <option value="paid">Fizetve</option>
+              <option value="open">Nyitott</option>
+            </PilotSelect>
+          </PilotFilterCard>
+          {data.items.length ? (
+            <PilotListCard
+              count={`${data.pagination.totalItems.toLocaleString("hu-HU")} beszerzési számla`}
+              pagination={data.pagination}
+              onPageChange={goToPage}
+            >
               <PilotDataTable
                 columns={columns}
                 rows={data.items}
@@ -392,19 +334,7 @@ export function PurchaseInvoiceListPage() {
                 onRowActivate={openInvoice}
                 minWidth={900}
               />
-              <div className="flex flex-col gap-3 border-t border-pilot-grey-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-pilot-grey-500">
-                  {pageRange(data.pagination)}
-                </p>
-                <Pagination
-                  variant="directionF"
-                  position="bottom"
-                  page={data.pagination.page}
-                  totalPages={data.pagination.totalPages}
-                  onPageChange={goToPage}
-                />
-              </div>
-            </section>
+            </PilotListCard>
           ) : (
             <EmptyState
               title={

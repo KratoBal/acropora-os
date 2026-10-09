@@ -31,7 +31,9 @@ import { unasShippingProfile } from "./medusa-unas-shipping.policy.js";
  *      A frissen létrehozott terméknek kötés-sora van, tehát SKU-párosítás itt
  *      nem kell: a kötés pontos.
  *
- * Az OS-be NEM ír: a jelzők csak a vetítésben élnek.
+ * Az OS-be NEM ír. A jelzők 2026-10-09 óta az OS-ben is élnek (a82ed229: a
+ * UNAS-szinkron és a kézi írás tartja őket); a UNAS-ból számolt érték itt már
+ * csak a még sor nélküli terméknél dönt.
  */
 export interface ShippingOnCreate {
   /** A bolt alapértelmezett szállítási profilja; `null`: nem pontosan egy van. */

@@ -27,6 +27,7 @@
 
 import { validateGtin } from "./gtin.js";
 import { parseDose, parseQuantity, type Dimension } from "./units.js";
+import { parseWaterParameterEffects } from "./water-parameters.js";
 
 export type Tier = "A" | "B" | "C";
 
@@ -36,6 +37,8 @@ export type FieldKind =
   | { kind: "quantity"; dimension: Dimension }
   /** An amount per water volume per period (`units.ts` `parseDose`). */
   | { kind: "dose" }
+  /** Measurement codes with a direction (`water-parameters.ts`). */
+  | { kind: "parameterEffects" }
   | { kind: "text" };
 
 export type ClaimPolicy = "none" | "value" | "prose";
@@ -267,6 +270,19 @@ export const FIELD_SPECS = {
     claims: "prose",
     tierFromDecision: false,
   },
+  /**
+   * The water parameters the product moves, and which way (the
+   * water-measurement recommendation, card 2b3983e1): `KALCIUM:EMEL;KH:EMEL`.
+   * A claimed value with its source like every Tier C field; two sources with
+   * different sets are CONFLICTING_SOURCES, so a recommendation only ever
+   * uses a set the sources agree on.
+   */
+  waterParameterEffects: {
+    tier: "C",
+    kind: { kind: "parameterEffects" },
+    claims: "value",
+    tierFromDecision: false,
+  },
   /** The GPSR manufacturer block: name, postal address, email. */
   manufacturerInfo: {
     tier: "C",
@@ -354,6 +370,10 @@ export function normalizeFieldValue(
     }
     case "dose": {
       const r = parseDose(raw);
+      return r.ok ? { ok: true, value: r.canonical } : r;
+    }
+    case "parameterEffects": {
+      const r = parseWaterParameterEffects(raw);
       return r.ok ? { ok: true, value: r.canonical } : r;
     }
     case "text": {

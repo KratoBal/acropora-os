@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type {
   GlsCodReportDetail,
   GlsCodReportListResponse,
@@ -25,6 +31,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+// a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: auth.session,
@@ -314,5 +324,130 @@ describe("GlsSettlementsPage", () => {
         "Gmail ellenőrzés kész: 3 GLS-levél, 1 új dokumentum, 1 már bent volt, 1 nem olvasható.",
       ),
     ).toBeTruthy();
+  });
+
+  it("GLS-DETAIL-VIEW: the detail takes the list's place, with the fee invoices, and goes back", async () => {
+    api.invoices.mockResolvedValue([
+      {
+        id: "inv-1",
+        invoiceNumber: "GLS-KIT-1",
+        invoiceDate: "2026-09-18",
+        currency: "HUF",
+        feeTotal: "12880",
+        cardFeeTotal: "0",
+        parcelCount: 42,
+        fileName: "gls.pdf",
+        createdAt: "2026-09-18T08:00:00.000Z",
+      },
+    ]);
+    render(createElement(GlsSettlementsPage));
+    fireEvent.click(
+      await screen.findByText("100031291_HUF_20260903_080032.xlsx"),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /GLS utalás ·/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Utánvét-utalások" }),
+    ).toBeNull();
+    expect(screen.getAllByTestId("gls-sor")).toHaveLength(2);
+    expect(screen.getByText("GLS-KIT-1")).toBeInTheDocument();
+    expect(screen.getByTestId("szamok-sav")).toHaveTextContent("1 / 2");
+    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
+    expect(
+      await screen.findByRole("heading", { name: "Utánvét-utalások" }),
+    ).toBeInTheDocument();
+  });
+
+  it("GLS-MONTH-SUMMARY: the month's transfers, parcels and fee invoices, from the loaded list", async () => {
+    api.invoices.mockResolvedValue([
+      {
+        id: "inv-1",
+        invoiceNumber: "GLS-KIT-1",
+        invoiceDate: "2026-09-18",
+        currency: "HUF",
+        feeTotal: "12880",
+        cardFeeTotal: "0",
+        parcelCount: 42,
+        fileName: "gls.pdf",
+        createdAt: "2026-09-18T08:00:00.000Z",
+      },
+    ]);
+    render(createElement(GlsSettlementsPage));
+    fireEvent.change(await screen.findByLabelText("A riport hónapja"), {
+      target: { value: "2026-09" },
+    });
+    expect(
+      await screen.findByText("1 utánvét-utalás · 2 csomag · 1 GLS díjszámla"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("A riport hónapja"), {
+      target: { value: "2026-08" },
+    });
+    expect(
+      screen.getByText("0 utánvét-utalás · 0 csomag · 0 GLS díjszámla"),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * barracuda's #1653 review: the list endpoint neither filters by month nor
+   * sums, so the summary counts from the latest 100 and says so when that
+   * window does not reach back to the month's start.
+   */
+  it("GLS-MONTH-WINDOW: 120 transfers, 50 loaded, an older month: the summary does not claim the whole month", async () => {
+    const day = (i: number) =>
+      new Date(Date.UTC(2026, 9, 5) - i * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    const latest = Array.from({ length: 50 }, (_, i) => ({
+      ...reports.items[0]!,
+      id: `report-${i}`,
+      fileName: `gls-${i}.xlsx`,
+      transferDate: day(i),
+    }));
+    api.list.mockImplementation(
+      async (_token: string, query: { page?: number; pageSize?: number }) => ({
+        items:
+          query.pageSize === 100
+            ? latest
+            : latest.slice(
+                ((query.page ?? 1) - 1) * (query.pageSize ?? 20),
+                (query.page ?? 1) * (query.pageSize ?? 20),
+              ),
+        pagination: {
+          page: query.page ?? 1,
+          pageSize: query.pageSize ?? 20,
+          totalItems: 120,
+          totalPages: Math.ceil(120 / (query.pageSize ?? 20)),
+        },
+      }),
+    );
+    render(createElement(GlsSettlementsPage));
+    const month = await screen.findByLabelText("A riport hónapja");
+    // the loaded window reaches back to 2026-08-17: September is whole
+    fireEvent.change(month, { target: { value: "2026-09" } });
+    expect(
+      await screen.findByText(/^30 utánvét-utalás · 60 csomag/),
+    ).toBeInTheDocument();
+    // August starts before the window: the summary says it is partial
+    fireEvent.change(month, { target: { value: "2026-08" } });
+    expect(
+      screen.getByText(
+        /^A legutóbbi 50 utalásból, a hónap régebbi utalásai nélkül: 15 utánvét-utalás/,
+      ),
+    ).toBeInTheDocument();
+    // the pager counts from the server's total and asks it for the next page
+    expect(screen.getByText(/^1–20 \/ 120$/)).toBeInTheDocument();
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Lapozás, alul" }),
+      ).getByRole("button", { name: "Következő" }),
+    );
+    await waitFor(() =>
+      expect(api.list).toHaveBeenCalledWith("token-OWNER", {
+        page: 2,
+        pageSize: 20,
+      }),
+    );
+    expect(await screen.findByText(/^21–40 \/ 120$/)).toBeInTheDocument();
   });
 });

@@ -20,6 +20,10 @@ const auth = vi.hoisted(() => ({
   session: null as Session | null,
 }));
 
+// a lap a Figma 45 · OS / Settlements óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: auth.session,

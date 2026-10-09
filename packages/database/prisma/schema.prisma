@@ -6863,8 +6863,26 @@ model ProductShippingProfile {
   isHeavy          Boolean
   /// Fagyasztott: nem szallithato, `pickupOnly`-kent viselkedik.
   isFrozen         Boolean
+  /// Csomagautomataba nem fer (a82ed229): a Foxpost kimarad, a GLS csomagpont
+  /// modon csak csomagbolt valaszthato. A UNAS nem ismeri, tehat mindig kezi.
+  lockerUnsuitable Boolean @default(false)
+
+  /// A JELZOK FORRASA (a82ed229, Balazs 2026-10-08 11:16 UTC: az OS a gazda).
+  /// `UNAS`: a UNAS-szinkron szamolja ujra minden futasnal; `MANUAL`: kezzel
+  /// allitottak, a szinkron nem irja felul. Az alapertek `MANUAL`, mert a tabla
+  /// eddigi sorait kezzel irtak.
+  pickupOnlySource       ShippingFlagSource @default(MANUAL)
+  foxpostForbiddenSource ShippingFlagSource @default(MANUAL)
+  isHeavySource          ShippingFlagSource @default(MANUAL)
+  isFrozenSource         ShippingFlagSource @default(MANUAL)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+/// Honnan jon egy szallitasi jelzo erteke (a82ed229).
+enum ShippingFlagSource {
+  UNAS
+  MANUAL
 }
 
 model ProductDatasheet {

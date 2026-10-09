@@ -79,6 +79,7 @@ export const FIELD_LABEL: Record<ProductEnrichmentFieldKey, string> = {
   dosing: "Adagolási rend",
   manufacturerClaims: "A gyártó állításai",
   manufacturerInfo: "Gyártó (GPSR)",
+  waterParameterEffects: "Mozgatott vízparaméterek",
 };
 
 export const SOURCE_LABEL: Record<ProductEvidenceSourceType, string> = {

@@ -323,6 +323,22 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       variant.product.unasSnapshot?.reportedStock?.toString(),
       "7.5",
     );
+    // a szállítási jelzők (a82ed229): a szinkron létrehozza a sort, a UNAS
+    // felülírás nélküli terméke korlátozás nélküli, minden jelző UNAS forrású
+    const szallitas = await prisma.productShippingProfile.findUniqueOrThrow({
+      where: { productId: variant.productId },
+    });
+    assert.deepEqual(
+      [
+        szallitas.pickupOnly,
+        szallitas.foxpostForbidden,
+        szallitas.isHeavy,
+        szallitas.pickupOnlySource,
+        szallitas.foxpostForbiddenSource,
+        szallitas.lockerUnsuitable,
+      ],
+      [false, false, false, "UNAS", "UNAS", false],
+    );
     /**
      * CSAK A SAJÁT KÉT FOLYAMA, nem az egész tábla.
      *
