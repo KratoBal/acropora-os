@@ -1,12 +1,13 @@
 "use client";
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   EmptyState,
-  PageHeader,
+  Icon,
+  PilotDataTable,
+  PilotPageHeader,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -16,11 +17,50 @@ import {
   type SupplierInvoiceMailSyncStatus,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotInput,
+  PilotSelect,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { urlChoice, useUrlQuery } from "@/lib/navigation/use-url-query";
 import { expectedArrivalsApi } from "@/lib/api/expected-arrivals";
+
+import {
+  PilotFilterCard,
+  PilotListCard,
+  PurchasingTabs,
+} from "./purchasing-pilot-shell";
+
+/** A lista egy lapja (a terv lapoz; a szerver a teljes listát adja). */
+const PAGE_SIZE = 25;
+
+type Stage = ExpectedArrivalListItem["stage"];
+
+const STAGE_LABEL: Record<Stage, string> = {
+  INVOICE: "Bevételezhető",
+  PROFORMA: "Csak proforma, a számla még nem érkezett meg",
+  LATE_CORRECTION: "Bevételezés után javított számla érkezett",
+};
+
+const STAGE_BADGE: Record<Stage, "success" | "amber" | "danger"> = {
+  INVOICE: "success",
+  PROFORMA: "amber",
+  LATE_CORRECTION: "danger",
+};
+
+/** A keresés a beszállító nevére, a rendelés- és a számlaszámra szűr. */
+function matches(item: ExpectedArrivalListItem, search: string): boolean {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return true;
+  return [item.supplierName, item.orderReference, item.invoiceNumber].some(
+    (value) => value?.toLowerCase().includes(needle),
+  );
+}
 
 function formatAmount(value: number | null, currency: string | null): string {
   if (value === null) return "—";
@@ -94,8 +134,13 @@ export function ExpectedArrivalListPage() {
     ["MAIL", "NAV"],
     "",
   );
-  const setSource = (next: "" | ExpectedArrivalSource) =>
+  const setSource = (next: "" | ExpectedArrivalSource) => {
     update({ source: next || null });
+    setPage(1);
+  };
+  const [search, setSearch] = useState("");
+  const [stage, setStage] = useState<"" | Stage>("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -176,65 +221,293 @@ export function ExpectedArrivalListPage() {
       />
     );
 
-  const shown = (items ?? []).filter(
-    (item) => !source || item.source === source,
+  return (
+    <ExpectedArrivalView
+      items={items}
+      dismissed={dismissed}
+      loading={loading}
+      error={error}
+      syncing={syncing}
+      syncNotice={syncNotice}
+      mailStatus={mailStatus}
+      canManage={canManage}
+      busyId={busyId}
+      source={source}
+      setSource={setSource}
+      search={search}
+      setSearch={(value) => {
+        setSearch(value);
+        setPage(1);
+      }}
+      stage={stage}
+      setStage={(value) => {
+        setStage(value);
+        setPage(1);
+      }}
+      page={page}
+      setPage={setPage}
+      onSync={() => void handleSync()}
+      onReload={() => void load()}
+      onMove={(id, action) => void handleMove(id, action)}
+      onOpen={(item) => router.push(item.editorPath!)}
+      onNew={() => router.push("/beszerzes/uj")}
+    />
   );
+}
+
+/**
+ * A LAP KINÉZETE (Figma 611:321, „OS / Purchasing / Expected / Desktop”):
+ * fejléc a művelettel, a Beszerzés fülei, szűrőkártya, a lista kártyája a
+ * darabszámmal és a lapozóval. A tartalom és a viselkedés a mai: a forrás-
+ * szűrő, a „Nem kell”, a levél-behúzás és a kivett tételek megmaradnak, a
+ * terv stílusában.
+ */
+function ExpectedArrivalView(props: {
+  items: ExpectedArrivalListItem[] | null;
+  dismissed: ExpectedArrivalListItem[];
+  loading: boolean;
+  error: string | null;
+  syncing: boolean;
+  syncNotice: string | null;
+  mailStatus: SupplierInvoiceMailSyncStatus | null;
+  canManage: boolean;
+  busyId: string | null;
+  source: "" | ExpectedArrivalSource;
+  setSource: (value: "" | ExpectedArrivalSource) => void;
+  search: string;
+  setSearch: (value: string) => void;
+  stage: "" | Stage;
+  setStage: (value: "" | Stage) => void;
+  page: number;
+  setPage: (page: number) => void;
+  onSync: () => void;
+  onReload: () => void;
+  onMove: (id: string, action: "dismiss" | "restore") => void;
+  onOpen: (item: ExpectedArrivalListItem) => void;
+  onNew: () => void;
+}) {
+  const { items, canManage, busyId } = props;
+  const shown = useMemo(
+    () =>
+      (items ?? []).filter(
+        (item) =>
+          (!props.source || item.source === props.source) &&
+          (!props.stage || item.stage === props.stage) &&
+          matches(item, props.search),
+      ),
+    [items, props.source, props.stage, props.search],
+  );
+  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const page = Math.min(props.page, totalPages);
+  const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const hasFilters = Boolean(props.source || props.stage || props.search);
+
+  const columns: PilotTableColumn<ExpectedArrivalListItem>[] = [
+    {
+      id: "reference",
+      header: "Rendelés / számla",
+      width: "19%",
+      cell: (item) => (
+        <div className="min-w-0">
+          <p className="truncate text-xs text-pilot-grey-600">
+            {[
+              item.orderReference ? `rendelés ${item.orderReference}` : null,
+              item.invoiceNumber,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "—"}
+          </p>
+          <PilotBadge variant={item.source === "MAIL" ? "blue" : "grey"}>
+            {item.source === "MAIL" ? "Levél" : "NAV"}
+          </PilotBadge>
+        </div>
+      ),
+    },
+    {
+      id: "supplier",
+      header: "Beszállító",
+      width: "22%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {item.supplierName}
+        </span>
+      ),
+    },
+    {
+      id: "arrived",
+      header: "Érkezett",
+      width: "12%",
+      cell: (item) => (
+        <span className="text-pilot-grey-600">
+          {formatDate(item.arrivedAt)}
+        </span>
+      ),
+    },
+    {
+      id: "amount",
+      header: "Nettó összeg",
+      align: "right",
+      width: "14%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.netTotal, item.currency)}
+        </span>
+      ),
+    },
+    {
+      id: "stage",
+      header: "Állapot",
+      width: "18%",
+      cell: (item) => (
+        <PilotBadge variant={STAGE_BADGE[item.stage]}>
+          {STAGE_LABEL[item.stage]}
+        </PilotBadge>
+      ),
+    },
+    {
+      id: "lines",
+      header: "Tételek",
+      align: "right",
+      width: "13%",
+      cell: (item) => (
+        <span className="text-sm text-pilot-blue-700">
+          {item.lineCount === null
+            ? "—"
+            : item.suggestedLineCount
+              ? `${item.lineCount} tétel (${item.suggestedLineCount} javaslattal)`
+              : `${item.lineCount} tétel`}
+        </span>
+      ),
+    },
+    ...(canManage
+      ? [
+          {
+            id: "actions",
+            header: "",
+            align: "right" as const,
+            width: "9%",
+            cell: (item: ExpectedArrivalListItem) =>
+              dismissable(item) ? (
+                // a sor kattintása és Enterje a szerkesztőt nyitná
+                <span
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <PilotButton
+                    variant="ghost"
+                    disabled={busyId === item.id}
+                    onClick={() => props.onMove(item.id, "dismiss")}
+                  >
+                    Nem kell
+                  </PilotButton>
+                </span>
+              ) : null,
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
         title="Várható beérkezések"
         description="A beérkezett, de még be nem vételezett beszállítói számlák. Válassz egyet a bevételezéshez: a szerkesztő előtöltve nyílik."
         actions={
-          canManage && mailStatus?.canRunNow ? (
-            <Button onClick={() => void handleSync()} disabled={syncing}>
-              {syncing ? "Ellenőrzés..." : "Levelek ellenőrzése"}
-            </Button>
+          canManage ? (
+            <>
+              {props.mailStatus?.canRunNow ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  onClick={props.onSync}
+                  disabled={props.syncing}
+                >
+                  {props.syncing ? "Ellenőrzés..." : "Levelek ellenőrzése"}
+                </PilotButton>
+              ) : null}
+              <PilotButton size="regular" onClick={props.onNew}>
+                Új beszerzés
+              </PilotButton>
+            </>
           ) : undefined
         }
       />
-      {mailStatus ? (
-        <p className="text-sm text-dusk-500" data-testid="levelbehuzas-allapot">
-          {mailPullSentence(mailStatus)}
+      <PurchasingTabs active="/beszerzes/varhato" />
+      {props.mailStatus ? (
+        <p
+          className="text-xs text-pilot-grey-500"
+          data-testid="levelbehuzas-allapot"
+        >
+          {mailPullSentence(props.mailStatus)}
         </p>
       ) : null}
-      {syncNotice ? (
+      {props.syncNotice ? (
         <Alert
           variant="info"
           title="Ellenőrzés kész"
-          description={syncNotice}
+          description={props.syncNotice}
         />
       ) : null}
-      {error ? (
+      {props.error ? (
         <Alert
           variant="danger"
           title="Hiba történt"
-          description={error}
+          description={props.error}
           action={
-            <Button variant="secondary" onClick={() => void load()}>
+            <Button variant="secondary" onClick={props.onReload}>
               Újrapróbálás
             </Button>
           }
         />
       ) : null}
-      <Card className="flex flex-wrap gap-2 p-4">
-        {(
-          [
-            ["", "Összes"],
-            ["MAIL", "Levélből"],
-            ["NAV", "NAV"],
-          ] as const
-        ).map(([value, label]) => (
-          <Button
-            key={value || "all"}
-            variant={source === value ? "primary" : "secondary"}
-            onClick={() => setSource(value)}
-          >
-            {label}
-          </Button>
-        ))}
-      </Card>
-      {loading && !items ? (
+      <PilotFilterCard
+        onClear={
+          hasFilters
+            ? () => {
+                props.setSearch("");
+                props.setStage("");
+                props.setSource("");
+              }
+            : undefined
+        }
+      >
+        <div className="min-w-[240px] flex-[2_1_360px]">
+          <PilotInput
+            aria-label="Keresés a várható beérkezések között"
+            value={props.search}
+            onChange={props.setSearch}
+            leadingIcon={<Icon name="search" size={17} />}
+            placeholder="Beszállító, rendelésazonosító, számlaszám…"
+            className="h-10"
+          />
+        </div>
+        <PilotSelect
+          chevron
+          aria-label="Forrás"
+          value={props.source}
+          onChange={(value) =>
+            props.setSource(value as "" | ExpectedArrivalSource)
+          }
+          className="min-w-[160px] flex-[1_1_180px] [&_select]:h-10"
+        >
+          <option value="">Minden forrás</option>
+          <option value="MAIL">Levélből</option>
+          <option value="NAV">NAV</option>
+        </PilotSelect>
+        <PilotSelect
+          chevron
+          aria-label="Állapot"
+          value={props.stage}
+          onChange={(value) => props.setStage(value as "" | Stage)}
+          className="min-w-[180px] flex-[1_1_200px] [&_select]:h-10"
+        >
+          <option value="">Minden állapot</option>
+          <option value="INVOICE">Bevételezhető</option>
+          <option value="PROFORMA">Csak proforma</option>
+          <option value="LATE_CORRECTION">Javított számla érkezett</option>
+        </PilotSelect>
+      </PilotFilterCard>
+      {props.loading && !items ? (
         <div aria-label="Várható beérkezések betöltése" className="space-y-3">
           <Skeleton className="h-16" />
           <Skeleton className="h-64" />
@@ -242,149 +515,75 @@ export function ExpectedArrivalListPage() {
       ) : null}
       {items ? (
         shown.length ? (
-          <Card className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
-              <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                <tr>
-                  <th className="p-3">Forrás</th>
-                  <th>Beszállító</th>
-                  <th>Rendelés / számla</th>
-                  <th>Érkezett</th>
-                  <th>Nettó összeg</th>
-                  <th>Sorok</th>
-                  <th>Állapot</th>
-                  {canManage ? <th className="p-3" /> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((item) => {
-                  const bookable = item.editorPath !== null;
-                  return (
-                    <tr
-                      key={`${item.source}-${item.id}`}
-                      data-testid="varhato-sor"
-                      className={
-                        bookable
-                          ? "cursor-pointer border-b last:border-0 hover:bg-dusk-50"
-                          : "border-b last:border-0 text-dusk-500"
-                      }
-                      onClick={
-                        bookable
-                          ? () => router.push(item.editorPath!)
-                          : undefined
-                      }
-                    >
-                      <td className="p-3">
-                        <Badge
-                          variant={item.source === "MAIL" ? "info" : "neutral"}
-                        >
-                          {item.source === "MAIL" ? "Levél" : "NAV"}
-                        </Badge>
-                      </td>
-                      <td className="font-semibold text-dusk-900">
-                        {item.supplierName}
-                      </td>
-                      <td className="font-mono text-xs text-dusk-600">
-                        {[
-                          item.orderReference
-                            ? `rendelés ${item.orderReference}`
-                            : null,
-                          item.invoiceNumber,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </td>
-                      <td>{formatDate(item.arrivedAt)}</td>
-                      <td>{formatAmount(item.netTotal, item.currency)}</td>
-                      <td>
-                        {item.lineCount === null
-                          ? "—"
-                          : item.suggestedLineCount
-                            ? `${item.lineCount} (${item.suggestedLineCount} javaslattal)`
-                            : String(item.lineCount)}
-                      </td>
-                      <td>
-                        {item.stage === "INVOICE" ? (
-                          <Badge variant="success">Bevételezhető</Badge>
-                        ) : item.stage === "LATE_CORRECTION" ? (
-                          <Badge variant="danger">
-                            Bevételezés után javított számla érkezett
-                          </Badge>
-                        ) : (
-                          <Badge variant="warning">
-                            Csak proforma, a számla még nem érkezett meg
-                          </Badge>
-                        )}
-                      </td>
-                      {canManage ? (
-                        <td className="p-3 text-right">
-                          {dismissable(item) ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={busyId === item.id}
-                              onClick={(event) => {
-                                // a sor kattintása a szerkesztőt nyitná
-                                event.stopPropagation();
-                                void handleMove(item.id, "dismiss");
-                              }}
-                            >
-                              Nem kell
-                            </Button>
-                          ) : null}
-                        </td>
-                      ) : null}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </Card>
+          <PilotListCard
+            count={`${shown.length.toLocaleString("hu-HU")} várható beérkezés`}
+            pagination={{
+              page,
+              pageSize: PAGE_SIZE,
+              totalItems: shown.length,
+              totalPages,
+            }}
+            onPageChange={props.setPage}
+          >
+            <PilotDataTable
+              columns={columns}
+              rows={pageItems}
+              rowKey={(item) => `${item.source}-${item.id}`}
+              rowTestId="varhato-sor"
+              onRowActivate={props.onOpen}
+              rowCanActivate={(item) => item.editorPath !== null}
+              rowLabel={(item) => `${item.supplierName} bevételezése`}
+              minWidth={900}
+            />
+          </PilotListCard>
         ) : (
           <EmptyState
-            title="Nincs várható beérkezés"
-            description="Minden beérkezett számla be van vételezve."
+            title={hasFilters ? "Nincs találat" : "Nincs várható beérkezés"}
+            description={
+              hasFilters
+                ? "Módosítsd a keresést vagy a szűrőket."
+                : "Minden beérkezett számla be van vételezve."
+            }
           />
         )
       ) : null}
-      {dismissed.length ? (
-        <Card className="p-4">
+      {props.dismissed.length ? (
+        <section className="rounded-2xl border border-pilot-grey-200 bg-white p-5">
           <details data-testid="kivett-tetelek">
-            <summary className="cursor-pointer text-sm font-semibold text-dusk-700">
-              Kivett tételek ({dismissed.length})
+            <summary className="cursor-pointer text-sm font-semibold text-pilot-grey-900">
+              Kivett tételek ({props.dismissed.length})
             </summary>
             <ul className="mt-3 space-y-2 text-sm">
-              {dismissed.map((item) => (
+              {props.dismissed.map((item) => (
                 <li
                   key={item.id}
                   data-testid="kivett-sor"
                   className="flex flex-wrap items-center justify-between gap-2"
                 >
                   <span>
-                    <span className="font-semibold text-dusk-900">
+                    <span className="font-semibold text-pilot-grey-900">
                       {item.supplierName}
                     </span>{" "}
-                    <span className="font-mono text-xs text-dusk-600">
+                    <span className="text-xs text-pilot-grey-600">
                       {item.invoiceNumber ?? item.orderReference ?? "—"}
                     </span>{" "}
                     · {formatAmount(item.netTotal, item.currency)}
                   </span>
                   {canManage ? (
-                    <Button
-                      size="sm"
+                    <PilotButton
                       variant="secondary"
                       disabled={busyId === item.id}
-                      onClick={() => void handleMove(item.id, "restore")}
+                      onClick={() => props.onMove(item.id, "restore")}
                     >
                       Visszavétel
-                    </Button>
+                    </PilotButton>
                   ) : null}
                 </li>
               ))}
             </ul>
           </details>
-        </Card>
+        </section>
       ) : null}
-    </div>
+    </PilotThemeRoot>
   );
 }
