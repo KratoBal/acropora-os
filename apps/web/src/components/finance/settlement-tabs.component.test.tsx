@@ -62,6 +62,17 @@ describe("SettlementTabs", () => {
     );
   });
 
+  it("SETTLE-CARDS: each provider card says what it settles", () => {
+    render(<SettlementTabs />);
+    expect(
+      screen.getByText("Heti utánvét + díjszámla egy levélben"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Utánvét, díjszámla és kompenzáció"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Kártyás forgalmi kimutatás")).toBeInTheDocument();
+  });
+
   it("shows no tab to a role without the finance view", () => {
     auth.session = as("SERVICE");
     render(<SettlementTabs />);
