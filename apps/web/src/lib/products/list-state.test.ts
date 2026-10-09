@@ -20,6 +20,8 @@ describe("product list URL state", () => {
     );
     assert.deepEqual(state, {
       q: "maxspect",
+      shipping: "",
+      shippingDiffers: false,
       active: "active",
       categoryId: "cat",
       brandId: "brand",
@@ -118,5 +120,24 @@ describe("product list request behavior", () => {
       }),
       "error",
     );
+  });
+});
+
+describe("product list URL state, shipping (a82ed229)", () => {
+  it("keeps a known shipping filter and the difference switch, drops an unknown one", () => {
+    const state = parseProductListState(
+      new URLSearchParams("shipping=HEAVY&shippingDiffers=true"),
+    );
+    assert.equal(state.shipping, "HEAVY");
+    assert.equal(state.shippingDiffers, true);
+    assert.equal(
+      serializeProductListState(state),
+      "shipping=HEAVY&shippingDiffers=true",
+    );
+    assert.equal(
+      parseProductListState(new URLSearchParams("shipping=MERGE")).shipping,
+      "",
+    );
+    assert.equal(serializeProductListState(DEFAULT_PRODUCT_LIST_STATE), "");
   });
 });

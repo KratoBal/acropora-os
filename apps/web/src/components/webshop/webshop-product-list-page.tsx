@@ -17,7 +17,16 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  PRODUCT_SHIPPING_FILTERS,
+  type ProductShippingFilter,
+} from "@acropora/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  ShippingCell,
+  ShippingFilterControls,
+} from "@/components/products/product-shipping-list";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { productApi } from "@/lib/api/products";
@@ -64,6 +73,14 @@ export function WebshopProductListPage() {
   const token = session?.token ?? "";
   const page = Number(params.get("page") ?? "1") || 1;
   const searchParam = params.get("search") ?? "";
+  // a szállítási szűrő (a82ed229), ugyanaz, mint a Termékek listán
+  const shippingParam = params.get("shipping") ?? "";
+  const shipping = (PRODUCT_SHIPPING_FILTERS as readonly string[]).includes(
+    shippingParam,
+  )
+    ? (shippingParam as ProductShippingFilter)
+    : "";
+  const shippingDiffers = params.get("shippingDiffers") === "true";
 
   const query = useMemo(
     () => ({
@@ -71,8 +88,10 @@ export function WebshopProductListPage() {
       page,
       pageSize: PAGE_SIZE,
       ...(searchParam ? { search: searchParam } : {}),
+      ...(shipping ? { shipping } : {}),
+      ...(shippingDiffers ? { shippingUnasDiffers: true } : {}),
     }),
-    [page, searchParam],
+    [page, searchParam, shipping, shippingDiffers],
   );
 
   const load = useCallback(async () => {
@@ -107,6 +126,19 @@ export function WebshopProductListPage() {
     }, 350);
     return () => window.clearTimeout(timer);
   }, [params, pathname, router, search, searchParam]);
+
+  const setShipping = (next: {
+    shipping: ProductShippingFilter | "";
+    shippingDiffers: boolean;
+  }) => {
+    const query = new URLSearchParams(params.toString());
+    if (next.shipping) query.set("shipping", next.shipping);
+    else query.delete("shipping");
+    if (next.shippingDiffers) query.set("shippingDiffers", "true");
+    else query.delete("shippingDiffers");
+    query.set("page", "1");
+    router.replace(`${pathname}?${query}`);
+  };
 
   const goToPage = (next: number) => {
     const query = new URLSearchParams(params.toString());
@@ -152,12 +184,19 @@ export function WebshopProductListPage() {
 
       {data ? (
         <>
-          <Card className="p-4">
-            <Input
-              aria-label="Termék keresése"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Terméknév vagy cikkszám"
+          <Card className="flex flex-wrap items-center gap-3 p-4">
+            <div className="min-w-[240px] flex-[2_1_320px]">
+              <Input
+                aria-label="Termék keresése"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Terméknév vagy cikkszám"
+              />
+            </div>
+            <ShippingFilterControls
+              value={shipping}
+              differs={shippingDiffers}
+              onChange={setShipping}
             />
           </Card>
 
@@ -170,6 +209,7 @@ export function WebshopProductListPage() {
                     <th>Cikkszám</th>
                     <th>Bruttó ár</th>
                     <th>Készlet</th>
+                    <th>Szállítás</th>
                     <th>Webshop státusz</th>
                     <th>Megnyitás</th>
                   </tr>
@@ -202,6 +242,9 @@ export function WebshopProductListPage() {
                         ) : null}
                       </td>
                       <td>{formatStock(item.stockOnHand)}</td>
+                      <td>
+                        <ShippingCell shipping={item.shipping} />
+                      </td>
                       {/*
                         Raw, on purpose: the shop's status codes have no
                         agreed meaning in this repository, and the product

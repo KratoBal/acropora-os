@@ -8,6 +8,11 @@ const api = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const search = vi.hoisted(() => ({ params: new URLSearchParams() }));
 
+// a szállítási szűrő a Pilot UI-ból jön, ami a `next/font/local`-t tölti (a82ed229)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
   usePathname: () => "/webshop/termekek",
@@ -153,5 +158,34 @@ describe("WebshopProductListPage", () => {
     expect(
       screen.queryByRole("button", { name: /vonalkód/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // a82ed229: ugyanaz a szállítási szűrő és oszlop, mint a Termékek listán
+  it("passes the shipping filter from the URL and shows the shipping column", async () => {
+    search.params = new URLSearchParams("shipping=PICKUP_ONLY");
+    api.list.mockResolvedValue(
+      response([
+        {
+          ...reefSalt,
+          shipping: {
+            pickupOnly: true,
+            foxpostForbidden: false,
+            isHeavy: false,
+            isFrozen: false,
+            lockerUnsuitable: false,
+            hasManual: false,
+            unasDiffers: false,
+          },
+        },
+      ]),
+    );
+    render(<WebshopProductListPage />);
+    await screen.findByText("Reef Salt 4 kg");
+    expect(api.list.mock.calls[0]?.[1]).toMatchObject({
+      shipping: "PICKUP_ONLY",
+    });
+    expect(
+      screen.getByText("Bolti átvétel", { selector: "span" }),
+    ).toBeInTheDocument();
   });
 });

@@ -29,6 +29,8 @@ function productQueryString(query: ProductListApiQuery): string {
   if (query.categoryId) params.set("categoryId", query.categoryId);
   if (query.brandId) params.set("brandId", query.brandId);
   if (query.listedOn) params.set("listedOn", query.listedOn);
+  if (query.shipping) params.set("shipping", query.shipping);
+  if (query.shippingUnasDiffers) params.set("shippingUnasDiffers", "true");
   return params.toString();
 }
 
@@ -45,7 +47,31 @@ export interface ProductShippingProfileDetail extends ProductShippingProfileInpu
   updatedAt: string;
 }
 
+/** A szállítási jelzők (a82ed229); a csomagautomata-jelzőnek nincs UNAS-forrása. */
+export type ShippingFlag =
+  "pickupOnly" | "foxpostForbidden" | "isHeavy" | "isFrozen";
+
+/** A tömeges szerkesztés: beállítás kézzel, vagy vissza „UNAS szerint”. */
+export interface ProductShippingBulkInput {
+  productIds: string[];
+  set?: Partial<Record<ShippingFlag | "lockerUnsuitable", boolean>>;
+  resetToUnas?: ShippingFlag[];
+}
+
+export interface ProductShippingBulkResult {
+  updated: number;
+  created: number;
+  missing: string[];
+}
+
 export const productApi = {
+  bulkShippingProfiles(token: string, input: ProductShippingBulkInput) {
+    return apiRequest<ProductShippingBulkResult>(
+      "/products/shipping-profiles/bulk",
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
   list(token: string, query: ProductListApiQuery) {
     return apiRequest<ProductListResponse>(
       `/products?${productQueryString(query)}`,

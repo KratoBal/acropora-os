@@ -21,6 +21,7 @@ const navigation = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   list: vi.fn(),
+  bulkShippingProfiles: vi.fn(),
   categoryOptions: vi.fn(),
   brandOptions: vi.fn(),
 }));
@@ -333,13 +334,16 @@ describe("ProductListPage", () => {
     const cells = within(within(table).getAllByRole("row")[1]!).getAllByRole(
       "cell",
     );
+    // a82ed229: a kijelölő oszlop (products.manage joggal) és a Szállítás
     expect(headers.map((header) => header.textContent)).toEqual([
+      "",
       "Termék",
       "SKU",
       "Bruttó ár",
       "Akciós ár",
       "Készlet",
       "Állapot",
+      "Szállítás",
       "Művelet",
     ]);
     const right = (element: HTMLElement) =>
@@ -348,9 +352,11 @@ describe("ProductListPage", () => {
     expect(headers.map(right)).toEqual([
       false,
       false,
+      false,
       true,
       true,
       true,
+      false,
       false,
       true,
     ]);
@@ -517,5 +523,91 @@ describe("ProductListPage", () => {
     );
     expect(api.categoryOptions).toHaveBeenCalledWith("");
     expect(api.brandOptions).toHaveBeenCalledWith("");
+  });
+
+  /*
+    A SZÁLLÍTÁS A LISTÁN (a82ed229). MI PIROSÍT: a szűrő nem jut el az API-ig; az
+    oszlop nem mondja meg a kézi eltérést, vagy a sor nélküli terméket korlátozás
+    nélkülinek mutatja; a tömeges sáv rossz kérést küld, vagy nem tölti újra a listát.
+  */
+  describe("szállítás", () => {
+    const szallitassal = (
+      shipping: ProductListResponse["items"][number]["shipping"],
+    ): ProductListResponse => ({
+      ...populatedResponse,
+      items: [{ ...populatedResponse.items[0]!, shipping }],
+    });
+
+    it("a szűrő az URL-ből az API-ig jut, és a választás az URL-be kerül", async () => {
+      setUrl("shipping=HEAVY&shippingDiffers=true");
+      api.list.mockResolvedValue(szallitassal(null));
+      render(createElement(ProductListPage));
+      await screen.findByRole("table");
+      expect(api.list.mock.calls[0]?.[1]).toMatchObject({
+        shipping: "HEAVY",
+        shippingUnasDiffers: true,
+      });
+      fireEvent.change(screen.getByLabelText("Szállítás"), {
+        target: { value: "FOXPOST_FORBIDDEN" },
+      });
+      expect(navigation.replace.mock.calls.at(-1)?.[0]).toContain(
+        "shipping=FOXPOST_FORBIDDEN",
+      );
+    });
+
+    it("az oszlop a jelzőt és az eltérést mondja; sor nélkül „Nincs kitöltve”", async () => {
+      api.list.mockResolvedValue(
+        szallitassal({
+          pickupOnly: false,
+          foxpostForbidden: false,
+          isHeavy: true,
+          isFrozen: false,
+          lockerUnsuitable: false,
+          hasManual: true,
+          unasDiffers: true,
+        }),
+      );
+      const { unmount } = render(createElement(ProductListPage));
+      const sor = within(await screen.findByRole("table")).getAllByRole(
+        "row",
+      )[1]!;
+      expect(sor.textContent).toContain("Nehéz áru");
+      expect(sor.textContent).toContain("Eltér a UNAS-tól");
+      unmount();
+      api.list.mockResolvedValue(szallitassal(null));
+      render(createElement(ProductListPage));
+      const ujra = within(await screen.findByRole("table")).getAllByRole(
+        "row",
+      )[1]!;
+      expect(ujra.textContent).toContain("Nincs kitöltve");
+    });
+
+    it("a kijelölt sorra a tömeges sáv a megnevezett jelzőt kéri, és újratölti a listát", async () => {
+      api.list.mockResolvedValue(szallitassal(null));
+      api.bulkShippingProfiles.mockResolvedValue({
+        updated: 0,
+        created: 1,
+        missing: [],
+      });
+      render(createElement(ProductListPage));
+      await screen.findByRole("table");
+      fireEvent.click(screen.getByLabelText("Red Sea ReefMat 500 kijelölése"));
+      const sav = screen.getByRole("region", {
+        name: "Tömeges szállítási szerkesztés",
+      });
+      fireEvent.change(within(sav).getByLabelText("Szállítási művelet"), {
+        target: { value: "be:lockerUnsuitable" },
+      });
+      fireEvent.click(
+        within(sav).getByRole("button", { name: "Alkalmaz (1)" }),
+      );
+      await waitFor(() =>
+        expect(api.bulkShippingProfiles).toHaveBeenCalledWith("token-owner", {
+          productIds: ["product-1"],
+          set: { lockerUnsuitable: true },
+        }),
+      );
+      await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+    });
   });
 });

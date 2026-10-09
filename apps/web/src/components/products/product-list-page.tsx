@@ -33,6 +33,12 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { productApi } from "@/lib/api/products";
 import {
+  ShippingBulkBar,
+  ShippingCell,
+  ShippingFilterControls,
+  shippingBulkInput,
+} from "./product-shipping-list";
+import {
   changeProductFilters,
   changeProductPage,
   createDebouncer,
@@ -134,9 +140,17 @@ export function ProductListPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
+  // a szállítási tömeges szerkesztés kijelölése (a82ed229); a lista minden
+  // újratöltése törli, hogy ne maradjon kijelölve olyan, ami már nem látszik
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_VIEW),
+  );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
   const token = session?.token ?? "";
 
@@ -183,10 +197,13 @@ export function ProductListPage() {
         active: state.active === "all" ? undefined : state.active === "active",
         categoryId: state.categoryId || undefined,
         brandId: state.brandId || undefined,
+        shipping: state.shipping || undefined,
+        shippingUnasDiffers: state.shippingDiffers || undefined,
       })
       .then((response) => {
         if (!active) return;
         setData(response);
+        setSelected(new Set());
         if (
           response.pagination.totalPages > 0 &&
           state.page > response.pagination.totalPages
@@ -253,7 +270,12 @@ export function ProductListPage() {
   }
 
   const hasFilters = Boolean(
-    state.q || state.active !== "all" || state.categoryId || state.brandId,
+    state.q ||
+    state.active !== "all" ||
+    state.categoryId ||
+    state.brandId ||
+    state.shipping ||
+    state.shippingDiffers,
   );
   const viewState = deriveProductListViewState({
     loading: loading && !data,
@@ -285,7 +307,55 @@ export function ProductListPage() {
     definícióból épül, a szélességet és a számoszlopok jobbra zárását
     egyszer mondjuk ki (`PilotDataTable`).
   */
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const pageIds = data?.items.map((item) => item.id) ?? [];
+  const allSelected =
+    pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const selectionColumn: PilotTableColumn<ProductListItem> = {
+    id: "select",
+    header: (
+      <input
+        type="checkbox"
+        aria-label="Az oldal összes termékének kijelölése"
+        checked={allSelected}
+        onChange={() => setSelected(allSelected ? new Set() : new Set(pageIds))}
+      />
+    ),
+    width: "44px",
+    cell: (product) => (
+      <input
+        type="checkbox"
+        aria-label={`${product.name} kijelölése`}
+        checked={selected.has(product.id)}
+        onClick={(event) => event.stopPropagation()}
+        onChange={() => toggle(product.id)}
+      />
+    ),
+  };
+  const applyBulk = (muvelet: Parameters<typeof shippingBulkInput>[1]) => {
+    setBulkBusy(true);
+    setBulkError(null);
+    void productApi
+      .bulkShippingProfiles(token, shippingBulkInput([...selected], muvelet))
+      .then(() => setRequestVersion((value) => value + 1))
+      .catch((cause: unknown) =>
+        setBulkError(
+          cause instanceof Error
+            ? cause.message
+            : "A tömeges szerkesztés nem sikerült.",
+        ),
+      )
+      .finally(() => setBulkBusy(false));
+  };
+
   const columns: PilotTableColumn<ProductListItem>[] = [
+    ...(canManage ? [selectionColumn] : []),
     {
       id: "product",
       header: "Termék",
@@ -376,6 +446,12 @@ export function ProductListPage() {
           {product.isActive ? "Aktív" : "Archivált"}
         </PilotBadge>
       ),
+    },
+    {
+      id: "shipping",
+      header: "Szállítás",
+      width: "180px",
+      cell: (product) => <ShippingCell shipping={product.shipping} />,
     },
     {
       id: "action",
@@ -474,6 +550,11 @@ export function ProductListPage() {
               </option>
             ))}
           </PilotSelect>
+          <ShippingFilterControls
+            value={state.shipping}
+            differs={state.shippingDiffers}
+            onChange={(next) => updateFilter(next)}
+          />
           {/*
             A SÁV "SZŰRŐK TÖRLÉSE" LINKJE (Figma "Clear", meleg szöveg) CSAK
             AKKOR, HA VAN MIT TÖRÖLNI, ÉS NEM A "NINCS TALÁLAT" ÁLLAPOTBAN: ott
@@ -593,6 +674,23 @@ export function ProductListPage() {
             </div>
           </div>
 
+          {canManage && selected.size > 0 ? (
+            <div className="space-y-2 px-5 pb-3">
+              <ShippingBulkBar
+                count={selected.size}
+                busy={bulkBusy}
+                onApply={applyBulk}
+                onClear={() => setSelected(new Set())}
+              />
+              {bulkError ? (
+                <Alert
+                  variant="danger"
+                  title="A tömeges szerkesztés nem sikerült"
+                  description={bulkError}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <PilotDataTable
             columns={columns}
             rows={data.items}

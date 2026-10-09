@@ -1,8 +1,17 @@
+import {
+  PRODUCT_SHIPPING_FILTERS,
+  type ProductShippingFilter,
+} from "@acropora/types";
+
 export const PRODUCT_PAGE_SIZES = [25, 50, 100] as const;
 export type ProductActiveFilter = "all" | "active" | "archived";
 
 export interface ProductListUrlState {
   q: string;
+  /** A szállítási szűrő (a82ed229); üres: nincs. */
+  shipping: ProductShippingFilter | "";
+  /** Csak a kézi jelzők, amik eltérnek a UNAS-étól. */
+  shippingDiffers: boolean;
   active: ProductActiveFilter;
   categoryId: string;
   brandId: string;
@@ -12,6 +21,8 @@ export interface ProductListUrlState {
 
 export const DEFAULT_PRODUCT_LIST_STATE: ProductListUrlState = {
   q: "",
+  shipping: "",
+  shippingDiffers: false,
   active: "all",
   categoryId: "",
   brandId: "",
@@ -29,8 +40,13 @@ export function parseProductListState(
 ): ProductListUrlState {
   const active = params.get("active");
   const size = positiveInteger(params.get("pageSize"), 25);
+  const shipping = params.get("shipping") ?? "";
   return {
     q: params.get("q")?.trim() ?? "",
+    shipping: (PRODUCT_SHIPPING_FILTERS as readonly string[]).includes(shipping)
+      ? (shipping as ProductShippingFilter)
+      : "",
+    shippingDiffers: params.get("shippingDiffers") === "true",
     active:
       active === "true" ? "active" : active === "false" ? "archived" : "all",
     categoryId: params.get("categoryId") ?? "",
@@ -51,6 +67,8 @@ export function serializeProductListState(state: ProductListUrlState): string {
   if (state.active === "archived") params.set("active", "false");
   if (state.categoryId) params.set("categoryId", state.categoryId);
   if (state.brandId) params.set("brandId", state.brandId);
+  if (state.shipping) params.set("shipping", state.shipping);
+  if (state.shippingDiffers) params.set("shippingDiffers", "true");
   if (state.page > 1) params.set("page", String(state.page));
   if (state.pageSize !== 25) params.set("pageSize", String(state.pageSize));
   return params.toString();
