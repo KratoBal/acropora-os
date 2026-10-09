@@ -11,6 +11,7 @@ import { validateSync } from "class-validator";
 
 import { UpsertProductShippingProfileDto } from "./dto/upsert-product-shipping-profile.dto.js";
 import {
+  manualShippingWrite,
   type ProductShippingProfileDatabase,
   ProductShippingProfileRepository,
 } from "./product-shipping-profile.repository.js";
@@ -28,6 +29,11 @@ const profil = (overrides: Record<string, unknown> = {}) => ({
   createdAt: new Date("2026-09-07T10:00:00.000Z"),
   updatedAt: new Date("2026-09-07T10:00:00.000Z"),
   ...TELJES,
+  lockerUnsuitable: false,
+  pickupOnlySource: "MANUAL",
+  foxpostForbiddenSource: "MANUAL",
+  isHeavySource: "MANUAL",
+  isFrozenSource: "MANUAL",
   ...overrides,
 });
 
@@ -120,7 +126,10 @@ describe("a szállítási profil tárolója", () => {
     await repository.upsert("product-1", TELJES, "user-1");
 
     assert.equal(metadata(hivasok).before, null);
-    assert.deepEqual(metadata(hivasok).after, TELJES);
+    assert.deepEqual(metadata(hivasok).after, {
+      ...TELJES,
+      lockerUnsuitable: false,
+    });
   });
 
   /**
@@ -139,8 +148,12 @@ describe("a szállítási profil tárolója", () => {
       foxpostForbidden: false,
       isHeavy: false,
       isFrozen: false,
+      lockerUnsuitable: false,
     });
-    assert.deepEqual(metadata(hivasok).after, TELJES);
+    assert.deepEqual(metadata(hivasok).after, {
+      ...TELJES,
+      lockerUnsuitable: false,
+    });
   });
 
   it("a napló eseménye megkülönbözteti a létrehozást a módosítástól", async () => {
@@ -161,5 +174,70 @@ describe("a szállítási profil tárolója", () => {
       esemeny(meglevonel.hivasok),
       "product_shipping_profile.updated",
     );
+  });
+});
+
+/*
+  A KÉZI ÍRÁS A FORRÁSSAL (a82ed229). MI PIROSÍT: a kártya egy javítása mind a
+  négy jelzőt kézire állítja, és ezzel a UNAS-ból jövőket is lefagyasztja; az
+  új jelző elhagyva hamisra íródik; a válasz nem mondja meg a forrást.
+*/
+describe("a kézi írás csak a megváltozott jelzőt teszi kézivé", () => {
+  const unasbol = profil({
+    pickupOnly: false,
+    foxpostForbidden: true,
+    isHeavy: false,
+    isFrozen: false,
+    pickupOnlySource: "UNAS",
+    foxpostForbiddenSource: "UNAS",
+    isHeavySource: "UNAS",
+    isFrozenSource: "UNAS",
+  });
+
+  it("egy jelző átírása: csak az lesz MANUAL, a többi UNAS marad", () => {
+    assert.deepEqual(
+      manualShippingWrite(unasbol as never, {
+        pickupOnly: false,
+        foxpostForbidden: true,
+        isHeavy: true,
+        isFrozen: false,
+      }),
+      { isHeavy: true, isHeavySource: "MANUAL" },
+    );
+  });
+
+  it("új sornál minden jelző kézi, az új jelző csak ha megadták", () => {
+    assert.deepEqual(manualShippingWrite(null, { ...TELJES }), {
+      pickupOnly: true,
+      pickupOnlySource: "MANUAL",
+      foxpostForbidden: false,
+      foxpostForbiddenSource: "MANUAL",
+      isHeavy: true,
+      isHeavySource: "MANUAL",
+      isFrozen: false,
+      isFrozenSource: "MANUAL",
+    });
+    assert.equal(
+      manualShippingWrite(unasbol as never, {
+        pickupOnly: false,
+        foxpostForbidden: true,
+        isHeavy: false,
+        isFrozen: false,
+        lockerUnsuitable: true,
+      }).lockerUnsuitable,
+      true,
+    );
+  });
+
+  it("a válasz a jelzők forrását és az új jelzőt is hordozza", async () => {
+    const { repository } = fixture(unasbol);
+    const detail = await repository.findByProductId("product-1");
+    assert.deepEqual(detail?.sources, {
+      pickupOnly: "UNAS",
+      foxpostForbidden: "UNAS",
+      isHeavy: "UNAS",
+      isFrozen: "UNAS",
+    });
+    assert.equal(detail?.lockerUnsuitable, false);
   });
 });

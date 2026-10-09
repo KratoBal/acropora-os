@@ -1,4 +1,4 @@
-import { IsBoolean } from "class-validator";
+import { IsBoolean, IsOptional } from "class-validator";
 
 /**
  * A NEGY JELZO MIND KOTELEZO, ES EZ A SEMA DONTESENEK A FOLYTATASA.
@@ -23,4 +23,6 @@ export class UpsertProductShippingProfileDto {
   @IsBoolean() isHeavy!: boolean;
   /** Fagyasztott: nem szallithato, `pickupOnly`-kent viselkedik. */
   @IsBoolean() isFrozen!: boolean;
+  /** Csomagautomatába nem fér (a82ed229); elhagyva a mai érték marad. */
+  @IsOptional() @IsBoolean() lockerUnsuitable?: boolean;
 }
