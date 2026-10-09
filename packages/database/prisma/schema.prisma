@@ -1157,6 +1157,8 @@ model Product {
   legacyCategory          Category?               @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   createdBy               User?                   @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   categories              ProductCategory[]
+  /// SEO P0 PR 10: a termek helye az Acropora-kategoriafaban (`StoreCategory`).
+  storeCategories         StoreCategoryProduct[]
   variants                ProductVariant[]
   channelListings         ChannelListing[]
   /// MIERT NEM MENT KI A KEP A LEGUTOBBI VETITESKOR. `null`, ha kiment.
@@ -1357,12 +1359,79 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent            Category?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children          Category[]        @relation("CategoryTree")
-  legacyProducts    Product[]         @relation("LegacyProductCategory")
+  parent            Category?            @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children          Category[]           @relation("CategoryTree")
+  legacyProducts    Product[]            @relation("LegacyProductCategory")
   productCategories ProductCategory[]
+  /// SEO P0 PR 10: melyik Acropora-kategoriara kepezodik ez a UNAS-kategoria.
+  storeMapping      UnasCategoryMapping?
 
   @@index([parentId])
+}
+
+/// SEO P0 PR 10 (C6): AZ ACROPORA-KATEGORIAFA, a UNAS-fa (`Category`) mellett,
+/// nem helyette. A UNAS-irok (API-szinkron, CSV-import) ehhez nem nyulnak: a
+/// fat a `store-category:load` CLI tolti JSON-fajlbol, es a vetites (PR 10b)
+/// olvassa. A `slug` egyetlen ASCII szegmens (`SLUG_ALAK`); a csereje
+/// `SlugHistory`-t (`STORE_CATEGORY`) es atiranyitast ir, egy tranzakcioban.
+model StoreCategory {
+  id              String   @id @default(cuid())
+  parentId        String?
+  name            String
+  slug            String   @unique
+  seoTitle        String?
+  metaDescription String?
+  intro           String?
+  imageUrl        String?
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  /// Restrict: egy szulo nem tunhet el ugy, hogy a gyerekei gyokerre esnek.
+  parent       StoreCategory?         @relation("StoreCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children     StoreCategory[]        @relation("StoreCategoryTree")
+  products     StoreCategoryProduct[]
+  unasMappings UnasCategoryMapping[]
+
+  @@index([parentId])
+}
+
+/// SEO P0 PR 10 (C6): egy termek egy Acropora-kategoriaban. Termekenkent
+/// legfeljebb EGY primary: a migracio reszleges egyedi indexe tartja (a Prisma
+/// sema nem tudja kifejezni). A primary adja a morzsat es a
+/// `primary_category_id` metaadatot (PR 10b).
+model StoreCategoryProduct {
+  id              String   @id @default(cuid())
+  productId       String
+  storeCategoryId String
+  isPrimary       Boolean  @default(false)
+  sortOrder       Int?
+  createdAt       DateTime @default(now())
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeCategory StoreCategory @relation(fields: [storeCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, storeCategoryId])
+  @@index([storeCategoryId, productId])
+}
+
+/// SEO P0 PR 10 (C6): melyik UNAS-kategoria (`Category`, a UNAS-fa sora) melyik
+/// Acropora-kategoriara kepezodik. A `storeCategoryId` ures, ha a UNAS-kategoria
+/// szandekosan nem kap parat; a `note` ilyenkor mondja meg, miert. A regi UNAS
+/// kategoria-URL-ek atiranyitasa ebbol keszul majd (PR 10c, D3).
+model UnasCategoryMapping {
+  id              String   @id @default(cuid())
+  unasCategoryId  String   @unique
+  storeCategoryId String?
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  unasCategory  Category       @relation(fields: [unasCategoryId], references: [id], onDelete: Cascade)
+  storeCategory StoreCategory? @relation(fields: [storeCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([storeCategoryId])
 }
 
 model ProductCategory {

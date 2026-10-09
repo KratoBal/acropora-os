@@ -24,6 +24,7 @@
     "medusa:handle-switch": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-handle-switch.cli.js",
     "medusa:brands": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-brand.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
+    "store-category:load": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/store-category/store-category-load.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
     "medusa:shipping-profile-link": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-shipping-profile-link.cli.js",
     "medusa:link-by-sku": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-sku-link.cli.js",
