@@ -40,6 +40,10 @@ vi.mock("@/components/auth/auth-provider", () => ({
   }),
 }));
 vi.mock("@/lib/api/expected-arrivals", () => ({ expectedArrivalsApi: api }));
+// a lap a Figma 611:321 óta `PilotThemeRoot` alatt áll (Inter, `next/font/local`)
+vi.mock("next/font/local", () => ({
+  default: () => ({ className: "pilot-inter-stub" }),
+}));
 
 const session = (role: "OWNER" | "VIEWER"): Session => ({
   id: "s",
@@ -141,7 +145,7 @@ describe("ExpectedArrivalListPage", () => {
       expect.stringContaining("Csak proforma"),
       expect.stringContaining("Hazai Kft."),
     ]);
-    expect(rows[0]).toHaveTextContent("7 (4 javaslattal)");
+    expect(rows[0]).toHaveTextContent("7 tétel (4 javaslattal)");
 
     fireEvent.click(rows[1]!);
     expect(urlNavigation.push).not.toHaveBeenCalled();
@@ -179,9 +183,10 @@ describe("ExpectedArrivalListPage", () => {
   it("filters by source", async () => {
     render(createElement(ExpectedArrivalListPage));
     await screen.findAllByTestId("varhato-sor");
-    fireEvent.click(screen.getByRole("button", { name: "NAV" }));
+    const source = screen.getByRole("combobox", { name: "Forrás" });
+    fireEvent.change(source, { target: { value: "NAV" } });
     expect(screen.getAllByTestId("varhato-sor")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Levélből" }));
+    fireEvent.change(source, { target: { value: "MAIL" } });
     expect(screen.getAllByTestId("varhato-sor")).toHaveLength(2);
   });
 
@@ -281,7 +286,9 @@ describe("Várható beérkezések -- a forrás-szűrő az URL-ben", () => {
   it("a forrás-váltás az URL-be íródik", async () => {
     render(<ExpectedArrivalListPage />);
     await screen.findByText("Hazai Kft.");
-    fireEvent.click(screen.getByRole("button", { name: "Levélből" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Forrás" }), {
+      target: { value: "MAIL" },
+    });
     await waitFor(() => expect(urlNavigation.search).toBe("source=MAIL"));
     expect(screen.queryByText("Hazai Kft.")).toBeNull();
   });
