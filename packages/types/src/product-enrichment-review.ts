@@ -81,6 +81,7 @@ export const PRODUCT_ENRICHMENT_FIELDS = {
   dosing: "C",
   manufacturerClaims: "C",
   manufacturerInfo: "C",
+  waterParameterEffects: "C",
 } as const satisfies Record<string, ProductFieldTier>;
 export type ProductEnrichmentFieldKey = keyof typeof PRODUCT_ENRICHMENT_FIELDS;
 

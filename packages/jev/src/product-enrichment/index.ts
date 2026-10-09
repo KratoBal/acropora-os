@@ -83,3 +83,11 @@ export {
   type Ratio,
   type UnsupportedFact,
 } from "./benchmark.js";
+export {
+  WATER_PARAMETER_CODES,
+  WATER_PARAMETER_DIRECTIONS,
+  parseWaterParameterEffects,
+  type WaterParameterCode,
+  type WaterParameterDirection,
+  type WaterParameterEffect,
+} from "./water-parameters.js";

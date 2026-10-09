@@ -6,7 +6,9 @@ import { describe, it } from "node:test";
 import { FIELD_SPECS } from "@acropora/jev/product-enrichment";
 
 import {
+  ATTRIBUTE_DEFINITION_ADDITIONS,
   ATTRIBUTE_DEFINITION_CHANGES,
+  additionSql,
   ATTRIBUTE_DEFINITIONS,
   CURRENT_ATTRIBUTE_DEFINITIONS,
   changeSql,
@@ -33,16 +35,17 @@ const SPECS = FIELD_SPECS as Record<
 const TENY_KULCSOK = Object.keys(SPECS).filter(
   (k) => !(COPY_KEYS as readonly string[]).includes(k),
 );
-const by = new Map(ATTRIBUTE_DEFINITIONS.map((d) => [d.key, d]));
+// a MAI definiciok (a seed es a kesobbi hozzaadasok): ezekhez mer a teny-kulcs lista
+const by = new Map(CURRENT_ATTRIBUTE_DEFINITIONS.map((d) => [d.key, d]));
 
 describe("attribute definitions vs FIELD_SPECS", () => {
   it("every fact key has exactly one definition, the copy keys none", () => {
-    assert.equal(TENY_KULCSOK.length, 25);
+    assert.equal(TENY_KULCSOK.length, 26);
     assert.deepEqual(
-      [...ATTRIBUTE_DEFINITIONS.map((d) => d.key)].sort(),
+      [...CURRENT_ATTRIBUTE_DEFINITIONS.map((d) => d.key)].sort(),
       [...TENY_KULCSOK].sort(),
     );
-    assert.equal(by.size, ATTRIBUTE_DEFINITIONS.length);
+    assert.equal(by.size, CURRENT_ATTRIBUTE_DEFINITIONS.length);
     for (const k of COPY_KEYS) assert.equal(by.has(k), false, k);
     // a ket, az elso valtozatbol kimaradt kulcs (C1)
     assert.ok(by.has("manufacturerInfo") && by.has("manufacturerClaims"));
@@ -141,6 +144,51 @@ describe("attribute definitions vs FIELD_SPECS", () => {
     }
   });
 
+  /*
+    A SEED UTAN FELVETT DEFINICIOK (kartya 2b3983e1). MI PIROSIT: a migracio nem
+    pontosan azt az INSERT-et irja, amit a lista mond.
+  */
+  it("every addition's migration holds exactly its INSERT", () => {
+    assert.ok(ATTRIBUTE_DEFINITION_ADDITIONS.length > 0);
+    for (const a of ATTRIBUTE_DEFINITION_ADDITIONS) {
+      const migracio = readFileSync(
+        join(
+          "..",
+          "..",
+          "packages",
+          "database",
+          "prisma",
+          "migrations",
+          a.migration,
+          "migration.sql",
+        ),
+        "utf8",
+      );
+      assert.ok(migracio.includes(additionSql(a)), a.migration);
+      // egy hozzaadas nem lehet a seedben is: akkor ket migracio irna egy kulcsot
+      assert.equal(
+        ATTRIBUTE_DEFINITIONS.some((d) => d.key === a.definition.key),
+        false,
+        a.definition.key,
+      );
+    }
+  });
+
+  it("the water parameter effects are the recommendation's input, not a shop fact", () => {
+    const d = by.get("waterParameterEffects")!;
+    assert.deepEqual(
+      [
+        d.dataType,
+        d.tier,
+        d.claimPolicy,
+        d.public,
+        d.aiVisible,
+        d.merchantVisible,
+      ],
+      ["TEXT", "C", "VALUE", false, true, false],
+    );
+  });
+
   it("today the ean is a per-variant barcode, not a public fact; nothing else changed", () => {
     const ean = CURRENT_ATTRIBUTE_DEFINITIONS.find((d) => d.key === "ean")!;
     assert.deepEqual(
@@ -149,11 +197,11 @@ describe("attribute definitions vs FIELD_SPECS", () => {
     );
     assert.deepEqual(
       CURRENT_ATTRIBUTE_DEFINITIONS.filter((d) => !d.public).map((d) => d.key),
-      ["ean"],
+      ["ean", "waterParameterEffects"],
     );
     assert.equal(
       CURRENT_ATTRIBUTE_DEFINITIONS.length,
-      ATTRIBUTE_DEFINITIONS.length,
+      ATTRIBUTE_DEFINITIONS.length + ATTRIBUTE_DEFINITION_ADDITIONS.length,
     );
   });
 });
