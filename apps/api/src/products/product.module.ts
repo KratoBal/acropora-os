@@ -7,10 +7,8 @@ import { ProductBarcodeService } from "./product-barcode.service.js";
 import { ProductExtensionController } from "./product-extension.controller.js";
 import { ProductExtensionRepository } from "./product-extension.repository.js";
 import { ProductExtensionService } from "./product-extension.service.js";
-import {
-  ProductShippingBulkController,
-  ProductShippingProfileController,
-} from "./product-shipping-profile.controller.js";
+import { ProductShippingBulkController } from "./product-shipping-bulk.controller.js";
+import { ProductShippingProfileController } from "./product-shipping-profile.controller.js";
 import { ProductShippingProfileRepository } from "./product-shipping-profile.repository.js";
 import { ProductShippingProfileService } from "./product-shipping-profile.service.js";
 import {
