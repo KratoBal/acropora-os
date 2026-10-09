@@ -235,6 +235,99 @@ describe(
       );
     });
 
+    it("known from Számlázz.hu, NAV or a mailbox reading with a space the recording lacks: not listed; an unknown one is", async () => {
+      const feed = await purchase("D9");
+      const nav = await purchase("E9");
+      const mail = await purchase("F9");
+      const free = await purchase("G9");
+      const spaced = (number: string) => number.replace(/^(\w)9/, "$1 9");
+      await prisma.incomingBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId: `pi-in-${suffix}-D9`,
+          feedMessageId: `pi-in-${suffix}-D9`,
+          feedReceivedAt: new Date(),
+          kindCode: "SZ",
+          documentNumber: spaced(feed.supplierInvoiceNumber),
+          electronic: true,
+          issueDate: new Date("2026-10-01T00:00:00Z"),
+          currency: "HUF",
+          supplierName: "Kitalált név a feedben",
+          supplierTaxNumber: tax,
+          buyerName: "Acropora Kft.",
+          netAmount: D(2000),
+          vatAmount: D(540),
+          grossAmount: D(2540),
+          lines: [],
+          vatSummary: [],
+          payments: [],
+          paymentsKnown: false,
+          paidAmount: D(0),
+          hasPdf: false,
+        },
+      });
+      await prisma.navIncomingInvoice.create({
+        data: {
+          navInvoiceNumber: spaced(nav.supplierInvoiceNumber),
+          supplierTaxNumber: tax,
+          supplierName: "Kitalált név a NAV-ban",
+          invoiceIssueDate: new Date("2026-10-01T00:00:00Z"),
+          insDate: new Date(),
+        },
+      });
+      const document = await prisma.incomingSupplierDocument.create({
+        data: {
+          gmailMessageId: `mail:${suffix}:F9`,
+          fileName: "F9.pdf",
+          sizeBytes: 9,
+          sha256: `${suffix}-mail-F9`,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 ")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "MAILBOX",
+          textReading: {
+            invoiceNumber: spaced(mail.supplierInvoiceNumber),
+            supplierTaxNumber: tax,
+          },
+        },
+        select: { id: true },
+      });
+      scanIds.push(document.id);
+      assert.deepEqual(
+        [
+          await listed(feed.id),
+          await listed(nav.id),
+          await listed(mail.id),
+          (await listed(free.id))?.purchaseInvoiceId,
+        ],
+        [null, null, null, free.id],
+        "SUBJECTS-NARROW-WS",
+      );
+    });
+
+    it("approved with a number the reviewer corrected: the purchase is not listed again", async () => {
+      const invoice = await purchase("H");
+      const review = await reviews.review(`purchase:${invoice.id}`);
+      await reviews.approve(
+        `purchase:${invoice.id}`,
+        {
+          ...review.values,
+          documentNumber: `${invoice.supplierInvoiceNumber}/A`,
+        },
+        userId,
+      );
+      assert.deepEqual(
+        [
+          await listed(invoice.id),
+          (await loadPurchaseSubjects(prisma)).some(
+            (subject) => subject.purchaseInvoiceId === invoice.id,
+          ),
+        ],
+        [null, false],
+        "APPROVED-RENUMBERED",
+      );
+    });
+
     after(async () => {
       if (gate.mode !== "run") return;
       await prisma.incomingDocumentReading.deleteMany({

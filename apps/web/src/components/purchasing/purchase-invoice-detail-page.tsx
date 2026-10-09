@@ -141,7 +141,7 @@ export function PurchaseInvoiceDetailPage({
         <Alert
           variant="info"
           title="Sztornózott számla"
-          description={`${detail.cancelledAt ? new Date(detail.cancelledAt).toLocaleString("hu-HU") + ": " : ""}${detail.cancelReason ?? "a rögzítés vissza lett vonva"}. A készlete kiment, a száma újra rögzíthető.`}
+          description={cancelledNote(detail)}
         />
       ) : null}
 
@@ -374,4 +374,21 @@ export function PurchaseInvoiceDetailPage({
       ) : null}
     </div>
   );
+}
+
+/**
+ * A SZTORNÓZOTT SZÁMLA SZÖVEGE. Ha volt számlaképe, az ezen a számlán marad
+ * (2408d6ad, acrobot 28406): a sztornó a bejövő számla jóváhagyását is
+ * visszavonja, és az újrarögzített számla kép nélkül nem hagyható jóvá.
+ */
+export function cancelledNote(
+  detail: Pick<PurchaseInvoiceDetail, "cancelledAt" | "cancelReason" | "scans">,
+): string {
+  const when = detail.cancelledAt
+    ? `${new Date(detail.cancelledAt).toLocaleString("hu-HU")}: `
+    : "";
+  const scan = detail.scans?.length
+    ? " A számlaképe ezen a számlán maradt: ha újra rögzíted, ott is csatold, különben bejövő számlaként nem hagyható jóvá."
+    : "";
+  return `${when}${detail.cancelReason ?? "a rögzítés vissza lett vonva"}. A készlete kiment, a száma újra rögzíthető.${scan}`;
 }

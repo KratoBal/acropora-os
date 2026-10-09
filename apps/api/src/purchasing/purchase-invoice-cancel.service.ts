@@ -11,6 +11,7 @@ import {
   postInventoryMovement,
   type InventoryMovementDatabase,
 } from "../common/inventory-movement-writer.js";
+import { withdrawPurchaseRow } from "../billing/purchase-incoming.js";
 import { receiptKey, rekeyReceipt } from "./purchase-invoice-edit.service.js";
 import { releaseReservations } from "./project-reservation.service.js";
 
@@ -249,6 +250,9 @@ export class PurchaseInvoiceCancelService {
         where: { purchaseInvoiceId: id },
         data: { purchaseInvoiceId: null, status: "OPEN" },
       });
+      // an approved incoming row goes too: the re-recorded invoice is approved
+      // again (2408d6ad, acrobot 28406)
+      const incomingWithdrawn = await withdrawPurchaseRow(tx, id, userId);
 
       await tx.auditLog.create({
         data: {
@@ -263,6 +267,7 @@ export class PurchaseInvoiceCancelService {
             releasedReservations: reservations.map((r) => r.id),
             navUnlinked: navRows.map((row) => row.id),
             arrivalsReopened: arrivals.count,
+            incomingWithdrawn,
           } as Prisma.InputJsonValue,
         },
       });

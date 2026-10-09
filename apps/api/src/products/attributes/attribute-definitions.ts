@@ -67,13 +67,15 @@ export interface AttributeDefinitionSeed {
  * mennyiseg / viztérfogat / idoszak.
  */
 export const KIND_DATA_TYPE: Record<
-  "gtin" | "identifier" | "quantity" | "dose" | "text",
+  "gtin" | "identifier" | "quantity" | "dose" | "parameterEffects" | "text",
   AttributeDataType
 > = {
   gtin: "STRING",
   identifier: "STRING",
   quantity: "QUANTITY",
   dose: "DOSE",
+  // a kanonikus `KOD:IRANY;...` szöveg (JEV `water-parameters.ts`)
+  parameterEffects: "TEXT",
   text: "TEXT",
 };
 
@@ -254,32 +256,31 @@ const sqlSzoveg = (v: string | null) =>
  * sem ir felul egy kesobb (az admin-feluleten) modositott sort.
  */
 export function seedSql(): string {
-  const sorok = ATTRIBUTE_DEFINITIONS.map(
-    (d) =>
-      `(${[
-        sqlSzoveg(d.key),
-        sqlSzoveg(d.label),
-        `'${d.dataType}'`,
-        d.dimension ? `'${d.dimension}'` : "NULL",
-        sqlSzoveg(d.canonicalUnit),
-        `'${d.scope}'`,
-        `'${d.tier}'`,
-        `'${d.claimPolicy}'`,
-        d.validation
-          ? `${sqlSzoveg(JSON.stringify(d.validation))}::jsonb`
-          : "NULL",
-        String(d.public),
-        String(d.aiVisible),
-        String(d.merchantVisible),
-        d.medusaNativeField ? `'${d.medusaNativeField}'` : "NULL",
-        "CURRENT_TIMESTAMP",
-      ].join(", ")})`,
-  );
   return [
     'INSERT INTO "AttributeDefinition" ("key", "label", "dataType", "dimension", "canonicalUnit", "scope", "tier", "claimPolicy", "validation", "public", "aiVisible", "merchantVisible", "medusaNativeField", "updatedAt") VALUES',
-    sorok.join(",\n"),
+    ATTRIBUTE_DEFINITIONS.map(sorSql).join(",\n"),
     'ON CONFLICT ("key") DO NOTHING;',
   ].join("\n");
+}
+
+/** Egy definíció VALUES-sora, ahogy a seed és a későbbi hozzáadások írják. */
+function sorSql(d: AttributeDefinitionSeed): string {
+  return `(${[
+    sqlSzoveg(d.key),
+    sqlSzoveg(d.label),
+    `'${d.dataType}'`,
+    d.dimension ? `'${d.dimension}'` : "NULL",
+    sqlSzoveg(d.canonicalUnit),
+    `'${d.scope}'`,
+    `'${d.tier}'`,
+    `'${d.claimPolicy}'`,
+    d.validation ? `${sqlSzoveg(JSON.stringify(d.validation))}::jsonb` : "NULL",
+    String(d.public),
+    String(d.aiVisible),
+    String(d.merchantVisible),
+    d.medusaNativeField ? `'${d.medusaNativeField}'` : "NULL",
+    "CURRENT_TIMESTAMP",
+  ].join(", ")})`;
 }
 
 /**
@@ -310,9 +311,54 @@ export const ATTRIBUTE_DEFINITION_CHANGES: readonly {
   },
 ];
 
-/** A definíciók MA: a seed, a későbbi változásokkal. */
+/**
+ * A SEED UTÁN FELVETT DEFINÍCIÓK, migrációnként. Ugyanaz az ok, mint a
+ * változásoknál: a seed a régi migráció INSERT-je betűre, tehát egy új kulcs nem
+ * kerülhet bele, hanem a saját migrációjával áll itt.
+ */
+export const ATTRIBUTE_DEFINITION_ADDITIONS: readonly {
+  migration: string;
+  definition: AttributeDefinitionSeed;
+}[] = [
+  {
+    // a vízmérési ajánlás bemenete (kártya 2b3983e1): a JEV állítása arról, mit
+    // mozgat a termék; nem bolti tény, ezért nem `public`, de az AI látja
+    migration: "20261009000000_water_parameter_effects_definition",
+    definition: {
+      key: "waterParameterEffects",
+      label: "Mozgatott vízparaméterek",
+      dataType: "TEXT",
+      dimension: null,
+      canonicalUnit: null,
+      scope: "PRODUCT",
+      tier: "C",
+      claimPolicy: "VALUE",
+      validation: null,
+      public: false,
+      aiVisible: true,
+      merchantVisible: false,
+      medusaNativeField: null,
+    },
+  },
+];
+
+/** Egy hozzáadás INSERT-je, ahogy a migrációjában áll. */
+export function additionSql(
+  a: (typeof ATTRIBUTE_DEFINITION_ADDITIONS)[number],
+): string {
+  return [
+    'INSERT INTO "AttributeDefinition" ("key", "label", "dataType", "dimension", "canonicalUnit", "scope", "tier", "claimPolicy", "validation", "public", "aiVisible", "merchantVisible", "medusaNativeField", "updatedAt") VALUES',
+    sorSql(a.definition),
+    'ON CONFLICT ("key") DO NOTHING;',
+  ].join("\n");
+}
+
+/** A definíciók MA: a seed és a hozzáadások, a későbbi változásokkal. */
 export const CURRENT_ATTRIBUTE_DEFINITIONS: readonly AttributeDefinitionSeed[] =
-  ATTRIBUTE_DEFINITIONS.map((d) =>
+  [
+    ...ATTRIBUTE_DEFINITIONS,
+    ...ATTRIBUTE_DEFINITION_ADDITIONS.map((a) => a.definition),
+  ].map((d) =>
     ATTRIBUTE_DEFINITION_CHANGES.filter((c) => c.key === d.key).reduce(
       (acc, c) => ({ ...acc, ...c.change }),
       d,

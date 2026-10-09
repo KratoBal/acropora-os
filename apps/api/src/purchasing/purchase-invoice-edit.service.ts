@@ -7,6 +7,8 @@ import {
 import { Prisma, prisma } from "@acropora/database";
 import type { UpdatePurchaseInvoiceInput } from "@acropora/types";
 
+import { followPurchaseEdit } from "../billing/purchase-incoming.js";
+
 /**
  * CORRECTING A RECORDED INVOICE, WITHOUT TOUCHING STOCK (Luca, 2026-10-08:
  * "ha mar ramentel hogy rogzites, utana mar nem tudsz szerkeszteni"; the
@@ -168,6 +170,15 @@ export class PurchaseInvoiceEditService {
           );
           await renumberScans(tx, id, data.supplierInvoiceNumber as string);
         }
+        // an approved incoming row says what the invoice says (2408d6ad)
+        const incoming = await followPurchaseEdit(tx, id, {
+          documentNumber:
+            data.supplierInvoiceNumber !== before.supplierInvoiceNumber
+              ? (data.supplierInvoiceNumber as string | undefined)
+              : undefined,
+          issueDate: data.invoiceDate as Date | undefined,
+          dueDate: data.dueDate as Date | null | undefined,
+        });
         for (const line of lineNames)
           await tx.purchaseInvoiceLine.update({
             where: { id: line.id },
@@ -185,6 +196,7 @@ export class PurchaseInvoiceEditService {
             metadata: {
               fields: fieldsOf(),
               changes: changesOf(before, data),
+              incoming,
             } as Prisma.InputJsonValue,
           },
         });

@@ -1,45 +1,78 @@
 "use client";
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   EmptyState,
-  PageHeader,
-  Pagination,
+  PilotDataTable,
+  PilotPageHeader,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type NavIncomingInvoiceListResponse,
   type NavIncomingInvoiceStatus,
+  type NavIncomingInvoiceSummary,
 } from "@acropora/types";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotSelect,
+  PilotThemeRoot,
+  type PilotBadgeVariant,
+} from "@/components/pilot/pilot-ui";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 
-import { NavInvoiceOperationNote } from "./nav-invoice-operation";
+import {
+  PilotFilterCard,
+  PilotListCard,
+  PurchasingTabs,
+} from "./purchasing-pilot-shell";
 
 function formatAmount(value: string | undefined, currency: string): string {
   if (!value) return "—";
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
 }
 
-function statusBadge(status: NavIncomingInvoiceStatus) {
-  switch (status) {
-    case "RECEIVED":
-      return <Badge variant="success">Bevételezve</Badge>;
-    case "ERROR":
-      return <Badge variant="danger">Hiba</Badge>;
-    case "DATA_FETCHED":
-      return <Badge variant="info">Betöltve</Badge>;
-    default:
-      return <Badge variant="neutral">Új</Badge>;
-  }
+/** A bruttó a nettó és az ÁFA összege; ÁFA nélkül nincs bruttó. */
+export function navGross(
+  item: Pick<
+    NavIncomingInvoiceSummary,
+    "invoiceNetAmount" | "invoiceVatAmount"
+  >,
+): string | undefined {
+  if (!item.invoiceNetAmount || !item.invoiceVatAmount) return undefined;
+  return (
+    Number(item.invoiceNetAmount) + Number(item.invoiceVatAmount)
+  ).toFixed(2);
 }
+
+const STATUS: Record<
+  NavIncomingInvoiceStatus,
+  { label: string; variant: PilotBadgeVariant }
+> = {
+  NEW: { label: "Új", variant: "blue" },
+  DATA_FETCHED: { label: "Betöltve", variant: "teal" },
+  RECEIVED: { label: "Bevételezve", variant: "grey" },
+  ERROR: { label: "Hiba", variant: "danger" },
+};
+
+const OPERATION: Record<
+  NavIncomingInvoiceSummary["invoiceOperation"],
+  { label: string; variant: PilotBadgeVariant }
+> = {
+  CREATE: { label: "Normál", variant: "grey" },
+  MODIFY: { label: "Módosító", variant: "amber" },
+  STORNO: { label: "Sztornó", variant: "amber" },
+};
+
+const day = (value: string | undefined) =>
+  value ? new Date(value).toLocaleDateString("hu-HU") : "—";
 
 export function NavIncomingInvoiceListPage() {
   const { session } = useAuth();
@@ -141,20 +174,106 @@ export function NavIncomingInvoiceListPage() {
     );
 
   const status = params.get("status") ?? "";
+  const columns: PilotTableColumn<NavIncomingInvoiceSummary>[] = [
+    {
+      id: "number",
+      header: "Számlaszám",
+      width: "17%",
+      cell: (item) => (
+        <div className="min-w-0">
+          <p className="truncate text-xs text-pilot-grey-600">
+            {item.navInvoiceNumber}
+          </p>
+          {item.originalInvoiceNumber ? (
+            <p className="truncate text-[11px] text-pilot-grey-500">
+              eredeti: {item.originalInvoiceNumber}
+            </p>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: "supplier",
+      header: "Szállító",
+      width: "23%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {item.supplierName}
+        </span>
+      ),
+    },
+    {
+      id: "issued",
+      header: "Kelte",
+      width: "12%",
+      cell: (item) => (
+        <span className="text-pilot-grey-600">
+          {day(item.invoiceIssueDate)}
+        </span>
+      ),
+    },
+    {
+      id: "delivered",
+      header: "Teljesítés",
+      width: "12%",
+      cell: (item) => (
+        <span className="text-pilot-grey-600">
+          {day(item.invoiceDeliveryDate)}
+        </span>
+      ),
+    },
+    {
+      id: "gross",
+      header: "Bruttó",
+      align: "right",
+      width: "14%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(navGross(item), item.currency)}
+        </span>
+      ),
+    },
+    {
+      id: "operation",
+      header: "NAV",
+      width: "11%",
+      cell: (item) => (
+        <PilotBadge variant={OPERATION[item.invoiceOperation].variant}>
+          {OPERATION[item.invoiceOperation].label}
+        </PilotBadge>
+      ),
+    },
+    {
+      id: "status",
+      header: "OS",
+      align: "right",
+      width: "11%",
+      cell: (item) => (
+        <PilotBadge variant={STATUS[item.status].variant}>
+          {STATUS[item.status].label}
+        </PilotBadge>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="NAV számla lekérés"
-        description="A NAV Online Számla rendszerből letöltött belföldi bejövő számlák - válassz egyet a bevételezéshez."
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
+        title="NAV számlák"
+        description="A NAV Online Számla rendszerből lekért bejövő számlák és OS-feldolgozási állapotuk. Válassz egyet a bevételezéshez."
         actions={
           canManage ? (
-            <Button onClick={() => void handleSync()} disabled={syncing}>
-              {syncing ? "Frissítés..." : "Frissítés"}
-            </Button>
+            <PilotButton
+              size="regular"
+              onClick={() => void handleSync()}
+              disabled={syncing}
+            >
+              {syncing ? "Lekérés..." : "NAV lekérés"}
+            </PilotButton>
           ) : undefined
         }
       />
+      <PurchasingTabs active="/beszerzes/nav-szamlak" />
       {syncNotice ? (
         <Alert variant="info" title="Szinkron kész" description={syncNotice} />
       ) : null}
@@ -170,25 +289,23 @@ export function NavIncomingInvoiceListPage() {
           }
         />
       ) : null}
-      <Card className="flex flex-wrap gap-2 p-4">
-        {(
-          [
-            ["", "Összes"],
-            ["NEW", "Új"],
-            ["DATA_FETCHED", "Betöltve"],
-            ["RECEIVED", "Bevételezve"],
-            ["ERROR", "Hiba"],
-          ] as const
-        ).map(([value, label]) => (
-          <Button
-            key={value || "all"}
-            variant={status === value ? "primary" : "secondary"}
-            onClick={() => filter("status", value)}
-          >
-            {label}
-          </Button>
-        ))}
-      </Card>
+      <PilotFilterCard
+        onClear={status ? () => filter("status", "") : undefined}
+      >
+        <PilotSelect
+          chevron
+          aria-label="OS állapot"
+          value={status}
+          onChange={(value) => filter("status", value)}
+          className="min-w-[200px] flex-[0_1_260px] [&_select]:h-10"
+        >
+          <option value="">Minden OS állapot</option>
+          <option value="NEW">Új</option>
+          <option value="DATA_FETCHED">Betöltve</option>
+          <option value="RECEIVED">Bevételezve</option>
+          <option value="ERROR">Hiba</option>
+        </PilotSelect>
+      </PilotFilterCard>
       {loading && !data ? (
         <div aria-label="NAV számlák betöltése" className="space-y-3">
           <Skeleton className="h-16" />
@@ -196,73 +313,34 @@ export function NavIncomingInvoiceListPage() {
         </div>
       ) : null}
       {data ? (
-        <>
-          {data.items.length ? (
-            <Card className="overflow-x-auto">
-              <div className="flex justify-end px-3 py-2">
-                <Pagination
-                  position="top"
-                  page={data.pagination.page}
-                  totalPages={data.pagination.totalPages}
-                  onPageChange={goToPage}
-                />
-              </div>
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Számlaszám</th>
-                    <th>Beszállító</th>
-                    <th>Kelte</th>
-                    <th>Összeg</th>
-                    <th>Állapot</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
-                      onClick={() =>
-                        router.push(`/beszerzes/nav-szamlak/${item.id}`)
-                      }
-                    >
-                      <td className="p-3 font-mono text-xs text-dusk-600">
-                        {item.navInvoiceNumber}
-                        <div className="font-sans">
-                          <NavInvoiceOperationNote invoice={item} />
-                        </div>
-                      </td>
-                      <td className="font-semibold text-dusk-900">
-                        {item.supplierName}
-                      </td>
-                      <td>
-                        {new Date(item.invoiceIssueDate).toLocaleDateString(
-                          "hu-HU",
-                        )}
-                      </td>
-                      <td>
-                        {formatAmount(item.invoiceNetAmount, item.currency)}
-                      </td>
-                      <td>{statusBadge(item.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
-          ) : (
-            <EmptyState
-              title="Nincs letöltött NAV számla"
-              description="Nyomd meg a Frissítés gombot az új belföldi bejövő számlák lekéréséhez."
-            />
-          )}
-          <Pagination
-            position="bottom"
-            page={data.pagination.page}
-            totalPages={data.pagination.totalPages}
+        data.items.length ? (
+          <PilotListCard
+            count={`${data.pagination.totalItems.toLocaleString("hu-HU")} NAV számla`}
+            pagination={data.pagination}
             onPageChange={goToPage}
+          >
+            <PilotDataTable
+              columns={columns}
+              rows={data.items}
+              rowKey={(item) => item.id}
+              onRowActivate={(item) =>
+                router.push(`/beszerzes/nav-szamlak/${item.id}`)
+              }
+              rowLabel={(item) => `${item.navInvoiceNumber} megnyitása`}
+              minWidth={900}
+            />
+          </PilotListCard>
+        ) : (
+          <EmptyState
+            title={status ? "Nincs találat" : "Nincs letöltött NAV számla"}
+            description={
+              status
+                ? "Válassz másik állapotot."
+                : "Nyomd meg a NAV lekérés gombot az új belföldi bejövő számlák lekéréséhez."
+            }
           />
-        </>
+        )
       ) : null}
-    </div>
+    </PilotThemeRoot>
   );
 }
