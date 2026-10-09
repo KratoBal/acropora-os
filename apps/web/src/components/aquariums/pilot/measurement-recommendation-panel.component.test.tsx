@@ -100,6 +100,17 @@ describe("MeasurementRecommendationPanel (2b3983e1)", () => {
     ).toBeInTheDocument();
   });
 
+  it("WEB-RECO-EMPTY: an empty response (what the API really sends for none) is no recommendation, not a crash", async () => {
+    api.measurementRecommendation.mockResolvedValue(undefined);
+    panel();
+    expect(
+      await screen.findByRole("button", { name: "Ajánlás kérése" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Ehhez a méréshez még nincs ajánlás/),
+    ).toBeInTheDocument();
+  });
+
   it("WEB-RECO-UNKNOWN: an id outside the candidates shows red, and the approval is off", async () => {
     api.measurementRecommendation.mockResolvedValue(
       draft({

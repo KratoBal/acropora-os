@@ -75,8 +75,15 @@ export function MeasurementRecommendationPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const show = (next: MeasurementRecommendationView | null) => {
-    setView(next);
+  /**
+   * "No recommendation yet" arrives as an EMPTY body, not as `null`: the API
+   * returns null, Nest sends nothing, and the client hands back `undefined`.
+   * Every check below is `view !== null`, so an undefined view counted as a
+   * recommendation and the first `view.draftText` took the whole page down
+   * (Balázs, 2026-10-09, on every measurement, as production had none yet).
+   */
+  const show = (next: MeasurementRecommendationView | null | undefined) => {
+    setView(next ?? null);
     setText(next?.draftText ?? "");
   };
 
