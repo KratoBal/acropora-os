@@ -206,6 +206,46 @@ export function billingIssueCta(
   return `${getDocumentCapabilities(type).label} kiállítása`;
 }
 
+/**
+ * A típus neve tárgyesetben, névelővel: „a számlát”. A megerősítő kérdés
+ * mondatába kerül, és a toldalék típusonként más, tehát nem képezhető.
+ */
+const ACCUSATIVE: Record<BillingDocumentType, string> = {
+  INVOICE: "a számlát",
+  PROFORMA: "a díjbekérőt",
+  ADVANCE_INVOICE: "az előlegszámlát",
+  DELIVERY_NOTE: "a szállítólevelet",
+};
+
+/**
+ * A KIÁLLÍTÁS MEGERŐSÍTŐ KÉRDÉSE (Balázs szövege, hétfői lista M1, 2026-10-09).
+ * Számlánál betű szerint:
+ *
+ *   e-számla  „Biztos, hogy kiállítod és kiküldöd a számlát a(z) [cím] címre?”
+ *             gomb: „Elküldöm”
+ *   papír     „Biztos, hogy kiállítod a számlát?”   gomb: „Kiállítom”
+ *
+ * A „Mégsem” a közös `ConfirmDialog` gombja. A többi típus ugyanezt a mondatot
+ * kapja a saját nevével. Több címzettnél a cím „címekre” áll, vesszővel.
+ */
+export function billingIssueConfirm(
+  type: BillingDocumentType,
+  format: InvoiceFormat | null,
+  recipients: readonly string[],
+): { question: string; confirmLabel: string } {
+  const noun = ACCUSATIVE[type];
+  if (billingEmailDelivery(type, format) !== "REQUIRED")
+    return {
+      question: `Biztos, hogy kiállítod ${noun}?`,
+      confirmLabel: "Kiállítom",
+    };
+  const place = recipients.length > 1 ? "címekre" : "címre";
+  return {
+    question: `Biztos, hogy kiállítod és kiküldöd ${noun} a(z) ${recipients.join(", ")} ${place}?`,
+    confirmLabel: "Elküldöm",
+  };
+}
+
 /** A kiküldő fiók végső gombja, ahol a kiküldés a kiállítás része. */
 export function billingDrawerCta(
   type: BillingDocumentType,

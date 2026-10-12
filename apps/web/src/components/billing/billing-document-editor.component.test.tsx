@@ -529,10 +529,15 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(button);
       expect(api.issue).not.toHaveBeenCalled();
       const dialog = await screen.findByRole("dialog");
+      // Balázs kérdése, betű szerint (hétfői lista M1)
+      expect(dialog).toHaveTextContent("Biztos, hogy kiállítod a számlát?");
       expect(dialog).toHaveTextContent("valódi számla készül a Számlázz.hu-n");
+      expect(
+        within(dialog).getByRole("button", { name: "Mégsem" }),
+      ).toBeEnabled();
 
       fireEvent.click(
-        within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+        within(dialog).getByRole("button", { name: "Kiállítom" }),
       );
       await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
       const [, created] = api.create.mock.calls[0]!;
@@ -570,11 +575,12 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
       );
-      fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
-          name: "Kiállítás és kiküldés",
-        }),
+      const dialog = await screen.findByRole("dialog");
+      // a címzett a kérdésben áll: aki megerősít, látja, hová megy a számla
+      expect(dialog).toHaveTextContent(
+        "Biztos, hogy kiállítod és kiküldöd a számlát a(z) szamlazas@partner.hu címre?",
       );
+      fireEvent.click(within(dialog).getByRole("button", { name: "Elküldöm" }));
     };
 
     it("an e-invoice: issued first, then the edited letter goes out", async () => {
@@ -728,7 +734,7 @@ describe("BillingDocumentEditor", () => {
       );
       fireEvent.click(
         within(await screen.findByRole("dialog")).getByRole("button", {
-          name: "Számla kiállítása",
+          name: "Kiállítom",
         }),
       );
       expect(

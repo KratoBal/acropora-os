@@ -6,6 +6,7 @@ import {
   BILLING_DOCUMENT_TYPES,
   billingDrawerCta,
   billingEmailDelivery,
+  billingIssueConfirm,
   billingIssueCta,
   canTransitionBillingDocument,
   getDocumentCapabilities,
@@ -109,6 +110,36 @@ describe("the issue flow's labels and e-mail step", () => {
     assert.equal(
       billingDrawerCta("INVOICE", "ELECTRONIC"),
       "E-számla kiállítása és elküldése",
+    );
+  });
+
+  // Balázs szövege betű szerint (hétfői lista M1): ha egy szó elcsúszik, ez piros.
+  it("BILLING-ISSUE-CONFIRM: asks Balázs's question, with the address for an e-invoice", () => {
+    assert.deepEqual(
+      [
+        billingIssueConfirm("INVOICE", "ELECTRONIC", ["szamlazas@partner.hu"]),
+        billingIssueConfirm("INVOICE", "PAPER", ["szamlazas@partner.hu"]),
+        billingIssueConfirm("INVOICE", "ELECTRONIC", [
+          "a@partner.hu",
+          "b@partner.hu",
+        ]).question,
+        billingIssueConfirm("ADVANCE_INVOICE", "PAPER", []).question,
+        billingIssueConfirm("DELIVERY_NOTE", null, []).question,
+      ],
+      [
+        {
+          question:
+            "Biztos, hogy kiállítod és kiküldöd a számlát a(z) szamlazas@partner.hu címre?",
+          confirmLabel: "Elküldöm",
+        },
+        {
+          question: "Biztos, hogy kiállítod a számlát?",
+          confirmLabel: "Kiállítom",
+        },
+        "Biztos, hogy kiállítod és kiküldöd a számlát a(z) a@partner.hu, b@partner.hu címekre?",
+        "Biztos, hogy kiállítod az előlegszámlát?",
+        "Biztos, hogy kiállítod a szállítólevelet?",
+      ],
     );
   });
 });
