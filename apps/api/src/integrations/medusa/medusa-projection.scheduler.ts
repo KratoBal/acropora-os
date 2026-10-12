@@ -141,6 +141,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "unasProductSnapshot"
   /** A tények változása (SEO P0 PR 8): a tény-írás a terméket nem érinti. */
   | "productKnowledgeFact"
+  /** A márka változása (t11): az átnevezés és a SEO-mezők a terméket nem érintik. */
+  | "brand"
 >;
 
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
@@ -303,10 +305,12 @@ export class MedusaProjectionScheduler
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
+    const marka = await this.markaValtozasAzonositok();
     const esedekes = [
       ...new Set([
         ...akcio,
         ...teny,
+        ...marka,
         ...(await this.esedekesAzonositok(limit)),
       ]),
     ].slice(0, limit);
@@ -547,6 +551,58 @@ export class MedusaProjectionScheduler
           k.lastSyncedAt === null ||
           legutobbi.get(k.entityId)! > k.lastSyncedAt,
       )
+      .map((k) => k.entityId);
+  }
+
+  /**
+   * A MÁRKA VÁLTOZÁSA IS ESEDÉKESSÉ TESZI A TERMÉKEIT (t11, barracuda #1684).
+   * A boltbeli márka-rekordot a termék-vetítés írja ki
+   * (`MedusaBrandModuleService`), tehát egy átnevezés vagy a márka SEO-mezőinek
+   * szerkesztése csak a márka valamelyik termékének következő, más okú
+   * vetítésével jutott volna ki. Átnevezésnél ez rosszabb a késésnél: a 301
+   * (`/hu/marka/régi` → `/hu/marka/új`) az átirányítás-körrel azonnal kimegy,
+   * és addig egy 404-re visz. A márka-írás a `Product` sort nem érinti, ezért
+   * KÜLÖN LEKÉRDEZÉS, a tény-változás mintájára.
+   *
+   * A döntés a kötés `lastSyncedAt`-je: ha a márka változása későbbi, a termék
+   * esedékes; egy vetítés után már nem. Kötés nélküli termék nem kerül be.
+   */
+  private async markaValtozasAzonositok(): Promise<string[]> {
+    const most = this.now();
+    const markak = await this.db.brand.findMany({
+      where: {
+        updatedAt: { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most },
+      },
+      select: { id: true, updatedAt: true },
+    });
+    if (!markak.length) return [];
+    const valtozas = new Map(markak.map((m) => [m.id, m.updatedAt]));
+    const termekek = await this.db.product.findMany({
+      where: {
+        brandId: { in: [...valtozas.keys()] },
+        isActive: true,
+        webshopExcluded: false,
+      },
+      select: { id: true, brandId: true },
+    });
+    if (!termekek.length) return [];
+    const markaja = new Map(termekek.map((t) => [t.id, t.brandId]));
+    const kotesek = await this.db.externalReference.findMany({
+      where: {
+        ...MEDUSA_PRODUCT_REFERENCE,
+        entityId: { in: termekek.map((t) => t.id) },
+      },
+      select: { entityId: true, lastSyncedAt: true },
+    });
+    return kotesek
+      .filter((k) => {
+        const brandId = markaja.get(k.entityId);
+        const mikor = brandId ? valtozas.get(brandId) : undefined;
+        return (
+          mikor !== undefined &&
+          (k.lastSyncedAt === null || mikor > k.lastSyncedAt)
+        );
+      })
       .map((k) => k.entityId);
   }
 

@@ -62,6 +62,8 @@ function adatbazis(
   }[] = [],
   /** A tények változásának sorai (`ProductKnowledgeFact`, SEO P0 PR 8). */
   tenySorok: { productId: string; updatedAt: Date }[] = [],
+  /** A márkák változásának sorai (`Brand`, t11). Alapból üres. */
+  markaSorok: { id: string; updatedAt: Date }[] = [],
 ) {
   const hivasok: { metodus: string; args: unknown }[] = [];
   const db = {
@@ -98,6 +100,12 @@ function adatbazis(
       findMany: async (args: unknown) => {
         hivasok.push({ metodus: "productKnowledgeFact.findMany", args });
         return tenySorok;
+      },
+    },
+    brand: {
+      findMany: async (args: unknown) => {
+        hivasok.push({ metodus: "brand.findMany", args });
+        return markaSorok;
       },
     },
   } as unknown as ProjectionSchedulerDatabase;
@@ -491,6 +499,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
       },
       unasProductSnapshot: { findMany: async () => [] },
       productKnowledgeFact: { findMany: async () => [] },
+      brand: { findMany: async () => [] },
     } as unknown as ProjectionSchedulerDatabase;
 
     const { run } = futtato();
@@ -1064,6 +1073,47 @@ describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
         [],
         [],
         [{ productId: "prod-1", updatedAt: tenyIdo }],
+      );
+      const scheduler = new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        runPricing: arFuttato().run,
+        environment: BEKAPCSOLVA,
+        logger: naplo().logger,
+        now: () => new Date(MOST.getTime() + 1_000),
+      });
+      await scheduler.runOnce();
+      assert.deepEqual(kapott, vart);
+    }
+  });
+});
+
+describe("a márka változása is esedékessé teszi a termékeit (t11)", () => {
+  /**
+   * MI PIROSÍT (barracuda #1684): egy, a kötés utolsó vetítése UTÁN átnevezett
+   * márka termékei nem kerülnek sorra (a 301 egy 404-re vinne, amíg más okból
+   * nem vetítik); egy korábbi márka-változás mégis esedékessé teszi őket
+   * (minden körben újra vetítene).
+   */
+  it("a vetítés utáni márka-változás esedékessé teszi a termékét, a korábbi nem", async () => {
+    for (const [markaIdo, vart] of [
+      [MOST, [["prod-1"]]],
+      [REGEN, []],
+    ] as const) {
+      const { run, kapott } = futtato(0);
+      const { db } = adatbazis(
+        [termek({ updatedAt: REGEN, brandId: "b1" })],
+        [
+          {
+            entityId: "prod-1",
+            lastSyncedAt: new Date(MOST.getTime() - 60_000),
+          },
+        ],
+        undefined,
+        [],
+        [],
+        [],
+        [{ id: "b1", updatedAt: markaIdo }],
       );
       const scheduler = new MedusaProjectionScheduler({
         db,

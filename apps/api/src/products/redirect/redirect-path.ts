@@ -57,6 +57,14 @@ export function webshopCategoryPath(slug: string): string {
 }
 
 /**
+ * A márkaoldal webshop-címe (G2): `/hu/marka/{slug}` (SEO P0 PR 11). A márka
+ * átnevezésekor a slug-csere ide ír 301-et (t11, barracuda #1678 C).
+ */
+export function webshopBrandPath(slug: string): string {
+  return `/hu/marka/${slug}`;
+}
+
+/**
  * A SEO landing oldal webshop-címe: `/hu/valogatas/{slug}` (Balázs, 2026-10-12,
  * Eldöntendő szál, message 1559272430457978951). A slug-csere ide ír 301-et.
  */
