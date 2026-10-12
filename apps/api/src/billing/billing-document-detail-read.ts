@@ -97,6 +97,34 @@ export function withIssueAndDelivery(
       canResend: mode !== null && delivers && pdfAvailable,
     },
     cancellation: osCancellation(row),
+    ...proformaLinks(row),
+  };
+}
+
+/**
+ * A DÍJBEKÉRŐ ÉS AZ ELŐLEG KAPCSA (számlázási brief, 2. pont). A díjbekérő
+ * kifizetettségét a szolgáltatás teszi rá a feedből; itt még `null`.
+ */
+export function proformaLinks(
+  row: Pick<BillingDocumentRow, "proformaInvoice" | "invoicesFromProforma">,
+): Pick<BillingDocumentDetail, "proforma" | "advance"> {
+  // a kapcsolat előtti (és a régi teszt-) sorokon a mezők hiányoznak
+  const advance = (row.invoicesFromProforma ?? [])[0];
+  return {
+    proforma: row.proformaInvoice
+      ? {
+          id: row.proformaInvoice.id,
+          number: row.proformaInvoice.invoiceNumber,
+          paid: null,
+        }
+      : null,
+    advance: advance
+      ? {
+          id: advance.id,
+          number: advance.invoiceNumber,
+          status: advance.status as BillingDocumentStatus,
+        }
+      : null,
   };
 }
 

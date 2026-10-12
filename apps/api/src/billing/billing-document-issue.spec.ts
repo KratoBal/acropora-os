@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import { buildIssueInput, vatRateText } from "./billing-document-issue.js";
+import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -262,6 +264,37 @@ describe("buildIssueInput", () => {
       code(row({ fulfillmentDate: null })),
       "BILLING_ISSUE_NO_FULFILLMENT_DATE",
     );
+  });
+});
+
+/*
+  A DÍJBEKÉRŐ SZÁMA AZ ELŐLEGEN (számlázási brief, 2. pont). MI PIROSÍT: a
+  díjbekérőből készült előleg kiállítása nem viszi a díjbekérő számát; egy
+  díjbekérő nélküli számla kap ilyet.
+*/
+describe("the proforma's number on the advance", () => {
+  it("goes as dijbekeroSzamlaszam when the draft came from a proforma, and only then", () => {
+    const xml = (value: BillingDocumentRow) => {
+      const input = buildIssueInput(value);
+      assert.ok(input.ok);
+      return buildSzamlazzAgentInvoiceXml(
+        toSzamlazzAgentInput(input.document, {
+          agentKey: "k",
+          previewOnly: false,
+        }),
+      );
+    };
+    const advance = xml(
+      row({
+        documentType: "ADVANCE_INVOICE",
+        proformaInvoice: { id: "p-1", invoiceNumber: "D-2026-7" },
+      }),
+    );
+    assert.match(
+      advance,
+      /<dijbekeroSzamlaszam>D-2026-7<\/dijbekeroSzamlaszam><elolegszamla>true<\/elolegszamla>/,
+    );
+    assert.doesNotMatch(xml(row()), /dijbekeroSzamlaszam/);
   });
 });
 

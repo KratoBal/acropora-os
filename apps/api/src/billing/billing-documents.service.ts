@@ -15,7 +15,10 @@ import type {
   BillingSourceType,
   InvoiceFormat,
 } from "@acropora/types";
-import { computeBillingDocumentAmounts } from "@acropora/types";
+import {
+  computeBillingDocumentAmounts,
+  getDocumentCapabilities,
+} from "@acropora/types";
 
 import {
   normalizeBillingDraft,
@@ -48,14 +51,23 @@ export class BillingDocumentsService {
     const detail = toBillingDocumentDetail(row);
     // a Számlázz.hu felületén sztornózott saját számla: a feed ikre mondja meg
     // (számlázási brief, 1. pont); az OS-ben kiállított sztornó elsőbb
-    if (
+    const siteCancelled =
       !detail.cancellation &&
       row.status === "ISSUED" &&
-      row.invoiceNumber &&
-      (await this.repository.feedTwinCancelled(row.invoiceNumber))
-    )
-      return { ...detail, cancellation: FEED_CANCELLATION };
-    return detail;
+      row.invoiceNumber !== null &&
+      (await this.repository.feedTwinCancelled(row.invoiceNumber));
+    // a díjbekérő kifizetettsége a feedből: kifizetve a Számlázz.hu
+    // Autokasszája már kiállíthatott belőle bizonylatot (brief, 2. pont)
+    const proformaPaid = detail.proforma?.number
+      ? await this.repository.feedPaid(detail.proforma.number)
+      : null;
+    return {
+      ...detail,
+      ...(siteCancelled ? { cancellation: FEED_CANCELLATION } : {}),
+      ...(detail.proforma
+        ? { proforma: { ...detail.proforma, paid: proformaPaid } }
+        : {}),
+    };
   }
 
   async create(
@@ -80,6 +92,76 @@ export class BillingDocumentsService {
         "Ez az azonosító már foglalt egy másik bizonylathoz.",
       );
     return toBillingDocumentDetail(row);
+  }
+
+  /**
+   * DÍJBEKÉRŐBŐL ELŐLEGSZÁMLA (számlázási brief, 2. pont; Balázs 2026-10-12
+   * 09:44 UTC „Mehet”). Egy KIÁLLÍTOTT díjbekérőből kitöltött előleg-vázlat:
+   * a vevő, a fizetési mód, a pénznem, a hivatkozás, a forrás és a tételek a
+   * díjbekérőé, és a vázlat a díjbekérőhöz kötődik (`proformaInvoiceId`). A
+   * kiállítás ebből küldi a `dijbekeroSzamlaszam`-ot a Számlázz.hu-nak.
+   *
+   * Díjbekérőnként EGY: az azonosító a díjbekérőből képződik, tehát a második
+   * kattintás (vagy egy egyidejű) ugyanazt a vázlatot kapja, ahogy a vázlat
+   * saját létrehozása is a meglévőt adja újraküldéskor.
+   *
+   * A vázlat a vázlat SAJÁT útján jön létre (`prepare`, `create`): a
+   * normalizálás és az összegek ugyanazok, mint a kézi létrehozásé.
+   */
+  async advanceFromProforma(
+    proformaId: string,
+    user: AuthenticatedUser,
+  ): Promise<BillingDocumentDetail> {
+    const proforma = await this.repository.find(proformaId);
+    if (!proforma) throw new NotFoundException("A díjbekérő nem található.");
+    if (
+      proforma.documentType !== "PROFORMA" ||
+      proforma.status !== "ISSUED" ||
+      !proforma.customerId
+    )
+      throw new ConflictException(
+        "Előlegszámla csak kiállított díjbekérőből készíthető.",
+      );
+    const id = advanceIdFor(proformaId);
+    if (await this.repository.find(id)) return this.detail(id);
+    const { draft, partner } = await this.prepare({
+      id,
+      documentType: "ADVANCE_INVOICE",
+      invoiceFormat: getDocumentCapabilities("ADVANCE_INVOICE").defaultFormat,
+      customerId: proforma.customerId,
+      // az előleg teljesítése a jóváírás napja: azt a kezelő írja be
+      fulfillmentDate: null,
+      dueDate: null,
+      paymentMethod: proforma.paymentMethod,
+      currency: proforma.currency,
+      language: proforma.language ?? "hu",
+      reference: proforma.reference,
+      note: proforma.note,
+      sourceType: proforma.sourceType as BillingSourceType | null,
+      sourceId: proforma.sourceId,
+      lines: proforma.lines
+        .filter((line) => line.kind === "ITEM")
+        .map((line) => ({
+          productId: line.productId,
+          variantId: line.variantId,
+          description: line.description,
+          quantity: line.quantity.toString(),
+          unit: line.unit,
+          unitNet: line.unitNet.toString(),
+          vatRatePercent: line.vatRatePercent.toString(),
+          discountPercent: line.discountPercent?.toString() ?? null,
+          comment: line.comment,
+        })),
+    });
+    await this.repository.create({
+      id,
+      draft,
+      partnerName: partner.name,
+      partnerTaxNumber: partner.taxNumber,
+      createdByUserId: user.id,
+      proformaInvoiceId: proformaId,
+    });
+    return this.detail(id);
   }
 
   async update(
@@ -224,3 +306,6 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+/** A díjbekérő előlegszámlájának azonosítója: díjbekérőnként egy. */
+export const advanceIdFor = (proformaId: string) => `${proformaId}-eloleg`;

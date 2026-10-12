@@ -134,6 +134,27 @@ export interface BillingDocumentCancellation {
   pdfAvailable: boolean;
 }
 
+/**
+ * DÍJBEKÉRŐ ÉS ELŐLEG (számlázási brief, 2. pont). Az előlegen a díjbekérő,
+ * amiből készült; a díjbekérőn a belőle készült előleg.
+ */
+export interface BillingDocumentProformaLink {
+  id: string;
+  number: string | null;
+  /**
+   * Kifizették-e a díjbekérőt, a Számlázz.hu feedje szerint. `true`: akkor a
+   * Számlázz.hu Autokasszája már kiállíthatott belőle bizonylatot (emlék
+   * 2141), és a felület figyelmeztet. `null`: nem tudjuk (nincs feed-sora).
+   */
+  paid: boolean | null;
+}
+
+export interface BillingDocumentAdvanceLink {
+  id: string;
+  number: string | null;
+  status: BillingDocumentStatus;
+}
+
 export interface BillingDocumentDetail {
   id: string;
   status: BillingDocumentStatus;
@@ -176,4 +197,8 @@ export interface BillingDocumentDetail {
   delivery?: BillingDocumentDeliveryInfo;
   /** A számla sztornója, ha van; `null`: nincs sztornózva. */
   cancellation?: BillingDocumentCancellation | null;
+  /** Díjbekérőből készült bizonylaton a díjbekérő; máshol `null`. */
+  proforma?: BillingDocumentProformaLink | null;
+  /** Díjbekérőn a belőle készült előlegszámla; máshol `null`. */
+  advance?: BillingDocumentAdvanceLink | null;
 }

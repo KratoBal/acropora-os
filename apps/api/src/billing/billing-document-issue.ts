@@ -212,8 +212,9 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
       language: row.language,
       note: row.note,
       reference: row.reference,
-      // a díjbekérő-hivatkozás a proformaInvoiceId-n át jön; v0.1-ben nincs kötve
-      proformaNumber: null,
+      // a díjbekérőből készült bizonylat a díjbekérő számát viszi
+      // (`dijbekeroSzamlaszam`; számlázási brief, 2. pont)
+      proformaNumber: row.proformaInvoice?.invoiceNumber ?? null,
       buyer: {
         name: buyer.name,
         // `orszag` is free text (XSD string): only for an EU buyer, by name
