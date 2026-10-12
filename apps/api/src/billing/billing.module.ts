@@ -7,7 +7,12 @@ import { BillingDocumentEmailController } from "./billing-document-email.control
 import { BillingDocumentEmailRepository } from "./billing-document-email.repository.js";
 import { BillingDocumentEmailDraftService } from "./billing-document-email-draft.service.js";
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
+import { BillingDocumentAdvanceController } from "./billing-document-advance.controller.js";
+import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
 import { BillingDocumentIssueController } from "./billing-document-issue.controller.js";
+import { BillingDocumentStornoController } from "./billing-document-storno.controller.js";
+import { BillingDocumentStornoPdfService } from "./billing-document-storno-pdf.service.js";
+import { BillingDocumentStornoService } from "./billing-document-storno.service.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
@@ -19,6 +24,8 @@ import { BillingDocumentsController } from "./billing-documents.controller.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 import { ExternalBillingDocumentsController } from "./external-billing-documents.controller.js";
+import { OutgoingPackageController } from "./outgoing-package.controller.js";
+import { OutgoingPackageService } from "./outgoing-package.service.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -30,8 +37,12 @@ import { ExternalBillingDocumentsController } from "./external-billing-documents
   imports: [SzamlazzModule, NotificationsModule],
   controllers: [
     ExternalBillingDocumentsController,
+    OutgoingPackageController,
     BillingDocumentsController,
     BillingDocumentIssueController,
+    BillingDocumentStornoController,
+    BillingDocumentAdvanceController,
+    BillingDocumentFinalController,
     BillingDocumentReadController,
     BillingDocumentEmailController,
     BillingEmailDraftController,
@@ -41,12 +52,15 @@ import { ExternalBillingDocumentsController } from "./external-billing-documents
     BillingDocumentsService,
     BillingDocumentIssueRepository,
     BillingDocumentIssueService,
+    BillingDocumentStornoService,
+    BillingDocumentStornoPdfService,
     BillingDocumentStockRepository,
     BillingDocumentListRepository,
     BillingDocumentPdfService,
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
+    OutgoingPackageService,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

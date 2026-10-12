@@ -7,6 +7,7 @@ import type {
   ProductFacts,
   StoredCheck,
 } from "./enrichment-run.js";
+import { waterEffectsFromCategories } from "./water-effects-category.js";
 
 /**
  * THE RUN'S DATABASE SIDE. It READS the product (to know our current values
@@ -68,6 +69,22 @@ export class PrismaEnrichmentRunStore implements EnrichmentRunStore {
     });
   }
 
+  async saveFailure(
+    runId: string,
+    failure: { productId: string; checkedAt: Date; errorCode: string },
+  ): Promise<void> {
+    await prisma.productEnrichmentRunProduct.create({
+      data: {
+        runId,
+        productId: failure.productId,
+        checkedAt: failure.checkedAt,
+        sourceCount: 0,
+        fieldCount: 0,
+        errorCode: failure.errorCode,
+      },
+    });
+  }
+
   async finishRun(
     runId: string,
     result: {
@@ -105,6 +122,8 @@ export class PrismaEnrichmentFactsReader implements EnrichmentFactsReader {
         name: true,
         brand: { select: { name: true, websiteUrl: true } },
         unasSnapshot: { select: { manufacturerUrl: true } },
+        // a vízhatás kategória-szabályához: a UNAS-ágak nevei, a gyökérig
+        categories: { select: { category: { select: KATEGORIA_LANC } } },
         variants: {
           select: {
             manufacturerPartNumber: true,
@@ -129,11 +148,43 @@ export class PrismaEnrichmentFactsReader implements EnrichmentFactsReader {
   }
 }
 
+/** Egy kategória a szüleivel, öt szintig (a UNAS-fa legmélyebb ága öt szint). */
+const KATEGORIA_LANC = {
+  name: true,
+  parent: {
+    select: {
+      name: true,
+      parent: {
+        select: {
+          name: true,
+          parent: {
+            select: { name: true, parent: { select: { name: true } } },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+interface KategoriaLanc {
+  name: string;
+  parent?: KategoriaLanc | null;
+}
+
+/** A gyökértől a kategóriáig a nevek. */
+function lanc(category: KategoriaLanc): string[] {
+  const nevek: string[] = [];
+  for (let c: KategoriaLanc | null | undefined = category; c; c = c.parent)
+    nevek.unshift(c.name);
+  return nevek;
+}
+
 export function productFactsFrom(product: {
   id: string;
   name: string;
   brand: { name: string; websiteUrl: string | null } | null;
   unasSnapshot: { manufacturerUrl: string | null } | null;
+  categories?: { category: KategoriaLanc }[];
   variants: {
     manufacturerPartNumber: string | null;
     barcodes: { code: string; isPrimary: boolean }[];
@@ -151,11 +202,25 @@ export function productFactsFrom(product: {
     if (ean) current.ean = ean;
     if (mpn && !mpnIsGtin) current.manufacturerSku = mpn;
   }
+  const hatas = waterEffectsFromCategories(
+    (product.categories ?? []).map((c) => ({ chain: lanc(c.category) })),
+  );
+  if (hatas) current.waterParameterEffects = hatas.raw;
   return {
     productId: product.id,
     name: product.name,
     brandWebsiteUrl: product.brand?.websiteUrl ?? null,
     unasManufacturerUrl: product.unasSnapshot?.manufacturerUrl ?? null,
     current,
+    ...(hatas
+      ? {
+          currentSource: {
+            waterParameterEffects: {
+              sourceType: "UNAS_CURRENT" as const,
+              sourceRef: hatas.sourceRef,
+            },
+          },
+        }
+      : {}),
   };
 }

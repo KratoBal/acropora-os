@@ -27,6 +27,35 @@ const DETAIL_INCLUDE = {
     take: 1,
     select: { recipients: true, outcome: true, error: true, createdAt: true },
   },
+  // a számla sztornója (legfeljebb egy: a migráció részleges egyedi indexe)
+  correctionInvoices: {
+    where: { documentType: "STORNO" },
+    select: {
+      id: true,
+      status: true,
+      invoiceNumber: true,
+      issueDate: true,
+      pdfStorageKey: true,
+      syncError: true,
+    },
+  },
+  // végszámlán a levont előleg (számlázási brief, 3.); a sztornó sor is ide
+  // mutat, de az nem saját bizonylat (`OWN_ROWS`), tehát itt nem olvassuk
+  referencedInvoice: {
+    select: {
+      id: true,
+      documentType: true,
+      invoiceNumber: true,
+      grossAmount: true,
+    },
+  },
+  // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.)
+  proformaInvoice: { select: { id: true, invoiceNumber: true } },
+  // a díjbekérőn: a belőle készült előleg (legfeljebb egy, `advanceIdFor`)
+  invoicesFromProforma: {
+    where: { documentType: "ADVANCE_INVOICE" },
+    select: { id: true, status: true, invoiceNumber: true },
+  },
   customer: {
     select: {
       id: true,
@@ -111,11 +140,15 @@ export async function insertBillingDraft(
     partnerName: string;
     partnerTaxNumber: string | null;
     createdByUserId: string;
+    proformaInvoiceId?: string | null;
+    referencedInvoiceId?: string | null;
   },
 ): Promise<void> {
   await transaction.invoice.create({
     data: {
       id: input.id,
+      proformaInvoiceId: input.proformaInvoiceId ?? null,
+      referencedInvoiceId: input.referencedInvoiceId ?? null,
       direction: "OUTBOUND",
       source: "SZAMLAZZ",
       status: "DRAFT",
@@ -151,6 +184,45 @@ export class BillingDocumentsRepository {
     });
   }
 
+  /** A saját számla Számlázz.hu-ikrét sztornózták-e (a feed `cancelled` jele). */
+  async feedTwinCancelled(invoiceNumber: string): Promise<boolean> {
+    const twin = await this.database.externalBillingDocument.findFirst({
+      where: { documentNumber: invoiceNumber, cancelled: true },
+      select: { id: true },
+    });
+    return twin !== null;
+  }
+
+  /**
+   * Kifizették-e a számot a Számlázz.hu feedje szerint: `true` kifizetés van,
+   * `false` a feed tudja, és nincs, `null` nincs feed-sora vagy nem vetített.
+   */
+  async feedPaid(documentNumber: string): Promise<boolean | null> {
+    const twin = await this.database.externalBillingDocument.findFirst({
+      where: { documentNumber },
+      select: { paymentsKnown: true, paidAmount: true },
+    });
+    if (!twin) return null;
+    if (twin.paidAmount.gt(0)) return true;
+    return twin.paymentsKnown === true ? false : null;
+  }
+
+  /** Az előlegszámlából készült végszámla, ha van (számlázási brief, 3.). */
+  finalInvoiceOf(advanceId: string): Promise<{
+    id: string;
+    invoiceNumber: string | null;
+    status: string;
+  } | null> {
+    return this.database.invoice.findFirst({
+      where: {
+        referencedInvoiceId: advanceId,
+        documentType: "FINAL_INVOICE",
+        ...OWN_ROWS,
+      },
+      select: { id: true, invoiceNumber: true, status: true },
+    });
+  }
+
   find(id: string): Promise<BillingDocumentRow | null> {
     return this.database.invoice.findFirst({
       where: { id, ...OWN_ROWS },
@@ -169,6 +241,10 @@ export class BillingDocumentsRepository {
     partnerName: string;
     partnerTaxNumber: string | null;
     createdByUserId: string;
+    /** Díjbekérőből készült előlegnél a díjbekérő (számlázási brief, 2. pont). */
+    proformaInvoiceId?: string | null;
+    /** Végszámlánál a levont előlegszámla (számlázási brief, 3. pont). */
+    referencedInvoiceId?: string | null;
   }): Promise<{ created: boolean }> {
     try {
       await this.database.$transaction((transaction) =>

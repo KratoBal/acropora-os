@@ -87,23 +87,60 @@ const lineNet = (line: {
     : gross;
 };
 
-/** A beérkezett dokumentum olvasott kulcsa (`textReading`), ha van szám. */
-const textKey = (reading: unknown): string | null => {
-  const value = reading as {
+/**
+ * A BEÉRKEZETT DOKUMENTUM KULCSAI, MINDHÁROM OLVASATBÓL (hétfői lista N3,
+ * Hertlein 261685 és 260835, Aquarioom FA00009139). A számlaszám a
+ * dokumentumon három helyen állhat: az illesztő eredményében (`importResult`,
+ * ahogy a `postedPurchaseForArrival` is elsőként nézi), a szövegolvasóéban
+ * (`textReading`), vagy a külföldi számla olvasatában (`IncomingDocumentReading`,
+ * #1588; a listán a postafiókos sor ebből veszi a számát). Eddig csak a
+ * szövegolvasó számított, és a fenti háromnál az üres volt: a postafiókos és a
+ * beszerzési sor egyszerre állt a listán. Bármelyik kulcs egyezése elég.
+ */
+export function arrivalKeys(document: {
+  importResult?: unknown;
+  textReading?: unknown;
+  reading?: {
+    documentNumber: string | null;
+    supplierTaxNumber: string | null;
+    supplierEuTaxNumber: string | null;
+    supplierName: string | null;
+  } | null;
+}): string[] {
+  // az üres számot az `incomingKey` maga utasítja el
+  const text = (field: unknown) => (typeof field === "string" ? field : null);
+  const adapter = document.importResult as {
+    invoiceNumber?: unknown;
+    supplier?: { name?: unknown; vatId?: unknown } | null;
+  } | null;
+  const reader = document.textReading as {
     invoiceNumber?: unknown;
     supplierTaxNumber?: unknown;
     supplierName?: unknown;
   } | null;
-  const text = (field: unknown) => (typeof field === "string" ? field : null);
-  const number = text(value?.invoiceNumber);
-  return number
-    ? incomingKey(
-        number,
-        text(value?.supplierTaxNumber),
-        text(value?.supplierName) ?? "",
-      )
-    : null;
-};
+  const reading = document.reading;
+  const candidates: [string | null, string | null, string][] = [
+    [
+      text(adapter?.invoiceNumber),
+      text(adapter?.supplier?.vatId),
+      text(adapter?.supplier?.name) ?? "",
+    ],
+    [
+      text(reader?.invoiceNumber),
+      text(reader?.supplierTaxNumber),
+      text(reader?.supplierName) ?? "",
+    ],
+    [
+      text(reading?.documentNumber),
+      text(reading?.supplierTaxNumber) ?? text(reading?.supplierEuTaxNumber),
+      text(reading?.supplierName) ?? "",
+    ],
+  ];
+  return candidates.flatMap(([number, tax, name]) => {
+    const key = number ? incomingKey(number, tax, name) : null;
+    return key ? [key] : [];
+  });
+}
 
 /**
  * A listára kerülő beszerzési számlák: POSTED, még nincs jóváhagyott sora,
@@ -168,9 +205,14 @@ export async function loadPurchaseSubjects(
       SELECT id FROM "IncomingBillingDocument"
       WHERE ${NUMBER_KEY_SQL("documentNumber")} = ANY(${numbers})`),
     ids(database.$queryRaw<{ id: string }[]>`
-      SELECT id FROM "IncomingSupplierDocument"
-      WHERE "purchaseInvoiceId" IS NULL
-        AND upper(regexp_replace("textReading"->>'invoiceNumber', '\\s', '', 'g')) = ANY(${numbers})`),
+      SELECT d.id FROM "IncomingSupplierDocument" d
+      LEFT JOIN "IncomingDocumentReading" r ON r."documentId" = d.id
+      WHERE d."purchaseInvoiceId" IS NULL
+        AND (
+          upper(regexp_replace(d."importResult"->>'invoiceNumber', '\\s', '', 'g')) = ANY(${numbers})
+          OR upper(regexp_replace(d."textReading"->>'invoiceNumber', '\\s', '', 'g')) = ANY(${numbers})
+          OR upper(regexp_replace(r."documentNumber", '\\s', '', 'g')) = ANY(${numbers})
+        )`),
   ]);
   const [nav, rows, documents] = await Promise.all([
     database.navIncomingInvoice.findMany({
@@ -195,7 +237,18 @@ export async function loadPurchaseSubjects(
     // a beérkezett, NEM beszerzéshez kötött dokumentumok olvasott kulcsa
     database.incomingSupplierDocument.findMany({
       where: { id: { in: documentIds } },
-      select: { textReading: true },
+      select: {
+        importResult: true,
+        textReading: true,
+        reading: {
+          select: {
+            documentNumber: true,
+            supplierTaxNumber: true,
+            supplierEuTaxNumber: true,
+            supplierName: true,
+          },
+        },
+      },
     }),
   ]);
 
@@ -236,7 +289,8 @@ export async function loadPurchaseSubjects(
           row.supplierName,
         ),
       );
-  for (const document of documents) add(textKey(document.textReading));
+  for (const document of documents)
+    for (const key of arrivalKeys(document)) add(key);
 
   return invoices
     .filter((invoice) => !approved.has(invoice.id))

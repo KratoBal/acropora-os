@@ -53,6 +53,14 @@ describe("billingEmailValues", () => {
     assert.equal(values.order_number, null);
   });
 
+  it("gives a final invoice its invoice number, like any invoice", () => {
+    assert.equal(
+      billingEmailValues(row({ documentType: "FINAL_INVOICE" }), "Partner Kft.")
+        .invoice_number,
+      row().invoiceNumber,
+    );
+  });
+
   it("keeps two decimals outside HUF", () => {
     const values = billingEmailValues(
       row({ currency: "EUR", grossAmount: new Prisma.Decimal("12.5") }),

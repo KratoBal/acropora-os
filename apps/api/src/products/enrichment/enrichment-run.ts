@@ -70,6 +70,14 @@ export interface ProductFacts {
   unasManufacturerUrl: string | null;
   /** Our own current values, raw, per field. */
   current: Partial<Record<EnrichedField, string>>;
+  /**
+   * Where a current value comes from, when it is not the product master: the
+   * water-effects category rule is our UNAS tree's statement (`UNAS_CURRENT`,
+   * card 2b3983e1). Both are our own catalogue, so neither can VERIFY alone.
+   */
+  currentSource?: Partial<
+    Record<EnrichedField, { sourceType: "UNAS_CURRENT"; sourceRef: string }>
+  >;
 }
 
 export interface StoredFetch {
@@ -142,6 +150,8 @@ export interface EnrichmentRunStore {
     requestLimit: number;
   }): Promise<string>;
   saveCheck(runId: string, check: StoredCheck): Promise<void>;
+  /** A product the run could not check or store: its row with the error, nothing else. */
+  saveFailure(runId: string, failure: ProductFailure): Promise<void>;
   finishRun(
     runId: string,
     result: {
@@ -180,6 +190,30 @@ export interface RunSummary {
   /** Why the run stopped early, when it did. */
   limit: "PRODUCTS" | "REQUESTS" | null;
   checks: StoredCheck[];
+  /** The products the run could not check or store; it went on past each one. */
+  failures: ProductFailure[];
+}
+
+export interface ProductFailure {
+  productId: string;
+  checkedAt: Date;
+  /** The Prisma error code when there is one (P2000), else the error's name. */
+  errorCode: string;
+}
+
+/**
+ * ONE PRODUCT'S ERROR DOES NOT STOP THE BATCH (water-effects run, 2026-10-12: a
+ * value too long for its column stopped batch 3 of 9 at its first bad product).
+ * It is recorded and the run goes on. So many in a row that it cannot be the
+ * product (the database is gone, a code error on every product) still stops
+ * the run as FAILED.
+ */
+export const MAX_CONSECUTIVE_PRODUCT_FAILURES = 5;
+
+function productErrorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^P\d{4}$/.test(code)) return code;
+  return error instanceof Error ? error.name : "UNKNOWN";
 }
 
 export class UnknownProductError extends Error {
@@ -212,6 +246,8 @@ export async function runEnrichment(
     requestLimit: options.requestLimit,
   });
   const checks: StoredCheck[] = [];
+  const failures: ProductFailure[] = [];
+  let consecutiveFailures = 0;
   let limit: RunSummary["limit"] = null;
 
   try {
@@ -224,12 +260,23 @@ export async function runEnrichment(
         const check = await checkProduct(product, facts[index]!, fetcher, deps);
         await deps.store.saveCheck(runId, check);
         checks.push(check);
+        consecutiveFailures = 0;
       } catch (error) {
         if (error instanceof RequestLimitReached) {
           limit = "REQUESTS";
           break;
         }
-        throw error;
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= MAX_CONSECUTIVE_PRODUCT_FAILURES)
+          throw error;
+        const failure: ProductFailure = {
+          productId: product.productId,
+          checkedAt: deps.now(),
+          errorCode: productErrorCode(error),
+        };
+        // a check is stored in one write, so a failed one left nothing behind
+        await deps.store.saveFailure(runId, failure);
+        failures.push(failure);
       }
     }
   } catch (error) {
@@ -247,7 +294,11 @@ export async function runEnrichment(
     status,
     productCount: checks.length,
     requestCount: fetcher.requestCount,
-    errorCode: limit ? `${limit}_LIMIT_REACHED` : null,
+    errorCode: limit
+      ? `${limit}_LIMIT_REACHED`
+      : failures.length
+        ? `${failures.length}_PRODUCTS_FAILED`
+        : null,
   });
   return {
     runId,
@@ -256,6 +307,7 @@ export async function runEnrichment(
     requestCount: fetcher.requestCount,
     limit,
     checks,
+    failures,
   };
 }
 
@@ -343,7 +395,11 @@ async function checkProduct(
       sourceKind: source.kind,
       url: page.url,
       outcome: "FETCHED",
-      reason: statement.note,
+      // a szótár megjegyzései (tagadott találat, kétirányú kód) a lap mellé
+      reason:
+        [statement.note, ...(statement.lexiconNotes ?? [])]
+          .filter(Boolean)
+          .join("; ") || null,
       httpStatus: page.httpStatus,
       fetchedAt: page.fetchedAt,
       fieldCount: statement.values.length,
@@ -411,8 +467,12 @@ export function fieldOutcome(
       ? null
       : {
           value: currentRaw,
-          sourceType: "OS_PRODUCT_MASTER",
-          sourceRef: OS_REF(facts.productId),
+          sourceType:
+            facts.currentSource?.[field as EnrichedField]?.sourceType ??
+            "OS_PRODUCT_MASTER",
+          sourceRef:
+            facts.currentSource?.[field as EnrichedField]?.sourceRef ??
+            OS_REF(facts.productId),
           retrievedAt: reconciledAt,
           confidence: null,
         };

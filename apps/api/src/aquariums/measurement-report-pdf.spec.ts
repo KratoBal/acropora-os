@@ -80,6 +80,31 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
   });
 
   /**
+   * THE APPROVED RECOMMENDATION (2b3983e1): its text with the product's name
+   * in it, and the product as a line under it. Without one, no block.
+   */
+  it("REPORT-RECOMMENDATION: the approved block, with the product named", async () => {
+    const withBlock = await textOf(
+      marine({
+        recommendation: [
+          { kind: "text", text: "A KH alacsony: " },
+          {
+            kind: "product",
+            productId: "p1",
+            name: "Kitalált KH puffer",
+            url: "https://bolt.example.invalid/kh",
+          },
+          { kind: "text", text: " segít." },
+        ],
+      }),
+    );
+    assert.match(withBlock, /AJÁNLOTT TERMÉKEK/);
+    assert.match(withBlock, /A KH alacsony: Kitalált KH puffer segít\./);
+    assert.match(withBlock, /• Kitalált KH puffer/);
+    assert.doesNotMatch(await textOf(marine()), /AJÁNLOTT TERMÉKEK/);
+  });
+
+  /**
    * THE OFFICE FOOTER (#1639, Balázs 2026-10-08): the measurement report is
    * not a service document, so it carries the office's number, never the
    * service number of the worksheet.

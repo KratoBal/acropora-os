@@ -17,6 +17,11 @@ import { AquariumMaintainersService } from "./aquarium-maintainers.service.js";
 import { AquariumMeasurementsService } from "./aquarium-measurements.service.js";
 import { AquariumsService } from "./aquariums.service.js";
 import {
+  ApproveMeasurementRecommendationDto,
+  UpdateMeasurementRecommendationDto,
+} from "./dto/measurement-recommendation.dto.js";
+import { MeasurementRecommendationService } from "./recommendation/measurement-recommendation.service.js";
+import {
   AquariumListQueryDto,
   AquariumSelectableCustomerQueryDto,
   CreateAquariumDto,
@@ -38,6 +43,7 @@ export class AquariumsController {
     private readonly service: AquariumsService,
     private readonly measurements: AquariumMeasurementsService,
     private readonly maintainers: AquariumMaintainersService,
+    private readonly recommendations: MeasurementRecommendationService,
   ) {}
 
   @Get()
@@ -195,6 +201,53 @@ export class AquariumsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.measurements.delete(id, occasionId, user);
+  }
+
+  /**
+   * A VÍZMÉRÉSI TERMÉKAJÁNLÁS (kártya 2b3983e1): a vázlat és a jóváhagyás
+   * belső lépés (a szolgáltatás `requireInternalWriter`-rel állítja meg a
+   * partnert); a vevő a jóváhagyott szöveget a mérések listájában kapja.
+   */
+  @Get(":id/measurements/:occasionId/recommendation")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_VIEW)
+  measurementRecommendation(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recommendations.get(id, occasionId, user);
+  }
+
+  @Post(":id/measurements/:occasionId/recommendation/request")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
+  requestMeasurementRecommendation(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recommendations.request(id, occasionId, user);
+  }
+
+  @Patch(":id/measurements/:occasionId/recommendation")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
+  saveMeasurementRecommendation(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @Body() input: UpdateMeasurementRecommendationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recommendations.saveDraft(id, occasionId, input, user);
+  }
+
+  @Post(":id/measurements/:occasionId/recommendation/approve")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
+  approveMeasurementRecommendation(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @Body() input: ApproveMeasurementRecommendationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recommendations.approve(id, occasionId, input, user);
   }
 
   @Post(":id/measurements/:occasionId/send-email")

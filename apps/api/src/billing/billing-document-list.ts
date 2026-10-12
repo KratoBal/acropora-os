@@ -137,6 +137,7 @@ export function toListItem(
     paidAmount: null,
     lastPaymentDate: null,
     paymentSource: null,
+    cancelled: (row.correctionInvoices?.length ?? 0) > 0,
   };
 }
 
@@ -150,9 +151,10 @@ export function toListItem(
 /**
  * A SZÁMLÁZZ.HU BIZONYLATTÍPUSA A MI TÍPUSUNKRA, A SZŰRŐHÖZ ÉS A „Dokumentum”
  * OSZLOPHOZ. A felirat ettől függetlenül a Számlázz.hu sajátja
- * (`externalKindLabel`). A sztornó, a jóváíró, a helyesbítő és a végszámla
- * számla-fajta, tehát INVOICE; az ismeretlen kód is az, a felirat pedig a nyers
- * kódot mutatja.
+ * (`externalKindLabel`). A sztornó, a jóváíró és a helyesbítő számla-fajta,
+ * tehát INVOICE; az ismeretlen kód is az, a felirat pedig a nyers kódot
+ * mutatja. A végszámla 2026-10-12 óta saját típus (számlázási brief, 3. pont),
+ * tehát a szűrőn a saját végszámláinkkal együtt áll.
  */
 export const EXTERNAL_KIND_TYPES: Readonly<
   Record<string, BillingDocumentType>
@@ -161,7 +163,7 @@ export const EXTERNAL_KIND_TYPES: Readonly<
   SS: "INVOICE",
   JS: "INVOICE",
   HS: "INVOICE",
-  VS: "INVOICE",
+  VS: "FINAL_INVOICE",
   ES: "ADVANCE_INVOICE",
   D: "PROFORMA",
   SL: "DELIVERY_NOTE",
@@ -213,6 +215,41 @@ export function externalWhere(
     ];
   }
   return where;
+}
+
+/**
+ * A SAJÁT SZÁMLA KÜLSŐ IKRE NEM KÜLÖN SOR (hétfői lista N2, 2026-10-09 10:31-es
+ * eset). Amit az OS állít ki, az a Számlázz.hu feedjében is visszajön, és
+ * eddig két sorként állt a listán: egyszer a mienk, egyszer „Külső”. A szám
+ * egy számlát jelöl, ezért a külső sor kimarad, és a saját sor viszi a
+ * kifizetési adatát (`withTwinPayment`). A #1457 a feed és az eBIZ közti
+ * duplát zárta le; ez a saját és a feed közöttit.
+ */
+export function withoutOwnTwins(
+  where: Prisma.ExternalBillingDocumentWhereInput | null,
+  ownNumbers: readonly string[],
+): Prisma.ExternalBillingDocumentWhereInput | null {
+  if (where === null || ownNumbers.length === 0) return where;
+  return { AND: [where, { documentNumber: { notIn: [...ownNumbers] } }] };
+}
+
+/**
+ * A saját sor a külső ikre kifizetési adatával: a Számlázz.hu a kifizetést a
+ * saját számlánkra is visszaküldi, és a saját sor eddig „nincs forrás”-t
+ * mutatott. Iker nélkül a saját sor változatlan.
+ */
+export function withTwinPayment(
+  item: BillingDocumentListItem,
+  twin:
+    | (Parameters<typeof externalPaymentFields>[0] & {
+        orderNumber?: string | null;
+      })
+    | undefined,
+  simplePay: readonly SimplePaySettlementLine[] = [],
+  marks: readonly OwnPaymentMark[] = [],
+): BillingDocumentListItem {
+  if (!twin) return item;
+  return { ...item, ...externalPaymentFields(twin, simplePay, marks) };
 }
 
 /** A mieink ugyanígy: `null`, ha a lekérdezés csak a külsőket kéri. */

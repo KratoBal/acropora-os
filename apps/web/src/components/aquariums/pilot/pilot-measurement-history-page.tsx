@@ -40,8 +40,10 @@ import {
   PilotButton,
   PilotCard,
   PilotCardHeader,
+  PilotDrawer,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+import { MeasurementRecommendationPanel } from "./measurement-recommendation-panel";
 
 /**
  * A HARMADIK MAKE-KÖR ÁTÜLTETÉSE -- "MÉRÉSI ELŐZMÉNYEK" ÖNÁLLÓ OLDAL.
@@ -120,6 +122,12 @@ export function PilotMeasurementHistoryPage({
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.AQUARIUMS_VIEW),
   );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.AQUARIUMS_MANAGE),
+  );
+  // the occasion whose recommendation panel is open (2b3983e1)
+  const [recommendFor, setRecommendFor] =
+    useState<AquariumMeasurementOccasion | null>(null);
 
   const [aquarium, setAquarium] = useState<AquariumDetail | null>(null);
   const [occasions, setOccasions] = useState<AquariumMeasurementOccasion[]>([]);
@@ -696,6 +704,13 @@ export function PilotMeasurementHistoryPage({
                           <td className="space-x-3 px-4 py-3">
                             <button
                               type="button"
+                              onClick={() => setRecommendFor(occasion)}
+                              className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-pilot-aqua-600 opacity-0 transition-opacity hover:text-pilot-aqua-800 group-hover:opacity-100 focus:opacity-100"
+                            >
+                              Ajánlás
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => void downloadPdf(occasion)}
                               className="cursor-pointer whitespace-nowrap text-[11px] font-medium text-pilot-aqua-600 opacity-0 transition-opacity hover:text-pilot-aqua-800 group-hover:opacity-100"
                             >
@@ -772,6 +787,37 @@ export function PilotMeasurementHistoryPage({
           </>
         )}
       </div>
+
+      <PilotDrawer
+        open={recommendFor !== null}
+        onClose={() => setRecommendFor(null)}
+        title="Mérés és ajánlás"
+        subtitle={
+          recommendFor
+            ? new Date(recommendFor.measuredAt).toLocaleString("hu-HU")
+            : undefined
+        }
+        width="lg"
+      >
+        {recommendFor ? (
+          <div className="space-y-4">
+            <section>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.05em] text-pilot-grey-500">
+                Javasolt intézkedések
+              </h3>
+              <p className="mt-1 whitespace-pre-wrap text-sm text-pilot-grey-800">
+                {recommendFor.notes || "Ehhez a méréshez nincs szöveg."}
+              </p>
+            </section>
+            <MeasurementRecommendationPanel
+              token={token}
+              aquariumId={aquariumId}
+              occasion={recommendFor}
+              canManage={canManage}
+            />
+          </div>
+        ) : null}
+      </PilotDrawer>
 
       <PilotEmailDialog
         occasion={emailFor}

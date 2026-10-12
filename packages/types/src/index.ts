@@ -32,12 +32,14 @@ export {
 export {
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
+  BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   BILLING_SOURCE_TYPES,
   INVOICE_FORMATS,
   INVOICE_FORMAT_LABELS,
   billingDrawerCta,
   billingEmailDelivery,
+  billingIssueConfirm,
   billingIssueCta,
   canTransitionBillingDocument,
   getDocumentCapabilities,
@@ -65,8 +67,13 @@ export type {
   DecimalText,
 } from "./billing-document-amounts.js";
 export type {
+  BillingDocumentAdvanceLink,
+  BillingDocumentDeductedAdvance,
+  BillingDocumentFinalInvoiceLink,
+  BillingDocumentCancellation,
   BillingDocumentCustomer,
   BillingDocumentDetail,
+  BillingDocumentProformaLink,
   BillingDocumentDraftInput,
   BillingDocumentLine,
   BillingDocumentLineInput,
@@ -614,6 +621,7 @@ export type {
   PosSaleStockWarning,
   SalesOrderLineSyncStatus,
 } from "./pos.js";
+export { POS_MANUAL_LINE_SKU, POS_MANUAL_VAT_RATES } from "./pos.js";
 export type {
   InventoryCountApplyResult,
   InventoryCountDetail,
@@ -1451,3 +1459,26 @@ export {
   viesFill,
 } from "./vies-address.js";
 export type { ViesAddressFields, ViesFillField } from "./vies-address.js";
+export {
+  hasMalformedRecommendationToken,
+  parseRecommendationText,
+  RECOMMENDATION_PRODUCT_TOKEN,
+  recommendationProductIds,
+} from "./measurement-recommendation.js";
+export type {
+  ApproveMeasurementRecommendationInput,
+  MeasurementRecommendationCandidate,
+  MeasurementRecommendationSegment,
+  MeasurementRecommendationStatus,
+  MeasurementRecommendationView,
+  RecommendationCandidateBasis,
+  RecommendationTextPart,
+  UpdateMeasurementRecommendationInput,
+} from "./measurement-recommendation.js";
+export {
+  CONTRACT_KIND_LABELS,
+  CONTRACT_KINDS,
+  contractMaintenanceSwitchBlocker,
+  contractPurchaseSwitchBlocker,
+} from "./contract.js";
+export type { ContractKind } from "./contract.js";

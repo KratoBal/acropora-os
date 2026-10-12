@@ -13,10 +13,13 @@ import {
   ownWhere,
   simplePayOrderKey,
   toExternalListItem,
+  withoutOwnTwins,
+  withTwinPayment,
   type OwnPaymentMark,
   type SimplePaySettlementLine,
   toListItem,
 } from "./billing-document-list.js";
+import { OWN_ROWS } from "./billing-documents.repository.js";
 import { UNAS_SHOP_ORDER_PREFIX } from "../integrations/simplepay/simplepay-settlement.repository.js";
 
 export const LIST_SELECT = {
@@ -33,6 +36,11 @@ export const LIST_SELECT = {
   emailStatus: true,
   createdAt: true,
   customer: { select: { companyName: true, displayName: true } },
+  // a kiállított sztornó (számlázási brief, 1. pont)
+  correctionInvoices: {
+    where: { documentType: "STORNO", status: "ISSUED" },
+    select: { id: true },
+  },
   lines: {
     select: {
       kind: true,
@@ -91,7 +99,14 @@ export class BillingDocumentListRepository {
       BillingDocumentListQuery,
   ): Promise<BillingDocumentListResponse> {
     const own = ownWhere(query);
-    const external = externalWhere(query);
+    // a saját kiállított számlák száma: ezek külső ikre nem kerül külön sorba
+    const ownNumbers = (
+      await this.database.invoice.findMany({
+        where: { ...OWN_ROWS, invoiceNumber: { not: null } },
+        select: { invoiceNumber: true },
+      })
+    ).flatMap((row) => (row.invoiceNumber ? [row.invoiceNumber] : []));
+    const external = withoutOwnTwins(externalWhere(query), ownNumbers);
     const offset = (query.page - 1) * query.pageSize;
     const both = own !== null && external !== null;
     const [ownRows, ownCount, externalRows, externalCount] =
@@ -145,6 +160,43 @@ export class BillingDocumentListRepository {
         marks.get(row.documentNumber) ?? [],
         (row.orderNumber && buyers.get(row.orderNumber)) || null,
       );
+    // a lap saját sorainak külső ikrei: a kifizetési adatuk a saját sorra kerül
+    const pageNumbers = ownRows.flatMap((row) =>
+      row.invoiceNumber ? [row.invoiceNumber] : [],
+    );
+    const twins = pageNumbers.length
+      ? await this.database.externalBillingDocument.findMany({
+          where: { documentNumber: { in: pageNumbers } },
+          select: EXTERNAL_LIST_SELECT,
+        })
+      : [];
+    const twinOf = new Map(twins.map((twin) => [twin.documentNumber, twin]));
+    const twinSimplePay = await simplePayLinesByOrder(
+      this.database,
+      twins.map((twin) => twin.orderNumber),
+    );
+    const twinMarks = await ownPaymentMarksByInvoice(
+      this.database,
+      twins.map((twin) => twin.documentNumber),
+    );
+    const toOwn = (row: (typeof ownRows)[number]) => {
+      const twin = row.invoiceNumber
+        ? twinOf.get(row.invoiceNumber)
+        : undefined;
+      if (!twin) return toListItem(row);
+      const orderKey = simplePayOrderKey(
+        twin.orderNumber,
+        UNAS_SHOP_ORDER_PREFIX,
+      );
+      const item = withTwinPayment(
+        toListItem(row),
+        twin,
+        (orderKey && twinSimplePay.get(orderKey)) || [],
+        twinMarks.get(twin.documentNumber) ?? [],
+      );
+      // a Számlázz.hu felületén sztornózott saját számla: a jel az ikertől jön
+      return twin.cancelled ? { ...item, cancelled: true } : item;
+    };
     const totalItems = ownCount + externalCount;
     const items = both
       ? mergeListRows(
@@ -152,7 +204,7 @@ export class BillingDocumentListRepository {
             issueDate: row.issueDate,
             createdAt: row.createdAt,
             id: row.id,
-            item: toListItem(row),
+            item: toOwn(row),
           })),
           externalRows.map((row) => ({
             issueDate: row.issueDate,
@@ -164,7 +216,7 @@ export class BillingDocumentListRepository {
           query.pageSize,
         )
       : own !== null
-        ? ownRows.map(toListItem)
+        ? ownRows.map(toOwn)
         : externalRows.map((row) => toExternal(row));
     return {
       items,

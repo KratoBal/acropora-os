@@ -10,8 +10,10 @@ import {
   type ScriptedAnswer,
 } from "./enrichment-test-fixtures.js";
 import {
+  MAX_CONSECUTIVE_PRODUCT_FAILURES,
   runEnrichment,
   type EnrichmentRunStore,
+  type ProductFailure,
   type ProductFacts,
   type RunProductInput,
   type StoredCheck,
@@ -31,7 +33,20 @@ const facts = (over: Partial<ProductFacts> = {}): ProductFacts => ({
   ...over,
 });
 
-function memoryStore() {
+/** A Prisma P2000 as the client throws it: a value too long for its column. */
+class TooLongForColumn extends Error {
+  readonly code = "P2000";
+  constructor() {
+    super(
+      "The provided value for the column is too long for the column's type.",
+    );
+    this.name = "PrismaClientKnownRequestError";
+  }
+}
+
+function memoryStore(
+  failSave: (check: StoredCheck) => Error | null = () => null,
+) {
   const runs: {
     id: string;
     status?: string;
@@ -40,13 +55,19 @@ function memoryStore() {
     errorCode?: string | null;
   }[] = [];
   const checks: StoredCheck[] = [];
+  const failures: ProductFailure[] = [];
   const store: EnrichmentRunStore = {
     startRun: async () => {
       runs.push({ id: `run-${runs.length + 1}` });
       return runs.at(-1)!.id;
     },
     saveCheck: async (_runId, check) => {
+      const error = failSave(check);
+      if (error) throw error;
       checks.push(check);
+    },
+    saveFailure: async (_runId, failure) => {
+      failures.push(failure);
     },
     finishRun: async (runId, result) => {
       Object.assign(
@@ -55,7 +76,7 @@ function memoryStore() {
       );
     },
   };
-  return { store, runs, checks };
+  return { store, runs, checks, failures };
 }
 
 async function run(
@@ -66,11 +87,12 @@ async function run(
     productLimit?: number;
     requestLimit?: number;
     suppliers?: Record<string, string>;
+    failSave?: (check: StoredCheck) => Error | null;
   } = {},
 ) {
   const network = scriptedNetwork(table);
   const clock = fakeClock();
-  const memory = memoryStore();
+  const memory = memoryStore(options.failSave);
   const summary = await runEnrichment(
     products,
     {
@@ -352,6 +374,174 @@ describe("egy kézi futás, árnyékban", () => {
     assert.ok(
       !/\$executeRaw|\$queryRaw/.test(source),
       "no raw SQL in the store",
+    );
+  });
+});
+
+/*
+  A VÍZHATÁS AZ EGYEZTETŐBEN (kártya 2b3983e1, D1): a kategória-szabály a
+  saját katalógusunk állítása (`UNAS_CURRENT`), a szótár egy független oldalé.
+  MI PIROSÍT: a kategória egyedül VERIFIED lesz; egy egyező oldal mellett sem;
+  egy bővebb oldal-halmaz csendben összeolvad vele; a tagadás nyom nélkül eltűnik.
+*/
+describe("a vízhatás a futásban", () => {
+  const megkoto = facts({
+    name: "Kitalált foszfátmegkötő",
+    current: { waterParameterEffects: "FOSZFAT:CSOKKENT" },
+    currentSource: {
+      waterParameterEffects: {
+        sourceType: "UNAS_CURRENT",
+        sourceRef: "unas-category:Problémamegoldás > Foszfátmegkötők",
+      },
+    },
+  });
+  const egyLap = (description: string) =>
+    run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/9` }],
+        },
+      ],
+      {
+        [`${BRS}/p/9`]: {
+          status: 200,
+          body: productPage({ name: "Phos Remover", description }),
+        },
+      },
+      { facts: { "p-1": megkoto } },
+    );
+  const mezo = (checks: StoredCheck[]) =>
+    checks[0]!.fields.find((f) => f.field === "waterParameterEffects")!;
+
+  it("a kategória egyedül nem ellenőrzött", async () => {
+    const { checks } = await egyLap("A great product for every reef.");
+    assert.equal(mezo(checks).status, "UNVERIFIED");
+    assert.equal(mezo(checks).currentValue, "FOSZFAT:CSOKKENT");
+    // a bizonyíték a kategória-ág, nem a terméktörzs
+    assert.deepEqual(
+      mezo(checks).evidence.map((e) => e.sourceRef),
+      ["unas-category:Problémamegoldás > Foszfátmegkötők"],
+    );
+  });
+
+  it("egy egyező független oldallal ellenőrzött, az oldal kivonatával", async () => {
+    const { checks } = await egyLap(
+      "A high capacity phosphate remover for reef aquariums.",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.equal(mezo(checks).value, "FOSZFAT:CSOKKENT");
+    const lap = mezo(checks).evidence.find(
+      (e) => e.sourceKind === "BULK_REEF_SUPPLY",
+    )!;
+    assert.match(lap.excerpt!, /phosphate remover/);
+  });
+
+  it("egy bővebb oldal-halmaz ütközés, nem összeolvadás", async () => {
+    const { checks } = await egyLap(
+      "Phosphate remover that also works as a silicate remover.",
+    );
+    assert.equal(mezo(checks).status, "CONFLICTING_SOURCES");
+    assert.equal(mezo(checks).value, null);
+  });
+
+  it("a tagadott találat a lap megjegyzésében marad", async () => {
+    const { checks } = await egyLap(
+      "Phosphate remover. It does not lower the pH.",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.match(checks[0]!.fetches[0]!.reason ?? "", /tagadva: PH:CSOKKENT/);
+  });
+});
+
+describe("egy termék hibája nem állítja meg az adagot", () => {
+  const product = (id: string): RunProductInput => ({
+    productId: id,
+    sources: [
+      { kind: "BULK_REEF_SUPPLY", url: `https://www.bulkreefsupply.com/${id}` },
+    ],
+  });
+  const page = { status: 200, body: productPage({ gtin13: "5901234123457" }) };
+  const many = (ids: string[]) => ({
+    facts: Object.fromEntries(ids.map((id) => [id, facts({ productId: id })])),
+    table: Object.fromEntries(
+      ids.map((id) => [`https://www.bulkreefsupply.com/${id}`, page]),
+    ),
+  });
+
+  it("a tárolásnál elhasaló termék hibakóddal rögzül, a futás a következővel megy tovább, és befejezett", async () => {
+    const ids = ["p-1", "p-2", "p-3"];
+    const { facts: f, table } = many(ids);
+    const { summary, runs, checks, failures } = await run(
+      ids.map(product),
+      table,
+      {
+        facts: f,
+        failSave: (check) =>
+          check.productId === "p-2" ? new TooLongForColumn() : null,
+      },
+    );
+    assert.deepEqual(
+      [
+        summary.status,
+        checks.map((c) => c.productId),
+        failures.map((x) => [x.productId, x.errorCode]),
+        summary.failures.map((x) => x.productId),
+        runs[0]!.status,
+        runs[0]!.errorCode,
+        runs[0]!.productCount,
+      ],
+      [
+        "COMPLETED",
+        ["p-1", "p-3"],
+        [["p-2", "P2000"]],
+        ["p-2"],
+        "COMPLETED",
+        "1_PRODUCTS_FAILED",
+        2,
+      ],
+    );
+  });
+
+  it(`${MAX_CONSECUTIVE_PRODUCT_FAILURES} egymás utáni hiba már nem a termék: a futás FAILED, a hiba továbbmegy`, async () => {
+    const ids = ["p-1", "p-2", "p-3", "p-4", "p-5", "p-6", "p-7"];
+    const { facts: f, table } = many(ids);
+    const memory = memoryStore(() => new TooLongForColumn());
+    const clock = fakeClock();
+    await assert.rejects(
+      runEnrichment(
+        ids.map(product),
+        { requestedById: "u-1", productLimit: 20, requestLimit: 200 },
+        {
+          store: memory.store,
+          facts: {
+            productFacts: async (id) => f[id] ?? null,
+            supplierWebsite: async () => null,
+          },
+          fetch: scriptedNetwork(table).fetch,
+          sleep: clock.sleep,
+          now: clock.now,
+        },
+      ),
+      TooLongForColumn,
+    );
+    assert.deepEqual(
+      [memory.runs[0]!.status, memory.failures.length, memory.checks.length],
+      ["FAILED", MAX_CONSECUTIVE_PRODUCT_FAILURES - 1, 0],
+    );
+  });
+
+  it("egy jó termék közben lenullázza a számlálót: négy hiba, egy jó, négy hiba még befejezett", async () => {
+    const ids = ["p-1", "p-2", "p-3", "p-4", "p-5", "p-6", "p-7", "p-8", "p-9"];
+    const { facts: f, table } = many(ids);
+    const { summary } = await run(ids.map(product), table, {
+      facts: f,
+      failSave: (check) =>
+        check.productId === "p-5" ? null : new TooLongForColumn(),
+    });
+    assert.deepEqual(
+      [summary.status, summary.failures.length, summary.checks.length],
+      ["COMPLETED", 8, 1],
     );
   });
 });

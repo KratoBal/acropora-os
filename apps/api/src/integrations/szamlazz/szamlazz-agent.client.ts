@@ -50,8 +50,33 @@ export interface SzamlazzAgentPaymentClient {
   registerPayment(xml: string): Promise<SzamlazzAgentResponse>;
 }
 
+/**
+ * Egy meglévő számla PDF-je (`xmlszamlapdf`). Mezőnév a
+ * docs.szamlazz.hu/agent/basics/sending-requests táblájából: „Query document
+ * (PDF) -> action-szamla_agent_pdf” (letöltve 2026-10-12). `valaszVerzio=2`
+ * mellett a válasz `xmlszamlavalasz` a base64 `pdf` elemmel
+ * (docs.szamlazz.hu/agent/querying_pdf/response); a 7-es hibakód: nincs ilyen
+ * számlaszám.
+ */
+export interface SzamlazzAgentPdfClient {
+  downloadInvoicePdf(xml: string): Promise<SzamlazzAgentResponse>;
+}
+
+/**
+ * Egy kiállított számla sztornózása (`xmlszamlast`). Mezőnév a
+ * docs.szamlazz.hu/agent/basics/sending-requests táblájából: „Reverse invoice
+ * -> action-szamla_agent_st” (letöltve 2026-10-12).
+ */
+export interface SzamlazzAgentStornoClient {
+  stornoInvoice(xml: string): Promise<SzamlazzAgentResponse>;
+}
+
 export class HttpSzamlazzAgentClient
-  implements SzamlazzAgentClient, SzamlazzAgentPaymentClient
+  implements
+    SzamlazzAgentClient,
+    SzamlazzAgentPaymentClient,
+    SzamlazzAgentPdfClient,
+    SzamlazzAgentStornoClient
 {
   constructor(
     private readonly url: string = SZAMLAZZ_AGENT_URL,
@@ -64,6 +89,14 @@ export class HttpSzamlazzAgentClient
 
   registerPayment(xml: string): Promise<SzamlazzAgentResponse> {
     return this.post("action-szamla_agent_kifiz", "kifizetes.xml", xml);
+  }
+
+  stornoInvoice(xml: string): Promise<SzamlazzAgentResponse> {
+    return this.post("action-szamla_agent_st", "storno.xml", xml);
+  }
+
+  downloadInvoicePdf(xml: string): Promise<SzamlazzAgentResponse> {
+    return this.post("action-szamla_agent_pdf", "pdf.xml", xml);
   }
 
   private async post(

@@ -38,7 +38,7 @@ const NOTE: Record<PackageDocumentOutcome, string> = {
   NO_FILE: "nincs tárolt fájl",
 };
 
-const MONTHS = [
+export const MONTHS = [
   "január",
   "február",
   "március",
@@ -54,7 +54,7 @@ const MONTHS = [
 ];
 
 /** Ezres tagolás sima szóközzel: a beágyazott betűben a keskeny szóköz nincs. */
-function amountText(amount: string, currency: string): string {
+export function amountText(amount: string, currency: string): string {
   const [whole, fraction] = amount.split(".");
   const grouped = (whole ?? "").replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return `${grouped}${fraction ? `,${fraction}` : ""} ${currency}`;
@@ -95,6 +95,30 @@ function renderCover(input: {
 }
 
 /**
+ * EGY EREDETI CSATOLHATÓ-E: PDF-e, és a pdf-lib olvassa-e. A kimenő csomag is
+ * ezt használja (hétfői lista N1).
+ */
+export async function attachablePdf(content: Uint8Array): Promise<{
+  outcome: "ATTACHED" | "NOT_PDF" | "UNREADABLE";
+  pdf?: PDFDocument;
+}> {
+  if (Buffer.from(content.subarray(0, 5)).toString("latin1") !== "%PDF-")
+    return { outcome: "NOT_PDF" };
+  /*
+    A BETÖLTÉS MAGA NEM ELÉG PRÓBA: egy csonka fájlt a pdf-lib hiba nélkül
+    „betölt”, és csak a lapok másolásakor dob, akkor viszont az EGÉSZ
+    csomagot viszi magával. Ezért itt a lapszámot is lekérjük.
+  */
+  try {
+    const pdf = await PDFDocument.load(content, { ignoreEncryption: true });
+    if (pdf.getPageCount() === 0) throw new Error("nincs lapja");
+    return { outcome: "ATTACHED", pdf };
+  } catch {
+    return { outcome: "UNREADABLE" };
+  }
+}
+
+/**
  * A HÓNAP MEGVAN-DOKUMENTUMAI EGY PDF-BEN: elöl egy borító, ami MINDEN tételt
  * felsorol, utána a csatolható eredetik a borító sorrendjében.
  *
@@ -122,27 +146,10 @@ export async function buildAccountantPackage(input: {
     for (const document of entry.documents) {
       let outcome: PackageDocumentOutcome;
       if (!document.file) outcome = entry.paperOriginal ? "PAPER" : "NO_FILE";
-      else if (
-        Buffer.from(document.file.content.subarray(0, 5)).toString("latin1") !==
-        "%PDF-"
-      )
-        outcome = "NOT_PDF";
       else {
-        /*
-          A BETÖLTÉS MAGA NEM ELÉG PRÓBA: egy csonka fájlt a pdf-lib hiba nélkül
-          „betölt”, és csak a lapok másolásakor dob, akkor viszont az EGÉSZ
-          csomagot viszi magával. Ezért itt a lapszámot is lekérjük.
-        */
-        try {
-          const pdf = await PDFDocument.load(document.file.content, {
-            ignoreEncryption: true,
-          });
-          if (pdf.getPageCount() === 0) throw new Error("nincs lapja");
-          loaded.push(pdf);
-          outcome = "ATTACHED";
-        } catch {
-          outcome = "UNREADABLE";
-        }
+        const attached = await attachablePdf(document.file.content);
+        outcome = attached.outcome;
+        if (attached.pdf) loaded.push(attached.pdf);
       }
       outcomes.push(outcome);
       notes.push(`${document.number || "szám nélkül"}: ${NOTE[outcome]}`);

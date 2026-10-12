@@ -2,7 +2,7 @@
 
 import { PilotRadioGroup } from "@acropora/ui";
 import {
-  BILLING_DOCUMENT_TYPES,
+  BILLING_NEW_DOCUMENT_TYPES,
   getDocumentCapabilities,
   INVOICE_FORMAT_LABELS,
   type BillingDocumentType,
@@ -16,6 +16,7 @@ const SOURCE_LABELS: Record<string, string> = {
   WEBSHOP_ORDER: "Webshop rendelés",
   SERVICE_JOB: "Szerviz munka",
   MANUAL: "Manuális",
+  CONTRACT: "Beszerzési szerződés",
 };
 
 /**
@@ -72,7 +73,12 @@ export function BillingDocumentTypeSelector({
           label="Dokumentum"
           value={documentType}
           onChange={onTypeChange}
-          options={BILLING_DOCUMENT_TYPES.map((type) => ({
+          // a végszámla csak előlegről készül, és az előlegéhez kötött: üres
+          // lapon nem választható, a saját vázlatán pedig nem váltható át
+          options={(documentType === "FINAL_INVOICE"
+            ? (["FINAL_INVOICE"] as const)
+            : BILLING_NEW_DOCUMENT_TYPES
+          ).map((type) => ({
             value: type,
             label: getDocumentCapabilities(type).label,
           }))}

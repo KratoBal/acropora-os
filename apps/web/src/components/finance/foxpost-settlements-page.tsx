@@ -2,14 +2,12 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   EmptyState,
-  PageHeader,
+  PilotDataTable,
+  PilotPageHeader,
   Skeleton,
+  type PilotTableColumn,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -19,13 +17,32 @@ import {
   type FoxpostSettlementLine,
   type FoxpostSettlementListResponse,
   type FoxpostSettlementStatus,
+  type FoxpostSettlementSummary,
   type FoxpostSyncState,
   type FoxpostSyncStatus,
 } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  PilotBadge,
+  PilotButton,
+  PilotThemeRoot,
+} from "@/components/pilot/pilot-ui";
 import { foxpostSettlementsApi } from "@/lib/api/foxpost-settlements";
+
+import {
+  SettlementApproveField,
+  SettlementMonthCard,
+  SettlementMonthInput,
+  settlementRange,
+  SETTLEMENT_PAGE_SIZE,
+  SettlementNotice,
+  SettlementStats,
+  SettlementSyncStrip,
+  SettlementTableCard,
+} from "./settlement-pilot";
+import { SettlementTabs } from "./settlement-tabs";
 
 function formatAmount(value?: string): string {
   if (value === undefined) return "—";
@@ -38,29 +55,36 @@ function formatDate(value?: string): string {
     : "—";
 }
 
+const STATUS_LABEL: Record<FoxpostSettlementStatus, string> = {
+  COMPLETED: "Kész",
+  NEEDS_REVIEW: "Ellenőrzendő",
+  ERROR: "Hiba",
+  PROCESSING: "Feldolgozás",
+};
+
 function settlementStatus(status: FoxpostSettlementStatus) {
-  switch (status) {
-    case "COMPLETED":
-      return <Badge variant="success">Kész</Badge>;
-    case "NEEDS_REVIEW":
-      return <Badge variant="warning">Ellenőrzendő</Badge>;
-    case "ERROR":
-      return <Badge variant="danger">Hiba</Badge>;
-    default:
-      return <Badge variant="info">Feldolgozás</Badge>;
-  }
+  const variant =
+    status === "COMPLETED"
+      ? "success"
+      : status === "NEEDS_REVIEW"
+        ? "amber"
+        : status === "ERROR"
+          ? "danger"
+          : "blue";
+  return <PilotBadge variant={variant}>{STATUS_LABEL[status]}</PilotBadge>;
 }
 
 function lineStatus(status: string) {
-  if (status === "MATCHED") return <Badge variant="success">Párosítva</Badge>;
+  if (status === "MATCHED")
+    return <PilotBadge variant="success">Párosítva</PilotBadge>;
   if (status === "ORDER_NOT_FOUND")
-    return <Badge variant="danger">Rendelés nem található</Badge>;
-  return <Badge variant="warning">Számla még nincs</Badge>;
+    return <PilotBadge variant="danger">Rendelés nem található</PilotBadge>;
+  return <PilotBadge variant="amber">Számla még nincs</PilotBadge>;
 }
 
 function lineResolution(line: FoxpostSettlementLine) {
   if (line.resolutionSource === "MANUAL")
-    return <Badge variant="info">Kézzel jóváhagyva</Badge>;
+    return <PilotBadge variant="blue">Kézzel jóváhagyva</PilotBadge>;
   return lineStatus(line.status);
 }
 
@@ -123,6 +147,7 @@ export function FoxpostSettlementsPage() {
     {},
   );
   const [reportMonth, setReportMonth] = useState("");
+  const [listPage, setListPage] = useState(1);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -130,7 +155,10 @@ export function FoxpostSettlementsPage() {
     setError(null);
     try {
       const [settlements, monthlyReports, status] = await Promise.all([
-        foxpostSettlementsApi.list(token, { page: 1, pageSize: 50 }),
+        foxpostSettlementsApi.list(token, {
+          page: listPage,
+          pageSize: SETTLEMENT_PAGE_SIZE,
+        }),
         foxpostSettlementsApi.reports(token),
         foxpostSettlementsApi.syncStatus(token),
       ]);
@@ -150,7 +178,7 @@ export function FoxpostSettlementsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, token]);
+  }, [canView, token, listPage]);
 
   useEffect(() => {
     void load();
@@ -292,43 +320,8 @@ export function FoxpostSettlementsPage() {
       />
     );
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Foxpost elszámolások"
-        description="A Foxpost heti elszámolása: egy levélben az utánvét-tételek (XLSX) és a Foxpost számlája (PDF). Az utánvét soronként a kimenő számlához kötve; a Foxpost díja az utalásból levonva."
-        actions={
-          canManage && syncStatus?.canRunNow ? (
-            <Button onClick={() => void sync()} disabled={working}>
-              {working ? "Feldolgozás…" : "Gmail ellenőrzése most"}
-            </Button>
-          ) : undefined
-        }
-      />
-
-      {syncStatus && syncStatus.state !== "ENABLED" ? (
-        <Alert
-          variant="info"
-          title="Az automatikus Gmail-behúzás ki van kapcsolva"
-          description={`Ok: ${SYNC_OFF[syncStatus.state]}. ${
-            syncStatus.canRunNow
-              ? "Addig a „Gmail ellenőrzése most” gombbal húzd be a leveleket."
-              : "Gmail-kulcs nélkül kézzel sem húzhatók be a levelek."
-          }`}
-        />
-      ) : null}
-      {syncStatus?.state === "ENABLED" ? (
-        <p className="text-sm text-dusk-600">
-          Automatikus Gmail-behúzás: {syncStatus.intervalMinutes} percenként.{" "}
-          {syncStatus.lastScheduledRun
-            ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
-                syncStatus.lastScheduledRun.status === "FAILED"
-                  ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
-                  : `${syncStatus.lastScheduledRun.createdCount} új elszámolás`
-              }.`
-            : "Automatikus futás még nincs rögzítve."}
-        </p>
-      ) : null}
+  const alerts = (
+    <>
       {notice ? (
         <Alert variant="info" title="Foxpost" description={notice} />
       ) : null}
@@ -344,45 +337,285 @@ export function FoxpostSettlementsPage() {
           }
         />
       ) : null}
+    </>
+  );
 
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Havi könyvelési fájl
-          </h2>
-          <span className="text-xs text-dusk-500">
-            Valódi dátum- és számértékekkel
+  /*
+    A RÉSZLET A LISTA HELYÉN (Figma 618:2082): ugyanazon az útvonalon egy
+    kiválasztott állapot, saját fejléccel és „Vissza a listához” gombbal.
+  */
+  if (selected) {
+    const total = selected.matchedLineCount + selected.unresolvedLineCount;
+    const lineColumns: PilotTableColumn<FoxpostSettlementLine>[] = [
+      {
+        id: "reference",
+        header: "Referencia",
+        width: "15%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {line.referenceCode}
           </span>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="month"
-              aria-label="A riport hónapja"
-              className="rounded-md border border-dusk-300 bg-white px-2 py-1.5 text-sm text-dusk-900"
-              value={reportMonth}
-              onChange={(event) => setReportMonth(event.target.value)}
-            />
-            <Button
-              variant="secondary"
-              onClick={() =>
-                selectedReport ? void download(selectedReport) : undefined
+        ),
+      },
+      {
+        id: "recipient",
+        header: "Címzett",
+        width: "15%",
+        cell: (line) => line.recipientName ?? "—",
+      },
+      {
+        id: "date",
+        header: "Tr. napja",
+        width: "10%",
+        cell: (line) => formatDate(line.transactionDate),
+      },
+      {
+        id: "amount",
+        header: "Összeg",
+        align: "right",
+        width: "11%",
+        cell: (line) => (
+          <span className="font-semibold text-pilot-grey-900">
+            {formatAmount(line.collectedAmount)}
+          </span>
+        ),
+      },
+      {
+        id: "invoice",
+        header: "Kimenő számla / kézi jóváhagyás",
+        width: "33%",
+        cell: (line) =>
+          line.status !== "MATCHED" && canManage ? (
+            <SettlementApproveField
+              label={`Számlaszám – ${line.referenceCode}`}
+              value={invoiceDrafts[line.id] ?? ""}
+              placeholder={line.referenceCode}
+              disabled={working}
+              onChange={(value) =>
+                setInvoiceDrafts((current) => ({
+                  ...current,
+                  [line.id]: value,
+                }))
               }
-              disabled={!selectedReport || downloadingId !== null}
+              onApprove={() => void approveLine(line)}
+              hint={
+                line.referenceInvoiceMissing
+                  ? "Ilyen kimenő számla nálunk nincs: ellenőrizd a számlaszámot jóváhagyás előtt."
+                  : undefined
+              }
+            />
+          ) : (
+            <div>
+              <span>{line.invoiceNumber ?? "—"}</span>
+              {line.manualApprovedByDisplayName ? (
+                <p className="mt-1 text-xs text-pilot-grey-500">
+                  {line.manualApprovedByDisplayName} ·{" "}
+                  {formatDate(line.manualApprovedAt)}
+                </p>
+              ) : null}
+            </div>
+          ),
+      },
+      {
+        id: "resolution",
+        header: "Párosítás",
+        align: "right",
+        width: "16%",
+        cell: lineResolution,
+      },
+    ];
+    return (
+      <PilotThemeRoot className="space-y-6">
+        <PilotPageHeader
+          title={`Foxpost elszámolás · ${selected.settlementCode ?? "ismeretlen"}`}
+          description={`${formatDate(selected.periodStart)} – ${formatDate(selected.periodEnd)} · heti XLSX + Foxpost díjszámla`}
+          actions={
+            <>
+              {canManage && selected.status !== "COMPLETED" ? (
+                <PilotButton
+                  variant="secondary"
+                  onClick={() => void reprocess()}
+                  disabled={working}
+                >
+                  Újrafeldolgozás
+                </PilotButton>
+              ) : null}
+              <PilotButton
+                variant="secondary"
+                onClick={() => setSelected(null)}
+              >
+                Vissza a listához
+              </PilotButton>
+            </>
+          }
+        />
+        <SettlementTabs />
+        {alerts}
+        <SettlementStats
+          items={[
+            {
+              label: "Beszedett",
+              value: formatAmount(selected.collectedAmount),
+            },
+            {
+              label: "Foxpost számla",
+              value: `${formatAmount(selected.invoiceGrossAmount)}${
+                selected.invoiceNumber ? ` (${selected.invoiceNumber})` : ""
+              }`,
+            },
+            {
+              label: "Utalt",
+              value: formatAmount(selected.transferredAmount),
+            },
+            {
+              label: "Párosítva",
+              value: `${selected.matchedLineCount} / ${total}`,
+            },
+            { label: "Állapot", value: STATUS_LABEL[selected.status] },
+          ]}
+        />
+        {selected.errorCode || selected.unresolvedLineCount > 0 ? (
+          <SettlementNotice
+            tone="check"
+            title={`${selected.unresolvedLineCount.toLocaleString("hu-HU")} tétel kézi ellenőrzést kér`}
+          >
+            Add meg a helyes számlaszámot az érintett sornál. Ha a Foxpost
+            referencia már maga a számlaszám, a mező előre kitöltve jelenik meg;
+            ellenőrzés után hagyd jóvá.
+          </SettlementNotice>
+        ) : null}
+        <SettlementTableCard>
+          <PilotDataTable
+            columns={lineColumns}
+            rows={selected.lines}
+            rowKey={(line) => line.id}
+            rowTestId="foxpost-sor"
+            minWidth={1040}
+          />
+        </SettlementTableCard>
+        <section className="rounded-2xl border border-pilot-grey-200 bg-white px-5 py-4">
+          <h2 className="text-sm font-semibold text-pilot-grey-900">
+            Forrásdokumentumok
+          </h2>
+          <ul className="mt-2 space-y-1.5 text-xs text-pilot-aqua-700">
+            <li>{selected.xlsxFileName}</li>
+            <li>{selected.pdfFileName}</li>
+            <li>
+              Gmail{selected.gmailFrom ? `: ${selected.gmailFrom}` : ""}
+              {selected.processedAt
+                ? ` · feldolgozva ${new Date(selected.processedAt).toLocaleString("hu-HU")}`
+                : ""}
+            </li>
+          </ul>
+        </section>
+      </PilotThemeRoot>
+    );
+  }
+
+  const listColumns: PilotTableColumn<FoxpostSettlementSummary>[] = [
+    {
+      id: "date",
+      header: "Kelte",
+      width: "16%",
+      cell: (item) => formatDate(item.invoiceIssueDate),
+    },
+    {
+      id: "code",
+      header: "Elszámolás",
+      width: "18%",
+      cell: (item) => item.settlementCode ?? "—",
+    },
+    {
+      id: "collected",
+      header: "Beszedett",
+      width: "17%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.collectedAmount)}
+        </span>
+      ),
+    },
+    {
+      id: "transferred",
+      header: "Utalt",
+      width: "17%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {formatAmount(item.transferredAmount)}
+        </span>
+      ),
+    },
+    {
+      id: "matched",
+      header: "Párosítva",
+      width: "14%",
+      cell: (item) => (
+        <span className="font-semibold text-pilot-grey-900">
+          {item.matchedLineCount} /{" "}
+          {item.matchedLineCount + item.unresolvedLineCount}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Állapot",
+      width: "18%",
+      cell: (item) => settlementStatus(item.status),
+    },
+  ];
+
+  return (
+    <PilotThemeRoot className="space-y-6">
+      <PilotPageHeader
+        title="Elszámolások"
+        description="Utánvétek és fizetési szolgáltatói kimutatások automatikus párosítással. A Foxpost heti levelében az utánvét-tételek (XLSX) és a Foxpost számlája (PDF); az utánvét soronként a kimenő számlához kötve, a Foxpost díja az utalásból levonva."
+        actions={
+          canManage && syncStatus?.canRunNow ? (
+            <PilotButton
+              size="regular"
+              onClick={() => void sync()}
+              disabled={working}
             >
-              {selectedReport && downloadingId === selectedReport.id
-                ? "Letöltés…"
-                : "XLSX letöltése"}
-            </Button>
-          </div>
-          {loading && !reports.length ? <Skeleton className="h-5" /> : null}
-          {!loading && !selectedReport ? (
-            <p className="text-sm text-dusk-500">
-              Erre a hónapra még nincs feldolgozott Foxpost riport.
-            </p>
-          ) : null}
-          {selectedReport ? (
-            <p className="text-sm text-dusk-600">
+              {working ? "Feldolgozás…" : "Gmail ellenőrzése most"}
+            </PilotButton>
+          ) : undefined
+        }
+      />
+      <SettlementTabs />
+      {syncStatus ? (
+        <SettlementSyncStrip
+          active={syncStatus.state === "ENABLED"}
+          title={
+            syncStatus.state === "ENABLED"
+              ? undefined
+              : "Az automatikus Gmail-behúzás ki van kapcsolva"
+          }
+          text={
+            syncStatus.state === "ENABLED"
+              ? `Automatikus Gmail-behúzás: ${syncStatus.intervalMinutes} percenként. ${
+                  syncStatus.lastScheduledRun
+                    ? `Utolsó automatikus futás: ${new Date(syncStatus.lastScheduledRun.startedAt).toLocaleString("hu-HU")}, ${
+                        syncStatus.lastScheduledRun.status === "FAILED"
+                          ? `sikertelen (${syncStatus.lastScheduledRun.errorCode ?? "ismeretlen hiba"})`
+                          : `${syncStatus.lastScheduledRun.createdCount} új elszámolás`
+                      }.`
+                    : "Automatikus futás még nincs rögzítve."
+                }`
+              : `Ok: ${SYNC_OFF[syncStatus.state]}. ${
+                  syncStatus.canRunNow
+                    ? "Addig a „Gmail ellenőrzése most” gombbal húzd be a leveleket."
+                    : "Gmail-kulcs nélkül kézzel sem húzhatók be a levelek."
+                }`
+          }
+        />
+      ) : null}
+      {alerts}
+      <SettlementMonthCard
+        title="Havi könyvelési fájl"
+        subtitle="Valódi dátum- és számértékekkel"
+        summary={
+          selectedReport ? (
+            <>
               {selectedReport.settlementCount} hét /{" "}
               {selectedReport.invoiceCount} számla · Beszedett{" "}
               {formatAmount(selectedReport.collectedAmount)} · Foxpost számla{" "}
@@ -395,201 +628,64 @@ export function FoxpostSettlementsPage() {
                   külön munkalapon
                 </span>
               ) : null}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <h2 className="text-sm font-semibold text-dusk-900">
-            Utánvét-utalások
-          </h2>
-          <span className="text-xs text-dusk-500">
-            {data?.pagination.totalItems ?? 0} utalás
-          </span>
-        </CardHeader>
-        <CardContent>
-          {loading && !data ? <Skeleton className="h-56" /> : null}
-          {data && data.items.length === 0 ? (
-            <EmptyState
-              title="Még nincs Foxpost utánvét-utalás"
-              description="A Gmail ellenőrzése után itt jelennek meg a heti XLSX + PDF párok."
+            </>
+          ) : loading && !reports.length ? (
+            <Skeleton className="h-4 w-64" />
+          ) : (
+            "Erre a hónapra még nincs feldolgozott Foxpost riport."
+          )
+        }
+        controls={
+          <>
+            <SettlementMonthInput
+              value={reportMonth}
+              onChange={setReportMonth}
             />
-          ) : null}
-          {data?.items.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Kelte</th>
-                    <th>Elszámolás</th>
-                    <th className="text-right">Beszedett</th>
-                    <th className="text-right">Utalt</th>
-                    <th className="text-right">Párosítva</th>
-                    <th className="p-3">Állapot</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
-                      onClick={() => void openDetail(item.id)}
-                    >
-                      <td className="p-3">
-                        {formatDate(item.invoiceIssueDate)}
-                      </td>
-                      <td className="font-mono text-xs">
-                        {item.settlementCode ?? "—"}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(item.collectedAmount)}
-                      </td>
-                      <td className="text-right">
-                        {formatAmount(item.transferredAmount)}
-                      </td>
-                      <td className="text-right">
-                        {item.matchedLineCount} /{" "}
-                        {item.matchedLineCount + item.unresolvedLineCount}
-                      </td>
-                      <td className="p-3">{settlementStatus(item.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      {selected ? (
-        <Card>
-          <CardHeader>
-            <div>
-              <h2 className="text-sm font-semibold text-dusk-900">
-                {selected.settlementCode ?? "Ismeretlen elszámolás"} részletei
-              </h2>
-              <p className="mt-1 text-xs text-dusk-500">
-                {selected.xlsxFileName} + {selected.pdfFileName}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {settlementStatus(selected.status)}
-              {canManage && selected.status !== "COMPLETED" ? (
-                <Button
-                  size="sm"
-                  onClick={() => void reprocess()}
-                  disabled={working}
-                >
-                  Újrafeldolgozás
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {selected.errorCode ? (
-              <Alert
-                variant="info"
-                title="Ellenőrzés szükséges"
-                description="Add meg a helyes számlaszámot az érintett sornál. Ha a Foxpost referencia már maga a számlaszám, a mező előre kitöltve jelenik meg; ellenőrzés után hagyd jóvá."
-              />
-            ) : null}
-            <div className="grid gap-3 text-sm sm:grid-cols-3">
-              <div>
-                <span className="text-dusk-500">Időszak:</span>{" "}
-                {formatDate(selected.periodStart)} –{" "}
-                {formatDate(selected.periodEnd)}
-              </div>
-              <div>
-                <span className="text-dusk-500">Beszedett:</span>{" "}
-                {formatAmount(selected.collectedAmount)}
-              </div>
-              <div>
-                <span className="text-dusk-500">Foxpost számla:</span>{" "}
-                {selected.invoiceNumber ?? "—"} (
-                {formatAmount(selected.invoiceGrossAmount)})
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Referencia kód</th>
-                    <th>Címzett</th>
-                    <th>Tranzakció napja</th>
-                    <th className="text-right">Összeg</th>
-                    <th className="pl-4">Kimenő számla / kézi jóváhagyás</th>
-                    <th className="p-3">Párosítás</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.lines.map((line) => (
-                    <tr key={line.id} className="border-b last:border-0">
-                      <td className="p-3 font-mono text-xs">
-                        {line.referenceCode}
-                      </td>
-                      <td>{line.recipientName ?? "—"}</td>
-                      <td>{formatDate(line.transactionDate)}</td>
-                      <td className="text-right">
-                        {formatAmount(line.collectedAmount)}
-                      </td>
-                      <td className="py-2 pl-4 pr-3">
-                        {line.status !== "MATCHED" && canManage ? (
-                          <div className="flex min-w-[290px] flex-wrap items-center gap-2">
-                            <input
-                              aria-label={`Számlaszám – ${line.referenceCode}`}
-                              className="min-w-0 flex-1 rounded-md border border-dusk-300 bg-white px-2 py-1.5 font-mono text-xs text-dusk-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                              value={invoiceDrafts[line.id] ?? ""}
-                              placeholder={line.referenceCode}
-                              maxLength={100}
-                              onChange={(event) =>
-                                setInvoiceDrafts((current) => ({
-                                  ...current,
-                                  [line.id]: event.target.value,
-                                }))
-                              }
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => void approveLine(line)}
-                              disabled={
-                                working ||
-                                !(invoiceDrafts[line.id] ?? "").trim()
-                              }
-                            >
-                              Jóváhagyás
-                            </Button>
-                            {line.referenceInvoiceMissing ? (
-                              <p className="w-full text-xs text-amber-700">
-                                Ilyen kimenő számla nálunk nincs: ellenőrizd a
-                                számlaszámot jóváhagyás előtt.
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="font-mono text-xs">
-                              {line.invoiceNumber ?? "—"}
-                            </span>
-                            {line.manualApprovedByDisplayName ? (
-                              <p className="mt-1 text-xs text-dusk-500">
-                                {line.manualApprovedByDisplayName} ·{" "}
-                                {formatDate(line.manualApprovedAt)}
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3">{lineResolution(line)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+            <PilotButton
+              variant="secondary"
+              onClick={() =>
+                selectedReport ? void download(selectedReport) : undefined
+              }
+              disabled={!selectedReport || downloadingId !== null}
+            >
+              {selectedReport && downloadingId === selectedReport.id
+                ? "Letöltés…"
+                : "XLSX letöltése"}
+            </PilotButton>
+          </>
+        }
+      />
+      {loading && !data ? <Skeleton className="h-56" /> : null}
+      {data && data.items.length === 0 ? (
+        <EmptyState
+          title="Még nincs Foxpost utánvét-utalás"
+          description="A Gmail ellenőrzése után itt jelennek meg a heti XLSX + PDF párok."
+        />
       ) : null}
-    </div>
+      {data?.items.length ? (
+        <SettlementTableCard
+          title="Utánvét-utalások"
+          count={`${data.pagination.totalItems.toLocaleString("hu-HU")} utalás`}
+          paging={{
+            page: data.pagination.page,
+            totalPages: data.pagination.totalPages,
+            range: settlementRange(data.pagination),
+            onPageChange: setListPage,
+          }}
+        >
+          <PilotDataTable
+            columns={listColumns}
+            rows={data.items}
+            rowKey={(item) => item.id}
+            rowTestId="foxpost-utalas"
+            onRowActivate={(item) => void openDetail(item.id)}
+            rowLabel={(item) =>
+              `${item.settlementCode ?? "Elszámolás"} részletei`
+            }
+            minWidth={820}
+          />
+        </SettlementTableCard>
+      ) : null}
+    </PilotThemeRoot>
   );
 }

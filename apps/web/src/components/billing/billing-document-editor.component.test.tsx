@@ -18,6 +18,10 @@ import {
   readPosInvoiceHandoff,
   writePosInvoiceHandoff,
 } from "./pos-invoice-handoff";
+import {
+  readContractInvoiceHandoff,
+  writeContractInvoiceHandoff,
+} from "./contract-invoice-handoff";
 
 /**
  * A SZÁMLÁZÁSI SZERKESZTŐ (Számlázás v0.1, brief 35. pont UI QA): a típus
@@ -42,6 +46,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   issue: vi.fn(),
   email: vi.fn(),
+  pdf: vi.fn(),
   emailDraft: vi.fn(),
   templateDraft: vi.fn(),
 }));
@@ -137,6 +142,7 @@ beforeEach(() => {
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
   api.issue.mockReset();
   api.email.mockReset();
+  api.pdf.mockReset();
   // A LEVELEZÉS OLDAL SABLONJA (nautilus #1293): ez megy ki, amíg a levélhez
   // senki nem nyúlt.
   api.emailDraft.mockReset();
@@ -342,6 +348,65 @@ describe("BillingDocumentEditor", () => {
   });
 
   /*
+    A BESZERZÉSI SZERZŐDÉS SZÁMLÁJA (hétfői lista M4). MI PIROSÍT: ha a vevő
+    nem töltődik be magától; ha a szerződés száma nem lesz hivatkozás; ha a
+    tétel nem nettóval, a szerződés egységével nyílik; ha a csomag az első
+    mentés után újra megnyílna.
+  */
+  it("WEB-INVOICE-FROM-CONTRACT: the purchase contract fills the customer, the reference and the lines", async () => {
+    window.sessionStorage.clear();
+    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+      contractId: "contract-2",
+      customerId: "cust-1",
+      contractNumber: "SZ2026/0000020",
+      lines: [
+        {
+          description: "Tengeri só, 25 kg",
+          quantity: "4.000000",
+          unit: "zsák",
+          unitNet: "18000.0000",
+          vatRatePercent: "27.00",
+        },
+      ],
+    });
+    render(<BillingDocumentEditor contractHandoffKey={key} />);
+    await screen.findByText(/Adószám: 12345678-2-42/);
+    expect(screen.getByDisplayValue("SZ2026/0000020")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+    );
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const [, created] = api.create.mock.calls[0]!;
+    expect(
+      [
+        customers.detail.mock.calls[0]?.[1],
+        created.customerId,
+        created.reference,
+        [created.sourceType, created.sourceId],
+        created.lines,
+        readContractInvoiceHandoff(window.sessionStorage, key),
+      ],
+      "WEB-INVOICE-FROM-CONTRACT",
+    ).toEqual([
+      "cust-1",
+      "cust-1",
+      "SZ2026/0000020",
+      ["CONTRACT", "contract-2"],
+      [
+        expect.objectContaining({
+          productId: null,
+          description: "Tengeri só, 25 kg",
+          quantity: "4",
+          unit: "zsák",
+          unitNet: "18000",
+          vatRatePercent: "27",
+        }),
+      ],
+      null,
+    ]);
+  });
+
+  /*
     KEREKÍTÉS (barracuda, #1642): a pénztár a forintra kerekített sorokat adja
     át (5127 és 738, gombja 5 865 Ft-ot írt). A szerkesztő bruttó végösszege
     ugyanez, és egyik sor sem jelez eltérést a beírt bruttótól.
@@ -529,10 +594,15 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(button);
       expect(api.issue).not.toHaveBeenCalled();
       const dialog = await screen.findByRole("dialog");
+      // Balázs kérdése, betű szerint (hétfői lista M1)
+      expect(dialog).toHaveTextContent("Biztos, hogy kiállítod a számlát?");
       expect(dialog).toHaveTextContent("valódi számla készül a Számlázz.hu-n");
+      expect(
+        within(dialog).getByRole("button", { name: "Mégsem" }),
+      ).toBeEnabled();
 
       fireEvent.click(
-        within(dialog).getByRole("button", { name: "Számla kiállítása" }),
+        within(dialog).getByRole("button", { name: "Kiállítom" }),
       );
       await waitFor(() => expect(api.issue).toHaveBeenCalledTimes(1));
       const [, created] = api.create.mock.calls[0]!;
@@ -570,11 +640,12 @@ describe("BillingDocumentEditor", () => {
       fireEvent.click(
         screen.getByRole("button", { name: "Kiállítás és kiküldés" }),
       );
-      fireEvent.click(
-        within(await screen.findByRole("dialog")).getByRole("button", {
-          name: "Kiállítás és kiküldés",
-        }),
+      const dialog = await screen.findByRole("dialog");
+      // a címzett a kérdésben áll: aki megerősít, látja, hová megy a számla
+      expect(dialog).toHaveTextContent(
+        "Biztos, hogy kiállítod és kiküldöd a számlát a(z) szamlazas@partner.hu címre?",
       );
+      fireEvent.click(within(dialog).getByRole("button", { name: "Elküldöm" }));
     };
 
     it("an e-invoice: issued first, then the edited letter goes out", async () => {
@@ -728,13 +799,127 @@ describe("BillingDocumentEditor", () => {
       );
       fireEvent.click(
         within(await screen.findByRole("dialog")).getByRole("button", {
-          name: "Számla kiállítása",
+          name: "Kiállítom",
         }),
       );
       expect(
         await screen.findByText("A valódi kiállítás ki van kapcsolva."),
       ).toBeInTheDocument();
       expect(screen.queryByText("Csak olvasható")).toBeNull();
+    });
+
+    /*
+      A SZÁMLAKÉP ÉS A PDF A „KIÁLLÍTVA” SÁVBAN (hétfői lista M2, Luca kérése).
+      MI PIROSÍT: ha a sávban nincs a két gomb; ha nem a hivatalos PDF-et kérik
+      le (a kiállított bizonylat azonosítójával); ha a még meg nem lévő PDF-re
+      kattintható; ha egy újratöltött kiállított bizonylatnál a sáv eltűnik.
+    */
+    const issuedPaper = (pdfAvailable: boolean) =>
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        documentNumber: "AC-2026-000003",
+        pdf: { available: pdfAvailable },
+      }));
+    const issuePaper = async () => {
+      await readyPaperInvoice();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      );
+      fireEvent.click(
+        within(await screen.findByRole("dialog")).getByRole("button", {
+          name: "Kiállítom",
+        }),
+      );
+      return within(
+        await screen.findByRole("group", {
+          name: "A kiállított bizonylat PDF-je",
+        }),
+      );
+    };
+
+    it("the issued bar opens the invoice image and downloads the official PDF", async () => {
+      issuedPaper(true);
+      api.pdf.mockResolvedValue(
+        new Blob(["%PDF"], { type: "application/pdf" }),
+      );
+      URL.createObjectURL = vi.fn(() => "blob:szamla");
+      URL.revokeObjectURL = vi.fn();
+      const open = vi.spyOn(window, "open").mockReturnValue(null);
+      const click = vi
+        .spyOn(HTMLAnchorElement.prototype, "click")
+        .mockImplementation(() => {});
+      const bar = await issuePaper();
+      const id = api.create.mock.calls[0]![1].id;
+
+      fireEvent.click(
+        bar.getByRole("button", { name: "Számlakép megtekintése" }),
+      );
+      await waitFor(() =>
+        expect(open).toHaveBeenCalledWith("blob:szamla", "_blank"),
+      );
+      fireEvent.click(bar.getByRole("button", { name: "PDF letöltése" }));
+      await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+      expect(
+        [
+          api.pdf.mock.calls,
+          (click.mock.contexts[0] as HTMLAnchorElement).download,
+        ],
+        "WEB-ISSUED-PDF",
+      ).toEqual([
+        [
+          ["token-1", id],
+          ["token-1", id],
+        ],
+        "AC-2026-000003.pdf",
+      ]);
+      open.mockRestore();
+      click.mockRestore();
+    });
+
+    it("an issued invoice whose PDF is not stored yet: both buttons off, with the reason", async () => {
+      issuedPaper(false);
+      const bar = await issuePaper();
+      const buttons = ["Számlakép megtekintése", "PDF letöltése"].map((name) =>
+        bar.getByRole("button", { name }),
+      );
+      expect(
+        buttons.map((button) => [
+          (button as HTMLButtonElement).disabled,
+          button.getAttribute("title"),
+        ]),
+        "WEB-ISSUED-PDF-MISSING",
+      ).toEqual([
+        [true, expect.stringMatching(/még nem érhető el/)],
+        [true, expect.stringMatching(/még nem érhető el/)],
+      ]);
+      expect(api.pdf).not.toHaveBeenCalled();
+    });
+
+    it("an issued invoice opened in the editor (after the route switch) keeps the bar", async () => {
+      api.detail.mockReset().mockResolvedValue({
+        ...detailFrom(
+          {
+            documentType: "INVOICE",
+            invoiceFormat: "PAPER",
+            currency: "HUF",
+            language: "hu",
+            lines: [],
+          },
+          "doc-issued",
+        ),
+        status: "ISSUED",
+        documentNumber: "AC-2026-000004",
+        pdf: { available: true },
+      });
+      render(<BillingDocumentEditor documentId="doc-issued" />);
+      expect(
+        await screen.findByText("Kiállítva: AC-2026-000004"),
+        "WEB-ISSUED-RELOAD",
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "PDF letöltése" }),
+      ).toBeEnabled();
     });
   });
 

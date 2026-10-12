@@ -3,6 +3,7 @@ import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PilotContractDetailPage } from "./pilot-contract-detail-page";
+import { readContractInvoiceHandoff } from "@/components/billing/contract-invoice-handoff";
 import { ApiError } from "@/lib/api/client";
 import type { ContractSummary } from "@/lib/api/contracts";
 
@@ -16,12 +17,18 @@ vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
 }));
 
-const api = vi.hoisted(() => ({ detail: vi.fn(), update: vi.fn() }));
+const api = vi.hoisted(() => ({
+  detail: vi.fn(),
+  update: vi.fn(),
+  quantityUnits: vi.fn(),
+}));
 const orderApi = vi.hoisted(() => ({ list: vi.fn() }));
 const worksheetsApi = vi.hoisted(() => ({ departments: vi.fn() }));
 const assetsApi = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
@@ -60,6 +67,8 @@ function contract(): ContractSummary {
     validFrom: "2026-01-01T00:00:00.000Z",
     validTo: null,
     status: "ACTIVE",
+    kind: "MAINTENANCE",
+    _count: { maintenanceOrders: 0 },
     notes: null,
     organizationalUnitName: null,
     contactPersonName: null,
@@ -150,6 +159,8 @@ describe("PilotContractDetailPage -- tétel helyszíne és eszközei", () => {
           quantity: "1",
           occasionsPerYear: 4,
           vatRatePercent: "27",
+          unitOfMeasureId: null,
+          unitOfMeasure: null,
           departmentId: null,
           assets: [],
           repairFeeWorkdayHours: null,
@@ -233,6 +244,8 @@ describe("PilotContractDetailPage -- tétel helyszíne és eszközei", () => {
           quantity: "1",
           occasionsPerYear: 1,
           vatRatePercent: "27",
+          unitOfMeasureId: null,
+          unitOfMeasure: null,
           departmentId: null,
           assets: [],
           repairFeeWorkdayHours: null,
@@ -339,6 +352,8 @@ describe("PilotContractDetailPage -- tétel törlése", () => {
     quantity: "1",
     occasionsPerYear: 1,
     vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
     departmentId: null,
     assets: [],
     repairFeeWorkdayHours: null,
@@ -456,6 +471,8 @@ describe("PilotContractDetailPage -- tétel szerkesztése és felvétele", () =>
     quantity: "1",
     occasionsPerYear: 1,
     vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
     departmentId: null,
     assets: [],
     repairFeeWorkdayHours: null,
@@ -574,6 +591,8 @@ describe("PilotContractDetailPage -- javítási díjak", () => {
         quantity: "1",
         occasionsPerYear: 1,
         vatRatePercent: "27",
+        unitOfMeasureId: null,
+        unitOfMeasure: null,
         departmentId: null,
         assets: [],
         repairFeeWorkdayHours: "9000",
@@ -620,5 +639,192 @@ describe("PilotContractDetailPage -- javítási díjak", () => {
       repairFeeWorkdayOffHours: "13000",
       repairTotal: null,
     });
+  });
+});
+
+/*
+  A SZERZŐDÉS FAJTÁJA AZ ADATLAPON (hétfői lista M4). MI PIROSÍT: ha egy
+  megrendelőlappal bíró szerződésnél a „Beszerzés” választható maradna, vagy
+  nem mondaná meg, miért nem; ha a beszerzési szerződés megrendelőlap-kártyát,
+  alkalom mezőt vagy helyszínt mutatna; ha a mentés nem a fajtát és a
+  beszerzés mezőit küldené.
+*/
+describe("PilotContractDetailPage -- a szerződés fajtája", () => {
+  const item = {
+    id: "item-1",
+    position: 1,
+    description: "Tengeri só, 25 kg",
+    unitNet: "18000",
+    quantity: "4",
+    occasionsPerYear: null,
+    vatRatePercent: "27",
+    unitOfMeasureId: "uom-zsak",
+    unitOfMeasure: { id: "uom-zsak", code: "zsák", name: "zsák" },
+    departmentId: null,
+    assets: [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
+  };
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.update.mockReset();
+    api.quantityUnits
+      .mockReset()
+      .mockResolvedValue([{ id: "uom-zsak", code: "zsák", name: "zsák" }]);
+    orderApi.list.mockReset().mockResolvedValue([]);
+    worksheetsApi.departments
+      .mockReset()
+      .mockResolvedValue({ items: [DEPARTMENT] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("WEB-CONTRACT-SWITCH-BLOCKED: megrendelőlap után a Beszerzés nem választható, és megmondja, miért", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      _count: { maintenanceOrders: 1 },
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const purchase = await screen.findByRole("radio", { name: "Beszerzés" });
+    expect(
+      [
+        (purchase as HTMLInputElement).disabled,
+        screen.queryByText(
+          "Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre.",
+        ) !== null,
+      ],
+      "WEB-CONTRACT-SWITCH-BLOCKED",
+    ).toEqual([true, true]);
+  });
+
+  it("WEB-CONTRACT-DETAIL-PURCHASE: a beszerzési adatlap egységgel, megrendelőlap nélkül, és a fajtát menti", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [item],
+    });
+    api.update.mockImplementation(async (_token, _id, input) => ({
+      ...contract(),
+      ...input,
+      items: [item],
+    }));
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const unit = (await screen.findByLabelText(
+      "1. tétel mennyiségi egysége",
+    )) as HTMLSelectElement;
+    await screen.findByRole("option", { name: "zsák (zsák)" });
+    const shown = [
+      unit.value,
+      screen.queryByText("Megrendelőlapok"),
+      screen.queryByLabelText("1. tétel alkalma évente"),
+      screen.queryByLabelText("Helyszín"),
+    ];
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const sent = api.update.mock.calls[0]![2];
+    expect(
+      [shown, sent.kind, sent.items],
+      "WEB-CONTRACT-DETAIL-PURCHASE",
+    ).toEqual([
+      ["uom-zsak", null, null, null],
+      "PURCHASE",
+      [
+        {
+          id: "item-1",
+          description: "Tengeri só, 25 kg",
+          unitNet: "18000",
+          quantity: "4",
+          vatRatePercent: "27",
+          occasionsPerYear: null,
+          unitOfMeasureId: "uom-zsak",
+        },
+      ],
+    ]);
+  });
+
+  /*
+    A „SZÁMLA” GOMB (hétfői lista M4). MI PIROSÍT: ha nem a mentett beszerzési
+    szerződés tételeivel, vevőjével és számával nyitná az Új számlát; ha egy még
+    karbantartásiként mentett szerződésből is nyitható lenne; ha számla után a
+    szerződés visszaállhatna karbantartásira (barracuda, #1661).
+  */
+  it("WEB-CONTRACT-INVOICE-OPEN: a mentett beszerzési szerződésből kitöltött Új számla nyílik", async () => {
+    window.sessionStorage.clear();
+    navigation.push.mockReset();
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [item],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Számla" }));
+    const target = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    );
+    expect(
+      [
+        target.pathname,
+        readContractInvoiceHandoff(
+          window.sessionStorage,
+          target.searchParams.get("szerzodes")!,
+        ),
+      ],
+      "WEB-CONTRACT-INVOICE-OPEN",
+    ).toEqual([
+      "/penzugy/szamlazas/uj",
+      {
+        contractId: "contract-1",
+        customerId: "customer-1",
+        contractNumber: "SZ2026/0000019",
+        lines: [
+          {
+            description: "Tengeri só, 25 kg",
+            quantity: "4",
+            unit: "zsák",
+            unitNet: "18000",
+            vatRatePercent: "27",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("WEB-CONTRACT-INVOICE-UNSAVED: karbantartásiként mentett szerződésből nincs számla", async () => {
+    api.detail.mockReset().mockResolvedValue(contract());
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Beszerzés" }));
+    expect(
+      [
+        (screen.getByRole("button", { name: "Számla" }) as HTMLButtonElement)
+          .disabled,
+        screen.queryByText("Előbb mentsd a szerződést Beszerzésként.") !== null,
+      ],
+      "WEB-CONTRACT-INVOICE-UNSAVED",
+    ).toEqual([true, true]);
+  });
+
+  it("WEB-CONTRACT-BACK-BLOCKED: számla után a Karbantartás nem választható", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      invoiceCount: 1,
+      items: [item],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const back = await screen.findByRole("radio", {
+      name: "Karbantartás, javítás",
+    });
+    expect(
+      [
+        (back as HTMLInputElement).disabled,
+        screen.queryByText(
+          "Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra.",
+        ) !== null,
+      ],
+      "WEB-CONTRACT-BACK-BLOCKED",
+    ).toEqual([true, true]);
   });
 });

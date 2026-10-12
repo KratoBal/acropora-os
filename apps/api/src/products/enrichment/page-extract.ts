@@ -1,5 +1,7 @@
 import type { ProductEnrichmentFieldKey } from "@acropora/types";
 
+import { readWaterEffects } from "./water-effects-lexicon.js";
+
 /**
  * WHAT A PAGE STATES ABOUT A PRODUCT, FROM ITS STRUCTURED DATA ONLY.
  *
@@ -27,6 +29,8 @@ export const ENRICHED_FIELDS = [
   "flowRate",
   "power",
   "voltage",
+  // a vízmérési ajánlás (kártya 2b3983e1): a leírásból, a szótárral
+  "waterParameterEffects",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
@@ -40,6 +44,11 @@ export interface ExtractedValue {
 export interface PageStatement {
   /** Values per field; at most one per field. */
   values: ExtractedValue[];
+  /**
+   * What the water-effects lexicon left out (a negated match, a code stated
+   * both ways), so the run can say it; empty when there is nothing to say.
+   */
+  lexiconNotes?: string[];
   /** Why nothing was taken, when nothing was. */
   note:
     | "NO_STRUCTURED_DATA"
@@ -158,12 +167,17 @@ export function extractPageStatement(html: string): PageStatement {
   const product = products[0]!;
 
   const values = new Map<EnrichedField, ExtractedValue>();
-  const put = (field: EnrichedField, raw: string | null, where: string) => {
+  const put = (
+    field: EnrichedField,
+    raw: string | null,
+    where: string,
+    excerpt?: string,
+  ) => {
     if (!raw || values.has(field)) return;
     values.set(field, {
       field,
       raw: raw.slice(0, 200),
-      excerpt: `ld+json Product.${where} = ${JSON.stringify(raw.slice(0, 120))}`,
+      excerpt: `ld+json Product.${where} = ${JSON.stringify(excerpt ?? raw.slice(0, 120))}`,
     });
   };
 
@@ -192,8 +206,24 @@ export function extractPageStatement(html: string): PageStatement {
         `additionalProperty[${JSON.stringify(name)}]`,
       );
   }
+  // a leírás a szótárral: a kivonat a találat körüli szöveg, nem a leírás eleje
+  const lexiconNotes: string[] = [];
+  const description = text(product.description);
+  if (description) {
+    const reading = readWaterEffects(description);
+    put(
+      "waterParameterEffects",
+      reading.raw,
+      "description",
+      reading.excerpt ?? undefined,
+    );
+    for (const n of reading.negated) lexiconNotes.push(`tagadva: ${n}`);
+    for (const code of reading.contradicted)
+      lexiconNotes.push(`${code}: mindkét irány, nincs érték`);
+  }
   return {
     values: [...values.values()],
+    ...(lexiconNotes.length ? { lexiconNotes } : {}),
     note: values.size ? null : "NO_VALUES",
   };
 }

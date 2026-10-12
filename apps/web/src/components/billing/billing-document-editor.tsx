@@ -12,7 +12,7 @@ import {
 import {
   billingEmailDelivery,
   billingEmailModeFor,
-  billingIssueCta,
+  billingIssueConfirm,
   getDocumentCapabilities,
   hasAnyPermission,
   hasPermission,
@@ -54,7 +54,17 @@ import {
   withCustomer,
   type EditorState,
 } from "./billing-editor-state";
-import { BillingPartnerCard } from "./billing-partner-card";
+import {
+  BillingPartnerCard,
+  billingCustomerFromDetail,
+} from "./billing-partner-card";
+import {
+  clearContractInvoiceHandoff,
+  editorLinesFromContractHandoff,
+  readContractInvoiceHandoff,
+} from "./contract-invoice-handoff";
+import { customersApi } from "@/lib/api/customers";
+import { useBillingDocumentPdf } from "./use-billing-document-pdf";
 import {
   clearPosInvoiceHandoff,
   editorLinesFromPosHandoff,
@@ -64,6 +74,20 @@ import {
 export const BILLING_EDITOR_PATH = "/penzugy/szamlazas";
 
 const EDITABLE_STATUSES = ["DRAFT", "ISSUE_FAILED"];
+
+const PDF_MISSING =
+  "A hivatalos PDF még nem érhető el; a részletek oldalán később megnézhető.";
+
+/** A sáv adata egy kiállított bizonylatból; minden más állapotban nincs sáv. */
+function issuedOf(detail: BillingDocumentDetail) {
+  return detail.status === "ISSUED" && detail.documentNumber
+    ? {
+        id: detail.id,
+        number: detail.documentNumber,
+        pdfAvailable: detail.pdf?.available === true,
+      }
+    : null;
+}
 
 function today(): string {
   // A helyi nap, nem az UTC-é: este tizenegykor a teljesítés ne a holnap legyen.
@@ -84,11 +108,14 @@ export function BillingDocumentEditor({
   documentId,
   initialType,
   posHandoffKey,
+  contractHandoffKey,
 }: {
   documentId?: string;
   initialType?: BillingDocumentType;
   /** A pénztár kosarának kulcsa (`pos-invoice-handoff`); csak új számlánál. */
   posHandoffKey?: string;
+  /** A beszerzési szerződés csomagjának kulcsa (`contract-invoice-handoff`). */
+  contractHandoffKey?: string;
 }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -146,7 +173,18 @@ export function BillingDocumentEditor({
   });
   const [confirmIssue, setConfirmIssue] = useState(false);
   const [issuing, setIssuing] = useState(false);
-  const [issuedNumber, setIssuedNumber] = useState<string | null>(null);
+  /*
+    A KIÁLLÍTOTT BIZONYLAT, A SÁVHOZ (hétfői lista M2, Luca kérése): a szám és
+    hogy a hivatalos PDF megvan-e. Betöltéskor is kitöltődik, mert egy új
+    számla a kiállítás után a saját szerkesztő-útvonalára vált, és ott a lap
+    újra betölt: a sáv nem csak a kiállító kattintás állapotában élhet.
+  */
+  const [issued, setIssued] = useState<{
+    id: string;
+    number: string;
+    pdfAvailable: boolean;
+  } | null>(null);
+  const pdf = useBillingDocumentPdf(token);
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
   /** A kiállítás utáni kiküldés kimenete: a címzettek, vagy a hiba. */
   const [sent, setSent] = useState<
@@ -172,6 +210,56 @@ export function BillingDocumentEditor({
     );
   }, [documentId, posHandoffKey]);
 
+  /*
+    A BESZERZÉSI SZERZŐDÉS (hétfői lista M4): az új számla a szerződés
+    tételeivel, a szerződés számával hivatkozásként és a vevővel nyílik. A vevő
+    a részletlapjáról jön, ugyanazzal a képzéssel, mint a kártya választásakor
+    (`billingCustomerFromDetail`), tehát a fizetési határidő is a vevőé.
+  */
+  useEffect(() => {
+    if (documentId || !contractHandoffKey) return;
+    const handoff = readContractInvoiceHandoff(
+      window.sessionStorage,
+      contractHandoffKey,
+    );
+    if (!handoff) return;
+    setState((current) =>
+      current && current.lines.length === 0
+        ? {
+            ...current,
+            reference: current.reference || handoff.contractNumber,
+            sourceType: "CONTRACT",
+            sourceId: handoff.contractId,
+            lines: editorLinesFromContractHandoff(handoff),
+          }
+        : current,
+    );
+    const controller = new AbortController();
+    customersApi
+      .detail(token, handoff.customerId, controller.signal)
+      .then((detail) => {
+        const chosen = billingCustomerFromDetail(detail);
+        setState((current) =>
+          current && !current.customer
+            ? withCustomer(
+                current,
+                chosen.customer,
+                chosen.terms.paymentDueDays,
+              )
+            : current,
+        );
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setSaveError(
+          cause instanceof Error
+            ? `A szerződés vevője nem tölthető be: ${cause.message}`
+            : "A szerződés vevője nem tölthető be; válaszd ki kézzel.",
+        );
+      });
+    return () => controller.abort();
+  }, [contractHandoffKey, documentId, token]);
+
   useEffect(() => {
     if (!documentId || !canView) return;
     const controller = new AbortController();
@@ -180,6 +268,7 @@ export function BillingDocumentEditor({
       .then((detail) => {
         setState(fromDetail(detail));
         setStatus(detail.status);
+        setIssued(issuedOf(detail));
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -234,6 +323,13 @@ export function BillingDocumentEditor({
     email ??
     defaultBillingEmail(state.documentType, state.customer?.email ?? "");
 
+  // Balázs kérdése a megerősítő ablakban (hétfői lista M1): e-számlánál a címzettel.
+  const issueConfirm = billingIssueConfirm(
+    state.documentType,
+    format,
+    splitAddresses(emailDraft.to),
+  );
+
   /** A mentés maga: a tárolt bizonylat, vagy hiba. A kiállítás is ezzel kezd. */
   const persist = async () => {
     const created = state.savedUpdatedAt === null;
@@ -249,6 +345,8 @@ export function BillingDocumentEditor({
     // nyitna, és a következő mentés egy második vázlatot hozna létre.
     if (created && posHandoffKey)
       clearPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
+    if (created && contractHandoffKey)
+      clearContractInvoiceHandoff(window.sessionStorage, contractHandoffKey);
     return { detail, created };
   };
 
@@ -305,7 +403,7 @@ export function BillingDocumentEditor({
       );
       setState(fromDetail(issued));
       setStatus(issued.status);
-      setIssuedNumber(issued.documentNumber);
+      setIssued(issuedOf(issued));
       if (created)
         router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
       if (delivery === "REQUIRED") await sendAfterIssue(issued);
@@ -439,11 +537,44 @@ export function BillingDocumentEditor({
         }
       />
 
-      {issuedNumber ? (
+      {issued ? (
         <Alert
           variant="info"
-          title={`Kiállítva: ${issuedNumber}`}
+          title={`Kiállítva: ${issued.number}`}
           description="A bizonylat számát a Számlázz.hu adta."
+          action={
+            <div
+              role="group"
+              aria-label="A kiállított bizonylat PDF-je"
+              className="flex flex-wrap gap-2"
+            >
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => pdf.view(issued.id)}
+                disabled={!issued.pdfAvailable || pdf.busy}
+                title={issued.pdfAvailable ? undefined : PDF_MISSING}
+              >
+                Számlakép megtekintése
+              </PilotButton>
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => pdf.download(issued.id, issued.number)}
+                disabled={!issued.pdfAvailable || pdf.busy}
+                title={issued.pdfAvailable ? undefined : PDF_MISSING}
+              >
+                PDF letöltése
+              </PilotButton>
+            </div>
+          }
+        />
+      ) : null}
+      {pdf.error ? (
+        <Alert
+          variant="danger"
+          title="A PDF nem érhető el"
+          description={pdf.error}
         />
       ) : null}
       {sent?.ok ? (
@@ -635,10 +766,10 @@ export function BillingDocumentEditor({
       ) : null}
       <ConfirmDialog
         open={confirmIssue}
-        title={`${capabilities.label} kiállítása`}
+        title={issueConfirm.question}
         consequence={`A kiállítással valódi ${capabilities.label.toLowerCase()} készül a Számlázz.hu-n, saját számmal. A bizonylat ezután nem szerkeszthető.`}
         recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
-        confirmLabel={billingIssueCta(state.documentType, format)}
+        confirmLabel={issueConfirm.confirmLabel}
         busy={issuing}
         onConfirm={() => void issue()}
         onCancel={() => setConfirmIssue(false)}

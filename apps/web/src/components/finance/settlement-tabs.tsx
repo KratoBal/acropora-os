@@ -7,11 +7,21 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { SETTLEMENT_TABS } from "@/components/navigation";
 
+/** A szolgáltató kártyájának második sora (Figma 618:1641, 618:1788, 618:1935). */
+const DESCRIPTION: Record<string, string> = {
+  "/penzugy/foxpost": "Heti utánvét + díjszámla egy levélben",
+  "/penzugy/gls": "Utánvét, díjszámla és kompenzáció",
+  "/penzugy/simplepay": "Kártyás forgalmi kimutatás",
+};
+
 /**
- * AZ ELSZÁMOLÁSOK FÜLSORA (Balázs, 2026-09-30): Foxpost, GLS, SimplePay egy
- * menüpont alatt. Az aktív fül a jelenlegi útvonalból jön, tehát a régi
- * útvonalak (könyvjelző, levélben küldött link) ugyanúgy a helyes fület
- * mutatják. Csak az a fül látszik, amihez a felhasználónak joga van.
+ * AZ ELSZÁMOLÁSOK SZOLGÁLTATÓI (Balázs, 2026-09-30): Foxpost, GLS, SimplePay
+ * egy menüpont alatt. A terv (Figma 45 · OS / Settlements) kártyákként
+ * rajzolja őket a fejléc alatt: pötty, név, egy sor leírás; az aktív kártya
+ * aqua kerettel és háttérrel. Az aktív kártya a jelenlegi útvonalból jön,
+ * tehát a régi útvonalak (könyvjelző, levélben küldött link) ugyanúgy a
+ * helyeset mutatják. Csak az a kártya látszik, amihez a felhasználónak joga
+ * van.
  */
 export function SettlementTabs() {
   const pathname = usePathname() ?? "";
@@ -21,8 +31,8 @@ export function SettlementTabs() {
   );
   if (tabs.length === 0) return null;
   return (
-    <nav aria-label="Elszámolások" className="mb-6 border-b border-line">
-      <ul className="-mb-px flex gap-1">
+    <nav aria-label="Elszámolások">
+      <ul className="grid gap-4 sm:grid-cols-3">
         {tabs.map((tab) => {
           const active =
             pathname === tab.href || pathname.startsWith(`${tab.href}/`);
@@ -30,14 +40,32 @@ export function SettlementTabs() {
             <li key={tab.href}>
               <Link
                 href={tab.href}
+                aria-label={tab.label}
                 aria-current={active ? "page" : undefined}
-                className={`inline-flex border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                className={`block h-full rounded-2xl border px-5 py-4 transition-colors ${
                   active
-                    ? "border-brand-500 text-ink"
-                    : "border-transparent text-muted hover:text-ink"
+                    ? "border-pilot-aqua-700 bg-pilot-aqua-50"
+                    : "border-pilot-grey-200 bg-white hover:border-pilot-grey-300"
                 }`}
               >
-                {tab.label}
+                <span className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      active ? "bg-pilot-aqua-700" : "bg-pilot-grey-300"
+                    }`}
+                  />
+                  <span
+                    className={`text-sm font-semibold ${
+                      active ? "text-pilot-aqua-700" : "text-pilot-grey-900"
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </span>
+                <span className="mt-1.5 block text-xs text-pilot-grey-600">
+                  {DESCRIPTION[tab.href]}
+                </span>
               </Link>
             </li>
           );

@@ -129,6 +129,7 @@ export class MaintenanceOrdersRepository {
         number: true,
         title: true,
         status: true,
+        kind: true,
         organizationalUnitName: true,
         contactPersonName: true,
         customer: { select: { id: true, displayName: true } },

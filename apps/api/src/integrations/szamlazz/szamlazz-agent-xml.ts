@@ -107,6 +107,12 @@ export interface SzamlazzAgentInvoiceInput {
   /** A díjbekérő száma, amelyből a számla vagy az előleg készül (`dijbekeroSzamlaszam`). */
   proformaNumber?: string;
   /**
+   * Végszámlán a levont előlegszámla száma (`elolegSzamlaszam`). Az XSD szerint
+   * akkor kell, ha az előleg a rendelésszámmal nem azonosítható; mi mindig
+   * megadjuk, mert a `rendelesSzam` nálunk szabad szöveg (a vevő hivatkozása).
+   */
+  advanceNumber?: string;
+  /**
    * A mi azonosítónk a Számlázz.hu-n (`szamlaKulsoAzon`). Ezzel egy ismeretlen
    * kimenetű kiállítás utólag lekérdezhető (01-es doksi): "later the invoice can
    * be queried with this key".
@@ -123,7 +129,11 @@ export interface SzamlazzAgentInvoiceInput {
 }
 
 export type SzamlazzDocumentType =
-  "INVOICE" | "PROFORMA" | "ADVANCE_INVOICE" | "DELIVERY_NOTE";
+  | "INVOICE"
+  | "PROFORMA"
+  | "ADVANCE_INVOICE"
+  | "DELIVERY_NOTE"
+  | "FINAL_INVOICE";
 
 /** Az XSD `szamlaNyelveTipus` értékkészlete. */
 export const SZAMLAZZ_INVOICE_LANGUAGES = [
@@ -148,6 +158,7 @@ const DOCUMENT_FLAG: Record<SzamlazzDocumentType, string | null> = {
   PROFORMA: "dijbekero",
   ADVANCE_INVOICE: "elolegszamla",
   DELIVERY_NOTE: "szallitolevel",
+  FINAL_INVOICE: "vegszamla",
 };
 
 export function buildSzamlazzAgentInvoiceXml(
@@ -183,6 +194,13 @@ export function buildSzamlazzAgentInvoiceXml(
       : tag("dijbekeroSzamlaszam", input.proformaNumber)) +
     // XSD 114: elolegszamla áll a dijbekero és a szallitolevel ELŐTT
     (flag === "elolegszamla" ? tag("elolegszamla", true) : "") +
+    // XSD 115-116: a végszámla jelzője, utána a levont előleg száma. Az előleg
+    // levonását a Számlázz.hu teszi a bizonylatra, nem negatív tételsor: így
+    // az előleg ÁFÁ-ja egyszer jelenik meg (számlázási brief, 3. pont)
+    (flag === "vegszamla" ? tag("vegszamla", true) : "") +
+    (flag === "vegszamla" && input.advanceNumber !== undefined
+      ? tag("elolegSzamlaszam", input.advanceNumber)
+      : "") +
     (flag === "dijbekero" ? tag("dijbekero", true) : "") +
     (flag === "szallitolevel" ? tag("szallitolevel", true) : "") +
     // elonezetpdf: lásd a fejlecTipus doc-commentjét a séma 128. sorában:
@@ -258,6 +276,78 @@ export function buildSzamlazzAgentInvoiceXml(
     `<vevo>${buyer}</vevo>` +
     `<tetelek>${items}</tetelek>` +
     `</xmlszamla>`
+  );
+}
+
+/**
+ * EGY KIÁLLÍTOTT SZÁMLA SZTORNÓZÁSA (Számla Agent, `xmlszamlast`; Balázs
+ * 2026-10-12 09:44 UTC „Mehet”, a számlázási brief 1. pontja). ELSŐDLEGES
+ * FORRÁS: docs.szamlazz.hu/agent/reversing_invoice/xml (az XSD-vel együtt,
+ * letöltve 2026-10-12). A sorrend a sémáé, `sequence`:
+ *
+ *   beallitasok: szamlaagentkulcs, eszamla, szamlaLetoltes, valaszVerzio
+ *   fejlec:      szamlaszam, keltDatum, megjegyzes, tipus
+ *
+ * `valaszVerzio=2`: a válasz `xmlszamlavalasz`, a sztornó bizonylat ÚJ számával
+ * és a base64 PDF-fel; ugyanaz az elemző olvassa, mint a kiállításét. Az
+ * `eszamla` az eredeti formátumát követi. A `tipus` SS (sztornó számla), a
+ * dokumentáció példája szerint.
+ */
+export function buildSzamlazzAgentStornoXml(input: {
+  agentKey: string;
+  invoiceNumber: string;
+  electronic: boolean;
+  /** ÉÉÉÉ-HH-NN, a sztornó kelte. */
+  issueDate: string;
+  /** A sztornó oka, szabad szöveg; üresen kimarad. */
+  reason?: string;
+}): string {
+  const reason = input.reason?.trim();
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<xmlszamlast xmlns="http://www.szamlazz.hu/xmlszamlast" ' +
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlast https://www.szamlazz.hu/szamla/docs/xsds/agentst/xmlszamlast.xsd">' +
+    "<beallitasok>" +
+    tag("szamlaagentkulcs", input.agentKey) +
+    tag("eszamla", input.electronic) +
+    tag("szamlaLetoltes", true) +
+    tag("valaszVerzio", 2) +
+    "</beallitasok>" +
+    "<fejlec>" +
+    tag("szamlaszam", input.invoiceNumber) +
+    tag("keltDatum", input.issueDate) +
+    (reason ? tag("megjegyzes", reason) : "") +
+    tag("tipus", "SS") +
+    "</fejlec>" +
+    "</xmlszamlast>"
+  );
+}
+
+/**
+ * EGY MEGLÉVŐ SZÁMLA PDF-JE (Számla Agent, `xmlszamlapdf`; hétfői lista N1,
+ * Balázs 2026-10-09). ELSŐDLEGES FORRÁS: a hivatalos XSD
+ * (https://www.szamlazz.hu/szamla/docs/xsds/agentpdf/xmlszamlapdf.xsd,
+ * letöltve 2026-10-12). A sorrend a sémáé (`sequence`): szamlaagentkulcs,
+ * szamlaszam, valaszVerzio; a többi elem opcionális, és nem küldjük.
+ *
+ * `valaszVerzio=2`: a válasz `xmlszamlavalasz`, a `pdf` elemben base64-ben,
+ * ugyanaz az alak, mint a számla-készítésé, tehát ugyanaz az elemző olvassa.
+ * Ez csak OLVAS: a Számlázz.hu-ban semmit nem változtat.
+ */
+export function buildSzamlazzAgentPdfXml(input: {
+  agentKey: string;
+  invoiceNumber: string;
+}): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<xmlszamlapdf xmlns="http://www.szamlazz.hu/xmlszamlapdf" ' +
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlapdf https://www.szamlazz.hu/szamla/docs/xsds/agentpdf/xmlszamlapdf.xsd">' +
+    tag("szamlaagentkulcs", input.agentKey) +
+    tag("szamlaszam", input.invoiceNumber) +
+    tag("valaszVerzio", 2) +
+    "</xmlszamlapdf>"
   );
 }
 

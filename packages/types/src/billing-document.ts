@@ -25,8 +25,20 @@ export const BILLING_DOCUMENT_TYPES = [
   "PROFORMA",
   "ADVANCE_INVOICE",
   "DELIVERY_NOTE",
+  "FINAL_INVOICE",
 ] as const;
 export type BillingDocumentType = (typeof BILLING_DOCUMENT_TYPES)[number];
+
+/**
+ * AMI ÜRES LAPRÓL IS KÉSZÍTHETŐ. A végszámla nem: csak egy kiállított
+ * előlegszámláról jön (`POST billing/documents/:id/final`), mert az előleg
+ * száma nélkül a Számlázz.hu nem tudja, mit von le (számlázási brief, 3. pont).
+ * A típusválasztó ezt kínálja, a szerver ugyanezzel utasítja el a kézi
+ * létrehozást.
+ */
+export const BILLING_NEW_DOCUMENT_TYPES = BILLING_DOCUMENT_TYPES.filter(
+  (type) => type !== "FINAL_INVOICE",
+);
 
 /** A formátum KÜLÖN dimenzió, nem a dokumentumtípus egy értéke (brief 3. pont). */
 export const INVOICE_FORMATS = ["PAPER", "ELECTRONIC"] as const;
@@ -57,6 +69,7 @@ export const BILLING_SOURCE_TYPES = [
   "SERVICE_JOB",
   "MANUAL",
   "WEBSHOP_ORDER",
+  "CONTRACT",
 ] as const;
 export type BillingSourceType = (typeof BILLING_SOURCE_TYPES)[number];
 
@@ -137,6 +150,16 @@ const CAPABILITIES: Record<BillingDocumentType, BillingDocumentCapabilities> = {
     summaryTitle: "Szállítólevél összesen",
     label: "Szállítólevél",
   },
+  // a végszámla számla: ugyanazok a formátumai és fizetési mezői
+  FINAL_INVOICE: {
+    type: "FINAL_INVOICE",
+    formats: ["PAPER", "ELECTRONIC"],
+    defaultFormat: "ELECTRONIC",
+    showsPaymentFields: true,
+    newTitle: "Új végszámla",
+    summaryTitle: "Végszámla összesen",
+    label: "Végszámla",
+  },
 };
 
 export function getDocumentCapabilities(
@@ -204,6 +227,47 @@ export function billingIssueCta(
   if (billingEmailDelivery(type, format) === "REQUIRED")
     return "Kiállítás és kiküldés";
   return `${getDocumentCapabilities(type).label} kiállítása`;
+}
+
+/**
+ * A típus neve tárgyesetben, névelővel: „a számlát”. A megerősítő kérdés
+ * mondatába kerül, és a toldalék típusonként más, tehát nem képezhető.
+ */
+const ACCUSATIVE: Record<BillingDocumentType, string> = {
+  INVOICE: "a számlát",
+  PROFORMA: "a díjbekérőt",
+  ADVANCE_INVOICE: "az előlegszámlát",
+  DELIVERY_NOTE: "a szállítólevelet",
+  FINAL_INVOICE: "a végszámlát",
+};
+
+/**
+ * A KIÁLLÍTÁS MEGERŐSÍTŐ KÉRDÉSE (Balázs szövege, hétfői lista M1, 2026-10-09).
+ * Számlánál betű szerint:
+ *
+ *   e-számla  „Biztos, hogy kiállítod és kiküldöd a számlát a(z) [cím] címre?”
+ *             gomb: „Elküldöm”
+ *   papír     „Biztos, hogy kiállítod a számlát?”   gomb: „Kiállítom”
+ *
+ * A „Mégsem” a közös `ConfirmDialog` gombja. A többi típus ugyanezt a mondatot
+ * kapja a saját nevével. Több címzettnél a cím „címekre” áll, vesszővel.
+ */
+export function billingIssueConfirm(
+  type: BillingDocumentType,
+  format: InvoiceFormat | null,
+  recipients: readonly string[],
+): { question: string; confirmLabel: string } {
+  const noun = ACCUSATIVE[type];
+  if (billingEmailDelivery(type, format) !== "REQUIRED")
+    return {
+      question: `Biztos, hogy kiállítod ${noun}?`,
+      confirmLabel: "Kiállítom",
+    };
+  const place = recipients.length > 1 ? "címekre" : "címre";
+  return {
+    question: `Biztos, hogy kiállítod és kiküldöd ${noun} a(z) ${recipients.join(", ")} ${place}?`,
+    confirmLabel: "Elküldöm",
+  };
 }
 
 /** A kiküldő fiók végső gombja, ahol a kiküldés a kiállítás része. */

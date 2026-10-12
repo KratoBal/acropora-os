@@ -32,6 +32,10 @@ export class ContractsController {
   @Get("customers") customers() {
     return this.service.customers();
   }
+  /** A beszerzési tétel mennyiségi egységei (hétfői lista M4). */
+  @Get("quantity-units") quantityUnits() {
+    return this.service.quantityUnits();
+  }
   @Get(":id") detail(@Param("id") id: string) {
     return this.service.detail(id);
   }

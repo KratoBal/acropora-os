@@ -1,8 +1,14 @@
 "use client";
 
 import { Alert } from "@acropora/ui";
-import type { WorksheetDepartmentSummary } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type ContractKind,
+  type WorksheetDepartmentSummary,
+} from "@acropora/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -24,7 +30,16 @@ import {
   repairFeesPayload,
   repairFeesValid,
 } from "./contract-items";
+import {
+  ContractKindSwitch,
+  QuantityUnitSelect,
+  useQuantityUnits,
+} from "./contract-kind";
 import { ContractRepairFees } from "./contract-repair-fees";
+import {
+  CONTRACT_INVOICE_HANDOFF_PARAM,
+  writeContractInvoiceHandoff,
+} from "@/components/billing/contract-invoice-handoff";
 import { formatHuNumber } from "@/lib/format/number";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
@@ -63,6 +78,8 @@ export function missingContractFields(contract: {
   number: string;
   title: string;
   validFrom: string;
+  /** A fajta dönti el, melyik tételmező kötelező (hétfői lista M4). */
+  kind?: ContractKind;
   /**
    * A TÉTELEK IS, MERT 2026-10-05 ÓTA SZERKESZTHETŐK (kártya c014db6f): a
    * mentés MINDEN tételt elküld, tehát mindnek a szerver szabályát kell
@@ -73,7 +90,8 @@ export function missingContractFields(contract: {
     unitNet: string;
     quantity: string;
     vatRatePercent: string;
-    occasionsPerYear: string | number;
+    occasionsPerYear: string | number | null;
+    unitOfMeasureId?: string | null;
     repairFeeWorkdayHours?: string | null;
     repairFeeWorkdayOffHours?: string | null;
     repairFeeHoliday?: string | null;
@@ -87,9 +105,18 @@ export function missingContractFields(contract: {
   if (!contract.validFrom) list.push("Érvényesség kezdete");
   // az utolsó tétel nem törölhető a felületen, tehát üres listát nem itt kell
   // kizárni; ami van, annak mind érvényesnek kell lennie
-  if (contract.items && !contract.items.every(isValidContractItem))
+  const kind = contract.kind ?? "MAINTENANCE";
+  // a nyíl kell: az `every` a második argumentumban az indexet adná a fajta helyére
+  if (
+    contract.items &&
+    !contract.items.every((item) => isValidContractItem(item, kind))
+  )
     list.push("minden tétel kitöltése");
-  if (contract.items && !contract.items.every(repairFeesValid))
+  if (
+    kind === "MAINTENANCE" &&
+    contract.items &&
+    !contract.items.every(repairFeesValid)
+  )
     list.push("a javítási díjak csak számok lehetnek");
   return list;
 }
@@ -119,6 +146,13 @@ export function PilotContractDetailPage({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  const router = useRouter();
+  // a számla vázlatát a `billing.create` jog hozza létre (hétfői lista M4)
+  const canInvoice = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
+  /** A szerver utolsó válasza: a számla a MENTETT tételekből készül. */
+  const [saved, setSaved] = useState<ContractSummary | null>(null);
   const [contract, setContract] = useState<ContractSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
@@ -167,6 +201,7 @@ export function PilotContractDetailPage({
    */
   const applyContractDetail = (detail: ContractSummary) => {
     setContract(detail);
+    setSaved(detail);
     // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
     // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
     // visz egy-egy alkalmat, de tételenként kivehető.
@@ -265,6 +300,7 @@ export function PilotContractDetailPage({
         validFrom: contract.validFrom,
         validTo: contract.validTo ?? null,
         status: contract.status,
+        kind: contract.kind,
         notes: contract.notes ?? null,
         organizationalUnitName: contract.organizationalUnitName ?? null,
         contactPersonName: contract.contactPersonName ?? null,
@@ -283,11 +319,20 @@ export function PilotContractDetailPage({
           description: item.description,
           unitNet: item.unitNet,
           quantity: item.quantity,
-          occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent,
-          departmentId: itemDepartmentId[item.id] || null,
-          assetIds: itemAssetIds[item.id] ?? [],
-          ...repairFeesPayload(item),
+          // a fajta saját mezői (hétfői lista M4); a másikét a szerver üríti
+          ...(contract.kind === "PURCHASE"
+            ? {
+                occasionsPerYear: null,
+                unitOfMeasureId: item.unitOfMeasureId,
+              }
+            : {
+                occasionsPerYear: item.occasionsPerYear,
+                unitOfMeasureId: null,
+                departmentId: itemDepartmentId[item.id] || null,
+                assetIds: itemAssetIds[item.id] ?? [],
+                ...repairFeesPayload(item),
+              }),
         })),
       });
       applyContractDetail(next);
@@ -359,8 +404,10 @@ export function PilotContractDetailPage({
           description: "",
           unitNet: "",
           quantity: "1",
-          occasionsPerYear: 1,
+          occasionsPerYear: contract.kind === "PURCHASE" ? null : 1,
           vatRatePercent: "27",
+          unitOfMeasureId: null,
+          unitOfMeasure: null,
           departmentId: null,
           assets: [],
           repairFeeWorkdayHours: null,
@@ -481,6 +528,40 @@ export function PilotContractDetailPage({
     () => (contract ? missingContractFields(contract) : []),
     [contract],
   );
+  const purchase = contract?.kind === "PURCHASE";
+  const quantityUnits = useQuantityUnits(token, purchase);
+
+  /*
+    A „SZÁMLA” GOMB (hétfői lista M4): a beszerzési szerződésből kitöltött Új
+    számlát nyit (`contract-invoice-handoff.ts`). A MENTETT állapotból, mert a
+    számla a szerződésre hivatkozik: egy el nem mentett tétel a szerződésen
+    nem létezik.
+  */
+  const invoiceBlocker = !canInvoice
+    ? "A számla nyitásához billing.create jog kell."
+    : saved?.kind !== "PURCHASE"
+      ? "Előbb mentsd a szerződést Beszerzésként."
+      : saved.items.length === 0
+        ? "A szerződésnek nincs tétele."
+        : null;
+  const openInvoice = () => {
+    if (invoiceBlocker !== null || !saved) return;
+    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+      contractId: saved.id,
+      customerId: saved.customerId,
+      contractNumber: saved.number,
+      lines: saved.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unitOfMeasure?.code ?? "db",
+        unitNet: item.unitNet,
+        vatRatePercent: item.vatRatePercent,
+      })),
+    });
+    router.push(
+      `/penzugy/szamlazas/uj?${CONTRACT_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
+    );
+  };
 
   if (error && !contract)
     return (
@@ -594,6 +675,18 @@ export function PilotContractDetailPage({
                   </PilotSelect>
                 </PilotFormField>
               </div>
+              <ContractKindSwitch
+                value={contract.kind}
+                onChange={(kind) => setContract({ ...contract, kind })}
+                maintenanceOrderCount={Math.max(
+                  contract._count?.maintenanceOrders ?? 0,
+                  orders?.length ?? 0,
+                )}
+                invoiceCount={contract.invoiceCount ?? 0}
+              />
+              {quantityUnits.error && purchase ? (
+                <p className="text-xs text-red-600">{quantityUnits.error}</p>
+              ) : null}
               {/*
                 A KÉT MEZŐ A MEGRENDELŐLAPRA MEGY, ÉS MI TÖLTJÜK KI -- Balázs
                 döntése (2026-09-24): a vevő szervezeti egysége és kapcsolattartója
@@ -668,7 +761,7 @@ export function PilotContractDetailPage({
               megy, ugyanabban a körben, mint a többi mező.
             */}
             <div className="flex flex-col gap-4 p-5">
-              {!departmentsLoaded ? (
+              {purchase ? null : !departmentsLoaded ? (
                 <p className="text-sm text-pilot-grey-400">
                   Helyszínek betöltése…
                 </p>
@@ -685,9 +778,9 @@ export function PilotContractDetailPage({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <p className="text-pilot-grey-900">
-                        {index + 1}. {item.description} — {item.unitNet} Ft ×{" "}
-                        {item.quantity} db × {item.occasionsPerYear} alkalom /
-                        év, {item.vatRatePercent}% ÁFA
+                        {purchase
+                          ? `${index + 1}. ${item.description} — ${item.unitNet} Ft × ${item.quantity} ${item.unitOfMeasure?.code ?? ""}, ${item.vatRatePercent}% ÁFA`
+                          : `${index + 1}. ${item.description} — ${item.unitNet} Ft × ${item.quantity} db × ${item.occasionsPerYear ?? "?"} alkalom / év, ${item.vatRatePercent}% ÁFA`}
                       </p>
                       {contract.items.length > 1 ? (
                         <PilotButton
@@ -747,24 +840,40 @@ export function PilotContractDetailPage({
                           }
                         />
                       </PilotFormField>
-                      <PilotFormField label="Alkalom / év">
-                        <PilotInput
-                          aria-label={`${index + 1}. tétel alkalma évente`}
-                          value={
-                            Number.isNaN(item.occasionsPerYear)
-                              ? ""
-                              : String(item.occasionsPerYear)
-                          }
+                      {purchase ? (
+                        <QuantityUnitSelect
+                          label="Mennyiségi egység"
+                          ariaLabel={`${index + 1}. tétel mennyiségi egysége`}
+                          units={quantityUnits.units}
+                          value={item.unitOfMeasureId ?? ""}
+                          current={item.unitOfMeasure}
                           onChange={(value) =>
                             editItem(item.id, {
-                              occasionsPerYear:
-                                value.trim() === ""
-                                  ? Number.NaN
-                                  : Number(value),
+                              unitOfMeasureId: value || null,
                             })
                           }
                         />
-                      </PilotFormField>
+                      ) : (
+                        <PilotFormField label="Alkalom / év">
+                          <PilotInput
+                            aria-label={`${index + 1}. tétel alkalma évente`}
+                            value={
+                              item.occasionsPerYear === null ||
+                              Number.isNaN(item.occasionsPerYear)
+                                ? ""
+                                : String(item.occasionsPerYear)
+                            }
+                            onChange={(value) =>
+                              editItem(item.id, {
+                                occasionsPerYear:
+                                  value.trim() === ""
+                                    ? Number.NaN
+                                    : Number(value),
+                              })
+                            }
+                          />
+                        </PilotFormField>
+                      )}
                       <PilotFormField label="ÁFA %">
                         <PilotInput
                           aria-label={`${index + 1}. tétel ÁFA-kulcsa`}
@@ -775,19 +884,22 @@ export function PilotContractDetailPage({
                         />
                       </PilotFormField>
                     </div>
-                    {repairFeeSummary(item, (v) => formatHuNumber(v)) ? (
+                    {!purchase &&
+                    repairFeeSummary(item, (v) => formatHuNumber(v)) ? (
                       <p className="text-xs text-pilot-grey-600">
                         {repairFeeSummary(item, (v) => formatHuNumber(v))}
                       </p>
                     ) : null}
-                    <ContractRepairFees
-                      values={item}
-                      ariaPrefix={`${index + 1}. tétel `}
-                      onChange={(key, value) =>
-                        editItem(item.id, { [key]: value })
-                      }
-                    />
-                    {departmentOptions.length > 0 ? (
+                    {purchase ? null : (
+                      <ContractRepairFees
+                        values={item}
+                        ariaPrefix={`${index + 1}. tétel `}
+                        onChange={(key, value) =>
+                          editItem(item.id, { [key]: value })
+                        }
+                      />
+                    )}
+                    {!purchase && departmentOptions.length > 0 ? (
                       <div className="grid gap-2 md:grid-cols-2">
                         <PilotFormField label="Helyszín">
                           <PilotSelect
@@ -840,140 +952,164 @@ export function PilotContractDetailPage({
               </div>
             </div>
           </PilotCard>
-          <PilotCard>
-            <PilotCardHeader title="Megrendelőlapok" />
-            <div className="flex flex-col gap-4 p-5">
-              {orderError ? (
-                <Alert
-                  variant="danger"
-                  title="Megrendelőlap-hiba"
-                  description={orderError}
-                />
-              ) : null}
-              <div>
-                <p className="mb-2 text-sm text-pilot-grey-400">
-                  Válaszd ki, mely tételekből visz egy-egy alkalmat a kiállítás
-                  (alapból az összes ki van jelölve):
+          {/* a beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4) */}
+          {purchase ? (
+            <PilotCard>
+              <PilotCardHeader title="Számla" />
+              <div className="flex flex-col gap-2 p-5">
+                <p className="text-sm text-pilot-grey-600">
+                  {invoiceBlocker ??
+                    "Az Új számla a mentett tételekkel, a vevővel és a szerződés számával nyílik; a kiállítás ott, megerősítéssel megy."}
                 </p>
-                <ul className="flex flex-col gap-1 text-sm">
-                  {contract.items
-                    .filter((item) => !isUnsavedItem(item.id))
-                    .map((item) => (
-                      <li key={item.id}>
-                        <label className="flex cursor-pointer items-center gap-2 py-1">
-                          <input
-                            type="checkbox"
-                            checked={selectedItemIds.has(item.id)}
-                            onChange={() => toggleItem(item.id)}
-                            className="h-4 w-4 rounded accent-pilot-aqua-600"
-                          />
-                          <span className="text-pilot-grey-800">
-                            {item.position}. {item.description}
-                          </span>
-                          {item.departmentId ? null : (
-                            <span className="text-xs text-red-600">
-                              (nincs helyszín megadva -- nem állítható ki
-                              belőle)
-                            </span>
-                          )}
-                        </label>
-                      </li>
-                    ))}
-                </ul>
-                <div className="mt-3">
+                <div>
                   <PilotButton
                     type="button"
                     variant="primary"
-                    disabled={issuing || selectedCount === 0}
-                    onClick={() => void issue()}
+                    disabled={invoiceBlocker !== null}
+                    onClick={openInvoice}
                   >
-                    {issuing
-                      ? "Kiállítás…"
-                      : `Megrendelőlap kiállítása (${selectedCount} tétel)`}
+                    Számla
                   </PilotButton>
                 </div>
               </div>
-              <div className="flex flex-col gap-3">
-                {orders === null ? (
-                  <p className="text-sm text-pilot-grey-400">
-                    Megrendelőlapok betöltése…
+            </PilotCard>
+          ) : (
+            <PilotCard>
+              <PilotCardHeader title="Megrendelőlapok" />
+              <div className="flex flex-col gap-4 p-5">
+                {orderError ? (
+                  <Alert
+                    variant="danger"
+                    title="Megrendelőlap-hiba"
+                    description={orderError}
+                  />
+                ) : null}
+                <div>
+                  <p className="mb-2 text-sm text-pilot-grey-400">
+                    Válaszd ki, mely tételekből visz egy-egy alkalmat a
+                    kiállítás (alapból az összes ki van jelölve):
                   </p>
-                ) : orders.length === 0 ? (
-                  <p className="text-sm text-pilot-grey-400">
-                    Ehhez a szerződéshez még nem állítottunk ki megrendelőlapot.
-                  </p>
-                ) : (
-                  orders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex flex-col gap-2 rounded-lg bg-pilot-grey-50 px-3 py-2 ring-1 ring-pilot-grey-100"
+                  <ul className="flex flex-col gap-1 text-sm">
+                    {contract.items
+                      .filter((item) => !isUnsavedItem(item.id))
+                      .map((item) => (
+                        <li key={item.id}>
+                          <label className="flex cursor-pointer items-center gap-2 py-1">
+                            <input
+                              type="checkbox"
+                              checked={selectedItemIds.has(item.id)}
+                              onChange={() => toggleItem(item.id)}
+                              className="h-4 w-4 rounded accent-pilot-aqua-600"
+                            />
+                            <span className="text-pilot-grey-800">
+                              {item.position}. {item.description}
+                            </span>
+                            {item.departmentId ? null : (
+                              <span className="text-xs text-red-600">
+                                (nincs helyszín megadva -- nem állítható ki
+                                belőle)
+                              </span>
+                            )}
+                          </label>
+                        </li>
+                      ))}
+                  </ul>
+                  <div className="mt-3">
+                    <PilotButton
+                      type="button"
+                      variant="primary"
+                      disabled={issuing || selectedCount === 0}
+                      onClick={() => void issue()}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-xs text-pilot-grey-700">
-                            {order.number}
-                          </span>
-                          <span className="text-xs text-pilot-grey-400">
-                            {order.occasionYear}
-                          </span>
-                          <PilotBadge
-                            variant={ORDER_STATUS_BADGE[order.status]}
-                          >
-                            {ORDER_STATUS_LABEL[order.status]}
-                          </PilotBadge>
-                        </div>
-                        {order.status === "ISSUED" ? (
-                          <div className="flex items-center gap-2">
-                            <label className="cursor-pointer text-xs font-medium text-pilot-aqua-700 underline">
-                              Aláírt PDF feltöltése
-                              <input
-                                type="file"
-                                accept="application/pdf"
-                                className="hidden"
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0];
-                                  if (file) void uploadSigned(order.id, file);
-                                  event.target.value = "";
-                                }}
-                              />
-                            </label>
-                            <PilotButton
-                              type="button"
-                              variant="secondary"
-                              onClick={() => void revoke(order.id)}
+                      {issuing
+                        ? "Kiállítás…"
+                        : `Megrendelőlap kiállítása (${selectedCount} tétel)`}
+                    </PilotButton>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {orders === null ? (
+                    <p className="text-sm text-pilot-grey-400">
+                      Megrendelőlapok betöltése…
+                    </p>
+                  ) : orders.length === 0 ? (
+                    <p className="text-sm text-pilot-grey-400">
+                      Ehhez a szerződéshez még nem állítottunk ki
+                      megrendelőlapot.
+                    </p>
+                  ) : (
+                    orders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="flex flex-col gap-2 rounded-lg bg-pilot-grey-50 px-3 py-2 ring-1 ring-pilot-grey-100"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs text-pilot-grey-700">
+                              {order.number}
+                            </span>
+                            <span className="text-xs text-pilot-grey-400">
+                              {order.occasionYear}
+                            </span>
+                            <PilotBadge
+                              variant={ORDER_STATUS_BADGE[order.status]}
                             >
-                              Visszavonás
-                            </PilotButton>
+                              {ORDER_STATUS_LABEL[order.status]}
+                            </PilotBadge>
                           </div>
-                        ) : null}
+                          {order.status === "ISSUED" ? (
+                            <div className="flex items-center gap-2">
+                              <label className="cursor-pointer text-xs font-medium text-pilot-aqua-700 underline">
+                                Aláírt PDF feltöltése
+                                <input
+                                  type="file"
+                                  accept="application/pdf"
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0];
+                                    if (file) void uploadSigned(order.id, file);
+                                    event.target.value = "";
+                                  }}
+                                />
+                              </label>
+                              <PilotButton
+                                type="button"
+                                variant="secondary"
+                                onClick={() => void revoke(order.id)}
+                              >
+                                Visszavonás
+                              </PilotButton>
+                            </div>
+                          ) : null}
+                        </div>
+                        <ul className="flex flex-col gap-1">
+                          {order.documents.map((documentSummary) => (
+                            <li key={documentSummary.id}>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-pilot-aqua-700 underline"
+                                onClick={() =>
+                                  void download(
+                                    order.id,
+                                    documentSummary.id,
+                                    documentSummary.fileName,
+                                  )
+                                }
+                              >
+                                {documentSummary.type === "SIGNED_FORM"
+                                  ? "Aláírt megrendelőlap"
+                                  : "Generált megrendelőlap"}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <ul className="flex flex-col gap-1">
-                        {order.documents.map((documentSummary) => (
-                          <li key={documentSummary.id}>
-                            <button
-                              type="button"
-                              className="text-xs font-medium text-pilot-aqua-700 underline"
-                              onClick={() =>
-                                void download(
-                                  order.id,
-                                  documentSummary.id,
-                                  documentSummary.fileName,
-                                )
-                              }
-                            >
-                              {documentSummary.type === "SIGNED_FORM"
-                                ? "Aláírt megrendelőlap"
-                                : "Generált megrendelőlap"}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          </PilotCard>
+            </PilotCard>
+          )}
         </div>
       </div>
     </PilotThemeRoot>

@@ -20,8 +20,9 @@ export const POS_INVOICE_HANDOFF_PARAM = "pos";
 const STORAGE_PREFIX = "pos-invoice-handoff.";
 
 export interface PosInvoiceHandoffLine {
-  productId: string;
-  variantId: string;
+  /** `null`: a pénztár kézi tétele (hétfői lista M3), termék nélkül. */
+  productId: string | null;
+  variantId: string | null;
   sku: string;
   productName: string;
   unit: string;
@@ -80,12 +81,14 @@ export function posInvoiceHandoffLines(
     unitGross: number;
     discountPercent: number;
     vatRate: string | null;
+    /** A pénztár kézi tétele: a kulcsai csak a kosáré, a számlán nincs termék. */
+    manual?: boolean;
   }>,
   cartDiscountPercent: number,
 ): PosInvoiceHandoffLine[] {
   return cart.map((line) => ({
-    productId: line.productId,
-    variantId: line.variantId,
+    productId: line.manual ? null : line.productId,
+    variantId: line.manual ? null : line.variantId,
     sku: line.sku,
     productName: line.productName,
     unit: line.unit,
@@ -140,7 +143,8 @@ export function editorLinesFromPosHandoff(
       emptyLine({
         productId: line.productId,
         variantId: line.variantId,
-        productLabel: `${line.sku} · termék`,
+        // a kézi tételnek nincs terméke: a számlán is szabad sor marad
+        productLabel: line.productId ? `${line.sku} · termék` : null,
         description: line.productName,
         quantity: String(line.quantity),
         unit: line.unit,

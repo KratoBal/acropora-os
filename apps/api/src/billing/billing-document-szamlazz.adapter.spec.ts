@@ -53,6 +53,7 @@ const base: BillingDocumentForIssue = {
   note: "Projekt: PROJ-0268",
   reference: "PROJ-0268",
   proformaNumber: null,
+  advanceNumber: null,
   buyer: {
     name: "Kitalált Kft.",
     country: null,
@@ -142,15 +143,21 @@ function assertXsdOrder(found: string[], order: string[], where: string) {
 
 describe("toSzamlazzAgentInput", () => {
   it("maps each document type to its one header flag, in XSD order", () => {
-    const flags = ["dijbekero", "elolegszamla", "szallitolevel"];
+    const flags = ["dijbekero", "elolegszamla", "szallitolevel", "vegszamla"];
     const cases = [
       ["INVOICE", "ELECTRONIC", []],
       ["PROFORMA", null, ["dijbekero"]],
       ["ADVANCE_INVOICE", "PAPER", ["elolegszamla"]],
       ["DELIVERY_NOTE", null, ["szallitolevel"]],
+      ["FINAL_INVOICE", "ELECTRONIC", ["vegszamla"]],
     ] as const;
     for (const [documentType, invoiceFormat, expected] of cases) {
-      const xml = xmlOf({ documentType, invoiceFormat });
+      const xml = xmlOf({
+        documentType,
+        invoiceFormat,
+        // a végszámla előleg-szám nélkül nem küldhető (külön teszt alább)
+        advanceNumber: documentType === "FINAL_INVOICE" ? "E-ELO-1" : null,
+      });
       const header = children(xml, "fejlec");
       assert.deepEqual(
         header.filter((name) => flags.includes(name)),
@@ -244,6 +251,44 @@ describe("toSzamlazzAgentInput", () => {
       (match) => match[1],
     );
     assert.deepEqual(names, ["Tápoldat 500 ml", "Kedvezmény (10%)", "Második"]);
+  });
+
+  it("a final invoice: vegszamla, then the advance's number, and the full items with no deduction line", () => {
+    const xml = xmlOf({
+      documentType: "FINAL_INVOICE",
+      advanceNumber: "E-ELO-1",
+      lines: [item],
+    });
+    const header = children(xml, "fejlec");
+    assert.deepEqual(
+      header.slice(
+        header.indexOf("vegszamla"),
+        header.indexOf("vegszamla") + 2,
+      ),
+      ["vegszamla", "elolegSzamlaszam"],
+    );
+    assert.match(xml, /<vegszamla>true<\/vegszamla>/);
+    assert.match(xml, /<elolegSzamlaszam>E-ELO-1<\/elolegSzamlaszam>/);
+    assertXsdOrder(header, FEJLEC_ORDER, "FINAL_INVOICE fejlec");
+    // the deduction is Számlázz.hu's: we send the items as they are, one
+    // <tetel> each, none of them negative (brief, 3.: no negative advance line)
+    const amounts = [...xml.matchAll(/<bruttoErtek>([^<]+)</g)].map((match) =>
+      Number(match[1]),
+    );
+    assert.deepEqual(amounts, [item.grossAmount]);
+  });
+
+  it("refuses a final invoice with no advance number, and sends the number on no other type", () => {
+    assert.throws(
+      () => xmlOf({ documentType: "FINAL_INVOICE", advanceNumber: null }),
+      (error: unknown) =>
+        error instanceof BillingDocumentAdapterError &&
+        error.code === "BILLING_FINAL_WITHOUT_ADVANCE",
+    );
+    for (const documentType of ["INVOICE", "ADVANCE_INVOICE"] as const) {
+      const xml = xmlOf({ documentType, advanceNumber: "E-ELO-1" });
+      assert.doesNotMatch(xml, /elolegSzamlaszam|vegszamla/, documentType);
+    }
   });
 
   it("refuses a discount line with no item above it", () => {

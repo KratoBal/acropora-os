@@ -136,7 +136,9 @@ export async function runShippingAttributesCli(
     A HARMADIK FORRAS: A UNAS SZALLITASI MOD-FELULIRASAI (kartya 2a7f2313,
     Balazs 2026-10-06 16:45 UTC, csak a teszt bolt). A KEZZEL kitoltott
     profil-sor ERŐSEBB: ahol van, a UNAS-bol jovo nem irja felul -- azt valaki
-    megvizsgalta. Az OS-be NEM irunk: a jelzo csak a vetitesben el.
+    megvizsgalta. Ez a parancs az OS-be NEM ir. A jelzok 2026-10-09 ota az
+    OS-ben is elnek (a82ed229: a UNAS-szinkron es a kezi iras tartja oket), igy a
+    UNAS-bol szamolt ertek itt mar csak a meg sor nelkuli termeknel dont.
   */
   const unasSorok = await database.unasProductSnapshot.findMany({
     where: idk.length ? { productId: { in: idk } } : {},

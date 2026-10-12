@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
+import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import { buildIssueInput, vatRateText } from "./billing-document-issue.js";
+import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -261,6 +263,71 @@ describe("buildIssueInput", () => {
     assert.equal(
       code(row({ fulfillmentDate: null })),
       "BILLING_ISSUE_NO_FULFILLMENT_DATE",
+    );
+  });
+});
+
+/*
+  A DÍJBEKÉRŐ SZÁMA AZ ELŐLEGEN (számlázási brief, 2. pont). MI PIROSÍT: a
+  díjbekérőből készült előleg kiállítása nem viszi a díjbekérő számát; egy
+  díjbekérő nélküli számla kap ilyet.
+*/
+describe("the proforma's number on the advance", () => {
+  it("goes as dijbekeroSzamlaszam when the draft came from a proforma, and only then", () => {
+    const xml = (value: BillingDocumentRow) => {
+      const input = buildIssueInput(value);
+      assert.ok(input.ok);
+      return buildSzamlazzAgentInvoiceXml(
+        toSzamlazzAgentInput(input.document, {
+          agentKey: "k",
+          previewOnly: false,
+        }),
+      );
+    };
+    const advance = xml(
+      row({
+        documentType: "ADVANCE_INVOICE",
+        proformaInvoice: { id: "p-1", invoiceNumber: "D-2026-7" },
+      }),
+    );
+    assert.match(
+      advance,
+      /<dijbekeroSzamlaszam>D-2026-7<\/dijbekeroSzamlaszam><elolegszamla>true<\/elolegszamla>/,
+    );
+    assert.doesNotMatch(xml(row()), /dijbekeroSzamlaszam/);
+  });
+});
+
+/*
+  A LEVONT ELŐLEG SZÁMA A VÉGSZÁMLÁN (számlázási brief, 3. pont). MI PIROSÍT:
+  a végszámla kiállítása nem viszi az előleg számát; egy nem végszámla sor a
+  hivatkozott számla számát előlegként küldi (a sztornó sor is hivatkozik).
+*/
+describe("the advance's number on the final invoice", () => {
+  it("goes as elolegSzamlaszam on a final invoice, and only there", () => {
+    const xml = (value: BillingDocumentRow) => {
+      const input = buildIssueInput(value);
+      assert.ok(input.ok);
+      return buildSzamlazzAgentInvoiceXml(
+        toSzamlazzAgentInput(input.document, {
+          agentKey: "k",
+          previewOnly: false,
+        }),
+      );
+    };
+    const referencedInvoice = {
+      id: "a-1",
+      documentType: "ADVANCE_INVOICE",
+      invoiceNumber: "E-ELO-1",
+      grossAmount: d("1270"),
+    };
+    assert.match(
+      xml(row({ documentType: "FINAL_INVOICE", referencedInvoice })),
+      /<vegszamla>true<\/vegszamla><elolegSzamlaszam>E-ELO-1<\/elolegSzamlaszam>/,
+    );
+    assert.doesNotMatch(
+      xml(row({ referencedInvoice })),
+      /elolegSzamlaszam|vegszamla/,
     );
   });
 });

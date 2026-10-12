@@ -25,6 +25,7 @@ import {
   previousValues,
 } from "./measurement-report.js";
 import { renderMeasurementReportPdf } from "./measurement-report-pdf.js";
+import { MeasurementRecommendationService } from "./recommendation/measurement-recommendation.service.js";
 import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dto.js";
 
 @Injectable()
@@ -35,11 +36,21 @@ export class AquariumMeasurementsService {
     private readonly notifications: NotificationsService,
     private readonly mail: AquariumMeasurementMailService,
     private readonly xlsx: AquariumMeasurementXlsx,
+    private readonly recommendations: MeasurementRecommendationService,
   ) {}
 
   async list(aquariumId: string, user: AuthenticatedUser) {
     await this.requireAquarium(aquariumId, user);
-    return this.repository.list(aquariumId);
+    const list = await this.repository.list(aquariumId);
+    // the APPROVED recommendation only (2b3983e1): a draft never leaves here
+    const approved = await this.recommendations.approvedSegments(aquariumId);
+    return {
+      ...list,
+      occasions: list.occasions.map((occasion) => {
+        const recommendation = approved.get(occasion.id);
+        return recommendation ? { ...occasion, recommendation } : occasion;
+      }),
+    };
   }
 
   /**
@@ -245,6 +256,11 @@ export class AquariumMeasurementsService {
       icp,
       deviations: deviationCount(rows) + (icp ? deviationCount(icp.rows) : 0),
       notes: occasion.notes?.trim() || null,
+      // the approved recommendation, as the customer sees it (2b3983e1)
+      recommendation:
+        (await this.recommendations.approvedSegments(aquarium.id)).get(
+          occasion.id,
+        ) ?? null,
     });
   }
 

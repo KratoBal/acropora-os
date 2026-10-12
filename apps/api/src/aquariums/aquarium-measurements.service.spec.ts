@@ -59,6 +59,7 @@ function makeService(
       notifications as never,
       {} as never,
       {} as never,
+      { approvedSegments: async () => new Map() } as never,
     ),
     repository,
   };

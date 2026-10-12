@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  arrivalKeys,
   postedPurchaseForArrival,
   purchaseListItem,
   purchaseReading,
@@ -138,5 +139,68 @@ describe("a később érkező példány kötése (PR 2)", () => {
       ["pi-1", null, null, null, null, "pi-1"],
       "ARRIVAL-KEY",
     );
+  });
+});
+
+/*
+  A BEÉRKEZETT DOKUMENTUM KULCSAI (hétfői lista N3). MI PIROSÍT: a kulcs csak a
+  szövegolvasóból jön, és az illesztő vagy a külföldi olvasat számát nem
+  látja (a Hertlein és az Aquarioom számlája így állt kétszer a listán); egy
+  üres szám kulcsot ad.
+*/
+describe("a beérkezett dokumentum kulcsai (N3)", () => {
+  it("az illesztő, a szövegolvasó és az olvasat számából is, a saját szállítójával", () => {
+    assert.deepEqual(
+      arrivalKeys({
+        importResult: {
+          invoiceNumber: "261685",
+          supplier: { name: "Hertlein GmbH", vatId: "DE123456789" },
+        },
+        textReading: { invoiceNumber: null },
+        reading: null,
+      }),
+      arrivalKeys({
+        reading: {
+          documentNumber: "261685",
+          supplierTaxNumber: null,
+          supplierEuTaxNumber: "DE123456789",
+          supplierName: "Hertlein GmbH",
+        },
+      }),
+    );
+    assert.equal(
+      arrivalKeys({
+        reading: {
+          documentNumber: "FA00009139",
+          supplierTaxNumber: null,
+          supplierEuTaxNumber: null,
+          supplierName: "Aquarioom",
+        },
+      }).length,
+      1,
+    );
+    assert.equal(
+      arrivalKeys({
+        textReading: { invoiceNumber: "KIT-7", supplierTaxNumber: "12345678" },
+      }).length,
+      1,
+    );
+  });
+
+  it("üres vagy hiányzó szám nem ad kulcsot", () => {
+    assert.deepEqual(
+      arrivalKeys({
+        importResult: { invoiceNumber: "  " },
+        textReading: { invoiceNumber: "" },
+        reading: {
+          documentNumber: null,
+          supplierTaxNumber: null,
+          supplierEuTaxNumber: null,
+          supplierName: "X",
+        },
+      }),
+      [],
+    );
+    assert.deepEqual(arrivalKeys({}), []);
   });
 });

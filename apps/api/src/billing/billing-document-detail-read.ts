@@ -4,6 +4,8 @@ import {
   billingEmailModeFor,
   szamlazzDocumentTotals,
   type BillingDeliveryOutcome,
+  type BillingDocumentCancellation,
+  type BillingDocumentDeductedAdvance,
   type BillingDocumentDetail,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -95,8 +97,91 @@ export function withIssueAndDelivery(
       // A kiküldés a tárolt PDF-et csatolja, tehát PDF nélkül nincs mit küldeni.
       canResend: mode !== null && delivers && pdfAvailable,
     },
+    cancellation: osCancellation(row),
+    ...proformaLinks(row),
+    deductedAdvance: deductedAdvanceOf(row),
   };
 }
+
+/**
+ * A VÉGSZÁMLA LEVONT ELŐLEGE (számlázási brief, 3. pont). Csak végszámlán: a
+ * `referencedInvoice` a sztornó soron is az eredetire mutat, de az más jelentés.
+ */
+export function deductedAdvanceOf(
+  row: Pick<BillingDocumentRow, "documentType" | "referencedInvoice">,
+): BillingDocumentDeductedAdvance | null {
+  // a kapcsolat előtti (és a régi teszt-) sorokon a mező hiányzik
+  const advance =
+    row.documentType === "FINAL_INVOICE" ? row.referencedInvoice : null;
+  if (!advance) return null;
+  return {
+    id: advance.id,
+    number: advance.invoiceNumber,
+    grossAmount: advance.grossAmount?.toFixed(4) ?? null,
+  };
+}
+
+/**
+ * A DÍJBEKÉRŐ ÉS AZ ELŐLEG KAPCSA (számlázási brief, 2. pont). A díjbekérő
+ * kifizetettségét a szolgáltatás teszi rá a feedből; itt még `null`.
+ */
+export function proformaLinks(
+  row: Pick<BillingDocumentRow, "proformaInvoice" | "invoicesFromProforma">,
+): Pick<BillingDocumentDetail, "proforma" | "advance"> {
+  // a kapcsolat előtti (és a régi teszt-) sorokon a mezők hiányoznak
+  const advance = (row.invoicesFromProforma ?? [])[0];
+  return {
+    proforma: row.proformaInvoice
+      ? {
+          id: row.proformaInvoice.id,
+          number: row.proformaInvoice.invoiceNumber,
+          paid: null,
+        }
+      : null,
+    advance: advance
+      ? {
+          id: advance.id,
+          number: advance.invoiceNumber,
+          status: advance.status as BillingDocumentStatus,
+        }
+      : null,
+  };
+}
+
+/**
+ * AZ OS-BEN KIÁLLÍTOTT (VAGY MEGKÍSÉRELT) SZTORNÓ a részletekhez. A Számlázz.hu
+ * felületén történt sztornót a szolgáltatás teszi rá a feed ikréből, mert az
+ * nem ennek a sornak a kapcsolata.
+ */
+export function osCancellation(
+  row: Pick<BillingDocumentRow, "correctionInvoices">,
+): BillingDocumentCancellation | null {
+  // a sztornó-mező előtti sorokon (és a régi teszt-sorokon) a kapcsolat hiányzik
+  const storno = (row.correctionInvoices ?? [])[0];
+  if (!storno) return null;
+  const state =
+    storno.status === "ISSUED" || storno.status === "ISSUE_FAILED"
+      ? storno.status
+      : "ISSUING";
+  return {
+    source: "OS",
+    state,
+    stornoNumber: state === "ISSUED" ? storno.invoiceNumber : null,
+    issueDate: state === "ISSUED" ? budapestDay(storno.issueDate) : null,
+    error: state === "ISSUED" ? null : storno.syncError,
+    pdfAvailable: state === "ISSUED" && storno.pdfStorageKey !== null,
+  };
+}
+
+/** A Számlázz.hu felületén sztornózott számla: csak a tény ismert. */
+export const FEED_CANCELLATION: BillingDocumentCancellation = {
+  source: "SZAMLAZZ",
+  state: "ISSUED",
+  stornoNumber: null,
+  issueDate: null,
+  error: null,
+  pdfAvailable: false,
+};
 
 /**
  * A VÉGÖSSZEG, AHOGY A SZÁMLÁN ÁLL. Kiállított bizonylatnál a Számlázz.hu

@@ -1,3 +1,5 @@
+import type { ContractKind } from "@acropora/types";
+
 /**
  * EGY SZERZŐDÉSES TÉTEL TÖRÖLHETŐ-E (kártya c014db6f, Ág Luca bejelentése,
  * 2026-10-05). Tiszta függvények, hogy a szabály a képernyő nélkül is mérhető
@@ -39,20 +41,32 @@ const DECIMAL = /^\d+(?:\.\d+)?$/;
  * KITÖLTÖTT-E A TÉTEL ÚGY, AHOGY A SZERVER ELFOGADJA. Ugyanaz a szabály az új
  * szerződés űrlapján és az adatlap szerkesztésekor (kártya c014db6f): enélkül
  * egy hibás mező az API angol üzenetével térne vissza.
+ *
+ * A FAJTA DÖNT (hétfői lista M4, a szerver `contracts.service.ts`
+ * `normalize()`-ja): karbantartásnál az alkalom / év kötelező, beszerzésnél a
+ * mennyiségi egység, és az alkalom nem számít.
  */
-export function isValidContractItem(item: {
-  description: string;
-  unitNet: string;
-  quantity: string;
-  vatRatePercent: string;
-  occasionsPerYear: string | number;
-}): boolean {
-  const occasions = Number(item.occasionsPerYear);
-  return (
+export function isValidContractItem(
+  item: {
+    description: string;
+    unitNet: string;
+    quantity: string;
+    vatRatePercent: string;
+    occasionsPerYear: string | number | null;
+    unitOfMeasureId?: string | null;
+  },
+  kind: ContractKind = "MAINTENANCE",
+): boolean {
+  const common =
     item.description.trim() !== "" &&
     DECIMAL.test(item.unitNet) &&
     DECIMAL.test(item.quantity) &&
-    DECIMAL.test(item.vatRatePercent) &&
+    DECIMAL.test(item.vatRatePercent);
+  if (kind === "PURCHASE") return common && Boolean(item.unitOfMeasureId);
+  const occasions = Number(item.occasionsPerYear);
+  return (
+    common &&
+    item.occasionsPerYear !== null &&
     Number.isInteger(occasions) &&
     occasions >= 1 &&
     occasions <= 366

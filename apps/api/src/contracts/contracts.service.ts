@@ -5,6 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+import {
+  contractMaintenanceSwitchBlocker,
+  contractPurchaseSwitchBlocker,
+  type ContractKind,
+} from "@acropora/types";
 
 import {
   ContractItemDto,
@@ -53,11 +58,21 @@ export class ContractsService {
   customers() {
     return this.repository.customers();
   }
+  quantityUnits() {
+    return this.repository.quantityUnits();
+  }
 
   async detail(id: string) {
     const contract = await this.repository.detail(id);
     if (!contract) throw new NotFoundException("A szerződés nem található.");
-    return contract;
+    // a visszaváltás feltétele a felületen (barracuda, #1661): készült-e számla
+    return {
+      ...contract,
+      invoiceCount:
+        contract.kind === "PURCHASE"
+          ? await this.repository.invoiceCount(id)
+          : 0,
+    };
   }
 
   async create(input: CreateContractDto) {
@@ -71,7 +86,28 @@ export class ContractsService {
 
   async update(id: string, patch: UpdateContractDto) {
     const existing = await this.detail(id);
+    const kind = patch.kind ?? existing.kind;
+    /*
+      KARBANTARTÁSIBÓL BESZERZÉSI CSAK MEGRENDELŐLAP NÉLKÜL (hétfői lista M4,
+      Balázs: „így van”). A megrendelőlap tételei a szerződés tételeire
+      mutatnak, és alkalmakat számolnak: egy beszerzési szerződés alatt ezek
+      értelmüket vesztenék. A felület ugyanezt előre kiírja.
+    */
+    if (kind === "PURCHASE" && existing.kind !== "PURCHASE") {
+      const blocker = contractPurchaseSwitchBlocker(
+        await this.repository.maintenanceOrderCount(id),
+      );
+      if (blocker) throw new ConflictException(blocker);
+    }
+    // a tükre (barracuda, #1661): számla után nem lesz újra karbantartási
+    if (kind === "MAINTENANCE" && existing.kind === "PURCHASE") {
+      const blocker = contractMaintenanceSwitchBlocker(
+        await this.repository.invoiceCount(id),
+      );
+      if (blocker) throw new ConflictException(blocker);
+    }
     const data = await this.normalize({
+      kind,
       customerId: existing.customerId,
       number: patch.number ?? existing.number,
       title: patch.title ?? existing.title,
@@ -99,6 +135,7 @@ export class ContractsService {
           quantity: item.quantity.toString(),
           occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent.toString(),
+          unitOfMeasureId: item.unitOfMeasureId,
           departmentId: item.departmentId,
           assetIds: item.assets.map((asset) => asset.assetId),
           ...Object.fromEntries(
@@ -110,7 +147,15 @@ export class ContractsService {
         })),
     });
     try {
-      return await this.repository.update(id, data);
+      const updated = await this.repository.update(id, data);
+      // ugyanaz az alak, mint a `detail()`-é: a felület a mentés válaszából él
+      return {
+        ...updated,
+        invoiceCount:
+          updated.kind === "PURCHASE"
+            ? await this.repository.invoiceCount(id)
+            : 0,
+      };
     } catch (error) {
       /*
         A REPOSITORY TÉTELENKÉNT UPSERT-EL (`contracts.repository.ts`
@@ -179,6 +224,7 @@ export class ContractsService {
   }
 
   private async normalize(input: {
+    kind?: ContractKind;
     customerId: string;
     number: string;
     title: string;
@@ -193,6 +239,36 @@ export class ContractsService {
     const customerId = input.customerId.trim();
     if (!(await this.repository.customerExists(customerId)))
       throw new BadRequestException("A megadott partner nem található.");
+    const kind = input.kind ?? "MAINTENANCE";
+    const purchase = kind === "PURCHASE";
+    /*
+      A FAJTA DÖNTI EL, MELYIK TÉTELMEZŐ KÖTELEZŐ (hétfői lista M4). Beszerzésnél
+      csak leírás, nettó egységár, mennyiség, mennyiségi egység és ÁFA: az
+      alkalom, a helyszín, az eszközök és a javítási díjak üresek lesznek, akkor
+      is, ha egy korábbi karbantartási változatból ott álltak. Karbantartásnál
+      az alkalom / év kötelező, a mennyiségi egység nincs.
+    */
+    const knownUnits = purchase
+      ? await this.repository.quantityUnitIds(
+          input.items.flatMap((item) =>
+            item.unitOfMeasureId ? [item.unitOfMeasureId] : [],
+          ),
+        )
+      : new Set<string>();
+    for (const item of input.items) {
+      if (purchase && !item.unitOfMeasureId)
+        throw new BadRequestException(
+          `A beszerzési tételnél a mennyiségi egység kötelező: ${item.description.trim()}.`,
+        );
+      if (purchase && !knownUnits.has(item.unitOfMeasureId!))
+        throw new BadRequestException(
+          `Ismeretlen mennyiségi egység: ${item.description.trim()}.`,
+        );
+      if (!purchase && !item.occasionsPerYear)
+        throw new BadRequestException(
+          `A karbantartási tételnél az alkalom / év kötelező: ${item.description.trim()}.`,
+        );
+    }
     const validFrom = new Date(input.validFrom);
     const validTo = input.validTo ? new Date(input.validTo) : null;
     if (validTo && validTo < validFrom)
@@ -201,8 +277,10 @@ export class ContractsService {
       );
     const items = await Promise.all(
       input.items.map(async (item) => {
-        const assetIds = [...new Set(item.assetIds ?? [])];
-        const departmentId = item.departmentId?.trim() || null;
+        const assetIds = purchase ? [] : [...new Set(item.assetIds ?? [])];
+        const departmentId = purchase
+          ? null
+          : item.departmentId?.trim() || null;
         if (
           departmentId &&
           !(await this.repository.departmentBelongsToCustomer(
@@ -253,11 +331,18 @@ export class ContractsService {
           description: item.description.trim(),
           unitNet: new Prisma.Decimal(item.unitNet),
           quantity: new Prisma.Decimal(item.quantity),
-          occasionsPerYear: item.occasionsPerYear,
+          occasionsPerYear: purchase ? null : (item.occasionsPerYear ?? null),
           vatRatePercent: new Prisma.Decimal(item.vatRatePercent),
+          unitOfMeasureId: purchase ? (item.unitOfMeasureId ?? null) : null,
           departmentId,
           assetIds,
-          ...repairFeesInput(item),
+          ...(purchase
+            ? repairFeesInput(
+                Object.fromEntries(
+                  REPAIR_FEE_FIELDS.map((field) => [field, null]),
+                ),
+              )
+            : repairFeesInput(item)),
         };
       }),
     );
@@ -268,6 +353,7 @@ export class ContractsService {
       validFrom,
       validTo,
       status: input.status ?? "DRAFT",
+      kind,
       notes: input.notes?.trim() || null,
       organizationalUnitName: input.organizationalUnitName?.trim() || null,
       contactPersonName: input.contactPersonName?.trim() || null,

@@ -1,7 +1,12 @@
 "use client";
 
 import { Alert } from "@acropora/ui";
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import {
+  CONTRACT_KIND_LABELS,
+  hasPermission,
+  PERMISSIONS,
+  type ContractKind,
+} from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,6 +33,11 @@ import {
   repairFeesValid,
   type RepairFeeValues,
 } from "./contract-items";
+import {
+  ContractKindSwitch,
+  QuantityUnitSelect,
+  useQuantityUnits,
+} from "./contract-kind";
 import { ContractRepairFees } from "./contract-repair-fees";
 
 export type DraftItem = {
@@ -36,6 +46,8 @@ export type DraftItem = {
   quantity: string;
   occasionsPerYear: string;
   vatRatePercent: string;
+  /** Beszerzési tételnél a mennyiségi egység (hétfői lista M4). */
+  unitOfMeasureId: string;
   /**
    * A HELYSZÍN ÉS AZ ESZKÖZ MOSTANTÓL A FELVITELEN IS SZERKESZTHETŐ --
    * acrobot kérése (2026-09-24 20:36, élesben blokkoló): a szerver mindig
@@ -59,6 +71,7 @@ export const emptyItem = (): DraftItem => ({
   quantity: "1",
   occasionsPerYear: "1",
   vatRatePercent: "27",
+  unitOfMeasureId: "",
   departmentId: "",
   assetIds: [],
 });
@@ -90,16 +103,22 @@ export function missingFields(draft: {
   number: string;
   title: string;
   validFrom: string;
+  /** A fajta dönti el, melyik tételmező kötelező (hétfői lista M4). */
+  kind?: ContractKind;
   items: DraftItem[];
 }): string[] {
+  const kind = draft.kind ?? "MAINTENANCE";
   const missing: string[] = [];
   if (!draft.customerId) missing.push("Partner");
   if (!draft.number.trim()) missing.push("Szerződésszám");
   if (!draft.title.trim()) missing.push("Szerződés címe");
   if (!draft.validFrom) missing.push("Érvényesség kezdete");
-  const hasValidItem = draft.items.some(isValidContractItem);
+  const hasValidItem = draft.items.some((item) =>
+    isValidContractItem(item, kind),
+  );
   if (!hasValidItem) missing.push("legalább egy kitöltött tétel");
-  if (!draft.items.every(repairFeesValid))
+  // a beszerzési tételnek nincs javítási díja: ott nem is ellenőrizzük
+  if (kind === "MAINTENANCE" && !draft.items.every(repairFeesValid))
     missing.push("a javítási díjak csak számok lehetnek");
   return missing;
 }
@@ -143,8 +162,11 @@ export function PilotContractsPage() {
     validFrom: "",
     validTo: "",
     notes: "",
+    kind: "MAINTENANCE" as ContractKind,
     items: [emptyItem()],
   });
+  const purchase = draft.kind === "PURCHASE";
+  const quantityUnits = useQuantityUnits(token, creating && purchase);
   const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
     [],
   );
@@ -208,6 +230,7 @@ export function PilotContractsPage() {
     [departments],
   );
 
+  // beszerzésnél nincs év: az összeg egyszer, a tételek értéke
   const yearly = useMemo(
     () =>
       draft.items.reduce(
@@ -215,10 +238,10 @@ export function PilotContractsPage() {
           total +
           Number(item.unitNet || 0) *
             Number(item.quantity || 0) *
-            Number(item.occasionsPerYear || 0),
+            (purchase ? 1 : Number(item.occasionsPerYear || 0)),
         0,
       ),
-    [draft.items],
+    [draft.items, purchase],
   );
   const missing = useMemo(() => missingFields(draft), [draft]);
   if (!canManage)
@@ -244,11 +267,25 @@ export function PilotContractsPage() {
         validFrom: draft.validFrom,
         validTo: draft.validTo || null,
         notes: draft.notes || null,
-        items: draft.items.map(({ rowKey: _rowKey, ...item }) => ({
-          ...item,
-          occasionsPerYear: Number(item.occasionsPerYear),
-          ...repairFeesPayload(item),
-        })),
+        kind: draft.kind,
+        items: draft.items.map(({ rowKey: _rowKey, ...item }) =>
+          purchase
+            ? {
+                // beszerzés: csak a saját öt mezője (hétfői lista M4)
+                description: item.description,
+                unitNet: item.unitNet,
+                quantity: item.quantity,
+                vatRatePercent: item.vatRatePercent,
+                unitOfMeasureId: item.unitOfMeasureId,
+                occasionsPerYear: null,
+              }
+            : {
+                ...item,
+                unitOfMeasureId: null,
+                occasionsPerYear: Number(item.occasionsPerYear),
+                ...repairFeesPayload(item),
+              },
+        ),
       });
       setDraft({
         customerId: "",
@@ -257,6 +294,7 @@ export function PilotContractsPage() {
         validFrom: "",
         validTo: "",
         notes: "",
+        kind: "MAINTENANCE",
         items: [emptyItem()],
       });
       setCreating(false);
@@ -423,6 +461,13 @@ export function PilotContractsPage() {
                     />
                   </PilotFormField>
                 </div>
+                <ContractKindSwitch
+                  value={draft.kind}
+                  onChange={(kind) => setDraft({ ...draft, kind })}
+                />
+                {quantityUnits.error && purchase ? (
+                  <p className="text-xs text-red-600">{quantityUnits.error}</p>
+                ) : null}
                 <div className="flex flex-col gap-3">
                   <p className="text-xs font-medium text-pilot-grey-700">
                     Szerződéses tételek
@@ -490,26 +535,45 @@ export function PilotContractsPage() {
                             }
                           />
                         </PilotFormField>
-                        <PilotFormField
-                          label={index === 0 ? "Alkalom / év" : ""}
-                        >
-                          <PilotInput
-                            aria-label="Alkalom / év"
-                            inputMode="numeric"
-                            placeholder="alkalom / év"
-                            value={item.occasionsPerYear}
+                        {purchase ? (
+                          <QuantityUnitSelect
+                            label={index === 0 ? "Mennyiségi egység" : ""}
+                            ariaLabel="Mennyiségi egység"
+                            units={quantityUnits.units}
+                            value={item.unitOfMeasureId}
                             onChange={(value) =>
                               setDraft({
                                 ...draft,
                                 items: draft.items.map((row, rowIndex) =>
                                   rowIndex === index
-                                    ? { ...row, occasionsPerYear: value }
+                                    ? { ...row, unitOfMeasureId: value }
                                     : row,
                                 ),
                               })
                             }
                           />
-                        </PilotFormField>
+                        ) : (
+                          <PilotFormField
+                            label={index === 0 ? "Alkalom / év" : ""}
+                          >
+                            <PilotInput
+                              aria-label="Alkalom / év"
+                              inputMode="numeric"
+                              placeholder="alkalom / év"
+                              value={item.occasionsPerYear}
+                              onChange={(value) =>
+                                setDraft({
+                                  ...draft,
+                                  items: draft.items.map((row, rowIndex) =>
+                                    rowIndex === index
+                                      ? { ...row, occasionsPerYear: value }
+                                      : row,
+                                  ),
+                                })
+                              }
+                            />
+                          </PilotFormField>
+                        )}
                         <PilotFormField label={index === 0 ? "ÁFA %" : ""}>
                           <PilotInput
                             aria-label="ÁFA %"
@@ -529,20 +593,22 @@ export function PilotContractsPage() {
                           />
                         </PilotFormField>
                       </div>
-                      <ContractRepairFees
-                        values={item}
-                        ariaPrefix={`${index + 1}. tétel `}
-                        onChange={(key, value) =>
-                          setDraft({
-                            ...draft,
-                            items: draft.items.map((row, rowIndex) =>
-                              rowIndex === index
-                                ? { ...row, [key]: value }
-                                : row,
-                            ),
-                          })
-                        }
-                      />
+                      {purchase ? null : (
+                        <ContractRepairFees
+                          values={item}
+                          ariaPrefix={`${index + 1}. tétel `}
+                          onChange={(key, value) =>
+                            setDraft({
+                              ...draft,
+                              items: draft.items.map((row, rowIndex) =>
+                                rowIndex === index
+                                  ? { ...row, [key]: value }
+                                  : row,
+                              ),
+                            })
+                          }
+                        />
+                      )}
                       {/*
                         A HELYSZÍN ÉS AZ ESZKÖZ ITT VÁLASZTHATÓ -- acrobot kérése
                         (2026-09-24 20:36, élesben blokkoló): a szerver mindig is
@@ -550,7 +616,7 @@ export function PilotContractsPage() {
                         mező. Csak akkor jelenik meg, ha van kiválasztott partner:
                         helyszín nélküle nincs.
                       */}
-                      {draft.customerId ? (
+                      {draft.customerId && !purchase ? (
                         !departmentsLoaded ? (
                           <p className="text-sm text-pilot-grey-400">
                             Helyszínek betöltése…
@@ -651,7 +717,7 @@ export function PilotContractsPage() {
                       Tétel hozzáadása
                     </PilotButton>
                     <p className="text-xs text-pilot-grey-500">
-                      Éves nettó összesen:{" "}
+                      {purchase ? "Nettó összesen" : "Éves nettó összesen"}:{" "}
                       <span className="font-semibold text-pilot-grey-900">
                         {money(String(yearly))} Ft
                       </span>
@@ -699,7 +765,8 @@ export function PilotContractsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-sm text-pilot-grey-400">
-                      {contract.number} · {contract.customer.displayName}
+                      {contract.number} · {contract.customer.displayName} ·{" "}
+                      {CONTRACT_KIND_LABELS[contract.kind]}
                     </p>
                     <h2 className="text-lg font-semibold text-pilot-grey-900">
                       {contract.title}
@@ -743,19 +810,31 @@ export function PilotContractsPage() {
                   </div>
                 </div>
                 <ul className="space-y-1 text-sm text-pilot-grey-900">
-                  {contract.items.map((item) => (
-                    <li key={item.id}>
-                      {item.position}. {item.description} —{" "}
-                      {money(
-                        String(
-                          Number(item.unitNet) *
-                            Number(item.quantity) *
-                            item.occasionsPerYear,
-                        ),
-                      )}{" "}
-                      Ft nettó / év
-                    </li>
-                  ))}
+                  {contract.items.map((item) =>
+                    contract.kind === "PURCHASE" ? (
+                      <li key={item.id}>
+                        {item.position}. {item.description} — {item.quantity}{" "}
+                        {item.unitOfMeasure?.code ?? ""} × {money(item.unitNet)}{" "}
+                        Ft ={" "}
+                        {money(
+                          String(Number(item.unitNet) * Number(item.quantity)),
+                        )}{" "}
+                        Ft nettó
+                      </li>
+                    ) : (
+                      <li key={item.id}>
+                        {item.position}. {item.description} —{" "}
+                        {money(
+                          String(
+                            Number(item.unitNet) *
+                              Number(item.quantity) *
+                              (item.occasionsPerYear ?? 0),
+                          ),
+                        )}{" "}
+                        Ft nettó / év
+                      </li>
+                    ),
+                  )}
                 </ul>
                 {contract.documents.length ? (
                   <div className="flex flex-wrap gap-2">

@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import { applyUnasShippingFlags } from "../../products/shipping-profile-sources.js";
 import { kellUjArSor } from "./unas-ar-tortenet.js";
 import type {
   CanonicalUnasProduct,
@@ -924,6 +925,13 @@ export class UnasProductSyncRepository extends Repository {
             },
             update: snapshotData(diff.product, windowEnd),
           });
+          // a szállítási jelzők (a82ed229): a nem kézi jelzők a UNAS mai
+          // beállítását követik, ugyanabban a tranzakcióban
+          await applyUnasShippingFlags(
+            transaction,
+            product.id,
+            diff.product.rawPayload,
+          );
           if (diff.product.isPackageProduct) {
             const packageVariants = await transaction.productVariant.findMany({
               where: { productId: product.id },
