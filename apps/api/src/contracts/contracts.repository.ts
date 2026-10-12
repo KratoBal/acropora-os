@@ -157,6 +157,16 @@ export class ContractsRepository {
     return new Set(rows.map((row) => row.id));
   }
 
+  /**
+   * Hány számla készült a beszerzési szerződésből (a vázlat is): a
+   * `sourceType` CONTRACT, a `sourceId` a szerződés.
+   */
+  invoiceCount(contractId: string) {
+    return this.database.invoice.count({
+      where: { sourceType: "CONTRACT", sourceId: contractId },
+    });
+  }
+
   /** Készült-e már megrendelőlap a szerződéshez (a visszavont is számít). */
   maintenanceOrderCount(contractId: string) {
     return this.database.maintenanceOrder.count({ where: { contractId } });

@@ -3,6 +3,7 @@
 import { PilotRadioGroup } from "@acropora/ui";
 import {
   CONTRACT_KIND_LABELS,
+  contractMaintenanceSwitchBlocker,
   contractPurchaseSwitchBlocker,
   type ContractKind,
 } from "@acropora/types";
@@ -21,14 +22,19 @@ export function ContractKindSwitch({
   value,
   onChange,
   maintenanceOrderCount = 0,
+  invoiceCount = 0,
 }: {
   value: ContractKind;
   onChange: (kind: ContractKind) => void;
   maintenanceOrderCount?: number;
+  /** Hány számla készült belőle: akkor nem lesz újra karbantartási. */
+  invoiceCount?: number;
 }) {
+  // a MÁSIK fajtára váltás zárja: megrendelőlap után a Beszerzés, számla után
+  // a Karbantartás (barracuda, #1661)
   const blocker =
     value === "PURCHASE"
-      ? null
+      ? contractMaintenanceSwitchBlocker(invoiceCount)
       : contractPurchaseSwitchBlocker(maintenanceOrderCount);
   return (
     <PilotRadioGroup
@@ -39,7 +45,7 @@ export function ContractKindSwitch({
       options={(["PURCHASE", "MAINTENANCE"] as const).map((kind) => ({
         value: kind,
         label: CONTRACT_KIND_LABELS[kind],
-        disabled: kind === "PURCHASE" && blocker !== null,
+        disabled: kind !== value && blocker !== null,
       }))}
       hint={blocker ?? undefined}
     />
