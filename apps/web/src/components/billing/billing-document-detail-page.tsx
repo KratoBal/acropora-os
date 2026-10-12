@@ -45,6 +45,7 @@ import {
 import { BillingDocumentStatus } from "./billing-document-status";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
+import { useBillingDocumentPdf } from "./use-billing-document-pdf";
 
 const SOURCE_LABELS: Record<string, string> = {
   PROJECT: "Projekt",
@@ -94,8 +95,7 @@ export function BillingDocumentDetailPage({
   const [detail, setDetail] = useState<BillingDocumentDetail | null>(null);
   useAssistantEntity("Számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const pdf = useBillingDocumentPdf(token);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /*
     A LEVÉL KÉPEI: olvasni számlaküldési vagy beállítás-kezelési joggal,
@@ -205,36 +205,6 @@ export function BillingDocumentDetailPage({
   const title = detail.documentNumber ?? "Piszkozat";
   const gross = formatMoney(detail.totals.grossAmount, detail.currency);
 
-  const withPdf = async (use: (url: string) => void) => {
-    setBusy(true);
-    setActionError(null);
-    try {
-      const blob = await billingDocumentsApi.pdf(token, detail.id);
-      use(URL.createObjectURL(blob));
-    } catch (cause) {
-      setActionError(
-        cause instanceof Error ? cause.message : "A PDF nem tölthető le.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const print = () =>
-    void withPdf((url) => {
-      // A HIVATALOS PDF nyílik meg, és a böngésző nyomtatási előnézete (brief
-      // 12. pont); nem a lap DOM-ja.
-      const opened = window.open(url, "_blank");
-      opened?.addEventListener("load", () => opened.print());
-    });
-  const download = () =>
-    void withPdf((url) => {
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${title}.pdf`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
-
   /**
    * A FIÓK A LEVELEZÉS OLDAL SABLONJÁVAL NYÍLIK (nautilus #1293): amíg a levélhez
    * senki nem nyúlt, a szerver vázlata lesz a kiinduló szöveg. Ha közben már
@@ -337,9 +307,9 @@ export function BillingDocumentDetailPage({
           <BillingDocumentActions
             pdfAvailable={pdfAvailable}
             pdfReason={pdfReason}
-            onPrint={print}
-            onDownload={download}
-            busy={busy}
+            onPrint={() => pdf.print(detail.id)}
+            onDownload={() => pdf.download(detail.id, title)}
+            busy={pdf.busy}
             resend={
               delivery === "NONE"
                 ? null
@@ -378,11 +348,11 @@ export function BillingDocumentDetailPage({
           }
         />
       ) : null}
-      {actionError ? (
+      {pdf.error ? (
         <Alert
           variant="danger"
           title="A PDF nem érhető el"
-          description={actionError}
+          description={pdf.error}
         />
       ) : null}
 
