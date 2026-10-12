@@ -172,6 +172,46 @@ describe("Brand management UI", () => {
       ),
     );
   });
+  /*
+    SEO P0 PR 11 (barracuda #1678, 5. pont). MI PIROSÍTJA: a négy SEO-mező
+    valamelyike nem töltődik be vagy nem megy el mentéskor, vagy egy kiürített
+    mező üres szövegként megy null helyett (a webshop csak a null-ra esik vissza
+    a névre és a leírásra).
+  */
+  it("loads and saves the four brand page fields, an emptied one as null", async () => {
+    api.detail.mockResolvedValue({
+      ...brand,
+      seoTitle: "Régi cím",
+      metaDescription: "Régi leírás",
+      intro: "Bevezető.",
+      merchantBrandName: "Oase Merchant",
+    });
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Márkaoldal a webshopban");
+    expect(screen.getByLabelText("Oldalcím (SEO)")).toHaveProperty(
+      "value",
+      "Régi cím",
+    );
+    fireEvent.change(screen.getByLabelText("Oldalcím (SEO)"), {
+      target: { value: "Új cím" },
+    });
+    fireEvent.change(screen.getByLabelText("Meta leírás"), {
+      target: { value: "" },
+    });
+    fireEvent.click(screen.getByText("Változások mentése"));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        "token",
+        "b1",
+        expect.objectContaining({
+          seoTitle: "Új cím",
+          metaDescription: null,
+          intro: "Bevezető.",
+          merchantBrandName: "Oase Merchant",
+        }),
+      ),
+    );
+  });
   it("adds and removes aliases", async () => {
     render(<BrandEditorPage brandId="b1" />);
     await screen.findByText("Oase GmbH");

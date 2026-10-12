@@ -94,6 +94,10 @@ export class BrandsService {
       );
     if (error instanceof Error && error.message === "CANONICAL_ALIAS")
       throw new BadRequestException("A kanonikus név nem szükséges aliasként.");
+    if (error instanceof Error && error.message === "SLUG_TAKEN")
+      throw new ConflictException(
+        "Ez a név egy másik márka korábbi webshop-címe volt, ezért nem használható: a régi cím átirányítása arra a márkára mutat.",
+      );
     if (error instanceof Error && error.message === "IDENTITY_CONFLICT")
       throw new ConflictException(
         "A normalizált identitást már egy másik kanonikus név vagy alias használja.",

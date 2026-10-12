@@ -4,6 +4,10 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type { BrandDetail, BrandListResponse } from "@acropora/types";
 
+import {
+  applyBrandSlugChange,
+  assertBrandSlugFree,
+} from "./brand-slug-change.js";
 import type {
   BrandAliasDto,
   BrandListQueryDto,
@@ -111,6 +115,7 @@ export class BrandsRepository extends Repository {
         const aliases = input.aliases.filter(
           (alias) => normalize(alias.alias) !== normalizedName,
         );
+        await assertBrandSlugFree(tx, slugify(name), null);
         const brand = await tx.brand.create({
           data: {
             name,
@@ -163,6 +168,18 @@ export class BrandsRepository extends Repository {
           }))
         )
           throw new Error("IDENTITY_CONFLICT");
+        // t11: az átnevezés a márkaoldal címét is cseréli (barracuda #1678 C)
+        const ujSlug = name ? slugify(name) : existing.slug;
+        if (ujSlug !== existing.slug) await assertBrandSlugFree(tx, ujSlug, id);
+        // a csere a frissítés ELŐTT: az átirányítás-zárat a tranzakció elején
+        // kell kérni (redirect.repository.ts); egy STALE_UPDATE az egészet
+        // visszagörgeti, a történet-sorral és a 301-gyel együtt
+        await applyBrandSlugChange(tx, {
+          brandId: id,
+          from: existing.slug,
+          to: ujSlug,
+          actorId,
+        });
         const changed = await tx.brand.updateMany({
           where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
           data: {

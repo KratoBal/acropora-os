@@ -263,6 +263,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
             <div className="mt-4 grid gap-4">
               <FormField label="Oldalcím (SEO)">
                 <Input
+                  aria-label="Oldalcím (SEO)"
                   maxLength={120}
                   value={seoTitle}
                   onChange={(event) => setSeoTitle(event.target.value)}
@@ -286,6 +287,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               </FormField>
               <FormField label="Márkanév a Merchant feedben">
                 <Input
+                  aria-label="Márkanév a Merchant feedben"
                   maxLength={120}
                   placeholder={name}
                   value={merchantBrandName}
