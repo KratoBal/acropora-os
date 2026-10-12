@@ -106,9 +106,17 @@ export const UNIQUE_PIECE_KEY = "unique_piece";
  */
 export const ACROPORA_IMAGES_KEY = "acropora_images";
 
+/**
+ * THE PRIMARY CATEGORY (SEO P0 PR 10b): the Medusa id of the product's primary
+ * in the Acropora tree. The storefront's breadcrumb follows it. Owned, so a
+ * product that goes back to the UNAS tree loses it in the merge.
+ */
+export const PRIMARY_CATEGORY_KEY = "primary_category_id";
+
 export const OWNED_METADATA_KEYS = [
   UNIQUE_PIECE_KEY,
   ACROPORA_IMAGES_KEY,
+  PRIMARY_CATEGORY_KEY,
 ] as const;
 
 /**

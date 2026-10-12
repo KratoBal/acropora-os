@@ -43,6 +43,7 @@ import {
 } from "./medusa-relations.policy.js";
 import {
   mergeProductMetadata,
+  PRIMARY_CATEGORY_KEY,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
 import {
@@ -128,6 +129,12 @@ export interface ProjectableProduct {
    * csak a dontes erkezik: van teljes lista, vagy nincs.
    */
   medusaCategoryIds: string[] | null;
+  /**
+   * THE PRIMARY'S MEDUSA ID, for a product in the Acropora tree (SEO P0 PR
+   * 10b); null otherwise. It goes out as `metadata.primary_category_id`, an
+   * owned key, so a product back on the UNAS tree loses it in the merge.
+   */
+  primaryMedusaCategoryId: string | null;
   /**
    * EGY DARAB-E EZ A TERMEK (a WYSIWYG reszfa donti el).
    *
@@ -791,6 +798,9 @@ export class MedusaProductProjectionService {
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
       ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
+      ...(product.primaryMedusaCategoryId
+        ? { [PRIMARY_CATEGORY_KEY]: product.primaryMedusaCategoryId }
+        : {}),
       /**
        * A KAPCSOLATOK EGY SZTRINGBEN, VESSZOVEL. Ures listara a kulcs KI SEM
        * MEGY: egy ures ertek ugyanazt jelentene, mint a hianya, csak a bolt

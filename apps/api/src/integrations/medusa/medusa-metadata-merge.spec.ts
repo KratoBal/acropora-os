@@ -166,3 +166,23 @@ describe("foreign keys stay out of the body", () => {
     });
   });
 });
+
+/**
+ * THE PRIMARY IS OURS (SEO P0 PR 10b). A product taken back to the UNAS tree
+ * sends no primary; if the key were not ours, the shop would keep the old one
+ * and the breadcrumb would point at a tree the product is no longer in.
+ */
+describe("the primary category key", () => {
+  it("leaves the shop when a run sends no primary", () => {
+    const eredmeny = mergeProductMetadata(
+      { primary_category_id: "pcat_regi", kezzel_irt: "x" },
+      { seo_title: "cím" },
+    );
+
+    assert.deepEqual(eredmeny.metadata, {
+      seo_title: "cím",
+      primary_category_id: "",
+    });
+    assert.deepEqual(eredmeny.removedKeys, ["primary_category_id"]);
+  });
+});

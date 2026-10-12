@@ -48,6 +48,7 @@ const product: ProjectableProduct = {
    */
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  primaryMedusaCategoryId: null,
   medusaSimilarIds: [],
   medusaAccessoryIds: [],
   uniquePiece: false,
@@ -202,6 +203,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   imageTexts: "atmegy", // -> metadata.acropora_images (JSON, csak a szoveges kepek)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
+  primaryMedusaCategoryId: "atmegy", // -> metadata.primary_category_id, ha van
   medusaSimilarIds: "atmegy", // -> metadata.unas_similar_ids, ha nem ures
   medusaAccessoryIds: "atmegy", // -> metadata.unas_accessory_ids, ha nem ures
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
@@ -264,6 +266,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         seoKeywords: "teszt, kulcsszo",
         unasProductUrl: "https://bolt.test/regi-lap",
         medusaCategoryIds: ["cat_1"],
+        primaryMedusaCategoryId: "cat_1",
         medusaSimilarIds: ["prod_medusa_9", "prod_medusa_8"],
         medusaAccessoryIds: ["prod_medusa_7", "prod_medusa_6"],
         medusaCollectionId: "pcol_1",
@@ -330,6 +333,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
       slug: torzs.handle === "teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
+      primaryMedusaCategoryId: torzs.metadata?.primary_category_id === "cat_1",
       /**
        * A SORREND IS SZAMIT, NEM CSAK A JELENLET: a kirakat ezt a sztringet
        * bontja fel, es a kert sorrendet allitja helyre belole. Egy halmaz-alaku

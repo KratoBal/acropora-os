@@ -5,8 +5,13 @@ import { describe, it } from "node:test";
 
 import {
   decideMedusaCategories,
+  decideProductCategories,
   describeMissingCategoryMapping,
   MEDUSA_CATEGORY_REFERENCE,
+  MEDUSA_STORE_CATEGORY_REFERENCE,
+  orderedStoreCategoryIds,
+  planProductCategories,
+  primaryMedusaCategoryId,
 } from "./medusa-category.policy.js";
 
 describe("a kategóriák leképezése a vetítésben", () => {
@@ -294,5 +299,88 @@ describe("a leképezés-sor keresési kulcsa", () => {
   it("names the spelling both ends must share", () => {
     assert.equal(MEDUSA_CATEGORY_REFERENCE.system, "MEDUSA");
     assert.equal(MEDUSA_CATEGORY_REFERENCE.entityType, "Category");
+  });
+});
+
+/**
+ * PRODUCT BY PRODUCT (SEO P0 PR 10b). The pilot is a set of products: one in
+ * the Acropora tree goes out from it, with its primary; its neighbour, not in
+ * that tree, stays on the UNAS tree in the same run.
+ */
+describe("which tree a product is projected from", () => {
+  const storeRows = [
+    { storeCategoryId: "sc_szivattyu", isPrimary: false, sortOrder: 2 },
+    { storeCategoryId: "sc_technika", isPrimary: true, sortOrder: 5 },
+  ];
+  const storeLinks = [
+    { entityId: "sc_technika", externalId: "pcat_technika" },
+    { entityId: "sc_szivattyu", externalId: "pcat_szivattyu" },
+  ];
+
+  it("a product in the Acropora tree goes out from it, with its primary", () => {
+    const plan = planProductCategories(storeRows, ["cat_unas"]);
+    assert.equal(plan.source, "STORE");
+    assert.deepEqual(plan.reference, MEDUSA_STORE_CATEGORY_REFERENCE);
+    assert.deepEqual(plan.osCategoryIds, ["sc_technika", "sc_szivattyu"]);
+
+    const decision = decideProductCategories(plan, storeRows, storeLinks);
+    assert.equal(decision.categories.kind, "complete");
+    assert.deepEqual(decision.categories.medusaCategoryIds, [
+      "pcat_technika",
+      "pcat_szivattyu",
+    ]);
+    assert.equal(decision.primaryMedusaCategoryId, "pcat_technika");
+  });
+
+  it("a product with no row there stays on the UNAS tree, without a primary", () => {
+    const plan = planProductCategories([], ["cat_unas"]);
+    assert.equal(plan.source, "UNAS");
+    assert.deepEqual(plan.reference, MEDUSA_CATEGORY_REFERENCE);
+    assert.deepEqual(plan.osCategoryIds, ["cat_unas"]);
+
+    const decision = decideProductCategories(
+      plan,
+      [],
+      [{ entityId: "cat_unas", externalId: "pcat_unas" }],
+    );
+    assert.deepEqual(decision.categories.medusaCategoryIds, ["pcat_unas"]);
+    assert.equal(decision.primaryMedusaCategoryId, null);
+  });
+
+  /**
+   * ALL OR NOTHING ON THE NEW PATH TOO, AND THE PRIMARY WITH IT. The missing
+   * link here is NOT the primary's, so a primary taken alone would still
+   * resolve: it must not go out beside a held-back list.
+   */
+  it("one missing Acropora link holds back the list and the primary", () => {
+    const plan = planProductCategories(storeRows, []);
+    const decision = decideProductCategories(plan, storeRows, [
+      { entityId: "sc_technika", externalId: "pcat_technika" },
+    ]);
+    assert.equal(decision.categories.kind, "incomplete");
+    assert.deepEqual(decision.categories.missing, ["sc_szivattyu"]);
+    assert.equal(decision.primaryMedusaCategoryId, null);
+  });
+
+  it("orders the primary first, then sortOrder, unset last, then id", () => {
+    assert.deepEqual(
+      orderedStoreCategoryIds([
+        { storeCategoryId: "sc_c", isPrimary: false, sortOrder: null },
+        { storeCategoryId: "sc_b", isPrimary: false, sortOrder: 1 },
+        { storeCategoryId: "sc_a", isPrimary: false, sortOrder: 1 },
+        { storeCategoryId: "sc_d", isPrimary: true, sortOrder: 9 },
+      ]),
+      ["sc_d", "sc_a", "sc_b", "sc_c"],
+    );
+  });
+
+  it("no primary row gives no primary", () => {
+    assert.equal(
+      primaryMedusaCategoryId(
+        [{ storeCategoryId: "sc_a", isPrimary: false, sortOrder: 0 }],
+        [{ entityId: "sc_a", externalId: "pcat_a" }],
+      ),
+      null,
+    );
   });
 });
