@@ -773,6 +773,34 @@ describe("storno", () => {
     expect(screen.getByRole("button", { name: "Sztornó" })).toBeEnabled();
   });
 
+  it("a retried storno refused again: the fresh error stands alone, not two red bars", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        cancellation: {
+          ...done,
+          state: "ISSUE_FAILED",
+          stornoNumber: null,
+          pdfAvailable: false,
+          error: "A Számlázz.hu elutasította a sztornót (57): régi ok",
+        },
+      }),
+    );
+    api.storno.mockRejectedValue(
+      new Error("A Számlázz.hu elutasította a sztornót (57): friss ok"),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: question })).getByRole(
+        "button",
+        { name: "Sztornózom" },
+      ),
+    );
+    expect(await screen.findByText(/friss ok/)).toBeInTheDocument();
+    expect(screen.queryByText(/régi ok/)).toBeNull();
+    expect(screen.getAllByText("A sztornó nem sikerült")).toHaveLength(1);
+  });
+
   it("stornoed on Számlázz.hu: the fact, and no PDF offered", async () => {
     api.detail.mockResolvedValue(
       detail({

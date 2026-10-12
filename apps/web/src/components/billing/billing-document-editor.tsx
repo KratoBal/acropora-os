@@ -633,7 +633,9 @@ export function BillingDocumentEditor({
           }
         />
       ) : null}
-      {issued && cancellation ? (
+      {issued &&
+      cancellation &&
+      !(storno.error && cancellation.state === "ISSUE_FAILED") ? (
         <BillingCancellationNotice
           cancellation={cancellation}
           documentId={issued.id}

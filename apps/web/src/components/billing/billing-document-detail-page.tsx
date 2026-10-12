@@ -353,7 +353,10 @@ export function BillingDocumentDetailPage({
         </div>
       </header>
 
-      {detail.cancellation ? (
+      {/* újrapróbált, megint elutasított sztornónál a friss hiba áll a tárolt
+          helyén, nem két piros sáv (barracuda, #1676) */}
+      {detail.cancellation &&
+      !(storno.error && detail.cancellation.state === "ISSUE_FAILED") ? (
         <BillingCancellationNotice
           cancellation={detail.cancellation}
           documentId={detail.id}
