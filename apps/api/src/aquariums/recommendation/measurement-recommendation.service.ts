@@ -332,6 +332,10 @@ export class MeasurementRecommendationService {
         (id) => !known.has(id),
       ),
       malformedReference: hasMalformedRecommendationToken(row.draftText ?? ""),
+      unverifiedProductIds: unverifiedReferences(
+        row.draftText ?? "",
+        candidates,
+      ),
       approvedText: row.approvedText,
       approvedSegments: recommendationSegments(row.approvedText, products),
       approvedAt: row.approvedAt?.toISOString() ?? null,
@@ -401,6 +405,23 @@ export class MeasurementRecommendationService {
       include: { approvedBy: { select: { displayName: true } } },
     });
   }
+}
+
+/**
+ * A VÁZLAT CSAK SAJÁT ADATTAL ALÁTÁMASZTOTT HIVATKOZÁSAI (Balázs, 2026-10-12
+ * 12:42 UTC): a jóváhagyó előtte látja őket, de a jóváhagyást nem tiltják.
+ * Egyszer mindegyik, a szöveg sorrendjében.
+ */
+export function unverifiedReferences(
+  draftText: string,
+  candidates: readonly MeasurementRecommendationCandidate[],
+): string[] {
+  const unverified = new Set(
+    candidates.filter((c) => c.unverified === true).map((c) => c.productId),
+  );
+  return [...new Set(recommendationProductIds(draftText))].filter((id) =>
+    unverified.has(id),
+  );
 }
 
 function candidatesOf(row: {

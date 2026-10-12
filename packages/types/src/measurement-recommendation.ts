@@ -79,6 +79,13 @@ export interface MeasurementRecommendationCandidate {
   basis: RecommendationCandidateBasis;
   /** JEV-nél a forrásoldal címe. */
   evidenceRef?: string;
+  /**
+   * JEV-nél `true`, ha a hatást csak a SAJÁT adatunk állítja (a JEV
+   * `UNVERIFIED` eredménye: kategória-szabály vagy a saját termékadat), és
+   * független forrás (gyártó, beszállító) nem erősíti meg. A jóváhagyó ezt
+   * látja (Balázs, 2026-10-12 12:42 UTC). Hiányzó: megerősített, vagy nem JEV.
+   */
+  unverified?: boolean;
 }
 
 /** A belső felület nézete: a vázlat, a jóváhagyott szöveg és a jelöltek. */
@@ -93,6 +100,11 @@ export interface MeasurementRecommendationView {
   draftSegments: MeasurementRecommendationSegment[];
   /** A vázlat jelöltlistán kívüli azonosítói: amíg van, nem hagyható jóvá. */
   unknownProductIds: string[];
+  /**
+   * A vázlatban hivatkozott, csak saját adattal alátámasztott jelöltek
+   * (`unverified`). Nem tiltja a jóváhagyást, de a jóváhagyó előtte látja.
+   */
+  unverifiedProductIds: string[];
   /** A vázlatban hibás alakú hivatkozás áll (`{{`/`}}` marad): nem hagyható jóvá. */
   malformedReference: boolean;
   approvedText: string | null;

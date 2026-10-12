@@ -48,6 +48,7 @@ const draft = (
     { kind: "text", text: "." },
   ],
   unknownProductIds: [],
+  unverifiedProductIds: [],
   malformedReference: false,
   approvedText: null,
   approvedSegments: [],
@@ -127,6 +128,57 @@ describe("MeasurementRecommendationPanel (2b3983e1)", () => {
       "ismeretlen termék (x9)",
     );
     expect(screen.getByRole("button", { name: "Jóváhagyás" })).toBeDisabled();
+  });
+
+  it("WEB-RECO-UNVERIFIED: a referenced product backed only by our own data is named before the approval, which stays on", async () => {
+    api.measurementRecommendation.mockResolvedValue(
+      draft({
+        unverifiedProductIds: ["p1"],
+        candidates: [
+          {
+            productId: "p1",
+            name: "Kitalált KH puffer",
+            category: "Termékek > Nyomelemek",
+            effects: [{ parameterCode: "KH", direction: "EMEL" }],
+            basis: "JEV",
+            unverified: true,
+          },
+        ],
+      }),
+    );
+    panel();
+    expect(
+      await screen.findByText(
+        /Független forrás nem erősíti meg ezeknek a termékeknek a vízhatását.*Kitalált KH puffer/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Kitalált KH puffer · JEV, csak saját adat, nincs független megerősítése/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Jóváhagyás" })).toBeEnabled();
+  });
+
+  it("WEB-RECO-VERIFIED: a verified JEV candidate carries no warning", async () => {
+    api.measurementRecommendation.mockResolvedValue(
+      draft({
+        candidates: [
+          {
+            productId: "p1",
+            name: "Kitalált KH puffer",
+            category: "Termékek > Nyomelemek",
+            effects: [{ parameterCode: "KH", direction: "EMEL" }],
+            basis: "JEV",
+          },
+        ],
+      }),
+    );
+    panel();
+    expect(
+      await screen.findByText(/Kitalált KH puffer · JEV$/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Független forrás nem erősíti meg/)).toBeNull();
   });
 
   it("WEB-RECO-APPROVE: an edited text is saved first, and the approval goes on the saved state", async () => {
