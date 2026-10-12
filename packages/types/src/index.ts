@@ -32,6 +32,7 @@ export {
 export {
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
+  BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUSES,
   BILLING_SOURCE_TYPES,
   INVOICE_FORMATS,
@@ -67,6 +68,8 @@ export type {
 } from "./billing-document-amounts.js";
 export type {
   BillingDocumentAdvanceLink,
+  BillingDocumentDeductedAdvance,
+  BillingDocumentFinalInvoiceLink,
   BillingDocumentCancellation,
   BillingDocumentCustomer,
   BillingDocumentDetail,

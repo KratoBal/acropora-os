@@ -215,6 +215,12 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
       // a díjbekérőből készült bizonylat a díjbekérő számát viszi
       // (`dijbekeroSzamlaszam`; számlázási brief, 2. pont)
       proformaNumber: row.proformaInvoice?.invoiceNumber ?? null,
+      // a végszámla a levont előleg számát viszi (`elolegSzamlaszam`;
+      // számlázási brief, 3. pont); máshol a hivatkozott sor nem előleg
+      advanceNumber:
+        row.documentType === "FINAL_INVOICE"
+          ? (row.referencedInvoice?.invoiceNumber ?? null)
+          : null,
       buyer: {
         name: buyer.name,
         // `orszag` is free text (XSD string): only for an EU buyer, by name

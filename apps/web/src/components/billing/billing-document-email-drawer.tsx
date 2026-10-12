@@ -111,6 +111,7 @@ const ACCUSATIVE: Record<BillingDocumentType, string> = {
   PROFORMA: "díjbekérőt",
   ADVANCE_INVOICE: "előlegszámlát",
   DELIVERY_NOTE: "szállítólevelet",
+  FINAL_INVOICE: "végszámlát",
 };
 
 export function defaultBillingEmail(

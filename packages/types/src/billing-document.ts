@@ -25,8 +25,20 @@ export const BILLING_DOCUMENT_TYPES = [
   "PROFORMA",
   "ADVANCE_INVOICE",
   "DELIVERY_NOTE",
+  "FINAL_INVOICE",
 ] as const;
 export type BillingDocumentType = (typeof BILLING_DOCUMENT_TYPES)[number];
+
+/**
+ * AMI ÜRES LAPRÓL IS KÉSZÍTHETŐ. A végszámla nem: csak egy kiállított
+ * előlegszámláról jön (`POST billing/documents/:id/final`), mert az előleg
+ * száma nélkül a Számlázz.hu nem tudja, mit von le (számlázási brief, 3. pont).
+ * A típusválasztó ezt kínálja, a szerver ugyanezzel utasítja el a kézi
+ * létrehozást.
+ */
+export const BILLING_NEW_DOCUMENT_TYPES = BILLING_DOCUMENT_TYPES.filter(
+  (type) => type !== "FINAL_INVOICE",
+);
 
 /** A formátum KÜLÖN dimenzió, nem a dokumentumtípus egy értéke (brief 3. pont). */
 export const INVOICE_FORMATS = ["PAPER", "ELECTRONIC"] as const;
@@ -138,6 +150,16 @@ const CAPABILITIES: Record<BillingDocumentType, BillingDocumentCapabilities> = {
     summaryTitle: "Szállítólevél összesen",
     label: "Szállítólevél",
   },
+  // a végszámla számla: ugyanazok a formátumai és fizetési mezői
+  FINAL_INVOICE: {
+    type: "FINAL_INVOICE",
+    formats: ["PAPER", "ELECTRONIC"],
+    defaultFormat: "ELECTRONIC",
+    showsPaymentFields: true,
+    newTitle: "Új végszámla",
+    summaryTitle: "Végszámla összesen",
+    label: "Végszámla",
+  },
 };
 
 export function getDocumentCapabilities(
@@ -216,6 +238,7 @@ const ACCUSATIVE: Record<BillingDocumentType, string> = {
   PROFORMA: "a díjbekérőt",
   ADVANCE_INVOICE: "az előlegszámlát",
   DELIVERY_NOTE: "a szállítólevelet",
+  FINAL_INVOICE: "a végszámlát",
 };
 
 /**

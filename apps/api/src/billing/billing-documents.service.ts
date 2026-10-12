@@ -16,6 +16,7 @@ import type {
   InvoiceFormat,
 } from "@acropora/types";
 import {
+  BILLING_NEW_DOCUMENT_TYPES,
   computeBillingDocumentAmounts,
   getDocumentCapabilities,
 } from "@acropora/types";
@@ -61,8 +62,24 @@ export class BillingDocumentsService {
     const proformaPaid = detail.proforma?.number
       ? await this.repository.feedPaid(detail.proforma.number)
       : null;
+    // az előlegszámlán a belőle készült végszámla (brief, 3. pont)
+    const final =
+      row.documentType === "ADVANCE_INVOICE"
+        ? await this.repository.finalInvoiceOf(id)
+        : null;
     return {
       ...detail,
+      ...(row.documentType === "ADVANCE_INVOICE"
+        ? {
+            finalInvoice: final
+              ? {
+                  id: final.id,
+                  number: final.invoiceNumber,
+                  status: final.status as BillingDocumentStatus,
+                }
+              : null,
+          }
+        : {}),
       ...(siteCancelled ? { cancellation: FEED_CANCELLATION } : {}),
       ...(detail.proforma
         ? { proforma: { ...detail.proforma, paid: proformaPaid } }
@@ -74,6 +91,12 @@ export class BillingDocumentsService {
     input: BillingDocumentDraftDto,
     user: AuthenticatedUser,
   ): Promise<BillingDocumentDetail> {
+    if (
+      !(BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
+        input.documentType,
+      )
+    )
+      throw new BadRequestException(FINAL_ONLY_FROM_ADVANCE);
     const { draft, partner } = await this.prepare(input);
     const id = input.id?.trim() || randomUUID();
     await this.repository.create({
@@ -128,11 +151,7 @@ export class BillingDocumentsService {
       // a sztornózott előleg helyére ugyanebből a díjbekérőből nem készül új
       // (díjbekérőnként egy), és ezt kimondjuk, nem a régit adjuk vissza
       // csendben (barracuda, #1670)
-      if (
-        (existing.correctionInvoices ?? []).some(
-          (storno) => storno.status === "ISSUED",
-        )
-      )
+      if (stornoed(existing))
         throw new ConflictException(
           `Ennek a díjbekérőnek az előlegszámláját (${existing.invoiceNumber ?? existing.id}) sztornózták; ugyanebből a díjbekérőből új előleg nem készül. Új díjbekérőt állíts ki.`,
         );
@@ -153,19 +172,7 @@ export class BillingDocumentsService {
       note: proforma.note,
       sourceType: proforma.sourceType as BillingSourceType | null,
       sourceId: proforma.sourceId,
-      lines: proforma.lines
-        .filter((line) => line.kind === "ITEM")
-        .map((line) => ({
-          productId: line.productId,
-          variantId: line.variantId,
-          description: line.description,
-          quantity: line.quantity.toString(),
-          unit: line.unit,
-          unitNet: line.unitNet.toString(),
-          vatRatePercent: line.vatRatePercent.toString(),
-          discountPercent: line.discountPercent?.toString() ?? null,
-          comment: line.comment,
-        })),
+      lines: draftLinesOf(proforma),
     });
     await this.repository.create({
       id,
@@ -178,6 +185,93 @@ export class BillingDocumentsService {
     return this.detail(id);
   }
 
+  /**
+   * ELŐLEGSZÁMLÁBÓL VÉGSZÁMLA (számlázási brief, 3. pont; Balázs 2026-10-12
+   * 09:44 UTC „Mehet”). Egy KIÁLLÍTOTT előlegszámlából kitöltött végszámla-
+   * vázlat, az előleghez kötve (`referencedInvoiceId`). A kiállítás ebből
+   * küldi a `vegszamla` jelzőt és az `elolegSzamlaszam`-ot: az előleg
+   * levonását a Számlázz.hu teszi a bizonylatra, ezért itt NINCS negatív
+   * előleg-sor, és az előleg ÁFÁ-ja egyszer jelenik meg.
+   *
+   * A tételek a TELJES ellenérték: ha az előleg díjbekérőből készült, a
+   * díjbekérő tételei, különben az előlegé; a vázlat szerkeszthető. A vevő, a
+   * pénznem, a fizetési mód, a formátum, a hivatkozás és a forrás az előlegé.
+   *
+   * Előlegenként EGY, ahogy a Számlázz.hu is egy végszámlát enged egy
+   * előleghez (docs.szamlazz.hu, bizonylattípusok): az azonosító az előlegből
+   * képződik, a második kattintás ugyanazt a vázlatot kapja.
+   */
+  async finalFromAdvance(
+    advanceId: string,
+    user: AuthenticatedUser,
+  ): Promise<BillingDocumentDetail> {
+    const advance = await this.repository.find(advanceId);
+    if (!advance) throw new NotFoundException("Az előlegszámla nem található.");
+    if (
+      advance.documentType !== "ADVANCE_INVOICE" ||
+      advance.status !== "ISSUED" ||
+      !advance.invoiceNumber ||
+      !advance.customerId
+    )
+      throw new ConflictException(
+        "Végszámla csak kiállított előlegszámláról készíthető.",
+      );
+    // egy sztornózott előleget nincs mit levonni: az OS-ben vagy a Számlázz.hu
+    // felületén sztornózott előleg egyaránt kizár, egy korábbi
+    // vázlat visszaadását is (az a sztornózott előleget vonná le)
+    if (
+      stornoed(advance) ||
+      (await this.repository.feedTwinCancelled(advance.invoiceNumber))
+    )
+      throw new ConflictException(
+        `A(z) ${advance.invoiceNumber} előlegszámlát sztornózták, ezért nem készülhet belőle végszámla.`,
+      );
+    const id = finalIdFor(advanceId);
+    const existing = await this.repository.find(id);
+    if (existing) {
+      // a sztornózott végszámla helyére ugyanebből az előlegből nem készül új
+      // (előlegenként egy), és ezt kimondjuk (a #1670 mintája)
+      if (stornoed(existing))
+        throw new ConflictException(
+          `Ennek az előlegszámlának a végszámláját (${existing.invoiceNumber ?? existing.id}) sztornózták; ugyanebből az előlegből új végszámla nem készül.`,
+        );
+      return this.detail(id);
+    }
+    const proforma = advance.proformaInvoiceId
+      ? await this.repository.find(advance.proformaInvoiceId)
+      : null;
+    const linesFrom = proforma ?? advance;
+    const { draft, partner } = await this.prepare({
+      id,
+      documentType: "FINAL_INVOICE",
+      invoiceFormat:
+        (advance.invoiceFormat as InvoiceFormat | null) ??
+        getDocumentCapabilities("FINAL_INVOICE").defaultFormat,
+      customerId: advance.customerId,
+      // a teljesítés napja az áru átadása: azt a kezelő írja be
+      fulfillmentDate: null,
+      dueDate: null,
+      paymentMethod: advance.paymentMethod,
+      currency: advance.currency,
+      language: advance.language ?? "hu",
+      reference: advance.reference,
+      // az előleg megjegyzése az előlegről szól; a végszámláé üresen indul
+      note: null,
+      sourceType: advance.sourceType as BillingSourceType | null,
+      sourceId: advance.sourceId,
+      lines: draftLinesOf(linesFrom),
+    });
+    await this.repository.create({
+      id,
+      draft,
+      partnerName: partner.name,
+      partnerTaxNumber: partner.taxNumber,
+      createdByUserId: user.id,
+      referencedInvoiceId: advanceId,
+    });
+    return this.detail(id);
+  }
+
   async update(
     id: string,
     input: BillingDocumentDraftDto,
@@ -185,6 +279,20 @@ export class BillingDocumentsService {
     if (!input.expectedUpdatedAt)
       throw new BadRequestException(
         "A mentéshez a legutóbb betöltött állapot időbélyege kell.",
+      );
+    // a végszámla az előlegéhez kötött: mentéskor sem lesz belőle más típus,
+    // és más típusból sem lesz végszámla. A feltételes mentés (`updatedAt`)
+    // garantálja, hogy a mért típus a mentett sor típusa.
+    const current = await this.repository.find(id);
+    if (
+      current &&
+      (current.documentType === "FINAL_INVOICE") !==
+        (input.documentType === "FINAL_INVOICE")
+    )
+      throw new BadRequestException(
+        current.documentType === "FINAL_INVOICE"
+          ? "A végszámla típusa nem változtatható: az előlegszámlájához kötött."
+          : FINAL_ONLY_FROM_ADVANCE,
       );
     const { draft, partner } = await this.prepare(input);
     const outcome = await this.repository.update({
@@ -323,3 +431,33 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
 
 /** A díjbekérő előlegszámlájának azonosítója: díjbekérőnként egy. */
 export const advanceIdFor = (proformaId: string) => `${proformaId}-eloleg`;
+
+/** Az előlegszámla végszámlájának azonosítója: előlegenként egy. */
+export const finalIdFor = (advanceId: string) => `${advanceId}-vegszamla`;
+
+const FINAL_ONLY_FROM_ADVANCE =
+  "Végszámla csak kiállított előlegszámláról készíthető (Végszámla készítése).";
+
+/** Az OS-ben kiállított sztornója van-e (a kapcsolat előtti sorokon hiányzik). */
+const stornoed = (row: BillingDocumentRow) =>
+  (row.correctionInvoices ?? []).some((storno) => storno.status === "ISSUED");
+
+/**
+ * Egy bizonylat tételei vázlat-bemenetként. Csak a tételek: a kedvezmény-sort
+ * a normalizálás a tétel százalékából újraépíti, egyszer.
+ */
+function draftLinesOf(row: BillingDocumentRow) {
+  return row.lines
+    .filter((line) => line.kind === "ITEM")
+    .map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId,
+      description: line.description,
+      quantity: line.quantity.toString(),
+      unit: line.unit,
+      unitNet: line.unitNet.toString(),
+      vatRatePercent: line.vatRatePercent.toString(),
+      discountPercent: line.discountPercent?.toString() ?? null,
+      comment: line.comment,
+    }));
+}

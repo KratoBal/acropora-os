@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   BILLING_DOCUMENT_STATUSES,
   BILLING_DOCUMENT_TYPES,
+  BILLING_NEW_DOCUMENT_TYPES,
   billingDrawerCta,
   billingEmailDelivery,
   billingIssueConfirm,
@@ -26,7 +27,18 @@ describe("getDocumentCapabilities", () => {
         ["Új díjbekérő", "Díjbekérő összesen"],
         ["Új előlegszámla", "Előlegszámla összesen"],
         ["Új szállítólevél", "Szállítólevél összesen"],
+        ["Új végszámla", "Végszámla összesen"],
       ],
+    );
+  });
+
+  it("offers every type on an empty page but the final invoice, which only comes from an advance", () => {
+    assert.deepEqual(
+      BILLING_DOCUMENT_TYPES.filter(
+        (type) =>
+          !(BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(type),
+      ),
+      ["FINAL_INVOICE"],
     );
   });
 

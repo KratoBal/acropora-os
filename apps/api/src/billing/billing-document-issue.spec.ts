@@ -298,6 +298,40 @@ describe("the proforma's number on the advance", () => {
   });
 });
 
+/*
+  A LEVONT ELŐLEG SZÁMA A VÉGSZÁMLÁN (számlázási brief, 3. pont). MI PIROSÍT:
+  a végszámla kiállítása nem viszi az előleg számát; egy nem végszámla sor a
+  hivatkozott számla számát előlegként küldi (a sztornó sor is hivatkozik).
+*/
+describe("the advance's number on the final invoice", () => {
+  it("goes as elolegSzamlaszam on a final invoice, and only there", () => {
+    const xml = (value: BillingDocumentRow) => {
+      const input = buildIssueInput(value);
+      assert.ok(input.ok);
+      return buildSzamlazzAgentInvoiceXml(
+        toSzamlazzAgentInput(input.document, {
+          agentKey: "k",
+          previewOnly: false,
+        }),
+      );
+    };
+    const referencedInvoice = {
+      id: "a-1",
+      documentType: "ADVANCE_INVOICE",
+      invoiceNumber: "E-ELO-1",
+      grossAmount: d("1270"),
+    };
+    assert.match(
+      xml(row({ documentType: "FINAL_INVOICE", referencedInvoice })),
+      /<vegszamla>true<\/vegszamla><elolegSzamlaszam>E-ELO-1<\/elolegSzamlaszam>/,
+    );
+    assert.doesNotMatch(
+      xml(row({ referencedInvoice })),
+      /elolegSzamlaszam|vegszamla/,
+    );
+  });
+});
+
 describe("vatRateText", () => {
   it("writes the rate as Számlázz.hu's afakulcs", () => {
     assert.equal(vatRateText("27.00"), "27");
