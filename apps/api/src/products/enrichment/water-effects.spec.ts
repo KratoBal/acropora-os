@@ -16,7 +16,7 @@ describe("a szótár a leírásra", () => {
   it("angol, magyar és német kifejezés, ékezettől és kis-nagybetűtől függetlenül", () => {
     assert.equal(
       readWaterEffects(
-        "Raises alkalinity quickly. A calcium supplement for reefs.",
+        "Raises alkalinity quickly. It also raises calcium in reefs.",
       ).raw,
       "KALCIUM:EMEL;KH:EMEL",
     );
@@ -62,6 +62,57 @@ describe("a szótár a leírásra", () => {
       "Detoxifies ammonia and chlorine.",
       "A pH buffer for stable values.",
       "Kompatibilis a 40 kHz-es vezérlővel.",
+    ])
+      assert.equal(readWaterEffects(text).raw, null, text);
+  });
+});
+
+/*
+  BARRACUDA #1669-ES REVIEW-JA. MI PIROSÍT: egy emoji után a kivonat a nyers
+  szövegben elcsúszik; egy só- vagy pótlószer-EMLÍTÉS („minden tengeri sóhoz”,
+  „egy kalcium-pótló mellé”) hatás-állításnak számít; a magyar „nincs” vagy az
+  angol „cannot” tagadás nem tagad.
+*/
+describe("a szótár határai (barracuda, #1669)", () => {
+  it("emoji után a kivonat ugyanott van, ahol a találat", () => {
+    // harminc emoji: mindegyik két UTF-16 egység, tehát egy elcsúszás itt
+    // harminc karakter, és a kivonat nem a találatot mutatná
+    const r = readWaterEffects(
+      `${"🐠".repeat(30)} Ez a termék gyorsan emeli a kalciumszintet.`,
+    );
+    assert.equal(r.raw, "KALCIUM:EMEL");
+    // nincs félbevágott emoji (egy elcsúszott ablak a pár közepén vág)
+    assert.doesNotMatch(
+      r.excerpt!,
+      /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/,
+    );
+    // és az ablak a találat UTÁN is a teljes környezetet mutatja
+    const after = readWaterEffects(
+      `${"🐠".repeat(30)} Ez a termék gyorsan emeli a kalciumszintet, és utána ${"x".repeat(200)}`,
+    );
+    assert.match(after.excerpt!, /emeli a kalciumszintet, és utána x{10}/);
+  });
+
+  it("egy só vagy pótlószer említése nem állítás", () => {
+    for (const text of [
+      "Compatible with all reef salts.",
+      "Use with any salt mix or marine salt.",
+      "Geeignet für alle Meersalze und jede Salzmischung.",
+      "Bármely sókeverékhez használható.",
+      "Use alongside a calcium supplement and a magnesium additive.",
+      "Works with every alkalinity buffer and KH booster.",
+      "Kalcium-pótlóval és KH-pufferrel együtt használd.",
+      "Zusammen mit einer Calcium-Ergänzung und KH-Puffer verwenden.",
+    ])
+      assert.equal(readWaterEffects(text).raw, null, text);
+  });
+
+  it("a magyar nincs, sem, ne és az angol cannot, isn't, won't tagad", () => {
+    for (const text of [
+      "Nincs szükség foszfátmegkötőre mellette.",
+      "It cannot remove phosphate.",
+      "This isn't a phosphate remover.",
+      "It won't lower nitrate.",
     ])
       assert.equal(readWaterEffects(text).raw, null, text);
   });

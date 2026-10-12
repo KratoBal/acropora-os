@@ -27,16 +27,15 @@ const CSOKKENT = "(?:remove|removes|reduce|reduces|lower|lowers)";
 export const WATER_EFFECTS_LEXICON: Lexicon = [
   // EMEL
   {
+    // A PÓTLÓSZER FŐNEVEI NEM (barracuda, #1669): „use alongside a calcium
+    // supplement”, „kalcium-pótlóval együtt” egy MÁSIK termék leírásában is áll.
+    // A KH, a kalcium és a magnézium csak az ige-alakból jön.
     code: "KH",
     direction: "EMEL",
     patterns: [
       /emeli a (?:kh|karbonatkemenyseg|lugossag)/,
-      /\bkh[- ]?(?:potlo|puffer)/,
       new RegExp(`\\b${NOVEL} (?:the )?(?:alkalinity|kh)\\b`),
-      /\balkalinity (?:supplement|buffer|booster)\b/,
-      /\bkh (?:buffer|booster|supplement)\b/,
       /erhoht die (?:kh|karbonatharte|alkalinitat)\b/,
-      /\bkh-puffer\b/,
     ],
   },
   {
@@ -44,11 +43,8 @@ export const WATER_EFFECTS_LEXICON: Lexicon = [
     direction: "EMEL",
     patterns: [
       /emeli a kalcium/,
-      /\bkalcium[- ]?(?:potlo|kiegeszito)/,
       new RegExp(`\\b${NOVEL} (?:the )?calcium\\b`),
-      /\bcalcium (?:supplement|additive)\b/,
       /erhoht den (?:calcium|kalzium)gehalt/,
-      /\bcalcium-erganzung/,
     ],
   },
   {
@@ -56,11 +52,8 @@ export const WATER_EFFECTS_LEXICON: Lexicon = [
     direction: "EMEL",
     patterns: [
       /emeli a magnezium/,
-      /\bmagnezium[- ]?potlo/,
       new RegExp(`\\b${NOVEL} (?:the )?magnesium\\b`),
-      /\bmagnesium (?:supplement|additive)\b/,
       /erhoht den magnesiumgehalt/,
-      /\bmagnesium-erganzung/,
     ],
   },
   {
@@ -73,18 +66,16 @@ export const WATER_EFFECTS_LEXICON: Lexicon = [
     ],
   },
   {
-    // a „sea salt” nem: egy adalék leírásában is áll („keverd a tengeri sóhoz”)
+    // A SÓ FŐNEVEI NEM (barracuda, #1669): egy adalék leírásában tipikusan
+    // említésként állnak („compatible with all reef salts”, „für alle
+    // Meersalze”, „bármely sókeverékhez”), és két oldal ugyanazt a gyártói
+    // szöveget hozva ellenőrzötté tenné. A sót a kategória-szabály fedi
+    // (Termékek > Tengeri só); itt csak az ige-alak marad.
     code: "SOTARTALOM",
     direction: "EMEL",
     patterns: [
-      /\bsokeverek/,
       /emeli a sotartalm/,
-      /\breef salt\b/,
-      /\bsalt mix(?:ture)?\b/,
-      /\bmarine salt\b/,
       new RegExp(`\\b${NOVEL} (?:the )?salinity\\b`),
-      /\bmeersalz\b/,
-      /\bsalzmischung\b/,
     ],
   },
   {
@@ -233,18 +224,35 @@ const TAGADAS = new Set([
   "never",
   "doesn",
   "don",
+  // a felbontás utáni alakok: isn't, won't, cannot (barracuda, #1669)
+  "isn",
+  "won",
+  "cannot",
   "nem",
+  "nincs",
+  "sem",
+  "ne",
   "nelkul",
   "nicht",
   "kein",
   "keine",
 ]);
 
-/** Kisbetű, ékezet nélkül; a szöveg hossza változatlan, így a kivonat a nyers szövegből jön. */
+/**
+ * Kisbetű, ékezet nélkül; a szöveg hossza UTF-16 egységben változatlan, így a
+ * találat indexe a nyers szövegben is ugyanott van, és a kivonat onnan jön.
+ * Kódpontonként: ha a normalizált alak ugyanolyan hosszú, az marad; egy egységes
+ * kódpontból az első karakter; egy BMP-n kívüli (emoji, két egység) annyi szóköz,
+ * ahány egységből áll (barracuda, #1669: eddig egy emoji eggyel rövidebb lett,
+ * és a kivonat a nyers szövegben elcsúszott).
+ */
 function normalizalt(text: string): string {
   return [...text]
-    .map((ch) => ch.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase())
-    .map((ch) => (ch.length === 1 ? ch : (ch[0] ?? " ")))
+    .map((orig) => {
+      const n = orig.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+      if (n.length === orig.length) return n;
+      return orig.length === 1 ? (n[0] ?? " ") : " ".repeat(orig.length);
+    })
     .join("");
 }
 
@@ -263,8 +271,12 @@ const KORNYEZET = 40;
 
 /** A szöveg egy darabja a találat körül, szóközre igazítva. */
 function kivonat(text: string, start: number, end: number): string {
-  const from = Math.max(0, start - KORNYEZET);
-  const to = Math.min(text.length, end + KORNYEZET);
+  let from = Math.max(0, start - KORNYEZET);
+  let to = Math.min(text.length, end + KORNYEZET);
+  // egy emoji két fele közé nem vágunk (barracuda, #1669)
+  const low = (i: number) => /[\udc00-\udfff]/.test(text[i] ?? "");
+  if (from > 0 && low(from)) from++;
+  if (to < text.length && low(to)) to--;
   return `${from > 0 ? "…" : ""}${text.slice(from, to).replace(/\s+/g, " ").trim()}${to < text.length ? "…" : ""}`;
 }
 
