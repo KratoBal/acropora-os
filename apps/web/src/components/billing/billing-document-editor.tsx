@@ -55,6 +55,7 @@ import {
   type EditorState,
 } from "./billing-editor-state";
 import { BillingPartnerCard } from "./billing-partner-card";
+import { useBillingDocumentPdf } from "./use-billing-document-pdf";
 import {
   clearPosInvoiceHandoff,
   editorLinesFromPosHandoff,
@@ -64,6 +65,20 @@ import {
 export const BILLING_EDITOR_PATH = "/penzugy/szamlazas";
 
 const EDITABLE_STATUSES = ["DRAFT", "ISSUE_FAILED"];
+
+const PDF_MISSING =
+  "A hivatalos PDF még nem érhető el; a részletek oldalán később megnézhető.";
+
+/** A sáv adata egy kiállított bizonylatból; minden más állapotban nincs sáv. */
+function issuedOf(detail: BillingDocumentDetail) {
+  return detail.status === "ISSUED" && detail.documentNumber
+    ? {
+        id: detail.id,
+        number: detail.documentNumber,
+        pdfAvailable: detail.pdf?.available === true,
+      }
+    : null;
+}
 
 function today(): string {
   // A helyi nap, nem az UTC-é: este tizenegykor a teljesítés ne a holnap legyen.
@@ -146,7 +161,18 @@ export function BillingDocumentEditor({
   });
   const [confirmIssue, setConfirmIssue] = useState(false);
   const [issuing, setIssuing] = useState(false);
-  const [issuedNumber, setIssuedNumber] = useState<string | null>(null);
+  /*
+    A KIÁLLÍTOTT BIZONYLAT, A SÁVHOZ (hétfői lista M2, Luca kérése): a szám és
+    hogy a hivatalos PDF megvan-e. Betöltéskor is kitöltődik, mert egy új
+    számla a kiállítás után a saját szerkesztő-útvonalára vált, és ott a lap
+    újra betölt: a sáv nem csak a kiállító kattintás állapotában élhet.
+  */
+  const [issued, setIssued] = useState<{
+    id: string;
+    number: string;
+    pdfAvailable: boolean;
+  } | null>(null);
+  const pdf = useBillingDocumentPdf(token);
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
   /** A kiállítás utáni kiküldés kimenete: a címzettek, vagy a hiba. */
   const [sent, setSent] = useState<
@@ -180,6 +206,7 @@ export function BillingDocumentEditor({
       .then((detail) => {
         setState(fromDetail(detail));
         setStatus(detail.status);
+        setIssued(issuedOf(detail));
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -312,7 +339,7 @@ export function BillingDocumentEditor({
       );
       setState(fromDetail(issued));
       setStatus(issued.status);
-      setIssuedNumber(issued.documentNumber);
+      setIssued(issuedOf(issued));
       if (created)
         router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
       if (delivery === "REQUIRED") await sendAfterIssue(issued);
@@ -446,11 +473,44 @@ export function BillingDocumentEditor({
         }
       />
 
-      {issuedNumber ? (
+      {issued ? (
         <Alert
           variant="info"
-          title={`Kiállítva: ${issuedNumber}`}
+          title={`Kiállítva: ${issued.number}`}
           description="A bizonylat számát a Számlázz.hu adta."
+          action={
+            <div
+              role="group"
+              aria-label="A kiállított bizonylat PDF-je"
+              className="flex flex-wrap gap-2"
+            >
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => pdf.view(issued.id)}
+                disabled={!issued.pdfAvailable || pdf.busy}
+                title={issued.pdfAvailable ? undefined : PDF_MISSING}
+              >
+                Számlakép megtekintése
+              </PilotButton>
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => pdf.download(issued.id, issued.number)}
+                disabled={!issued.pdfAvailable || pdf.busy}
+                title={issued.pdfAvailable ? undefined : PDF_MISSING}
+              >
+                PDF letöltése
+              </PilotButton>
+            </div>
+          }
+        />
+      ) : null}
+      {pdf.error ? (
+        <Alert
+          variant="danger"
+          title="A PDF nem érhető el"
+          description={pdf.error}
         />
       ) : null}
       {sent?.ok ? (
