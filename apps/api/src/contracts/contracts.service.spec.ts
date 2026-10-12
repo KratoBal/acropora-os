@@ -219,3 +219,118 @@ describe("ContractsService.update", () => {
     assert.equal(receivedItems[0]!.id, "item-1");
   });
 });
+
+/*
+  A SZERZŐDÉS FAJTÁJA (hétfői lista M4). MI PIROSÍT: ha a beszerzési tétel
+  megtartaná az alkalmat, a helyszínt, az eszközt vagy a javítási díjat; ha
+  mennyiségi egység nélkül, vagy ismeretlennel menthető lenne; ha a
+  karbantartási tétel alkalom nélkül menthető lenne; ha egy megrendelőlappal
+  bíró szerződés átállhatna Beszerzésre.
+*/
+describe("ContractsService, a fajta", () => {
+  const PURCHASE_ITEM = {
+    description: "Tengeri só, 25 kg",
+    unitNet: "18000",
+    quantity: "4",
+    vatRatePercent: "27",
+    unitOfMeasureId: "uom-zsak",
+    // egy karbantartási változatból maradt mezők: ezek nem maradhatnak meg
+    occasionsPerYear: 4,
+    departmentId: "dep-1",
+    assetIds: ["asset-1"],
+    repairWeight: "90",
+  };
+  const purchaseInput = (item: Record<string, unknown>) =>
+    ({
+      ...CREATE_INPUT,
+      kind: "PURCHASE",
+      items: [item],
+    }) as unknown as CreateContractDto;
+  const outcome = (run: () => Promise<unknown>) =>
+    run().then(
+      (stored) => stored,
+      (error: { status?: number; message: string }) =>
+        `${error.status}: ${error.message}`,
+    );
+
+  it("CONTRACT-KIND-NORMALIZE: a beszerzési tétel csak a saját mezőit tartja meg", async () => {
+    let stored: { kind?: string; items?: Record<string, unknown>[] } = {};
+    const { service } = makeService({
+      quantityUnitIds: async (ids: string[]) =>
+        new Set(ids.filter((id) => id === "uom-zsak")),
+      create: async (input: typeof stored) => {
+        stored = input;
+        return { id: "contract-2" };
+      },
+    });
+    const results = [
+      await outcome(() => service.create(purchaseInput(PURCHASE_ITEM))),
+      await outcome(() =>
+        service.create(
+          purchaseInput({ ...PURCHASE_ITEM, unitOfMeasureId: undefined }),
+        ),
+      ),
+      await outcome(() =>
+        service.create(
+          purchaseInput({ ...PURCHASE_ITEM, unitOfMeasureId: "uom-mg-l" }),
+        ),
+      ),
+      await outcome(() =>
+        service.create({
+          ...CREATE_INPUT,
+          items: [{ ...CREATE_INPUT.items[0]!, occasionsPerYear: undefined }],
+        } as CreateContractDto),
+      ),
+    ];
+    const item = stored.items?.[0] ?? {};
+    assert.deepEqual(
+      {
+        results,
+        kind: stored.kind,
+        item: [
+          item.occasionsPerYear,
+          item.unitOfMeasureId,
+          item.departmentId,
+          item.assetIds,
+          item.repairWeight,
+          String(item.quantity),
+        ],
+      },
+      {
+        results: [
+          { id: "contract-2" },
+          "400: A beszerzési tételnél a mennyiségi egység kötelező: Tengeri só, 25 kg.",
+          "400: Ismeretlen mennyiségi egység: Tengeri só, 25 kg.",
+          "400: A karbantartási tételnél az alkalom / év kötelező: Cápasuli RO karbantartás.",
+        ],
+        kind: "PURCHASE",
+        item: [null, "uom-zsak", null, [], null, "4"],
+      },
+      "CONTRACT-KIND-NORMALIZE",
+    );
+  });
+
+  it("CONTRACT-KIND-SWITCH-409: megrendelőlap után nem állhat át Beszerzésre", async () => {
+    const switchTo = (orders: number) => {
+      const { service } = makeService({
+        maintenanceOrderCount: async () => orders,
+        quantityUnitIds: async (ids: string[]) => new Set(ids),
+      });
+      return outcome(() =>
+        service.update("contract-1", {
+          kind: "PURCHASE",
+          items: [PURCHASE_ITEM],
+        } as unknown as UpdateContractDto),
+      );
+    };
+    const [blocked, allowed] = [await switchTo(1), await switchTo(0)];
+    assert.deepEqual(
+      [blocked, (allowed as { kind?: string }).kind],
+      [
+        "409: Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre.",
+        "PURCHASE",
+      ],
+      "CONTRACT-KIND-SWITCH-409",
+    );
+  });
+});

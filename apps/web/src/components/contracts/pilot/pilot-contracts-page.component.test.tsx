@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   customers: vi.fn(),
   create: vi.fn(),
+  quantityUnits: vi.fn(),
 }));
 const worksheetsApi = vi.hoisted(() => ({ departments: vi.fn() }));
 const assetsApi = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
@@ -366,6 +367,106 @@ describe("PilotContractsPage -- javítási díjak", () => {
         .getByText("Szerződés mentése")
         .closest("button")!
         .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+});
+
+/*
+  A BESZERZÉSI SZERZŐDÉS FELVITELE (hétfői lista M4). MI PIROSÍT: ha a
+  „Beszerzés” mellett is az alkalom / év mező állna, vagy a javítási díjak és a
+  helyszín; ha a mennyiségi egység nem a szerződés egységeiből választható; ha
+  a mentés karbantartási mezőket is küldene, vagy a fajtát nem.
+*/
+describe("PilotContractsPage -- beszerzési szerződés", () => {
+  beforeEach(() => {
+    auth.session = session();
+    api.list.mockReset().mockResolvedValue([]);
+    api.customers
+      .mockReset()
+      .mockResolvedValue([
+        { id: "customer-1", displayName: "Fővárosi Állatkert" },
+      ]);
+    api.create.mockReset().mockResolvedValue({ id: "contract-2" });
+    api.quantityUnits
+      .mockReset()
+      .mockResolvedValue([{ id: "uom-zsak", code: "zsák", name: "zsák" }]);
+    worksheetsApi.departments
+      .mockReset()
+      .mockResolvedValue({ items: [DEPARTMENT] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("WEB-CONTRACT-NEW-PURCHASE: csak a beszerzés öt mezője, és azok mennek", async () => {
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fireEvent.click(screen.getByText("Új szerződés"));
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "customer-1" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Beszerzés" }));
+    await screen.findByRole("option", { name: "zsák (zsák)" });
+
+    const hidden = [
+      screen.queryByLabelText("Alkalom / év"),
+      screen.queryByLabelText("1. tétel Súlyszám"),
+      screen.queryByLabelText("Helyszín"),
+    ];
+    for (const [label, value] of [
+      ["Szerződésszám *", "SZ2026/0000020"],
+      ["Szerződés címe *", "Só beszerzés"],
+      ["Érvényesség kezdete *", "2026-01-01"],
+      ["Tétel leírása", "Tengeri só, 25 kg"],
+      ["Nettó egységár", "18000"],
+      ["Darabszám", "4"],
+      ["Mennyiségi egység", "uom-zsak"],
+      ["ÁFA %", "27"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    expect(screen.getByText(/Nettó összesen/).textContent).toMatch(/72.000 Ft/);
+    fireEvent.click(screen.getByText("Szerződés mentése"));
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const sent = api.create.mock.calls[0]![1];
+    expect(
+      [hidden, sent.kind, sent.items],
+      "WEB-CONTRACT-NEW-PURCHASE",
+    ).toEqual([
+      [null, null, null],
+      "PURCHASE",
+      [
+        {
+          description: "Tengeri só, 25 kg",
+          unitNet: "18000",
+          quantity: "4",
+          vatRatePercent: "27",
+          unitOfMeasureId: "uom-zsak",
+          occasionsPerYear: null,
+        },
+      ],
+    ]);
+  });
+
+  it("egység nélkül a beszerzési tétel nem menthető", async () => {
+    render(<PilotContractsPage />);
+    await screen.findByText("Új szerződés");
+    fireEvent.click(screen.getByText("Új szerződés"));
+    fireEvent.change(screen.getByLabelText("Partner"), {
+      target: { value: "customer-1" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Beszerzés" }));
+    for (const [label, value] of [
+      ["Szerződésszám *", "SZ2026/0000020"],
+      ["Szerződés címe *", "Só beszerzés"],
+      ["Érvényesség kezdete *", "2026-01-01"],
+      ["Tétel leírása", "Tengeri só, 25 kg"],
+      ["Nettó egységár", "18000"],
+    ] as const)
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    expect(
+      screen
+        .getByText("Szerződés mentése")
+        .closest("button")!
+        .hasAttribute("disabled"),
+      "WEB-CONTRACT-PURCHASE-UNIT",
     ).toBe(true);
   });
 });

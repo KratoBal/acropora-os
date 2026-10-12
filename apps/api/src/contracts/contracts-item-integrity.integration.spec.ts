@@ -105,6 +105,10 @@ describe("Szerződés-tétel integritás", { skip: gate.mode === "skip" }, () =>
       });
       await prisma.contract.deleteMany({ where: { id: { in: contractIds } } });
     }
+    // a beszerzési tétel egysége Restrict-tel köt: a szerződés után törölhető
+    await prisma.unitOfMeasure.deleteMany({
+      where: { code: { startsWith: PREFIX } },
+    });
     await prisma.asset.deleteMany({
       where: { assetNumber: { startsWith: PREFIX } },
     });
@@ -413,6 +417,59 @@ describe("Szerződés-tétel integritás", { skip: gate.mode === "skip" }, () =>
           ],
         }),
       /idegen vagy ismeretlen eszköz/,
+    );
+  });
+
+  /*
+    A BESZERZÉSI SZERZŐDÉS AZ ADATBÁZISON (hétfői lista M4): a migráció után
+    a tétel alkalom nélkül, mennyiségi egységgel tárolható, és az adatlap
+    visszaadja az egység kódját és a megrendelőlapok számát. Visszaállítva
+    karbantartásira az alkalom nélküli tétel 400.
+  */
+  it("CONTRACT-PURCHASE-DB: a beszerzési tétel alkalom nélkül, egységgel tárolódik", async () => {
+    const customer = await makeCustomer("P");
+    const unit = await prisma.unitOfMeasure.create({
+      data: { code: `${PREFIX}${suffix}-zsák`, name: "zsák", kind: "QUANTITY" },
+    });
+    const created = (await service.create({
+      customerId: customer.id,
+      number: `${PREFIX}${suffix}-5`,
+      title: "Só beszerzés",
+      validFrom: "2026-01-01",
+      kind: "PURCHASE",
+      items: [
+        {
+          description: "Tengeri só, 25 kg",
+          unitNet: "18000",
+          quantity: "4",
+          vatRatePercent: "27",
+          unitOfMeasureId: unit.id,
+        },
+      ],
+    }))!;
+    const back = await service.detail(created.id);
+    const refused = await service
+      .update(created.id, { kind: "MAINTENANCE" })
+      .then(
+        () => null,
+        (error: { status?: number }) => error.status,
+      );
+    assert.deepEqual(
+      {
+        kind: back.kind,
+        occasions: back.items[0]!.occasionsPerYear,
+        unit: back.items[0]!.unitOfMeasure?.code,
+        orders: back._count.maintenanceOrders,
+        refused,
+      },
+      {
+        kind: "PURCHASE",
+        occasions: null,
+        unit: `${PREFIX}${suffix}-zsák`,
+        orders: 0,
+        refused: 400,
+      },
+      "CONTRACT-PURCHASE-DB",
     );
   });
 });

@@ -466,6 +466,15 @@ enum ContractStatus {
   TERMINATED
 }
 
+/// A szerződés fajtája (hétfői lista M4, Balázs 2026-10-09). A karbantartási
+/// szerződés alkalmakra szól, és megrendelőlap készül belőle; a beszerzési csak
+/// tételeket ad el (leírás, nettó egységár, mennyiség, mennyiségi egység, ÁFA),
+/// és számla készül belőle. A meglévő szerződések mind karbantartásiak.
+enum ContractKind {
+  MAINTENANCE
+  PURCHASE
+}
+
 /// Egy megrendelőlap-kiállítás állapota. ISSUED: a PDF elkészült és kiment.
 /// SIGNED: az aláírt példány visszajött, és a karbantartási lap (ServiceJob +
 /// munkalapok) létrejött belőle. REVOKED: a kiállítás visszavonva, az általa
@@ -3378,6 +3387,7 @@ model Contract {
   validFrom              DateTime
   validTo                DateTime?
   status                 ContractStatus @default(DRAFT)
+  kind                   ContractKind   @default(MAINTENANCE)
   notes                  String?
   /// A vevő SAJÁT szervezeti egysége a megrendelőlapon (pl. "Üzemeltetési
   /// Osztály"). MI TÖLTJÜK KI, nem a vevő -- Balázs döntése (2026-09-24): egy
@@ -3408,8 +3418,12 @@ model ContractItem {
   description              String
   unitNet                  Decimal  @db.Decimal(19, 4)
   quantity                 Decimal  @db.Decimal(19, 6)
-  occasionsPerYear         Int
+  /// Karbantartási tételnél kötelező (a szolgáltatás ellenőrzi); a beszerzési
+  /// tételnek nincs alkalma.
+  occasionsPerYear         Int?
   vatRatePercent           Decimal  @db.Decimal(5, 2)
+  /// A beszerzési tétel mennyiségi egysége (`QUANTITY` fajta); ott kötelező.
+  unitOfMeasureId          String?
   departmentId             String?
   /// JAVÍTÁSI DÍJAK (kártya 3d80a18d, Balázs 2026-10-05 08:42 UTC; minta:
   /// exchange/szerzodes-javitasi-dijak-minta-2026-10-05.png). Mind nem kötelező,
@@ -3424,12 +3438,14 @@ model ContractItem {
   updatedAt                DateTime @updatedAt
 
   contract              Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  unitOfMeasure         UnitOfMeasure?         @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
   department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   assets                ContractItemAsset[]
   maintenanceOrderItems MaintenanceOrderItem[]
 
   @@unique([contractId, position])
   @@index([departmentId])
+  @@index([unitOfMeasureId])
 }
 
 model ContractItemAsset {
@@ -4336,7 +4352,8 @@ model UnitOfMeasure {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
-  performanceAssets Asset[] @relation("AssetPerformanceUnit")
+  performanceAssets Asset[]        @relation("AssetPerformanceUnit")
+  contractItems     ContractItem[]
 
   /// A KOD A FAJTAJAN BELUL EGYEDI, nem globalisan. Egy jel ket vilagban is
   /// allhat (a `l` mennyiseg is, meres is lehet), es egy globalis egyediseg

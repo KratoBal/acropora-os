@@ -1469,3 +1469,9 @@ export type {
   RecommendationTextPart,
   UpdateMeasurementRecommendationInput,
 } from "./measurement-recommendation.js";
+export {
+  CONTRACT_KIND_LABELS,
+  CONTRACT_KINDS,
+  contractPurchaseSwitchBlocker,
+} from "./contract.js";
+export type { ContractKind } from "./contract.js";
