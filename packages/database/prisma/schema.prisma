@@ -8162,7 +8162,7 @@ model ProductEnrichmentSourceFetch {
   outcome    ProductEnrichmentFetchOutcome
   /// Az ok kódja, ha nem FETCHED (pl. ROBOTS_DISALLOWED, CHALLENGE, HTTP_403); FETCHED lapnál a
   /// szótár megjegyzései (tagadott találat, kétirányú kód). Szabad szöveg, ezért nincs hossz-korlátja.
-  reason     String?
+  reason     String?                       @db.VarChar(64)
   httpStatus Int?
   fetchedAt  DateTime
   fieldCount Int                           @default(0)
