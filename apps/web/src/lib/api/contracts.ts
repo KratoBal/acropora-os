@@ -1,3 +1,5 @@
+import type { ContractKind } from "@acropora/types";
+
 import { apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
@@ -15,8 +17,11 @@ export type ContractItemInput = {
   description: string;
   unitNet: string;
   quantity: string;
-  occasionsPerYear: number;
+  /** Karbantartási tételnél kötelező; beszerzésinél `null` (hétfői lista M4). */
+  occasionsPerYear: number | null;
   vatRatePercent: string;
+  /** A beszerzési tétel mennyiségi egysége; ott kötelező. */
+  unitOfMeasureId?: string | null;
   departmentId?: string | null;
   assetIds?: string[];
   /**
@@ -37,6 +42,8 @@ export type ContractInput = {
   validFrom: string;
   validTo?: string | null;
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+  /** Hiányzik: új szerződésnél karbantartási, módosításnál marad a tárolt. */
+  kind?: ContractKind;
   notes?: string | null;
   /**
    * A vevő szervezeti egysége és kapcsolattartója a megrendelőlapon -- MI
@@ -65,8 +72,10 @@ export type ContractItemSummary = {
   description: string;
   unitNet: string;
   quantity: string;
-  occasionsPerYear: number;
+  occasionsPerYear: number | null;
   vatRatePercent: string;
+  unitOfMeasureId: string | null;
+  unitOfMeasure: { id: string; code: string; name: string } | null;
   departmentId: string | null;
   assets: Array<{ assetId: string }>;
   repairFeeWorkdayHours: string | null;
@@ -76,8 +85,11 @@ export type ContractItemSummary = {
   repairTotal: string | null;
 };
 
-export type ContractSummary = Omit<ContractInput, "items"> & {
+export type ContractSummary = Omit<ContractInput, "items" | "kind"> & {
   id: string;
+  kind: ContractKind;
+  /** Hány megrendelőlap készült (a fajtaváltás feltétele, hétfői lista M4). */
+  _count: { maintenanceOrders: number };
   customer: { id: string; displayName: string };
   createdAt: string;
   updatedAt: string;
@@ -109,6 +121,13 @@ export const contractsApi = {
         worksheetPartnerCode: string | null;
       }>
     >(`${base}/customers`, token);
+  },
+  /** A beszerzési tétel mennyiségi egységei (aktív `QUANTITY` egységek). */
+  quantityUnits(token: string) {
+    return apiRequest<Array<{ id: string; code: string; name: string }>>(
+      `${base}/quantity-units`,
+      token,
+    );
   },
   create(token: string, input: ContractInput) {
     return apiRequest<ContractSummary>(base, token, {

@@ -30,6 +30,7 @@ const ACTOR: AuthenticatedUser = {
 function contractRow(
   overrides: Partial<{
     status: string;
+    kind: "MAINTENANCE" | "PURCHASE";
     items: Array<{
       id: string;
       position: number;
@@ -47,6 +48,7 @@ function contractRow(
     number: "SZ2026/0000019",
     title: "Vízgépészet karbantartása",
     status: overrides.status ?? "ACTIVE",
+    kind: overrides.kind ?? "MAINTENANCE",
     organizationalUnitName: "Üzemeltetési Osztály",
     contactPersonName: "Sándor Zsolt",
     customer: {
@@ -129,6 +131,18 @@ describe("MaintenanceOrdersService.issue", () => {
       () =>
         service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
       /aktív szerződésre/,
+    );
+  });
+
+  // hétfői lista M4: a beszerzési szerződésből számla készül, nem megrendelőlap
+  it("MAINTENANCE-ORDER-PURCHASE: beszerzési szerződésre nem állít ki megrendelőlapot", async () => {
+    const { service } = makeService({
+      contractForIssuance: async () => contractRow({ kind: "PURCHASE" }),
+    });
+    await assert.rejects(
+      () =>
+        service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
+      /Beszerzési szerződésre nem állítható ki megrendelőlap/,
     );
   });
 

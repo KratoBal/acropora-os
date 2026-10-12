@@ -1,11 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
+import type { ContractKind } from "@acropora/types";
 
 const contractInclude = {
   customer: { select: { id: true, displayName: true } },
   items: {
     orderBy: { position: "asc" as const },
     include: {
+      unitOfMeasure: { select: { id: true, code: true, name: true } },
       department: { select: { id: true, name: true, code: true } },
       assets: {
         include: {
@@ -14,6 +16,8 @@ const contractInclude = {
       },
     },
   },
+  // a fajtaváltás feltétele (hétfői lista M4): volt-e már megrendelőlap
+  _count: { select: { maintenanceOrders: true } },
   documents: {
     orderBy: { createdAt: "desc" as const },
     select: {
@@ -33,6 +37,7 @@ export type ContractInput = {
   validFrom: Date;
   validTo: Date | null;
   status: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+  kind: ContractKind;
   notes: string | null;
   organizationalUnitName: string | null;
   contactPersonName: string | null;
@@ -48,8 +53,9 @@ export type ContractInput = {
       description: string;
       unitNet: Prisma.Decimal;
       quantity: Prisma.Decimal;
-      occasionsPerYear: number;
+      occasionsPerYear: number | null;
       vatRatePercent: Prisma.Decimal;
+      unitOfMeasureId: string | null;
       departmentId: string | null;
       assetIds: string[];
     } & RepairFees
@@ -127,6 +133,35 @@ export class ContractsRepository {
     });
   }
 
+  /**
+   * A BESZERZÉSI TÉTEL MENNYISÉGI EGYSÉGEI (hétfői lista M4): a `QUANTITY`
+   * fajta aktív egységei, a beállított sorrendben. Itt, és nem a
+   * `/units-of-measure` útján, mert az `service.view` jogot kér, a szerződés
+   * lapja pedig `partners.manage`-et: a kettő nem ugyanaz a kör.
+   */
+  quantityUnits() {
+    return this.database.unitOfMeasure.findMany({
+      where: { kind: "QUANTITY", isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
+      select: { id: true, code: true, name: true },
+    });
+  }
+
+  /** A megadottak közül azok, amik valóban `QUANTITY` fajtájú egységek. */
+  async quantityUnitIds(ids: readonly string[]): Promise<Set<string>> {
+    if (!ids.length) return new Set();
+    const rows = await this.database.unitOfMeasure.findMany({
+      where: { id: { in: [...ids] }, kind: "QUANTITY" },
+      select: { id: true },
+    });
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /** Készült-e már megrendelőlap a szerződéshez (a visszavont is számít). */
+  maintenanceOrderCount(contractId: string) {
+    return this.database.maintenanceOrder.count({ where: { contractId } });
+  }
+
   create(input: ContractInput) {
     return this.database.contract.create({
       data: this.data(input),
@@ -201,6 +236,7 @@ export class ContractsRepository {
           quantity: item.quantity,
           occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent,
+          unitOfMeasureId: item.unitOfMeasureId,
           departmentId: item.departmentId,
           ...repairFeesOf(item),
         };
@@ -273,6 +309,7 @@ export class ContractsRepository {
       validFrom: input.validFrom,
       validTo: input.validTo,
       status: input.status,
+      kind: input.kind,
       notes: input.notes,
       organizationalUnitName: input.organizationalUnitName,
       contactPersonName: input.contactPersonName,
@@ -290,6 +327,7 @@ export class ContractsRepository {
           quantity: item.quantity,
           occasionsPerYear: item.occasionsPerYear,
           vatRatePercent: item.vatRatePercent,
+          unitOfMeasureId: item.unitOfMeasureId,
           departmentId: item.departmentId,
           ...repairFeesOf(item),
           assets: { create: item.assetIds.map((assetId) => ({ assetId })) },
