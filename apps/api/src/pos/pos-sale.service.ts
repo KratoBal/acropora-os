@@ -4,11 +4,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
-import type {
-  CreatePosSaleInput,
-  PosSaleDetail,
-  PosSaleListResponse,
-  PosSaleResult,
+import {
+  POS_MANUAL_LINE_SKU,
+  POS_MANUAL_VAT_RATES,
+  type CreatePosSaleInput,
+  type PosSaleDetail,
+  type PosSaleListResponse,
+  type PosSaleResult,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
@@ -51,6 +53,17 @@ export class PosSaleService {
       );
     }
 
+    // A KÉZI TÉTEL (hétfői lista M3) nem termék: se összevonás, se készlet.
+    // Minden sor pontosan az egyik fajta; a kettő együtt vagy egyik sem hiba.
+    for (const line of input.lines) {
+      const manual = line.description !== undefined;
+      if (manual === (line.variantId !== undefined)) {
+        throw new BadRequestException(
+          "Egy tétel vagy termék, vagy kézi tétel (megnevezéssel).",
+        );
+      }
+    }
+
     // Merge duplicate variantId entries defensively; the cart UI shouldn't
     // send the same product as two separate lines, but don't trust the
     // client for something this easy to get right server-side.
@@ -69,6 +82,7 @@ export class PosSaleService {
           "A tételkedvezmény 0 és 100% közötti lehet.",
         );
       }
+      if (line.variantId === undefined) continue;
       const existing = mergedByVariant.get(line.variantId);
       if (existing) {
         existing.quantity += line.quantity;
@@ -102,7 +116,89 @@ export class PosSaleService {
     let totalTax = new Prisma.Decimal(0);
     let totalGross = new Prisma.Decimal(0);
 
-    for (const [variantId, cartLine] of mergedByVariant) {
+    /** Egy sor összegei, a termékes és a kézi soron ugyanígy. */
+    const price = (
+      label: string,
+      cartLine: {
+        quantity: number;
+        unitGross: number;
+        discountPercent: number;
+      },
+      taxRate: Prisma.Decimal,
+    ) => {
+      if (!Number.isFinite(cartLine.quantity) || cartLine.quantity <= 0) {
+        throw new BadRequestException(`Érvénytelen mennyiség: ${label}.`);
+      }
+      if (!Number.isFinite(cartLine.unitGross) || cartLine.unitGross < 0) {
+        throw new BadRequestException(`Érvénytelen eladási ár: ${label}.`);
+      }
+      const quantity = new Prisma.Decimal(cartLine.quantity);
+      const unitGross = new Prisma.Decimal(cartLine.unitGross);
+      const unitNet = unitGross.dividedBy(taxRate.dividedBy(100).plus(1));
+      const lineDiscountPercent = new Prisma.Decimal(cartLine.discountPercent);
+      const lineDiscountFactor = new Prisma.Decimal(1).minus(
+        lineDiscountPercent.dividedBy(100),
+      );
+      const lineGross = unitGross.times(quantity).times(lineDiscountFactor);
+      const lineNet = unitNet.times(quantity).times(lineDiscountFactor);
+      const lineTax = lineGross.minus(lineNet);
+
+      totalNet = totalNet.plus(lineNet);
+      totalTax = totalTax.plus(lineTax);
+      totalGross = totalGross.plus(lineGross);
+      return {
+        quantity,
+        taxRate,
+        unitNet,
+        lineGross,
+        discountPercent: lineDiscountPercent.isZero()
+          ? null
+          : lineDiscountPercent,
+      };
+    };
+
+    // A sorrend a kosáré: a kézi tétel ott áll, ahová felvették, a termék az
+    // első előfordulásánál (összevonva).
+    const emitted = new Set<string>();
+    for (const line of input.lines) {
+      if (line.variantId === undefined) {
+        const description = (line.description ?? "").trim();
+        if (!description) {
+          throw new BadRequestException("A kézi tételnek megnevezés kell.");
+        }
+        const vat = line.vatRatePercent;
+        if (
+          vat === undefined ||
+          !(POS_MANUAL_VAT_RATES as readonly number[]).includes(vat)
+        ) {
+          throw new BadRequestException(
+            `A kézi tétel ÁFA-kulcsa ${POS_MANUAL_VAT_RATES.join(", ")}% lehet: ${description}.`,
+          );
+        }
+        preparedLines.push({
+          variantId: null,
+          sku: POS_MANUAL_LINE_SKU,
+          productName: description,
+          unit: "db",
+          ...price(
+            description,
+            {
+              quantity: line.quantity,
+              unitGross: line.unitGross,
+              discountPercent: line.discountPercent ?? 0,
+            },
+            new Prisma.Decimal(vat),
+          ),
+          // nincs mögötte termék: se készletmozgás, se UNAS
+          syncToUnas: false,
+          stockComponents: [],
+        });
+        continue;
+      }
+      const variantId = line.variantId;
+      if (emitted.has(variantId)) continue;
+      emitted.add(variantId);
+      const cartLine = mergedByVariant.get(variantId)!;
       const info = variants.get(variantId);
       if (!info) {
         throw new BadRequestException(`Ismeretlen termék: ${variantId}.`);
@@ -122,28 +218,6 @@ export class PosSaleService {
           `Nincs beállítva ÁFA kulcs ehhez a termékhez: ${info.sku}.`,
         );
       }
-      if (!Number.isFinite(cartLine.quantity) || cartLine.quantity <= 0) {
-        throw new BadRequestException(`Érvénytelen mennyiség: ${info.sku}.`);
-      }
-      if (!Number.isFinite(cartLine.unitGross) || cartLine.unitGross < 0) {
-        throw new BadRequestException(`Érvénytelen eladási ár: ${info.sku}.`);
-      }
-
-      const quantity = new Prisma.Decimal(cartLine.quantity);
-      const unitGross = new Prisma.Decimal(cartLine.unitGross);
-      const taxRate = info.vatRate;
-      const unitNet = unitGross.dividedBy(taxRate.dividedBy(100).plus(1));
-      const lineDiscountPercent = new Prisma.Decimal(cartLine.discountPercent);
-      const lineDiscountFactor = new Prisma.Decimal(1).minus(
-        lineDiscountPercent.dividedBy(100),
-      );
-      const lineGross = unitGross.times(quantity).times(lineDiscountFactor);
-      const lineNet = unitNet.times(quantity).times(lineDiscountFactor);
-      const lineTax = lineGross.minus(lineNet);
-
-      totalNet = totalNet.plus(lineNet);
-      totalTax = totalTax.plus(lineTax);
-      totalGross = totalGross.plus(lineGross);
 
       // Nincs itt előre kiszámolt resultingQty/negatív-figyelmeztetés
       // többé: az egyetlen hiteles "mennyi marad" érték a
@@ -157,13 +231,7 @@ export class PosSaleService {
         sku: info.sku,
         productName: info.productName,
         unit: info.unit,
-        quantity,
-        taxRate,
-        unitNet,
-        lineGross,
-        discountPercent: lineDiscountPercent.isZero()
-          ? null
-          : lineDiscountPercent,
+        ...price(info.sku, cartLine, info.vatRate),
         syncToUnas: info.syncToUnas,
         stockComponents: info.stockComponents,
       });

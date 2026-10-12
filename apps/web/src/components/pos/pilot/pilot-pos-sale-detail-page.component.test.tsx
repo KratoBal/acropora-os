@@ -171,4 +171,37 @@ describe("PilotPosSaleDetailPage", () => {
       screen.getByRole("heading", { name: "POS-0001" }),
     ).toBeInTheDocument();
   });
+
+  // A KÉZI TÉTEL (hétfői lista M3): nem termék, tehát nincs szinkronja. MI
+  // PIROSÍT: ha „Függőben” jelvényt kapna, vagy a szinkron-számlálóba esne.
+  it("a kézi tétel jelvénye „Kézi tétel”, és nem számít a szinkronba", async () => {
+    api.getSale.mockResolvedValue({
+      ...saleDetail,
+      lines: [
+        saleDetail.lines[0],
+        {
+          ...saleDetail.lines[0],
+          id: "manual",
+          variantId: null,
+          sku: "KÉZI",
+          productName: "Akvárium beüzemelés",
+          syncStatus: "PENDING",
+        },
+      ],
+    });
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+    const row = await screen.findByRole("row", { name: /Akvárium beüzemelés/ });
+    expect(
+      [
+        within(row).queryByText("Kézi tétel") !== null,
+        within(row).queryByText("Függőben"),
+        screen
+          .getByText(/tétel szinkronizálva/)
+          .textContent?.match(
+            /\d+ tétel szinkronizálva · \d+ függőben · \d+ hiba/,
+          )?.[0],
+      ],
+      "POS-WEB-MANUAL-DETAIL",
+    ).toEqual([true, null, "1 tétel szinkronizálva · 0 függőben · 0 hiba"]);
+  });
 });

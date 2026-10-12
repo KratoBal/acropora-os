@@ -235,6 +235,57 @@ describe("PosSaleRepository.createSale", () => {
     assert.equal(result.detail.status, "COMPLETED");
   });
 
+  // A KÉZI TÉTEL (hétfői lista M3). MI PIROSÍT: ha a kézi sor készletet
+  // mozgatna vagy UNAS-sort írna; ha egy csupa kézi eladás mozgást (üres
+  // bizonylatot) könyvelne; ha a termékes sor mozgása a kézi mellett elveszne.
+  it("a manual line books no stock and no UNAS row; the product line next to it still does", async () => {
+    const manual = line({
+      variantId: null,
+      sku: "KÉZI",
+      productName: "Akvárium beüzemelés",
+      syncToUnas: false,
+      stockComponents: [],
+    });
+    const db = new FakeDb();
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      onHand: new Prisma.Decimal("10"),
+    });
+    const mixed = await repositoryWith(db).createSale(
+      baseParams({ lines: [manual, line()] }),
+    );
+    const onlyManual = new FakeDb();
+    await repositoryWith(onlyManual).createSale(
+      baseParams({ orderNumber: "POS-2", lines: [manual] }),
+    );
+    assert.deepEqual(
+      {
+        mixedLines: mixed.detail.lines.map((saved) => [
+          saved.variantId,
+          saved.sku,
+        ]),
+        mixedMovementLines: db.movementLines.map((moved) => moved.variantId),
+        mixedOutbox: db.outbox.length,
+        onlyManualOrders: onlyManual.orders.length,
+        onlyManualMovements: onlyManual.movements.length,
+        onlyManualOutbox: onlyManual.outbox.length,
+      },
+      {
+        mixedLines: [
+          [null, "KÉZI"],
+          ["variant-1", "REEF-SALT-01"],
+        ],
+        mixedMovementLines: ["variant-1"],
+        mixedOutbox: 1,
+        onlyManualOrders: 1,
+        onlyManualMovements: 0,
+        onlyManualOutbox: 0,
+      },
+      "POS-MANUAL-REPO",
+    );
+  });
+
   it("books a package sale against component variants instead of the package variant", async () => {
     const db = new FakeDb();
     db.stockItems.push(

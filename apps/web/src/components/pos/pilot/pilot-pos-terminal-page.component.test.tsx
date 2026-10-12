@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import type {
   PosProductSearchResult,
@@ -347,6 +348,155 @@ describe("PilotPosTerminalPage", () => {
         // 2 × 24 900 × 0,9 × 0,8
         lineGross: 35856,
       },
+    ]);
+  });
+
+  /*
+    A KÉZI TÉTEL (hétfői lista M3): megnevezés, darabszám, bruttó ár, készlet
+    nélkül, de a végösszegben és a számlán benne. MI PIROSÍT: ha a kézi sor
+    termékként (variantId-vel) menne a szervernek; ha kimaradna a végösszegből;
+    ha készlet-figyelmeztetést adna; ha a számlára termékkel menne át; ha egy
+    hiányos űrlap felkerülne a kosárba.
+  */
+  async function addManualLine(fields: {
+    description: string;
+    quantity: string;
+    unitGross: string;
+    vat?: string;
+  }) {
+    fireEvent.click(screen.getByRole("button", { name: "Kézi tétel" }));
+    const form = within(screen.getByRole("form", { name: "Kézi tétel" }));
+    fireEvent.change(form.getByRole("textbox", { name: "Megnevezés" }), {
+      target: { value: fields.description },
+    });
+    fireEvent.change(form.getByRole("spinbutton", { name: "Darabszám" }), {
+      target: { value: fields.quantity },
+    });
+    fireEvent.change(
+      form.getByRole("spinbutton", { name: "Bruttó egységár (Ft)" }),
+      { target: { value: fields.unitGross } },
+    );
+    if (fields.vat)
+      fireEvent.change(form.getByRole("combobox", { name: "ÁFA" }), {
+        target: { value: fields.vat },
+      });
+    fireEvent.click(form.getByRole("button", { name: "Hozzáadás a kosárhoz" }));
+  }
+
+  it("a kézi tétel készlet nélkül, a végösszegben, megnevezéssel és ÁFÁ-val megy az eladásba", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    api.createSale.mockResolvedValue(saleResult());
+    render(createElement(PilotPosTerminalPage));
+    await waitFor(() => expect(api.listSales).toHaveBeenCalledTimes(1));
+
+    await addManualLine({
+      description: "Akvárium beüzemelés",
+      quantity: "2",
+      unitGross: "5900",
+      vat: "18",
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    expect(
+      [
+        screen.queryByRole("form", { name: "Kézi tétel" }),
+        screen.getByText("Kézi tétel · 18% ÁFA · készlet nélkül"),
+        screen.queryByTestId("pos-stock-warning"),
+        // a hu-HU ezres-tagolás nem törő szóköz
+        screen
+          .getByRole("button", { name: /^Fizetés/ })
+          .textContent?.replace(/\s/g, " "),
+      ].map((found) => (typeof found === "string" ? found : found !== null)),
+      "POS-WEB-MANUAL-CART",
+    ).toEqual([false, true, false, "Fizetés · 36 700 Ft"]);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
+    await waitFor(() => expect(api.createSale).toHaveBeenCalledTimes(1));
+    expect(
+      api.createSale.mock.calls[0]![1].lines,
+      "POS-WEB-MANUAL-SALE",
+    ).toEqual([
+      {
+        description: "Akvárium beüzemelés",
+        vatRatePercent: 18,
+        quantity: 2,
+        unitGross: 5900,
+        discountPercent: 0,
+      },
+      {
+        variantId: "variant-1",
+        quantity: 1,
+        unitGross: 24900,
+        discountPercent: 0,
+      },
+    ]);
+  });
+
+  it("a kézi tétel termék nélkül megy át a számlára", async () => {
+    window.sessionStorage.clear();
+    render(createElement(PilotPosTerminalPage));
+    await addManualLine({
+      description: "Szerviz kiszállás",
+      quantity: "1",
+      unitGross: "12700",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Számlázás" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Tovább a számlához/ }),
+    );
+    const key = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    ).searchParams.get("pos")!;
+    expect(
+      readPosInvoiceHandoff(window.sessionStorage, key),
+      "POS-WEB-MANUAL-INVOICE",
+    ).toEqual([
+      {
+        productId: null,
+        variantId: null,
+        sku: "KÉZI",
+        productName: "Szerviz kiszállás",
+        unit: "db",
+        quantity: 1,
+        vatRatePercent: "27",
+        lineGross: 12700,
+      },
+    ]);
+    expect(api.createSale).not.toHaveBeenCalled();
+  });
+
+  it("hiányos kézi tétel nem kerül a kosárba, és megmondja, mi hiányzik", async () => {
+    render(createElement(PilotPosTerminalPage));
+    await addManualLine({ description: "  ", quantity: "1", unitGross: "100" });
+    const missingName = screen.getByRole("alert").textContent;
+    fireEvent.change(screen.getByRole("textbox", { name: "Megnevezés" }), {
+      target: { value: "Munkadíj" },
+    });
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Bruttó egységár (Ft)" }),
+      { target: { value: "" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hozzáadás a kosárhoz" }),
+    );
+    expect(
+      [
+        missingName,
+        screen.getByRole("alert").textContent,
+        screen.getByText("0 tétel") !== null,
+      ],
+      "POS-WEB-MANUAL-INVALID",
+    ).toEqual([
+      "Add meg a tétel megnevezését.",
+      "Add meg a bruttó árat.",
+      true,
     ]);
   });
 

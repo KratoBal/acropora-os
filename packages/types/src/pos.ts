@@ -20,8 +20,26 @@ export interface PosProductSearchResult {
   isPackageProduct: boolean;
 }
 
+/**
+ * A KÉZI TÉTEL (hétfői lista M3): megnevezés, darabszám, bruttó ár, KÉSZLET
+ * NÉLKÜL. Nincs mögötte termék, tehát se készletmozgás, se UNAS-szinkron; a
+ * végösszegben és a számlán viszont benne van. A cikkszám helyén ez a jel áll.
+ */
+export const POS_MANUAL_LINE_SKU = "KÉZI";
+
+/** A kézi tétel választható ÁFA-kulcsai; az első az alapértelmezés. */
+export const POS_MANUAL_VAT_RATES = [27, 18, 5] as const;
+
+/**
+ * Egy kosársor: VAGY termék (`variantId`), VAGY kézi tétel (`description` és
+ * `vatRatePercent`). A kettő együtt, vagy egyik sem, hiba.
+ */
 export interface CreatePosSaleLineInput {
-  variantId: string;
+  variantId?: string;
+  /** Kézi tétel megnevezése. */
+  description?: string;
+  /** Kézi tétel ÁFA-kulcsa, `POS_MANUAL_VAT_RATES` közül. */
+  vatRatePercent?: number;
   quantity: number;
   /** Gross unit price actually charged; defaults from grossPrice but overridable per line. */
   unitGross: number;
