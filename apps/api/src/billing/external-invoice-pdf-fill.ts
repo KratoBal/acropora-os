@@ -26,9 +26,22 @@ export interface ExternalPdfCandidate {
   issueDate: Date;
 }
 
+/**
+ * A Számlázz.hu 7-es hibája: nincs ilyen számlaszám. Egy ilyen sor a
+ * következő futáson sem fog PDF-et kapni, ezért alapból kimarad (barracuda,
+ * #1658); a `retryUnknown` mégis újrapróbálja.
+ */
+export const UNKNOWN_NUMBER_REASON = "SZAMLAZZ_PDF_REJECTED_7";
+
 export interface ExternalPdfStore {
-  /** A SZAMLAZZ-forrású, PDF nélküli sorok; `month` (ÉÉÉÉ-HH) a kelte szerint. */
-  candidates(month: string | null): Promise<ExternalPdfCandidate[]>;
+  /**
+   * A SZAMLAZZ-forrású, PDF nélküli sorok; `month` (ÉÉÉÉ-HH) a kelte szerint.
+   * Az ismeretlen számú sor (`UNKNOWN_NUMBER_REASON`) csak `retryUnknown`-nal.
+   */
+  candidates(
+    month: string | null,
+    options?: { retryUnknown?: boolean },
+  ): Promise<ExternalPdfCandidate[]>;
   setPdf(
     id: string,
     pdfStorageKey: string | null,
@@ -55,7 +68,7 @@ export async function fillExternalInvoicePdfs(input: {
       bytes = await fetchPdf(input, row.documentNumber);
     } catch (error) {
       const reason = reasonOf(error);
-      await input.store.setPdf(row.id, null, reason);
+      await markFailed(input.store, row.id, reason);
       outcomes.push({ ...base, kind: "FAILED", reason });
       continue;
     }
@@ -64,11 +77,33 @@ export async function fillExternalInvoicePdfs(input: {
       ownerId: row.id,
       documentId: SZAMLAZZ_PDF_DOCUMENT_ID,
     };
-    await input.documents.put(key, bytes);
-    await input.store.setPdf(row.id, storageKeyFor(key), null);
+    // egy tár- vagy adatbázis-hiba ennél a számlánál áll meg, nem a futásnál
+    // (barracuda, #1658)
+    try {
+      await input.documents.put(key, bytes);
+      await input.store.setPdf(row.id, storageKeyFor(key), null);
+    } catch {
+      const reason = "SZAMLAZZ_PDF_STORE_FAILED";
+      await markFailed(input.store, row.id, reason);
+      outcomes.push({ ...base, kind: "FAILED", reason });
+      continue;
+    }
     outcomes.push({ ...base, kind: "STORED", bytes: bytes.length });
   }
   return outcomes;
+}
+
+/** A hiba okát a sorra írja; ha ez sem megy, a futás a kimenetben jelenti. */
+async function markFailed(
+  store: Pick<ExternalPdfStore, "setPdf">,
+  id: string,
+  reason: string,
+): Promise<void> {
+  try {
+    await store.setPdf(id, null, reason);
+  } catch {
+    // a kimenet és a kilépési kód így is FAILED-et mond
+  }
 }
 
 class PdfFetchError extends Error {
@@ -115,13 +150,22 @@ export function monthRange(month: string): { gte: Date; lt: Date } {
 }
 
 export const prismaExternalPdfStore: ExternalPdfStore = {
-  async candidates(month) {
+  async candidates(month, options) {
     return prisma.externalBillingDocument.findMany({
       where: {
         source: "SZAMLAZZ",
         pdfStorageKey: null,
         documentNumber: { not: "" },
         ...(month ? { issueDate: monthRange(month) } : {}),
+        // a `not` a NULL-t is kizárná, ezért a hiba nélküli sor külön ág
+        ...(options?.retryUnknown
+          ? {}
+          : {
+              OR: [
+                { pdfMissingReason: null },
+                { pdfMissingReason: { not: UNKNOWN_NUMBER_REASON } },
+              ],
+            }),
       },
       select: { id: true, documentNumber: true, issueDate: true },
       orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],

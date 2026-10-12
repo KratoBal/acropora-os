@@ -18,6 +18,19 @@ export const CONTRACT_KIND_LABELS: Record<ContractKind, string> = {
 };
 
 /**
+ * Miért nem állítható vissza a beszerzési szerződés karbantartásira, vagy
+ * `null`. A tükre a megrendelőlapos zárnak (barracuda, #1661): ha már készült
+ * belőle számla (vázlat is), a számla egy beszerzési szerződésre hivatkozik.
+ */
+export function contractMaintenanceSwitchBlocker(
+  invoiceCount: number,
+): string | null {
+  return invoiceCount > 0
+    ? "Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra."
+    : null;
+}
+
+/**
  * Miért nem állítható át a szerződés Beszerzésre, vagy `null`, ha átállítható.
  * Balázs („így van”): ha már készült hozzá karbantartási megrendelőlap, nem.
  */
