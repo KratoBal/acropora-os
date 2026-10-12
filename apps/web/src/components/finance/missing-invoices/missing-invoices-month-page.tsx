@@ -384,6 +384,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
             missingInvoicesApi.accountantPackage(token, month),
           )
         }
+        onDownloadOutgoing={() =>
+          void download(() => missingInvoicesApi.outgoingPackage(token, month))
+        }
         exporting={exporting}
       />
       <input

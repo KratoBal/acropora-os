@@ -82,6 +82,7 @@ export function MissingInvoicesMonthDetail({
   onUploadStatement,
   onDownloadMissing,
   onDownloadPackage,
+  onDownloadOutgoing,
   exporting,
 }: {
   month: string;
@@ -114,6 +115,11 @@ export function MissingInvoicesMonthDetail({
    */
   onDownloadMissing?: () => void;
   onDownloadPackage?: () => void;
+  /**
+   * A havi kimenő számlák csomagja. A kivonattól független: a kimenő számlák
+   * a számlázásból jönnek, nem a banki terhelésekből.
+   */
+  onDownloadOutgoing?: () => void;
   exporting: boolean;
 }) {
   const title = formatMonth(month);
@@ -265,14 +271,16 @@ export function MissingInvoicesMonthDetail({
     },
   ];
 
+  const statementExports =
+    hasStatement && Boolean(onDownloadMissing || onDownloadPackage);
   const actions =
-    canManage && hasStatement && (onDownloadMissing || onDownloadPackage) ? (
+    canManage && (statementExports || onDownloadOutgoing) ? (
       <div
         role="group"
         aria-label="Exportok"
         className="flex max-w-full flex-wrap justify-end gap-2"
       >
-        {allFound || !onDownloadMissing ? null : (
+        {!statementExports || allFound || !onDownloadMissing ? null : (
           <PilotButton
             variant="secondary"
             size="regular"
@@ -282,7 +290,7 @@ export function MissingInvoicesMonthDetail({
             Hiánylista letöltése
           </PilotButton>
         )}
-        {onDownloadPackage ? (
+        {statementExports && onDownloadPackage ? (
           <PilotButton
             variant="secondary"
             size="regular"
@@ -290,6 +298,16 @@ export function MissingInvoicesMonthDetail({
             onClick={onDownloadPackage}
           >
             Könyvelői csomag
+          </PilotButton>
+        ) : null}
+        {onDownloadOutgoing ? (
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            disabled={exporting}
+            onClick={onDownloadOutgoing}
+          >
+            Kimenő számlák
           </PilotButton>
         ) : null}
       </div>

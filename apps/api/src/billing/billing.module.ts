@@ -19,6 +19,8 @@ import { BillingDocumentsController } from "./billing-documents.controller.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 import { ExternalBillingDocumentsController } from "./external-billing-documents.controller.js";
+import { OutgoingPackageController } from "./outgoing-package.controller.js";
+import { OutgoingPackageService } from "./outgoing-package.service.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -30,6 +32,7 @@ import { ExternalBillingDocumentsController } from "./external-billing-documents
   imports: [SzamlazzModule, NotificationsModule],
   controllers: [
     ExternalBillingDocumentsController,
+    OutgoingPackageController,
     BillingDocumentsController,
     BillingDocumentIssueController,
     BillingDocumentReadController,
@@ -47,6 +50,7 @@ import { ExternalBillingDocumentsController } from "./external-billing-documents
     BillingDocumentEmailRepository,
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
+    OutgoingPackageService,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

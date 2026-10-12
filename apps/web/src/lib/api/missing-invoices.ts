@@ -247,6 +247,24 @@ export const missingInvoicesApi = {
       "A könyvelői csomag nem tölthető le.",
     );
   },
+  /**
+   * A havi KIMENŐ csomag (PDF, hétfői lista N1): a hónap összes kimenő
+   * számlája, OS, Számlázz.hu és eBIZ, számlaszámonként egy, a PDF-jeikkel.
+   */
+  async outgoingPackage(
+    token: string,
+    month: string,
+  ): Promise<MissingInvoicesExport> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/outgoing-package/${encodeURIComponent(month)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return readExport(
+      response,
+      `kimeno-szamlak-${month}.pdf`,
+      "A kimenő számlák csomagja nem tölthető le.",
+    );
+  },
   uploadStatement(token: string, file: File) {
     const form = new FormData();
     form.append("file", file);

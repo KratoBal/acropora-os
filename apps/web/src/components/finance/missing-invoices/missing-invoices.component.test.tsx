@@ -559,6 +559,34 @@ describe("MissingInvoicesMonthDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("the outgoing package stands without a statement, and only it", () => {
+    const onDownloadOutgoing = vi.fn();
+    const props = {
+      ...base(),
+      state: "STATEMENT_MISSING" as const,
+      accounts: accounts.map((account) => ({
+        ...account,
+        hasStatement: false,
+      })),
+      rows: [],
+      onDownloadOutgoing,
+    };
+    const { unmount } = render(<MissingInvoicesMonthDetail {...props} />);
+    const exports = screen.getByRole("group", { name: "Exportok" });
+    expect(
+      within(exports)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Kimenő számlák"]);
+    fireEvent.click(
+      within(exports).getByRole("button", { name: "Kimenő számlák" }),
+    );
+    expect(onDownloadOutgoing).toHaveBeenCalled();
+    unmount();
+    render(<MissingInvoicesMonthDetail {...props} canManage={false} />);
+    expect(screen.queryByRole("group", { name: "Exportok" })).toBeNull();
+  });
+
   it("loading says so, and a viewer gets no export buttons", () => {
     const { unmount } = render(
       <MissingInvoicesMonthDetail
