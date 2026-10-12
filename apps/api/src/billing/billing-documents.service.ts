@@ -21,7 +21,10 @@ import {
   normalizeBillingDraft,
   type NormalizedBillingDraft,
 } from "./billing-document-draft.js";
-import { withIssueAndDelivery } from "./billing-document-detail-read.js";
+import {
+  FEED_CANCELLATION,
+  withIssueAndDelivery,
+} from "./billing-document-detail-read.js";
 import {
   BillingDocumentsRepository,
   type BillingDocumentRow,
@@ -42,7 +45,17 @@ export class BillingDocumentsService {
   async detail(id: string): Promise<BillingDocumentDetail> {
     const row = await this.repository.find(id);
     if (!row) throw new NotFoundException("A bizonylat nem található.");
-    return toBillingDocumentDetail(row);
+    const detail = toBillingDocumentDetail(row);
+    // a Számlázz.hu felületén sztornózott saját számla: a feed ikre mondja meg
+    // (számlázási brief, 1. pont); az OS-ben kiállított sztornó elsőbb
+    if (
+      !detail.cancellation &&
+      row.status === "ISSUED" &&
+      row.invoiceNumber &&
+      (await this.repository.feedTwinCancelled(row.invoiceNumber))
+    )
+      return { ...detail, cancellation: FEED_CANCELLATION };
+    return detail;
   }
 
   async create(

@@ -2309,6 +2309,8 @@ enum UnasStockSyncSourceProcess {
   /// A Számlázás modulban kiállított számla (2026-09-30): a kiszámlázott
   /// készletezett termék levonása, a POS-eladással azonos úton.
   BILLING_INVOICE
+  /// A számla sztornója (2026-10-12): a számla eladását adja vissza.
+  BILLING_STORNO
   /// Az elhullási naplóba rögzített, rendszerbeli élőlény levonása
   /// (2026-10-07), a bolti eladással azonos úton.
   MORTALITY
@@ -3064,7 +3066,9 @@ model Invoice {
   grossAmount             Decimal?            @db.Decimal(19, 4)
   isPaid                  Boolean             @default(false)
   paidAt                  DateTime?
-  /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat.
+  /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat. Egy számlához
+  /// legfeljebb EGY STORNO sor: a migráció részleges egyedi indexe tartja
+  /// (20261012020000_invoice_one_storno), a Prisma séma nem tudja kifejezni.
   referencedInvoiceId     String?
   syncStatus              InvoiceSyncStatus   @default(PENDING)
   syncError               String?

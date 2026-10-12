@@ -137,6 +137,7 @@ export function toListItem(
     paidAmount: null,
     lastPaymentDate: null,
     paymentSource: null,
+    cancelled: (row.correctionInvoices?.length ?? 0) > 0,
   };
 }
 

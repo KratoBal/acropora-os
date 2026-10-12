@@ -890,3 +890,67 @@ describe("the own invoice and its Számlázz.hu twin (N2)", () => {
     assert.equal(list.pagination.totalItems, 2);
   });
 });
+
+/*
+  A SZTORNÓZOTT SAJÁT SZÁMLA A LISTÁN (számlázási brief, 1. pont). MI PIROSÍT:
+  az OS-ben kiállított sztornó nem jelöli az eredetit; a Számlázz.hu felületén
+  sztornózott számla jele nem jön át az ikertől; egy nem sztornózott számla
+  jelet kap.
+*/
+describe("the cancelled own invoice on the list", () => {
+  it("cancelled by its own storno, or by its Számlázz.hu twin; a plain one is not", async () => {
+    const own = (id: string, number: string, storno: boolean) =>
+      ({
+        ...row({
+          id,
+          status: "ISSUED",
+          invoiceNumber: number,
+          issueDate: new Date("2026-09-30T08:00:00.000Z"),
+        }),
+        correctionInvoices: storno ? [{ id: `${id}-storno` }] : [],
+      }) as BillingDocumentListRow;
+    const owns = [
+      own("os-storno", "A-1", true),
+      own("site-storno", "A-2", false),
+      own("plain", "A-3", false),
+    ];
+    const twins = [
+      external({ id: "t-2", documentNumber: "A-2", cancelled: true }),
+      external({ id: "t-3", documentNumber: "A-3", cancelled: false }),
+    ];
+    const repository = new BillingDocumentListRepository();
+    (repository as unknown as { database: unknown }).database = {
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+      invoice: {
+        findMany: async (args: { select: Record<string, unknown> }) =>
+          "lines" in args.select
+            ? owns
+            : owns.map((o) => ({ invoiceNumber: o.invoiceNumber })),
+        count: async () => owns.length,
+      },
+      externalBillingDocument: {
+        findMany: async (args: {
+          where: { documentNumber?: { in?: string[] } };
+        }) =>
+          args.where.documentNumber?.in
+            ? twins.filter((t) =>
+                args.where.documentNumber!.in!.includes(t.documentNumber),
+              )
+            : [],
+        count: async () => 0,
+      },
+      simplePayTransactionLine: { findMany: async () => [] },
+      outgoingPaymentMark: { findMany: async () => [] },
+      salesOrder: { findMany: async () => [] },
+    };
+    const list = await repository.list({ page: 1, pageSize: 25 });
+    assert.deepEqual(
+      list.items.map((i) => [i.id, i.cancelled]),
+      [
+        ["os-storno", true],
+        ["site-storno", true],
+        ["plain", false],
+      ],
+    );
+  });
+});
