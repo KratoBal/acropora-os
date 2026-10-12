@@ -61,7 +61,17 @@ export function matchingJevRows(
     const helps = parsed.effects.some(
       (effect) => wanted.get(effect.code) === effect.direction,
     );
-    if (!helps) return [];
+    /*
+      ELLENTÉTES HATÁS (barracuda, #1668): ha a termék egy MÁSIK mért eltérést
+      rossz irányba visz (alacsony Ca és magas Mg mellett egy Ca-t ÉS Mg-t is
+      emelő termék), nem jelölt. Egy munkatárs a vázlatban könnyen átengedné,
+      ezért nem az AI-ra és nem a jóváhagyásra bízzuk.
+    */
+    const harms = parsed.effects.some((effect) => {
+      const want = wanted.get(effect.code);
+      return want !== undefined && want !== effect.direction;
+    });
+    if (!helps || harms) return [];
     return [
       {
         productId: row.productId,
@@ -107,19 +117,42 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
       },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
-    return matches.flatMap((match) => {
-      const product = byId.get(match.productId);
-      if (!product) return [];
-      return [
-        {
-          productId: product.id,
-          name: product.name,
-          category: product.categories[0]?.category.name ?? "",
-          effects: match.effects,
-          basis: "JEV" as const,
-          ...(match.evidenceRef ? { evidenceRef: match.evidenceRef } : {}),
-        },
-      ];
-    });
+    return limitCandidates(
+      matches.flatMap((match) => {
+        const product = byId.get(match.productId);
+        if (!product) return [];
+        return [
+          {
+            productId: product.id,
+            name: product.name,
+            category: product.categories[0]?.category.name ?? "",
+            effects: match.effects,
+            basis: "JEV" as const,
+            ...(match.evidenceRef ? { evidenceRef: match.evidenceRef } : {}),
+          },
+        ];
+      }),
+      wanted,
+    );
   }
+}
+
+/**
+ * A JELÖLTEK FELSŐ KORLÁTJA (barracuda, #1668): az AI-oldal (#34) legfeljebb
+ * 300 jelöltet fogad, fölötte 400-at ad, és az OS ezt „nem adott használható
+ * ajánlást”-ként mutatná. Egy gyakori eltérés (alacsony KH) a JEV bővülésével
+ * átlépheti, és az ajánlás egy nap csendben eltűnne. Ezért legfeljebb
+ * `MAX_CANDIDATES`, előre az, amelyik több mért eltérést javít, utána név szerint.
+ */
+export const MAX_CANDIDATES = 200;
+
+export function limitCandidates(
+  candidates: readonly MeasurementRecommendationCandidate[],
+  wanted: ReadonlyMap<string, "EMEL" | "CSOKKENT">,
+): MeasurementRecommendationCandidate[] {
+  const helped = (c: MeasurementRecommendationCandidate) =>
+    c.effects.filter((e) => wanted.get(e.parameterCode) === e.direction).length;
+  return [...candidates]
+    .sort((a, b) => helped(b) - helped(a) || a.name.localeCompare(b.name, "hu"))
+    .slice(0, MAX_CANDIDATES);
 }

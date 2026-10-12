@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import {
   JevRecommendationCandidateSource,
+  limitCandidates,
   matchingJevRows,
+  MAX_CANDIDATES,
   wantedMoves,
   type JevEffectRow,
 } from "./jev-candidate-source.js";
@@ -85,6 +87,65 @@ describe("the JEV rows that help", () => {
   });
 });
 
+describe("a product that moves another measured deviation the wrong way (barracuda, #1668)", () => {
+  it("is not a candidate: low calcium and high magnesium, a product raising both", () => {
+    const wanted = wantedMoves([
+      dev("KALCIUM", "LOW"),
+      dev("MAGNEZIUM", "HIGH"),
+    ]);
+    assert.deepEqual(
+      matchingJevRows(
+        [
+          row({ productId: "both-up", value: "KALCIUM:EMEL;MAGNEZIUM:EMEL" }),
+          row({ productId: "ca-only", value: "KALCIUM:EMEL" }),
+          row({
+            productId: "both-right",
+            value: "KALCIUM:EMEL;MAGNEZIUM:CSOKKENT",
+          }),
+        ],
+        wanted,
+      ).map((m) => m.productId),
+      ["ca-only", "both-right"],
+    );
+  });
+});
+
+describe("the cap the AI side takes (barracuda, #1668)", () => {
+  it("at most MAX_CANDIDATES, the ones helping more deviations first, then by name", () => {
+    const wanted = wantedMoves([dev("KALCIUM", "LOW"), dev("NITRAT", "HIGH")]);
+    const candidate = (name: string, effects: string[]) => ({
+      productId: name,
+      name,
+      category: "",
+      basis: "JEV" as const,
+      effects: effects.map((e) => {
+        const [parameterCode, direction] = e.split(":") as [
+          string,
+          "EMEL" | "CSOKKENT",
+        ];
+        return { parameterCode, direction };
+      }),
+    });
+    const many = Array.from({ length: 250 }, (_, i) =>
+      candidate(`termek-${String(i).padStart(3, "0")}`, ["KALCIUM:EMEL"]),
+    );
+    const limited = limitCandidates(
+      [...many, candidate("zz-mindketto", ["KALCIUM:EMEL", "NITRAT:CSOKKENT"])],
+      wanted,
+    );
+    assert.equal(MAX_CANDIDATES < 300, true);
+    assert.deepEqual(
+      [
+        limited.length,
+        limited[0]!.name,
+        limited[1]!.name,
+        limited.at(-1)!.name,
+      ],
+      [MAX_CANDIDATES, "zz-mindketto", "termek-000", "termek-198"],
+    );
+  });
+});
+
 describe("the source", () => {
   it("the active products among the matches, with their category; no deviation, no query", async () => {
     let queries = 0;
@@ -130,5 +191,22 @@ describe("the source", () => {
         evidenceRef: "https://gyarto.example/termek",
       },
     ]);
+  });
+
+  it("the source itself applies the cap", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `p-${i}`);
+    const source = new JevRecommendationCandidateSource();
+    (source as unknown as { database: unknown }).database = {
+      $queryRaw: async () =>
+        ids.map((productId) => row({ productId, value: "KALCIUM:EMEL" })),
+      product: {
+        findMany: async () =>
+          ids.map((id) => ({ id, name: id, categories: [] })),
+      },
+    };
+    const candidates = await source.candidates({
+      deviations: [dev("KALCIUM", "LOW")],
+    });
+    assert.equal(candidates.length, MAX_CANDIDATES);
   });
 });
