@@ -39,6 +39,13 @@ const DETAIL_INCLUDE = {
       syncError: true,
     },
   },
+  // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.)
+  proformaInvoice: { select: { id: true, invoiceNumber: true } },
+  // a díjbekérőn: a belőle készült előleg (legfeljebb egy, `advanceIdFor`)
+  invoicesFromProforma: {
+    where: { documentType: "ADVANCE_INVOICE" },
+    select: { id: true, status: true, invoiceNumber: true },
+  },
   customer: {
     select: {
       id: true,
@@ -123,11 +130,13 @@ export async function insertBillingDraft(
     partnerName: string;
     partnerTaxNumber: string | null;
     createdByUserId: string;
+    proformaInvoiceId?: string | null;
   },
 ): Promise<void> {
   await transaction.invoice.create({
     data: {
       id: input.id,
+      proformaInvoiceId: input.proformaInvoiceId ?? null,
       direction: "OUTBOUND",
       source: "SZAMLAZZ",
       status: "DRAFT",
@@ -172,6 +181,20 @@ export class BillingDocumentsRepository {
     return twin !== null;
   }
 
+  /**
+   * Kifizették-e a számot a Számlázz.hu feedje szerint: `true` kifizetés van,
+   * `false` a feed tudja, és nincs, `null` nincs feed-sora vagy nem vetített.
+   */
+  async feedPaid(documentNumber: string): Promise<boolean | null> {
+    const twin = await this.database.externalBillingDocument.findFirst({
+      where: { documentNumber },
+      select: { paymentsKnown: true, paidAmount: true },
+    });
+    if (!twin) return null;
+    if (twin.paidAmount.gt(0)) return true;
+    return twin.paymentsKnown === true ? false : null;
+  }
+
   find(id: string): Promise<BillingDocumentRow | null> {
     return this.database.invoice.findFirst({
       where: { id, ...OWN_ROWS },
@@ -190,6 +213,8 @@ export class BillingDocumentsRepository {
     partnerName: string;
     partnerTaxNumber: string | null;
     createdByUserId: string;
+    /** Díjbekérőből készült előlegnél a díjbekérő (számlázási brief, 2. pont). */
+    proformaInvoiceId?: string | null;
   }): Promise<{ created: boolean }> {
     try {
       await this.database.$transaction((transaction) =>
