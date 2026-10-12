@@ -113,21 +113,8 @@ export class BillingDocumentStornoService {
         "Csak kiállított számla vagy előlegszámla sztornózható.",
       );
 
-    // a kiállított végszámla levonja ezt az előleget: előbb azt kell
-    // sztornózni, különben a végszámla egy sztornózott előlegre hivatkozna
-    // (barracuda, #1672). A végszámla-vázlat nem akadály: annak a kiállítását
-    // a végszámla saját őre állítja meg.
-    if (original.documentType === "ADVANCE_INVOICE") {
-      const final = await this.documents.finalInvoiceOf(original.id);
-      if (
-        final &&
-        (final.status === "ISSUING" ||
-          (final.status === "ISSUED" && final.correctionInvoices.length === 0))
-      )
-        throw new ConflictException(
-          `Erre az előlegszámlára a(z) ${final.invoiceNumber ?? "kiállítás alatt álló"} végszámla hivatkozik: előbb a végszámlát sztornózd.`,
-        );
-    }
+    const finalBlock = await this.finalInvoiceBlock(original);
+    if (finalBlock) throw new ConflictException(finalBlock);
 
     const existing = original.correctionInvoices[0] ?? null;
     // a sikeres sztornó utáni második kattintás a sztornózott számlát kapja;
@@ -164,6 +151,25 @@ export class BillingDocumentStornoService {
       throw new ConflictException(
         "Ennek a számlának a sztornózása már elindult: töltsd újra, és nézd meg, mi lett vele.",
       );
+
+    // A FOGLALÁS UTÁN MÉG EGYSZER (barracuda, #1674): a végszámla kiállítása a
+    // fenti őr és a foglalás között indulhatott el. A végszámla a saját
+    // foglalása után ugyanígy visszaolvassa ezt a sztornót, tehát a kettő közül
+    // legalább az egyik látja a másikat. FELTÉTELE: mindkét foglalás önálló,
+    // azonnal lezárt írás. Ha egy tranzakcióba kerülne a visszaolvasással, READ
+    // COMMITTED mellett a másik oldal nem látná, és a rés csendben újranyílna.
+    const lateBlock = await this.finalInvoiceBlock(original);
+    if (lateBlock) {
+      await this.database.invoice.updateMany({
+        where: { id: stornoId, status: "ISSUING" },
+        data: {
+          status: "ISSUE_FAILED",
+          syncStatus: "ERROR",
+          syncError: lateBlock.slice(0, 500),
+        },
+      });
+      throw new ConflictException(lateBlock);
+    }
 
     let response;
     try {
@@ -272,6 +278,32 @@ export class BillingDocumentStornoService {
     }
 
     return this.withStock(id, stornoId, response.invoiceNumber, user);
+  }
+
+  /**
+   * AZ ELŐLEGET LEVONÓ VÉGSZÁMLA (barracuda, #1672): ha kiállított vagy
+   * kiállítás alatt álló, sztornózatlan végszámla vonja le az előleget, előbb
+   * azt kell sztornózni, különben a végszámla egy sztornózott előlegre
+   * hivatkozna. A végszámla-vázlat nem akadály: annak a kiállítását a végszámla
+   * saját őre állítja meg.
+   *
+   * AMIT NEM FED (barracuda, #1674): a `finalInvoiceOf` csak a saját sorokat
+   * látja. Egy közvetlenül a Számlázz.hu felületén kiállított végszámla (csak a
+   * feedben van) nem állítja meg az előleg sztornóját.
+   */
+  private async finalInvoiceBlock(original: {
+    id: string;
+    documentType: string;
+  }): Promise<string | null> {
+    if (original.documentType !== "ADVANCE_INVOICE") return null;
+    const final = await this.documents.finalInvoiceOf(original.id);
+    if (
+      final &&
+      (final.status === "ISSUING" ||
+        (final.status === "ISSUED" && final.correctionInvoices.length === 0))
+    )
+      return `Erre az előlegszámlára a(z) ${final.invoiceNumber ?? "kiállítás alatt álló"} végszámla hivatkozik: előbb a végszámlát sztornózd.`;
+    return null;
   }
 
   /**

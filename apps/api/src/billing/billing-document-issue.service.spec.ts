@@ -112,6 +112,8 @@ function setup(
     stockFails?: boolean;
     over?: Record<string, unknown>;
     feedCancelled?: boolean;
+    /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
+    stornoAfterClaim?: "OS" | "FEED";
   } = {},
 ) {
   const calls = {
@@ -130,7 +132,11 @@ function setup(
   } as BillingDocumentRow;
   const documents = {
     find: async () => current,
-    feedTwinCancelled: async () => options.feedCancelled ?? false,
+    feedTwinCancelled: async () =>
+      (options.feedCancelled ?? false) ||
+      (options.stornoAfterClaim === "FEED" && calls.claim > 0),
+    stornoStarted: async () =>
+      options.stornoAfterClaim === "OS" && calls.claim > 0,
   } as unknown as BillingDocumentsRepository;
   const repository = {
     claim: async () => {
@@ -254,6 +260,39 @@ describe("BillingDocumentIssueService", () => {
     const ok = setup({ over: final({}) });
     assert.equal((await issue(ok.service)).status, "ISSUED");
     assert.equal(ok.calls.generate, 1);
+  });
+
+  /*
+    A FOGLALÁS UTÁNI VISSZAOLVASÁS (barracuda, #1674): a sztornó az őr és a
+    foglalás között indult el. MI PIROSÍT: a végszámla ilyenkor is elmegy, vagy
+    ISSUING-ben ragad ahelyett, hogy elutasítottra váltana.
+  */
+  it("a storno of the advance started between the guard and the claim stops the final invoice after its claim", async () => {
+    const advance = {
+      id: "adv-1",
+      documentType: "ADVANCE_INVOICE",
+      invoiceNumber: "E-ELO-1",
+      grossAmount: d("381"),
+      currency: "HUF",
+      correctionInvoices: [] as { id: string }[],
+    };
+    for (const late of ["OS", "FEED"] as const) {
+      const s = setup({
+        over: { documentType: "FINAL_INVOICE", referencedInvoice: advance },
+        stornoAfterClaim: late,
+      });
+      await assert.rejects(
+        () => issue(s.service),
+        /E-ELO-1.*sztornózása időközben elindult/,
+        late,
+      );
+      assert.deepEqual([s.calls.claim, s.calls.generate], [1, 0], late);
+      assert.equal(s.calls.failed.length, 1, late);
+      assert.match(s.calls.failed[0]!, /időközben elindult/);
+    }
+    // nem végszámlán a visszaolvasás nem állít meg semmit
+    const plain = setup({ stornoAfterClaim: "OS" });
+    assert.equal((await issue(plain.service)).status, "ISSUED");
   });
 
   it("does not call Számlázz.hu while the switch is off", async () => {

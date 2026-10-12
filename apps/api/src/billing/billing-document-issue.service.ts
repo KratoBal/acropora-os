@@ -185,6 +185,27 @@ export class BillingDocumentIssueService {
         "A vázlatot időközben mentették vagy már kiállítják: töltsd újra, és nézd meg, mi változott.",
       );
 
+    // A FOGLALÁS UTÁN MÉG EGYSZER (barracuda, #1674): a fenti őr és az előleg
+    // sztornója egyszerre is átmehet. A sztornó a saját foglalása után ugyanígy
+    // visszaolvassa ezt a végszámlát, tehát a kettő közül legalább az egyik
+    // látja a másikat; itt a folyamatban lévő sztornó is megállít. FELTÉTELE:
+    // mindkét foglalás önálló, azonnal lezárt írás. Ha egy tranzakcióba kerülne
+    // a visszaolvasással, READ COMMITTED mellett a másik oldal nem látná, és a
+    // rés csendben újranyílna.
+    if (
+      row.documentType === "FINAL_INVOICE" &&
+      row.referencedInvoice &&
+      ((await this.documents.stornoStarted(row.referencedInvoice.id)) ||
+        (row.referencedInvoice.invoiceNumber != null &&
+          (await this.documents.feedTwinCancelled(
+            row.referencedInvoice.invoiceNumber,
+          ))))
+    ) {
+      const reason = `A(z) ${row.referencedInvoice.invoiceNumber ?? "levonandó"} előlegszámla sztornózása időközben elindult, ezért ez a végszámla nem állítható ki.`;
+      await this.repository.markFailed(id, reason);
+      throw new BadRequestException(reason);
+    }
+
     let response;
     try {
       response = await (
