@@ -66,6 +66,7 @@ export type {
   DecimalText,
 } from "./billing-document-amounts.js";
 export type {
+  BillingDocumentCancellation,
   BillingDocumentCustomer,
   BillingDocumentDetail,
   BillingDocumentDraftInput,

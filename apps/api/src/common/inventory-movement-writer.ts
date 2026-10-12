@@ -63,6 +63,8 @@ export type InventoryMovementSourceProcess =
   | "RECONCILIATION"
   /** A Számlázás modulban kiállított számla (2026-09-30). */
   | "BILLING_INVOICE"
+  /** A számla sztornója: a számla eladását adja vissza (2026-10-12). */
+  | "BILLING_STORNO"
   /** Az elhullási naplóba rögzített, rendszerbeli élőlény (2026-10-07). */
   | "MORTALITY"
   /** Projektfoglalás változása: a szabad készlet mozog, a fizikai nem (#1582 P5a). */

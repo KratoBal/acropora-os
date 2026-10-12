@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import type { SzamlazzAgentClient } from "./szamlazz-agent.client.js";
+import type {
+  SzamlazzAgentClient,
+  SzamlazzAgentStornoClient,
+} from "./szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "./szamlazz-agent-xml.js";
 
 /**
@@ -49,7 +52,9 @@ function stubPdf(text: string): Buffer {
   return Buffer.from(body, "latin1");
 }
 
-export class StubSzamlazzAgentClient implements SzamlazzAgentClient {
+export class StubSzamlazzAgentClient
+  implements SzamlazzAgentClient, SzamlazzAgentStornoClient
+{
   constructor(private readonly now: () => Date = () => new Date()) {}
 
   async generateInvoice(): Promise<SzamlazzAgentResponse> {
@@ -58,6 +63,16 @@ export class StubSzamlazzAgentClient implements SzamlazzAgentClient {
       successful: true,
       invoiceNumber: number,
       pdf: stubPdf(`TESZT SZAMLA, NEM VALODI: ${number}`),
+    };
+  }
+
+  /** A sztornó is végigkattintható a teszt-szerveren (számlázási brief, 1. pont). */
+  async stornoInvoice(): Promise<SzamlazzAgentResponse> {
+    const number = `TESZT-SZTORNO-${this.now().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+    return {
+      successful: true,
+      invoiceNumber: number,
+      pdf: stubPdf(`TESZT SZTORNO, NEM VALODI: ${number}`),
     };
   }
 }

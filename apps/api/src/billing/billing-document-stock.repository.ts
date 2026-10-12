@@ -6,11 +6,13 @@ import { postInventoryMovement } from "../common/inventory-movement-writer.js";
 import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
 import { retryOnTakenCode } from "../common/unique-code.util.js";
 import { ensureMainWarehouse } from "../common/warehouse.util.js";
+import { isUnasMasteredVariant } from "../products/catalog-authority.js";
 import {
   invoiceStockIdempotencyKey,
   planInvoiceStock,
   type StockComponentVariant,
   type StockProduct,
+  invoiceStornoStockIdempotencyKey,
 } from "./billing-document-stock.js";
 
 export interface InvoiceStockResult {
@@ -169,6 +171,75 @@ export class BillingDocumentStockRepository {
           movedLines: [...plan.outcomes.values()].filter(
             (outcome) => outcome === "MOVED",
           ).length,
+        };
+      }),
+    );
+  }
+
+  /**
+   * A SZTORNÓ VISSZAADJA A SZÁMLA ELADÁSÁT (számlázási brief, 1. pont). A
+   * számla kiállításkori `SALE` mozgásának sorait egy `RETURN_IN` mozgás adja
+   * vissza, ugyanabba a raktárba, a sztornó soron hivatkozva. Ami a számlán
+   * nem mozgott (nem készletes tétel, fel nem oldott csomag), az most sem
+   * mozdul: a forrás a tényleges mozgás, nem a számla mai sorai. Saját
+   * idempotencia-kulcs, tehát egy második hívás nem ad vissza kétszer.
+   */
+  async postStornoReturn(
+    invoiceId: string,
+    stornoId: string,
+    stornoNumber: string | null,
+    actorUserId: string,
+  ): Promise<{ alreadyPosted: boolean; returnedLines: number } | null> {
+    const sale = await this.database.stockMovement.findFirst({
+      where: { idempotencyKey: invoiceStockIdempotencyKey(invoiceId) },
+      select: {
+        sourceWarehouseId: true,
+        lines: {
+          select: {
+            variantId: true,
+            quantity: true,
+            unit: true,
+            variant: {
+              select: {
+                sku: true,
+                product: { select: { catalogAuthority: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!sale || sale.lines.length === 0) return null;
+    const warehouseId =
+      sale.sourceWarehouseId ?? (await ensureMainWarehouse(this.database)).id;
+    return retryOnTakenCode({ field: "movementNumber" }, () =>
+      this.database.$transaction(async (transaction) => {
+        const posted = await postInventoryMovement(transaction, {
+          idempotencyKey: invoiceStornoStockIdempotencyKey(invoiceId),
+          movementNumber: generateCode("SZTO"),
+          type: "RETURN_IN",
+          warehouseId,
+          referenceType: "Invoice",
+          referenceId: stornoId,
+          performedById: actorUserId,
+          note: stornoNumber,
+          sourceProcess: "BILLING_STORNO",
+          lines: sale.lines.map((line) => ({
+            variantId: line.variantId,
+            sku: line.variant.sku,
+            unit: line.unit,
+            // a mozgás sora a mennyiség abszolút értékét tárolja; vissza: +
+            quantityDelta: line.quantity.abs(),
+            syncToUnas: isUnasMasteredVariant({
+              product: {
+                catalogAuthority: line.variant.product.catalogAuthority,
+              },
+            }),
+          })),
+        });
+        return {
+          alreadyPosted: posted.alreadyPosted,
+          returnedLines: posted.alreadyPosted ? 0 : sale.lines.length,
         };
       }),
     );

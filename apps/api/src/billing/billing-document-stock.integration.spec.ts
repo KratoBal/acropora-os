@@ -5,7 +5,7 @@ import { nincsMaradek } from "../common/takaritas-leltar.js";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -15,6 +15,7 @@ import type { DocumentStore } from "../service-assets/document-store/document-st
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
 import { BillingDocumentStockRepository } from "./billing-document-stock.repository.js";
+import { BillingDocumentStornoService } from "./billing-document-storno.service.js";
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { BillingDocumentsService } from "./billing-documents.service.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
@@ -309,6 +310,81 @@ describe(
       );
       assert.equal(issued.lines[0]!.stockOutcome, "MOVED_BY_SOURCE");
       assert.deepEqual(await onHand("unas"), ["-2"]);
+    });
+
+    /*
+      A SZTORNÓ VISSZAADJA AZ ELADÁST (számlázási brief, 1. pont). MI PIROSÍT:
+      a sztornó nem ad vissza készletet, vagy egy második kattintásra kétszer
+      ad vissza; a UNAS-termék visszavétele nem kerül a kimenőbe; egy második
+      STORNO sor ugyanarra a számlára létrejöhet (a részleges egyedi index).
+    */
+    it("a storno gives the sale back once, through the UNAS outbox, and one storno per invoice", async () => {
+      let stornoCalls = 0;
+      const storno = new BillingDocumentStornoService(
+        new BillingDocumentsRepository(),
+        {
+          resolve: async () => ({ agentKey: "it-key", revision: "db:1" }),
+        } as unknown as SzamlazzCredentialProvider,
+        { put: async () => undefined } as unknown as DocumentStore,
+        new BillingDocumentStockRepository(),
+        {
+          stornoInvoice: async () => {
+            stornoCalls++;
+            return {
+              successful: true,
+              invoiceNumber: `${PREFIX}-STORNO-${stornoCalls}`,
+            };
+          },
+        },
+        { BILLING_ISSUE_ENABLED: "true" },
+      );
+      const created = await draft([["unas", "1"]]);
+      await issuing.issue(created.id, created.updatedAt, user);
+      assert.deepEqual(await onHand("unas"), ["-3"]);
+
+      const cancelled = await storno.storno(created.id, "teszt", user);
+      const again = await storno.storno(created.id, undefined, user);
+      assert.equal(stornoCalls, 1);
+      assert.deepEqual(await onHand("unas"), ["-2"]);
+      assert.deepEqual(
+        [cancelled.cancellation?.state, again.cancellation?.stornoNumber],
+        ["ISSUED", `${PREFIX}-STORNO-1`],
+      );
+      const stornoRow = await prisma.invoice.findFirstOrThrow({
+        where: { referencedInvoiceId: created.id, documentType: "STORNO" },
+        select: { id: true, grossAmount: true },
+      });
+      assert.equal(
+        await prisma.stockMovement.count({
+          where: { referenceType: "Invoice", referenceId: stornoRow.id },
+        }),
+        1,
+      );
+      assert.ok(Number(stornoRow.grossAmount) < 0);
+      assert.ok(
+        (
+          await prisma.unasStockSyncOutbox.findMany({
+            where: { variantId: variantIds.unas! },
+            select: { sourceProcess: true },
+          })
+        ).some((row) => row.sourceProcess === "BILLING_STORNO"),
+      );
+      await assert.rejects(
+        prisma.invoice.create({
+          data: {
+            direction: "OUTBOUND",
+            documentType: "STORNO",
+            source: "SZAMLAZZ",
+            status: "ISSUING",
+            referencedInvoiceId: created.id,
+            partnerName: "második sztornó",
+            customerId,
+          },
+        }),
+        (error: unknown) =>
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002",
+      );
     });
   },
 );

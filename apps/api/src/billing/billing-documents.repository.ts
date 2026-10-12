@@ -27,6 +27,18 @@ const DETAIL_INCLUDE = {
     take: 1,
     select: { recipients: true, outcome: true, error: true, createdAt: true },
   },
+  // a számla sztornója (legfeljebb egy: a migráció részleges egyedi indexe)
+  correctionInvoices: {
+    where: { documentType: "STORNO" },
+    select: {
+      id: true,
+      status: true,
+      invoiceNumber: true,
+      issueDate: true,
+      pdfStorageKey: true,
+      syncError: true,
+    },
+  },
   customer: {
     select: {
       id: true,
@@ -149,6 +161,15 @@ export class BillingDocumentsRepository {
         taxNumber: true,
       },
     });
+  }
+
+  /** A saját számla Számlázz.hu-ikrét sztornózták-e (a feed `cancelled` jele). */
+  async feedTwinCancelled(invoiceNumber: string): Promise<boolean> {
+    const twin = await this.database.externalBillingDocument.findFirst({
+      where: { documentNumber: invoiceNumber, cancelled: true },
+      select: { id: true },
+    });
+    return twin !== null;
   }
 
   find(id: string): Promise<BillingDocumentRow | null> {

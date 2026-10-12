@@ -114,6 +114,26 @@ export interface BillingDocumentLine extends BillingAmounts {
   stockOutcome?: BillingLineStockOutcome | null;
 }
 
+/**
+ * A SZÁMLA SZTORNÓJA (számlázási brief, 1. pont, Balázs 2026-10-12). `OS`: a
+ * sztornót az OS állította ki (vagy kísérelte meg); `SZAMLAZZ`: a Számlázz.hu
+ * felületén sztornózták, és a feed ikre mondja meg. Ott a sztornó bizonylat
+ * száma nem ismert, és a PDF-je sem.
+ */
+export interface BillingDocumentCancellation {
+  source: "OS" | "SZAMLAZZ";
+  /** A sztornó bizonylat állapota; a feedből tudott sztornó mindig `ISSUED`. */
+  state: "ISSUING" | "ISSUED" | "ISSUE_FAILED";
+  /** A sztornó bizonylat száma; folyamatban és a feedből tudott sztornónál `null`. */
+  stornoNumber: string | null;
+  /** `YYYY-MM-DD`, a sztornó kelte; ahol nem ismert, `null`. */
+  issueDate: string | null;
+  /** Elutasított vagy ismeretlen kimenetű sztornónál az ok. */
+  error: string | null;
+  /** Letölthető-e a sztornó PDF-je (`GET billing/documents/:id/storno-pdf`). */
+  pdfAvailable: boolean;
+}
+
 export interface BillingDocumentDetail {
   id: string;
   status: BillingDocumentStatus;
@@ -154,4 +174,6 @@ export interface BillingDocumentDetail {
   szamlazz?: BillingDocumentSzamlazzInfo;
   pdf?: BillingDocumentPdfInfo;
   delivery?: BillingDocumentDeliveryInfo;
+  /** A számla sztornója, ha van; `null`: nincs sztornózva. */
+  cancellation?: BillingDocumentCancellation | null;
 }
