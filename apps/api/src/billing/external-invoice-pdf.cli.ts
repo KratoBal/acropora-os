@@ -24,13 +24,19 @@ import {
  *
  *   pnpm --filter @acropora/api external-invoice-pdf:fill [--month ÉÉÉÉ-HH] [--apply]
  *
+ * Az `--apply` csak megnevezett hónapra fut, vagy kifejezett `--all-months`-szal:
+ * egy elgépelt parancs ne kérje le az összes hónapot (barracuda, #1658). A
+ * Számlázz.hu 7-es hibájával (nincs ilyen szám) jelölt sor alapból kimarad,
+ * mert újra sem fog sikerülni; a `--retry-unknown` mégis újrapróbálja.
+ *
  * Argumentum nélkül CSAK SZÁMOL: kiírja, hány PDF nélküli SZAMLAZZ-forrású
  * számla van, és a Számlázz.hu-t nem hívja. A letöltés és a tárolás az
  * `--apply`. A Számlázz.hu-ban semmit nem változtat (csak olvas), a mi
  * oldalunkon a dokumentumtárba és a sor PDF-mezőibe ír.
  *
  * Kilépési kód: 0 nincs teendő vagy minden PDF megjött; 1 száraz futás, VAN
- * teendő; 2 rossz hónap, vagy `--apply` dokumentumtár nélkül; 3 legalább egy
+ * teendő; 2 rossz hónap, `--apply` hónap nélkül, vagy `--apply` dokumentumtár
+ * nélkül; 3 legalább egy
  * PDF nem jött meg (a sor `pdfMissingReason`-t kapott).
  */
 export async function main(
@@ -56,8 +62,17 @@ export async function main(
       return 2;
     }
   }
+  const apply = argv.includes("--apply");
+  if (apply && month === null && !argv.includes("--all-months")) {
+    io.err(
+      "Az --apply egy hónapra fut (--month ÉÉÉÉ-HH), vagy kifejezetten mindre: --all-months\n",
+    );
+    return 2;
+  }
   const store = deps.store ?? prismaExternalPdfStore;
-  const candidates = await store.candidates(month);
+  const candidates = await store.candidates(month, {
+    retryUnknown: argv.includes("--retry-unknown"),
+  });
   const scope = month ? `${month} kelte` : "minden hónap";
   io.out(
     `PDF nélküli Számlázz.hu-számla (${scope}): ${candidates.length}\n` +
@@ -69,7 +84,7 @@ export async function main(
         .join(""),
   );
   if (candidates.length === 0) return 0;
-  if (!argv.includes("--apply")) {
+  if (!apply) {
     io.out(
       "Ez a futás nem hívta a Számlázz.hu-t, és nem írt. A letöltéshez: --apply\n",
     );

@@ -48,6 +48,7 @@ const api = vi.hoisted(() => ({
   uploadDocument: vi.fn(),
   missingXlsx: vi.fn(),
   accountantPackage: vi.fn(),
+  outgoingPackage: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
 
@@ -729,6 +730,19 @@ describe("MissingInvoicesMonthPage", () => {
       "A könyvelői csomaghoz finance.manage jog kell.",
     );
     expect(api.accountantPackage).toHaveBeenCalledWith("token-1", "2026-08");
+  });
+
+  it("the outgoing package asks for the month's outgoing invoices", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.outgoingPackage.mockRejectedValue(new Error("nem sikerült"));
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const exports = await screen.findByRole("group", { name: "Exportok" });
+    fireEvent.click(
+      within(exports).getByRole("button", { name: "Kimenő számlák" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("nem sikerült");
+    expect(api.outgoingPackage).toHaveBeenCalledWith("token-1", "2026-08");
+    expect(api.accountantPackage).not.toHaveBeenCalled();
   });
 
   it("a viewer (finance.view only) reads the drawer, but cannot pair, move or save", async () => {
