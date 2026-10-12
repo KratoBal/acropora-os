@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
-import { buildIssueInput, vatRateText } from "./billing-document-issue.js";
+import {
+  buildIssueInput,
+  finalInvoiceIssueProblem,
+  vatRateText,
+} from "./billing-document-issue.js";
 import { toSzamlazzAgentInput } from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
@@ -328,6 +332,63 @@ describe("the advance's number on the final invoice", () => {
     assert.doesNotMatch(
       xml(row({ referencedInvoice })),
       /elolegSzamlaszam|vegszamla/,
+    );
+  });
+});
+
+/*
+  A VÉGSZÁMLA KIÁLLÍTHATÓSÁGA (barracuda, #1672). MI PIROSÍT: egy sztornózott
+  előleg levonása átmegy; egy az előlegnél kisebb végszámla (negatív
+  fizetendő) átmegy; a teljes összegű előleg utáni nulla végszámla elakad; egy
+  más típusú bizonylatot is megállít.
+*/
+describe("can the final invoice still be issued", () => {
+  const advance = (over: Record<string, unknown> = {}) => ({
+    id: "adv-1",
+    documentType: "ADVANCE_INVOICE",
+    invoiceNumber: "E-ELO-1",
+    grossAmount: d("1270"),
+    currency: "HUF",
+    correctionInvoices: [],
+    ...over,
+  });
+  const problem = (
+    gross: string,
+    over: Record<string, unknown> = {},
+    site = false,
+    documentType = "FINAL_INVOICE",
+  ) =>
+    finalInvoiceIssueProblem(
+      {
+        documentType,
+        currency: "HUF",
+        referencedInvoice: advance(over),
+      } as never,
+      gross,
+      site,
+    );
+
+  it("a stornoed advance, here or on Számlázz.hu, stops it; a sound one does not", () => {
+    assert.equal(problem("5000"), null);
+    assert.match(
+      problem("5000", { correctionInvoices: [{ id: "st-1" }] })!,
+      /E-ELO-1.*sztornózták/,
+    );
+    assert.match(problem("5000", {}, true)!, /E-ELO-1.*sztornózták/);
+  });
+
+  it("less than the advance is refused; as much as the advance (a full advance) is not", () => {
+    assert.match(problem("1269.99")!, /kisebb, mint a levonandó előlegé/);
+    assert.equal(problem("1270"), null);
+    // in another currency the two are not comparable here
+    assert.equal(problem("1", { currency: "EUR" }), null);
+  });
+
+  it("no advance number is a problem; another document type never is", () => {
+    assert.match(problem("5000", { invoiceNumber: null })!, /nincs kiállított/);
+    assert.equal(
+      problem("1", { correctionInvoices: [{ id: "x" }] }, true, "INVOICE"),
+      null,
     );
   });
 });
