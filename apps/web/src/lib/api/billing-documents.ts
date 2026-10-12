@@ -261,6 +261,31 @@ export const billingDocumentsApi = {
     );
   },
   /**
+   * SZTORNÓ (számlázási brief, 1. pont, #1667): a kiállított számla
+   * visszavonása a Számlázz.hu-n, `billing.issue` joggal. A második hívás a
+   * már sztornózottat adja; ahol a szerver nem engedi (kikapcsolt kiállítás,
+   * folyamatban lévő sztornó, az előleget levonó végszámla), 409 az okkal.
+   */
+  storno(token: string, id: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(id)}/storno`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+  },
+  /** A sztornó bizonylat tárolt PDF-je; ahol nincs, 404 a szerver mondatával. */
+  async stornoPdf(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/documents/${encodeURIComponent(id)}/storno-pdf`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    return pdfBlob(response, "A sztornó PDF-je nem tölthető le.");
+  },
+  /**
    * A VALÓDI KIÁLLÍTÁS (#1279, nautilus). Valódi Számlázz.hu-bizonylatot hoz
    * létre; a szerver kapcsolója (`BILLING_ISSUE_ENABLED`) nélkül elutasítja,
    * hívás előtt. Az ütközés-őr ugyanaz, mint a mentésnél.

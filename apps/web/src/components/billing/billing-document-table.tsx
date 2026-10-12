@@ -75,6 +75,13 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
           {item.origin === "EXTERNAL" ? (
             <ExternalBadge source={item.externalSource} />
           ) : null}
+          {/* a sztornózott saját számla, az OS-ben vagy a Számlázz.hu-n
+              (számlázási brief, 1. pont) */}
+          {item.cancelled ? (
+            <span className="inline-flex items-center rounded-full bg-pilot-red-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-pilot-red-700">
+              Sztornózott
+            </span>
+          ) : null}
         </span>
       ),
     },
@@ -172,7 +179,9 @@ export function BillingDocumentTable({
         `${item.origin === "EXTERNAL" ? "Külső " : ""}${
           item.externalKindLabel ??
           getDocumentCapabilities(item.documentType).label
-        } ${item.documentNumber ?? "piszkozat"}, ${item.customerName} megnyitása`
+        } ${item.documentNumber ?? "piszkozat"}${
+          item.cancelled ? " (sztornózott)" : ""
+        }, ${item.customerName} megnyitása`
       }
       minWidth={960}
     />

@@ -43,6 +43,13 @@ import {
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentStatus } from "./billing-document-status";
+import {
+  BillingCancellationNotice,
+  BillingStornoButton,
+  BillingStornoDialog,
+  stornoOffered,
+  useBillingStorno,
+} from "./billing-document-storno";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { useBillingDocumentPdf } from "./use-billing-document-pdf";
@@ -94,6 +101,9 @@ export function BillingDocumentDetailPage({
   const canCreate = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
   );
+  const canIssue = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
+  );
   const [finalBusy, setFinalBusy] = useState(false);
   const [finalError, setFinalError] = useState<string | null>(null);
 
@@ -101,6 +111,7 @@ export function BillingDocumentDetailPage({
   useAssistantEntity("Számla", detail?.id, detail?.documentNumber);
   const [error, setError] = useState<string | null>(null);
   const pdf = useBillingDocumentPdf(token);
+  const storno = useBillingStorno(token, setDetail);
   const [drawerOpen, setDrawerOpen] = useState(false);
   /*
     A LEVÉL KÉPEI: olvasni számlaküldési vagy beállítás-kezelési joggal,
@@ -333,8 +344,29 @@ export function BillingDocumentDetailPage({
                   }
             }
           />
+          {canIssue && stornoOffered(detail) ? (
+            <BillingStornoButton
+              disabled={storno.busy}
+              onClick={() => storno.setOpen(true)}
+            />
+          ) : null}
         </div>
       </header>
+
+      {detail.cancellation ? (
+        <BillingCancellationNotice
+          cancellation={detail.cancellation}
+          documentId={detail.id}
+          token={token}
+        />
+      ) : null}
+      {storno.error ? (
+        <Alert
+          variant="danger"
+          title="A sztornó nem sikerült"
+          description={storno.error}
+        />
+      ) : null}
 
       {isDraft ? (
         <Alert
@@ -661,6 +693,15 @@ export function BillingDocumentDetailPage({
             busy: sending,
             error: sendError,
           }}
+        />
+      ) : null}
+      {detail.documentNumber ? (
+        <BillingStornoDialog
+          number={detail.documentNumber}
+          open={storno.open}
+          busy={storno.busy}
+          onConfirm={() => void storno.confirm(detail.id)}
+          onCancel={() => storno.setOpen(false)}
         />
       ) : null}
     </PilotThemeRoot>

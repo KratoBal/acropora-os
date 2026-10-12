@@ -9,8 +9,14 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
  * A részletek lapja és a szerkesztő „Kiállítva” sávja (hétfői lista M2, Luca
  * kérése) ugyanezt használja, hogy a kettő ne térjen el: mindig a tárolt,
  * Számlázz.hu által adott PDF nyílik, soha nem a lap DOM-ja.
+ *
+ * `storno`: ugyanezek a műveletek a bizonylat sztornójának tárolt PDF-jén
+ * (számlázási brief, 1. pont).
  */
-export function useBillingDocumentPdf(token: string) {
+export function useBillingDocumentPdf(
+  token: string,
+  kind: "document" | "storno" = "document",
+) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +24,10 @@ export function useBillingDocumentPdf(token: string) {
     setBusy(true);
     setError(null);
     try {
-      const blob = await billingDocumentsApi.pdf(token, id);
+      const blob =
+        kind === "storno"
+          ? await billingDocumentsApi.stornoPdf(token, id)
+          : await billingDocumentsApi.pdf(token, id);
       use(URL.createObjectURL(blob));
     } catch (cause) {
       setError(

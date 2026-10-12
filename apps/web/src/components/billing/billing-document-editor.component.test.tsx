@@ -49,6 +49,8 @@ const api = vi.hoisted(() => ({
   pdf: vi.fn(),
   emailDraft: vi.fn(),
   templateDraft: vi.fn(),
+  storno: vi.fn(),
+  stornoPdf: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 /* a drawer nyitásakor a képtár töltődik; itt üres, hálózat nélkül */
@@ -143,6 +145,8 @@ beforeEach(() => {
   api.issue.mockReset();
   api.email.mockReset();
   api.pdf.mockReset();
+  api.storno.mockReset();
+  api.stornoPdf.mockReset();
   // A LEVELEZÉS OLDAL SABLONJA (nautilus #1293): ez megy ki, amíg a levélhez
   // senki nem nyúlt.
   api.emailDraft.mockReset();
@@ -920,6 +924,67 @@ describe("BillingDocumentEditor", () => {
       expect(
         screen.getByRole("button", { name: "PDF letöltése" }),
       ).toBeEnabled();
+    });
+
+    /*
+      A SZTORNÓ A „KIÁLLÍTVA” SÁVBAN (számlázási brief, 1. pont). MI PIROSÍT:
+      ha a gomb hiányzik a kiállított számla sávjából; ha a megerősítés nem a
+      brief szövege; ha a kérés nem erre a bizonylatra megy; ha a sztornó után
+      a gomb megmarad, vagy egy már sztornózott számlán felkínálja.
+    */
+    const issuedInvoice = (over: Partial<BillingDocumentDetail> = {}) => ({
+      ...detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "doc-issued",
+      ),
+      status: "ISSUED" as const,
+      documentNumber: "AC-2026-000004",
+      pdf: { available: true },
+      ...over,
+    });
+    const stornoDone = {
+      source: "OS" as const,
+      state: "ISSUED" as const,
+      stornoNumber: "AC-2026-000005",
+      issueDate: "2026-10-12",
+      error: null,
+      pdfAvailable: true,
+    };
+
+    it("the issued bar offers the storno, and after it says so", async () => {
+      api.detail.mockReset().mockResolvedValue(issuedInvoice());
+      api.storno.mockResolvedValue(issuedInvoice({ cancellation: stornoDone }));
+      render(<BillingDocumentEditor documentId="doc-issued" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
+      const dialog = screen.getByRole("dialog", {
+        name: "Biztos, hogy sztornózod a(z) AC-2026-000004 számlát?",
+      });
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Sztornózom" }),
+      );
+      expect(
+        await screen.findByText("Sztornózva: AC-2026-000005"),
+      ).toBeInTheDocument();
+      expect(api.storno).toHaveBeenCalledWith("token-1", "doc-issued");
+      expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("an already stornoed invoice shows it, and offers no second storno", async () => {
+      api.detail
+        .mockReset()
+        .mockResolvedValue(issuedInvoice({ cancellation: stornoDone }));
+      render(<BillingDocumentEditor documentId="doc-issued" />);
+      expect(
+        await screen.findByText("Sztornózva: AC-2026-000005"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
     });
   });
 
