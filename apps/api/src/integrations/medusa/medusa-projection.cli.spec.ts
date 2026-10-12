@@ -1822,6 +1822,90 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
   });
 
   /**
+   * A MARKA KET HELYRE MEGY, ATMENETILEG (SEO P0 PR 11, C7).
+   *
+   * A gyujtemeny (`collection_id`) a letrehozas torzseben marad, mert a
+   * markaoldal termeklistaja meg abbol olvas; mellette kimegy a marka-modul
+   * rekordja es a termek kapcsolata. MI PIROSITJA: ha a vetites nem irna a
+   * kapcsolatot, ha a `collection_id` elmaradna, vagy ha a marka-rekord nem az
+   * OS markaazonositojan menne ki.
+   */
+  it("marka: a collection_id marad, es mellette a marka-modul es a kapcsolat is kimegy", async () => {
+    const { out, stdout, stderr } = collector();
+    const marka = {
+      id: "brand-1",
+      name: "Aquaforest",
+      slug: "aquaforest",
+      description: "Lengyel gyártó.",
+      intro: " ",
+      seoTitle: "Aquaforest termékek",
+      metaDescription: null,
+      logoUrl: null,
+      websiteUrl: "https://aquaforest.eu",
+      isActive: true,
+      archivedAt: null,
+    };
+    const alap = adatbazis(termek({ brandId: "brand-1", brand: marka }));
+    const { db } = adatbazis(termek({ brandId: "brand-1", brand: marka }), {
+      externalReference: {
+        ...(alap.db as unknown as { externalReference: object })
+          .externalReference,
+        findMany: async (args: { where?: { entityType?: string } }) =>
+          args.where?.entityType === "ProductCollection"
+            ? [{ entityId: "brand-1", externalId: "pcol_1" }]
+            : [],
+      },
+    });
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.equal(
+      (letrehozas?.body as { collection_id?: string }).collection_id,
+      "pcol_1",
+    );
+    const markaKeresek = keresek.filter(
+      (k) =>
+        k.url.includes("/admin/brands/") ||
+        k.url.includes("/admin/product-brands/"),
+    );
+    assert.deepEqual(
+      markaKeresek.map((k) => [k.method, k.url.split("/admin/")[1]]),
+      [
+        ["GET", "brands/brand-1"],
+        ["PUT", "brands/brand-1"],
+        ["GET", "product-brands/prod_medusa_1"],
+        ["PUT", "product-brands/prod_medusa_1"],
+      ],
+    );
+    assert.deepEqual(markaKeresek[1]!.body, {
+      name: "Aquaforest",
+      handle: "aquaforest",
+      description: "Lengyel gyártó.",
+      intro: null,
+      seo_title: "Aquaforest termékek",
+      meta_description: null,
+      logo_url: null,
+      website_url: "https://aquaforest.eu",
+    });
+    assert.deepEqual(markaKeresek[3]!.body, { os_brand_id: "brand-1" });
+    assert.match(stdout.join(""), /márka-kapcsolat: most állítottuk be/);
+  });
+
+  /**
    * A WEBSHOPBOL KIHAGYOTT TERMEK NEM MEGY KI (Balazs, 2026-09-28 20:53 UTC).
    *
    * A beszallitoi szamlasorbol felvett uj termek csak akkor kerul a boltba
@@ -2206,6 +2290,8 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       // kártya 2a7f2313: a létrehozás a bolt alapértelmezett profilját kapja
       "GET /admin/shipping-profiles",
       "POST /admin/products",
+      // SEO P0 PR 11: a márka nélküli termék kapcsolatát is megnézi (írni nem ír)
+      "GET /admin/product-brands/prod_medusa_1",
     ]);
     assert.match(
       stdout.join(""),

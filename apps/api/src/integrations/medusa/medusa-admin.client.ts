@@ -34,6 +34,7 @@
 import type { WebshopStuckMail, WebshopStuckMailList } from "@acropora/types";
 import type { KnowledgeProjection } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
+import type { MedusaBrandRecord } from "./medusa-brand-module.policy.js";
 
 export interface MedusaProductLookupRow {
   id: string;
@@ -1206,6 +1207,20 @@ export interface MedusaAdminClient {
     productId: string,
     knowledge: KnowledgeProjection,
   ): Promise<KnowledgeProjection>;
+  /**
+   * A COMMERCE MARKA-MODUL (SEO P0 PR 11; a commerce szerzodese:
+   * `GET|PUT /admin/brands/:os_brand_id`). Az OS markaazonositoja a kulcs.
+   */
+  fetchBrand(osBrandId: string): Promise<MedusaBrandRecord | null>;
+  /** A TELJES REKORD CSEREJE (`PUT`). EZ IR A BOLTI OLDALRA. */
+  setBrand(
+    osBrandId: string,
+    brand: MedusaBrandRecord,
+  ): Promise<MedusaBrandRecord>;
+  /** A termek markaja (`GET /admin/product-brands/:product_id`), `null` ha nincs. */
+  fetchProductBrand(productId: string): Promise<string | null>;
+  /** A termek markajanak beallitasa vagy torlese (`PUT`). EZ IR A BOLTI OLDALRA. */
+  setProductBrand(productId: string, osBrandId: string | null): Promise<void>;
   /**
    * A BOLT ÁTIRÁNYÍTÁS-LISTÁJA (SEO P0 PR 7b; a commerce PR 7a szerződése:
    * `GET /admin/url-redirects`). A `hash` a rendezett lista ujjlenyomata: az OS
@@ -2416,6 +2431,62 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       body: JSON.stringify(knowledge),
     });
     return body.product_knowledge;
+  }
+
+  /**
+   * THE COMMERCE BRAND MODULE (SEO P0 PR 11), addressed by the OS brand id.
+   * A 404 means the brand was never written (or the module is not deployed
+   * yet); either way there is nothing to compare against.
+   */
+  async fetchBrand(osBrandId: string): Promise<MedusaBrandRecord | null> {
+    try {
+      const body = await this.request<{ brand: MedusaBrandRecord | null }>(
+        `/admin/brands/${encodeURIComponent(osBrandId)}`,
+      );
+      return body.brand ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async setBrand(
+    osBrandId: string,
+    brand: MedusaBrandRecord,
+  ): Promise<MedusaBrandRecord> {
+    const body = await this.request<{ brand: MedusaBrandRecord }>(
+      `/admin/brands/${encodeURIComponent(osBrandId)}`,
+      { method: "PUT", body: JSON.stringify(brand) },
+    );
+    return body.brand;
+  }
+
+  /** Which OS brand a shop product belongs to; `null` when none. */
+  async fetchProductBrand(productId: string): Promise<string | null> {
+    try {
+      const body = await this.request<{
+        product_brand?: { os_brand_id: string | null } | null;
+      }>(`/admin/product-brands/${encodeURIComponent(productId)}`);
+      return body.product_brand?.os_brand_id ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async setProductBrand(
+    productId: string,
+    osBrandId: string | null,
+  ): Promise<void> {
+    await this.request(
+      `/admin/product-brands/${encodeURIComponent(productId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ os_brand_id: osBrandId }),
+      },
+    );
   }
 
   async fetchUrlRedirects(): Promise<MedusaUrlRedirectList> {

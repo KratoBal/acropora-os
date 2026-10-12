@@ -1331,22 +1331,55 @@ model ProductVariant {
 }
 
 model Brand {
-  id             String       @id @default(cuid())
-  name           String
-  normalizedName String       @unique
-  slug           String       @unique
-  description    String?
-  websiteUrl     String?
-  logoUrl        String?
-  isActive       Boolean      @default(true)
-  archivedAt     DateTime?
-  metadata       Json?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  products       Product[]
-  aliases        BrandAlias[]
+  id                String              @id @default(cuid())
+  name              String
+  normalizedName    String              @unique
+  slug              String              @unique
+  description       String?
+  websiteUrl        String?
+  logoUrl           String?
+  isActive          Boolean             @default(true)
+  archivedAt        DateTime?
+  metadata          Json?
+  /// SEO P0 PR 11 (C7): the brand page's own title and description. Empty
+  /// means the storefront falls back to the name and the description.
+  seoTitle          String?
+  metaDescription   String?
+  intro             String?             @db.Text
+  /// The brand name the Merchant feed sends when it differs from `name`.
+  merchantBrandName String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  products          Product[]
+  aliases           BrandAlias[]
+  sourceDomains     BrandSourceDomain[]
 
   @@index([isActive, name])
+}
+
+/// SEO P0 PR 11 (C7): which web domains speak for a brand, and in what order
+/// the JEV should trust them. Today the source permission is global; this
+/// refines it per brand. Nothing reads it yet: the JEV wiring is its own PR.
+enum BrandSourceKind {
+  MANUFACTURER
+  DISTRIBUTOR
+  RETAILER
+}
+
+model BrandSourceDomain {
+  id        String          @id @default(cuid())
+  brandId   String
+  /// Lower-case host without scheme or path (`aquaforest.eu`).
+  domain    String
+  kind      BrandSourceKind
+  /// Lower is tried first.
+  priority  Int             @default(100)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  brand     Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, domain])
+  @@index([domain])
 }
 
 model BrandAlias {
