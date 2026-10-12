@@ -9,15 +9,30 @@ import {
   IsPositive,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateNested,
 } from "class-validator";
+import { POS_MANUAL_VAT_RATES } from "@acropora/types";
 
 const POS_PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER"] as const;
 
 export class CreatePosSaleLineDto {
+  // VAGY termék, VAGY kézi tétel (hétfői lista M3); hogy pontosan az egyik
+  // álljon, azt a service dönti el, mert a két mező együtt értelmes.
+  @IsOptional()
   @IsString()
-  variantId!: string;
+  variantId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn([...POS_MANUAL_VAT_RATES])
+  vatRatePercent?: number;
 
   @Type(() => Number)
   @IsNumber()

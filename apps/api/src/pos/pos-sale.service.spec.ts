@@ -56,6 +56,8 @@ function fakeSaleResult(
 ): CreatePosSaleResult {
   const stockWarnings: PosSaleStockWarning[] = [];
   for (const line of params.lines) {
+    // a kézi tételnek nincs készlete, tehát figyelmeztetése sem
+    if (line.variantId === null) continue;
     const info = variants.get(line.variantId);
     const resultingQty = (info?.currentQty ?? new Prisma.Decimal(0)).minus(
       line.quantity,
@@ -253,6 +255,128 @@ describe("PosSaleService.createSale", () => {
     assert.equal(params?.totals.totalNet.toString(), "144");
     assert.equal(params?.totals.totalTax.toString(), "38.88");
     assert.equal(params?.totals.totalGross.toString(), "182.88");
+  });
+
+  /*
+    A KÉZI TÉTEL (hétfői lista M3): megnevezés, darabszám, bruttó ár, készlet
+    nélkül. MI PIROSÍT: ha a kézi sor terméket vagy készlet-összetevőt kapna; ha
+    kimaradna a végösszegből; ha nem a kosár sorrendjében állna; ha a választott
+    ÁFA helyett más kulccsal bontana.
+  */
+  it("a manual line: no product, no stock, in the total, in the cart's order", async () => {
+    const { service, getCapturedCreateSaleParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await service.createSale(
+      baseInput({
+        lines: [
+          {
+            description: "  Akvárium beüzemelés  ",
+            vatRatePercent: 18,
+            quantity: 2,
+            unitGross: 5900,
+          },
+          { variantId: "variant-1", quantity: 1, unitGross: 127 },
+        ],
+      }),
+      "user-1",
+    );
+    const params = getCapturedCreateSaleParams()!;
+    assert.deepEqual(
+      {
+        lines: params.lines.map((prepared) => [
+          prepared.variantId,
+          prepared.sku,
+          prepared.productName,
+          prepared.taxRate.toString(),
+          prepared.unitNet.toString(),
+          prepared.lineGross.toString(),
+          prepared.stockComponents.length,
+          prepared.syncToUnas,
+        ]),
+        totalGross: params.totals.totalGross.toString(),
+        totalNet: params.totals.totalNet.toString(),
+      },
+      {
+        lines: [
+          [
+            null,
+            "KÉZI",
+            "Akvárium beüzemelés",
+            "18",
+            "5000",
+            "11800",
+            0,
+            false,
+          ],
+          [
+            "variant-1",
+            "REEF-SALT-01",
+            "Reef Salt",
+            "27",
+            "100",
+            "127",
+            1,
+            true,
+          ],
+        ],
+        totalGross: "11927",
+        totalNet: "10100",
+      },
+      "POS-MANUAL-LINE",
+    );
+  });
+
+  it("a manual line needs a name and one of the offered VAT rates, and is never also a product", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    const refused = async (line: CreatePosSaleInput["lines"][number]) =>
+      service.createSale(baseInput({ lines: [line] }), "user-1").then(
+        () => "accepted",
+        (error: { status?: number; message: string }) =>
+          `${error.status}: ${error.message}`,
+      );
+    assert.deepEqual(
+      await Promise.all([
+        refused({
+          description: "  ",
+          vatRatePercent: 27,
+          quantity: 1,
+          unitGross: 100,
+        }),
+        refused({
+          description: "Munkadíj",
+          vatRatePercent: 10,
+          quantity: 1,
+          unitGross: 100,
+        }),
+        refused({ description: "Munkadíj", quantity: 1, unitGross: 100 }),
+        refused({
+          variantId: "variant-1",
+          description: "Munkadíj",
+          vatRatePercent: 27,
+          quantity: 1,
+          unitGross: 100,
+        }),
+        refused({ quantity: 1, unitGross: 100 }),
+        refused({
+          description: "Munkadíj",
+          vatRatePercent: 27,
+          quantity: 0,
+          unitGross: 100,
+        }),
+      ]),
+      [
+        "400: A kézi tételnek megnevezés kell.",
+        "400: A kézi tétel ÁFA-kulcsa 27, 18, 5% lehet: Munkadíj.",
+        "400: A kézi tétel ÁFA-kulcsa 27, 18, 5% lehet: Munkadíj.",
+        "400: Egy tétel vagy termék, vagy kézi tétel (megnevezéssel).",
+        "400: Egy tétel vagy termék, vagy kézi tétel (megnevezéssel).",
+        "400: Érvénytelen mennyiség: Munkadíj.",
+      ],
+      "POS-MANUAL-REJECT",
+    );
   });
 
   it("rejects discounts outside the 0-100 percent range", async () => {

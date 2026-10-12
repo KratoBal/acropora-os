@@ -615,6 +615,7 @@ export type {
   PosSaleStockWarning,
   SalesOrderLineSyncStatus,
 } from "./pos.js";
+export { POS_MANUAL_LINE_SKU, POS_MANUAL_VAT_RATES } from "./pos.js";
 export type {
   InventoryCountApplyResult,
   InventoryCountDetail,

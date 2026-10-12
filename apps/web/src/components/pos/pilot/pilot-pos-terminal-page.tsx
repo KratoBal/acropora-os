@@ -4,6 +4,8 @@ import { Alert, Icon, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
+  POS_MANUAL_LINE_SKU,
+  POS_MANUAL_VAT_RATES,
   type PosPaymentMethod,
   type PosProductSearchResult,
   type PosSaleListItem,
@@ -58,6 +60,38 @@ interface CartLine {
   currentStock: string;
   isPackageProduct: boolean;
   vatRate: string | null;
+  /**
+   * KÉZI TÉTEL (hétfői lista M3): nincs mögötte termék. A `variantId` ilyenkor
+   * csak a kosár saját kulcsa (`kezi-…`), a szerver nem látja.
+   */
+  manual?: boolean;
+}
+
+/** A kézi tétel űrlapja, szövegként, ahogy a mezőkben áll. */
+interface ManualDraft {
+  description: string;
+  quantity: string;
+  unitGross: string;
+  vatRatePercent: string;
+}
+
+const EMPTY_MANUAL: ManualDraft = {
+  description: "",
+  quantity: "1",
+  unitGross: "",
+  vatRatePercent: String(POS_MANUAL_VAT_RATES[0]),
+};
+
+/** Miért nem vehető még fel a kézi tétel; `null`, ha felvehető. */
+export function manualDraftProblem(draft: ManualDraft): string | null {
+  if (!draft.description.trim()) return "Add meg a tétel megnevezését.";
+  const quantity = Number(draft.quantity);
+  if (!draft.quantity.trim() || !Number.isFinite(quantity) || quantity <= 0)
+    return "A darabszám legyen nullánál nagyobb.";
+  const unitGross = Number(draft.unitGross);
+  if (!draft.unitGross.trim() || !Number.isFinite(unitGross) || unitGross < 0)
+    return "Add meg a bruttó árat.";
+  return null;
 }
 
 /** Aggregate by variant, matching the server's duplicate-line merge. */
@@ -69,10 +103,13 @@ export function getCartStockWarnings(
     currentStock: string;
     isPackageProduct: boolean;
     unit: string;
+    manual?: boolean;
   }>,
 ) {
   const byVariant = new Map<string, (typeof lines)[number]>();
   for (const line of lines) {
+    // a kézi tételnek nincs készlete, tehát nincs mit meghaladnia
+    if (line.manual) continue;
     const previous = byVariant.get(line.variantId);
     byVariant.set(line.variantId, {
       ...line,
@@ -203,6 +240,9 @@ export function PilotPosTerminalPage() {
   const [recentSales, setRecentSales] = useState<PosSaleListItem[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [lastAdded, setLastAdded] = useState<LastAdded | null>(null);
+  /** A nyitott kézi-tétel űrlap, vagy `null`, ha zárva van. */
+  const [manualDraft, setManualDraft] = useState<ManualDraft | null>(null);
+  const [manualTried, setManualTried] = useState(false);
   const cartListRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -371,6 +411,41 @@ export function PilotPosTerminalPage() {
     );
   };
 
+  const manualProblem = manualDraft ? manualDraftProblem(manualDraft) : null;
+  const addManualLine = () => {
+    setManualTried(true);
+    if (!manualDraft || manualProblem) return;
+    const key = `kezi-${crypto.randomUUID()}`;
+    const description = manualDraft.description.trim();
+    const quantity = Number(manualDraft.quantity);
+    setCart((previous) => [
+      ...previous,
+      {
+        productId: "",
+        variantId: key,
+        sku: POS_MANUAL_LINE_SKU,
+        productName: description,
+        unit: "db",
+        quantity,
+        unitGross: Number(manualDraft.unitGross),
+        discountPercent: 0,
+        currentStock: "",
+        isPackageProduct: false,
+        vatRate: manualDraft.vatRatePercent,
+        manual: true,
+      },
+    ]);
+    setLastAdded({
+      variantId: key,
+      productName: description,
+      quantity,
+      unit: "db",
+    });
+    setManualDraft(null);
+    setManualTried(false);
+    searchInputRef.current?.focus();
+  };
+
   const subtotalGross = useMemo(
     () =>
       cart.reduce(
@@ -407,12 +482,22 @@ export function PilotPosTerminalPage() {
       .createSale(token, {
         paymentMethod,
         discountPercent,
-        lines: cart.map((line) => ({
-          variantId: line.variantId,
-          quantity: line.quantity,
-          unitGross: line.unitGross,
-          discountPercent: line.discountPercent,
-        })),
+        lines: cart.map((line) =>
+          line.manual
+            ? {
+                description: line.productName,
+                vatRatePercent: Number(line.vatRate),
+                quantity: line.quantity,
+                unitGross: line.unitGross,
+                discountPercent: line.discountPercent,
+              }
+            : {
+                variantId: line.variantId,
+                quantity: line.quantity,
+                unitGross: line.unitGross,
+                discountPercent: line.discountPercent,
+              },
+        ),
       })
       .then((result) => {
         setLastResult(result);
@@ -503,9 +588,108 @@ export function PilotPosTerminalPage() {
       <div className="grid flex-1 grid-cols-1 items-start gap-6 px-8 pb-8 lg:grid-cols-[minmax(0,1fr)_424px]">
         <div className="flex min-w-0 flex-col gap-5">
           <PilotCard className="px-5 py-6">
-            <h2 className="mb-3 text-sm font-semibold text-pilot-grey-900">
-              Termék keresése
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-pilot-grey-900">
+                Termék keresése
+              </h2>
+              <PilotButton
+                variant="secondary"
+                size="regular"
+                onClick={() => {
+                  setManualTried(false);
+                  setManualDraft((open) => (open ? null : EMPTY_MANUAL));
+                }}
+              >
+                Kézi tétel
+              </PilotButton>
+            </div>
+            {manualDraft ? (
+              <form
+                aria-label="Kézi tétel"
+                className="mb-4 grid grid-cols-1 gap-2 rounded-lg bg-pilot-grey-50 p-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  addManualLine();
+                }}
+              >
+                {(
+                  [
+                    ["description", "Megnevezés", "text"],
+                    ["quantity", "Darabszám", "number"],
+                    ["unitGross", "Bruttó egységár (Ft)", "number"],
+                  ] as const
+                ).map(([field, label, type]) => (
+                  <label
+                    key={field}
+                    className="flex min-w-0 flex-col gap-1 text-xs"
+                  >
+                    <span className="text-[10px] font-medium text-pilot-grey-500">
+                      {label}
+                    </span>
+                    <input
+                      type={type}
+                      step={type === "number" ? "any" : undefined}
+                      min={type === "number" ? 0 : undefined}
+                      autoFocus={field === "description"}
+                      value={manualDraft[field]}
+                      onChange={(event) =>
+                        setManualDraft((current) =>
+                          current
+                            ? { ...current, [field]: event.target.value }
+                            : current,
+                        )
+                      }
+                      className="h-[38px] w-full min-w-0 rounded-lg bg-white px-3 py-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                    />
+                  </label>
+                ))}
+                <label className="flex min-w-0 flex-col gap-1 text-xs">
+                  <span className="text-[10px] font-medium text-pilot-grey-500">
+                    ÁFA
+                  </span>
+                  <select
+                    value={manualDraft.vatRatePercent}
+                    onChange={(event) =>
+                      setManualDraft((current) =>
+                        current
+                          ? { ...current, vatRatePercent: event.target.value }
+                          : current,
+                      )
+                    }
+                    className="h-[38px] w-full min-w-0 rounded-lg bg-white px-2 text-xs text-pilot-grey-900 ring-1 ring-pilot-grey-200 focus:outline-none focus:ring-2 focus:ring-pilot-aqua-500"
+                  >
+                    {POS_MANUAL_VAT_RATES.map((rate) => (
+                      <option key={rate} value={String(rate)}>
+                        {rate}%
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-[10px] text-pilot-grey-600 sm:col-span-4">
+                  Készletet nem von le; a végösszegben és a számlán benne van.
+                </p>
+                {manualTried && manualProblem ? (
+                  <p
+                    role="alert"
+                    className="text-[11px] text-pilot-red-700 sm:col-span-4"
+                  >
+                    {manualProblem}
+                  </p>
+                ) : null}
+                <div className="flex gap-2 sm:col-span-4">
+                  <PilotButton variant="primary" size="regular" type="submit">
+                    Hozzáadás a kosárhoz
+                  </PilotButton>
+                  <PilotButton
+                    variant="secondary"
+                    size="regular"
+                    onClick={() => setManualDraft(null)}
+                  >
+                    Mégsem
+                  </PilotButton>
+                </div>
+              </form>
+            ) : null}
             <div className="relative">
               <Icon
                 name="search"
@@ -686,7 +870,9 @@ export function PilotPosTerminalPage() {
                             {line.productName}
                           </p>
                           <p className="mt-0.5 break-all text-[10px] leading-[14px] text-pilot-grey-500">
-                            {line.sku}
+                            {line.manual
+                              ? `Kézi tétel · ${line.vatRate}% ÁFA · készlet nélkül`
+                              : line.sku}
                           </p>
                         </div>
                         <button
