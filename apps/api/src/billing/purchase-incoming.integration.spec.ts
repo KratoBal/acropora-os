@@ -305,6 +305,54 @@ describe(
       );
     });
 
+    it("known from a mailbox document only by its adapter or its foreign reading (N3): not listed", async () => {
+      const adapter = await purchase("I9");
+      const read = await purchase("J9");
+      const mailbox = async (code: string, data: Record<string, unknown>) => {
+        const document = await prisma.incomingSupplierDocument.create({
+          data: {
+            gmailMessageId: `mail:${suffix}:${code}`,
+            fileName: `${code}.pdf`,
+            sizeBytes: 9,
+            sha256: `${suffix}-mail-${code}`,
+            content: new Uint8Array(Buffer.from("%PDF-1.4 ")),
+            status: "FAILED",
+            kind: "INVOICE",
+            origin: "MAILBOX",
+            // a szövegolvasó nem talált számot: a régi út ezen elcsúszott
+            textReading: { invoiceNumber: null },
+            ...data,
+          },
+          select: { id: true },
+        });
+        scanIds.push(document.id);
+        return document.id;
+      };
+      await mailbox("I9", {
+        importResult: {
+          invoiceNumber: adapter.supplierInvoiceNumber,
+          supplier: { vatId: tax, name: "Kitalált név az illesztőben" },
+        },
+      });
+      const readId = await mailbox("J9", {});
+      await prisma.incomingDocumentReading.create({
+        data: {
+          documentId: readId,
+          documentNumber: read.supplierInvoiceNumber,
+          supplierTaxNumber: tax,
+          supplierName: "Kitalált név az olvasatban",
+          sources: {},
+          warnings: [],
+          hasText: true,
+        },
+      });
+      assert.deepEqual(
+        [await listed(adapter.id), await listed(read.id)],
+        [null, null],
+        "SUBJECTS-ADAPTER-READING",
+      );
+    });
+
     it("approved with a number the reviewer corrected: the purchase is not listed again", async () => {
       const invoice = await purchase("H");
       const review = await reviews.review(`purchase:${invoice.id}`);
