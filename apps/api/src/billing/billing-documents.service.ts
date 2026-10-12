@@ -123,7 +123,21 @@ export class BillingDocumentsService {
         "Előlegszámla csak kiállított díjbekérőből készíthető.",
       );
     const id = advanceIdFor(proformaId);
-    if (await this.repository.find(id)) return this.detail(id);
+    const existing = await this.repository.find(id);
+    if (existing) {
+      // a sztornózott előleg helyére ugyanebből a díjbekérőből nem készül új
+      // (díjbekérőnként egy), és ezt kimondjuk, nem a régit adjuk vissza
+      // csendben (barracuda, #1670)
+      if (
+        (existing.correctionInvoices ?? []).some(
+          (storno) => storno.status === "ISSUED",
+        )
+      )
+        throw new ConflictException(
+          `Ennek a díjbekérőnek az előlegszámláját (${existing.invoiceNumber ?? existing.id}) sztornózták; ugyanebből a díjbekérőből új előleg nem készül. Új díjbekérőt állíts ki.`,
+        );
+      return this.detail(id);
+    }
     const { draft, partner } = await this.prepare({
       id,
       documentType: "ADVANCE_INVOICE",

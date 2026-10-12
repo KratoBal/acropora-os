@@ -190,6 +190,25 @@ describe("an advance from a proforma", () => {
     );
   });
 
+  it("a stornoed advance: no new one from the same proforma, and it says why (barracuda, #1670)", async () => {
+    const s = setup({
+      "pro-1": proforma(),
+      [advanceIdFor("pro-1")]: proforma({
+        id: advanceIdFor("pro-1"),
+        documentType: "ADVANCE_INVOICE",
+        invoiceNumber: "E-ELO-1",
+        correctionInvoices: [{ id: "st-1", status: "ISSUED" }],
+      }),
+    });
+    await assert.rejects(
+      s.service.advanceFromProforma("pro-1", USER),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /E-ELO-1.*sztornózták/.test(error.message),
+    );
+    assert.equal(s.created.length, 0);
+  });
+
   it("the links: the advance names its proforma, the proforma its advance", () => {
     assert.deepEqual(
       proformaLinks({
