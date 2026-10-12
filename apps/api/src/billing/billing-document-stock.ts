@@ -177,3 +177,7 @@ export function planInvoiceStock(input: {
 /** Egy számla egy mozgás: az újrapróbált kiállítás nem von le kétszer. */
 export const invoiceStockIdempotencyKey = (invoiceId: string) =>
   `BILLING_INVOICE:${invoiceId}`;
+
+/** A sztornó visszavételének kulcsa: egy számla eladása egyszer jön vissza. */
+export const invoiceStornoStockIdempotencyKey = (invoiceId: string) =>
+  `BILLING_INVOICE_STORNO:${invoiceId}`;

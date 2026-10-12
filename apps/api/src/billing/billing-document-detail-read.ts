@@ -4,6 +4,7 @@ import {
   billingEmailModeFor,
   szamlazzDocumentTotals,
   type BillingDeliveryOutcome,
+  type BillingDocumentCancellation,
   type BillingDocumentDetail,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -95,8 +96,44 @@ export function withIssueAndDelivery(
       // A kiküldés a tárolt PDF-et csatolja, tehát PDF nélkül nincs mit küldeni.
       canResend: mode !== null && delivers && pdfAvailable,
     },
+    cancellation: osCancellation(row),
   };
 }
+
+/**
+ * AZ OS-BEN KIÁLLÍTOTT (VAGY MEGKÍSÉRELT) SZTORNÓ a részletekhez. A Számlázz.hu
+ * felületén történt sztornót a szolgáltatás teszi rá a feed ikréből, mert az
+ * nem ennek a sornak a kapcsolata.
+ */
+export function osCancellation(
+  row: Pick<BillingDocumentRow, "correctionInvoices">,
+): BillingDocumentCancellation | null {
+  // a sztornó-mező előtti sorokon (és a régi teszt-sorokon) a kapcsolat hiányzik
+  const storno = (row.correctionInvoices ?? [])[0];
+  if (!storno) return null;
+  const state =
+    storno.status === "ISSUED" || storno.status === "ISSUE_FAILED"
+      ? storno.status
+      : "ISSUING";
+  return {
+    source: "OS",
+    state,
+    stornoNumber: state === "ISSUED" ? storno.invoiceNumber : null,
+    issueDate: state === "ISSUED" ? budapestDay(storno.issueDate) : null,
+    error: state === "ISSUED" ? null : storno.syncError,
+    pdfAvailable: state === "ISSUED" && storno.pdfStorageKey !== null,
+  };
+}
+
+/** A Számlázz.hu felületén sztornózott számla: csak a tény ismert. */
+export const FEED_CANCELLATION: BillingDocumentCancellation = {
+  source: "SZAMLAZZ",
+  state: "ISSUED",
+  stornoNumber: null,
+  issueDate: null,
+  error: null,
+  pdfAvailable: false,
+};
 
 /**
  * A VÉGÖSSZEG, AHOGY A SZÁMLÁN ÁLL. Kiállított bizonylatnál a Számlázz.hu

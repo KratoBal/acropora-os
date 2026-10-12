@@ -115,6 +115,11 @@ export interface BillingDocumentListItem {
    * rögzítve. `null`, ahol a `paymentState` is az, vagy ismeretlen.
    */
   paymentSource: BillingPaymentSource | null;
+  /**
+   * A saját számla sztornózva van: az OS-ben (kiállított sztornó) vagy a
+   * Számlázz.hu felületén (a feed ikre mondja). A külső sornál hiányzik.
+   */
+  cancelled?: boolean;
 }
 
 /**

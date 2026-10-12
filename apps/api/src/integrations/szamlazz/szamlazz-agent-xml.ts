@@ -262,6 +262,51 @@ export function buildSzamlazzAgentInvoiceXml(
 }
 
 /**
+ * EGY KIÁLLÍTOTT SZÁMLA SZTORNÓZÁSA (Számla Agent, `xmlszamlast`; Balázs
+ * 2026-10-12 09:44 UTC „Mehet”, a számlázási brief 1. pontja). ELSŐDLEGES
+ * FORRÁS: docs.szamlazz.hu/agent/reversing_invoice/xml (az XSD-vel együtt,
+ * letöltve 2026-10-12). A sorrend a sémáé, `sequence`:
+ *
+ *   beallitasok: szamlaagentkulcs, eszamla, szamlaLetoltes, valaszVerzio
+ *   fejlec:      szamlaszam, keltDatum, megjegyzes, tipus
+ *
+ * `valaszVerzio=2`: a válasz `xmlszamlavalasz`, a sztornó bizonylat ÚJ számával
+ * és a base64 PDF-fel; ugyanaz az elemző olvassa, mint a kiállításét. Az
+ * `eszamla` az eredeti formátumát követi. A `tipus` SS (sztornó számla), a
+ * dokumentáció példája szerint.
+ */
+export function buildSzamlazzAgentStornoXml(input: {
+  agentKey: string;
+  invoiceNumber: string;
+  electronic: boolean;
+  /** ÉÉÉÉ-HH-NN, a sztornó kelte. */
+  issueDate: string;
+  /** A sztornó oka, szabad szöveg; üresen kimarad. */
+  reason?: string;
+}): string {
+  const reason = input.reason?.trim();
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<xmlszamlast xmlns="http://www.szamlazz.hu/xmlszamlast" ' +
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlast https://www.szamlazz.hu/szamla/docs/xsds/agentst/xmlszamlast.xsd">' +
+    "<beallitasok>" +
+    tag("szamlaagentkulcs", input.agentKey) +
+    tag("eszamla", input.electronic) +
+    tag("szamlaLetoltes", true) +
+    tag("valaszVerzio", 2) +
+    "</beallitasok>" +
+    "<fejlec>" +
+    tag("szamlaszam", input.invoiceNumber) +
+    tag("keltDatum", input.issueDate) +
+    (reason ? tag("megjegyzes", reason) : "") +
+    tag("tipus", "SS") +
+    "</fejlec>" +
+    "</xmlszamlast>"
+  );
+}
+
+/**
  * EGY MEGLÉVŐ SZÁMLA PDF-JE (Számla Agent, `xmlszamlapdf`; hétfői lista N1,
  * Balázs 2026-10-09). ELSŐDLEGES FORRÁS: a hivatalos XSD
  * (https://www.szamlazz.hu/szamla/docs/xsds/agentpdf/xmlszamlapdf.xsd,

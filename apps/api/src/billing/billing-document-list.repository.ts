@@ -36,6 +36,11 @@ export const LIST_SELECT = {
   emailStatus: true,
   createdAt: true,
   customer: { select: { companyName: true, displayName: true } },
+  // a kiállított sztornó (számlázási brief, 1. pont)
+  correctionInvoices: {
+    where: { documentType: "STORNO", status: "ISSUED" },
+    select: { id: true },
+  },
   lines: {
     select: {
       kind: true,
@@ -183,12 +188,14 @@ export class BillingDocumentListRepository {
         twin.orderNumber,
         UNAS_SHOP_ORDER_PREFIX,
       );
-      return withTwinPayment(
+      const item = withTwinPayment(
         toListItem(row),
         twin,
         (orderKey && twinSimplePay.get(orderKey)) || [],
         twinMarks.get(twin.documentNumber) ?? [],
       );
+      // a Számlázz.hu felületén sztornózott saját számla: a jel az ikertől jön
+      return twin.cancelled ? { ...item, cancelled: true } : item;
     };
     const totalItems = ownCount + externalCount;
     const items = both
