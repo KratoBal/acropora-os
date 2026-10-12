@@ -38,6 +38,7 @@ export {
   INVOICE_FORMAT_LABELS,
   billingDrawerCta,
   billingEmailDelivery,
+  billingIssueConfirm,
   billingIssueCta,
   canTransitionBillingDocument,
   getDocumentCapabilities,

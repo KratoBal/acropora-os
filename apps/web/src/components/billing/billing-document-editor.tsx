@@ -12,7 +12,7 @@ import {
 import {
   billingEmailDelivery,
   billingEmailModeFor,
-  billingIssueCta,
+  billingIssueConfirm,
   getDocumentCapabilities,
   hasAnyPermission,
   hasPermission,
@@ -233,6 +233,13 @@ export function BillingDocumentEditor({
   const emailDraft =
     email ??
     defaultBillingEmail(state.documentType, state.customer?.email ?? "");
+
+  // Balázs kérdése a megerősítő ablakban (hétfői lista M1): e-számlánál a címzettel.
+  const issueConfirm = billingIssueConfirm(
+    state.documentType,
+    format,
+    splitAddresses(emailDraft.to),
+  );
 
   /** A mentés maga: a tárolt bizonylat, vagy hiba. A kiállítás is ezzel kezd. */
   const persist = async () => {
@@ -635,10 +642,10 @@ export function BillingDocumentEditor({
       ) : null}
       <ConfirmDialog
         open={confirmIssue}
-        title={`${capabilities.label} kiállítása`}
+        title={issueConfirm.question}
         consequence={`A kiállítással valódi ${capabilities.label.toLowerCase()} készül a Számlázz.hu-n, saját számmal. A bizonylat ezután nem szerkeszthető.`}
         recovery="Egy kiállított bizonylat nem vonható vissza; javítani csak sztornóval vagy helyesbítő bizonylattal lehet."
-        confirmLabel={billingIssueCta(state.documentType, format)}
+        confirmLabel={issueConfirm.confirmLabel}
         busy={issuing}
         onConfirm={() => void issue()}
         onCancel={() => setConfirmIssue(false)}
