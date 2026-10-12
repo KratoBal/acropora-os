@@ -5,6 +5,7 @@ import {
   szamlazzDocumentTotals,
   type BillingDeliveryOutcome,
   type BillingDocumentCancellation,
+  type BillingDocumentDeductedAdvance,
   type BillingDocumentDetail,
   type BillingDocumentStatus,
   type BillingDocumentType,
@@ -98,6 +99,25 @@ export function withIssueAndDelivery(
     },
     cancellation: osCancellation(row),
     ...proformaLinks(row),
+    deductedAdvance: deductedAdvanceOf(row),
+  };
+}
+
+/**
+ * A VÉGSZÁMLA LEVONT ELŐLEGE (számlázási brief, 3. pont). Csak végszámlán: a
+ * `referencedInvoice` a sztornó soron is az eredetire mutat, de az más jelentés.
+ */
+export function deductedAdvanceOf(
+  row: Pick<BillingDocumentRow, "documentType" | "referencedInvoice">,
+): BillingDocumentDeductedAdvance | null {
+  // a kapcsolat előtti (és a régi teszt-) sorokon a mező hiányzik
+  const advance =
+    row.documentType === "FINAL_INVOICE" ? row.referencedInvoice : null;
+  if (!advance) return null;
+  return {
+    id: advance.id,
+    number: advance.invoiceNumber,
+    grossAmount: advance.grossAmount?.toFixed(4) ?? null,
   };
 }
 

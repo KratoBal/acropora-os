@@ -155,6 +155,24 @@ export interface BillingDocumentAdvanceLink {
   status: BillingDocumentStatus;
 }
 
+/**
+ * VÉGSZÁMLA ÉS ELŐLEG (számlázási brief, 3. pont). A végszámlán az
+ * előlegszámla, amelyet a Számlázz.hu levon (`elolegSzamlaszam`); a bruttó
+ * összege a levonás mértéke, ahogy az előleg kiállításakor rögzült.
+ */
+export interface BillingDocumentDeductedAdvance {
+  id: string;
+  number: string | null;
+  grossAmount: DecimalText | null;
+}
+
+/** Az előlegszámlán a belőle készült végszámla. */
+export interface BillingDocumentFinalInvoiceLink {
+  id: string;
+  number: string | null;
+  status: BillingDocumentStatus;
+}
+
 export interface BillingDocumentDetail {
   id: string;
   status: BillingDocumentStatus;
@@ -201,4 +219,8 @@ export interface BillingDocumentDetail {
   proforma?: BillingDocumentProformaLink | null;
   /** Díjbekérőn a belőle készült előlegszámla; máshol `null`. */
   advance?: BillingDocumentAdvanceLink | null;
+  /** Végszámlán a levont előlegszámla; máshol `null`. */
+  deductedAdvance?: BillingDocumentDeductedAdvance | null;
+  /** Előlegszámlán a belőle készült végszámla; máshol `null`. */
+  finalInvoice?: BillingDocumentFinalInvoiceLink | null;
 }

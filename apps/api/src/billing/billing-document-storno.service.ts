@@ -39,8 +39,9 @@ export const BILLING_SZAMLAZZ_STORNO_CLIENT = Symbol(
   "BILLING_SZAMLAZZ_STORNO_CLIENT",
 );
 
-/** Csak ez a kettő sztornózható: a díjbekérő nem számla, a szállítólevél sem. */
-const STORNABLE = new Set(["INVOICE", "ADVANCE_INVOICE"]);
+/** Csak a számla-fajták sztornózhatók: a díjbekérő nem számla, a szállítólevél
+ *  sem. A végszámla sztornója a készletét is visszaadja (acrobot 28782). */
+const STORNABLE = new Set(["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"]);
 
 const negate = (value: Prisma.Decimal | null) =>
   value === null ? null : value.negated();

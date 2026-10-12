@@ -107,6 +107,12 @@ export interface SzamlazzAgentInvoiceInput {
   /** A díjbekérő száma, amelyből a számla vagy az előleg készül (`dijbekeroSzamlaszam`). */
   proformaNumber?: string;
   /**
+   * Végszámlán a levont előlegszámla száma (`elolegSzamlaszam`). Az XSD szerint
+   * akkor kell, ha az előleg a rendelésszámmal nem azonosítható; mi mindig
+   * megadjuk, mert a `rendelesSzam` nálunk szabad szöveg (a vevő hivatkozása).
+   */
+  advanceNumber?: string;
+  /**
    * A mi azonosítónk a Számlázz.hu-n (`szamlaKulsoAzon`). Ezzel egy ismeretlen
    * kimenetű kiállítás utólag lekérdezhető (01-es doksi): "later the invoice can
    * be queried with this key".
@@ -123,7 +129,11 @@ export interface SzamlazzAgentInvoiceInput {
 }
 
 export type SzamlazzDocumentType =
-  "INVOICE" | "PROFORMA" | "ADVANCE_INVOICE" | "DELIVERY_NOTE";
+  | "INVOICE"
+  | "PROFORMA"
+  | "ADVANCE_INVOICE"
+  | "DELIVERY_NOTE"
+  | "FINAL_INVOICE";
 
 /** Az XSD `szamlaNyelveTipus` értékkészlete. */
 export const SZAMLAZZ_INVOICE_LANGUAGES = [
@@ -148,6 +158,7 @@ const DOCUMENT_FLAG: Record<SzamlazzDocumentType, string | null> = {
   PROFORMA: "dijbekero",
   ADVANCE_INVOICE: "elolegszamla",
   DELIVERY_NOTE: "szallitolevel",
+  FINAL_INVOICE: "vegszamla",
 };
 
 export function buildSzamlazzAgentInvoiceXml(
@@ -183,6 +194,13 @@ export function buildSzamlazzAgentInvoiceXml(
       : tag("dijbekeroSzamlaszam", input.proformaNumber)) +
     // XSD 114: elolegszamla áll a dijbekero és a szallitolevel ELŐTT
     (flag === "elolegszamla" ? tag("elolegszamla", true) : "") +
+    // XSD 115-116: a végszámla jelzője, utána a levont előleg száma. Az előleg
+    // levonását a Számlázz.hu teszi a bizonylatra, nem negatív tételsor: így
+    // az előleg ÁFÁ-ja egyszer jelenik meg (számlázási brief, 3. pont)
+    (flag === "vegszamla" ? tag("vegszamla", true) : "") +
+    (flag === "vegszamla" && input.advanceNumber !== undefined
+      ? tag("elolegSzamlaszam", input.advanceNumber)
+      : "") +
     (flag === "dijbekero" ? tag("dijbekero", true) : "") +
     (flag === "szallitolevel" ? tag("szallitolevel", true) : "") +
     // elonezetpdf: lásd a fejlecTipus doc-commentjét a séma 128. sorában:

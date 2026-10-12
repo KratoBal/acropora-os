@@ -39,6 +39,16 @@ const DETAIL_INCLUDE = {
       syncError: true,
     },
   },
+  // végszámlán a levont előleg (számlázási brief, 3.); a sztornó sor is ide
+  // mutat, de az nem saját bizonylat (`OWN_ROWS`), tehát itt nem olvassuk
+  referencedInvoice: {
+    select: {
+      id: true,
+      documentType: true,
+      invoiceNumber: true,
+      grossAmount: true,
+    },
+  },
   // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.)
   proformaInvoice: { select: { id: true, invoiceNumber: true } },
   // a díjbekérőn: a belőle készült előleg (legfeljebb egy, `advanceIdFor`)
@@ -131,12 +141,14 @@ export async function insertBillingDraft(
     partnerTaxNumber: string | null;
     createdByUserId: string;
     proformaInvoiceId?: string | null;
+    referencedInvoiceId?: string | null;
   },
 ): Promise<void> {
   await transaction.invoice.create({
     data: {
       id: input.id,
       proformaInvoiceId: input.proformaInvoiceId ?? null,
+      referencedInvoiceId: input.referencedInvoiceId ?? null,
       direction: "OUTBOUND",
       source: "SZAMLAZZ",
       status: "DRAFT",
@@ -195,6 +207,22 @@ export class BillingDocumentsRepository {
     return twin.paymentsKnown === true ? false : null;
   }
 
+  /** Az előlegszámlából készült végszámla, ha van (számlázási brief, 3.). */
+  finalInvoiceOf(advanceId: string): Promise<{
+    id: string;
+    invoiceNumber: string | null;
+    status: string;
+  } | null> {
+    return this.database.invoice.findFirst({
+      where: {
+        referencedInvoiceId: advanceId,
+        documentType: "FINAL_INVOICE",
+        ...OWN_ROWS,
+      },
+      select: { id: true, invoiceNumber: true, status: true },
+    });
+  }
+
   find(id: string): Promise<BillingDocumentRow | null> {
     return this.database.invoice.findFirst({
       where: { id, ...OWN_ROWS },
@@ -215,6 +243,8 @@ export class BillingDocumentsRepository {
     createdByUserId: string;
     /** Díjbekérőből készült előlegnél a díjbekérő (számlázási brief, 2. pont). */
     proformaInvoiceId?: string | null;
+    /** Végszámlánál a levont előlegszámla (számlázási brief, 3. pont). */
+    referencedInvoiceId?: string | null;
   }): Promise<{ created: boolean }> {
     try {
       await this.database.$transaction((transaction) =>

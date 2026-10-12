@@ -151,9 +151,10 @@ export function toListItem(
 /**
  * A SZÁMLÁZZ.HU BIZONYLATTÍPUSA A MI TÍPUSUNKRA, A SZŰRŐHÖZ ÉS A „Dokumentum”
  * OSZLOPHOZ. A felirat ettől függetlenül a Számlázz.hu sajátja
- * (`externalKindLabel`). A sztornó, a jóváíró, a helyesbítő és a végszámla
- * számla-fajta, tehát INVOICE; az ismeretlen kód is az, a felirat pedig a nyers
- * kódot mutatja.
+ * (`externalKindLabel`). A sztornó, a jóváíró és a helyesbítő számla-fajta,
+ * tehát INVOICE; az ismeretlen kód is az, a felirat pedig a nyers kódot
+ * mutatja. A végszámla 2026-10-12 óta saját típus (számlázási brief, 3. pont),
+ * tehát a szűrőn a saját végszámláinkkal együtt áll.
  */
 export const EXTERNAL_KIND_TYPES: Readonly<
   Record<string, BillingDocumentType>
@@ -162,7 +163,7 @@ export const EXTERNAL_KIND_TYPES: Readonly<
   SS: "INVOICE",
   JS: "INVOICE",
   HS: "INVOICE",
-  VS: "INVOICE",
+  VS: "FINAL_INVOICE",
   ES: "ADVANCE_INVOICE",
   D: "PROFORMA",
   SL: "DELIVERY_NOTE",

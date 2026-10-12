@@ -221,6 +221,15 @@ describe("a sztornó szolgáltatás", () => {
     }
   });
 
+  it("a végszámla is sztornózható, és a készlete visszajön (acrobot 28782)", async () => {
+    const s = setup({ documentType: "FINAL_INVOICE" });
+    await s.service.storno("doc-1", undefined, USER);
+    assert.equal(s.state.calls.length, 1);
+    assert.deepEqual(s.state.stock, [
+      ["doc-1", "storno-1", "E-STORNO-1", "user-1"],
+    ]);
+  });
+
   it("siker: STORNO sor az eredetire hivatkozva, az eredeti ellentett összegei, PDF, készlet vissza", async () => {
     const s = setup();
     const detail = await s.service.storno("doc-1", "rossz vevő", USER);
