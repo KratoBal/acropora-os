@@ -8,11 +8,11 @@ import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
 import { AquariumMeasurementsService } from "./aquarium-measurements.service.js";
 import { AquariumsController } from "./aquariums.controller.js";
+import { JevRecommendationCandidateSource } from "./recommendation/jev-candidate-source.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
 import { AquariumsService } from "./aquariums.service.js";
 import { HttpMeasurementRecommendationAiClient } from "./recommendation/measurement-recommendation.ai-client.js";
 import {
-  EmptyRecommendationCandidateSource,
   MEASUREMENT_RECOMMENDATION_AI_CLIENT,
   RECOMMENDATION_CANDIDATE_SOURCE,
 } from "./recommendation/measurement-recommendation.contract.js";
@@ -45,7 +45,8 @@ import { MeasurementRecommendationService } from "./recommendation/measurement-r
     },
     {
       provide: RECOMMENDATION_CANDIDATE_SOURCE,
-      useClass: EmptyRecommendationCandidateSource,
+      // a JEV ellenőrzött hatás-értékeiből (kártya 2b3983e1, a terv 4. lépése)
+      useClass: JevRecommendationCandidateSource,
     },
   ],
   exports: [AquariumsService],

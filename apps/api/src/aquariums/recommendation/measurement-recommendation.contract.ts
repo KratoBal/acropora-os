@@ -11,8 +11,9 @@ import type {
  * Két cserélhető rész áll itt, mert egyik sem az OS-é:
  * - az AI ügynök végpontja (a terv 2. lépése, acropora-ai-agent): a kérés és a
  *   válasz alakja, és egy kliens, amit a teszt mockkal vált ki;
- * - a jelöltek forrása: ma üres (a kategória-szabály nautilus 2. JEV-PR-jában
- *   jön, acrobot 28467), később a JEV VERIFIED értékei (nautilus 28462).
+ * - a jelöltek forrása: a JEV VERIFIED `waterParameterEffects` értékei
+ *   (`JevRecommendationCandidateSource`, 2026-10-12); az üres forrás alább a
+ *   tesztekhez és a kikapcsolt állapothoz marad.
  */
 
 /** Egy eltérő mért érték, ahogy a PDF is jelzi (`measurement-report.ts`). */
@@ -74,10 +75,8 @@ export const RECOMMENDATION_CANDIDATE_SOURCE = Symbol(
 );
 
 /**
- * A JELÖLTEK FORRÁSA, AMÍG A SZABÁLY NINCS BENT: üres lista (acrobot 28467).
- * A kategória-szabály (`WATER_EFFECT_CATEGORY_RULES`) nautilus 2. JEV-PR-jában
- * jön; addig az ajánlás termék nélkül készül, és ez ugyanezen az interfészen
- * cserélődik.
+ * ÜRES JELÖLTFORRÁS: az ajánlás termék nélkül készül. 2026-10-12-ig ez volt
+ * a modulban; azóta a `JevRecommendationCandidateSource` adja a jelölteket.
  */
 export class EmptyRecommendationCandidateSource implements RecommendationCandidateSource {
   async candidates(): Promise<MeasurementRecommendationCandidate[]> {
