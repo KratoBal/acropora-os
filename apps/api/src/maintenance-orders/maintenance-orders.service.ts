@@ -66,6 +66,11 @@ export class MaintenanceOrdersService {
       throw new BadRequestException(
         "Csak aktív szerződésre állítható ki megrendelőlap.",
       );
+    // A beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4).
+    if (contract.kind === "PURCHASE")
+      throw new BadRequestException(
+        "Beszerzési szerződésre nem állítható ki megrendelőlap.",
+      );
     if (contract.items.length !== itemIds.length)
       throw new BadRequestException(
         "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
@@ -103,7 +108,8 @@ export class MaintenanceOrdersService {
       occasionYear,
     );
     const tulfoglalt = contract.items.filter(
-      (item) => (counts.get(item.id) ?? 0) >= item.occasionsPerYear,
+      // karbantartási tételnél az alkalom kötelező; ha mégis hiányzik, nincs keret
+      (item) => (counts.get(item.id) ?? 0) >= (item.occasionsPerYear ?? 0),
     );
     if (tulfoglalt.length)
       throw new ConflictException(

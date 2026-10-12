@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
+import { CONTRACT_KINDS, type ContractKind } from "@acropora/types";
 
 const DECIMAL = /^\d+(?:\.\d+)?$/;
 
@@ -32,8 +33,14 @@ export class ContractItemDto {
   @IsString() @MinLength(1) @MaxLength(1000) description!: string;
   @IsString() @Matches(DECIMAL) unitNet!: string;
   @IsString() @Matches(DECIMAL) quantity!: string;
-  @IsInt() @Min(1) @Max(366) occasionsPerYear!: number;
+  /**
+   * KARBANTARTÁSI TÉTELNÉL KÖTELEZŐ, beszerzésinél nincs (hétfői lista M4). Hogy
+   * a fajtához illik-e, a szolgáltatás dönti el, mert a fajta a szerződésen áll.
+   */
+  @IsInt() @Min(1) @Max(366) @IsOptional() occasionsPerYear?: number | null;
   @IsString() @Matches(DECIMAL) vatRatePercent!: string;
+  /** A beszerzési tétel mennyiségi egysége (`QUANTITY` fajta); ott kötelező. */
+  @IsString() @IsOptional() unitOfMeasureId?: string | null;
   @IsString() @IsOptional() departmentId?: string | null;
   /**
    * JAVÍTÁSI DÍJAK (kártya 3d80a18d): nem kötelezők, és nincs számolás. A
@@ -67,6 +74,8 @@ export class CreateContractDto {
   @IsIn(["DRAFT", "ACTIVE", "EXPIRED", "TERMINATED"])
   @IsOptional()
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+  /** Hiányzik: új szerződésnél karbantartási, módosításnál marad a tárolt. */
+  @IsIn([...CONTRACT_KINDS]) @IsOptional() kind?: ContractKind;
   @IsString() @MaxLength(8000) @IsOptional() notes?: string | null;
   /**
    * A vevő szervezeti egysége és kapcsolattartója a megrendelőlapon -- MI
@@ -91,6 +100,8 @@ export class UpdateContractDto {
   @IsIn(["DRAFT", "ACTIVE", "EXPIRED", "TERMINATED"])
   @IsOptional()
   status?: "DRAFT" | "ACTIVE" | "EXPIRED" | "TERMINATED";
+  /** Hiányzik: új szerződésnél karbantartási, módosításnál marad a tárolt. */
+  @IsIn([...CONTRACT_KINDS]) @IsOptional() kind?: ContractKind;
   @IsString() @MaxLength(8000) @IsOptional() notes?: string | null;
   @IsString() @MaxLength(300) @IsOptional() organizationalUnitName?:
     string | null;
