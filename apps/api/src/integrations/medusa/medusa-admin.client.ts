@@ -35,6 +35,7 @@ import type { WebshopStuckMail, WebshopStuckMailList } from "@acropora/types";
 import type { KnowledgeProjection } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 import type { MedusaBrandRecord } from "./medusa-brand-module.policy.js";
+import type { MedusaLandingPageRecord } from "./medusa-landing-projection.js";
 
 export interface MedusaProductLookupRow {
   id: string;
@@ -1217,6 +1218,18 @@ export interface MedusaAdminClient {
     osBrandId: string,
     brand: MedusaBrandRecord,
   ): Promise<MedusaBrandRecord>;
+  /**
+   * A COMMERCE LANDING-MODUL (SEO P1-14; a commerce szerzodese:
+   * `GET|PUT /admin/landing-pages/:os_landing_id`). Az OS azonositoja a kulcs.
+   */
+  fetchLandingPage(
+    osLandingId: string,
+  ): Promise<MedusaLandingPageRecord | null>;
+  /** A TELJES REKORD CSEREJE (`PUT`). EZ IR A BOLTI OLDALRA. */
+  setLandingPage(
+    osLandingId: string,
+    record: MedusaLandingPageRecord,
+  ): Promise<MedusaLandingPageRecord>;
   /** A termek markaja (`GET /admin/product-brands/:product_id`), `null` ha nincs. */
   fetchProductBrand(productId: string): Promise<string | null>;
   /** A termek markajanak beallitasa vagy torlese (`PUT`). EZ IR A BOLTI OLDALRA. */
@@ -2460,6 +2473,36 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "PUT", body: JSON.stringify(brand) },
     );
     return body.brand;
+  }
+
+  /**
+   * THE COMMERCE LANDING PAGE MODULE (SEO P1-14), addressed by the OS id. A
+   * 404 means the module is not deployed yet; there is nothing to compare.
+   */
+  async fetchLandingPage(
+    osLandingId: string,
+  ): Promise<MedusaLandingPageRecord | null> {
+    try {
+      const body = await this.request<{
+        landing_page: MedusaLandingPageRecord | null;
+      }>(`/admin/landing-pages/${encodeURIComponent(osLandingId)}`);
+      return body.landing_page ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async setLandingPage(
+    osLandingId: string,
+    record: MedusaLandingPageRecord,
+  ): Promise<MedusaLandingPageRecord> {
+    const body = await this.request<{ landing_page: MedusaLandingPageRecord }>(
+      `/admin/landing-pages/${encodeURIComponent(osLandingId)}`,
+      { method: "PUT", body: JSON.stringify(record) },
+    );
+    return body.landing_page;
   }
 
   /** Which OS brand a shop product belongs to; `null` when none. */

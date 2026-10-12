@@ -24,6 +24,12 @@ import {
 } from "./medusa-projection.cli.js";
 import { prismaRedirectSource } from "./medusa-redirect.cli.js";
 import {
+  describeLandingProjection,
+  prismaLandingSource,
+  projectLandingPages,
+  type LandingPageOutcome,
+} from "./medusa-landing-projection.js";
+import {
   describeRedirectProjection,
   projectUrlRedirects,
   type RedirectProjectionOutcome,
@@ -37,6 +43,13 @@ import {
  */
 export const projectRedirectsInRound = (env: NodeJS.ProcessEnv): boolean =>
   env.MEDUSA_PROJECT_REDIRECTS === "true";
+
+/**
+ * A LANDING OLDALAK A KORBEN (SEO P1-14), ugyanugy kapcsoloval, alapbol KI: a
+ * commerce `landing_page` modulja (#541) elobb kerul ki.
+ */
+export const projectLandingPagesInRound = (env: NodeJS.ProcessEnv): boolean =>
+  env.MEDUSA_PROJECT_LANDING_PAGES === "true";
 
 /**
  * A VETITES UTEMEZOJE.
@@ -166,6 +179,8 @@ export interface MedusaProjectionSchedulerDeps {
   now?: () => Date;
   /** Az átirányítás-lista köre (SEO P0 PR 7b). */
   runRedirects?: () => Promise<RedirectProjectionOutcome>;
+  /** A landing oldalak köre (SEO P1-14). */
+  runLandingPages?: () => Promise<LandingPageOutcome[]>;
 }
 
 /**
@@ -197,6 +212,7 @@ export class MedusaProjectionScheduler
   private readonly naplo: ProjectionSchedulerLogger;
   private readonly now: () => Date;
   private readonly runRedirects: () => Promise<RedirectProjectionOutcome>;
+  private readonly runLandingPages: () => Promise<LandingPageOutcome[]>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
 
@@ -233,6 +249,17 @@ export class MedusaProjectionScheduler
             stderr: (value) => this.logNemUres(value, "warn"),
           }),
           prismaRedirectSource,
+          true,
+        ));
+    this.runLandingPages =
+      deps?.runLandingPages ??
+      (async () =>
+        projectLandingPages(
+          await medusaClientForProjection(storedCredentialProvider(), {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          }),
+          prismaLandingSource,
           true,
         ));
   }
@@ -272,6 +299,7 @@ export class MedusaProjectionScheduler
       állnak elöl, hogy egy teli kör ne szorítsa ki őket.
     */
     await this.atiranyitasKor();
+    await this.landingKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
@@ -395,6 +423,28 @@ export class MedusaProjectionScheduler
    * szabály). A hibája csak napló: a termék-vetítést nem állítja meg, és a kör
    * kimenetét sem rontja, mert a lista a következő körben újra próbálkozik.
    */
+  /**
+   * A LANDING OLDALAK EGY KÖRE (SEO P1-14), az átirányítások után, ugyanazzal a
+   * szabállyal: a hiba csak napló, a termék-vetítést nem állítja meg. Egy
+   * visszatartott oldal (bolti pár nélküli kategória) figyelmeztetés.
+   */
+  private async landingKor(): Promise<void> {
+    if (!projectLandingPagesInRound(this.environment)) return;
+    try {
+      const eredmeny = await this.runLandingPages();
+      if (eredmeny.some((o) => o.status === "refused"))
+        this.naplo.warn(describeLandingProjection(eredmeny));
+      else if (eredmeny.some((o) => o.status !== "unchanged"))
+        this.naplo.log(describeLandingProjection(eredmeny));
+    } catch (error) {
+      this.naplo.warn(
+        `Landing oldalak: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
   private async atiranyitasKor(): Promise<void> {
     if (!projectRedirectsInRound(this.environment)) return;
     try {

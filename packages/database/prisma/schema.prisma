@@ -1443,6 +1443,25 @@ model StoreCategory {
   @@index([parentId])
 }
 
+/// SEO P1-14 (C10): egy SEO landing oldal, a bolti cime `/hu/valogatas/{slug}`
+/// (Balazs, 2026-10-12, Eldontendo szal, message 1559272430457978951). A slug a
+/// `LANDING_PAGE` tipus alatt all a slug-nyilvantartasban: a csere `SlugHistory`
+/// sort es 301-et ir. A `filterDefinition` alakja a `@acropora/types`
+/// `SeoLandingFilter`-e (`storeCategoryIds`, `brandIds`, `attributeFilters`); a
+/// commerce `landing_page` read modelje vetitve kapja, bolti azonositokkal.
+model SeoLandingPage {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  title            String
+  seoTitle         String?
+  metaDescription  String?
+  intro            String?
+  filterDefinition Json
+  isPublished      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 /// SEO P0 PR 10 (C6): egy termek egy Acropora-kategoriaban. Termekenkent
 /// legfeljebb EGY primary: a migracio reszleges egyedi indexe tartja (a Prisma
 /// sema nem tudja kifejezni). A primary adja a morzsat es a
