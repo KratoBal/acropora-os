@@ -96,6 +96,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
+    title: "Webshop válogatások",
+    icon: "package",
+    links: [
+      {
+        label: "Webshop válogatások",
+        description: "Kiemelt termékválogatások saját címmel: /hu/valogatas/…",
+        href: "/admin/valogatasok",
+        // a márkák jogával (products.view), mint az API végpontja
+        entryId: "brands",
+      },
+    ],
+  },
+  {
     title: "Integrációk",
     icon: "key",
     links: [
