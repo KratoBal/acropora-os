@@ -6,7 +6,10 @@ import { PDFDocument } from "pdf-lib";
 import { Prisma } from "@acropora/database";
 
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
-import { OutgoingPackageService } from "./outgoing-package.service.js";
+import {
+  OutgoingPackageService,
+  externalKind,
+} from "./outgoing-package.service.js";
 import {
   buildOutgoingPackage,
   externalNotInvoice,
@@ -71,6 +74,37 @@ describe("a hónap tételei", () => {
       [
         ["ACRW-2026/00501", "OS", "os"],
         ["ACRW-2026/00502", "SZAMLAZZ", "feed2"],
+      ],
+    );
+  });
+
+  it("a Számlázz.hu-n sztornózott OS-számla sztornó jele az ikertől jön (barracuda, #1662)", () => {
+    const rows = outgoingPackageRows("2026-09", [
+      jelolt({ number: "A", source: "OS", cancelled: false }),
+      jelolt({ number: "A", source: "SZAMLAZZ", cancelled: true }),
+      jelolt({ number: "B", source: "OS", cancelled: false }),
+      jelolt({ number: "B", source: "SZAMLAZZ", cancelled: false }),
+    ]);
+    assert.deepEqual(
+      rows.map((r) => [r.number, r.source, r.cancelled]),
+      [
+        ["A", "OS", true],
+        ["B", "OS", false],
+      ],
+    );
+  });
+
+  it("a külső bizonylat fajtája a borítóra kerül; a sima számlának nincs", () => {
+    assert.deepEqual(
+      ["SZ", "sz", "SS", "HS", "JS", "ES", "VS"].map(externalKind),
+      [
+        null,
+        null,
+        "Sztornó számla",
+        "Helyesbítő számla",
+        "Jóváíró számla",
+        "Előlegszámla",
+        "Végszámla",
       ],
     );
   });
@@ -235,6 +269,12 @@ describe("a csomag adatai", () => {
           kulso({ id: "x3", documentNumber: "ACRW-2026/00510" }),
           kulso({ id: "x4", documentNumber: "D-2", kindCode: "D" }),
           kulso({
+            id: "x5",
+            documentNumber: "ACRW-2026/00513",
+            kindCode: "SS",
+            pdfStorageKey: null,
+          }),
+          kulso({
             id: "x2",
             documentNumber: "ACRW-2026/00512",
             source: "EBIZ",
@@ -256,5 +296,10 @@ describe("a csomag adatai", () => {
     ]);
     // borító + a két megjött PDF; az eBIZ-é a tár hibája miatt nincs benne
     assert.equal((await PDFDocument.load(content)).getPageCount(), 3);
+    const borito = (await readPdfTextLines(content)).map((l) => l.text);
+    assert.ok(
+      borito.some((l) => l.startsWith("Sztornó számla, Számlázz.hu")),
+      borito.join("\n"),
+    );
   });
 });

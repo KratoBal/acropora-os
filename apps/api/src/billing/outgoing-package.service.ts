@@ -4,6 +4,7 @@ import { ACROPORA_COMPANY } from "@acropora/types";
 
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
+import { externalKindLabel } from "./billing-document-list.js";
 import {
   buildOutgoingPackage,
   externalNotInvoice,
@@ -17,6 +18,11 @@ const KIND_LABEL: Partial<Record<string, string>> = {
   ADVANCE_INVOICE: "előleg",
   FINAL_INVOICE: "végszámla",
 };
+
+/** The kind label of a Számlázz.hu or eBIZ document; a plain invoice has none. */
+export function externalKind(kindCode: string): string | null {
+  return kindCode.toUpperCase() === "SZ" ? null : externalKindLabel(kindCode);
+}
 
 /** A tárolt kulcs utolsó tagja a dokumentum azonosítója (`<mappa>/<id>/<doc>`). */
 const documentIdOf = (storageKey: string) => storageKey.split("/").pop() ?? "";
@@ -119,7 +125,9 @@ export class OutgoingPackageService {
         paymentMethod: row.paymentMethod,
         gross: row.grossAmount.toFixed(2),
         currency: row.currency,
-        kind: null,
+        // a storno, correction or advance issued on the Számlázz.hu site says
+        // so on the cover, as the OS's own kinds do (barracuda, #1662)
+        kind: externalKind(row.kindCode),
         cancelled: row.cancelled,
         notInvoice: externalNotInvoice(row.kindCode),
         pdfKey: row.pdfStorageKey,
