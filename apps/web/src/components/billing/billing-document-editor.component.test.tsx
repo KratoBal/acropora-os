@@ -765,7 +765,7 @@ describe("BillingDocumentEditor", () => {
       );
       fireEvent.click(
         within(await screen.findByRole("dialog")).getByRole("button", {
-          name: "Számla kiállítása",
+          name: "Kiállítom",
         }),
       );
       return within(
