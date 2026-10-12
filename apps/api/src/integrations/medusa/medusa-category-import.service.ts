@@ -133,6 +133,11 @@ export interface ImportVerification {
   mappingRowsHere: number;
   /** Hany kategoriat kellett volna atvinni osszesen. */
   expected: number;
+  /**
+   * How many of them should be active, when not all (the Acropora tree
+   * mirrors inactive categories as inactive). Unset: all of them.
+   */
+  expectedActive?: number;
 }
 
 @Injectable()

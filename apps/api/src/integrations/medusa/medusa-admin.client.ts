@@ -253,6 +253,9 @@ export interface MedusaCategoryRow {
    * nincs kozottuk kezzel atirt. Ha egyszer lesz, az ITT fog latszani.
    */
   handle: string;
+  /** Read for the Acropora tree's comparison (SEO P0 PR 10b). */
+  description?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -288,6 +291,13 @@ export interface MedusaCategoryInput {
    * veletlenul elhagyni. Az indok a tipus alatt all.
    */
   is_active: boolean;
+  /**
+   * The Acropora tree only (SEO P0 PR 10b): the intro and the two SEO keys.
+   * The UNAS tree sends neither. Shapes per @medusajs/medusa 2.20.1
+   * `CreateProductCategory`: `description` is a string, never null.
+   */
+  description?: string;
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -305,7 +315,19 @@ export interface MedusaCategoryInput {
  *   (Merve 2026-09-22: `updateProductCategory(id, {})` -> TS2345.)
  */
 export type MedusaCategoryPatch =
-  { name: string; handle?: string } | { name?: string; handle: string };
+  | { name: string; handle?: string }
+  | { name?: string; handle: string }
+  /**
+   * The Acropora tree's update (SEO P0 PR 10b): all four fields at once, so
+   * one shape covers every change and no field is left to a default.
+   */
+  | {
+      name: string;
+      handle: string;
+      is_active: boolean;
+      description: string;
+      metadata: Record<string, string>;
+    };
 
 /**
  * AZ AKTIV JELOLOT KI KELL KULDENI, ES EZ EGY MERESEN MULT.
@@ -2146,7 +2168,8 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {
     const params = new URLSearchParams({
-      fields: "id,name,external_id,parent_category_id,is_active,handle",
+      fields:
+        "id,name,external_id,parent_category_id,is_active,handle,description,metadata",
       limit: String(CATEGORY_LIST_LIMIT),
     });
     const body = await this.request<{
