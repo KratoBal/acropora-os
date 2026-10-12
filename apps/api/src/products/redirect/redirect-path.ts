@@ -47,3 +47,11 @@ export function redirectPathLower(path: string): string {
 export function webshopProductPath(slug: string): string {
   return `/hu/termek/${slug}`;
 }
+
+/**
+ * Az Acropora-kategória webshop-címe (G2): `/hu/kategoria/{slug}`. Az útvonal a
+ * kirakaton a PR 10c-ben jön; a slug-csere átirányítása már erre a címre íródik.
+ */
+export function webshopCategoryPath(slug: string): string {
+  return `/hu/kategoria/${slug}`;
+}
