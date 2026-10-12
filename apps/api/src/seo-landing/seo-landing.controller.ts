@@ -20,6 +20,13 @@ export class SeoLandingController {
     return this.landings.list();
   }
 
+  // before ":id", or GET /seo/landing-pages/options resolves to it
+  @Get("options")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
+  options() {
+    return this.landings.options();
+  }
+
   @Get(":id")
   @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
   detail(@Param("id") id: string) {

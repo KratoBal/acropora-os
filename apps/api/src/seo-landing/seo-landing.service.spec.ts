@@ -27,6 +27,7 @@ function setup() {
   let n = 0;
   const store: SeoLandingStore = {
     list: async () => [...rows.values()],
+    options: async () => ({ categories: [], brands: [] }),
     find: async (id) => rows.get(id) ?? null,
     slugOwner: async (slug) => {
       for (const row of rows.values())

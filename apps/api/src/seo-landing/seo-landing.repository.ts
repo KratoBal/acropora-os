@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { SeoLandingPageInput } from "@acropora/types";
+import type { SeoLandingOptions, SeoLandingPageInput } from "@acropora/types";
 
 import {
   PrismaRedirectStore,
@@ -37,6 +37,41 @@ const taken = (error: unknown) =>
 export class SeoLandingRepository implements SeoLandingStore {
   list(): Promise<SeoLandingRow[]> {
     return prisma.seoLandingPage.findMany({ orderBy: { slug: "asc" } });
+  }
+
+  /** The editor's choices: the category paths from the root, every brand. */
+  async options(): Promise<SeoLandingOptions> {
+    const [categories, brands] = await Promise.all([
+      prisma.storeCategory.findMany({
+        select: { id: true, name: true, parentId: true, isActive: true },
+      }),
+      prisma.brand.findMany({
+        select: { id: true, name: true, isActive: true, archivedAt: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    const path = (id: string) => {
+      const names: string[] = [];
+      const seen = new Set<string>();
+      let current = byId.get(id);
+      while (current && !seen.has(current.id)) {
+        seen.add(current.id);
+        names.unshift(current.name);
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+      return names.join(" > ");
+    };
+    return {
+      categories: categories
+        .map((c) => ({ id: c.id, path: path(c.id), isActive: c.isActive }))
+        .sort((a, b) => a.path.localeCompare(b.path, "hu")),
+      brands: brands.map((b) => ({
+        id: b.id,
+        name: b.name,
+        shown: b.isActive && !b.archivedAt,
+      })),
+    };
   }
 
   find(id: string): Promise<SeoLandingRow | null> {

@@ -38,6 +38,18 @@ export interface SeoLandingPage extends SeoLandingPageInput {
   updatedAt: string;
 }
 
+/**
+ * WHAT THE EDITOR OFFERS (`GET /seo/landing-pages/options`): every store
+ * category with its path, every brand. `isActive` / `shown` say whether the
+ * shop will list products under it: an inactive category or a brand the shop
+ * does not show (inactive or archived, the brand projection's `brandIsShown`)
+ * gives an empty page, and the editor warns about it.
+ */
+export interface SeoLandingOptions {
+  categories: { id: string; path: string; isActive: boolean }[];
+  brands: { id: string; name: string; shown: boolean }[];
+}
+
 /** The commerce limits, so a page the OS accepts the shop accepts too. */
 export const SEO_LANDING_LIMITS = {
   title: 200,

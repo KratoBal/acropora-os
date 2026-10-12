@@ -1487,6 +1487,7 @@ export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
   SeoLandingFilter,
+  SeoLandingOptions,
   SeoLandingPage,
   SeoLandingPageInput,
   SeoLandingParse,

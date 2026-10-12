@@ -8,6 +8,7 @@ import {
 import {
   parseSeoLandingInput,
   type SeoLandingFilter,
+  type SeoLandingOptions,
   type SeoLandingPage,
   type SeoLandingPageInput,
 } from "@acropora/types";
@@ -37,6 +38,7 @@ export interface SeoLandingRow {
 
 export interface SeoLandingStore {
   list(): Promise<SeoLandingRow[]>;
+  options(): Promise<SeoLandingOptions>;
   find(id: string): Promise<SeoLandingRow | null>;
   /** Who holds the slug: a live landing page, or one that used it before. */
   slugOwner(
@@ -106,6 +108,10 @@ export class SeoLandingService {
 
   async list(): Promise<SeoLandingPage[]> {
     return (await this.store.list()).map(toSeoLandingPage);
+  }
+
+  options(): Promise<SeoLandingOptions> {
+    return this.store.options();
   }
 
   async detail(id: string): Promise<SeoLandingPage> {
