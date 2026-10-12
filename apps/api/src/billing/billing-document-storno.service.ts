@@ -9,7 +9,11 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { AuthenticatedUser, BillingDocumentDetail } from "@acropora/types";
+import {
+  BILLING_STORNABLE_TYPES,
+  type AuthenticatedUser,
+  type BillingDocumentDetail,
+} from "@acropora/types";
 
 import { budapestDayKey } from "../dashboard/budapest-day.js";
 import { StubSzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agent-stub.client.js";
@@ -38,10 +42,6 @@ import { billingIssueMode } from "./billing-issue.config.js";
 export const BILLING_SZAMLAZZ_STORNO_CLIENT = Symbol(
   "BILLING_SZAMLAZZ_STORNO_CLIENT",
 );
-
-/** Csak a számla-fajták sztornózhatók: a díjbekérő nem számla, a szállítólevél
- *  sem. A végszámla sztornója a készletét is visszaadja (acrobot 28782). */
-const STORNABLE = new Set(["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"]);
 
 const negate = (value: Prisma.Decimal | null) =>
   value === null ? null : value.negated();
@@ -105,7 +105,9 @@ export class BillingDocumentStornoService {
     if (
       original.status !== "ISSUED" ||
       !original.invoiceNumber ||
-      !STORNABLE.has(original.documentType)
+      !(BILLING_STORNABLE_TYPES as ReadonlySet<string>).has(
+        original.documentType,
+      )
     )
       throw new ConflictException(
         "Csak kiállított számla vagy előlegszámla sztornózható.",

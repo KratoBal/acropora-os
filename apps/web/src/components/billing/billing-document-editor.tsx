@@ -38,6 +38,13 @@ import {
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentFields } from "./billing-document-fields";
+import {
+  BillingCancellationNotice,
+  BillingStornoButton,
+  BillingStornoDialog,
+  stornoOffered,
+  useBillingStorno,
+} from "./billing-document-storno";
 import { BillingDocumentLineEditor } from "./billing-document-line-editor";
 import { BillingDocumentSummary } from "./billing-document-summary";
 import { BILLING_LIST_PATH } from "./billing-document-table";
@@ -191,6 +198,12 @@ export function BillingDocumentEditor({
     pdfAvailable: boolean;
   } | null>(null);
   const pdf = useBillingDocumentPdf(token);
+  /** A kiállított bizonylat sztornója (számlázási brief, 1. pont). */
+  const [cancellation, setCancellation] =
+    useState<BillingDocumentDetail["cancellation"]>(null);
+  const storno = useBillingStorno(token, (after) =>
+    setCancellation(after.cancellation ?? null),
+  );
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
   /** A kiállítás utáni kiküldés kimenete: a címzettek, vagy a hiba. */
   const [sent, setSent] = useState<
@@ -277,6 +290,7 @@ export function BillingDocumentEditor({
         setDeductedAdvance(detail.deductedAdvance ?? null);
         setProforma(detail.proforma ?? null);
         setIssued(issuedOf(detail));
+        setCancellation(detail.cancellation ?? null);
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -578,31 +592,59 @@ export function BillingDocumentEditor({
           title={`Kiállítva: ${issued.number}`}
           description="A bizonylat számát a Számlázz.hu adta."
           action={
-            <div
-              role="group"
-              aria-label="A kiállított bizonylat PDF-je"
-              className="flex flex-wrap gap-2"
-            >
-              <PilotButton
-                variant="secondary"
-                size="regular"
-                onClick={() => pdf.view(issued.id)}
-                disabled={!issued.pdfAvailable || pdf.busy}
-                title={issued.pdfAvailable ? undefined : PDF_MISSING}
+            <div className="flex flex-wrap gap-2">
+              <div
+                role="group"
+                aria-label="A kiállított bizonylat PDF-je"
+                className="flex flex-wrap gap-2"
               >
-                Számlakép megtekintése
-              </PilotButton>
-              <PilotButton
-                variant="secondary"
-                size="regular"
-                onClick={() => pdf.download(issued.id, issued.number)}
-                disabled={!issued.pdfAvailable || pdf.busy}
-                title={issued.pdfAvailable ? undefined : PDF_MISSING}
-              >
-                PDF letöltése
-              </PilotButton>
+                <PilotButton
+                  variant="secondary"
+                  size="regular"
+                  onClick={() => pdf.view(issued.id)}
+                  disabled={!issued.pdfAvailable || pdf.busy}
+                  title={issued.pdfAvailable ? undefined : PDF_MISSING}
+                >
+                  Számlakép megtekintése
+                </PilotButton>
+                <PilotButton
+                  variant="secondary"
+                  size="regular"
+                  onClick={() => pdf.download(issued.id, issued.number)}
+                  disabled={!issued.pdfAvailable || pdf.busy}
+                  title={issued.pdfAvailable ? undefined : PDF_MISSING}
+                >
+                  PDF letöltése
+                </PilotButton>
+              </div>
+              {canIssue &&
+              stornoOffered({
+                status,
+                documentNumber: issued.number,
+                documentType: state.documentType,
+                cancellation,
+              }) ? (
+                <BillingStornoButton
+                  disabled={storno.busy}
+                  onClick={() => storno.setOpen(true)}
+                />
+              ) : null}
             </div>
           }
+        />
+      ) : null}
+      {issued && cancellation ? (
+        <BillingCancellationNotice
+          cancellation={cancellation}
+          documentId={issued.id}
+          token={token}
+        />
+      ) : null}
+      {storno.error ? (
+        <Alert
+          variant="danger"
+          title="A sztornó nem sikerült"
+          description={storno.error}
         />
       ) : null}
       {pdf.error ? (
@@ -809,6 +851,15 @@ export function BillingDocumentEditor({
         onConfirm={() => void issue()}
         onCancel={() => setConfirmIssue(false)}
       />
+      {issued ? (
+        <BillingStornoDialog
+          number={issued.number}
+          open={storno.open}
+          busy={storno.busy}
+          onConfirm={() => void storno.confirm(issued.id)}
+          onCancel={() => storno.setOpen(false)}
+        />
+      ) : null}
     </PilotThemeRoot>
   );
 }

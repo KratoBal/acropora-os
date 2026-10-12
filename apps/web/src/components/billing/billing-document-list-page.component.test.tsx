@@ -196,6 +196,28 @@ describe("BillingDocumentListPage", () => {
     );
   });
 
+  // A SZTORNÓZOTT SAJÁT SZÁMLA (számlázási brief, 1. pont). MI PIROSÍT: ha a
+  // `cancelled` sor nincs jelölve, vagy a jel a nem sztornózott sorra is kerül.
+  it("a stornoed own invoice is marked on the list, the others are not", async () => {
+    api.list.mockResolvedValue(
+      response([
+        item({}),
+        item({
+          id: "doc-2",
+          documentNumber: "AC-2026-001249",
+          cancelled: true,
+        }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(within(rows[1]!).getByText("Sztornózott")).toBeInTheDocument();
+    expect(rows[1]).toHaveAccessibleName(
+      expect.stringContaining("AC-2026-001249 (sztornózott)"),
+    );
+    expect(within(rows[0]!).queryByText("Sztornózott")).toBeNull();
+  });
+
   // MI PIROSÍT: ha a kifizetettség nem a válaszból jönne, vagy a három állapot
   // összemosódna; ha a saját bizonylat kitalált állapotot mutatna.
   it("shows whether an external invoice is paid, with the incoming list's labels (Balázs, GLS)", async () => {

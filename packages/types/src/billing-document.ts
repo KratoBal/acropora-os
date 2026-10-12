@@ -162,6 +162,15 @@ const CAPABILITIES: Record<BillingDocumentType, BillingDocumentCapabilities> = {
   },
 };
 
+/**
+ * A SZTORNÓZHATÓ TÍPUSOK (számlázási brief, 1. pont): csak a számla-fajták, a
+ * díjbekérő nem számla, a szállítólevél sem. A végszámla sztornója a készletét
+ * is visszaadja (acrobot 28782). A szerver ezen kívül 409-et ad, a felület
+ * ezért csak ezeken kínálja a Sztornó gombot.
+ */
+export const BILLING_STORNABLE_TYPES: ReadonlySet<BillingDocumentType> =
+  new Set<BillingDocumentType>(["INVOICE", "ADVANCE_INVOICE", "FINAL_INVOICE"]);
+
 export function getDocumentCapabilities(
   type: BillingDocumentType,
 ): BillingDocumentCapabilities {

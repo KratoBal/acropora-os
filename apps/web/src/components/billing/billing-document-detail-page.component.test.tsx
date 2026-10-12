@@ -33,6 +33,8 @@ const api = vi.hoisted(() => ({
   emailDraft: vi.fn(),
   final: vi.fn(),
   advance: vi.fn(),
+  storno: vi.fn(),
+  stornoPdf: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 /*
@@ -209,6 +211,10 @@ beforeEach(() => {
   api.detail.mockReset().mockResolvedValue(detail());
   api.final.mockReset();
   api.advance.mockReset();
+  api.storno.mockReset();
+  api.stornoPdf
+    .mockReset()
+    .mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
   api.pdf
     .mockReset()
     .mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
@@ -625,6 +631,198 @@ describe("BillingDocumentDetailPage", () => {
   előlegen is kínálja; jog nélkül is kínálja; a végszámlán nem látszik, mit
   von le a Számlázz.hu.
 */
+/*
+  A SZTORNÓ A RÉSZLETEKEN (számlázási brief, 1. pont). MI PIROSÍT: ha a gomb
+  rossz bizonylaton, jog nélkül vagy egy már sztornózott számlán jelenik meg;
+  ha a megerősítés nem a brief szövege, vagy a Mégsem is küld; ha a szerver
+  oka (409) elvész; ha a sztornó állapotai (kész, Számlázz.hu-n sztornózott,
+  ellenőrzésre vár, elutasított) összemosódnak; ha a sztornó PDF-je helyett a
+  számláé jön.
+*/
+describe("storno", () => {
+  const done = {
+    source: "OS" as const,
+    state: "ISSUED" as const,
+    stornoNumber: "AC-2026-001249",
+    issueDate: "2026-10-12",
+    error: null,
+    pdfAvailable: true,
+  };
+  const question = "Biztos, hogy sztornózod a(z) AC-2026-001248 számlát?";
+
+  it("an issued invoice: the button, the brief's dialog, then the storno shown", async () => {
+    api.storno.mockResolvedValue(detail({ cancellation: done }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
+    const dialog = screen.getByRole("dialog", { name: question });
+    expect(within(dialog).getByText(question)).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Mégsem" }),
+    ).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sztornózom" }));
+    expect(
+      await screen.findByText("Sztornózva: AC-2026-001249"),
+    ).toBeInTheDocument();
+    expect(api.storno).toHaveBeenCalledWith("token-1", "doc-1");
+    expect(
+      screen.getByText("A sztornó bizonylat kelte: 2026. 10. 12."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
+  });
+
+  it("Mégsem closes the dialog and sends nothing", async () => {
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: question })).getByRole(
+        "button",
+        { name: "Mégsem" },
+      ),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.storno).not.toHaveBeenCalled();
+  });
+
+  it("the server's refusal is shown as it said it", async () => {
+    api.storno.mockRejectedValue(
+      new Error(
+        "Erre az előlegszámlára a(z) E-VEG-1 végszámla hivatkozik: előbb a végszámlát sztornózd.",
+      ),
+    );
+    api.detail.mockResolvedValue(
+      detail({ documentType: "ADVANCE_INVOICE", finalInvoice: null }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sztornó" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: question })).getByRole(
+        "button",
+        { name: "Sztornózom" },
+      ),
+    );
+    expect(
+      await screen.findByText(/előbb a végszámlát sztornózd/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sztornó" })).toBeEnabled();
+  });
+
+  it("no billing.issue, no button", async () => {
+    auth.role = "VIEWER" as UserRole;
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("heading", { level: 1, name: "AC-2026-001248" });
+    expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
+  });
+
+  it.each([
+    ["a proforma", { documentType: "PROFORMA" as const }],
+    ["a draft", { status: "DRAFT" as const }],
+    ["an already stornoed invoice", { cancellation: done }],
+    [
+      "a storno waiting for checking",
+      {
+        cancellation: {
+          ...done,
+          state: "ISSUING" as const,
+          stornoNumber: null,
+          pdfAvailable: false,
+        },
+      },
+    ],
+  ])("%s offers no storno", async (_name, over) => {
+    api.detail.mockResolvedValue(detail(over));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
+  });
+
+  it("a storno waiting for checking says so", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        cancellation: {
+          ...done,
+          state: "ISSUING",
+          stornoNumber: null,
+          pdfAvailable: false,
+        },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText("A sztornó ellenőrzésre vár"),
+    ).toBeInTheDocument();
+  });
+
+  it("a refused storno shows the error, and may be tried again", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        cancellation: {
+          ...done,
+          state: "ISSUE_FAILED",
+          stornoNumber: null,
+          pdfAvailable: false,
+          error: "A Számlázz.hu elutasította: a számla már sztornózva van.",
+        },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText(
+        "A Számlázz.hu elutasította: a számla már sztornózva van.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sztornó" })).toBeEnabled();
+  });
+
+  it("stornoed on Számlázz.hu: the fact, and no PDF offered", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        cancellation: {
+          source: "SZAMLAZZ",
+          state: "ISSUED",
+          stornoNumber: null,
+          issueDate: null,
+          error: null,
+          pdfAvailable: false,
+        },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText("Sztornózva a Számlázz.hu-n"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sztornó PDF letöltése" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sztornó" })).toBeNull();
+  });
+
+  it("the storno PDF is the storno's, not the invoice's", async () => {
+    api.detail.mockResolvedValue(detail({ cancellation: done }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sztornó megtekintése" }),
+    );
+    await waitFor(() =>
+      expect(api.stornoPdf).toHaveBeenCalledWith("token-1", "doc-1"),
+    );
+    expect(api.pdf).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith("blob:pdf", "_blank");
+  });
+
+  it("without a stored storno PDF the two buttons are disabled", async () => {
+    api.detail.mockResolvedValue(
+      detail({ cancellation: { ...done, pdfAvailable: false } }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("button", { name: "Sztornó megtekintése" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Sztornó PDF letöltése" }),
+    ).toBeDisabled();
+  });
+});
+
 describe("the final invoice from an advance", () => {
   const advance = (over: Partial<BillingDocumentDetail> = {}) =>
     detail({
