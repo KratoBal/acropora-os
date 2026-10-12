@@ -79,7 +79,14 @@ export function outgoingPackageRows<T extends OutgoingCandidate>(
     const day = issueDay(candidate);
     if (candidate.notInvoice || !day.startsWith(`${month}-`)) continue;
     const key = candidate.number.trim();
-    if (!key || byNumber.has(key)) continue;
+    if (!key) continue;
+    const kept = byNumber.get(key);
+    if (kept) {
+      // the OS row wins, but a storno made on the Számlázz.hu site shows only
+      // on the feed twin: its mark comes along (barracuda, #1662)
+      if (candidate.cancelled) kept.cancelled = true;
+      continue;
+    }
     byNumber.set(key, { ...candidate, issueDay: day });
   }
   return [...byNumber.values()].sort(
