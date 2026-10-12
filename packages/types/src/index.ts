@@ -1483,3 +1483,11 @@ export {
   contractPurchaseSwitchBlocker,
 } from "./contract.js";
 export type { ContractKind } from "./contract.js";
+export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
+export type {
+  SeoLandingAttributeFilter,
+  SeoLandingFilter,
+  SeoLandingPage,
+  SeoLandingPageInput,
+  SeoLandingParse,
+} from "./seo-landing.js";

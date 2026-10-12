@@ -55,3 +55,11 @@ export function webshopProductPath(slug: string): string {
 export function webshopCategoryPath(slug: string): string {
   return `/hu/kategoria/${slug}`;
 }
+
+/**
+ * A SEO landing oldal webshop-címe: `/hu/valogatas/{slug}` (Balázs, 2026-10-12,
+ * Eldöntendő szál, message 1559272430457978951). A slug-csere ide ír 301-et.
+ */
+export function webshopLandingPath(slug: string): string {
+  return `/hu/valogatas/${slug}`;
+}
