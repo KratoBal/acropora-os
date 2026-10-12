@@ -1,7 +1,10 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
-import { MEDUSA_CATEGORY_REFERENCE } from "./medusa-category.policy.js";
+import {
+  MEDUSA_CATEGORY_REFERENCE,
+  MEDUSA_STORE_CATEGORY_REFERENCE,
+} from "./medusa-category.policy.js";
 
 /**
  * A KATEGORIA-AZONOSSAG helye az Acropora OS es a Medusa kozott.
@@ -35,7 +38,6 @@ import { MEDUSA_CATEGORY_REFERENCE } from "./medusa-category.policy.js";
  * nem hibazna: en irnam a sorokat, o nem talalna oket, es minden termek
  * kategoria nelkul vetulne.
  */
-const { system: SYSTEM, entityType: ENTITY_TYPE } = MEDUSA_CATEGORY_REFERENCE;
 
 export interface MedusaCategoryLink {
   /** Az Acropora OS `Category.id` erteke. */
@@ -86,6 +88,11 @@ function toLink(row: ExternalReferenceRow): MedusaCategoryLink {
 @Injectable()
 export class MedusaCategoryLinkRepository {
   private readonly database: MedusaCategoryLinkDatabase;
+  /** Which tree's links: the UNAS tree here, the Acropora tree in the subclass. */
+  protected readonly reference: {
+    system: string;
+    entityType: string;
+  } = MEDUSA_CATEGORY_REFERENCE;
 
   constructor(
     @Optional()
@@ -106,7 +113,10 @@ export class MedusaCategoryLinkRepository {
    */
   async all(): Promise<MedusaCategoryLink[]> {
     const rows = await this.database.externalReference.findMany({
-      where: { system: SYSTEM, entityType: ENTITY_TYPE },
+      where: {
+        system: this.reference.system,
+        entityType: this.reference.entityType,
+      },
     });
     return rows.map(toLink);
   }
@@ -117,8 +127,8 @@ export class MedusaCategoryLinkRepository {
     const row = await this.database.externalReference.findUnique({
       where: {
         system_entityType_entityId: {
-          system: SYSTEM,
-          entityType: ENTITY_TYPE,
+          system: this.reference.system,
+          entityType: this.reference.entityType,
           entityId: categoryId,
         },
       },
@@ -132,8 +142,8 @@ export class MedusaCategoryLinkRepository {
     const row = await this.database.externalReference.findUnique({
       where: {
         system_entityType_externalId: {
-          system: SYSTEM,
-          entityType: ENTITY_TYPE,
+          system: this.reference.system,
+          entityType: this.reference.entityType,
           externalId: medusaCategoryId,
         },
       },
@@ -177,8 +187,8 @@ export class MedusaCategoryLinkRepository {
         await this.database.externalReference.update({
           where: {
             system_entityType_entityId: {
-              system: SYSTEM,
-              entityType: ENTITY_TYPE,
+              system: this.reference.system,
+              entityType: this.reference.entityType,
               entityId: categoryId,
             },
           },
@@ -189,8 +199,8 @@ export class MedusaCategoryLinkRepository {
     return toLink(
       await this.database.externalReference.create({
         data: {
-          system: SYSTEM,
-          entityType: ENTITY_TYPE,
+          system: this.reference.system,
+          entityType: this.reference.entityType,
           entityId: categoryId,
           externalId: medusaCategoryId,
           lastSyncedAt: syncedAt,
@@ -219,8 +229,8 @@ export class MedusaCategoryLinkRepository {
       await this.database.externalReference.update({
         where: {
           system_entityType_entityId: {
-            system: SYSTEM,
-            entityType: ENTITY_TYPE,
+            system: this.reference.system,
+            entityType: this.reference.entityType,
             entityId: categoryId,
           },
         },
@@ -228,4 +238,14 @@ export class MedusaCategoryLinkRepository {
       }),
     );
   }
+}
+
+/**
+ * THE ACROPORA TREE'S LINKS (SEO P0 PR 10b): `MEDUSA/StoreCategory`, apart
+ * from the UNAS tree's `MEDUSA/Category`. Two trees, two link sets: an id from
+ * one never resolves in the other, and neither run can overwrite the other's.
+ */
+@Injectable()
+export class MedusaStoreCategoryLinkRepository extends MedusaCategoryLinkRepository {
+  protected override readonly reference = MEDUSA_STORE_CATEGORY_REFERENCE;
 }

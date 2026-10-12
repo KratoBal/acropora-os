@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   MedusaCategoryLinkConflictError,
   MedusaCategoryLinkRepository,
+  MedusaStoreCategoryLinkRepository,
   type MedusaCategoryLinkDatabase,
 } from "./medusa-category-link.repository.js";
 
@@ -202,6 +203,29 @@ describe("a kategória-leképezés tárolója", () => {
     assert.deepEqual(
       mind.map((l) => [l.categoryId, l.medusaCategoryId]),
       [["cat_1", "pcat_1"]],
+    );
+  });
+});
+
+/**
+ * TWO TREES, TWO LINK SETS (SEO P0 PR 10b). The Acropora tree's links live
+ * under `MEDUSA/StoreCategory`; the UNAS tree's repository must not see them,
+ * or a store id would resolve in the UNAS path.
+ */
+describe("the Acropora tree's link repository", () => {
+  it("writes under MEDUSA/StoreCategory, and the UNAS repository does not see it", async () => {
+    const db = memoriaDb();
+    await new MedusaStoreCategoryLinkRepository(db).link(
+      "sc_technika",
+      "pcat_technika",
+      MOST,
+    );
+
+    assert.equal(db.sorok[0]?.entityType, "StoreCategory");
+    assert.deepEqual(await new MedusaCategoryLinkRepository(db).all(), []);
+    assert.equal(
+      (await new MedusaStoreCategoryLinkRepository(db).all()).length,
+      1,
     );
   });
 });
