@@ -124,16 +124,21 @@ describe("SeoLandingEditorPage", () => {
     });
   });
 
-  it("LP-ED-WARN: an inactive category and a hidden brand are named", async () => {
+  it("LP-ED-WARN: a hidden brand empties its part; an inactive category does not", async () => {
+    // the shop's landing route filters on category ids over the whole tree
+    // (commerce #544): an inactive category's products DO appear (#1683)
     render(<SeoLandingEditorPage landingId="lp-1" />);
     fireEvent.click(await screen.findByLabelText(/Világítás > Régi/));
     fireEvent.click(screen.getByLabelText(/Megszűnt/));
     expect(
-      await screen.findByText(/„Világítás > Régi” kategória nem aktív/),
+      await screen.findByText(
+        /„Világítás > Régi” kategória oldala nem látszik a webshopban, de a termékei a válogatásban megjelennek/,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/„Megszűnt” márka nem látszik a webshopban/),
     ).toBeInTheDocument();
+    expect(screen.getAllByText("Üres lehet a válogatás")).toHaveLength(1);
   });
 
   it("LP-ED-RENAME: a slug change says the old address redirects", async () => {

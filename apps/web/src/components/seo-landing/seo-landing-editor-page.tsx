@@ -33,9 +33,13 @@ import { SEO_LANDING_LIST_PATH } from "./seo-landing-list-page";
  * one category or brand is required: an empty filter would be the whole
  * catalogue. The same shared parser checks it here and on the server.
  *
- * THE WARNINGS (barracuda, #1682): a chosen category that is inactive, or a
- * brand the shop does not show (inactive or archived), lists no product in the
- * shop. Saving is allowed; the page says so before it goes out empty.
+ * THE NOTES (barracuda, #1682 and #1683): a brand the shop does not show
+ * (inactive or archived) has its product links taken down by the brand
+ * projection, so its products do NOT reach the page: a warning. An inactive
+ * category is different: the shop's landing route (acropora-commerce #544)
+ * filters on the category ids over the whole tree, so its products DO appear;
+ * only the category's own page is hidden. The editor says exactly that, so no
+ * one removes a working category for a problem that does not exist.
  */
 export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
   const { session } = useAuth();
@@ -99,23 +103,23 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
     setBrandIds(next.filter.brandIds);
   };
 
-  const warnings = useMemo(() => {
+  const notes = useMemo(() => {
     if (!options) return [];
     const categories = new Map(options.categories.map((c) => [c.id, c]));
     const brands = new Map(options.brands.map((b) => [b.id, b]));
     return [
       ...categoryIds
         .filter((id) => categories.get(id)?.isActive === false)
-        .map(
-          (id) =>
-            `A(z) „${categories.get(id)!.path}” kategória nem aktív: a webshop nem mutat alatta terméket.`,
-        ),
+        .map((id) => ({
+          title: "Rejtett kategória",
+          text: `A(z) „${categories.get(id)!.path}” kategória oldala nem látszik a webshopban, de a termékei a válogatásban megjelennek.`,
+        })),
       ...brandIds
         .filter((id) => brands.get(id)?.shown === false)
-        .map(
-          (id) =>
-            `A(z) „${brands.get(id)!.name}” márka nem látszik a webshopban (nem aktív vagy archivált): a termékei nem kerülnek a válogatásba.`,
-        ),
+        .map((id) => ({
+          title: "Üres lehet a válogatás",
+          text: `A(z) „${brands.get(id)!.name}” márka nem látszik a webshopban (nem aktív vagy archivált): a termékei nem kerülnek a válogatásba.`,
+        })),
     ];
   }, [options, categoryIds, brandIds]);
 
@@ -198,12 +202,12 @@ export function SeoLandingEditorPage({ landingId }: { landingId?: string }) {
         />
       ) : null}
       {saved ? <Alert variant="info" title="Mentve" /> : null}
-      {warnings.map((warning) => (
+      {notes.map((note) => (
         <Alert
-          key={warning}
+          key={note.text}
           variant="info"
-          title="Üres lehet a válogatás"
-          description={warning}
+          title={note.title}
+          description={note.text}
         />
       ))}
       <form className="space-y-6" onSubmit={submit}>
