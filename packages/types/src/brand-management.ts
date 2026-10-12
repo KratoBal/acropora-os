@@ -41,6 +41,12 @@ export interface BrandDetail extends BrandSummary {
   description?: string;
   websiteUrl?: string;
   logoUrl?: string;
+  /** SEO P0 PR 11: the brand page's title, description and intro. */
+  seoTitle?: string;
+  metaDescription?: string;
+  intro?: string;
+  /** The Merchant feed's brand name, when it differs from `name`. */
+  merchantBrandName?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -73,6 +79,10 @@ export interface UpdateBrandInput {
   description?: string | null;
   websiteUrl?: string | null;
   logoUrl?: string | null;
+  seoTitle?: string | null;
+  metaDescription?: string | null;
+  intro?: string | null;
+  merchantBrandName?: string | null;
   expectedUpdatedAt: string;
 }
 

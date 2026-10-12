@@ -39,6 +39,10 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
   const [description, setDescription] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [seoTitle, setSeoTitle] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+  const [intro, setIntro] = useState("");
+  const [merchantBrandName, setMerchantBrandName] = useState("");
   const [alias, setAlias] = useState(searchParams.get("sourceName") ?? "");
   const [aliasSource, setAliasSource] = useState(
     searchParams.get("source") ?? "MANUAL",
@@ -57,6 +61,10 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
       setDescription(next.description ?? "");
       setWebsiteUrl(next.websiteUrl ?? "");
       setLogoUrl(next.logoUrl ?? "");
+      setSeoTitle(next.seoTitle ?? "");
+      setMetaDescription(next.metaDescription ?? "");
+      setIntro(next.intro ?? "");
+      setMerchantBrandName(next.merchantBrandName ?? "");
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A márka nem tölthető be.",
@@ -92,6 +100,10 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
             description: description || null,
             websiteUrl: websiteUrl || null,
             logoUrl: logoUrl || null,
+            seoTitle: seoTitle || null,
+            metaDescription: metaDescription || null,
+            intro: intro || null,
+            merchantBrandName: merchantBrandName || null,
             expectedUpdatedAt: brand.updatedAt,
           }),
         );
@@ -242,6 +254,47 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
             </div>
           </div>
         </Card>
+        {brand ? (
+          <Card className="p-6">
+            <h2 className="font-semibold">Márkaoldal a webshopban</h2>
+            <p className="mt-1 text-sm text-dusk-500">
+              Üresen hagyva a webshop a márka nevét és leírását használja.
+            </p>
+            <div className="mt-4 grid gap-4">
+              <FormField label="Oldalcím (SEO)">
+                <Input
+                  maxLength={120}
+                  value={seoTitle}
+                  onChange={(event) => setSeoTitle(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Meta leírás">
+                <Textarea
+                  aria-label="Meta leírás"
+                  maxLength={320}
+                  value={metaDescription}
+                  onChange={(event) => setMetaDescription(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Bevezető szöveg">
+                <Textarea
+                  aria-label="Bevezető szöveg"
+                  className="min-h-24"
+                  value={intro}
+                  onChange={(event) => setIntro(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Márkanév a Merchant feedben">
+                <Input
+                  maxLength={120}
+                  placeholder={name}
+                  value={merchantBrandName}
+                  onChange={(event) => setMerchantBrandName(event.target.value)}
+                />
+              </FormField>
+            </div>
+          </Card>
+        ) : null}
         <div className="flex justify-end">
           <Button type="submit" disabled={busy}>
             {busy ? "Mentés…" : "Változások mentése"}

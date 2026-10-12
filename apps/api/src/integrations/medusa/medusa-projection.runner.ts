@@ -65,6 +65,14 @@ import {
 } from "./medusa-product-link.repository.js";
 import type { ShippingAttributesCliDatabase } from "./medusa-shipping-attributes.cli.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
+import {
+  describeBrandLink,
+  MedusaBrandModuleService,
+} from "./medusa-brand-module.service.js";
+import {
+  OS_BRAND_FOR_SHOP_SELECT,
+  type OsBrandForShop,
+} from "./medusa-brand-module.policy.js";
 import { MedusaShippingOnCreate } from "./medusa-shipping-on-create.js";
 import {
   MedusaProductProjectionService,
@@ -597,6 +605,8 @@ export async function runProjectionCli(
   let service: MedusaProductProjectionService | null = null;
   /** A termekismeret vetitese (#1431); ugyanazzal a klienssel. */
   let knowledge: MedusaProductKnowledgeService | null = null;
+  /** The brand module and the product link (SEO P0 PR 11); same client. */
+  let brandModule: MedusaBrandModuleService | null = null;
   /**
    * A KEP-OLDALI VARRATOK KULON ALLNAK, MERT MAS AZ ELETUK.
    *
@@ -651,6 +661,7 @@ export async function runProjectionCli(
         ),
       );
       knowledge = new MedusaProductKnowledgeService(productLinks, imageClient);
+      brandModule = new MedusaBrandModuleService(imageClient);
     } catch (error) {
       /**
        * A KÉT HIÁNY KÜLÖN SORT KAP, mert a teendő is más: a kulcs a
@@ -814,6 +825,12 @@ export async function runProjectionCli(
          * keresni.
          */
         brandId: true,
+        /**
+         * SEO P0 PR 11: the brand module needs the brand's own fields too (the
+         * collection above needs only the id). A product without a brand reads
+         * `null` here, and its link is cleared rather than left as it was.
+         */
+        brand: { select: OS_BRAND_FOR_SHOP_SELECT },
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -1584,6 +1601,34 @@ export async function runProjectionCli(
     } catch (error) {
       out.stderr(
         `${productId}: a termékismeret vetítése nem sikerült (${
+          error instanceof MedusaAdminHttpError
+            ? describeMedusaFailure(error)
+            : error instanceof Error
+              ? error.message
+              : String(error)
+        })\n`,
+      );
+      failed += 1;
+    }
+
+    /**
+     * A MARKA-MODUL ES A TERMEK KAPCSOLATA (SEO P0 PR 11), A TUDAS UTAN.
+     *
+     * Ugyanaz a szabaly, mint a tudasnal: a termek mar kint van, a bukas nem
+     * vonja vissza, de a futas hibakoddal zarul. A gyujtemeny (`collection_id`)
+     * irasa ATMENETILEG marad mellette: a markaoldal termeklistaja meg abbol
+     * olvas. A sor csak akkor all ki, ha van mit mondania.
+     */
+    try {
+      const markaKimenet = await brandModule!.project(
+        outcome.medusaProductId,
+        (product as { brand?: OsBrandForShop | null }).brand ?? null,
+      );
+      if (markaKimenet.action === "applied" || markaKimenet.osBrandId)
+        out.stdout(describeBrandLink(markaKimenet));
+    } catch (error) {
+      out.stderr(
+        `${productId}: a márka-kapcsolat vetítése nem sikerült (${
           error instanceof MedusaAdminHttpError
             ? describeMedusaFailure(error)
             : error instanceof Error

@@ -9,6 +9,7 @@ import {
   IsUrl,
   Max,
   Min,
+  MaxLength,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -39,6 +40,11 @@ export class UpdateBrandDto {
   @IsString() @IsOptional() description?: string | null;
   @IsUrl({ require_protocol: true }) @IsOptional() websiteUrl?: string | null;
   @IsUrl({ require_protocol: true }) @IsOptional() logoUrl?: string | null;
+  // SEO P0 PR 11 (C7): the brand page's own texts; `null` clears them
+  @IsString() @MaxLength(120) @IsOptional() seoTitle?: string | null;
+  @IsString() @MaxLength(320) @IsOptional() metaDescription?: string | null;
+  @IsString() @IsOptional() intro?: string | null;
+  @IsString() @MaxLength(120) @IsOptional() merchantBrandName?: string | null;
   @IsString() expectedUpdatedAt!: string;
 }
 
