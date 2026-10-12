@@ -188,6 +188,28 @@ describe("a vízmérési termékajánlás", { skip: gate.mode === "skip" }, () =
     );
   });
 
+  /**
+   * t5-5 (acropora-ai-agent #35): a jelöltforrás `unverified` jelzése
+   * változatlanul kerül az AI-kérésbe. MI PIROSÍTJA: ha a szolgáltatás a
+   * jelölteket mezőnként másolná, és a jelzés elveszne.
+   */
+  it("an unverified candidate keeps its mark in the AI request", async () => {
+    const regi = candidates;
+    candidates = [{ ...regi[0]!, basis: "JEV", unverified: true }];
+    try {
+      const { aquariumId, occasionId } = await occasion(5.5);
+      aiText = `Alacsony a KH: {{termek:${productId}}} segíthet.`;
+      await service.request(aquariumId, occasionId, user);
+      assert.deepEqual(
+        aiCalls.at(-1)!.candidates.map((c) => [c.productId, c.unverified]),
+        [[productId, true]],
+        "RECO-REQUEST-UNVERIFIED",
+      );
+    } finally {
+      candidates = regi;
+    }
+  });
+
   it("an id outside the candidates blocks the approval; the corrected draft is approved and listed", async () => {
     const { aquariumId, occasionId } = await occasion(5);
     aiText = `Próbáld ezt: {{termek:nincs-ilyen-${suffix}}}.`;
