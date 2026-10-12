@@ -40,14 +40,24 @@ const POTOL =
   "(?:raise|raises|raising|increase|increases|increasing|boost|boosts|boosting|elevate|elevates|elevating|replenish|replenishes|replenishing|restore|restores|restoring)";
 const EN_TAG = "(?:alkalinity|kh|dkh|calcium|magnesium)";
 const EN_LISTA = `(?:${EN_TAG}(?:,? and|,| &) )*`;
-const EN_NEM_POTLAS = "(?! (?:consumption|uptake|demand|usage|depletion))";
+/*
+  A KIZÁRÁS A FELSOROLÁS VÉGÉT NÉZI, nem a target utáni szót (barracuda, #1681):
+  az „increases calcium and magnesium uptake” kalciuma után még a lista farka
+  áll, és csak utána a főnév. A család: fogyasztás, felvétel, felszívódás,
+  hasznosulás, igény.
+*/
+const EN_FOGYASZTAS =
+  "(?:consumption|uptake|demand|usage|depletion|absorption|assimilation|utili[sz]ation|requirements?)";
+const EN_NEM_POTLAS = `(?!(?:(?:,? and|,| &) (?:the )?${EN_TAG})* ${EN_FOGYASZTAS})`;
 const en = (target: string) =>
   new RegExp(
     `\\b${POTOL} (?:the )?(?:levels? of )?${EN_LISTA}(?:the )?${target}\\b${EN_NEM_POTLAS}`,
   );
 const HU_TAG = "(?:kh|karbonatkemenyseg|lugossag|kalcium|magnezium)";
 const HU_LISTA = `(?:${HU_TAG}-(?:,| es| valamint) )*`;
-const HU_NEM_POTLAS = "(?![a-z-]*(?:fogyaszt|felvetel|igeny))";
+// ugyanígy: a külön írt főnév („a kalcium felvételét”) és a lista farka is
+const HU_NEM_POTLAS =
+  "(?![a-z-]*(?:(?:,| es| valamint) (?:a )?[a-z-]+)* ?(?:fogyaszt|felvetel|igeny|beepul|hasznosul|felszivod))";
 const hu = (target: string) => [
   new RegExp(
     `\\b(?:emeli|noveli|potolja) a ${HU_LISTA}(?:a )?${target}${HU_NEM_POTLAS}`,
@@ -79,7 +89,7 @@ export const WATER_EFFECTS_LEXICON: Lexicon = [
       ...hu("kalcium"),
       en("calcium"),
       new RegExp(`erhoht den (?:calcium|kalzium)${DE_ERTEK}`),
-      /erhoht den (?:calcium|kalzium)- und magnesium/,
+      new RegExp(`erhoht den (?:calcium|kalzium)- und magnesium${DE_ERTEK}`),
     ],
   },
   {

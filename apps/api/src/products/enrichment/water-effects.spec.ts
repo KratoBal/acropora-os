@@ -192,6 +192,17 @@ describe("a KH, a kalcium és a magnézium pótlása", () => {
       "Boosts magnesium uptake of corals.",
       "Növeli a kalciumfogyasztást.",
       "Növeli a magnézium-felvételt.",
+      // barracuda #1681 review: a lista nem utolsó tagja, és a külön írt főnév
+      "Increases calcium and magnesium uptake.",
+      "Boosts calcium, magnesium and alkalinity consumption.",
+      "Növeli a kalcium felvételét.",
+      "Növeli a kalcium- és magnéziumfelvételt.",
+      "Erhöht den Calcium- und Magnesiumverbrauch.",
+      // ugyanaz a család (barracuda): felszívódás, beépülés, hasznosulás, igény
+      "Increases calcium absorption and utilization.",
+      "Raises the magnesium requirement of fast-growing corals.",
+      "Növeli a kalcium beépülését a vázba.",
+      "Javítja és növeli a magnézium hasznosulását.",
     ])
       assert.equal(raw(text), null, text);
   });
