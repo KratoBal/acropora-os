@@ -148,6 +148,12 @@ export function BillingDocumentEditor({
   );
   const [status, setStatus] =
     useState<BillingDocumentDetail["status"]>("DRAFT");
+  /** Végszámlán a levonandó előleg (számlázási brief, 3. pont). */
+  const [deductedAdvance, setDeductedAdvance] =
+    useState<BillingDocumentDetail["deductedAdvance"]>(null);
+  /** Díjbekérőből készült bizonylaton a díjbekérő (és hogy kifizették-e). */
+  const [proforma, setProforma] =
+    useState<BillingDocumentDetail["proforma"]>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -268,6 +274,8 @@ export function BillingDocumentEditor({
       .then((detail) => {
         setState(fromDetail(detail));
         setStatus(detail.status);
+        setDeductedAdvance(detail.deductedAdvance ?? null);
+        setProforma(detail.proforma ?? null);
         setIssued(issuedOf(detail));
       })
       .catch((cause: unknown) => {
@@ -536,6 +544,33 @@ export function BillingDocumentEditor({
             : null
         }
       />
+
+      {proforma?.paid === true && status !== "ISSUED" ? (
+        // Autokassza (emlék 2141, számlázási brief, 2. pont): figyelmeztet,
+        // nem tilt
+        <Alert
+          // az Alert két változata közül: egy második bizonylat kockázata
+          variant="danger"
+          title="A díjbekérőt már kifizették"
+          description={`A(z) ${proforma.number ?? "díjbekérő"} kifizetett: a Számlázz.hu Autokasszája kiállíthatott belőle bizonylatot. Kiállítás előtt nézd meg a Számlázz.hu-n, hogy ne legyen kettő.`}
+        />
+      ) : null}
+
+      {state.documentType === "FINAL_INVOICE" ? (
+        <Alert
+          variant="info"
+          title="Végszámla"
+          description={`A tételek a TELJES ellenérték, nem a maradék. ${
+            deductedAdvance
+              ? `A(z) ${deductedAdvance.number ?? "előlegszámla"} előleget${
+                  deductedAdvance.grossAmount
+                    ? ` (bruttó ${formatMoney(deductedAdvance.grossAmount, state.currency)})`
+                    : ""
+                } a Számlázz.hu vonja le a végszámlán.`
+              : "A levonandó előleget a Számlázz.hu vonja le a végszámlán."
+          }`}
+        />
+      ) : null}
 
       {issued ? (
         <Alert

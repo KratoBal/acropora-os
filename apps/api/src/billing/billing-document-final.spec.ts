@@ -16,9 +16,9 @@ import {
   externalDocumentType,
   EXTERNAL_KIND_TYPES,
 } from "./billing-document-list.js";
-import type {
-  BillingDocumentRow,
+import {
   BillingDocumentsRepository,
+  type BillingDocumentRow,
 } from "./billing-documents.repository.js";
 import {
   advanceIdFor,
@@ -164,7 +164,7 @@ describe("a final invoice from an advance", () => {
     }
   });
 
-  it("a draft bound to the advance: its customer, currency, format and reference, the advance's items when it had no proforma", async () => {
+  it("a draft bound to the advance: its customer, currency, format and reference; with no proforma it starts with no items (barracuda, #1672)", async () => {
     const s = setup({ "adv-1": doc() });
     const detail = await s.service.finalFromAdvance("adv-1", USER);
     assert.equal(s.created.length, 1);
@@ -206,7 +206,10 @@ describe("a final invoice from an advance", () => {
         "PROJ-7",
         // the advance's note is about the advance, not about the final one
         null,
-        [["ITEM", "Előleg a PROJ-7 projektre"]],
+        // the advance's own line is the advance ("30%"): from it Számlázz.hu
+        // would deduct the same, a zero final invoice; the operator enters
+        // the full items
+        [],
       ],
     );
     // no deduction line: Számlázz.hu deducts the advance (brief, 3.)
@@ -406,6 +409,55 @@ describe("Számlázz.hu's own final invoice on the list", () => {
         .filter(([, type]) => type === "INVOICE")
         .map(([code]) => code),
       ["SZ", "SS", "JS", "HS"],
+    );
+  });
+});
+
+/*
+  AMIT A KÉT ŐR OLVAS, A LEKÉRDEZÉS HOZZA-E (barracuda, #1672). MI PIROSÍT: a
+  bizonylat lekérdezése nem hozza az előleg kiállított sztornóját vagy
+  pénznemét, vagy a végszámla-lekérdezés a végszámla sztornóját; ilyenkor az
+  őrök a hiányzó mezőt üresnek veszik, és CSENDBEN átengednek.
+*/
+describe("what the two guards read, the queries bring", () => {
+  const captured = () => {
+    const calls: { where: unknown; include?: any; select?: any }[] = [];
+    const repository = new BillingDocumentsRepository();
+    (repository as unknown as { database: unknown }).database = {
+      invoice: {
+        findFirst: async (args: { where: unknown }) => {
+          calls.push(args);
+          return null;
+        },
+      },
+    };
+    return { repository, calls };
+  };
+
+  it("a document brings its advance's issued storno and currency", async () => {
+    const { repository, calls } = captured();
+    await repository.find("fin-1");
+    const advance = calls[0]!.include.referencedInvoice.select;
+    assert.deepEqual(
+      [advance.invoiceNumber, advance.grossAmount, advance.currency],
+      [true, true, true],
+    );
+    assert.deepEqual(advance.correctionInvoices.where, {
+      documentType: "STORNO",
+      status: "ISSUED",
+    });
+  });
+
+  it("an advance's final invoice brings its own issued storno", async () => {
+    const { repository, calls } = captured();
+    await repository.finalInvoiceOf("adv-1");
+    assert.deepEqual(
+      [
+        (calls[0]!.where as Record<string, unknown>).referencedInvoiceId,
+        (calls[0]!.where as Record<string, unknown>).documentType,
+        calls[0]!.select.correctionInvoices.where,
+      ],
+      ["adv-1", "FINAL_INVOICE", { documentType: "STORNO", status: "ISSUED" }],
     );
   });
 });

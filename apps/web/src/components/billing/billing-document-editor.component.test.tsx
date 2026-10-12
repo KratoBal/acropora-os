@@ -1317,4 +1317,87 @@ describe("BillingDocumentEditor", () => {
       expect(screen.queryByText("Nincs találat.")).toBeNull();
     });
   });
+
+  /*
+    A VÉGSZÁMLA-VÁZLAT (számlázási brief, 3. pont, #1672). MI PIROSÍT: a
+    kezelő nem látja, hogy a tételek a teljes ellenérték, és melyik előleget
+    vonja le a Számlázz.hu; vagy egy rendes számlán is ezt látja.
+  */
+  it("a final invoice's draft says the items are the full price, and which advance Számlázz.hu deducts", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...detailFrom(
+        {
+          documentType: "FINAL_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "fin-1",
+      ),
+      deductedAdvance: {
+        id: "adv-1",
+        number: "E-ELO-1",
+        grossAmount: "38100.0000",
+      },
+    });
+    render(<BillingDocumentEditor documentId="fin-1" />);
+    expect(
+      await screen.findByText(
+        /A tételek a TELJES ellenérték.*E-ELO-1 előleget \(bruttó 38\s100.*\) a Számlázz\.hu vonja le/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("an invoice's draft carries no final-invoice note", async () => {
+    api.detail.mockReset().mockResolvedValue(
+      detailFrom(
+        {
+          documentType: "INVOICE",
+          invoiceFormat: "PAPER",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "inv-1",
+      ),
+    );
+    render(<BillingDocumentEditor documentId="inv-1" />);
+    await screen.findByRole("heading", { level: 1, name: "Új számla" });
+    expect(screen.queryByText(/A tételek a TELJES ellenérték/)).toBeNull();
+  });
+
+  /*
+    AZ AUTOKASSZA AZ ELŐLEG-VÁZLATON (számlázási brief, 2. pont). MI PIROSÍT:
+    egy kifizetett díjbekérőből készült előlegnél nincs figyelmeztetés; egy
+    nem kifizetettnél (vagy ismeretlennél) mégis van.
+  */
+  it("an advance from a paid proforma warns before the issue; an unpaid or unknown one does not", async () => {
+    const advanceDraft = (paid: boolean | null) => ({
+      ...detailFrom(
+        {
+          documentType: "ADVANCE_INVOICE",
+          invoiceFormat: "ELECTRONIC",
+          currency: "HUF",
+          language: "hu",
+          lines: [],
+        },
+        "adv-1",
+      ),
+      proforma: { id: "pro-1", number: "D-2026-7", paid },
+    });
+    api.detail.mockReset().mockResolvedValue(advanceDraft(true));
+    const { unmount } = render(<BillingDocumentEditor documentId="adv-1" />);
+    expect(
+      await screen.findByText(/D-2026-7 kifizetett.*Autokasszája/),
+    ).toBeInTheDocument();
+    unmount();
+    for (const paid of [false, null]) {
+      api.detail.mockReset().mockResolvedValue(advanceDraft(paid));
+      const view = render(<BillingDocumentEditor documentId="adv-1" />);
+      await screen.findByRole("heading", { level: 1, name: "Új előlegszámla" });
+      expect(screen.queryByText(/Autokasszája/)).toBeNull();
+      view.unmount();
+    }
+  });
 });

@@ -47,6 +47,12 @@ const DETAIL_INCLUDE = {
       documentType: true,
       invoiceNumber: true,
       grossAmount: true,
+      currency: true,
+      // a végszámla kiállítása előtt: sztornózták-e közben az előleget
+      correctionInvoices: {
+        where: { documentType: "STORNO", status: "ISSUED" },
+        select: { id: true },
+      },
     },
   },
   // díjbekérőből készült előlegnél a díjbekérő száma a kiállításhoz (brief, 2.)
@@ -212,6 +218,8 @@ export class BillingDocumentsRepository {
     id: string;
     invoiceNumber: string | null;
     status: string;
+    /** A végszámla kiállított sztornója (legfeljebb egy). */
+    correctionInvoices: { id: string }[];
   } | null> {
     return this.database.invoice.findFirst({
       where: {
@@ -219,7 +227,15 @@ export class BillingDocumentsRepository {
         documentType: "FINAL_INVOICE",
         ...OWN_ROWS,
       },
-      select: { id: true, invoiceNumber: true, status: true },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        correctionInvoices: {
+          where: { documentType: "STORNO", status: "ISSUED" },
+          select: { id: true },
+        },
+      },
     });
   }
 

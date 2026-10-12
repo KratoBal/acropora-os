@@ -111,6 +111,22 @@ export class BillingDocumentStornoService {
         "Csak kiállított számla vagy előlegszámla sztornózható.",
       );
 
+    // a kiállított végszámla levonja ezt az előleget: előbb azt kell
+    // sztornózni, különben a végszámla egy sztornózott előlegre hivatkozna
+    // (barracuda, #1672). A végszámla-vázlat nem akadály: annak a kiállítását
+    // a végszámla saját őre állítja meg.
+    if (original.documentType === "ADVANCE_INVOICE") {
+      const final = await this.documents.finalInvoiceOf(original.id);
+      if (
+        final &&
+        (final.status === "ISSUING" ||
+          (final.status === "ISSUED" && final.correctionInvoices.length === 0))
+      )
+        throw new ConflictException(
+          `Erre az előlegszámlára a(z) ${final.invoiceNumber ?? "kiállítás alatt álló"} végszámla hivatkozik: előbb a végszámlát sztornózd.`,
+        );
+    }
+
     const existing = original.correctionInvoices[0] ?? null;
     // a sikeres sztornó utáni második kattintás a sztornózott számlát kapja;
     // ha a készlet visszavétele elmaradt, most pótolja (idempotensen)

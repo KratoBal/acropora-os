@@ -106,6 +106,7 @@ function setup(
     env?: NodeJS.ProcessEnv;
     answer?: () => SzamlazzAgentResponse;
     createThrows?: unknown;
+    final?: { status: string; stornoed?: boolean } | null;
   } = {},
 ) {
   const state = {
@@ -140,6 +141,15 @@ function setup(
     }) as unknown as BillingDocumentRow;
   const documents = {
     find: async () => original(),
+    finalInvoiceOf: async () =>
+      options.final
+        ? {
+            id: "fin-1",
+            invoiceNumber: options.final.status === "ISSUED" ? "E-VEG-1" : null,
+            status: options.final.status,
+            correctionInvoices: options.final.stornoed ? [{ id: "st-f" }] : [],
+          }
+        : null,
   } as unknown as BillingDocumentsRepository;
   const service = new BillingDocumentStornoService(
     documents,
@@ -218,6 +228,29 @@ describe("a sztornó szolgáltatás", () => {
         ConflictException,
       );
       assert.equal(s.state.calls.length, 0);
+    }
+  });
+
+  it("az előleg nem sztornózható, amíg kiállított végszámla vonja le; a végszámla sztornója vagy egy vázlat nem akadály (barracuda, #1672)", async () => {
+    for (const status of ["ISSUED", "ISSUING"]) {
+      const s = setup({ documentType: "ADVANCE_INVOICE", final: { status } });
+      await assert.rejects(
+        s.service.storno("doc-1", undefined, USER),
+        (error: unknown) =>
+          error instanceof ConflictException &&
+          /végszámla hivatkozik/.test(error.message),
+        status,
+      );
+      assert.equal(s.state.calls.length, 0);
+    }
+    for (const final of [
+      { status: "ISSUED", stornoed: true },
+      { status: "DRAFT" },
+      null,
+    ]) {
+      const s = setup({ documentType: "ADVANCE_INVOICE", final });
+      await s.service.storno("doc-1", undefined, USER);
+      assert.equal(s.state.calls.length, 1, JSON.stringify(final));
     }
   });
 

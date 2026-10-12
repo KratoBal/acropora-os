@@ -110,6 +110,8 @@ function setup(
     env?: NodeJS.ProcessEnv;
     respond?: () => Promise<SzamlazzAgentResponse>;
     stockFails?: boolean;
+    over?: Record<string, unknown>;
+    feedCancelled?: boolean;
   } = {},
 ) {
   const calls = {
@@ -122,9 +124,13 @@ function setup(
     pdf: [] as unknown[],
     resolve: 0,
   };
-  let current = row(options.status, options.format);
+  let current = {
+    ...row(options.status, options.format),
+    ...options.over,
+  } as BillingDocumentRow;
   const documents = {
     find: async () => current,
+    feedTwinCancelled: async () => options.feedCancelled ?? false,
   } as unknown as BillingDocumentsRepository;
   const repository = {
     claim: async () => {
@@ -219,6 +225,35 @@ describe("BillingDocumentIssueService", () => {
     });
     await assert.rejects(() => issue(service), /ellentmondásos/);
     assert.deepEqual([calls.claim, calls.generate, calls.resolve], [0, 0, 0]);
+  });
+
+  /*
+    A VÉGSZÁMLA ELŐLEGE KÖZBEN SZTORNÓZHATÓ (barracuda, #1672). MI PIROSÍT: egy
+    sztornózott előleget levonó végszámla elmegy a Számlázz.hu-ra.
+  */
+  it("a final invoice whose advance was stornoed meanwhile, in the OS or on Számlázz.hu, is not sent", async () => {
+    const advance = {
+      id: "adv-1",
+      documentType: "ADVANCE_INVOICE",
+      invoiceNumber: "E-ELO-1",
+      grossAmount: d("381"),
+      currency: "HUF",
+      correctionInvoices: [] as { id: string }[],
+    };
+    const final = (over: Record<string, unknown>) => ({
+      documentType: "FINAL_INVOICE",
+      referencedInvoice: { ...advance, ...over },
+    });
+    for (const s of [
+      setup({ over: final({ correctionInvoices: [{ id: "st-1" }] }) }),
+      setup({ over: final({}), feedCancelled: true }),
+    ]) {
+      await assert.rejects(() => issue(s.service), /E-ELO-1.*sztornózták/);
+      assert.deepEqual([s.calls.claim, s.calls.generate], [0, 0]);
+    }
+    const ok = setup({ over: final({}) });
+    assert.equal((await issue(ok.service)).status, "ISSUED");
+    assert.equal(ok.calls.generate, 1);
   });
 
   it("does not call Számlázz.hu while the switch is off", async () => {

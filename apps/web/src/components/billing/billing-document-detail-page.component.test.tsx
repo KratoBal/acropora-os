@@ -23,13 +23,16 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-// A részletek oldala CSAK ezt a hármat hívhatja: a kiállításhoz vagy a
-// vázlat mentéséhez nincs tagja a duplának, tehát egy ilyen hívás itt dobna.
+// A részletek oldala CSAK ezeket hívhatja: a kiállításhoz vagy a vázlat
+// mentéséhez nincs tagja a duplának, tehát egy ilyen hívás itt dobna. A
+// `final` az előleg „Végszámla készítése” gombja (#1672), vázlatot készít.
 const api = vi.hoisted(() => ({
   detail: vi.fn(),
   pdf: vi.fn(),
   email: vi.fn(),
   emailDraft: vi.fn(),
+  final: vi.fn(),
+  advance: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 /*
@@ -204,6 +207,8 @@ beforeEach(() => {
     variables: [],
   });
   api.detail.mockReset().mockResolvedValue(detail());
+  api.final.mockReset();
+  api.advance.mockReset();
   api.pdf
     .mockReset()
     .mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
@@ -610,5 +615,163 @@ describe("BillingDocumentDetailPage", () => {
       within(drawer).getByTitle("Levél előnézete").getAttribute("srcdoc") ?? "";
     expect(srcdoc).toMatch(/<img[^>]*src="data:image\/png/);
     expect(srcdoc).not.toContain("acropora-image:");
+  });
+});
+
+/*
+  A VÉGSZÁMLA AZ ELŐLEGRŐL (számlázási brief, 3. pont, #1672). MI PIROSÍT: a
+  kiállított előlegen nincs „Végszámla készítése”, vagy nem a vázlat
+  szerkesztőjére visz; egy meglévő végszámla mellett újat kínál; sztornózott
+  előlegen is kínálja; jog nélkül is kínálja; a végszámlán nem látszik, mit
+  von le a Számlázz.hu.
+*/
+describe("the final invoice from an advance", () => {
+  const advance = (over: Partial<BillingDocumentDetail> = {}) =>
+    detail({
+      documentType: "ADVANCE_INVOICE",
+      documentNumber: "E-ELO-1",
+      finalInvoice: null,
+      ...over,
+    });
+
+  it("an issued advance offers it, and the draft opens in the editor", async () => {
+    api.detail.mockResolvedValue(advance());
+    api.final.mockResolvedValue(detail({ id: "doc-1-vegszamla" }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Végszámla készítése" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/penzugy/szamlazas/doc-1-vegszamla/szerkesztes",
+      ),
+    );
+    expect(api.final).toHaveBeenCalledWith("token-1", "doc-1");
+  });
+
+  it("with a final invoice already there, it opens that one instead", async () => {
+    api.detail.mockResolvedValue(
+      advance({
+        finalInvoice: { id: "fin-1", number: "E-VEG-1", status: "ISSUED" },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("link", { name: "Végszámla megnyitása" }),
+    ).toHaveAttribute("href", "/penzugy/szamlazas/fin-1");
+    expect(
+      screen.queryByRole("button", { name: "Végszámla készítése" }),
+    ).toBeNull();
+  });
+
+  it("a stornoed advance says why, and offers nothing", async () => {
+    api.detail.mockResolvedValue(
+      advance({
+        cancellation: {
+          source: "OS",
+          state: "ISSUED",
+          stornoNumber: "E-ST-1",
+          issueDate: "2026-10-12",
+          error: null,
+          pdfAvailable: true,
+        },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText(
+        /sztornózták, ezért nem készülhet belőle végszámla/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Végszámla készítése" }),
+    ).toBeNull();
+  });
+
+  it("no billing.create, no button", async () => {
+    auth.role = "VIEWER" as UserRole;
+    api.detail.mockResolvedValue(advance());
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("heading", { level: 1, name: "E-ELO-1" });
+    expect(
+      screen.queryByRole("button", { name: "Végszámla készítése" }),
+    ).toBeNull();
+  });
+
+  it("the final invoice names the advance Számlázz.hu deducts", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        documentType: "FINAL_INVOICE",
+        deductedAdvance: {
+          id: "adv-1",
+          number: "E-ELO-1",
+          grossAmount: "38100.0000",
+        },
+      }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("link", { name: "E-ELO-1" }),
+    ).toHaveAttribute("href", "/penzugy/szamlazas/adv-1");
+    expect(screen.getByText(/bruttó 38\s100/)).toBeInTheDocument();
+  });
+});
+
+/*
+  AZ ELŐLEG A DÍJBEKÉRŐRŐL (számlázási brief, 2. pont, #1670). MI PIROSÍT: a
+  kiállított díjbekérőn nincs „Előlegszámla készítése”, vagy nem a vázlat
+  szerkesztőjére visz; meglévő előleg mellett újat kínál; az Autokassza
+  figyelmeztetése hiányzik a gomb mellől; vázlat díjbekérőn is kínálja.
+*/
+describe("the advance from a proforma", () => {
+  const proforma = (over: Partial<BillingDocumentDetail> = {}) =>
+    detail({
+      documentType: "PROFORMA",
+      invoiceFormat: null,
+      documentNumber: "D-2026-7",
+      advance: null,
+      ...over,
+    });
+
+  it("an issued proforma offers it with the Autokassza warning, and the draft opens in the editor", async () => {
+    api.detail.mockResolvedValue(proforma());
+    api.advance.mockResolvedValue(detail({ id: "doc-1-eloleg" }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText(/Autokasszája kiállíthatott belőle bizonylatot/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Előlegszámla készítése" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/penzugy/szamlazas/doc-1-eloleg/szerkesztes",
+      ),
+    );
+    expect(api.advance).toHaveBeenCalledWith("token-1", "doc-1");
+  });
+
+  it("with an advance already there, it opens that one (its draft in the editor)", async () => {
+    api.detail.mockResolvedValue(
+      proforma({ advance: { id: "adv-1", number: null, status: "DRAFT" } }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("link", { name: "Előlegszámla megnyitása" }),
+    ).toHaveAttribute("href", "/penzugy/szamlazas/adv-1/szerkesztes");
+    expect(
+      screen.queryByRole("button", { name: "Előlegszámla készítése" }),
+    ).toBeNull();
+  });
+
+  it("a proforma not yet issued offers nothing", async () => {
+    api.detail.mockResolvedValue(
+      proforma({ status: "DRAFT", documentNumber: null }),
+    );
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByText(/még nincs hivatalos száma/);
+    expect(
+      screen.queryByRole("button", { name: "Előlegszámla készítése" }),
+    ).toBeNull();
   });
 });
