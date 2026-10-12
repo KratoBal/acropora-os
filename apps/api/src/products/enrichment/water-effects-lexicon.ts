@@ -24,6 +24,40 @@ type Lexicon = readonly {
 const NOVEL = "(?:raise|raises|increase|increases|boost|boosts)";
 const CSOKKENT = "(?:remove|removes|reduce|reduces|lower|lowers)";
 
+/*
+  A KH, A KALCIUM ÉS A MAGNÉZIUM PÓTLÁSA (t6-kh-ca-mg, 2026-10-12). Ezekre a
+  kategória-út nem működik: az éles UNAS-fán a Termékek > Nyomelemek alágai
+  kizárólag márkák, KH-, kalcium- vagy magnézium-ág sehol nincs (acrobot
+  mérése, READ ONLY). Ezért a szótár bővül, de csak IGE-alakkal (a pótlószer
+  főneve továbbra sem találat, barracuda #1669):
+  - több ige és -ing alak, „the level of”, a dKH;
+  - felsorolás, de csak a három paraméter nevével a lista tagjaként, így egy
+    „raises pH and reduces magnesium” nem ad magnéziumot;
+  - a „fogyasztás” jellegű főnév kizárva („increases calcium consumption”,
+    „növeli a kalciumfogyasztást”): az a pótlás ellentéte, nem a pótlás.
+*/
+const POTOL =
+  "(?:raise|raises|raising|increase|increases|increasing|boost|boosts|boosting|elevate|elevates|elevating|replenish|replenishes|replenishing|restore|restores|restoring)";
+const EN_TAG = "(?:alkalinity|kh|dkh|calcium|magnesium)";
+const EN_LISTA = `(?:${EN_TAG}(?:,? and|,| &) )*`;
+const EN_NEM_POTLAS = "(?! (?:consumption|uptake|demand|usage|depletion))";
+const en = (target: string) =>
+  new RegExp(
+    `\\b${POTOL} (?:the )?(?:levels? of )?${EN_LISTA}(?:the )?${target}\\b${EN_NEM_POTLAS}`,
+  );
+const HU_TAG = "(?:kh|karbonatkemenyseg|lugossag|kalcium|magnezium)";
+const HU_LISTA = `(?:${HU_TAG}-(?:,| es| valamint) )*`;
+const HU_NEM_POTLAS = "(?![a-z-]*(?:fogyaszt|felvetel|igeny))";
+const hu = (target: string) => [
+  new RegExp(
+    `\\b(?:emeli|noveli|potolja) a ${HU_LISTA}(?:a )?${target}${HU_NEM_POTLAS}`,
+  ),
+  new RegExp(
+    `\\b${target}(?:-?szint)?(?:-(?:,| es| valamint) [a-z-]+)? (?:emelesere|novelesere|potlasara)`,
+  ),
+];
+const DE_ERTEK = "(?:gehalt|-?wert|spiegel)";
+
 export const WATER_EFFECTS_LEXICON: Lexicon = [
   // EMEL
   {
@@ -33,27 +67,30 @@ export const WATER_EFFECTS_LEXICON: Lexicon = [
     code: "KH",
     direction: "EMEL",
     patterns: [
-      /emeli a (?:kh|karbonatkemenyseg|lugossag)/,
-      new RegExp(`\\b${NOVEL} (?:the )?(?:alkalinity|kh)\\b`),
-      /erhoht die (?:kh|karbonatharte|alkalinitat)\b/,
+      ...hu("(?:kh|karbonatkemenyseg|lugossag)"),
+      en("(?:alkalinity|kh|dkh)"),
+      /erhoht (?:den |die )?(?:kh|karbonatharte|alkalinitat)(?:-wert)?\b/,
     ],
   },
   {
     code: "KALCIUM",
     direction: "EMEL",
     patterns: [
-      /emeli a kalcium/,
-      new RegExp(`\\b${NOVEL} (?:the )?calcium\\b`),
-      /erhoht den (?:calcium|kalzium)gehalt/,
+      ...hu("kalcium"),
+      en("calcium"),
+      new RegExp(`erhoht den (?:calcium|kalzium)${DE_ERTEK}`),
+      /erhoht den (?:calcium|kalzium)- und magnesium/,
     ],
   },
   {
     code: "MAGNEZIUM",
     direction: "EMEL",
     patterns: [
-      /emeli a magnezium/,
-      new RegExp(`\\b${NOVEL} (?:the )?magnesium\\b`),
-      /erhoht den magnesiumgehalt/,
+      ...hu("magnezium"),
+      en("magnesium"),
+      new RegExp(
+        `erhoht den (?:(?:calcium|kalzium)- und )?magnesium${DE_ERTEK}`,
+      ),
     ],
   },
   {

@@ -118,6 +118,85 @@ describe("a szótár határai (barracuda, #1669)", () => {
   });
 });
 
+/*
+  A KH, A KALCIUM ÉS A MAGNÉZIUM BŐVÍTETT SZÓTÁRA (t6-kh-ca-mg). Ezekre nincs
+  kategória-ág (az éles fán a Nyomelemek alágai márkák), tehát csak a szöveg
+  mondhatja meg. MI PIROSÍT: egy új igealak vagy felsorolás nem talál; a
+  tagadás nem tagadja az új alakot; a fogyasztásról szóló mondat pótlásnak
+  számít; egy idegen paraméter a felsorolásban átviszi a hatást.
+*/
+describe("a KH, a kalcium és a magnézium pótlása", () => {
+  const raw = (text: string) => readWaterEffects(text).raw;
+
+  it("angol igealakok, a dKH és a „the level of”", () => {
+    assert.equal(raw("Replenishes calcium quickly."), "KALCIUM:EMEL");
+    assert.equal(
+      raw("Ideal for increasing the level of magnesium."),
+      "MAGNEZIUM:EMEL",
+    );
+    assert.equal(raw("Boosts dKH within hours."), "KH:EMEL");
+    assert.equal(raw("Restores alkalinity after a crash."), "KH:EMEL");
+  });
+
+  it("angol felsorolás: mindhárom, de idegen paraméter nem viszi át", () => {
+    assert.equal(
+      raw("Raises calcium, magnesium and alkalinity in one dose."),
+      "KALCIUM:EMEL;KH:EMEL;MAGNEZIUM:EMEL",
+    );
+    assert.equal(
+      raw("Increases calcium & magnesium."),
+      "KALCIUM:EMEL;MAGNEZIUM:EMEL",
+    );
+    assert.equal(
+      raw("Raises pH and reduces magnesium precipitation."),
+      "PH:EMEL",
+    );
+  });
+
+  it("magyar: növeli, pótolja, a kötőjeles felsorolás és a célhatározó", () => {
+    assert.equal(raw("Gyorsan növeli a KH-t."), "KH:EMEL");
+    assert.equal(
+      raw("Pótolja a magnéziumot a tengeri akváriumban."),
+      "MAGNEZIUM:EMEL",
+    );
+    assert.equal(
+      raw("Emeli a kalcium- és magnéziumszintet."),
+      "KALCIUM:EMEL;MAGNEZIUM:EMEL",
+    );
+    assert.equal(raw("A KH-szint emelésére."), "KH:EMEL");
+    assert.equal(
+      raw("A kalcium- és magnéziumszint pótlására."),
+      "KALCIUM:EMEL;MAGNEZIUM:EMEL",
+    );
+  });
+
+  it("német: a KH-Wert és a Calcium- und Magnesiumgehalt", () => {
+    assert.equal(raw("Erhöht den KH-Wert zuverlässig."), "KH:EMEL");
+    assert.equal(
+      raw("Erhöht den Calcium- und Magnesiumgehalt."),
+      "KALCIUM:EMEL;MAGNEZIUM:EMEL",
+    );
+  });
+
+  it("a tagadás az új alakokat is kizárja", () => {
+    for (const text of ["Does not replenish calcium.", "Nem növeli a KH-t."]) {
+      const r = readWaterEffects(text);
+      assert.equal(r.raw, null, text);
+      assert.equal(r.negated.length, 1, text);
+    }
+  });
+
+  it("a fogyasztás nem pótlás", () => {
+    for (const text of [
+      "Fast coral growth increases calcium consumption.",
+      "Boosts magnesium uptake of corals.",
+      "Növeli a kalciumfogyasztást.",
+      "Növeli a magnézium-felvételt.",
+    ])
+      assert.equal(raw(text), null, text);
+  });
+});
+
 describe("a kategória-szabály a UNAS-ágra", () => {
   it("a megkötők ága a szülőjével együtt, a hivatkozás az ág", () => {
     assert.deepEqual(
