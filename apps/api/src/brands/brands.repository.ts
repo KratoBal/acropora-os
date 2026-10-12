@@ -27,6 +27,16 @@ const normalize = (value: string) =>
     .replace(/\s+/g, " ");
 const slugify = (value: string) => normalize(value).replace(/ /g, "-");
 
+/**
+ * `undefined` leaves the column as it is (the field was not sent); a blank
+ * string clears it, the same as `null`, so an emptied form field does not
+ * leave a whitespace title behind.
+ */
+function blankToNull(value: string | null | undefined) {
+  if (value === undefined) return undefined;
+  return value?.trim() ? value.trim() : null;
+}
+
 @Injectable()
 export class BrandsRepository extends Repository {
   constructor() {
@@ -162,6 +172,10 @@ export class BrandsRepository extends Repository {
             description: input.description,
             websiteUrl: input.websiteUrl,
             logoUrl: input.logoUrl,
+            seoTitle: blankToNull(input.seoTitle),
+            metaDescription: blankToNull(input.metaDescription),
+            intro: blankToNull(input.intro),
+            merchantBrandName: blankToNull(input.merchantBrandName),
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
@@ -335,6 +349,10 @@ export class BrandsRepository extends Repository {
       description: brand.description ?? undefined,
       websiteUrl: brand.websiteUrl ?? undefined,
       logoUrl: brand.logoUrl ?? undefined,
+      seoTitle: brand.seoTitle ?? undefined,
+      metaDescription: brand.metaDescription ?? undefined,
+      intro: brand.intro ?? undefined,
+      merchantBrandName: brand.merchantBrandName ?? undefined,
       isActive: brand.isActive,
       archivedAt: brand.archivedAt?.toISOString(),
       metadata: brand.metadata ?? undefined,

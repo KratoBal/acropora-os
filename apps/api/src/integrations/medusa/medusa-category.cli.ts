@@ -107,10 +107,12 @@ export function describeVerification(v: {
   activeAmongThem: number;
   mappingRowsHere: number;
   expected: number;
+  expectedActive?: number;
 }): string {
+  const kellAktiv = v.expectedActive ?? v.expected;
   const rendben =
     v.carryingOurId === v.expected &&
-    v.activeAmongThem === v.expected &&
+    v.activeAmongThem === kellAktiv &&
     v.mappingRowsHere === v.expected;
   const fej =
     `Ellenőrzés (${v.expected} kategóriára): a Medusában ${v.carryingOurId} hordozza ` +
@@ -122,7 +124,13 @@ export function describeVerification(v: {
     bajok.push(
       `Hiányzik ${v.expected - v.carryingOurId} kategória a Medusából.`,
     );
-  if (v.activeAmongThem !== v.carryingOurId)
+  if (v.expectedActive !== undefined) {
+    if (v.activeAmongThem !== v.expectedActive)
+      bajok.push(
+        `${v.activeAmongThem} kategória aktív a Medusában, a fánk szerint ` +
+          `${v.expectedActive} kellene: az aktív jelölő eltér a miénktől.`,
+      );
+  } else if (v.activeAmongThem !== v.carryingOurId)
     bajok.push(
       `${v.carryingOurId - v.activeAmongThem} kategória INAKTÍV: a Medusa nem ` +
         `tárolta el az aktív jelölőt, tehát a katalógus nem látszik.`,
