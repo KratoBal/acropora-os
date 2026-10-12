@@ -118,6 +118,39 @@ describe("a pótlás", () => {
     );
   });
 
+  it("egy tár- vagy adatbázis-hiba csak annál a számlánál áll meg (barracuda, #1658)", async () => {
+    const t = tar();
+    let put = 0;
+    const out = await fillExternalInvoicePdfs({
+      candidates: [1, 2].map(jelolt),
+      agentKey: "k",
+      client: { downloadInvoicePdf: async () => valasz() },
+      documents: {
+        put: async (key) => {
+          if (put++ === 0) throw new Error("a tár megtelt");
+          return t.documents.put(key);
+        },
+      },
+      store: {
+        // a hiba-jelölés maga is elbukik: a futás akkor is megy tovább
+        setPdf: async (id, key, reason) => {
+          if (reason) throw new Error("adatbázis");
+          return t.store.setPdf(id, key, reason);
+        },
+      },
+    });
+    assert.deepEqual(
+      out.map((o) => [
+        o.documentNumber,
+        o.kind === "FAILED" ? o.reason : o.kind,
+      ]),
+      [
+        ["ACRW-2026/00501", "SZAMLAZZ_PDF_STORE_FAILED"],
+        ["ACRW-2026/00502", "STORED"],
+      ],
+    );
+  });
+
   it("a hónap határai UTC-ben, a rossz alak hiba", () => {
     assert.deepEqual(monthRange("2026-12"), {
       gte: new Date("2026-12-01T00:00:00Z"),
@@ -134,12 +167,14 @@ describe("a parancs", () => {
   ) {
     let hivas = 0;
     let honap: string | null | undefined;
+    let ujra: boolean | undefined;
     let out = "";
     let err = "";
     const t = tar();
     const store: ExternalPdfStore = {
-      candidates: async (month) => {
+      candidates: async (month, options) => {
         honap = month;
+        ujra = options?.retryUnknown;
         return [jelolt(1), jelolt(2)];
       },
       setPdf: t.store.setPdf,
@@ -158,7 +193,7 @@ describe("a parancs", () => {
           },
         },
       },
-    ).then((code) => ({ code, out, err, hivas, honap, t }));
+    ).then((code) => ({ code, out, err, hivas, honap, ujra, t }));
   }
 
   it("száraz futás: kiírja a számlákat, a Számlázz.hu-t nem hívja, és nem ír", async () => {
@@ -174,10 +209,10 @@ describe("a parancs", () => {
   });
 
   it("--apply: letölt; egy meg nem jött PDF a kilépési kódban is látszik", async () => {
-    const jo = await futtat(["--apply"]);
+    const jo = await futtat(["--apply", "--month", "2026-09"]);
     assert.equal(jo.code, 0);
     assert.equal(jo.hivas, 2);
-    const rossz = await futtat(["--apply"], {
+    const rossz = await futtat(["--apply", "--all-months"], {
       valasz: () => valasz({ successful: false, errorCode: "7" }),
     });
     assert.equal(rossz.code, 3);
@@ -187,8 +222,25 @@ describe("a parancs", () => {
     );
   });
 
+  it("--apply hónap nélkül nem indul, csak kifejezett --all-months-szal (barracuda, #1658)", async () => {
+    const r = await futtat(["--apply"]);
+    assert.equal(r.code, 2);
+    assert.equal(r.hivas, 0);
+    assert.match(r.err, /--all-months/);
+  });
+
+  it("az ismeretlen számú sor alapból kimarad, a --retry-unknown kéri (barracuda, #1658)", async () => {
+    assert.equal((await futtat(["--month", "2026-09"])).ujra, false);
+    assert.equal(
+      (await futtat(["--month", "2026-09", "--retry-unknown"])).ujra,
+      true,
+    );
+  });
+
   it("dokumentumtár nélkül, vagy rossz hónappal nem indul", async () => {
-    const tarNelkul = await futtat(["--apply"], { documents: null });
+    const tarNelkul = await futtat(["--apply", "--all-months"], {
+      documents: null,
+    });
     assert.equal(tarNelkul.code, 2);
     assert.equal(tarNelkul.hivas, 0);
     const rosszHonap = await futtat(["--month", "2026-9"]);
