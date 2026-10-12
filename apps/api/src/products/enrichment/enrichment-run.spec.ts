@@ -355,3 +355,79 @@ describe("egy kézi futás, árnyékban", () => {
     );
   });
 });
+
+/*
+  A VÍZHATÁS AZ EGYEZTETŐBEN (kártya 2b3983e1, D1): a kategória-szabály a
+  saját katalógusunk állítása (`UNAS_CURRENT`), a szótár egy független oldalé.
+  MI PIROSÍT: a kategória egyedül VERIFIED lesz; egy egyező oldal mellett sem;
+  egy bővebb oldal-halmaz csendben összeolvad vele; a tagadás nyom nélkül eltűnik.
+*/
+describe("a vízhatás a futásban", () => {
+  const megkoto = facts({
+    name: "Kitalált foszfátmegkötő",
+    current: { waterParameterEffects: "FOSZFAT:CSOKKENT" },
+    currentSource: {
+      waterParameterEffects: {
+        sourceType: "UNAS_CURRENT",
+        sourceRef: "unas-category:Problémamegoldás > Foszfátmegkötők",
+      },
+    },
+  });
+  const egyLap = (description: string) =>
+    run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/9` }],
+        },
+      ],
+      {
+        [`${BRS}/p/9`]: {
+          status: 200,
+          body: productPage({ name: "Phos Remover", description }),
+        },
+      },
+      { facts: { "p-1": megkoto } },
+    );
+  const mezo = (checks: StoredCheck[]) =>
+    checks[0]!.fields.find((f) => f.field === "waterParameterEffects")!;
+
+  it("a kategória egyedül nem ellenőrzött", async () => {
+    const { checks } = await egyLap("A great product for every reef.");
+    assert.equal(mezo(checks).status, "UNVERIFIED");
+    assert.equal(mezo(checks).currentValue, "FOSZFAT:CSOKKENT");
+    // a bizonyíték a kategória-ág, nem a terméktörzs
+    assert.deepEqual(
+      mezo(checks).evidence.map((e) => e.sourceRef),
+      ["unas-category:Problémamegoldás > Foszfátmegkötők"],
+    );
+  });
+
+  it("egy egyező független oldallal ellenőrzött, az oldal kivonatával", async () => {
+    const { checks } = await egyLap(
+      "A high capacity phosphate remover for reef aquariums.",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.equal(mezo(checks).value, "FOSZFAT:CSOKKENT");
+    const lap = mezo(checks).evidence.find(
+      (e) => e.sourceKind === "BULK_REEF_SUPPLY",
+    )!;
+    assert.match(lap.excerpt!, /phosphate remover/);
+  });
+
+  it("egy bővebb oldal-halmaz ütközés, nem összeolvadás", async () => {
+    const { checks } = await egyLap(
+      "Phosphate remover that also works as a silicate remover.",
+    );
+    assert.equal(mezo(checks).status, "CONFLICTING_SOURCES");
+    assert.equal(mezo(checks).value, null);
+  });
+
+  it("a tagadott találat a lap megjegyzésében marad", async () => {
+    const { checks } = await egyLap(
+      "Phosphate remover. It does not lower the pH.",
+    );
+    assert.equal(mezo(checks).status, "VERIFIED");
+    assert.match(checks[0]!.fetches[0]!.reason ?? "", /tagadva: PH:CSOKKENT/);
+  });
+});
