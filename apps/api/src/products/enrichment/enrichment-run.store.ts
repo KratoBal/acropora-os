@@ -69,6 +69,22 @@ export class PrismaEnrichmentRunStore implements EnrichmentRunStore {
     });
   }
 
+  async saveFailure(
+    runId: string,
+    failure: { productId: string; checkedAt: Date; errorCode: string },
+  ): Promise<void> {
+    await prisma.productEnrichmentRunProduct.create({
+      data: {
+        runId,
+        productId: failure.productId,
+        checkedAt: failure.checkedAt,
+        sourceCount: 0,
+        fieldCount: 0,
+        errorCode: failure.errorCode,
+      },
+    });
+  }
+
   async finishRun(
     runId: string,
     result: {

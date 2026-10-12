@@ -48,7 +48,9 @@ export function billingEmailValues(
       }).format(Number(row.grossAmount))
     : null;
   const isInvoice =
-    row.documentType === "INVOICE" || row.documentType === "ADVANCE_INVOICE";
+    row.documentType === "INVOICE" ||
+    row.documentType === "ADVANCE_INVOICE" ||
+    row.documentType === "FINAL_INVOICE";
   return {
     customer_name: customerName,
     document_number: row.invoiceNumber,

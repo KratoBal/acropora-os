@@ -15,9 +15,9 @@ import {
  * A BILLING DOKUMENTUM -> SZÁMLÁZZ.HU KÉRÉS (Számlázás v0.1, capability report
  * 6.3 pont; brief 31. pont).
  *
- * A négy típus UGYANAZ az `xmlszamla` kérés, ugyanazzal a klienssel: a típus
+ * Az öt típus UGYANAZ az `xmlszamla` kérés, ugyanazzal a klienssel: a típus
  * csak a `fejlec` jelzőjét és a kötelező mezők kitöltését változtatja. Ezért ez
- * nem négy adapter, hanem egy leképezés, és a React oldal semmit nem tud róla.
+ * nem öt adapter, hanem egy leképezés, és a React oldal semmit nem tud róla.
  *
  * AMIT A LEKÉPEZÉS NEM SZÁMOL: az összegeket. A sorok a TÁROLT összegeikkel
  * mennek (a szerver már újraszámolta őket), mert a Számlázz.hu tételenként
@@ -59,6 +59,8 @@ export interface BillingDocumentForIssue {
   reference: string | null;
   /** A díjbekérő Számlázz.hu-s száma, ha ebből készül. */
   proformaNumber: string | null;
+  /** Végszámlán a levont előlegszámla Számlázz.hu-s száma (kötelező). */
+  advanceNumber: string | null;
   buyer: {
     name: string;
     country: string | null;
@@ -83,6 +85,7 @@ export class BillingDocumentAdapterError extends Error {
       | "BILLING_PAYMENT_TERMS_REQUIRED"
       | "BILLING_LANGUAGE_NOT_SUPPORTED"
       | "BILLING_NO_LINES"
+      | "BILLING_FINAL_WITHOUT_ADVANCE"
       | "BILLING_DISCOUNT_WITHOUT_ITEM",
   ) {
     super(code);
@@ -143,6 +146,10 @@ export function toSzamlazzAgentInput(
   if (!format.ok) throw new BillingDocumentAdapterError(format.error);
   if (document.lines.length === 0)
     throw new BillingDocumentAdapterError("BILLING_NO_LINES");
+  // egy előleg nélküli végszámla a Számlázz.hu-n vagy egy rendelésszám
+  // szerinti, általunk nem választott előleget vonna le, vagy semmit
+  if (document.documentType === "FINAL_INVOICE" && !document.advanceNumber)
+    throw new BillingDocumentAdapterError("BILLING_FINAL_WITHOUT_ADVANCE");
 
   const language = document.language ?? "hu";
   if (!isLanguage(language))
@@ -174,6 +181,9 @@ export function toSzamlazzAgentInput(
     ...(document.reference ? { orderNumber: document.reference } : {}),
     ...(document.proformaNumber
       ? { proformaNumber: document.proformaNumber }
+      : {}),
+    ...(document.documentType === "FINAL_INVOICE" && document.advanceNumber
+      ? { advanceNumber: document.advanceNumber }
       : {}),
     seller: {},
     buyer: {

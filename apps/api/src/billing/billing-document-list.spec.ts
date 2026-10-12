@@ -528,8 +528,12 @@ describe("the external documents on the list", () => {
       kindCode: { in: ["D"] },
     });
     // a számla-fajta az ismeretlen kódot is hozza
+    // a végszámla (VS) 2026-10-12 óta saját típus, nem számla
+    assert.deepEqual(externalWhere({ documentType: "FINAL_INVOICE" }), {
+      kindCode: { in: ["VS"] },
+    });
     assert.deepEqual(externalWhere({ documentType: "INVOICE" }), {
-      kindCode: { notIn: ["ES", "D", "SL"] },
+      kindCode: { notIn: ["VS", "ES", "D", "SL"] },
     });
     assert.deepEqual(externalWhere({ invoiceFormat: "ELECTRONIC" }), {
       electronic: true,

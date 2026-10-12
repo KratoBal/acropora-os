@@ -41,6 +41,9 @@ function deps(env: NodeJS.ProcessEnv = {}, input = INPUT) {
     saveCheck: async () => {
       stored.push("check");
     },
+    saveFailure: async (_runId, failure) => {
+      stored.push(`failure:${failure.productId}:${failure.errorCode}`);
+    },
     finishRun: async () => {
       stored.push("finish");
     },
@@ -136,6 +139,25 @@ describe("a kézi indítás parancssora", () => {
     );
     assert.deepEqual(d.stored, ["start", "check", "finish"]);
     assert.match(c.text().stdout, /COMPLETED, 1 termék/);
+  });
+
+  it("egy tárolhatatlan termék 4-es kilépés: a futás befejeződik, a termék hibakóddal rögzül és kiíródik", async () => {
+    const d = deps({ JEV_PRODUCT_ENRICHMENT: "review" });
+    d.value.store.saveCheck = async () => {
+      throw Object.assign(new Error("too long"), { code: "P2000" });
+    };
+    const c = capture();
+    assert.equal(
+      await runEnrichmentCli(
+        ["--input", "x", "--apply", "--actor", "u-1"],
+        c.out,
+        d.value,
+      ),
+      4,
+    );
+    assert.deepEqual(d.stored, ["start", "failure:p-1:P2000", "finish"]);
+    assert.match(c.text().stdout, /COMPLETED, 0 termék/);
+    assert.match(c.text().stdout, /HIBÁS TERMÉK: 1 .*\n- p-1: P2000/);
   });
 
   it("a korlát elérése 3-as kilépés és kiírt jelzés", async () => {

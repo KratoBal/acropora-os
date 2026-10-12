@@ -196,6 +196,22 @@ describe("planInvoiceStock", () => {
     }
   });
 
+  it("moves stock on a final invoice too, by the invoice's source rule (acrobot 28782)", () => {
+    assert.equal(
+      plan([line("a", "p-unas")], {
+        documentType: "FINAL_INVOICE",
+      }).outcomes.get("a"),
+      "MOVED",
+    );
+    assert.equal(
+      plan([line("a", "p-unas")], {
+        documentType: "FINAL_INVOICE",
+        sourceType: "SALES_ORDER",
+      }).outcomes.get("a"),
+      "MOVED_BY_SOURCE",
+    );
+  });
+
   it("moves stock only on an invoice, not on a proforma, an advance or a delivery note", () => {
     for (const documentType of [
       "PROFORMA",
