@@ -58,7 +58,12 @@ export interface EnrichmentReader {
 export class PrismaEnrichmentReader implements EnrichmentReader {
   async latestCheck(productId: string): Promise<LatestCheck | null> {
     const check = await prisma.productEnrichmentRunProduct.findFirst({
-      where: { productId, run: { status: { in: [...FINISHED] } } },
+      // a product the run could not store is not a check of it
+      where: {
+        productId,
+        errorCode: null,
+        run: { status: { in: [...FINISHED] } },
+      },
       orderBy: { checkedAt: "desc" },
       select: { checkedAt: true, sourceCount: true, fieldCount: true },
     });

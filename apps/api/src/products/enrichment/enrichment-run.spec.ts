@@ -10,8 +10,10 @@ import {
   type ScriptedAnswer,
 } from "./enrichment-test-fixtures.js";
 import {
+  MAX_CONSECUTIVE_PRODUCT_FAILURES,
   runEnrichment,
   type EnrichmentRunStore,
+  type ProductFailure,
   type ProductFacts,
   type RunProductInput,
   type StoredCheck,
@@ -31,7 +33,20 @@ const facts = (over: Partial<ProductFacts> = {}): ProductFacts => ({
   ...over,
 });
 
-function memoryStore() {
+/** A Prisma P2000 as the client throws it: a value too long for its column. */
+class TooLongForColumn extends Error {
+  readonly code = "P2000";
+  constructor() {
+    super(
+      "The provided value for the column is too long for the column's type.",
+    );
+    this.name = "PrismaClientKnownRequestError";
+  }
+}
+
+function memoryStore(
+  failSave: (check: StoredCheck) => Error | null = () => null,
+) {
   const runs: {
     id: string;
     status?: string;
@@ -40,13 +55,19 @@ function memoryStore() {
     errorCode?: string | null;
   }[] = [];
   const checks: StoredCheck[] = [];
+  const failures: ProductFailure[] = [];
   const store: EnrichmentRunStore = {
     startRun: async () => {
       runs.push({ id: `run-${runs.length + 1}` });
       return runs.at(-1)!.id;
     },
     saveCheck: async (_runId, check) => {
+      const error = failSave(check);
+      if (error) throw error;
       checks.push(check);
+    },
+    saveFailure: async (_runId, failure) => {
+      failures.push(failure);
     },
     finishRun: async (runId, result) => {
       Object.assign(
@@ -55,7 +76,7 @@ function memoryStore() {
       );
     },
   };
-  return { store, runs, checks };
+  return { store, runs, checks, failures };
 }
 
 async function run(
@@ -66,11 +87,12 @@ async function run(
     productLimit?: number;
     requestLimit?: number;
     suppliers?: Record<string, string>;
+    failSave?: (check: StoredCheck) => Error | null;
   } = {},
 ) {
   const network = scriptedNetwork(table);
   const clock = fakeClock();
-  const memory = memoryStore();
+  const memory = memoryStore(options.failSave);
   const summary = await runEnrichment(
     products,
     {
@@ -429,5 +451,97 @@ describe("a vízhatás a futásban", () => {
     );
     assert.equal(mezo(checks).status, "VERIFIED");
     assert.match(checks[0]!.fetches[0]!.reason ?? "", /tagadva: PH:CSOKKENT/);
+  });
+});
+
+describe("egy termék hibája nem állítja meg az adagot", () => {
+  const product = (id: string): RunProductInput => ({
+    productId: id,
+    sources: [
+      { kind: "BULK_REEF_SUPPLY", url: `https://www.bulkreefsupply.com/${id}` },
+    ],
+  });
+  const page = { status: 200, body: productPage({ gtin13: "5901234123457" }) };
+  const many = (ids: string[]) => ({
+    facts: Object.fromEntries(ids.map((id) => [id, facts({ productId: id })])),
+    table: Object.fromEntries(
+      ids.map((id) => [`https://www.bulkreefsupply.com/${id}`, page]),
+    ),
+  });
+
+  it("a tárolásnál elhasaló termék hibakóddal rögzül, a futás a következővel megy tovább, és befejezett", async () => {
+    const ids = ["p-1", "p-2", "p-3"];
+    const { facts: f, table } = many(ids);
+    const { summary, runs, checks, failures } = await run(
+      ids.map(product),
+      table,
+      {
+        facts: f,
+        failSave: (check) =>
+          check.productId === "p-2" ? new TooLongForColumn() : null,
+      },
+    );
+    assert.deepEqual(
+      [
+        summary.status,
+        checks.map((c) => c.productId),
+        failures.map((x) => [x.productId, x.errorCode]),
+        summary.failures.map((x) => x.productId),
+        runs[0]!.status,
+        runs[0]!.errorCode,
+        runs[0]!.productCount,
+      ],
+      [
+        "COMPLETED",
+        ["p-1", "p-3"],
+        [["p-2", "P2000"]],
+        ["p-2"],
+        "COMPLETED",
+        "1_PRODUCTS_FAILED",
+        2,
+      ],
+    );
+  });
+
+  it(`${MAX_CONSECUTIVE_PRODUCT_FAILURES} egymás utáni hiba már nem a termék: a futás FAILED, a hiba továbbmegy`, async () => {
+    const ids = ["p-1", "p-2", "p-3", "p-4", "p-5", "p-6", "p-7"];
+    const { facts: f, table } = many(ids);
+    const memory = memoryStore(() => new TooLongForColumn());
+    const clock = fakeClock();
+    await assert.rejects(
+      runEnrichment(
+        ids.map(product),
+        { requestedById: "u-1", productLimit: 20, requestLimit: 200 },
+        {
+          store: memory.store,
+          facts: {
+            productFacts: async (id) => f[id] ?? null,
+            supplierWebsite: async () => null,
+          },
+          fetch: scriptedNetwork(table).fetch,
+          sleep: clock.sleep,
+          now: clock.now,
+        },
+      ),
+      TooLongForColumn,
+    );
+    assert.deepEqual(
+      [memory.runs[0]!.status, memory.failures.length, memory.checks.length],
+      ["FAILED", MAX_CONSECUTIVE_PRODUCT_FAILURES - 1, 0],
+    );
+  });
+
+  it("egy jó termék közben lenullázza a számlálót: négy hiba, egy jó, négy hiba még befejezett", async () => {
+    const ids = ["p-1", "p-2", "p-3", "p-4", "p-5", "p-6", "p-7", "p-8", "p-9"];
+    const { facts: f, table } = many(ids);
+    const { summary } = await run(ids.map(product), table, {
+      facts: f,
+      failSave: (check) =>
+        check.productId === "p-5" ? null : new TooLongForColumn(),
+    });
+    assert.deepEqual(
+      [summary.status, summary.failures.length, summary.checks.length],
+      ["COMPLETED", 8, 1],
+    );
   });
 });
