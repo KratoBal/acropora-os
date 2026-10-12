@@ -1472,6 +1472,7 @@ export type {
 export {
   CONTRACT_KIND_LABELS,
   CONTRACT_KINDS,
+  contractMaintenanceSwitchBlocker,
   contractPurchaseSwitchBlocker,
 } from "./contract.js";
 export type { ContractKind } from "./contract.js";

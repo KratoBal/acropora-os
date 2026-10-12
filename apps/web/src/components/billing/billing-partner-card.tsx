@@ -44,6 +44,15 @@ export function BillingPartnerCard({
   disabled?: boolean;
 }) {
   const [picking, setPicking] = useState(customer === null);
+  /*
+    A KÍVÜLRŐL ÉRKEZŐ VEVŐ IS LEZÁRJA A VÁLASZTÓT (hétfői lista M4): a
+    beszerzési szerződésből nyitott számla a vevőt a betöltés UTÁN kapja meg,
+    és a `picking` csak a csatoláskor dől el. E nélkül a kitöltött vevő a
+    kereső mögött maradna. Csak új vevőre fut, a „Másik partner” nem zárja be.
+  */
+  useEffect(() => {
+    if (customer) setPicking(false);
+  }, [customer?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [creating, setCreating] = useState(false);
   const { session } = useAuth();
   // a new customer is a customer record, with that permission (28105)
@@ -97,22 +106,8 @@ export function BillingPartnerCard({
   const [termsNote, setTermsNote] = useState<string | null>(null);
 
   const choose = (detail: CustomerDetail) => {
-    onChange(
-      {
-        id: detail.id,
-        name: detail.companyName?.trim() || detail.displayName,
-        address: detail.address,
-        taxNumber: detail.taxNumber ?? null,
-        euTaxNumber: detail.euTaxNumber ?? null,
-        contactName: null,
-        email: detail.email ?? null,
-        internalCode: detail.customerNumber,
-      },
-      {
-        paymentDueDays:
-          detail.paymentDueDays ?? detail.partnerTerms?.paymentDueDays ?? null,
-      },
-    );
+    const chosen = billingCustomerFromDetail(detail);
+    onChange(chosen.customer, chosen.terms);
     setTermsNote(partnerTermsNote(detail));
     setPicking(false);
     setCreating(false);
@@ -249,6 +244,33 @@ export function BillingPartnerCard({
  * állítják. A szöveg kimondja, honnan jött a határidő, hogy ne látsszon
  * önkényesnek.
  */
+/**
+ * A vevő részletlapjából a számla vevője és a fizetési nap. A kártya
+ * választása és a szerződésből nyitott számla (hétfői lista M4) ugyanígy
+ * képezi, hogy a kettő ne térjen el.
+ */
+export function billingCustomerFromDetail(detail: CustomerDetail): {
+  customer: BillingDocumentCustomer;
+  terms: { paymentDueDays: number | null };
+} {
+  return {
+    customer: {
+      id: detail.id,
+      name: detail.companyName?.trim() || detail.displayName,
+      address: detail.address,
+      taxNumber: detail.taxNumber ?? null,
+      euTaxNumber: detail.euTaxNumber ?? null,
+      contactName: null,
+      email: detail.email ?? null,
+      internalCode: detail.customerNumber,
+    },
+    terms: {
+      paymentDueDays:
+        detail.paymentDueDays ?? detail.partnerTerms?.paymentDueDays ?? null,
+    },
+  };
+}
+
 export function partnerTermsNote(detail: CustomerDetail): string | null {
   if (detail.paymentDueDays !== null || !detail.partnerTerms) return null;
   return `Fizetési határidő: ${detail.partnerTerms.paymentDueDays} nap, a(z) ${detail.partnerTerms.partnerName} partner beállításából (ezen a vevő-soron nincs megadva).`;

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import {
+  contractMaintenanceSwitchBlocker,
   contractPurchaseSwitchBlocker,
   type ContractKind,
 } from "@acropora/types";
@@ -64,7 +65,14 @@ export class ContractsService {
   async detail(id: string) {
     const contract = await this.repository.detail(id);
     if (!contract) throw new NotFoundException("A szerződés nem található.");
-    return contract;
+    // a visszaváltás feltétele a felületen (barracuda, #1661): készült-e számla
+    return {
+      ...contract,
+      invoiceCount:
+        contract.kind === "PURCHASE"
+          ? await this.repository.invoiceCount(id)
+          : 0,
+    };
   }
 
   async create(input: CreateContractDto) {
@@ -88,6 +96,13 @@ export class ContractsService {
     if (kind === "PURCHASE" && existing.kind !== "PURCHASE") {
       const blocker = contractPurchaseSwitchBlocker(
         await this.repository.maintenanceOrderCount(id),
+      );
+      if (blocker) throw new ConflictException(blocker);
+    }
+    // a tükre (barracuda, #1661): számla után nem lesz újra karbantartási
+    if (kind === "MAINTENANCE" && existing.kind === "PURCHASE") {
+      const blocker = contractMaintenanceSwitchBlocker(
+        await this.repository.invoiceCount(id),
       );
       if (blocker) throw new ConflictException(blocker);
     }
@@ -132,7 +147,15 @@ export class ContractsService {
         })),
     });
     try {
-      return await this.repository.update(id, data);
+      const updated = await this.repository.update(id, data);
+      // ugyanaz az alak, mint a `detail()`-é: a felület a mentés válaszából él
+      return {
+        ...updated,
+        invoiceCount:
+          updated.kind === "PURCHASE"
+            ? await this.repository.invoiceCount(id)
+            : 0,
+      };
     } catch (error) {
       /*
         A REPOSITORY TÉTELENKÉNT UPSERT-EL (`contracts.repository.ts`

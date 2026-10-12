@@ -54,7 +54,16 @@ import {
   withCustomer,
   type EditorState,
 } from "./billing-editor-state";
-import { BillingPartnerCard } from "./billing-partner-card";
+import {
+  BillingPartnerCard,
+  billingCustomerFromDetail,
+} from "./billing-partner-card";
+import {
+  clearContractInvoiceHandoff,
+  editorLinesFromContractHandoff,
+  readContractInvoiceHandoff,
+} from "./contract-invoice-handoff";
+import { customersApi } from "@/lib/api/customers";
 import { useBillingDocumentPdf } from "./use-billing-document-pdf";
 import {
   clearPosInvoiceHandoff,
@@ -99,11 +108,14 @@ export function BillingDocumentEditor({
   documentId,
   initialType,
   posHandoffKey,
+  contractHandoffKey,
 }: {
   documentId?: string;
   initialType?: BillingDocumentType;
   /** A pénztár kosarának kulcsa (`pos-invoice-handoff`); csak új számlánál. */
   posHandoffKey?: string;
+  /** A beszerzési szerződés csomagjának kulcsa (`contract-invoice-handoff`). */
+  contractHandoffKey?: string;
 }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -198,6 +210,56 @@ export function BillingDocumentEditor({
     );
   }, [documentId, posHandoffKey]);
 
+  /*
+    A BESZERZÉSI SZERZŐDÉS (hétfői lista M4): az új számla a szerződés
+    tételeivel, a szerződés számával hivatkozásként és a vevővel nyílik. A vevő
+    a részletlapjáról jön, ugyanazzal a képzéssel, mint a kártya választásakor
+    (`billingCustomerFromDetail`), tehát a fizetési határidő is a vevőé.
+  */
+  useEffect(() => {
+    if (documentId || !contractHandoffKey) return;
+    const handoff = readContractInvoiceHandoff(
+      window.sessionStorage,
+      contractHandoffKey,
+    );
+    if (!handoff) return;
+    setState((current) =>
+      current && current.lines.length === 0
+        ? {
+            ...current,
+            reference: current.reference || handoff.contractNumber,
+            sourceType: "CONTRACT",
+            sourceId: handoff.contractId,
+            lines: editorLinesFromContractHandoff(handoff),
+          }
+        : current,
+    );
+    const controller = new AbortController();
+    customersApi
+      .detail(token, handoff.customerId, controller.signal)
+      .then((detail) => {
+        const chosen = billingCustomerFromDetail(detail);
+        setState((current) =>
+          current && !current.customer
+            ? withCustomer(
+                current,
+                chosen.customer,
+                chosen.terms.paymentDueDays,
+              )
+            : current,
+        );
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setSaveError(
+          cause instanceof Error
+            ? `A szerződés vevője nem tölthető be: ${cause.message}`
+            : "A szerződés vevője nem tölthető be; válaszd ki kézzel.",
+        );
+      });
+    return () => controller.abort();
+  }, [contractHandoffKey, documentId, token]);
+
   useEffect(() => {
     if (!documentId || !canView) return;
     const controller = new AbortController();
@@ -283,6 +345,8 @@ export function BillingDocumentEditor({
     // nyitna, és a következő mentés egy második vázlatot hozna létre.
     if (created && posHandoffKey)
       clearPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
+    if (created && contractHandoffKey)
+      clearContractInvoiceHandoff(window.sessionStorage, contractHandoffKey);
     return { detail, created };
   };
 

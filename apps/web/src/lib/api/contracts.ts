@@ -90,6 +90,8 @@ export type ContractSummary = Omit<ContractInput, "items" | "kind"> & {
   kind: ContractKind;
   /** Hány megrendelőlap készült (a fajtaváltás feltétele, hétfői lista M4). */
   _count: { maintenanceOrders: number };
+  /** Hány számla készült belőle (beszerzésnél; a visszaváltás feltétele). */
+  invoiceCount?: number;
   customer: { id: string; displayName: string };
   createdAt: string;
   updatedAt: string;

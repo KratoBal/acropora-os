@@ -3,6 +3,7 @@ import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PilotContractDetailPage } from "./pilot-contract-detail-page";
+import { readContractInvoiceHandoff } from "@/components/billing/contract-invoice-handoff";
 import { ApiError } from "@/lib/api/client";
 import type { ContractSummary } from "@/lib/api/contracts";
 
@@ -26,6 +27,8 @@ const worksheetsApi = vi.hoisted(() => ({ departments: vi.fn() }));
 const assetsApi = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
@@ -739,5 +742,89 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
         },
       ],
     ]);
+  });
+
+  /*
+    A „SZÁMLA” GOMB (hétfői lista M4). MI PIROSÍT: ha nem a mentett beszerzési
+    szerződés tételeivel, vevőjével és számával nyitná az Új számlát; ha egy még
+    karbantartásiként mentett szerződésből is nyitható lenne; ha számla után a
+    szerződés visszaállhatna karbantartásira (barracuda, #1661).
+  */
+  it("WEB-CONTRACT-INVOICE-OPEN: a mentett beszerzési szerződésből kitöltött Új számla nyílik", async () => {
+    window.sessionStorage.clear();
+    navigation.push.mockReset();
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [item],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Számla" }));
+    const target = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    );
+    expect(
+      [
+        target.pathname,
+        readContractInvoiceHandoff(
+          window.sessionStorage,
+          target.searchParams.get("szerzodes")!,
+        ),
+      ],
+      "WEB-CONTRACT-INVOICE-OPEN",
+    ).toEqual([
+      "/penzugy/szamlazas/uj",
+      {
+        contractId: "contract-1",
+        customerId: "customer-1",
+        contractNumber: "SZ2026/0000019",
+        lines: [
+          {
+            description: "Tengeri só, 25 kg",
+            quantity: "4",
+            unit: "zsák",
+            unitNet: "18000",
+            vatRatePercent: "27",
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("WEB-CONTRACT-INVOICE-UNSAVED: karbantartásiként mentett szerződésből nincs számla", async () => {
+    api.detail.mockReset().mockResolvedValue(contract());
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Beszerzés" }));
+    expect(
+      [
+        (screen.getByRole("button", { name: "Számla" }) as HTMLButtonElement)
+          .disabled,
+        screen.queryByText("Előbb mentsd a szerződést Beszerzésként.") !== null,
+      ],
+      "WEB-CONTRACT-INVOICE-UNSAVED",
+    ).toEqual([true, true]);
+  });
+
+  it("WEB-CONTRACT-BACK-BLOCKED: számla után a Karbantartás nem választható", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      invoiceCount: 1,
+      items: [item],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const back = await screen.findByRole("radio", {
+      name: "Karbantartás, javítás",
+    });
+    expect(
+      [
+        (back as HTMLInputElement).disabled,
+        screen.queryByText(
+          "Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra.",
+        ) !== null,
+      ],
+      "WEB-CONTRACT-BACK-BLOCKED",
+    ).toEqual([true, true]);
   });
 });

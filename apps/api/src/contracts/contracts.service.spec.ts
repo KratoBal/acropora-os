@@ -45,6 +45,8 @@ const CREATE_INPUT: CreateContractDto = {
 function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     customerExists: async () => true,
+    invoiceCount: async () => 0,
+    maintenanceOrderCount: async () => 0,
     departmentBelongsToCustomer: async () => true,
     assetsBelongToCustomer: async (assetIds: string[]) => assetIds,
     create: async (input: unknown) => ({
@@ -331,6 +333,33 @@ describe("ContractsService, a fajta", () => {
         "PURCHASE",
       ],
       "CONTRACT-KIND-SWITCH-409",
+    );
+  });
+
+  it("CONTRACT-KIND-BACK-409: számla után a beszerzési nem lesz újra karbantartási", async () => {
+    const back = (invoices: number) => {
+      const { service } = makeService({
+        invoiceCount: async () => invoices,
+        detail: async () => ({
+          ...(await fakeRepository().detail()),
+          kind: "PURCHASE",
+        }),
+      });
+      return outcome(() =>
+        service.update("contract-1", {
+          kind: "MAINTENANCE",
+          items: [CREATE_INPUT.items[0]],
+        } as unknown as UpdateContractDto),
+      );
+    };
+    const [blocked, allowed] = [await back(1), await back(0)];
+    assert.deepEqual(
+      [blocked, (allowed as { kind?: string }).kind],
+      [
+        "409: Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra.",
+        "MAINTENANCE",
+      ],
+      "CONTRACT-KIND-BACK-409",
     );
   });
 });
