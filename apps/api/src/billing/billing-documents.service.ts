@@ -194,8 +194,11 @@ export class BillingDocumentsService {
    * előleg-sor, és az előleg ÁFÁ-ja egyszer jelenik meg.
    *
    * A tételek a TELJES ellenérték: ha az előleg díjbekérőből készült, a
-   * díjbekérő tételei, különben az előlegé; a vázlat szerkeszthető. A vevő, a
-   * pénznem, a fizetési mód, a formátum, a hivatkozás és a forrás az előlegé.
+   * díjbekérő tételei. Díjbekérő nélkül ÜRESEN indul: egy kézi előleg tétele
+   * jellemzően maga az előleg („Előleg, 30%”), és abból a Számlázz.hu ugyanazt
+   * vonná le, nulla végszámlát adva (barracuda, #1672); a kezelő írja be a
+   * teljes tételeket. A vevő, a pénznem, a fizetési mód, a formátum, a
+   * hivatkozás és a forrás az előlegé.
    *
    * Előlegenként EGY, ahogy a Számlázz.hu is egy végszámlát enged egy
    * előleghez (docs.szamlazz.hu, bizonylattípusok): az azonosító az előlegből
@@ -240,7 +243,6 @@ export class BillingDocumentsService {
     const proforma = advance.proformaInvoiceId
       ? await this.repository.find(advance.proformaInvoiceId)
       : null;
-    const linesFrom = proforma ?? advance;
     const { draft, partner } = await this.prepare({
       id,
       documentType: "FINAL_INVOICE",
@@ -259,7 +261,7 @@ export class BillingDocumentsService {
       note: null,
       sourceType: advance.sourceType as BillingSourceType | null,
       sourceId: advance.sourceId,
-      lines: draftLinesOf(linesFrom),
+      lines: proforma ? draftLinesOf(proforma) : [],
     });
     await this.repository.create({
       id,
