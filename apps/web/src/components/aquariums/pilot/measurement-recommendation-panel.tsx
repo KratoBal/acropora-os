@@ -243,6 +243,21 @@ export function MeasurementRecommendationPanel({
               között: javítsd vagy töröld, különben nem hagyható jóvá.
             </p>
           ) : null}
+          {view.unverifiedProductIds.length ? (
+            // Balázs, 2026-10-12 12:42 UTC: a csak saját adattal alátámasztott
+            // hatást a jóváhagyó lássa; a jóváhagyást nem tiltja
+            <p className="text-xs text-amber-800">
+              Független forrás nem erősíti meg ezeknek a termékeknek a
+              vízhatását, csak a saját adatunk állítja:{" "}
+              {view.unverifiedProductIds
+                .map(
+                  (id) =>
+                    view.candidates.find((c) => c.productId === id)?.name ?? id,
+                )
+                .join(", ")}
+              . Jóváhagyás előtt nézd meg, megállja-e a helyét.
+            </p>
+          ) : null}
           {view.candidates.length ? (
             <details className="text-xs text-pilot-grey-600">
               <summary className="cursor-pointer">
@@ -253,7 +268,9 @@ export function MeasurementRecommendationPanel({
                   <li key={candidate.productId}>
                     <code>{candidate.productId}</code> · {candidate.name} ·{" "}
                     {candidate.basis === "JEV"
-                      ? "JEV"
+                      ? candidate.unverified
+                        ? "JEV, csak saját adat, nincs független megerősítése"
+                        : "JEV"
                       : candidate.effects.length
                         ? "kategória"
                         : "kategória, gyártói állítás nélkül"}
