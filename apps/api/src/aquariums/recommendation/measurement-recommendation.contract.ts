@@ -11,7 +11,8 @@ import type {
  * Két cserélhető rész áll itt, mert egyik sem az OS-é:
  * - az AI ügynök végpontja (a terv 2. lépése, acropora-ai-agent): a kérés és a
  *   válasz alakja, és egy kliens, amit a teszt mockkal vált ki;
- * - a jelöltek forrása: a JEV VERIFIED `waterParameterEffects` értékei
+ * - a jelöltek forrása: a JEV `waterParameterEffects` értékei, a VERIFIED és
+ *   (megjelölve) a csak saját adattal alátámasztott UNVERIFIED is
  *   (`JevRecommendationCandidateSource`, 2026-10-12); az üres forrás alább a
  *   tesztekhez és a kikapcsolt állapothoz marad.
  */

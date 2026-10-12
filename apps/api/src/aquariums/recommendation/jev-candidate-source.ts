@@ -19,14 +19,21 @@ import type {
  * termékminőség sora is nézi: egy régebbi ellenőrzött érték nem éled fel, ha a
  * legutóbbi futás már ütközést vagy mást mondott.
  *
- * Ami NEM számít: az ellenőrizetlen vagy ütköző érték (az AI csak forrással
- * igazolt állításra hivatkozhat), az inaktív termék, és a termék törzsadata
- * (ebből nem írunk és nem olvasunk hatást).
+ * A SAJÁT ADATTAL ALÁTÁMASZTOTT HATÁS IS JELÖLT, MEGJELÖLVE (Balázs, 2026-10-12
+ * 12:42 UTC „Igen”): a JEV `UNVERIFIED` eredménye az, amit csak a saját
+ * adatunk állít (a #1669 kategória-szabálya vagy a saját termékadat). A
+ * reconcile ilyenkor értéket nem ad (`value` üres, csak a VERIFIED és a
+ * SUGGESTED hordoz), a saját érték a `currentValue`-ban áll, ugyanabban a
+ * normalizált alakban. A jelölt `unverified: true`, és a jóváhagyó látja.
+ *
+ * Ami NEM számít: az ütköző és a valószínűleg hibás érték, az inaktív termék.
  */
 export interface JevEffectRow {
   productId: string;
   status: string;
   value: string | null;
+  /** A saját (OS) érték az ellenőrzéskor; `UNVERIFIED` sornál ez a hatás. */
+  currentValue: string | null;
   sourceRef: string | null;
 }
 
@@ -45,7 +52,21 @@ export function wantedMoves(
   );
 }
 
-/** A JEV-sorokból azok, amelyek ellenőrzötten a jó irányba mozgatnak valamit. */
+/**
+ * A sor hatása és megerősítettsége: VERIFIED-nél a független forrás értéke,
+ * UNVERIFIED-nél a saját érték; minden más státusz nem jelölt.
+ */
+function effectOf(
+  row: JevEffectRow,
+): { text: string; unverified: boolean } | null {
+  if (row.status === "VERIFIED" && row.value)
+    return { text: row.value, unverified: false };
+  if (row.status === "UNVERIFIED" && row.currentValue)
+    return { text: row.currentValue, unverified: true };
+  return null;
+}
+
+/** A JEV-sorokból azok, amelyek a jó irányba mozgatnak valamit (megjelölve). */
 export function matchingJevRows(
   rows: readonly JevEffectRow[],
   wanted: ReadonlyMap<string, "EMEL" | "CSOKKENT">,
@@ -53,10 +74,12 @@ export function matchingJevRows(
   productId: string;
   effects: MeasurementRecommendationCandidate["effects"];
   evidenceRef?: string;
+  unverified?: true;
 }[] {
   return rows.flatMap((row) => {
-    if (row.status !== "VERIFIED" || !row.value) return [];
-    const parsed = parseWaterParameterEffects(row.value);
+    const effect = effectOf(row);
+    if (!effect) return [];
+    const parsed = parseWaterParameterEffects(effect.text);
     if (!parsed.ok) return [];
     const helps = parsed.effects.some(
       (effect) => wanted.get(effect.code) === effect.direction,
@@ -79,7 +102,11 @@ export function matchingJevRows(
           parameterCode: effect.code,
           direction: effect.direction,
         })),
-        ...(row.sourceRef ? { evidenceRef: row.sourceRef } : {}),
+        // a saját adat hivatkozása belső (OS, UNAS kategória): nem forrásoldal
+        ...(row.sourceRef && !effect.unverified
+          ? { evidenceRef: row.sourceRef }
+          : {}),
+        ...(effect.unverified ? { unverified: true as const } : {}),
       },
     ];
   });
@@ -95,7 +122,7 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
     const wanted = wantedMoves(input.deviations);
     if (wanted.size === 0) return [];
     const rows = await this.database.$queryRaw<JevEffectRow[]>`
-      SELECT DISTINCT ON (c."productId") c."productId", f.status, f.value, f."sourceRef"
+      SELECT DISTINCT ON (c."productId") c."productId", f.status, f.value, f."currentValue", f."sourceRef"
       FROM "ProductEnrichmentFieldResult" f
       JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
       JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
@@ -129,6 +156,7 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
             effects: match.effects,
             basis: "JEV" as const,
             ...(match.evidenceRef ? { evidenceRef: match.evidenceRef } : {}),
+            ...(match.unverified ? { unverified: true } : {}),
           },
         ];
       }),
@@ -142,7 +170,8 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
  * 300 jelöltet fogad, fölötte 400-at ad, és az OS ezt „nem adott használható
  * ajánlást”-ként mutatná. Egy gyakori eltérés (alacsony KH) a JEV bővülésével
  * átlépheti, és az ajánlás egy nap csendben eltűnne. Ezért legfeljebb
- * `MAX_CANDIDATES`, előre az, amelyik több mért eltérést javít, utána név szerint.
+ * `MAX_CANDIDATES`, előre az, amelyik több mért eltérést javít, azon belül a
+ * független forrással megerősített, utána név szerint.
  */
 export const MAX_CANDIDATES = 200;
 
@@ -153,6 +182,11 @@ export function limitCandidates(
   const helped = (c: MeasurementRecommendationCandidate) =>
     c.effects.filter((e) => wanted.get(e.parameterCode) === e.direction).length;
   return [...candidates]
-    .sort((a, b) => helped(b) - helped(a) || a.name.localeCompare(b.name, "hu"))
+    .sort(
+      (a, b) =>
+        helped(b) - helped(a) ||
+        Number(a.unverified === true) - Number(b.unverified === true) ||
+        a.name.localeCompare(b.name, "hu"),
+    )
     .slice(0, MAX_CANDIDATES);
 }
