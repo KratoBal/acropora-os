@@ -262,6 +262,33 @@ export function buildSzamlazzAgentInvoiceXml(
 }
 
 /**
+ * EGY MEGLÉVŐ SZÁMLA PDF-JE (Számla Agent, `xmlszamlapdf`; hétfői lista N1,
+ * Balázs 2026-10-09). ELSŐDLEGES FORRÁS: a hivatalos XSD
+ * (https://www.szamlazz.hu/szamla/docs/xsds/agentpdf/xmlszamlapdf.xsd,
+ * letöltve 2026-10-12). A sorrend a sémáé (`sequence`): szamlaagentkulcs,
+ * szamlaszam, valaszVerzio; a többi elem opcionális, és nem küldjük.
+ *
+ * `valaszVerzio=2`: a válasz `xmlszamlavalasz`, a `pdf` elemben base64-ben,
+ * ugyanaz az alak, mint a számla-készítésé, tehát ugyanaz az elemző olvassa.
+ * Ez csak OLVAS: a Számlázz.hu-ban semmit nem változtat.
+ */
+export function buildSzamlazzAgentPdfXml(input: {
+  agentKey: string;
+  invoiceNumber: string;
+}): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<xmlszamlapdf xmlns="http://www.szamlazz.hu/xmlszamlapdf" ' +
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+    'xsi:schemaLocation="http://www.szamlazz.hu/xmlszamlapdf https://www.szamlazz.hu/szamla/docs/xsds/agentpdf/xmlszamlapdf.xsd">' +
+    tag("szamlaagentkulcs", input.agentKey) +
+    tag("szamlaszam", input.invoiceNumber) +
+    tag("valaszVerzio", 2) +
+    "</xmlszamlapdf>"
+  );
+}
+
+/**
  * A JÓVÁÍRÁS RÖGZÍTÉSE egy általunk kiállított számlán (Számla Agent,
  * `xmlszamlakifiz`; acrobot 25989). ELSŐDLEGES FORRÁS: a hivatalos XSD
  * (https://www.szamlazz.hu/szamla/docs/xsds/agentkifiz/xmlszamlakifiz.xsd,
