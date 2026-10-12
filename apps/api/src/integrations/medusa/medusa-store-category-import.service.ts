@@ -26,6 +26,7 @@ function existingShape(row: MedusaCategoryRow): ExistingStoreCategory {
     externalId: row.external_id,
     handle: row.handle,
     name: row.name,
+    parentId: row.parent_category_id,
     isActive: row.is_active,
     description: row.description ?? null,
     metadata: row.metadata ?? null,
@@ -41,6 +42,8 @@ export interface StoreCategoryImportReport {
   linkedOnly: number;
   relinked: number;
   skipped: number;
+  /** Linked and nothing to change: skips that got no update and no taken handle. */
+  unchanged: number;
   conflicts: string[];
   handleTaken: string[];
   blockedByConflict: string[];
@@ -53,6 +56,10 @@ export interface StoreCategoryImportReport {
  * tree's service (`medusa-category-import.service.ts`): refuse on a truncated
  * list, link what already carries our id, create parent-first, a child of a
  * blocked parent is blocked too, then read back and count.
+ *
+ * IT NEVER DELETES. A category removed from our tree stays in Medusa as it
+ * was, active or not: removing it is a manual step, because the loader does
+ * not delete either, and a deleted category takes its product links with it.
  */
 @Injectable()
 export class MedusaStoreCategoryImportService {
@@ -102,6 +109,11 @@ export class MedusaStoreCategoryImportService {
       linkedOnly: 0,
       relinked: 0,
       skipped: plan.skip.length,
+      unchanged: plan.skip.filter(
+        (id) =>
+          !plan.update.some((u) => u.ourId === id) &&
+          !plan.handleTaken.some((h) => h.ourId === id),
+      ).length,
       conflicts: plan.conflict.map((c) => c.ourId),
       handleTaken: plan.handleTaken.map((h) => h.ourId),
       blockedByConflict: [],
@@ -154,8 +166,22 @@ export class MedusaStoreCategoryImportService {
       }
     }
 
+    // the parent's Medusa id, now that this run's creates are done; a
+    // parent that is still missing (taken handle, blocked) or in conflict
+    // blocks the update, rather than leave the category on its old parent
     for (const update of plan.update) {
-      await client.updateProductCategory(update.medusaId, update.patch);
+      const parent = update.parentOurId
+        ? (medusaId.get(update.parentOurId) ?? null)
+        : null;
+      if (update.parentOurId && (blocked.has(update.parentOurId) || !parent)) {
+        blocked.add(update.ourId);
+        report.blockedByConflict.push(update.ourId);
+        continue;
+      }
+      await client.updateProductCategory(update.medusaId, {
+        ...update.patch,
+        parent_category_id: parent,
+      });
       report.updates.push(update);
     }
 

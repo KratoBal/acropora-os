@@ -182,6 +182,7 @@ describe("the Acropora tree's plan", () => {
       {
         id: "pcat_import",
         externalId: null,
+        parentId: null,
         handle: "technika",
         name: "Technika (import)",
         isActive: true,
@@ -206,6 +207,7 @@ describe("the Acropora tree's plan", () => {
         {
           id: "pcat_t",
           externalId: "sc_technika",
+          parentId: null,
           handle: "technika",
           name: "Technika",
           isActive: true,
@@ -226,8 +228,19 @@ describe("the Acropora tree's plan", () => {
       targets,
       [
         {
+          id: "pcat_t",
+          externalId: "sc_technika",
+          parentId: null,
+          handle: "technika",
+          name: "Technika",
+          isActive: true,
+          description: "",
+          metadata: null,
+        },
+        {
           id: "pcat_sz",
           externalId: "sc_szivattyu",
+          parentId: "pcat_t",
           handle: "szivattyuk",
           name: "Szivattyúk",
           isActive: true,
@@ -235,13 +248,17 @@ describe("the Acropora tree's plan", () => {
           metadata: { seo_title: "régi cím", seo_description: "" },
         },
       ],
-      [{ ourId: "sc_szivattyu", medusaId: "pcat_sz" }],
+      [
+        { ourId: "sc_technika", medusaId: "pcat_t" },
+        { ourId: "sc_szivattyu", medusaId: "pcat_sz" },
+      ],
     );
 
     assert.deepEqual(plan.update, [
       {
         ourId: "sc_szivattyu",
         medusaId: "pcat_sz",
+        parentOurId: "sc_technika",
         changed: ["metadata"],
         patch: {
           name: "Szivattyúk",
@@ -264,6 +281,7 @@ describe("the Acropora tree's plan", () => {
         {
           id: "pcat_t",
           externalId: "sc_technika",
+          parentId: null,
           handle: "technika",
           name: "Technika",
           isActive: false,
@@ -280,6 +298,55 @@ describe("the Acropora tree's plan", () => {
     );
   });
 
+  /**
+   * A MOVE IN OUR TREE (barracuda, #1677 review). Every other field is the
+   * same, so without the parent this read "unchanged" and the shop kept the
+   * old chain. The root case is the same rule the other way round.
+   */
+  it("a category moved in our tree is updated, and so is one made a root", () => {
+    const plan = planStoreCategoryImport(
+      storeCategoryTargets([
+        node({ id: "sc_technika", name: "Technika", slug: "technika" }),
+        node({
+          id: "sc_szivattyu",
+          parentId: "sc_technika",
+          name: "Szivattyúk",
+          slug: "szivattyuk",
+        }),
+        node({ id: "sc_gyoker", name: "Gyökér", slug: "gyoker" }),
+      ]),
+      (
+        [
+          ["pcat_t", "sc_technika", null, "technika", "Technika"],
+          ["pcat_sz", "sc_szivattyu", "pcat_regi", "szivattyuk", "Szivattyúk"],
+          ["pcat_gy", "sc_gyoker", "pcat_t", "gyoker", "Gyökér"],
+        ] as [string, string, string | null, string, string][]
+      ).map(([id, externalId, parentId, handle, name]) => ({
+        id,
+        externalId,
+        parentId,
+        handle,
+        name,
+        isActive: true,
+        description: "",
+        metadata: null,
+      })),
+      [
+        { ourId: "sc_technika", medusaId: "pcat_t" },
+        { ourId: "sc_szivattyu", medusaId: "pcat_sz" },
+        { ourId: "sc_gyoker", medusaId: "pcat_gy" },
+      ],
+    );
+
+    assert.deepEqual(
+      plan.update.map((u) => [u.ourId, u.parentOurId, u.changed]),
+      [
+        ["sc_szivattyu", "sc_technika", ["parent"]],
+        ["sc_gyoker", null, ["parent"]],
+      ],
+    );
+  });
+
   it("a slug moved onto a taken handle is not updated", () => {
     const plan = planStoreCategoryImport(
       targets,
@@ -287,6 +354,7 @@ describe("the Acropora tree's plan", () => {
         {
           id: "pcat_t",
           externalId: "sc_technika",
+          parentId: null,
           handle: "technika-regi",
           name: "Technika",
           isActive: true,
@@ -296,6 +364,7 @@ describe("the Acropora tree's plan", () => {
         {
           id: "pcat_import",
           externalId: null,
+          parentId: null,
           handle: "technika",
           name: "Technika (import)",
           isActive: true,
@@ -358,6 +427,83 @@ describe("the Acropora tree's load", () => {
       expected: 2,
       expectedActive: 2,
     });
+  });
+
+  it("a category moved under a parent created in the same run points at it", async () => {
+    const { client, updated } = medusaFake([
+      {
+        id: "pcat_sz",
+        name: "Szivattyúk",
+        external_id: "sc_szivattyu",
+        parent_category_id: "pcat_regi",
+        is_active: true,
+        handle: "szivattyuk",
+        description: "Minden, ami a vizet mozgatja.",
+        metadata: {
+          seo_title: "Akvárium szivattyúk",
+          seo_description: "Áramoltató és visszanyomó szivattyúk.",
+        },
+      },
+    ]);
+    const { links } = linksFake([
+      {
+        categoryId: "sc_szivattyu",
+        medusaCategoryId: "pcat_sz",
+        lastSyncedAt: NOW,
+      },
+    ]);
+
+    const report = await new MedusaStoreCategoryImportService(links).run(
+      client,
+      TREE,
+      NOW,
+    );
+
+    assert.deepEqual(
+      updated.map((u) => [
+        u.id,
+        (u.patch as { parent_category_id?: string | null }).parent_category_id,
+      ]),
+      [["pcat_sz", "pcat_new_1"]],
+    );
+    assert.equal(report.unchanged, 0);
+  });
+
+  it("a move under a parent whose handle is taken is blocked, not left on the old parent", async () => {
+    const { client, updated } = medusaFake([
+      {
+        id: "pcat_import",
+        name: "Technika (import)",
+        external_id: null,
+        parent_category_id: null,
+        is_active: true,
+        handle: "technika",
+      },
+      {
+        id: "pcat_sz",
+        name: "Szivattyúk",
+        external_id: "sc_szivattyu",
+        parent_category_id: "pcat_regi",
+        is_active: true,
+        handle: "szivattyuk",
+      },
+    ]);
+    const { links } = linksFake([
+      {
+        categoryId: "sc_szivattyu",
+        medusaCategoryId: "pcat_sz",
+        lastSyncedAt: NOW,
+      },
+    ]);
+
+    const report = await new MedusaStoreCategoryImportService(links).run(
+      client,
+      TREE,
+      NOW,
+    );
+
+    assert.deepEqual(updated, []);
+    assert.deepEqual(report.blockedByConflict, ["sc_szivattyu"]);
   });
 
   it("an inactive category is created inactive, and the check expects it so", async () => {

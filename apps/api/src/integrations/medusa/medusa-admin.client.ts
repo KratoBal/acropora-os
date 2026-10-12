@@ -324,6 +324,7 @@ export type MedusaCategoryPatch =
   | {
       name: string;
       handle: string;
+      parent_category_id: string | null;
       is_active: boolean;
       description: string;
       metadata: Record<string, string>;

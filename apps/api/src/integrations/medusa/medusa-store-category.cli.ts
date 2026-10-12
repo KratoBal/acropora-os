@@ -109,7 +109,7 @@ export async function runStoreCategoryCli(
         `Csak leképezés írva: ${report.linkedOnly}`,
         `Elavult leképezés átírva: ${report.relinked}`,
         `Frissítve: ${report.updates.length}`,
-        `Változatlan: ${report.skipped - report.updates.length}`,
+        `Változatlan: ${report.unchanged}`,
         `Ütközés, érintetlen: ${report.conflicts.length}`,
         `Foglalt webcím, érintetlen: ${report.handleTaken.length}`,
         `A szülőjük miatt kimaradt: ${report.blockedByConflict.length}`,

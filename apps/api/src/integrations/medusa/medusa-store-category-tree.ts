@@ -61,6 +61,7 @@ export interface ExistingStoreCategory {
   externalId: string | null;
   handle: string;
   name: string;
+  parentId: string | null;
   isActive: boolean;
   description: string | null;
   metadata: Record<string, unknown> | null;
@@ -69,7 +70,13 @@ export interface ExistingStoreCategory {
 export interface StoreCategoryUpdate {
   ourId: string;
   medusaId: string;
-  /** The fields that differ, for the report: name, handle, is_active, description, metadata. */
+  /**
+   * The parent, as OUR id. Its Medusa id is resolved by the run, after the
+   * creates: a category moved under a parent created in the same run only has
+   * a parent to point at by then.
+   */
+  parentOurId: string | null;
+  /** The fields that differ, for the report: name, handle, parent, is_active, description, metadata. */
   changed: string[];
   patch: {
     name: string;
@@ -203,9 +210,20 @@ export function planStoreCategoryImport(
     const stored = byId.get(medusaId);
     if (!stored) return;
     const metadata = storedMetadata(stored.metadata);
+    // A MOVE IN OUR TREE (barracuda, #1677 review): the loader rewrites
+    // `parentId`, and without this the shop would keep the old chain while
+    // every other field reads "unchanged". A parent not yet in Medusa can not
+    // be the stored one, so it counts as a change too.
+    const parentInMedusa = target.parentOurId
+      ? (carrying.get(target.parentOurId)?.id ?? null)
+      : null;
+    const parentMoved = target.parentOurId
+      ? parentInMedusa === null || stored.parentId !== parentInMedusa
+      : stored.parentId !== null;
     const changed = [
       stored.name !== target.name ? "name" : null,
       stored.handle !== target.handle ? "handle" : null,
+      parentMoved ? "parent" : null,
       stored.isActive !== target.isActive ? "is_active" : null,
       (stored.description ?? "") !== target.description ? "description" : null,
       STORE_CATEGORY_METADATA_KEYS.some(
@@ -229,6 +247,7 @@ export function planStoreCategoryImport(
     plan.update.push({
       ourId: target.ourId,
       medusaId,
+      parentOurId: target.parentOurId,
       changed,
       patch: {
         name: target.name,
