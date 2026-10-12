@@ -155,7 +155,9 @@ export class BillingDocumentStornoService {
     // A FOGLALÁS UTÁN MÉG EGYSZER (barracuda, #1674): a végszámla kiállítása a
     // fenti őr és a foglalás között indulhatott el. A végszámla a saját
     // foglalása után ugyanígy visszaolvassa ezt a sztornót, tehát a kettő közül
-    // legalább az egyik látja a másikat.
+    // legalább az egyik látja a másikat. FELTÉTELE: mindkét foglalás önálló,
+    // azonnal lezárt írás. Ha egy tranzakcióba kerülne a visszaolvasással, READ
+    // COMMITTED mellett a másik oldal nem látná, és a rés csendben újranyílna.
     const lateBlock = await this.finalInvoiceBlock(original);
     if (lateBlock) {
       await this.database.invoice.updateMany({
@@ -279,11 +281,6 @@ export class BillingDocumentStornoService {
   }
 
   /**
-   * A FOGLALÁS: új STORNO sor ISSUING-ben, vagy az elutasított sztornó sorának
-   * feltételes visszavétele. `null`: valaki más már foglal (az egyedi index
-   * vagy a feltételes frissítés mondja meg).
-   */
-  /**
    * AZ ELŐLEGET LEVONÓ VÉGSZÁMLA (barracuda, #1672): ha kiállított vagy
    * kiállítás alatt álló, sztornózatlan végszámla vonja le az előleget, előbb
    * azt kell sztornózni, különben a végszámla egy sztornózott előlegre
@@ -309,6 +306,11 @@ export class BillingDocumentStornoService {
     return null;
   }
 
+  /**
+   * A FOGLALÁS: új STORNO sor ISSUING-ben, vagy az elutasított sztornó sorának
+   * feltételes visszavétele. `null`: valaki más már foglal (az egyedi index
+   * vagy a feltételes frissítés mondja meg).
+   */
   private async claim(
     original: NonNullable<
       Awaited<ReturnType<BillingDocumentsRepository["find"]>>

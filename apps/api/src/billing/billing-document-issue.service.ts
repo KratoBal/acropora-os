@@ -188,7 +188,10 @@ export class BillingDocumentIssueService {
     // A FOGLALÁS UTÁN MÉG EGYSZER (barracuda, #1674): a fenti őr és az előleg
     // sztornója egyszerre is átmehet. A sztornó a saját foglalása után ugyanígy
     // visszaolvassa ezt a végszámlát, tehát a kettő közül legalább az egyik
-    // látja a másikat; itt a folyamatban lévő sztornó is megállít.
+    // látja a másikat; itt a folyamatban lévő sztornó is megállít. FELTÉTELE:
+    // mindkét foglalás önálló, azonnal lezárt írás. Ha egy tranzakcióba kerülne
+    // a visszaolvasással, READ COMMITTED mellett a másik oldal nem látná, és a
+    // rés csendben újranyílna.
     if (
       row.documentType === "FINAL_INVOICE" &&
       row.referencedInvoice &&
