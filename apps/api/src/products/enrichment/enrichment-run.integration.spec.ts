@@ -261,5 +261,79 @@ describe(
         check.fields.length,
       );
     });
+
+    // the water-effects run, 2026-10-12: batch 3 stopped on P2000, a fetch
+    // reason (the lexicon notes) longer than its VARCHAR(64)
+    const runOptions = () => ({
+      requestedById: userId,
+      productLimit: 5,
+      requestLimit: 20,
+    });
+    const oneFetchCheck = (checkedAt: Date, reason: string | null) => ({
+      productId,
+      checkedAt,
+      sourceCount: 1,
+      fieldCount: 0,
+      fetches: [
+        {
+          sourceKind: "MANUFACTURER" as const,
+          url: "https://gyarto.example.invalid/p/2",
+          outcome: "FETCHED" as const,
+          reason,
+          httpStatus: 200,
+          fetchedAt: checkedAt,
+          fieldCount: 0,
+        },
+      ],
+      fields: [],
+    });
+    const finished = {
+      status: "COMPLETED" as const,
+      productCount: 1,
+      requestCount: 1,
+      errorCode: null,
+    };
+
+    it("JEV-RUN-LONG-REASON: a lap-megjegyzés a régi 64 jelnél hosszabb is lehet, és egészben tárolódik", async () => {
+      const store = new PrismaEnrichmentRunStore();
+      const notes = Array.from(
+        { length: 6 },
+        (_, i) =>
+          `tagadva: KALCIUM:EMEL a ${i}. bekezdésben nem emeli a kalciumszintet`,
+      ).join("; ");
+      assert.ok(notes.length > 64, "longer than the old column");
+      const run = await store.startRun(runOptions());
+      await store.saveCheck(
+        run,
+        oneFetchCheck(new Date("2030-01-01T10:00:00Z"), notes),
+      );
+      await store.finishRun(run, finished);
+      const stored = await prisma.productEnrichmentSourceFetch.findFirst({
+        where: { check: { runId: run } },
+        select: { reason: true },
+      });
+      assert.equal(stored?.reason, notes);
+    });
+
+    it("JEV-RUN-FAILED-ROW-SKIPPED: egy később tárolhatatlan termék sora nem lesz a legutóbbi ellenőrzés", async () => {
+      const store = new PrismaEnrichmentRunStore();
+      const okAt = new Date("2030-02-01T10:00:00Z");
+      const okRun = await store.startRun(runOptions());
+      await store.saveCheck(okRun, oneFetchCheck(okAt, null));
+      await store.finishRun(okRun, finished);
+      const failedRun = await store.startRun(runOptions());
+      await store.saveFailure(failedRun, {
+        productId,
+        checkedAt: new Date("2030-02-02T10:00:00Z"),
+        errorCode: "P2000",
+      });
+      await store.finishRun(failedRun, {
+        ...finished,
+        productCount: 0,
+        errorCode: "1_PRODUCTS_FAILED",
+      });
+      const latest = await new PrismaEnrichmentReader().latestCheck(productId);
+      assert.equal(latest?.checkedAt.toISOString(), okAt.toISOString());
+    });
   },
 );

@@ -57,7 +57,9 @@ import type { EnrichmentFetch } from "./polite-fetcher.js";
  * at most `MAX_PRODUCT_LIMIT` products and `MAX_REQUEST_LIMIT` requests.
  *
  * Exit: 0 finished; 1 the switch is off; 2 bad input or unknown actor or
- * product; 3 the run hit a limit and stopped (reported, not silent).
+ * product; 3 the run hit a limit and stopped (reported, not silent); 4 it
+ * finished, but some products could not be stored (each one reported, and
+ * recorded with its error code; the run went on past them).
  */
 export interface EnrichmentCliDeps {
   env: NodeJS.ProcessEnv;
@@ -259,7 +261,8 @@ export async function runEnrichmentCli(
     throw error;
   }
   out.stdout(runReport(summary));
-  return summary.status === "LIMIT_REACHED" ? 3 : 0;
+  if (summary.status === "LIMIT_REACHED") return 3;
+  return summary.failures.length ? 4 : 0;
 }
 
 export function runReport(summary: RunSummary): string {
@@ -269,6 +272,11 @@ export function runReport(summary: RunSummary): string {
   if (summary.limit)
     lines.push(
       `KORLÁT ELÉRVE (${summary.limit === "PRODUCTS" ? "termékszám" : "lekérésszám"}): a futás itt megállt.`,
+    );
+  if (summary.failures.length)
+    lines.push(
+      `HIBÁS TERMÉK: ${summary.failures.length} (a futás továbbment rajtuk, és hibakóddal rögzítette őket):`,
+      ...summary.failures.map((f) => `- ${f.productId}: ${f.errorCode}`),
     );
   for (const check of summary.checks) {
     lines.push(
