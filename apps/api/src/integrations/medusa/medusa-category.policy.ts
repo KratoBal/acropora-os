@@ -265,6 +265,14 @@ export function planProductCategories(
  * The categories and the primary, together. The primary goes out only on the
  * Acropora path and only beside a complete list: a primary without its list
  * would point the breadcrumb at a category the product is not shown in.
+ *
+ * AND AN INCOMPLETE LIST TAKES THE SHOP'S PRIMARY AWAY, ON PURPOSE (barracuda,
+ * #1675 review). The list is held back, so the shop keeps its old categories;
+ * the primary key is ours, so a run without it removes it. "Not known now"
+ * then acts as "no primary": the breadcrumb falls back to today's longest
+ * chain until the next complete run puts it back. Keeping the shop's value
+ * instead would leave a primary we can no longer vouch for; a fallback
+ * breadcrumb is the safer wrong answer.
  */
 export function decideProductCategories(
   plan: ProductCategoryPlan,
