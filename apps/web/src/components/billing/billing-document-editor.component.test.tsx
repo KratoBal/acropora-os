@@ -18,6 +18,10 @@ import {
   readPosInvoiceHandoff,
   writePosInvoiceHandoff,
 } from "./pos-invoice-handoff";
+import {
+  readContractInvoiceHandoff,
+  writeContractInvoiceHandoff,
+} from "./contract-invoice-handoff";
 
 /**
  * A SZÁMLÁZÁSI SZERKESZTŐ (Számlázás v0.1, brief 35. pont UI QA): a típus
@@ -341,6 +345,65 @@ describe("BillingDocumentEditor", () => {
     ]);
     // az első mentés után a kosár nem nyílik újra (barracuda, #1642)
     expect(readPosInvoiceHandoff(window.sessionStorage, key)).toBeNull();
+  });
+
+  /*
+    A BESZERZÉSI SZERZŐDÉS SZÁMLÁJA (hétfői lista M4). MI PIROSÍT: ha a vevő
+    nem töltődik be magától; ha a szerződés száma nem lesz hivatkozás; ha a
+    tétel nem nettóval, a szerződés egységével nyílik; ha a csomag az első
+    mentés után újra megnyílna.
+  */
+  it("WEB-INVOICE-FROM-CONTRACT: the purchase contract fills the customer, the reference and the lines", async () => {
+    window.sessionStorage.clear();
+    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+      contractId: "contract-2",
+      customerId: "cust-1",
+      contractNumber: "SZ2026/0000020",
+      lines: [
+        {
+          description: "Tengeri só, 25 kg",
+          quantity: "4.000000",
+          unit: "zsák",
+          unitNet: "18000.0000",
+          vatRatePercent: "27.00",
+        },
+      ],
+    });
+    render(<BillingDocumentEditor contractHandoffKey={key} />);
+    await screen.findByText(/Adószám: 12345678-2-42/);
+    expect(screen.getByDisplayValue("SZ2026/0000020")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+    );
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const [, created] = api.create.mock.calls[0]!;
+    expect(
+      [
+        customers.detail.mock.calls[0]?.[1],
+        created.customerId,
+        created.reference,
+        [created.sourceType, created.sourceId],
+        created.lines,
+        readContractInvoiceHandoff(window.sessionStorage, key),
+      ],
+      "WEB-INVOICE-FROM-CONTRACT",
+    ).toEqual([
+      "cust-1",
+      "cust-1",
+      "SZ2026/0000020",
+      ["CONTRACT", "contract-2"],
+      [
+        expect.objectContaining({
+          productId: null,
+          description: "Tengeri só, 25 kg",
+          quantity: "4",
+          unit: "zsák",
+          unitNet: "18000",
+          vatRatePercent: "27",
+        }),
+      ],
+      null,
+    ]);
   });
 
   /*

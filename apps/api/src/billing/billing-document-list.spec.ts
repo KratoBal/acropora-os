@@ -13,12 +13,17 @@ import {
   simplePayOrderKey,
   toExternalListItem,
   toListItem,
+  withoutOwnTwins,
+  withTwinPayment,
   type ExternalListRow,
   type OwnPaymentMark,
   type SimplePaySettlementLine,
   type MergeRow,
 } from "./billing-document-list.js";
-import type { BillingDocumentListRow } from "./billing-document-list.repository.js";
+import {
+  BillingDocumentListRepository,
+  type BillingDocumentListRow,
+} from "./billing-document-list.repository.js";
 
 const D = (value: string) => new Prisma.Decimal(value);
 
@@ -779,5 +784,109 @@ describe("the buyer's name from the webshop order (acrobot 26096)", () => {
     assert.deepEqual(externalCustomerName(privateRow, "  "), {
       customerName: "Magánszemély (NAV)",
     });
+  });
+});
+
+/*
+  A SAJÁT SZÁMLA ÉS A KÜLSŐ IKRE (hétfői lista N2, 2026-10-09 10:31). Az OS-ben
+  kiállított számla a Számlázz.hu feedjében is visszajön. MI PIROSÍT: a külső
+  iker külön sorként a listán marad; a szűrő a saját keresést vagy típust
+  elnyeli; a saját sor elveszíti az iker kifizetési adatát; a darabszám a
+  kihagyott ikret is számolja.
+*/
+describe("the own invoice and its Számlázz.hu twin (N2)", () => {
+  it("the twin is left out by number, and the other filters stay", () => {
+    assert.equal(withoutOwnTwins(null, ["A"]), null);
+    assert.deepEqual(withoutOwnTwins({ electronic: true }, []), {
+      electronic: true,
+    });
+    assert.deepEqual(withoutOwnTwins({ electronic: true }, ["A", "B"]), {
+      AND: [{ electronic: true }, { documentNumber: { notIn: ["A", "B"] } }],
+    });
+  });
+
+  it("the own row carries the twin's payment; without a twin it is unchanged", () => {
+    const own = toListItem(
+      row({
+        status: "ISSUED",
+        invoiceNumber: "ACRW-2026/00508",
+        issueDate: new Date("2026-09-30T08:00:00.000Z"),
+      }),
+    );
+    assert.equal(withTwinPayment(own, undefined), own);
+    const paid = withTwinPayment(
+      own,
+      external({
+        paymentsKnown: true,
+        paidAmount: D("29210"),
+        grossAmount: D("29210"),
+        lastPaymentDate: new Date("2026-10-02T00:00:00.000Z"),
+      }),
+    );
+    assert.deepEqual(
+      [paid.origin, paid.id, paid.paymentState, paid.lastPaymentDate],
+      ["OWN", "doc-1", "PAID", "2026-10-02"],
+    );
+  });
+
+  it("the list shows one row per number, and the count agrees", async () => {
+    const twin = external({
+      id: "ext-twin",
+      documentNumber: "ACRW-2026/00508",
+      paymentsKnown: true,
+      paidAmount: D("29210"),
+      grossAmount: D("29210"),
+    });
+    const other = external({ id: "ext-other", documentNumber: "KULSO-1" });
+    const externals = [twin, other];
+    const matches = (
+      where: Record<string, unknown>,
+      r: ExternalListRow,
+    ): boolean => {
+      if (Array.isArray(where.AND))
+        return (where.AND as Record<string, unknown>[]).every((w) =>
+          matches(w, r),
+        );
+      const number = where.documentNumber as
+        { notIn?: string[]; in?: string[] } | undefined;
+      if (number?.notIn?.includes(r.documentNumber)) return false;
+      if (number?.in && !number.in.includes(r.documentNumber)) return false;
+      return true;
+    };
+    const ownRow = row({
+      id: "own-1",
+      status: "ISSUED",
+      invoiceNumber: "ACRW-2026/00508",
+      issueDate: new Date("2026-09-30T08:00:00.000Z"),
+    });
+    const repository = new BillingDocumentListRepository();
+    (repository as unknown as { database: unknown }).database = {
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+      invoice: {
+        findMany: async (args: { select: Record<string, unknown> }) =>
+          "lines" in args.select
+            ? [ownRow]
+            : [{ invoiceNumber: "ACRW-2026/00508" }],
+        count: async () => 1,
+      },
+      externalBillingDocument: {
+        findMany: async (args: { where: Record<string, unknown> }) =>
+          externals.filter((r) => matches(args.where, r)),
+        count: async (args: { where: Record<string, unknown> }) =>
+          externals.filter((r) => matches(args.where, r)).length,
+      },
+      simplePayTransactionLine: { findMany: async () => [] },
+      outgoingPaymentMark: { findMany: async () => [] },
+      salesOrder: { findMany: async () => [] },
+    };
+    const list = await repository.list({ page: 1, pageSize: 25 });
+    assert.deepEqual(
+      list.items.map((i) => [i.origin, i.documentNumber, i.paymentState]),
+      [
+        ["OWN", "ACRW-2026/00508", "PAID"],
+        ["EXTERNAL", "KULSO-1", "UNKNOWN"],
+      ],
+    );
+    assert.equal(list.pagination.totalItems, 2);
   });
 });

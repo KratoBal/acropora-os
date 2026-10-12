@@ -1,8 +1,14 @@
 "use client";
 
 import { Alert } from "@acropora/ui";
-import type { ContractKind, WorksheetDepartmentSummary } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type ContractKind,
+  type WorksheetDepartmentSummary,
+} from "@acropora/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -30,6 +36,10 @@ import {
   useQuantityUnits,
 } from "./contract-kind";
 import { ContractRepairFees } from "./contract-repair-fees";
+import {
+  CONTRACT_INVOICE_HANDOFF_PARAM,
+  writeContractInvoiceHandoff,
+} from "@/components/billing/contract-invoice-handoff";
 import { formatHuNumber } from "@/lib/format/number";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
@@ -136,6 +146,13 @@ export function PilotContractDetailPage({
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
+  const router = useRouter();
+  // a számla vázlatát a `billing.create` jog hozza létre (hétfői lista M4)
+  const canInvoice = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
+  /** A szerver utolsó válasza: a számla a MENTETT tételekből készül. */
+  const [saved, setSaved] = useState<ContractSummary | null>(null);
   const [contract, setContract] = useState<ContractSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
@@ -184,6 +201,7 @@ export function PilotContractDetailPage({
    */
   const applyContractDetail = (detail: ContractSummary) => {
     setContract(detail);
+    setSaved(detail);
     // ALAPÉRTELMEZÉSBEN AZ ÖSSZES TÉTEL KI VAN VÁLASZTVA -- Balázs
     // döntése (2026-09-24): egy kiállítás a szerződés összes tételéből
     // visz egy-egy alkalmat, de tételenként kivehető.
@@ -513,6 +531,38 @@ export function PilotContractDetailPage({
   const purchase = contract?.kind === "PURCHASE";
   const quantityUnits = useQuantityUnits(token, purchase);
 
+  /*
+    A „SZÁMLA” GOMB (hétfői lista M4): a beszerzési szerződésből kitöltött Új
+    számlát nyit (`contract-invoice-handoff.ts`). A MENTETT állapotból, mert a
+    számla a szerződésre hivatkozik: egy el nem mentett tétel a szerződésen
+    nem létezik.
+  */
+  const invoiceBlocker = !canInvoice
+    ? "A számla nyitásához billing.create jog kell."
+    : saved?.kind !== "PURCHASE"
+      ? "Előbb mentsd a szerződést Beszerzésként."
+      : saved.items.length === 0
+        ? "A szerződésnek nincs tétele."
+        : null;
+  const openInvoice = () => {
+    if (invoiceBlocker !== null || !saved) return;
+    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+      contractId: saved.id,
+      customerId: saved.customerId,
+      contractNumber: saved.number,
+      lines: saved.items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unitOfMeasure?.code ?? "db",
+        unitNet: item.unitNet,
+        vatRatePercent: item.vatRatePercent,
+      })),
+    });
+    router.push(
+      `/penzugy/szamlazas/uj?${CONTRACT_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
+    );
+  };
+
   if (error && !contract)
     return (
       <PilotThemeRoot>
@@ -632,6 +682,7 @@ export function PilotContractDetailPage({
                   contract._count?.maintenanceOrders ?? 0,
                   orders?.length ?? 0,
                 )}
+                invoiceCount={contract.invoiceCount ?? 0}
               />
               {quantityUnits.error && purchase ? (
                 <p className="text-xs text-red-600">{quantityUnits.error}</p>
@@ -902,7 +953,27 @@ export function PilotContractDetailPage({
             </div>
           </PilotCard>
           {/* a beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4) */}
-          {purchase ? null : (
+          {purchase ? (
+            <PilotCard>
+              <PilotCardHeader title="Számla" />
+              <div className="flex flex-col gap-2 p-5">
+                <p className="text-sm text-pilot-grey-600">
+                  {invoiceBlocker ??
+                    "Az Új számla a mentett tételekkel, a vevővel és a szerződés számával nyílik; a kiállítás ott, megerősítéssel megy."}
+                </p>
+                <div>
+                  <PilotButton
+                    type="button"
+                    variant="primary"
+                    disabled={invoiceBlocker !== null}
+                    onClick={openInvoice}
+                  >
+                    Számla
+                  </PilotButton>
+                </div>
+              </div>
+            </PilotCard>
+          ) : (
             <PilotCard>
               <PilotCardHeader title="Megrendelőlapok" />
               <div className="flex flex-col gap-4 p-5">

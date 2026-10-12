@@ -16,6 +16,7 @@ const SOURCE_LABELS: Record<string, string> = {
   WEBSHOP_ORDER: "Webshop rendelés",
   SERVICE_JOB: "Szerviz munka",
   MANUAL: "Manuális",
+  CONTRACT: "Beszerzési szerződés",
 };
 
 /**

@@ -57,6 +57,7 @@ export const BILLING_SOURCE_TYPES = [
   "SERVICE_JOB",
   "MANUAL",
   "WEBSHOP_ORDER",
+  "CONTRACT",
 ] as const;
 export type BillingSourceType = (typeof BILLING_SOURCE_TYPES)[number];
 
