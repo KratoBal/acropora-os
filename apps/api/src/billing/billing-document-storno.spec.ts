@@ -107,6 +107,8 @@ function setup(
     answer?: () => SzamlazzAgentResponse;
     createThrows?: unknown;
     final?: { status: string; stornoed?: boolean } | null;
+    /** A sztornó foglalása UTÁN látszó végszámla (a kettő egyszerre indult). */
+    finalAfterClaim?: { status: string } | null;
   } = {},
 ) {
   const state = {
@@ -141,15 +143,22 @@ function setup(
     }) as unknown as BillingDocumentRow;
   const documents = {
     find: async () => original(),
-    finalInvoiceOf: async () =>
-      options.final
+    finalInvoiceOf: async () => {
+      const final =
+        state.storno?.status === "ISSUING" &&
+        options.finalAfterClaim !== undefined
+          ? options.finalAfterClaim
+          : options.final;
+      return final
         ? {
             id: "fin-1",
-            invoiceNumber: options.final.status === "ISSUED" ? "E-VEG-1" : null,
-            status: options.final.status,
-            correctionInvoices: options.final.stornoed ? [{ id: "st-f" }] : [],
+            invoiceNumber: final.status === "ISSUED" ? "E-VEG-1" : null,
+            status: final.status,
+            correctionInvoices:
+              "stornoed" in final && final.stornoed ? [{ id: "st-f" }] : [],
           }
-        : null,
+        : null;
+    },
   } as unknown as BillingDocumentsRepository;
   const service = new BillingDocumentStornoService(
     documents,
@@ -252,6 +261,28 @@ describe("a sztornó szolgáltatás", () => {
       await s.service.storno("doc-1", undefined, USER);
       assert.equal(s.state.calls.length, 1, JSON.stringify(final));
     }
+  });
+
+  /*
+    A FOGLALÁS UTÁNI VISSZAOLVASÁS (barracuda, #1674): a végszámla kiállítása az
+    őr és a foglalás között indult el. MI PIROSÍT: a sztornó ilyenkor is
+    elmegy, vagy ISSUING-ben ragad ahelyett, hogy elutasítottra váltana.
+  */
+  it("a final invoice claimed between the guard and the storno's claim stops the storno before Számlázz.hu", async () => {
+    const s = setup({
+      documentType: "ADVANCE_INVOICE",
+      final: { status: "DRAFT" },
+      finalAfterClaim: { status: "ISSUING" },
+    });
+    await assert.rejects(
+      s.service.storno("doc-1", undefined, USER),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        /végszámla hivatkozik/.test(error.message),
+    );
+    assert.equal(s.state.calls.length, 0);
+    assert.equal(s.state.storno?.status, "ISSUE_FAILED");
+    assert.match(String(s.state.storno?.syncError), /végszámla hivatkozik/);
   });
 
   it("a végszámla is sztornózható, és a készlete visszajön (acrobot 28782)", async () => {

@@ -213,6 +213,23 @@ export class BillingDocumentsRepository {
     return twin.paymentsKnown === true ? false : null;
   }
 
+  /**
+   * ELINDULT VAGY KÉSZ SZTORNÓJA VAN-E (ISSUING vagy ISSUED). A végszámla
+   * kiállítása a saját foglalása UTÁN ezzel olvassa vissza az előleget: a
+   * folyamatban lévő sztornó is számít, mert a kiállítás alatt kimehet.
+   */
+  async stornoStarted(invoiceId: string): Promise<boolean> {
+    const storno = await this.database.invoice.findFirst({
+      where: {
+        referencedInvoiceId: invoiceId,
+        documentType: "STORNO",
+        status: { in: ["ISSUING", "ISSUED"] },
+      },
+      select: { id: true },
+    });
+    return storno !== null;
+  }
+
   /** Az előlegszámlából készült végszámla, ha van (számlázási brief, 3.). */
   finalInvoiceOf(advanceId: string): Promise<{
     id: string;
