@@ -89,8 +89,10 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
     );
   }
 
+  // a kézi tétel (hétfői lista M3) nem termék: nincs mit szinkronizálni
   const syncCounts = detail?.lines.reduce(
     (counts, line) => {
+      if (line.variantId === null) return counts;
       counts[line.syncStatus] += 1;
       return counts;
     },
@@ -295,11 +297,15 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
                           {formatHuf(line.lineGross)}
                         </td>
                         <td className="py-7 pl-2">
-                          <PilotBadge
-                            variant={syncBadgeVariant(line.syncStatus)}
-                          >
-                            {syncBadgeLabel(line.syncStatus)}
-                          </PilotBadge>
+                          {line.variantId === null ? (
+                            <PilotBadge variant="grey">Kézi tétel</PilotBadge>
+                          ) : (
+                            <PilotBadge
+                              variant={syncBadgeVariant(line.syncStatus)}
+                            >
+                              {syncBadgeLabel(line.syncStatus)}
+                            </PilotBadge>
+                          )}
                           {line.syncError ? (
                             <p className="mt-1 break-words text-[10px] text-red-500">
                               {line.syncError}

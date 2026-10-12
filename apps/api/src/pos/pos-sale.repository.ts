@@ -66,7 +66,8 @@ export interface PosSaleCurrentStock {
 }
 
 export interface CreatePosSaleLine {
-  variantId: string;
+  /** `null`: kézi tétel (hétfői lista M3), nincs mögötte termék és készlet. */
+  variantId: string | null;
   sku: string;
   productName: string;
   unit: string;
@@ -411,6 +412,9 @@ export class PosSaleRepository extends Repository {
               });
           }
         }
+        // Csupa kézi tételből álló eladásnál nincs mit könyvelni: a kézi
+        // tételnek nincs összetevője, tehát mozgás sem keletkezik.
+        if (movementLinesByVariant.size === 0) return { order, stockWarnings };
         const posted = await postInventoryMovement(transaction, {
           idempotencyKey: this.buildIdempotencyKey(params.orderNumber),
           movementNumber: generateCode("ELAD"),
