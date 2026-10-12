@@ -13,9 +13,10 @@ import type { RecommendationDeviation } from "./measurement-recommendation.contr
 
 /**
  * A JELÖLTEK A JEV-BŐL (kártya 2b3983e1). MI PIROSÍT: az irány megfordul
- * (alacsony kalciumra csökkentő termék); egy ellenőrizetlen vagy ütköző
- * érték jelölt lesz; egy olvashatatlan érték elviszi a többit; egy inaktív
- * termék jelölt lesz; eltérés nélkül is lekérdez.
+ * (alacsony kalciumra csökkentő termék); egy ütköző érték jelölt lesz; a
+ * csak saját adattal alátámasztott (UNVERIFIED) hatás kimarad, vagy
+ * megjelölés nélkül megy át; egy olvashatatlan érték elviszi a többit; egy
+ * inaktív termék jelölt lesz; eltérés nélkül is lekérdez.
  */
 const dev = (
   parameterCode: string,
@@ -34,6 +35,7 @@ const row = (over: Partial<JevEffectRow>): JevEffectRow => ({
   productId: "p",
   status: "VERIFIED",
   value: "KALCIUM:EMEL",
+  currentValue: null,
   sourceRef: "https://gyarto.example/termek",
   ...over,
 });
@@ -84,6 +86,101 @@ describe("the JEV rows that help", () => {
         effects: [{ parameterCode: "NITRAT", direction: "CSOKKENT" }],
       },
     ]);
+  });
+});
+
+describe("a water effect backed only by our own data (Balázs, 2026-10-12 12:42 UTC)", () => {
+  it("is a candidate from its own value, marked, with no source page; the reconciled value is never read for it", () => {
+    const wanted = wantedMoves([dev("KH", "LOW"), dev("NITRAT", "HIGH")]);
+    const found = matchingJevRows(
+      [
+        // the #1669 category rule: UNVERIFIED, no value, ours in currentValue
+        row({
+          productId: "kh-own",
+          status: "UNVERIFIED",
+          value: null,
+          currentValue: "KH:EMEL",
+          sourceRef: "unas-kategoria:Vizkezelok",
+        }),
+        // a value on an UNVERIFIED row is not ours: it does not count
+        row({
+          productId: "kh-stray",
+          status: "UNVERIFIED",
+          value: "KH:EMEL",
+          currentValue: null,
+        }),
+        // with both on an UNVERIFIED row, ours decides (here: the right way)
+        row({
+          productId: "kh-mixed",
+          status: "UNVERIFIED",
+          value: "NITRAT:EMEL",
+          currentValue: "KH:EMEL",
+        }),
+        // the wrong way, own data or not, stays out
+        row({
+          productId: "no3-up-own",
+          status: "UNVERIFIED",
+          value: null,
+          currentValue: "NITRAT:EMEL",
+        }),
+        // a conflict or a likely wrong value is no candidate, even with ours
+        row({
+          productId: "kh-conflict",
+          status: "CONFLICTING_SOURCES",
+          value: null,
+          currentValue: "KH:EMEL",
+        }),
+        row({
+          productId: "kh-wrong",
+          status: "POSSIBLE_WRONG_VALUE",
+          value: null,
+          currentValue: "KH:EMEL",
+        }),
+        // a verified row reads its value, not ours
+        row({
+          productId: "kh-verified",
+          value: "KH:EMEL",
+          currentValue: "NITRAT:EMEL",
+        }),
+      ],
+      wanted,
+    );
+    assert.deepEqual(found, [
+      {
+        productId: "kh-own",
+        effects: [{ parameterCode: "KH", direction: "EMEL" }],
+        unverified: true,
+      },
+      {
+        productId: "kh-mixed",
+        effects: [{ parameterCode: "KH", direction: "EMEL" }],
+        unverified: true,
+      },
+      {
+        productId: "kh-verified",
+        effects: [{ parameterCode: "KH", direction: "EMEL" }],
+        evidenceRef: "https://gyarto.example/termek",
+      },
+    ]);
+  });
+
+  it("under the cap, a verified candidate goes before an unverified one helping as much", () => {
+    const wanted = wantedMoves([dev("KH", "LOW")]);
+    const candidate = (name: string, unverified: boolean) => ({
+      productId: name,
+      name,
+      category: "",
+      basis: "JEV" as const,
+      effects: [{ parameterCode: "KH", direction: "EMEL" as const }],
+      ...(unverified ? { unverified: true } : {}),
+    });
+    assert.deepEqual(
+      limitCandidates(
+        [candidate("a-sajat", true), candidate("b-gyartoi", false)],
+        wanted,
+      ).map((c) => c.name),
+      ["b-gyartoi", "a-sajat"],
+    );
   });
 });
 
@@ -191,6 +288,38 @@ describe("the source", () => {
         evidenceRef: "https://gyarto.example/termek",
       },
     ]);
+  });
+
+  it("an unverified match reaches the candidate marked, and the query reads our own value", async () => {
+    let sql = "";
+    const source = new JevRecommendationCandidateSource();
+    (source as unknown as { database: unknown }).database = {
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        sql = strings.join("?");
+        return [
+          row({
+            productId: "kh-own",
+            status: "UNVERIFIED",
+            value: null,
+            currentValue: "KH:EMEL",
+          }),
+        ];
+      },
+      product: {
+        findMany: async () => [
+          { id: "kh-own", name: "KH puffer", categories: [] },
+        ],
+      },
+    };
+    const candidates = await source.candidates({
+      deviations: [dev("KH", "LOW")],
+    });
+    // without the column every UNVERIFIED row would silently give nothing
+    assert.match(sql, /f\."currentValue"/);
+    assert.deepEqual(
+      candidates.map((c) => [c.productId, c.unverified, c.evidenceRef]),
+      [["kh-own", true, undefined]],
+    );
   });
 
   it("the source itself applies the cap", async () => {

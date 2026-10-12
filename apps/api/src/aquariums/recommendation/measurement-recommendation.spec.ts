@@ -9,6 +9,7 @@ import {
   pickExamples,
   productShopUrl,
   recommendationSegments,
+  unverifiedReferences,
 } from "./measurement-recommendation.service.js";
 
 const occasion = (
@@ -22,6 +23,30 @@ const occasion = (
   }) as AquariumMeasurementOccasion;
 
 describe("measurement recommendation (2b3983e1)", () => {
+  it("RECO-UNVERIFIED: the draft's references backed only by our own data, once each, in text order", () => {
+    const candidate = (productId: string, unverified?: boolean) => ({
+      productId,
+      name: productId,
+      category: "",
+      effects: [],
+      basis: "JEV" as const,
+      ...(unverified ? { unverified } : {}),
+    });
+    assert.deepEqual(
+      unverifiedReferences(
+        "{{termek:b}} és {{termek:a}}, majd {{termek:b}}; {{termek:c}} {{termek:x}}",
+        [
+          candidate("a", true),
+          candidate("b", true),
+          candidate("c"),
+          candidate("d", true),
+        ],
+      ),
+      // c is verified, d is not referenced, x is no candidate at all
+      ["b", "a"],
+    );
+  });
+
   it("RECO-DEVIATIONS: only the rows outside their range, with the PDF's status, side and trend", () => {
     const earlier = occasion("2026-10-01T10:00:00.000Z", [["KH", 5]]);
     const now = occasion("2026-10-08T10:00:00.000Z", [
