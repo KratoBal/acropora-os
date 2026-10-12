@@ -24,9 +24,9 @@ import { imageTextsFor } from "./medusa-image-texts.js";
 import { prisma } from "@acropora/database";
 
 import {
-  decideMedusaCategories,
+  decideProductCategories,
   describeMissingCategoryMapping,
-  MEDUSA_CATEGORY_REFERENCE,
+  planProductCategories,
 } from "./medusa-category.policy.js";
 import {
   decideMedusaBarcode,
@@ -849,6 +849,11 @@ export async function runProjectionCli(
           },
         },
         categories: { select: { categoryId: true } },
+        // the Acropora tree (SEO P0 PR 10b): a product with any row here is
+        // projected from it, every other one from the UNAS tree above
+        storeCategories: {
+          select: { storeCategoryId: true, isPrimary: true, sortOrder: true },
+        },
         /**
          * A MAI BOLTI CIM, ES CSAK A UNAS CSATORNAROL.
          *
@@ -948,19 +953,26 @@ export async function runProjectionCli(
      * kategoriaja" es a "van, de meg nincs lekepezve" ugyanaz (egyik sem kuld
      * mezot), de a masodik HIANY, ezert kiirodik.
      */
-    const osCategoryIds = product.categories.map((row) => row.categoryId);
-    const categories = decideMedusaCategories(
-      osCategoryIds,
-      osCategoryIds.length
-        ? await db.externalReference.findMany({
-            where: {
-              ...MEDUSA_CATEGORY_REFERENCE,
-              entityId: { in: osCategoryIds },
-            },
-            select: { entityId: true, externalId: true },
-          })
-        : [],
+    // PRODUCT BY PRODUCT (SEO P0 PR 10b): a product in the Acropora tree goes
+    // out with that tree's categories, through its own links, and its primary;
+    // every other product stays on the UNAS tree, without a primary. The
+    // all-or-nothing rule holds on both paths.
+    const plan = planProductCategories(
+      product.storeCategories,
+      product.categories.map((row) => row.categoryId),
     );
+    const categoryReference = plan.reference;
+    const categoryMappings = plan.osCategoryIds.length
+      ? await db.externalReference.findMany({
+          where: {
+            ...categoryReference,
+            entityId: { in: plan.osCategoryIds },
+          },
+          select: { entityId: true, externalId: true },
+        })
+      : [];
+    const { categories, primaryMedusaCategoryId: primaryCategoryId } =
+      decideProductCategories(plan, product.storeCategories, categoryMappings);
     /**
      * A HIANY SORA A STDOUT-RA MEGY, NEM A STDERR-RE, ES EZ NEM IZLES.
      *
@@ -977,7 +989,7 @@ export async function runProjectionCli(
      */
     if (categories.kind === "incomplete")
       out.stdout(
-        `${describeMissingCategoryMapping(product.id, categories.missing)}\n`,
+        `${describeMissingCategoryMapping(product.id, categories.missing, categoryReference.entityType)}\n`,
       );
 
     /**
@@ -1395,6 +1407,7 @@ export async function runProjectionCli(
           unasVariantValues: variant.unasVariantValues,
         })),
         medusaCategoryIds: categories.medusaCategoryIds,
+        primaryMedusaCategoryId: primaryCategoryId,
         ...relationFieldsForProjection(similar, accessory),
         /**
          * A JELZO A MI KATEGORIA-FANKBOL JON, nem a forras jelzoibol es nem a
@@ -1402,7 +1415,13 @@ export async function runProjectionCli(
          * modulban all, ugyanaz, amibol a rendelhetoseg is dol -- egy forras,
          * ket kerdes.
          */
-        uniquePiece: isWysiwygProduct(osCategoryIds, await wysiwygReszfa()),
+        // the WYSIWYG subtree lives in the UNAS tree (`Category`), so the
+        // flag reads the UNAS rows on both paths: a store-tree id never
+        // matches it, and a pilot product would silently lose the flag
+        uniquePiece: isWysiwygProduct(
+          product.categories.map((row) => row.categoryId),
+          await wysiwygReszfa(),
+        ),
         medusaCollectionId: brand.medusaCollectionId,
         barcode: vonalkod.field
           ? { field: vonalkod.field, value: vonalkod.value }

@@ -1085,6 +1085,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       ],
       unasSnapshot: null,
       categories: [],
+      storeCategories: [],
       channelListings: [],
       images: [],
       // a kep-blokkolas mostani allapota a soron: alapbol nincs blokk
@@ -1984,6 +1985,166 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       "true",
       "a masodlagos WYSIWYG besorolas nem szamitott: a valasztas elsodlegesre szukult",
     );
+  });
+
+  /**
+   * A PILOT PRODUCT (SEO P0 PR 10b): rows in the Acropora tree, so its
+   * categories and primary come through the MEDUSA/StoreCategory links. Its
+   * UNAS row is a WYSIWYG one on purpose: the flag reads the UNAS tree, and a
+   * runner that fed it the store ids would lose it here.
+   */
+  it("a product in the Acropora tree goes out from it, and keeps its WYSIWYG flag", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({
+        categories: [{ categoryId: "cat_wysiwyg", isPrimary: true }],
+        storeCategories: [
+          { storeCategoryId: "sc_szivattyu", isPrimary: false, sortOrder: 1 },
+          { storeCategoryId: "sc_technika", isPrimary: true, sortOrder: 2 },
+        ],
+      }),
+      {
+        category: {
+          findMany: async () => [
+            { id: "cat_korall", parentId: null, name: "Korallok" },
+            { id: "cat_wysiwyg", parentId: "cat_korall", name: "WYSIWYG" },
+          ],
+        },
+        externalReference: {
+          findMany: async (args: { where?: { entityType?: string } }) =>
+            args.where?.entityType === "StoreCategory"
+              ? [
+                  { entityId: "sc_technika", externalId: "pcat_technika" },
+                  { entityId: "sc_szivattyu", externalId: "pcat_szivattyu" },
+                ]
+              : [{ entityId: "cat_wysiwyg", externalId: "pcat_unas" }],
+          findUnique: async () => null,
+          create: async () => ({
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+          }),
+          deleteMany: async () => ({ count: 1 }),
+        },
+      },
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.ok(letrehozas, "a termek letrehozasa nem futott le");
+    const torzs = letrehozas.body as {
+      categories?: { id: string }[];
+      metadata?: Record<string, string>;
+    };
+
+    assert.deepEqual(torzs.categories, [
+      { id: "pcat_technika" },
+      { id: "pcat_szivattyu" },
+    ]);
+    assert.equal(torzs.metadata?.primary_category_id, "pcat_technika");
+    assert.equal(torzs.metadata?.unique_piece, "true");
+  });
+
+  /**
+   * ONE MISSING ACROPORA LINK: the list is held back (the shop keeps its old
+   * categories), and the primary is REMOVED, not kept. Said aloud here because
+   * the two halves look inconsistent; the reason is in `decideProductCategories`.
+   */
+  it("an incomplete Acropora list sends no categories and removes the primary", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({
+        storeCategories: [
+          { storeCategoryId: "sc_szivattyu", isPrimary: false, sortOrder: 1 },
+          { storeCategoryId: "sc_technika", isPrimary: true, sortOrder: 2 },
+        ],
+      }),
+      {
+        externalReference: {
+          findMany: async (args: { where?: { entityType?: string } }) =>
+            args.where?.entityType === "StoreCategory"
+              ? [{ entityId: "sc_technika", externalId: "pcat_technika" }]
+              : [],
+          findUnique: async () => ({
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+          }),
+          create: async () => ({
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+          }),
+          update: async () => ({
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+          }),
+          deleteMany: async () => ({ count: 1 }),
+        },
+      },
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        // the shop holds the old primary, so its removal is visible
+        (async (url: unknown, init?: RequestInit) =>
+          String(url).includes(
+            "/admin/products/prod_medusa_1?fields=id,metadata",
+          )
+            ? new Response(
+                JSON.stringify({
+                  product: {
+                    id: "prod_medusa_1",
+                    metadata: { primary_category_id: "pcat_regi" },
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { "content-type": "application/json" },
+                },
+              )
+            : boltiFetchTorzzsel(keresek)(url as string, init)) as typeof fetch,
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.match(stdout.join(""), /MEDUSA\/StoreCategory/);
+    const torzsek = keresek
+      .filter((k) => k.method === "POST" && /\/admin\/products\//.test(k.url))
+      .map(
+        (k) =>
+          k.body as {
+            categories?: unknown;
+            metadata?: Record<string, string>;
+          },
+      )
+      .filter((b) => b && b.metadata);
+    assert.ok(torzsek.length > 0, "nem futott termek-frissites");
+    for (const torzs of torzsek) {
+      assert.equal(torzs.categories, undefined);
+      assert.equal(torzs.metadata?.primary_category_id, "");
+    }
   });
 
   it("a fo ut: egy termek kimegy, es a lekepezes sora megszuletik", async () => {

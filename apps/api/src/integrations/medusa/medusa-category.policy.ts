@@ -61,6 +61,75 @@ export const MEDUSA_CATEGORY_REFERENCE = {
   entityType: "Category",
 } as const;
 
+/**
+ * THE ACROPORA TREE'S LINK (SEO P0 PR 10b). A store category's Medusa id is
+ * kept apart from the UNAS tree's: the two trees are two sets of rows, and a
+ * product switches from one to the other on its own (`categorySourceFor`).
+ */
+export const MEDUSA_STORE_CATEGORY_REFERENCE = {
+  system: "MEDUSA",
+  entityType: "StoreCategory",
+} as const;
+
+/** A product's row in the Acropora tree (`StoreCategoryProduct`). */
+export interface ProductStoreCategoryRow {
+  storeCategoryId: string;
+  isPrimary: boolean;
+  sortOrder: number | null;
+}
+
+/**
+ * WHICH TREE A PRODUCT IS PROJECTED FROM, PRODUCT BY PRODUCT (SEO P0 PR 10).
+ * A product with at least one row in the Acropora tree goes out with that
+ * tree's categories and its primary; every other product stays on the UNAS
+ * tree, as today. There is no global switch: the pilot is a set of products.
+ */
+export function categorySourceFor(
+  storeRows: readonly ProductStoreCategoryRow[],
+): "STORE" | "UNAS" {
+  return storeRows.length > 0 ? "STORE" : "UNAS";
+}
+
+/**
+ * The Acropora-tree categories in a fixed order: the primary first, then by
+ * `sortOrder` (unset last), then by id. The request body is compared between
+ * runs, so its order must not depend on the query's.
+ */
+export function orderedStoreCategoryIds(
+  rows: readonly ProductStoreCategoryRow[],
+): string[] {
+  return [...rows]
+    .sort(
+      (a, b) =>
+        Number(b.isPrimary) - Number(a.isPrimary) ||
+        (a.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+          (b.sortOrder ?? Number.MAX_SAFE_INTEGER) ||
+        (a.storeCategoryId < b.storeCategoryId
+          ? -1
+          : a.storeCategoryId > b.storeCategoryId
+            ? 1
+            : 0),
+    )
+    .map((row) => row.storeCategoryId);
+}
+
+/**
+ * The primary's Medusa id, or null: no primary row, or the primary not yet
+ * linked. Only asked when the decision was "complete", so a missing link here
+ * is not a second way to send half a picture.
+ */
+export function primaryMedusaCategoryId(
+  rows: readonly ProductStoreCategoryRow[],
+  mappings: readonly MedusaCategoryMapping[],
+): string | null {
+  const primary = rows.find((row) => row.isPrimary);
+  if (!primary) return null;
+  return (
+    mappings.find((row) => row.entityId === primary.storeCategoryId)
+      ?.externalId ?? null
+  );
+}
+
 /** Egy lekepezes-sor: a mi kategoriank, es a Medusa-oldali azonositoja. */
 export interface MedusaCategoryMapping {
   entityId: string;
@@ -153,12 +222,70 @@ export function decideMedusaCategories(
 export function describeMissingCategoryMapping(
   productId: string,
   missing: readonly string[],
+  entityType: string = MEDUSA_CATEGORY_REFERENCE.entityType,
 ): string {
   return (
     `${productId}: ${missing.length} kategória még nincs leképezve a Medusára ` +
     `(${missing.join(", ")}), ezért EGYIKET SEM küldjük ki: ` +
     `a részleges lista letörölhetné a többit. Ha MINDEN terméknél ezt látod, ` +
     `a leképezés-tábla vagy üres (a betöltés nem futott), vagy rossz ` +
-    `azonosítókkal telt meg - a kettőt a MEDUSA/Category sorok száma dönti el.`
+    `azonosítókkal telt meg - a kettőt a MEDUSA/${entityType} sorok száma dönti el.`
   );
+}
+
+/**
+ * THE PER-PRODUCT PLAN (SEO P0 PR 10b): which links to read and which of our
+ * ids to look up in them. Split from the decision only because the links sit
+ * between the two, in the database; both halves stay pure.
+ */
+export interface ProductCategoryPlan {
+  source: "STORE" | "UNAS";
+  reference: { system: "MEDUSA"; entityType: "Category" | "StoreCategory" };
+  osCategoryIds: string[];
+}
+
+export function planProductCategories(
+  storeRows: readonly ProductStoreCategoryRow[],
+  unasCategoryIds: readonly string[],
+): ProductCategoryPlan {
+  return categorySourceFor(storeRows) === "STORE"
+    ? {
+        source: "STORE",
+        reference: MEDUSA_STORE_CATEGORY_REFERENCE,
+        osCategoryIds: orderedStoreCategoryIds(storeRows),
+      }
+    : {
+        source: "UNAS",
+        reference: MEDUSA_CATEGORY_REFERENCE,
+        osCategoryIds: [...unasCategoryIds],
+      };
+}
+
+/**
+ * The categories and the primary, together. The primary goes out only on the
+ * Acropora path and only beside a complete list: a primary without its list
+ * would point the breadcrumb at a category the product is not shown in.
+ *
+ * AND AN INCOMPLETE LIST TAKES THE SHOP'S PRIMARY AWAY, ON PURPOSE (barracuda,
+ * #1675 review). The list is held back, so the shop keeps its old categories;
+ * the primary key is ours, so a run without it removes it. "Not known now"
+ * then acts as "no primary": the breadcrumb falls back to today's longest
+ * chain until the next complete run puts it back. Keeping the shop's value
+ * instead would leave a primary we can no longer vouch for; a fallback
+ * breadcrumb is the safer wrong answer.
+ */
+export function decideProductCategories(
+  plan: ProductCategoryPlan,
+  storeRows: readonly ProductStoreCategoryRow[],
+  mappings: readonly MedusaCategoryMapping[],
+): {
+  categories: MedusaCategoryDecision;
+  primaryMedusaCategoryId: string | null;
+} {
+  const categories = decideMedusaCategories(plan.osCategoryIds, mappings);
+  const primary =
+    plan.source === "STORE" && categories.kind === "complete"
+      ? primaryMedusaCategoryId(storeRows, mappings)
+      : null;
+  return { categories, primaryMedusaCategoryId: primary };
 }
