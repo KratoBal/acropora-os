@@ -239,6 +239,28 @@ export const billingDocumentsApi = {
     });
   },
   /**
+   * DÍJBEKÉRŐBŐL ELŐLEGSZÁMLA (számlázási brief, 2. pont, #1670): kitöltött
+   * előleg-vázlat, díjbekérőnként egy; a második hívás ugyanazt adja.
+   */
+  advance(token: string, proformaId: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(proformaId)}/advance`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
+   * ELŐLEGSZÁMLÁBÓL VÉGSZÁMLA (számlázási brief, 3. pont, #1672): kitöltött
+   * végszámla-vázlat, előlegenként egy; a második hívás ugyanazt adja.
+   */
+  final(token: string, advanceId: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(advanceId)}/final`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
    * A VALÓDI KIÁLLÍTÁS (#1279, nautilus). Valódi Számlázz.hu-bizonylatot hoz
    * létre; a szerver kapcsolója (`BILLING_ISSUE_ENABLED`) nélkül elutasítja,
    * hívás előtt. Az ütközés-őr ugyanaz, mint a mentésnél.

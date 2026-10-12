@@ -7,6 +7,8 @@ import {
   type InvoiceFormat,
 } from "@acropora/types";
 
+import { Prisma } from "@acropora/database";
+
 import type { BillingDocumentForIssue } from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
@@ -103,6 +105,40 @@ function billingAddress(row: BillingDocumentRow) {
     addresses[0] ??
     null
   );
+}
+
+/**
+ * A VÉGSZÁMLA KIÁLLÍTHATÓ-E MÉG (barracuda, #1672). A vázlat létrehozásakor az
+ * előleg ép volt, de a kiállításig sztornózhatták (az OS-ben vagy a
+ * Számlázz.hu felületén), és akkor egy sztornózott előleget vonnánk le.
+ *
+ * A bruttó nem lehet KISEBB az előlegénél: akkor a vevő fizetendője negatív.
+ * EGYENLŐ lehet: a teljes összegű előleg után is végszámla jár, nulla
+ * fizetendővel. Csak azonos pénznemnél mérhető; eltérőnél a Számlázz.hu dönt.
+ *
+ * `null`: nincs akadály; különben a kezelőnek szóló ok.
+ */
+export function finalInvoiceIssueProblem(
+  row: Pick<
+    BillingDocumentRow,
+    "documentType" | "currency" | "referencedInvoice"
+  >,
+  grossAmount: string,
+  advanceCancelledOnSite: boolean,
+): string | null {
+  if (row.documentType !== "FINAL_INVOICE") return null;
+  const advance = row.referencedInvoice;
+  if (!advance?.invoiceNumber)
+    return "A végszámlához nincs kiállított előlegszámla rendelve.";
+  if ((advance.correctionInvoices ?? []).length > 0 || advanceCancelledOnSite)
+    return `A(z) ${advance.invoiceNumber} előlegszámlát időközben sztornózták, ezért ez a végszámla nem állítható ki.`;
+  if (
+    advance.grossAmount !== null &&
+    advance.currency === row.currency &&
+    new Prisma.Decimal(grossAmount).lt(advance.grossAmount)
+  )
+    return `A végszámla bruttója (${grossAmount} ${row.currency}) kisebb, mint a levonandó előlegé (${advance.grossAmount.toString()} ${row.currency}): a végszámla tételei a teljes ellenérték, nem a maradék.`;
+  return null;
 }
 
 export function buildIssueInput(row: BillingDocumentRow): IssueInput {

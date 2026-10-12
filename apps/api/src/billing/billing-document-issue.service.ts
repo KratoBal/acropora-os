@@ -27,7 +27,10 @@ import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-cr
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
-import { buildIssueInput } from "./billing-document-issue.js";
+import {
+  buildIssueInput,
+  finalInvoiceIssueProblem,
+} from "./billing-document-issue.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
   BillingDocumentAdapterError,
@@ -133,6 +136,17 @@ export class BillingDocumentIssueService {
 
     const input = buildIssueInput(row);
     if (!input.ok) throw new BadRequestException(input.message);
+    // a végszámla előlege közben sztornózható; a felületi sztornót a feed hozza
+    const finalProblem = finalInvoiceIssueProblem(
+      row,
+      input.totals.grossAmount,
+      row.documentType === "FINAL_INVOICE" &&
+        row.referencedInvoice?.invoiceNumber != null &&
+        (await this.documents.feedTwinCancelled(
+          row.referencedInvoice.invoiceNumber,
+        )),
+    );
+    if (finalProblem) throw new BadRequestException(finalProblem);
 
     let agentKey: string;
     try {

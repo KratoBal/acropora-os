@@ -91,6 +91,11 @@ export function BillingDocumentDetailPage({
   const canResend = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_RESEND),
   );
+  const canCreate = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.BILLING_CREATE),
+  );
+  const [finalBusy, setFinalBusy] = useState(false);
+  const [finalError, setFinalError] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<BillingDocumentDetail | null>(null);
   useAssistantEntity("Számla", detail?.id, detail?.documentNumber);
@@ -348,6 +353,58 @@ export function BillingDocumentDetailPage({
           }
         />
       ) : null}
+      {detail.documentType === "PROFORMA" && detail.status === "ISSUED" ? (
+        <AdvanceBar
+          detail={detail}
+          canCreate={canCreate}
+          busy={finalBusy}
+          error={finalError}
+          onCreate={async () => {
+            setFinalBusy(true);
+            setFinalError(null);
+            try {
+              const advance = await billingDocumentsApi.advance(
+                token,
+                detail.id,
+              );
+              router.push(`${BILLING_LIST_PATH}/${advance.id}/szerkesztes`);
+            } catch (cause) {
+              setFinalError(
+                cause instanceof Error
+                  ? cause.message
+                  : "Az előlegszámla nem készíthető el.",
+              );
+            } finally {
+              setFinalBusy(false);
+            }
+          }}
+        />
+      ) : null}
+      {detail.documentType === "ADVANCE_INVOICE" &&
+      detail.status === "ISSUED" ? (
+        <FinalInvoiceBar
+          detail={detail}
+          canCreate={canCreate}
+          busy={finalBusy}
+          error={finalError}
+          onCreate={async () => {
+            setFinalBusy(true);
+            setFinalError(null);
+            try {
+              const final = await billingDocumentsApi.final(token, detail.id);
+              router.push(`${BILLING_LIST_PATH}/${final.id}/szerkesztes`);
+            } catch (cause) {
+              setFinalError(
+                cause instanceof Error
+                  ? cause.message
+                  : "A végszámla nem készíthető el.",
+              );
+            } finally {
+              setFinalBusy(false);
+            }
+          }}
+        />
+      ) : null}
       {pdf.error ? (
         <Alert
           variant="danger"
@@ -413,6 +470,19 @@ export function BillingDocumentDetailPage({
                 </>
               ) : null}
               <PilotDataItem label="Pénznem">{detail.currency}</PilotDataItem>
+              {detail.deductedAdvance ? (
+                <PilotDataItem label="Levont előleg">
+                  <Link
+                    href={`${BILLING_LIST_PATH}/${detail.deductedAdvance.id}`}
+                    className="underline"
+                  >
+                    {detail.deductedAdvance.number ?? "előlegszámla"}
+                  </Link>
+                  {detail.deductedAdvance.grossAmount
+                    ? ` · bruttó ${formatMoney(detail.deductedAdvance.grossAmount, detail.currency)}`
+                    : ""}
+                </PilotDataItem>
+              ) : null}
               <PilotDataItem label="Hivatkozás">
                 {detail.reference ?? "—"}
               </PilotDataItem>
@@ -594,5 +664,134 @@ export function BillingDocumentDetailPage({
         />
       ) : null}
     </PilotThemeRoot>
+  );
+}
+
+/**
+ * AZ ELŐLEGSZÁMLA VÉGSZÁMLÁJA (számlázási brief, 3. pont, #1672): ha van, a
+ * megnyitása; ha nincs, a „Végszámla készítése” gomb. Sztornózott előlegből
+ * nem készül végszámla, ezt a gomb helyett kimondjuk.
+ */
+function FinalInvoiceBar({
+  detail,
+  canCreate,
+  busy,
+  error,
+  onCreate,
+}: {
+  detail: BillingDocumentDetail;
+  canCreate: boolean;
+  busy: boolean;
+  error: string | null;
+  onCreate: () => void;
+}) {
+  const final = detail.finalInvoice ?? null;
+  if (final) {
+    const editable =
+      final.status === "DRAFT" || final.status === "ISSUE_FAILED";
+    return (
+      <Alert
+        variant="info"
+        title="Végszámla"
+        description={
+          editable
+            ? "Ehhez az előleghez már van végszámla-piszkozat."
+            : `Ehhez az előleghez a(z) ${final.number ?? "kiállítás alatt álló"} végszámla tartozik.`
+        }
+        action={
+          <Link
+            href={`${BILLING_LIST_PATH}/${final.id}${editable ? "/szerkesztes" : ""}`}
+            className="text-sm font-semibold underline"
+          >
+            Végszámla megnyitása
+          </Link>
+        }
+      />
+    );
+  }
+  if (detail.cancellation?.state === "ISSUED")
+    return (
+      <Alert
+        variant="info"
+        title="Végszámla"
+        description="Ezt az előlegszámlát sztornózták, ezért nem készülhet belőle végszámla."
+      />
+    );
+  if (!canCreate) return null;
+  return (
+    <Alert
+      variant={error ? "danger" : "info"}
+      title="Végszámla"
+      description={
+        error ??
+        "A végszámla a teljes ellenértékről szól; ezt az előleget a Számlázz.hu vonja le rajta."
+      }
+      action={
+        <PilotButton size="action" disabled={busy} onClick={onCreate}>
+          Végszámla készítése
+        </PilotButton>
+      }
+    />
+  );
+}
+
+/**
+ * A DÍJBEKÉRŐ ELŐLEGSZÁMLÁJA (számlázási brief, 2. pont, #1670): ha van, a
+ * megnyitása; ha nincs, az „Előlegszámla készítése” gomb. Az Autokassza
+ * (emlék 2141): egy kifizetett díjbekérőből a Számlázz.hu maga is kiállíthatott
+ * bizonylatot; nem tiltunk és nem automatizálunk, a gomb mellett kimondjuk.
+ */
+function AdvanceBar({
+  detail,
+  canCreate,
+  busy,
+  error,
+  onCreate,
+}: {
+  detail: BillingDocumentDetail;
+  canCreate: boolean;
+  busy: boolean;
+  error: string | null;
+  onCreate: () => void;
+}) {
+  const advance = detail.advance ?? null;
+  if (advance) {
+    const editable =
+      advance.status === "DRAFT" || advance.status === "ISSUE_FAILED";
+    return (
+      <Alert
+        variant="info"
+        title="Előlegszámla"
+        description={
+          editable
+            ? "Ehhez a díjbekérőhöz már van előlegszámla-piszkozat."
+            : `Ehhez a díjbekérőhöz a(z) ${advance.number ?? "kiállítás alatt álló"} előlegszámla tartozik.`
+        }
+        action={
+          <Link
+            href={`${BILLING_LIST_PATH}/${advance.id}${editable ? "/szerkesztes" : ""}`}
+            className="text-sm font-semibold underline"
+          >
+            Előlegszámla megnyitása
+          </Link>
+        }
+      />
+    );
+  }
+  if (!canCreate) return null;
+  return (
+    <Alert
+      variant={error ? "danger" : "info"}
+      title="Előlegszámla"
+      description={
+        error ??
+        "Ha a díjbekérőt már kifizették, a Számlázz.hu Autokasszája kiállíthatott belőle bizonylatot: kiállítás előtt nézd meg a Számlázz.hu-n."
+      }
+      action={
+        <PilotButton size="action" disabled={busy} onClick={onCreate}>
+          Előlegszámla készítése
+        </PilotButton>
+      }
+    />
   );
 }
