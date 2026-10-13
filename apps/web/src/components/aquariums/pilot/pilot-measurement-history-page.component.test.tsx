@@ -79,4 +79,19 @@ describe("PilotMeasurementHistoryPage", () => {
       ),
     );
   });
+
+  /**
+   * t17 (Balázs, 2026-10-13 07:24): hosszú ajánlásnál a „Mérés és ajánlás”
+   * fiók alja nem látszott, és nem lehetett görgetni. MI PIROSÍTJA: a fiók
+   * tartalma nem görgető, paddingolt burokban áll.
+   */
+  it("the recommendation drawer's content scrolls inside the drawer", async () => {
+    render(<PilotMeasurementHistoryPage aquariumId="aq-1" />);
+    fireEvent.click(await screen.findByText("Ajánlás"));
+    const cim = await screen.findByText("Javasolt intézkedések");
+    const burok = cim.closest("section")?.parentElement;
+    expect(burok?.className).toMatch(/\bflex-1\b/);
+    expect(burok?.className).toMatch(/\boverflow-y-auto\b/);
+    expect(burok?.className).toMatch(/\bpx-6\b/);
+  });
 });

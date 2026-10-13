@@ -800,7 +800,7 @@ export function PilotMeasurementHistoryPage({
         width="lg"
       >
         {recommendFor ? (
-          <div className="space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
             <section>
               <h3 className="text-xs font-semibold uppercase tracking-[0.05em] text-pilot-grey-500">
                 Javasolt intézkedések

@@ -194,7 +194,7 @@ export function QuoteItemDrawer({
         </div>
       }
     >
-      <div className="space-y-5">
+      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
         {error ? (
           <Alert variant="danger" title="Nem sikerült" description={error} />
         ) : null}
