@@ -745,6 +745,85 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
   });
 
   /*
+    t19 (Balázs, 2026-10-13, élesben): Beszerzésre állított szerződés tételénél
+    nem lehetett egységet választani, mert egyetlen mennyiségi egység sem volt
+    felvéve. MI PIROSÍT: ha az üres lista nem mondja meg, mi hiányzik és hol
+    kell felvenni; ha a felirat nem „Menny. egység”; ha egy Karbantartásból
+    Beszerzésre állított szerződés tételén a választott egység nem menne el.
+  */
+  it("WEB-CONTRACT-UNIT-EMPTY: üres egységlistánál kimondja, hogy nincs felvett egység, és hol kell felvenni", async () => {
+    api.quantityUnits.mockReset().mockResolvedValue([]);
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [{ ...item, unitOfMeasureId: null, unitOfMeasure: null }],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByRole("option", { name: "Nincs mennyiségi egység" });
+    expect(
+      [
+        screen.queryByText(
+          "Nincs felvett mennyiségi egység. Beállítások → Mértékegységek, Fajta: Mennyiség.",
+        ) !== null,
+        screen.queryByText("Menny. egység") !== null,
+        screen.queryByText("Mennyiségi egység"),
+      ],
+      "WEB-CONTRACT-UNIT-EMPTY",
+    ).toEqual([true, true, null]);
+  });
+
+  it("WEB-CONTRACT-SWITCH-UNIT: Karbantartásból Beszerzésre állítva a tétel egysége választható, és elmegy", async () => {
+    api.quantityUnits
+      .mockReset()
+      .mockResolvedValue([{ id: "uom-db", code: "db", name: "darab" }]);
+    // a meglévő karbantartási tétel: egység nélkül, alkalommal
+    const maintenance = {
+      ...item,
+      occasionsPerYear: 2,
+      unitOfMeasureId: null,
+      unitOfMeasure: null,
+    };
+    api.detail
+      .mockReset()
+      .mockResolvedValue({ ...contract(), items: [maintenance] });
+    api.update.mockImplementation(async (_token, _id, input) => ({
+      ...contract(),
+      ...input,
+      items: [maintenance],
+    }));
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Beszerzés" }));
+    await screen.findByRole("option", { name: "db (darab)" });
+    const unit = screen.getByLabelText(
+      "1. tétel mennyiségi egysége",
+    ) as HTMLSelectElement;
+    fireEvent.change(unit, { target: { value: "uom-db" } });
+    const chosen = unit.value;
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const sent = api.update.mock.calls[0]![2];
+    expect(
+      [chosen, sent.kind, sent.items[0].unitOfMeasureId],
+      "WEB-CONTRACT-SWITCH-UNIT",
+    ).toEqual(["uom-db", "PURCHASE", "uom-db"]);
+  });
+
+  it("WEB-CONTRACT-ITEM-DESCRIPTION: a leírás többsoros, a tartalomhoz nő, és sortörést nem tárol", async () => {
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [item],
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const field = await screen.findByLabelText("1. tétel leírása");
+    fireEvent.change(field, { target: { value: "Tengeri só\n25 kg" } });
+    expect(
+      [field.tagName, (field as HTMLTextAreaElement).value],
+      "WEB-CONTRACT-ITEM-DESCRIPTION",
+    ).toEqual(["TEXTAREA", "Tengeri só 25 kg"]);
+  });
+
+  /*
     A „SZÁMLA” GOMB (hétfői lista M4). MI PIROSÍT: ha nem a mentett beszerzési
     szerződés tételeivel, vevőjével és számával nyitná az Új számlát; ha egy még
     karbantartásiként mentett szerződésből is nyitható lenne; ha számla után a
