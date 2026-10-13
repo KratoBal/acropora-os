@@ -32,6 +32,8 @@ import {
 } from "./contract-items";
 import {
   ContractKindSwitch,
+  CONTRACT_ITEM_GRID,
+  ContractItemDescriptionInput,
   QuantityUnitSelect,
   useQuantityUnits,
 } from "./contract-kind";
@@ -600,7 +602,7 @@ export function PilotContractDetailPage({
           </Link>
         </div>
 
-        <div className="flex max-w-3xl flex-1 flex-col gap-4 px-8 py-6">
+        <div className="flex flex-1 flex-col gap-4 px-8 py-6">
           {error ? (
             <Alert variant="danger" title="Mentési hiba" description={error} />
           ) : null}
@@ -812,10 +814,10 @@ export function PilotContractDetailPage({
                         {contractItemRemovalBlocker(item.id, lockedItemIds)}
                       </p>
                     ) : null}
-                    <div className="grid gap-2 md:grid-cols-5">
+                    <div className={CONTRACT_ITEM_GRID}>
                       <PilotFormField label="Leírás">
-                        <PilotInput
-                          aria-label={`${index + 1}. tétel leírása`}
+                        <ContractItemDescriptionInput
+                          ariaLabel={`${index + 1}. tétel leírása`}
                           value={item.description}
                           onChange={(value) =>
                             editItem(item.id, { description: value })
@@ -842,7 +844,7 @@ export function PilotContractDetailPage({
                       </PilotFormField>
                       {purchase ? (
                         <QuantityUnitSelect
-                          label="Mennyiségi egység"
+                          label="Menny. egység"
                           ariaLabel={`${index + 1}. tétel mennyiségi egysége`}
                           units={quantityUnits.units}
                           value={item.unitOfMeasureId ?? ""}

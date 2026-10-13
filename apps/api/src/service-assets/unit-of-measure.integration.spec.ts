@@ -303,15 +303,31 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
     ).map((sor) => sor.code);
     for (const kod of ["W", "kW", "l/h"])
       assert.ok(kodok.includes(kod), `hiányzik a kezdő készletből: ${kod}`);
-    // ES A TESTVER-KONTROLL: a MENNYISEGI fajtaba SZANDEKOSAN nem vittunk be
-    // semmit, mert azt ma meg szabad szoveg hordozza tiz helyen. Egy elore
-    // feltoltott, de senki altal nem hasznalt lista csak zaj lenne.
-    assert.equal(
-      await prisma.unitOfMeasure.count({
-        where: { kind: "QUANTITY", code: { not: { startsWith: PREFIX } } },
-      }),
-      0,
-    );
+    // ES A TESTVER-KONTROLL, 2026-10-13 OTA MAS ALAKBAN (t19): a mennyisegi
+    // fajta eddig szandekosan ures volt, mert senki nem hasznalta. A beszerzesi
+    // szerzodes tetele viszont KOTELEZOEN egyseget visel, es egy ures lista
+    // mellett elesben nem volt mit valasztani -- ezert a
+    // `20261013100000_seed_quantity_units` migracio Balazs jovahagyott
+    // kilences listajat viszi fel, aktivkent.
+    const mennyisegek = await prisma.unitOfMeasure.findMany({
+      where: { kind: "QUANTITY", code: { not: { startsWith: PREFIX } } },
+      select: { code: true, isActive: true },
+    });
+    for (const kod of [
+      "db",
+      "óra",
+      "kg",
+      "g",
+      "l",
+      "m",
+      "m²",
+      "csomag",
+      "készlet",
+    ])
+      assert.ok(
+        mennyisegek.some((sor) => sor.code === kod && sor.isActive),
+        `hiányzik a mennyiségi kezdő készletből: ${kod}`,
+      );
   });
 
   /**

@@ -34,6 +34,8 @@ import {
   type RepairFeeValues,
 } from "./contract-items";
 import {
+  CONTRACT_ITEM_GRID,
+  ContractItemDescriptionInput,
   ContractKindSwitch,
   QuantityUnitSelect,
   useQuantityUnits,
@@ -477,12 +479,12 @@ export function PilotContractsPage() {
                       className="flex flex-col gap-2 rounded-lg bg-pilot-grey-50 p-3 ring-1 ring-pilot-grey-100"
                       key={item.rowKey ?? index}
                     >
-                      <div className="grid gap-2 md:grid-cols-5">
+                      <div className={CONTRACT_ITEM_GRID}>
                         <PilotFormField
                           label={index === 0 ? "Tétel leírása" : ""}
                         >
-                          <PilotInput
-                            aria-label="Tétel leírása"
+                          <ContractItemDescriptionInput
+                            ariaLabel="Tétel leírása"
                             placeholder="Tétel leírása"
                             value={item.description}
                             onChange={(value) =>
@@ -537,7 +539,7 @@ export function PilotContractsPage() {
                         </PilotFormField>
                         {purchase ? (
                           <QuantityUnitSelect
-                            label={index === 0 ? "Mennyiségi egység" : ""}
+                            label={index === 0 ? "Menny. egység" : ""}
                             ariaLabel="Mennyiségi egység"
                             units={quantityUnits.units}
                             value={item.unitOfMeasureId}
