@@ -242,7 +242,7 @@ export function QuoteHandoffDrawer({
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
         {notice ? (
           <Alert variant="info" title="A terv frissült" description={notice} />
         ) : null}

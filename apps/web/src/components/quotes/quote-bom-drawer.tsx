@@ -171,7 +171,7 @@ export function QuoteBomDrawer({
         </div>
       }
     >
-      <div className="space-y-5">
+      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
         <PilotBadge variant="grey">Csak belső</PilotBadge>
         {error ? (
           <Alert variant="danger" title="Nem sikerült" description={error} />
