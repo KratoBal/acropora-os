@@ -1,11 +1,13 @@
 -- === BASIC QUANTITY UNITS (t19, 2026-10-13) ===
 --
 -- A purchase contract item must carry a quantity unit (`kind = 'QUANTITY'`),
--- but the units_of_measure migration created the table empty, and on
--- production only PERFORMANCE units were entered by hand. The contract item
--- unit picker therefore offered nothing to choose.
+-- but the units_of_measure migration (20260916130000) seeded only five
+-- PERFORMANCE units (`uom_perf_*`) and no QUANTITY unit. Production had six
+-- active PERFORMANCE rows and zero QUANTITY rows on 2026-10-13 (read-only
+-- measurement), so the contract item unit picker offered nothing to choose.
 --
--- These are the common quantity units of the shop. ON CONFLICT on the
+-- The list was approved by Balázs on 2026-10-13 07:48:41 UTC (Discord,
+-- relayed by acrobot in inter-agent message 29251). ON CONFLICT on the
 -- (kind, code) unique key: a unit that was already entered by hand stays as it
 -- is (name, sort order, active flag untouched), so the migration is idempotent
 -- and never overwrites a setting. Further units are added on the

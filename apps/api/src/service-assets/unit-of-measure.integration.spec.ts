@@ -308,7 +308,8 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
     // szerzodes tetele viszont KOTELEZOEN egyseget visel, es egy ures lista
     // mellett elesben nem volt mit valasztani -- ezert a
     // `20261013100000_seed_quantity_units` migracio Balazs jovahagyott
-    // kilences listajat viszi fel, aktivkent.
+    // kilences listajat viszi fel, aktivkent (2026-10-13 07:48:41 UTC,
+    // acrobot 29251-es uzenete).
     const mennyisegek = await prisma.unitOfMeasure.findMany({
       where: { kind: "QUANTITY", code: { not: { startsWith: PREFIX } } },
       select: { code: true, isActive: true },
