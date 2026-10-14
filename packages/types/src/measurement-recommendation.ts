@@ -53,6 +53,129 @@ export function recommendationProductIds(text: string): string[] {
   ];
 }
 
+/*
+  A SZÖVEG TAGOLÁSA (Balázs, 2026-10-14 08:48 UTC: „az ajánlás így nem szép …
+  Vélemény - Javaslat - Ajánlott termékek”). A szöveg sima szöveg marad (a
+  kolléga így szerkeszti, és a régi jóváhagyott szövegek is ilyenek), a felület
+  és a PDF ebből rajzol:
+    - fejléc: egy sor, ami csak a három cím egyike, kettősponttal vagy anélkül
+      (a markdown `**` és `#` jelölése nélkül is felismerve); egy „Vélemény: …”
+      alakú sorban a cím után álló szöveg az első bekezdés;
+    - lista: `- ` vagy `• ` kezdetű sor; az egymás utániak egy listát adnak;
+    - bekezdés: a többi; üres sor választja el, a sima sortörés megmarad.
+  A darabok (szöveg és termék) a soron belül változatlanok: a termék-hivatkozás
+  ugyanúgy a termékből kap nevet és linket.
+*/
+export const RECOMMENDATION_HEADINGS = [
+  "Vélemény",
+  "Javaslat",
+  "Ajánlott termékek",
+] as const;
+export type RecommendationHeading = (typeof RECOMMENDATION_HEADINGS)[number];
+
+export type RecommendationBlock<T> =
+  | { kind: "heading"; text: RecommendationHeading }
+  /** sorok, soronként a darabjaik */
+  | { kind: "paragraph"; lines: T[][] }
+  /** tételek, tételenként a darabjaik */
+  | { kind: "list"; items: T[][] };
+
+const fold = (value: string) =>
+  value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const LIST_MARKER = /^\s*[-•]\s+/;
+
+/**
+ * A sor eleje cím-e. Cím: a sor csak a cím (kettősponttal vagy anélkül), vagy
+ * a cím, kettőspont, és utána szöveg. Egy „Javaslatunk szerint …” mondat nem cím.
+ */
+function headingOf(
+  text: string,
+): { heading: RecommendationHeading; rest: string; colon: boolean } | null {
+  const cleaned = text
+    .normalize("NFC")
+    .replace(/\*\*/g, "")
+    .replace(/^\s*#+\s*/, "")
+    .trim();
+  for (const heading of RECOMMENDATION_HEADINGS) {
+    if (fold(cleaned.slice(0, heading.length)) !== fold(heading)) continue;
+    const after = cleaned.slice(heading.length);
+    if (!after.trim()) return { heading, rest: "", colon: false };
+    const match = /^\s*:\s*([\s\S]*)$/.exec(after);
+    if (match) return { heading, rest: match[1]!.trim(), colon: true };
+  }
+  return null;
+}
+
+/** A darabok tagolva: fejléc, bekezdés, lista (lásd fent). */
+export function recommendationBlocks<T extends { kind: string }>(
+  segments: readonly T[],
+): RecommendationBlock<T>[] {
+  // 1. sorokra bontás: a szöveg-darab a sortöréseknél szétválik
+  const lines: T[][] = [[]];
+  for (const segment of segments) {
+    if (segment.kind !== "text") {
+      lines.at(-1)!.push(segment);
+      continue;
+    }
+    const pieces = (segment as unknown as { text: string }).text.split("\n");
+    pieces.forEach((piece, index) => {
+      if (index > 0) lines.push([]);
+      if (piece) lines.at(-1)!.push({ ...segment, text: piece });
+    });
+  }
+  // 2. soronként: üres, fejléc, listatétel vagy bekezdés-sor
+  const blocks: RecommendationBlock<T>[] = [];
+  const textOf = (line: T[]) =>
+    line.every((part) => part.kind === "text")
+      ? line.map((part) => (part as unknown as { text: string }).text).join("")
+      : null;
+  const paragraphLine = (line: T[]) => {
+    const last = blocks.at(-1);
+    if (last?.kind === "paragraph") last.lines.push(line);
+    else blocks.push({ kind: "paragraph", lines: [line] });
+  };
+  let broken = true; // egy üres sor után új bekezdés indul
+  for (const line of lines) {
+    const whole = textOf(line);
+    if (whole !== null && !whole.trim()) {
+      broken = true;
+      continue;
+    }
+    const first = line[0];
+    const firstText =
+      first?.kind === "text"
+        ? (first as unknown as { text: string }).text
+        : null;
+    const heading = firstText !== null ? headingOf(firstText) : null;
+    if (heading && (heading.colon || line.length === 1)) {
+      blocks.push({ kind: "heading", text: heading.heading });
+      const rest = heading.rest
+        ? [{ ...first!, text: heading.rest } as T, ...line.slice(1)]
+        : line.slice(1);
+      if (rest.length) blocks.push({ kind: "paragraph", lines: [rest] });
+      broken = false;
+      continue;
+    }
+    if (firstText !== null && LIST_MARKER.test(firstText)) {
+      const stripped = firstText.replace(LIST_MARKER, "");
+      const item = [
+        ...(stripped ? [{ ...first!, text: stripped } as T] : []),
+        ...line.slice(1),
+      ];
+      const last = blocks.at(-1);
+      if (last?.kind === "list" && !broken) last.items.push(item);
+      else blocks.push({ kind: "list", items: [item] });
+      broken = false;
+      continue;
+    }
+    if (broken || blocks.at(-1)?.kind !== "paragraph")
+      blocks.push({ kind: "paragraph", lines: [line] });
+    else paragraphLine(line);
+    broken = false;
+  }
+  return blocks;
+}
+
 /** Egy darab, ahogy a felület rajzolja: a termék nevével és linkjével. */
 export type MeasurementRecommendationSegment =
   | { kind: "text"; text: string }

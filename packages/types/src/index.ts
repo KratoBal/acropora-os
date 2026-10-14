@@ -1463,7 +1463,9 @@ export type { ViesAddressFields, ViesFillField } from "./vies-address.js";
 export {
   hasMalformedRecommendationToken,
   parseRecommendationText,
+  RECOMMENDATION_HEADINGS,
   RECOMMENDATION_PRODUCT_TOKEN,
+  recommendationBlocks,
   recommendationProductIds,
 } from "./measurement-recommendation.js";
 export type {
@@ -1472,7 +1474,9 @@ export type {
   MeasurementRecommendationSegment,
   MeasurementRecommendationStatus,
   MeasurementRecommendationView,
+  RecommendationBlock,
   RecommendationCandidateBasis,
+  RecommendationHeading,
   RecommendationTextPart,
   UpdateMeasurementRecommendationInput,
 } from "./measurement-recommendation.js";

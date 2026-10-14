@@ -1,5 +1,6 @@
 import {
   ACROPORA_COMPANY,
+  recommendationBlocks,
   type MeasurementRecommendationSegment,
 } from "@acropora/types";
 
@@ -168,35 +169,77 @@ export function renderMeasurementReportPdf(
   }
 
   if (input.recommendation?.length) {
-    // the names stand in the text; the links follow, one product a line
-    const text = input.recommendation
-      .map((part) =>
-        part.kind === "text" ? part.text : (part.name ?? "ismeretlen termék"),
-      )
-      .join("");
-    const height = measure(doc, text, { size: 9, color: BODY }, CONTENT_WIDTH);
-    ensure(headingHeight + Math.min(height, 60));
-    y = heading(doc, "Ajánlott termékek", y);
-    write(doc, text, LEFT, y, { size: 9, color: BODY }, CONTENT_WIDTH);
-    y += height + 10;
-    const linked = new Map<string, { name: string; url: string }>();
-    for (const part of input.recommendation)
-      if (part.kind === "product" && part.name && part.url)
-        linked.set(part.productId, { name: part.name, url: part.url });
-    for (const product of linked.values()) {
-      ensure(16);
-      doc
-        .font(PDF_REGULAR_FONT)
-        .fontSize(9)
-        .fillColor(TEAL)
-        .text(`• ${product.name}`, LEFT, y, {
-          width: CONTENT_WIDTH,
-          link: product.url,
-          underline: true,
-        });
-      y += 16;
+    const blocks = recommendationBlocks(input.recommendation);
+    const plain = (parts: readonly MeasurementRecommendationSegment[]) =>
+      parts
+        .map((part) =>
+          part.kind === "text" ? part.text : (part.name ?? "ismeretlen termék"),
+        )
+        .join("");
+    const body = { size: 9, color: BODY };
+    // A TAGOLT SZÖVEG (Balázs, 2026-10-14): a szöveg saját fejlécei (Vélemény,
+    // Javaslat, Ajánlott termékek) állnak, a termék neve a sorban link. Egy
+    // régi, tagolatlan szöveg a közös cím alatt, és a linkek utána, soronként.
+    const sectioned = blocks.some((block) => block.kind === "heading");
+    if (!sectioned) {
+      const text = blocks
+        .flatMap((block) =>
+          block.kind === "paragraph"
+            ? [block.lines.map(plain).join("\n")]
+            : block.kind === "list"
+              ? block.items.map((item) => `• ${plain(item)}`)
+              : [],
+        )
+        .join("\n");
+      const height = measure(doc, text, body, CONTENT_WIDTH);
+      ensure(headingHeight + Math.min(height, 60));
+      y = heading(doc, "Vélemény – Javaslat – Ajánlott termékek", y);
+      write(doc, text, LEFT, y, body, CONTENT_WIDTH);
+      y += height + 10;
+      const linked = new Map<string, { name: string; url: string }>();
+      for (const part of input.recommendation)
+        if (part.kind === "product" && part.name && part.url)
+          linked.set(part.productId, { name: part.name, url: part.url });
+      for (const product of linked.values()) {
+        ensure(16);
+        doc
+          .font(PDF_REGULAR_FONT)
+          .fontSize(9)
+          .fillColor(TEAL)
+          .text(`• ${product.name}`, LEFT, y, {
+            width: CONTENT_WIDTH,
+            link: product.url,
+            underline: true,
+          });
+        y += 16;
+      }
+      y += 20;
+    } else {
+      for (const block of blocks) {
+        if (block.kind === "heading") {
+          ensure(headingHeight + 16);
+          y = heading(doc, block.text, y);
+          continue;
+        }
+        const lines =
+          block.kind === "paragraph"
+            ? block.lines
+            : block.items.map((item) => [
+                {
+                  kind: "text",
+                  text: "• ",
+                } as MeasurementRecommendationSegment,
+                ...item,
+              ]);
+        for (const line of lines) {
+          const height = measure(doc, plain(line), body, CONTENT_WIDTH);
+          ensure(height);
+          y = writeLinked(doc, line, LEFT, y, CONTENT_WIDTH);
+        }
+        y += 10;
+      }
+      y += 10;
     }
-    y += 20;
   }
 
   ensure(14);
@@ -242,6 +285,40 @@ function write(
     .fontSize(style.size)
     .fillColor(style.color)
     .text(text, x, y, { width, align, lineGap: 2 });
+}
+
+/**
+ * One line of the recommendation, the product's name a link to its shop page
+ * (in the line, not after it). Returns the y under the line.
+ */
+function writeLinked(
+  doc: PDFKit.PDFDocument,
+  parts: readonly MeasurementRecommendationSegment[],
+  x: number,
+  y: number,
+  width: number,
+): number {
+  if (!parts.length) return y;
+  parts.forEach((part, index) => {
+    const continued = index < parts.length - 1;
+    const linked = part.kind === "product" && part.name && part.url;
+    doc
+      .font(PDF_REGULAR_FONT)
+      .fontSize(9)
+      .fillColor(linked ? TEAL : BODY);
+    const text =
+      part.kind === "text" ? part.text : (part.name ?? "ismeretlen termék");
+    const options = {
+      width,
+      lineGap: 2,
+      continued,
+      link: linked ? part.url : null,
+      underline: !!linked,
+    };
+    if (index === 0) doc.text(text, x, y, options);
+    else doc.text(text, options);
+  });
+  return doc.y + 4;
 }
 
 function measure(
