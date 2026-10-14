@@ -40,8 +40,10 @@ import {
 import { ContractRepairFees } from "./contract-repair-fees";
 import {
   CONTRACT_INVOICE_HANDOFF_PARAM,
+  contractInvoiceHandoffLines,
   writeContractInvoiceHandoff,
 } from "@/components/billing/contract-invoice-handoff";
+import { ContractBillingSummary } from "./contract-billing-summary";
 import { formatHuNumber } from "@/lib/format/number";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
@@ -377,6 +379,16 @@ export function PilotContractDetailPage({
   */
   const lockedItemIds =
     orders === null ? null : contractItemsWithOrders(orders);
+  // a már számlázott tétel sem törölhető (feladat d510)
+  const invoicedItemIds = useMemo(
+    () =>
+      new Set(
+        (saved?.billing?.items ?? [])
+          .filter((row) => Number(row.invoicedQuantity) !== 0)
+          .map((row) => row.contractItemId),
+      ),
+    [saved],
+  );
   /*
     A TÉTEL SZERKESZTÉSE ÉS FELVÉTELE (kártya c014db6f, Ág Luca, 2026-10-05:
     mentés és újranyitás után is szerkeszthetők legyenek). A változás a
@@ -539,26 +551,25 @@ export function PilotContractDetailPage({
     számla a szerződésre hivatkozik: egy el nem mentett tétel a szerződésen
     nem létezik.
   */
+  // A RÉSZTELJESÍTÉS (feladat d510): a teljesen kiszámlázott szerződés lezárt,
+  // új számla nem nyílik belőle; a részben számlázottból csak a maradék
+  const savedBilling = saved?.billing ?? null;
   const invoiceBlocker = !canInvoice
     ? "A számla nyitásához billing.create jog kell."
     : saved?.kind !== "PURCHASE"
       ? "Előbb mentsd a szerződést Beszerzésként."
       : saved.items.length === 0
         ? "A szerződésnek nincs tétele."
-        : null;
+        : savedBilling?.state === "FULL"
+          ? "A szerződés teljesen ki van számlázva: lezárva, új számla nem készül belőle."
+          : null;
   const openInvoice = () => {
     if (invoiceBlocker !== null || !saved) return;
     const key = writeContractInvoiceHandoff(window.sessionStorage, {
       contractId: saved.id,
       customerId: saved.customerId,
       contractNumber: saved.number,
-      lines: saved.items.map((item) => ({
-        description: item.description,
-        quantity: item.quantity,
-        unit: item.unitOfMeasure?.code ?? "db",
-        unitNet: item.unitNet,
-        vatRatePercent: item.vatRatePercent,
-      })),
+      lines: contractInvoiceHandoffLines(saved.items, savedBilling),
     });
     router.push(
       `/penzugy/szamlazas/uj?${CONTRACT_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
@@ -794,12 +805,14 @@ export function PilotContractDetailPage({
                             contractItemRemovalBlocker(
                               item.id,
                               lockedItemIds,
+                              invoicedItemIds,
                             ) !== null
                           }
                           title={
                             contractItemRemovalBlocker(
                               item.id,
                               lockedItemIds,
+                              invoicedItemIds,
                             ) ?? undefined
                           }
                           onClick={() => removeItem(item.id)}
@@ -809,9 +822,17 @@ export function PilotContractDetailPage({
                       ) : null}
                     </div>
                     {contract.items.length > 1 &&
-                    contractItemRemovalBlocker(item.id, lockedItemIds) ? (
+                    contractItemRemovalBlocker(
+                      item.id,
+                      lockedItemIds,
+                      invoicedItemIds,
+                    ) ? (
                       <p className="text-xs text-pilot-grey-400">
-                        {contractItemRemovalBlocker(item.id, lockedItemIds)}
+                        {contractItemRemovalBlocker(
+                          item.id,
+                          lockedItemIds,
+                          invoicedItemIds,
+                        )}
                       </p>
                     ) : null}
                     <div className={CONTRACT_ITEM_GRID}>
@@ -959,9 +980,17 @@ export function PilotContractDetailPage({
             <PilotCard>
               <PilotCardHeader title="Számla" />
               <div className="flex flex-col gap-2 p-5">
+                {savedBilling ? (
+                  <ContractBillingSummary
+                    billing={savedBilling}
+                    items={saved?.items ?? []}
+                  />
+                ) : null}
                 <p className="text-sm text-pilot-grey-600">
                   {invoiceBlocker ??
-                    "Az Új számla a mentett tételekkel, a vevővel és a szerződés számával nyílik; a kiállítás ott, megerősítéssel megy."}
+                    (savedBilling?.state === "PARTIAL"
+                      ? "Az Új számla csak a még nem számlázott mennyiséggel nyílik, a vevővel és a szerződés számával; a kiállítás ott, megerősítéssel megy."
+                      : "Az Új számla a mentett tételekkel, a vevővel és a szerződés számával nyílik; a kiállítás ott, megerősítéssel megy.")}
                 </p>
                 <div>
                   <PilotButton

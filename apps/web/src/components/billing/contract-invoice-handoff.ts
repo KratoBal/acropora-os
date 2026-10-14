@@ -3,6 +3,7 @@ import {
   trimDecimal,
   type EditorLine,
 } from "./billing-editor-state";
+import type { ContractBilling } from "@acropora/types";
 
 /**
  * A BESZERZÉSI SZERZŐDÉS ÁTADÁSA A SZÁMLÁZÁSNAK (hétfői lista M4): a szerződés
@@ -30,6 +31,8 @@ export interface ContractInvoiceHandoff {
   /** A szerződés száma: a számla hivatkozása lesz. */
   contractNumber: string;
   lines: Array<{
+    /** A szerződés tétele: a számlasor erre mutat (feladat d510). Régi csomagban hiányozhat. */
+    contractItemId?: string;
     description: string;
     quantity: string;
     /** A mennyiségi egység jele (`UnitOfMeasure.code`). */
@@ -77,6 +80,46 @@ export function clearContractInvoiceHandoff(
 }
 
 /**
+ * A „SZÁMLA” GOMB SORAI: CSAK A MARADÉK (feladat d510; Balázs: „a következő
+ * számla csak a még nem számlázott részt engedje”). Tételenként a még nem
+ * számlázott mennyiség, a teljesen számlázott tétel kimarad, és minden sor
+ * visz a tételre mutató hivatkozást. `billing` nélkül (régebbi API) a teljes
+ * mennyiség, ahogy eddig. A kiállítás a szerveren ugyanezt ellenőrzi.
+ */
+export function contractInvoiceHandoffLines(
+  items: ReadonlyArray<{
+    id: string;
+    description: string;
+    quantity: string;
+    unitNet: string;
+    vatRatePercent: string;
+    unitOfMeasure?: { code: string } | null;
+  }>,
+  billing: ContractBilling | null | undefined,
+): ContractInvoiceHandoff["lines"] {
+  const remaining = new Map(
+    (billing?.items ?? []).map((row) => [
+      row.contractItemId,
+      row.remainingQuantity,
+    ]),
+  );
+  return items.flatMap((item) => {
+    const quantity = billing ? remaining.get(item.id) : item.quantity;
+    if (quantity === undefined || Number(quantity) <= 0) return [];
+    return [
+      {
+        contractItemId: item.id,
+        description: item.description,
+        quantity,
+        unit: item.unitOfMeasure?.code ?? "db",
+        unitNet: item.unitNet,
+        vatRatePercent: item.vatRatePercent,
+      },
+    ];
+  });
+}
+
+/**
  * A számla sorai. A szerződés nettó egységárat tárol, a sor tehát nettóval
  * nyílik (a pénztár bruttót ad át); termék nincs mögötte, szabad sor marad.
  */
@@ -85,6 +128,7 @@ export function editorLinesFromContractHandoff(
 ): EditorLine[] {
   return handoff.lines.map((line) =>
     emptyLine({
+      contractItemId: line.contractItemId ?? null,
       description: line.description,
       quantity: trimDecimal(line.quantity),
       unit: line.unit,

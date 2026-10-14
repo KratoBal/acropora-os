@@ -22,6 +22,8 @@ import {
   type SzamlazzAgentClient,
 } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
+import { contractOverbillingProblem } from "@acropora/types";
+import { CONTRACT_BILLED_DOCUMENT_TYPES } from "../contracts/contract-billed-lines.js";
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
@@ -105,6 +107,49 @@ export class BillingDocumentIssueService {
     return billingIssueMode(this.environment);
   }
 
+  /**
+   * Túlszámlázná-e a bizonylat a forrás-szerződését (feladat d510)? Csak
+   * szerződésből jött, számlázottnak számító típusú bizonylatnál, és csak a
+   * szerződés-tételre mutató soraival; `null`, ha rendben.
+   */
+  private async contractOverbilling(row: {
+    id: string;
+    sourceType: string | null;
+    sourceId: string | null;
+    documentType: string;
+    lines: Array<{
+      kind: string;
+      contractItemId: string | null;
+      description: string;
+      quantity: { toString(): string };
+    }>;
+  }): Promise<string | null> {
+    if (row.sourceType !== "CONTRACT" || !row.sourceId) return null;
+    if (
+      !(CONTRACT_BILLED_DOCUMENT_TYPES as readonly string[]).includes(
+        row.documentType,
+      )
+    )
+      return null;
+    const draft = row.lines.flatMap((line) =>
+      line.kind === "ITEM" && line.contractItemId
+        ? [
+            {
+              contractItemId: line.contractItemId,
+              description: line.description,
+              quantity: line.quantity.toString(),
+            },
+          ]
+        : [],
+    );
+    if (!draft.length) return null;
+    const facts = await this.documents.contractBillingFacts(
+      row.sourceId,
+      row.id,
+    );
+    return contractOverbillingProblem(facts.items, facts.billed, draft);
+  }
+
   async issue(
     id: string,
     expectedUpdatedAt: string,
@@ -147,6 +192,10 @@ export class BillingDocumentIssueService {
         )),
     );
     if (finalProblem) throw new BadRequestException(finalProblem);
+    // SZERZŐDÉSBŐL CSAK A MARADÉK (feladat d510): a saját sorai nélkül számolva
+    // egy szerződés-tétel sem léphet túl a még nem számlázott mennyiségen
+    const contractProblem = await this.contractOverbilling(row);
+    if (contractProblem) throw new BadRequestException(contractProblem);
 
     let agentKey: string;
     try {
@@ -204,6 +253,17 @@ export class BillingDocumentIssueService {
       const reason = `A(z) ${row.referencedInvoice.invoiceNumber ?? "levonandó"} előlegszámla sztornózása időközben elindult, ezért ez a végszámla nem állítható ki.`;
       await this.repository.markFailed(id, reason);
       throw new BadRequestException(reason);
+    }
+
+    // A FOGLALÁS UTÁN MÉG EGYSZER, a végszámla-előleg mintájára (#1674): két
+    // egyszerre kiállított vázlat ugyanabból a szerződésből mindkettő átmehetett
+    // a fenti őrön. A másik foglalása (ISSUING) most már számlázottnak számít,
+    // tehát legalább az egyik látja a másikat. A foglalás önálló, azonnal
+    // lezárt írás; egy tranzakcióba téve READ COMMITTED mellett újranyílna a rés.
+    const contractRace = await this.contractOverbilling(row);
+    if (contractRace) {
+      await this.repository.markFailed(id, contractRace);
+      throw new BadRequestException(contractRace);
     }
 
     let response;

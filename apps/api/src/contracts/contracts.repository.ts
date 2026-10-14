@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { contractBilledLines } from "./contract-billed-lines.js";
 import { prisma, Prisma } from "@acropora/database";
 import type { ContractKind } from "@acropora/types";
 
@@ -165,6 +166,11 @@ export class ContractsRepository {
     return this.database.invoice.count({
       where: { sourceType: "CONTRACT", sourceId: contractId },
     });
+  }
+
+  /** A beszerzési szerződés számlázottnak számító sorai (contract-billed-lines.ts). */
+  billedLines(contractId: string) {
+    return contractBilledLines(this.database, contractId);
   }
 
   /** Készült-e már megrendelőlap a szerződéshez (a visszavont is számít). */

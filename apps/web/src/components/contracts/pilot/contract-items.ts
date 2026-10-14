@@ -27,10 +27,14 @@ export function contractItemsWithOrders(
 export function contractItemRemovalBlocker(
   itemId: string,
   locked: ReadonlySet<string> | null,
+  invoiced: ReadonlySet<string> = new Set(),
 ): string | null {
   if (locked === null) return "A megrendelőlapok betöltése folyamatban.";
-  return locked.has(itemId)
-    ? "Ehhez a tételhez már készült megrendelőlap, ezért nem törölhető."
+  if (locked.has(itemId))
+    return "Ehhez a tételhez már készült megrendelőlap, ezért nem törölhető.";
+  // a számlasor a tételre mutat (feladat d510): a szerver is elutasítaná
+  return invoiced.has(itemId)
+    ? "Ehhez a tételhez már készült számla, ezért nem törölhető."
     : null;
 }
 

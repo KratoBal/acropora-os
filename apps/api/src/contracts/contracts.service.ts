@@ -9,6 +9,7 @@ import {
   contractMaintenanceSwitchBlocker,
   contractPurchaseSwitchBlocker,
   type ContractKind,
+  contractBilling,
 } from "@acropora/types";
 
 import {
@@ -72,7 +73,29 @@ export class ContractsService {
         contract.kind === "PURCHASE"
           ? await this.repository.invoiceCount(id)
           : 0,
+      billing: await this.billingOf(contract),
     };
+  }
+
+  /**
+   * A RÉSZTELJESÍTÉS ÉS SZÁMLÁZÁS (feladat d510): beszerzési szerződésnél
+   * tételenként a számlázott és a maradék mennyiség, és az állapot (nincs,
+   * részben, teljesen számlázva). Karbantartásinál `null`: ott az alkalmakat a
+   * megrendelőlap számolja.
+   */
+  private async billingOf(contract: {
+    id: string;
+    kind: string;
+    items: Array<{ id: string; quantity: { toString(): string } }>;
+  }) {
+    if (contract.kind !== "PURCHASE") return null;
+    return contractBilling(
+      contract.items.map((item) => ({
+        id: item.id,
+        quantity: item.quantity.toString(),
+      })),
+      await this.repository.billedLines(contract.id),
+    );
   }
 
   async create(input: CreateContractDto) {
@@ -155,6 +178,7 @@ export class ContractsService {
           updated.kind === "PURCHASE"
             ? await this.repository.invoiceCount(id)
             : 0,
+        billing: await this.billingOf(updated),
       };
     } catch (error) {
       /*
@@ -173,7 +197,8 @@ export class ContractsService {
         error.code === "P2003"
       )
         throw new ConflictException(
-          "A tételek nem módosíthatók, mert ezekhez már készült megrendelőlap.",
+          // a számlasor is a tételre mutat (feladat d510), nem csak a megrendelőlap
+          "A tétel nem törölhető, mert már készült megrendelőlap vagy számla, ami rá hivatkozik.",
         );
       this.mapUniqueNumberConflict(error, data.number);
     }

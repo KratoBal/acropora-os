@@ -28,6 +28,8 @@ export interface NormalizedBillingLine {
   position: number;
   productId: string | null;
   variantId: string | null;
+  /** A beszerzési szerződés tétele (feladat d510); csak CONTRACT forrású bizonylaton. */
+  contractItemId: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;
@@ -62,7 +64,8 @@ export interface NormalizedBillingDraft {
 
 export type BillingDraftError =
   | { code: "FORMAT"; message: string }
-  | { code: "AMOUNT"; message: string; lineIndex: number; field: string };
+  | { code: "AMOUNT"; message: string; lineIndex: number; field: string }
+  | { code: "CONTRACT"; message: string; lineIndex: number };
 
 const FIELD_LABELS: Record<string, string> = {
   quantity: "mennyiség",
@@ -124,6 +127,21 @@ export function normalizeBillingDraft(
       },
     };
 
+  // a szerződés-tétel csak szerződésből jött bizonylaton áll: máshol HIBA, nem
+  // csendben elejtett mező (a tag a forrás-szerződésre a szolgáltatás nézi)
+  const strayContractLine = input.lines.findIndex(
+    (line) => text(line.contractItemId) && input.sourceType !== "CONTRACT",
+  );
+  if (strayContractLine >= 0)
+    return {
+      ok: false,
+      error: {
+        code: "CONTRACT",
+        lineIndex: strayContractLine,
+        message: `A(z) ${strayContractLine + 1}. tétel szerződés-tételre mutat, de a bizonylat nem szerződésből készül.`,
+      },
+    };
+
   const lines: NormalizedBillingLine[] = [];
   input.lines.forEach((line, index) => {
     const computed = amounts.amounts.lines[index]!;
@@ -136,6 +154,7 @@ export function normalizeBillingDraft(
       productId: text(line.productId),
       // a változat csak a termékhez tartozik: termék nélkül eldobjuk
       variantId: text(line.productId) ? text(line.variantId) : null,
+      contractItemId: text(line.contractItemId),
       description: line.description.trim(),
       quantity: line.quantity.trim().replace(",", "."),
       unit: text(line.unit),
@@ -155,6 +174,7 @@ export function normalizeBillingDraft(
         position: lines.length + 1,
         productId: null,
         variantId: null,
+        contractItemId: null,
         description: `Kedvezmény (${computed.discount.discountPercent.replace(/\.?0+$/, "")}%)`,
         quantity: "1",
         unit: null,

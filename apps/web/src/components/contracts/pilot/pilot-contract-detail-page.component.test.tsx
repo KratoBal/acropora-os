@@ -860,6 +860,7 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
         contractNumber: "SZ2026/0000019",
         lines: [
           {
+            contractItemId: "item-1",
             description: "Tengeri só, 25 kg",
             quantity: "4",
             unit: "zsák",
@@ -869,6 +870,85 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
         ],
       },
     ]);
+  });
+
+  /*
+    A RÉSZTELJESÍTÉS (feladat d510). MI PIROSÍT: a részben számlázott szerződés
+    a teljes mennyiséggel nyitja az Új számlát, nem jelzi a számlázást, vagy a
+    teljesen kiszámlázott szerződésből még nyitható számla.
+  */
+  it("WEB-CONTRACT-INVOICE-REMAINDER: részben számlázva a számla csak a maradékkal nyílik, és a lap jelzi", async () => {
+    window.sessionStorage.clear();
+    navigation.push.mockReset();
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      invoiceCount: 1,
+      items: [item],
+      billing: {
+        state: "PARTIAL",
+        items: [
+          {
+            contractItemId: "item-1",
+            quantity: "4",
+            invoicedQuantity: "3",
+            remainingQuantity: "1",
+            overInvoiced: false,
+          },
+        ],
+      },
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    expect(await screen.findByText("Részben számlázva")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Számla" }));
+    const target = new URL(
+      navigation.push.mock.calls[0]![0] as string,
+      "http://localhost",
+    );
+    const handoff = readContractInvoiceHandoff(
+      window.sessionStorage,
+      target.searchParams.get("szerzodes")!,
+    );
+    expect(
+      handoff?.lines.map((l) => [l.contractItemId, l.quantity]),
+      "WEB-CONTRACT-INVOICE-REMAINDER",
+    ).toEqual([["item-1", "1"]]);
+  });
+
+  it("WEB-CONTRACT-INVOICE-FULL: teljesen számlázva lezárt, a Számla gomb nem nyit", async () => {
+    navigation.push.mockReset();
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      invoiceCount: 2,
+      items: [item],
+      billing: {
+        state: "FULL",
+        items: [
+          {
+            contractItemId: "item-1",
+            quantity: "4",
+            invoicedQuantity: "4",
+            remainingQuantity: "0",
+            overInvoiced: false,
+          },
+        ],
+      },
+    });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    expect(await screen.findByText("Lezárva: teljesen számlázva")).toBeTruthy();
+    const button = screen.getByRole("button", {
+      name: "Számla",
+    }) as HTMLButtonElement;
+    expect(
+      [
+        button.disabled,
+        screen.queryByText(
+          "A szerződés teljesen ki van számlázva: lezárva, új számla nem készül belőle.",
+        ) !== null,
+      ],
+      "WEB-CONTRACT-INVOICE-FULL",
+    ).toEqual([true, true]);
   });
 
   it("WEB-CONTRACT-INVOICE-UNSAVED: karbantartásiként mentett szerződésből nincs számla", async () => {

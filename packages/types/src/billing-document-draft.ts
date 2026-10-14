@@ -37,6 +37,13 @@ export interface BillingDocumentLineInput {
    * és a szerver eldobja. Elhagyható: a régebbi kliens nem küldi.
    */
   variantId?: string | null;
+  /**
+   * A beszerzési szerződés tétele, amiből a sor jött (feladat d510): ebből
+   * számolódik a tétel számlázott és maradék mennyisége. Csak CONTRACT
+   * forrású bizonylaton, és csak a forrás-szerződés tétele lehet; a szerver
+   * ellenőrzi. Elhagyható: a régebbi kliens nem küldi.
+   */
+  contractItemId?: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;
@@ -100,6 +107,8 @@ export interface BillingDocumentLine extends BillingAmounts {
   productId: string | null;
   /** A sor változata; választható, mert a régebbi API nem küldi. */
   variantId?: string | null;
+  /** A szerződés-tétel, amiből a sor jött; választható, mert a régebbi API nem küldi. */
+  contractItemId?: string | null;
   description: string;
   quantity: DecimalText;
   unit: string | null;

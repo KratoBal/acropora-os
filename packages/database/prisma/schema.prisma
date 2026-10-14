@@ -3297,16 +3297,25 @@ model InvoiceLine {
   /// több változatú terméknél ez mondja meg, melyik változat készlete csökken a
   /// kiállításkor. NULL: nincs megadva; egyváltozatú terméknél nem is kell.
   variantId       String?
+  /// A beszerzési szerződés tétele, amiből a sor jött (feladat d510, Balázs
+  /// 2026-10-14: részteljesítés és számlázás). Ebből SZÁMOLÓDIK a tétel
+  /// számlázott mennyisége (nem tároljuk külön), és a kiállítás ez alapján
+  /// engedi csak a maradékot. Csak CONTRACT forrású bizonylaton, a
+  /// forrás-szerződés tételére; a szolgáltatás ellenőrzi. Restrict: egy
+  /// számlázott tétel nem törölhető el a szerződésről, mert a számla rá mutat.
+  contractItemId  String?
 
   invoice       Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   parentLine    InvoiceLine?    @relation("InvoiceLineDiscount", fields: [parentLineId], references: [id], onDelete: Cascade)
   discountLines InvoiceLine[]   @relation("InvoiceLineDiscount")
   product       Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
   variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  contractItem  ContractItem?   @relation(fields: [contractItemId], references: [id], onDelete: Restrict)
 
   @@index([invoiceId])
   @@index([parentLineId])
   @@index([productId])
+  @@index([contractItemId])
   @@index([variantId])
 }
 
@@ -3569,6 +3578,7 @@ model ContractItem {
   department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   assets                ContractItemAsset[]
   maintenanceOrderItems MaintenanceOrderItem[]
+  invoiceLines          InvoiceLine[]
 
   @@unique([contractId, position])
   @@index([departmentId])

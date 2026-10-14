@@ -191,4 +191,52 @@ describe("BillingDocumentsService", () => {
       );
     }
   });
+
+  /*
+    CSAK A FORRÁS-SZERZŐDÉS TÉTELE (feladat d510). MI PIROSÍT: egy idegen
+    szerződés tételére mutató sor elmenthető (annak a maradékát fogyasztaná),
+    vagy a saját tételre mutató sor hivatkozás nélkül tárolódik.
+  */
+  it("CONTRACT-ITEM-OWN: a line may point only at an item of the document's source contract", async () => {
+    const contractLine = (contractItemId: string) => ({
+      ...dto().lines[0]!,
+      contractItemId,
+    });
+    const own = repository({
+      purchaseContractItemIds: async () => new Set(["ci-1"]),
+    });
+    await new BillingDocumentsService(own.repo).create(
+      dto({
+        sourceType: "CONTRACT",
+        sourceId: "contract-1",
+        lines: [contractLine("ci-1")],
+      }),
+      USER,
+    );
+    const stored = own.calls.create![0] as {
+      draft: { lines: Array<{ contractItemId: string | null }> };
+    };
+    assert.deepEqual(
+      stored.draft.lines.map((l) => l.contractItemId),
+      ["ci-1"],
+    );
+
+    const foreign = repository({
+      purchaseContractItemIds: async () => new Set(["ci-1"]),
+    });
+    await assert.rejects(
+      new BillingDocumentsService(foreign.repo).create(
+        dto({
+          sourceType: "CONTRACT",
+          sourceId: "contract-1",
+          lines: [contractLine("ci-OTHER")],
+        }),
+        USER,
+      ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /nem a bizonylat forrás-szerződéséhez tartozik/.test(error.message),
+    );
+    assert.equal(foreign.calls.create!.length, 0);
+  });
 });
