@@ -30,6 +30,7 @@ export class BillingDocumentLineDto implements BillingDocumentLineInput {
   @IsOptional() @IsString() @MinLength(1) @MaxLength(64) id?: string;
   @IsOptional() @IsString() @MaxLength(64) productId!: string | null;
   @IsOptional() @IsString() @MaxLength(64) variantId?: string | null;
+  @IsOptional() @IsString() @MaxLength(64) contractItemId?: string | null;
   @IsString() @MinLength(1) @MaxLength(500) description!: string;
   @IsString() @Matches(DECIMAL) quantity!: string;
   @IsOptional() @IsString() @MaxLength(20) unit!: string | null;

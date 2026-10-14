@@ -323,6 +323,25 @@ export class BillingDocumentsService {
   }> {
     const normalized = normalizeBillingDraft(input, randomUUID);
     if (!normalized.ok) throw new BadRequestException(normalized.error.message);
+    // A SZERZŐDÉS-TÉTEL CSAK A FORRÁS-SZERZŐDÉSÉ (feladat d510): egy sor nem
+    // mutathat más szerződés tételére, mert annak a maradékát fogyasztaná.
+    const contractLines = normalized.draft.lines.filter(
+      (line) => line.contractItemId,
+    );
+    if (contractLines.length) {
+      const own = normalized.draft.sourceId
+        ? await this.repository.purchaseContractItemIds(
+            normalized.draft.sourceId,
+          )
+        : new Set<string>();
+      const stray = contractLines.find(
+        (line) => !own.has(line.contractItemId!),
+      );
+      if (stray)
+        throw new BadRequestException(
+          `A(z) „${stray.description}” sor olyan szerződés-tételre mutat, ami nem a bizonylat forrás-szerződéséhez tartozik.`,
+        );
+    }
     const customer = await this.repository.customer(input.customerId);
     if (!customer)
       throw new BadRequestException("A kiválasztott partner nem található.");
@@ -364,6 +383,7 @@ function draftDetail(row: BillingDocumentRow): BillingDocumentDetail {
     parentLineId: line.parentLineId,
     productId: line.productId,
     variantId: line.variantId,
+    contractItemId: line.contractItemId,
     description: line.description,
     quantity: line.quantity.toFixed(6),
     unit: line.unit,
@@ -454,6 +474,8 @@ function draftLinesOf(row: BillingDocumentRow) {
     .map((line) => ({
       productId: line.productId,
       variantId: line.variantId,
+      // a díjbekérő -> előleg -> végszámla lánc a szerződés-tételt is viszi
+      contractItemId: line.contractItemId,
       description: line.description,
       quantity: line.quantity.toString(),
       unit: line.unit,

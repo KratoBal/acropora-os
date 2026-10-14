@@ -46,6 +46,7 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     customerExists: async () => true,
     invoiceCount: async () => 0,
+    billedLines: async () => [],
     maintenanceOrderCount: async () => 0,
     departmentBelongsToCustomer: async () => true,
     assetsBelongToCustomer: async (assetIds: string[]) => assetIds,
@@ -361,5 +362,62 @@ describe("ContractsService, a fajta", () => {
       ],
       "CONTRACT-KIND-BACK-409",
     );
+  });
+});
+
+/*
+  A RÉSZTELJESÍTÉS ÉS SZÁMLÁZÁS (feladat d510). MI PIROSÍT: a beszerzési
+  szerződés részletei nem hozzák tételenként a számlázott és a maradék
+  mennyiséget és az állapotot, vagy a karbantartási kap ilyet.
+*/
+describe("ContractsService, a számlázás állapota", () => {
+  const items = [
+    { id: "ci-1", quantity: { toString: () => "10" } },
+    { id: "ci-2", quantity: { toString: () => "2" } },
+  ];
+  const detail = (kind: string) => async () => ({
+    id: "contract-1",
+    kind,
+    items,
+  });
+
+  it("CONTRACT-BILLING: a purchase contract reports partial billing with the remainder per item", async () => {
+    const { service } = makeService({
+      detail: detail("PURCHASE"),
+      billedLines: async () => [{ contractItemId: "ci-1", quantity: "4" }],
+    });
+    const result = (await service.detail("contract-1")) as { billing: unknown };
+    assert.deepEqual(result.billing, {
+      state: "PARTIAL",
+      items: [
+        {
+          contractItemId: "ci-1",
+          quantity: "10",
+          invoicedQuantity: "4",
+          remainingQuantity: "6",
+          overInvoiced: false,
+        },
+        {
+          contractItemId: "ci-2",
+          quantity: "2",
+          invoicedQuantity: "0",
+          remainingQuantity: "2",
+          overInvoiced: false,
+        },
+      ],
+    });
+  });
+
+  it("CONTRACT-BILLING-MAINTENANCE: a maintenance contract has none (its occasions are counted by the orders)", async () => {
+    let asked = 0;
+    const { service } = makeService({
+      detail: detail("MAINTENANCE"),
+      billedLines: async () => {
+        asked++;
+        return [];
+      },
+    });
+    const result = (await service.detail("contract-1")) as { billing: unknown };
+    assert.deepEqual([result.billing, asked], [null, 0]);
   });
 });

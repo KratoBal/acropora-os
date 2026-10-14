@@ -1,4 +1,5 @@
 import type { ContractKind } from "@acropora/types";
+import type { ContractBilling } from "@acropora/types";
 
 import { apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
@@ -92,6 +93,12 @@ export type ContractSummary = Omit<ContractInput, "items" | "kind"> & {
   _count: { maintenanceOrders: number };
   /** Hány számla készült belőle (beszerzésnél; a visszaváltás feltétele). */
   invoiceCount?: number;
+  /**
+   * Részteljesítés és számlázás (feladat d510): beszerzésnél tételenként a
+   * számlázott és a maradék mennyiség, és az állapot; karbantartásinál `null`.
+   * Választható, mert a régebbi API nem küldi.
+   */
+  billing?: ContractBilling | null;
   customer: { id: string; displayName: string };
   createdAt: string;
   updatedAt: string;

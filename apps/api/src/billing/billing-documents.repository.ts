@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { contractBilledLines } from "../contracts/contract-billed-lines.js";
 import { prisma, Prisma } from "@acropora/database";
 
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
@@ -120,6 +121,7 @@ function linesData(draft: NormalizedBillingDraft, invoiceId: string) {
     parentLineId: line.parentLineId,
     productId: line.productId,
     variantId: line.variantId,
+    contractItemId: line.contractItemId,
     description: line.description,
     quantity: line.quantity,
     unit: line.unit,
@@ -177,6 +179,40 @@ export async function insertBillingDraft(
 @Injectable()
 export class BillingDocumentsRepository {
   private readonly database = prisma;
+
+  /**
+   * A kiállítás őréhez (feladat d510): a beszerzési szerződés tételei és a
+   * MÁSHOL számlázottnak számító sorai (a kiállítandó bizonylat sajátjai nélkül).
+   */
+  async contractBillingFacts(
+    contractId: string,
+    excludeInvoiceIds: readonly string[],
+  ) {
+    const items = await this.database.contractItem.findMany({
+      where: { contractId, contract: { kind: "PURCHASE" } },
+      select: { id: true, quantity: true },
+    });
+    return {
+      items: items.map((item) => ({
+        id: item.id,
+        quantity: item.quantity.toString(),
+      })),
+      billed: await contractBilledLines(
+        this.database,
+        contractId,
+        excludeInvoiceIds,
+      ),
+    };
+  }
+
+  /** A beszerzési szerződés tételeinek azonosítói (feladat d510); ismeretlen vagy nem beszerzési szerződésnél üres. */
+  async purchaseContractItemIds(contractId: string): Promise<Set<string>> {
+    const items = await this.database.contractItem.findMany({
+      where: { contractId, contract: { kind: "PURCHASE" } },
+      select: { id: true },
+    });
+    return new Set(items.map((item) => item.id));
+  }
 
   customer(id: string) {
     return this.database.customer.findFirst({

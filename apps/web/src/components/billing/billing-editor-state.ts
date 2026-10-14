@@ -40,6 +40,11 @@ export interface EditorLine {
    */
   variantId?: string | null;
   /**
+   * A beszerzési szerződés tétele, amiből a sor jött (feladat d510): a szerződés
+   * ebből tudja, mennyi van számlázva. Nem látszik, a sorral együtt utazik.
+   */
+  contractItemId?: string | null;
+  /**
    * A termék aktív változatai, ha egynél több van (a termék adataiból töltődik);
    * csak a felületé, nem megy el. `undefined`: még nincs betöltve.
    */
@@ -254,6 +259,7 @@ export function fromDetail(detail: BillingDocumentDetail): EditorState {
         id: line.id,
         productId: line.productId,
         variantId: line.variantId ?? null,
+        contractItemId: line.contractItemId ?? null,
         productLabel: null,
         description: line.description,
         quantity: trimDecimal(line.quantity),
@@ -328,6 +334,7 @@ export function toDraftInput(
       ...(line.id ? { id: line.id } : {}),
       productId: line.productId,
       variantId: line.productId ? (line.variantId ?? null) : null,
+      contractItemId: line.contractItemId ?? null,
       description: line.description.trim(),
       quantity: line.quantity.trim(),
       unit: blank(line.unit),

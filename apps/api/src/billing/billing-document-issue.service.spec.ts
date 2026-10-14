@@ -114,6 +114,11 @@ function setup(
     feedCancelled?: boolean;
     /** A foglalás UTÁN látszó előleg-sztornó (OS: ISSUING/ISSUED; feed). */
     stornoAfterClaim?: "OS" | "FEED";
+    /** A forrás-szerződés tételei és a MÁSHOL számlázott sorai, a foglalás előtt / után. */
+    contractFacts?: (afterClaim: boolean) => {
+      items: Array<{ id: string; quantity: string }>;
+      billed: Array<{ contractItemId: string; quantity: string }>;
+    };
   } = {},
 ) {
   const calls = {
@@ -125,6 +130,7 @@ function setup(
     unknown: [] as string[],
     pdf: [] as unknown[],
     resolve: 0,
+    excluded: [] as string[][],
   };
   let current = {
     ...row(options.status, options.format),
@@ -137,6 +143,12 @@ function setup(
       (options.stornoAfterClaim === "FEED" && calls.claim > 0),
     stornoStarted: async () =>
       options.stornoAfterClaim === "OS" && calls.claim > 0,
+    contractBillingFacts: async (_contractId: string, exclude: string[]) => {
+      calls.excluded.push(exclude);
+      return (
+        options.contractFacts?.(calls.claim > 0) ?? { items: [], billed: [] }
+      );
+    },
   } as unknown as BillingDocumentsRepository;
   const repository = {
     claim: async () => {
@@ -208,7 +220,118 @@ function setup(
 const issue = (service: BillingDocumentIssueService) =>
   service.issue("doc-1", "2026-09-30T10:00:00.000Z", USER);
 
+// Feladat d510: egy beszerzési szerződésből jött számla, egy szerződés-tételre
+// mutató sorral (2 egység a 3-ból).
+const contractRow = {
+  sourceType: "CONTRACT",
+  sourceId: "contract-1",
+  lines: [
+    {
+      ...(row().lines[0] as unknown as Record<string, unknown>),
+      contractItemId: "ci-1",
+      description: "Kitalált szivattyú",
+      quantity: d("2"),
+    },
+  ],
+};
+const ONE_ITEM = [{ id: "ci-1", quantity: "3" }];
+
 describe("BillingDocumentIssueService", () => {
+  /*
+    CSAK A MARADÉK (feladat d510). MI PIROSÍT: egy szerződés-tétel túlszámlázása
+    eljut a Számlázz.hu-ig; a foglalás előtti őr foglal vagy hív; a foglalás után
+    kiderülő verseny (egy másik, közben foglalt számla) nem ISSUE_FAILED-et ír,
+    vagy mégis hív; a maradékon belüli számla nem megy ki.
+  */
+  it("CONTRACT-OVERBILL: more than the remainder is refused before the claim, Számlázz.hu is not called", async () => {
+    const { service, calls } = setup({
+      over: contractRow,
+      contractFacts: () => ({
+        items: ONE_ITEM,
+        billed: [{ contractItemId: "ci-1", quantity: "2" }],
+      }),
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak 1 maradt számlázatlan/.test(error.message),
+    );
+    assert.deepEqual(
+      [calls.claim, calls.generate, calls.failed.length],
+      [0, 0, 0],
+    );
+  });
+
+  it("CONTRACT-RACE: another invoice claimed meanwhile shows up after the claim: ISSUE_FAILED, no call", async () => {
+    const { service, calls } = setup({
+      over: contractRow,
+      contractFacts: (afterClaim) => ({
+        items: ONE_ITEM,
+        billed: afterClaim ? [{ contractItemId: "ci-1", quantity: "2" }] : [],
+      }),
+    });
+    await assert.rejects(issue(service), BadRequestException);
+    assert.deepEqual([calls.claim, calls.generate], [1, 0]);
+    assert.match(calls.failed[0] ?? "", /csak 1 maradt számlázatlan/);
+  });
+
+  /*
+    AZ ELŐLEG (barracuda, #1699). MI PIROSÍT: egy előlegszámla kiállítása nem
+    méri a szerződés maradékát (akkor egy rendes számla és az előleg együtt
+    túlszámlázhatna); a végszámla a saját előlegét is „máshol számlázottnak”
+    veszi, és önmagával ütközik.
+  */
+  it("CONTRACT-ADVANCE: an advance invoice is measured against the remainder too", async () => {
+    const { service, calls } = setup({
+      over: { ...contractRow, documentType: "ADVANCE_INVOICE" },
+      contractFacts: () => ({
+        items: ONE_ITEM,
+        billed: [{ contractItemId: "ci-1", quantity: "2" }],
+      }),
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak 1 maradt számlázatlan/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+  });
+
+  it("CONTRACT-FINAL-OWN-ADVANCE: a final invoice leaves its own advance out of the elsewhere-billed lines", async () => {
+    const { service, calls } = setup({
+      over: {
+        ...contractRow,
+        documentType: "FINAL_INVOICE",
+        referencedInvoiceId: "adv-1",
+        referencedInvoice: {
+          id: "adv-1",
+          invoiceNumber: "E-ADV-1",
+          correctionInvoices: [],
+        },
+      },
+      contractFacts: () => ({ items: ONE_ITEM, billed: [] }),
+    });
+    await issue(service).catch(() => undefined);
+    assert.deepEqual(calls.excluded[0], ["doc-1", "adv-1"]);
+  });
+
+  it("CONTRACT-OK: within the remainder the invoice goes out", async () => {
+    const { service, calls } = setup({
+      over: contractRow,
+      contractFacts: () => ({
+        items: ONE_ITEM,
+        billed: [{ contractItemId: "ci-1", quantity: "1" }],
+      }),
+    });
+    assert.equal((await issue(service)).status, "ISSUED");
+    assert.deepEqual(
+      [calls.claim, calls.generate, calls.failed.length],
+      [1, 1, 0],
+    );
+  });
+
   /*
     AZ ÁLSZÁMLÁZÓ (Webshop / Rendelések, 4. PR). MI PIROSÍT: a teszt-szerveren a
     kiállítás a Számlázz.hu-t hívja vagy a tárolt (esetleg éles) kulcsot

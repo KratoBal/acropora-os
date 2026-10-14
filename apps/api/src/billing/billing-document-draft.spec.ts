@@ -188,4 +188,38 @@ describe("normalizeBillingDraft", () => {
       "A(z) 2. tétel mennyiség mezője túl sok tizedesjegyet tartalmaz.",
     );
   });
+
+  /*
+    A SZERZŐDÉS-TÉTEL HIVATKOZÁSA (feladat d510). MI PIROSÍT: a hivatkozás
+    elveszik a normalizáláskor, a kedvezmény-sor is megkapja, vagy egy nem
+    szerződésből jött bizonylaton csendben eldobódik hiba helyett.
+  */
+  it("CONTRACT-LINE: a contract invoice keeps the item link on the item, never on its discount line", () => {
+    const line = {
+      ...input().lines[0]!,
+      contractItemId: " ci-1 ",
+      discountPercent: "10",
+    };
+    const draft = ok(
+      input({ sourceType: "CONTRACT", sourceId: "contract-1", lines: [line] }),
+    );
+    assert.deepEqual(
+      draft.lines.map((l) => [l.kind, l.contractItemId]),
+      [
+        ["ITEM", "ci-1"],
+        ["DISCOUNT", null],
+      ],
+    );
+  });
+
+  it("CONTRACT-STRAY: an item link on a document that does not come from a contract is an error", () => {
+    const line = { ...input().lines[0]!, contractItemId: "ci-1" };
+    const result = normalizeBillingDraft(
+      input({ sourceType: "MANUAL", lines: [line] }),
+      newId,
+    );
+    assert.ok(!result.ok);
+    assert.equal(result.error.code, "CONTRACT");
+    assert.match(result.error.message, /1\. tétel szerződés-tételre mutat/);
+  });
 });
