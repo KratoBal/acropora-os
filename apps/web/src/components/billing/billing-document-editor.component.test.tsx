@@ -266,6 +266,28 @@ describe("BillingDocumentEditor", () => {
     ).toBe("Szeptember havi átalány");
   });
 
+  /*
+    AZ UTÁNVÉT (Luca kérése, 2026-10-14). MI PIROSÍT: ha a választóban nincs
+    „Utánvét”, vagy a vázlat nem ezzel a szöveggel megy a szerverre (a
+    Számlázz.hu ezt írja ki, és a kifizetettség ebből tudja, hogy a pénz később jön).
+  */
+  it("WEB-INVOICE-COD: cash on delivery can be chosen and is saved as Utánvét", async () => {
+    render(<BillingDocumentEditor />);
+    addLine("Munkadíj", "1", "280000");
+    await pickPartner();
+    const method = screen.getByLabelText("Fizetési mód") as HTMLSelectElement;
+    expect(Array.from(method.options).map((option) => option.value)).toContain(
+      "Utánvét",
+    );
+    fireEvent.change(method, { target: { value: "Utánvét" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+    );
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    const [, created] = api.create.mock.calls[0]!;
+    expect(created.paymentMethod, "WEB-INVOICE-COD").toBe("Utánvét");
+  });
+
   it("paper: the plain issue button, and the e-mail is optional", () => {
     render(<BillingDocumentEditor />);
     fireEvent.click(radio("Papír alapú"));
