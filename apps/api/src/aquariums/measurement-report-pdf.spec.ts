@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
 import {
   ACROPORA_SERVICE_CONTACT,
   type AquariumMeasurementOccasion,
@@ -57,6 +59,74 @@ function marine(over: Partial<MeasurementReportPdfInput> = {}) {
     notes: "A foszfát magas, 7 nap múlva kontrollmérés.",
     ...over,
   } satisfies MeasurementReportPdfInput;
+}
+
+/**
+ * The link annotations of the PDF, as a viewer reads them (pdfjs): the URI and
+ * the clickable box, in the top-origin page box of `readPdfTextLines`.
+ */
+async function linksOf(
+  bytes: Uint8Array,
+): Promise<
+  { url: string; x: number; right: number; top: number; bottom: number }[]
+> {
+  const task = getDocument({
+    data: new Uint8Array(bytes),
+    useWorkerFetch: false,
+  });
+  try {
+    const doc = await task.promise;
+    const out = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const height = page.view[3] ?? 842;
+      for (const a of await page.getAnnotations())
+        if (a.subtype === "Link") {
+          const [x1, y1, x2, y2] = a.rect as number[];
+          out.push({
+            url: a.url as string,
+            x: x1!,
+            right: x2!,
+            top: height - y2!,
+            bottom: height - y1!,
+          });
+        }
+    }
+    return out;
+  } finally {
+    await task.destroy();
+  }
+}
+
+/** The link box stands on the text line, over the product's name and not the whole line. */
+async function linkOnLine(
+  bytes: Uint8Array,
+  line: string,
+  nameAtStart: boolean,
+) {
+  const found = (await readPdfTextLines(bytes)).find((l) => l.text === line);
+  assert.ok(found, `no line ${JSON.stringify(line)}`);
+  const lineBottom = found.top! + found.height!;
+  const on = (await linksOf(bytes)).filter(
+    (l) => l.top < lineBottom && l.bottom > found.top!,
+  );
+  assert.equal(
+    on.length,
+    1,
+    `links on ${JSON.stringify(line)}: ${JSON.stringify(on)}`,
+  );
+  const link = on[0]!;
+  assert.ok(link.right - link.x > 20, "an empty link box");
+  assert.ok(
+    link.right <= found.x! + found.width! + 1,
+    "the box runs past the line",
+  );
+  if (!nameAtStart)
+    assert.ok(
+      link.x > found.x! + 2,
+      "the box starts at the line, not at the name",
+    );
+  return link;
 }
 
 async function textOf(input: MeasurementReportPdfInput): Promise<string> {
@@ -132,7 +202,71 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     );
     assert.doesNotMatch(text, /VÉLEMÉNY – JAVASLAT/);
     assert.match(text, /• Kitalált KH puffer: a KH emeléséhez/);
-    assert.ok(pdf.includes(Buffer.from("https://bolt.example.invalid/kh")));
+    const link = await linkOnLine(
+      pdf,
+      "• Kitalált KH puffer: a KH emeléséhez",
+      false,
+    );
+    assert.equal(link.url, "https://bolt.example.invalid/kh");
+    assert.equal((await linksOf(pdf)).length, 1);
+  });
+
+  /**
+   * A KATTINTHATÓ NÉV (Balázs, 2026-10-14 09:42 UTC: „a kattinthatóságot nem látom
+   * a pdfben”). MI PIROSÍT: ha a kész PDF-ben a név nem link-annotáció a termék
+   * lapjára (egy megjelenítő ezt olvassa, nem az URL bájtjait), ha a doboz nem a
+   * név során, a néven áll, ha a régi, tagolatlan szövegben a sorban álló név nem
+   * link, vagy ha egy URL nélküli termék mégis linket kap.
+   */
+  it("REPORT-RECOMMENDATION-LINKS: the name is a URI annotation on itself; without a url, plain text", async () => {
+    const url = "https://bolt.example.invalid/kh";
+    const old = await renderMeasurementReportPdf(
+      marine({
+        recommendation: [
+          { kind: "text", text: "A KH alacsony: " },
+          { kind: "product", productId: "p1", name: "Kitalált KH puffer", url },
+          { kind: "text", text: " segít." },
+        ],
+      }),
+    );
+    const inline = await linkOnLine(
+      old,
+      "A KH alacsony: Kitalált KH puffer segít.",
+      false,
+    );
+    const listed = await linkOnLine(old, "• Kitalált KH puffer", true);
+    assert.deepEqual(
+      [inline.url, listed.url, (await linksOf(old)).length],
+      [url, url, 2],
+    );
+
+    const noUrl = await renderMeasurementReportPdf(
+      marine({
+        recommendation: [
+          { kind: "text", text: "Ajánlott termékek:\n- " },
+          {
+            kind: "product",
+            productId: "p2",
+            name: "Kitalált Mg oldat",
+            url: null,
+          },
+          { kind: "text", text: "\nA KH alacsony: " },
+          {
+            kind: "product",
+            productId: "p3",
+            name: "Kitalált KH por",
+            url: null,
+          },
+        ],
+      }),
+    );
+    assert.deepEqual(await linksOf(noUrl), []);
+    const text = (await readPdfTextLines(noUrl)).map((l) => l.text);
+    assert.ok(text.includes("• Kitalált Mg oldat"), JSON.stringify(text));
+    assert.ok(
+      text.includes("A KH alacsony: Kitalált KH por"),
+      JSON.stringify(text),
+    );
   });
 
   /**
