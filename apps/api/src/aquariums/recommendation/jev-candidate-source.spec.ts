@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   isPurchasableOnUnas,
+  isRecommendableOnUnas,
   JevRecommendationCandidateSource,
   limitCandidates,
   matchingJevRows,
@@ -370,6 +371,79 @@ describe("the source", () => {
       "st-1",
       "st-2",
     ]);
+  });
+
+  /*
+    CSAK ÉRDEKLŐDÉSRE (feladat ajanlas-inquire; acrobot mérése az élő UNAS-ból:
+    84 termék 1-es vagy 2-es státuszú, de csak érdeklődésre). MI PIROSÍT: egy
+    Inquire=1 termék jelölt marad; egy Inquire=0 vagy pillanatkép nélküli termék
+    kiesik (pillanatkép nélkül a státusz dönt, ahogy eddig); a pillanatkép nem
+    kerül a lekérdezésbe.
+  */
+  it("INQUIRE-SOURCE: an inquire-only product drops out; Inquire 0 and no snapshot stay", async () => {
+    const SELLS = [{ channel: "UNAS", externalStatus: "1" }];
+    const snapshots: Record<string, { rawPayload: unknown } | null> = {
+      "inq-1": { rawPayload: { Inquire: "1" } },
+      "inq-0": { rawPayload: { Inquire: "0" } },
+      "no-snapshot": null,
+    };
+    let selected: unknown;
+    const source = new JevRecommendationCandidateSource();
+    (source as unknown as { database: unknown }).database = {
+      $queryRaw: async () =>
+        Object.keys(snapshots).map((productId) =>
+          row({ productId, value: "KALCIUM:EMEL" }),
+        ),
+      product: {
+        findMany: async (args: { select: Record<string, unknown> }) => {
+          selected = args.select.unasSnapshot;
+          return Object.entries(snapshots).map(([id, unasSnapshot]) => ({
+            id,
+            name: id,
+            categories: [],
+            channelListings: SELLS,
+            unasSnapshot,
+          }));
+        },
+      },
+    };
+    const candidates = await source.candidates({
+      deviations: [dev("KALCIUM", "LOW")],
+    });
+    assert.deepEqual(candidates.map((c) => c.productId).sort(), [
+      "inq-0",
+      "no-snapshot",
+    ]);
+    assert.deepEqual(selected, { select: { rawPayload: true } });
+  });
+
+  it("INQUIRE-RULE: the stored flag shapes the sync uses; the status still decides first", () => {
+    const sells = [{ channel: "UNAS", externalStatus: "2" }];
+    const with_ = (rawPayload: unknown) =>
+      isRecommendableOnUnas({
+        channelListings: sells,
+        unasSnapshot: { rawPayload },
+      });
+    assert.deepEqual(
+      [
+        with_({ Inquire: "1" }),
+        with_({ Inquire: 1 }),
+        with_({ Inquire: true }),
+        with_({ Inquire: "0" }),
+        with_({}),
+        with_(null),
+        with_("x"),
+      ],
+      [false, false, false, true, true, true, true],
+    );
+    // a status 3 product is out whatever the snapshot says
+    assert.equal(
+      isRecommendableOnUnas({
+        channelListings: [{ channel: "UNAS", externalStatus: "3" }],
+        unasSnapshot: { rawPayload: { Inquire: "0" } },
+      }),
+      false,
+    );
   });
 
   it("isPurchasableOnUnas: the shop's base status decides, only 1 and 2", () => {

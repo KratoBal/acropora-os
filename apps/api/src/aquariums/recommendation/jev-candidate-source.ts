@@ -3,6 +3,8 @@ import { prisma } from "@acropora/database";
 import { parseWaterParameterEffects } from "@acropora/jev/product-enrichment";
 import type { MeasurementRecommendationCandidate } from "@acropora/types";
 
+import { inquiryOnly } from "../../imports/unas/unas-webshop-sellable-backfill.js";
+
 import type {
   RecommendationCandidateSource,
   RecommendationDeviation,
@@ -136,6 +138,31 @@ export function isPurchasableOnUnas(
   return PURCHASABLE_UNAS_STATUSES.has(unas?.externalStatus ?? "");
 }
 
+/**
+ * CSAK ÉRDEKLŐDÉSRE NEM VÁSÁROLHATÓ (feladat ajanlas-inquire, Balázs „B”-je:
+ * „csak vásárolható”). Mérve az élő UNAS-ból (acrobot, 2026-10-14 14:2x, 1898
+ * termék): 84 termék 1-es vagy 2-es státuszú, de `Inquire` = 1, vagyis a boltban
+ * nem kosárba tehető, csak érdeklődni lehet rá. Ezek sem jelöltek.
+ *
+ * A FORRÁS A UNAS PILLANATKÉP NYERS VÁLASZA (`UnasProductSnapshot.rawPayload`
+ * `Inquire`), ugyanazzal a szabállyal, amivel a webshop-eladhatóság visszatöltése
+ * olvassa (`inquiryOnly`). NEM a `webshopSellable` mező: azt a kézi XLSX-import
+ * nem írja, tehát ott hiányozhat. PILLANATKÉP NÉLKÜL a mai viselkedés marad (a
+ * státusz dönt): nincs mit olvasni, és egy hiányzó adat nem zárhat ki terméket.
+ */
+export function isRecommendableOnUnas(product: {
+  channelListings: readonly {
+    channel: string;
+    externalStatus: string | null;
+  }[];
+  unasSnapshot?: { rawPayload: unknown } | null;
+}): boolean {
+  if (!isPurchasableOnUnas(product.channelListings)) return false;
+  const raw = product.unasSnapshot?.rawPayload;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return true;
+  return !inquiryOnly(raw as Record<string, unknown>);
+}
+
 @Injectable()
 export class JevRecommendationCandidateSource implements RecommendationCandidateSource {
   private readonly database = prisma;
@@ -166,12 +193,11 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
           select: { category: { select: { name: true } } },
         },
         channelListings: { select: { channel: true, externalStatus: true } },
+        unasSnapshot: { select: { rawPayload: true } },
       },
     });
     const byId = new Map(
-      products
-        .filter((p) => isPurchasableOnUnas(p.channelListings))
-        .map((p) => [p.id, p]),
+      products.filter((p) => isRecommendableOnUnas(p)).map((p) => [p.id, p]),
     );
     return limitCandidates(
       matches.flatMap((match) => {
