@@ -35,6 +35,7 @@ import {
   readForeignInvoice,
   type ForeignReading,
 } from "./foreign-invoice-reading.js";
+import { prismaErrorSummary } from "./error-summary.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
   loadPurchaseSubjects,
@@ -185,6 +186,10 @@ export interface PendingReport {
   read: number;
   /** ennyit írt (csak `apply` mellett) */
   written: number;
+  /** ennyi sor bukott el (kimaradt, a következő futás újra próbálja) */
+  failed: number;
+  /** a bukott sorok: dokumentum-azonosító és a hiba fajtája, számla-adat nélkül */
+  failures: { documentId: string; error: string }[];
   withText: number;
   withAdapter: number;
   /** ennyiben áll minden kötelező mező (jóváhagyható egy kattintással) */
@@ -404,6 +409,8 @@ export class IncomingReviewService {
       alreadyRead: 0,
       read: 0,
       written: 0,
+      failed: 0,
+      failures: [],
       withText: 0,
       withAdapter: 0,
       complete: 0,
@@ -417,45 +424,59 @@ export class IncomingReviewService {
         continue;
       }
       if (options.limit && report.read >= options.limit) break;
-      const source = await this.sourceOf(pairing);
-      const reading = await this.readingFrom(pairing, source);
-      report.read += 1;
-      const missing = INCOMING_READING_REQUIRED.filter(
-        (field) => reading.values[field] === null,
-      );
-      const currency = reading.values.currency;
-      const domain = senderDomain(source.sender);
-      if (reading.hasText) report.withText += 1;
-      if (source.adapter) report.withAdapter += 1;
-      if (!approvalProblems(reading.values).length) report.complete += 1;
-      report.byCurrency[currency ?? "?"] =
-        (report.byCurrency[currency ?? "?"] ?? 0) + 1;
-      report.bySenderDomain[domain ?? "?"] =
-        (report.bySenderDomain[domain ?? "?"] ?? 0) + 1;
-      report.rows.push({
-        documentId: pairing.document.id,
-        date: pairing.document.date,
-        currency,
-        senderDomain: domain,
-        hasText: reading.hasText,
-        adapter: !!source.adapter,
-        filled: INCOMING_READING_FIELDS.filter(
-          (field) => reading.values[field] !== null,
-        ).length,
-        missing,
-        warnings: reading.warnings.length,
-      });
-      if (options.apply) {
-        await this.database.incomingDocumentReading.create({
-          data: {
-            documentId: pairing.document.id,
-            ...columns(reading.values),
-            sources: reading.sources,
-            warnings: reading.warnings,
-            hasText: reading.hasText,
-          },
+      /*
+        EGY SOR HIBÁJA NEM ÁLLÍTJA MEG A TÖBBIT (kulfoldi-szamla-olvasas-hiba):
+        2026-10-13 óta egy írhatatlan sor minden futást ugyanott állított meg.
+        A sor kimarad, a következő futás újra próbálja; a hiba fajtája a
+        jelentésbe kerül, a számla adata nem.
+      */
+      try {
+        const source = await this.sourceOf(pairing);
+        const reading = await this.readingFrom(pairing, source);
+        report.read += 1;
+        const missing = INCOMING_READING_REQUIRED.filter(
+          (field) => reading.values[field] === null,
+        );
+        const currency = reading.values.currency;
+        const domain = senderDomain(source.sender);
+        if (reading.hasText) report.withText += 1;
+        if (source.adapter) report.withAdapter += 1;
+        if (!approvalProblems(reading.values).length) report.complete += 1;
+        report.byCurrency[currency ?? "?"] =
+          (report.byCurrency[currency ?? "?"] ?? 0) + 1;
+        report.bySenderDomain[domain ?? "?"] =
+          (report.bySenderDomain[domain ?? "?"] ?? 0) + 1;
+        report.rows.push({
+          documentId: pairing.document.id,
+          date: pairing.document.date,
+          currency,
+          senderDomain: domain,
+          hasText: reading.hasText,
+          adapter: !!source.adapter,
+          filled: INCOMING_READING_FIELDS.filter(
+            (field) => reading.values[field] !== null,
+          ).length,
+          missing,
+          warnings: reading.warnings.length,
         });
-        report.written += 1;
+        if (options.apply) {
+          await this.database.incomingDocumentReading.create({
+            data: {
+              documentId: pairing.document.id,
+              ...columns(reading.values),
+              sources: reading.sources,
+              warnings: reading.warnings,
+              hasText: reading.hasText,
+            },
+          });
+          report.written += 1;
+        }
+      } catch (error) {
+        report.failed += 1;
+        report.failures.push({
+          documentId: pairing.document.id,
+          error: prismaErrorSummary(error),
+        });
       }
     }
     return report;

@@ -248,6 +248,12 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   ) => {
     if (value === null || value === undefined || value === "") return;
     if (values[field] !== null) return; // az előző (erősebb) forrás nyer
+    // ami az oszlopába nem fér, az nem foglalja el a mezőt: egy gyengébb, de
+    // tárolható forrás még kitöltheti, különben kézi marad (lásd `storable`)
+    if (!fitsColumn(field, value)) {
+      warnings.push(unstorableWarning(field, value));
+      return;
+    }
     values[field] = value;
     sources[field] = source;
   };
@@ -377,5 +383,78 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     }
   }
 
+  storable(values, sources, warnings);
   return { values, sources, warnings, hasText };
+}
+
+/*
+  A TÁROLHATÓSÁG ŐRE (kulfoldi-szamla-olvasas-hiba, 2026-10-14). Az éles
+  időzítő 2026-10-13 08:29 óta minden futásnál egy `PrismaClientKnownRequestError`-on
+  állt meg: egy sor olvasata nem fért az oszlopába, és az írás mindig ugyanott
+  bukott. A legvalószínűbb két ok a deviza (`VarChar(3)`; az illesztő devizája
+  csak nagybetűsítve jön át) és egy félreolvasott összeg (`Decimal(18,2)`, 16
+  egész jegy). Ami nem fér el, az a mezőt nem foglalja el (`set`), és ami az
+  egyeztetésben számolódik, az a végén még egyszer átmegy ugyanezen (`storable`).
+  A 2. szabály szerint egy rossz szám rosszabb, mint egy üres: a sor
+  figyelmeztetéssel kézi kitöltésre vár, ahelyett hogy a futást állítaná meg.
+*/
+const STORABLE_CURRENCY = /^[A-Z]{3}$/;
+const STORABLE_AMOUNT = /^-?\d{1,16}(\.\d{1,2})?$/;
+const STORABLE_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const FIELD_LABEL: Partial<Record<IncomingReadingField, string>> = {
+  currency: "deviza",
+  netAmount: "nettó",
+  vatAmount: "ÁFA",
+  grossAmount: "bruttó",
+  issueDate: "kelt",
+  fulfillmentDate: "teljesítés",
+  dueDate: "fizetési határidő",
+};
+
+function storableDate(value: string): boolean {
+  const match = STORABLE_DATE.exec(value);
+  return (
+    !!match &&
+    validDate(Number(match[1]), Number(match[2]), Number(match[3])) === value
+  );
+}
+
+const COLUMN_CHECK: Partial<
+  Record<IncomingReadingField, (value: string) => boolean>
+> = {
+  currency: (value) => STORABLE_CURRENCY.test(value),
+  netAmount: (value) => STORABLE_AMOUNT.test(value),
+  vatAmount: (value) => STORABLE_AMOUNT.test(value),
+  grossAmount: (value) => STORABLE_AMOUNT.test(value),
+  issueDate: storableDate,
+  fulfillmentDate: storableDate,
+  dueDate: storableDate,
+};
+
+/** Elfér-e az érték a mező oszlopában (a szöveges mezők korlátlanok). */
+export function fitsColumn(
+  field: IncomingReadingField,
+  value: string,
+): boolean {
+  return COLUMN_CHECK[field]?.(value) ?? true;
+}
+
+function unstorableWarning(field: IncomingReadingField, value: string): string {
+  const shown = value.length > 40 ? `${value.slice(0, 40)}…` : value;
+  return `A kiolvasott ${FIELD_LABEL[field] ?? field} („${shown}”) nem tárolható; kézzel kell megadni.`;
+}
+
+/** Kiüríti, ami az oszlopába nem férne, és megmondja, miért. */
+export function storable(
+  values: IncomingReadingValues,
+  sources: ForeignReading["sources"],
+  warnings: string[],
+): void {
+  for (const field of Object.keys(COLUMN_CHECK) as IncomingReadingField[]) {
+    const value = values[field];
+    if (value === null || fitsColumn(field, value)) continue;
+    warnings.push(unstorableWarning(field, value));
+    values[field] = null;
+    delete sources[field];
+  }
 }
