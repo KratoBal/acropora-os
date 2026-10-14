@@ -235,6 +235,38 @@ const compactNumber = (value: string) =>
  * DUPLIKÁCIÓ NÉLKÜL: ha a dokumentum (vagy bármelyik aliasa) egy feed-sor
  * forrása, vagy a száma egy feed-soré, a feed sora jelöli, ez kimarad.
  */
+/**
+ * MELYIK DOKUMENTUM HORDOZHATJA EGY POSTAFIÓKOS SOR OLVASATÁT, sorrendben: a sor
+ * saját azonosítója, az eredeti, az aliasok. Egy összevont számla saját
+ * azonosítója gyakran a NAV-soré (`missing-invoices.repository.ts`, az
+ * összevonás), az pedig nem `IncomingSupplierDocument`: az olvasat ott nem
+ * állhat, és élesen 21 sor írása bukott rajta P2003-mal (2026-10-14). A saját
+ * azonosító áll elöl, mert a ma tárolt olvasatok mind azon vannak.
+ */
+export function readingDocumentIds(
+  document: Pick<DocumentPairing["document"], "id" | "originalId" | "aliasIds">,
+): string[] {
+  return [
+    ...new Set([
+      document.id,
+      ...(document.originalId ? [document.originalId] : []),
+      ...(document.aliasIds ?? []),
+    ]),
+  ];
+}
+
+/** Egy sor olvasata a fenti azonosítók közül az elsőn, amin van. */
+export function readingOfDocument<T>(
+  readings: ReadonlyMap<string, T>,
+  document: Pick<DocumentPairing["document"], "id" | "originalId" | "aliasIds">,
+): T | undefined {
+  for (const id of readingDocumentIds(document)) {
+    const reading = readings.get(id);
+    if (reading !== undefined) return reading;
+  }
+  return undefined;
+}
+
 export function mailboxOnlyPaidItems(
   feed: readonly Pick<
     IncomingBillingDocument,
@@ -251,7 +283,7 @@ export function mailboxOnlyPaidItems(
     mailboxListItem(
       pairing.document,
       pairing,
-      readings.get(pairing.document.id),
+      readingOfDocument(readings, pairing.document),
     ),
   );
 }
