@@ -23,7 +23,7 @@ import {
 } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import { contractOverbillingProblem } from "@acropora/types";
-import { CONTRACT_BILLED_DOCUMENT_TYPES } from "../contracts/contract-billed-lines.js";
+import { CONTRACT_GUARDED_DOCUMENT_TYPES } from "../contracts/contract-billed-lines.js";
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
@@ -123,10 +123,12 @@ export class BillingDocumentIssueService {
       description: string;
       quantity: { toString(): string };
     }>;
+    referencedInvoiceId?: string | null;
+    referencedInvoice?: { id: string } | null;
   }): Promise<string | null> {
     if (row.sourceType !== "CONTRACT" || !row.sourceId) return null;
     if (
-      !(CONTRACT_BILLED_DOCUMENT_TYPES as readonly string[]).includes(
+      !(CONTRACT_GUARDED_DOCUMENT_TYPES as readonly string[]).includes(
         row.documentType,
       )
     )
@@ -143,9 +145,15 @@ export class BillingDocumentIssueService {
         : [],
     );
     if (!draft.length) return null;
+    // a végszámla a saját előlegét sem számolja „máshol számlázottnak”: az az
+    // előleg épp most adja át a tételeit neki (contract-billed-lines.ts)
+    const ownAdvance =
+      row.documentType === "FINAL_INVOICE"
+        ? (row.referencedInvoice?.id ?? row.referencedInvoiceId ?? null)
+        : null;
     const facts = await this.documents.contractBillingFacts(
       row.sourceId,
-      row.id,
+      ownAdvance ? [row.id, ownAdvance] : [row.id],
     );
     return contractOverbillingProblem(facts.items, facts.billed, draft);
   }

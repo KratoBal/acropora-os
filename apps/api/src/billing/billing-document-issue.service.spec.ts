@@ -130,6 +130,7 @@ function setup(
     unknown: [] as string[],
     pdf: [] as unknown[],
     resolve: 0,
+    excluded: [] as string[][],
   };
   let current = {
     ...row(options.status, options.format),
@@ -142,8 +143,12 @@ function setup(
       (options.stornoAfterClaim === "FEED" && calls.claim > 0),
     stornoStarted: async () =>
       options.stornoAfterClaim === "OS" && calls.claim > 0,
-    contractBillingFacts: async () =>
-      options.contractFacts?.(calls.claim > 0) ?? { items: [], billed: [] },
+    contractBillingFacts: async (_contractId: string, exclude: string[]) => {
+      calls.excluded.push(exclude);
+      return (
+        options.contractFacts?.(calls.claim > 0) ?? { items: [], billed: [] }
+      );
+    },
   } as unknown as BillingDocumentsRepository;
   const repository = {
     claim: async () => {
@@ -269,6 +274,47 @@ describe("BillingDocumentIssueService", () => {
     await assert.rejects(issue(service), BadRequestException);
     assert.deepEqual([calls.claim, calls.generate], [1, 0]);
     assert.match(calls.failed[0] ?? "", /csak 1 maradt számlázatlan/);
+  });
+
+  /*
+    AZ ELŐLEG (barracuda, #1699). MI PIROSÍT: egy előlegszámla kiállítása nem
+    méri a szerződés maradékát (akkor egy rendes számla és az előleg együtt
+    túlszámlázhatna); a végszámla a saját előlegét is „máshol számlázottnak”
+    veszi, és önmagával ütközik.
+  */
+  it("CONTRACT-ADVANCE: an advance invoice is measured against the remainder too", async () => {
+    const { service, calls } = setup({
+      over: { ...contractRow, documentType: "ADVANCE_INVOICE" },
+      contractFacts: () => ({
+        items: ONE_ITEM,
+        billed: [{ contractItemId: "ci-1", quantity: "2" }],
+      }),
+    });
+    await assert.rejects(
+      issue(service),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak 1 maradt számlázatlan/.test(error.message),
+    );
+    assert.deepEqual([calls.claim, calls.generate], [0, 0]);
+  });
+
+  it("CONTRACT-FINAL-OWN-ADVANCE: a final invoice leaves its own advance out of the elsewhere-billed lines", async () => {
+    const { service, calls } = setup({
+      over: {
+        ...contractRow,
+        documentType: "FINAL_INVOICE",
+        referencedInvoiceId: "adv-1",
+        referencedInvoice: {
+          id: "adv-1",
+          invoiceNumber: "E-ADV-1",
+          correctionInvoices: [],
+        },
+      },
+      contractFacts: () => ({ items: ONE_ITEM, billed: [] }),
+    });
+    await issue(service).catch(() => undefined);
+    assert.deepEqual(calls.excluded[0], ["doc-1", "adv-1"]);
   });
 
   it("CONTRACT-OK: within the remainder the invoice goes out", async () => {

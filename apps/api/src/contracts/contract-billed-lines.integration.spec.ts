@@ -39,6 +39,8 @@ describe(
     let itemId = "";
     let otherItemId = "";
     let firstInvoiceId = "";
+    let draftFinalId = "";
+    let itsAdvanceId = "";
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
@@ -70,7 +72,7 @@ describe(
                 position: 1,
                 description: "Kitalált szivattyú",
                 unitNet: "1000",
-                quantity: "10",
+                quantity: "30",
                 vatRatePercent: "27",
                 unitOfMeasureId: unit.id,
               },
@@ -146,7 +148,36 @@ describe(
         referencedInvoiceId: stornoed,
         lines: false,
       });
-      await invoice("4", { documentType: "ADVANCE_INVOICE" }); // the final invoice carries these
+      // ADVANCES (barracuda, #1699): an advance counts until its final invoice is live;
+      // then the final counts instead, and never both
+      const advA = await invoice("4", { documentType: "ADVANCE_INVOICE" });
+      await invoice("4", {
+        documentType: "FINAL_INVOICE",
+        referencedInvoiceId: advA,
+      }); // counts 4, advA not
+      await invoice("2", { documentType: "ADVANCE_INVOICE" }); // no final: counts 2
+      const advC = await invoice("6", { documentType: "ADVANCE_INVOICE" });
+      await invoice("6", {
+        documentType: "FINAL_INVOICE",
+        status: "ISSUING",
+        referencedInvoiceId: advC,
+      }); // counts 6, advC not
+      const advD = await invoice("5", { documentType: "ADVANCE_INVOICE" }); // counts 5: its final is stornoed
+      const finalD = await invoice("5", {
+        documentType: "FINAL_INVOICE",
+        referencedInvoiceId: advD,
+      });
+      await invoice("0", {
+        documentType: "STORNO",
+        referencedInvoiceId: finalD,
+        lines: false,
+      });
+      itsAdvanceId = await invoice("7", { documentType: "ADVANCE_INVOICE" }); // counts 7 while its final is a draft
+      draftFinalId = await invoice("7", {
+        documentType: "FINAL_INVOICE",
+        status: "DRAFT",
+        referencedInvoiceId: itsAdvanceId,
+      });
       await invoice("4", { documentType: "PROFORMA" }); // not an invoice
       await invoice("1", { documentType: "FINAL_INVOICE", status: "ISSUING" }); // counts: claimed
       const cancelling = await invoice("1"); // counts: its storno is still in progress
@@ -200,16 +231,18 @@ describe(
       });
     }
 
-    it("BILLED-RULE: issued and claimed invoices and final invoices count; draft, proforma, advance, cancelled and inbound do not", async () => {
+    it("BILLED-RULE: issued and claimed invoices, finals, and advances without a live final count; draft, proforma, cancelled and inbound do not", async () => {
       const billed = await contractBilledLines(prisma, contractId);
       const state = contractBilling(
         [
-          { id: itemId, quantity: "10" },
+          { id: itemId, quantity: "30" },
           { id: otherItemId, quantity: "2" },
         ],
         billed,
       );
-      // 3 (issued) + 1 (final, issuing) + 1 (storno still in progress)
+      // 3 (issued) + 4 (final of advA) + 2 (advance, no final) + 6 (issuing final of advC)
+      // + 5 (advD, its final stornoed) + 7 (advance, its final a draft) + 1 (final, issuing)
+      // + 1 (storno still in progress)
       assert.deepEqual(
         [
           state.state,
@@ -217,20 +250,31 @@ describe(
           state.items[0]!.remainingQuantity,
           state.items[1]!.invoicedQuantity,
         ],
-        ["PARTIAL", "5", "5", "0"],
+        ["PARTIAL", "29", "1", "0"],
       );
     });
 
     it("BILLED-EXCLUDE: the invoice being issued does not count its own lines", async () => {
-      const billed = await contractBilledLines(
-        prisma,
-        contractId,
+      const billed = await contractBilledLines(prisma, contractId, [
         firstInvoiceId,
-      );
+      ]);
       assert.equal(
-        contractBilling([{ id: itemId, quantity: "10" }], billed).items[0]!
+        contractBilling([{ id: itemId, quantity: "30" }], billed).items[0]!
           .invoicedQuantity,
-        "2",
+        "26",
+      );
+    });
+
+    it("BILLED-OWN-ADVANCE: a final invoice being issued leaves out its own advance, so it does not collide with itself", async () => {
+      const billed = await contractBilledLines(prisma, contractId, [
+        draftFinalId,
+        itsAdvanceId,
+      ]);
+      // 29 - 7: the advance hands its items to this final; 30 - 22 = 8 left, the final asks 7
+      assert.equal(
+        contractBilling([{ id: itemId, quantity: "30" }], billed).items[0]!
+          .remainingQuantity,
+        "8",
       );
     });
 

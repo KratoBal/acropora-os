@@ -184,7 +184,10 @@ export class BillingDocumentsRepository {
    * A kiállítás őréhez (feladat d510): a beszerzési szerződés tételei és a
    * MÁSHOL számlázottnak számító sorai (a kiállítandó bizonylat sajátjai nélkül).
    */
-  async contractBillingFacts(contractId: string, excludeInvoiceId: string) {
+  async contractBillingFacts(
+    contractId: string,
+    excludeInvoiceIds: readonly string[],
+  ) {
     const items = await this.database.contractItem.findMany({
       where: { contractId, contract: { kind: "PURCHASE" } },
       select: { id: true, quantity: true },
@@ -197,7 +200,7 @@ export class BillingDocumentsRepository {
       billed: await contractBilledLines(
         this.database,
         contractId,
-        excludeInvoiceId,
+        excludeInvoiceIds,
       ),
     };
   }

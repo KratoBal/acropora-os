@@ -4,9 +4,8 @@ import { contractBilling, type ContractBilledLine } from "@acropora/types";
 import { prisma } from "@acropora/database";
 
 import {
-  CONTRACT_BILLED_DOCUMENT_TYPES,
-  CONTRACT_BILLED_STATUSES,
   contractBilledLines,
+  invoiceCountsAsContractBilled,
 } from "./contract-billed-lines.js";
 
 /**
@@ -54,7 +53,7 @@ export interface LinkInvoiceLine {
   description: string;
   unitNet: string;
   quantity: string;
-  /** Számlázottnak számít-e a számla (kiállított, nem sztornózott számla vagy végszámla). */
+  /** Számlázottnak számít-e a bizonylat (invoiceCountsAsContractBilled, a lekérdezés szabálya). */
   counts: boolean;
 }
 
@@ -150,7 +149,10 @@ export async function runContractBillingLinkCli(
     );
     for (const { line, item } of plan.links)
       out.stdout(
-        `  KÖT   ${line.invoiceLabel} ${line.position ?? "-"}. sor  "${line.description}" ${line.quantity}  ->  ${item.position}. tétel\n`,
+        // a nem számító bizonylat (vázlat, díjbekérő, sztornózott, végszámlás előleg)
+        // sora is összekötődik (egy később kiállított vázlat így már számít), de
+        // a terv KÜLÖN jelöli, hogy ma nem számít bele (barracuda, #1699)
+        `  KÖT   ${line.invoiceLabel} ${line.position ?? "-"}. sor  "${line.description}" ${line.quantity}  ->  ${item.position}. tétel${line.counts ? "" : "  (ma nem számít bele: a bizonylat nem számlázottnak számító)"}\n`,
       );
     for (const { line, reason } of plan.skipped)
       out.stdout(
@@ -261,9 +263,18 @@ if (
                 status: true,
                 documentType: true,
                 direction: true,
+                // a sztornók és (előlegnél) a végszámlák, a sztornójukkal: a
+                // számlázott-szabály ugyanaz, mint a lekérdezésé
                 correctionInvoices: {
-                  where: { documentType: "STORNO", status: "ISSUED" },
-                  select: { id: true },
+                  where: { documentType: { in: ["STORNO", "FINAL_INVOICE"] } },
+                  select: {
+                    documentType: true,
+                    status: true,
+                    correctionInvoices: {
+                      where: { documentType: "STORNO", status: "ISSUED" },
+                      select: { id: true },
+                    },
+                  },
                 },
               },
             },
@@ -276,15 +287,20 @@ if (
           description: r.description,
           unitNet: r.unitNet.toString(),
           quantity: r.quantity.toString(),
-          counts:
-            r.invoice.direction === "OUTBOUND" &&
-            (CONTRACT_BILLED_DOCUMENT_TYPES as readonly string[]).includes(
-              r.invoice.documentType,
-            ) &&
-            (CONTRACT_BILLED_STATUSES as readonly string[]).includes(
-              r.invoice.status,
-            ) &&
-            r.invoice.correctionInvoices.length === 0,
+          counts: invoiceCountsAsContractBilled({
+            direction: r.invoice.direction,
+            documentType: r.invoice.documentType,
+            status: r.invoice.status,
+            stornoed: r.invoice.correctionInvoices.some(
+              (c) => c.documentType === "STORNO" && c.status === "ISSUED",
+            ),
+            finals: r.invoice.correctionInvoices
+              .filter((c) => c.documentType === "FINAL_INVOICE")
+              .map((f) => ({
+                status: f.status,
+                stornoed: f.correctionInvoices.length > 0,
+              })),
+          }),
         }));
       },
       billedLines: (contractId) => contractBilledLines(prisma, contractId),

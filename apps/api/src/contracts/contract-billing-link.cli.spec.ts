@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { invoiceCountsAsContractBilled } from "./contract-billed-lines.js";
 import {
   planContractBillingLinks,
   runContractBillingLinkCli,
@@ -110,8 +111,9 @@ describe("runContractBillingLinkCli", () => {
     );
     assert.deepEqual(written, []);
     assert.match(out.text, /TERV: semmi nem íródott/);
-    // l1 (2, counts) links; l4 (5) links too but its invoice does not count
+    // l1 (2, counts) links; l4 (5) links too but its invoice does not count, and the plan says so
     assert.match(out.text, /1\. tétel: szerződés 3, számlázva 2, maradék 1/);
+    assert.equal(out.text.match(/ma nem számít bele/g)?.length, 1);
   });
 
   it("LINK-APPLY-NEEDS-APPROVAL: --apply without --approval writes nothing (exit 2)", async () => {
@@ -137,5 +139,64 @@ describe("runContractBillingLinkCli", () => {
     );
     assert.deepEqual(written, ["l1->ci-1", "l4->ci-1"]);
     assert.match(out.text, /ÍRÁS, hivatkozás: Balázs, teszt/);
+  });
+});
+
+/*
+  A SZABÁLY BETÖLTÖTT BIZONYLATRA (a CLI tervéhez; ugyanaz, mint a lekérdezésé).
+  MI PIROSÍT: az előleg a végszámla kiállítása előtt nem számít (barracuda,
+  #1699), vagy élő végszámla mellett is számít; egy sztornózott végszámla nem
+  adja vissza az előlegnek a számítást; a vázlat, a díjbekérő, a bejövő vagy a
+  sztornózott számla számít.
+*/
+describe("invoiceCountsAsContractBilled", () => {
+  const base = { direction: "OUTBOUND", status: "ISSUED", stornoed: false };
+  it("BILLED-RULE-PURE: invoices, finals and advances without a live final count; the rest does not", () => {
+    assert.deepEqual(
+      [
+        invoiceCountsAsContractBilled({ ...base, documentType: "INVOICE" }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "FINAL_INVOICE",
+          status: "ISSUING",
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "ADVANCE_INVOICE",
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "ADVANCE_INVOICE",
+          finals: [{ status: "DRAFT", stornoed: false }],
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "ADVANCE_INVOICE",
+          finals: [{ status: "ISSUED", stornoed: true }],
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "ADVANCE_INVOICE",
+          finals: [{ status: "ISSUING", stornoed: false }],
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "INVOICE",
+          status: "DRAFT",
+        }),
+        invoiceCountsAsContractBilled({ ...base, documentType: "PROFORMA" }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "INVOICE",
+          direction: "INBOUND",
+        }),
+        invoiceCountsAsContractBilled({
+          ...base,
+          documentType: "INVOICE",
+          stornoed: true,
+        }),
+      ],
+      [true, true, true, true, true, false, false, false, false, false],
+    );
   });
 });
