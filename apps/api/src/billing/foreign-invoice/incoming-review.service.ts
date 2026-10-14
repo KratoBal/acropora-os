@@ -244,12 +244,13 @@ export class IncomingReviewService {
     if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
       return this.purchaseReview(itemId.slice(PURCHASE_ITEM_PREFIX.length));
     const documentId = this.documentIdOf(itemId);
-    const stored = await this.storedReadingOf(documentId);
+    const pairings = await this.missing.documentPairings();
+    const stored = await this.storedReadingOf(documentId, pairings);
     if (stored?.state === "VERIFIED") {
-      const { pairing } = await this.pairingOf(documentId, true);
+      const { pairing } = await this.pairingOf(documentId, true, pairings);
       return this.view(pairing, stored, null);
     }
-    const { pairing } = await this.pairingOf(documentId);
+    const { pairing } = await this.pairingOf(documentId, false, pairings);
     const computed = stored ? null : await this.computeReading(pairing);
     return this.view(pairing, stored, computed);
   }
@@ -288,10 +289,11 @@ export class IncomingReviewService {
     if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
       return this.purchaseApprove(itemId, input, userId);
     const documentId = this.documentIdOf(itemId);
-    const existing = await this.storedReadingOf(documentId);
+    const pairings = await this.missing.documentPairings();
+    const existing = await this.storedReadingOf(documentId, pairings);
     if (existing?.state === "VERIFIED")
       throw new ConflictException("Ez a számla már jóvá van hagyva.");
-    const { pairing } = await this.pairingOf(documentId);
+    const { pairing } = await this.pairingOf(documentId, false, pairings);
     const values = input
       ? normalizedInput(input)
       : existing
@@ -621,8 +623,9 @@ export class IncomingReviewService {
   /** Egy sor tárolt olvasata az azonosítói közül az elsőn, amin van; vagy `null`. */
   private async storedReadingOf(
     documentId: string,
+    pairings: Map<string, DocumentPairing>,
   ): Promise<StoredReading | null> {
-    const pairing = (await this.missing.documentPairings()).get(documentId);
+    const pairing = pairings.get(documentId);
     const ids = pairing ? readingDocumentIds(pairing.document) : [documentId];
     const rows = await this.database.incomingDocumentReading.findMany({
       where: { documentId: { in: ids } },
@@ -908,13 +911,15 @@ export class IncomingReviewService {
   private async pairingOf(
     documentId: string,
     verified = false,
+    // the pairings, if the caller has them already (one computation per request; barracuda #1693)
+    known?: Map<string, DocumentPairing>,
   ): Promise<{ pairing: DocumentPairing }> {
     const [feed, pairings] = await Promise.all([
       this.database.incomingBillingDocument.findMany({
         where: verified ? { source: "SZAMLAZZ" } : undefined,
         select: { sourceDocumentId: true, documentNumber: true },
       }),
-      this.missing.documentPairings(),
+      known ?? this.missing.documentPairings(),
     ]);
     const pairing = pairings.get(documentId);
     if (
