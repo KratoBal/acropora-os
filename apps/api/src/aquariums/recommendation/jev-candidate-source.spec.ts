@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  isInquiryOnly,
   isPurchasableOnUnas,
   JevRecommendationCandidateSource,
   limitCandidates,
@@ -386,6 +387,69 @@ describe("the source", () => {
     assert.equal(isPurchasableOnUnas([]), false);
     // the link rule is wider (3 is visible): the two must stay different
     assert.deepEqual([...PURCHASABLE_UNAS_STATUSES].sort(), ["1", "2"]);
+  });
+
+  it("an inquiry-only product (UNAS Inquire=1) drops out, Inquire=0 stays, and a product with no snapshot is judged by its status alone", async () => {
+    // acrobot, 2026-10-14 14:2x: 84 products are status 1 or 2 and inquiry-only on the live UNAS
+    const products: Record<string, { rawPayload: unknown } | null> = {
+      erdeklodes: {
+        rawPayload: {
+          Inquire: "1",
+          Statuses: { Status: { Type: "base", Value: "1" } },
+        },
+      },
+      vasarolhato: { rawPayload: { Inquire: "0" } },
+      "nincs-pillanatkep": null,
+      "nincs-inquire-mezo": { rawPayload: { Name: "x" } },
+    };
+    const source = new JevRecommendationCandidateSource();
+    (source as unknown as { database: unknown }).database = {
+      $queryRaw: async () =>
+        Object.keys(products).map((productId) =>
+          row({ productId, value: "KALCIUM:EMEL" }),
+        ),
+      product: {
+        findMany: async () =>
+          Object.entries(products).map(([id, unasSnapshot]) => ({
+            id,
+            name: id,
+            categories: [],
+            channelListings: SELLS,
+            unasSnapshot,
+          })),
+      },
+    };
+    const candidates = await source.candidates({
+      deviations: [dev("KALCIUM", "LOW")],
+    });
+    assert.deepEqual(candidates.map((c) => c.productId).sort(), [
+      "nincs-inquire-mezo",
+      "nincs-pillanatkep",
+      "vasarolhato",
+    ]);
+  });
+
+  it("isInquiryOnly: the UNAS client's true values, as stored text or as 1/true; anything else is not inquiry-only", () => {
+    const on = (Inquire: unknown) => isInquiryOnly({ Inquire });
+    assert.deepEqual(["1", "yes", "TRUE", " on ", 1, true].map(on), [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
+    assert.deepEqual(
+      ["0", "no", "false", "off", "", 0, false, null, undefined, "2"].map(on),
+      Array(10).fill(false),
+    );
+    assert.deepEqual([null, undefined, "1", 1, {}].map(isInquiryOnly), [
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 
   it("the source itself applies the cap", async () => {

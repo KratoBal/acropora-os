@@ -136,6 +136,32 @@ export function isPurchasableOnUnas(
   return PURCHASABLE_UNAS_STATUSES.has(unas?.externalStatus ?? "");
 }
 
+/**
+ * A „CSAK ÉRDEKLŐDÉSRE” TERMÉK SEM VÁSÁROLHATÓ (ugyanaz a döntés, „B”). Mérve az élő
+ * UNAS-ból (acrobot, 2026-10-14 14:2x, 1898 termék): 84 termék 1-es vagy 2-es
+ * státuszú, mégis csak érdeklődésre (Inquire=1) kapható; a státusz-szabály egyedül
+ * ezeket átengedte.
+ *
+ * A FORRÁS A UNAS PILLANATKÉP NYERS VÁLASZA (`UnasProductSnapshot.rawPayload.Inquire`),
+ * NEM a `Product.webshopSellable`: azt a kézi XLSX-import nem írja, kézzel is írható, és
+ * az alapértéke hamis, tehát egy karban nem tartott sor minden jelöltet elvinne. Az
+ * érték alakja a UNAS-kliensé (unas-api.client.ts `flag`): "1", "yes", "true", "on"
+ * igaz; a tárolt nyers válaszban szöveg, de a backfill mintájára az `1` és a `true` is.
+ *
+ * PILLANATKÉP NÉLKÜL a mai viselkedés marad (csak a státusz dönt): egy hiányzó sor nem
+ * jelenti, hogy a termék érdeklődéses, és a jelölt nem tűnhet el adathiány miatt.
+ */
+const INQUIRE_TRUE = new Set(["1", "yes", "true", "on"]);
+
+export function isInquiryOnly(rawPayload: unknown): boolean {
+  if (!rawPayload || typeof rawPayload !== "object") return false;
+  const value = (rawPayload as Record<string, unknown>).Inquire;
+  if (value === true || value === 1) return true;
+  return (
+    typeof value === "string" && INQUIRE_TRUE.has(value.trim().toLowerCase())
+  );
+}
+
 @Injectable()
 export class JevRecommendationCandidateSource implements RecommendationCandidateSource {
   private readonly database = prisma;
@@ -166,11 +192,16 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
           select: { category: { select: { name: true } } },
         },
         channelListings: { select: { channel: true, externalStatus: true } },
+        unasSnapshot: { select: { rawPayload: true } },
       },
     });
     const byId = new Map(
       products
-        .filter((p) => isPurchasableOnUnas(p.channelListings))
+        .filter(
+          (p) =>
+            isPurchasableOnUnas(p.channelListings) &&
+            !isInquiryOnly(p.unasSnapshot?.rawPayload),
+        )
         .map((p) => [p.id, p]),
     );
     return limitCandidates(
