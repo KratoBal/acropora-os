@@ -98,14 +98,16 @@ async function linksOf(
   }
 }
 
-/** The link box stands on the text line, over the product's name and not the whole line. */
-async function linkOnLine(
-  bytes: Uint8Array,
-  line: string,
-  nameAtStart: boolean,
-) {
+/**
+ * The link box stands on the text line, over `name` and nothing else. pdfjs gives the line
+ * as one run, so the name's place is estimated from its share of the characters; the
+ * tolerance (12 pt, about two letters at 9 pt) still tells the name from the word next to it.
+ */
+async function linkOnLine(bytes: Uint8Array, line: string, name: string) {
   const found = (await readPdfTextLines(bytes)).find((l) => l.text === line);
   assert.ok(found, `no line ${JSON.stringify(line)}`);
+  const at = line.indexOf(name);
+  assert.ok(at >= 0, `${JSON.stringify(name)} is not in the line`);
   const lineBottom = found.top! + found.height!;
   const on = (await linksOf(bytes)).filter(
     (l) => l.top < lineBottom && l.bottom > found.top!,
@@ -116,16 +118,13 @@ async function linkOnLine(
     `links on ${JSON.stringify(line)}: ${JSON.stringify(on)}`,
   );
   const link = on[0]!;
-  assert.ok(link.right - link.x > 20, "an empty link box");
+  const perChar = found.width! / line.length;
+  const start = found.x! + at * perChar;
+  const end = found.x! + (at + name.length) * perChar;
   assert.ok(
-    link.right <= found.x! + found.width! + 1,
-    "the box runs past the line",
+    Math.abs(link.x - start) < 12 && Math.abs(link.right - end) < 12,
+    `the box [${link.x}, ${link.right}] is not over the name [${start}, ${end}]`,
   );
-  if (!nameAtStart)
-    assert.ok(
-      link.x > found.x! + 2,
-      "the box starts at the line, not at the name",
-    );
   return link;
 }
 
@@ -205,7 +204,7 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     const link = await linkOnLine(
       pdf,
       "• Kitalált KH puffer: a KH emeléséhez",
-      false,
+      "Kitalált KH puffer",
     );
     assert.equal(link.url, "https://bolt.example.invalid/kh");
     assert.equal((await linksOf(pdf)).length, 1);
@@ -286,9 +285,14 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     const inline = await linkOnLine(
       old,
       "A KH alacsony: Kitalált KH puffer segít.",
-      false,
+      "Kitalált KH puffer",
     );
-    const listed = await linkOnLine(old, "• Kitalált KH puffer", true);
+    // the old layout's list links the whole line, the bullet too
+    const listed = await linkOnLine(
+      old,
+      "• Kitalált KH puffer",
+      "• Kitalált KH puffer",
+    );
     assert.deepEqual(
       [inline.url, listed.url, (await linksOf(old)).length],
       [url, url, 2],
