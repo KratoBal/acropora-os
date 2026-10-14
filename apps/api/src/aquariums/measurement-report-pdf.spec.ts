@@ -98,14 +98,16 @@ async function linksOf(
   }
 }
 
-/** The link box stands on the text line, over the product's name and not the whole line. */
-async function linkOnLine(
-  bytes: Uint8Array,
-  line: string,
-  nameAtStart: boolean,
-) {
+/**
+ * The link box stands on the text line, over `name` and nothing else. pdfjs gives the line
+ * as one run, so the name's place is estimated from its share of the characters; the
+ * tolerance (12 pt, about two letters at 9 pt) still tells the name from the word next to it.
+ */
+async function linkOnLine(bytes: Uint8Array, line: string, name: string) {
   const found = (await readPdfTextLines(bytes)).find((l) => l.text === line);
   assert.ok(found, `no line ${JSON.stringify(line)}`);
+  const at = line.indexOf(name);
+  assert.ok(at >= 0, `${JSON.stringify(name)} is not in the line`);
   const lineBottom = found.top! + found.height!;
   const on = (await linksOf(bytes)).filter(
     (l) => l.top < lineBottom && l.bottom > found.top!,
@@ -116,16 +118,13 @@ async function linkOnLine(
     `links on ${JSON.stringify(line)}: ${JSON.stringify(on)}`,
   );
   const link = on[0]!;
-  assert.ok(link.right - link.x > 20, "an empty link box");
+  const perChar = found.width! / line.length;
+  const start = found.x! + at * perChar;
+  const end = found.x! + (at + name.length) * perChar;
   assert.ok(
-    link.right <= found.x! + found.width! + 1,
-    "the box runs past the line",
+    Math.abs(link.x - start) < 12 && Math.abs(link.right - end) < 12,
+    `the box [${link.x}, ${link.right}] is not over the name [${start}, ${end}]`,
   );
-  if (!nameAtStart)
-    assert.ok(
-      link.x > found.x! + 2,
-      "the box starts at the line, not at the name",
-    );
   return link;
 }
 
@@ -205,7 +204,7 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     const link = await linkOnLine(
       pdf,
       "• Kitalált KH puffer: a KH emeléséhez",
-      false,
+      "Kitalált KH puffer",
     );
     assert.equal(link.url, "https://bolt.example.invalid/kh");
     assert.equal((await linksOf(pdf)).length, 1);
@@ -218,6 +217,60 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
    * név során, a néven áll, ha a régi, tagolatlan szövegben a sorban álló név nem
    * link, vagy ha egy URL nélküli termék mégis linket kap.
    */
+  /**
+   * A TÖRT NÉV (barracuda, #1694): a sor végén átnyúló név minden darabja
+   * kattintható, a saját során. MI PIROSÍT: ha a töréskor csak egy doboz marad,
+   * ha a második sor doboza a név után álló szóra is ráfut, vagy egy doboz más
+   * sorra kerül.
+   */
+  it("REPORT-RECOMMENDATION-LINK-WRAP: a name broken over two lines is a link box on each, over the name only", async () => {
+    const url = "https://bolt.example.invalid/kh";
+    const pdf = await renderMeasurementReportPdf(
+      marine({
+        recommendation: [
+          {
+            kind: "text",
+            text: "Ajánlott termékek:\n- A KH és a kalcium együtt alacsony, ezért ezt érdemes adagolni: ",
+          },
+          {
+            kind: "product",
+            productId: "p1",
+            name: "Kitalált nagyon hosszú nevű kalcium- és magnézium-pótló kétkomponensű oldat 5000 ml utántöltő kiszerelésben",
+            url,
+          },
+          { kind: "text", text: " naponta." },
+        ],
+      }),
+    );
+    const lines = await readPdfTextLines(pdf);
+    const first = lines.find((l) => l.text.endsWith("kalcium- és magnézium-"));
+    const second = lines.find((l) => l.text.endsWith("kiszerelésben naponta."));
+    assert.ok(first && second, JSON.stringify(lines.map((l) => l.text)));
+    const links = await linksOf(pdf);
+    const on = (line: typeof first) =>
+      links.filter(
+        (l) => l.top < line!.top! + line!.height! && l.bottom > line!.top!,
+      );
+    const [a, b] = [on(first), on(second)];
+    assert.deepEqual(
+      [links.length, a.length, b.length, a[0]?.url, b[0]?.url],
+      [2, 1, 1, url, url],
+    );
+    // the first box starts at the name, the second ends before " naponta."
+    assert.ok(
+      a[0]!.x > first.x! + 100,
+      "the first box starts at the line, not at the name",
+    );
+    assert.ok(
+      Math.abs(b[0]!.x - second.x!) < 1,
+      "the second box does not start at the line",
+    );
+    assert.ok(
+      b[0]!.right < second.x! + second.width! - 20,
+      "the second box runs over the word after the name",
+    );
+  });
+
   it("REPORT-RECOMMENDATION-LINKS: the name is a URI annotation on itself; without a url, plain text", async () => {
     const url = "https://bolt.example.invalid/kh";
     const old = await renderMeasurementReportPdf(
@@ -232,9 +285,14 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
     const inline = await linkOnLine(
       old,
       "A KH alacsony: Kitalált KH puffer segít.",
-      false,
+      "Kitalált KH puffer",
     );
-    const listed = await linkOnLine(old, "• Kitalált KH puffer", true);
+    // the old layout's list links the whole line, the bullet too
+    const listed = await linkOnLine(
+      old,
+      "• Kitalált KH puffer",
+      "• Kitalált KH puffer",
+    );
     assert.deepEqual(
       [inline.url, listed.url, (await linksOf(old)).length],
       [url, url, 2],
