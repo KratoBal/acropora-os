@@ -1,8 +1,9 @@
-import type {
-  IncomingReadingField,
-  IncomingReadingSource,
-  IncomingReadingValues,
-  SupplierInvoiceImportResult,
+import {
+  INCOMING_READING_SOURCE_LABELS,
+  type IncomingReadingField,
+  type IncomingReadingSource,
+  type IncomingReadingValues,
+  type SupplierInvoiceImportResult,
 } from "@acropora/types";
 
 import {
@@ -241,6 +242,9 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   const values: IncomingReadingValues = { ...EMPTY };
   const sources: ForeignReading["sources"] = {};
   const warnings: string[] = [];
+  // az első nem tárolható érték mezőnként; a figyelmeztetés a végén megy ki,
+  // amikor már látszik, kitöltötte-e egy másik forrás
+  const refused: Partial<Record<IncomingReadingField, string>> = {};
   const set = <K extends IncomingReadingField>(
     field: K,
     value: IncomingReadingValues[K] | null | undefined,
@@ -251,7 +255,7 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // ami az oszlopába nem fér, az nem foglalja el a mezőt: egy gyengébb, de
     // tárolható forrás még kitöltheti, különben kézi marad (lásd `storable`)
     if (!fitsColumn(field, value)) {
-      warnings.push(unstorableWarning(field, value));
+      refused[field] ??= value;
       return;
     }
     values[field] = value;
@@ -383,6 +387,21 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     }
   }
 
+  for (const [field, value] of Object.entries(refused) as [
+    IncomingReadingField,
+    string,
+  ][]) {
+    const source = sources[field];
+    warnings.push(
+      unstorableWarning(
+        field,
+        value,
+        values[field] !== null && source
+          ? `helyette a(z) „${INCOMING_READING_SOURCE_LABELS[source]}” értéke áll`
+          : "kézzel kell megadni",
+      ),
+    );
+  }
   storable(values, sources, warnings);
   return { values, sources, warnings, hasText };
 }
@@ -439,9 +458,13 @@ export function fitsColumn(
   return COLUMN_CHECK[field]?.(value) ?? true;
 }
 
-function unstorableWarning(field: IncomingReadingField, value: string): string {
+function unstorableWarning(
+  field: IncomingReadingField,
+  value: string,
+  then = "kézzel kell megadni",
+): string {
   const shown = value.length > 40 ? `${value.slice(0, 40)}…` : value;
-  return `A kiolvasott ${FIELD_LABEL[field] ?? field} („${shown}”) nem tárolható; kézzel kell megadni.`;
+  return `A kiolvasott ${FIELD_LABEL[field] ?? field} („${shown}”) nem tárolható; ${then}.`;
 }
 
 /** Kiüríti, ami az oszlopába nem férne, és megmondja, miért. */

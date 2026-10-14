@@ -388,8 +388,11 @@ describe("what does not fit its column is left empty, with a warning", () => {
     // az illesztő „EURO”-ja nem foglalja el a mezőt; a párosítás tárolható EUR-ja kitölti
     assert.equal(values.currency, "EUR");
     assert.equal(sources.currency, "PAIRING");
+    // a figyelmeztetés nem kér kézi kitöltést, hanem megmondja, mi áll helyette (barracuda #1689)
     assert.ok(
-      warnings.some((w) => w.includes("deviza („EURO”) nem tárolható")),
+      warnings.includes(
+        "A kiolvasott deviza („EURO”) nem tárolható; helyette a(z) „Banki párosításból” értéke áll.",
+      ),
     );
     // párosítás nélküli devizával a mező üres marad
     const alone = readForeignInvoice({
@@ -399,6 +402,11 @@ describe("what does not fit its column is left empty, with a warning", () => {
     });
     assert.equal(alone.values.currency, null);
     assert.equal(alone.sources.currency, undefined);
+    assert.ok(
+      alone.warnings.includes(
+        "A kiolvasott deviza („EURO”) nem tárolható; kézzel kell megadni.",
+      ),
+    );
   });
 
   it("an amount past Decimal(18,2), and one that is not a number", () => {
@@ -433,9 +441,15 @@ describe("what does not fit its column is left empty, with a warning", () => {
     // az illesztő kelte nem foglalja el a mezőt, a párosítás dátuma tölti ki
     assert.equal(values.issueDate, "2026-10-01");
     assert.equal(values.dueDate, null);
-    assert.ok(warnings.some((w) => w.includes("kelt („20.09.2026”)")));
     assert.ok(
-      warnings.some((w) => w.includes("fizetési határidő („2026-02-30”)")),
+      warnings.includes(
+        "A kiolvasott kelt („20.09.2026”) nem tárolható; helyette a(z) „Banki párosításból” értéke áll.",
+      ),
+    );
+    assert.ok(
+      warnings.includes(
+        "A kiolvasott fizetési határidő („2026-02-30”) nem tárolható; kézzel kell megadni.",
+      ),
     );
   });
 

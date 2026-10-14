@@ -418,12 +418,17 @@ export class IncomingReviewService {
       bySenderDomain: {},
       rows: [],
     };
+    // soronként egyszer nő: egy íráskor bukott sor olvasott ÉS kimaradt is,
+    // a korlátba mégis csak egyszer számít (barracuda #1691)
+    let attempted = 0;
     for (const pairing of pending) {
       if (known.has(pairing.document.id)) {
         report.alreadyRead += 1;
         continue;
       }
-      if (options.limit && report.read >= options.limit) break;
+      // a bukott sor is próbálkozás: egy csupa-hibás futás is megáll a korlátnál
+      if (options.limit && attempted >= options.limit) break;
+      attempted += 1;
       /*
         EGY SOR HIBÁJA NEM ÁLLÍTJA MEG A TÖBBIT (kulfoldi-szamla-olvasas-hiba):
         2026-10-13 óta egy írhatatlan sor minden futást ugyanott állított meg.

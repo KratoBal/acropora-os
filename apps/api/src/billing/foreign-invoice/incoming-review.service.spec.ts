@@ -91,6 +91,8 @@ function harness(input: {
   readings?: Row[];
   /** a reading create for this document fails, as the database would refuse it */
   failCreateFor?: Record<string, Error>;
+  /** reading this document's stored file fails (the store is unreachable) */
+  failSourceFor?: string[];
 }) {
   const feed: Row[] = [...(input.feed ?? [])];
   const readings: Row[] = [...(input.readings ?? [])];
@@ -137,6 +139,8 @@ function harness(input: {
     },
     incomingSupplierDocument: {
       findUnique: async ({ where }: { where: { id: string } }) => {
+        if (input.failSourceFor?.includes(where.id))
+          throw new Error("store unreachable");
         const content = input.files[where.id];
         return content
           ? {
@@ -526,6 +530,44 @@ describe("reading the pending rows", () => {
       ["mail-1", "mail-3"],
     );
     assert.doesNotMatch(JSON.stringify(report.failures), /Kitalált|81\.30/);
+  });
+
+  // egy csupa-hibás futás is megáll a korlátnál (barracuda #1689): a forrás
+  // olvasásán bukó sor még nem „olvasott”, mégis próbálkozás
+  it("a row failing on its source counts toward the limit", async () => {
+    const h = harness({
+      pairings: [pairing(), pairing({ id: "mail-2", number: "KIT-2" })],
+      files: {},
+      failSourceFor: ["mail-1", "mail-2"],
+    });
+    const report = await h.service.readPending({ apply: true, limit: 1 });
+    assert.equal(report.read, 0);
+    assert.equal(report.failed, 1);
+  });
+
+  // egy íráskor bukott sor is csak EGY helyet foglal a korlátban (barracuda #1691)
+  it("a row failing on its write takes one place in the limit, not two", async () => {
+    const refuse = () =>
+      new Prisma.PrismaClientKnownRequestError("x", {
+        code: "P2020",
+        clientVersion: "6.19.3",
+      });
+    const h = harness({
+      pairings: [
+        pairing(),
+        pairing({ id: "mail-2", number: "KIT-2" }),
+        pairing({ id: "mail-3", number: "KIT-3" }),
+      ],
+      files: {
+        "mail-1": await textPdf(INVOICE),
+        "mail-2": await textPdf(INVOICE),
+        "mail-3": await textPdf(INVOICE),
+      },
+      failCreateFor: { "mail-1": refuse() },
+    });
+    const report = await h.service.readPending({ apply: true, limit: 2 });
+    assert.equal(report.failed, 1);
+    assert.equal(report.written, 1);
   });
 
   it("since leaves the older rows out", async () => {

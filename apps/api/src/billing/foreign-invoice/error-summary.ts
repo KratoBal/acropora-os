@@ -12,8 +12,13 @@ const IDENTIFIER = /^[A-Za-z0-9_.]{1,64}$/;
 
 function names(value: unknown): string[] {
   const list = Array.isArray(value) ? value : [value];
-  return list.filter(
-    (item): item is string => typeof item === "string" && IDENTIFIER.test(item),
+  return (
+    list
+      .filter((item): item is string => typeof item === "string")
+      // a P2003 `field_name`-je kényszernév és zárójeles megjegyzés
+      // („…_fkey (index)”, barracuda #1689): a megjegyzés nélkül még név
+      .map((item) => item.replace(/\s*\([^()]*\)$/, ""))
+      .filter((item) => IDENTIFIER.test(item))
   );
 }
 
