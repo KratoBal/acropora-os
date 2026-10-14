@@ -202,6 +202,9 @@ export function renderMeasurementReportPdf(
         y = writeLinked(doc, line, LEFT, y, CONTENT_WIDTH);
       }
     };
+    // An old, unsectioned text keeps the list of linked products after it, so there
+    // the name is clickable twice, in its line and in the list: on purpose
+    // (barracuda, #1694), the list is where the old layout put the links.
     if (!sectioned) {
       ensure(headingHeight + 16);
       y = heading(doc, "Vélemény – Javaslat – Ajánlott termékek", y);
