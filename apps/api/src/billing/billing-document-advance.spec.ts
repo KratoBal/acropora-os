@@ -114,6 +114,7 @@ function setup(start: Record<string, BillingDocumentRow>) {
     },
     feedPaid: async () => true,
     finalInvoiceOf: async () => null,
+    purchaseContractItemIds: async () => new Set(["ci-1"]),
   } as unknown as BillingDocumentsRepository;
   return { service: new BillingDocumentsService(repository), created };
 }
@@ -244,6 +245,40 @@ describe("is the proforma paid, by the feed", () => {
         await answer({ paymentsKnown: null, paidAmount: d("0") }),
       ],
       [null, true, false, null],
+    );
+  });
+
+  /*
+    A SZERZŐDÉS-TÉTEL A LÁNCON VÉGIG UTAZIK (feladat d510): a díjbekérőből
+    készült előleg, és belőle a végszámla, ugyanarra a tételre mutat, különben a
+    végszámla nem számítana bele a szerződés számlázott mennyiségébe.
+    MI PIROSÍT: a másolás (draftLinesOf) elhagyja a hivatkozást.
+  */
+  it("CONTRACT-CHAIN: an advance from a contract proforma keeps the contract item on its line", async () => {
+    const base = proforma();
+    const s = setup({
+      "pro-1": proforma({
+        sourceType: "CONTRACT",
+        sourceId: "contract-1",
+        lines: (
+          base as unknown as { lines: Array<Record<string, unknown>> }
+        ).lines.map((line) =>
+          line.kind === "ITEM"
+            ? { ...line, contractItemId: "ci-1" }
+            : { ...line, contractItemId: null },
+        ),
+      }),
+    });
+    await s.service.advanceFromProforma("pro-1", USER);
+    const input = s.created[0] as {
+      draft: { lines: Array<{ kind: string; contractItemId: string | null }> };
+    };
+    assert.deepEqual(
+      input.draft.lines.map((l) => [l.kind, l.contractItemId]),
+      [
+        ["ITEM", "ci-1"],
+        ["DISCOUNT", null],
+      ],
     );
   });
 });
