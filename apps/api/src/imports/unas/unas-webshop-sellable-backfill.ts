@@ -51,8 +51,12 @@ function baseStatusFromPayload(
   return null;
 }
 
-/** A már eltárolt UNAS nyers érték ugyanazt a flag-alakot követi, mint a kliens. */
-function inquiryOnly(rawPayload: Record<string, unknown>): boolean {
+/**
+ * A már eltárolt UNAS nyers érték ugyanazt a flag-alakot követi, mint a kliens.
+ * Exportálva: a vízmérési ajánlás jelölt-forrása is ebből dönti el, hogy egy
+ * termék csak érdeklődésre van-e (feladat ajanlas-inquire), egy szabállyal.
+ */
+export function inquiryOnly(rawPayload: Record<string, unknown>): boolean {
   const value = rawPayload.Inquire;
   return value === true || value === 1 || value === "1";
 }
