@@ -545,6 +545,31 @@ describe("reading the pending rows", () => {
     assert.equal(report.failed, 1);
   });
 
+  // egy íráskor bukott sor is csak EGY helyet foglal a korlátban (barracuda #1691)
+  it("a row failing on its write takes one place in the limit, not two", async () => {
+    const refuse = () =>
+      new Prisma.PrismaClientKnownRequestError("x", {
+        code: "P2020",
+        clientVersion: "6.19.3",
+      });
+    const h = harness({
+      pairings: [
+        pairing(),
+        pairing({ id: "mail-2", number: "KIT-2" }),
+        pairing({ id: "mail-3", number: "KIT-3" }),
+      ],
+      files: {
+        "mail-1": await textPdf(INVOICE),
+        "mail-2": await textPdf(INVOICE),
+        "mail-3": await textPdf(INVOICE),
+      },
+      failCreateFor: { "mail-1": refuse() },
+    });
+    const report = await h.service.readPending({ apply: true, limit: 2 });
+    assert.equal(report.failed, 1);
+    assert.equal(report.written, 1);
+  });
+
   it("since leaves the older rows out", async () => {
     const h = harness({ pairings: [pairing()], files: {} });
     const report = await h.service.readPending({
