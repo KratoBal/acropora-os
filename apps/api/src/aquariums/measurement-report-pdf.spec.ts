@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   ACROPORA_SERVICE_CONTACT,
   type AquariumMeasurementOccasion,
+  type MeasurementRecommendationSegment,
 } from "@acropora/types";
 
 import { readPdfTextLines } from "../documents/pdf/pdf-text-readback.js";
@@ -98,10 +99,40 @@ describe("the measurement report PDF (Figma 06, 2:470)", () => {
         ],
       }),
     );
-    assert.match(withBlock, /AJÁNLOTT TERMÉKEK/);
+    assert.match(withBlock, /VÉLEMÉNY – JAVASLAT – AJÁNLOTT TERMÉKEK/);
     assert.match(withBlock, /A KH alacsony: Kitalált KH puffer segít\./);
     assert.match(withBlock, /• Kitalált KH puffer/);
     assert.doesNotMatch(await textOf(marine()), /AJÁNLOTT TERMÉKEK/);
+  });
+
+  /**
+   * A TAGOLT SZÖVEG (Balázs, 2026-10-14). MI PIROSÍT: ha a szöveg saját
+   * fejlécei nem fejlécként állnak, ha a közös cím mellettük is megjelenik, ha
+   * a lista tétele nem pontozott sor, vagy a termék neve nem link a lapjára.
+   */
+  it("REPORT-RECOMMENDATION-SECTIONS: the text's own headings, a list, the name linked in the line", async () => {
+    const recommendation: MeasurementRecommendationSegment[] = [
+      {
+        kind: "text",
+        text: "Vélemény:\nA KH alacsony.\n\nJavaslat:\nEmelje lassan.\n\nAjánlott termékek:\n- ",
+      },
+      {
+        kind: "product",
+        productId: "p1",
+        name: "Kitalált KH puffer",
+        url: "https://bolt.example.invalid/kh",
+      },
+      { kind: "text", text: ": a KH emeléséhez" },
+    ];
+    const pdf = await renderMeasurementReportPdf(marine({ recommendation }));
+    const text = await textOf(marine({ recommendation }));
+    assert.match(
+      text,
+      /VÉLEMÉNY\s[\s\S]*A KH alacsony\.[\s\S]*JAVASLAT\s[\s\S]*Emelje lassan\.[\s\S]*AJÁNLOTT TERMÉKEK/,
+    );
+    assert.doesNotMatch(text, /VÉLEMÉNY – JAVASLAT/);
+    assert.match(text, /• Kitalált KH puffer: a KH emeléséhez/);
+    assert.ok(pdf.includes(Buffer.from("https://bolt.example.invalid/kh")));
   });
 
   /**

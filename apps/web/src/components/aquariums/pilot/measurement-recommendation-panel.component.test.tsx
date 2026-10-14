@@ -6,7 +6,10 @@ import type {
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MeasurementRecommendationPanel } from "./measurement-recommendation-panel";
+import {
+  MeasurementRecommendationPanel,
+  RecommendationText,
+} from "./measurement-recommendation-panel";
 
 const api = vi.hoisted(() => ({
   measurementRecommendation: vi.fn(),
@@ -240,5 +243,54 @@ describe("MeasurementRecommendationPanel (2b3983e1)", () => {
     expect(
       screen.getByText(/ne írj bele nevet vagy cégnevet/),
     ).toBeInTheDocument();
+  });
+});
+
+/*
+  A TAGOLT SZÖVEG (Balázs, 2026-10-14). MI PIROSÍT: ha a három cím nem fejléc,
+  a „- ” sor nem listatétel, a termék neve nem link új fülön a termék saját
+  URL-jére, vagy egy URL nélküli termék linket kap.
+*/
+describe("RecommendationText", () => {
+  it("WEB-RECO-FORMAT: headings, a paragraph and a product list with links in a new tab", () => {
+    render(
+      createElement(RecommendationText, {
+        segments: [
+          {
+            kind: "text",
+            text: "Vélemény:\nA KH alacsony.\n\nJavaslat:\nEmelje lassan.\n\nAjánlott termékek:\n- ",
+          },
+          {
+            kind: "product",
+            productId: "p1",
+            name: "KH Buffer",
+            url: "https://shop.example/kh-buffer",
+          },
+          { kind: "text", text: ": a KH emeléséhez\n- " },
+          {
+            kind: "product",
+            productId: "p2",
+            name: "Url nélküli termék",
+            url: null,
+          },
+        ],
+      }),
+    );
+    expect(
+      screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent),
+    ).toEqual(["Vélemény", "Javaslat", "Ajánlott termékek"]);
+    const items = screen.getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      "KH Buffer: a KH emeléséhez",
+      "Url nélküli termék",
+    ]);
+    const link = screen.getByRole("link", { name: "KH Buffer" });
+    expect([link.getAttribute("href"), link.getAttribute("target")]).toEqual([
+      "https://shop.example/kh-buffer",
+      "_blank",
+    ]);
+    expect(
+      screen.queryByRole("link", { name: "Url nélküli termék" }),
+    ).toBeNull();
   });
 });

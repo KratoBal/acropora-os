@@ -1,28 +1,25 @@
 "use client";
 import { Alert } from "@acropora/ui";
-import type {
-  AquariumMeasurementOccasion,
-  MeasurementRecommendationSegment,
-  MeasurementRecommendationView,
+import {
+  recommendationBlocks,
+  type AquariumMeasurementOccasion,
+  type MeasurementRecommendationSegment,
+  type MeasurementRecommendationView,
 } from "@acropora/types";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { PilotBadge, PilotButton } from "@/components/pilot/pilot-ui";
 import { aquariumsApi } from "@/lib/api/aquariums";
 
-/**
- * A szöveg, ahogy a vevő látja: a termék neve link a webshop lapjára. A
- * jelöltlistán kívüli azonosító piros, link nélkül (`danger`): jóváhagyni
- * így nem lehet, a szerver is megállítja.
- */
-export function RecommendationText({
-  segments,
+/** Egy sor darabjai: szöveg, és a termék neve link a webshop lapjára. */
+function Segments({
+  parts,
 }: {
-  segments: readonly MeasurementRecommendationSegment[];
+  parts: readonly MeasurementRecommendationSegment[];
 }) {
   return (
-    <p className="whitespace-pre-wrap text-sm leading-6 text-pilot-grey-800">
-      {segments.map((segment, index) =>
+    <>
+      {parts.map((segment, index) =>
         segment.kind === "text" ? (
           <span key={index}>{segment.text}</span>
         ) : segment.name === null ? (
@@ -49,7 +46,49 @@ export function RecommendationText({
           </span>
         ),
       )}
-    </p>
+    </>
+  );
+}
+
+/**
+ * A szöveg, ahogy a vevő látja, tagolva (Balázs, 2026-10-14): a Vélemény, a
+ * Javaslat és az Ajánlott termékek fejléc, bekezdések, lista
+ * (`recommendationBlocks`). A termék neve link a webshop lapjára, új fülön; a
+ * jelöltlistán kívüli azonosító piros, link nélkül (`danger`): jóváhagyni így
+ * nem lehet, a szerver is megállítja. Egy régi, tagolatlan szöveg egy bekezdés.
+ */
+export function RecommendationText({
+  segments,
+}: {
+  segments: readonly MeasurementRecommendationSegment[];
+}) {
+  return (
+    <div className="space-y-2 text-sm leading-6 text-pilot-grey-800">
+      {recommendationBlocks(segments).map((block, index) =>
+        block.kind === "heading" ? (
+          <h4 key={index} className="pt-1 font-semibold text-pilot-grey-900">
+            {block.text}
+          </h4>
+        ) : block.kind === "list" ? (
+          <ul key={index} className="list-disc space-y-1 pl-5">
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex}>
+                <Segments parts={item} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>
+            {block.lines.map((line, lineIndex) => (
+              <Fragment key={lineIndex}>
+                {lineIndex > 0 ? <br /> : null}
+                <Segments parts={line} />
+              </Fragment>
+            ))}
+          </p>
+        ),
+      )}
+    </div>
   );
 }
 
@@ -175,7 +214,7 @@ export function MeasurementRecommendationPanel({
     >
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-pilot-grey-900">
-          Termékajánlás
+          Vélemény – Javaslat – Ajánlott termékek
         </h3>
         {view ? (
           view.status === "APPROVED" ? (
