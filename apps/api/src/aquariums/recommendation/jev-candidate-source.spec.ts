@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  isPurchasableOnUnas,
   JevRecommendationCandidateSource,
   limitCandidates,
   matchingJevRows,
   MAX_CANDIDATES,
+  PURCHASABLE_UNAS_STATUSES,
   wantedMoves,
   type JevEffectRow,
 } from "./jev-candidate-source.js";
@@ -30,6 +32,9 @@ const dev = (
     status: "WARN",
     trend: null,
   }) as RecommendationDeviation;
+
+/** A UNAS row of a product one can buy (status 1), for the fixtures that are not about status. */
+const SELLS = [{ channel: "UNAS", externalStatus: "1" }];
 
 const row = (over: Partial<JevEffectRow>): JevEffectRow => ({
   productId: "p",
@@ -264,6 +269,7 @@ describe("the source", () => {
               id: "aktiv",
               name: "Kalcium adalék",
               categories: [{ category: { name: "Adalékok" } }],
+              channelListings: SELLS,
             },
           ];
         },
@@ -307,7 +313,12 @@ describe("the source", () => {
       },
       product: {
         findMany: async () => [
-          { id: "kh-own", name: "KH puffer", categories: [] },
+          {
+            id: "kh-own",
+            name: "KH puffer",
+            categories: [],
+            channelListings: SELLS,
+          },
         ],
       },
     };
@@ -322,6 +333,61 @@ describe("the source", () => {
     );
   });
 
+  it("only a product one can buy: UNAS status 1 and 2 stay, 3 (active, not purchasable), 0, unknown and no UNAS row drop out", async () => {
+    // Balázs, 2026-10-14 11:26:20 UTC, message_id 1559890095572779059 ("B")
+    const statuses: Record<
+      string,
+      { channel: string; externalStatus: string | null }[]
+    > = {
+      "st-1": [{ channel: "UNAS", externalStatus: "1" }],
+      "st-2": [{ channel: "UNAS", externalStatus: "2" }],
+      "st-3": [{ channel: "UNAS", externalStatus: "3" }],
+      "st-0": [{ channel: "UNAS", externalStatus: "0" }],
+      "st-null": [{ channel: "UNAS", externalStatus: null }],
+      // a status "1" on ANOTHER channel is not the shop's word
+      "no-unas": [{ channel: "WEBSHOP", externalStatus: "1" }],
+    };
+    const source = new JevRecommendationCandidateSource();
+    (source as unknown as { database: unknown }).database = {
+      $queryRaw: async () =>
+        Object.keys(statuses).map((productId) =>
+          row({ productId, value: "KALCIUM:EMEL" }),
+        ),
+      product: {
+        findMany: async () =>
+          Object.entries(statuses).map(([id, channelListings]) => ({
+            id,
+            name: id,
+            categories: [],
+            channelListings,
+          })),
+      },
+    };
+    const candidates = await source.candidates({
+      deviations: [dev("KALCIUM", "LOW")],
+    });
+    assert.deepEqual(candidates.map((c) => c.productId).sort(), [
+      "st-1",
+      "st-2",
+    ]);
+  });
+
+  it("isPurchasableOnUnas: the shop's base status decides, only 1 and 2", () => {
+    const on = (externalStatus: string | null) =>
+      isPurchasableOnUnas([{ channel: "UNAS", externalStatus }]);
+    assert.deepEqual(["0", "1", "2", "3", "", null].map(on), [
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
+    assert.equal(isPurchasableOnUnas([]), false);
+    // the link rule is wider (3 is visible): the two must stay different
+    assert.deepEqual([...PURCHASABLE_UNAS_STATUSES].sort(), ["1", "2"]);
+  });
+
   it("the source itself applies the cap", async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `p-${i}`);
     const source = new JevRecommendationCandidateSource();
@@ -330,7 +396,12 @@ describe("the source", () => {
         ids.map((productId) => row({ productId, value: "KALCIUM:EMEL" })),
       product: {
         findMany: async () =>
-          ids.map((id) => ({ id, name: id, categories: [] })),
+          ids.map((id) => ({
+            id,
+            name: id,
+            categories: [],
+            channelListings: SELLS,
+          })),
       },
     };
     const candidates = await source.candidates({

@@ -112,6 +112,30 @@ export function matchingJevRows(
   });
 }
 
+/**
+ * CSAK VÁSÁROLHATÓ TERMÉK LEHET JELÖLT (Balázs, 2026-10-14 11:26:20 UTC, Acropora OS
+ * szál, message_id 1559890095572779059: „B”). A UNAS alapstátusza
+ * (docs/M2.1-UNAS-API-DISCOVERY.md): 0 inaktív, 1 aktív, 2 aktív/új, 3 aktív/nem
+ * vásárolható. Jelölt csak az 1 és a 2: a 3-ast meg lehet nézni, de nem lehet
+ * megvenni, a 0 nem is látszik. Ismeretlen státusz vagy hiányzó UNAS-sor sem jelölt.
+ *
+ * NEM UGYANAZ, MINT A LINK SZABÁLYA: a `productShopUrl` (measurement-recommendation
+ * .service.ts) a 3-ast is linkeli, mert az a lap látszik a boltban. Az ajánlás
+ * szűkebb: amit ajánlunk, azt meg is kell tudni venni. Az `isActive` (OS) mellett
+ * áll, nem helyette.
+ */
+export const PURCHASABLE_UNAS_STATUSES: ReadonlySet<string> = new Set([
+  "1",
+  "2",
+]);
+
+export function isPurchasableOnUnas(
+  listings: readonly { channel: string; externalStatus: string | null }[],
+): boolean {
+  const unas = listings.find((listing) => listing.channel === "UNAS");
+  return PURCHASABLE_UNAS_STATUSES.has(unas?.externalStatus ?? "");
+}
+
 @Injectable()
 export class JevRecommendationCandidateSource implements RecommendationCandidateSource {
   private readonly database = prisma;
@@ -141,9 +165,14 @@ export class JevRecommendationCandidateSource implements RecommendationCandidate
           take: 1,
           select: { category: { select: { name: true } } },
         },
+        channelListings: { select: { channel: true, externalStatus: true } },
       },
     });
-    const byId = new Map(products.map((p) => [p.id, p]));
+    const byId = new Map(
+      products
+        .filter((p) => isPurchasableOnUnas(p.channelListings))
+        .map((p) => [p.id, p]),
+    );
     return limitCandidates(
       matches.flatMap((match) => {
         const product = byId.get(match.productId);
