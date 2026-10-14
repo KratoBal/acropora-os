@@ -29,6 +29,7 @@ import {
   mailboxOnlyPairings,
   mailboxOnlyPaidItems,
   mailboxPdfCandidates,
+  readingDocumentIds,
   toIncomingListItem,
 } from "../incoming-billing-documents.js";
 import {
@@ -210,6 +211,16 @@ export interface PendingReport {
   }[];
 }
 
+/** A sornak nincs postafiókos dokumentuma, amin az olvasat állhatna. */
+export class NoMailboxDocumentError extends Error {
+  override readonly name = "NoMailboxDocumentError";
+  constructor() {
+    super(
+      "Ehhez a sorhoz nincs postafiókos dokumentum, amin az olvasat állhatna.",
+    );
+  }
+}
+
 @Injectable()
 export class IncomingReviewService {
   private readonly database: Database = prisma;
@@ -233,9 +244,7 @@ export class IncomingReviewService {
     if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
       return this.purchaseReview(itemId.slice(PURCHASE_ITEM_PREFIX.length));
     const documentId = this.documentIdOf(itemId);
-    const stored = await this.database.incomingDocumentReading.findUnique({
-      where: { documentId },
-    });
+    const stored = await this.storedReadingOf(documentId);
     if (stored?.state === "VERIFIED") {
       const { pairing } = await this.pairingOf(documentId, true);
       return this.view(pairing, stored, null);
@@ -279,9 +288,7 @@ export class IncomingReviewService {
     if (itemId.startsWith(PURCHASE_ITEM_PREFIX))
       return this.purchaseApprove(itemId, input, userId);
     const documentId = this.documentIdOf(itemId);
-    const existing = await this.database.incomingDocumentReading.findUnique({
-      where: { documentId },
-    });
+    const existing = await this.storedReadingOf(documentId);
     if (existing?.state === "VERIFIED")
       throw new ConflictException("Ez a számla már jóvá van hagyva.");
     const { pairing } = await this.pairingOf(documentId);
@@ -292,9 +299,11 @@ export class IncomingReviewService {
         : (await this.computeReading(pairing)).values;
     const problems = approvalProblems(values);
     if (problems.length) throw new BadRequestException(problems.join(" "));
-    await this.storeManual(pairing, values, userId);
+    const stored = await this.storeManual(pairing, values, userId);
+    // az olvasat dokumentuma: összevont számlánál nem a sor azonosítója (P2003)
+    const readingDocumentId = stored.documentId;
     const document = await this.database.incomingSupplierDocument.findUnique({
-      where: { id: documentId },
+      where: { id: readingDocumentId },
       select: { receivedAt: true },
     });
     /*
@@ -346,7 +355,7 @@ export class IncomingReviewService {
         },
       });
       const reading = await tx.incomingDocumentReading.update({
-        where: { documentId },
+        where: { documentId: readingDocumentId },
         data: {
           state: "VERIFIED",
           reviewedAt: now,
@@ -422,7 +431,7 @@ export class IncomingReviewService {
     // a korlátba mégis csak egyszer számít (barracuda #1691)
     let attempted = 0;
     for (const pairing of pending) {
-      if (known.has(pairing.document.id)) {
+      if (readingDocumentIds(pairing.document).some((id) => known.has(id))) {
         report.alreadyRead += 1;
         continue;
       }
@@ -465,9 +474,12 @@ export class IncomingReviewService {
           warnings: reading.warnings.length,
         });
         if (options.apply) {
+          // az olvasat egy valódi postafiókos dokumentumon áll; összevont
+          // számlánál a sor saját azonosítója a NAV-soré lehet (P2003, 2026-10-14)
+          const documentId = await this.readingDocumentId(pairing);
           await this.database.incomingDocumentReading.create({
             data: {
-              documentId: pairing.document.id,
+              documentId,
               ...columns(reading.values),
               sources: reading.sources,
               warnings: reading.warnings,
@@ -559,17 +571,67 @@ export class IncomingReviewService {
    * A kézi (vagy jóváhagyott) értékek tárolása. Ha még nincs tárolt sor, a
    * kinyert olvasat a kiinduló pont, hogy a forrás mezőnként megmaradjon.
    */
-  private storeManual(
+  private async storeManual(
     pairing: DocumentPairing,
     input: IncomingReviewInput,
     userId: string,
   ): Promise<StoredReading> {
+    let documentId: string;
+    try {
+      documentId = await this.readingDocumentId(pairing);
+    } catch (error) {
+      if (error instanceof NoMailboxDocumentError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
     return this.storeManualFor(
-      pairing.document.id,
+      documentId,
       () => this.computeReading(pairing),
       input,
       userId,
     );
+  }
+
+  /**
+   * MELYIK DOKUMENTUMON ÁLL (vagy fog állni) EGY SOR OLVASATA (P2003,
+   * 2026-10-14): ha már van olvasat a sor azonosítóinak egyikén
+   * (`readingDocumentIds`), azon; különben az első, ami valódi
+   * `IncomingSupplierDocument`. Egy összevont számla saját azonosítója a
+   * NAV-soré lehet, arra az idegen kulcs nem enged olvasatot.
+   */
+  private async readingDocumentId(pairing: DocumentPairing): Promise<string> {
+    const ids = readingDocumentIds(pairing.document);
+    const stored = await this.database.incomingDocumentReading.findMany({
+      where: { documentId: { in: ids } },
+      select: { documentId: true },
+    });
+    const storedOn = ids.find((id) =>
+      stored.some((row) => row.documentId === id),
+    );
+    if (storedOn) return storedOn;
+    const documents = await this.database.incomingSupplierDocument.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    const document = ids.find((id) => documents.some((row) => row.id === id));
+    if (!document) throw new NoMailboxDocumentError();
+    return document;
+  }
+
+  /** Egy sor tárolt olvasata az azonosítói közül az elsőn, amin van; vagy `null`. */
+  private async storedReadingOf(
+    documentId: string,
+  ): Promise<StoredReading | null> {
+    const pairing = (await this.missing.documentPairings()).get(documentId);
+    const ids = pairing ? readingDocumentIds(pairing.document) : [documentId];
+    const rows = await this.database.incomingDocumentReading.findMany({
+      where: { documentId: { in: ids } },
+    });
+    for (const id of ids) {
+      const row = rows.find((candidate) => candidate.documentId === id);
+      if (row) return row;
+    }
+    return null;
   }
 
   /**

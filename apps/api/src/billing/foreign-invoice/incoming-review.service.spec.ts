@@ -91,6 +91,11 @@ function harness(input: {
   readings?: Row[];
   /** a reading create for this document fails, as the database would refuse it */
   failCreateFor?: Record<string, Error>;
+  /**
+   * ids that are NOT an IncomingSupplierDocument (a NAV row's id); every other
+   * id exists, with or without a file in `files`
+   */
+  notSupplierDocuments?: string[];
   /** reading this document's stored file fails (the store is unreachable) */
   failSourceFor?: string[];
 }) {
@@ -138,6 +143,10 @@ function harness(input: {
       },
     },
     incomingSupplierDocument: {
+      findMany: async (args: { where: { id: { in: string[] } } }) =>
+        args.where.id.in
+          .filter((id) => !input.notSupplierDocuments?.includes(id))
+          .map((id) => ({ id })),
       findUnique: async ({ where }: { where: { id: string } }) => {
         if (input.failSourceFor?.includes(where.id))
           throw new Error("store unreachable");
@@ -153,9 +162,14 @@ function harness(input: {
       },
     },
     incomingDocumentReading: {
-      findMany: async (args?: { where?: { state?: string } }) =>
+      findMany: async (args?: {
+        where?: { state?: string; documentId?: { in: string[] } };
+      }) =>
         readings.filter(
-          (row) => !args?.where?.state || row.state === args.where.state,
+          (row) =>
+            (!args?.where?.state || row.state === args.where.state) &&
+            (!args?.where?.documentId ||
+              args.where.documentId.in.includes(row.documentId as string)),
         ),
       findUnique: async ({ where }: { where: { documentId: string } }) =>
         readings.find((row) => row.documentId === where.documentId) ?? null,
@@ -455,6 +469,96 @@ describe("saving corrections", () => {
     assert.deepEqual(
       (h.audit[0]!.metadata as { changedFields: string[] }).changedFields,
       ["fulfillmentDate"],
+    );
+  });
+});
+
+/*
+  AZ ÖSSZEVONT SZÁMLA OLVASATA (P2003, élesen 21 sor, 2026-10-14). Egy NAV-sor
+  és egy postafiókos PDF összevonva a NAV-sor azonosítóját viseli, a forrása
+  viszont MAILBOX; az olvasat a NAV-azonosítón nem állhat (az idegen kulcs
+  `IncomingSupplierDocument`). MI PIROSÍT: ha a futás, a mentés vagy a
+  jóváhagyás nem az eredetire ír; ha a második futás újraolvasná; ha a lista nem
+  találná meg az eredetin álló olvasatot; ha egy postafiókos dokumentum nélküli
+  sor P2003-mal bukna a saját okával helyett.
+*/
+describe("a merged invoice whose own id is the NAV row's", () => {
+  const merged = () =>
+    pairing({ id: "nav-1", originalId: "mail-9", number: "KIT-9" });
+
+  it("MERGED-READ: the run writes the reading on the original, and the next run sees it as read", async () => {
+    const h = harness({
+      pairings: [merged()],
+      files: { "mail-9": await textPdf(INVOICE) },
+      notSupplierDocuments: ["nav-1"],
+    });
+    const first = await h.service.readPending({ apply: true });
+    const again = await h.service.readPending({ apply: true });
+    assert.deepEqual(
+      [
+        first.written,
+        first.failed,
+        h.readings.map((r) => r.documentId),
+        again.alreadyRead,
+        again.written,
+      ],
+      [1, 0, ["mail-9"], 1, 0],
+    );
+  });
+
+  it("MERGED-REVIEW: saving and approving write on the original; the list finds that reading", async () => {
+    const h = harness({
+      pairings: [merged()],
+      files: { "mail-9": await textPdf(INVOICE) },
+      notSupplierDocuments: ["nav-1"],
+    });
+    await h.service.save("mailbox:nav-1", COMPLETE, "user-1");
+    const review = await h.service.review("mailbox:nav-1");
+    const values = new Map(
+      h.readings.map((r) => [
+        r.documentId as string,
+        normalizedInput(COMPLETE),
+      ]),
+    );
+    const [item] = mailboxOnlyPaidItems(
+      [],
+      new Map([["nav-1", merged()]]),
+      values,
+    );
+    const approved = await h.service.approve("mailbox:nav-1", null, "user-1");
+    assert.deepEqual(
+      [
+        h.readings.map((r) => [r.documentId, r.state]),
+        review.values.documentNumber,
+        // the reading's own field: without the reading the row has no due date
+        item!.dueDate,
+        approved.state,
+        [h.feed.at(-1)!.externalId, h.feed.at(-1)!.sourceDocumentId],
+      ],
+      [
+        [["mail-9", "VERIFIED"]],
+        "KIT-2026-0042",
+        "2026-10-17",
+        "VERIFIED",
+        ["nav-1", "mail-9"],
+      ],
+    );
+  });
+
+  it("MERGED-NO-DOCUMENT: a row with no mailbox document is skipped for that reason, not with P2003", async () => {
+    const h = harness({
+      pairings: [pairing({ id: "nav-2", number: "KIT-X" })],
+      files: {},
+      notSupplierDocuments: ["nav-2"],
+    });
+    const report = await h.service.readPending({ apply: true });
+    assert.deepEqual(
+      [report.written, report.failures],
+      [0, [{ documentId: "nav-2", error: "NoMailboxDocumentError" }]],
+    );
+    await assert.rejects(
+      h.service.save("mailbox:nav-2", COMPLETE, "user-1"),
+      BadRequestException,
     );
   });
 });
