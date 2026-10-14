@@ -220,11 +220,15 @@ function harness(input: {
   for (const one of input.pairings)
     for (const id of [one.document.id, ...(one.document.aliasIds ?? [])])
       map.set(id, one);
+  const pairingRuns = { count: 0 };
   const service = new IncomingReviewService({
-    documentPairings: async () => map,
+    documentPairings: async () => {
+      pairingRuns.count += 1;
+      return map;
+    },
   } as never);
   Object.defineProperty(service, "database", { value: database });
-  return { service, feed, readings, audit, writes };
+  return { service, feed, readings, audit, writes, pairingRuns };
 }
 
 const COMPLETE = {
@@ -484,7 +488,14 @@ describe("saving corrections", () => {
 */
 describe("a merged invoice whose own id is the NAV row's", () => {
   const merged = () =>
-    pairing({ id: "nav-1", originalId: "mail-9", number: "KIT-9" });
+    // the real merge's shape: the NAV row's id, the mailbox document as the original
+    // AND among the aliases (missing-invoices.repository.ts puts every other member there)
+    pairing({
+      id: "nav-1",
+      originalId: "mail-9",
+      aliasIds: ["mail-9"],
+      number: "KIT-9",
+    });
 
   it("MERGED-READ: the run writes the reading on the original, and the next run sees it as read", async () => {
     const h = harness({
@@ -543,6 +554,25 @@ describe("a merged invoice whose own id is the NAV row's", () => {
         ["nav-1", "mail-9"],
       ],
     );
+  });
+
+  it("MERGED-ONCE-AND-DEDUP: the review and the approval compute the pairings once; after approval the row leaves the mailbox list", async () => {
+    const h = harness({
+      pairings: [merged()],
+      files: { "mail-9": await textPdf(INVOICE) },
+      notSupplierDocuments: ["nav-1"],
+    });
+    await h.service.review("mailbox:nav-1");
+    const onReview = h.pairingRuns.count;
+    h.pairingRuns.count = 0;
+    await h.service.approve("mailbox:nav-1", COMPLETE, "user-1");
+    const onApprove = h.pairingRuns.count;
+    // the approved feed row points at mail-9, an alias of the merged row: the list drops it
+    const after = mailboxOnlyPaidItems(
+      h.feed as never,
+      new Map([["nav-1", merged()]]),
+    );
+    assert.deepEqual([onReview, onApprove, after], [1, 1, []]);
   });
 
   it("MERGED-NO-DOCUMENT: a row with no mailbox document is skipped for that reason, not with P2003", async () => {
