@@ -76,7 +76,8 @@ describe("a vízmérési termékajánlás", { skip: gate.mode === "skip" }, () =
         channelListings: {
           create: {
             channel: "UNAS",
-            isPublished: true,
+            // what the UNAS sync writes: the status and the url, never isPublished
+            externalStatus: "1",
             productUrl: `https://bolt.example.invalid/${suffix}-kh-puffer`,
           },
         },

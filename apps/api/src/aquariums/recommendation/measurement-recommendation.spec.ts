@@ -91,21 +91,43 @@ describe("measurement recommendation (2b3983e1)", () => {
     assert.deepEqual(recommendationSegments(null, new Map()), []);
   });
 
-  it("RECO-SHOP-URL: the published UNAS page; nothing from an unpublished one or another channel", () => {
+  /**
+   * MI PIROSÍT: ha a link a soha nem írt `isPublished`-en múlik (a szinkron
+   * státuszt és címet ír, publikálást nem), ha egy inaktív (0) vagy ismeretlen
+   * státuszú termék is linket kap, ha a webshop csatorna sora kerül elő, vagy ha
+   * nem http(s) cím lesz link.
+   */
+  it("RECO-SHOP-URL: the UNAS page of a product active in the shop; nothing for an inactive, unknown or non-http one", () => {
+    const unas = (
+      externalStatus: string | null,
+      productUrl: string | null,
+    ) => ({
+      channel: "UNAS",
+      externalStatus,
+      productUrl,
+    });
+    const url = "https://bolt.example.invalid/kh";
     assert.deepEqual(
       [
         productShopUrl([
-          { channel: "WEBSHOP", isPublished: true, productUrl: "w" },
-          { channel: "UNAS", isPublished: true, productUrl: "u" },
+          {
+            channel: "WEBSHOP",
+            externalStatus: "1",
+            productUrl: "https://w.invalid/",
+          },
+          unas("1", url),
         ]),
+        productShopUrl([unas("2", url)]),
+        productShopUrl([unas("3", url)]),
+        productShopUrl([unas("0", url)]),
+        productShopUrl([unas(null, url)]),
+        productShopUrl([unas("1", null)]),
+        productShopUrl([unas("1", "javascript:alert(1)")]),
         productShopUrl([
-          { channel: "UNAS", isPublished: false, productUrl: "u" },
-        ]),
-        productShopUrl([
-          { channel: "UNAS", isPublished: true, productUrl: null },
+          { channel: "WEBSHOP", externalStatus: "1", productUrl: url },
         ]),
       ],
-      ["u", null, null],
+      [url, url, url, null, null, null, null, null],
     );
   });
 

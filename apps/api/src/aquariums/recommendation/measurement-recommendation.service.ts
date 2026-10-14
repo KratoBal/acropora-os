@@ -40,22 +40,34 @@ type Row = Prisma.AquariumMeasurementRecommendationGetPayload<{
 
 /**
  * A TERMÉK LINKJE (a terv „Link” pontja): ma a mostani webshop lapja, a UNAS
- * csatorna-sor publikált `productUrl`-je. A bolt költözésekor ez az egy
- * függvény vált a WEBSHOP csatornára; a szövegben URL nincs, tehát semmi nem
- * törik el.
+ * csatorna-sor `productUrl`-je (a szinkron a UNAS API `Url` mezőjéből írja). A
+ * bolt költözésekor ez az egy függvény vált a WEBSHOP csatornára; a szövegben
+ * URL nincs, tehát semmi nem törik el.
+ *
+ * A LÁTHATÓSÁGOT A UNAS STÁTUSZA MONDJA MEG, NEM AZ `isPublished`. Azt semmi nem
+ * írja, minden soron hamis (products/product.repository.ts), és erre épülve a
+ * link SEHOL nem jelent meg (Balázs, 2026-10-14: a terméknév félkövér, nem link).
+ * A UNAS alapstátusza (docs/M2.1-UNAS-API-DISCOVERY.md): 0 inaktív, 1 aktív,
+ * 2 aktív/új, 3 aktív/nem vásárolható. Az inaktív termék lapja nem látszik a
+ * boltban, ismeretlen státusznál sem linkelünk. Csak http(s) cím lehet link.
  */
+const SHOP_VISIBLE_UNAS_STATUSES: ReadonlySet<string> = new Set([
+  "1",
+  "2",
+  "3",
+]);
+
 export function productShopUrl(
   listings: readonly {
     channel: string;
-    isPublished: boolean;
+    externalStatus: string | null;
     productUrl: string | null;
   }[],
 ): string | null {
-  const unas = listings.find(
-    (listing) =>
-      listing.channel === "UNAS" && listing.isPublished && listing.productUrl,
-  );
-  return unas?.productUrl ?? null;
+  const unas = listings.find((listing) => listing.channel === "UNAS");
+  if (!unas?.productUrl) return null;
+  if (!SHOP_VISIBLE_UNAS_STATUSES.has(unas.externalStatus ?? "")) return null;
+  return /^https?:\/\//i.test(unas.productUrl) ? unas.productUrl : null;
 }
 
 /**
@@ -444,7 +456,7 @@ async function productsById(
       id: true,
       name: true,
       channelListings: {
-        select: { channel: true, isPublished: true, productUrl: true },
+        select: { channel: true, externalStatus: true, productUrl: true },
       },
     },
   });
