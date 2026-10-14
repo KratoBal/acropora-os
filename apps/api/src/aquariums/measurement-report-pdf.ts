@@ -181,21 +181,32 @@ export function renderMeasurementReportPdf(
     // Javaslat, Ajánlott termékek) állnak, a termék neve a sorban link. Egy
     // régi, tagolatlan szöveg a közös cím alatt, és a linkek utána, soronként.
     const sectioned = blocks.some((block) => block.kind === "heading");
+    // Every line goes through writeLinked, so the product's name is a PDF link
+    // (a URI annotation) wherever it stands, in a sectioned or an old text alike;
+    // without a url it stays plain text.
+    const writeBlock = (block: (typeof blocks)[number]) => {
+      if (block.kind === "heading") return;
+      const lines =
+        block.kind === "paragraph"
+          ? block.lines
+          : block.items.map((item) => [
+              {
+                kind: "text",
+                text: "• ",
+              } as MeasurementRecommendationSegment,
+              ...item,
+            ]);
+      for (const line of lines) {
+        const height = measure(doc, plain(line), body, CONTENT_WIDTH);
+        ensure(height);
+        y = writeLinked(doc, line, LEFT, y, CONTENT_WIDTH);
+      }
+    };
     if (!sectioned) {
-      const text = blocks
-        .flatMap((block) =>
-          block.kind === "paragraph"
-            ? [block.lines.map(plain).join("\n")]
-            : block.kind === "list"
-              ? block.items.map((item) => `• ${plain(item)}`)
-              : [],
-        )
-        .join("\n");
-      const height = measure(doc, text, body, CONTENT_WIDTH);
-      ensure(headingHeight + Math.min(height, 60));
+      ensure(headingHeight + 16);
       y = heading(doc, "Vélemény – Javaslat – Ajánlott termékek", y);
-      write(doc, text, LEFT, y, body, CONTENT_WIDTH);
-      y += height + 10;
+      for (const block of blocks) writeBlock(block);
+      y += 10;
       const linked = new Map<string, { name: string; url: string }>();
       for (const part of input.recommendation)
         if (part.kind === "product" && part.name && part.url)
@@ -221,21 +232,7 @@ export function renderMeasurementReportPdf(
           y = heading(doc, block.text, y);
           continue;
         }
-        const lines =
-          block.kind === "paragraph"
-            ? block.lines
-            : block.items.map((item) => [
-                {
-                  kind: "text",
-                  text: "• ",
-                } as MeasurementRecommendationSegment,
-                ...item,
-              ]);
-        for (const line of lines) {
-          const height = measure(doc, plain(line), body, CONTENT_WIDTH);
-          ensure(height);
-          y = writeLinked(doc, line, LEFT, y, CONTENT_WIDTH);
-        }
+        writeBlock(block);
         y += 10;
       }
       y += 10;
