@@ -67,7 +67,10 @@ export function formatReport(report: PendingReport, apply: boolean): string {
   const lines = [
     `mód: ${apply ? "ÍR (--apply)" : "csak olvas"}`,
     "megjegyzés: olvasatot csak --apply ír; a párosítás számítása a vevő-ítélet gyorsítótárát (payeeCheck) kitöltheti, mint a lista megnyitása.",
-    `postafiókos sor: ${report.total}; már olvasott: ${report.alreadyRead}; most olvasott: ${report.read}; írt: ${report.written}`,
+    `postafiókos sor: ${report.total}; már olvasott: ${report.alreadyRead}; most olvasott: ${report.read}; írt: ${report.written}; kimaradt (hiba): ${report.failed}`,
+    ...report.failures.map(
+      (failure) => `kimaradt: ${failure.documentId} ${failure.error}`,
+    ),
     `szövegréteg: ${report.withText}/${report.read}; illesztő: ${report.withAdapter}/${report.read}; jóváhagyható egy kattintással: ${report.complete}/${report.read}`,
     `deviza: ${count(report.byCurrency)}`,
     `feladó: ${count(report.bySenderDomain)}`,

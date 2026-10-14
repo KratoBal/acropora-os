@@ -358,3 +358,97 @@ describe("readForeignInvoice", () => {
     assert.deepEqual(warnings, []);
   });
 });
+
+/*
+  A TÁROLHATÓSÁG ŐRE (kulfoldi-szamla-olvasas-hiba, 2026-10-14). MI PIROSÍT: ha
+  egy négybetűs deviza, egy 16 egész jegynél hosszabb összeg vagy egy nem
+  naptári dátum az olvasatban maradna (az írás akkor P2000 / P2020-szal bukik,
+  és élesen 24 futást állított meg); ha a kiürített mező forrása megmaradna;
+  ha egy jó érték is kiürülne.
+*/
+describe("what does not fit its column is left empty, with a warning", () => {
+  const adapter = (over: Record<string, unknown>) =>
+    ({
+      supplier: { name: "Illesztő GmbH", vatId: "DE111111111", country: "DE" },
+      invoiceNumber: "ADP-9",
+      invoiceDate: "2026-09-20",
+      dueDate: null,
+      currency: "EUR",
+      netTotal: 100,
+      lines: [],
+      ...over,
+    }) as unknown as SupplierInvoiceImportResult;
+
+  it("a currency that is not a three-letter code", () => {
+    const { values, sources, warnings } = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ currency: "euro" }),
+      pairing: pairing({ currency: "EUR" }),
+    });
+    // az illesztő „EURO”-ja nem foglalja el a mezőt; a párosítás tárolható EUR-ja kitölti
+    assert.equal(values.currency, "EUR");
+    assert.equal(sources.currency, "PAIRING");
+    assert.ok(
+      warnings.some((w) => w.includes("deviza („EURO”) nem tárolható")),
+    );
+    // párosítás nélküli devizával a mező üres marad
+    const alone = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ currency: "euro" }),
+      pairing: pairing({ currency: "" }),
+    });
+    assert.equal(alone.values.currency, null);
+    assert.equal(alone.sources.currency, undefined);
+  });
+
+  it("an amount past Decimal(18,2), and one that is not a number", () => {
+    const big = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ netTotal: 12345678901234567 }),
+      pairing: pairing(),
+    });
+    assert.equal(big.values.netAmount, null);
+    assert.ok(big.warnings.some((w) => w.includes("nettó")));
+    const nan = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ netTotal: Number.NaN }),
+      pairing: pairing(),
+    });
+    assert.equal(nan.values.netAmount, null);
+    // a határon belül marad: 16 egész jegy
+    const edge = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ netTotal: 1234567890123456 }),
+      pairing: pairing(),
+    });
+    assert.equal(edge.values.netAmount, "1234567890123456.00");
+  });
+
+  it("a date that is not a calendar day", () => {
+    const { values, warnings } = readForeignInvoice({
+      lines: null,
+      adapter: adapter({ invoiceDate: "20.09.2026", dueDate: "2026-02-30" }),
+      pairing: pairing(),
+    });
+    // az illesztő kelte nem foglalja el a mezőt, a párosítás dátuma tölti ki
+    assert.equal(values.issueDate, "2026-10-01");
+    assert.equal(values.dueDate, null);
+    assert.ok(warnings.some((w) => w.includes("kelt („20.09.2026”)")));
+    assert.ok(
+      warnings.some((w) => w.includes("fizetési határidő („2026-02-30”)")),
+    );
+  });
+
+  it("a good reading is untouched", () => {
+    const { values, warnings } = readForeignInvoice({
+      lines: null,
+      adapter: adapter({}),
+      pairing: pairing(),
+    });
+    assert.equal(values.currency, "EUR");
+    assert.equal(values.netAmount, "100.00");
+    assert.equal(values.issueDate, "2026-09-20");
+    // a szkennelt PDF figyelmeztetése marad, tárolhatósági nem jön
+    assert.equal(warnings.filter((w) => w.includes("nem tárolható")).length, 0);
+  });
+});

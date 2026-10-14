@@ -89,6 +89,8 @@ function harness(input: {
   files: Record<string, Buffer>;
   feed?: Row[];
   readings?: Row[];
+  /** a reading create for this document fails, as the database would refuse it */
+  failCreateFor?: Record<string, Error>;
 }) {
   const feed: Row[] = [...(input.feed ?? [])];
   const readings: Row[] = [...(input.readings ?? [])];
@@ -154,6 +156,8 @@ function harness(input: {
       findUnique: async ({ where }: { where: { documentId: string } }) =>
         readings.find((row) => row.documentId === where.documentId) ?? null,
       create: async ({ data }: { data: Row }) => {
+        const refused = input.failCreateFor?.[data.documentId as string];
+        if (refused) throw refused;
         writes.push("incomingDocumentReading.create");
         const row = asReading(data);
         readings.push(row);
@@ -478,6 +482,50 @@ describe("reading the pending rows", () => {
     assert.equal(applied.written, 1);
     assert.deepEqual(wet.writes, ["incomingDocumentReading.create"]);
     assert.equal(wet.readings.at(-1)!.documentId, "mail-1");
+  });
+
+  /*
+    EGY SOR HIBÁJA NEM ÁLLÍTJA MEG A TÖBBIT (kulfoldi-szamla-olvasas-hiba,
+    2026-10-14: élesen 24 futás bukott egy írhatatlan soron). MI PIROSÍT: ha a
+    hibás sor után a többi nem íródik; ha a futás dob; ha a jelentés nem
+    nevezi meg a sort és a kódot; ha a kitalált számla-adat (szállító, összeg)
+    a jelentésbe kerül.
+  */
+  it("a row the database refuses is skipped and reported; the others are written", async () => {
+    const files = {
+      "mail-1": await textPdf(INVOICE),
+      "mail-2": await textPdf(INVOICE),
+      "mail-3": await textPdf(INVOICE),
+    };
+    const h = harness({
+      pairings: [
+        pairing(),
+        pairing({ id: "mail-2", number: "KIT-2" }),
+        pairing({ id: "mail-3", number: "KIT-3" }),
+      ],
+      files,
+      failCreateFor: {
+        "mail-2": new Prisma.PrismaClientKnownRequestError(
+          "Kitalált Előfizetés Inc. 81.30 EUR",
+          {
+            code: "P2020",
+            clientVersion: "6.19.3",
+            meta: { details: "81.30" },
+          },
+        ),
+      },
+    });
+    const report = await h.service.readPending({ apply: true });
+    assert.equal(report.written, 2);
+    assert.equal(report.failed, 1);
+    assert.deepEqual(report.failures, [
+      { documentId: "mail-2", error: "PrismaClientKnownRequestError P2020" },
+    ]);
+    assert.deepEqual(
+      h.readings.map((row) => row.documentId),
+      ["mail-1", "mail-3"],
+    );
+    assert.doesNotMatch(JSON.stringify(report.failures), /Kitalált|81\.30/);
   });
 
   it("since leaves the older rows out", async () => {

@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { Prisma } from "@acropora/database";
+
+import { prismaErrorSummary } from "./error-summary.js";
 import { formatReport, parseArguments } from "./incoming-foreign-read.cli.js";
-import { foreignReadSettings } from "./incoming-foreign-read.scheduler.js";
+import {
+  foreignReadSettings,
+  IncomingForeignReadScheduler,
+} from "./incoming-foreign-read.scheduler.js";
+import type {
+  IncomingReviewService,
+  PendingReport,
+} from "./incoming-review.service.js";
 
 /**
  * A KÜLFÖLDI SZÁMLA KINYERÉS KAPCSOLÓI (kártya e4c3b0fb). MI PIROSÍT: ha a
@@ -41,6 +51,13 @@ describe("the CLI options", () => {
         alreadyRead: 0,
         read: 1,
         written: 0,
+        failed: 1,
+        failures: [
+          {
+            documentId: "doc-2",
+            error: "PrismaClientKnownRequestError P2000 (currency)",
+          },
+        ],
         withText: 1,
         withAdapter: 0,
         complete: 0,
@@ -69,6 +86,119 @@ describe("the CLI options", () => {
       text,
       /doc-1\t2026-10-03\tEUR\tkitalalt\.example\tigen\tnem\t9\tvatAmount\t0/,
     );
+    assert.match(text, /kimaradt \(hiba\): 1/);
+    assert.match(
+      text,
+      /kimaradt: doc-2 PrismaClientKnownRequestError P2000 \(currency\)/,
+    );
+  });
+});
+
+/*
+  A HIBA FAJTÁJA, A TARTALMA NÉLKÜL (kulfoldi-szamla-olvasas-hiba). MI PIROSÍT:
+  ha a naplóba csak az osztály neve kerül (2026-10-13 óta 24 futás bukott így,
+  a kód nélkül); ha a Prisma `meta`-jából egy érték is a naplóba jut (a P2020
+  `details`-e magát a túl nagy összeget idézi); ha egy nem Prisma hiba üzenete
+  kiíródik.
+*/
+const known = (code: string, meta: Record<string, unknown>) =>
+  new Prisma.PrismaClientKnownRequestError("Kitalált üzenet 123456789,99 EUR", {
+    code,
+    clientVersion: "6.19.3",
+    meta,
+  });
+
+describe("the error summary", () => {
+  it("names the code and the field, never a value", () => {
+    assert.equal(
+      prismaErrorSummary(known("P2000", { column_name: "currency" })),
+      "PrismaClientKnownRequestError P2000 (currency)",
+    );
+    assert.equal(
+      prismaErrorSummary(
+        known("P2002", {
+          modelName: "IncomingDocumentReading",
+          target: ["documentId"],
+        }),
+      ),
+      "PrismaClientKnownRequestError P2002 (IncomingDocumentReading, documentId)",
+    );
+    const overflow = prismaErrorSummary(
+      known("P2020", {
+        details: "Value 123456789012345678901,00 out of range",
+      }),
+    );
+    assert.equal(overflow, "PrismaClientKnownRequestError P2020");
+    // a meta-ba csempészett érték sem kerül át, ha nem azonosító alakú
+    assert.equal(
+      prismaErrorSummary(
+        known("P2003", { field_name: "Kitalált Kft. 81,30 EUR" }),
+      ),
+      "PrismaClientKnownRequestError P2003",
+    );
+    assert.equal(
+      prismaErrorSummary(new TypeError("Kitalált Kft. számla")),
+      "TypeError",
+    );
+    assert.equal(prismaErrorSummary("szöveg"), "UNKNOWN");
+  });
+});
+
+describe("the scheduler run", () => {
+  const report = (over: Partial<PendingReport>): PendingReport => ({
+    total: 0,
+    alreadyRead: 0,
+    read: 0,
+    written: 0,
+    failed: 0,
+    failures: [],
+    withText: 0,
+    withAdapter: 0,
+    complete: 0,
+    byCurrency: {},
+    bySenderDomain: {},
+    rows: [],
+    ...over,
+  });
+  const scheduler = (readPending: () => Promise<PendingReport>) => {
+    const lines: string[] = [];
+    const run = new IncomingForeignReadScheduler({
+      readPending,
+    } as unknown as IncomingReviewService);
+    const logger = {
+      log: (m: string) => lines.push(`log ${m}`),
+      warn: (m: string) => lines.push(`warn ${m}`),
+      error: (m: string) => lines.push(`error ${m}`),
+    };
+    Object.assign(run, { logger });
+    return { run, lines };
+  };
+
+  it("a skipped row is a warning with its id and code; the run still applies", async () => {
+    const { run, lines } = scheduler(async () =>
+      report({
+        written: 2,
+        failed: 1,
+        failures: [
+          { documentId: "doc-9", error: "PrismaClientKnownRequestError P2020" },
+        ],
+      }),
+    );
+    assert.equal(await run.runOnce(), "APPLIED");
+    assert.deepEqual(lines, [
+      "log Foreign invoice reading: 2 new",
+      "warn Foreign invoice reading: 1 row(s) skipped: doc-9 PrismaClientKnownRequestError P2020",
+    ]);
+  });
+
+  it("a failed run logs the code, not the message", async () => {
+    const { run, lines } = scheduler(async () => {
+      throw known("P2022", { column_name: "currency" });
+    });
+    assert.equal(await run.runOnce(), "FAILED");
+    assert.deepEqual(lines, [
+      "error Foreign invoice reading failed: PrismaClientKnownRequestError P2022 (currency)",
+    ]);
   });
 });
 

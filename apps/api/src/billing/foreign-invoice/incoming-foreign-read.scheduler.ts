@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 
+import { prismaErrorSummary } from "./error-summary.js";
 import { IncomingReviewService } from "./incoming-review.service.js";
 
 const STARTUP_DELAY_MS = 240_000;
@@ -77,13 +78,18 @@ export class IncomingForeignReadScheduler
       });
       if (report.written)
         this.logger.log(`Foreign invoice reading: ${report.written} new`);
+      // a kimaradt sorok: azonosító és a hiba fajtája (kód, mezőnév), számla-adat nélkül
+      if (report.failed)
+        this.logger.warn(
+          `Foreign invoice reading: ${report.failed} row(s) skipped: ${report.failures
+            .map((failure) => `${failure.documentId} ${failure.error}`)
+            .join("; ")}`,
+        );
       return "APPLIED";
     } catch (error) {
       // a hibaüzenet számla-adatot hordozhat, ezért csak a fajtája megy a naplóba
       this.logger.error(
-        `Foreign invoice reading failed: ${
-          error instanceof Error ? error.name : "UNKNOWN"
-        }`,
+        `Foreign invoice reading failed: ${prismaErrorSummary(error)}`,
       );
       return "FAILED";
     }
