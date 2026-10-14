@@ -96,7 +96,18 @@ export interface EditorState {
   lines: EditorLine[];
 }
 
-export const PAYMENT_METHODS = ["Átutalás", "Készpénz", "Bankkártya"] as const;
+/*
+  A SZÁMLA FIZETÉSI MÓDJAI (a Számlázz.hu ezt a szöveget írja ki, `fizmod`).
+  Az „Utánvét” Luca kérése (2026-10-14): a webshop utánvétes számlája már ezzel a
+  szöveggel megy (`invoicePaymentMethodOf`), és a kifizetettség-osztályozó
+  „Nincs fizetve”-nek veszi, amíg a fizetés meg nem jön (`outgoingMissingPayments`).
+*/
+export const PAYMENT_METHODS = [
+  "Átutalás",
+  "Készpénz",
+  "Bankkártya",
+  "Utánvét",
+] as const;
 export const CURRENCIES = ["HUF", "EUR"] as const;
 export const LANGUAGES = [
   { value: "hu", label: "Magyar" },
