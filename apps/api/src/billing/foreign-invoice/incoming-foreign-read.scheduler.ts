@@ -85,6 +85,14 @@ export class IncomingForeignReadScheduler
             .map((failure) => `${failure.documentId} ${failure.error}`)
             .join("; ")}`,
         );
+      // ami semmit nem írt és hibázott, az nem sikeres futás (barracuda #1689):
+      // egy rendszerszintű sorhiba (például a PDF-tár) különben APPLIED-nak látszana
+      if (report.failed && !report.written) {
+        this.logger.error(
+          `Foreign invoice reading failed: ${report.failed} row(s) skipped, none written`,
+        );
+        return "FAILED";
+      }
       return "APPLIED";
     } catch (error) {
       // a hibaüzenet számla-adatot hordozhat, ezért csak a fajtája megy a naplóba

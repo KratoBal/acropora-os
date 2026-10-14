@@ -136,6 +136,15 @@ describe("the error summary", () => {
       ),
       "PrismaClientKnownRequestError P2003",
     );
+    // a P2003 kényszerneve zárójeles megjegyzéssel jön: a név megmarad (barracuda #1689)
+    assert.equal(
+      prismaErrorSummary(
+        known("P2003", {
+          field_name: "IncomingDocumentReading_documentId_fkey (index)",
+        }),
+      ),
+      "PrismaClientKnownRequestError P2003 (IncomingDocumentReading_documentId_fkey)",
+    );
     assert.equal(
       prismaErrorSummary(new TypeError("Kitalált Kft. számla")),
       "TypeError",
@@ -188,6 +197,22 @@ describe("the scheduler run", () => {
     assert.deepEqual(lines, [
       "log Foreign invoice reading: 2 new",
       "warn Foreign invoice reading: 1 row(s) skipped: doc-9 PrismaClientKnownRequestError P2020",
+    ]);
+  });
+
+  it("a run that skipped rows and wrote none is a failed run", async () => {
+    const { run, lines } = scheduler(async () =>
+      report({
+        failed: 1,
+        failures: [
+          { documentId: "doc-9", error: "PrismaClientKnownRequestError P2020" },
+        ],
+      }),
+    );
+    assert.equal(await run.runOnce(), "FAILED");
+    assert.deepEqual(lines, [
+      "warn Foreign invoice reading: 1 row(s) skipped: doc-9 PrismaClientKnownRequestError P2020",
+      "error Foreign invoice reading failed: 1 row(s) skipped, none written",
     ]);
   });
 

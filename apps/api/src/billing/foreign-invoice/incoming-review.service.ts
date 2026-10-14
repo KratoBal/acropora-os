@@ -423,7 +423,8 @@ export class IncomingReviewService {
         report.alreadyRead += 1;
         continue;
       }
-      if (options.limit && report.read >= options.limit) break;
+      // a bukott sor is próbálkozás: egy csupa-hibás futás is megáll a korlátnál
+      if (options.limit && report.read + report.failed >= options.limit) break;
       /*
         EGY SOR HIBÁJA NEM ÁLLÍTJA MEG A TÖBBIT (kulfoldi-szamla-olvasas-hiba):
         2026-10-13 óta egy írhatatlan sor minden futást ugyanott állított meg.
