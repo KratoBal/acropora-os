@@ -237,6 +237,54 @@ describe(
       );
     });
 
+    it("S4: a beszúrt tételsor árrögzítéssel áll, az állapot megszámolja, és a következő foglalás már felhasználásnak látja", async () => {
+      const { customer, department, contract, items } = await setup([1]);
+      const [d] = items as [Item];
+      const job = await prisma.serviceJob.create({
+        data: {
+          jobNumber: next(),
+          title: "Keret teszt lap (B út)",
+          kind: "MAINTENANCE",
+          customerId: customer.id,
+          departmentId: department.id,
+          contractId: contract.id,
+        },
+      });
+      const before = await repository.serviceJobContractItemState(job.id);
+      const first = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        (tx) =>
+          repository.insertServiceJobContractItems(tx, job.id, [
+            {
+              contractItemId: d.id,
+              description: d.description,
+              unitNet: d.unitNet,
+              quantity: d.quantity,
+              vatRatePercent: d.vatRatePercent,
+            },
+          ]),
+      );
+      const after = await repository.serviceJobContractItemState(job.id);
+      const stored = await prisma.serviceJobContractItem.findMany({
+        where: { serviceJobId: job.id },
+        select: { contractItemId: true, unitNet: true },
+      });
+      const second = await repository.reserveOccasions(
+        reserveInput(contract.id, [d]),
+        async () => "nem kellene lefutnia",
+      );
+      assert.deepEqual(
+        [
+          before?.itemCount,
+          first.ok,
+          after?.itemCount,
+          stored.map((row) => [row.contractItemId, row.unitNet.toString()]),
+          second,
+        ],
+        [0, true, 1, [[d.id, "100000"]], { ok: false, exhausted: ["Tétel 1"] }],
+      );
+    });
+
     it("két egyszerre indított foglalás az utolsó alkalomra: pontosan egy megy át", async () => {
       const { contract, items } = await setup([1]);
       const [c] = items as [Item];

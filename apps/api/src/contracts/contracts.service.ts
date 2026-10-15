@@ -198,8 +198,9 @@ export class ContractsService {
         error.code === "P2003"
       )
         throw new ConflictException(
-          // a számlasor is a tételre mutat (feladat d510), nem csak a megrendelőlap
-          "A tétel nem törölhető, mert már készült megrendelőlap vagy számla, ami rá hivatkozik.",
+          // a számlasor (feladat d510) és a megrendelőlap nélküli karbantartási
+          // lap tételsora (felmérés S4, barracuda 31612) is a tételre mutat
+          "A tétel nem törölhető, mert már készült megrendelőlap, számla vagy karbantartási lap, ami rá hivatkozik.",
         );
       this.mapUniqueNumberConflict(error, data.number);
     }

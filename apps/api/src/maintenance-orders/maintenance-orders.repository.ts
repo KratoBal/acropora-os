@@ -312,25 +312,101 @@ export class MaintenanceOrdersRepository {
       }[];
     },
     write: (tx: Prisma.TransactionClient) => Promise<T>,
-  ): Promise<{ ok: true; value: T } | { ok: false; exhausted: string[] }> {
-    return this.database.$transaction(async (tx) => {
-      // a `::text` azért kell, mert a void visszatérést a Prisma nem tudja beolvasni
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`maintenance-occasions:${input.contractId}`}))::text`;
-      const used = await occasionsUsed(
-        tx,
-        input.items.map((item) => item.contractItemId),
-        input.year,
-      );
-      const exhausted = input.items.filter(
-        (item) =>
-          (used.get(item.contractItemId) ?? 0) >= (item.occasionsPerYear ?? 0),
-      );
-      if (exhausted.length)
-        return {
-          ok: false as const,
-          exhausted: exhausted.map((item) => item.description),
-        };
-      return { ok: true as const, value: await write(tx) };
+  ): Promise<
+    | { ok: true; value: T }
+    | { ok: false; exhausted: string[] }
+    | { ok: false; busy: true }
+  > {
+    /*
+      AZ IDŐKORLÁT KIMONDVA (barracuda 31686): a Prisma interaktív
+      tranzakciójának alapja 5 mp, és a zárra várás is beleszámít. Egy
+      torlódásnál (több kiállítás vagy lap ugyanarra a szerződésre) a várakozó
+      ennél tovább állhat; a lejárt tranzakció P2028-at ad, és az nem
+      keret-túllépés, hanem "próbáld újra": a hívó így tudja megkülönböztetni.
+    */
+    try {
+      return await this.reserveOccasionsLocked(input, write);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2028"
+      )
+        return { ok: false as const, busy: true as const };
+      throw error;
+    }
+  }
+
+  private reserveOccasionsLocked<T>(
+    input: {
+      contractId: string;
+      year: number;
+      items: readonly {
+        contractItemId: string;
+        description: string;
+        occasionsPerYear: number | null;
+      }[];
+    },
+    write: (tx: Prisma.TransactionClient) => Promise<T>,
+  ) {
+    return this.database.$transaction(
+      async (tx) => {
+        // a `::text` azért kell, mert a void visszatérést a Prisma nem tudja beolvasni
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`maintenance-occasions:${input.contractId}`}))::text`;
+        const used = await occasionsUsed(
+          tx,
+          input.items.map((item) => item.contractItemId),
+          input.year,
+        );
+        const exhausted = input.items.filter(
+          (item) =>
+            (used.get(item.contractItemId) ?? 0) >=
+            (item.occasionsPerYear ?? 0),
+        );
+        if (exhausted.length)
+          return {
+            ok: false as const,
+            exhausted: exhausted.map((item) => item.description),
+          };
+        return { ok: true as const, value: await write(tx) };
+      },
+      { maxWait: 10_000, timeout: 20_000 },
+    );
+  }
+
+  /**
+   * A MEGRENDELŐLAP NÉLKÜLI LAP ÁLLAPOTA A FOGLALÁSHOZ: mikor jött létre (az
+   * alkalomkeret éve ebből számol) és hány szerződés-tétele van már. Ha
+   * vannak, egy korábbi próbálkozás a foglalásig eljutott: az újrahívás nem
+   * foglal újra (a saját sorait különben a keret felhasználásnak látná).
+   */
+  async serviceJobContractItemState(serviceJobId: string) {
+    const job = await this.database.serviceJob.findUnique({
+      where: { id: serviceJobId },
+      select: { createdAt: true, _count: { select: { contractItems: true } } },
+    });
+    return job
+      ? { createdAt: job.createdAt, itemCount: job._count.contractItems }
+      : null;
+  }
+
+  /**
+   * A LAP SZERZŐDÉS-TÉTELEI, ÁRRÖGZÍTÉSSEL (felmérés S4; a másolat oka a
+   * `ServiceJobContractItem` modell fejlécén). A foglalás `write`-jaként fut,
+   * a zár alatt.
+   */
+  insertServiceJobContractItems(
+    tx: Prisma.TransactionClient,
+    serviceJobId: string,
+    items: readonly {
+      contractItemId: string;
+      description: string;
+      unitNet: Prisma.Decimal;
+      quantity: Prisma.Decimal;
+      vatRatePercent: Prisma.Decimal;
+    }[],
+  ) {
+    return tx.serviceJobContractItem.createMany({
+      data: items.map((item) => ({ serviceJobId, ...item })),
     });
   }
 

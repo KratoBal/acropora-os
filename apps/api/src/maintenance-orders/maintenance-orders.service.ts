@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
@@ -14,7 +16,11 @@ import { decideQuota } from "../service-assets/document-store/document-quota.js"
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
 
-import { IssueMaintenanceOrderDto, RevokeMaintenanceOrderDto } from "./dto.js";
+import {
+  CreateContractJobDto,
+  IssueMaintenanceOrderDto,
+  RevokeMaintenanceOrderDto,
+} from "./dto.js";
 import {
   createJobFromContractItems,
   ensureOneSite,
@@ -26,6 +32,23 @@ import {
   nextMaintenanceOrderNumber,
 } from "./maintenance-order-number.js";
 import { MaintenanceOrdersRepository } from "./maintenance-orders.repository.js";
+
+/**
+ * A FOGLALÁS SIKERTELEN ÁGA, 409-KÉNT: elfogyott a keret (a tételek nevével),
+ * vagy a zárra várás lejárt (torlódás, nem túllépés: próbáld újra).
+ */
+function reservationConflict(
+  year: number,
+  failed: { ok: false; exhausted: string[] } | { ok: false; busy: true },
+): ConflictException {
+  return "busy" in failed
+    ? new ConflictException(
+        "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+      )
+    : new ConflictException(
+        `A következő tételeknél ${year}-ban elfogyott az évi alkalomkeret: ${failed.exhausted.join(", ")}.`,
+      );
+}
 
 @Injectable()
 export class MaintenanceOrdersService {
@@ -234,10 +257,7 @@ export class MaintenanceOrdersService {
         );
       throw error;
     }
-    if (!reserved.ok)
-      throw new ConflictException(
-        `A következő tételeknél ${occasionYear}-ban elfogyott az évi alkalomkeret: ${reserved.exhausted.join(", ")}.`,
-      );
+    if (!reserved.ok) throw reservationConflict(occasionYear, reserved);
     return reserved.value;
   }
 
@@ -355,6 +375,130 @@ export class MaintenanceOrdersService {
     );
 
     return this.repository.attachServiceJob(id, serviceJobId);
+  }
+
+  /**
+   * KARBANTARTÁSI LAP A SZERZŐDÉSBŐL, MEGRENDELŐLAP NÉLKÜL (karbantartási
+   * felmérés S4, B út; Balázs 2026-10-15). A helyszín és az eszközök a
+   * szerződésből jönnek (a közös S3 út), a lap fedett tételei a
+   * `ServiceJobContractItem` sorokba kerülnek árrögzítéssel, és az éves
+   * alkalomkeretet ugyanaz a zár védi, mint a kiállítást. Ár a lapra nem kerül.
+   *
+   * A SORREND, ÉS MIÉRT ILYEN: a lapot és a munkalapokat a meglévő
+   * szolgáltatások hozzák létre, saját adatbázis-kapcsolattal, tehát a lap nem
+   * kerülhet a foglalás tranzakciójába. Ezért:
+   *   1. ELŐELLENŐRZÉS a zár alatt, írás nélkül: a szokásos túllépés így lap
+   *      létrehozása NÉLKÜL ad 409-et;
+   *   2. a lap és a munkalapok, idempotens kulccsal (`contract-job-<kulcs>`);
+   *   3. a tételsorok beszúrása, ÚJRA a zár alatt. Ha közben egy párhuzamos
+   *      foglalás elvitte az utolsó alkalmat, a friss lapot LEMONDJUK (a
+   *      napló megmarad, a keret nem lép túl), és 409 jön.
+   * Egy újrahívás ugyanazzal a kulccsal a meglévő lapot kapja vissza; ha annak
+   * már vannak tételsorai, a foglalás nem fut újra.
+   */
+  async createJobFromContract(
+    dto: CreateContractJobDto,
+    actor: AuthenticatedUser,
+  ) {
+    const itemIds = [...new Set(dto.itemIds)];
+    const contract = await this.repository.contractForIssuance(
+      dto.contractId,
+      itemIds,
+    );
+    if (!contract) throw new NotFoundException("A szerződés nem található.");
+    if (contract.status !== "ACTIVE")
+      throw new BadRequestException(
+        "Csak aktív szerződésből készíthető karbantartási lap.",
+      );
+    // a beszerzésiből számla, a javításiból (felmérés S0/3) semmilyen karbantartási lap nem készül
+    if (contract.kind !== "MAINTENANCE")
+      throw new BadRequestException(
+        "Csak karbantartási szerződésből készíthető karbantartási lap.",
+      );
+    if (contract.items.length !== itemIds.length)
+      throw new BadRequestException(
+        "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
+      );
+
+    const items = contract.items.map((item) => ({
+      id: item.id,
+      departmentId: item.departmentId,
+      description: item.description,
+      quantity: item.quantity.toNumber(),
+    }));
+    const departmentId = await siteForContractItems(this.repository, items);
+    const reservation = {
+      contractId: contract.id,
+      items: contract.items.map((item) => ({
+        contractItemId: item.id,
+        description: item.description,
+        occasionsPerYear: item.occasionsPerYear,
+      })),
+    };
+    const nowYear = maintenanceOrderOccasionYear(new Date());
+    const key = dto.clientOperationId?.trim() || randomUUID();
+
+    const precheck = await this.repository.reserveOccasions(
+      { ...reservation, year: nowYear },
+      async () => null,
+    );
+    if (!precheck.ok) throw reservationConflict(nowYear, precheck);
+
+    const { serviceJobId } = await createJobFromContractItems(
+      {
+        repository: this.repository,
+        serviceJobs: this.serviceJobs,
+        worksheets: this.worksheets,
+      },
+      {
+        title: dto.title?.trim() || contract.title,
+        contract: { id: contract.id, customerId: contract.customer.id },
+        departmentId,
+        items,
+        jobOperationId: `contract-job-${key}`,
+        worksheetOperationIdPrefix: `contract-job-${key}-worksheet-`,
+        source: `contract-job ${key}`,
+      },
+      actor,
+    );
+
+    const state =
+      await this.repository.serviceJobContractItemState(serviceJobId);
+    if (!state)
+      throw new Error(
+        `A most létrehozott ${serviceJobId} karbantartási lap nem található.`,
+      );
+    if (state.itemCount > 0) return { serviceJobId };
+
+    const year = maintenanceOrderOccasionYear(state.createdAt);
+    const reserved = await this.repository.reserveOccasions(
+      { ...reservation, year },
+      (tx) =>
+        this.repository.insertServiceJobContractItems(
+          tx,
+          serviceJobId,
+          contract.items.map((item) => ({
+            contractItemId: item.id,
+            description: item.description,
+            unitNet: item.unitNet,
+            quantity: item.quantity,
+            vatRatePercent: item.vatRatePercent,
+          })),
+        ),
+    );
+    if (!reserved.ok) {
+      await this.serviceJobs.move(
+        serviceJobId,
+        {
+          to: "CANCELLED",
+          note: "A szerződés alkalomkeretét a lap létrehozása közben egy párhuzamos foglalás elvitte; a lap tételek nélkül lemondva.",
+        },
+        actor.id,
+        actor,
+      );
+      throw reservationConflict(year, reserved);
+    }
+    return { serviceJobId };
   }
 
   /** A helyszín-szabály a közös úton áll (`job-from-contract-items.ts`). */

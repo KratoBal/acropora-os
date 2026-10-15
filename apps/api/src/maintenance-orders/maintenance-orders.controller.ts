@@ -19,7 +19,11 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 
-import { IssueMaintenanceOrderDto, RevokeMaintenanceOrderDto } from "./dto.js";
+import {
+  CreateContractJobDto,
+  IssueMaintenanceOrderDto,
+  RevokeMaintenanceOrderDto,
+} from "./dto.js";
 import { MaintenanceOrdersService } from "./maintenance-orders.service.js";
 
 /**
@@ -52,6 +56,15 @@ export class MaintenanceOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.issue(dto, user);
+  }
+
+  /** Karbantartási lap a szerződésből, megrendelőlap nélkül (felmérés S4). */
+  @Post("contract-jobs")
+  createJobFromContract(
+    @Body() dto: CreateContractJobDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.createJobFromContract(dto, user);
   }
 
   @Post(":id/revoke")

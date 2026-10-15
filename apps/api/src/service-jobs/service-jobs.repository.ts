@@ -148,15 +148,16 @@ export class ServiceJobsRepository {
    * Nem a partner-felület `supplierId` útvonala a tulajdonosi tengely: az
    * adatmodellben a munka és a szerződés is a vevőé.
    */
-  async contractBelongsToCustomer(
+  /** A szerződés fajtája, ha ehhez a partnerhez tartozik; különben `null`. */
+  async contractKindForCustomer(
     contractId: string,
     customerId: string,
-  ): Promise<boolean> {
+  ): Promise<"MAINTENANCE" | "PURCHASE" | "REPAIR" | null> {
     const found = await this.database.contract.findFirst({
       where: { id: contractId, customerId },
-      select: { id: true },
+      select: { kind: true },
     });
-    return found !== null;
+    return found?.kind ?? null;
   }
 
   /**
