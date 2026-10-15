@@ -1401,8 +1401,27 @@ describe("a Megrendelések és Teljesítési igazolások kötése", () => {
    */
   it("a megrendelőlap letöltése a szerver fileName/contentType mezőit használja, nem kitalált nevet", () => {
     const s = kod(MEGRENDELES_RESZLET);
-    assert.match(s, /generated\.fileName/);
+    assert.match(s, /sheet\.fileName/);
     assert.doesNotMatch(s, /-megrendelolap\.pdf/);
+  });
+
+  /**
+   * A LETÖLTHETŐ LAP A FORRÁST KÖVETI (karbantartási felmérés S8). A vevő
+   * megrendelőlapjának nincs generált dokumentuma: a csak `GENERATED_FORM`-ot
+   * kereső kártya ott letöltés nélkül maradt. MI PIROSÍT: ha az adatlap
+   * visszaállna a típusra szűrő keresésre, ha nem a közös választót hívná,
+   * vagy ha a lista nem írná ki a vevő megrendelőlapjának feliratát.
+   */
+  it("az adatlap a forrás szerinti megrendelőlapot adja le, a lista jelzi a vevői lapot", () => {
+    const reszlet = kod(MEGRENDELES_RESZLET);
+    assert.match(reszlet, /maintenanceOrderSheetDocument\(order\)/);
+    assert.doesNotMatch(reszlet, /doc\.type === "GENERATED_FORM"/);
+    assert.match(reszlet, /maintenanceOrderSourceLabel\[order\.source\]/);
+    const lista = kod(MEGRENDELES_LISTA);
+    assert.match(
+      lista,
+      /order\.source === "CUSTOMER_FORM"[\s\S]{0,200}maintenanceOrderSourceLabel\.CUSTOMER_FORM/,
+    );
   });
 
   /**

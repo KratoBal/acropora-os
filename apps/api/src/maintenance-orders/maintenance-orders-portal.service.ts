@@ -48,6 +48,32 @@ function documentedMaintenanceOrderContentType(
 }
 
 /**
+ * A LISTA ÉS AZ ADATLAP KÖZÖS FEJE. A `source` a megrendelőlap forrása
+ * (karbantartási felmérés S8): a portál ebből írja ki a vevő megrendelőlapjának
+ * feliratát, és ebből választja a letölthető dokumentumot.
+ */
+export function portalMaintenanceOrderSummary(
+  row: PortalMaintenanceOrderRow,
+  departmentNames: ReadonlyMap<string, string>,
+): MaintenanceOrderPartnerSummary {
+  const location = maintenanceOrderLocationView(row.items);
+  const names = location.departmentIds
+    .map((id) => departmentNames.get(id))
+    .filter((name): name is string => Boolean(name));
+  return {
+    id: row.id,
+    number: row.number,
+    contractNumber: row.contract.number,
+    contractTitle: row.contract.title,
+    status: row.status,
+    source: row.source,
+    period: HU_MONTH_YEAR.format(row.issuedAt),
+    departmentName: names.length ? names.join(", ") : null,
+    issuedAt: row.issuedAt.toISOString(),
+  };
+}
+
+/**
  * A MEGRENDELŐLAP OLVASÁSA/FELTÖLTÉSE A PARTNER PORTÁLON.
  *
  * === EZ NEM A BELSŐ `MaintenanceOrdersController`/`MaintenanceOrdersService`
@@ -99,7 +125,9 @@ export class MaintenanceOrdersPortalService {
     const visible = await this.filterVisible(rows, scope.customerId, unitIds);
     const departmentNames = await this.departmentNames(visible);
     return {
-      items: visible.map((row) => this.toSummary(row, departmentNames)),
+      items: visible.map((row) =>
+        portalMaintenanceOrderSummary(row, departmentNames),
+      ),
     };
   }
 
@@ -135,7 +163,7 @@ export class MaintenanceOrdersPortalService {
       }),
     );
     return {
-      ...this.toSummary(row, departmentNames),
+      ...portalMaintenanceOrderSummary(row, departmentNames),
       items,
       documents,
       canUploadSigned,
@@ -237,25 +265,5 @@ export class MaintenanceOrdersPortalService {
       ),
     ];
     return this.repository.departmentNames(ids);
-  }
-
-  private toSummary(
-    row: PortalMaintenanceOrderRow,
-    departmentNames: Map<string, string>,
-  ): MaintenanceOrderPartnerSummary {
-    const location = maintenanceOrderLocationView(row.items);
-    const names = location.departmentIds
-      .map((id) => departmentNames.get(id))
-      .filter((name): name is string => Boolean(name));
-    return {
-      id: row.id,
-      number: row.number,
-      contractNumber: row.contract.number,
-      contractTitle: row.contract.title,
-      status: row.status,
-      period: HU_MONTH_YEAR.format(row.issuedAt),
-      departmentName: names.length ? names.join(", ") : null,
-      issuedAt: row.issuedAt.toISOString(),
-    };
   }
 }

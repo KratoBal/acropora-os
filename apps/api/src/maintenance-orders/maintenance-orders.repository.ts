@@ -66,6 +66,7 @@ const portalOrderSelect = {
   id: true,
   number: true,
   status: true,
+  source: true,
   occasionYear: true,
   issuedAt: true,
   contract: {

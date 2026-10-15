@@ -520,10 +520,13 @@ export type {
   MaintenanceOrderPartnerItem,
   MaintenanceOrderPartnerListResponse,
   MaintenanceOrderPartnerSummary,
+  MaintenanceOrderSourceValue,
   MaintenanceOrderStatusTone,
   MaintenanceOrderStatusValue,
 } from "./maintenance-order-management.js";
 export {
+  maintenanceOrderSheetDocument,
+  maintenanceOrderSourceLabel,
   maintenanceOrderStatusLabel,
   maintenanceOrderStatusTone,
 } from "./maintenance-order-management.js";

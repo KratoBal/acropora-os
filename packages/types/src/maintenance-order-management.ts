@@ -39,6 +39,38 @@ export const maintenanceOrderStatusTone: Record<
 };
 
 /**
+ * HONNAN JÖTT A MEGRENDELŐLAP (karbantartási felmérés S6/S8). `GENERATED`:
+ * mi állítottuk ki a szerződésből; `CUSTOMER_FORM`: a vevő saját, feltöltött
+ * megrendelőlapja. A felirat a belső szerződés-lap szövegét követi.
+ */
+export type MaintenanceOrderSourceValue = "GENERATED" | "CUSTOMER_FORM";
+
+export const maintenanceOrderSourceLabel: Record<
+  MaintenanceOrderSourceValue,
+  string
+> = {
+  GENERATED: "Általunk kiállított",
+  CUSTOMER_FORM: "Vevő megrendelőlapja",
+};
+
+/**
+ * A LETÖLTHETŐ MEGRENDELŐLAP A FORRÁST KÖVETI: a vevő megrendelőlapjánál a
+ * feltöltött `CUSTOMER_FORM` dokumentum, egyébként a generált lap. Egy vevői
+ * lapnak nincs generált dokumentuma, ezért a csak `GENERATED_FORM`-ot kereső
+ * felület ott letöltés nélkül maradt.
+ */
+export function maintenanceOrderSheetDocument<
+  T extends Pick<MaintenanceOrderDocumentSummary, "type">,
+>(order: {
+  source: MaintenanceOrderSourceValue;
+  documents: readonly T[];
+}): T | undefined {
+  const type =
+    order.source === "CUSTOMER_FORM" ? "CUSTOMER_FORM" : "GENERATED_FORM";
+  return order.documents.find((doc) => doc.type === type);
+}
+
+/**
  * A KÉT LEHETSÉGES TARTALOMTÍPUS, NEM ÁLTALÁNOS `string`.
  *
  * A `GENERATED_FORM` MA `.docx` (a mai nap `feat/maintenance-order-form-
@@ -89,6 +121,7 @@ export interface MaintenanceOrderPartnerSummary {
   contractNumber: string;
   contractTitle: string;
   status: MaintenanceOrderStatusValue;
+  source: MaintenanceOrderSourceValue;
   /**
    * A KIÁLLÍTÁS HÓNAPJA ÉS ÉVE, MAGYARUL ("2026. október") -- a Figma terv
    * "Időszak" oszlopa hónap-pontosságú mintát mutat (`idoszak: '2026. okt.'`),

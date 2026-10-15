@@ -9,6 +9,7 @@ import {
   pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
+  maintenanceOrderSourceLabel,
   maintenanceOrderStatusLabel,
   maintenanceOrderStatusTone,
 } from "@acropora/types";
@@ -131,6 +132,11 @@ export function MaintenanceOrderList() {
                     <span className="font-mono text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
                       {order.number}
                     </span>
+                    {order.source === "CUSTOMER_FORM" ? (
+                      <span className="block text-xs text-pilot-grey-500">
+                        {maintenanceOrderSourceLabel.CUSTOMER_FORM}
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-5 py-3 text-pilot-grey-500">
                     {order.contractNumber}
