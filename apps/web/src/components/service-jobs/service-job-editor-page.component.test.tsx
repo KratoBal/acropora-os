@@ -15,6 +15,7 @@ import {
   savotMond,
   setOnLine,
 } from "@/components/service/service-offline-notice.testing";
+import { ApiError } from "@/lib/api/client";
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
 const api = vi.hoisted(() => ({
@@ -967,6 +968,74 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     );
     expect(orders.createContractJob).toHaveBeenCalledTimes(1);
     expect(api.updateFields).toHaveBeenCalledTimes(2);
+  });
+
+  it("WEB-JOB-CONTRACT-UNRESOLVED: válasz nélküli hiba után a partner, a szerződés, a tételek és a cím zárolva, az újrapróba ugyanazzal a kulccsal megy", async () => {
+    orders.createContractJob
+      .mockReset()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ serviceJobId: "job-szerz" });
+    await pickContract();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+
+    expect(
+      await screen.findByText(/Az előző kérés eredménye ismeretlen/),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Szerződés").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getByRole("checkbox", { name: /1\. Szűrőcsere/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(screen.getByLabelText("Mi a baj?").hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Másik partner" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/hibajegyek/job-szerz",
+      ),
+    );
+    const [first, second] = orders.createContractJob.mock.calls.map(
+      (call) => call[1] as { clientOperationId: string; itemIds: string[] },
+    );
+    expect(second?.clientOperationId).toBe(first?.clientOperationId);
+    expect(second?.itemIds).toEqual(first?.itemIds);
+  });
+
+  it("WEB-JOB-CONTRACT-REFUSED: 4xx elutasítás után nincs zár, a kijelölés módosítható", async () => {
+    orders.createContractJob
+      .mockReset()
+      .mockRejectedValueOnce(new ApiError("Elfogyott az alkalom.", 409));
+    await pickContract();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+
+    await screen.findByText("Elfogyott az alkalom.");
+    expect(
+      screen.queryByText(/Az előző kérés eredménye ismeretlen/),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("checkbox", { name: /1\. Szűrőcsere/ })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+    expect(screen.getByLabelText("Szerződés").hasAttribute("disabled")).toBe(
+      false,
+    );
   });
 
   it("WEB-JOB-CONTRACT-NONE: szerződés nélkül a régi út marad, a helyszín választható", async () => {
