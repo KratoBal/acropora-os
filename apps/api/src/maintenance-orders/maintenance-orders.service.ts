@@ -14,7 +14,11 @@ import { decideQuota } from "../service-assets/document-store/document-quota.js"
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
 
-import { IssueMaintenanceOrderDto, RevokeMaintenanceOrderDto } from "./dto.js";
+import {
+  IssueMaintenanceOrderDto,
+  RevokeMaintenanceOrderDto,
+  UploadCustomerFormDto,
+} from "./dto.js";
 import {
   createJobFromContractItems,
   ensureOneSite,
@@ -60,55 +64,7 @@ export class MaintenanceOrdersService {
    * de eldobott PDF-fel járna, feleslegesen.
    */
   async issue(dto: IssueMaintenanceOrderDto, actor: AuthenticatedUser) {
-    const itemIds = [...new Set(dto.itemIds)];
-    const contract = await this.repository.contractForIssuance(
-      dto.contractId,
-      itemIds,
-    );
-    if (!contract) throw new NotFoundException("A szerződés nem található.");
-    if (contract.status !== "ACTIVE")
-      throw new BadRequestException(
-        "Csak aktív szerződésre állítható ki megrendelőlap.",
-      );
-    // A beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4),
-    // és a javításiból sem készül (karbantartási felmérés S0/3).
-    if (contract.kind === "PURCHASE")
-      throw new BadRequestException(
-        "Beszerzési szerződésre nem állítható ki megrendelőlap.",
-      );
-    if (contract.kind === "REPAIR")
-      throw new BadRequestException(
-        "Javítási szerződésre nem állítható ki megrendelőlap.",
-      );
-    if (contract.items.length !== itemIds.length)
-      throw new BadRequestException(
-        "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
-      );
-
-    /*
-      A HELYSZÍN NÉLKÜLI TÉTELBŐL NEM LEHET MUNKALAP -- ezt itt, KIÁLLÍTÁSKOR
-      kérjük számon, nem csak aláíráskor. Enélkül egy megrendelőlap kimenne,
-      aláírva visszajönne, és csak AKKOR derülne ki, hogy a karbantartási
-      lapot nem lehet belőle megcsinálni -- a legrosszabb pillanatban.
-    */
-    const helyszinNelkul = contract.items.filter((item) => !item.departmentId);
-    if (helyszinNelkul.length)
-      throw new BadRequestException(
-        `A következő tételekhez nincs megadva helyszín a szerződésen, ezért nem állítható ki belőlük megrendelőlap: ${helyszinNelkul
-          .map((item) => item.description)
-          .join(", ")}.`,
-      );
-
-    /*
-      EGY MEGRENDELŐLAP EGY HELYSZÍNRE KÉSZÜL, és ez a tételek KÖZÖS FELSŐ
-      HELYSZÍNE is lehet (Balázs döntése, 2026-10-02 07:36 UTC, kártya
-      1806e061; az éles eset a Capasuli és három medencéje). Tényleg
-      független helyszíneknél itt, KIÁLLÍTÁSKOR állunk meg, és megnevezzük
-      őket (`uploadSignedDocument` ugyanezt ellenőrzi).
-    */
-    await this.ensureOneSite(
-      contract.items.map((item) => item.departmentId as string),
-    );
+    const contract = await this.orderableContract(dto);
 
     const now = new Date();
     const occasionYear = maintenanceOrderOccasionYear(now);
@@ -306,20 +262,7 @@ export class MaintenanceOrdersService {
     const departmentId = await siteForContractItems(this.repository, items);
 
     if (order.status === "ISSUED") {
-      if (
-        file.mimetype !== "application/pdf" ||
-        !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
-      )
-        throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
-      const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
-      if (Number.isFinite(limitBytes) && limitBytes > 0) {
-        const quota = decideQuota({
-          usedBytes: await sumDocumentBytesInUse(),
-          incomingBytes: file.buffer.length,
-          limitBytes,
-        });
-        if (quota.state === "reject") throw new ConflictException(quota.reason);
-      }
+      await this.acceptPdf(file);
       await this.repository.saveSignedDocumentAndMarkSigned(id, file);
     }
 
@@ -357,9 +300,200 @@ export class MaintenanceOrdersService {
     return this.repository.attachServiceJob(id, serviceJobId);
   }
 
+  /**
+   * MIRŐL KÉSZÜLHET MEGRENDELŐLAP: a kiállítás és a vevő saját megrendelőlapja
+   * (S6) ugyanazokon a szabályokon megy át: aktív szerződés, nem beszerzési és
+   * nem javítási, a tételek a szerződéséi, mindnek van helyszíne, és egy
+   * helyszínre (vagy közös felső helyszínre) esnek.
+   */
+  private async orderableContract(dto: {
+    contractId: string;
+    itemIds: string[];
+  }) {
+    const itemIds = [...new Set(dto.itemIds)];
+    const contract = await this.repository.contractForIssuance(
+      dto.contractId,
+      itemIds,
+    );
+    if (!contract) throw new NotFoundException("A szerződés nem található.");
+    if (contract.status !== "ACTIVE")
+      throw new BadRequestException(
+        "Csak aktív szerződésre állítható ki megrendelőlap.",
+      );
+    // A beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4),
+    // és a javításiból sem készül (karbantartási felmérés S0/3).
+    if (contract.kind === "PURCHASE")
+      throw new BadRequestException(
+        "Beszerzési szerződésre nem állítható ki megrendelőlap.",
+      );
+    if (contract.kind === "REPAIR")
+      throw new BadRequestException(
+        "Javítási szerződésre nem állítható ki megrendelőlap.",
+      );
+    if (contract.items.length !== itemIds.length)
+      throw new BadRequestException(
+        "A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
+      );
+
+    /*
+      A HELYSZÍN NÉLKÜLI TÉTELBŐL NEM LEHET MUNKALAP -- ezt itt, KIÁLLÍTÁSKOR
+      kérjük számon, nem csak aláíráskor. Enélkül egy megrendelőlap kimenne,
+      aláírva visszajönne, és csak AKKOR derülne ki, hogy a karbantartási
+      lapot nem lehet belőle megcsinálni -- a legrosszabb pillanatban.
+    */
+    const helyszinNelkul = contract.items.filter((item) => !item.departmentId);
+    if (helyszinNelkul.length)
+      throw new BadRequestException(
+        `A következő tételekhez nincs megadva helyszín a szerződésen, ezért nem állítható ki belőlük megrendelőlap: ${helyszinNelkul
+          .map((item) => item.description)
+          .join(", ")}.`,
+      );
+
+    /*
+      EGY MEGRENDELŐLAP EGY HELYSZÍNRE KÉSZÜL, és ez a tételek KÖZÖS FELSŐ
+      HELYSZÍNE is lehet (Balázs döntése, 2026-10-02 07:36 UTC, kártya
+      1806e061; az éles eset a Capasuli és három medencéje). Tényleg
+      független helyszíneknél itt, KIÁLLÍTÁSKOR állunk meg, és megnevezzük
+      őket (`uploadSignedDocument` ugyanezt ellenőrzi).
+    */
+    await this.ensureOneSite(
+      contract.items.map((item) => item.departmentId as string),
+    );
+    return contract;
+  }
+
+  /** Csak valódi PDF, és csak ha a dokumentum-tárban van még hely. */
+  private async acceptPdf(file: Express.Multer.File) {
+    if (
+      file.mimetype !== "application/pdf" ||
+      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+    )
+      throw new BadRequestException("Csak valódi PDF-fájl tölthető fel.");
+    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+    if (Number.isFinite(limitBytes) && limitBytes > 0) {
+      const quota = decideQuota({
+        usedBytes: await sumDocumentBytesInUse(),
+        incomingBytes: file.buffer.length,
+        limitBytes,
+      });
+      if (quota.state === "reject") throw new ConflictException(quota.reason);
+    }
+  }
+
   /** A helyszín-szabály a közös úton áll (`job-from-contract-items.ts`). */
   private ensureOneSite(departmentIds: readonly string[]): Promise<string> {
     return ensureOneSite(this.repository, departmentIds);
+  }
+
+  /**
+   * A VEVŐ SAJÁT MEGRENDELŐLAPJA, FELTÖLTVE (karbantartási felmérés S6).
+   *
+   * Ugyanaz a rendelés, mint egy kiállított és aláírt megrendelőlap, csak a
+   * dokumentumot a vevő adja: a szerződés-szabályok, a számozás és az
+   * alkalomkeret ugyanaz (`orderableContract`, `reserveOccasions`), a sor
+   * `CUSTOMER_FORM` forrással, rögtön `SIGNED` állapotban jön létre. A tételek
+   * és az ár a szerződésből jönnek, a PDF-ből semmit nem olvasunk ki (S0/2):
+   * ha a vevő lapja más árat mond, az a szerződés módosítása.
+   *
+   * A LAP ÉS A MUNKALAPOK UGYANAZON AZ ÚTON, mint az aláírásnál: a rendelés
+   * `SIGNED`, lap nélkül jön létre, és az `uploadSignedDocument` folytatási
+   * ága (SIGNED, `serviceJobId` nélkül) készíti el őket, ugyanazokkal a
+   * kulcsokkal. Ha ez a lépés megszakad, az aláírt-dokumentum végpont
+   * ugyanerre a rendelésre folytatja, ahogy egy megszakadt aláírást.
+   */
+  async uploadCustomerForm(
+    dto: UploadCustomerFormDto,
+    file: Express.Multer.File,
+    actor: AuthenticatedUser,
+  ) {
+    const contract = await this.orderableContract(dto);
+    await this.acceptPdf(file);
+
+    const occasionYear = maintenanceOrderOccasionYear(new Date());
+    const number = nextMaintenanceOrderNumber({
+      year: occasionYear,
+      lastNumber: await this.repository.lastNumberOfYear(
+        maintenanceOrderNumberPrefix(occasionYear),
+      ),
+    });
+
+    let reserved;
+    try {
+      reserved = await this.repository.reserveOccasions(
+        {
+          contractId: contract.id,
+          year: occasionYear,
+          items: contract.items.map((item) => ({
+            contractItemId: item.id,
+            description: item.description,
+            occasionsPerYear: item.occasionsPerYear,
+          })),
+        },
+        async (tx) => {
+          const duplicate = await this.repository.customerFormDuplicate(
+            {
+              contractId: contract.id,
+              itemIds: contract.items.map((item) => item.id),
+              content: file.buffer,
+            },
+            tx,
+          );
+          if (duplicate) return { duplicate };
+          const order = await this.repository.createCustomerForm(
+            {
+              contractId: contract.id,
+              number,
+              occasionYear,
+              issuedByName: actor.displayName,
+              items: contract.items.map((item) => ({
+                contractItemId: item.id,
+                description: item.description,
+                unitNet: item.unitNet,
+                quantity: item.quantity,
+                vatRatePercent: item.vatRatePercent,
+              })),
+              document: {
+                fileName: file.originalname,
+                contentType: file.mimetype,
+                content: file.buffer,
+              },
+            },
+            tx,
+          );
+          return { order };
+        },
+      );
+    } catch (error) {
+      // a kiállítással azonos versenyhelyzet: a számot közben más kapta meg
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new ConflictException(
+          `A(z) ${number} megrendelőlap-szám időközben már kiosztásra került. Próbáld újra.`,
+        );
+      throw error;
+    }
+    if (!reserved.ok)
+      throw new ConflictException(
+        `A következő tételeknél ${occasionYear}-ban elfogyott az évi alkalomkeret: ${reserved.exhausted.join(", ")}.`,
+      );
+    const { duplicate, order } = reserved.value;
+    if (duplicate) {
+      /*
+        AZ ÚJRAKÜLDÉS ÖNMAGÁT GYÓGYÍTJA (barracuda, #1708): ha az első
+        próbálkozás a sort már létrehozta, de a lap közben elhasalt, ugyanez a
+        hívás a meglévő rendelésre folytat, ahogy egy megszakadt aláírás. Ha a
+        lap már megvan, ez valódi kettős beküldés: 409, a meglévő számmal.
+      */
+      if (!duplicate.serviceJobId)
+        return this.uploadSignedDocument(duplicate.id, file, actor);
+      throw new ConflictException(
+        `Ez a vevői megrendelőlap ugyanezekkel a tételekkel már fel van töltve (${duplicate.number}).`,
+      );
+    }
+    if (!order) throw new Error("A vevői megrendelőlap sora nem jött létre.");
+    return this.uploadSignedDocument(order.id, file, actor);
   }
 
   async revoke(
