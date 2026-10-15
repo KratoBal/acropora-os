@@ -112,20 +112,6 @@ export class MaintenanceOrdersService {
 
     const now = new Date();
     const occasionYear = maintenanceOrderOccasionYear(now);
-    const counts = await this.repository.issuedOccasionCounts(
-      contract.items.map((item) => item.id),
-      occasionYear,
-    );
-    const tulfoglalt = contract.items.filter(
-      // karbantartási tételnél az alkalom kötelező; ha mégis hiányzik, nincs keret
-      (item) => (counts.get(item.id) ?? 0) >= (item.occasionsPerYear ?? 0),
-    );
-    if (tulfoglalt.length)
-      throw new ConflictException(
-        `A következő tételeknél ${occasionYear}-ban elfogyott az évi alkalomkeret: ${tulfoglalt
-          .map((item) => item.description)
-          .join(", ")}.`,
-      );
 
     const address = await this.repository.defaultAddress(contract.customer.id);
     const orderFormInput: MaintenanceOrderFormInput = {
@@ -185,27 +171,50 @@ export class MaintenanceOrdersService {
         "A generált megrendelőlap tételszáma nem egyezik a bemenettel. A rendelés nem jött létre, mert épp ezt neveznénk hitelesnek.",
       );
 
+    /*
+      AZ ALKALOMKERET A BESZÚRÁSSAL EGY TRANZAKCIÓBAN, SZERZŐDÉSENKÉNTI ZÁRRAL
+      (`reserveOccasions`): korábban a számlálás itt, a PDF előállítása előtt
+      futott, a beszúrás pedig utána, tehát két egyidejű kiállítás ugyanazt a
+      maradékot láthatta. A keret ma a megrendelőlap nélküli lapokat is
+      számolja (felmérés S0/1).
+    */
+    let reserved;
     try {
-      return await this.repository.issue({
-        contractId: contract.id,
-        number,
-        occasionYear,
-        issuedByName: actor.displayName,
-        items: contract.items.map((item) => ({
-          contractItemId: item.id,
-          description: item.description,
-          unitNet: item.unitNet,
-          quantity: item.quantity,
-          vatRatePercent: item.vatRatePercent,
-        })),
-        document: {
-          fileName: `megrendelolap-${number}.docx`,
-          contentType:
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          sizeBytes: rendered.content.length,
-          content: rendered.content,
+      reserved = await this.repository.reserveOccasions(
+        {
+          contractId: contract.id,
+          year: occasionYear,
+          items: contract.items.map((item) => ({
+            contractItemId: item.id,
+            description: item.description,
+            occasionsPerYear: item.occasionsPerYear,
+          })),
         },
-      });
+        (tx) =>
+          this.repository.issue(
+            {
+              contractId: contract.id,
+              number,
+              occasionYear,
+              issuedByName: actor.displayName,
+              items: contract.items.map((item) => ({
+                contractItemId: item.id,
+                description: item.description,
+                unitNet: item.unitNet,
+                quantity: item.quantity,
+                vatRatePercent: item.vatRatePercent,
+              })),
+              document: {
+                fileName: `megrendelolap-${number}.docx`,
+                contentType:
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                sizeBytes: rendered.content.length,
+                content: rendered.content,
+              },
+            },
+            tx,
+          ),
+      );
     } catch (error) {
       /*
         A SZÁM ITT NEM FELHASZNÁLÓI BEVITEL, hanem a `nextMaintenanceOrderNumber`
@@ -225,6 +234,11 @@ export class MaintenanceOrdersService {
         );
       throw error;
     }
+    if (!reserved.ok)
+      throw new ConflictException(
+        `A következő tételeknél ${occasionYear}-ban elfogyott az évi alkalomkeret: ${reserved.exhausted.join(", ")}.`,
+      );
+    return reserved.value;
   }
 
   /**

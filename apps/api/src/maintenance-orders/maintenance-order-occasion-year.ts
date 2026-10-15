@@ -18,3 +18,16 @@ const HU_YEAR = new Intl.DateTimeFormat("hu-HU", {
 export function maintenanceOrderOccasionYear(issuedAt: Date): number {
   return Number(HU_YEAR.format(issuedAt));
 }
+
+/**
+ * A MEGRENDELŐLAP NÉLKÜLI LAP ÉVE: a létrehozás budapesti naptári éve. Január
+ * 1-jén Budapesten mindig téli idő (UTC+1) van, tehát az év határa UTC-ben
+ * december 31. 23:00 -- ugyanaz a naptár, mint a `maintenanceOrderOccasionYear`.
+ */
+export function budapestYearRange(year: number): { gte: Date; lt: Date } {
+  const hour = 60 * 60 * 1000;
+  return {
+    gte: new Date(Date.UTC(year, 0, 1) - hour),
+    lt: new Date(Date.UTC(year + 1, 0, 1) - hour),
+  };
+}

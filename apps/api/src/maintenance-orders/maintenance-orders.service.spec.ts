@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { ConflictException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
@@ -86,7 +87,12 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
       postalCode: "1146",
       city: "Budapest",
     }),
-    issuedOccasionCounts: async () => new Map<string, number>(),
+    // alapból van keret: a hívó beszúrása lefut (a valódi zár és számlálás
+    // az integrációs specben: maintenance-order-occasion-guard.integration.spec.ts)
+    reserveOccasions: async (
+      _input: unknown,
+      write: (tx: unknown) => Promise<unknown>,
+    ) => ({ ok: true, value: await write({}) }),
     lastNumberOfYear: async () => null,
     issue: async (input: unknown) => ({ id: "order-1", ...(input as object) }),
     detail: async () => null,
@@ -254,20 +260,49 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
-  it("ConflictException-t dob, ha egy tételnél elfogyott az évi alkalomkeret", async () => {
+  it("ConflictException-t dob, ha egy tételnél elfogyott az évi alkalomkeret, és nem ír", async () => {
     /*
-      A tétel évi 4 alkalmat enged; ha a számláló szerint MÁR 4 nem visszavont
-      rendelés esett rá ebben az évben, az ÖTÖDIK kiállítás elutasítandó.
+      A foglalás (zár + számlálás) a repository dolga; a szolgáltatás azt
+      méri itt, hogy a túllépett tételeket megnevezi, a keret adatait (tétel,
+      évi alkalom, szerződés) átadja, és túllépésnél nem hívja a beszúrást.
     */
+    let asked: unknown;
+    let issueCalls = 0;
     const { service } = makeService({
-      issuedOccasionCounts: async () => new Map([["item-1", 4]]),
+      reserveOccasions: async (input: unknown) => {
+        asked = input;
+        return { ok: false, exhausted: ["Cápasuli RO karbantartás"] };
+      },
+      issue: async () => {
+        issueCalls += 1;
+        return { id: "order-1" };
+      },
     });
-    await assert.rejects(
-      () =>
-        service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
-      (error: unknown) =>
-        error instanceof Error &&
-        /elfogyott az évi alkalomkeret/.test(error.message),
+    const outcome = await service
+      .issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR)
+      .then(
+        () => "nem dobott",
+        (error: unknown) =>
+          error instanceof ConflictException ? error.message : String(error),
+      );
+    const year = (asked as { year: number }).year;
+    assert.deepEqual(
+      [outcome, asked, issueCalls],
+      [
+        `A következő tételeknél ${year}-ban elfogyott az évi alkalomkeret: Cápasuli RO karbantartás.`,
+        {
+          contractId: "contract-1",
+          year,
+          items: [
+            {
+              contractItemId: "item-1",
+              description: "Cápasuli RO karbantartás",
+              occasionsPerYear: 4,
+            },
+          ],
+        },
+        0,
+      ],
     );
   });
 

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { maintenanceOrderOccasionYear } from "./maintenance-order-occasion-year.js";
+import {
+  budapestYearRange,
+  maintenanceOrderOccasionYear,
+} from "./maintenance-order-occasion-year.js";
 
 describe("a kiállítás éve budapesti naptár szerint", () => {
   it("egy dél körüli időpontnál nincs eltérés", () => {
@@ -37,6 +40,38 @@ describe("a kiállítás éve budapesti naptár szerint", () => {
       maintenanceOrderOccasionYear(new Date("2026-12-31T20:00:00.000Z")),
       2026,
       "20:00 UTC dec 31-én Budapesten (CET, UTC+1) még 21:00, ugyanaznap",
+    );
+  });
+});
+
+/*
+  A MEGRENDELŐLAP NÉLKÜLI LAP ÉVE (karbantartási felmérés S0/1): az alkalomkeret
+  a lap létrehozásának évét egy UTC-tartománnyal kérdezi le. MI PIROSÍT: ha a
+  tartomány határa eltér a `maintenanceOrderOccasionYear` naptárától, vagyis egy
+  szilveszter éjjel nyitott lap az egyik számlálóban az egyik, a másikban a
+  másik évbe esne.
+*/
+describe("budapestYearRange: ugyanaz a naptár, mint a kiállítás éve", () => {
+  it("a határok két oldala a két évbe esik, a tartomány pedig pontosan egy év", () => {
+    const { gte, lt } = budapestYearRange(2026);
+    const ms = 1;
+    assert.deepEqual(
+      [
+        gte.toISOString(),
+        lt.toISOString(),
+        maintenanceOrderOccasionYear(new Date(gte.getTime() - ms)),
+        maintenanceOrderOccasionYear(gte),
+        maintenanceOrderOccasionYear(new Date(lt.getTime() - ms)),
+        maintenanceOrderOccasionYear(lt),
+      ],
+      [
+        "2025-12-31T23:00:00.000Z",
+        "2026-12-31T23:00:00.000Z",
+        2025,
+        2026,
+        2026,
+        2027,
+      ],
     );
   });
 });
