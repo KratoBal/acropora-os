@@ -165,10 +165,11 @@ describe(
           content,
         });
       // ugyanaz a PDF, ugyanazok a tételek (más sorrendben is): ismétlés
-      assert.equal(
-        await duplicate([second.id, first.id], pdf),
-        `${PREFIX}${suffix}-MR`,
-      );
+      assert.deepEqual(await duplicate([second.id, first.id], pdf), {
+        id: order.id,
+        number: `${PREFIX}${suffix}-MR`,
+        serviceJobId: null,
+      });
       // azonos méretű, de más PDF: új rendelés, nem ismétlés
       assert.equal(await duplicate([first.id, second.id], sameSizeOther), null);
       // más tétel-halmaz: nem ismétlés

@@ -232,12 +232,12 @@ describe("MaintenanceOrdersService.uploadCustomerForm", () => {
     assert.equal(calls.job, undefined);
   });
 
-  it("ugyanaz a PDF ugyanazokra a tételekre másodszor: 409 a meglévő számmal, új sor és lap nélkül", async () => {
+  it("ugyanaz a PDF ugyanazokra a tételekre másodszor, kész lappal: 409 a meglévő számmal, új sor és lap nélkül", async () => {
     let asked: unknown;
     const { service, calls } = wire({
       customerFormDuplicate: async (input: unknown) => {
         asked = input;
-        return "MR-2026-007";
+        return { id: "order-7", number: "MR-2026-007", serviceJobId: "job-7" };
       },
     });
     await assert.rejects(
@@ -253,6 +253,25 @@ describe("MaintenanceOrdersService.uploadCustomerForm", () => {
     });
     assert.equal(calls.created.length, 0);
     assert.equal(calls.job, undefined);
+  });
+
+  it("az újraküldés, ami után a lap még nem készült el, a meglévő rendelést folytatja, új sor nélkül", async () => {
+    const { service, calls } = wire({
+      customerFormDuplicate: async () => ({
+        id: "order-9",
+        number: "MR-2026-001",
+        serviceJobId: null,
+      }),
+    });
+    const result = await service.uploadCustomerForm(DTO, PDF, ACTOR);
+    assert.equal(calls.created.length, 0);
+    assert.equal(calls.saveSigned, 0);
+    assert.equal(
+      calls.job?.clientOperationId,
+      "maintenance-order-order-9-signed",
+    );
+    assert.deepEqual(calls.attached, ["order-9", "job-9"]);
+    assert.equal((result as { serviceJobId: string }).serviceJobId, "job-9");
   });
 
   it("a szám-versenyhelyzet (P2002) magyar 409, mint a kiállításnál", async () => {

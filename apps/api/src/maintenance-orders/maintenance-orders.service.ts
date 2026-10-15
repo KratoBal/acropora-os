@@ -478,12 +478,22 @@ export class MaintenanceOrdersService {
       throw new ConflictException(
         `A következő tételeknél ${occasionYear}-ban elfogyott az évi alkalomkeret: ${reserved.exhausted.join(", ")}.`,
       );
-    if ("duplicate" in reserved.value)
+    const { duplicate, order } = reserved.value;
+    if (duplicate) {
+      /*
+        AZ ÚJRAKÜLDÉS ÖNMAGÁT GYÓGYÍTJA (barracuda, #1708): ha az első
+        próbálkozás a sort már létrehozta, de a lap közben elhasalt, ugyanez a
+        hívás a meglévő rendelésre folytat, ahogy egy megszakadt aláírás. Ha a
+        lap már megvan, ez valódi kettős beküldés: 409, a meglévő számmal.
+      */
+      if (!duplicate.serviceJobId)
+        return this.uploadSignedDocument(duplicate.id, file, actor);
       throw new ConflictException(
-        `Ez a vevői megrendelőlap ugyanezekkel a tételekkel már fel van töltve (${reserved.value.duplicate}).`,
+        `Ez a vevői megrendelőlap ugyanezekkel a tételekkel már fel van töltve (${duplicate.number}).`,
       );
-
-    return this.uploadSignedDocument(reserved.value.order.id, file, actor);
+    }
+    if (!order) throw new Error("A vevői megrendelőlap sora nem jött létre.");
+    return this.uploadSignedDocument(order.id, file, actor);
   }
 
   async revoke(

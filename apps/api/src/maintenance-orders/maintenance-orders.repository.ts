@@ -463,11 +463,19 @@ export class MaintenanceOrdersRepository {
    * zárja alatt fut, tehát két egyidejű beküldés közül a második már látja az
    * elsőt. Egy ÚJ PDF ugyanazokra a tételekre nem ismétlés, hanem új rendelés:
    * azt az alkalomkeret dönti el.
+   *
+   * A találatnál a lap állapotát is visszaadja: egy újraküldés, ami után a
+   * lap még nem készült el (az első próbálkozás a sor után hasalt el), a
+   * hívónál nem 409, hanem a folytatás (barracuda, #1708).
    */
   async customerFormDuplicate(
     input: { contractId: string; itemIds: readonly string[]; content: Buffer },
     tx: Prisma.TransactionClient = this.database,
-  ): Promise<string | null> {
+  ): Promise<{
+    id: string;
+    number: string;
+    serviceJobId: string | null;
+  } | null> {
     const candidates = await tx.maintenanceOrder.findMany({
       where: {
         contractId: input.contractId,
@@ -478,7 +486,9 @@ export class MaintenanceOrdersRepository {
         },
       },
       select: {
+        id: true,
         number: true,
+        serviceJobId: true,
         items: { select: { contractItemId: true } },
         documents: {
           where: { type: "CUSTOMER_FORM", sizeBytes: input.content.length },
@@ -498,7 +508,11 @@ export class MaintenanceOrdersRepository {
             doc.content && Buffer.from(doc.content).equals(input.content),
         )
       )
-        return candidate.number;
+        return {
+          id: candidate.id,
+          number: candidate.number,
+          serviceJobId: candidate.serviceJobId,
+        };
     }
     return null;
   }
