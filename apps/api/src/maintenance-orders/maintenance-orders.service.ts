@@ -303,6 +303,30 @@ export class MaintenanceOrdersService {
       await this.repository.saveSignedDocumentAndMarkSigned(id, file);
     }
 
+    /*
+      AZ ESZKÖZÖK A SZERZŐDÉSBŐL JÖNNEK (karbantartási felmérés S1,
+      2026-10-15): a lap a tételek eszközeinek UNIÓJÁT kapja, minden munkalap
+      a SAJÁT tételéét. Csak a ma is a tétel helyszínén álló eszköz jön át --
+      a miértje a `itemAssetsOnSite` fejlécén.
+
+      VISSZAMENŐLEG NEM PÓTOL: egy már aláírt megrendelőlap lapja egy
+      újrahívásra is a meglévő sort adja vissza (`clientOperationId`), tehát
+      az akkor eszköz nélkül létrejött lapok eszköz nélkül maradnak.
+    */
+    const itemAssets = await this.repository.itemAssetsOnSite(
+      order.items.map((item) => ({
+        contractItemId: item.contractItem.id,
+        departmentId: item.contractItem.departmentId as string,
+      })),
+    );
+    const jobAssetIds = [
+      ...new Set(
+        order.items.flatMap(
+          (item) => itemAssets.get(item.contractItem.id) ?? [],
+        ),
+      ),
+    ];
+
     const serviceJob = await this.serviceJobs.create(
       {
         title: `${order.contract.title} (${order.number})`,
@@ -310,6 +334,7 @@ export class MaintenanceOrdersService {
         contractId: order.contract.id,
         customerId: order.contract.customerId,
         departmentId,
+        assetIds: jobAssetIds,
         clientOperationId: `maintenance-order-${order.id}-signed`,
       },
       actor,
@@ -322,6 +347,7 @@ export class MaintenanceOrdersService {
           departmentId: item.contractItem.departmentId as string,
           serviceJobId: serviceJob.id,
           subject: item.description,
+          assetIds: itemAssets.get(item.contractItem.id) ?? [],
           clientOperationId: `maintenance-order-${order.id}-worksheet-${item.contractItem.id}`,
           lines: [
             {

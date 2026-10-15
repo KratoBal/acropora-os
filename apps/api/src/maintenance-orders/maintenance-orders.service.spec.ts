@@ -96,6 +96,8 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
     departmentTree: async (ids: readonly string[]) =>
       ids.map((id) => ({ id, name: id, parentId: null })),
     saveSignedDocumentAndMarkSigned: async () => undefined,
+    // alapból egyik tételnek sincs szerződéses eszköze
+    itemAssetsOnSite: async () => new Map<string, string[]>(),
     attachServiceJob: async () => ({ id: "order-1", status: "SIGNED" }),
     markRevoked: async () => ({ id: "order-1", status: "REVOKED" }),
     document: async () => null,
@@ -327,7 +329,7 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       items: departmentIds.map((departmentId, index) => ({
         description: `Tétel ${index + 1}`,
         quantity: new Prisma.Decimal("1"),
-        contractItem: { departmentId },
+        contractItem: { id: `item-${index + 1}`, departmentId },
       })),
     };
   }
@@ -419,6 +421,96 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       "kismedence",
       "nagymedence",
     ]);
+  });
+
+  /*
+    AZ ESZKÖZÖK A SZERZŐDÉSBŐL (karbantartási felmérés S1, 2026-10-15). MI
+    PIROSÍT: ha a lap nem kapja meg a tételek eszközeit; ha egy közös eszköz
+    kétszer kerül a lapra; ha egy munkalap a MÁSIK tétel eszközét is megkapja;
+    ha a repository nem a tétel SAJÁT helyszínét kapja a szűréshez.
+  */
+  it("aláíráskor a lap a tételek eszközeinek unióját, a munkalap a saját tételéét kapja", async () => {
+    let jobAssetIds: string[] | undefined;
+    const worksheetAssetIds: Array<string[] | undefined> = [];
+    let asked: unknown;
+    const wired = new MaintenanceOrdersService(
+      fakeRepository({
+        departmentTree: async () => CAPASULI,
+        detail: async () => orderRow("ISSUED", ["kismedence", "nagymedence"]),
+        itemAssetsOnSite: async (items: unknown) => {
+          asked = items;
+          return new Map([
+            ["item-1", ["szivattyu", "kozos-szuro"]],
+            ["item-2", ["uv-lampa", "kozos-szuro"]],
+          ]);
+        },
+      }) as never,
+      {
+        create: async (input: { assetIds?: string[] }) => {
+          jobAssetIds = input.assetIds;
+          return { id: "job-1" };
+        },
+      } as never,
+      {
+        create: async (input: { assetIds?: string[] }) => {
+          worksheetAssetIds.push(input.assetIds);
+          return { id: "worksheet-1" };
+        },
+      } as never,
+    );
+    await wired.uploadSignedDocument(
+      "order-1",
+      {
+        mimetype: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4 ..."),
+        originalname: "alairt.pdf",
+        size: 10,
+      } as Express.Multer.File,
+      ACTOR,
+    );
+    assert.deepEqual(asked, [
+      { contractItemId: "item-1", departmentId: "kismedence" },
+      { contractItemId: "item-2", departmentId: "nagymedence" },
+    ]);
+    assert.deepEqual(jobAssetIds, ["szivattyu", "kozos-szuro", "uv-lampa"]);
+    assert.deepEqual(worksheetAssetIds, [
+      ["szivattyu", "kozos-szuro"],
+      ["uv-lampa", "kozos-szuro"],
+    ]);
+  });
+
+  it("eszköz nélküli tételnél a lap és a munkalap üres eszközlistát kap", async () => {
+    let jobAssetIds: string[] | undefined;
+    const worksheetAssetIds: Array<string[] | undefined> = [];
+    const wired = new MaintenanceOrdersService(
+      fakeRepository({
+        detail: async () => orderRow("ISSUED", ["department-1"]),
+      }) as never,
+      {
+        create: async (input: { assetIds?: string[] }) => {
+          jobAssetIds = input.assetIds;
+          return { id: "job-1" };
+        },
+      } as never,
+      {
+        create: async (input: { assetIds?: string[] }) => {
+          worksheetAssetIds.push(input.assetIds);
+          return { id: "worksheet-1" };
+        },
+      } as never,
+    );
+    await wired.uploadSignedDocument(
+      "order-1",
+      {
+        mimetype: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4 ..."),
+        originalname: "alairt.pdf",
+        size: 10,
+      } as Express.Multer.File,
+      ACTOR,
+    );
+    assert.deepEqual(jobAssetIds, []);
+    assert.deepEqual(worksheetAssetIds, [[]]);
   });
 
   it("egy Cápasuli-medence és a független Fókamedence: marad a 400, a helyszínek nevével", async () => {
