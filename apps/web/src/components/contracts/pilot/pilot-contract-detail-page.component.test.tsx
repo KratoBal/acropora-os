@@ -688,15 +688,31 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
     });
     render(<PilotContractDetailPage contractId="contract-1" />);
     const purchase = await screen.findByRole("radio", { name: "Beszerzés" });
+    const repair = screen.getByRole("radio", { name: "Javítás" });
     expect(
       [
         (purchase as HTMLInputElement).disabled,
+        (repair as HTMLInputElement).disabled,
         screen.queryByText(
-          "Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre.",
+          "Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre vagy Javításra.",
         ) !== null,
       ],
       "WEB-CONTRACT-SWITCH-BLOCKED",
-    ).toEqual([true, true]);
+    ).toEqual([true, true, true]);
+  });
+
+  it("WEB-CONTRACT-REPAIR: megrendelőlap nélkül a Javítás választható, és nem zár semmit", async () => {
+    api.detail.mockReset().mockResolvedValue(contract());
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const repair = await screen.findByRole("radio", { name: "Javítás" });
+    expect(
+      [
+        (repair as HTMLInputElement).disabled,
+        (screen.getByRole("radio", { name: "Beszerzés" }) as HTMLInputElement)
+          .disabled,
+      ],
+      "WEB-CONTRACT-REPAIR",
+    ).toEqual([false, false]);
   });
 
   it("WEB-CONTRACT-DETAIL-PURCHASE: a beszerzési adatlap egységgel, megrendelőlap nélkül, és a fajtát menti", async () => {
@@ -974,13 +990,13 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
     });
     render(<PilotContractDetailPage contractId="contract-1" />);
     const back = await screen.findByRole("radio", {
-      name: "Karbantartás, javítás",
+      name: "Karbantartás",
     });
     expect(
       [
         (back as HTMLInputElement).disabled,
         screen.queryByText(
-          "Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra.",
+          "Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra vagy Javításra.",
         ) !== null,
       ],
       "WEB-CONTRACT-BACK-BLOCKED",

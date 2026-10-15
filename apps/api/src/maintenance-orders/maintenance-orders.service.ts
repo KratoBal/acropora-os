@@ -70,10 +70,15 @@ export class MaintenanceOrdersService {
       throw new BadRequestException(
         "Csak aktív szerződésre állítható ki megrendelőlap.",
       );
-    // A beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4).
+    // A beszerzési szerződésből számla készül, nem megrendelőlap (hétfői lista M4),
+    // és a javításiból sem készül (karbantartási felmérés S0/3).
     if (contract.kind === "PURCHASE")
       throw new BadRequestException(
         "Beszerzési szerződésre nem állítható ki megrendelőlap.",
+      );
+    if (contract.kind === "REPAIR")
+      throw new BadRequestException(
+        "Javítási szerződésre nem állítható ki megrendelőlap.",
       );
     if (contract.items.length !== itemIds.length)
       throw new BadRequestException(

@@ -473,6 +473,11 @@ enum ContractStatus {
 enum ContractKind {
   MAINTENANCE
   PURCHASE
+  /// JAVÍTÁSI SZERZŐDÉS (karbantartási felmérés S0/3, Balázs 2026-10-15 13:51
+  /// UTC): most csak választható fajta, viselkedés nélkül. Megrendelőlap és
+  /// megrendelőlap nélküli karbantartási lap NEM készül belőle, ugyanúgy, mint
+  /// a beszerzésiből.
+  REPAIR
 }
 
 /// Egy megrendelőlap-kiállítás állapota. ISSUED: a PDF elkészült és kiment.
@@ -490,6 +495,19 @@ enum MaintenanceOrderStatus {
 enum MaintenanceOrderDocumentType {
   GENERATED_FORM
   SIGNED_FORM
+  /// A VEVŐ SAJÁT megrendelőlapja, feltöltve (karbantartási felmérés S6): nem
+  /// mi generáltuk, és nem a mi lapunk aláírt példánya.
+  CUSTOMER_FORM
+}
+
+/// HONNAN JÖTT A MEGRENDELŐLAP (karbantartási felmérés, 2026-10-15). GENERATED:
+/// mi állítottuk ki a szerződésből, és a vevő aláírva küldte vissza (minden
+/// eddigi sor). CUSTOMER_FORM: a vevő saját megrendelőlapját töltöttük fel; a
+/// tételek és az árak akkor is a szerződésből jönnek (S0/2), a PDF csak
+/// dokumentum.
+enum MaintenanceOrderSource {
+  GENERATED
+  CUSTOMER_FORM
 }
 
 /// Ugyanaz a két dokumentum-fajta, a teljesítési igazoláshoz -- külön enum,
@@ -3477,10 +3495,10 @@ model ServiceJob {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  customer              Customer?              @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  contract              Contract?              @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  department            WorksheetDepartment    @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  aquarium              Aquarium?              @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  customer              Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contract              Contract?                @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  department            WorksheetDepartment      @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  aquarium              Aquarium?                @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets                ServiceJobAsset[]
   /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
   events                ServiceJobEvent[]
@@ -3499,6 +3517,8 @@ model ServiceJob {
   /// lapon van értéke. A visszahivatkozás a
   /// `CompletionCertificate.serviceJobId`-n áll, itt csak az ellenoldal.
   completionCertificate CompletionCertificate?
+  /// A megrendelőlap nélküli lap szerződés-tételei (lásd `ServiceJobContractItem`).
+  contractItems         ServiceJobContractItem[]
 
   /// A NYITO SZERINTI SZURES INDEXELT. A lathatosag minden partner-oldali
   /// lekerdezesnel ezen az oszlopon szur, tehat ez nem "hatha" index.
@@ -3573,11 +3593,12 @@ model ContractItem {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  contract              Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  unitOfMeasure         UnitOfMeasure?         @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
-  department            WorksheetDepartment?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  contract              Contract                 @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  unitOfMeasure         UnitOfMeasure?           @relation(fields: [unitOfMeasureId], references: [id], onDelete: Restrict)
+  department            WorksheetDepartment?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   assets                ContractItemAsset[]
   maintenanceOrderItems MaintenanceOrderItem[]
+  serviceJobItems       ServiceJobContractItem[]
   invoiceLines          InvoiceLine[]
 
   @@unique([contractId, position])
@@ -3628,6 +3649,7 @@ model MaintenanceOrder {
   /// A megrendelőlap saját sorszáma -- NEM azonos a `Contract.number`-rel.
   number        String                 @unique
   status        MaintenanceOrderStatus @default(ISSUED)
+  source        MaintenanceOrderSource @default(GENERATED)
   occasionYear  Int
   issuedAt      DateTime               @default(now())
   issuedByName  String?
@@ -3670,6 +3692,30 @@ model MaintenanceOrderItem {
   contractItem     ContractItem     @relation(fields: [contractItemId], references: [id], onDelete: Restrict)
 
   @@unique([maintenanceOrderId, contractItemId])
+  @@index([contractItemId])
+}
+
+/// A MEGRENDELŐLAP NÉLKÜLI KARBANTARTÁSI LAP TÉTELEI (karbantartási felmérés,
+/// B út, 2026-10-15): mely szerződés-tételeket fedi a lap. A leíró mezők és az
+/// ár MÁSOLATOK a lap létrehozásának pillanatából, ugyanazért, amiért a
+/// `MaintenanceOrderItem` is másolat: ha a szerződéses ár a lap megnyitása és a
+/// teljesítési igazolás között változik, az elvégzett munka a megnyitáskori
+/// áron igazolódik, ugyanúgy, mint a megrendelőlapos úton (barracuda 31567).
+///
+/// `Cascade` a lap felől (a sor a lap része), `Restrict` a tétel felől: egy
+/// tétel, amit egy lap fed, nem törölhető ki a szerződésből alóla.
+model ServiceJobContractItem {
+  serviceJobId   String
+  contractItemId String
+  description    String
+  unitNet        Decimal @db.Decimal(19, 4)
+  quantity       Decimal @db.Decimal(19, 6)
+  vatRatePercent Decimal @db.Decimal(5, 2)
+
+  serviceJob   ServiceJob   @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  contractItem ContractItem @relation(fields: [contractItemId], references: [id], onDelete: Restrict)
+
+  @@id([serviceJobId, contractItemId])
   @@index([contractItemId])
 }
 
