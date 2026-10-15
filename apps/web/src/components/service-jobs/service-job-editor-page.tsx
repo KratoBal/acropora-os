@@ -9,15 +9,24 @@ import {
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { maintenanceOrdersApi } from "@/lib/api/maintenance-orders";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import {
+  keepsContractJobOperationId,
+  newContractJobOperationId,
+} from "./contract-job-operation";
+import {
+  ContractJobPicker,
+  type ContractJobChoice,
+} from "./contract-job-picker";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceJobStepCard } from "./service-job-page-chrome";
@@ -97,6 +106,8 @@ export function ServiceJobEditorPage({
   const [created, setCreated] = useState<{
     id: string;
     jobNumber: string;
+    /** Opened from a contract: the description and colleagues follow on it. */
+    viaContract?: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -104,6 +115,19 @@ export function ServiceJobEditorPage({
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
+  /**
+   * A KARBANTARTÁSI LAP SZERZŐDÉSBŐL (karbantartási felmérés S7). Csak
+   * karbantartásnál, és csak annak, aki a szerződést is látja: a szerződés-lista
+   * és a lap-létrehozás végpontja is `partners.manage` jogot kér.
+   */
+  const canUseContract =
+    kind === "MAINTENANCE" &&
+    Boolean(
+      session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
+    );
+  const [contractChoice, setContractChoice] =
+    useState<ContractJobChoice | null>(null);
+  const contractOperationId = useRef(newContractJobOperationId());
 
   /**
    * A VALASZTHATO KOLLEGAK LISTAJA. A `canManage` a kapcsolo: jogosultsag
@@ -158,6 +182,7 @@ export function ServiceJobEditorPage({
    */
   useEffect(() => {
     setDepartmentId("");
+    setContractChoice(null);
   }, [customer?.customerId]);
 
   /**
@@ -197,7 +222,11 @@ export function ServiceJobEditorPage({
    */
   const canSubmit =
     Boolean(created) ||
-    (Boolean(title.trim()) && Boolean(customer) && Boolean(departmentId));
+    (Boolean(title.trim()) &&
+      Boolean(customer) &&
+      (contractChoice
+        ? contractChoice.itemIds.length > 0
+        : Boolean(departmentId)));
 
   if (!canManage)
     return (
@@ -235,6 +264,37 @@ export function ServiceJobEditorPage({
       await serviceJobsApi.uploadDocument(token, jobId, "OTHER", egyeb);
   };
 
+  /**
+   * A SZERZŐDÉSES ÚT A LAPOT A SZERZŐDÉS VÉGPONTJÁN NYITJA (S4): a helyszín és
+   * az eszközök a tételekből jönnek. A leírást és a delegálást az a végpont nem
+   * fogadja, ezért azok a már létező lapra mennek, a csatolmányokkal azonos
+   * sorrendben: előbb a lap, utána ami rá kerül.
+   */
+  const createFromContract = async (choice: ContractJobChoice) => {
+    const { serviceJobId } = await maintenanceOrdersApi.createContractJob(
+      token,
+      {
+        contractId: choice.contract.id,
+        itemIds: choice.itemIds,
+        title: title.trim(),
+        clientOperationId: contractOperationId.current,
+      },
+    );
+    return { id: serviceJobId, jobNumber: "", viaContract: true };
+  };
+
+  /** Ismételhető: a leírás felülírás, a delegálás a teljes halmaz. */
+  const completeContractJob = async (jobId: string) => {
+    if (description.trim())
+      await serviceJobsApi.updateFields(token, jobId, {
+        description: description.trim(),
+      });
+    if (assigneeIds.length)
+      await serviceJobsApi.setAssignees(token, jobId, {
+        userIds: assigneeIds,
+      });
+  };
+
   const submit = async () => {
     setSaving(true);
     setError(null);
@@ -242,31 +302,51 @@ export function ServiceJobEditorPage({
      * A MAR LETREJOTT JEGYRE NEM NYITUNK MASIKAT. Ha az elso kor a feltoltesen
      * bukott el, ez a gomb UJRAPROBALAS -- a felvitelt nem szabad megismetelni.
      */
-    const job =
-      created ??
-      (await serviceJobsApi
-        .create(token, {
-          title: title.trim(),
-          description: description.trim() || null,
-          customerId: customer?.customerId ?? null,
-          departmentId: departmentId || null,
-          assetIds,
-          assigneeIds,
-          ...(kind === "MAINTENANCE" ? { kind } : {}),
-        })
-        .catch((cause: unknown) => {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "A hibajegy nem jött létre.",
-          );
-          return null;
-        }));
+    let job = created;
     if (!job) {
-      setSaving(false);
-      return;
+      try {
+        job = contractChoice
+          ? await createFromContract(contractChoice)
+          : await serviceJobsApi.create(token, {
+              title: title.trim(),
+              description: description.trim() || null,
+              customerId: customer?.customerId ?? null,
+              departmentId: departmentId || null,
+              assetIds,
+              assigneeIds,
+              ...(kind === "MAINTENANCE" ? { kind } : {}),
+            });
+      } catch (cause) {
+        // a válasz nélküli és az 5xx hibánál a lap létezhet: ugyanaz a kulcs
+        // találja meg; a 4xx elutasítás után új kulcs kell
+        if (contractChoice && !keepsContractJobOperationId(cause))
+          contractOperationId.current = newContractJobOperationId();
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : contractChoice
+              ? "A karbantartási lap nem jött létre."
+              : "A hibajegy nem jött létre.",
+        );
+        setSaving(false);
+        return;
+      }
+      setCreated(job);
     }
-    setCreated(job);
+
+    if (job.viaContract) {
+      try {
+        await completeContractJob(job.id);
+      } catch (cause) {
+        setError(
+          "A karbantartási lap LÉTREJÖTT, de a leírás vagy a delegálás mentése nem sikerült: " +
+            (cause instanceof Error ? cause.message : "ismeretlen hiba") +
+            ". A gombbal újrapróbálhatod, vagy a lap oldalán pótolhatod.",
+        );
+        setSaving(false);
+        return;
+      }
+    }
 
     if (files.length) {
       try {
@@ -281,7 +361,10 @@ export function ServiceJobEditorPage({
          * jegyet meg kellene keresnie a listaban.
          */
         setError(
-          `A(z) ${job.jobNumber} hibajegy LÉTREJÖTT, de a csatolmányok feltöltése nem sikerült: ` +
+          (job.viaContract
+            ? "A karbantartási lap LÉTREJÖTT"
+            : `A(z) ${job.jobNumber} hibajegy LÉTREJÖTT`) +
+            ", de a csatolmányok feltöltése nem sikerült: " +
             (cause instanceof Error ? cause.message : "ismeretlen hiba") +
             ". A fájlok kiválasztva maradtak, a gombbal újrapróbálhatod, vagy a jegy lapján is feltöltheted.",
         );
@@ -374,14 +457,26 @@ export function ServiceJobEditorPage({
               )}
             </div>
 
-            <div className="space-y-1">
-              <label
-                className="block text-sm font-semibold"
-                htmlFor="hibajegy-helyszin"
-              >
-                Helyszín
-              </label>
-              {/*
+            {canUseContract && customer ? (
+              <ContractJobPicker
+                key={customer.customerId}
+                token={token}
+                customerId={customer.customerId}
+                siteOptions={departmentOptions}
+                value={contractChoice}
+                onChange={setContractChoice}
+              />
+            ) : null}
+
+            {contractChoice ? null : (
+              <div className="space-y-1">
+                <label
+                  className="block text-sm font-semibold"
+                  htmlFor="hibajegy-helyszin"
+                >
+                  Helyszín
+                </label>
+                {/*
             HAROM KULON ALLAPOT, HAROM KULON MONDAT, es ez nem bobeszedusseg.
             Nincs partner / meg toltunk / a partnernek nincs helyszine -- a
             telefonos urlapon pontosan ez a kulonbseg hianyzott, es egy ures
@@ -389,34 +484,37 @@ export function ServiceJobEditorPage({
             Aki egy ures listat lat magyarazat nelkul, a rossz helyen kezd
             keresni.
           */}
-              {!customer ? (
-                <p className="text-sm text-dusk-500">
-                  Előbb válassz partnert. A helyszínek a partner saját fájából
-                  jönnek.
-                </p>
-              ) : !departmentsLoaded ? (
-                <p className="text-sm text-dusk-500">Helyszínek betöltése...</p>
-              ) : nincsValaszthatoHelyszin ? (
-                <p className="text-sm text-dusk-500">
-                  Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre nem
-                  nyitható jegy rá. Vegyél fel egyet a partner lapján.
-                </p>
-              ) : (
-                <select
-                  id="hibajegy-helyszin"
-                  className="w-full rounded border px-2 py-1 text-sm"
-                  value={departmentId}
-                  onChange={(event) => setDepartmentId(event.target.value)}
-                >
-                  <option value="">Válassz helyszínt</option>
-                  {departmentOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
+                {!customer ? (
+                  <p className="text-sm text-dusk-500">
+                    Előbb válassz partnert. A helyszínek a partner saját fájából
+                    jönnek.
+                  </p>
+                ) : !departmentsLoaded ? (
+                  <p className="text-sm text-dusk-500">
+                    Helyszínek betöltése...
+                  </p>
+                ) : nincsValaszthatoHelyszin ? (
+                  <p className="text-sm text-dusk-500">
+                    Ehhez a partnerhez nincs felvéve helyszín, ezért egyelőre
+                    nem nyitható jegy rá. Vegyél fel egyet a partner lapján.
+                  </p>
+                ) : (
+                  <select
+                    id="hibajegy-helyszin"
+                    className="w-full rounded border px-2 py-1 text-sm"
+                    value={departmentId}
+                    onChange={(event) => setDepartmentId(event.target.value)}
+                  >
+                    <option value="">Válassz helyszínt</option>
+                    {departmentOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </ServiceJobStepCard>
 
           <ServiceJobStepCard number="02" title="A hiba leírása">
@@ -456,11 +554,17 @@ export function ServiceJobEditorPage({
             csoportra vonatkozik, es a sajat feliratat minden sor viszi. Egy
             `htmlFor` nelkuli `label` csendben semmire nem mutatna.
           */}
-              <JobAssetPicker
-                departmentId={departmentId}
-                selected={assetIds}
-                onChange={setAssetIds}
-              />
+              {contractChoice ? (
+                <p className="text-sm text-dusk-500">
+                  A kijelölt szerződéstételek eszközei kerülnek a lapra.
+                </p>
+              ) : (
+                <JobAssetPicker
+                  departmentId={departmentId}
+                  selected={assetIds}
+                  onChange={setAssetIds}
+                />
+              )}
             </div>
           </ServiceJobStepCard>
 
@@ -561,8 +665,12 @@ export function ServiceJobEditorPage({
                 onClick={() => void submit()}
               >
                 {created
-                  ? "Csatolmányok feltöltése újra"
-                  : "Hibajegy megnyitása"}
+                  ? created.viaContract
+                    ? "Befejezés újra"
+                    : "Csatolmányok feltöltése újra"
+                  : contractChoice
+                    ? "Karbantartási lap megnyitása"
+                    : "Hibajegy megnyitása"}
               </Button>
             </div>
           </div>

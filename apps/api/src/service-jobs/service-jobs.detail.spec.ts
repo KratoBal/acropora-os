@@ -287,3 +287,45 @@ it("exposes the shared reporter label in internal and partner details", async ()
     assert.equal(detail.reporterPersonName, "Szilveszter Roland");
   }
 });
+
+/**
+ * THE ITEM SOURCE (karbantartási felmérés S7): the internal detail carries it,
+ * the partner shape does not (`partnerServiceJobDetail` copies field by field).
+ */
+describe("a karbantartási lap forrása a részletlapon", () => {
+  const contract = { id: "c1", number: "SZ-2026-001", title: "Éves" };
+
+  it("a belső hívó a szerződést és a lapon rögzített tételeket kapja", async () => {
+    const detail = belsoReszletlap(
+      await serviceWith(
+        row({
+          kind: "MAINTENANCE",
+          contract,
+          contractItems: [{ description: "Szűrőcsere" }],
+        }),
+      ).detail("job-1", BELSOS),
+    );
+
+    assert.deepEqual(detail.source, {
+      kind: "CONTRACT",
+      contract,
+      itemDescriptions: ["Szűrőcsere"],
+    });
+  });
+
+  it("a hibajegynek nincs forrása, és a partner alakjában a mező nem szerepel", async () => {
+    const belso = belsoReszletlap(
+      await serviceWith(row()).detail("job-1", BELSOS),
+    );
+    assert.equal(belso.source, null);
+
+    const partner = await serviceWith(
+      row({
+        contract,
+        maintenanceOrder: { id: "o1", number: "MR-1", source: "GENERATED" },
+      }),
+    ).detail("job-1", PARTNER);
+    assert.ok(isPartnerServiceJobDetail(partner));
+    assert.equal("source" in partner, false);
+  });
+});

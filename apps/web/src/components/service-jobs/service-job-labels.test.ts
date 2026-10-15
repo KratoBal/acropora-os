@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   serviceJobNoteDescription,
+  serviceJobSourceText,
   serviceJobWorksheetLabel,
 } from "./service-job-labels";
 
@@ -99,5 +100,47 @@ describe("serviceJobWorksheetLabel", () => {
     expect(
       serviceJobWorksheetLabel({ number: "BIO-2026-004", subject: "   " }),
     ).toBe("BIO-2026-004");
+  });
+});
+
+describe("serviceJobSourceText", () => {
+  const contract = { id: "c1", number: "SZ-2026-001", title: "Karbantartás" };
+
+  it("a megrendelőlap száma, a vevő saját lapja jelölve, alatta a szerződés", () => {
+    expect(
+      serviceJobSourceText({
+        kind: "MAINTENANCE_ORDER",
+        orderId: "o1",
+        orderNumber: "MR-2026-0008",
+        customerForm: true,
+        contract,
+      }),
+    ).toEqual({
+      headline: "Megrendelőlap: MR-2026-0008 (a vevő saját megrendelőlapja)",
+      detail: "Szerződés: SZ-2026-001",
+    });
+  });
+
+  it("szerződésből: a szerződés száma és a tételek", () => {
+    expect(
+      serviceJobSourceText({
+        kind: "CONTRACT",
+        contract,
+        itemDescriptions: ["Szűrőcsere", "Vízcsere"],
+      }),
+    ).toEqual({
+      headline: "Szerződésből, megrendelőlap nélkül: SZ-2026-001",
+      detail: "Tételek: Szűrőcsere, Vízcsere",
+    });
+  });
+
+  it("tétel nélküli szerződéses lapnál és forrás nélkül kimondja, hogy igazolás nem lesz", () => {
+    expect(
+      serviceJobSourceText({ kind: "CONTRACT", contract, itemDescriptions: [] })
+        .detail,
+    ).toMatch(/teljesítési igazolás nem állítható ki/);
+    expect(serviceJobSourceText(null).detail).toMatch(
+      /Teljesítési igazolás nem állítható ki/,
+    );
   });
 });

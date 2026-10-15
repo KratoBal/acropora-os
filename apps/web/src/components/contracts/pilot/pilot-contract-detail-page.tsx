@@ -9,9 +9,13 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  keepsContractJobOperationId,
+  newContractJobOperationId,
+} from "@/components/service-jobs/contract-job-operation";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { ApiError } from "@/lib/api/client";
@@ -168,6 +172,9 @@ export function PilotContractDetailPage({
     new Set(),
   );
   const [issuing, setIssuing] = useState(false);
+  const [creatingJob, setCreatingJob] = useState(false);
+  const [uploadingCustomerForm, setUploadingCustomerForm] = useState(false);
+  const jobOperationId = useRef(newContractJobOperationId());
 
   /**
    * A TÉTELEK HELYSZÍNE ÉS ESZKÖZEI -- acrobot kérése (2026-09-24 20:36,
@@ -474,6 +481,60 @@ export function PilotContractDetailPage({
       );
     } finally {
       setIssuing(false);
+    }
+  };
+
+  /**
+   * A KÉT ÚJ ÚT UGYANARRÓL A KIJELÖLÉSRŐL (karbantartási felmérés S7): a
+   * karbantartási lap megrendelőlap nélkül (S4), és a vevő saját
+   * megrendelőlapja (S6). Mindkettő a kijelölt tételekből megy, ugyanúgy, mint
+   * a kiállítás, és ugyanaz az alkalomkeret védi.
+   */
+  const createJob = async () => {
+    if (!contract || selectedItemIds.size === 0) return;
+    setCreatingJob(true);
+    setOrderError(null);
+    try {
+      const { serviceJobId } = await maintenanceOrdersApi.createContractJob(
+        token,
+        {
+          contractId: contract.id,
+          itemIds: [...selectedItemIds],
+          clientOperationId: jobOperationId.current,
+        },
+      );
+      router.push(`/szerviz/hibajegyek/${serviceJobId}`);
+    } catch (cause) {
+      if (!keepsContractJobOperationId(cause))
+        jobOperationId.current = newContractJobOperationId();
+      setOrderError(
+        cause instanceof Error
+          ? cause.message
+          : "A karbantartási lap nem jött létre.",
+      );
+      setCreatingJob(false);
+    }
+  };
+
+  const uploadCustomerForm = async (file: File) => {
+    if (!contract || selectedItemIds.size === 0) return;
+    setUploadingCustomerForm(true);
+    setOrderError(null);
+    try {
+      await maintenanceOrdersApi.uploadCustomerForm(token, {
+        contractId: contract.id,
+        itemIds: [...selectedItemIds],
+        file,
+      });
+      await loadOrders();
+    } catch (cause) {
+      setOrderError(
+        cause instanceof Error
+          ? cause.message
+          : "A vevő megrendelőlapja nem tölthető fel.",
+      );
+    } finally {
+      setUploadingCustomerForm(false);
     }
   };
 
@@ -1045,7 +1106,7 @@ export function PilotContractDetailPage({
                         </li>
                       ))}
                   </ul>
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <PilotButton
                       type="button"
                       variant="primary"
@@ -1056,6 +1117,50 @@ export function PilotContractDetailPage({
                         ? "Kiállítás…"
                         : `Megrendelőlap kiállítása (${selectedCount} tétel)`}
                     </PilotButton>
+                    {/*
+                      A MEGRENDELŐLAP NÉLKÜLI LAP CSAK MENTETT KARBANTARTÁSI
+                      SZERZŐDÉSBŐL: a javításiból a szerver nem készít lapot,
+                      és egy el nem mentett fajtaváltás még nem él.
+                    */}
+                    {saved?.kind === "MAINTENANCE" ? (
+                      <PilotButton
+                        type="button"
+                        variant="secondary"
+                        disabled={creatingJob || selectedCount === 0}
+                        onClick={() => void createJob()}
+                      >
+                        {creatingJob
+                          ? "Lap létrehozása…"
+                          : `Karbantartási lap megrendelőlap nélkül (${selectedCount} tétel)`}
+                      </PilotButton>
+                    ) : null}
+                    {/*
+                      A FÁJLVÁLASZTÓ A FELIRATBAN, ugyanúgy, mint az aláírt PDF
+                      feltöltésénél: kijelölés nélkül nem nyílik meg, mert a
+                      szerver üres tétel-listát nem fogad.
+                    */}
+                    <label
+                      className={
+                        uploadingCustomerForm || selectedCount === 0
+                          ? "text-xs font-medium text-pilot-grey-400"
+                          : "cursor-pointer text-xs font-medium text-pilot-aqua-700 underline"
+                      }
+                    >
+                      {uploadingCustomerForm
+                        ? "Feltöltés…"
+                        : `Vevő megrendelőlapjának feltöltése (${selectedCount} tétel)`}
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        disabled={uploadingCustomerForm || selectedCount === 0}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadCustomerForm(file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
                 <div className="flex flex-col gap-3">
@@ -1087,6 +1192,19 @@ export function PilotContractDetailPage({
                             >
                               {ORDER_STATUS_LABEL[order.status]}
                             </PilotBadge>
+                            {order.source === "CUSTOMER_FORM" ? (
+                              <span className="text-xs text-pilot-grey-600">
+                                Vevő megrendelőlapja
+                              </span>
+                            ) : null}
+                            {order.serviceJobId ? (
+                              <Link
+                                href={`/szerviz/hibajegyek/${order.serviceJobId}`}
+                                className="text-xs font-medium text-pilot-aqua-700 underline"
+                              >
+                                Karbantartási lap
+                              </Link>
+                            ) : null}
                           </div>
                           {order.status === "ISSUED" ? (
                             <div className="flex items-center gap-2">

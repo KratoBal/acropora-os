@@ -128,6 +128,10 @@ export function serviceJobDetailRow(
      * `overrides`-szal.
      */
     departmentPath: null,
+    // The item source (karbantartási felmérés S7): a repair ticket has none.
+    contract: null,
+    maintenanceOrder: null,
+    contractItems: [],
     ...overrides,
   } satisfies NonNullable<ServiceJobDetailRow>;
 }

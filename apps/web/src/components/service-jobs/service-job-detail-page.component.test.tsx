@@ -106,6 +106,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
      */
     assets: [],
     assignees: [],
+    source: null,
     /**
      * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
      * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.

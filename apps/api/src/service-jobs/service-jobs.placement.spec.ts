@@ -66,6 +66,9 @@ const RESZLETLAP: DetailRow = {
   worksheets: [],
   assets: [],
   assignees: [],
+  contract: null,
+  maintenanceOrder: null,
+  contractItems: [],
 };
 
 type PlacementArg = Parameters<ServiceJobsRepository["setPlacement"]>[0];

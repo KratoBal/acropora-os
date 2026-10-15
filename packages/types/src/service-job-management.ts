@@ -235,6 +235,40 @@ export interface ServiceJobAssetLink {
   attachedAt: string;
 }
 
+/** The contract a maintenance job was opened from. No price: a service user sees none. */
+export interface ServiceJobSourceContract {
+  id: string;
+  number: string;
+  title: string;
+}
+
+/**
+ * WHERE A MAINTENANCE JOB'S ITEMS COME FROM (karbantartási felmérés S7).
+ *
+ * The same precedence the completion certificate uses (S5): an order sheet
+ * wins, otherwise the contract items recorded on the job. The server decides,
+ * the client only draws it.
+ *
+ *     MAINTENANCE_ORDER   an order sheet (ours, signed, or the customer's own
+ *                         upload: `customerForm`)
+ *     CONTRACT            opened from the contract without an order sheet;
+ *                         `itemDescriptions` empty means a job from before the
+ *                         contract items existed: no certificate can be issued
+ */
+export type ServiceJobSource =
+  | {
+      kind: "MAINTENANCE_ORDER";
+      orderId: string;
+      orderNumber: string;
+      customerForm: boolean;
+      contract: ServiceJobSourceContract | null;
+    }
+  | {
+      kind: "CONTRACT";
+      contract: ServiceJobSourceContract;
+      itemDescriptions: string[];
+    };
+
 /**
  * A JEGYRE DELEGÁLT SZERVIZES KOLLÉGA.
  *
@@ -447,6 +481,13 @@ export interface ServiceJobDetail {
    * adna -- egy üres tömb viszont pontosan azt mondja, amit jelent.
    */
   assignees: ServiceJobAssignee[];
+  /**
+   * The maintenance job's item source (`ServiceJobSource`); `null` when the
+   * job has neither an order sheet nor a contract (every repair ticket).
+   * Internal only: `partnerServiceJobDetail` copies field by field and does
+   * not pass it.
+   */
+  source: ServiceJobSource | null;
 }
 
 /**

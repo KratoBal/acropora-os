@@ -1435,6 +1435,14 @@ export class ServiceJobsRepository {
             assignedBy: { select: { displayName: true, nickname: true } },
           },
         },
+        // The item source (karbantartási felmérés S7, `serviceJobSource`):
+        // numbers and descriptions only, no price -- a service user sees none.
+        contract: { select: { id: true, number: true, title: true } },
+        maintenanceOrder: { select: { id: true, number: true, source: true } },
+        contractItems: {
+          orderBy: { contractItem: { position: "asc" } },
+          select: { description: true },
+        },
       },
     });
   }
