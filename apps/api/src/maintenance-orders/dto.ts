@@ -34,6 +34,26 @@ export class RevokeMaintenanceOrderDto {
 }
 
 /**
+ * KARBANTARTÁSI LAP A SZERZŐDÉSBŐL, MEGRENDELŐLAP NÉLKÜL (felmérés S4). A
+ * `clientOperationId` az idempotencia kulcsa: ugyanazzal újraküldve a meglévő
+ * lapot adja vissza (az űrlap a megnyitásakor generálja).
+ */
+export class CreateContractJobDto {
+  @IsString() @MinLength(1) @MaxLength(64) contractId!: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  itemIds!: string[];
+  @IsString() @MaxLength(300) @IsOptional() title?: string | null;
+  @IsString()
+  @MinLength(8)
+  @MaxLength(100)
+  @IsOptional()
+  clientOperationId?: string | null;
+}
+
+/**
  * A VEVŐ SAJÁT MEGRENDELŐLAPJA (karbantartási felmérés S6): ugyanaz a
  * szerződés és tétel-lista, mint a kiállításnál, de a dokumentumot a vevő
  * adja, PDF-ként, multipart kéréssel.

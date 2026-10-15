@@ -20,6 +20,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { DOCUMENT_UPLOAD_LIMITS } from "../documents/document-upload-limits.js";
 
 import {
+  CreateContractJobDto,
   IssueMaintenanceOrderDto,
   RevokeMaintenanceOrderDto,
   UploadCustomerFormDto,
@@ -56,6 +57,15 @@ export class MaintenanceOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.issue(dto, user);
+  }
+
+  /** Karbantartási lap a szerződésből, megrendelőlap nélkül (felmérés S4). */
+  @Post("contract-jobs")
+  createJobFromContract(
+    @Body() dto: CreateContractJobDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.createJobFromContract(dto, user);
   }
 
   /**

@@ -383,14 +383,19 @@ export class ServiceJobsService {
         throw new BadRequestException(
           "Szerződéshez partner megadása kötelező.",
         );
-      if (
-        !(await this.repository.contractBelongsToCustomer(
-          contractId,
-          customerId,
-        ))
-      )
+      const contractKind = await this.repository.contractKindForCustomer(
+        contractId,
+        customerId,
+      );
+      if (contractKind === null)
         throw new BadRequestException(
           "A megadott szerződés nem ehhez a partnerhez tartozik.",
+        );
+      // a beszerzési és a javítási szerződéshez nem tartozik karbantartási lap
+      // (felmérés S0/3 és S4, barracuda 31612)
+      if (contractKind !== "MAINTENANCE")
+        throw new BadRequestException(
+          "Csak karbantartási szerződés kapcsolható karbantartási laphoz.",
         );
     }
     const title = input.title.trim();

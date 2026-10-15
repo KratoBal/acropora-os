@@ -260,6 +260,23 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
+  it("a lejárt zár-várakozás a kiállításnál is 'próbáld újra' 409, nem keret-túllépés", async () => {
+    const { service } = makeService({
+      reserveOccasions: async () => ({ ok: false, busy: true }),
+    });
+    const outcome = await service
+      .issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR)
+      .then(
+        () => "nem dobott",
+        (error: unknown) =>
+          error instanceof ConflictException ? error.message : String(error),
+      );
+    assert.equal(
+      outcome,
+      "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+    );
+  });
+
   it("ConflictException-t dob, ha egy tételnél elfogyott az évi alkalomkeret, és nem ír", async () => {
     /*
       A foglalás (zár + számlálás) a repository dolga; a szolgáltatás azt
@@ -838,5 +855,270 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       revokedByName: "Kovács Anna",
       reason: "tévedésből",
     });
+  });
+});
+
+/*
+  KARBANTARTÁSI LAP A SZERZŐDÉSBŐL, MEGRENDELŐLAP NÉLKÜL (karbantartási felmérés
+  S4). MI PIROSÍT: ha nem karbantartási vagy nem aktív szerződésből lap készül;
+  ha a szokásos keret-túllépés LAPOT hoz létre a 409 előtt; ha a tételsorok nem a
+  szerződéses árat rögzítik; ha a foglalás éve nem a lap létrehozásáé; ha a
+  versenyhelyzetben elvesztett foglalás után a lap élve marad; ha egy újrahívás
+  újra foglal (a saját sorait felhasználásnak látná); ha a torlódás keret-
+  túllépésnek látszik.
+*/
+describe("MaintenanceOrdersService.createJobFromContract", () => {
+  type Reserved =
+    | { ok: true }
+    | { ok: false; exhausted: string[] }
+    | { ok: false; busy: true };
+
+  function harness(
+    opts: {
+      contract?: ReturnType<typeof contractRow>;
+      reservations?: Reserved[];
+      itemCount?: number;
+      createdAt?: Date;
+      status?: string;
+      jobContractId?: string | null;
+      // a kulcs alatt MÁR létező lap (újrahívás); alapból nincs ilyen
+      existing?: { status?: string; contractId?: string; itemCount: number };
+    } = {},
+  ) {
+    const calls: string[] = [];
+    const years: number[] = [];
+    const inserted: unknown[] = [];
+    const moved: unknown[] = [];
+    const jobInputs: unknown[] = [];
+    const queue = [...(opts.reservations ?? [{ ok: true }, { ok: true }])];
+    const repository = fakeRepository({
+      contractForIssuance: async () => opts.contract ?? contractRow(),
+      reserveOccasions: async (
+        input: { year: number },
+        write: (tx: unknown) => Promise<unknown>,
+      ) => {
+        calls.push("reserve");
+        years.push(input.year);
+        const next = queue.shift() ?? { ok: true };
+        if (!next.ok) return next;
+        return { ok: true, value: await write({ tx: true }) };
+      },
+      serviceJobContractItemState: async (
+        where: { id: string } | { clientOperationId: string },
+      ) => {
+        if ("clientOperationId" in where) {
+          calls.push("lookup");
+          return opts.existing
+            ? {
+                id: "job-1",
+                createdAt: new Date("2026-06-15T10:00:00.000Z"),
+                status: opts.existing.status ?? "NEW",
+                contractId: opts.existing.contractId ?? "contract-1",
+                itemCount: opts.existing.itemCount,
+              }
+            : null;
+        }
+        calls.push("state");
+        return {
+          id: "job-1",
+          createdAt: opts.createdAt ?? new Date("2026-06-15T10:00:00.000Z"),
+          status: opts.status ?? "NEW",
+          contractId:
+            opts.jobContractId === undefined
+              ? "contract-1"
+              : opts.jobContractId,
+          itemCount: opts.itemCount ?? 0,
+        };
+      },
+      insertServiceJobContractItems: async (
+        tx: unknown,
+        serviceJobId: string,
+        items: unknown,
+      ) => {
+        calls.push("insert");
+        inserted.push({ tx, serviceJobId, items });
+        return { count: 1 };
+      },
+    });
+    const service = new MaintenanceOrdersService(
+      repository as never,
+      {
+        create: async (input: unknown) => {
+          calls.push("job");
+          jobInputs.push(input);
+          return { id: "job-1" };
+        },
+        move: async (...args: unknown[]) => {
+          calls.push("move");
+          moved.push(args);
+          return { id: "job-1" };
+        },
+      } as never,
+      {
+        create: async () => {
+          calls.push("worksheet");
+          return { id: "worksheet-1" };
+        },
+      } as never,
+    );
+    const run = (dto: Record<string, unknown> = {}) =>
+      service
+        .createJobFromContract(
+          {
+            contractId: "contract-1",
+            itemIds: ["item-1"],
+            clientOperationId: "kulcs-0001",
+            ...dto,
+          } as never,
+          ACTOR,
+        )
+        .then(
+          (value) => value as unknown,
+          (error: unknown) =>
+            `${(error as { getStatus?: () => number }).getStatus?.() ?? "?"}: ${(error as Error).message}`,
+        );
+    return { run, calls, years, inserted, moved, jobInputs };
+  }
+
+  it("csak aktív karbantartási szerződésből, és csak a saját tételeiből", async () => {
+    const results = [
+      await harness({ contract: contractRow({ kind: "REPAIR" }) }).run(),
+      await harness({ contract: contractRow({ kind: "PURCHASE" }) }).run(),
+      await harness({ contract: contractRow({ status: "DRAFT" }) }).run(),
+      await harness().run({ itemIds: ["item-1", "idegen"] }),
+    ];
+    assert.deepEqual(results, [
+      "400: Csak karbantartási szerződésből készíthető karbantartási lap.",
+      "400: Csak karbantartási szerződésből készíthető karbantartási lap.",
+      "400: Csak aktív szerződésből készíthető karbantartási lap.",
+      "400: A megadott tételek között olyan van, ami nem ehhez a szerződéshez tartozik, vagy már nem létezik.",
+    ]);
+  });
+
+  it("a rendes út: előellenőrzés, lap a közös úton, tételsorok a szerződéses áron, a lap évére", async () => {
+    const h = harness({ createdAt: new Date("2026-12-31T23:30:00.000Z") });
+    const result = await h.run({ title: "  Téli karbantartás  " });
+    assert.deepEqual(
+      {
+        result,
+        calls: h.calls,
+        year: h.years[1],
+        job: h.jobInputs[0],
+        inserted: h.inserted,
+      },
+      {
+        result: { serviceJobId: "job-1" },
+        calls: [
+          "lookup",
+          "reserve",
+          "job",
+          "worksheet",
+          "state",
+          "reserve",
+          "insert",
+        ],
+        // a lap 2026-12-31 23:30 UTC-kor jött létre: Budapesten már 2027
+        year: 2027,
+        job: {
+          title: "Téli karbantartás",
+          kind: "MAINTENANCE",
+          contractId: "contract-1",
+          customerId: "customer-1",
+          departmentId: "department-1",
+          assetIds: [],
+          clientOperationId: "contract-job-kulcs-0001",
+        },
+        inserted: [
+          {
+            tx: { tx: true },
+            serviceJobId: "job-1",
+            items: [
+              {
+                contractItemId: "item-1",
+                description: "Cápasuli RO karbantartás",
+                unitNet: new Prisma.Decimal("410000"),
+                quantity: new Prisma.Decimal("1"),
+                vatRatePercent: new Prisma.Decimal("27"),
+              },
+            ],
+          },
+        ],
+      },
+    );
+  });
+
+  it("a szokásos túllépés lap létrehozása NÉLKÜL ad 409-et", async () => {
+    const h = harness({
+      reservations: [{ ok: false, exhausted: ["Cápasuli RO karbantartás"] }],
+    });
+    const result = await h.run();
+    assert.deepEqual(
+      [String(result).replace(/\d{4}-ban/, "ÉV-ban"), h.calls],
+      [
+        "409: A következő tételeknél ÉV-ban elfogyott az évi alkalomkeret: Cápasuli RO karbantartás.",
+        ["lookup", "reserve"],
+      ],
+    );
+  });
+
+  it("versenyhelyzet: a második foglalás elveszett, a friss lap lemondva, 409", async () => {
+    const h = harness({
+      reservations: [
+        { ok: true },
+        { ok: false, exhausted: ["Cápasuli RO karbantartás"] },
+      ],
+    });
+    const result = await h.run();
+    const [jobId, move] = h.moved[0] as [string, { to: string }];
+    assert.deepEqual(
+      [String(result).slice(0, 4), h.calls, jobId, move.to, h.inserted],
+      [
+        "409:",
+        ["lookup", "reserve", "job", "worksheet", "state", "reserve", "move"],
+        "job-1",
+        "CANCELLED",
+        [],
+      ],
+    );
+  });
+
+  it("újrahívás: ha a kulcs alatti lapnak már vannak tételsorai, nem foglal újra (az előellenőrzés sem)", async () => {
+    const h = harness({ existing: { itemCount: 1 }, itemCount: 1 });
+    const result = await h.run();
+    assert.deepEqual(
+      [result, h.calls],
+      [{ serviceJobId: "job-1" }, ["lookup", "job", "worksheet", "state"]],
+    );
+  });
+
+  it("újrahívás egy lemondott vagy másik szerződés lapjára: 409 a lap és a munkalapok létrehozása ELŐTT (barracuda 31714, 31720)", async () => {
+    const cancelled = harness({
+      existing: { status: "CANCELLED", itemCount: 0 },
+    });
+    const foreign = harness({
+      existing: { contractId: "contract-2", itemCount: 0 },
+    });
+    assert.deepEqual(
+      [
+        await cancelled.run(),
+        cancelled.calls,
+        await foreign.run(),
+        foreign.calls,
+      ],
+      [
+        "409: Ez a karbantartási lap le van mondva. Új lapot kezdj.",
+        ["lookup"],
+        "409: Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
+        ["lookup"],
+      ],
+    );
+  });
+
+  it("torlódás: a lejárt zár-várakozás 'próbáld újra' 409, nem keret-túllépés", async () => {
+    const h = harness({ reservations: [{ ok: false, busy: true }] });
+    assert.equal(
+      await h.run(),
+      "409: A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+    );
   });
 });

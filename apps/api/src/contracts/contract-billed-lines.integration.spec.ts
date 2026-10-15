@@ -295,7 +295,9 @@ describe(
         service.update(contractId, { items: keepOnlySecond } as never),
         (error: unknown) =>
           error instanceof ConflictException &&
-          /megrendelőlap vagy számla/.test((error as Error).message),
+          /megrendelőlap, számla vagy karbantartási lap/.test(
+            (error as Error).message,
+          ),
       );
       assert.equal(
         await prisma.contractItem.count({ where: { contractId } }),
