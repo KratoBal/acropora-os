@@ -63,11 +63,12 @@ export class CompletionCertificatesService {
    * A KIÁLLÍTÁS: ELLENŐRZÉS, PDF, TÁROLÁS -- EBBEN A SORRENDBEN, UGYANÚGY,
    * MINT A MEGRENDELŐLAPNÁL.
    *
-   * A TÉTELEK FORRÁSA A MEGRENDELŐLAP, NEM A SZERZŐDÉS KÖZVETLENÜL: a
-   * `MaintenanceOrderItem` már a KIÁLLÍTÁS pillanatának másolata (lásd ott a
-   * modell fejlécét), tehát ha a szerződéses ár azóta változott, ez az
-   * igazolás a RÉGI, akkor érvényes árat mutatja -- ugyanazt, amit a
-   * megrendelőlap is mutatott.
+   * A TÉTELEK FORRÁSA NEM A SZERZŐDÉS KÖZVETLENÜL, hanem egy rögzített
+   * másolat: a megrendelőlapos lapnál a `MaintenanceOrderItem` (a KIÁLLÍTÁS
+   * pillanatának másolata), a megrendelőlap nélkülinél a
+   * `ServiceJobContractItem` (a lap LÉTREHOZÁSÁNAK másolata, felmérés S5). Ha a
+   * szerződéses ár azóta változott, az igazolás a RÉGI, akkor érvényes árat
+   * mutatja.
    */
   async issue(dto: IssueCompletionCertificateDto, actor: AuthenticatedUser) {
     const job = await this.repository.serviceJobForIssuance(dto.serviceJobId);
@@ -80,11 +81,27 @@ export class CompletionCertificatesService {
       throw new ConflictException(
         "Ehhez a laphoz már készült teljesítési igazolás.",
       );
-    if (!job.maintenanceOrder)
+    /*
+      A TÉTELEK FORRÁSA (karbantartási felmérés S5, Balázs 2026-10-15): ha a
+      lapnak van megrendelőlapja, annak tételei (változatlanul); ha nincs, a
+      lap SAJÁT szerződés-tételei, a lap létrehozásakor rögzített áron
+      (`ServiceJobContractItem`, felmérés S4) -- NEM a szerződés mai ára, mert
+      az a lap megnyitása óta változhatott, és a megrendelőlapos út is a
+      kiállításkori árat adja. Ha egyik sincs, a forrás ismeretlen.
+    */
+    const source = job.maintenanceOrder
+      ? {
+          contractNumber: job.maintenanceOrder.contract.number,
+          items: job.maintenanceOrder.items,
+        }
+      : job.contract && job.contractItems.length
+        ? { contractNumber: job.contract.number, items: job.contractItems }
+        : null;
+    if (!source)
       throw new BadRequestException(
-        "Ehhez a laphoz nem tartozik megrendelőlap, a tételek forrása ismeretlen.",
+        "Ehhez a laphoz nem tartozik megrendelőlap és szerződés-tétel sem, a tételek forrása ismeretlen.",
       );
-    if (!job.maintenanceOrder.items.length)
+    if (!source.items.length)
       throw new BadRequestException("A megrendelőlapnak nincs tétele.");
 
     /*
@@ -101,7 +118,6 @@ export class CompletionCertificatesService {
       );
 
     const now = new Date();
-    const maintenanceOrder = job.maintenanceOrder;
     const address = job.customer?.addresses[0] ?? null;
     const firstWorksheet = job.worksheets[0] ?? null;
 
@@ -120,9 +136,9 @@ export class CompletionCertificatesService {
           : [],
         taxNumber: job.customer?.taxNumber ?? undefined,
       },
-      items: maintenanceOrder.items.map((item) => ({
+      items: source.items.map((item) => ({
         description: item.description,
-        contractNumber: maintenanceOrder.contract.number,
+        contractNumber: source.contractNumber,
         // EGY MEGRENDELŐLAP-TÉTEL EGY ALKALMAT VISZ (lásd
         // `MaintenanceOrdersService.issue`) -- a teljesítési igazolás
         // ugyanazt az egy alkalmat igazolja, nem a szerződés éves keretét.
@@ -166,7 +182,7 @@ export class CompletionCertificatesService {
         serviceJobId: job.id,
         number,
         issuedByName: actor.displayName,
-        items: maintenanceOrder.items.map((item) => ({
+        items: source.items.map((item) => ({
           description: item.description,
           // EGY ALKALOM -- lásd a `CompletionCertificateInput` építésénél a
           // magyarázatot ugyanerre a döntésre.

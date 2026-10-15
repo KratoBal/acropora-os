@@ -161,6 +161,20 @@ export class CompletionCertificatesRepository {
             },
           },
         },
+        /*
+          A MEGRENDELŐLAP NÉLKÜLI LAP TÉTELEI (felmérés S5): a lap
+          létrehozásakor rögzített másolat (`ServiceJobContractItem`), a
+          szerződés-tétel sorrendjében. A szerződés száma a lap szerződéséé.
+        */
+        contract: { select: { number: true } },
+        contractItems: {
+          orderBy: { contractItem: { position: "asc" } },
+          select: {
+            description: true,
+            unitNet: true,
+            vatRatePercent: true,
+          },
+        },
         worksheets: {
           select: {
             id: true,
