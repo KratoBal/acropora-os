@@ -983,6 +983,8 @@ describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
     expect(
       await screen.findByText(/Az előző kérés eredménye ismeretlen/),
     ).toBeTruthy();
+    // a kulcs és a zár a lap állapota: frissítés után elvész (barracuda, #1712)
+    expect(screen.getByText(/ne frissítsd az oldalt/)).toBeTruthy();
     expect(screen.getByLabelText("Szerződés").hasAttribute("disabled")).toBe(
       true,
     );

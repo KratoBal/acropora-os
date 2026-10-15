@@ -1136,6 +1136,8 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
     expect(
       await screen.findByText(/Az előző kérés eredménye ismeretlen/),
     ).toBeTruthy();
+    // a kulcs és a zár a lap állapota: frissítés után elvész (barracuda, #1712)
+    expect(screen.getByText(/ne frissítsd az oldalt/)).toBeTruthy();
     const masodik = screen.getByRole("checkbox", { name: /2\. Vízcsere/ });
     expect(masodik.hasAttribute("disabled")).toBe(true);
     expect((masodik as HTMLInputElement).checked).toBe(false);
