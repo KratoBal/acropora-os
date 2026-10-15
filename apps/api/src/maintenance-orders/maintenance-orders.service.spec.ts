@@ -862,6 +862,8 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       reservations?: Reserved[];
       itemCount?: number;
       createdAt?: Date;
+      status?: string;
+      jobContractId?: string | null;
     } = {},
   ) {
     const calls: string[] = [];
@@ -886,6 +888,11 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         calls.push("state");
         return {
           createdAt: opts.createdAt ?? new Date("2026-06-15T10:00:00.000Z"),
+          status: opts.status ?? "NEW",
+          contractId:
+            opts.jobContractId === undefined
+              ? "contract-1"
+              : opts.jobContractId,
           itemCount: opts.itemCount ?? 0,
         };
       },
@@ -1039,6 +1046,25 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     assert.deepEqual(
       [result, h.calls],
       [{ serviceJobId: "job-1" }, ["reserve", "job", "worksheet", "state"]],
+    );
+  });
+
+  it("újrahívás egy lemondott vagy másik szerződés lapjára: 409, és nincs foglalás, nincs beszúrás (barracuda 31714)", async () => {
+    const cancelled = harness({ status: "CANCELLED" });
+    const foreign = harness({ jobContractId: "contract-2" });
+    assert.deepEqual(
+      [
+        await cancelled.run(),
+        cancelled.calls,
+        await foreign.run(),
+        foreign.calls,
+      ],
+      [
+        "409: Ez a karbantartási lap le van mondva. Új lapot kezdj.",
+        ["reserve", "job", "worksheet", "state"],
+        "409: Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
+        ["reserve", "job", "worksheet", "state"],
+      ],
     );
   });
 

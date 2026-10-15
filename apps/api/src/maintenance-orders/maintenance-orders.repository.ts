@@ -382,10 +382,20 @@ export class MaintenanceOrdersRepository {
   async serviceJobContractItemState(serviceJobId: string) {
     const job = await this.database.serviceJob.findUnique({
       where: { id: serviceJobId },
-      select: { createdAt: true, _count: { select: { contractItems: true } } },
+      select: {
+        createdAt: true,
+        status: true,
+        contractId: true,
+        _count: { select: { contractItems: true } },
+      },
     });
     return job
-      ? { createdAt: job.createdAt, itemCount: job._count.contractItems }
+      ? {
+          createdAt: job.createdAt,
+          status: job.status,
+          contractId: job.contractId,
+          itemCount: job._count.contractItems,
+        }
       : null;
   }
 

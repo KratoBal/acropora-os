@@ -468,6 +468,22 @@ export class MaintenanceOrdersService {
       throw new Error(
         `A most létrehozott ${serviceJobId} karbantartási lap nem található.`,
       );
+    /*
+      A KULCS ALATT TALÁLT LAP ÁLLAPOTA (barracuda 31714). Egy újrahívás a
+      MEGLÉVŐ lapot kapja vissza, és két esetben az nem folytatható: ha egy
+      korábbi próbálkozás a versenyhelyzet-ágon lemondta (különben egy közben
+      felszabadult alkalommal a tételsorok egy LEMONDOTT lapra kerülnének,
+      és a hívás sikert mondana), vagy ha a kulcs egy MÁSIK szerződés lapjához
+      tartozik.
+    */
+    if (state.status === "CANCELLED")
+      throw new ConflictException(
+        "Ez a karbantartási lap le van mondva. Új lapot kezdj.",
+      );
+    if (state.contractId !== contract.id)
+      throw new ConflictException(
+        "Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
+      );
     if (state.itemCount > 0) return { serviceJobId };
 
     const year = maintenanceOrderOccasionYear(state.createdAt);
