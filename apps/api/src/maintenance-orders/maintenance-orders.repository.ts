@@ -3,6 +3,7 @@ import { prisma, Prisma } from "@acropora/database";
 
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { unitPathsFor, unitRowsFor } from "../common/unit-path-lookup.js";
+import { budapestYearRange } from "./maintenance-order-occasion-year.js";
 
 const orderInclude = {
   contract: {
@@ -94,6 +95,43 @@ const portalOrderSelect = {
 export type PortalMaintenanceOrderRow = Prisma.MaintenanceOrderGetPayload<{
   select: typeof portalOrderSelect;
 }>;
+
+/** A tételek éves felhasználása (lásd `reserveOccasions`), tételenként. */
+async function occasionsUsed(
+  tx: Prisma.TransactionClient,
+  contractItemIds: string[],
+  year: number,
+): Promise<Map<string, number>> {
+  const used = new Map<string, number>();
+  if (!contractItemIds.length) return used;
+  const add = (contractItemId: string, count: number) =>
+    used.set(contractItemId, (used.get(contractItemId) ?? 0) + count);
+  const orderItems = await tx.maintenanceOrderItem.groupBy({
+    by: ["contractItemId"],
+    where: {
+      contractItemId: { in: contractItemIds },
+      maintenanceOrder: { occasionYear: year, status: { not: "REVOKED" } },
+    },
+    _count: { contractItemId: true },
+  });
+  for (const row of orderItems)
+    add(row.contractItemId, row._count.contractItemId);
+  const jobItems = await tx.serviceJobContractItem.groupBy({
+    by: ["contractItemId"],
+    where: {
+      contractItemId: { in: contractItemIds },
+      serviceJob: {
+        status: { not: "CANCELLED" },
+        maintenanceOrder: { is: null },
+        createdAt: budapestYearRange(year),
+      },
+    },
+    _count: { contractItemId: true },
+  });
+  for (const row of jobItems)
+    add(row.contractItemId, row._count.contractItemId);
+  return used;
+}
 
 @Injectable()
 export class MaintenanceOrdersRepository {
@@ -238,29 +276,58 @@ export class MaintenanceOrdersRepository {
   }
 
   /**
-   * HÁNY NEM VISSZAVONT RENDELÉS ESIK ERRE A TÉTELRE, EBBEN AZ ÉVBEN -- a
-   * kettős rendelés elleni őrző alapja. `REVOKED` állapotú rendelés tétele
-   * NEM számít bele: egy visszavont kiállítás felszabadítja az alkalmat.
+   * AZ ÉVES ALKALOMKERET FOGLALÁSA, ZÁRRAL (karbantartási felmérés S0/1,
+   * Balázs 2026-10-15; a zár barracuda 31567-es kikötése).
+   *
+   * Egy tranzakcióban: (1) szerződésenkénti zár (`pg_advisory_xact_lock`, a
+   * tranzakció végén magától oldódik), (2) a tételek ÉVES felhasználása,
+   * (3) ha egy tétel elérte az `occasionsPerYear`-t, a túllépett tételek
+   * listája jön vissza, és SEMMI nem íródik; különben (4) a hívó `write`-ja
+   * ugyanebben a tranzakcióban fut. Zár nélkül két egyszerre indított
+   * foglalás ugyanazt a maradékot látná, és együtt túllépnék a keretet.
+   *
+   * MI SZÁMÍT FELHASZNÁLÁSNAK, tételenként, az adott évben:
+   *   - a nem visszavont megrendelőlap tétele (`occasionYear` szerint; egy
+   *     visszavont kiállítás felszabadítja az alkalmat);
+   *   - a megrendelőlap NÉLKÜLI, nem lemondott karbantartási lap
+   *     `ServiceJobContractItem` sora, a lap létrehozásának budapesti éve
+   *     szerint. A megrendelőlapos lap sora NEM számít külön: annak az
+   *     alkalmát a megrendelőlap már lefoglalta.
+   *
+   * Az alkalom nélküli tételnek (`occasionsPerYear` null) nincs kerete, tehát
+   * az mindig túllépett: ugyanaz a viselkedés, mint eddig a kiállításnál.
    */
-  async issuedOccasionCounts(
-    contractItemIds: string[],
-    occasionYear: number,
-  ): Promise<Map<string, number>> {
-    if (!contractItemIds.length) return new Map();
-    const rows = await this.database.maintenanceOrderItem.groupBy({
-      by: ["contractItemId"],
-      where: {
-        contractItemId: { in: contractItemIds },
-        maintenanceOrder: {
-          occasionYear,
-          status: { not: "REVOKED" },
-        },
-      },
-      _count: { contractItemId: true },
+  async reserveOccasions<T>(
+    input: {
+      contractId: string;
+      year: number;
+      items: readonly {
+        contractItemId: string;
+        description: string;
+        occasionsPerYear: number | null;
+      }[];
+    },
+    write: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<{ ok: true; value: T } | { ok: false; exhausted: string[] }> {
+    return this.database.$transaction(async (tx) => {
+      // a `::text` azért kell, mert a void visszatérést a Prisma nem tudja beolvasni
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`maintenance-occasions:${input.contractId}`}))::text`;
+      const used = await occasionsUsed(
+        tx,
+        input.items.map((item) => item.contractItemId),
+        input.year,
+      );
+      const exhausted = input.items.filter(
+        (item) =>
+          (used.get(item.contractItemId) ?? 0) >= (item.occasionsPerYear ?? 0),
+      );
+      if (exhausted.length)
+        return {
+          ok: false as const,
+          exhausted: exhausted.map((item) => item.description),
+        };
+      return { ok: true as const, value: await write(tx) };
     });
-    return new Map(
-      rows.map((row) => [row.contractItemId, row._count.contractItemId]),
-    );
   }
 
   /**
@@ -269,15 +336,18 @@ export class MaintenanceOrdersRepository {
    * már létezne, a PDF viszont nélküle -- és a felület egy dokumentum
    * nélküli, kiadhatatlan kiállítást mutatna.
    */
-  async issue(input: {
-    contractId: string;
-    number: string;
-    occasionYear: number;
-    issuedByName: string | null;
-    items: MaintenanceOrderItemInput[];
-    document: MaintenanceOrderGeneratedDocument;
-  }) {
-    return this.database.maintenanceOrder.create({
+  async issue(
+    input: {
+      contractId: string;
+      number: string;
+      occasionYear: number;
+      issuedByName: string | null;
+      items: MaintenanceOrderItemInput[];
+      document: MaintenanceOrderGeneratedDocument;
+    },
+    tx: Prisma.TransactionClient = this.database,
+  ) {
+    return tx.maintenanceOrder.create({
       data: {
         contractId: input.contractId,
         number: input.number,
