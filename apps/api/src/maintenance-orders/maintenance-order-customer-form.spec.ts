@@ -232,6 +232,23 @@ describe("MaintenanceOrdersService.uploadCustomerForm", () => {
     assert.equal(calls.job, undefined);
   });
 
+  // a foglalás zár-várakozása lejárt (#1709 óta: busy ág): "próbáld újra" 409,
+  // nem keret-túllépés, és itt sem jön létre sor (barracuda 31731)
+  it("lejárt zár-várakozásnál 'próbáld újra' 409, és sor nem jön létre", async () => {
+    const { service, calls } = wire({
+      reserveOccasions: async () => ({ ok: false, busy: true }),
+    });
+    await assert.rejects(
+      () => service.uploadCustomerForm(DTO, PDF, ACTOR),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message ===
+          "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+    );
+    assert.equal(calls.created.length, 0);
+    assert.equal(calls.job, undefined);
+  });
+
   it("ugyanaz a PDF ugyanazokra a tételekre másodszor, kész lappal: 409 a meglévő számmal, új sor és lap nélkül", async () => {
     let asked: unknown;
     const { service, calls } = wire({
