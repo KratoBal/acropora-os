@@ -79,6 +79,9 @@ const RESZLETLAP: DetailRow = {
   worksheets: [],
   assets: [],
   assignees: [],
+  contract: null,
+  maintenanceOrder: null,
+  contractItems: [],
 };
 
 /** Amit a tarolo OLDALAN latunk: minden iro metodus nevet feljegyzi. */
