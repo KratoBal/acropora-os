@@ -97,7 +97,8 @@ function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {
       ids.map((id) => ({ id, name: id, parentId: null })),
     saveSignedDocumentAndMarkSigned: async () => undefined,
     // alapból egyik tételnek sincs szerződéses eszköze
-    itemAssetsOnSite: async () => new Map<string, string[]>(),
+    itemAssetsBySite: async () =>
+      new Map<string, { onSite: string[]; outside: string[] }>(),
     attachServiceJob: async () => ({ id: "order-1", status: "SIGNED" }),
     markRevoked: async () => ({ id: "order-1", status: "REVOKED" }),
     document: async () => null,
@@ -451,11 +452,11 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
       fakeRepository({
         departmentTree: async () => CAPASULI,
         detail: async () => orderRow("ISSUED", ["kismedence", "nagymedence"]),
-        itemAssetsOnSite: async (items: unknown) => {
+        itemAssetsBySite: async (items: unknown) => {
           asked = items;
           return new Map([
-            ["item-1", ["szivattyu", "kozos-szuro"]],
-            ["item-2", ["uv-lampa", "kozos-szuro"]],
+            ["item-1", { onSite: ["szivattyu", "kozos-szuro"], outside: [] }],
+            ["item-2", { onSite: ["uv-lampa", "kozos-szuro"], outside: [] }],
           ]);
         },
       }) as never,
@@ -704,6 +705,55 @@ describe("MaintenanceOrdersService: állapot-átmenetek", () => {
     assert.equal(workedsheetCalls, 1);
     assert.equal(capturedClientOperationId, "maintenance-order-order-1-signed");
     assert.equal((result as { status: string }).status, "SIGNED");
+  });
+
+  /*
+    A KULCSOK BETŰRE A MAI KULCSOK (karbantartási felmérés S3). A lap és a
+    munkalapok létrehozása egy közös, paraméterezett úton megy; ha a kulcs
+    összeállítása ott elcsúszna, egy megszakadt aláírás újrafuttatása NEM a
+    meglévő sorokat találná meg, hanem újakat hozna létre. MI PIROSÍT: bármelyik
+    kulcs egyetlen karaktere.
+  */
+  it("az aláírás-út a lapot és a munkalapokat a mai idempotencia-kulcsokkal hozza létre", async () => {
+    let jobKey: string | undefined;
+    const worksheetKeys: Array<string | undefined> = [];
+    const wired = new MaintenanceOrdersService(
+      fakeRepository({
+        departmentTree: async () => [
+          { id: "capasuli", name: "Cápasuli", parentId: null },
+          { id: "kismedence", name: "Kismedence", parentId: "capasuli" },
+          { id: "nagymedence", name: "Nagymedence", parentId: "capasuli" },
+        ],
+        detail: async () => orderRow("ISSUED", ["kismedence", "nagymedence"]),
+      }) as never,
+      {
+        create: async (input: { clientOperationId?: string }) => {
+          jobKey = input.clientOperationId;
+          return { id: "job-1" };
+        },
+      } as never,
+      {
+        create: async (input: { clientOperationId?: string }) => {
+          worksheetKeys.push(input.clientOperationId);
+          return { id: "worksheet-1" };
+        },
+      } as never,
+    );
+    await wired.uploadSignedDocument(
+      "order-1",
+      {
+        mimetype: "application/pdf",
+        buffer: Buffer.from("%PDF-1.4 ..."),
+        originalname: "alairt.pdf",
+        size: 10,
+      } as Express.Multer.File,
+      ACTOR,
+    );
+    assert.equal(jobKey, "maintenance-order-order-1-signed");
+    assert.deepEqual(worksheetKeys, [
+      "maintenance-order-order-1-worksheet-item-1",
+      "maintenance-order-order-1-worksheet-item-2",
+    ]);
   });
 
   it("TELJESEN KÉSZ rendelésre (SIGNED, van serviceJobId) nem tölthető fel újra aláírt példány", async () => {

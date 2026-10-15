@@ -14,7 +14,7 @@ import { MaintenanceOrdersRepository } from "./maintenance-orders.repository.js"
  * A SZERZŐDÉS-TÉTELEK ESZKÖZEI, AHOGY AZ ALÁÍRÁS ÁTVISZI ŐKET (karbantartási
  * felmérés S1, 2026-10-15), ADATBÁZISON.
  *
- * A `MaintenanceOrdersRepository.itemAssetsOnSite()` tételenként adja vissza a
+ * A `MaintenanceOrdersRepository.itemAssetsBySite()` tételenként adja vissza a
  * `ContractItemAsset` eszközöket, de csak azokat, amik a tétel helyszínének
  * RÉSZFÁJÁN állnak. A szolgáltatás tesztje ezt a metódust hamisítja, tehát a
  * szűrés maga csak itt mérhető. MI PIROSÍT: ha egy másik ágra költözött eszköz
@@ -178,18 +178,23 @@ describe(
       const felsoTetel = await item(2, capasuli.id, [uvLampa.id, szivattyu.id]);
       const uresTetel = await item(3, nagymedence.id, []);
 
-      const result = await repository.itemAssetsOnSite([
+      const result = await repository.itemAssetsBySite([
         { contractItemId: kisTetel.id, departmentId: kismedence.id },
         { contractItemId: felsoTetel.id, departmentId: capasuli.id },
         { contractItemId: uresTetel.id, departmentId: nagymedence.id },
       ]);
 
-      assert.deepEqual(result.get(kisTetel.id), [szivattyu.id]);
+      assert.deepEqual(result.get(kisTetel.id), {
+        onSite: [szivattyu.id],
+        // az átköltözött eszköz nem vész el szó nélkül: a hívó jelzi (S3)
+        outside: [atkoltozott.id],
+      });
       assert.deepEqual(
-        [...(result.get(felsoTetel.id) ?? [])].sort(),
+        [...(result.get(felsoTetel.id)?.onSite ?? [])].sort(),
         [uvLampa.id, szivattyu.id].sort(),
       );
-      assert.deepEqual(result.get(uresTetel.id), []);
+      assert.deepEqual(result.get(felsoTetel.id)?.outside, []);
+      assert.deepEqual(result.get(uresTetel.id), { onSite: [], outside: [] });
       assert.equal(result.size, 3);
     });
   },
