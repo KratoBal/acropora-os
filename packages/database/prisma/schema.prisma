@@ -3766,8 +3766,9 @@ model CompletionCertificate {
 }
 
 /// EGY SOR AZ IGAZOLÁSON. A leíró mezők MÁSOLATOK a kiállítás pillanatából
-/// (a `MaintenanceOrderItem` saját másolatából, ami viszont a
-/// `ContractItem`-ét másolja) -- ugyanaz a lánc, ugyanazért, amiért a
+/// (a `MaintenanceOrderItem`, megrendelőlap nélküli lapnál a
+/// `ServiceJobContractItem` saját másolatából, ami viszont a `ContractItem`-ét
+/// másolja; felmérés S5) -- ugyanaz a lánc, ugyanazért, amiért a
 /// megrendelőlap tétele is másolat: egy később szerkesztett szerződéses ár
 /// nem írhatja át visszamenőleg egy már kiadott igazolást.
 model CompletionCertificateLineItem {

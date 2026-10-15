@@ -27,6 +27,9 @@ function jobRow(
     hasOrder: boolean;
     itemCount: number;
     worksheetStatuses: Array<string | undefined>;
+    // a megrendelőlap nélküli lap rögzített tételsorai (felmérés S5)
+    contractItems: Array<{ description: string; unitNet: string }>;
+    contractNumber: string | null;
   }> = {},
 ) {
   const itemCount = overrides.itemCount ?? 1;
@@ -64,6 +67,15 @@ function jobRow(
               vatRatePercent: new Prisma.Decimal(27),
             })),
           },
+    contract:
+      overrides.contractNumber === null
+        ? null
+        : { number: overrides.contractNumber ?? "SZ2026/0000019" },
+    contractItems: (overrides.contractItems ?? []).map((item) => ({
+      description: item.description,
+      unitNet: new Prisma.Decimal(item.unitNet),
+      vatRatePercent: new Prisma.Decimal(27),
+    })),
     worksheets: (overrides.worksheetStatuses ?? ["SIGNED"]).map(
       (status, index) => ({
         id: `worksheet-${index + 1}`,
@@ -178,6 +190,84 @@ describe("CompletionCertificatesService.issue", () => {
         error instanceof Error &&
         /időközben már kiosztásra került/.test(error.message) &&
         error.message.includes("TI-"),
+    );
+  });
+
+  /*
+    A TÉTELEK FORRÁSA MEGRENDELŐLAP NÉLKÜL (karbantartási felmérés S5). MI
+    PIROSÍT: ha megrendelőlap nélkül nem a lap rögzített tételsorai adják a
+    tételeket (vagy a mai szerződéses ár kerül oda); ha tételsor vagy szerződés
+    nélkül mégis kiállítja; ha megrendelőlap mellett a tételsorok nyernek.
+  */
+  it("megrendelőlap nélkül a lap rögzített tételsoraiból, tételenként 1 alkalommal", async () => {
+    let captured: unknown;
+    const { service } = makeService({
+      serviceJobForIssuance: async () =>
+        jobRow({
+          hasOrder: false,
+          contractItems: [
+            { description: "Cápasuli RO", unitNet: "650000" },
+            { description: "UV-lámpa csere", unitNet: "120000" },
+          ],
+        }),
+      issue: async (input: unknown) => {
+        captured = input;
+        return { id: "certificate-1" };
+      },
+    });
+    await service.issue({ serviceJobId: "job-1" }, ACTOR);
+    const items = (captured as { items: Array<Record<string, unknown>> }).items;
+    assert.deepEqual(
+      items.map((item) => [
+        item.description,
+        String(item.quantity),
+        String(item.unitNet),
+        String(item.vatRatePercent),
+      ]),
+      [
+        ["Cápasuli RO", "1", "650000", "27"],
+        ["UV-lámpa csere", "1", "120000", "27"],
+      ],
+    );
+  });
+
+  it("megrendelőlap nélkül, tételsor vagy szerződés nélkül nem állít ki; megrendelőlap mellett az nyer", async () => {
+    const outcome = async (row: ReturnType<typeof jobRow>) => {
+      let captured: unknown;
+      const { service } = makeService({
+        serviceJobForIssuance: async () => row,
+        issue: async (input: unknown) => {
+          captured = input;
+          return { id: "certificate-1" };
+        },
+      });
+      return service.issue({ serviceJobId: "job-1" }, ACTOR).then(
+        () =>
+          (captured as { items: Array<{ description: string }> }).items.map(
+            (item) => item.description,
+          ),
+        (error: unknown) => (error as Error).message,
+      );
+    };
+    const noSource =
+      "Ehhez a laphoz nem tartozik megrendelőlap és szerződés-tétel sem, a tételek forrása ismeretlen.";
+    assert.deepEqual(
+      [
+        await outcome(jobRow({ hasOrder: false })),
+        await outcome(
+          jobRow({
+            hasOrder: false,
+            contractNumber: null,
+            contractItems: [{ description: "Árva tétel", unitNet: "1" }],
+          }),
+        ),
+        await outcome(
+          jobRow({
+            contractItems: [{ description: "Nem ez nyer", unitNet: "1" }],
+          }),
+        ),
+      ],
+      [noSource, noSource, ["Tétel 1"]],
     );
   });
 
