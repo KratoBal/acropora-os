@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 
+import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { unitPathsFor, unitRowsFor } from "../common/unit-path-lookup.js";
 
 const orderInclude = {
@@ -159,6 +160,49 @@ export class MaintenanceOrdersRepository {
   /** A helyszínek gazdáinak teljes fája (a közös felső helyszínhez). */
   departmentTree(departmentIds: readonly string[]) {
     return unitRowsFor(this.database, departmentIds);
+  }
+
+  /**
+   * A SZERZŐDÉS-TÉTELEK ESZKÖZEI (`ContractItemAsset`), TÉTELENKÉNT -- DE
+   * CSAK AZOK, AMIK MA IS A TÉTEL HELYSZÍNÉNEK RÉSZFÁJÁN ÁLLNAK.
+   *
+   * A szűrés oka: a lap és a munkalap létrehozása ugyanezt a részfa-szabályt
+   * kéri számon (`requireAssetsOnDepartment`, `requireAssetsInDepartment`),
+   * és hibát dob egy kívül álló eszközre. A szerződés mentése ugyan a tétel
+   * helyszínéhez méri az eszközt, de csak 2026-09-24 óta (előtte a partnerhez),
+   * és egy eszköz azóta át is költözhetett. Szűrés nélkül egy ilyen eszköz egy
+   * vevő által aláírt megrendelőlap feldolgozását állítaná meg, holott a
+   * megrendelés a TÉTELRE szól, nem az eszközre. Ami nem a helyszínen áll, azt
+   * ott nem is lehet karbantartani -- ezért marad le a lapról.
+   */
+  async itemAssetsOnSite(
+    items: readonly { contractItemId: string; departmentId: string }[],
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (items.length === 0) return result;
+    const rows = await this.database.contractItemAsset.findMany({
+      where: {
+        contractItemId: { in: items.map((item) => item.contractItemId) },
+      },
+      select: { contractItemId: true, assetId: true },
+    });
+    for (const item of items) {
+      const assetIds = rows
+        .filter((row) => row.contractItemId === item.contractItemId)
+        .map((row) => row.assetId);
+      if (assetIds.length === 0) {
+        result.set(item.contractItemId, []);
+        continue;
+      }
+      const outside = new Set(
+        await assetsOutsideDepartment(assetIds, item.departmentId),
+      );
+      result.set(
+        item.contractItemId,
+        assetIds.filter((assetId) => !outside.has(assetId)),
+      );
+    }
+    return result;
   }
 
   /**
