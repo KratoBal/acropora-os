@@ -128,6 +128,14 @@ export function ServiceJobEditorPage({
   const [contractChoice, setContractChoice] =
     useState<ContractJobChoice | null>(null);
   const contractOperationId = useRef(newContractJobOperationId());
+  /**
+   * AN EARLIER REQUEST UNDER THE KEPT KEY HAS AN UNKNOWN OUTCOME (no answer or
+   * 5xx): the job may exist with the current partner, contract, items and title.
+   * Until the retry resolves, none of these may change (barracuda, #1711 review):
+   * a changed request under the old key would be answered with the old job, and
+   * the new choice would be lost without a word.
+   */
+  const [contractUnresolved, setContractUnresolved] = useState(false);
 
   /**
    * A VALASZTHATO KOLLEGAK LISTAJA. A `canManage` a kapcsolo: jogosultsag
@@ -319,8 +327,11 @@ export function ServiceJobEditorPage({
       } catch (cause) {
         // a válasz nélküli és az 5xx hibánál a lap létezhet: ugyanaz a kulcs
         // találja meg; a 4xx elutasítás után új kulcs kell
-        if (contractChoice && !keepsContractJobOperationId(cause))
-          contractOperationId.current = newContractJobOperationId();
+        if (contractChoice) {
+          const keep = keepsContractJobOperationId(cause);
+          if (!keep) contractOperationId.current = newContractJobOperationId();
+          setContractUnresolved(keep);
+        }
         setError(
           cause instanceof Error
             ? cause.message
@@ -331,6 +342,7 @@ export function ServiceJobEditorPage({
         setSaving(false);
         return;
       }
+      setContractUnresolved(false);
       setCreated(job);
     }
 
@@ -441,7 +453,8 @@ export function ServiceJobEditorPage({
                   <span className="font-medium">{customer.name}</span>
                   <button
                     type="button"
-                    className="text-xs text-dusk-500 underline"
+                    className="text-xs text-dusk-500 underline disabled:no-underline disabled:opacity-50"
+                    disabled={contractUnresolved}
                     onClick={() => setCustomer(null)}
                   >
                     Másik partner
@@ -465,7 +478,16 @@ export function ServiceJobEditorPage({
                 siteOptions={departmentOptions}
                 value={contractChoice}
                 onChange={setContractChoice}
+                locked={contractUnresolved}
               />
+            ) : null}
+            {contractUnresolved ? (
+              <p className="text-sm font-medium text-rose-600">
+                Az előző kérés eredménye ismeretlen, a lap létrejöhetett. Előbb
+                próbáld újra, és ne frissítsd az oldalt: frissítés után egy új
+                kérés második lapot nyithat. A partner, a szerződés, a tételek
+                és a cím addig nem módosítható.
+              </p>
             ) : null}
 
             {contractChoice ? null : (
@@ -525,6 +547,7 @@ export function ServiceJobEditorPage({
               <Input
                 id="hibajegy-cim"
                 value={title}
+                disabled={contractUnresolved}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder="Például: a hármas medence szivattyúja nem indul"
               />

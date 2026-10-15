@@ -165,7 +165,6 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
   return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
 
-/** Az időrend-ikon négy valós forrásra -- ugyanaz a forma, mint a Figma tervé, a saját négy kindünkre igazítva. */
 /** Where the maintenance job's items come from (karbantartási felmérés S7). */
 function ServiceJobSourceValue({
   source,
@@ -183,6 +182,7 @@ function ServiceJobSourceValue({
   );
 }
 
+/** Az időrend-ikon négy valós forrásra -- ugyanaz a forma, mint a Figma tervé, a saját négy kindünkre igazítva. */
 function TimelineIcon({ kind }: { kind: ServiceJobTimelineEntry["kind"] }) {
   const cfg: Record<
     ServiceJobTimelineEntry["kind"],
