@@ -16,6 +16,13 @@
  *   row here; a row for one of them is reported as a double decision.
  * - a ROW in `ANONYMIZATION_REGISTER` below, for every other field.
  *
+ * THE SCOPE IS BY TYPE: String, String[], Json, Bytes and Unsupported(...) are
+ * the types that can carry free-form data. DateTime, Int, Float, Decimal,
+ * Boolean and enum fields are outside it. On 2026-10-15 none of them held
+ * personal data (barracuda searched the schema), but a future `birthDate
+ * DateTime` or a `lat`/`lng` Float would pass this check unclassified: such a
+ * field needs the scope widened, not just a row.
+ *
  * `anonymization-register.test.ts` fails when a field has no decision, when a
  * row points to a field that does not exist, or when a field is decided twice.
  * A new column therefore cannot reach the stage copy unclassified.
@@ -162,6 +169,11 @@ export const ANONYMIZATION_KINDS = {
     action: "replace",
     description:
       "A stored file (attachment, scan, report, thumbnail): replaced by a neutral placeholder of the same type.",
+  },
+  opaqueToken: {
+    action: "replace",
+    description:
+      "A random token on a row that must stay, kept from other parties on purpose (an asset's QR label token): replaced by a fresh random value of the same shape. On stage the physical label no longer matches, which does not matter there.",
   },
   secret: {
     action: "delete",
@@ -661,7 +673,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   Asset: {
     assetNumber: "identifier",
     clientOperationId: "identifier",
-    qrToken: "identifier",
+    qrToken: "opaqueToken",
     name: "business",
     category: "business",
     manufacturer: "business",
