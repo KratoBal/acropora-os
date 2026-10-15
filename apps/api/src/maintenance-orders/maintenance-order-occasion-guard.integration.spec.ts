@@ -250,7 +250,9 @@ describe(
           contractId: contract.id,
         },
       });
-      const before = await repository.serviceJobContractItemState(job.id);
+      const before = await repository.serviceJobContractItemState({
+        id: job.id,
+      });
       const first = await repository.reserveOccasions(
         reserveInput(contract.id, [d]),
         (tx) =>
@@ -264,7 +266,9 @@ describe(
             },
           ]),
       );
-      const after = await repository.serviceJobContractItemState(job.id);
+      const after = await repository.serviceJobContractItemState({
+        id: job.id,
+      });
       const stored = await prisma.serviceJobContractItem.findMany({
         where: { serviceJobId: job.id },
         select: { contractItemId: true, unitNet: true },

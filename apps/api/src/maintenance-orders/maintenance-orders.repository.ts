@@ -379,10 +379,13 @@ export class MaintenanceOrdersRepository {
    * vannak, egy korábbi próbálkozás a foglalásig eljutott: az újrahívás nem
    * foglal újra (a saját sorait különben a keret felhasználásnak látná).
    */
-  async serviceJobContractItemState(serviceJobId: string) {
+  async serviceJobContractItemState(
+    where: { id: string } | { clientOperationId: string },
+  ) {
     const job = await this.database.serviceJob.findUnique({
-      where: { id: serviceJobId },
+      where,
       select: {
+        id: true,
         createdAt: true,
         status: true,
         contractId: true,
@@ -391,6 +394,7 @@ export class MaintenanceOrdersRepository {
     });
     return job
       ? {
+          id: job.id,
           createdAt: job.createdAt,
           status: job.status,
           contractId: job.contractId,

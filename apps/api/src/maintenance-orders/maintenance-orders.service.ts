@@ -50,6 +50,26 @@ function reservationConflict(
       );
 }
 
+/**
+ * A KULCS ALATT TALÁLT LAP FOLYTATHATÓ-E (barracuda 31714): lemondott lapra
+ * nem kerülhet tételsor (egy közben felszabadult alkalommal a hívás sikert
+ * mondana egy lemondott lapról), és egy másik szerződés lapjához tartozó kulcs
+ * hibás kliens jele.
+ */
+function assertContinuable(
+  job: { status: string; contractId: string | null },
+  contractId: string,
+): void {
+  if (job.status === "CANCELLED")
+    throw new ConflictException(
+      "Ez a karbantartási lap le van mondva. Új lapot kezdj.",
+    );
+  if (job.contractId !== contractId)
+    throw new ConflictException(
+      "Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
+    );
+}
+
 @Injectable()
 export class MaintenanceOrdersService {
   constructor(
@@ -438,11 +458,26 @@ export class MaintenanceOrdersService {
     const nowYear = maintenanceOrderOccasionYear(new Date());
     const key = dto.clientOperationId?.trim() || randomUUID();
 
-    const precheck = await this.repository.reserveOccasions(
-      { ...reservation, year: nowYear },
-      async () => null,
-    );
-    if (!precheck.ok) throw reservationConflict(nowYear, precheck);
+    /*
+      A KULCS ALATTI LAP, MÉG A LÉTREHOZÁS ELŐTT (barracuda 31714, 31720).
+      Lemondott lapot nem folytatunk, és egy másik szerződés lapja alá nem
+      teszünk munkalapot (az új kérés tételeinek munkalap-kulcsai újak
+      lennének, tehát a 409 előtt idegen munkalapok keletkeznének). Ha a lapnak
+      már vannak tételsorai, az előellenőrzés kimarad: a saját sorait
+      felhasználásnak látná, és egy sikeres újrahívást utasítana el.
+    */
+    const existing = await this.repository.serviceJobContractItemState({
+      clientOperationId: `contract-job-${key}`,
+    });
+    if (existing) assertContinuable(existing, contract.id);
+
+    if (!existing || existing.itemCount === 0) {
+      const precheck = await this.repository.reserveOccasions(
+        { ...reservation, year: nowYear },
+        async () => null,
+      );
+      if (!precheck.ok) throw reservationConflict(nowYear, precheck);
+    }
 
     const { serviceJobId } = await createJobFromContractItems(
       {
@@ -462,28 +497,16 @@ export class MaintenanceOrdersService {
       actor,
     );
 
-    const state =
-      await this.repository.serviceJobContractItemState(serviceJobId);
+    const state = await this.repository.serviceJobContractItemState({
+      id: serviceJobId,
+    });
     if (!state)
       throw new Error(
         `A most létrehozott ${serviceJobId} karbantartási lap nem található.`,
       );
-    /*
-      A KULCS ALATT TALÁLT LAP ÁLLAPOTA (barracuda 31714). Egy újrahívás a
-      MEGLÉVŐ lapot kapja vissza, és két esetben az nem folytatható: ha egy
-      korábbi próbálkozás a versenyhelyzet-ágon lemondta (különben egy közben
-      felszabadult alkalommal a tételsorok egy LEMONDOTT lapra kerülnének,
-      és a hívás sikert mondana), vagy ha a kulcs egy MÁSIK szerződés lapjához
-      tartozik.
-    */
-    if (state.status === "CANCELLED")
-      throw new ConflictException(
-        "Ez a karbantartási lap le van mondva. Új lapot kezdj.",
-      );
-    if (state.contractId !== contract.id)
-      throw new ConflictException(
-        "Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
-      );
+    // ugyanaz az ellenőrzés a létrehozás után is: egy párhuzamos kérés
+    // ugyanazzal a kulccsal közben hozhatta létre a lapot
+    assertContinuable(state, contract.id);
     if (state.itemCount > 0) return { serviceJobId };
 
     const year = maintenanceOrderOccasionYear(state.createdAt);

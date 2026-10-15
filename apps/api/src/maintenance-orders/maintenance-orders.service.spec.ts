@@ -864,6 +864,8 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       createdAt?: Date;
       status?: string;
       jobContractId?: string | null;
+      // a kulcs alatt MÁR létező lap (újrahívás); alapból nincs ilyen
+      existing?: { status?: string; contractId?: string; itemCount: number };
     } = {},
   ) {
     const calls: string[] = [];
@@ -884,9 +886,24 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
         if (!next.ok) return next;
         return { ok: true, value: await write({ tx: true }) };
       },
-      serviceJobContractItemState: async () => {
+      serviceJobContractItemState: async (
+        where: { id: string } | { clientOperationId: string },
+      ) => {
+        if ("clientOperationId" in where) {
+          calls.push("lookup");
+          return opts.existing
+            ? {
+                id: "job-1",
+                createdAt: new Date("2026-06-15T10:00:00.000Z"),
+                status: opts.existing.status ?? "NEW",
+                contractId: opts.existing.contractId ?? "contract-1",
+                itemCount: opts.existing.itemCount,
+              }
+            : null;
+        }
         calls.push("state");
         return {
+          id: "job-1",
           createdAt: opts.createdAt ?? new Date("2026-06-15T10:00:00.000Z"),
           status: opts.status ?? "NEW",
           contractId:
@@ -974,7 +991,15 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       },
       {
         result: { serviceJobId: "job-1" },
-        calls: ["reserve", "job", "worksheet", "state", "reserve", "insert"],
+        calls: [
+          "lookup",
+          "reserve",
+          "job",
+          "worksheet",
+          "state",
+          "reserve",
+          "insert",
+        ],
         // a lap 2026-12-31 23:30 UTC-kor jött létre: Budapesten már 2027
         year: 2027,
         job: {
@@ -1014,7 +1039,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       [String(result).replace(/\d{4}-ban/, "ÉV-ban"), h.calls],
       [
         "409: A következő tételeknél ÉV-ban elfogyott az évi alkalomkeret: Cápasuli RO karbantartás.",
-        ["reserve"],
+        ["lookup", "reserve"],
       ],
     );
   });
@@ -1032,7 +1057,7 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       [String(result).slice(0, 4), h.calls, jobId, move.to, h.inserted],
       [
         "409:",
-        ["reserve", "job", "worksheet", "state", "reserve", "move"],
+        ["lookup", "reserve", "job", "worksheet", "state", "reserve", "move"],
         "job-1",
         "CANCELLED",
         [],
@@ -1040,18 +1065,22 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
     );
   });
 
-  it("újrahívás: ha a lapnak már vannak tételsorai, nem foglal újra", async () => {
-    const h = harness({ itemCount: 1 });
+  it("újrahívás: ha a kulcs alatti lapnak már vannak tételsorai, nem foglal újra (az előellenőrzés sem)", async () => {
+    const h = harness({ existing: { itemCount: 1 }, itemCount: 1 });
     const result = await h.run();
     assert.deepEqual(
       [result, h.calls],
-      [{ serviceJobId: "job-1" }, ["reserve", "job", "worksheet", "state"]],
+      [{ serviceJobId: "job-1" }, ["lookup", "job", "worksheet", "state"]],
     );
   });
 
-  it("újrahívás egy lemondott vagy másik szerződés lapjára: 409, és nincs foglalás, nincs beszúrás (barracuda 31714)", async () => {
-    const cancelled = harness({ status: "CANCELLED" });
-    const foreign = harness({ jobContractId: "contract-2" });
+  it("újrahívás egy lemondott vagy másik szerződés lapjára: 409 a lap és a munkalapok létrehozása ELŐTT (barracuda 31714, 31720)", async () => {
+    const cancelled = harness({
+      existing: { status: "CANCELLED", itemCount: 0 },
+    });
+    const foreign = harness({
+      existing: { contractId: "contract-2", itemCount: 0 },
+    });
     assert.deepEqual(
       [
         await cancelled.run(),
@@ -1061,9 +1090,9 @@ describe("MaintenanceOrdersService.createJobFromContract", () => {
       ],
       [
         "409: Ez a karbantartási lap le van mondva. Új lapot kezdj.",
-        ["reserve", "job", "worksheet", "state"],
+        ["lookup"],
         "409: Ez a kérés-azonosító egy másik szerződés karbantartási lapjához tartozik. Új lapot kezdj.",
-        ["reserve", "job", "worksheet", "state"],
+        ["lookup"],
       ],
     );
   });
