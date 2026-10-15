@@ -13,6 +13,8 @@ import {
   pilotBadgeVariantForTone,
 } from "@acropora/ui";
 import {
+  maintenanceOrderSheetDocument,
+  maintenanceOrderSourceLabel,
   maintenanceOrderStatusLabel,
   maintenanceOrderStatusTone,
   type MaintenanceOrderPartnerDetail,
@@ -38,6 +40,11 @@ import { Message } from "./ticket-list";
  * szervertől kapott `fileName`/`contentType` mezőket használja, nem
  * feltételezi előre egyik formátumot sem -- a Figma terv `.pdf` fájlnév-
  * feltevése emiatt itt SZÁNDÉKOSAN nem jelenik meg.
+ *
+ * A letölthető lap a FORRÁST követi (karbantartási felmérés S8): a vevő
+ * megrendelőlapjánál a feltöltött `CUSTOMER_FORM` dokumentum, egyébként a
+ * generált lap -- lásd `maintenanceOrderSheetDocument`. Egy vevői lapnak
+ * nincs generált dokumentuma, ezért a csak azt kereső kártya ott üres maradt.
  *
  * === A FELTÖLTŐ KÁRTYA KÉT FELTÉTELHEZ KÖTŐDIK ===
  *
@@ -126,9 +133,8 @@ export function MaintenanceOrderDetail({ id }: { id: string }) {
       </PilotThemeRoot>
     );
 
-  const generated = order.documents.find(
-    (doc) => doc.type === "GENERATED_FORM",
-  );
+  const sheet = maintenanceOrderSheetDocument(order);
+  const customerForm = order.source === "CUSTOMER_FORM";
   const showUpload = order.status === "ISSUED" && order.canUploadSigned;
 
   return (
@@ -171,6 +177,10 @@ export function MaintenanceOrderDetail({ id }: { id: string }) {
               value={order.departmentName ?? undefined}
             />
             <PilotDataRow label="Időszak" value={order.period} />
+            <PilotDataRow
+              label="Megrendelőlap"
+              value={maintenanceOrderSourceLabel[order.source]}
+            />
             <PilotDataRow
               label="Állapot"
               value={maintenanceOrderStatusLabel[order.status]}
@@ -225,7 +235,7 @@ export function MaintenanceOrderDetail({ id }: { id: string }) {
         <PilotCard>
           <PilotCardHeader title="Megrendelőlap" />
           <div className="flex items-center gap-3 px-5 py-4">
-            {generated ? (
+            {sheet ? (
               <>
                 <div className="flex flex-1 items-center gap-3 rounded-lg bg-pilot-grey-50 px-4 py-3 ring-1 ring-pilot-grey-200">
                   <Icon
@@ -234,12 +244,12 @@ export function MaintenanceOrderDetail({ id }: { id: string }) {
                     className="text-pilot-grey-400"
                   />
                   <span className="truncate font-mono text-sm text-pilot-grey-600">
-                    {generated.fileName}
+                    {sheet.fileName}
                   </span>
                 </div>
                 <PilotButton
                   variant="secondary"
-                  onClick={() => download(generated.id, generated.fileName)}
+                  onClick={() => download(sheet.id, sheet.fileName)}
                 >
                   <Icon name="download" size={13} />
                   Letöltés
@@ -247,7 +257,9 @@ export function MaintenanceOrderDetail({ id }: { id: string }) {
               </>
             ) : (
               <p className="text-sm italic text-pilot-grey-500">
-                Nincs generált megrendelőlap.
+                {customerForm
+                  ? "Nincs feltöltött vevői megrendelőlap."
+                  : "Nincs generált megrendelőlap."}
               </p>
             )}
           </div>
