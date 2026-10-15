@@ -325,6 +325,38 @@ jobs:
       - name: Production build
         run: pnpm build
 
+  # Security Baseline B32: the lockfiles' known vulnerabilities, including what never reaches
+  # an image (the mobile app, build and dev dependencies; the images themselves are scanned in
+  # docker-build-scan). REPORT MODE: the job lists, it does not block, so today's findings show
+  # first; `--strict` on a step makes it fail at --level (default high). An audit it cannot
+  # read is exit 2 in both modes, never a clean result. No new service and no token: the
+  # registry the install already uses answers the audit.
+  dependency-audit:
+    name: Dependency audit (report)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Workspace (pnpm lockfile)
+        run: node scripts/dependency-audit.mjs --tool pnpm --label workspace
+
+      - name: Mobile app (npm lockfile)
+        if: always()
+        run: node scripts/dependency-audit.mjs --tool npm --dir apps/mobile --label mobile
+
   docker-build-scan:
     name: Docker build & vulnerability scan (${{ matrix.app }})
     runs-on: ubuntu-latest
