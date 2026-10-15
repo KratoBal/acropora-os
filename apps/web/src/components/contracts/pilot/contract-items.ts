@@ -68,6 +68,12 @@ export function isValidContractItem(
     DECIMAL.test(item.vatRatePercent);
   if (kind === "PURCHASE") return common && Boolean(item.unitOfMeasureId);
   const occasions = Number(item.occasionsPerYear);
+  // a javítási tételnél az alkalom nem kötelező (felmérés S0/3), de ha van, érvényes legyen
+  if (
+    kind === "REPAIR" &&
+    (item.occasionsPerYear === null || item.occasionsPerYear === "")
+  )
+    return common;
   return (
     common &&
     item.occasionsPerYear !== null &&

@@ -30,7 +30,7 @@ const ACTOR: AuthenticatedUser = {
 function contractRow(
   overrides: Partial<{
     status: string;
-    kind: "MAINTENANCE" | "PURCHASE";
+    kind: "MAINTENANCE" | "PURCHASE" | "REPAIR";
     items: Array<{
       id: string;
       position: number;
@@ -145,6 +145,20 @@ describe("MaintenanceOrdersService.issue", () => {
       () =>
         service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
       /Beszerzési szerződésre nem állítható ki megrendelőlap/,
+    );
+  });
+
+  it("MAINTENANCE-ORDER-REPAIR: javítási szerződésre nem állít ki megrendelőlapot", async () => {
+    const { service } = makeService({
+      contractForIssuance: async () => contractRow({ kind: "REPAIR" }),
+    });
+    await assert.rejects(
+      () =>
+        service.issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message ===
+          "Javítási szerződésre nem állítható ki megrendelőlap.",
     );
   });
 

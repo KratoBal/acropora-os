@@ -627,6 +627,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
   MaintenanceOrderItem: {
     description: "freeText",
   },
+  ServiceJobContractItem: {
+    description: "freeText",
+  },
   MaintenanceOrderDocument: {
     fileName: "freeText",
     contentType: "business",

@@ -3,8 +3,8 @@
 import { PilotRadioGroup } from "@acropora/ui";
 import {
   CONTRACT_KIND_LABELS,
-  contractMaintenanceSwitchBlocker,
-  contractPurchaseSwitchBlocker,
+  CONTRACT_KINDS,
+  contractKindSwitchBlocker,
   type ContractKind,
 } from "@acropora/types";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -30,24 +30,31 @@ export function ContractKindSwitch({
   /** Hány számla készült belőle: akkor nem lesz újra karbantartási. */
   invoiceCount?: number;
 }) {
-  // a MÁSIK fajtára váltás zárja: megrendelőlap után a Beszerzés, számla után
-  // a Karbantartás (barracuda, #1661)
-  const blocker =
-    value === "PURCHASE"
-      ? contractMaintenanceSwitchBlocker(invoiceCount)
-      : contractPurchaseSwitchBlocker(maintenanceOrderCount);
+  // a MÁSIK fajtára váltás zárja: megrendelőlap után a Beszerzés és a Javítás,
+  // számla után a Karbantartás és a Javítás (barracuda, #1661; felmérés S0/3).
+  // A zár opciónként dől el, ugyanazzal a függvénnyel, amit a szerver kérdez.
+  const blockers = new Map(
+    CONTRACT_KINDS.map((kind) => [
+      kind,
+      contractKindSwitchBlocker(value, kind, {
+        maintenanceOrderCount,
+        invoiceCount,
+      }),
+    ]),
+  );
+  const hint = [...new Set([...blockers.values()].filter(Boolean))].join(" ");
   return (
     <PilotRadioGroup
       name="contract-kind"
       label="Szerződés típusa"
       value={value}
       onChange={onChange}
-      options={(["PURCHASE", "MAINTENANCE"] as const).map((kind) => ({
+      options={(["PURCHASE", "MAINTENANCE", "REPAIR"] as const).map((kind) => ({
         value: kind,
         label: CONTRACT_KIND_LABELS[kind],
-        disabled: kind !== value && blocker !== null,
+        disabled: blockers.get(kind) !== null,
       }))}
-      hint={blocker ?? undefined}
+      hint={hint || undefined}
     />
   );
 }
