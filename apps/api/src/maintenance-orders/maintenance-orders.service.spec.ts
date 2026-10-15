@@ -260,6 +260,23 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
+  it("a lejárt zár-várakozás a kiállításnál is 'próbáld újra' 409, nem keret-túllépés", async () => {
+    const { service } = makeService({
+      reserveOccasions: async () => ({ ok: false, busy: true }),
+    });
+    const outcome = await service
+      .issue({ contractId: "contract-1", itemIds: ["item-1"] }, ACTOR)
+      .then(
+        () => "nem dobott",
+        (error: unknown) =>
+          error instanceof ConflictException ? error.message : String(error),
+      );
+    assert.equal(
+      outcome,
+      "A szerződés alkalomkeretét most egy másik művelet foglalja. Próbáld újra.",
+    );
+  });
+
   it("ConflictException-t dob, ha egy tételnél elfogyott az évi alkalomkeret, és nem ír", async () => {
     /*
       A foglalás (zár + számlálás) a repository dolga; a szolgáltatás azt

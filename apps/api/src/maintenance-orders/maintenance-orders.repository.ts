@@ -491,6 +491,122 @@ export class MaintenanceOrdersRepository {
    * még elvégezni, vagy a hívás egy MEGSZAKADT próbálkozás folytatása
    * (lásd a szolgáltatás fejlécét).
    */
+  /**
+   * A VEVŐ SAJÁT MEGRENDELŐLAPJA (karbantartási felmérés S6): ugyanaz a sor,
+   * mint egy kiállított és aláírt megrendelőlap, csak a forrása
+   * `CUSTOMER_FORM`, rögtön `SIGNED`, és egyetlen dokumentuma a vevő PDF-je
+   * (`CUSTOMER_FORM` típussal). A tételek, a számozás és az alkalomkeret
+   * ugyanaz, tehát a portál-lista, a lap és az igazolás útja sem változik.
+   * A `reserveOccasions` `write`-jaként fut, ugyanabban a tranzakcióban.
+   */
+  async createCustomerForm(
+    input: {
+      contractId: string;
+      number: string;
+      occasionYear: number;
+      issuedByName: string | null;
+      items: MaintenanceOrderItemInput[];
+      document: { fileName: string; contentType: string; content: Buffer };
+    },
+    tx: Prisma.TransactionClient = this.database,
+  ) {
+    const now = new Date();
+    return tx.maintenanceOrder.create({
+      data: {
+        contractId: input.contractId,
+        number: input.number,
+        occasionYear: input.occasionYear,
+        issuedByName: input.issuedByName,
+        source: "CUSTOMER_FORM",
+        status: "SIGNED",
+        issuedAt: now,
+        signedAt: now,
+        items: {
+          create: input.items.map((item) => ({
+            contractItemId: item.contractItemId,
+            description: item.description,
+            unitNet: item.unitNet,
+            quantity: item.quantity,
+            vatRatePercent: item.vatRatePercent,
+          })),
+        },
+        documents: {
+          create: {
+            type: "CUSTOMER_FORM",
+            fileName: input.document.fileName,
+            contentType: input.document.contentType,
+            sizeBytes: input.document.content.length,
+            content: Uint8Array.from(input.document.content),
+          },
+        },
+      },
+      include: orderInclude,
+    });
+  }
+
+  /**
+   * UGYANEZ A VEVŐI MEGRENDELŐLAP MÁR FEL VAN-E TÖLTVE: ugyanarra a
+   * szerződésre, pontosan ugyanazokkal a tételekkel, bájtra ugyanazzal a
+   * PDF-fel, és nincs visszavonva. A kettős beküldés (dupla kattintás, egy
+   * elveszett válasz utáni újraküldés) ellen: a modellnek nincs ismétlésvédelmi
+   * kulcsa, a vevő PDF-je viszont maga a megrendelés. A `reserveOccasions`
+   * zárja alatt fut, tehát két egyidejű beküldés közül a második már látja az
+   * elsőt. Egy ÚJ PDF ugyanazokra a tételekre nem ismétlés, hanem új rendelés:
+   * azt az alkalomkeret dönti el.
+   *
+   * A találatnál a lap állapotát is visszaadja: egy újraküldés, ami után a
+   * lap még nem készült el (az első próbálkozás a sor után hasalt el), a
+   * hívónál nem 409, hanem a folytatás (barracuda, #1708).
+   */
+  async customerFormDuplicate(
+    input: { contractId: string; itemIds: readonly string[]; content: Buffer },
+    tx: Prisma.TransactionClient = this.database,
+  ): Promise<{
+    id: string;
+    number: string;
+    serviceJobId: string | null;
+  } | null> {
+    const candidates = await tx.maintenanceOrder.findMany({
+      where: {
+        contractId: input.contractId,
+        source: "CUSTOMER_FORM",
+        status: { not: "REVOKED" },
+        documents: {
+          some: { type: "CUSTOMER_FORM", sizeBytes: input.content.length },
+        },
+      },
+      select: {
+        id: true,
+        number: true,
+        serviceJobId: true,
+        items: { select: { contractItemId: true } },
+        documents: {
+          where: { type: "CUSTOMER_FORM", sizeBytes: input.content.length },
+          select: { content: true },
+        },
+      },
+    });
+    const wanted = [...new Set(input.itemIds)].sort().join("|");
+    for (const candidate of candidates) {
+      const items = [...new Set(candidate.items.map((i) => i.contractItemId))]
+        .sort()
+        .join("|");
+      if (items !== wanted) continue;
+      if (
+        candidate.documents.some(
+          (doc) =>
+            doc.content && Buffer.from(doc.content).equals(input.content),
+        )
+      )
+        return {
+          id: candidate.id,
+          number: candidate.number,
+          serviceJobId: candidate.serviceJobId,
+        };
+    }
+    return null;
+  }
+
   async saveSignedDocumentAndMarkSigned(
     orderId: string,
     file: Express.Multer.File,

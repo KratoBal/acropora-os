@@ -23,6 +23,7 @@ import {
   CreateContractJobDto,
   IssueMaintenanceOrderDto,
   RevokeMaintenanceOrderDto,
+  UploadCustomerFormDto,
 } from "./dto.js";
 import { MaintenanceOrdersService } from "./maintenance-orders.service.js";
 
@@ -65,6 +66,27 @@ export class MaintenanceOrdersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.createJobFromContract(dto, user);
+  }
+
+  /**
+   * A VEVŐ SAJÁT MEGRENDELŐLAPJA (karbantartási felmérés S6): szerződés,
+   * tételek és a PDF egy multipart kérésben; az `itemIds` ismételt mezőként vagy
+   * JSON-tömbként (lásd `UploadCustomerFormDto`).
+   */
+  @Post("customer-form")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: DOCUMENT_UPLOAD_LIMITS.fileSizeBytes },
+    }),
+  )
+  uploadCustomerForm(
+    @Body() dto: UploadCustomerFormDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A feltöltendő PDF kötelező.");
+    return this.service.uploadCustomerForm(dto, file, user);
   }
 
   @Post(":id/revoke")
