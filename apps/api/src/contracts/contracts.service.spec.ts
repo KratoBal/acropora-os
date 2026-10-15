@@ -330,7 +330,7 @@ describe("ContractsService, a fajta", () => {
     assert.deepEqual(
       [blocked, (allowed as { kind?: string }).kind],
       [
-        "409: Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre.",
+        "409: Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre vagy Javításra.",
         "PURCHASE",
       ],
       "CONTRACT-KIND-SWITCH-409",
@@ -357,10 +357,58 @@ describe("ContractsService, a fajta", () => {
     assert.deepEqual(
       [blocked, (allowed as { kind?: string }).kind],
       [
-        "409: Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra.",
+        "409: Ebből a szerződésből már készült számla, ezért nem állítható vissza Karbantartásra vagy Javításra.",
         "MAINTENANCE",
       ],
       "CONTRACT-KIND-BACK-409",
+    );
+  });
+
+  /*
+    A JAVÍTÁSI FAJTA (karbantartási felmérés S0/3). MI PIROSÍT: ha a javítási
+    tétel alkalom nélkül nem menthető; ha a karbantartási tétel alkalom nélkül
+    átmegy (a két fajta szabálya összecsúszott); ha megrendelőlap után a
+    szerződés Javításra váltható; ha megrendelőlap nélkül nem.
+  */
+  it("CONTRACT-KIND-REPAIR: javítási tételnél nem kötelező az alkalom, és megrendelőlap után nem lehet Javítás", async () => {
+    const noOccasions = {
+      ...CREATE_INPUT.items[0]!,
+      occasionsPerYear: undefined,
+    };
+    const create = (kind: "REPAIR" | "MAINTENANCE") =>
+      outcome(() =>
+        makeService().service.create({
+          ...CREATE_INPUT,
+          kind,
+          items: [noOccasions],
+        } as CreateContractDto),
+      );
+    const switchTo = (orders: number) =>
+      outcome(() =>
+        makeService({
+          maintenanceOrderCount: async () => orders,
+        }).service.update("contract-1", {
+          kind: "REPAIR",
+          items: [noOccasions],
+        } as unknown as UpdateContractDto),
+      );
+    const repair = await create("REPAIR");
+    const maintenance = await create("MAINTENANCE");
+    const [blocked, allowed] = [await switchTo(1), await switchTo(0)];
+    assert.deepEqual(
+      [
+        (repair as { kind?: string }).kind,
+        maintenance,
+        blocked,
+        (allowed as { kind?: string }).kind,
+      ],
+      [
+        "REPAIR",
+        "400: A karbantartási tételnél az alkalom / év kötelező: Cápasuli RO karbantartás.",
+        "409: Ehhez a szerződéshez már készült karbantartási megrendelőlap, ezért nem állítható át Beszerzésre vagy Javításra.",
+        "REPAIR",
+      ],
+      "CONTRACT-KIND-REPAIR",
     );
   });
 });

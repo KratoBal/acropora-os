@@ -117,7 +117,7 @@ export function missingContractFields(contract: {
   )
     list.push("minden tétel kitöltése");
   if (
-    kind === "MAINTENANCE" &&
+    kind !== "PURCHASE" &&
     contract.items &&
     !contract.items.every(repairFeesValid)
   )
@@ -1129,7 +1129,9 @@ export function PilotContractDetailPage({
                               >
                                 {documentSummary.type === "SIGNED_FORM"
                                   ? "Aláírt megrendelőlap"
-                                  : "Generált megrendelőlap"}
+                                  : documentSummary.type === "CUSTOMER_FORM"
+                                    ? "Vevő megrendelőlapja"
+                                    : "Generált megrendelőlap"}
                               </button>
                             </li>
                           ))}

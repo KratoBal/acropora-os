@@ -6,8 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import {
-  contractMaintenanceSwitchBlocker,
-  contractPurchaseSwitchBlocker,
+  contractKindSwitchBlocker,
   type ContractKind,
   contractBilling,
 } from "@acropora/types";
@@ -116,17 +115,19 @@ export class ContractsService {
       mutatnak, és alkalmakat számolnak: egy beszerzési szerződés alatt ezek
       értelmüket vesztenék. A felület ugyanezt előre kiírja.
     */
-    if (kind === "PURCHASE" && existing.kind !== "PURCHASE") {
-      const blocker = contractPurchaseSwitchBlocker(
-        await this.repository.maintenanceOrderCount(id),
-      );
-      if (blocker) throw new ConflictException(blocker);
-    }
-    // a tükre (barracuda, #1661): számla után nem lesz újra karbantartási
-    if (kind === "MAINTENANCE" && existing.kind === "PURCHASE") {
-      const blocker = contractMaintenanceSwitchBlocker(
-        await this.repository.invoiceCount(id),
-      );
+    // a tükre (barracuda, #1661): számla után nem lesz újra karbantartási;
+    // és a javítási fajta (felmérés S0/3) megrendelőlap után ugyanígy zárt
+    if (kind !== existing.kind) {
+      const blocker = contractKindSwitchBlocker(existing.kind, kind, {
+        maintenanceOrderCount:
+          existing.kind !== "PURCHASE" && kind !== "MAINTENANCE"
+            ? await this.repository.maintenanceOrderCount(id)
+            : 0,
+        invoiceCount:
+          existing.kind === "PURCHASE"
+            ? await this.repository.invoiceCount(id)
+            : 0,
+      });
       if (blocker) throw new ConflictException(blocker);
     }
     const data = await this.normalize({
@@ -271,7 +272,8 @@ export class ContractsService {
       csak leírás, nettó egységár, mennyiség, mennyiségi egység és ÁFA: az
       alkalom, a helyszín, az eszközök és a javítási díjak üresek lesznek, akkor
       is, ha egy korábbi karbantartási változatból ott álltak. Karbantartásnál
-      az alkalom / év kötelező, a mennyiségi egység nincs.
+      az alkalom / év kötelező, a mennyiségi egység nincs. Javításnál (felmérés
+      S0/3) ugyanaz, mint a karbantartásnál, csak az alkalom nem kötelező.
     */
     const knownUnits = purchase
       ? await this.repository.quantityUnitIds(
@@ -289,7 +291,8 @@ export class ContractsService {
         throw new BadRequestException(
           `Ismeretlen mennyiségi egység: ${item.description.trim()}.`,
         );
-      if (!purchase && !item.occasionsPerYear)
+      // a javítási tételnél az alkalom nem kötelező (felmérés S0/3)
+      if (kind === "MAINTENANCE" && !item.occasionsPerYear)
         throw new BadRequestException(
           `A karbantartási tételnél az alkalom / év kötelező: ${item.description.trim()}.`,
         );

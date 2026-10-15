@@ -55,7 +55,8 @@ export type MaintenanceOrderDocumentContentType =
 
 export interface MaintenanceOrderDocumentSummary {
   id: string;
-  type: "GENERATED_FORM" | "SIGNED_FORM";
+  /** `CUSTOMER_FORM`: a vevő saját, feltöltött megrendelőlapja (felmérés S6). */
+  type: "GENERATED_FORM" | "SIGNED_FORM" | "CUSTOMER_FORM";
   fileName: string;
   contentType: MaintenanceOrderDocumentContentType;
   sizeBytes: number;

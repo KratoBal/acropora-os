@@ -1498,6 +1498,7 @@ export {
   CONTRACT_KINDS,
   contractMaintenanceSwitchBlocker,
   contractPurchaseSwitchBlocker,
+  contractKindSwitchBlocker,
 } from "./contract.js";
 export type { ContractKind } from "./contract.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";

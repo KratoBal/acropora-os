@@ -120,7 +120,7 @@ export function missingFields(draft: {
   );
   if (!hasValidItem) missing.push("legalább egy kitöltött tétel");
   // a beszerzési tételnek nincs javítási díja: ott nem is ellenőrizzük
-  if (kind === "MAINTENANCE" && !draft.items.every(repairFeesValid))
+  if (kind !== "PURCHASE" && !draft.items.every(repairFeesValid))
     missing.push("a javítási díjak csak számok lehetnek");
   return missing;
 }

@@ -16,7 +16,7 @@ export type MaintenanceOrderItemSummary = {
 
 export type MaintenanceOrderDocumentSummary = {
   id: string;
-  type: "GENERATED_FORM" | "SIGNED_FORM";
+  type: "GENERATED_FORM" | "SIGNED_FORM" | "CUSTOMER_FORM";
   fileName: string;
   contentType: string;
   sizeBytes: number;
