@@ -1,0 +1,3 @@
+# occasion guard (#1707): the per-contract lock removed, and the job-without-order count dropped
+not ok - a megrendelőlap nélküli lap sora beleszámít; a visszavont, a lemondott és a megrendelőlapos nem
+not ok - két egyszerre indított foglalás az utolsó alkalomra: pontosan egy megy át

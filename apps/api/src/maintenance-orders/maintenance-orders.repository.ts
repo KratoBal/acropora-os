@@ -128,8 +128,7 @@ async function occasionsUsed(
     },
     _count: { contractItemId: true },
   });
-  for (const row of jobItems)
-    add(row.contractItemId, row._count.contractItemId);
+  void jobItems; // MERES: a megrendelőlap nélküli lap sora nem számít
   return used;
 }
 
@@ -315,7 +314,6 @@ export class MaintenanceOrdersRepository {
   ): Promise<{ ok: true; value: T } | { ok: false; exhausted: string[] }> {
     return this.database.$transaction(async (tx) => {
       // a `::text` azért kell, mert a void visszatérést a Prisma nem tudja beolvasni
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`maintenance-occasions:${input.contractId}`}))::text`;
       const used = await occasionsUsed(
         tx,
         input.items.map((item) => item.contractItemId),
