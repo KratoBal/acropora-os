@@ -174,11 +174,15 @@ export class MaintenanceOrdersRepository {
    * vevő által aláírt megrendelőlap feldolgozását állítaná meg, holott a
    * megrendelés a TÉTELRE szól, nem az eszközre. Ami nem a helyszínen áll, azt
    * ott nem is lehet karbantartani -- ezért marad le a lapról.
+   *
+   * A KIMARADTAKAT IS VISSZAADJA (`outside`, karbantartási felmérés S3): a
+   * szerződés eszközlistája ilyenkor elavult, és a hívó jelzi (barracuda
+   * 31588, nautilus 31615).
    */
-  async itemAssetsOnSite(
+  async itemAssetsBySite(
     items: readonly { contractItemId: string; departmentId: string }[],
-  ): Promise<Map<string, string[]>> {
-    const result = new Map<string, string[]>();
+  ): Promise<Map<string, { onSite: string[]; outside: string[] }>> {
+    const result = new Map<string, { onSite: string[]; outside: string[] }>();
     if (items.length === 0) return result;
     const rows = await this.database.contractItemAsset.findMany({
       where: {
@@ -191,16 +195,16 @@ export class MaintenanceOrdersRepository {
         .filter((row) => row.contractItemId === item.contractItemId)
         .map((row) => row.assetId);
       if (assetIds.length === 0) {
-        result.set(item.contractItemId, []);
+        result.set(item.contractItemId, { onSite: [], outside: [] });
         continue;
       }
       const outside = new Set(
         await assetsOutsideDepartment(assetIds, item.departmentId),
       );
-      result.set(
-        item.contractItemId,
-        assetIds.filter((assetId) => !outside.has(assetId)),
-      );
+      result.set(item.contractItemId, {
+        onSite: assetIds.filter((assetId) => !outside.has(assetId)),
+        outside: assetIds.filter((assetId) => outside.has(assetId)),
+      });
     }
     return result;
   }

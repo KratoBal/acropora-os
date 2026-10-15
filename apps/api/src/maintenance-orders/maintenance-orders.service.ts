@@ -11,11 +11,15 @@ import { renderMaintenanceOrderFormDocx } from "../maintenance-contracts/mainten
 import type { MaintenanceOrderFormInput } from "../maintenance-contracts/maintenance-order-form.types.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
-import { sharedAncestor } from "../service-assets/unit-path.js";
 import { ServiceJobsService } from "../service-jobs/service-jobs.service.js";
 import { WorksheetsService } from "../worksheets/worksheets.service.js";
 
 import { IssueMaintenanceOrderDto, RevokeMaintenanceOrderDto } from "./dto.js";
+import {
+  createJobFromContractItems,
+  ensureOneSite,
+  siteForContractItems,
+} from "./job-from-contract-items.js";
 import { maintenanceOrderOccasionYear } from "./maintenance-order-occasion-year.js";
 import {
   maintenanceOrderNumberPrefix,
@@ -273,17 +277,14 @@ export class MaintenanceOrdersService {
       meg: egy csendben kihagyott tétel egy vevő által aláírt lapról néma
       hiány lenne.
     */
-    const helyszinNelkul = order.items.find(
-      (item) => !item.contractItem.departmentId,
-    );
-    if (helyszinNelkul)
-      throw new ConflictException(
-        `A(z) "${helyszinNelkul.description}" tételhez időközben megszűnt a helyszín-hozzárendelés, ezért nem hozható létre hozzá munkalap. A szerződés tételét előbb rendezni kell.`,
-      );
     // a hibajegy a közös helyszínre kerül, a munkalapok a tételek sajátjára
-    const departmentId = await this.ensureOneSite(
-      order.items.map((item) => item.contractItem.departmentId as string),
-    );
+    const items = order.items.map((item) => ({
+      id: item.contractItem.id,
+      departmentId: item.contractItem.departmentId,
+      description: item.description,
+      quantity: item.quantity.toNumber(),
+    }));
+    const departmentId = await siteForContractItems(this.repository, items);
 
     if (order.status === "ISSUED") {
       if (
@@ -304,94 +305,42 @@ export class MaintenanceOrdersService {
     }
 
     /*
-      AZ ESZKÖZÖK A SZERZŐDÉSBŐL JÖNNEK (karbantartási felmérés S1,
-      2026-10-15): a lap a tételek eszközeinek UNIÓJÁT kapja, minden munkalap
-      a SAJÁT tételéét. Csak a ma is a tétel helyszínén álló eszköz jön át --
-      a miértje a `itemAssetsOnSite` fejlécén.
+      A LAP ÉS A MUNKALAPOK A KÖZÖS ÚTON (karbantartási felmérés S3): az
+      eszközök a szerződésből jönnek, a lap a tételek eszközeinek uniója, a
+      munkalap a saját tételéé (S1). A kulcsok a mai kulcsok, hogy egy
+      újrafuttatás ugyanazt a sort találja.
 
       VISSZAMENŐLEG NEM PÓTOL: egy már aláírt megrendelőlap lapja egy
       újrahívásra is a meglévő sort adja vissza (`clientOperationId`), tehát
       az akkor eszköz nélkül létrejött lapok eszköz nélkül maradnak.
     */
-    const itemAssets = await this.repository.itemAssetsOnSite(
-      order.items.map((item) => ({
-        contractItemId: item.contractItem.id,
-        departmentId: item.contractItem.departmentId as string,
-      })),
-    );
-    const jobAssetIds = [
-      ...new Set(
-        order.items.flatMap(
-          (item) => itemAssets.get(item.contractItem.id) ?? [],
-        ),
-      ),
-    ];
-
-    const serviceJob = await this.serviceJobs.create(
+    const { serviceJobId } = await createJobFromContractItems(
+      {
+        repository: this.repository,
+        serviceJobs: this.serviceJobs,
+        worksheets: this.worksheets,
+      },
       {
         title: `${order.contract.title} (${order.number})`,
-        kind: "MAINTENANCE",
-        contractId: order.contract.id,
-        customerId: order.contract.customerId,
+        contract: {
+          id: order.contract.id,
+          customerId: order.contract.customerId,
+        },
         departmentId,
-        assetIds: jobAssetIds,
-        clientOperationId: `maintenance-order-${order.id}-signed`,
+        items,
+        jobOperationId: `maintenance-order-${order.id}-signed`,
+        worksheetOperationIdPrefix: `maintenance-order-${order.id}-worksheet-`,
+        source: `maintenance-order ${order.id}`,
       },
       actor,
     );
 
-    for (const item of order.items) {
-      await this.worksheets.create(
-        {
-          customerId: order.contract.customerId,
-          departmentId: item.contractItem.departmentId as string,
-          serviceJobId: serviceJob.id,
-          subject: item.description,
-          assetIds: itemAssets.get(item.contractItem.id) ?? [],
-          clientOperationId: `maintenance-order-${order.id}-worksheet-${item.contractItem.id}`,
-          lines: [
-            {
-              description: item.description,
-              quantity: item.quantity.toNumber(),
-              unit: "db",
-              kind: "OTHER",
-            },
-          ],
-        },
-        actor,
-      );
-    }
-
-    return this.repository.attachServiceJob(id, serviceJob.id);
+    return this.repository.attachServiceJob(id, serviceJobId);
   }
 
-  /**
-   * EGY KARBANTARTÁSI LAP EGY HELYSZÍNRE KÉSZÜL. Ha a bemenet TÖBB
-   * különböző helyszínt hordoz, a modell erre még nincs eldöntve (Balázs
-   * elé megy) -- ezért megállunk, és a hibaüzenet MEGNEVEZI a helyszíneket
-   * (a teljes utat, nem csak a kódot, lásd `unit-path-lookup.ts` fejlécét),
-   * hogy ne kelljen találgatni, melyik tétel melyik ágon van.
-   */
-  /**
-   * A MEGRENDELŐLAP HELYSZÍNE: az egyetlen helyszín, vagy ha több van, a
-   * közös felső helyszínük (`sharedAncestor`). Ha nincs közös ős, a tételek
-   * tényleg független helyszíneken vannak: a régi üzenettel megállunk.
-   */
-  private async ensureOneSite(
-    departmentIds: readonly string[],
-  ): Promise<string> {
-    const distinct = [...new Set(departmentIds)];
-    if (distinct.length === 1) return distinct[0]!;
-    const shared = sharedAncestor(
-      distinct,
-      await this.repository.departmentTree(distinct),
-    );
-    if (shared) return shared;
-    const paths = await this.repository.departmentPaths(distinct);
-    const names = distinct.map((id) => paths.get(id)?.join(" / ") ?? id);
-    throw new BadRequestException(
-      `A kiválasztott tételek különböző helyszínen vannak (${names.join(", ")}), ezért egyelőre nem készíthető belőlük egy karbantartási lap. Állíts ki külön megrendelőlapot helyszínenként.`,
-    );
+  /** A helyszín-szabály a közös úton áll (`job-from-contract-items.ts`). */
+  private ensureOneSite(departmentIds: readonly string[]): Promise<string> {
+    return ensureOneSite(this.repository, departmentIds);
   }
 
   async revoke(
