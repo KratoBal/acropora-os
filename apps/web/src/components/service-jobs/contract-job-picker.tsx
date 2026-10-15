@@ -23,6 +23,11 @@ export interface ContractJobChoice {
  *
  * The site and the assets are shown, not chosen: they come from the contract,
  * and the server rejects a client override.
+ *
+ * `locked`: an earlier request with the same idempotency key has an unknown
+ * outcome, so the job may exist with THIS choice. A changed choice would be
+ * sent under the old key and silently answered with the old job; a new key
+ * would open a second one. So nothing here changes until the retry resolves.
  */
 export function ContractJobPicker({
   token,
@@ -30,12 +35,14 @@ export function ContractJobPicker({
   siteOptions,
   value,
   onChange,
+  locked = false,
 }: {
   token: string;
   customerId: string;
   siteOptions: SiteOption[];
   value: ContractJobChoice | null;
   onChange: (choice: ContractJobChoice | null) => void;
+  locked?: boolean;
 }) {
   const [contracts, setContracts] = useState<ContractSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +120,7 @@ export function ContractJobPicker({
           id="karbantartas-szerzodes"
           className="w-full rounded border px-2 py-1 text-sm"
           value={value?.contract.id ?? ""}
+          disabled={locked}
           onChange={(event) => pick(event.target.value)}
         >
           <option value="">Szerződés nélkül</option>
@@ -142,7 +150,7 @@ export function ContractJobPicker({
                     type="checkbox"
                     className="mt-0.5 h-4 w-4"
                     checked={value.itemIds.includes(item.id)}
-                    disabled={!item.departmentId}
+                    disabled={locked || !item.departmentId}
                     onChange={() => toggle(item.id)}
                   />
                   <span>

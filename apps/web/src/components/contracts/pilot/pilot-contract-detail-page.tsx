@@ -175,6 +175,21 @@ export function PilotContractDetailPage({
   const [creatingJob, setCreatingJob] = useState(false);
   const [uploadingCustomerForm, setUploadingCustomerForm] = useState(false);
   const jobOperationId = useRef(newContractJobOperationId());
+  /**
+   * THE ITEMS OF A JOB REQUEST WITH AN UNKNOWN OUTCOME (no answer or 5xx; the
+   * key was kept, so the job may exist with THESE items). Until the retry
+   * resolves, the page shows and sends this snapshot, not the live selection
+   * (barracuda, #1711 review): a changed selection under the old key would be
+   * answered with the old job and lost without a word. A snapshot and not only
+   * disabled boxes, because a save (`applyContractDetail`) re-selects all items.
+   */
+  const [pendingJobItemIds, setPendingJobItemIds] = useState<string[] | null>(
+    null,
+  );
+  const chosenItemIds = useMemo(
+    () => (pendingJobItemIds ? new Set(pendingJobItemIds) : selectedItemIds),
+    [pendingJobItemIds, selectedItemIds],
+  );
 
   /**
    * A TÉTELEK HELYSZÍNE ÉS ESZKÖZEI -- acrobot kérése (2026-09-24 20:36,
@@ -464,13 +479,13 @@ export function PilotContractDetailPage({
   };
 
   const issue = async () => {
-    if (!contract || selectedItemIds.size === 0) return;
+    if (!contract || chosenItemIds.size === 0) return;
     setIssuing(true);
     setOrderError(null);
     try {
       await maintenanceOrdersApi.issue(token, {
         contractId: contract.id,
-        itemIds: [...selectedItemIds],
+        itemIds: [...chosenItemIds],
       });
       await loadOrders();
     } catch (cause) {
@@ -491,7 +506,7 @@ export function PilotContractDetailPage({
    * a kiállítás, és ugyanaz az alkalomkeret védi.
    */
   const createJob = async () => {
-    if (!contract || selectedItemIds.size === 0) return;
+    if (!contract || chosenItemIds.size === 0) return;
     setCreatingJob(true);
     setOrderError(null);
     try {
@@ -499,14 +514,15 @@ export function PilotContractDetailPage({
         token,
         {
           contractId: contract.id,
-          itemIds: [...selectedItemIds],
+          itemIds: [...chosenItemIds],
           clientOperationId: jobOperationId.current,
         },
       );
       router.push(`/szerviz/hibajegyek/${serviceJobId}`);
     } catch (cause) {
-      if (!keepsContractJobOperationId(cause))
-        jobOperationId.current = newContractJobOperationId();
+      const keep = keepsContractJobOperationId(cause);
+      if (!keep) jobOperationId.current = newContractJobOperationId();
+      setPendingJobItemIds(keep ? [...chosenItemIds] : null);
       setOrderError(
         cause instanceof Error
           ? cause.message
@@ -517,13 +533,13 @@ export function PilotContractDetailPage({
   };
 
   const uploadCustomerForm = async (file: File) => {
-    if (!contract || selectedItemIds.size === 0) return;
+    if (!contract || chosenItemIds.size === 0) return;
     setUploadingCustomerForm(true);
     setOrderError(null);
     try {
       await maintenanceOrdersApi.uploadCustomerForm(token, {
         contractId: contract.id,
-        itemIds: [...selectedItemIds],
+        itemIds: [...chosenItemIds],
         file,
       });
       await loadOrders();
@@ -590,7 +606,7 @@ export function PilotContractDetailPage({
     }
   };
 
-  const selectedCount = useMemo(() => selectedItemIds.size, [selectedItemIds]);
+  const selectedCount = chosenItemIds.size;
 
   /**
    * UGYANAZ A HIBAOSZTÁLY, MINT AZ ÚJ SZERZŐDÉS ŰRLAPON
@@ -1089,7 +1105,8 @@ export function PilotContractDetailPage({
                           <label className="flex cursor-pointer items-center gap-2 py-1">
                             <input
                               type="checkbox"
-                              checked={selectedItemIds.has(item.id)}
+                              checked={chosenItemIds.has(item.id)}
+                              disabled={pendingJobItemIds !== null}
                               onChange={() => toggleItem(item.id)}
                               className="h-4 w-4 rounded accent-pilot-aqua-600"
                             />
@@ -1133,6 +1150,13 @@ export function PilotContractDetailPage({
                           ? "Lap létrehozása…"
                           : `Karbantartási lap megrendelőlap nélkül (${selectedCount} tétel)`}
                       </PilotButton>
+                    ) : null}
+                    {pendingJobItemIds ? (
+                      <p className="w-full text-xs font-medium text-red-600">
+                        Az előző kérés eredménye ismeretlen, a lap
+                        létrejöhetett. Előbb próbáld újra: a tételek kijelölése
+                        addig nem módosítható.
+                      </p>
                     ) : null}
                     {/*
                       A FÁJLVÁLASZTÓ A FELIRATBAN, ugyanúgy, mint az aláírt PDF

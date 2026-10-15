@@ -1118,6 +1118,48 @@ describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megr
     expect(keys[2]).not.toBe(keys[1]);
   });
 
+  it("WEB-CONTRACT-JOB-UNRESOLVED: válasz nélküli hiba után a kijelölés zárolva; egy mentés sem írja át, az újrapróba ugyanazt a kulcsot és tételeket küldi", async () => {
+    createContractJob()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce({ serviceJobId: "job-9" });
+    api.update.mockResolvedValue(twoItems());
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByText(/Karbantartási lap megrendelőlap nélkül/);
+    // csak az első tétel marad kijelölve
+    fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Karbantartási lap megrendelőlap nélkül (1 tétel)",
+      }),
+    );
+
+    expect(
+      await screen.findByText(/Az előző kérés eredménye ismeretlen/),
+    ).toBeTruthy();
+    const masodik = screen.getByRole("checkbox", { name: /2\. Vízcsere/ });
+    expect(masodik.hasAttribute("disabled")).toBe(true);
+    expect((masodik as HTMLInputElement).checked).toBe(false);
+
+    // a mentés a szerver válaszából MINDEN tételt kijelölne
+    fireEvent.click(screen.getByText("Módosítások mentése"));
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Karbantartási lap megrendelőlap nélkül (1 tétel)",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+    );
+    const [first, second] = createContractJob().mock.calls.map(
+      (call) => call[1] as { clientOperationId: string; itemIds: string[] },
+    );
+    expect(second?.clientOperationId).toBe(first?.clientOperationId);
+    expect(first?.itemIds).toEqual(["item-1"]);
+    expect(second?.itemIds).toEqual(["item-1"]);
+  });
+
   it("WEB-CONTRACT-JOB-REPAIR: javítási szerződésen nincs megrendelőlap nélküli lap", async () => {
     api.detail.mockResolvedValue(twoItems("REPAIR"));
     render(<PilotContractDetailPage contractId="contract-1" />);
