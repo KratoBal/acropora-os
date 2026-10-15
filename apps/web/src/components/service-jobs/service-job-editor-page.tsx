@@ -484,8 +484,9 @@ export function ServiceJobEditorPage({
             {contractUnresolved ? (
               <p className="text-sm font-medium text-rose-600">
                 Az előző kérés eredménye ismeretlen, a lap létrejöhetett. Előbb
-                próbáld újra: a partner, a szerződés, a tételek és a cím addig
-                nem módosítható.
+                próbáld újra, és ne frissítsd az oldalt: frissítés után egy új
+                kérés második lapot nyithat. A partner, a szerződés, a tételek
+                és a cím addig nem módosítható.
               </p>
             ) : null}
 

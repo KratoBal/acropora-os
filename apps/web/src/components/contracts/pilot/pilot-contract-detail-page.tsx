@@ -1154,8 +1154,9 @@ export function PilotContractDetailPage({
                     {pendingJobItemIds ? (
                       <p className="w-full text-xs font-medium text-red-600">
                         Az előző kérés eredménye ismeretlen, a lap
-                        létrejöhetett. Előbb próbáld újra: a tételek kijelölése
-                        addig nem módosítható.
+                        létrejöhetett. Előbb próbáld újra, és ne frissítsd az
+                        oldalt: frissítés után egy új kérés második lapot
+                        nyithat. A tételek kijelölése addig nem módosítható.
                       </p>
                     ) : null}
                     {/*
