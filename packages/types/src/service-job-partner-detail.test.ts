@@ -67,6 +67,12 @@ const BELSO: ServiceJobDetail = {
   assignees: [
     { userId: "u1", name: "Nagy Béla", assignedAt: "2026-09-20T08:00:00.000Z" },
   ],
+  // KITÖLTVE, NEM `null`: egy üres mező átmenetét a lenti állítás nem látná
+  source: {
+    kind: "CONTRACT",
+    contract: { id: "c1", number: "SZ-2026-001", title: "Éves karbantartás" },
+    itemDescriptions: ["Szűrőcsere"],
+  },
 };
 
 /** A tizenegy mezo, amit a portal MA SEM olvas (merve 2026-09-21, kontrollal). */
@@ -83,6 +89,8 @@ const ELVETT = [
   "completedAt",
   "allowedSteps",
   "assignees",
+  // a karbantartási lap forrása (felmérés S7): szerződésszám, belső adat
+  "source",
 ] as const;
 
 describe("a partner reszletlapja", () => {
