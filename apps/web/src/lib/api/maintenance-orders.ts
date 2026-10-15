@@ -27,6 +27,10 @@ export type MaintenanceOrderSummary = {
   id: string;
   number: string;
   status: MaintenanceOrderStatus;
+  /** Ours (`GENERATED`), or the customer's own uploaded sheet (S6). */
+  source: "GENERATED" | "CUSTOMER_FORM";
+  /** The maintenance job made on signing; `null` until then. */
+  serviceJobId: string | null;
   occasionYear: number;
   issuedAt: string;
   issuedByName: string | null;
@@ -57,6 +61,48 @@ export const maintenanceOrdersApi = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
+    });
+  },
+  /**
+   * A maintenance job from the contract, without an order sheet (karbantartási
+   * felmérés S4). The site and the assets come from the contract items; the
+   * same `clientOperationId` returns the existing job instead of a second one.
+   */
+  createContractJob(
+    token: string,
+    input: {
+      contractId: string;
+      itemIds: string[];
+      title?: string | null;
+      clientOperationId: string;
+    },
+  ) {
+    return apiRequest<{ serviceJobId: string }>(
+      `${base}/contract-jobs`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  /**
+   * The customer's own order sheet, uploaded (S6): signed at once, and the job
+   * and its worksheets are created the same way as after our own sheet is
+   * signed. `itemIds` goes as a repeated multipart field.
+   */
+  uploadCustomerForm(
+    token: string,
+    input: { contractId: string; itemIds: string[]; file: File },
+  ) {
+    const form = new FormData();
+    form.append("contractId", input.contractId);
+    for (const itemId of input.itemIds) form.append("itemIds", itemId);
+    form.append("file", input.file);
+    return apiRequest<MaintenanceOrderSummary>(`${base}/customer-form`, token, {
+      method: "POST",
+      body: form,
     });
   },
   revoke(token: string, id: string, reason?: string) {

@@ -39,6 +39,7 @@ import { CompletionCertificatePanel } from "../completion-certificate-panel";
 import { MaintenancePackagePanel } from "../maintenance-package-panel";
 import {
   serviceJobNoteDescription,
+  serviceJobSourceText,
   serviceJobStatusLabel,
   serviceJobWorksheetLabel,
 } from "../service-job-labels";
@@ -165,6 +166,23 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
 }
 
 /** Az időrend-ikon négy valós forrásra -- ugyanaz a forma, mint a Figma tervé, a saját négy kindünkre igazítva. */
+/** Where the maintenance job's items come from (karbantartási felmérés S7). */
+function ServiceJobSourceValue({
+  source,
+}: {
+  source: ServiceJobDetail["source"];
+}) {
+  const text = serviceJobSourceText(source);
+  return (
+    <>
+      <span className="block">{text.headline}</span>
+      {text.detail ? (
+        <span className="block text-xs text-pilot-grey-400">{text.detail}</span>
+      ) : null}
+    </>
+  );
+}
+
 function TimelineIcon({ kind }: { kind: ServiceJobTimelineEntry["kind"] }) {
   const cfg: Record<
     ServiceJobTimelineEntry["kind"],
@@ -1180,6 +1198,13 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                     : job.departmentName
                 }
               />
+              {job.kind === "MAINTENANCE" ? (
+                <PilotDataRow
+                  label="Forrás"
+                  labelWidth="110px"
+                  value={<ServiceJobSourceValue source={job.source} />}
+                />
+              ) : null}
               <PilotDataRow
                 label="Felelősök"
                 labelWidth="110px"

@@ -153,6 +153,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     allowedSteps: ["SCHEDULED", "CANCELLED"],
     assets: [],
     assignees: [],
+    source: null,
     timeline: [],
     hidden: false,
     ...overrides,
@@ -183,6 +184,38 @@ describe("PilotServiceJobDetailPage -- MAINTENANCE panelek", () => {
     expect(
       screen.getByTestId("maintenance-package-panel-stub"),
     ).toBeInTheDocument();
+  });
+
+  /*
+    KARBANTARTÁSI FELMÉRÉS S7: a lap forrása az „Az ügy adatai” kártyán; a
+    hibajegyen (REPAIR) nincs ilyen sor.
+  */
+  it("WEB-JOB-SOURCE: a karbantartási lapon a forrás látszik, a hibajegyen nem", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        kind: "MAINTENANCE",
+        source: {
+          kind: "CONTRACT",
+          contract: { id: "c1", number: "SZ-2026-001", title: "Éves" },
+          itemDescriptions: ["Szűrőcsere", "Vízcsere"],
+        },
+      }),
+    );
+    const { unmount } = render(<PilotServiceJobDetailPage jobId="job-1" />);
+    expect(
+      await screen.findByText(
+        "Szerződésből, megrendelőlap nélkül: SZ-2026-001",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Tételek: Szűrőcsere, Vízcsere"),
+    ).toBeInTheDocument();
+    unmount();
+
+    api.detail.mockResolvedValue(detail({ kind: "REPAIR" }));
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Negyedéves ellenőrzés");
+    expect(screen.queryByText("Forrás")).toBeNull();
   });
 
   it("a hibajegyen áll a „Beszélgetés” gomb, a jegy azonosítójával", async () => {

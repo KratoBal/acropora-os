@@ -1,5 +1,6 @@
 import type {
   ServiceJobPartnerStatus,
+  ServiceJobSource,
   ServiceJobStatusValue,
 } from "@acropora/types";
 
@@ -129,3 +130,31 @@ export function serviceJobStatusTone(
  * webes marad, tehát a hívóknak amúgy is innen kell importálniuk.
  */
 export { serviceJobWorksheetLabel } from "@acropora/types";
+
+/**
+ * THE MAINTENANCE JOB'S ITEM SOURCE IN TWO LINES (karbantartási felmérés S7):
+ * what it was opened from, and what follows from it. A contract job without
+ * recorded items is named as such, because the completion certificate refuses
+ * it ("a tételek forrása ismeretlen") and the page should say so first.
+ */
+export function serviceJobSourceText(source: ServiceJobSource | null): {
+  headline: string;
+  detail: string | null;
+} {
+  if (!source)
+    return {
+      headline: "Megrendelőlap és szerződés nélkül",
+      detail: "Teljesítési igazolás nem állítható ki rá.",
+    };
+  if (source.kind === "MAINTENANCE_ORDER")
+    return {
+      headline: `Megrendelőlap: ${source.orderNumber}${source.customerForm ? " (a vevő saját megrendelőlapja)" : ""}`,
+      detail: source.contract ? `Szerződés: ${source.contract.number}` : null,
+    };
+  return {
+    headline: `Szerződésből, megrendelőlap nélkül: ${source.contract.number}`,
+    detail: source.itemDescriptions.length
+      ? `Tételek: ${source.itemDescriptions.join(", ")}`
+      : "Nincs rögzített szerződéstétel, ezért teljesítési igazolás nem állítható ki rá.",
+  };
+}

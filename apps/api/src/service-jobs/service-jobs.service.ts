@@ -65,6 +65,7 @@ import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
 } from "./service-job-transitions.js";
+import { serviceJobSource } from "./service-job-source.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
 @Injectable()
@@ -1387,6 +1388,7 @@ export class ServiceJobsService {
           ? personDisplayName(assignee.assignedBy)
           : null,
       })),
+      source: serviceJobSource(row),
     };
 
     /**

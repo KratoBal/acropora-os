@@ -17,7 +17,14 @@ import {
 } from "@/components/service/service-offline-notice.testing";
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
-const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
+const api = vi.hoisted(() => ({
+  create: vi.fn(),
+  uploadDocument: vi.fn(),
+  updateFields: vi.fn(),
+  setAssignees: vi.fn(),
+}));
+const contracts = vi.hoisted(() => ({ list: vi.fn() }));
+const orders = vi.hoisted(() => ({ createContractJob: vi.fn() }));
 /**
  * AZ ESZKOZ-VEGPONT IS MOCKOT KAP, ES EZ NEM TELJESSEG-KEDVEERT VAN.
  *
@@ -54,6 +61,10 @@ vi.mock("@/components/auth/auth-provider", () => ({
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
 vi.mock("@/lib/api/assets", () => ({ assetsApi: assets }));
+vi.mock("@/lib/api/contracts", () => ({ contractsApi: contracts }));
+vi.mock("@/lib/api/maintenance-orders", () => ({
+  maintenanceOrdersApi: orders,
+}));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -751,3 +762,250 @@ describe("ServiceJobEditorPage", () => {
  * szolna, amit megirt.
  */
 afterEach(() => setOnLine(true));
+
+/**
+ * KARBANTARTÁSI LAP SZERZŐDÉSBŐL (karbantartási felmérés S7): a partner után
+ * a szerződés, utána a tételek; a helyszín és az eszközök a szerződésből
+ * jönnek, az űrlapon nem választhatók.
+ */
+describe("ServiceJobEditorPage -- karbantartási lap szerződésből", () => {
+  const contractItem = (
+    id: string,
+    position: number,
+    description: string,
+    departmentId: string | null,
+  ) => ({
+    id,
+    position,
+    description,
+    unitNet: "1000",
+    quantity: "1",
+    occasionsPerYear: 4,
+    vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
+    departmentId,
+    assets: departmentId
+      ? [{ assetId: "asset-1" }, { assetId: "asset-2" }]
+      : [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
+  });
+  const contract = (overrides: Record<string, unknown>) => ({
+    id: "contract-1",
+    customerId: "vevo-1",
+    customer: { id: "vevo-1", displayName: "FANK" },
+    number: "SZ-2026-001",
+    title: "Éves karbantartás",
+    validFrom: "2026-01-01T00:00:00.000Z",
+    validTo: null,
+    status: "ACTIVE",
+    kind: "MAINTENANCE",
+    _count: { maintenanceOrders: 0 },
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    documents: [],
+    items: [
+      contractItem("item-1", 1, "Szűrőcsere", "unit-1"),
+      contractItem("item-2", 2, "Vízcsere", "unit-1"),
+      contractItem("item-3", 3, "Világítás", null),
+    ],
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    auth.session = sessionAs("OWNER");
+    api.create.mockReset();
+    api.uploadDocument.mockReset().mockResolvedValue([]);
+    api.updateFields.mockReset().mockResolvedValue({});
+    api.setAssignees.mockReset().mockResolvedValue({});
+    assets.list.mockReset().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
+    });
+    sheets.assignableUsers.mockReset().mockResolvedValue({
+      items: [{ id: "user-eva", name: "Éva" }],
+    });
+    sheets.selectablePartners.mockReset().mockResolvedValue(partnerList);
+    sheets.departments.mockReset().mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "NAG",
+          name: "Nagy fókamedence",
+          isActive: true,
+        },
+      ],
+    });
+    contracts.list.mockReset().mockResolvedValue([
+      contract({}),
+      contract({
+        id: "other-customer",
+        customerId: "vevo-2",
+        number: "SZ-X",
+      }),
+      contract({ id: "purchase", kind: "PURCHASE", number: "SZ-BESZ" }),
+      contract({ id: "draft", status: "DRAFT", number: "SZ-PISZK" }),
+    ]);
+    orders.createContractJob
+      .mockReset()
+      .mockResolvedValue({ serviceJobId: "job-szerz" });
+    navigation.push.mockReset();
+  });
+
+  const pickContract = async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+      target: { value: "Negyedéves karbantartás" },
+    });
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Szerződés"), {
+      target: { value: "contract-1" },
+    });
+  };
+
+  it("WEB-JOB-CONTRACT-LIST: csak a partner aktív karbantartási szerződéseit kínálja", async () => {
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    const select = (await screen.findByLabelText(
+      "Szerződés",
+    )) as HTMLSelectElement;
+    expect(Array.from(select.options).map((option) => option.value)).toEqual([
+      "",
+      "contract-1",
+    ]);
+  });
+
+  it("WEB-JOB-CONTRACT-ITEMS: a helyszínes tételek kijelölve, a helyszín nélküli nem választható, helyszín- és eszközválasztó nincs", async () => {
+    await pickContract();
+
+    const elso = screen.getByRole("checkbox", { name: /1\. Szűrőcsere/ });
+    const harmadik = screen.getByRole("checkbox", { name: /3\. Világítás/ });
+    expect((elso as HTMLInputElement).checked).toBe(true);
+    expect((harmadik as HTMLInputElement).checked).toBe(false);
+    expect(harmadik.hasAttribute("disabled")).toBe(true);
+    expect(screen.getAllByText(/Helyszín: Nagy fókamedence/)).toHaveLength(2);
+    expect(screen.getAllByText(/2 eszköz/)).toHaveLength(2);
+    expect(screen.queryByLabelText("Helyszín")).toBeNull();
+    expect(
+      screen.getByText(/A kijelölt szerződéstételek eszközei kerülnek a lapra/),
+    ).toBeTruthy();
+  });
+
+  it("WEB-JOB-CONTRACT-SUBMIT: a szerződés végpontján nyit, a leírás és a delegálás a létrejött lapra megy", async () => {
+    await pickContract();
+    fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
+    fireEvent.change(screen.getByLabelText("Részletek"), {
+      target: { value: "Mindkét medence." },
+    });
+    fireEvent.click(await screen.findByLabelText("Éva"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/hibajegyek/job-szerz",
+      ),
+    );
+    expect(api.create).not.toHaveBeenCalled();
+    expect(orders.createContractJob.mock.calls[0]?.[1]).toMatchObject({
+      contractId: "contract-1",
+      itemIds: ["item-1"],
+      title: "Negyedéves karbantartás",
+    });
+    expect(api.updateFields).toHaveBeenCalledWith("token-1", "job-szerz", {
+      description: "Mindkét medence.",
+    });
+    expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-szerz", {
+      userIds: ["user-eva"],
+    });
+  });
+
+  it("WEB-JOB-CONTRACT-EMPTY: tétel nélkül a gomb tiltva", async () => {
+    await pickContract();
+    fireEvent.click(screen.getByRole("checkbox", { name: /1\. Szűrőcsere/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
+    expect(
+      screen
+        .getByRole("button", { name: "Karbantartási lap megnyitása" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("WEB-JOB-CONTRACT-RETRY: ha a leírás mentése bukik, kimondja, hogy a lap létrejött, és az újrapróbálás nem nyit másodikat", async () => {
+    api.updateFields
+      .mockReset()
+      .mockRejectedValueOnce(new Error("A szerver nem érhető el."))
+      .mockResolvedValueOnce({});
+    await pickContract();
+    fireEvent.change(screen.getByLabelText("Részletek"), {
+      target: { value: "Mindkét medence." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Karbantartási lap megnyitása" }),
+    );
+
+    expect(
+      await screen.findByText(/A karbantartási lap LÉTREJÖTT/),
+    ).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Befejezés újra" }));
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/hibajegyek/job-szerz",
+      ),
+    );
+    expect(orders.createContractJob).toHaveBeenCalledTimes(1);
+    expect(api.updateFields).toHaveBeenCalledTimes(2);
+  });
+
+  it("WEB-JOB-CONTRACT-NONE: szerződés nélkül a régi út marad, a helyszín választható", async () => {
+    api.create.mockResolvedValue({ id: "job-uj", jobNumber: "KB-2026-001" });
+    render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+      target: { value: "Negyedéves karbantartás" },
+    });
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    await screen.findByLabelText("Szerződés");
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(orders.createContractJob).not.toHaveBeenCalled();
+  });
+
+  it("WEB-JOB-CONTRACT-PERMISSION: partners.manage nélkül, és hibajegynél nincs szerződésválasztó", async () => {
+    auth.session = sessionAs("SERVICE");
+    const { unmount } = render(<ServiceJobEditorPage kind="MAINTENANCE" />);
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    await screen.findByLabelText("Helyszín");
+    expect(screen.queryByLabelText("Szerződés")).toBeNull();
+    unmount();
+
+    auth.session = sessionAs("OWNER");
+    render(<ServiceJobEditorPage />);
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    await screen.findByLabelText("Helyszín");
+    expect(screen.queryByLabelText("Szerződés")).toBeNull();
+    expect(contracts.list).not.toHaveBeenCalled();
+  });
+});

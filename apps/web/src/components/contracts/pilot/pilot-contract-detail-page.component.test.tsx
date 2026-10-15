@@ -22,7 +22,11 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   quantityUnits: vi.fn(),
 }));
-const orderApi = vi.hoisted(() => ({ list: vi.fn() }));
+const orderApi = vi.hoisted(() => ({
+  list: vi.fn(),
+  createContractJob: vi.fn(),
+  uploadCustomerForm: vi.fn(),
+}));
 const worksheetsApi = vi.hoisted(() => ({ departments: vi.fn() }));
 const assetsApi = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -1001,5 +1005,181 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
       ],
       "WEB-CONTRACT-BACK-BLOCKED",
     ).toEqual([true, true]);
+  });
+});
+
+/**
+ * KARBANTARTÁSI FELMÉRÉS S7: a két új út a szerződés oldaláról, ugyanarról a
+ * tétel-kijelölésről, amiből a megrendelőlap is kiáll.
+ */
+describe("PilotContractDetailPage -- lap megrendelőlap nélkül és vevői megrendelőlap", () => {
+  const item = (id: string, position: number, description: string) => ({
+    id,
+    position,
+    description,
+    unitNet: `${position}000`,
+    quantity: "1",
+    occasionsPerYear: 2,
+    vatRatePercent: "27",
+    unitOfMeasureId: null,
+    unitOfMeasure: null,
+    departmentId: "department-1",
+    assets: [],
+    repairFeeWorkdayHours: null,
+    repairFeeWorkdayOffHours: null,
+    repairFeeHoliday: null,
+    repairWeight: null,
+    repairTotal: null,
+  });
+  const twoItems = (kind: ContractSummary["kind"] = "MAINTENANCE") => ({
+    ...contract(),
+    kind,
+    items: [item("item-1", 1, "Szűrőcsere"), item("item-2", 2, "Vízcsere")],
+  });
+  const order = (overrides: Record<string, unknown> = {}) => ({
+    id: "order-7",
+    number: "MR-2026-0007",
+    status: "SIGNED",
+    source: "CUSTOMER_FORM",
+    serviceJobId: "job-7",
+    occasionYear: 2026,
+    issuedAt: "2026-10-15T00:00:00.000Z",
+    issuedByName: "Balázs",
+    signedAt: "2026-10-15T00:00:00.000Z",
+    revokedAt: null,
+    revokedByName: null,
+    revokeReason: null,
+    contract: { id: "contract-1", number: "SZ", title: "T" },
+    items: [],
+    documents: [],
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    auth.session = session("dev-token");
+    api.detail.mockReset().mockResolvedValue(twoItems());
+    api.update.mockReset();
+    orderApi.list.mockReset().mockResolvedValue([]);
+    orderApi.createContractJob.mockReset();
+    orderApi.uploadCustomerForm.mockReset();
+    navigation.push.mockReset();
+    worksheetsApi.departments.mockReset().mockResolvedValue({ items: [] });
+    assetsApi.list.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  const createContractJob = () => orderApi.createContractJob;
+  const uploadCustomerForm = () => orderApi.uploadCustomerForm;
+
+  it("WEB-CONTRACT-JOB: a kijelölt tételekből lapot nyit, és a lapra visz", async () => {
+    createContractJob().mockResolvedValue({ serviceJobId: "job-9" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Karbantartási lap megrendelőlap nélkül (2 tétel)",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith("/szerviz/hibajegyek/job-9"),
+    );
+    const [token, input] = createContractJob().mock.calls[0]!;
+    expect(token).toBe("dev-token");
+    expect(input).toMatchObject({
+      contractId: "contract-1",
+      itemIds: ["item-1", "item-2"],
+    });
+    expect(typeof input.clientOperationId).toBe("string");
+  });
+
+  it("WEB-CONTRACT-JOB-KEY: 5xx után ugyanazzal a kulccsal próbál újra, 4xx után újjal, és a hibát kiírja", async () => {
+    createContractJob()
+      .mockRejectedValueOnce(new ApiError("Belső hiba", 500))
+      .mockRejectedValueOnce(
+        new ApiError("A 2026. évi alkalomkeret elfogyott.", 409),
+      )
+      .mockResolvedValueOnce({ serviceJobId: "job-9" });
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    const button = await screen.findByRole("button", {
+      name: "Karbantartási lap megrendelőlap nélkül (2 tétel)",
+    });
+
+    fireEvent.click(button);
+    await screen.findByText("Belső hiba");
+    fireEvent.click(button);
+    await screen.findByText("A 2026. évi alkalomkeret elfogyott.");
+    fireEvent.click(button);
+    await waitFor(() => expect(navigation.push).toHaveBeenCalled());
+
+    const keys = createContractJob().mock.calls.map(
+      (call) => (call[1] as { clientOperationId: string }).clientOperationId,
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[1]);
+  });
+
+  it("WEB-CONTRACT-JOB-REPAIR: javítási szerződésen nincs megrendelőlap nélküli lap", async () => {
+    api.detail.mockResolvedValue(twoItems("REPAIR"));
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByText(/Megrendelőlap kiállítása/);
+    expect(
+      screen.queryByRole("button", {
+        name: /Karbantartási lap megrendelőlap nélkül/,
+      }),
+    ).toBeNull();
+  });
+
+  it("WEB-CONTRACT-CUSTOMER-FORM: a vevő PDF-jét a kijelölt tételekkel tölti fel, és a lista a forrást és a lapot mutatja", async () => {
+    uploadCustomerForm().mockResolvedValue(order());
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText(
+      "Vevő megrendelőlapjának feltöltése (2 tétel)",
+    );
+    // csak az első tétel marad kijelölve
+    fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
+    orderApi.list.mockResolvedValue([order()]);
+
+    const pdf = new File(["%PDF-1.4"], "vevo.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(
+      screen.getByLabelText("Vevő megrendelőlapjának feltöltése (1 tétel)"),
+      { target: { files: [pdf] } },
+    );
+
+    await waitFor(() =>
+      expect(uploadCustomerForm()).toHaveBeenCalledWith("dev-token", {
+        contractId: "contract-1",
+        itemIds: ["item-1"],
+        file: pdf,
+      }),
+    );
+    expect(await screen.findByText("Vevő megrendelőlapja")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Karbantartási lap" })
+        .getAttribute("href"),
+    ).toBe("/szerviz/hibajegyek/job-7");
+  });
+
+  it("WEB-CONTRACT-CUSTOMER-FORM-EMPTY: kijelölés nélkül a feltöltés nem nyílik meg", async () => {
+    render(<PilotContractDetailPage contractId="contract-1" />);
+    await screen.findByLabelText(
+      "Vevő megrendelőlapjának feltöltése (2 tétel)",
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /1\. Szűrőcsere/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /2\. Vízcsere/ }));
+
+    const input = screen.getByLabelText(
+      "Vevő megrendelőlapjának feltöltése (0 tétel)",
+    );
+    expect(input.hasAttribute("disabled")).toBe(true);
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Karbantartási lap megrendelőlap nélkül (0 tétel)",
+        })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 });
