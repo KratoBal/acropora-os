@@ -96,22 +96,41 @@ function concrete(path: string): string {
     .replace(/\*\w*/g, PARAM);
 }
 
+/**
+ * A request that never answers counts as an ANSWER, not as a hang: status 0,
+ * which is never the anonymous 401, so the route is listed as a leak by name.
+ * Measured on the calibration branch: with a guard that let the foreign
+ * cookie through, one internal handler kept its connection open, and without
+ * this limit the sweep sat until the CI job's timeout and named nothing.
+ * The body is cancelled, not read: only the status matters, and a streaming
+ * route would otherwise hold the read forever after its headers.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+const TIMED_OUT = 0;
+
 async function statusOf(
   base: string,
   route: Route,
   headers: Record<string, string> = {},
 ): Promise<number> {
   const hasBody = ["POST", "PUT", "PATCH"].includes(route.method);
-  const response = await fetch(`${base}${concrete(route.path)}`, {
-    method: route.method,
-    redirect: "manual",
-    headers: hasBody
-      ? { "Content-Type": "application/json", ...headers }
-      : headers,
-    body: hasBody ? "{}" : undefined,
-  });
-  await response.arrayBuffer();
-  return response.status;
+  try {
+    const response = await fetch(`${base}${concrete(route.path)}`, {
+      method: route.method,
+      redirect: "manual",
+      headers: hasBody
+        ? { "Content-Type": "application/json", ...headers }
+        : headers,
+      body: hasBody ? "{}" : undefined,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    await response.body?.cancel().catch(() => undefined);
+    return response.status;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError")
+      return TIMED_OUT;
+    throw error;
+  }
 }
 
 function setCookies(response: Response): Record<string, string> {
