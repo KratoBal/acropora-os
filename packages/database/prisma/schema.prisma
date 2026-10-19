@@ -1129,6 +1129,63 @@ model Session {
   @@index([userId, kind, expiresAt])
 }
 
+/// A REEFCLUB-FIOK: a vevoi alkalmazas sajat identitasa (ReefClub terv v6.1,
+/// 2.2 pont). SZANDEKOSAN NEM a `User` tabla sora: egy szerep-tevedes sem adhat
+/// neki belso jogot, mert a belso orok (`AuthGuard`) ezt a tablat nem is
+/// olvassak. Az e-mail kisbetusitve, levagott szokozokkel all itt.
+model ReefClubAccount {
+  id              String                 @id @default(cuid())
+  email           String                 @unique
+  /// scrypt lenyomat (`users/password.util.ts`); ures, ha a fiok csak kulso
+  /// belepessel el (a 3. szelet: Google, Apple).
+  passwordHash    String?
+  /// Ures: a fiok nem lephet be jelszoval.
+  emailVerifiedAt DateTime?
+  /// A bolti meres veglegesitesekor menjen-e level (3.5 pont).
+  notifyOnRelease Boolean                @default(true)
+  /// Az elfogadott adatkezelesi tajekoztato verzioja es az elfogadas ideje.
+  consentVersion  String
+  consentAt       DateTime
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  sessions        ReefClubSession[]
+  tokens          ReefClubAccountToken[]
+}
+
+/// A ReefClub munkamenet: kulon tabla, kulon suti, a belso `Session`-tol
+/// fuggetlenul. Itt is csak a token SHA-256 lenyomata all.
+model ReefClubSession {
+  id        String          @id @default(cuid())
+  accountId String
+  tokenHash String          @unique
+  expiresAt DateTime
+  createdAt DateTime        @default(now())
+  account   ReefClubAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([expiresAt])
+}
+
+enum ReefClubTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// Egyszer hasznalhato, lejaro token az e-mailben kuldott linkhez. A nyers
+/// token csak a levelben letezik, itt a lenyomata all.
+model ReefClubAccountToken {
+  id        String               @id @default(cuid())
+  accountId String
+  purpose   ReefClubTokenPurpose
+  tokenHash String               @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime             @default(now())
+  account   ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, purpose])
+}
+
 model Product {
   id               String                   @id @default(cuid())
   name             String

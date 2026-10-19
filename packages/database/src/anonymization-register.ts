@@ -230,6 +230,17 @@ export const ANONYMIZATION_REGISTER: Readonly<
   Session: {
     tokenHash: "secret",
   },
+  ReefClubAccount: {
+    email: "email",
+    passwordHash: "passwordHash",
+    consentVersion: "business",
+  },
+  ReefClubSession: {
+    tokenHash: "secret",
+  },
+  ReefClubAccountToken: {
+    tokenHash: "secret",
+  },
   Product: {
     name: "business",
     description: "business",

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   databaseNameOf,
   integrationDatabaseGate,
+  integrationDatabaseUrl,
 } from "./integration-database.js";
 
 const DEV_URL =
@@ -33,6 +34,23 @@ describe("integrationDatabaseGate", () => {
       }),
       { mode: "run", database: "acropora_test" },
     ));
+
+  it("hands out the approved address only when the gate says run", () => {
+    assert.equal(
+      integrationDatabaseUrl({
+        RUN_DB_INTEGRATION: "1",
+        DATABASE_URL: TEST_URL,
+      }),
+      TEST_URL,
+    );
+    assert.throws(() => integrationDatabaseUrl({ DATABASE_URL: TEST_URL }));
+    assert.throws(() =>
+      integrationDatabaseUrl({
+        RUN_DB_INTEGRATION: "1",
+        DATABASE_URL: DEV_URL,
+      }),
+    );
+  });
 
   it("accepts the database CI actually uses", () =>
     assert.deepEqual(
