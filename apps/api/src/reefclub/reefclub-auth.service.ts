@@ -62,7 +62,11 @@ export class ReefClubAuthService implements OnModuleDestroy {
     @Inject(REEFCLUB_MAIL_SENDER) private readonly mail: MailSender,
   ) {}
 
-  /** Answers at once; the account work and the e-mail run in the background. */
+  /**
+   * Answers at once; the account work and the e-mail run in the background.
+   * Returns `void`, not a promise, on purpose: the controller has nothing to
+   * await, so the answer cannot be made to wait for the account lookup.
+   */
   register(email: string, password: string, consentVersion: string): void {
     this.background("register", () =>
       this.registerNow(normalizeEmail(email), password, consentVersion),

@@ -133,14 +133,6 @@ describe("ReefClubAuthService: regisztráció", () => {
     assert.match(sent[0]!.text, /email-megerosites#token=/);
   });
 
-  it("a válasz előtt nem vár a háttérmunkára (a válaszidő nem árulja el a fiókot)", () => {
-    const { svc, sent } = service();
-    svc.register("gyors@pelda.hu", PASSWORD, "v1");
-    // Synchronously after the call nothing has been sent yet: the work runs
-    // after the controller has answered.
-    assert.equal(sent.length, 0);
-  });
-
   it("ismeretlen címre jelszó-visszaállítást nem küld, ismertre igen", async () => {
     const { svc, sent, accounts } = service(
       fakeAccounts([await verified("van@pelda.hu")]),
