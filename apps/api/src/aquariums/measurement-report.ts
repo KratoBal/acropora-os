@@ -1,9 +1,15 @@
 import {
   aquariumEffectiveMeasurementTargetRange,
   aquariumMeasurementParameter,
+  measurementDistanceFromRange,
+  measurementStatus,
+  measurementTrend,
   type AquariumMeasurementOccasion,
   type AquariumMeasurementParameterCode,
   type AquariumMeasurementTarget,
+  type MeasurementRange,
+  type MeasurementStatus,
+  type MeasurementTrend,
   type WaterType,
 } from "@acropora/types";
 
@@ -25,13 +31,14 @@ import {
  * the marine default).
  */
 
-export type ReportStatus = "OK" | "WARN" | "ALERT";
-export type ReportTrend = "IMPROVING" | "WORSENING" | "STABLE";
-
-export interface ReportRange {
-  min?: number;
-  max?: number;
-}
+// THE RULE ITSELF (D1, D2) IS SHARED: @acropora/types,
+// aquarium-measurement-evaluation.ts. The report keeps its own names for it.
+export const distanceFromRange = measurementDistanceFromRange;
+export const reportStatus = measurementStatus;
+export const reportTrend = measurementTrend;
+export type ReportRange = MeasurementRange;
+export type ReportStatus = MeasurementStatus;
+export type ReportTrend = MeasurementTrend;
 
 export interface ReportRow {
   label: string;
@@ -41,53 +48,6 @@ export interface ReportRow {
   status: ReportStatus | null;
   direction: "LOW" | "HIGH" | null;
   trend: ReportTrend | null;
-}
-
-/** How far a value lies outside a range, and on which side; 0 inside. */
-export function distanceFromRange(
-  value: number,
-  range: ReportRange,
-): { distance: number; direction: "LOW" | "HIGH" | null } {
-  if (range.min !== undefined && value < range.min)
-    return { distance: range.min - value, direction: "LOW" };
-  if (range.max !== undefined && value > range.max)
-    return { distance: value - range.max, direction: "HIGH" };
-  return { distance: 0, direction: null };
-}
-
-/** D1. */
-/**
- * THE TOLERANCE OF A COMPARISON (barracuda's review, #1640): the distance and
- * the width are float differences, so on a range of 7,8–8,4 a value of 7,2
- * gives 0.5999999999999996 against 0.6000000000000005, and "exactly the width"
- * would fall on the warning side. Equal within this tolerance counts as equal.
- */
-const TOLERANCE = 1e-9;
-
-export function reportStatus(value: number, range: ReportRange): ReportStatus {
-  const { distance } = distanceFromRange(value, range);
-  if (distance <= TOLERANCE) return "OK";
-  // A ONE-SIDED BOUND OF 0 (for example "max. 0") has a width of 0: any
-  // deviation from it needs action. That is intended, not an edge case.
-  const width =
-    range.min !== undefined && range.max !== undefined
-      ? range.max - range.min
-      : Math.abs((range.min ?? range.max)!) * 0.1;
-  return distance < width - TOLERANCE ? "WARN" : "ALERT";
-}
-
-/** D2. */
-export function reportTrend(
-  value: number,
-  previous: number | undefined,
-  range: ReportRange,
-): ReportTrend | null {
-  if (previous === undefined) return null;
-  const now = distanceFromRange(value, range).distance;
-  const before = distanceFromRange(previous, range).distance;
-  if (now < before - TOLERANCE) return "IMPROVING";
-  if (now > before + TOLERANCE) return "WORSENING";
-  return "STABLE";
 }
 
 /** Hungarian decimals: a comma, and the number as it was measured. */

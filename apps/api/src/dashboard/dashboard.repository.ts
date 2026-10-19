@@ -3,6 +3,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import {
   MATERIAL_REQUEST_ACTIVE_STATUSES,
   aquariumEffectiveMeasurementTargetRange,
+  isOutsideMeasurementRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementParameterCode,
   type DashboardActivity,
@@ -263,10 +264,7 @@ export class DashboardRepository extends Repository {
           })),
         );
         const value = measurement.value.toNumber();
-        return (
-          (range?.min !== undefined && value < range.min) ||
-          (range?.max !== undefined && value > range.max)
-        );
+        return isOutsideMeasurementRange(value, range);
       });
       return outOfRange
         ? [

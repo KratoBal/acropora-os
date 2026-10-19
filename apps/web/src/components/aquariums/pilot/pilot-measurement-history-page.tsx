@@ -2,6 +2,7 @@
 import { Alert, Icon } from "@acropora/ui";
 import {
   aquariumEffectiveMeasurementTargetRange,
+  isOutsideMeasurementRange,
   aquariumMeasurementParametersFor,
   AQUARIUM_MEASUREMENT_PARAMETER_COLOR,
   hasPermission,
@@ -676,9 +677,7 @@ export function PilotMeasurementHistoryPage({
                               );
                             const out =
                               value !== undefined &&
-                              range !== undefined &&
-                              ((range.min !== undefined && value < range.min) ||
-                                (range.max !== undefined && value > range.max));
+                              isOutsideMeasurementRange(value, range);
                             return (
                               <td
                                 key={param.code}
@@ -879,11 +878,7 @@ function ComparisonTile({
     param.code,
     targets,
   );
-  const outOfRange =
-    diff !== 0 &&
-    range !== undefined &&
-    ((range.min !== undefined && b < range.min) ||
-      (range.max !== undefined && b > range.max));
+  const outOfRange = diff !== 0 && isOutsideMeasurementRange(b, range);
 
   return (
     <div className="flex min-w-[140px] flex-col gap-1 rounded-xl px-4 py-3 ring-1 ring-pilot-grey-200">
@@ -1038,10 +1033,7 @@ function CombinedChart({
                   value?: number;
                 }) => {
                   const { cx = 0, cy = 0, value = 0 } = dotProps;
-                  const out =
-                    range &&
-                    ((range.min !== undefined && value < range.min) ||
-                      (range.max !== undefined && value > range.max));
+                  const out = isOutsideMeasurementRange(value, range);
                   return (
                     <circle
                       key={`${param.code}-${cx}-${cy}`}
@@ -1163,10 +1155,7 @@ function SmallMultiples({
                         value?: number;
                       }) => {
                         const { cx = 0, cy = 0, value = 0 } = dotProps;
-                        const out =
-                          range &&
-                          ((range.min !== undefined && value < range.min) ||
-                            (range.max !== undefined && value > range.max));
+                        const out = isOutsideMeasurementRange(value, range);
                         return (
                           <circle
                             key={`${param.code}-${cx}-${cy}`}

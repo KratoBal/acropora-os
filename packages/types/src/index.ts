@@ -514,6 +514,17 @@ export {
   aquariumMeasurementTargetRange,
 } from "./aquarium-management.js";
 export type {
+  MeasurementRange,
+  MeasurementStatus,
+  MeasurementTrend,
+} from "./aquarium-measurement-evaluation.js";
+export {
+  isOutsideMeasurementRange,
+  measurementDistanceFromRange,
+  measurementStatus,
+  measurementTrend,
+} from "./aquarium-measurement-evaluation.js";
+export type {
   MaintenanceOrderDocumentContentType,
   MaintenanceOrderDocumentSummary,
   MaintenanceOrderPartnerDetail,
