@@ -35,13 +35,13 @@ const EXPECTED_ROUTES = [
 describe("ReefClub-folyamat (adatbázis nélkül)", () => {
   let app: INestApplication;
   let base: string;
-  const previousUrl = process.env.REEFCLUB_DATABASE_URL;
 
   before(async () => {
-    process.env.REEFCLUB_DATABASE_URL =
-      "postgresql://nincs:nincs@127.0.0.1:1/reefclub_unit_test";
     app = await NestFactory.create(
-      ReefClubAppModule.forRoot({ mailSender: { async send() {} } }),
+      ReefClubAppModule.forRoot({
+        mailSender: { async send() {} },
+        databaseUrl: "postgresql://nincs:nincs@127.0.0.1:1/reefclub_unit_test",
+      }),
       // Without `abortOnError: false` Nest ends the PROCESS on an unknown
       // provider in `app.get`, so the assertion below would exit the test run
       // with code 1 and no message instead of passing.
@@ -54,8 +54,6 @@ describe("ReefClub-folyamat (adatbázis nélkül)", () => {
 
   after(async () => {
     await app?.close();
-    if (previousUrl === undefined) delete process.env.REEFCLUB_DATABASE_URL;
-    else process.env.REEFCLUB_DATABASE_URL = previousUrl;
   });
 
   it("pontosan a ReefClub útvonalait szolgálja ki, mind /rc/v1 alatt", () => {

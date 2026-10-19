@@ -4,7 +4,11 @@ import { APP_GUARD } from "@nestjs/core";
 import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
 import { ReefClubAuthController } from "./reefclub-auth.controller.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
-import { ReefClubDatabase } from "./reefclub-database.js";
+import {
+  REEFCLUB_DATABASE_ADDRESS,
+  ReefClubDatabase,
+  reefClubDatabaseUrl,
+} from "./reefclub-database.js";
 import { ReefClubHealthController } from "./reefclub-health.controller.js";
 import type { MailSender } from "../notifications/mail/mail.port.js";
 import {
@@ -24,6 +28,12 @@ export interface ReefClubModuleOptions {
    * production wiring with one seam.
    */
   mailSender?: MailSender;
+  /**
+   * The database address; the default is `REEFCLUB_DATABASE_URL`. The
+   * integration spec passes the test database the common run already uses,
+   * so it needs no environment of its own.
+   */
+  databaseUrl?: string;
 }
 
 /**
@@ -44,6 +54,10 @@ export class ReefClubModule {
         ReefClubHealthController,
       ],
       providers: [
+        {
+          provide: REEFCLUB_DATABASE_ADDRESS,
+          useFactory: () => options.databaseUrl ?? reefClubDatabaseUrl(),
+        },
         ReefClubDatabase,
         ReefClubAccountRepository,
         ReefClubSessionRepository,

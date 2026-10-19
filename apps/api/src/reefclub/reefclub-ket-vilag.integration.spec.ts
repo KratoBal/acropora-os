@@ -10,7 +10,10 @@ import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "../app.module.js";
 import { configureApp } from "../app.configuration.js";
-import { integrationDatabaseGate } from "../common/integration-database.js";
+import {
+  integrationDatabaseGate,
+  integrationDatabaseUrl,
+} from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import type { OutgoingMail } from "../notifications/mail/mail.port.js";
 import { hashPassword } from "../users/password.util.js";
@@ -205,9 +208,6 @@ describe(
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
-      // The ReefClub process has its own address variable; on the test
-      // database it names the same database (slice 6 narrows the role).
-      process.env.REEFCLUB_DATABASE_URL ??= process.env.DATABASE_URL;
       await removeLeftovers();
 
       await prisma.user.create({
@@ -228,6 +228,10 @@ describe(
 
       reefclub = await NestFactory.create(
         ReefClubAppModule.forRoot({
+          // The ReefClub process normally gets its own address variable; here it
+          // is the test database the common run already uses (slice 6 narrows
+          // the role, not the database).
+          databaseUrl: integrationDatabaseUrl(process.env),
           mailSender: {
             async send(mail) {
               mails.push(mail);

@@ -66,6 +66,26 @@ export function integrationDatabaseGate(
 }
 
 /**
+ * The connection string the gate approved, for a spec that builds its OWN
+ * client on the same test database (the ReefClub process has a separate
+ * Prisma client). It reads nothing the common run does not already provide,
+ * and it throws unless the gate says "run", so it cannot hand out the address
+ * of a database not named for testing.
+ */
+export function integrationDatabaseUrl(
+  env: Record<string, string | undefined>,
+): string {
+  const gate = integrationDatabaseGate(env);
+  if (gate.mode !== "run")
+    throw new Error(
+      gate.mode === "refuse"
+        ? gate.reason
+        : "Az integrációs adatbázis nincs engedélyezve (RUN_DB_INTEGRATION).",
+    );
+  return env.DATABASE_URL!;
+}
+
+/**
  * Parses only what is needed - the database name - without pulling the
  * credentials out of the URL or logging any part of it.
  */

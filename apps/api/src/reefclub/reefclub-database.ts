@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, type OnModuleDestroy } from "@nestjs/common";
 import { PrismaClient } from "@acropora/database";
 
 /**
@@ -27,11 +27,14 @@ export function reefClubDatabaseUrl(
   return url;
 }
 
+/** The address the client connects with; `ReefClubModule.forRoot` provides it. */
+export const REEFCLUB_DATABASE_ADDRESS = Symbol("REEFCLUB_DATABASE_ADDRESS");
+
 @Injectable()
 export class ReefClubDatabase extends PrismaClient implements OnModuleDestroy {
-  constructor() {
+  constructor(@Inject(REEFCLUB_DATABASE_ADDRESS) address: string) {
     // Constructing does not connect: the first query does.
-    super({ datasourceUrl: reefClubDatabaseUrl() });
+    super({ datasourceUrl: address });
   }
 
   async onModuleDestroy(): Promise<void> {
