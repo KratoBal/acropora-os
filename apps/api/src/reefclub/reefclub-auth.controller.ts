@@ -1,0 +1,150 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  HttpCode,
+  Post,
+  Req,
+  Res,
+} from "@nestjs/common";
+
+import { generateCsrfToken, parseCookies } from "../auth/cookie.util.js";
+import type { CookieResponse } from "../auth/cookie.util.js";
+import { callerAddress } from "../common/ip-rate-limit.js";
+import {
+  ReefClubLoginDto,
+  ReefClubPasswordResetConfirmDto,
+  ReefClubPasswordResetRequestDto,
+  ReefClubRegisterDto,
+  ReefClubTokenDto,
+} from "./reefclub-auth.dto.js";
+import {
+  normalizeEmail,
+  ReefClubAuthService,
+} from "./reefclub-auth.service.js";
+import {
+  reefClubCookieNames,
+  reefClubCookieOptions,
+} from "./reefclub-cookies.js";
+import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
+import { ReefClubPublic, type ReefClubRequest } from "./reefclub.guard.js";
+
+/** One answer for every bad link: unknown, used and expired look the same. */
+const INVALID_LINK = "A link érvénytelen vagy lejárt.";
+
+/**
+ * POST /rc/v1/auth/* (plan v6.1, 3.2). Google and Apple are slice 3; account
+ * deletion is slice 6.
+ */
+@Controller("rc/v1/auth")
+export class ReefClubAuthController {
+  constructor(
+    private readonly auth: ReefClubAuthService,
+    private readonly limits: ReefClubRateLimits,
+  ) {}
+
+  /** Always 202, for a new address and an existing one alike (plan 3.2). */
+  @ReefClubPublic()
+  @Post("register")
+  @HttpCode(202)
+  register(@Body() body: ReefClubRegisterDto, @Req() request: ReefClubRequest) {
+    this.limits.registerByAddress.check(callerAddress(request));
+    this.limits.registerByEmail.check(normalizeEmail(body.email));
+    this.auth.register(body.email, body.password, body.consentVersion);
+  }
+
+  @ReefClubPublic()
+  @Post("verify-email")
+  @HttpCode(204)
+  async verifyEmail(
+    @Body() body: ReefClubTokenDto,
+    @Req() request: ReefClubRequest,
+  ): Promise<void> {
+    this.limits.tokenByAddress.check(callerAddress(request));
+    if (!(await this.auth.verifyEmail(body.token)))
+      throw new BadRequestException(INVALID_LINK);
+  }
+
+  @ReefClubPublic()
+  @Post("login")
+  @HttpCode(204)
+  async login(
+    @Body() body: ReefClubLoginDto,
+    @Req() request: ReefClubRequest,
+    @Res({ passthrough: true }) response: CookieResponse,
+  ): Promise<void> {
+    this.limits.loginByAddress.check(callerAddress(request));
+    this.limits.loginByEmail.check(normalizeEmail(body.email));
+    const session = await this.auth.login(body.email, body.password);
+    const names = reefClubCookieNames();
+    const maxAgeMs = Math.max(0, session.expiresAt.getTime() - Date.now());
+    response.cookie(
+      names.session,
+      session.token,
+      reefClubCookieOptions(maxAgeMs, { httpOnly: true }),
+    );
+    response.cookie(
+      names.csrf,
+      generateCsrfToken(),
+      reefClubCookieOptions(maxAgeMs, { httpOnly: false }),
+    );
+  }
+
+  /** Always 202 (plan 3.2). */
+  @ReefClubPublic()
+  @Post("password-reset")
+  @HttpCode(202)
+  requestPasswordReset(
+    @Body() body: ReefClubPasswordResetRequestDto,
+    @Req() request: ReefClubRequest,
+  ) {
+    this.limits.resetByAddress.check(callerAddress(request));
+    this.limits.resetByEmail.check(normalizeEmail(body.email));
+    this.auth.requestPasswordReset(body.email);
+  }
+
+  /** Sets the new password and ends every session of the account. */
+  @ReefClubPublic()
+  @Post("password-reset/confirm")
+  @HttpCode(204)
+  async confirmPasswordReset(
+    @Body() body: ReefClubPasswordResetConfirmDto,
+    @Req() request: ReefClubRequest,
+  ): Promise<void> {
+    this.limits.tokenByAddress.check(callerAddress(request));
+    if (!(await this.auth.confirmPasswordReset(body.token, body.password)))
+      throw new BadRequestException(INVALID_LINK);
+  }
+
+  /**
+   * Public and idempotent: it ends the session named by the cookie, if any,
+   * and clears the cookies either way. No body is accepted.
+   */
+  @ReefClubPublic()
+  @Post("logout")
+  @HttpCode(204)
+  async logout(
+    @Req() request: ReefClubRequest,
+    @Res({ passthrough: true }) response: CookieResponse,
+  ): Promise<void> {
+    const names = reefClubCookieNames();
+    const cookie = request.headers.cookie;
+    const token = parseCookies(Array.isArray(cookie) ? cookie[0] : cookie)[
+      names.session
+    ];
+    await this.auth.logout(token);
+    // Overwritten with the same attributes rather than `clearCookie`: the
+    // browser refuses a `__Host-` cookie, the expiring one included, without
+    // `Secure` and `Path=/`.
+    response.cookie(
+      names.session,
+      "",
+      reefClubCookieOptions(0, { httpOnly: true }),
+    );
+    response.cookie(
+      names.csrf,
+      "",
+      reefClubCookieOptions(0, { httpOnly: false }),
+    );
+  }
+}
