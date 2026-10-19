@@ -1,5 +1,6 @@
 import {
   aquariumEffectiveMeasurementTargetRange,
+  isOutsideMeasurementRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementParameterCode,
   type DashboardAquariumAlertsWidgetData,
@@ -81,10 +82,10 @@ export function aquariumFindings(
         targets,
       );
       if (!range) return { verdict: "noTarget" as const, range };
-      const below = range.min !== undefined && value < range.min;
-      const above = range.max !== undefined && value > range.max;
       return {
-        verdict: below || above ? ("out" as const) : ("in" as const),
+        verdict: isOutsideMeasurementRange(value, range)
+          ? ("out" as const)
+          : ("in" as const),
         range,
       };
     };

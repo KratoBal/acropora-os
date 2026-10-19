@@ -2,6 +2,7 @@
 import { ConfirmDialog, Icon } from "@acropora/ui";
 import {
   aquariumEffectiveMeasurementTargetRange,
+  isOutsideMeasurementRange,
   aquariumMeasurementParametersFor,
   type AquariumMeasurementOccasion,
   type AquariumMeasurementParameterCode,
@@ -289,10 +290,7 @@ export function PilotAquariumWaterValues({
                 value.parameterCode,
                 targets,
               );
-              const outOfRange =
-                range !== undefined &&
-                ((range.min !== undefined && value.value < range.min) ||
-                  (range.max !== undefined && value.value > range.max));
+              const outOfRange = isOutsideMeasurementRange(value.value, range);
               return (
                 <button
                   key={value.parameterCode}
