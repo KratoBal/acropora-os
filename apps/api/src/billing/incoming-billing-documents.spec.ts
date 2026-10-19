@@ -292,6 +292,96 @@ describe("incomingPaymentOf", () => {
   });
 });
 
+/*
+  A KÉZI „FIZETVE” A BESZERZÉSI SZÁMLÁRÓL (barracuda 2026-10-17; Balázs 2026-10-19). MI PIROSÍT: ha a
+  jóváhagyott beszerzési sor a kézi jelölést elvesztené; ha a jelölés a Számlázz.hu fizetése vagy a banki
+  párosítás FÖLÉ kerülne (azoknak van forrásuk, ennek nincs); ha a jelölés más forrású sort (feed,
+  postafiók) is fizetettre tenne; ha egy fel nem jelölt PURCHASE sor fizetettnek látszana.
+*/
+describe("a beszerzési számla kézi „Fizetve” jelölése a jóváhagyott soron", () => {
+  const paired = bankMatchOf(
+    row(),
+    new Map([["doc-1", pairing({ debits: [debit] })]]),
+  );
+  const unpaired = bankMatchOf(row(), new Map());
+  const manual = { paidAt: day("2026-10-05") };
+  const state = (
+    over: Partial<IncomingBillingDocument>,
+    match = unpaired,
+    paidInFull = false,
+    manualPaid: { paidAt: Date | null } | null = manual,
+  ) => {
+    const r = incomingPaymentOf(row(over), match, paidInFull, manualPaid);
+    return [r.paymentState, r.paymentSource, r.paidAmount, r.lastPaymentDate];
+  };
+
+  it("a jelölés fizetett, a bruttóval és a jelölés napjával, forrás-jelölés nélkül (mint jóváhagyás előtt)", () => {
+    assert.deepEqual(state({ paymentsKnown: false }), [
+      "PAID",
+      null,
+      "12700",
+      "2026-10-05",
+    ]);
+  });
+
+  it("jelölés nélkül ugyanez a sor „Nincs adat” marad", () => {
+    assert.deepEqual(state({ paymentsKnown: false }, unpaired, false, null), [
+      "UNKNOWN",
+      null,
+      "0",
+      null,
+    ]);
+  });
+
+  it("a Számlázz.hu fizetése és a banki párosítás megelőzi a jelölést", () => {
+    assert.deepEqual(
+      state({ paidAmount: D(5000), lastPaymentDate: day("2026-09-29") }),
+      ["PARTIAL", "SZAMLAZZ", "5000", "2026-09-29"],
+    );
+    assert.deepEqual(state({ paymentsKnown: false }, paired, true), [
+      "PAID",
+      "BANK_PAIRING",
+      "12700",
+      "2026-09-30",
+    ]);
+  });
+
+  it("a jelölés napja hiányozhat (a fizetés napja nincs kitöltve)", () => {
+    assert.deepEqual(
+      state({ paymentsKnown: false }, unpaired, false, { paidAt: null }),
+      ["PAID", null, "12700", null],
+    );
+  });
+
+  it("csak a PURCHASE forrású sor kaphat jelölést: a feed és a postafiókos sor nem", () => {
+    const item = (source: string) =>
+      toIncomingListItem(
+        row({
+          source: source as IncomingBillingDocument["source"],
+          paymentsKnown: false,
+        }),
+        new Map(),
+        false,
+        manual,
+      ).paymentState;
+    assert.deepEqual(
+      [item("PURCHASE"), item("SZAMLAZZ"), item("MAILBOX")],
+      ["PAID", "UNKNOWN", "UNKNOWN"],
+    );
+  });
+
+  it("az adatlap ugyanazt adja, mint a lista", () => {
+    const purchase = row({ source: "PURCHASE", paymentsKnown: false });
+    const listed = toIncomingListItem(purchase, new Map(), false, manual);
+    const detail = toIncomingDetail(purchase, new Map(), false, manual);
+    assert.deepEqual(
+      [detail.paymentState, detail.paidAmount, detail.lastPaymentDate],
+      [listed.paymentState, listed.paidAmount, listed.lastPaymentDate],
+    );
+    assert.equal(detail.paymentState, "PAID");
+  });
+});
+
 describe("toIncomingListItem and toIncomingDetail", () => {
   it("formats amounts per currency and derives the states", () => {
     const pairings = new Map([["doc-1", pairing()]]);

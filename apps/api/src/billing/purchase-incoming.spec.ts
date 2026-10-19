@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Prisma } from "@acropora/database";
+import { Prisma, type IncomingBillingDocument } from "@acropora/database";
 
 import {
   arrivalKeys,
+  incomingListItems,
+  loadManualPurchasePayments,
   postedPurchaseForArrival,
   purchaseListItem,
   purchaseReading,
@@ -202,5 +204,162 @@ describe("a beérkezett dokumentum kulcsai (N3)", () => {
       [],
     );
     assert.deepEqual(arrivalKeys({}), []);
+  });
+});
+
+/*
+  A KÉZI „FIZETVE” NEM VESZIK EL JÓVÁHAGYÁSKOR (barracuda 2026-10-17). A jóváhagyás előtti sor a
+  beszerzési számla jelöléséből fizetett; a jóváhagyás után a PURCHASE sor a beszerzési számla mezőjéből
+  kapja ugyanezt. MI PIROSÍT: ha a két állapot eltérne; ha a lekérés nem csak a PURCHASE sorokra és a
+  ténylegesen fizetettre menne; ha a lista nem a beszerzési azonosító szerint kötné a jelölést a sorhoz.
+*/
+describe("a kézi „Fizetve” jóváhagyás előtt és után", () => {
+  const purchaseRow = (over: Partial<IncomingBillingDocument> = {}) =>
+    ({
+      id: "in-9",
+      source: "PURCHASE",
+      externalId: "pi-1",
+      feedMessageId: "pi-1",
+      feedReceivedAt: new Date("2026-10-08T08:00:00Z"),
+      versionCount: 1,
+      kindCode: "BE",
+      documentNumber: "KIT-2026-7",
+      electronic: false,
+      issueDate: new Date("2026-10-01T00:00:00Z"),
+      fulfillmentDate: null,
+      dueDate: new Date("2026-10-09T00:00:00Z"),
+      paymentMethod: null,
+      currency: "HUF",
+      exchangeRate: null,
+      exchangeBank: null,
+      supplierName: "Kitalált Kft.",
+      supplierTaxNumber: "12345678-2-42",
+      supplierEuTaxNumber: null,
+      supplierAddress: null,
+      supplierBankAccount: null,
+      buyerName: "Acropora Kft.",
+      buyerTaxNumber: null,
+      netAmount: D(1234),
+      vatAmount: D(334),
+      grossAmount: D(1568),
+      lines: [],
+      vatSummary: [],
+      paymentsKnown: false,
+      payments: [],
+      paidAmount: D(0),
+      lastPaymentDate: null,
+      note: null,
+      orderNumber: null,
+      referencedInvoiceNumber: null,
+      referencedProformaNumber: null,
+      cancelled: false,
+      hasPdf: true,
+      sourceDocumentId: "scan-1",
+      createdAt: new Date("2026-10-08T08:00:00Z"),
+      updatedAt: new Date("2026-10-08T08:00:00Z"),
+      ...over,
+    }) as IncomingBillingDocument;
+
+  const list = (
+    rows: IncomingBillingDocument[],
+    manualPaid?: Map<string, { paidAt: Date | null }>,
+  ) =>
+    incomingListItems({
+      rows,
+      pairings: new Map(),
+      hasCollectedPdf: () => false,
+      readings: new Map(),
+      purchases: [],
+      manualPaid,
+    });
+
+  it("ugyanaz az állapot a jóváhagyás előtt és után; jelölés nélkül „Nincs adat”", () => {
+    const paidAt = new Date("2026-10-05T00:00:00Z");
+    const before = purchaseListItem(
+      subject({ isPaid: true, paidAt }),
+      new Map(),
+    );
+    const [after] = list([purchaseRow()], new Map([["pi-1", { paidAt }]]));
+    const [unmarked] = list([purchaseRow()], new Map());
+    assert.deepEqual(
+      [
+        [
+          after!.paymentState,
+          after!.paidAmount,
+          after!.lastPaymentDate,
+          after!.paymentSource,
+        ],
+        [unmarked!.paymentState, unmarked!.paidAmount],
+      ],
+      [
+        [
+          before.paymentState,
+          before.paidAmount,
+          before.lastPaymentDate,
+          before.paymentSource,
+        ],
+        ["UNKNOWN", "0"],
+      ],
+      "PURCHASE-MANUAL-PAID",
+    );
+    assert.equal(after!.paymentState, "PAID");
+  });
+
+  it("a jelölést a beszerzési azonosító köti a sorhoz: egy másik számla jelölése nem fizetettre teszi", () => {
+    const [other] = list(
+      [purchaseRow()],
+      new Map([["pi-2", { paidAt: null }]]),
+    );
+    assert.equal(other!.paymentState, "UNKNOWN");
+  });
+
+  it("a betöltő csak a PURCHASE sorok azonosítóit kérdezi, csak a fizetettre jelölteket", async () => {
+    const asked: unknown[] = [];
+    const database = {
+      purchaseInvoice: {
+        findMany: async (args: unknown) => {
+          asked.push(args);
+          return [{ id: "pi-1", paidAt: new Date("2026-10-05T00:00:00Z") }];
+        },
+      },
+    };
+    const map = await loadManualPurchasePayments(
+      database as unknown as Parameters<typeof loadManualPurchasePayments>[0],
+      [
+        purchaseRow(),
+        purchaseRow({ source: "SZAMLAZZ", externalId: "5150" }),
+        purchaseRow({ source: "MAILBOX", externalId: "doc-3" }),
+      ],
+    );
+    assert.deepEqual(
+      [asked, [...map.entries()]],
+      [
+        [
+          {
+            where: { id: { in: ["pi-1"] }, isPaid: true },
+            select: { id: true, paidAt: true },
+          },
+        ],
+        [["pi-1", { paidAt: new Date("2026-10-05T00:00:00Z") }]],
+      ],
+      "PURCHASE-MANUAL-LOAD",
+    );
+  });
+
+  it("PURCHASE sor nélkül nincs lekérés", async () => {
+    let calls = 0;
+    const database = {
+      purchaseInvoice: {
+        findMany: async () => {
+          calls += 1;
+          return [];
+        },
+      },
+    };
+    const map = await loadManualPurchasePayments(
+      database as unknown as Parameters<typeof loadManualPurchasePayments>[0],
+      [purchaseRow({ source: "SZAMLAZZ", externalId: "5150" })],
+    );
+    assert.deepEqual([calls, map.size], [0, 0]);
   });
 });

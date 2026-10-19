@@ -39,6 +39,7 @@ import {
 import { prismaErrorSummary } from "./error-summary.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
+  loadManualPurchasePayments,
   loadPurchaseSubjects,
   lockIncomingKey,
   otherSourceRowFor,
@@ -727,8 +728,20 @@ export class IncomingReviewService {
       const stored = await this.database.incomingDocumentReading.findUnique({
         where: { incomingBillingDocumentId: approved.id },
       });
+      // ugyanaz a kézi „Fizetve” jelölés, mint a listán és az adatlapon (a beszerzési számla mezőjéből)
+      const manualPaid = await loadManualPurchasePayments(this.database, [
+        approved,
+      ]);
       return this.purchaseView(
-        { ...toIncomingListItem(approved, new Map()), review: "VERIFIED" },
+        {
+          ...toIncomingListItem(
+            approved,
+            new Map(),
+            false,
+            manualPaid.get(approved.externalId) ?? null,
+          ),
+          review: "VERIFIED",
+        },
         stored,
         null,
       );

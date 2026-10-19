@@ -41,6 +41,7 @@ import {
 } from "./incoming-collected-pdf.js";
 import {
   incomingListItems,
+  loadManualPurchasePayments,
   loadPurchaseSubjects,
   PURCHASE_ITEM_PREFIX,
 } from "./purchase-incoming.js";
@@ -85,6 +86,7 @@ export class IncomingBillingDocumentsController {
       this.reviews.pendingReadings(),
       loadPurchaseSubjects(this.database),
     ]);
+    const manualPaid = await loadManualPurchasePayments(this.database, rows);
     return incomingListResponse(
       incomingListItems({
         rows,
@@ -92,6 +94,7 @@ export class IncomingBillingDocumentsController {
         hasCollectedPdf: (row) => collectedPdfIds(row, collected).length > 0,
         readings,
         purchases,
+        manualPaid,
       }),
       query,
     );
@@ -145,14 +148,16 @@ export class IncomingBillingDocumentsController {
       where: { id },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    const [pairings, collected] = await Promise.all([
+    const [pairings, collected, manualPaid] = await Promise.all([
       this.missing.documentPairings(),
       this.collectedIndex(),
+      loadManualPurchasePayments(this.database, [row]),
     ]);
     return toIncomingDetail(
       row,
       pairings,
       collectedPdfIds(row, collected).length > 0,
+      manualPaid.get(row.externalId) ?? null,
     );
   }
 
