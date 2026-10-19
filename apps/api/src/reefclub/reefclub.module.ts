@@ -9,7 +9,16 @@ import {
   ReefClubDatabase,
   reefClubDatabaseUrl,
 } from "./reefclub-database.js";
+import {
+  REEFCLUB_IDENTITY_KEYS,
+  REEFCLUB_PROVIDER_CONFIGS,
+  ReefClubExternalAuthService,
+  type ReefClubProviderConfigs,
+  reefClubProviderConfigs,
+} from "./reefclub-external-auth.service.js";
 import { ReefClubHealthController } from "./reefclub-health.controller.js";
+import type { ReefClubKeyLookup } from "./reefclub-id-token.js";
+import { ReefClubIdentityKeys } from "./reefclub-identity-keys.js";
 import type { MailSender } from "../notifications/mail/mail.port.js";
 import {
   createReefClubMailSender,
@@ -34,6 +43,14 @@ export interface ReefClubModuleOptions {
    * so it needs no environment of its own.
    */
   databaseUrl?: string;
+  /**
+   * Where the Google and Apple public keys come from; the default fetches and
+   * caches the providers' JWK sets (`ReefClubIdentityKeys`). Tests pass their
+   * own keys, so a token they sign is checked by the production code.
+   */
+  identityKeys?: ReefClubKeyLookup;
+  /** Our client ids; the default reads `REEFCLUB_GOOGLE_CLIENT_IDS` and `REEFCLUB_APPLE_CLIENT_IDS`. */
+  providerConfigs?: ReefClubProviderConfigs;
 }
 
 /**
@@ -62,6 +79,17 @@ export class ReefClubModule {
         ReefClubAccountRepository,
         ReefClubSessionRepository,
         ReefClubAuthService,
+        ReefClubExternalAuthService,
+        {
+          provide: REEFCLUB_IDENTITY_KEYS,
+          useFactory: () =>
+            options.identityKeys ?? new ReefClubIdentityKeys().lookup,
+        },
+        {
+          provide: REEFCLUB_PROVIDER_CONFIGS,
+          useFactory: () =>
+            options.providerConfigs ?? reefClubProviderConfigs(),
+        },
         ReefClubRateLimits,
         ReefClubGuard,
         {

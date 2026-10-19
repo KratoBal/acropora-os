@@ -11,6 +11,8 @@ import {
 import { generateCsrfToken, parseCookies } from "../auth/cookie.util.js";
 import type { CookieResponse } from "../auth/cookie.util.js";
 import {
+  ReefClubAppleSignInDto,
+  ReefClubGoogleSignInDto,
   ReefClubLoginDto,
   ReefClubPasswordResetConfirmDto,
   ReefClubPasswordResetRequestDto,
@@ -20,11 +22,13 @@ import {
 import {
   normalizeEmail,
   ReefClubAuthService,
+  type ReefClubIssuedSession,
 } from "./reefclub-auth.service.js";
 import {
   reefClubCookieNames,
   reefClubCookieOptions,
 } from "./reefclub-cookies.js";
+import { ReefClubExternalAuthService } from "./reefclub-external-auth.service.js";
 import {
   reefClubCallerAddress,
   ReefClubRateLimits,
@@ -35,13 +39,13 @@ import { ReefClubPublic, type ReefClubRequest } from "./reefclub.guard.js";
 const INVALID_LINK = "A link érvénytelen vagy lejárt.";
 
 /**
- * POST /rc/v1/auth/* (plan v6.1, 3.2). Google and Apple are slice 3; account
- * deletion is slice 6.
+ * POST /rc/v1/auth/* (plan v6.1, 3.2). Account deletion is slice 6.
  */
 @Controller("rc/v1/auth")
 export class ReefClubAuthController {
   constructor(
     private readonly auth: ReefClubAuthService,
+    private readonly external: ReefClubExternalAuthService,
     private readonly limits: ReefClubRateLimits,
   ) {}
 
@@ -77,18 +81,50 @@ export class ReefClubAuthController {
   ): Promise<void> {
     this.limits.loginByAddress.check(reefClubCallerAddress(request));
     this.limits.loginByEmail.check(normalizeEmail(body.email));
-    const session = await this.auth.login(body.email, body.password);
-    const names = reefClubCookieNames();
-    const maxAgeMs = Math.max(0, session.expiresAt.getTime() - Date.now());
-    response.cookie(
-      names.session,
-      session.token,
-      reefClubCookieOptions(maxAgeMs, { httpOnly: true }),
+    setSessionCookies(
+      response,
+      await this.auth.login(body.email, body.password),
     );
-    response.cookie(
-      names.csrf,
-      generateCsrfToken(),
-      reefClubCookieOptions(maxAgeMs, { httpOnly: false }),
+  }
+
+  /**
+   * Google sign-in (plan 3.2, slice 3): signs in to the account the Google
+   * account is bound to, or creates one; no merging by e-mail
+   * (`ReefClubExternalAuthService`).
+   */
+  @ReefClubPublic()
+  @Post("google")
+  @HttpCode(204)
+  async google(
+    @Body() body: ReefClubGoogleSignInDto,
+    @Req() request: ReefClubRequest,
+    @Res({ passthrough: true }) response: CookieResponse,
+  ): Promise<void> {
+    this.limits.externalByAddress.check(reefClubCallerAddress(request));
+    setSessionCookies(
+      response,
+      await this.external.signIn("GOOGLE", body.idToken, {
+        consentVersion: body.consentVersion,
+      }),
+    );
+  }
+
+  /** Apple sign-in: the same, with the nonce checked. */
+  @ReefClubPublic()
+  @Post("apple")
+  @HttpCode(204)
+  async apple(
+    @Body() body: ReefClubAppleSignInDto,
+    @Req() request: ReefClubRequest,
+    @Res({ passthrough: true }) response: CookieResponse,
+  ): Promise<void> {
+    this.limits.externalByAddress.check(reefClubCallerAddress(request));
+    setSessionCookies(
+      response,
+      await this.external.signIn("APPLE", body.idToken, {
+        nonce: body.nonce,
+        consentVersion: body.consentVersion,
+      }),
     );
   }
 
@@ -149,4 +185,23 @@ export class ReefClubAuthController {
       reefClubCookieOptions(0, { httpOnly: false }),
     );
   }
+}
+
+/** The session cookie and its CSRF pair, for the session's remaining life. */
+function setSessionCookies(
+  response: CookieResponse,
+  session: ReefClubIssuedSession,
+): void {
+  const names = reefClubCookieNames();
+  const maxAgeMs = Math.max(0, session.expiresAt.getTime() - Date.now());
+  response.cookie(
+    names.session,
+    session.token,
+    reefClubCookieOptions(maxAgeMs, { httpOnly: true }),
+  );
+  response.cookie(
+    names.csrf,
+    generateCsrfToken(),
+    reefClubCookieOptions(maxAgeMs, { httpOnly: false }),
+  );
 }

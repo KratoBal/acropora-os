@@ -71,4 +71,6 @@ export class ReefClubRateLimits {
   readonly resetByAddress = new IpRateLimiter(5, 300, 10 * MINUTE);
   readonly resetByEmail = new IpRateLimiter(3, 10_000, 60 * MINUTE);
   readonly tokenByAddress = new IpRateLimiter(20, 1_000, MINUTE);
+  /** Google and Apple sign-in and linking: each one a signature check and maybe a key fetch. */
+  readonly externalByAddress = new IpRateLimiter(20, 1_000, MINUTE);
 }
