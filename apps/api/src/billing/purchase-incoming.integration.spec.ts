@@ -5,8 +5,13 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
-import { loadPurchaseSubjects } from "./purchase-incoming.js";
+import { IncomingBillingDocumentsController } from "./incoming-billing-documents.controller.js";
+import {
+  loadManualPurchasePayments,
+  loadPurchaseSubjects,
+} from "./purchase-incoming.js";
 
 /**
  * A RÖGZÍTETT BESZERZÉSI SZÁMLA A BEJÖVŐ SZÁMLÁK KÖZÖTT, a valódi adatbázison
@@ -33,7 +38,11 @@ describe(
 
     async function purchase(
       number: string,
-      options: { scan?: boolean; vatRate?: number | null } = {},
+      options: {
+        scan?: boolean;
+        vatRate?: number | null;
+        isPaid?: boolean;
+      } = {},
     ) {
       const invoice = await prisma.purchaseInvoice.create({
         data: {
@@ -46,6 +55,8 @@ describe(
           invoiceDate: new Date("2026-10-01T00:00:00Z"),
           dueDate: new Date("2026-10-09T00:00:00Z"),
           vatRate: options.vatRate === null ? null : D(options.vatRate ?? 27),
+          isPaid: options.isPaid ?? false,
+          paidAt: options.isPaid ? new Date("2026-10-05T00:00:00Z") : null,
           lines: {
             create: [
               {
@@ -211,6 +222,52 @@ describe(
         ],
         ["VERIFIED", "2540", true, null, "VERIFIED", "PURCHASE"],
         "PURCHASE-APPROVED",
+      );
+    });
+
+    it("a manual Paid mark survives the approval and follows the purchase invoice afterwards", async () => {
+      // barracuda 2026-10-17: the approval wrote paymentsKnown false and the mark was lost
+      const invoice = await purchase("G", { isPaid: true });
+      await reviews.approve(`purchase:${invoice.id}`, null, userId);
+      const rows = await prisma.incomingBillingDocument.findMany({
+        where: { source: "PURCHASE", externalId: invoice.id },
+      });
+      const marked = await loadManualPurchasePayments(prisma, rows);
+      const afterApproval = await reviews.review(`purchase:${invoice.id}`);
+      // the list endpoint and the detail endpoint, through the controller (the wiring, not only the mapper)
+      const controller = new IncomingBillingDocumentsController(
+        { documentPairings: async () => new Map() } as never,
+        reviews,
+      );
+      const listItem = (
+        await controller.list(
+          Object.assign(new IncomingDocumentListQueryDto(), {
+            q: `G-${suffix}`,
+          }),
+        )
+      ).items.find((item) => item.id === rows[0]!.id);
+      const detail = await controller.detail(rows[0]!.id);
+      // the purchase invoice stays editable: the mark is read from it, not copied
+      await prisma.purchaseInvoice.update({
+        where: { id: invoice.id },
+        data: { isPaid: false, paidAt: null },
+      });
+      const unmarked = await loadManualPurchasePayments(prisma, rows);
+      const afterUnmark = await reviews.review(`purchase:${invoice.id}`);
+      assert.deepEqual(
+        [
+          rows.length,
+          marked.has(invoice.id),
+          afterApproval.item.paymentState,
+          afterApproval.item.lastPaymentDate,
+          afterApproval.item.paymentSource,
+          listItem?.paymentState,
+          detail.paymentState,
+          unmarked.size,
+          afterUnmark.item.paymentState,
+        ],
+        [1, true, "PAID", "2026-10-05", null, "PAID", "PAID", 0, "UNKNOWN"],
+        "PURCHASE-MANUAL-PAID-INTEGRATION",
       );
     });
 

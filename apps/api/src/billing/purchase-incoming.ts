@@ -16,6 +16,7 @@ import { invoiceNumberKey } from "./external-billing-one-row.js";
 import {
   mailboxOnlyPaidItems,
   toIncomingListItem,
+  type ManualPurchasePayment,
 } from "./incoming-billing-documents.js";
 
 /**
@@ -52,6 +53,29 @@ type Database = Pick<
   | "incomingBillingDocument"
   | "incomingSupplierDocument"
 >;
+
+/**
+ * A JÓVÁHAGYOTT PURCHASE SOROK KÉZI „FIZETVE” JELÖLÉSE (a beszerzési számla azonosítója szerint).
+ * Egy lekérés a sorok beszerzési azonosítóira, csak a ténylegesen fizetettre jelöltek jönnek
+ * vissza. A mező a forrás: a beszerzési számla a jóváhagyás után is szerkeszthető
+ * (`purchase-invoice-edit.service.ts`), ezért a sor nem tárol róla másolatot.
+ */
+export async function loadManualPurchasePayments(
+  database: Pick<PrismaClient, "purchaseInvoice">,
+  rows: readonly Pick<IncomingBillingDocument, "source" | "externalId">[],
+): Promise<Map<string, ManualPurchasePayment>> {
+  const ids = rows
+    .filter((row) => row.source === PURCHASE_SOURCE)
+    .map((row) => row.externalId);
+  if (ids.length === 0) return new Map();
+  const paid = await database.purchaseInvoice.findMany({
+    where: { id: { in: ids }, isPaid: true },
+    select: { id: true, paidAt: true },
+  });
+  return new Map(
+    paid.map((invoice) => [invoice.id, { paidAt: invoice.paidAt }]),
+  );
+}
 
 /** Egy listára kerülő (még nem jóváhagyott) beszerzési számla. */
 export interface PurchaseSubject {
@@ -684,8 +708,14 @@ export function incomingListItems(input: {
   hasCollectedPdf: (row: IncomingBillingDocument) => boolean;
   readings: ReadonlyMap<string, IncomingReadingValues>;
   purchases: readonly PurchaseSubject[];
+  /**
+   * A jóváhagyott PURCHASE sorok kézi „Fizetve” jelölése, a beszerzési számla azonosítója
+   * szerint (`loadManualPurchasePayments`). Hiányzó = nincs ilyen jelölés.
+   */
+  manualPaid?: ReadonlyMap<string, ManualPurchasePayment>;
 }): IncomingDocumentListItem[] {
   const { rows, pairings, readings, purchases } = input;
+  const manualPaid = input.manualPaid ?? new Map();
   const purchaseScans = new Set(purchases.flatMap((p) => p.scanIds));
   const mailboxPairings = new Map(
     [...pairings].filter(
@@ -697,7 +727,14 @@ export function incomingListItems(input: {
   );
   return [
     ...rows.map((row) =>
-      toIncomingListItem(row, pairings, input.hasCollectedPdf(row)),
+      toIncomingListItem(
+        row,
+        pairings,
+        input.hasCollectedPdf(row),
+        row.source === PURCHASE_SOURCE
+          ? (manualPaid.get(row.externalId) ?? null)
+          : null,
+      ),
     ),
     // a feedben nem szereplő, csak postafiókból ismert, fizetett számlák
     ...mailboxOnlyPaidItems(rows, mailboxPairings, readings),

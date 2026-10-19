@@ -108,6 +108,18 @@ export function bankMatchOf(
  * lelete, 26014): az összeg-eltéréses, a kétszer fizetett és a sztornózott
  * vásárlás párosítása nem fizetettség. Ilyenkor a feed állapota marad.
  */
+/**
+ * A BESZERZÉSI SZÁMLÁN KÉZZEL BEÍRT „FIZETVE” (`PurchaseInvoice.isPaid`), a PURCHASE
+ * forrású sor mellé. A beszerzési számla a jóváhagyás UTÁN is szerkeszthető, tehát a
+ * jelölést nem másoljuk a sorba (a másolat eltérne attól, amit a Beszerzésben
+ * átírnak), hanem a mezőből olvassuk. Jóváhagyás előtt ugyanezt mutatta a lista
+ * (`purchaseListItem`): a jelölés a jóváhagyással nem veszhet el (barracuda,
+ * 2026-10-17; Balázs kérése 2026-10-19).
+ */
+export interface ManualPurchasePayment {
+  paidAt: Date | null;
+}
+
 export function incomingPaymentOf(
   row: Pick<
     IncomingBillingDocument,
@@ -120,6 +132,12 @@ export function incomingPaymentOf(
   bankMatch: IncomingBankMatch,
   /** A párosított terhelések a teljes számlát fizetik (`DocumentPairing.paidInFull`). */
   paidInFull: boolean,
+  /**
+   * A beszerzési számla kézi jelölése, ha a sor beszerzésből jött és a jelölés áll. A
+   * sorrend: Számlázz.hu, banki párosítás, kézi jelölés, a feed állapota. A kézi jelölés
+   * forrás-jelölést nem kap (jóváhagyás előtt sem kapott).
+   */
+  manualPaid: ManualPurchasePayment | null = null,
 ): {
   paymentState: IncomingPaymentState;
   paidAmount: string;
@@ -147,6 +165,14 @@ export function incomingPaymentOf(
       paymentSource: "BANK_PAIRING",
       paymentConflict: false,
     };
+  if (manualPaid)
+    return {
+      paymentState: "PAID",
+      paidAmount: money(row.grossAmount, row.currency),
+      lastPaymentDate: day(manualPaid.paidAt),
+      paymentSource: null,
+      paymentConflict: false,
+    };
   return {
     paymentState: feed,
     paidAmount: money(row.paidAmount, row.currency),
@@ -171,6 +197,8 @@ export function toIncomingListItem(
    * PDF-je nélkül is igaz lehet: a `hasPdf` bármelyik forrásra igaz.
    */
   collectedPdf = false,
+  /** Lásd `ManualPurchasePayment`; csak a PURCHASE forrású sor kaphat ilyet. */
+  manualPaid: ManualPurchasePayment | null = null,
 ): FeedListItem {
   const bankMatch = bankMatchOf(row, pairings);
   return {
@@ -205,6 +233,7 @@ export function toIncomingListItem(
       (row.sourceDocumentId
         ? pairings.get(row.sourceDocumentId)?.paidInFull
         : undefined) ?? false,
+      row.source === "PURCHASE" ? manualPaid : null,
     ),
     bankMatch,
     hasPdf: row.hasPdf || collectedPdf,
@@ -453,10 +482,11 @@ export function toIncomingDetail(
   row: IncomingBillingDocument,
   pairings: ReadonlyMap<string, DocumentPairing>,
   collectedPdf = false,
+  manualPaid: ManualPurchasePayment | null = null,
 ): IncomingDocumentDetail {
   const payments = row.payments as unknown as IncomingPayment[];
   return {
-    ...toIncomingListItem(row, pairings, collectedPdf),
+    ...toIncomingListItem(row, pairings, collectedPdf, manualPaid),
     exchangeBank: row.exchangeBank,
     supplier: {
       name: row.supplierName,
