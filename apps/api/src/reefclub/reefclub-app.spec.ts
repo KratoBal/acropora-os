@@ -24,12 +24,16 @@ const EXPECTED_ROUTES = [
   "GET /rc/v1/health",
   "GET /rc/v1/me",
   "PATCH /rc/v1/me",
+  "POST /rc/v1/auth/apple",
+  "POST /rc/v1/auth/google",
   "POST /rc/v1/auth/login",
   "POST /rc/v1/auth/logout",
   "POST /rc/v1/auth/password-reset",
   "POST /rc/v1/auth/password-reset/confirm",
   "POST /rc/v1/auth/register",
   "POST /rc/v1/auth/verify-email",
+  "POST /rc/v1/me/identities/apple",
+  "POST /rc/v1/me/identities/google",
 ];
 
 describe("ReefClub-folyamat (adatbázis nélkül)", () => {

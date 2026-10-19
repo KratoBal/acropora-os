@@ -31,9 +31,11 @@ export interface ReefClubIssuedSession {
   expiresAt: Date;
 }
 
+export type ReefClubLoginMethod = "PASSWORD" | "GOOGLE" | "APPLE";
+
 export interface ReefClubMe {
   email: string;
-  loginMethods: "PASSWORD"[];
+  loginMethods: ReefClubLoginMethod[];
   notifyOnRelease: boolean;
   consentVersion: string;
 }
@@ -119,7 +121,7 @@ export class ReefClubAuthService implements OnModuleDestroy {
     // the two reads is a session that no longer has an owner.
     if (!account)
       throw new UnauthorizedException("Érvénytelen vagy lejárt munkamenet.");
-    return toMe(account);
+    return toMe(account, await this.accounts.providersOf(accountId));
   }
 
   async updateMe(
@@ -128,6 +130,7 @@ export class ReefClubAuthService implements OnModuleDestroy {
   ): Promise<ReefClubMe> {
     return toMe(
       await this.accounts.updateNotifyOnRelease(accountId, notifyOnRelease),
+      await this.accounts.providersOf(accountId),
     );
   }
 
@@ -212,10 +215,16 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function toMe(account: ReefClubAccountRecord): ReefClubMe {
+function toMe(
+  account: ReefClubAccountRecord,
+  providers: ("GOOGLE" | "APPLE")[],
+): ReefClubMe {
   return {
     email: account.email,
-    loginMethods: account.passwordHash ? ["PASSWORD"] : [],
+    loginMethods: [
+      ...(account.passwordHash ? (["PASSWORD"] as const) : []),
+      ...providers,
+    ],
     notifyOnRelease: account.notifyOnRelease,
     consentVersion: account.consentVersion,
   };

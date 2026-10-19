@@ -1150,6 +1150,30 @@ model ReefClubAccount {
   updatedAt       DateTime               @updatedAt
   sessions        ReefClubSession[]
   tokens          ReefClubAccountToken[]
+  identities      ReefClubIdentity[]
+}
+
+enum ReefClubIdentityProvider {
+  GOOGLE
+  APPLE
+}
+
+/// KULSO BELEPES (ReefClub terv v6.1, 2.2 es 3.2; 3. szelet): a Google- vagy
+/// Apple-fiok tartos azonositoja (`sub`), egy ReefClub-fiokhoz kotve. Egy
+/// kulso fiok csak EGY ReefClub-fiokhoz tartozhat. E-mail alapjan nem kotodik
+/// magatol semmi: a meglevo fiokhoz a felhasznalo belepve adja hozza.
+model ReefClubIdentity {
+  id        String                   @id @default(cuid())
+  accountId String
+  provider  ReefClubIdentityProvider
+  subject   String
+  createdAt DateTime                 @default(now())
+  account   ReefClubAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  /// Szolgaltatonkent egy: egy ReefClub-fiokhoz legfeljebb egy Google- es egy
+  /// Apple-fiok tartozik.
+  @@unique([accountId, provider])
 }
 
 /// A ReefClub munkamenet: kulon tabla, kulon suti, a belso `Session`-tol

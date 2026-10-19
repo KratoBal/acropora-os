@@ -5,6 +5,7 @@ import { hashSessionToken } from "../auth/session-token.util.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
 
 export type ReefClubTokenPurpose = "EMAIL_VERIFICATION" | "PASSWORD_RESET";
+export type ReefClubIdentityProvider = "GOOGLE" | "APPLE";
 
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
@@ -90,11 +91,7 @@ export class ReefClubAccountRepository {
         return account.id;
       });
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      )
-        return null;
+      if (isUniqueViolation(error)) return null;
       throw error;
     }
   }
@@ -182,6 +179,149 @@ export class ReefClubAccountRepository {
     });
   }
 
+  /** The account a Google or Apple account is bound to, if any. */
+  async findByIdentity(
+    provider: ReefClubIdentityProvider,
+    subject: string,
+  ): Promise<ReefClubAccountRecord | null> {
+    const identity = await this.database.reefClubIdentity.findUnique({
+      where: { provider_subject: { provider, subject } },
+      select: { account: { select: ACCOUNT_FIELDS } },
+    });
+    return identity?.account ?? null;
+  }
+
+  async providersOf(accountId: string): Promise<ReefClubIdentityProvider[]> {
+    const rows = await this.database.reefClubIdentity.findMany({
+      where: { accountId },
+      select: { provider: true },
+      orderBy: { provider: "asc" },
+    });
+    return rows.map((row) => row.provider);
+  }
+
+  /**
+   * A new account from a Google or Apple sign-in: no password, the e-mail
+   * verified by the provider, the external account bound to it. Null when the
+   * e-mail or the external account was taken in the meantime (a parallel
+   * sign-in); the caller looks again.
+   */
+  async createExternal(input: {
+    email: string;
+    provider: ReefClubIdentityProvider;
+    subject: string;
+    consentVersion: string;
+  }): Promise<string | null> {
+    try {
+      return await this.database.$transaction(async (tx) => {
+        const now = new Date();
+        const account = await tx.reefClubAccount.create({
+          data: {
+            email: input.email,
+            emailVerifiedAt: now,
+            consentVersion: input.consentVersion,
+            consentAt: now,
+          },
+          select: { id: true },
+        });
+        await tx.reefClubIdentity.create({
+          data: {
+            accountId: account.id,
+            provider: input.provider,
+            subject: input.subject,
+          },
+        });
+        return account.id;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * THE OWNER OF AN ADDRESS TAKES OVER AN UNVERIFIED ACCOUNT ON IT (slice 3,
+   * the same rule as `replaceUnverifiedCredentials`). Somebody may have
+   * registered the address first and never confirmed it; the provider has now
+   * verified that the person signing in owns the mailbox. So, in one
+   * transaction and only while the account is still unverified: the stranger's
+   * password goes, every open e-mail link of the account goes, EVERY session of
+   * the account goes (an unverified account cannot log in, so none should
+   * exist; deleting them makes that a guarantee, not an assumption), the
+   * address becomes verified, the consent becomes the owner's, and the
+   * external account is bound. False when the account got verified in the
+   * meantime or the external account is bound elsewhere: then nothing changed.
+   */
+  async takeOverUnverified(input: {
+    accountId: string;
+    provider: ReefClubIdentityProvider;
+    subject: string;
+    consentVersion: string;
+  }): Promise<boolean> {
+    try {
+      return await this.database.$transaction(async (tx) => {
+        const now = new Date();
+        const updated = await tx.reefClubAccount.updateMany({
+          where: { id: input.accountId, emailVerifiedAt: null },
+          data: {
+            passwordHash: null,
+            emailVerifiedAt: now,
+            consentVersion: input.consentVersion,
+            consentAt: now,
+          },
+        });
+        if (updated.count !== 1) return false;
+        await tx.reefClubAccountToken.deleteMany({
+          where: { accountId: input.accountId, usedAt: null },
+        });
+        await tx.reefClubSession.deleteMany({
+          where: { accountId: input.accountId },
+        });
+        await tx.reefClubIdentity.create({
+          data: {
+            accountId: input.accountId,
+            provider: input.provider,
+            subject: input.subject,
+          },
+        });
+        return true;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Binds an external account to a signed-in account. Binding the same one
+   * again is a no-op. "BOUND_ELSEWHERE": it belongs to another ReefClub
+   * account. "HAS_OTHER": this account already has a different account of the
+   * same provider (one per provider, by the unique index).
+   */
+  async linkIdentity(input: {
+    accountId: string;
+    provider: ReefClubIdentityProvider;
+    subject: string;
+  }): Promise<"LINKED" | "BOUND_ELSEWHERE" | "HAS_OTHER"> {
+    try {
+      await this.database.reefClubIdentity.create({ data: input });
+      return "LINKED";
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      const owner = await this.database.reefClubIdentity.findUnique({
+        where: {
+          provider_subject: {
+            provider: input.provider,
+            subject: input.subject,
+          },
+        },
+        select: { accountId: true },
+      });
+      if (owner?.accountId === input.accountId) return "LINKED";
+      return owner ? "BOUND_ELSEWHERE" : "HAS_OTHER";
+    }
+  }
+
   async updateNotifyOnRelease(
     accountId: string,
     notifyOnRelease: boolean,
@@ -237,4 +377,11 @@ function tokenRow(
     tokenHash: hashSessionToken(token),
     expiresAt: new Date(Date.now() + ttlFor(purpose)),
   };
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002"
+  );
 }

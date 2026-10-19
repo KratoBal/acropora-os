@@ -1,6 +1,7 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
@@ -19,6 +20,7 @@ import type { OutgoingMail } from "../notifications/mail/mail.port.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
+import { reefClubProviderConfigs } from "./reefclub-external-auth.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -50,8 +52,60 @@ const NEW_PASSWORD = "reefclub uj jelszo 2026";
 const CSRF = "ket-vilag-csrf";
 const PARAM = "rc-ket-vilag-nincs";
 
+// Slice 3: the Google and Apple tokens of this suite, signed with a key the
+// ReefClub app is handed through `forRoot` (the production verifier checks them).
+const IDP = generateKeyPairSync("rsa", { modulusLength: 2048 });
+const IDP_JWK = {
+  ...IDP.publicKey.export({ format: "jwk" }),
+  kid: "ket-vilag",
+};
+const GOOGLE_CLIENT = "rc-ket-vilag-google";
+const APPLE_CLIENT = "rc-ket-vilag-apple";
+const APPLE_NONCE = "ket-vilag-apple-nonce-1234";
+
+function idToken(
+  provider: "GOOGLE" | "APPLE",
+  subject: string,
+  address: string | undefined,
+  // The suite's addresses are not gmail.com: for Google they count as the
+  // signer's only from a Workspace account of their domain (#1719 review).
+  hostedDomain: string | undefined = provider === "GOOGLE"
+    ? TEST_EMAIL_DOMAIN
+    : undefined,
+): string {
+  const now = Math.floor(Date.now() / 1000);
+  const claims =
+    provider === "GOOGLE"
+      ? { iss: "https://accounts.google.com", aud: GOOGLE_CLIENT }
+      : {
+          iss: "https://appleid.apple.com",
+          aud: APPLE_CLIENT,
+          nonce: createHash("sha256").update(APPLE_NONCE).digest("hex"),
+        };
+  const part = (value: unknown) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const head = part({ alg: "RS256", kid: "ket-vilag" });
+  const body = part({
+    ...claims,
+    sub: subject,
+    email: address,
+    email_verified: true,
+    hd: hostedDomain,
+    iat: now,
+    exp: now + 600,
+  });
+  const signature = sign(
+    "RSA-SHA256",
+    Buffer.from(`${head}.${body}`),
+    IDP.privateKey,
+  ).toString("base64url");
+  return `${head}.${body}.${signature}`;
+}
+
 /** The ReefClub routes that answer without a session; every other one is closed. */
 const REEFCLUB_OPEN_ROUTES = [
+  "POST /rc/v1/auth/apple",
+  "POST /rc/v1/auth/google",
   "POST /rc/v1/auth/login",
   "POST /rc/v1/auth/logout",
   "POST /rc/v1/auth/password-reset",
@@ -256,6 +310,12 @@ describe(
               mails.push(mail);
             },
           },
+          identityKeys: async (_config, kid) =>
+            kid === "ket-vilag" ? IDP_JWK : null,
+          providerConfigs: reefClubProviderConfigs({
+            REEFCLUB_GOOGLE_CLIENT_IDS: GOOGLE_CLIENT,
+            REEFCLUB_APPLE_CLIENT_IDS: APPLE_CLIENT,
+          }),
         }),
         { logger: false },
       );
@@ -678,6 +738,280 @@ describe(
         ).status,
         204,
       );
+    });
+
+    describe("Google- és Apple-belépés (3. szelet)", () => {
+      const sub = (name: string) => `${name}-${suffix}`;
+
+      async function google(
+        subject: string,
+        address: string | undefined,
+        consentVersion?: string,
+      ) {
+        return rc("/rc/v1/auth/google", {
+          method: "POST",
+          body: {
+            idToken: idToken("GOOGLE", subject, address),
+            ...(consentVersion ? { consentVersion } : {}),
+          },
+        });
+      }
+
+      async function meOf(response: Response) {
+        const cookies = setCookies(response);
+        const me = await rc("/rc/v1/me", {
+          cookie: `rc_session=${cookies.rc_session}`,
+        });
+        assert.equal(me.status, 200);
+        return (await me.json()) as { email: string; loginMethods: string[] };
+      }
+
+      it("első Google-belépés: új fiók, a következő ugyanabba a fiókba lép", async () => {
+        const address = email("google-uj");
+        const first = await google(sub("g-uj"), address, "teszt-3");
+        assert.equal(first.status, 204);
+        assert.deepEqual(await meOf(first), {
+          email: address,
+          loginMethods: ["GOOGLE"],
+          notifyOnRelease: true,
+          consentVersion: "teszt-3",
+        });
+        const again = await google(sub("g-uj"), address);
+        assert.equal(
+          again.status,
+          204,
+          "kötött fióknál hozzájárulás nélkül is belép",
+        );
+        assert.equal(
+          await prisma.reefClubAccount.count({ where: { email: address } }),
+          1,
+        );
+      });
+
+      it("két párhuzamos első belépés ugyanazzal a Google-fiókkal: egy fiók, mindkettő belép", async () => {
+        const address = email("google-verseny");
+        const [a, b] = await Promise.all([
+          google(sub("g-verseny"), address, "teszt-3"),
+          google(sub("g-verseny"), address, "teszt-3"),
+        ]);
+        assert.deepEqual([a.status, b.status], [204, 204]);
+        assert.equal(
+          await prisma.reefClubAccount.count({ where: { email: address } }),
+          1,
+        );
+        assert.equal(
+          await prisma.reefClubIdentity.count({
+            where: { subject: sub("g-verseny") },
+          }),
+          1,
+        );
+      });
+
+      it("megerősített jelszavas fiók e-mailjével: 409, nincs összevonás", async () => {
+        await verifiedLogin("google-letezo");
+        const response = await google(
+          sub("g-letezo"),
+          email("google-letezo"),
+          "teszt-3",
+        );
+        assert.equal(response.status, 409);
+        assert.match(
+          ((await response.json()) as { message: string }).message,
+          /már van ReefClub-fiók/,
+          "az e-mail egyezést nevezi meg, nem egy elvesztett versenyt",
+        );
+        assert.equal(setCookies(response).rc_session, undefined);
+        assert.equal(
+          await prisma.reefClubIdentity.count({
+            where: { subject: sub("g-letezo") },
+          }),
+          0,
+        );
+      });
+
+      it("FIÓK-ÁTVÉTEL: a meg nem erősített foglaló jelszava, linkje és munkamenetei megszűnnek", async () => {
+        const address = email("foglalt");
+        const register = await rc("/rc/v1/auth/register", {
+          method: "POST",
+          body: {
+            email: address,
+            password: PASSWORD,
+            consentVersion: "foglalo-1",
+          },
+        });
+        assert.equal(register.status, 202);
+        await settle();
+        const squatterLink = tokenIn(lastMailTo(address));
+        const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
+          where: { email: address },
+          select: { id: true },
+        });
+        // A session cannot exist on an unverified account through the API; one is
+        // planted to measure that the takeover removes it anyway.
+        await prisma.reefClubSession.create({
+          data: {
+            accountId: squatter.id,
+            tokenHash: createHash("sha256")
+              .update(`ultetett-${suffix}`)
+              .digest("hex"),
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        });
+
+        const owner = await google(sub("g-tulaj"), address, "tulaj-1");
+        assert.equal(owner.status, 204);
+
+        const after = await prisma.reefClubAccount.findUniqueOrThrow({
+          where: { email: address },
+          select: {
+            id: true,
+            passwordHash: true,
+            emailVerifiedAt: true,
+            consentVersion: true,
+            _count: { select: { sessions: true, tokens: true } },
+          },
+        });
+        assert.equal(after.id, squatter.id);
+        assert.equal(after.passwordHash, null, "a foglaló jelszava törlődött");
+        assert.ok(after.emailVerifiedAt);
+        assert.equal(after.consentVersion, "tulaj-1");
+        assert.equal(
+          after._count.tokens,
+          0,
+          "a foglaló megerősítő linkje törlődött",
+        );
+        assert.equal(
+          after._count.sessions,
+          1,
+          "csak a tulajdonos új munkamenete maradt",
+        );
+        assert.equal(
+          (
+            await rc("/rc/v1/auth/verify-email", {
+              method: "POST",
+              body: { token: squatterLink },
+            })
+          ).status,
+          400,
+          "a foglaló linkje halott",
+        );
+        assert.equal(
+          (
+            await rc("/rc/v1/auth/login", {
+              method: "POST",
+              body: { email: address, password: PASSWORD },
+            })
+          ).status,
+          401,
+          "a foglaló jelszava nem lép be",
+        );
+      });
+
+      it("hozzáadás a belépett fiókban: utána a Google is abba a fiókba lép", async () => {
+        const session = await verifiedLogin("google-hozzaad");
+        const linked = await rc("/rc/v1/me/identities/google", {
+          method: "POST",
+          cookie: session.cookie,
+          csrf: session.csrf,
+          body: {
+            idToken: idToken("GOOGLE", sub("g-hozzaad"), "akarmi@example.com"),
+          },
+        });
+        assert.equal(linked.status, 204);
+        const viaGoogle = await google(sub("g-hozzaad"), "akarmi@example.com");
+        assert.equal(viaGoogle.status, 204);
+        assert.deepEqual((await meOf(viaGoogle)).loginMethods, [
+          "PASSWORD",
+          "GOOGLE",
+        ]);
+        assert.equal((await meOf(viaGoogle)).email, email("google-hozzaad"));
+      });
+
+      it("Apple: nonce nélkül 401, a helyes nonce-szal új fiók", async () => {
+        const address = email("apple-uj");
+        const body = {
+          idToken: idToken("APPLE", sub("a-uj"), address),
+          consentVersion: "teszt-3",
+        };
+        const withoutNonce = await rc("/rc/v1/auth/apple", {
+          method: "POST",
+          body,
+        });
+        assert.equal(withoutNonce.status, 400, "a nonce kötelező mező");
+        const wrong = await rc("/rc/v1/auth/apple", {
+          method: "POST",
+          body: { ...body, nonce: "rossz-nonce-0123456789" },
+        });
+        assert.equal(wrong.status, 401);
+        const right = await rc("/rc/v1/auth/apple", {
+          method: "POST",
+          body: { ...body, nonce: APPLE_NONCE },
+        });
+        assert.equal(right.status, 204);
+        assert.deepEqual((await meOf(right)).loginMethods, ["APPLE"]);
+      });
+
+      it("nem Google-tartományú cím Workspace-hd nélkül: 422, fiókot sem létrehoz, sem átvesz", async () => {
+        const fresh = email("google-nem-hiteles");
+        const taken = email("google-nem-hiteles-foglalt");
+        await rc("/rc/v1/auth/register", {
+          method: "POST",
+          body: {
+            email: taken,
+            password: PASSWORD,
+            consentVersion: "foglalo-1",
+          },
+        });
+        await settle();
+        for (const address of [fresh, taken]) {
+          const response = await rc("/rc/v1/auth/google", {
+            method: "POST",
+            body: {
+              idToken: idToken(
+                "GOOGLE",
+                sub(`g-nh-${address.length}`),
+                address,
+                "",
+              ),
+              consentVersion: "teszt-3",
+            },
+          });
+          assert.equal(response.status, 422, address);
+        }
+        assert.equal(
+          await prisma.reefClubAccount.count({ where: { email: fresh } }),
+          0,
+        );
+        const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
+          where: { email: taken },
+          select: { passwordHash: true, emailVerifiedAt: true },
+        });
+        assert.ok(squatter.passwordHash, "a meg nem erősített fiók érintetlen");
+        assert.equal(squatter.emailVerifiedAt, null);
+      });
+
+      it("idegen kulccsal aláírt Google-token: 401, fiók nem jön létre", async () => {
+        const address = email("google-hamis");
+        const forged = idToken("GOOGLE", sub("g-hamis"), address).split(".");
+        const other = generateKeyPairSync("rsa", { modulusLength: 2048 });
+        const signature = sign(
+          "RSA-SHA256",
+          Buffer.from(`${forged[0]}.${forged[1]}`),
+          other.privateKey,
+        ).toString("base64url");
+        const response = await rc("/rc/v1/auth/google", {
+          method: "POST",
+          body: {
+            idToken: `${forged[0]}.${forged[1]}.${signature}`,
+            consentVersion: "teszt-3",
+          },
+        });
+        assert.equal(response.status, 401);
+        assert.equal(
+          await prisma.reefClubAccount.count({ where: { email: address } }),
+          0,
+        );
+      });
     });
   },
 );

@@ -241,6 +241,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ReefClubAccountToken: {
     tokenHash: "secret",
   },
+  // The Google or Apple account id of a person: replaced, so an anonymized
+  // copy cannot be entered with the real external account.
+  ReefClubIdentity: {
+    subject: "opaqueToken",
+  },
   Product: {
     name: "business",
     description: "business",

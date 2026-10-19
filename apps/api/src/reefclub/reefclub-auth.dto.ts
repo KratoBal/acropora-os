@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -19,6 +20,11 @@ const PASSWORD_MIN = 10;
 const PASSWORD_MAX = 200;
 const EMAIL_MAX = 254;
 const TOKEN_MAX = 200;
+/** An ID token is a few kilobytes; `ID_TOKEN_MAX_LENGTH` in reefclub-id-token.ts. */
+const ID_TOKEN_MAX = 8192;
+const NONCE_MIN = 16;
+const NONCE_MAX = 128;
+const CONSENT_VERSION = /^[A-Za-z0-9._-]{1,40}$/;
 
 export class ReefClubRegisterDto {
   @IsEmail()
@@ -32,7 +38,7 @@ export class ReefClubRegisterDto {
 
   /** The version of the privacy notice the user accepted (plan 1.1). */
   @IsString()
-  @Matches(/^[A-Za-z0-9._-]{1,40}$/)
+  @Matches(CONSENT_VERSION)
   consentVersion!: string;
 }
 
@@ -75,4 +81,44 @@ export class ReefClubPasswordResetConfirmDto {
 export class ReefClubUpdateMeDto {
   @IsBoolean()
   notifyOnRelease!: boolean;
+}
+
+/**
+ * Google sign-in (slice 3). The consent is needed only when the sign-in
+ * creates the account; for a bound account it is ignored.
+ */
+export class ReefClubGoogleSignInDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(ID_TOKEN_MAX)
+  idToken!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(CONSENT_VERSION)
+  consentVersion?: string;
+}
+
+/** Apple sign-in: the raw nonce, whose SHA-256 the token must carry. */
+export class ReefClubAppleSignInDto extends ReefClubGoogleSignInDto {
+  @IsString()
+  @MinLength(NONCE_MIN)
+  @MaxLength(NONCE_MAX)
+  nonce!: string;
+}
+
+/** Adding Google to the signed-in account. */
+export class ReefClubGoogleLinkDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(ID_TOKEN_MAX)
+  idToken!: string;
+}
+
+/** Adding Apple to the signed-in account. */
+export class ReefClubAppleLinkDto extends ReefClubGoogleLinkDto {
+  @IsString()
+  @MinLength(NONCE_MIN)
+  @MaxLength(NONCE_MAX)
+  nonce!: string;
 }
