@@ -122,6 +122,7 @@ describe("ReefClub környezet-lista (terv v6.1, 2.1)", () => {
   it("egy új, ismeretlen szolgáltató titka a név alakja miatt megáll", () => {
     for (const name of [
       "NEWVENDOR_API_KEY",
+      "NEWVENDOR_ACCESS_TOKEN",
       "WEBHOOK_SIGNING_SECRET",
       "X_PASSWORD",
       "FOO_PRIVATE_PEM",
