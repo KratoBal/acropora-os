@@ -60,7 +60,7 @@ function idToken(
     JSON.stringify({
       ...base,
       sub: "kulso-1",
-      email: "vevo@example.com",
+      email: "vevo@gmail.com",
       email_verified: true,
       iat: now,
       exp: now + 600,
@@ -180,7 +180,7 @@ const account = (
   over: Partial<ReefClubAccountRecord> = {},
 ): ReefClubAccountRecord => ({
   id: "acc-letezo",
-  email: "vevo@example.com",
+  email: "vevo@gmail.com",
   passwordHash: "scrypt$valami",
   emailVerifiedAt: new Date(),
   notifyOnRelease: true,
@@ -196,7 +196,7 @@ describe("ReefClub Google- és Apple-belépés", () => {
     });
     assert.ok(session.token);
     const [created] = [...accounts.accounts.values()];
-    assert.equal(created!.email, "vevo@example.com");
+    assert.equal(created!.email, "vevo@gmail.com");
     assert.equal(created!.passwordHash, null);
     assert.ok(created!.emailVerifiedAt);
     assert.deepEqual(accounts.identities, [
@@ -365,6 +365,101 @@ describe("ReefClub Google- és Apple-belépés", () => {
       svc.signIn("GOOGLE", idToken("GOOGLE"), { consentVersion: "v2" }),
       ServiceUnavailableException,
     );
+  });
+});
+
+describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () => {
+  it("igazolt, de nem Google-tartományú cím hd nélkül: 422, sem létrehozás, sem átvétel", async () => {
+    const accounts = store([
+      account({
+        id: "acc-foglalo",
+        email: "volt.kollega@ceg.hu",
+        emailVerifiedAt: null,
+      }),
+    ]);
+    const { svc, sessions } = service(accounts);
+    await assert.rejects(
+      svc.signIn(
+        "GOOGLE",
+        idToken("GOOGLE", { email: "volt.kollega@ceg.hu" }),
+        { consentVersion: "v2" },
+      ),
+      UnprocessableEntityException,
+    );
+    await assert.rejects(
+      svc.signIn("GOOGLE", idToken("GOOGLE", { email: "uj@ceg.hu" }), {
+        consentVersion: "v2",
+      }),
+      UnprocessableEntityException,
+    );
+    assert.deepEqual(accounts.takenOver, []);
+    assert.equal(accounts.accounts.size, 1);
+    assert.equal(accounts.identities.length, 0);
+    assert.deepEqual(sessions, []);
+  });
+
+  it("nem hiteles cím megerősített fióknál is 422, nem 409: a fiók létezése nem derül ki", async () => {
+    const accounts = store([account({ email: "tulaj@ceg.hu" })]);
+    const { svc } = service(accounts);
+    await assert.rejects(
+      svc.signIn("GOOGLE", idToken("GOOGLE", { email: "tulaj@ceg.hu" }), {
+        consentVersion: "v2",
+      }),
+      UnprocessableEntityException,
+    );
+  });
+
+  it("Workspace-fiók, amelynek hd-je a cím tartománya: létrehoz és átvesz", async () => {
+    const accounts = store([
+      account({ id: "acc-foglalo", email: "a@ceg.hu", emailVerifiedAt: null }),
+    ]);
+    const { svc } = service(accounts);
+    await svc.signIn(
+      "GOOGLE",
+      idToken("GOOGLE", { sub: "ws-1", email: "a@ceg.hu", hd: "ceg.hu" }),
+      { consentVersion: "v2" },
+    );
+    await svc.signIn(
+      "GOOGLE",
+      idToken("GOOGLE", { sub: "ws-2", email: "b@ceg.hu", hd: "ceg.hu" }),
+      { consentVersion: "v2" },
+    );
+    assert.deepEqual(accounts.takenOver, ["acc-foglalo"]);
+    assert.equal(accounts.accounts.size, 2);
+  });
+
+  it("más tartományú hd nem hitelesít: 422", async () => {
+    const { svc } = service();
+    await assert.rejects(
+      svc.signIn(
+        "GOOGLE",
+        idToken("GOOGLE", { email: "a@ceg.hu", hd: "masik.hu" }),
+        { consentVersion: "v2" },
+      ),
+      UnprocessableEntityException,
+    );
+  });
+
+  it("Apple-nél az igazolt cím bármely tartományban hiteles (az Apple igazolja, a relé-cím is az övé)", async () => {
+    const { svc, sessions } = service();
+    await svc.signIn(
+      "APPLE",
+      idToken("APPLE", { email: "x@privaterelay.appleid.com" }),
+      { nonce: NONCE, consentVersion: "v2" },
+    );
+    assert.equal(sessions.length, 1);
+  });
+
+  it("hozzáadásnál a cím nem számít: a fiók tulajdonosa már belépett", async () => {
+    const accounts = store([account({ id: "acc-1" })]);
+    const { svc } = service(accounts);
+    await svc.link(
+      "acc-1",
+      "GOOGLE",
+      idToken("GOOGLE", { email: "volt.kollega@ceg.hu" }),
+      {},
+    );
+    assert.equal(accounts.identities.length, 1);
   });
 });
 

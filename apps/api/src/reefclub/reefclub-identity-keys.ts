@@ -41,6 +41,8 @@ export type ReefClubFetch = (
 export class ReefClubIdentityKeys {
   private readonly logger = new Logger(ReefClubIdentityKeys.name);
   private readonly sets = new Map<string, CachedSet>();
+  /** When the last fetch failed, per key-set URL; it limits retries before any set arrived too. */
+  private readonly lastFailure = new Map<string, number>();
 
   constructor(
     private readonly fetcher: ReefClubFetch = fetch as unknown as ReefClubFetch,
@@ -50,6 +52,16 @@ export class ReefClubIdentityKeys {
   readonly lookup: ReefClubKeyLookup = async (config, kid) => {
     const now = this.clock();
     let set = this.sets.get(config.jwksUrl);
+    // No set yet and the last try failed within the minute (start-up, the
+    // provider unreachable): every login would otherwise start a new fetch
+    // with its 5 s timeout (barracuda, #1719 review).
+    const failedAt = this.lastFailure.get(config.jwksUrl);
+    if (
+      !set &&
+      failedAt !== undefined &&
+      now - failedAt < REFETCH_MIN_INTERVAL_MS
+    )
+      return null;
     if (!set || set.expiresAt <= now) set = (await this.fetch(config)) ?? set;
     let key = findKey(set, kid);
     if (!key && set && now - set.fetchedAt >= REFETCH_MIN_INTERVAL_MS) {
@@ -83,6 +95,7 @@ export class ReefClubIdentityKeys {
       const code = error instanceof Error ? error.message : "UNKNOWN";
       this.logger.warn(`A ${config.provider} kulcsai nem jöttek le (${code}).`);
       // A failed attempt still counts for the once-a-minute limit.
+      this.lastFailure.set(config.jwksUrl, now);
       const old = this.sets.get(config.jwksUrl);
       if (old) old.fetchedAt = now;
       return undefined;

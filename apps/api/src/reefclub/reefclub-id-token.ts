@@ -12,8 +12,8 @@ import { createHash, createPublicKey, verify } from "node:crypto";
  * configuration, never from the token.
  *
  * WHAT A PASS MEANS: the provider signed these claims for one of OUR client
- * ids, recently. It does not mean the e-mail in it is verified; that is a
- * separate claim the caller reads (`emailVerified`).
+ * ids, recently. It does not mean the e-mail in it is the signer's mailbox
+ * today; that is `emailIsAuthoritative`.
  */
 
 export type ReefClubProvider = "GOOGLE" | "APPLE";
@@ -47,6 +47,8 @@ export interface ReefClubIdClaims {
   /** Lower-cased and trimmed, or null when the token carries none. */
   email: string | null;
   emailVerified: boolean;
+  /** Google's `hd`: the Workspace domain of the account, lower-cased, or null. */
+  hostedDomain: string | null;
   nonce: string | null;
 }
 
@@ -155,8 +157,39 @@ export async function verifyIdToken(
     // Google sends a boolean, Apple has sent the string "true" as well.
     emailVerified:
       payload.email_verified === true || payload.email_verified === "true",
+    hostedDomain:
+      typeof payload.hd === "string" && payload.hd.trim().length > 0
+        ? payload.hd.trim().toLowerCase()
+        : null,
     nonce: typeof payload.nonce === "string" ? payload.nonce : null,
   };
+}
+
+/** The domains whose mailboxes Google itself runs. */
+export const GOOGLE_MAIL_DOMAINS = ["gmail.com", "googlemail.com"] as const;
+
+/**
+ * DOES THE PROVIDER VOUCH THAT THE PERSON SIGNING IN OWNS THE MAILBOX NOW?
+ * (barracuda, #1719 review, point 1.) `email_verified` alone does not say
+ * that for Google: on an address outside Google's own domains it means the
+ * address was verified ONCE, when the Google account was opened (a former
+ * employee's Google account on the company address keeps it). Google's own
+ * backend guidance reads the address as authoritative only together with the
+ * domain: a gmail.com / googlemail.com address, or a Workspace account whose
+ * `hd` is the address's domain. Apple verifies the address it hands over (its
+ * relay address included), so for Apple `email_verified` is enough.
+ *
+ * Creating an account and taking one over rest on this; adding Google to a
+ * signed-in account does not, because there the owner has already shown it.
+ */
+export function emailIsAuthoritative(claims: ReefClubIdClaims): boolean {
+  if (!claims.email || !claims.emailVerified) return false;
+  if (claims.provider === "APPLE") return true;
+  const domain = claims.email.slice(claims.email.lastIndexOf("@") + 1);
+  return (
+    (GOOGLE_MAIL_DOMAINS as readonly string[]).includes(domain) ||
+    (claims.hostedDomain !== null && claims.hostedDomain === domain)
+  );
 }
 
 /**

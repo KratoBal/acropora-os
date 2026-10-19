@@ -15,6 +15,7 @@ import {
   APPLE_ISSUERS,
   APPLE_JWKS_URL,
   appleNonceMatches,
+  emailIsAuthoritative,
   GOOGLE_ISSUERS,
   GOOGLE_JWKS_URL,
   type ReefClubIdClaims,
@@ -72,6 +73,11 @@ const NAMES: Record<ReefClubProvider, { name: string; a: string; A: string }> =
 
 /**
  * SIGN-IN AND LINKING WITH GOOGLE AND APPLE (plan v6.1, 3.2; slice 3).
+ *
+ * THE ADDRESS MUST BE THE SIGNER'S TODAY (`emailIsAuthoritative`): for
+ * Google a gmail.com address or a Workspace account of the address's domain;
+ * any other verified Google address may belong to someone who no longer has
+ * the mailbox, and it neither creates nor takes over an account.
  *
  * NO MERGING BY E-MAIL (plan 3.2, [K]). An external account signs in to the
  * ReefClub account it is bound to, and to no other. A first sign-in whose
@@ -131,9 +137,11 @@ export class ReefClubExternalAuthService {
         throw new UnprocessableEntityException(
           `${NAMES[provider].A}-fiók nem adott e-mail címet, így nem hozható létre ReefClub-fiók.`,
         );
-      if (!claims.emailVerified)
+      // Before the 409 below, on purpose: that answer says an account exists on
+      // the address, and only the mailbox owner may learn it.
+      if (!emailIsAuthoritative(claims))
         throw new UnprocessableEntityException(
-          `${NAMES[provider].A}-fiók e-mail címe nincs megerősítve.`,
+          `${NAMES[provider].A}-fiók nem igazolja, hogy ez az e-mail cím ma is a tiéd, ezért vele nem hozható létre és nem vehető át ReefClub-fiók. Lépj be (vagy regisztrálj) e-mail címmel és jelszóval, és a fiókodban kapcsold hozzá ${NAMES[provider].a}-belépést.`,
         );
       if (existing?.emailVerifiedAt)
         throw new ConflictException(

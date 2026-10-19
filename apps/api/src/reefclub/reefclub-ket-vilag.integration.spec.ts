@@ -67,6 +67,11 @@ function idToken(
   provider: "GOOGLE" | "APPLE",
   subject: string,
   address: string | undefined,
+  // The suite's addresses are not gmail.com: for Google they count as the
+  // signer's only from a Workspace account of their domain (#1719 review).
+  hostedDomain: string | undefined = provider === "GOOGLE"
+    ? TEST_EMAIL_DOMAIN
+    : undefined,
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const claims =
@@ -85,6 +90,7 @@ function idToken(
     sub: subject,
     email: address,
     email_verified: true,
+    hd: hostedDomain,
     iat: now,
     exp: now + 600,
   });
@@ -943,6 +949,45 @@ describe(
         });
         assert.equal(right.status, 204);
         assert.deepEqual((await meOf(right)).loginMethods, ["APPLE"]);
+      });
+
+      it("nem Google-tartományú cím Workspace-hd nélkül: 422, fiókot sem létrehoz, sem átvesz", async () => {
+        const fresh = email("google-nem-hiteles");
+        const taken = email("google-nem-hiteles-foglalt");
+        await rc("/rc/v1/auth/register", {
+          method: "POST",
+          body: {
+            email: taken,
+            password: PASSWORD,
+            consentVersion: "foglalo-1",
+          },
+        });
+        await settle();
+        for (const address of [fresh, taken]) {
+          const response = await rc("/rc/v1/auth/google", {
+            method: "POST",
+            body: {
+              idToken: idToken(
+                "GOOGLE",
+                sub(`g-nh-${address.length}`),
+                address,
+                "",
+              ),
+              consentVersion: "teszt-3",
+            },
+          });
+          assert.equal(response.status, 422, address);
+        }
+        assert.equal(
+          await prisma.reefClubAccount.count({ where: { email: fresh } }),
+          0,
+        );
+        const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
+          where: { email: taken },
+          select: { passwordHash: true, emailVerifiedAt: true },
+        });
+        assert.ok(squatter.passwordHash, "a meg nem erősített fiók érintetlen");
+        assert.equal(squatter.emailVerifiedAt, null);
       });
 
       it("idegen kulccsal aláírt Google-token: 401, fiók nem jön létre", async () => {

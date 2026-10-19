@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import {
   appleNonceMatches,
+  emailIsAuthoritative,
   GOOGLE_ISSUERS,
   ID_TOKEN_MAX_LENGTH,
   type ReefClubIdTokenFailure,
@@ -90,6 +91,7 @@ describe("ReefClub ID-token ellenőrzés", () => {
       subject: "1100220033",
       email: "vevo@example.com",
       emailVerified: true,
+      hostedDomain: null,
       nonce: null,
     });
   });
@@ -214,6 +216,7 @@ describe("Apple nonce", () => {
     subject: "001.apple",
     email: null,
     emailVerified: false,
+    hostedDomain: null,
     nonce,
   });
 
@@ -231,5 +234,71 @@ describe("Apple nonce", () => {
 
   it("a token saját nonce-mezőjét visszaküldeni nem elég (a tokent birtokló nem ismeri a nyerset)", () => {
     assert.equal(appleNonceMatches(claims(hashed), hashed), false);
+  });
+});
+
+describe("a cím hitelessége", () => {
+  const google = (
+    email: string | null,
+    emailVerified: boolean,
+    hostedDomain: string | null = null,
+  ) => ({
+    provider: "GOOGLE" as const,
+    subject: "1",
+    email,
+    emailVerified,
+    hostedDomain,
+    nonce: null,
+  });
+
+  it("Google: gmail.com és googlemail.com igen, más tartomány hd nélkül nem", () => {
+    assert.equal(emailIsAuthoritative(google("a@gmail.com", true)), true);
+    assert.equal(emailIsAuthoritative(google("a@googlemail.com", true)), true);
+    assert.equal(emailIsAuthoritative(google("a@ceg.hu", true)), false);
+  });
+
+  it("Google: a cím tartományával egyező hd igen, más hd vagy aldomain nem", () => {
+    assert.equal(
+      emailIsAuthoritative(google("a@ceg.hu", true, "ceg.hu")),
+      true,
+    );
+    assert.equal(
+      emailIsAuthoritative(google("a@ceg.hu", true, "masik.hu")),
+      false,
+    );
+    assert.equal(
+      emailIsAuthoritative(google("a@resz.ceg.hu", true, "ceg.hu")),
+      false,
+    );
+  });
+
+  it("igazolatlan vagy hiányzó cím soha", () => {
+    assert.equal(emailIsAuthoritative(google("a@gmail.com", false)), false);
+    assert.equal(emailIsAuthoritative(google(null, true)), false);
+    assert.equal(
+      emailIsAuthoritative({ ...google("a@ceg.hu", false), provider: "APPLE" }),
+      false,
+    );
+  });
+
+  it("Apple: az igazolt cím bármely tartományban", () => {
+    assert.equal(
+      emailIsAuthoritative({
+        ...google("a@privaterelay.appleid.com", true),
+        provider: "APPLE",
+      }),
+      true,
+    );
+  });
+
+  it("a hd mezőt kisbetűsen olvassa ki a tokenből", async () => {
+    const claims = await verifyIdToken(
+      token({ email: "a@Ceg.hu", hd: "CEG.HU" }),
+      CONFIG,
+      keys,
+      NOW,
+    );
+    assert.equal(claims.hostedDomain, "ceg.hu");
+    assert.equal(emailIsAuthoritative(claims), true);
   });
 });

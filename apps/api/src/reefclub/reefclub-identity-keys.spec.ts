@@ -88,11 +88,19 @@ describe("ReefClub szolgáltatói kulcsok", () => {
     assert.equal(await keys.lookup(CONFIG, "b"), null);
   });
 
-  it("készlet nélkül egy bukott lekérés nem enged át semmit", async () => {
+  it("készlet nélkül egy bukott lekérés nem enged át semmit, és percenként egyszer próbál újra", async () => {
     const { state, fetcher } = server();
     state.fail = true;
-    const keys = new ReefClubIdentityKeys(fetcher, () => 1_000_000);
+    let now = 1_000_000;
+    const keys = new ReefClubIdentityKeys(fetcher, () => now);
     assert.equal(await keys.lookup(CONFIG, "a"), null);
+    for (let i = 0; i < 10; i++)
+      assert.equal(await keys.lookup(CONFIG, "a"), null);
+    assert.equal(state.requests, 1, "a percen belül nincs újabb lekérés");
+    now += 61 * 1000;
+    state.fail = false;
+    assert.equal((await keys.lookup(CONFIG, "a"))?.kid, "a");
+    assert.equal(state.requests, 2);
   });
 
   it("a max-age korlátos: nulla sem kér minden belépésnél, egy év sem tart egy évig", async () => {
