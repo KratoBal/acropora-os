@@ -525,6 +525,50 @@ describe(
       );
     });
 
+    it("idegen oldalról a belépés nem sikerül: idegen Origin 403, űrlap-törzs 415, sütit egyik sem állít", async () => {
+      // A real account with the right password: without the check these
+      // requests WOULD log the visitor in (barracuda, #1717 review, point A).
+      const name = "idegen-oldal";
+      await prisma.reefClubAccount.create({
+        data: {
+          email: email(name),
+          passwordHash: await hashPassword(PASSWORD),
+          emailVerifiedAt: new Date(),
+          consentVersion: "teszt-1",
+          consentAt: new Date(),
+        },
+      });
+      const form = new URLSearchParams({
+        email: email(name),
+        password: PASSWORD,
+      });
+      const foreign = await fetch(`${reefclubBase}/rc/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          origin: "https://tamado.example",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: form.toString(),
+      });
+      assert.equal(foreign.status, 403);
+      assert.deepEqual(foreign.headers.getSetCookie(), []);
+
+      const formOnly = await fetch(`${reefclubBase}/rc/v1/auth/login`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
+      });
+      assert.equal(formOnly.status, 415);
+      assert.deepEqual(formOnly.headers.getSetCookie(), []);
+
+      // the control: the same credentials as JSON from no foreign origin work
+      const own = await rc("/rc/v1/auth/login", {
+        method: "POST",
+        body: { email: email(name), password: PASSWORD },
+      });
+      assert.equal(own.status, 204);
+    });
+
     it("a regisztráció válasza nem árulja el, hogy van-e fiók, és meglévő fiókot nem módosít", async () => {
       const existing = email("vilag");
       const previous = await prisma.reefClubAccount.findUniqueOrThrow({

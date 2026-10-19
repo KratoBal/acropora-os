@@ -13,6 +13,15 @@ import type { CookieOptions } from "../auth/cookie.util.js";
  * The CSRF cookie is the same double-submit pattern as the internal one
  * (`auth/cookie.util.ts`): readable by the page, mirrored into a header on
  * every state-changing request.
+ *
+ * A CONDITION THIS PUTS ON THE WEB APP (barracuda, #1717 review, point C): a
+ * `__Host-` cookie is readable only on the host that set it. The double submit
+ * therefore works only if the ReefClub web page (`REEFCLUB_WEB_URL`) is served
+ * from the SAME host as these `/rc/v1` answers, i.e. the web app proxies
+ * `/rc/v1` to this process (the way the internal web proxies its API). If the
+ * web app ever runs on another host, `document.cookie` will not see the CSRF
+ * cookie and every PATCH will be a 403: then the login answer must also carry
+ * the CSRF token in its body. Slice 9 decides; this is where the condition is.
  */
 export interface ReefClubCookieNames {
   session: string;

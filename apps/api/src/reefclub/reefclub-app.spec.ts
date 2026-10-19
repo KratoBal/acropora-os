@@ -86,6 +86,19 @@ describe("ReefClub-folyamat (adatbázis nélkül)", () => {
     assert.equal(response.status, 401);
   });
 
+  it("idegen oldal űrlap-POST-ja a belépésre 403, sütit nem állít (adatbázis nélkül is)", async () => {
+    const response = await fetch(`${base}/rc/v1/auth/login`, {
+      method: "POST",
+      headers: {
+        origin: "https://tamado.example",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "email=tamado%40pelda.hu&password=tamado+jelszava",
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(response.headers.getSetCookie(), []);
+  });
+
   it("belső útvonal ebben a folyamatban nem létezik: 404", async () => {
     const response = await fetch(`${base}/auth/me`);
     assert.equal(response.status, 404);

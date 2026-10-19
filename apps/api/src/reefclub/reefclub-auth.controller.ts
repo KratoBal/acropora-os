@@ -10,7 +10,6 @@ import {
 
 import { generateCsrfToken, parseCookies } from "../auth/cookie.util.js";
 import type { CookieResponse } from "../auth/cookie.util.js";
-import { callerAddress } from "../common/ip-rate-limit.js";
 import {
   ReefClubLoginDto,
   ReefClubPasswordResetConfirmDto,
@@ -26,7 +25,10 @@ import {
   reefClubCookieNames,
   reefClubCookieOptions,
 } from "./reefclub-cookies.js";
-import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
+import {
+  reefClubCallerAddress,
+  ReefClubRateLimits,
+} from "./reefclub-rate-limits.js";
 import { ReefClubPublic, type ReefClubRequest } from "./reefclub.guard.js";
 
 /** One answer for every bad link: unknown, used and expired look the same. */
@@ -48,7 +50,7 @@ export class ReefClubAuthController {
   @Post("register")
   @HttpCode(202)
   register(@Body() body: ReefClubRegisterDto, @Req() request: ReefClubRequest) {
-    this.limits.registerByAddress.check(callerAddress(request));
+    this.limits.registerByAddress.check(reefClubCallerAddress(request));
     this.limits.registerByEmail.check(normalizeEmail(body.email));
     this.auth.register(body.email, body.password, body.consentVersion);
   }
@@ -60,7 +62,7 @@ export class ReefClubAuthController {
     @Body() body: ReefClubTokenDto,
     @Req() request: ReefClubRequest,
   ): Promise<void> {
-    this.limits.tokenByAddress.check(callerAddress(request));
+    this.limits.tokenByAddress.check(reefClubCallerAddress(request));
     if (!(await this.auth.verifyEmail(body.token)))
       throw new BadRequestException(INVALID_LINK);
   }
@@ -73,7 +75,7 @@ export class ReefClubAuthController {
     @Req() request: ReefClubRequest,
     @Res({ passthrough: true }) response: CookieResponse,
   ): Promise<void> {
-    this.limits.loginByAddress.check(callerAddress(request));
+    this.limits.loginByAddress.check(reefClubCallerAddress(request));
     this.limits.loginByEmail.check(normalizeEmail(body.email));
     const session = await this.auth.login(body.email, body.password);
     const names = reefClubCookieNames();
@@ -98,7 +100,7 @@ export class ReefClubAuthController {
     @Body() body: ReefClubPasswordResetRequestDto,
     @Req() request: ReefClubRequest,
   ) {
-    this.limits.resetByAddress.check(callerAddress(request));
+    this.limits.resetByAddress.check(reefClubCallerAddress(request));
     this.limits.resetByEmail.check(normalizeEmail(body.email));
     this.auth.requestPasswordReset(body.email);
   }
@@ -111,7 +113,7 @@ export class ReefClubAuthController {
     @Body() body: ReefClubPasswordResetConfirmDto,
     @Req() request: ReefClubRequest,
   ): Promise<void> {
-    this.limits.tokenByAddress.check(callerAddress(request));
+    this.limits.tokenByAddress.check(reefClubCallerAddress(request));
     if (!(await this.auth.confirmPasswordReset(body.token, body.password)))
       throw new BadRequestException(INVALID_LINK);
   }

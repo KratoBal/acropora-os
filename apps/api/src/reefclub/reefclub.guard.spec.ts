@@ -5,6 +5,7 @@ import {
   type ExecutionContext,
   ForbiddenException,
   UnauthorizedException,
+  UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
@@ -156,6 +157,41 @@ describe("ReefClubGuard", () => {
         }),
       ),
       true,
+    );
+  });
+
+  it("nyilvános útvonalon is: idegen Origin 403, űrlap-törzs 415 (barracuda #1717 A)", async () => {
+    const { guard: g } = guard();
+    await assert.rejects(
+      g.canActivate(
+        context(
+          {
+            method: "POST",
+            headers: {
+              origin: "https://tamado.example",
+              "content-type": "application/json",
+              "content-length": "2",
+            },
+          },
+          true,
+        ),
+      ),
+      ForbiddenException,
+    );
+    await assert.rejects(
+      g.canActivate(
+        context(
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/x-www-form-urlencoded",
+              "content-length": "10",
+            },
+          },
+          true,
+        ),
+      ),
+      UnsupportedMediaTypeException,
     );
   });
 

@@ -5,6 +5,7 @@ import {
   Injectable,
   SetMetadata,
   UnauthorizedException,
+  UnsupportedMediaTypeException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
@@ -13,6 +14,8 @@ import {
   REEFCLUB_CSRF_HEADER,
   reefClubCookieNames,
 } from "./reefclub-cookies.js";
+import { reefClubWebUrl } from "./reefclub-mail.js";
+import { crossSiteRefusal, webOriginOf } from "./reefclub-origin.js";
 import { ReefClubSessionRepository } from "./reefclub-session.repository.js";
 
 /**
@@ -46,6 +49,11 @@ const CSRF_EXEMPT_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * internal `AuthGuard` likewise never looks at the ReefClub cookie. The
  * integration spec `reefclub-ket-vilag.integration.spec.ts` measures all of
  * these against the routes the loaded applications actually serve.
+ *
+ * BEFORE ANY OF THAT, on every route, public or not: a state-changing request
+ * from a foreign origin, or with a non-JSON body, is refused
+ * (`reefclub-origin.ts`, barracuda #1717 A). That is what keeps a foreign
+ * page from logging the visitor into someone else's account.
  */
 @Injectable()
 export class ReefClubGuard implements CanActivate {
@@ -55,13 +63,19 @@ export class ReefClubGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<ReefClubRequest>();
+    const refusal = crossSiteRefusal(request, webOriginOf(reefClubWebUrl()));
+    if (refusal?.kind === "origin")
+      throw new ForbiddenException("Idegen oldalról érkezett kérés.");
+    if (refusal?.kind === "media-type")
+      throw new UnsupportedMediaTypeException("Csak JSON törzs fogadható.");
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(
       REEFCLUB_PUBLIC_KEY,
       [context.getHandler(), context.getClass()],
     );
     if (isPublic) return true;
 
-    const request = context.switchToHttp().getRequest<ReefClubRequest>();
     const names = reefClubCookieNames();
     const cookies = parseCookies(firstValue(request.headers.cookie));
     const token = cookies[names.session];
