@@ -25,6 +25,7 @@ import {
 } from "../notifications/mail/mail.port.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
+import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
 import { hashLinkCode, normalizeLinkCode } from "./reefclub-link-code.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
@@ -280,7 +281,11 @@ describe(
           `/rc/v1/aquariums/${id}/measurements/${encodeURIComponent(OCCASION_RELEASED)}`,
           undefined,
         ],
-        ["POST", `/rc/v1/aquariums/${id}/share`, { consentVersion: "teszt-1" }],
+        [
+          "POST",
+          `/rc/v1/aquariums/${id}/share`,
+          { consentVersion: REEFCLUB_SHARE_CONSENT_VERSION },
+        ],
         ["DELETE", `/rc/v1/aquariums/${id}/share`, undefined],
         ["GET", `/rc/v1/aquariums/${id}/share/preview`, undefined],
       ];

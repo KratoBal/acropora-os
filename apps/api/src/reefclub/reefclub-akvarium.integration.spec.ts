@@ -18,6 +18,7 @@ import {
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
+import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -59,7 +60,9 @@ const MISSING_OCCASION = "2001-01-01T00:00:00.000Z";
 
 /** A valid body for every swept route that takes one; a missing entry is red. */
 const BODIES: Record<string, unknown> = {
-  "POST /rc/v1/aquariums/:id/share": { consentVersion: "teszt-1" },
+  "POST /rc/v1/aquariums/:id/share": {
+    consentVersion: REEFCLUB_SHARE_CONSENT_VERSION,
+  },
   "PATCH /rc/v1/aquariums/:id": { name: `${NAME_PREFIX} átírva` },
   "PUT /rc/v1/aquariums/:id/targets": {
     targets: [{ parameterCode: "KH", min: 7, max: 9 }],

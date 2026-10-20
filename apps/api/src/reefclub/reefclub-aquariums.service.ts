@@ -33,6 +33,7 @@ import type {
   ReefClubUpdateAquariumDto,
 } from "./reefclub-aquarium.dto.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
+import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
 import { REEFCLUB_MAX_OWN_AQUARIUMS } from "./reefclub-rate-limits.js";
 import { type ReefClubShopView, shopViewOf } from "./reefclub-shop-view.js";
 
@@ -225,6 +226,10 @@ export class ReefClubAquariumsService {
     grant: ReefClubAquariumGrant,
     consentVersion: string,
   ): Promise<ReefClubAquarium> {
+    if (consentVersion !== REEFCLUB_SHARE_CONSENT_VERSION)
+      throw new BadRequestException(
+        "A megosztás hozzájárulási szövege időközben megváltozott. Töltsd újra az oldalt, és olvasd el az új szöveget.",
+      );
     await this.database.$transaction(async (tx) => {
       const { count } = await tx.aquarium.updateMany({
         where: { id: grant.aquariumId, sharedWithShopAt: null },
