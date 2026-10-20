@@ -463,6 +463,7 @@ describe(
         'SELECT "measuredById" FROM "AquariumMeasurement" LIMIT 1',
         'SELECT 1 FROM "AquariumShareEvent" LIMIT 1',
         'SELECT 1 FROM "AquariumMeasurementRecommendation" LIMIT 1',
+        'SELECT 1 FROM "ReefClubLinkCode" LIMIT 1',
       ]) {
         const result = await read(sql);
         if (result !== "TILTOTT") refused.push(`${sql}: ${result}`);
@@ -656,13 +657,6 @@ describe(
           otherCustomer.id,
           used.id,
         ),
-        "kontroll: összekapcsolás a saját kódjával a kód vevőjére": await write(
-          linkWithCodeSql,
-          `szerep-lnk3-${suffix}`,
-          account.id,
-          customerId,
-          used.id,
-        ),
         "lezárt összekapcsolás újranyitása": await write(
           'UPDATE "ReefClubCustomerLink" SET "status" = \'ACTIVE\' WHERE "id" = $1',
           ended.id,
@@ -694,12 +688,12 @@ describe(
         "bolti célsáv törlése": 0,
         "kontroll: megosztási napló a saját akváriumról": 1,
         "megosztási napló a bolti akváriumról": "SORSZINTŰ TILTÁS",
-        "összekapcsolás kód nélkül": "SORSZINTŰ TILTÁS",
-        "összekapcsolás a saját kódjával másik vevőre": "SORSZINTŰ TILTÁS",
-        "kontroll: összekapcsolás a saját kódjával a kód vevőjére": 1,
+        // no INSERT on links and no right on codes: only the redemption function
+        "összekapcsolás kód nélkül": "OSZLOP/TÁBLA TILTÁS",
+        "összekapcsolás a saját kódjával másik vevőre": "OSZLOP/TÁBLA TILTÁS",
         "lezárt összekapcsolás újranyitása": 0,
         "összekapcsolás átírása másik fiókra": "OSZLOP/TÁBLA TILTÁS",
-        "beváltott kód visszanyitása": 0,
+        "beváltott kód visszanyitása": "OSZLOP/TÁBLA TILTÁS",
       });
 
       // And on the owner connection: the shop rows are as they were.
@@ -734,6 +728,87 @@ describe(
           })
         ).usedAt,
       );
+    });
+
+    it("a kódot csak a beváltó függvény váltja be: egyszer, érvényesen, magánszemély vevőre (#1748)", async () => {
+      const account = await prisma.reefClubAccount.create({
+        data: {
+          email: email("bevalto"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const company = await prisma.customer.create({
+        data: {
+          customerNumber: `RCS-${suffix}-C`,
+          type: "COMPANY",
+          displayName: `${NAME_PREFIX} cég`,
+        },
+      });
+      const code = (customer: string, hash: string, expiresIn: number) =>
+        prisma.reefClubLinkCode.create({
+          data: {
+            customerId: customer,
+            codeHash: `szerep-bevalto-${hash}-${suffix}`,
+            expiresAt: new Date(Date.now() + expiresIn),
+          },
+        });
+      // The rights themselves, not only their effect: a link INSERT the role
+      // got back would still be refused (its policy reads the code table), so
+      // only this tells that the grant came back.
+      const rights = await prisma.$queryRawUnsafe<Record<string, boolean>[]>(
+        `SELECT has_any_column_privilege($1, '"ReefClubCustomerLink"', 'INSERT') AS "linkInsert",
+                has_any_column_privilege($1, '"ReefClubLinkCode"', 'SELECT') AS "codeSelect",
+                has_any_column_privilege($1, '"ReefClubLinkCode"', 'INSERT') AS "codeInsert",
+                has_any_column_privilege($1, '"ReefClubLinkCode"', 'UPDATE') AS "codeUpdate",
+                has_table_privilege($1, '"ReefClubLinkCode"', 'DELETE') AS "codeDelete",
+                has_function_privilege($1, '"reefclub_redeem_link_code"(text, text)', 'EXECUTE') AS "redeem"`,
+        role,
+      );
+      assert.deepEqual(rights[0], {
+        linkInsert: false,
+        codeSelect: false,
+        codeInsert: false,
+        codeUpdate: false,
+        codeDelete: false,
+        redeem: true,
+      });
+
+      const valid = await code(customerId, "jo", 3_600_000);
+      const expired = await code(customerId, "lejart", -60_000);
+      const companys = await code(company.id, "ceg", 3_600_000);
+      const redeem = (hash: string) =>
+        asRole.$queryRawUnsafe<{ linkId: string; customerName: string }[]>(
+          'SELECT "linkId", "customerName" FROM "reefclub_redeem_link_code"($1, $2)',
+          hash,
+          account.id,
+        );
+
+      const first = await redeem(valid.codeHash);
+      assert.equal(first.length, 1);
+      assert.equal(first[0]!.customerName, `${NAME_PREFIX} vevő`);
+      const link = await prisma.reefClubCustomerLink.findUniqueOrThrow({
+        where: { id: first[0]!.linkId },
+      });
+      assert.deepEqual(
+        [link.accountId, link.customerId, link.codeId, link.status],
+        [account.id, customerId, valid.id, "ACTIVE"],
+      );
+      assert.deepEqual(
+        {
+          again: (await redeem(valid.codeHash)).length,
+          expired: (await redeem(expired.codeHash)).length,
+          company: (await redeem(companys.codeHash)).length,
+          unknown: (await redeem(`nincs-ilyen-${suffix}`)).length,
+        },
+        { again: 0, expired: 0, company: 0, unknown: 0 },
+      );
+      // the claim is written with the account, in UTC like Prisma's rows
+      const claimed = await prisma.reefClubLinkCode.findUniqueOrThrow({
+        where: { id: valid.id },
+      });
+      assert.equal(claimed.usedByAccountId, account.id);
+      assert.ok(Math.abs(claimed.usedAt!.getTime() - Date.now()) < 60_000);
     });
   },
 );

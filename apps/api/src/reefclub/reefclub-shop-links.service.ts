@@ -7,7 +7,6 @@ import {
   Logger,
 } from "@nestjs/common";
 
-import { isPrismaErrorCode } from "../common/prisma-error.util.js";
 import { reefClubNotFound } from "./reefclub-aquarium-access.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
 import { hashLinkCode, normalizeLinkCode } from "./reefclub-link-code.js";
@@ -17,11 +16,11 @@ import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
  * THE SHOP LINK, FROM THE REEFCLUB SIDE (plan v6.1, 3.3; slice 5): redeeming
  * a code the shop issued, listing the active links, ending one.
  *
- * A REDEMPTION IS ONE TRANSACTION: the code is claimed with a conditional
- * update (unused, unexpired, issued to a private person), and the link is
- * written in the same transaction. Two redemptions of one code at the same
- * moment both find the row; the second claim matches nothing after the first
- * commits, and gets the same answer as an unknown code.
+ * A REDEMPTION IS ONE DATABASE FUNCTION (`reefclub_redeem_link_code`): the
+ * code is claimed with a conditional update (unused, unexpired, issued to a
+ * private person), and the link is written in the same call. Two redemptions
+ * of one code at the same moment: the second claim matches nothing after the
+ * first commits, and gets the same answer as an unknown code.
  *
  * EVERY WRONG CODE GETS ONE ANSWER (unknown, expired, used, a company's), so
  * a guess learns nothing about which codes exist. Five wrong ones in an hour
@@ -67,7 +66,7 @@ export class ReefClubShopLinksService {
 
     const normalized = normalizeLinkCode(input);
     const link = normalized
-      ? await this.claimOnce(accountId, hashLinkCode(normalized))
+      ? await this.claim(accountId, hashLinkCode(normalized))
       : null;
     if (!link) {
       this.limits.shopLinkFailuresByAccount.fail(accountId);
@@ -105,74 +104,31 @@ export class ReefClubShopLinksService {
   }
 
   /**
-   * Two codes of one customer redeemed by one account at the same moment
-   * both find no active link; the second insert then meets the partial
-   * unique index (`ReefClubCustomerLink_active_key`) and its transaction,
-   * the claim included, rolls back. One retry finds the link the first one
-   * wrote.
-   */
-  private async claimOnce(
-    accountId: string,
-    codeHash: string,
-  ): Promise<ReefClubShopLink | null> {
-    try {
-      return await this.claim(accountId, codeHash);
-    } catch (error) {
-      // Any unique violation in this transaction is that index: the code
-      // row is only updated, and a claimed code has no second link. Its
-      // target names the index, not the columns, since Prisma's schema does
-      // not know a partial index.
-      if (!isPrismaErrorCode(error, "P2002")) throw error;
-      return this.claim(accountId, codeHash);
-    }
-  }
-
-  /**
-   * The claim and the link. An active link of the same account and customer
-   * already there (a second code for the same customer) is answered with
-   * that link; the code is spent either way.
+   * The claim and the link, in one database function
+   * (`reefclub_redeem_link_code`, migration 20261021000000): the ReefClub
+   * role neither reads nor writes the code table, so it cannot claim a code
+   * whose hash it was not given (barracuda, #1748). The function claims an
+   * unused, unexpired code of an active person customer once; an active link
+   * of the same account and customer is answered with that link (the code is
+   * spent either way), otherwise it writes one. Two redemptions at the same
+   * moment meet on the partial unique index there, not here. No row: the one
+   * wrong-code answer.
    */
   private async claim(
     accountId: string,
     codeHash: string,
   ): Promise<ReefClubShopLink | null> {
-    return this.database.$transaction(async (tx) => {
-      const now = new Date();
-      const code = await tx.reefClubLinkCode.findUnique({
-        where: { codeHash },
-        select: { id: true, customerId: true },
-      });
-      if (!code) return null;
-      const claimed = await tx.reefClubLinkCode.updateMany({
-        where: {
-          id: code.id,
-          usedAt: null,
-          expiresAt: { gt: now },
-          customer: { type: "PERSON", isActive: true },
-        },
-        data: { usedAt: now, usedByAccountId: accountId },
-      });
-      if (claimed.count === 0) return null;
-
-      const existing = await tx.reefClubCustomerLink.findFirst({
-        where: { accountId, customerId: code.customerId, status: "ACTIVE" },
-        select: {
-          id: true,
-          createdAt: true,
-          customer: { select: { displayName: true } },
-        },
-      });
-      if (existing) return toShopLink(existing);
-      const created = await tx.reefClubCustomerLink.create({
-        data: { accountId, customerId: code.customerId, codeId: code.id },
-        select: {
-          id: true,
-          createdAt: true,
-          customer: { select: { displayName: true } },
-        },
-      });
-      return toShopLink(created);
-    });
+    const rows = await this.database.$queryRaw<
+      { linkId: string; createdAt: Date; customerName: string }[]
+    >`SELECT "linkId", "createdAt", "customerName" FROM "reefclub_redeem_link_code"(${codeHash}, ${accountId})`;
+    const row = rows[0];
+    return row
+      ? {
+          id: row.linkId,
+          customerName: row.customerName,
+          createdAt: row.createdAt.toISOString(),
+        }
+      : null;
   }
 }
 

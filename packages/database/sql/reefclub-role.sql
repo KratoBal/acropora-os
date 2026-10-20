@@ -7,9 +7,11 @@
 -- readable: a mistake or an injection in the ReefClub process cannot hand it out.
 --
 -- The WRITES are bound to rows too, not only to tables and columns (row-level security at the end
--- of this file; barracuda, #1730): the role writes only ReefClub aquariums and their rows, a link
--- only with a code the same account claimed, and ends links but never reopens them. Without it a
--- mistake there could delete a shop aquarium, with its internal measurements by the cascade.
+-- of this file; barracuda, #1730): the role writes only ReefClub aquariums and their rows, and ends
+-- links but never reopens them. Codes and new links go only through the redemption function
+-- (`reefclub_redeem_link_code`): the role cannot read a code. Without this a mistake there could
+-- delete a shop aquarium, with its internal measurements by the cascade, or link the account to a
+-- customer whose code it read.
 --
 -- HOW IT IS APPLIED. Not a Prisma migration: the role is per environment (its password is a secret
 -- of that environment), and a migration naming a role that does not exist would stop every
@@ -38,12 +40,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   "ReefClubIdentity",
   "ReefClubAccountDeletion"
 TO "reefclub_app";
-GRANT SELECT, INSERT ON "ReefClubCustomerLink" TO "reefclub_app";
+GRANT SELECT ON "ReefClubCustomerLink" TO "reefclub_app";
 -- Ending a link is the only change the ReefClub makes to one.
 GRANT UPDATE ("status", "endedAt", "endedBy") ON "ReefClubCustomerLink" TO "reefclub_app";
-GRANT SELECT ON "ReefClubLinkCode" TO "reefclub_app";
--- Claiming a code is the only change the ReefClub makes to one.
-GRANT UPDATE ("usedAt", "usedByAccountId") ON "ReefClubLinkCode" TO "reefclub_app";
+-- A code is redeemed, and the link written, only by this function (migration 20261021000000): the
+-- role has no right on "ReefClubLinkCode" and cannot insert a link, so it cannot claim a code whose
+-- hash it was not given. The GRANT fails if the function is missing, so the file cannot be applied
+-- before that migration.
+GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_app";
 
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).
 GRANT SELECT ("id", "displayName", "type", "isActive") ON "Customer" TO "reefclub_app";
@@ -192,7 +196,9 @@ CREATE POLICY "AquariumShareEvent_reefclub_insert" ON "AquariumShareEvent" AS RE
   ));
 
 -- A link: created active, only with a code of the same customer that this account claimed; an
--- active link may only be ended (by the account), and an ended one is never reopened.
+-- active link may only be ended (by the account), and an ended one is never reopened. The role has
+-- no INSERT on links and no right on codes today (the function writes both); the INSERT and the
+-- code policies stay as a second line, should a grant come back.
 DROP POLICY IF EXISTS "ReefClubCustomerLink_reefclub_insert" ON "ReefClubCustomerLink";
 CREATE POLICY "ReefClubCustomerLink_reefclub_insert" ON "ReefClubCustomerLink" AS RESTRICTIVE
   FOR INSERT TO "reefclub_app" WITH CHECK (
