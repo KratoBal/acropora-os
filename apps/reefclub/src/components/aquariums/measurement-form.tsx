@@ -2,7 +2,7 @@
 
 import { aquariumMeasurementParametersFor } from "@acropora/types";
 import { Alert, Button, FormField, Input } from "@acropora/ui";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { rc } from "@/lib/api";
 import { parseDecimal } from "@/lib/labels";
@@ -34,6 +34,8 @@ export function MeasurementForm({
   const [moment, setMoment] = useState(() => localInputValue(now()));
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [operationId, setOperationId] = useState(() => crypto.randomUUID());
+  // what the last send of this operation id carried; null before any send and after a save
+  const lastSent = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -56,13 +58,32 @@ export function MeasurementForm({
     setBusy(true);
     setError(null);
     setSaved(false);
+    // The same id returns the occasion that was ALREADY created if the earlier
+    // answer was lost. That is right for a plain retry, and wrong once the user
+    // changed the moment or a value since: the screen would say "saved" over
+    // values that were never stored. Different content, a new id.
+    //
+    // THE LIMIT, both ways visible and neither silent (barracuda): if the first
+    // answer was lost AND the user changed the MOMENT, the new id makes a second
+    // occasion next to the first (which has the old values); if only the values
+    // changed, the same moment answers 409 from the server and its words are shown.
+    const content = JSON.stringify([
+      at.toISOString(),
+      entries.map((e) => [e.parameter.code, e.value]),
+    ]);
+    const id =
+      lastSent.current !== null && lastSent.current !== content
+        ? crypto.randomUUID()
+        : operationId;
+    setOperationId(id);
+    lastSent.current = content;
     try {
       await rc<ReefClubOccasion>(
         "POST",
         `/aquariums/${encodeURIComponent(aquarium.id)}/measurements`,
         {
           body: {
-            clientOperationId: operationId,
+            clientOperationId: id,
             measuredAt: at.toISOString(),
             values: entries.map((entry) => ({
               parameterCode: entry.parameter.code,
@@ -72,6 +93,7 @@ export function MeasurementForm({
         },
       );
       setTexts({});
+      lastSent.current = null;
       setOperationId(crypto.randomUUID());
       setSaved(true);
       await onSaved();

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { AuthCard } from "@/components/auth/auth-card";
+import { ExternalSignIn } from "@/components/auth/external-sign-in";
 import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = { title: "Belépés" };
@@ -30,6 +31,7 @@ export default function LoginPage() {
       }
     >
       <LoginForm />
+      <ExternalSignIn />
     </AuthCard>
   );
 }
