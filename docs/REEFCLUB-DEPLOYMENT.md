@@ -117,6 +117,22 @@ measurements and ranges, a link and a code cannot be written in the refused ways
 control of the same shape that succeeds). A new column the ReefClub uses without a line in the
 file is a red test.
 
+## The product dose list for the recommendation
+
+The ReefClub role may not read the product tables, so it reads a PROJECTION of the product dose list
+(`ReefClubDoseRow`, with `ReefClubDoseProjectionRun` as its run record). The role has `SELECT` only on
+both (and on the run record only `id`, `status`, `finishedAt`, `rowCount`, not the error text). The
+INTERNAL (OS) process rebuilds the projection COMPLETELY, in one transaction, with a SUCCEEDED run record
+written in the same transaction (`dose-projection.service.ts`): after every change to the dose list, 30
+seconds after a start, and every hour (the purchasability and the JEV change outside the list too). A
+failed build changes nothing and leaves a FAILED record with its text. The projection's age is the last
+SUCCESSFUL build (not a row's `updatedAt`); past 26 hours no dose is given from it.
+
+`GET /products/dose-effects/projection` (the product view right) answers with the last success, the last
+failure with its text, whether the failure is newer than the success, and whether the projection is stale:
+the control panel reads this. A failing rebuilder shows there at once; the 26 hour limit is only the safety
+net behind it.
+
 ## Account deletion
 
 `DELETE /rc/v1/me` locks the account at once; the ReefClub process deletes it 30 days later, in

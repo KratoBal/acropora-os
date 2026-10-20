@@ -732,6 +732,20 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parameterCode: "business",
     clientOperationId: "identifier",
   },
+  // ReefClub 8: the projection of the product dose list. Numbers, names and fixed refusal codes
+  // of products; the run's error text is free text (a database or network error message).
+  ReefClubDoseProjectionRun: {
+    trigger: "business",
+    errorMessage: "freeText",
+  },
+  ReefClubDoseRow: {
+    sourceId: "identifier",
+    productId: "identifier",
+    productName: "business",
+    parameterCode: "business",
+    source: "business",
+    refusals: "business",
+  },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.
   AquariumShareEvent: {

@@ -10243,3 +10243,67 @@ model ReefClubAdministeredDose {
   @@index([recommendationId])
   @@index([productId])
 }
+
+enum ReefClubDoseProjectionRunStatus {
+  SUCCEEDED
+  FAILED
+}
+
+/// A TERMEK-ADAG LISTA VETITESENEK FUTASI REKORDJA (ReefClub terv v6.1, 6.2; 8. szelet, a (B) ut:
+/// acrobot es barracuda 2026-10-20). A ReefClub-folyamat nem olvashat termek-tablat, ezert az OS
+/// (belso) folyamata TELJESEN ujraepiti a `ReefClubDoseRow` tablat, egy tranzakcioban, es ugyanabban
+/// a tranzakcioban ir egy SUCCEEDED rekordot. Ez a rekord, nem a sorok `updatedAt`-je mondja meg
+/// a vetites korat: a valtozatlan sor nem oregszik, es egy leallt frissito ideje nem hamisithato
+/// egy regi idobelyeggel. A hiba (FAILED) kulon sor, a tranzakcio UTAN irva, a hibaszoveggel.
+/// A ReefClub-szerep csak az `id`, `status`, `finishedAt`, `rowCount` oszlopot olvashatja.
+model ReefClubDoseProjectionRun {
+  id           String                          @id @default(cuid())
+  status       ReefClubDoseProjectionRunStatus
+  /// EDIT (a termek-adag lista valtozott), SCHEDULE (idozitve), STARTUP (a folyamat indulasakor).
+  trigger      String
+  startedAt    DateTime
+  finishedAt   DateTime
+  /// SUCCEEDED: a vetitett sorok szama.
+  rowCount     Int?
+  /// FAILED: a hiba szovege, roviditve; titok vagy szemelyes adat nincs benne.
+  errorMessage String?
+  rows         ReefClubDoseRow[]
+
+  @@index([status, finishedAt])
+}
+
+/// A TERMEK-ADAG LISTA EGY SORANAK VETITETT PILLANATKEPE (ReefClub 8. szelet). A forras
+/// `ProductDoseEffect` sora szamaival es VERZIOJAVAL (`sourceVersion`: a forrase, nem a
+/// vetiteske, hogy az ajanlas-naplo rowId/rowVersion paarja visszavezetheto legyen), a termek
+/// nevevel, es a `doseEffectRefusals` eredmenyevel (`refusals`: ures = elo). Az archivalt es
+/// az elutasitott sorok is benne vannak a visszautasitasukkal: a termek tovabbra is mozgatja a
+/// parametert, es a szamitas ezt tudja ("erinti"). A tabla minden futasnal TELJESEN cserelodik,
+/// ezert ami a forrasbol eltunt, innen is eltunik. A ReefClub-szerep CSAK olvashatja.
+model ReefClubDoseRow {
+  id                  String                    @id @default(cuid())
+  runId               String
+  /// A `ProductDoseEffect` azonositoja; szandekosan nincs idegen kulcs a termek-tablara.
+  sourceId            String                    @unique
+  sourceVersion       Int
+  productId           String
+  productName         String
+  parameterCode       String
+  direction           DoseEffectDirection
+  effectPer100L       Decimal                   @db.Decimal(19, 6)
+  doseUnit            DoseUnit
+  doseStep            Decimal                   @db.Decimal(19, 6)
+  maxDailyDosePer100L Decimal?                  @db.Decimal(19, 6)
+  effectHours         Int?
+  source              String
+  /// A `doseEffectRefusals` kodjai; ures: a sor elo.
+  refusals            String[]
+  /// Keszleten van-e a boltban; ures: nem ismert (ha lesz forrasa, a vetites tolti).
+  inStock             Boolean?
+  /// Egy adagegyseg ara forintban; ures: nem ismert.
+  pricePerDoseUnit    Decimal?                  @db.Decimal(19, 6)
+  run                 ReefClubDoseProjectionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([productId])
+  @@index([parameterCode, direction])
+}

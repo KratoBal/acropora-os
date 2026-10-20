@@ -476,6 +476,8 @@ describe(
         'SELECT "measuredById" FROM "AquariumMeasurement" LIMIT 1',
         'SELECT 1 FROM "AquariumShareEvent" LIMIT 1',
         'SELECT 1 FROM "AquariumMeasurementRecommendation" LIMIT 1',
+        'SELECT "errorMessage" FROM "ReefClubDoseProjectionRun" LIMIT 1',
+        'SELECT "trigger" FROM "ReefClubDoseProjectionRun" LIMIT 1',
         'SELECT 1 FROM "ReefClubLinkCode" LIMIT 1',
       ]) {
         const result = await read(sql);
@@ -487,6 +489,12 @@ describe(
         "OLVASHATÓ",
         "kontroll: a megengedett oszlop olvasható",
       );
+      // the projection of the dose list (slice 8, path B): the rows and the run's age are readable
+      for (const sql of [
+        'SELECT "sourceId", "sourceVersion", "refusals", "inStock" FROM "ReefClubDoseRow" LIMIT 1',
+        'SELECT "id", "status", "finishedAt", "rowCount" FROM "ReefClubDoseProjectionRun" LIMIT 1',
+      ])
+        assert.equal(await read(sql), "OLVASHATÓ", sql);
     });
 
     it("a szereppel a belső sorok nem írhatók, a ReefClub sajátjai igen (#1730 barracuda, sorszintű házirend)", async () => {
@@ -1098,6 +1106,99 @@ describe(
       });
       assert.equal(answered.status, "GIVEN");
       assert.equal(answered.amount.toNumber(), 8);
+    });
+
+    it("a szereppel a termék-adag lista vetítése csak olvasható, semmilyen írás nem megy (8. szelet, (B) út)", async () => {
+      // The owner connection makes one run and one row; the role may read them and change nothing.
+      // A refused statement is a permission error (no INSERT, UPDATE or DELETE grant at all), and
+      // the control is a read of the same table that must succeed, so a missing table would not
+      // read as the grant.
+      const run = await prisma.reefClubDoseProjectionRun.create({
+        data: {
+          status: "SUCCEEDED",
+          trigger: "STARTUP",
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          rowCount: 1,
+        },
+      });
+      const row = await prisma.reefClubDoseRow.create({
+        data: {
+          runId: run.id,
+          sourceId: `szerep-vet-${suffix}`,
+          sourceVersion: 1,
+          productId: `szerep-vet-p-${suffix}`,
+          productName: `${NAME_PREFIX} vetített`,
+          parameterCode: "KH",
+          direction: "EMEL",
+          effectPer100L: 0.25,
+          doseUnit: "ML",
+          doseStep: 1,
+          source: "próba",
+          refusals: [],
+        },
+      });
+      const outcome = (sql: string, ...values: unknown[]) =>
+        asRole.$executeRawUnsafe(sql, ...values).then(
+          (count) => count,
+          (error: unknown) =>
+            /permission denied/i.test(String(error))
+              ? "TILTOTT"
+              : String(error),
+        );
+      try {
+        const result: Record<string, unknown> = {
+          "kontroll: olvasás": (
+            await asRole.$queryRawUnsafe<unknown[]>(
+              'SELECT 1 FROM "ReefClubDoseRow" WHERE "id" = $1',
+              row.id,
+            )
+          ).length,
+          "sor beszúrása": await outcome(
+            'INSERT INTO "ReefClubDoseRow" ("id", "runId", "sourceId", "sourceVersion", "productId", "productName", "parameterCode", "direction", "effectPer100L", "doseUnit", "doseStep", "source", "refusals") VALUES ($1, $2, $3, 1, \'p\', \'n\', \'KH\', \'EMEL\', 1, \'ML\', 1, \'s\', \'{}\')',
+            `szerep-vet2-${suffix}`,
+            run.id,
+            `szerep-vet2-${suffix}`,
+          ),
+          "sor átírása": await outcome(
+            'UPDATE "ReefClubDoseRow" SET "effectPer100L" = 999 WHERE "id" = $1',
+            row.id,
+          ),
+          "sor törlése": await outcome(
+            'DELETE FROM "ReefClubDoseRow" WHERE "id" = $1',
+            row.id,
+          ),
+          "futási rekord beszúrása": await outcome(
+            'INSERT INTO "ReefClubDoseProjectionRun" ("id", "status", "trigger", "startedAt", "finishedAt") VALUES ($1, \'SUCCEEDED\', \'EDIT\', now(), now())',
+            `szerep-vet3-${suffix}`,
+          ),
+          "futási rekord átírása": await outcome(
+            'UPDATE "ReefClubDoseProjectionRun" SET "finishedAt" = now() WHERE "id" = $1',
+            run.id,
+          ),
+          "futási rekord törlése": await outcome(
+            'DELETE FROM "ReefClubDoseProjectionRun" WHERE "id" = $1',
+            run.id,
+          ),
+        };
+        assert.deepEqual(result, {
+          "kontroll: olvasás": 1,
+          "sor beszúrása": "TILTOTT",
+          "sor átírása": "TILTOTT",
+          "sor törlése": "TILTOTT",
+          "futási rekord beszúrása": "TILTOTT",
+          "futási rekord átírása": "TILTOTT",
+          "futási rekord törlése": "TILTOTT",
+        });
+        const intact = await prisma.reefClubDoseRow.findUniqueOrThrow({
+          where: { id: row.id },
+        });
+        assert.equal(intact.effectPer100L.toNumber(), 0.25);
+      } finally {
+        await prisma.reefClubDoseProjectionRun.deleteMany({
+          where: { id: run.id },
+        });
+      }
     });
   },
 );
