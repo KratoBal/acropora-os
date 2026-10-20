@@ -72,7 +72,6 @@ import type {
  *  - one recommendation is ONE DAY's dose (`durationDays` 1): 6.5 forbids a
  *    new correction without a new measurement, so a multi-day course would
  *    ask for a second request the rules refuse;
- 
  *  - a product that moves another parameter is usable only if that parameter
  *    has an approved limit, a fresh measurement and a band, and the change
  *    keeps it INSIDE its band; a product with no such room drops out.

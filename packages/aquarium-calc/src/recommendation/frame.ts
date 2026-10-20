@@ -9,8 +9,8 @@
  *   JOVAHAGYVA  Balázs approved the number. KH 1 dKH, calcium 20 mg/l and
  *               magnesium 100 mg/l on 2026-10-15 (plan 6.5, 11:36:53 UTC);
  *               nitrate 5 mg/l down and 2 up, phosphate 0,03 mg/l down and
- *               0,02 up on 2026-10-20 (Eldöntendő thread, 21:33 UTC, "Jó",
- *               memory 2437 or thereabouts). Version v0 of this frame held
+ *               0,02 up on 2026-10-20 21:33:26 UTC (Eldöntendő thread, message
+ *               1562217206375387218, "Jó", memory 2438). Version v0 of this frame held
  *               the nitrate and phosphate numbers as placeholders.
  *   HELYORZO    a PLACEHOLDER, not a professional number. The engine REFUSES
  *               to give a dose from a limit of this kind unless the caller
@@ -81,7 +81,7 @@ export const DAILY_LIMITS: readonly DailyLimit[] = [
     maxChangePer24h: 5,
     approval: "JOVAHAGYVA",
     approvedBy:
-      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
+      "Balázs 2026-10-20 21:33:26 UTC, Eldöntendő szál, msg 1562217206375387218, emlék 2438",
   },
   {
     parameter: "NITRAT",
@@ -89,7 +89,7 @@ export const DAILY_LIMITS: readonly DailyLimit[] = [
     maxChangePer24h: 2,
     approval: "JOVAHAGYVA",
     approvedBy:
-      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
+      "Balázs 2026-10-20 21:33:26 UTC, Eldöntendő szál, msg 1562217206375387218, emlék 2438",
   },
   {
     parameter: "FOSZFAT",
@@ -97,7 +97,7 @@ export const DAILY_LIMITS: readonly DailyLimit[] = [
     maxChangePer24h: 0.03,
     approval: "JOVAHAGYVA",
     approvedBy:
-      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
+      "Balázs 2026-10-20 21:33:26 UTC, Eldöntendő szál, msg 1562217206375387218, emlék 2438",
   },
   {
     parameter: "FOSZFAT",
@@ -105,7 +105,7 @@ export const DAILY_LIMITS: readonly DailyLimit[] = [
     maxChangePer24h: 0.02,
     approval: "JOVAHAGYVA",
     approvedBy:
-      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
+      "Balázs 2026-10-20 21:33:26 UTC, Eldöntendő szál, msg 1562217206375387218, emlék 2438",
   },
 ];
 
