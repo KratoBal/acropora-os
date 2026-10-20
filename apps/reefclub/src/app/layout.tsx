@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
+import { SessionProvider } from "@/lib/session";
+
 import "./globals.css";
 
 /**
@@ -37,7 +39,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="hu">
       <body className={`${dmSans.variable} ${manrope.variable}`}>
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );
