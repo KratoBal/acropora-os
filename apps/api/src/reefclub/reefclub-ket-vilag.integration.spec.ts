@@ -846,7 +846,7 @@ describe(
           body: {
             email: address,
             password: PASSWORD,
-            consentVersion: "foglalo-1",
+            consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
           },
         });
         assert.equal(register.status, 202);
@@ -854,7 +854,7 @@ describe(
         const squatterLink = tokenIn(lastMailTo(address));
         const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
           where: { email: address },
-          select: { id: true },
+          select: { id: true, consentAt: true },
         });
         // A session cannot exist on an unverified account through the API; one is
         // planted to measure that the takeover removes it anyway.
@@ -868,7 +868,11 @@ describe(
           },
         });
 
-        const owner = await google(sub("g-tulaj"), address, "tulaj-1");
+        const owner = await google(
+          sub("g-tulaj"),
+          address,
+          REEFCLUB_PRIVACY_NOTICE_VERSION,
+        );
         assert.equal(owner.status, 204);
 
         const after = await prisma.reefClubAccount.findUniqueOrThrow({
@@ -878,13 +882,18 @@ describe(
             passwordHash: true,
             emailVerifiedAt: true,
             consentVersion: true,
+            consentAt: true,
             _count: { select: { sessions: true, tokens: true } },
           },
         });
         assert.equal(after.id, squatter.id);
         assert.equal(after.passwordHash, null, "a foglaló jelszava törlődött");
         assert.ok(after.emailVerifiedAt);
-        assert.equal(after.consentVersion, "tulaj-1");
+        assert.equal(after.consentVersion, REEFCLUB_PRIVACY_NOTICE_VERSION);
+        assert.ok(
+          after.consentAt.getTime() > squatter.consentAt.getTime(),
+          "a hozzájárulás a tulajdonosé: újabb, mint a foglalóé",
+        );
         assert.equal(
           after._count.tokens,
           0,
@@ -969,7 +978,7 @@ describe(
           body: {
             email: taken,
             password: PASSWORD,
-            consentVersion: "foglalo-1",
+            consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
           },
         });
         await settle();
