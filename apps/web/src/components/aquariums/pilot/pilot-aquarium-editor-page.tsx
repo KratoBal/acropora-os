@@ -30,6 +30,7 @@ import {
   WATER_BODY_LABEL,
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
+import { ReefClubCodePanel } from "../reefclub-code-panel";
 import { PilotAquariumWaterValues } from "./pilot-aquarium-water-values";
 import {
   draftFromDefaults,
@@ -531,6 +532,12 @@ export function PilotAquariumEditorPage({
                         setDepartmentId("");
                       }}
                     />
+                    {isEdit && customerSelection.customerId ? (
+                      <ReefClubCodePanel
+                        token={token}
+                        customerId={customerSelection.customerId}
+                      />
+                    ) : null}
                     {customerSelection.customerId ? (
                       <PilotFormField
                         label="Helyszín"

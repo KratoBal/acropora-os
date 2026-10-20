@@ -12,7 +12,31 @@ import type {
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
 
+/**
+ * A KIADOTT REEFCLUB-KÓD (apps/api `IssuedLinkCode`, aquarium-reefclub.service.ts). A kód csak
+ * ebben a válaszban látszik: a szerver csak a lenyomatát tárolja.
+ */
+export interface IssuedReefClubLinkCode {
+  code: string;
+  /** ISO időpont. */
+  expiresAt: string;
+  /** Ha a kód e-mailben is elment, a cím. */
+  emailedTo?: string;
+}
+
 export const aquariumsApi = {
+  /** POST /aquariums/customers/:customerId/reefclub-link-code (ReefClub terv v6.1, 3.3). */
+  issueReefClubCode(token: string, customerId: string, sendEmail: boolean) {
+    return apiRequest<IssuedReefClubLinkCode>(
+      `/aquariums/customers/${encodeURIComponent(customerId)}/reefclub-link-code`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sendEmail }),
+      },
+    );
+  },
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<AquariumListResponse>(`/aquariums?${query}`, token, {
       signal,
