@@ -1059,6 +1059,9 @@ model User {
   incomingReadingsReviewed            IncomingDocumentReading[]           @relation("IncomingDocumentReadingReviewedBy")
   measurementRecommendationsRequested AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationRequestedBy")
   measurementRecommendationsApproved  AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationApprovedBy")
+  recordedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectRecordedBy")
+  verifiedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectVerifiedBy")
+  doseEffectVersions                  ProductDoseEffectVersion[]          @relation("DoseEffectVersionBy")
   issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
   aquariumShareReads                  AquariumShareEvent[]                @relation("AquariumShareReader")
   endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
@@ -1403,6 +1406,8 @@ model Product {
   /// az elhullási napló bejegyzései (kártya 115c9740)
   mortalityRecords           MortalityRecord[]
   homepageFeatured           HomepageFeaturedProduct?
+  /// A termek adag-hatas sorai (ReefClub 7. szelet). Lasd a `ProductDoseEffect` fejlecet.
+  doseEffects                ProductDoseEffect[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -10001,4 +10006,91 @@ model AttributeSetAttribute {
   sortOrder      Int                 @default(0)
 
   @@unique([attributeSetId, attributeKey])
+}
+
+/// Az adag-hatas iranya; a betuk a JEV `waterParameterEffects` ertekeivel azonosak.
+enum DoseEffectDirection {
+  EMEL
+  CSOKKENT
+}
+
+/// Az adagegyseg, amire a hatas, a lepes es a napi legnagyobb adag szol.
+enum DoseUnit {
+  ML
+  G
+  CSEPP
+}
+
+/// A TERMEK-ADAG LISTA EGY SORA (ReefClub terv v6.1, 6.2; 7. szelet): egy termek
+/// egy parameterre, egy iranyba. "Egy adagegyseg 100 literben `effectPer100L`-lel
+/// valtoztatja a parametert" (a parameter sajat mertekegysegeben, a katalogus
+/// szerint). A sor az OS-ben el, a bolt szakembere tartja karban; a JEV csak
+/// javasolhat, a sort mindig kollega rogziti.
+///
+/// AZ AUTOMATIKUS AJANLAS (8. szelet) CSAK HASZNALHATO SORBOL AD ADAGOT
+/// (`dose-effect.rules.ts`): van forrasa, ket KULONBOZO kollega rogzitette es
+/// ellenorizte, a napi legnagyobb adag ki van toltve, a JEV halmaza ugyanezt
+/// a parametert es iranyt mondja, es a termek vasarolhato. A sor BARMELY
+/// szerkesztese torli az ellenorzest es uj verziot nyit (`ProductDoseEffectVersion`).
+///
+/// Egy termekre, parameterre es iranyra legfeljebb egy NEM ARCHIVALT sor all
+/// (reszleges egyedi index a migracioban, `ProductDoseEffect_live_key`).
+model ProductDoseEffect {
+  id                  String                     @id @default(cuid())
+  productId           String
+  parameterCode       String
+  direction           DoseEffectDirection
+  effectPer100L       Decimal                    @db.Decimal(19, 6)
+  doseUnit            DoseUnit
+  /// A legkisebb adaglepes az adagegysegben.
+  doseStep            Decimal                    @db.Decimal(19, 6)
+  /// A gyarto napi legnagyobb adagja 100 literre, adagegysegben; ures: a sor nem hasznalhato.
+  maxDailyDosePer100L Decimal?                   @db.Decimal(19, 6)
+  /// Hatasido orakban; ures: 24 ora (terv 6.5, v6).
+  effectHours         Int?
+  /// A gyartoi oldal vagy a cimke, ahonnan a szamok jonnek. Kotelezo.
+  source              String
+  version             Int                        @default(1)
+  /// Ki rogzitette a mostani verziot (letrehozas vagy szerkesztes).
+  recordedById        String?
+  recordedAt          DateTime
+  /// Ki ellenorizte a mostani verziot; a rogzitotol kulonbozo kollega.
+  verifiedById        String?
+  verifiedAt          DateTime?
+  archivedAt          DateTime?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  product             Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  recordedBy          User?                      @relation("DoseEffectRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  verifiedBy          User?                      @relation("DoseEffectVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  versions            ProductDoseEffectVersion[]
+
+  @@index([productId])
+  @@index([parameterCode, direction])
+  @@index([recordedById])
+  @@index([verifiedById])
+}
+
+/// EGY ADAG-HATAS SOR VERZIOI (terv 6.2: "a sorok verziozottak, es az
+/// ajanlas-naplo a sor verziojat is rogziti"). Minden letrehozas es szerkesztes
+/// egy uj sor a szamokkal; az ellenorzes a verzio sorara is raker.
+model ProductDoseEffectVersion {
+  id                  String            @id @default(cuid())
+  effectId            String
+  version             Int
+  effectPer100L       Decimal           @db.Decimal(19, 6)
+  doseUnit            DoseUnit
+  doseStep            Decimal           @db.Decimal(19, 6)
+  maxDailyDosePer100L Decimal?          @db.Decimal(19, 6)
+  effectHours         Int?
+  source              String
+  recordedById        String?
+  recordedAt          DateTime
+  verifiedById        String?
+  verifiedAt          DateTime?
+  effect              ProductDoseEffect @relation(fields: [effectId], references: [id], onDelete: Cascade)
+  recordedBy          User?             @relation("DoseEffectVersionBy", fields: [recordedById], references: [id], onDelete: SetNull)
+
+  @@unique([effectId, version])
+  @@index([recordedById])
 }
