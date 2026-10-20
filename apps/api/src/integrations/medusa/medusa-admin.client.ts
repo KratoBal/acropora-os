@@ -35,6 +35,7 @@ import type { WebshopStuckMail, WebshopStuckMailList } from "@acropora/types";
 import type { KnowledgeProjection } from "../../products/knowledge/knowledge.policy.js";
 import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
 import type { MedusaBrandRecord } from "./medusa-brand-module.policy.js";
+import type { MedusaHomepageContentRecord } from "./medusa-homepage-projection.js";
 import type { MedusaLandingPageRecord } from "./medusa-landing-projection.js";
 
 export interface MedusaProductLookupRow {
@@ -1225,6 +1226,16 @@ export interface MedusaAdminClient {
   fetchLandingPage(
     osLandingId: string,
   ): Promise<MedusaLandingPageRecord | null>;
+
+  /**
+   * THE COMMERCE HOME PAGE CONTENT (`GET|PUT /admin/homepage-content`, one
+   * record). `null` when nothing is written, or the module is not deployed.
+   */
+  fetchHomepageContent(): Promise<MedusaHomepageContentRecord | null>;
+
+  setHomepageContent(
+    record: MedusaHomepageContentRecord,
+  ): Promise<MedusaHomepageContentRecord>;
   /** A TELJES REKORD CSEREJE (`PUT`). EZ IR A BOLTI OLDALRA. */
   setLandingPage(
     osLandingId: string,
@@ -2492,6 +2503,32 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         return null;
       throw error;
     }
+  }
+
+  /** The home page content record. A 404 means the module is not deployed yet. */
+  async fetchHomepageContent(): Promise<MedusaHomepageContentRecord | null> {
+    try {
+      const body = await this.request<{
+        homepage_content: MedusaHomepageContentRecord | null;
+      }>("/admin/homepage-content");
+      return body.homepage_content ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async setHomepageContent(
+    record: MedusaHomepageContentRecord,
+  ): Promise<MedusaHomepageContentRecord> {
+    const body = await this.request<{
+      homepage_content: MedusaHomepageContentRecord;
+    }>("/admin/homepage-content", {
+      method: "PUT",
+      body: JSON.stringify(record),
+    });
+    return body.homepage_content;
   }
 
   async setLandingPage(

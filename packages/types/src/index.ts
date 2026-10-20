@@ -1517,6 +1517,20 @@ export {
   contractKindSwitchBlocker,
 } from "./contract.js";
 export type { ContractKind } from "./contract.js";
+export {
+  HOMEPAGE_LIMITS,
+  HOMEPAGE_TEXT_FIELDS,
+  isSafeHomepageAddress,
+  parseHomepageContentInput,
+} from "./homepage-content.js";
+export type {
+  HomepageContent,
+  HomepageContentInput,
+  HomepageContentParse,
+  HomepageFieldType,
+  HomepageSlide,
+  HomepageTextField,
+} from "./homepage-content.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,
