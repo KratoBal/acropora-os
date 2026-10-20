@@ -107,7 +107,9 @@ describe(
         },
         {
           nev: "vetítési futás",
-          darab: await prisma.reefClubDoseProjectionRun.count(),
+          darab: await prisma.reefClubDoseProjectionRun.count({
+            where: { startedAt: { gte: suiteStartedAt } },
+          }),
         },
       ]);
     });
