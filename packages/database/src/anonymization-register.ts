@@ -694,9 +694,16 @@ export const ANONYMIZATION_REGISTER: Readonly<
     name: "freeText",
     notes: "freeText",
     responsibleUserId: "identifier",
+    shareConsentVersion: "business",
   },
   AquariumMeasurementTarget: {
     parameterCode: "business",
+  },
+  // ReefClub 5a: the share log. The consent version and the read's purpose
+  // are fixed words, not free text.
+  AquariumShareEvent: {
+    consentVersion: "business",
+    purpose: "business",
   },
   AquariumEquipment: {
     manufacturer: "business",

@@ -47,7 +47,7 @@ export class AquariumMeasurementsService {
   ) {}
 
   async list(aquariumId: string, user: AuthenticatedUser) {
-    await this.requireAquarium(aquariumId, user);
+    await this.requireAquarium(aquariumId, user, "mérések");
     const list = await this.repository.list(aquariumId);
     // the APPROVED recommendation only (2b3983e1): a draft never leaves here
     const approved = await this.recommendations.approvedSegments(aquariumId);
@@ -79,7 +79,7 @@ export class AquariumMeasurementsService {
     actorUserId: string,
     user: AuthenticatedUser,
   ) {
-    const aquarium = await this.requireAquarium(aquariumId, user);
+    const aquarium = await this.aquariums.writable(aquariumId, user);
     this.rejectFutureMeasuredAt(input.measuredAt);
     const result = await this.repository.create(aquariumId, input, actorUserId);
 
@@ -116,7 +116,7 @@ export class AquariumMeasurementsService {
     user: AuthenticatedUser,
   ): Promise<void> {
     requireInternalWriter(user, "Vízmérés törlése");
-    await this.requireAquarium(aquariumId, user);
+    await this.aquariums.writable(aquariumId, user);
     // A RELEASED OCCASION IS NOT CHANGED SILENTLY (ReefClub plan 3.5): the
     // customer may already have read it in the ReefClub. A mistake found after
     // the release needs its own correction step, which this slice does not
@@ -150,7 +150,7 @@ export class AquariumMeasurementsService {
     user: AuthenticatedUser,
   ): Promise<AquariumMeasurementOccasion> {
     requireInternalWriter(user, "Vízmérés véglegesítése");
-    const aquarium = await this.requireAquarium(aquariumId, user);
+    const aquarium = await this.aquariums.writable(aquariumId, user);
     if (!aquarium.customerId)
       throw new BadRequestException(
         "Csak vevőhöz tartozó akvárium mérése véglegesíthető.",
@@ -204,7 +204,7 @@ export class AquariumMeasurementsService {
     user: AuthenticatedUser,
   ): Promise<void> {
     requireInternalWriter(user, "Mérési eredmény e-mailben küldése");
-    const aquarium = await this.requireAquarium(aquariumId, user);
+    const aquarium = await this.aquariums.writable(aquariumId, user);
     if (!aquarium.customerEmail)
       throw new BadRequestException(
         "Az ügyfélnek nincs e-mail címe, ezért nem küldhető el az eredmény.",
@@ -237,7 +237,7 @@ export class AquariumMeasurementsService {
     user: AuthenticatedUser,
   ): Promise<{ filename: string; buffer: Buffer }> {
     requireInternalWriter(user, "Mérések exportálása");
-    const aquarium = await this.requireAquarium(aquariumId, user);
+    const aquarium = await this.requireAquarium(aquariumId, user, "XLSX");
     const measurements = await this.repository.list(aquariumId);
     const buffer = await this.xlsx.build({
       aquariumName: aquarium.name,
@@ -270,7 +270,7 @@ export class AquariumMeasurementsService {
     occasionId: string,
     user: AuthenticatedUser,
   ): Promise<{ filename: string; buffer: Buffer }> {
-    const aquarium = await this.requireAquarium(aquariumId, user);
+    const aquarium = await this.requireAquarium(aquariumId, user, "PDF");
     const { occasions } = await this.repository.list(aquariumId);
     const occasion = occasions.find((o) => o.id === occasionId);
     if (!occasion)
@@ -337,7 +337,12 @@ export class AquariumMeasurementsService {
     });
   }
 
-  private async requireAquarium(id: string, user: AuthenticatedUser) {
-    return this.aquariums.detail(id, user);
+  /** A read; a write path asks `aquariums.writable` instead. */
+  private async requireAquarium(
+    id: string,
+    user: AuthenticatedUser,
+    purpose: string,
+  ) {
+    return this.aquariums.detail(id, user, purpose);
   }
 }

@@ -32,7 +32,13 @@ const AQUARIUM = {
 const ACTOR = { id: "actor-1" } as never;
 
 function fakeAquariums(overrides: Partial<Record<string, unknown>> = {}) {
-  return { detail: async () => AQUARIUM, ...overrides };
+  // `writable` is the write paths' access check (ReefClub slice 5a), `detail`
+  // the reads'; the fake answers both with the same aquarium.
+  return {
+    detail: async () => AQUARIUM,
+    writable: async () => AQUARIUM,
+    ...overrides,
+  };
 }
 
 function fakeRepository(overrides: Partial<Record<string, unknown>> = {}) {

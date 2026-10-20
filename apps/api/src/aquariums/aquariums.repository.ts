@@ -88,6 +88,7 @@ function toEquipment(
 
 function toSummary(row: AquariumListRow): AquariumSummary {
   return {
+    ...reefClubMark(row),
     id: row.id,
     aquariumNumber: row.aquariumNumber,
     name: row.name,
@@ -133,6 +134,7 @@ function toDetail(
   row: AquariumDetailRow,
 ): Omit<AquariumDetail, "canAssignAssets"> {
   return {
+    ...reefClubMark(row),
     id: row.id,
     aquariumNumber: row.aquariumNumber,
     name: row.name,
@@ -168,6 +170,24 @@ function toDetail(
   };
 }
 
+/** The "ReefClub akvárium" mark (slice 5a); see `AquariumSummary.reefClubSharedAt`. */
+function reefClubMark(row: {
+  ownerAccountId: string | null;
+  sharedWithShopAt: Date | null;
+}): { reefClubSharedAt?: string } {
+  return row.ownerAccountId && row.sharedWithShopAt
+    ? { reefClubSharedAt: row.sharedWithShopAt.toISOString() }
+    : {};
+}
+
+/**
+ * THE DEFAULT OF THE `visibility` PARAMETER: every row but a ReefClub
+ * aquarium (plan 4.4). A caller that passes nothing gets the internal WRITE
+ * view, the narrower one; reading a shared ReefClub aquarium needs the READ
+ * condition, passed explicitly by `AquariumsService`.
+ */
+const INTERNAL_ROWS: Prisma.AquariumWhereInput = { ownerAccountId: null };
+
 @Injectable()
 export class AquariumsRepository {
   /**
@@ -186,7 +206,7 @@ export class AquariumsRepository {
       waterBodyType?: "AKVARIUM" | "TO";
       customerId?: string;
     },
-    visibility: Prisma.AquariumWhereInput = {},
+    visibility: Prisma.AquariumWhereInput = INTERNAL_ROWS,
   ): Promise<AquariumListResponse> {
     const filters: Prisma.AquariumWhereInput = {
       isActive: true,
@@ -244,7 +264,7 @@ export class AquariumsRepository {
    */
   async detail(
     id: string,
-    visibility: Prisma.AquariumWhereInput = {},
+    visibility: Prisma.AquariumWhereInput = INTERNAL_ROWS,
   ): Promise<Omit<AquariumDetail, "canAssignAssets"> | null> {
     const row = await prisma.aquarium.findFirst({
       where: { AND: [{ id }, visibility] },

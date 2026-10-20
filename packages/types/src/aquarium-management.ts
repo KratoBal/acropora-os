@@ -53,6 +53,12 @@ export interface AquariumSummary {
   customerId?: string;
   customerName?: string;
   /**
+   * A "REEFCLUB AKVÁRIUM" (ReefClub plan v6.1, 4.4; slice 5a): a customer's
+   * own aquarium from the ReefClub, shared with the shop at this moment. The
+   * OS reads it and never writes it. Missing: an ordinary shop aquarium.
+   */
+  reefClubSharedAt?: string;
+  /**
    * A PARTNER ALEGYSÉGE, AHOL AZ AKVÁRIUM ÁLL -- OPCIONÁLIS. Lásd az
    * `Aquarium.departmentId` séma-fejlécét: a meglévő akváriumok üresen
    * maradnak, és ez helyes, nem hiányzó adat.

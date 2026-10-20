@@ -1060,6 +1060,7 @@ model User {
   measurementRecommendationsRequested AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationRequestedBy")
   measurementRecommendationsApproved  AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationApprovedBy")
   issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
+  aquariumShareReads                  AquariumShareEvent[]                @relation("AquariumShareReader")
   endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
   releasedMeasurements                AquariumMeasurementRelease[]        @relation("MeasurementReleasedBy")
 
@@ -1161,6 +1162,7 @@ model ReefClubAccount {
   /// A fiok bolti osszerendelesei (5. szelet).
   customerLinks        ReefClubCustomerLink[]
   redeemedLinkCodes    ReefClubLinkCode[]
+  aquariumShareEvents  AquariumShareEvent[]
 }
 
 enum ReefClubIdentityProvider {
@@ -4212,6 +4214,14 @@ model Aquarium {
   ///
   /// `Cascade`: a fiok torlesevel a sajat akvariumai is torlodnek (terv 4.5).
   ownerAccountId       String?
+  /// A REEFCLUB-AKVARIUM MEGOSZTASA A BOLTTAL (terv v6.1, 4.4; 5a. szelet).
+  /// Ures: privat, a belso oldal nem latja. Kitoltve: a belso OLVASAS latja
+  /// "ReefClub akvarium" jelolessel, iras nelkul. Visszavonaskor ujra ures, es
+  /// a korabbi adat sem erheto el belulrol. CHECK
+  /// (`Aquarium_share_owner_check`): csak ReefClub-akvariumon lehet kitoltve.
+  sharedWithShopAt     DateTime?
+  /// A megosztaskor elfogadott hozzajarulasi szoveg verzioja.
+  shareConsentVersion  String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
@@ -4238,6 +4248,8 @@ model Aquarium {
   mortalityRecords MortalityRecord[]
   /// A bolti meresi alkalmak veglegesitese (ReefClub 5. szelet).
   releases         AquariumMeasurementRelease[]
+  /// A megosztas, a visszavonas es a belso olvasasok naplója (5a. szelet).
+  shareEvents      AquariumShareEvent[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -6257,6 +6269,38 @@ model AquariumMeasurementRelease {
 
   @@unique([aquariumId, measuredAt])
   @@index([releasedById])
+}
+
+enum AquariumShareEventKind {
+  /// A fiok megosztotta a bolttal.
+  SHARED
+  /// A fiok visszavonta.
+  REVOKED
+  /// Egy belso kollega olvasta (terv 4.4: ki nezte, mikor). A visszavonas utan
+  /// is megmarad, a tartalom nem.
+  INTERNAL_READ
+}
+
+/// A REEFCLUB-AKVARIUM MEGOSZTASANAK NAPLOJA (terv v6.1, 4.4; 5a. szelet):
+/// megosztas es visszavonas (a fiok, a hozzajarulas verzioja), es minden belso
+/// olvasas (a kollega, mit olvasott). Csak hozzaadas.
+model AquariumShareEvent {
+  id             String                 @id @default(cuid())
+  aquariumId     String
+  kind           AquariumShareEventKind
+  accountId      String?
+  userId         String?
+  consentVersion String?
+  /// Belso olvasasnal: mit olvasott (reszlet, meresek, PDF, XLSX, ajanlas).
+  purpose        String?
+  createdAt      DateTime               @default(now())
+  aquarium       Aquarium               @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  account        ReefClubAccount?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  user           User?                  @relation("AquariumShareReader", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([aquariumId, createdAt])
+  @@index([accountId])
+  @@index([userId])
 }
 
 enum MeasurementRecommendationStatus {
