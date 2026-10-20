@@ -506,6 +506,15 @@ describe(
           endedBy: "ACCOUNT",
         },
       });
+      // Another person customer: a code claimed for the first one must not
+      // link the account to this one (barracuda, #1748).
+      const otherCustomer = await prisma.customer.create({
+        data: {
+          customerNumber: `RCS-${suffix}-M`,
+          type: "PERSON",
+          displayName: `${NAME_PREFIX} másik vevő`,
+        },
+      });
       const used = await prisma.reefClubLinkCode.create({
         data: {
           customerId,
@@ -536,6 +545,8 @@ describe(
         'INSERT INTO "AquariumMeasurementTarget" ("id", "aquariumId", "parameterCode", "min", "updatedAt") VALUES ($1, $2, \'CA\', 400, now())';
       const aquariumSql =
         'INSERT INTO "Aquarium" ("id", "aquariumNumber", "ownerAccountId", "ownershipType", "name", "updatedAt") VALUES ($1, $2, $3, \'CUSTOMER\', $4, now())';
+      const linkWithCodeSql =
+        'INSERT INTO "ReefClubCustomerLink" ("id", "accountId", "customerId", "codeId", "status") VALUES ($1, $2, $3, $4, \'ACTIVE\')';
       const shareSql =
         'INSERT INTO "AquariumShareEvent" ("id", "aquariumId", "kind", "accountId") VALUES ($1, $2, \'SHARED\', $3)';
       const result: Record<string, unknown> = {
@@ -635,6 +646,20 @@ describe(
           account.id,
           customerId,
         ),
+        "összekapcsolás a saját kódjával másik vevőre": await write(
+          linkWithCodeSql,
+          `szerep-lnk2-${suffix}`,
+          account.id,
+          otherCustomer.id,
+          used.id,
+        ),
+        "kontroll: összekapcsolás a saját kódjával a kód vevőjére": await write(
+          linkWithCodeSql,
+          `szerep-lnk3-${suffix}`,
+          account.id,
+          customerId,
+          used.id,
+        ),
         "lezárt összekapcsolás újranyitása": await write(
           'UPDATE "ReefClubCustomerLink" SET "status" = \'ACTIVE\' WHERE "id" = $1',
           ended.id,
@@ -667,6 +692,8 @@ describe(
         "kontroll: megosztási napló a saját akváriumról": 1,
         "megosztási napló a bolti akváriumról": "SORSZINTŰ TILTÁS",
         "összekapcsolás kód nélkül": "SORSZINTŰ TILTÁS",
+        "összekapcsolás a saját kódjával másik vevőre": "SORSZINTŰ TILTÁS",
+        "kontroll: összekapcsolás a saját kódjával a kód vevőjére": 1,
         "lezárt összekapcsolás újranyitása": 0,
         "összekapcsolás átírása másik fiókra": "OSZLOP/TÁBLA TILTÁS",
         "beváltott kód visszanyitása": 0,

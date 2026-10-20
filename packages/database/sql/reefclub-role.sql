@@ -99,6 +99,12 @@ GRANT INSERT ("id", "aquariumId", "kind", "accountId", "consentVersion", "create
 -- which shop aquarium an account sees); only writing is. A write the policies refuse is no error
 -- for UPDATE and DELETE (no row matches) and "new row violates row-level security policy" for
 -- INSERT. Dropped first, so the file stays idempotent.
+--
+-- EVERY OUTER COLUMN IN A SUBQUERY IS QUALIFIED WITH ITS TABLE (barracuda, #1748). Unqualified, a
+-- name binds to the innermost FROM item that has it: the link policy's `c."customerId" =
+-- "customerId"` compared the code's own column with itself, always true, so a claimed code of one
+-- customer let the role link the account to any other customer. Today the other subqueries' names
+-- happen to resolve outward; a column added later would turn them the same way, silently.
 
 ALTER TABLE "Aquarium" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "AquariumMeasurement" ENABLE ROW LEVEL SECURITY;
@@ -143,14 +149,15 @@ CREATE POLICY "AquariumMeasurement_reefclub_insert" ON "AquariumMeasurement" AS 
   FOR INSERT TO "reefclub_app" WITH CHECK (
     "source" = 'REEFCLUB_MANUAL' AND EXISTS (
       SELECT 1 FROM "Aquarium" a
-      WHERE a."id" = "aquariumId" AND a."ownerAccountId" = "recordedByAccountId"
+      WHERE a."id" = "AquariumMeasurement"."aquariumId"
+        AND a."ownerAccountId" = "AquariumMeasurement"."recordedByAccountId"
     )
   );
 DROP POLICY IF EXISTS "AquariumMeasurement_reefclub_delete" ON "AquariumMeasurement";
 CREATE POLICY "AquariumMeasurement_reefclub_delete" ON "AquariumMeasurement" AS RESTRICTIVE
   FOR DELETE TO "reefclub_app" USING (
     "source" = 'REEFCLUB_MANUAL' AND EXISTS (
-      SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" IS NOT NULL
+      SELECT 1 FROM "Aquarium" a WHERE a."id" = "AquariumMeasurement"."aquariumId" AND a."ownerAccountId" IS NOT NULL
     )
   );
 
@@ -158,28 +165,30 @@ CREATE POLICY "AquariumMeasurement_reefclub_delete" ON "AquariumMeasurement" AS 
 DROP POLICY IF EXISTS "AquariumMeasurementTarget_reefclub_insert" ON "AquariumMeasurementTarget";
 CREATE POLICY "AquariumMeasurementTarget_reefclub_insert" ON "AquariumMeasurementTarget"
   AS RESTRICTIVE FOR INSERT TO "reefclub_app" WITH CHECK (EXISTS (
-    SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" IS NOT NULL
+    SELECT 1 FROM "Aquarium" a WHERE a."id" = "AquariumMeasurementTarget"."aquariumId" AND a."ownerAccountId" IS NOT NULL
   ));
 DROP POLICY IF EXISTS "AquariumMeasurementTarget_reefclub_update" ON "AquariumMeasurementTarget";
 CREATE POLICY "AquariumMeasurementTarget_reefclub_update" ON "AquariumMeasurementTarget"
   AS RESTRICTIVE FOR UPDATE TO "reefclub_app"
   USING (EXISTS (
-    SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" IS NOT NULL
+    SELECT 1 FROM "Aquarium" a WHERE a."id" = "AquariumMeasurementTarget"."aquariumId" AND a."ownerAccountId" IS NOT NULL
   ))
   WITH CHECK (EXISTS (
-    SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" IS NOT NULL
+    SELECT 1 FROM "Aquarium" a WHERE a."id" = "AquariumMeasurementTarget"."aquariumId" AND a."ownerAccountId" IS NOT NULL
   ));
 DROP POLICY IF EXISTS "AquariumMeasurementTarget_reefclub_delete" ON "AquariumMeasurementTarget";
 CREATE POLICY "AquariumMeasurementTarget_reefclub_delete" ON "AquariumMeasurementTarget"
   AS RESTRICTIVE FOR DELETE TO "reefclub_app" USING (EXISTS (
-    SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" IS NOT NULL
+    SELECT 1 FROM "Aquarium" a WHERE a."id" = "AquariumMeasurementTarget"."aquariumId" AND a."ownerAccountId" IS NOT NULL
   ));
 
 -- The share log: an entry of the aquarium's own owner only.
 DROP POLICY IF EXISTS "AquariumShareEvent_reefclub_insert" ON "AquariumShareEvent";
 CREATE POLICY "AquariumShareEvent_reefclub_insert" ON "AquariumShareEvent" AS RESTRICTIVE
   FOR INSERT TO "reefclub_app" WITH CHECK (EXISTS (
-    SELECT 1 FROM "Aquarium" a WHERE a."id" = "aquariumId" AND a."ownerAccountId" = "accountId"
+    SELECT 1 FROM "Aquarium" a
+    WHERE a."id" = "AquariumShareEvent"."aquariumId"
+      AND a."ownerAccountId" = "AquariumShareEvent"."accountId"
   ));
 
 -- A link: created active, only with a code of the same customer that this account claimed; an
@@ -189,8 +198,9 @@ CREATE POLICY "ReefClubCustomerLink_reefclub_insert" ON "ReefClubCustomerLink" A
   FOR INSERT TO "reefclub_app" WITH CHECK (
     "status" = 'ACTIVE' AND EXISTS (
       SELECT 1 FROM "ReefClubLinkCode" c
-      WHERE c."id" = "codeId" AND c."customerId" = "customerId"
-        AND c."usedByAccountId" = "accountId"
+      WHERE c."id" = "ReefClubCustomerLink"."codeId"
+        AND c."customerId" = "ReefClubCustomerLink"."customerId"
+        AND c."usedByAccountId" = "ReefClubCustomerLink"."accountId"
     )
   );
 DROP POLICY IF EXISTS "ReefClubCustomerLink_reefclub_update" ON "ReefClubCustomerLink";
@@ -207,6 +217,6 @@ CREATE POLICY "ReefClubLinkCode_reefclub_update" ON "ReefClubLinkCode" AS RESTRI
   FOR UPDATE TO "reefclub_app"
   USING ("usedAt" IS NULL AND "expiresAt" > (now() AT TIME ZONE 'UTC') AND EXISTS (
     SELECT 1 FROM "Customer" cu
-    WHERE cu."id" = "customerId" AND cu."type" = 'PERSON' AND cu."isActive"
+    WHERE cu."id" = "ReefClubLinkCode"."customerId" AND cu."type" = 'PERSON' AND cu."isActive"
   ))
   WITH CHECK ("usedAt" IS NOT NULL AND "usedByAccountId" IS NOT NULL);
