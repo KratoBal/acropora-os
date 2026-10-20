@@ -1,11 +1,13 @@
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from "class-validator";
 
 /**
@@ -121,4 +123,32 @@ export class ReefClubAppleLinkDto extends ReefClubGoogleLinkDto {
   @MinLength(NONCE_MIN)
   @MaxLength(NONCE_MAX)
   nonce!: string;
+}
+
+/**
+ * Deleting the account (slice 6): a fresh sign-in with one of the account's
+ * own methods. The password, or a Google or Apple ID token (Apple with its
+ * raw nonce); the token must be at most ten minutes old.
+ */
+export class ReefClubDeleteMeDto {
+  @IsIn(["PASSWORD", "GOOGLE", "APPLE"])
+  method!: "PASSWORD" | "GOOGLE" | "APPLE";
+
+  @ValidateIf((body: ReefClubDeleteMeDto) => body.method === "PASSWORD")
+  @IsString()
+  @MinLength(1)
+  @MaxLength(PASSWORD_MAX)
+  password?: string;
+
+  @ValidateIf((body: ReefClubDeleteMeDto) => body.method !== "PASSWORD")
+  @IsString()
+  @MinLength(1)
+  @MaxLength(ID_TOKEN_MAX)
+  idToken?: string;
+
+  @ValidateIf((body: ReefClubDeleteMeDto) => body.method === "APPLE")
+  @IsString()
+  @MinLength(NONCE_MIN)
+  @MaxLength(NONCE_MAX)
+  nonce?: string;
 }

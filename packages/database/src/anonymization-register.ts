@@ -246,6 +246,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ReefClubIdentity: {
     subject: "opaqueToken",
   },
+  // The deletion log of a ReefClub account (slice 6): the account's id with no
+  // foreign key, since the account row is gone after the deletion.
+  ReefClubAccountDeletion: {
+    accountId: "identifier",
+  },
   // The SHA-256 of a single-use shop-link code (slice 5); the raw code exists
   // only in the colleague's answer and the customer's e-mail.
   ReefClubLinkCode: {

@@ -50,6 +50,8 @@ export interface ReefClubIdClaims {
   /** Google's `hd`: the Workspace domain of the account, lower-cased, or null. */
   hostedDomain: string | null;
   nonce: string | null;
+  /** `iat` in seconds, or null when the token carries none. */
+  issuedAt: number | null;
 }
 
 /** Why a token was refused. The caller answers the same way for every code. */
@@ -162,6 +164,7 @@ export async function verifyIdToken(
         ? payload.hd.trim().toLowerCase()
         : null,
     nonce: typeof payload.nonce === "string" ? payload.nonce : null,
+    issuedAt: typeof payload.iat === "number" ? payload.iat : null,
   };
 }
 

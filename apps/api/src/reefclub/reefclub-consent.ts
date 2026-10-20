@@ -7,7 +7,7 @@
  *
  * A CONSTANT, NOT A SETTING: the text lives in the ReefClub web page (slice
  * 9), so a new text is a code change, and this value changes with it in the
- * same change. The page reads the value from GET /rc/v1/share-consent.
+ * same change. The page reads the value from GET /rc/v1/me/share-consent.
  *
  * The registration's privacy-notice version is still the client's word
  * (`ReefClubRegisterDto.consentVersion`); the same rule for it is open.

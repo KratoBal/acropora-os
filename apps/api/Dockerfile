@@ -386,9 +386,12 @@ USER nestjs
 EXPOSE 3001
 
 # Uses the existing GET /health endpoint (checks Postgres + Redis). Node's
-# built-in fetch avoids needing curl/wget in the runtime image.
+# built-in fetch avoids needing curl/wget in the runtime image. The ReefClub
+# process has no /health:
+# it answers GET /rc/v1/health on REEFCLUB_PORT (default 3002).
+# (REEFCLUB_PROCESS=true, see docker-entrypoint.sh)
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+  CMD node -e "const rc = process.env.REEFCLUB_PROCESS === 'true'; const port = rc ? (process.env.REEFCLUB_PORT || 3002) : (process.env.PORT || 3001); fetch('http://127.0.0.1:' + port + (rc ? '/rc/v1/health' : '/health')).then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # docker-entrypoint.sh runs `prisma migrate deploy` (never `db push`) to
 # completion, or exits non-zero without ever execing `node dist/main.js` —

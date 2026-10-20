@@ -1,6 +1,7 @@
 import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
+import { ReefClubAccountDeletionService } from "./reefclub-account-deletion.service.js";
 import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
 import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
 import { ReefClubAquariumsController } from "./reefclub-aquariums.controller.js";
@@ -90,6 +91,7 @@ export class ReefClubModule {
         ReefClubAquariumAccess,
         ReefClubAquariumsService,
         ReefClubShopLinksService,
+        ReefClubAccountDeletionService,
         {
           provide: REEFCLUB_IDENTITY_KEYS,
           useFactory: () =>
