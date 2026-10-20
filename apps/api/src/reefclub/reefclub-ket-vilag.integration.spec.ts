@@ -22,6 +22,7 @@ import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
 import { reefClubProviderConfigs } from "./reefclub-external-auth.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
+import { REEFCLUB_PRIVACY_NOTICE_VERSION } from "./reefclub-consent.js";
 
 /**
  * THE TWO WORLDS, MEASURED ON THE ROUTES THE PROCESSES ACTUALLY SERVE (plan
@@ -112,6 +113,7 @@ const REEFCLUB_OPEN_ROUTES = [
   "POST /rc/v1/auth/password-reset/confirm",
   "POST /rc/v1/auth/register",
   "POST /rc/v1/auth/verify-email",
+  "GET /rc/v1/auth/privacy-consent",
   "GET /rc/v1/health",
 ];
 
@@ -493,7 +495,11 @@ describe(
       const address = email("uj");
       const register = await rc("/rc/v1/auth/register", {
         method: "POST",
-        body: { email: address, password: PASSWORD, consentVersion: "teszt-1" },
+        body: {
+          email: address,
+          password: PASSWORD,
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+        },
       });
       assert.equal(register.status, 202);
       await settle();
@@ -536,7 +542,7 @@ describe(
         where: { email: address },
         select: { consentVersion: true, consentAt: true },
       });
-      assert.equal(stored.consentVersion, "teszt-1");
+      assert.equal(stored.consentVersion, REEFCLUB_PRIVACY_NOTICE_VERSION);
 
       assert.equal(
         (
@@ -640,7 +646,7 @@ describe(
         body: {
           email: email("friss"),
           password: PASSWORD,
-          consentVersion: "teszt-1",
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
         },
       });
       const taken = await rc("/rc/v1/auth/register", {
@@ -648,7 +654,7 @@ describe(
         body: {
           email: existing,
           password: NEW_PASSWORD,
-          consentVersion: "teszt-2",
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
         },
       });
       assert.equal(fresh.status, taken.status);
@@ -768,13 +774,17 @@ describe(
 
       it("első Google-belépés: új fiók, a következő ugyanabba a fiókba lép", async () => {
         const address = email("google-uj");
-        const first = await google(sub("g-uj"), address, "teszt-3");
+        const first = await google(
+          sub("g-uj"),
+          address,
+          REEFCLUB_PRIVACY_NOTICE_VERSION,
+        );
         assert.equal(first.status, 204);
         assert.deepEqual(await meOf(first), {
           email: address,
           loginMethods: ["GOOGLE"],
           notifyOnRelease: true,
-          consentVersion: "teszt-3",
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
         });
         const again = await google(sub("g-uj"), address);
         assert.equal(
@@ -791,8 +801,8 @@ describe(
       it("két párhuzamos első belépés ugyanazzal a Google-fiókkal: egy fiók, mindkettő belép", async () => {
         const address = email("google-verseny");
         const [a, b] = await Promise.all([
-          google(sub("g-verseny"), address, "teszt-3"),
-          google(sub("g-verseny"), address, "teszt-3"),
+          google(sub("g-verseny"), address, REEFCLUB_PRIVACY_NOTICE_VERSION),
+          google(sub("g-verseny"), address, REEFCLUB_PRIVACY_NOTICE_VERSION),
         ]);
         assert.deepEqual([a.status, b.status], [204, 204]);
         assert.equal(
@@ -812,7 +822,7 @@ describe(
         const response = await google(
           sub("g-letezo"),
           email("google-letezo"),
-          "teszt-3",
+          REEFCLUB_PRIVACY_NOTICE_VERSION,
         );
         assert.equal(response.status, 409);
         assert.match(
@@ -836,7 +846,7 @@ describe(
           body: {
             email: address,
             password: PASSWORD,
-            consentVersion: "foglalo-1",
+            consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
           },
         });
         assert.equal(register.status, 202);
@@ -844,7 +854,7 @@ describe(
         const squatterLink = tokenIn(lastMailTo(address));
         const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
           where: { email: address },
-          select: { id: true },
+          select: { id: true, consentAt: true },
         });
         // A session cannot exist on an unverified account through the API; one is
         // planted to measure that the takeover removes it anyway.
@@ -858,7 +868,23 @@ describe(
           },
         });
 
-        const owner = await google(sub("g-tulaj"), address, "tulaj-1");
+        // The takeover sets consentAt to its own `new Date()`, never earlier than a time taken
+        // just before the call (same process, same clock). A comparison with the squatter's
+        // timestamp could tie on a fast machine; a time taken after a 2 ms gap cannot, and the
+        // precondition below pins that the squatter's consentAt is strictly earlier, so the
+        // assertion after the call decides in BOTH directions: a takeover that did NOT set
+        // consentAt would leave the squatter's, and that is below `beforeTakeover`.
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        const beforeTakeover = new Date();
+        assert.ok(
+          squatter.consentAt.getTime() < beforeTakeover.getTime(),
+          "előfeltétel: a foglaló hozzájárulása korábbi, mint az átvétel pillanata",
+        );
+        const owner = await google(
+          sub("g-tulaj"),
+          address,
+          REEFCLUB_PRIVACY_NOTICE_VERSION,
+        );
         assert.equal(owner.status, 204);
 
         const after = await prisma.reefClubAccount.findUniqueOrThrow({
@@ -868,13 +894,18 @@ describe(
             passwordHash: true,
             emailVerifiedAt: true,
             consentVersion: true,
+            consentAt: true,
             _count: { select: { sessions: true, tokens: true } },
           },
         });
         assert.equal(after.id, squatter.id);
         assert.equal(after.passwordHash, null, "a foglaló jelszava törlődött");
         assert.ok(after.emailVerifiedAt);
-        assert.equal(after.consentVersion, "tulaj-1");
+        assert.equal(after.consentVersion, REEFCLUB_PRIVACY_NOTICE_VERSION);
+        assert.ok(
+          after.consentAt.getTime() >= beforeTakeover.getTime(),
+          "a hozzájárulás a tulajdonosé: az átvétel pillanatában állították be, nem a foglalóé maradt",
+        );
         assert.equal(
           after._count.tokens,
           0,
@@ -931,7 +962,7 @@ describe(
         const address = email("apple-uj");
         const body = {
           idToken: idToken("APPLE", sub("a-uj"), address),
-          consentVersion: "teszt-3",
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
         };
         const withoutNonce = await rc("/rc/v1/auth/apple", {
           method: "POST",
@@ -959,7 +990,7 @@ describe(
           body: {
             email: taken,
             password: PASSWORD,
-            consentVersion: "foglalo-1",
+            consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
           },
         });
         await settle();
@@ -973,7 +1004,7 @@ describe(
                 address,
                 "",
               ),
-              consentVersion: "teszt-3",
+              consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
             },
           });
           assert.equal(response.status, 422, address);
@@ -1003,7 +1034,7 @@ describe(
           method: "POST",
           body: {
             idToken: `${forged[0]}.${forged[1]}.${signature}`,
-            consentVersion: "teszt-3",
+            consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
           },
         });
         assert.equal(response.status, 401);

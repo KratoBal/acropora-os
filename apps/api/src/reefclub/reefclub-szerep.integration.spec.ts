@@ -21,7 +21,10 @@ import {
   ReefClubAccountDeletionService,
 } from "./reefclub-account-deletion.service.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
-import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
+import {
+  REEFCLUB_PRIVACY_NOTICE_VERSION,
+  REEFCLUB_SHARE_CONSENT_VERSION,
+} from "./reefclub-consent.js";
 import { hashLinkCode, normalizeLinkCode } from "./reefclub-link-code.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
@@ -283,7 +286,7 @@ describe(
         body: {
           email: email("a"),
           password: PASSWORD,
-          consentVersion: "teszt-1",
+          consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
         },
       });
       await settle();

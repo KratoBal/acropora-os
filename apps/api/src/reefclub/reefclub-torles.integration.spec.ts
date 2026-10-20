@@ -24,6 +24,7 @@ import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
 import { reefClubProviderConfigs } from "./reefclub-external-auth.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
+import { REEFCLUB_PRIVACY_NOTICE_VERSION } from "./reefclub-consent.js";
 
 /**
  * ACCOUNT DELETION (plan v6.1, 4.5 and 3.2; acceptance 7.9; slice 6).
@@ -329,7 +330,7 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
       body: {
         email: email("a"),
         password: "egy uj jelszo 2026",
-        consentVersion: "teszt-1",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       },
     });
     await reefclub.get(ReefClubAuthService).settled();

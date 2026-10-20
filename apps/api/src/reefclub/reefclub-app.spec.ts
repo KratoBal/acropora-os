@@ -23,6 +23,7 @@ import { ReefClubAppModule } from "./reefclub.module.js";
 const EXPECTED_ROUTES = [
   "DELETE /rc/v1/aquariums/:id",
   "DELETE /rc/v1/aquariums/:id/measurements/:occasionId",
+  "GET /rc/v1/auth/privacy-consent",
   "GET /rc/v1/aquariums",
   "GET /rc/v1/aquariums/:id",
   "GET /rc/v1/aquariums/:id/measurements",

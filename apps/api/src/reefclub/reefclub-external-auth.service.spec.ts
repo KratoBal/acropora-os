@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { describe, it } from "node:test";
 
 import {
+  BadRequestException,
   ConflictException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -18,6 +19,10 @@ import {
   ReefClubExternalAuthService,
   reefClubProviderConfigs,
 } from "./reefclub-external-auth.service.js";
+import {
+  PRIVACY_VERSION_CHANGED,
+  REEFCLUB_PRIVACY_NOTICE_VERSION,
+} from "./reefclub-consent.js";
 import type { ReefClubSessionRepository } from "./reefclub-session.repository.js";
 
 /**
@@ -192,7 +197,7 @@ describe("ReefClub Google- és Apple-belépés", () => {
   it("első belépés szabad e-maillel: új, megerősített, jelszó nélküli fiók, kötött külső fiókkal", async () => {
     const { svc, accounts, sessions } = service();
     const session = await svc.signIn("GOOGLE", idToken("GOOGLE"), {
-      consentVersion: "v2",
+      consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
     });
     assert.ok(session.token);
     const [created] = [...accounts.accounts.values()];
@@ -258,7 +263,9 @@ describe("ReefClub Google- és Apple-belépés", () => {
       return result;
     };
     const { svc, sessions } = service(accounts);
-    await svc.signIn("GOOGLE", idToken("GOOGLE"), { consentVersion: "v2" });
+    await svc.signIn("GOOGLE", idToken("GOOGLE"), {
+      consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+    });
     assert.deepEqual(sessions, ["acc-masik"]);
   });
 
@@ -266,7 +273,9 @@ describe("ReefClub Google- és Apple-belépés", () => {
     const accounts = store([account()]);
     const { svc, sessions } = service(accounts);
     await assert.rejects(
-      svc.signIn("GOOGLE", idToken("GOOGLE"), { consentVersion: "v2" }),
+      svc.signIn("GOOGLE", idToken("GOOGLE"), {
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+      }),
       ConflictException,
     );
     assert.deepEqual(accounts.identities, []);
@@ -278,11 +287,17 @@ describe("ReefClub Google- és Apple-belépés", () => {
       account({ id: "acc-foglalo", emailVerifiedAt: null }),
     ]);
     const { svc, sessions } = service(accounts);
-    await svc.signIn("GOOGLE", idToken("GOOGLE"), { consentVersion: "v2" });
+    await svc.signIn("GOOGLE", idToken("GOOGLE"), {
+      consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+    });
     assert.deepEqual(accounts.takenOver, ["acc-foglalo"]);
     const taken = accounts.accounts.get("acc-foglalo")!;
     assert.equal(taken.passwordHash, null, "a foglaló jelszava törlődik");
-    assert.equal(taken.consentVersion, "v2", "a hozzájárulás a tulajdonosé");
+    assert.equal(
+      taken.consentVersion,
+      REEFCLUB_PRIVACY_NOTICE_VERSION,
+      "a hozzájárulás a tulajdonosé",
+    );
     assert.deepEqual(sessions, ["acc-foglalo"]);
   });
 
@@ -293,7 +308,7 @@ describe("ReefClub Google- és Apple-belépés", () => {
     const { svc } = service(accounts);
     await assert.rejects(
       svc.signIn("GOOGLE", idToken("GOOGLE", { email_verified: false }), {
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnprocessableEntityException,
     );
@@ -306,7 +321,7 @@ describe("ReefClub Google- és Apple-belépés", () => {
     await assert.rejects(
       svc.signIn("APPLE", idToken("APPLE", { email: undefined }), {
         nonce: NONCE,
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnprocessableEntityException,
     );
@@ -321,23 +336,62 @@ describe("ReefClub Google- és Apple-belépés", () => {
     assert.equal(accounts.accounts.size, 0);
   });
 
+  /*
+    THE PRIVACY VERSION IS THE SERVER'S (card 33780bcb): where an account is CREATED the
+    page's version must equal the server's current one; where it is not used (a bound
+    account signs in) a stale version must not lock the user out. What must fail: a
+    creation under a version the user never saw; a returning user refused over a stale
+    version.
+  */
+  it("új fiókhoz csak a szerver saját tájékoztató-verziója jó: másik 400, és nem jön létre fiók", async () => {
+    const { svc, accounts, sessions } = service();
+    await assert.rejects(
+      svc.signIn("GOOGLE", idToken("GOOGLE"), {
+        consentVersion: "regi-verzio",
+      }),
+      (error: Error) =>
+        error instanceof BadRequestException &&
+        error.message === PRIVACY_VERSION_CHANGED,
+    );
+    assert.equal(accounts.accounts.size, 0);
+    assert.deepEqual(sessions, []);
+  });
+
+  it("kötött fióknál a verziót nem használja: egy elavult verzió nem zárja ki a belépőt", async () => {
+    const accounts = store([
+      account({ id: "acc-1", email: "regi@example.com" }),
+    ]);
+    accounts.identities.push({
+      accountId: "acc-1",
+      provider: "GOOGLE",
+      subject: "kulso-1",
+    });
+    const { svc, sessions } = service(accounts);
+    await svc.signIn("GOOGLE", idToken("GOOGLE"), {
+      consentVersion: "regi-verzio",
+    });
+    assert.deepEqual(sessions, ["acc-1"]);
+  });
+
   it("Apple: a nonce kötelező és egyeznie kell; a helyes nonce-szal belép", async () => {
     const { svc, sessions } = service();
     await assert.rejects(
-      svc.signIn("APPLE", idToken("APPLE"), { consentVersion: "v2" }),
+      svc.signIn("APPLE", idToken("APPLE"), {
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+      }),
       UnauthorizedException,
     );
     await assert.rejects(
       svc.signIn("APPLE", idToken("APPLE"), {
         nonce: "masik-nonce-0123456789",
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnauthorizedException,
     );
     assert.deepEqual(sessions, []);
     await svc.signIn("APPLE", idToken("APPLE"), {
       nonce: NONCE,
-      consentVersion: "v2",
+      consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
     });
     assert.equal(sessions.length, 1);
   });
@@ -346,14 +400,14 @@ describe("ReefClub Google- és Apple-belépés", () => {
     const { svc } = service();
     await assert.rejects(
       svc.signIn("GOOGLE", idToken("GOOGLE", { aud: "masik" }), {
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnauthorizedException,
     );
     await assert.rejects(
       svc.signIn("APPLE", idToken("GOOGLE"), {
         nonce: NONCE,
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnauthorizedException,
     );
@@ -362,7 +416,9 @@ describe("ReefClub Google- és Apple-belépés", () => {
   it("beállított ügyfél-azonosító nélkül a belépési mód ki van kapcsolva: 503", async () => {
     const { svc } = service(store(), reefClubProviderConfigs({}));
     await assert.rejects(
-      svc.signIn("GOOGLE", idToken("GOOGLE"), { consentVersion: "v2" }),
+      svc.signIn("GOOGLE", idToken("GOOGLE"), {
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+      }),
       ServiceUnavailableException,
     );
   });
@@ -382,13 +438,13 @@ describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () =>
       svc.signIn(
         "GOOGLE",
         idToken("GOOGLE", { email: "volt.kollega@ceg.hu" }),
-        { consentVersion: "v2" },
+        { consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION },
       ),
       UnprocessableEntityException,
     );
     await assert.rejects(
       svc.signIn("GOOGLE", idToken("GOOGLE", { email: "uj@ceg.hu" }), {
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnprocessableEntityException,
     );
@@ -403,7 +459,7 @@ describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () =>
     const { svc } = service(accounts);
     await assert.rejects(
       svc.signIn("GOOGLE", idToken("GOOGLE", { email: "tulaj@ceg.hu" }), {
-        consentVersion: "v2",
+        consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
       }),
       UnprocessableEntityException,
     );
@@ -417,12 +473,12 @@ describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () =>
     await svc.signIn(
       "GOOGLE",
       idToken("GOOGLE", { sub: "ws-1", email: "a@ceg.hu", hd: "ceg.hu" }),
-      { consentVersion: "v2" },
+      { consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION },
     );
     await svc.signIn(
       "GOOGLE",
       idToken("GOOGLE", { sub: "ws-2", email: "b@ceg.hu", hd: "ceg.hu" }),
-      { consentVersion: "v2" },
+      { consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION },
     );
     assert.deepEqual(accounts.takenOver, ["acc-foglalo"]);
     assert.equal(accounts.accounts.size, 2);
@@ -434,7 +490,7 @@ describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () =>
       svc.signIn(
         "GOOGLE",
         idToken("GOOGLE", { email: "a@ceg.hu", hd: "masik.hu" }),
-        { consentVersion: "v2" },
+        { consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION },
       ),
       UnprocessableEntityException,
     );
@@ -445,7 +501,7 @@ describe("ReefClub Google-cím hitelessége (barracuda, #1719 review 1.)", () =>
     await svc.signIn(
       "APPLE",
       idToken("APPLE", { email: "x@privaterelay.appleid.com" }),
-      { nonce: NONCE, consentVersion: "v2" },
+      { nonce: NONCE, consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION },
     );
     assert.equal(sessions.length, 1);
   });

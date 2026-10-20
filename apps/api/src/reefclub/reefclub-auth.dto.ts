@@ -1,4 +1,5 @@
 import {
+  Equals,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -9,6 +10,11 @@ import {
   MinLength,
   ValidateIf,
 } from "class-validator";
+
+import {
+  PRIVACY_VERSION_CHANGED,
+  REEFCLUB_PRIVACY_NOTICE_VERSION,
+} from "./reefclub-consent.js";
 
 /**
  * The ReefClub request bodies. Real classes, because the global
@@ -38,9 +44,15 @@ export class ReefClubRegisterDto {
   @MaxLength(PASSWORD_MAX)
   password!: string;
 
-  /** The version of the privacy notice the user accepted (plan 1.1). */
+  /**
+   * The version of the privacy notice the user accepted (plan 1.1). Only the
+   * server's own current one is accepted (`reefclub-consent.ts`): checked here,
+   * before the always-202 answer, so a stale page learns it at once and the
+   * check says nothing about the address.
+   */
   @IsString()
   @Matches(CONSENT_VERSION)
+  @Equals(REEFCLUB_PRIVACY_NOTICE_VERSION, { message: PRIVACY_VERSION_CHANGED })
   consentVersion!: string;
 }
 
