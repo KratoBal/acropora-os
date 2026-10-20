@@ -297,7 +297,7 @@ export function BillingDocumentEditor({
         // Az új számla kiállítása után a szerkesztő újra felépül: a régi
         // példány kiküldési eredményét a munkamenet-tár hozza át.
         const handedOver = takeSendResultHandoff(
-          window.sessionStorage,
+          () => window.sessionStorage,
           detail.id,
         );
         if (handedOver) setSent(handedOver);
@@ -444,7 +444,11 @@ export function BillingDocumentEditor({
       if (result) setSent(result);
       if (created) {
         if (result)
-          writeSendResultHandoff(window.sessionStorage, issued.id, result);
+          writeSendResultHandoff(
+            () => window.sessionStorage,
+            issued.id,
+            result,
+          );
         router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
       }
     } catch (cause) {

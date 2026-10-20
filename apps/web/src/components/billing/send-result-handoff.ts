@@ -10,13 +10,20 @@ export type EditorSendResult =
 
 const STORAGE_PREFIX = "billing-send-result.";
 
+/**
+ * A tár GETTERT kap, nem Storage-et: ahol a böngésző a webhely-adatot tiltja,
+ * maga a `window.sessionStorage` olvasása dob (SecurityError), és argumentumként
+ * kiértékelve ez a `try` ELŐTT történne meg (barracuda, #1729).
+ */
+type StorageGetter<K extends keyof Storage> = () => Pick<Storage, K>;
+
 export function writeSendResultHandoff(
-  storage: Pick<Storage, "setItem">,
+  getStorage: StorageGetter<"setItem">,
   documentId: string,
   result: EditorSendResult,
 ): void {
   try {
-    storage.setItem(STORAGE_PREFIX + documentId, JSON.stringify(result));
+    getStorage().setItem(STORAGE_PREFIX + documentId, JSON.stringify(result));
   } catch {
     // A tár nem érhető el (privát ablak, tele): az eredmény ilyenkor a
     // részleteknél olvasható, a kiállítás ettől nem sérül.
@@ -25,10 +32,11 @@ export function writeSendResultHandoff(
 
 /** Kiolvassa és törli: egy átadást egyszer lehet felhasználni. */
 export function takeSendResultHandoff(
-  storage: Pick<Storage, "getItem" | "removeItem">,
+  getStorage: StorageGetter<"getItem" | "removeItem">,
   documentId: string,
 ): EditorSendResult | null {
   try {
+    const storage = getStorage();
     const raw = storage.getItem(STORAGE_PREFIX + documentId);
     if (raw === null) return null;
     storage.removeItem(STORAGE_PREFIX + documentId);
