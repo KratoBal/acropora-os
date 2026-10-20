@@ -713,6 +713,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ProductDoseEffectVersion: {
     source: "business",
     verifiedById: "identifier",
+    recordedByName: "personName",
   },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.

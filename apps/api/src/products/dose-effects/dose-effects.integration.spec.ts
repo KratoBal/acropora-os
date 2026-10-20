@@ -46,6 +46,7 @@ describe(
     const userId: Record<string, string> = {};
     let product: string;
     let otherProduct: string;
+    let inquiryProduct: string;
     let rowId: string;
 
     const email = (name: string) => `${name}-${suffix}@${EMAIL_DOMAIN}`;
@@ -126,6 +127,7 @@ describe(
         ["a", "OWNER"],
         ["b", "MANAGER"],
         ["v", "VIEWER"],
+        ["t", "MANAGER"],
       ] as const) {
         userId[name] = (
           await prisma.user.create({
@@ -161,11 +163,27 @@ describe(
         })
       ).id;
 
+      // Status 1, but only "inquire" in the UNAS snapshot: not purchasable.
+
+      inquiryProduct = (
+        await prisma.product.create({
+          data: {
+            name: `${PREFIX}csak érdeklődésre ${suffix}`,
+
+            channelListings: {
+              create: [{ channel: "UNAS", externalStatus: "1" }],
+            },
+
+            unasSnapshot: { create: { rawPayload: { Inquire: 1, Name: "x" } } },
+          },
+        })
+      ).id;
+
       app = await NestFactory.create(AppModule, { logger: false });
       configureApp(app);
       await app.listen(0, "127.0.0.1");
       base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}`;
-      for (const name of ["a", "b", "v"]) {
+      for (const name of ["a", "b", "v", "t"]) {
         const response = await fetch(`${base}/auth/mobile/login/password`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -350,6 +368,21 @@ describe(
       assert.ok(notForSale.body.refusals.includes("NOT_PURCHASABLE"));
       assert.ok(notForSale.body.refusals.includes("JEV_DISAGREES"));
       assert.equal(notForSale.body.jevStatus, "NONE");
+
+      // the snapshot's `Inquire` is read too (the batched query, #1731 b)
+      await jev(inquiryProduct, "KH:EMEL");
+      const inquiry = await call(
+        "a",
+        `/products/${inquiryProduct}/dose-effects`,
+        {
+          method: "POST",
+          body: ROW,
+        },
+      );
+      assert.deepEqual(inquiry.body.refusals, [
+        "NOT_VERIFIED",
+        "NOT_PURCHASABLE",
+      ]);
     });
 
     it("JEV sor-javaslat: csak olvas, és csak az élő sor nélküli hatásokat ajánlja, számok nélkül", async () => {
@@ -406,6 +439,14 @@ describe(
           .status,
         204,
       );
+      const archived = await prisma.productDoseEffect.findUniqueOrThrow({
+        where: { id: rowId },
+      });
+      assert.equal(
+        archived.archivedById,
+        userId.a,
+        "ki vonta vissza (#1731 a)",
+      );
       const live = await call("v", "/dose-effects?parameterCode=KH");
       assert.ok(
         !live.body.items.some((row: { id: string }) => row.id === rowId),
@@ -420,6 +461,41 @@ describe(
         body: ROW,
       });
       assert.equal(replaced.status, 201);
+    });
+
+    it("ha a rögzítő fiókja megszűnik, a sort senki nem ellenőrizheti, és a neve a változatban megmarad (#1731 c)", async () => {
+      const created = await call("t", `/products/${product}/dose-effects`, {
+        method: "POST",
+
+        body: { ...ROW, parameterCode: "NITRAT", direction: "CSOKKENT" },
+      });
+
+      assert.equal(created.status, 201);
+
+      await prisma.session.deleteMany({ where: { userId: userId.t } });
+
+      await prisma.user.delete({ where: { id: userId.t } });
+
+      const verify = await call(
+        "b",
+        `/dose-effects/${created.body.id}/verify`,
+        {
+          method: "POST",
+
+          body: { expectedVersion: 1 },
+        },
+      );
+
+      assert.equal(verify.status, 400);
+
+      const versions = await call(
+        "v",
+        `/dose-effects/${created.body.id}/versions`,
+      );
+
+      assert.equal(versions.body.items[0].recordedBy, null);
+
+      assert.equal(versions.body.items[0].recordedByName, "Adag-lista t");
     });
 
     it("adatbázis-CHECK: a rögzítő nem lehet az ellenőrző, a szám nem lehet nulla", async () => {

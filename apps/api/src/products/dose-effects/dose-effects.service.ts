@@ -57,6 +57,7 @@ export interface DoseEffectView {
   verifiedBy: { id: string; name: string } | null;
   verifiedAt: string | null;
   archivedAt: string | null;
+  archivedBy: { id: string; name: string } | null;
   usable: boolean;
   refusals: DoseEffectRefusal[];
   /**
@@ -99,14 +100,10 @@ const ROW_SELECT = {
   archivedAt: true,
   recordedBy: { select: { id: true, displayName: true } },
   verifiedBy: { select: { id: true, displayName: true } },
-  product: {
-    select: {
-      name: true,
-      isActive: true,
-      channelListings: { select: { channel: true, externalStatus: true } },
-      unasSnapshot: { select: { rawPayload: true } },
-    },
-  },
+  archivedBy: { select: { id: true, displayName: true } },
+  // Not the listings and the UNAS snapshot: those are read once per product,
+  // in one query, and only the snapshot's `Inquire` (barracuda, #1731 b).
+  product: { select: { name: true } },
 } satisfies Prisma.ProductDoseEffectSelect;
 
 type Row = Prisma.ProductDoseEffectGetPayload<{ select: typeof ROW_SELECT }>;
@@ -180,6 +177,7 @@ export class DoseEffectsService {
             version: 1,
             ...values,
             recordedById: user.id,
+            recordedByName: user.displayName,
             recordedAt: now,
           },
         });
@@ -258,6 +256,7 @@ export class DoseEffectsService {
           version,
           ...next,
           recordedById: user.id,
+          recordedByName: user.displayName,
           recordedAt: now,
         },
       });
@@ -285,6 +284,13 @@ export class DoseEffectsService {
       throw new BadRequestException(
         "A sort nem az ellenőrizheti, aki rögzítette: kell egy második kolléga.",
       );
+    // The recorder's account is gone (SetNull): who recorded it cannot be
+    // told apart from the checker, so the two-colleague rule cannot be kept.
+    // A new version (an edit) names a recorder again (barracuda, #1731 c).
+    if (!current.recordedById)
+      throw new BadRequestException(
+        "A sor rögzítője már nem azonosítható: előbb rögzítsd újra (szerkesztés), és azt ellenőrizze egy második kolléga.",
+      );
     const now = new Date();
     await prisma.$transaction(async (tx) => {
       const { count } = await tx.productDoseEffect.updateMany({
@@ -307,7 +313,7 @@ export class DoseEffectsService {
     requireInternalWriter(user, "Adag-hatás archiválása");
     const { count } = await prisma.productDoseEffect.updateMany({
       where: { id, archivedAt: null },
-      data: { archivedAt: new Date() },
+      data: { archivedAt: new Date(), archivedById: user.id },
     });
     if (count === 0)
       throw new NotFoundException("Az élő adag-hatás sor nem található.");
@@ -328,6 +334,7 @@ export class DoseEffectsService {
         recordedAt: true,
         verifiedAt: true,
         recordedBy: { select: { id: true, displayName: true } },
+        recordedByName: true,
         verifiedById: true,
       },
     });
@@ -344,6 +351,8 @@ export class DoseEffectsService {
       recordedBy: row.recordedBy
         ? { id: row.recordedBy.id, name: row.recordedBy.displayName }
         : null,
+      // the name as it was when recorded, also after the account is gone
+      recordedByName: row.recordedByName,
       recordedAt: row.recordedAt.toISOString(),
       verifiedById: row.verifiedById,
       verifiedAt: row.verifiedAt?.toISOString() ?? null,
@@ -415,24 +424,15 @@ export class DoseEffectsService {
 
   private async views(rows: readonly Row[]): Promise<DoseEffectView[]> {
     const products = [...new Set(rows.map((row) => row.productId))];
-    const jev = new Map(
-      await Promise.all(
-        products.map(
-          async (productId) =>
-            [
-              productId,
-              jevEffectState(
-                await latestJevField(productId, "waterParameterEffects"),
-              ),
-            ] as const,
-        ),
-      ),
-    );
+    const [jevRows, sale] = await Promise.all([
+      latestJevEffects(products),
+      purchasability(products),
+    ]);
     return rows.map((row) => {
-      const jevState = jev.get(row.productId)!;
+      const jevState = jevEffectState(jevRows.get(row.productId) ?? null);
       const refusals = doseEffectRefusals(row, {
         jev: jevState,
-        purchasable: row.product.isActive && isRecommendableOnUnas(row.product),
+        purchasable: sale.get(row.productId) ?? false,
       });
       return {
         id: row.id,
@@ -456,6 +456,9 @@ export class DoseEffectsService {
           : null,
         verifiedAt: row.verifiedAt?.toISOString() ?? null,
         archivedAt: row.archivedAt?.toISOString() ?? null,
+        archivedBy: row.archivedBy
+          ? { id: row.archivedBy.id, name: row.archivedBy.displayName }
+          : null,
         usable: refusals.length === 0,
         refusals,
         jevStatus: jevState.status,
@@ -503,4 +506,82 @@ async function latestJevField(
     ORDER BY c."checkedAt" DESC, f.id DESC
     LIMIT 1`;
   return rows[0] ?? null;
+}
+
+/**
+ * The latest completed JEV water-effect result of each product, in ONE query
+ * (barracuda, #1731 b: a full list was one query per product).
+ */
+async function latestJevEffects(
+  productIds: readonly string[],
+): Promise<
+  Map<
+    string,
+    { status: string; value: string | null; currentValue: string | null }
+  >
+> {
+  if (productIds.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<
+    {
+      productId: string;
+      status: string;
+      value: string | null;
+      currentValue: string | null;
+    }[]
+  >`
+    SELECT DISTINCT ON (c."productId") c."productId", f.status, f.value, f."currentValue"
+    FROM "ProductEnrichmentFieldResult" f
+    JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
+    JOIN "ProductEnrichmentRun" r ON r.id = c."runId"
+    WHERE f.field = 'waterParameterEffects'
+      AND c."productId" = ANY(${[...productIds]}::text[])
+      AND r.status IN ('COMPLETED', 'LIMIT_REACHED')
+    ORDER BY c."productId", c."checkedAt" DESC, f.id DESC`;
+  return new Map(rows.map((row) => [row.productId, row]));
+}
+
+/**
+ * Whether each product can be bought: active, UNAS status 1 or 2, and not
+ * inquiry-only. The internal recommendation's rule (`isRecommendableOnUnas`),
+ * fed from one query that reads only the snapshot's `Inquire`, not the whole
+ * UNAS payload (barracuda, #1731 b).
+ */
+async function purchasability(
+  productIds: readonly string[],
+): Promise<Map<string, boolean>> {
+  if (productIds.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<
+    {
+      id: string;
+      isActive: boolean;
+      unasStatus: string | null;
+      hasSnapshot: boolean;
+      inquire: unknown;
+    }[]
+  >`
+    SELECT p.id, p."isActive",
+      (SELECT cl."externalStatus" FROM "ChannelListing" cl
+        WHERE cl."productId" = p.id AND cl.channel = 'UNAS' LIMIT 1) AS "unasStatus",
+      (s."productId" IS NOT NULL) AS "hasSnapshot",
+      s."rawPayload"->'Inquire' AS inquire
+    FROM "Product" p
+    LEFT JOIN "UnasProductSnapshot" s ON s."productId" = p.id
+    WHERE p.id = ANY(${[...productIds]}::text[])`;
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      row.isActive &&
+        isRecommendableOnUnas({
+          channelListings: row.unasStatus
+            ? [{ channel: "UNAS", externalStatus: row.unasStatus }]
+            : [],
+          unasSnapshot: row.hasSnapshot
+            ? {
+                rawPayload:
+                  row.inquire === null ? {} : { Inquire: row.inquire },
+              }
+            : null,
+        }),
+    ]),
+  );
 }

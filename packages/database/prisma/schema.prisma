@@ -1062,6 +1062,7 @@ model User {
   recordedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectRecordedBy")
   verifiedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectVerifiedBy")
   doseEffectVersions                  ProductDoseEffectVersion[]          @relation("DoseEffectVersionBy")
+  archivedDoseEffects                 ProductDoseEffect[]                 @relation("DoseEffectArchivedBy")
   issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
   aquariumShareReads                  AquariumShareEvent[]                @relation("AquariumShareReader")
   endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
@@ -10077,17 +10078,22 @@ model ProductDoseEffect {
   verifiedById        String?
   verifiedAt          DateTime?
   archivedAt          DateTime?
+  /// Ki vonta vissza (barracuda, #1731: a vevoi adagot befolyasolo lista
+  /// visszavonasanal a "ki" ugyanolyan fontos, mint a rogziteskor).
+  archivedById        String?
   createdAt           DateTime                   @default(now())
   updatedAt           DateTime                   @updatedAt
   product             Product                    @relation(fields: [productId], references: [id], onDelete: Cascade)
   recordedBy          User?                      @relation("DoseEffectRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
   verifiedBy          User?                      @relation("DoseEffectVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  archivedBy          User?                      @relation("DoseEffectArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
   versions            ProductDoseEffectVersion[]
 
   @@index([productId])
   @@index([parameterCode, direction])
   @@index([recordedById])
   @@index([verifiedById])
+  @@index([archivedById])
 }
 
 /// EGY ADAG-HATAS SOR VERZIOI (terv 6.2: "a sorok verziozottak, es az
@@ -10104,6 +10110,9 @@ model ProductDoseEffectVersion {
   effectHours         Int?
   source              String
   recordedById        String?
+  /// A rogzito neve a rogziteskor: a fiok torlese (SetNull) utan is
+  /// visszakeresheto, ki rogzitette ezt a valtozatot.
+  recordedByName      String?
   recordedAt          DateTime
   verifiedById        String?
   verifiedAt          DateTime?

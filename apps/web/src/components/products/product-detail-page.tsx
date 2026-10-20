@@ -31,6 +31,7 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { ProductHomepageCard } from "@/components/products/product-homepage-card";
+import { ProductDoseEffectsCard } from "@/components/products/product-dose-effects-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
@@ -1202,6 +1203,16 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   token={token}
                   productId={product.id}
                   canManage={canManage}
+                />
+                {/*
+                  A termék-adag lista (ReefClub 7. szelet): kézzel gondozott,
+                  két kolléga ellenőrzi; a UNAS-szinkron nem ír rá.
+                */}
+                <ProductDoseEffectsCard
+                  token={token}
+                  productId={product.id}
+                  canManage={canManage}
+                  currentUserId={session?.user.id ?? ""}
                 />
                 <ProductHomepageCard
                   token={token}
