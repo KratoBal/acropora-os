@@ -89,11 +89,18 @@ psql "$DATABASE_URL" -c "CREATE ROLE \"reefclub_app\" LOGIN PASSWORD '...'"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
 ```
 
+**The file is applied only together with the code redemption function** (migration
+`20261021000000_reefclub_redeem_link_code`, `reefclub_redeem_link_code`): the role has no right on
+the code table and inserts no links itself, so without the function the ReefClub could not redeem
+a shop code at all. The file grants `EXECUTE` on the function, and with `ON_ERROR_STOP=1` that
+`GRANT` stops the run if the migration is missing, so the order cannot silently be wrong: first
+`prisma migrate deploy`, then this file.
+
 The writes are bound to rows as well: the file enables row-level security on six tables
 (`Aquarium`, `AquariumMeasurement`, `AquariumMeasurementTarget`, `AquariumShareEvent`,
 `ReefClubCustomerLink`, `ReefClubLinkCode`). The role writes only ReefClub aquariums and their
-rows, creates a link only with a code the same account claimed, ends links but never reopens
-them, and never undoes a claimed code. Every other role keeps exactly what its grants give it (a
+rows, ends links but never reopens them, and redeems codes only through the function above (it
+cannot read a code). Every other role keeps exactly what its grants give it (a
 permissive policy for all roles on each of the six), and the table owner (the internal API's
 connection, the migrations) is not bound by row-level security at all. Applying the file
 therefore needs the owner: `psql` with the internal `DATABASE_URL`, as above.
