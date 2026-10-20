@@ -42,6 +42,7 @@ import {
 } from "./slug/webshop-slug.service.js";
 import { DoseEffectsController } from "./dose-effects/dose-effects.controller.js";
 import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
+import { DoseProjectionService } from "./dose-effects/dose-projection.service.js";
 @Module({
   controllers: [
     ProductController,
@@ -59,6 +60,7 @@ import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
   ],
   providers: [
     DoseEffectsService,
+    DoseProjectionService,
     ProductRepository,
     ProductService,
     ProductBarcodeRepository,

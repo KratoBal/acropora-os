@@ -58,6 +58,12 @@ GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_a
 GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
 GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
+-- The projection of the product dose list (plan 6.2, slice 8, path B): the role may only READ it,
+-- and of the run record only what the staleness gate needs (not the error text). The OS (internal)
+-- process, the table owner, rebuilds both; the role has no INSERT, UPDATE or DELETE on them, so
+-- nothing the ReefClub process does can change a dose number it will then recommend from.
+GRANT SELECT ON "ReefClubDoseRow" TO "reefclub_app";
+GRANT SELECT ("id", "status", "finishedAt", "rowCount") ON "ReefClubDoseProjectionRun" TO "reefclub_app";
 
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).
 GRANT SELECT ("id", "displayName", "type", "isActive") ON "Customer" TO "reefclub_app";
