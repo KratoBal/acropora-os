@@ -1,7 +1,6 @@
 "use client";
 
 import { Alert, Button } from "@acropora/ui";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { rc } from "@/lib/api";
@@ -13,7 +12,6 @@ import {
 } from "@/lib/external-scripts";
 import { newRawNonce, sha256Hex } from "@/lib/nonce";
 import { fetchPublicConfig, type PublicConfig } from "@/lib/public-config";
-import { useSession } from "@/lib/session";
 
 /**
  * Google and Apple sign-in under the e-mail form (plan 3.2). The page gets the
@@ -31,12 +29,13 @@ import { useSession } from "@/lib/session";
 export function ExternalSignIn({
   loadScript = realLoadScript,
   loadConfig = () => fetchPublicConfig(),
+  navigate = (path) => window.location.assign(path),
 }: {
   loadScript?: (src: string) => Promise<void>;
   loadConfig?: () => Promise<PublicConfig>;
+  /** A FULL page load, see `finish`; a test passes its own. */
+  navigate?: (path: string) => void;
 }) {
-  const router = useRouter();
-  const { refresh } = useSession();
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [accepted, setAccepted] = useState(false);
   const acceptedRef = useRef(false);
@@ -73,8 +72,12 @@ export function ExternalSignIn({
             : {}),
         },
       });
-      await refresh();
-      router.replace("/");
+      // A FULL page load, not a client-side navigation (barracuda, #1741 note a):
+      // the provider's script (Google or Apple) would otherwise stay in the
+      // page and keep running on the signed-in pages, on this origin, next to
+      // the readable CSRF cookie. A fresh load starts without it, and reads
+      // the session itself.
+      navigate("/");
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A belépés nem sikerült.",
@@ -137,6 +140,10 @@ export function ExternalSignIn({
         clientId: config.appleClientId,
         scope: "email",
         redirectURI: config.appleRedirectUri ?? window.location.origin,
+        // POPUP MODE: the token comes back through this page to the server, and the
+        // nonce binds it there, so `state` is not compared with the answer. If this
+        // ever switches to redirect mode, comparing `state` becomes mandatory
+        // (barracuda, #1741 note b).
         state: newRawNonce(),
         nonce: await sha256Hex(raw),
         usePopup: true,

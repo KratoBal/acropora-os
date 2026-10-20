@@ -12,8 +12,11 @@ import { mockApi, reply } from "@/test/mock-api";
 
 import { ExternalSignIn } from "./external-sign-in";
 
-const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+const navigate = vi.fn();
+// the session provider around the component needs a router; the component itself navigates by a full load
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+}));
 
 const ME = {
   email: "kovacs@example.test",
@@ -49,7 +52,7 @@ const appleInit = vi.fn();
 const appleSignIn = vi.fn();
 
 beforeEach(() => {
-  router.replace.mockReset();
+  navigate.mockReset();
   googleCallback = undefined;
   google.accounts.id.initialize.mockClear();
   google.accounts.id.renderButton.mockClear();
@@ -67,7 +70,11 @@ afterEach(() => {
 function view(config: PublicConfig, loadScript = vi.fn(async () => {})) {
   render(
     <SessionProvider>
-      <ExternalSignIn loadScript={loadScript} loadConfig={async () => config} />
+      <ExternalSignIn
+        loadScript={loadScript}
+        loadConfig={async () => config}
+        navigate={navigate}
+      />
     </SessionProvider>,
   );
   return loadScript;
@@ -116,21 +123,52 @@ describe("ExternalSignIn", () => {
 
     // not ticked: a returning user is not asked for the notice
     googleCallback!({ credential: "id-token-1" });
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
     expect(calls.find((c) => c.path === "/auth/google")!.body).toEqual({
       idToken: "id-token-1",
     });
 
     // ticked: the version goes with it (the callback reads the box at the moment it fires)
-    router.replace.mockReset();
+    navigate.mockReset();
     await user.click(screen.getByRole("checkbox"));
     googleCallback!({ credential: "id-token-2" });
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
     const second = calls.filter((c) => c.path === "/auth/google")[1]!;
     expect(second.body).toEqual({
       idToken: "id-token-2",
       consentVersion: PRIVACY_NOTICE_VERSION,
     });
+  });
+
+  it("by default finishes with a FULL page load, so the provider's script does not stay in the signed-in pages", async () => {
+    const assign = vi.fn();
+    const original = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...original, assign, origin: original.origin },
+    });
+    try {
+      mockApi({
+        "GET /me": () => reply(401, {}),
+        "POST /auth/google": () => reply(204),
+      });
+      render(
+        <SessionProvider>
+          <ExternalSignIn
+            loadScript={async () => {}}
+            loadConfig={async () => BOTH}
+          />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(googleCallback).toBeDefined());
+      googleCallback!({ credential: "id-token" });
+      await waitFor(() => expect(assign).toHaveBeenCalledWith("/"));
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: original,
+      });
+    }
   });
 
   it("shows the server's words when a new account needs the notice, and does not go in", async () => {
@@ -150,7 +188,7 @@ describe("ExternalSignIn", () => {
         "Az első belépéshez el kell fogadni az adatkezelési tájékoztatót.",
       ),
     ).toBeInTheDocument();
-    expect(router.replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("Apple: gives Apple the SHA-256 of a raw nonce and the server the raw one", async () => {
@@ -171,7 +209,7 @@ describe("ExternalSignIn", () => {
       await screen.findByRole("button", { name: "Belépés Apple-fiókkal" }),
     );
 
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
     const init = appleInit.mock.calls[0]![0] as {
       clientId: string;
       nonce: string;
