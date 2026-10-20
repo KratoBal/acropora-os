@@ -77,6 +77,11 @@ import {
   editorLinesFromPosHandoff,
   readPosInvoiceHandoff,
 } from "./pos-invoice-handoff";
+import {
+  takeSendResultHandoff,
+  writeSendResultHandoff,
+  type EditorSendResult,
+} from "./send-result-handoff";
 
 export const BILLING_EDITOR_PATH = "/penzugy/szamlazas";
 
@@ -206,9 +211,7 @@ export function BillingDocumentEditor({
   );
   const [email, setEmail] = useState<BillingEmailDraft | null>(null);
   /** A kiállítás utáni kiküldés kimenete: a címzettek, vagy a hiba. */
-  const [sent, setSent] = useState<
-    { ok: true; to: string } | { ok: false; error: string } | null
-  >(null);
+  const [sent, setSent] = useState<EditorSendResult | null>(null);
 
   /*
     A PÉNZTÁR KOSARA (kártya cdc2771b): az új számla a kosár tételsoraival
@@ -291,6 +294,13 @@ export function BillingDocumentEditor({
         setProforma(detail.proforma ?? null);
         setIssued(issuedOf(detail));
         setCancellation(detail.cancellation ?? null);
+        // Az új számla kiállítása után a szerkesztő újra felépül: a régi
+        // példány kiküldési eredményét a munkamenet-tár hozza át.
+        const handedOver = takeSendResultHandoff(
+          () => window.sessionStorage,
+          detail.id,
+        );
+        if (handedOver) setSent(handedOver);
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -426,9 +436,21 @@ export function BillingDocumentEditor({
       setState(fromDetail(issued));
       setStatus(issued.status);
       setIssued(issuedOf(issued));
-      if (created)
+      // A KIKÜLDÉS ELŐBB, AZ ÚTVÁLTÁS UTÁNA: az új számla útváltásakor a
+      // szerkesztő újra felépül, és a régi példányban befejeződő küldés
+      // eredménye elveszne (kártya 7976970f).
+      const result =
+        delivery === "REQUIRED" ? await sendAfterIssue(issued) : null;
+      if (result) setSent(result);
+      if (created) {
+        if (result)
+          writeSendResultHandoff(
+            () => window.sessionStorage,
+            issued.id,
+            result,
+          );
         router.replace(`${BILLING_EDITOR_PATH}/${issued.id}/szerkesztes`);
-      if (delivery === "REQUIRED") await sendAfterIssue(issued);
+      }
     } catch (cause) {
       setSaveError(
         cause instanceof Error ? cause.message : "A kiállítás nem sikerült.",
@@ -445,17 +467,18 @@ export function BillingDocumentEditor({
    * vonható vissza. A felület ezt kimondja, és a részletekre visz, ahol a
    * hiba utáni újrapróbálás ugyanazzal a levéllel megy.
    */
-  const sendAfterIssue = async (issued: BillingDocumentDetail) => {
+  const sendAfterIssue = async (
+    issued: BillingDocumentDetail,
+  ): Promise<EditorSendResult> => {
     const mode = billingEmailModeFor(
       issued.status,
       issued.delivery?.status ?? issued.emailStatus,
     );
     if (mode === null) {
-      setSent({
+      return {
         ok: false,
         error: "A bizonylat most nem küldhető ki.",
-      });
-      return;
+      };
     }
     try {
       // AMIHEZ NEM NYÚLTAK, AZ A LEVELEZÉS OLDAL SABLONJA (nautilus #1293): a
@@ -482,12 +505,12 @@ export function BillingDocumentEditor({
         bodyHtml: letter.bodyHtml,
       });
       setStatus(after.status);
-      setSent({ ok: true, to: emailDraft.to });
+      return { ok: true, to: emailDraft.to };
     } catch (cause) {
-      setSent({
+      return {
         ok: false,
         error: cause instanceof Error ? cause.message : "A levél nem ment ki.",
-      });
+      };
     }
   };
 
