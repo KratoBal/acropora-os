@@ -21,6 +21,16 @@ import { ReefClubAppModule } from "./reefclub.module.js";
  * never connects, and no assertion here reaches a query.
  */
 const EXPECTED_ROUTES = [
+  "DELETE /rc/v1/aquariums/:id",
+  "DELETE /rc/v1/aquariums/:id/measurements/:occasionId",
+  "GET /rc/v1/aquariums",
+  "GET /rc/v1/aquariums/:id",
+  "GET /rc/v1/aquariums/:id/measurements",
+  "GET /rc/v1/aquariums/:id/targets",
+  "PATCH /rc/v1/aquariums/:id",
+  "POST /rc/v1/aquariums",
+  "POST /rc/v1/aquariums/:id/measurements",
+  "PUT /rc/v1/aquariums/:id/targets",
   "GET /rc/v1/health",
   "GET /rc/v1/me",
   "PATCH /rc/v1/me",

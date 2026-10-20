@@ -48,15 +48,16 @@ export class AquariumsService {
 
   /**
    * A HATÓKÖR, LEKÉRDEZHETŐ ALAKBAN -- lásd `aquarium-visibility.ts`
-   * fejlécét. A belsős hívó üres szűrőt kap (mindent lát), a vevő-hatókörű
-   * a saját, kiosztott helyszíneire szűkül, a szállító-hatókörű és a
-   * hozzárendelés nélküli vevő-hatókörű pedig semmit nem lát.
+   * fejlécét. A belsős hívó minden belső akváriumot lát (a ReefClub-fiók
+   * sajátját nem, ReefClub terv 4.4), a vevő-hatókörű a saját, kiosztott
+   * helyszíneire szűkül, a szállító-hatókörű és a hozzárendelés nélküli
+   * vevő-hatókörű pedig semmit nem lát. A belsős ág is a közös függvényen
+   * megy át: egy rövidzár itt a ReefClub-kizárást kerülné meg.
    */
   private async visibilityFor(
     user: AuthenticatedUser,
   ): Promise<Prisma.AquariumWhereInput> {
     const scope = partnerScopeOf(user);
-    if (scope.kind === "internal") return {};
     const unitIds =
       scope.kind === "customer" ? await assignedUnitIdsFor(user.id) : [];
     return aquariumVisibilityWhere({ scope, unitIds });

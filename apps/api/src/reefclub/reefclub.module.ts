@@ -2,6 +2,9 @@ import { type DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 
 import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
+import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
+import { ReefClubAquariumsController } from "./reefclub-aquariums.controller.js";
+import { ReefClubAquariumsService } from "./reefclub-aquariums.service.js";
 import { ReefClubAuthController } from "./reefclub-auth.controller.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
 import {
@@ -68,6 +71,7 @@ export class ReefClubModule {
       controllers: [
         ReefClubAuthController,
         ReefClubMeController,
+        ReefClubAquariumsController,
         ReefClubHealthController,
       ],
       providers: [
@@ -80,6 +84,8 @@ export class ReefClubModule {
         ReefClubSessionRepository,
         ReefClubAuthService,
         ReefClubExternalAuthService,
+        ReefClubAquariumAccess,
+        ReefClubAquariumsService,
         {
           provide: REEFCLUB_IDENTITY_KEYS,
           useFactory: () =>

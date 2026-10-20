@@ -102,6 +102,17 @@ export class ReefClubGuard implements CanActivate {
   }
 }
 
+/**
+ * The account the guard put on the request. The guard sets it on every
+ * non-public route; a missing one is a wiring fault, and it must not fall
+ * through to some default account.
+ */
+export function reefClubAccountOf(request: ReefClubRequest): string {
+  if (!request.reefClubAccountId)
+    throw new Error("ReefClub route reached without a ReefClub session.");
+  return request.reefClubAccountId;
+}
+
 function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
