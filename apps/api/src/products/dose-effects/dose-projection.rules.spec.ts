@@ -26,6 +26,7 @@ const VIEW: DoseEffectView = {
   source: "Gyártói címke (teszt)",
   version: 4,
   recordedBy: null,
+  recordedByName: null,
   recordedAt: "2026-10-01T08:00:00.000Z",
   verifiedBy: null,
   verifiedAt: null,
