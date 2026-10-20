@@ -22,7 +22,10 @@ import {
   reefClubCallerAddress,
   ReefClubRateLimits,
 } from "./reefclub-rate-limits.js";
-import type { ReefClubRequest } from "./reefclub.guard.js";
+import {
+  reefClubAccountOf as accountOf,
+  type ReefClubRequest,
+} from "./reefclub.guard.js";
 
 /**
  * GET and PATCH /rc/v1/me (plan v6.1, 3.2). The account is the session's,
@@ -76,12 +79,4 @@ export class ReefClubMeController {
       nonce: body.nonce,
     });
   }
-}
-
-function accountOf(request: ReefClubRequest): string {
-  // The guard sets it on every non-public route; a missing one is a wiring
-  // fault, and it must not fall through to some default account.
-  if (!request.reefClubAccountId)
-    throw new Error("ReefClub route reached without a ReefClub session.");
-  return request.reefClubAccountId;
 }

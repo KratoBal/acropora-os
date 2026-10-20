@@ -34,7 +34,13 @@ export function aquariumVisibilityWhere(input: {
   scope: PartnerScope;
   unitIds: readonly string[];
 }): Prisma.AquariumWhereInput {
-  if (input.scope.kind === "internal") return {};
+  // A REEFCLUB AQUARIUM (a ReefClub account is its owner) IS NOT AN INTERNAL
+  // ROW (ReefClub plan v6.1, 4.4): the internal reads leave it out by
+  // default, here and not per endpoint. Sharing with the shop (slice 5a)
+  // opens it explicitly, read-only. The customer branch below needs no such
+  // condition: it requires a customerId, and a ReefClub aquarium has none
+  // (the `Aquarium_reefclub_owner_check` constraint).
+  if (input.scope.kind === "internal") return { ownerAccountId: null };
   // A SZÁLLÍTÓ-HATÓKÖR itt nem értelmezett: az akvárium ügyfélhez tartozik,
   // szállítóhoz soha. Ugyanaz az explicit-üres válasz, mint a hozzárendelés
   // nélküli vevő-hatókörnél.

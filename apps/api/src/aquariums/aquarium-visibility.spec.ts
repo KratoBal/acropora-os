@@ -18,10 +18,10 @@ import { aquariumVisibilityWhere } from "./aquarium-visibility.js";
  * `AND`-ágas szabály közvetlen alkalmazása az akváriumra.
  */
 describe("aquariumVisibilityWhere", () => {
-  it("belsős hívónál nincs szűrés", () => {
+  it("belsős hívónál csak a ReefClub-akvárium esik ki, más szűrés nincs", () => {
     assert.deepEqual(
       aquariumVisibilityWhere({ scope: { kind: "internal" }, unitIds: [] }),
-      {},
+      { ownerAccountId: null },
     );
   });
 

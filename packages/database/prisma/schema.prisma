@@ -1134,23 +1134,27 @@ model Session {
 /// neki belso jogot, mert a belso orok (`AuthGuard`) ezt a tablat nem is
 /// olvassak. Az e-mail kisbetusitve, levagott szokozokkel all itt.
 model ReefClubAccount {
-  id              String                 @id @default(cuid())
-  email           String                 @unique
+  id                   String                 @id @default(cuid())
+  email                String                 @unique
   /// scrypt lenyomat (`users/password.util.ts`); ures, ha a fiok csak kulso
   /// belepessel el (a 3. szelet: Google, Apple).
-  passwordHash    String?
+  passwordHash         String?
   /// Ures: a fiok nem lephet be jelszoval.
-  emailVerifiedAt DateTime?
+  emailVerifiedAt      DateTime?
   /// A bolti meres veglegesitesekor menjen-e level (3.5 pont).
-  notifyOnRelease Boolean                @default(true)
+  notifyOnRelease      Boolean                @default(true)
   /// Az elfogadott adatkezelesi tajekoztato verzioja es az elfogadas ideje.
-  consentVersion  String
-  consentAt       DateTime
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  sessions        ReefClubSession[]
-  tokens          ReefClubAccountToken[]
-  identities      ReefClubIdentity[]
+  consentVersion       String
+  consentAt            DateTime
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  sessions             ReefClubSession[]
+  tokens               ReefClubAccountToken[]
+  identities           ReefClubIdentity[]
+  /// A fiok sajat akvariumai (4. szelet). Lasd az `Aquarium.ownerAccountId` fejlecet.
+  aquariums            Aquarium[]
+  /// A fiok altal rogzitett kezi meresek. Lasd az `AquariumMeasurement.recordedByAccountId` fejlecet.
+  recordedMeasurements AquariumMeasurement[]
 }
 
 enum ReefClubIdentityProvider {
@@ -4103,10 +4107,27 @@ model Aquarium {
   maintainedByUs       Boolean               @default(false)
   responsibleUserId    String?
   isActive             Boolean               @default(true)
+  /// A REEFCLUB-FIOK SAJAT AKVARIUMANAK GAZDAJA (ReefClub terv v6.1, 2.2 es
+  /// 4.2; 4. szelet). Ures minden belso (bolti vagy vevoi) akvariumon.
+  ///
+  /// ADATBAZIS-CHECK (`Aquarium_reefclub_owner_check`, a migracioban): ha ki
+  /// van toltve, akkor a `customerId`, a `departmentId` es a
+  /// `responsibleUserId` ures, a `maintainedByUs` hamis. Tehat a vevo es a
+  /// fiok kozul LEGFELJEBB egy a gazda. A terv "pontosan egy"-et irt, de a
+  /// bolt sajat (OWN) akvariumainak ma sincs vevoje, igy a szigorubb alak
+  /// minden ilyen sort megtagadna.
+  ///
+  /// A BELSO ADATELERES EZT A SORT NEM LATJA: `aquarium-visibility.ts` belso
+  /// aga `ownerAccountId: null`-ra szur (terv 4.4). A megosztas (5a. szelet)
+  /// nyitja majd meg kifejezetten, olvasasra.
+  ///
+  /// `Cascade`: a fiok torlesevel a sajat akvariumai is torlodnek (terv 4.5).
+  ownerAccountId       String?
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
   customer         Customer?                           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  ownerAccount     ReefClubAccount?                    @relation(fields: [ownerAccountId], references: [id], onDelete: Cascade)
   department       WorksheetDepartment?                @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   measurements     AquariumMeasurement[]
   serviceJobs      ServiceJob[]
@@ -4129,6 +4150,7 @@ model Aquarium {
 
   @@index([customerId, isActive])
   @@index([departmentId])
+  @@index([ownerAccountId])
 }
 
 /// AKVÁRIUMONKÉNTI, PARAMÉTERENKÉNTI CÉLTARTOMÁNY -- Balázs kérése,
@@ -6076,16 +6098,22 @@ model WorksheetVersionSignature {
 }
 
 model AquariumMeasurement {
-  id                String   @id @default(cuid())
-  aquariumId        String
-  parameterCode     String
-  value             Decimal  @db.Decimal(19, 6)
-  unit              String
-  measuredAt        DateTime
-  measuredById      String?
-  source            String?
-  notes             String?
-  createdAt         DateTime @default(now())
+  id                  String   @id @default(cuid())
+  aquariumId          String
+  parameterCode       String
+  value               Decimal  @db.Decimal(19, 6)
+  unit                String
+  measuredAt          DateTime
+  measuredById        String?
+  source              String?
+  notes               String?
+  /// A KEZI MERESET ROGZITO REEFCLUB-FIOK (terv v6.1, 2.2; 4. szelet), idegen
+  /// kulccsal. A `measuredById` regi, idegen kulcs nelkuli szoveg, ezert a
+  /// fiok nem oda kerul. A ReefClub kezi meresenek `source` erteke
+  /// `REEFCLUB_MANUAL`. CHECK (`AquariumMeasurement_recorder_check`): a ket
+  /// rogzito-mezo kozul legfeljebb egy kitoltott.
+  recordedByAccountId String?
+  createdAt           DateTime @default(now())
   /// A MÉRÉSI ALKALOM IDEMPOTENCIA-KULCSA -- ugyanaz a minta, mint az
   /// `Aquarium.clientOperationId`-nél, de EGY SZINTTEL FELJEBB: egy mérési
   /// alkalom (Balázs kérése, 2026-09-24: "egy mérés = egy mérési alkalom,
@@ -6099,9 +6127,10 @@ model AquariumMeasurement {
   ///
   /// A NULL nem egyenlő önmagával, tehát a webes felvitel (kulcs nélkül) és
   /// egymás mellett is korlátlanul állhat.
-  clientOperationId String?
+  clientOperationId   String?
 
-  aquarium Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  aquarium          Aquarium         @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  recordedByAccount ReefClubAccount? @relation(fields: [recordedByAccountId], references: [id], onDelete: SetNull)
 
   @@unique([aquariumId, clientOperationId, parameterCode])
   /// EGY ALKALOM EGY PARAMÉTERT LEGFELJEBB EGYSZER VISEL. Ez korábban
@@ -6116,6 +6145,7 @@ model AquariumMeasurement {
   /// a `clientOperationId`-nél.
   @@unique([aquariumId, measuredAt, parameterCode])
   @@index([aquariumId, parameterCode, measuredAt])
+  @@index([recordedByAccountId])
 }
 
 enum MeasurementRecommendationStatus {
