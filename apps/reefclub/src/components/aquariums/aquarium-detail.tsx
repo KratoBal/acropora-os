@@ -29,6 +29,7 @@ import { useLoad } from "@/lib/use-load";
 import { MeasurementChart } from "./measurement-chart";
 import { MeasurementForm } from "./measurement-form";
 import { OccasionList } from "./occasion-list";
+import { SharePanel } from "./share-panel";
 
 /**
  * An aquarium: its data, its own target ranges, the measurements with a chart,
@@ -128,6 +129,8 @@ export function AquariumDetail({ id }: { id: string }) {
           </>
         ) : null}
       </section>
+
+      {own ? <SharePanel aquarium={data} onChanged={aquarium.reload} /> : null}
 
       {own ? (
         <section
