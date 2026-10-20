@@ -96,6 +96,12 @@ a shop code at all. The file grants `EXECUTE` on the function, and with `ON_ERRO
 `GRANT` stops the run if the migration is missing, so the order cannot silently be wrong: first
 `prisma migrate deploy`, then this file.
 
+The function runs with its owner's rights (SECURITY DEFINER), and its owner is whoever ran the
+migrations. The file's last step hands it to the tables' owner if that was a superuser; changing an
+owner needs a superuser or the current owner, so **if the migrations ran as a superuser, run this
+file as a superuser too** (otherwise it stops at that step with Postgres's message). Check:
+`SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE proname = 'reefclub_redeem_link_code';`
+
 The writes are bound to rows as well: the file enables row-level security on six tables
 (`Aquarium`, `AquariumMeasurement`, `AquariumMeasurementTarget`, `AquariumShareEvent`,
 `ReefClubCustomerLink`, `ReefClubLinkCode`). The role writes only ReefClub aquariums and their
