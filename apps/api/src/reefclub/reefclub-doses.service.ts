@@ -232,6 +232,25 @@ export class ReefClubDosesService {
             message: "Erre az ajánlásra már jelezted a beadást.",
           };
 
+        // A key already used (by a free dose, or an earlier answer) is a plain refusal,
+        // never the unique index's 500 (barracuda, #1759).
+        if (request.clientOperationId) {
+          const used = await tx.reefClubAdministeredDose.findFirst({
+            where: {
+              aquariumId: grant.aquariumId,
+              clientOperationId: request.clientOperationId,
+            },
+            select: { id: true },
+          });
+          if (used)
+            return {
+              outcome: "REFUSED",
+              code: "OPERATION_ID_USED",
+              message:
+                "Ez a művelet-azonosító már használatban van; küldd új azonosítóval.",
+            };
+        }
+
         if (request.answer === "NOT_GIVEN") {
           await tx.reefClubRecommendation.update({
             where: { id: recommendation.id },

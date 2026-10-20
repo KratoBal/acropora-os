@@ -105,6 +105,20 @@ describe("a beadott adag rögzítése", () => {
     }
   });
 
+  it("ajánlás-azonosító a szabad adagon nem fogadható el: az adag az ajánlás válasza (barracuda, #1759)", async () => {
+    const found = await validate(
+      plainToInstance(ReefClubRecordDoseDto, {
+        ...DOSE,
+        recommendationId: "rec-1",
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    assert.deepEqual(
+      found.map((entry) => entry.property),
+      ["recommendationId"],
+    );
+  });
+
   it("a paraméter az ötből való; a mértékegység a listából; az időpont szigorú ISO", async () => {
     assert.deepEqual(
       await errors(ReefClubRecordDoseDto, { ...DOSE, parameter: "PH" }),

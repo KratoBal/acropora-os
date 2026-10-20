@@ -53,6 +53,8 @@ export interface ReefClubRecommendationAnswer {
   text: string;
   reason?: NoDoseReason;
   recommendationId?: string;
+  /** ACTIVE only: the open proposal was issued for another account linked to the same customer. */
+  byOtherAccount?: boolean;
   amount?: number;
   unit?: "ML" | "G" | "CSEPP";
   durationDays?: number;
@@ -267,6 +269,7 @@ export class ReefClubRecommendationService {
           parameter,
           text: active.text,
           recommendationId: active.id,
+          byOtherAccount: active.accountId !== accountId,
           amount: active.amount.toNumber(),
           unit: active.doseUnit,
           durationDays: active.durationDays,

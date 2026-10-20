@@ -79,15 +79,12 @@ export class ReefClubRecordDoseDto {
 
   @IsDateString({ strict: true }) administeredAt!: string;
 
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsString()
-  @MaxLength(40)
-  recommendationId?: string | null;
-
-  @IsOptional()
-  @IsBoolean()
-  confirmed?: boolean;
+  /**
+   * NO `recommendationId` HERE (barracuda, #1759): a dose tied to a
+   * recommendation is its ANSWER (`.../answer`), which writes the dose and the
+   * status together. A free dose with the id would leave the recommendation
+   * open and count both its reservation and the dose.
+   */
 
   /** REQUIRED, against a double send from the phone (barracuda). */
   @Matches(OPERATION_ID, { message: OPERATION_ID_MESSAGE })

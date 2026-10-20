@@ -1459,6 +1459,7 @@ describe(
       const given = await open("given");
       const partial = await open("partial");
       const notGiven = await open("notgiven");
+      const reused = await open("reused");
 
       const database = new ReefClubDatabase(roleUrl);
       const service = new ReefClubDosesService(
@@ -1581,6 +1582,26 @@ describe(
             ? first.doseId === second.doseId
             : false,
           true,
+        );
+
+        // a key a free dose already used is a refusal, not the unique index's 500 (barracuda, #1759)
+        const clash = await service.answer(account.id, aquarium.id, reused.id, {
+          answer: "GIVEN",
+          clientOperationId: other.clientOperationId,
+        });
+        assert.equal(clash.outcome, "REFUSED");
+        assert.equal(
+          clash.outcome === "REFUSED" ? clash.code : "",
+          "OPERATION_ID_USED",
+        );
+        assert.equal(
+          (
+            await prisma.reefClubRecommendation.findUniqueOrThrow({
+              where: { id: reused.id },
+            })
+          ).status,
+          "OPEN",
+          "a visszautasított válasz semmit nem ír",
         );
 
         // an account that may not read the aquarium: the one 404

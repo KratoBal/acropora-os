@@ -125,8 +125,8 @@ export class ReefClubRecommendationsController {
         amount: body.amount,
         unit: body.unit,
         administeredAt: new Date(body.administeredAt),
-        recommendationId: body.recommendationId ?? null,
-        confirmed: body.confirmed ?? false,
+        recommendationId: null,
+        confirmed: false,
         clientOperationId: body.clientOperationId,
       }),
     );
