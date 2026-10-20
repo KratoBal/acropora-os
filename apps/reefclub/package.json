@@ -1,0 +1,40 @@
+{
+  "name": "@acropora/reefclub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3003",
+    "build": "next build",
+    "start": "next start --port 3003",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "@acropora/aquarium-calc": "workspace:*",
+    "@acropora/types": "workspace:*",
+    "@acropora/ui": "workspace:*",
+    "next": "^16.3.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "recharts": "^3.10.1",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@acropora/config": "workspace:*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "happy-dom": "20.11.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vitest": "4.1.10"
+  }
+}

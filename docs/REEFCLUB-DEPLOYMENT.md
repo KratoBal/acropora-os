@@ -28,6 +28,24 @@ container**. The internal API is never behind the public host, so even a gateway
 forwards every path cannot reach an internal route: the process behind it has none (acceptance
 7.7). The ReefClub web application (slice 9) calls `/rc/v1/*` on that host.
 
+## The web application (slice 9)
+
+`apps/reefclub` is its own Next application and image (`apps/reefclub/Dockerfile`, port 3003, built
+in the CI matrix like `api`, `web` and `partner`). The browser only talks to its own host:
+the app forwards **exactly `/rc/v1/*`** to the ReefClub API container and serves everything else
+itself. The `__Host-` cookies are bound to that one host, and the CSRF double submit reads the
+CSRF cookie from the page, so the page and the answers must share the host
+(`apps/api/src/reefclub/reefclub-cookies.ts`).
+
+| Setting                         | Where                         | What                                                                                                         |
+| ------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `REEFCLUB_API_URL`              | **build argument** (baked in) | the ReefClub API container's internal address, for example `http://<container>:3002`; never the internal API |
+| `REEFCLUB_WEB_URL` (on the API) | the ReefClub API container    | the public address of this web app; it is the only allowed origin and the base of the e-mail links           |
+
+Next stores the rewrite at build time, so a changed `REEFCLUB_API_URL` needs a rebuild. Setting
+the resource up in an environment (domain, Coolify resource, the API container with the
+`reefclub_app` role) is a separate, approved deployment step.
+
 ## Environment of the ReefClub container
 
 Only `REEFCLUB_`-prefixed settings, and none of the internal API's secrets: the process stops at

@@ -113,10 +113,10 @@ describe("a Next-appok typecheckje ma build nélkül is lefut", () => {
    *
    * Enelkul egy elrontott felismeres (atnevezett `next.config`, rossz gyoker)
    * URES listat adna, es MINDEN alabbi allitas zolden atmenne -- a ciklus
-   * egyszer sem futna le. Ma ketto van: `partner` es `web`.
+   * egyszer sem futna le. Ma harom van: `partner`, `reefclub` es `web`.
    */
-  it("pontosan két Next-app van, névvel", () => {
-    assert.deepEqual(appok, ["partner", "web"]);
+  it("pontosan három Next-app van, névvel", () => {
+    assert.deepEqual(appok, ["partner", "reefclub", "web"]);
   });
 
   /**

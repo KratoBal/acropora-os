@@ -1,0 +1,16 @@
+@import "tailwindcss";
+@source "../../../../packages/ui/src";
+
+/* The shared visual base, as in apps/partner and apps/web: the tokens first, then the Figma layer. */
+@import "../../../../packages/ui/src/theme.css";
+@import "../../../../packages/ui/src/figma-theme.css";
+
+textarea,
+select {
+  font: inherit;
+}
+
+body {
+  background: var(--color-pilot-grey-50, #f8fafb);
+  color: var(--color-pilot-grey-900, #1b2b2f);
+}
