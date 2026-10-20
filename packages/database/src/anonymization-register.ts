@@ -311,6 +311,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     intro: "business",
     filterDefinition: "business",
   },
+  HomepageContent: {
+    key: "business",
+    texts: "business",
+    slides: "business",
+    updatedById: "identifier",
+  },
   UnasCategoryMapping: {
     note: "freeText",
   },
