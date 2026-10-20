@@ -89,9 +89,20 @@ psql "$DATABASE_URL" -c "CREATE ROLE \"reefclub_app\" LOGIN PASSWORD '...'"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f packages/database/sql/reefclub-role.sql
 ```
 
+The writes are bound to rows as well: the file enables row-level security on six tables
+(`Aquarium`, `AquariumMeasurement`, `AquariumMeasurementTarget`, `AquariumShareEvent`,
+`ReefClubCustomerLink`, `ReefClubLinkCode`). The role writes only ReefClub aquariums and their
+rows, creates a link only with a code the same account claimed, ends links but never reopens
+them, and never undoes a claimed code. Every other role keeps exactly what its grants give it (a
+permissive policy for all roles on each of the six), and the table owner (the internal API's
+connection, the migrations) is not bound by row-level security at all. Applying the file
+therefore needs the owner: `psql` with the internal `DATABASE_URL`, as above.
+
 `reefclub-szerep.integration.spec.ts` runs every ReefClub flow on a role with exactly this file
-applied, and checks that the forbidden tables and columns refuse. A new column the ReefClub uses
-without a line in the file is a red test.
+applied, and checks that the forbidden tables and columns refuse, and that a shop aquarium, its
+measurements and ranges, a link and a code cannot be written in the refused ways (each beside a
+control of the same shape that succeeds). A new column the ReefClub uses without a line in the
+file is a red test.
 
 ## Account deletion
 
