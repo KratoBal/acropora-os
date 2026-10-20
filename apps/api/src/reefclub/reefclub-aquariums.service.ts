@@ -238,14 +238,18 @@ export class ReefClubAquariumsService {
           shareConsentVersion: consentVersion,
         },
       });
+      // `createMany`: no row read back (the role may write the log, not
+      // read the colleagues' read entries in it).
       if (count === 1)
-        await tx.aquariumShareEvent.create({
-          data: {
-            aquariumId: grant.aquariumId,
-            kind: "SHARED",
-            accountId,
-            consentVersion,
-          },
+        await tx.aquariumShareEvent.createMany({
+          data: [
+            {
+              aquariumId: grant.aquariumId,
+              kind: "SHARED",
+              accountId,
+              consentVersion,
+            },
+          ],
         });
     });
     return this.detail(accountId, grant);
@@ -258,8 +262,8 @@ export class ReefClubAquariumsService {
         data: { sharedWithShopAt: null, shareConsentVersion: null },
       });
       if (count === 1)
-        await tx.aquariumShareEvent.create({
-          data: { aquariumId: grant.aquariumId, kind: "REVOKED", accountId },
+        await tx.aquariumShareEvent.createMany({
+          data: [{ aquariumId: grant.aquariumId, kind: "REVOKED", accountId }],
         });
     });
   }
@@ -272,7 +276,11 @@ export class ReefClubAquariumsService {
 
   /** The aquarium with its targets and measurements (Cascade). */
   async remove(grant: ReefClubAquariumGrant): Promise<void> {
-    await this.database.aquarium.delete({ where: { id: grant.aquariumId } });
+    // `deleteMany`, not `delete`: the latter reads the whole row back, and the
+    // ReefClub role may not read the internal columns (slice 6, 2.1).
+    await this.database.aquarium.deleteMany({
+      where: { id: grant.aquariumId },
+    });
   }
 
   async targets(grant: ReefClubAquariumGrant): Promise<ReefClubTarget[]> {

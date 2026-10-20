@@ -1150,6 +1150,11 @@ model ReefClubAccount {
   /// Az elfogadott adatkezelesi tajekoztato verzioja es az elfogadas ideje.
   consentVersion       String
   consentAt            DateTime
+  /// A FIOKTORLES KERESE (terv v6.1, 4.5; 6. szelet). Kitoltve: a fiok zarolt
+  /// (egyik belepesi uton sem talalhato, a munkamenetei megszuntek, az
+  /// osszerendelesei es megosztasai megszuntek), es 30 nap utan a sor a
+  /// sajat akvariumaival, kezi meresivel, kulso belepeseivel egyutt torlodik.
+  deletionRequestedAt  DateTime?
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   sessions             ReefClubSession[]
@@ -1220,6 +1225,20 @@ model ReefClubAccountToken {
   account   ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, purpose])
+}
+
+/// A FIOKTORLES NAPLOJA (terv v6.1, 4.5: "a torles naplozott, ki, mikor"). A
+/// fiok sora a vegleges torleskor eltunik, ez megmarad: ezert NINCS idegen
+/// kulcsa, es nem visz szemelyes adatot, csak a fiok azonositojat.
+model ReefClubAccountDeletion {
+  id          String    @id @default(cuid())
+  accountId   String
+  requestedAt DateTime
+  /// A vegleges torles ideje; ures, amig a 30 nap nem telt le.
+  completedAt DateTime?
+
+  @@index([completedAt, requestedAt])
+  @@index([accountId])
 }
 
 enum ReefClubLinkStatus {

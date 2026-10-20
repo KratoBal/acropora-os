@@ -141,6 +141,13 @@ describe("ReefClub környezet-lista (terv v6.1, 2.1)", () => {
       assert.equal(forbiddenReason(name), null, name);
   });
 
+  it("a konténer ReefClub-kapcsolója (REEFCLUB_PROCESS) átmegy, egy ACROPORA_ alakú nem (6. szelet)", () => {
+    // docker-entrypoint.sh starts the ReefClub process on this name; with an
+    // ACROPORA_ name the process would stop here before serving anything.
+    assert.equal(forbiddenReason("REEFCLUB_PROCESS"), null);
+    assert.ok(forbiddenReason("ACROPORA_PROCESS"));
+  });
+
   it("minden tiltott nevet egyszerre felsorol, értéket egyet sem", () => {
     const environment = {
       REEFCLUB_DATABASE_URL: "postgresql://rc",

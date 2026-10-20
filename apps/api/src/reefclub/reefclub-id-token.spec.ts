@@ -93,6 +93,7 @@ describe("ReefClub ID-token ellenőrzés", () => {
       emailVerified: true,
       hostedDomain: null,
       nonce: null,
+      issuedAt: NOW_S - 10,
     });
   });
 
@@ -218,6 +219,7 @@ describe("Apple nonce", () => {
     emailVerified: false,
     hostedDomain: null,
     nonce,
+    issuedAt: null,
   });
 
   it("a token a nyers nonce SHA-256-ját viseli: egyezik", () => {
@@ -249,6 +251,7 @@ describe("a cím hitelessége", () => {
     emailVerified,
     hostedDomain,
     nonce: null,
+    issuedAt: null,
   });
 
   it("Google: gmail.com és googlemail.com igen, más tartomány hd nélkül nem", () => {

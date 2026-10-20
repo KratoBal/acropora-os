@@ -39,6 +39,7 @@ const EXPECTED_ROUTES = [
   "POST /rc/v1/shop-links",
   "GET /rc/v1/health",
   "GET /rc/v1/me",
+  "DELETE /rc/v1/me",
   "GET /rc/v1/me/share-consent",
   "PATCH /rc/v1/me",
   "POST /rc/v1/auth/apple",
