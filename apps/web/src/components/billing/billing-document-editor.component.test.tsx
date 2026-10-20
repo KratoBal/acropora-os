@@ -794,6 +794,168 @@ describe("BillingDocumentEditor", () => {
       expect(screen.getByText("Csak olvasható")).toBeInTheDocument();
     });
 
+    /*
+      A KÁRTYA 7976970f (barracuda #1659): az új számla kiállítása az `/uj`
+      útról a `/{id}/szerkesztes` útra vált, és a szerkesztő ott újra
+      felépül. A `navigation.replace` itt alapból üres, ezért az újraépülést
+      ez a segéd játssza le. MI PIROSÍT: ha a kiküldés eredménye a régi
+      példányban marad, az új példány nem mutat sem "Kiküldve", sem "nem ment
+      ki" sávot.
+    */
+    const remountOnReplace = () => {
+      let view: ReturnType<typeof render> | undefined;
+      navigation.replace.mockImplementation((path: string) => {
+        const id = path.split("/")[3]!;
+        api.detail.mockResolvedValue({
+          ...detailFrom(api.create.mock.calls[0]![1], id),
+          status: "ISSUED",
+          emailStatus: "SENT",
+          documentNumber: "AC-2026-000002",
+        });
+        view?.unmount();
+        view = render(<BillingDocumentEditor documentId={id} />);
+      });
+      return (first: ReturnType<typeof render>) => {
+        view = first;
+      };
+    };
+
+    it("a new invoice navigates after issuing: the new editor still shows that the letter went out", async () => {
+      window.sessionStorage.clear();
+      api.email.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "SENT",
+        documentNumber: "AC-2026-000002",
+      }));
+      const adopt = remountOnReplace();
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "PENDING",
+        documentNumber: "AC-2026-000002",
+      }));
+      adopt(render(<BillingDocumentEditor />));
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+      await confirmIssueAndSend();
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledTimes(1));
+      // az útváltás a küldés UTÁN jön, különben az eredmény a régi példányban ragad
+      expect(api.email.mock.invocationCallOrder[0]!).toBeLessThan(
+        navigation.replace.mock.invocationCallOrder[0]!,
+      );
+      expect(
+        await screen.findByText(
+          "Az értesítő levél elment: szamlazas@partner.hu.",
+        ),
+      ).toBeInTheDocument();
+      // egyszer olvasható: egy későbbi megnyitás nem mutatja újra
+      expect(
+        window.sessionStorage.getItem(
+          `billing-send-result.${api.create.mock.calls[0]![1].id}`,
+        ),
+      ).toBeNull();
+    });
+
+    it("a new invoice navigates after issuing: the new editor still shows that the letter failed", async () => {
+      window.sessionStorage.clear();
+      api.email.mockRejectedValue(new Error("A levélküldés ki van kapcsolva."));
+      const adopt = remountOnReplace();
+      api.issue.mockImplementation(async (_token, id) => ({
+        ...detailFrom(api.create.mock.calls[0]![1], id),
+        status: "ISSUED",
+        emailStatus: "PENDING",
+        documentNumber: "AC-2026-000002",
+      }));
+      adopt(render(<BillingDocumentEditor />));
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+      await confirmIssueAndSend();
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledTimes(1));
+      const warning = await screen.findByText(
+        "A bizonylat kiállítva, de a levél nem ment ki",
+      );
+      expect(warning.closest("[role=alert]")).toHaveTextContent(
+        "A levélküldés ki van kapcsolva.",
+      );
+    });
+
+    /*
+      BARRACUDA, #1729: ahol a böngésző a webhely-adatot tiltja, maga a
+      `window.sessionStorage` olvasása dob. MI PIROSÍT: ha a tár elérése a
+      `try` előtt (argumentumként) történik, (a) minden meglévő bizonylat
+      szerkesztője betöltési hibára fut, (b) a kiállított új számla
+      "A kiállítás nem sikerült" üzenetet kap, és nem vált útra.
+    */
+    const blockSiteData = () =>
+      vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+
+    it("with site data blocked, an existing document still loads", async () => {
+      const blocked = blockSiteData();
+      try {
+        api.detail.mockReset().mockResolvedValue(
+          detailFrom(
+            {
+              documentType: "INVOICE",
+              invoiceFormat: "PAPER",
+              currency: "HUF",
+              language: "hu",
+              lines: [],
+            },
+            "draft-blocked",
+          ),
+        );
+        render(<BillingDocumentEditor documentId="draft-blocked" />);
+        await waitFor(() =>
+          expect(api.detail).toHaveBeenCalledWith(
+            "token-1",
+            "draft-blocked",
+            expect.anything(),
+          ),
+        );
+        // a betöltés nem esik hibára (a hiba-sáv szövege a betöltési hiba)
+        await waitFor(() =>
+          expect(screen.queryByText(/nem tölthető be/)).toBeNull(),
+        );
+        // a név több helyen áll az oldalon: elég, hogy a betöltött adat megjelent
+        expect(
+          (await screen.findAllByText("Fővárosi Állat- és Növénykert")).length,
+        ).toBeGreaterThan(0);
+      } finally {
+        blocked.mockRestore();
+      }
+    });
+
+    it("with site data blocked, a new invoice is still issued and navigates without an issue error", async () => {
+      const blocked = blockSiteData();
+      try {
+        api.email.mockImplementation(async (_token, id) => ({
+          ...detailFrom(api.create.mock.calls[0]![1], id),
+          status: "ISSUED",
+          emailStatus: "SENT",
+          documentNumber: "AC-2026-000002",
+        }));
+        api.issue.mockImplementation(async (_token, id) => ({
+          ...detailFrom(api.create.mock.calls[0]![1], id),
+          status: "ISSUED",
+          emailStatus: "PENDING",
+          documentNumber: "AC-2026-000002",
+        }));
+        render(<BillingDocumentEditor />);
+        await pickPartner();
+        addLine("Munkadíj", "1", "280000");
+        await confirmIssueAndSend();
+        await waitFor(() =>
+          expect(navigation.replace).toHaveBeenCalledTimes(1),
+        );
+        expect(screen.queryByText(/A kiállítás nem sikerült/)).toBeNull();
+      } finally {
+        blocked.mockRestore();
+      }
+    });
+
     it("an e-invoice without a recipient cannot be issued, and says why", async () => {
       customers.detail.mockResolvedValue({
         id: "cust-1",
