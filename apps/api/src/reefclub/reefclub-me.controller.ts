@@ -1,15 +1,25 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Patch,
   Post,
   Req,
+  Res,
 } from "@nestjs/common";
+
+import type { CookieResponse } from "../auth/cookie.util.js";
+import { ReefClubAccountDeletionService } from "./reefclub-account-deletion.service.js";
+import {
+  reefClubCookieNames,
+  reefClubCookieOptions,
+} from "./reefclub-cookies.js";
 
 import {
   ReefClubAppleLinkDto,
+  ReefClubDeleteMeDto,
   ReefClubGoogleLinkDto,
   ReefClubUpdateMeDto,
 } from "./reefclub-auth.dto.js";
@@ -32,7 +42,7 @@ import {
  * GET and PATCH /rc/v1/me (plan v6.1, 3.2). The account is the session's,
  * never a field of the request (plan 3.1: the owner never comes from the body).
  * POST /rc/v1/me/identities/{google,apple} adds a sign-in method (slice 3).
- * DELETE /rc/v1/me (account deletion) is slice 6.
+ * DELETE /rc/v1/me deletes the account (slice 6).
  */
 @Controller("rc/v1/me")
 export class ReefClubMeController {
@@ -40,7 +50,46 @@ export class ReefClubMeController {
     private readonly auth: ReefClubAuthService,
     private readonly external: ReefClubExternalAuthService,
     private readonly limits: ReefClubRateLimits,
+    private readonly deletion: ReefClubAccountDeletionService,
   ) {}
+
+  /**
+   * DELETE /rc/v1/me (plan v6.1, 3.2 and 4.5; slice 6): with a fresh sign-in,
+   * the account is locked at once and deleted 30 days later. 202: accepted,
+   * the deletion itself is later. The session cookies are cleared, the same
+   * way as at logout. The limits are the login's: the password here is as
+   * good to guess as there.
+   */
+  @Delete()
+  @HttpCode(202)
+  async remove(
+    @Req() request: ReefClubRequest,
+    @Body() body: ReefClubDeleteMeDto,
+    @Res({ passthrough: true }) response: CookieResponse,
+  ): Promise<void> {
+    const account = accountOf(request);
+    this.limits.loginByAddress.check(reefClubCallerAddress(request));
+    this.limits.loginByEmail.check(`delete:${account}`);
+    await this.deletion.request(
+      account,
+      body.method === "PASSWORD"
+        ? { method: "PASSWORD", password: body.password! }
+        : body.method === "GOOGLE"
+          ? { method: "GOOGLE", idToken: body.idToken! }
+          : { method: "APPLE", idToken: body.idToken!, nonce: body.nonce! },
+    );
+    const names = reefClubCookieNames();
+    response.cookie(
+      names.session,
+      "",
+      reefClubCookieOptions(0, { httpOnly: true }),
+    );
+    response.cookie(
+      names.csrf,
+      "",
+      reefClubCookieOptions(0, { httpOnly: false }),
+    );
+  }
 
   /**
    * The consent text version the share must carry (`reefclub-consent.ts`);

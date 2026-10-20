@@ -49,16 +49,24 @@ export class ReefClubAccountRepository {
     @Inject(ReefClubDatabase) private readonly database: ReefClubDatabase,
   ) {}
 
+  /*
+    AN ACCOUNT LOCKED FOR DELETION IS NOT FOUND (plan v6.1, 4.5; slice 6): the
+    three lookups every sign-in path starts from leave it out, so a password,
+    a Google or an Apple sign-in, a password reset and a registration on its
+    address all behave as if there were no account (the registration's insert
+    then meets the unique address and sends nothing). Its sessions are gone,
+    and `ReefClubSessionRepository.findActive` refuses one anyway.
+  */
   findByEmail(email: string): Promise<ReefClubAccountRecord | null> {
-    return this.database.reefClubAccount.findUnique({
-      where: { email },
+    return this.database.reefClubAccount.findFirst({
+      where: { email, deletionRequestedAt: null },
       select: ACCOUNT_FIELDS,
     });
   }
 
   findById(id: string): Promise<ReefClubAccountRecord | null> {
-    return this.database.reefClubAccount.findUnique({
-      where: { id },
+    return this.database.reefClubAccount.findFirst({
+      where: { id, deletionRequestedAt: null },
       select: ACCOUNT_FIELDS,
     });
   }
@@ -186,9 +194,15 @@ export class ReefClubAccountRepository {
   ): Promise<ReefClubAccountRecord | null> {
     const identity = await this.database.reefClubIdentity.findUnique({
       where: { provider_subject: { provider, subject } },
-      select: { account: { select: ACCOUNT_FIELDS } },
+      select: {
+        account: {
+          select: { ...ACCOUNT_FIELDS, deletionRequestedAt: true },
+        },
+      },
     });
-    return identity?.account ?? null;
+    if (!identity || identity.account.deletionRequestedAt) return null;
+    const { deletionRequestedAt: _locked, ...account } = identity.account;
+    return account;
   }
 
   async providersOf(accountId: string): Promise<ReefClubIdentityProvider[]> {

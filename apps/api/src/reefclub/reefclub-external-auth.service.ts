@@ -196,6 +196,32 @@ export class ReefClubExternalAuthService {
       );
   }
 
+  /**
+   * A FRESH SIGN-IN WITH THE ACCOUNT'S OWN GOOGLE OR APPLE ACCOUNT (slice 6:
+   * the account deletion asks for one). The token must be valid, issued within
+   * `maxAgeSeconds`, and its subject must be the one bound to this account.
+   * Any other case is the same refusal.
+   */
+  async confirmOwn(
+    accountId: string,
+    provider: ReefClubProvider,
+    idToken: string,
+    options: { nonce?: string; maxAgeSeconds: number },
+  ): Promise<void> {
+    const claims = await this.claims(provider, idToken, options.nonce);
+    const refused = new UnauthorizedException(
+      `${NAMES[provider].A}-megerősítés nem sikerült.`,
+    );
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      claims.issuedAt === null ||
+      now - claims.issuedAt > options.maxAgeSeconds
+    )
+      throw refused;
+    const bound = await this.accounts.findByIdentity(provider, claims.subject);
+    if (!bound || bound.id !== accountId) throw refused;
+  }
+
   private async claims(
     provider: ReefClubProvider,
     idToken: string,

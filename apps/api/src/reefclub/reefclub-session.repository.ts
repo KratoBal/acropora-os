@@ -40,11 +40,23 @@ export class ReefClubSessionRepository {
 
   /** The live session for a raw token, or null. An expired row is removed. */
   async findActive(token: string): Promise<ReefClubActiveSession | null> {
-    const session = await this.database.reefClubSession.findUnique({
+    const row = await this.database.reefClubSession.findUnique({
       where: { tokenHash: hashSessionToken(token) },
-      select: { id: true, accountId: true, expiresAt: true },
+      select: {
+        id: true,
+        accountId: true,
+        expiresAt: true,
+        account: { select: { deletionRequestedAt: true } },
+      },
     });
-    if (!session) return null;
+    // A session of an account locked for deletion is no session (slice 6);
+    // the request deletes them, this holds if one is left over.
+    if (!row || row.account.deletionRequestedAt) return null;
+    const session = {
+      id: row.id,
+      accountId: row.accountId,
+      expiresAt: row.expiresAt,
+    };
     if (session.expiresAt.getTime() <= Date.now()) {
       await this.database.reefClubSession
         .deleteMany({ where: { id: session.id } })
