@@ -897,5 +897,207 @@ describe(
       assert.equal(claimed.usedByAccountId, account.id);
       assert.ok(Math.abs(claimed.usedAt!.getTime() - Date.now()) < 60_000);
     });
+
+    it("a szereppel az ajánlás-napló és a beadott adag csak a saját vagy az összekötött vevő akváriumára írható (8. szelet, sorszintű házirend)", async () => {
+      // Two accounts: A owns an aquarium and has an ACTIVE link to the shop customer (made on the
+      // owner connection); B has neither. Each refused shape has a control of the same shape that
+      // must succeed, so a missing column grant would not read as the policy.
+      const accountA = await prisma.reefClubAccount.create({
+        data: {
+          email: email("ajanlas-a"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const accountB = await prisma.reefClubAccount.create({
+        data: {
+          email: email("ajanlas-b"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const ownA = await prisma.aquarium.create({
+        data: {
+          aquariumNumber: `RCS-${suffix}-AJ`,
+          ownerAccountId: accountA.id,
+          ownershipType: "CUSTOMER",
+          name: `${NAME_PREFIX} ajánlás saját`,
+        },
+      });
+      await prisma.reefClubCustomerLink.create({
+        data: { accountId: accountA.id, customerId, status: "ACTIVE" },
+      });
+
+      const write = (sql: string, ...values: unknown[]) =>
+        asRole.$executeRawUnsafe(sql, ...values).then(
+          (count) => count,
+          (error: unknown) =>
+            /row-level security/i.test(String(error))
+              ? "SORSZINTŰ TILTÁS"
+              : /permission denied/i.test(String(error))
+                ? "OSZLOP/TÁBLA TILTÁS"
+                : String(error),
+        );
+      const recommendationSql =
+        'INSERT INTO "ReefClubRecommendation" ("id", "aquariumId", "accountId", "parameterCode", "direction", "frameVersion", "input", "basisMeasuredAt", "doseEffectVersion", "productName", "amount", "doseUnit", "durationDays", "effectHours", "source", "text", "templateId", "reservedChanges", "status", "effectEndsAt") VALUES ($1, $2, $3, \'KH\', \'EMEL\', \'keret-proba\', \'{}\'::jsonb, now(), 1, \'Minta\', 8, \'ML\', 1, 12, \'forrás\', \'mondat\', \'dose-v1\', \'[]\'::jsonb, $4::"ReefClubRecommendationStatus", now() + interval \'12 hours\')';
+      const doseSql =
+        'INSERT INTO "ReefClubAdministeredDose" ("id", "aquariumId", "accountId", "parameterCode", "recommendationId", "amount", "doseUnit", "administeredAt", "clientOperationId") VALUES ($1, $2, $3, \'KH\', $4, 4, \'ML\', now(), $5)';
+      const id = (name: string) => `szerep-aj-${name}-${suffix}`;
+      const result: Record<string, unknown> = {
+        "kontroll: ajánlás a saját akváriumra": await write(
+          recommendationSql,
+          id("r1"),
+          ownA.id,
+          accountA.id,
+          "OPEN",
+        ),
+        "ajánlás a saját akváriumra másik fiók nevén": await write(
+          recommendationSql,
+          id("r2"),
+          ownA.id,
+          accountB.id,
+          "OPEN",
+        ),
+        "ajánlás a bolti akváriumra összekötés nélkül": await write(
+          recommendationSql,
+          id("r3"),
+          shopAquariumId,
+          accountB.id,
+          "OPEN",
+        ),
+        "kontroll: ajánlás a bolti akváriumra aktív összekötéssel": await write(
+          recommendationSql,
+          id("r4"),
+          shopAquariumId,
+          accountA.id,
+          "OPEN",
+        ),
+        "ajánlás már megválaszoltként felvéve": await write(
+          recommendationSql,
+          id("r5"),
+          ownA.id,
+          accountA.id,
+          "GIVEN",
+        ),
+        "GIVEN visszajelzés a beadott adag sora nélkül": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'GIVEN\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r1"),
+        ),
+        "kontroll: beadott adag a saját akváriumra a saját ajánlással":
+          await write(
+            doseSql,
+            id("d1"),
+            ownA.id,
+            accountA.id,
+            id("r1"),
+            id("o1"),
+          ),
+        "kontroll: GIVEN visszajelzés a beadott adag sorával": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'GIVEN\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r1"),
+        ),
+        "megválaszolt ajánlás újraválaszolása": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'NOT_GIVEN\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r1"),
+        ),
+        "kontroll: másik nyitott ajánlás": await write(
+          recommendationSql,
+          id("r6"),
+          ownA.id,
+          accountA.id,
+          "OPEN",
+        ),
+        "kontroll: NOT_GIVEN visszajelzés adag nélkül": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'NOT_GIVEN\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r6"),
+        ),
+        "harmadik nyitott ajánlás": await write(
+          recommendationSql,
+          id("r7"),
+          ownA.id,
+          accountA.id,
+          "OPEN",
+        ),
+        "PARTIAL visszajelzés a beadott adag sora nélkül": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'PARTIAL\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r7"),
+        ),
+        "GIVEN visszajelzés másik ajánlás adag-sorával": await write(
+          'UPDATE "ReefClubRecommendation" SET "status" = \'GIVEN\', "feedbackAt" = now() WHERE "id" = $1',
+          id("r7"),
+        ),
+        "az ajánlott mennyiség átírása": await write(
+          'UPDATE "ReefClubRecommendation" SET "amount" = 1 WHERE "id" = $1',
+          id("r4"),
+        ),
+        "ajánlás törlése": await write(
+          'DELETE FROM "ReefClubRecommendation" WHERE "id" = $1',
+          id("r4"),
+        ),
+        "beadott adag a bolti akváriumra összekötés nélkül": await write(
+          doseSql,
+          id("d2"),
+          shopAquariumId,
+          accountB.id,
+          null,
+          id("o2"),
+        ),
+        "beadott adag másik akvárium ajánlásával": await write(
+          doseSql,
+          id("d3"),
+          ownA.id,
+          accountA.id,
+          id("r4"),
+          id("o3"),
+        ),
+        "kontroll: beadott adag ajánlás nélkül": await write(
+          doseSql,
+          id("d4"),
+          ownA.id,
+          accountA.id,
+          null,
+          id("o4"),
+        ),
+        "beadott adag átírása": await write(
+          'UPDATE "ReefClubAdministeredDose" SET "amount" = 99 WHERE "id" = $1',
+          id("d1"),
+        ),
+        "beadott adag törlése": await write(
+          'DELETE FROM "ReefClubAdministeredDose" WHERE "id" = $1',
+          id("d1"),
+        ),
+      };
+      assert.deepEqual(result, {
+        "kontroll: ajánlás a saját akváriumra": 1,
+        "ajánlás a saját akváriumra másik fiók nevén": "SORSZINTŰ TILTÁS",
+        "ajánlás a bolti akváriumra összekötés nélkül": "SORSZINTŰ TILTÁS",
+        "kontroll: ajánlás a bolti akváriumra aktív összekötéssel": 1,
+        "ajánlás már megválaszoltként felvéve": "SORSZINTŰ TILTÁS",
+        "GIVEN visszajelzés a beadott adag sora nélkül": "SORSZINTŰ TILTÁS",
+        "kontroll: beadott adag a saját akváriumra a saját ajánlással": 1,
+        "kontroll: GIVEN visszajelzés a beadott adag sorával": 1,
+        "megválaszolt ajánlás újraválaszolása": 0,
+        "kontroll: másik nyitott ajánlás": 1,
+        "kontroll: NOT_GIVEN visszajelzés adag nélkül": 1,
+        "harmadik nyitott ajánlás": 1,
+        "PARTIAL visszajelzés a beadott adag sora nélkül": "SORSZINTŰ TILTÁS",
+        "GIVEN visszajelzés másik ajánlás adag-sorával": "SORSZINTŰ TILTÁS",
+        "az ajánlott mennyiség átírása": "OSZLOP/TÁBLA TILTÁS",
+        "ajánlás törlése": "OSZLOP/TÁBLA TILTÁS",
+        "beadott adag a bolti akváriumra összekötés nélkül": "SORSZINTŰ TILTÁS",
+        "beadott adag másik akvárium ajánlásával": "SORSZINTŰ TILTÁS",
+        "kontroll: beadott adag ajánlás nélkül": 1,
+        "beadott adag átírása": "OSZLOP/TÁBLA TILTÁS",
+        "beadott adag törlése": "OSZLOP/TÁBLA TILTÁS",
+      });
+
+      // On the owner connection: the answered one stayed GIVEN, the amount is untouched.
+      const answered = await prisma.reefClubRecommendation.findUniqueOrThrow({
+        where: { id: id("r1") },
+        select: { status: true, amount: true },
+      });
+      assert.equal(answered.status, "GIVEN");
+      assert.equal(answered.amount.toNumber(), 8);
+    });
   },
 );
