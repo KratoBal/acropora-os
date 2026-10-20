@@ -64,9 +64,15 @@ export class AquariumsService {
     return aquariumVisibilityWhere({ scope, unitIds, mode });
   }
 
+  /**
+   * The list is a read too (acrobot's decision on barracuda's #1726 review):
+   * the name and the mark of a shared ReefClub aquarium are the customer's
+   * data, so every shared one on the returned page is logged for the
+   * colleague, purpose "lista". The ones on other pages were not shown.
+   */
   async list(query: AquariumListQueryDto, user: AuthenticatedUser) {
     const visibility = await this.visibilityFor(user, "READ");
-    return this.repository.list(
+    const page = await this.repository.list(
       {
         page: query.page,
         pageSize: query.pageSize,
@@ -77,6 +83,17 @@ export class AquariumsService {
       },
       visibility,
     );
+    const shared = page.items.filter((item) => item.reefClubSharedAt);
+    if (shared.length > 0)
+      await prisma.aquariumShareEvent.createMany({
+        data: shared.map((item) => ({
+          aquariumId: item.id,
+          kind: "INTERNAL_READ" as const,
+          userId: user.id,
+          purpose: "lista",
+        })),
+      });
+    return page;
   }
 
   /**

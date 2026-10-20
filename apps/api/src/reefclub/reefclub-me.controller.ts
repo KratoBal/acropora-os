@@ -17,6 +17,7 @@ import {
   type ReefClubMe,
   ReefClubAuthService,
 } from "./reefclub-auth.service.js";
+import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
 import { ReefClubExternalAuthService } from "./reefclub-external-auth.service.js";
 import {
   reefClubCallerAddress,
@@ -40,6 +41,15 @@ export class ReefClubMeController {
     private readonly external: ReefClubExternalAuthService,
     private readonly limits: ReefClubRateLimits,
   ) {}
+
+  /**
+   * The consent text version the share must carry (`reefclub-consent.ts`);
+   * the web page shows the text of this version before sharing.
+   */
+  @Get("share-consent")
+  shareConsent(): { version: string } {
+    return { version: REEFCLUB_SHARE_CONSENT_VERSION };
+  }
 
   @Get()
   me(@Req() request: ReefClubRequest): Promise<ReefClubMe> {

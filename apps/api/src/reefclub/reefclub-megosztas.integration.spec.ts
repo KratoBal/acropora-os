@@ -18,6 +18,7 @@ import {
 import { nincsMaradek } from "../common/takaritas-leltar.js";
 import { hashPassword } from "../users/password.util.js";
 import { configureReefClubApp } from "./reefclub-app.configuration.js";
+import { REEFCLUB_SHARE_CONSENT_VERSION } from "./reefclub-consent.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -485,9 +486,27 @@ describe(
     });
 
     it("5.2/13: a megosztott akvárium jelöléssel látszik, az olvasások mennek és naplózódnak, minden írás 404", async () => {
+      // The server accepts only its own current consent version (#1726
+      // review b): another one is refused and nothing is shared.
+      const stale = await rc(`/rc/v1/aquariums/${sharedId}/share`, {
+        method: "POST",
+        body: { consentVersion: "megosztas-regi" },
+        session: sessionA,
+      });
+      assert.equal(stale.status, 400);
+      assert.equal(
+        (await prisma.aquarium.findUniqueOrThrow({ where: { id: sharedId } }))
+          .sharedWithShopAt,
+        null,
+      );
+      const consent = await rc("/rc/v1/me/share-consent", {
+        session: sessionA,
+      });
+      const version = ((await consent.json()) as { version: string }).version;
+      assert.equal(version, REEFCLUB_SHARE_CONSENT_VERSION);
       const shared = await rc(`/rc/v1/aquariums/${sharedId}/share`, {
         method: "POST",
-        body: { consentVersion: "megosztas-1" },
+        body: { consentVersion: version },
         session: sessionA,
       });
       assert.equal(shared.status, 201, await shared.clone().text());
@@ -519,13 +538,14 @@ describe(
       assert.ok(reads.length >= 4, `${reads.length} naplózott olvasás`);
       assert.ok(reads.every((read) => read.userId === userId));
       const purposes = new Set(reads.map((read) => read.purpose));
-      for (const purpose of ["részlet", "mérések", "XLSX", "PDF"])
+      // "lista": the list read above, acrobot's decision on #1726 review a.
+      for (const purpose of ["lista", "részlet", "mérések", "XLSX", "PDF"])
         assert.ok(purposes.has(purpose), `nincs naplózva: ${purpose}`);
       const log = await prisma.aquariumShareEvent.findMany({
         where: { aquariumId: sharedId, kind: "SHARED" },
       });
       assert.equal(log.length, 1);
-      assert.equal(log[0]!.consentVersion, "megosztas-1");
+      assert.equal(log[0]!.consentVersion, REEFCLUB_SHARE_CONSENT_VERSION);
     });
 
     it("a vezérlőpult akvárium-riasztásai között egyik ReefClub-akvárium sincs, a bolti igen (kontroll)", async () => {
