@@ -100,9 +100,11 @@ export interface PriorRecommendation {
   /**
    * What it recommended: the product and the amount in the row's unit. The
    * manufacturer's daily maximum counts an open or expired recommendation as
-   * given, so the log keeps these three with it.
+   * given, so the log keeps these three with it. `productId` is null when
+   * the product has since been deleted (the log's foreign key is set null):
+   * to the calculation that is "another product", an unknown effect.
    */
-  productId: string;
+  productId: string | null;
   amount: number;
   unit: DoseUnit;
   status: PriorRecommendationStatus;
@@ -122,6 +124,12 @@ export interface RecommendationInput {
   rows: readonly DoseRow[];
   administrations: readonly AdministrationRecord[];
   priorRecommendations: readonly PriorRecommendation[];
+  /**
+   * When the rows above were last built successfully (the projection's last
+   * SUCCEEDED run); null: never. A list built longer ago than
+   * `MAX_DOSE_LIST_AGE_HOURS` gives no dose.
+   */
+  doseListBuiltAt: Date | null;
 }
 
 export interface RecommendationOptions {
@@ -135,6 +143,7 @@ export interface RecommendationOptions {
 export type NoDoseReason =
   | "OUT_OF_CIRCLE"
   | "ACTIVE_RECOMMENDATION"
+  | "DOSE_LIST_STALE"
   | "NO_VOLUME"
   | "NO_TARGET_BAND"
   | "NO_MEASUREMENT"

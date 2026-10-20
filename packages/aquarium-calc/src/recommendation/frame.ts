@@ -122,6 +122,11 @@ export const MAX_MEASUREMENT_AGE_DAYS: Record<RecommendationParameter, number> =
 export const HOUR_MS = 60 * 60 * 1000;
 /** The limit and the "one correction per measurement" rule use a ROLLING window (plan 6.5, v5). */
 export const ROLLING_WINDOW_HOURS = 24;
+/**
+ * The product dose list the ReefClub reads is a projection (plan 6.2, path B); one built longer ago than
+ * this, or never, gives no dose. The same number the OS status route uses (`DOSE_PROJECTION_MAX_AGE_HOURS`).
+ */
+export const MAX_DOSE_LIST_AGE_HOURS = 26;
 /** An alarm-level manual measurement needs a repeat within this long (plan 6.3 gate 2). */
 export const REPEAT_MEASUREMENT_WINDOW_HOURS = 48;
 /** A product row without an effect time works for this long (plan 6.2, v6). */
