@@ -40,9 +40,12 @@ import {
   WEBSHOP_SLUG_STORE,
   WebshopSlugService,
 } from "./slug/webshop-slug.service.js";
+import { DoseEffectsController } from "./dose-effects/dose-effects.controller.js";
+import { DoseEffectsService } from "./dose-effects/dose-effects.service.js";
 @Module({
   controllers: [
     ProductController,
+    DoseEffectsController,
     ProductBarcodeController,
     ProductExtensionController,
     ProductShippingProfileController,
@@ -55,6 +58,7 @@ import {
     UrlRedirectController,
   ],
   providers: [
+    DoseEffectsService,
     ProductRepository,
     ProductService,
     ProductBarcodeRepository,

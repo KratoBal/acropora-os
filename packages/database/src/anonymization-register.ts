@@ -704,6 +704,16 @@ export const ANONYMIZATION_REGISTER: Readonly<
   AquariumMeasurementTarget: {
     parameterCode: "business",
   },
+  // ReefClub slice 7: the product dose list. Product data, not personal:
+  // the source is a manufacturer page or a label.
+  ProductDoseEffect: {
+    parameterCode: "business",
+    source: "business",
+  },
+  ProductDoseEffectVersion: {
+    source: "business",
+    verifiedById: "identifier",
+  },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.
   AquariumShareEvent: {
