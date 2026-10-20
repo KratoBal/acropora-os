@@ -8,7 +8,7 @@
  *
  * `HOMEPAGE_TEXT_FIELDS` is the list of keys the storefront reads
  * (`apps/storefront/src/modules/kezdolap/szovegek.ts` in acropora-commerce; the
- * copy was generated from commit 12dd7a1 of the home page blocks), with the
+ * copy was generated from commit 31a2cc9 of the home page blocks (acropora-commerce #554)), with the
  * label, the field type and the starting value the page shows until a value is
  * written here. Two repositories cannot test each other, so the guard against
  * drift is on the receiving side: the editor shows every key of this list, the
@@ -125,7 +125,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 1. terület",
     label: "1. hivatkozás: cél",
     type: "link",
-    default: "/categories/halak",
+    default: "/store",
   },
   {
     key: "mit.1.l2.felirat",
@@ -139,7 +139,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 1. terület",
     label: "2. hivatkozás: cél",
     type: "link",
-    default: "/categories/korallok",
+    default: "/store",
   },
   {
     key: "mit.1.l3.felirat",
@@ -153,7 +153,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 1. terület",
     label: "3. hivatkozás: cél",
     type: "link",
-    default: "/categories/korallok",
+    default: "/store",
   },
   {
     key: "mit.1.l4.felirat",
@@ -167,7 +167,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 1. terület",
     label: "4. hivatkozás: cél",
     type: "link",
-    default: "/categories/korallok",
+    default: "/store",
   },
   {
     key: "mit.1.l5.felirat",
@@ -181,7 +181,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 1. terület",
     label: "5. hivatkozás: cél",
     type: "link",
-    default: "/categories/gerinctelenek",
+    default: "/store",
   },
   {
     key: "mit.2.cim",
@@ -209,7 +209,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 2. terület",
     label: "1. hivatkozás: cél",
     type: "link",
-    default: "/categories/technika",
+    default: "/store",
   },
   {
     key: "mit.2.l2.felirat",
@@ -223,7 +223,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 2. terület",
     label: "2. hivatkozás: cél",
     type: "link",
-    default: "/categories/technika",
+    default: "/store",
   },
   {
     key: "mit.2.l3.felirat",
@@ -237,7 +237,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 2. terület",
     label: "3. hivatkozás: cél",
     type: "link",
-    default: "/categories/technika",
+    default: "/store",
   },
   {
     key: "mit.2.l4.felirat",
@@ -251,7 +251,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 2. terület",
     label: "4. hivatkozás: cél",
     type: "link",
-    default: "/categories/technika",
+    default: "/store",
   },
   {
     key: "mit.2.l5.felirat",
@@ -293,7 +293,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 3. terület",
     label: "1. hivatkozás: cél",
     type: "link",
-    default: "/categories/vizkezeles",
+    default: "/store",
   },
   {
     key: "mit.3.l2.felirat",
@@ -307,7 +307,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 3. terület",
     label: "2. hivatkozás: cél",
     type: "link",
-    default: "/categories/vizkezeles",
+    default: "/store",
   },
   {
     key: "mit.3.l3.felirat",
@@ -321,7 +321,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 3. terület",
     label: "3. hivatkozás: cél",
     type: "link",
-    default: "/categories/vizkezeles",
+    default: "/store",
   },
   {
     key: "mit.3.l4.felirat",
@@ -335,7 +335,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Mit keresel ma? 3. terület",
     label: "4. hivatkozás: cél",
     type: "link",
-    default: "/categories/vizkezeles",
+    default: "/store",
   },
   {
     key: "mit.3.l5.felirat",
@@ -582,7 +582,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Tapasztaltaknak",
     label: "1. sor: cél",
     type: "link",
-    default: "/categories/korallok",
+    default: "/store",
   },
   {
     key: "halado.2.cim",
@@ -618,13 +618,14 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     label: "3. sor: jobb oldali szöveg",
     type: "text",
     default: "Fauna Marin, Tropic Marin, Red Sea",
+    sample: true,
   },
   {
     key: "halado.3.link",
     group: "Tapasztaltaknak",
     label: "3. sor: cél",
     type: "link",
-    default: "/categories/vizkezeles",
+    default: "/store",
   },
   {
     key: "halado.4.cim",
@@ -645,7 +646,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     group: "Tapasztaltaknak",
     label: "4. sor: cél",
     type: "link",
-    default: "/categories/technika",
+    default: "/store",
   },
   {
     key: "halado.gomb.felirat",
@@ -1043,6 +1044,13 @@ export interface HomepageContentInput {
 
 export interface HomepageContent extends HomepageContentInput {
   updatedAt: string | null;
+  /**
+   * Whether this environment sends the content to the web shop (and lets the
+   * editor upload images to it). An administrator's switch in the editor; the
+   * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable also turns it on, but its
+   * absence does not turn it off.
+   */
+  projectionEnabled: boolean;
 }
 
 export const HOMEPAGE_LIMITS = {

@@ -106,6 +106,14 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         // a márkák jogával (products.view), mint az API végpontja
         entryId: "brands",
       },
+      {
+        label: "Webshop kezdőlap",
+        description:
+          "A kezdőlap szövegei, hivatkozásai, képei és a nyitó csúszka diái.",
+        href: "/admin/kezdolap",
+        // a márkák jogával (products.view), mint az API végpontja
+        entryId: "brands",
+      },
     ],
   },
   {

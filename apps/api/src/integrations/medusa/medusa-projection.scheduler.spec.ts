@@ -108,6 +108,8 @@ function adatbazis(
         return markaSorok;
       },
     },
+    // a kezdolap kapcsoloja: itt nincs sor, tehat ki van kapcsolva
+    homepageContent: { findUnique: async () => null },
   } as unknown as ProjectionSchedulerDatabase;
   return { db, hivasok };
 }
@@ -500,6 +502,7 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
       unasProductSnapshot: { findMany: async () => [] },
       productKnowledgeFact: { findMany: async () => [] },
       brand: { findMany: async () => [] },
+      homepageContent: { findUnique: async () => null },
     } as unknown as ProjectionSchedulerDatabase;
 
     const { run } = futtato();
@@ -1126,5 +1129,99 @@ describe("a márka változása is esedékessé teszi a termékeit (t11)", () => 
       await scheduler.runOnce();
       assert.deepEqual(kapott, vart);
     }
+  });
+});
+
+/**
+ * A KEZDŐLAP TARTALMÁNAK KÖRE (Balázs, 2026-10-20), kapcsolóval: a változó VAGY
+ * az admin szerkesztő-oldali kapcsolója (egy adatbázis-sor) kapcsolja be; a
+ * változó HIÁNYA nem tilt (acrobot 33456).
+ *
+ * MI PIROSIT: a kör kapcsoló nélkül fut; az admin kapcsolója (változó nélkül)
+ * nem indítja el; a változó nem indítja el; egy hiba megállítja a termékek
+ * körét vagy hiányzik a naplóból.
+ */
+describe("MedusaProjectionScheduler kezdolap kore", () => {
+  const dbKapcsoloval = (be: boolean) => {
+    const { db } = adatbazis(
+      [termek()],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+    (db as unknown as Record<string, unknown>).homepageContent = {
+      findUnique: async () => (be ? { projectionEnabled: true } : null),
+    };
+    return db;
+  };
+  const scheduler = (
+    db: ProjectionSchedulerDatabase,
+    environment: NodeJS.ProcessEnv,
+    run: () => Promise<{ status: "sent" | "unchanged" | "nothing" }>,
+    n = naplo(),
+  ) =>
+    new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato().run,
+      runPricing: arFuttato().run,
+      environment,
+      logger: n.logger,
+      runHomepageContent: run,
+    });
+
+  it("se kapcsoló, se változó: nem fut", async () => {
+    let hivas = 0;
+    await scheduler(dbKapcsoloval(false), BEKAPCSOLVA, async () => {
+      hivas += 1;
+      return { status: "sent" };
+    }).runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("az admin kapcsolója változó nélkül is elindítja, és a küldést naplózza", async () => {
+    let hivas = 0;
+    const n = naplo();
+    await scheduler(
+      dbKapcsoloval(true),
+      BEKAPCSOLVA,
+      async () => {
+        hivas += 1;
+        return { status: "sent" };
+      },
+      n,
+    ).runOnce();
+    assert.equal(hivas, 1);
+    assert.ok(
+      n.sorok.some((s) => s.includes("Kezdolap tartalom: sent")),
+      n.sorok.join("\n"),
+    );
+  });
+
+  it("a változó kapcsoló nélkül is elindítja", async () => {
+    let hivas = 0;
+    await scheduler(
+      dbKapcsoloval(false),
+      { ...BEKAPCSOLVA, MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
+      async () => {
+        hivas += 1;
+        return { status: "unchanged" };
+      },
+    ).runOnce();
+    assert.equal(hivas, 1);
+  });
+
+  it("egy hiba naplóba megy, és a termékek köre fut tovább", async () => {
+    const n = naplo();
+    const eredmeny = await scheduler(
+      dbKapcsoloval(true),
+      BEKAPCSOLVA,
+      async () => {
+        throw new Error("a bolt nem valaszol");
+      },
+      n,
+    ).runOnce();
+    assert.equal(eredmeny, "SKIPPED");
+    assert.ok(
+      n.sorok.some((s) => s.includes("a bolt nem valaszol")),
+      n.sorok.join("\n"),
+    );
   });
 });

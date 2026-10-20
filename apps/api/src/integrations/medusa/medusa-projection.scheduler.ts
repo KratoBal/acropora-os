@@ -150,6 +150,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "productKnowledgeFact"
   /** A márka változása (t11): az átnevezés és a SEO-mezők a terméket nem érintik. */
   | "brand"
+  /** A kezdőlap kapcsolója (az admin szerkesztő-oldali kapcsolója, egy sor). */
+  | "homepageContent"
 >;
 
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
@@ -192,6 +194,8 @@ export interface MedusaProjectionSchedulerDeps {
   runLandingPages?: () => Promise<LandingPageOutcome[]>;
   /** A kezdőlap tartalmának köre (Balázs, 2026-10-20). */
   runHomepageContent?: () => Promise<HomepageProjectionOutcome>;
+  /** Be van-e kapcsolva a kezdőlap küldése: a változó VAGY az admin kapcsolója. */
+  homepageSwitchedOn?: () => Promise<boolean>;
 }
 
 /**
@@ -225,6 +229,7 @@ export class MedusaProjectionScheduler
   private readonly runRedirects: () => Promise<RedirectProjectionOutcome>;
   private readonly runLandingPages: () => Promise<LandingPageOutcome[]>;
   private readonly runHomepageContent: () => Promise<HomepageProjectionOutcome>;
+  private readonly homepageOn: () => Promise<boolean>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
 
@@ -274,6 +279,18 @@ export class MedusaProjectionScheduler
           prismaLandingSource,
           true,
         ));
+    this.homepageOn =
+      deps?.homepageSwitchedOn ??
+      (() =>
+        projectHomepageContentInRound(this.environment, {
+          switchedOn: async () =>
+            (
+              await this.db.homepageContent.findUnique({
+                where: { key: "main" },
+                select: { projectionEnabled: true },
+              })
+            )?.projectionEnabled === true,
+        }));
     this.runHomepageContent =
       deps?.runHomepageContent ??
       (async () =>
@@ -477,8 +494,8 @@ export class MedusaProjectionScheduler
    * maga is kér egy kört, ez a tartalék, ha az elmaradt vagy elbukott.
    */
   private async kezdolapKor(): Promise<void> {
-    if (!projectHomepageContentInRound(this.environment)) return;
     try {
+      if (!(await this.homepageOn())) return;
       const eredmeny = await this.runHomepageContent();
       if (eredmeny.status !== "unchanged" && eredmeny.status !== "nothing")
         this.naplo.log(describeHomepageProjection(eredmeny));

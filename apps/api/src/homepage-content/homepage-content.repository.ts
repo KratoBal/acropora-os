@@ -14,6 +14,25 @@ export class HomepageContentRepository implements HomepageContentStore {
     return prisma.homepageContent.findUnique({ where: { key } });
   }
 
+  setProjection(
+    key: string,
+    enabled: boolean,
+    userId: string,
+  ): Promise<HomepageContentRow> {
+    return prisma.homepageContent.upsert({
+      where: { key },
+      // a row nobody has written content to yet: no overrides, slides not set
+      create: {
+        key,
+        texts: {},
+        slides: Prisma.DbNull,
+        projectionEnabled: enabled,
+        updatedById: userId,
+      },
+      update: { projectionEnabled: enabled, updatedById: userId },
+    });
+  }
+
   save(
     key: string,
     input: HomepageContentInput,

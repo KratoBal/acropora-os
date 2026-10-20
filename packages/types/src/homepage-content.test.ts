@@ -54,6 +54,33 @@ describe("the home page catalogue", () => {
   });
 });
 
+describe("the starting link targets", () => {
+  it("point only at routes the shop is known to have (commerce #554)", () => {
+    const known = new Set(["", "/store", "/hamarosan/szolgaltatasok"]);
+    for (const f of HOMEPAGE_TEXT_FIELDS)
+      if (f.type === "link")
+        assert.ok(known.has(f.default), `${f.key}: ${f.default}`);
+  });
+
+  it("marks the invented facts as samples, the plain titles and buttons not", () => {
+    const sample = new Set(
+      HOMEPAGE_TEXT_FIELDS.filter((f) => f.sample).map((f) => f.key),
+    );
+    for (const key of [
+      "hero.tenyek.3.cim",
+      "velemenyek.1.idezet",
+      "markak.1",
+      "bolt.cim_ertek",
+      "bolt.nyitva_ertek",
+      "halado.1.szoveg",
+      "halado.3.szoveg",
+    ])
+      assert.ok(sample.has(key), key);
+    for (const key of ["mit.cim", "kezdo.cim", "bolt.gomb.felirat"])
+      assert.ok(!sample.has(key), key);
+  });
+});
+
 describe("parseHomepageContentInput", () => {
   it("takes the editor's record: texts, none, null or up to five slides", () => {
     assert.ok(ok(input()));

@@ -1570,6 +1570,9 @@ model HomepageContent {
   key         String   @unique
   texts       Json
   slides      Json?
+  /// Az adminisztrator kapcsoloja: kuldjuk-e a tartalmat a webshopba (es
+  /// toltheto-e fel kep). Alapbol ki; a kornyezeti valtozo hianya nem tiltja.
+  projectionEnabled Boolean @default(false)
   updatedById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

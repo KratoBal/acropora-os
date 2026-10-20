@@ -95,7 +95,7 @@ describe("projectHomepageContent", () => {
     const { client, writes } = fakeClient(null);
     const out = await projectHomepageContent(
       client,
-      { content: async () => content() },
+      { content: async () => content(), switchedOn: async () => true },
       true,
     );
     assert.equal(out.status, "sent");
@@ -108,7 +108,7 @@ describe("projectHomepageContent", () => {
       (
         await projectHomepageContent(
           same.client,
-          { content: async () => content() },
+          { content: async () => content(), switchedOn: async () => true },
           true,
         )
       ).status,
@@ -120,7 +120,7 @@ describe("projectHomepageContent", () => {
       (
         await projectHomepageContent(
           dry.client,
-          { content: async () => content() },
+          { content: async () => content(), switchedOn: async () => true },
           false,
         )
       ).status,
@@ -133,7 +133,7 @@ describe("projectHomepageContent", () => {
     const { client, writes } = fakeClient(null);
     const out = await projectHomepageContent(
       client,
-      { content: async () => null },
+      { content: async () => null, switchedOn: async () => true },
       true,
     );
     assert.equal(out.status, "nothing");
@@ -142,23 +142,34 @@ describe("projectHomepageContent", () => {
 });
 
 describe("projectHomepageContentInRound", () => {
-  it("is off unless the flag is exactly true", () => {
-    assert.equal(projectHomepageContentInRound({}), false);
+  const source = (on: boolean) => ({ switchedOn: async () => on });
+
+  it("is off unless the variable is exactly true or the administrator's switch is on", async () => {
+    assert.equal(await projectHomepageContentInRound({}, source(false)), false);
     assert.equal(
-      projectHomepageContentInRound({
-        MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false",
-      }),
+      await projectHomepageContentInRound(
+        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
+        source(false),
+      ),
       false,
     );
     assert.equal(
-      projectHomepageContentInRound({ MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" }),
+      await projectHomepageContentInRound(
+        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" },
+        source(false),
+      ),
       false,
     );
     assert.equal(
-      projectHomepageContentInRound({
-        MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true",
-      }),
+      await projectHomepageContentInRound(
+        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
+        source(false),
+      ),
       true,
     );
+  });
+
+  it("the administrator's switch alone turns it on, with no variable at all", async () => {
+    assert.equal(await projectHomepageContentInRound({}, source(true)), true);
   });
 });
