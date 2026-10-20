@@ -143,33 +143,29 @@ describe("projectHomepageContent", () => {
 
 describe("projectHomepageContentInRound", () => {
   const source = (on: boolean) => ({ switchedOn: async () => on });
+  const allowed = { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" };
 
-  it("is off unless the variable is exactly true or the administrator's switch is on", async () => {
-    assert.equal(await projectHomepageContentInRound({}, source(false)), false);
+  it("is an AND: the variable exactly true AND the administrator's switch", async () => {
     assert.equal(
-      await projectHomepageContentInRound(
-        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
-        source(false),
-      ),
-      false,
-    );
-    assert.equal(
-      await projectHomepageContentInRound(
-        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" },
-        source(false),
-      ),
-      false,
-    );
-    assert.equal(
-      await projectHomepageContentInRound(
-        { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
-        source(false),
-      ),
+      await projectHomepageContentInRound(allowed, source(true)),
       true,
+    );
+    assert.equal(
+      await projectHomepageContentInRound(allowed, source(false)),
+      false,
     );
   });
 
-  it("the administrator's switch alone turns it on, with no variable at all", async () => {
-    assert.equal(await projectHomepageContentInRound({}, source(true)), true);
+  it("the switch alone never turns it on, whatever the variable says (acrobot 33495)", async () => {
+    for (const env of [
+      {},
+      { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
+      { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" },
+      { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "TRUE" },
+    ])
+      assert.equal(
+        await projectHomepageContentInRound(env, source(true)),
+        false,
+      );
   });
 });

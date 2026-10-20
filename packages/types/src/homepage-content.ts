@@ -1045,12 +1045,18 @@ export interface HomepageContentInput {
 export interface HomepageContent extends HomepageContentInput {
   updatedAt: string | null;
   /**
-   * Whether this environment sends the content to the web shop (and lets the
-   * editor upload images to it). An administrator's switch in the editor; the
-   * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable also turns it on, but its
-   * absence does not turn it off.
+   * The administrator's switch in the editor: send the content to the web shop
+   * (and let the editor upload images to it). It takes effect ONLY where the
+   * environment allows it too (`projectionAllowed`).
    */
   projectionEnabled: boolean;
+  /**
+   * Whether this ENVIRONMENT allows writing to the web shop
+   * (`MEDUSA_PROJECT_HOMEPAGE_CONTENT=true`). Production OS has it off, so the
+   * switch there does nothing and the editor says so; the commerce exception
+   * covers the test shop only (acrobot 33495, barracuda #1721).
+   */
+  projectionAllowed: boolean;
 }
 
 export const HOMEPAGE_LIMITS = {
