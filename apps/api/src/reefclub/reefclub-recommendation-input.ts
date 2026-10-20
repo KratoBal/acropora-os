@@ -24,8 +24,12 @@ import { REEFCLUB_MANUAL_SOURCE } from "./reefclub-aquariums.service.js";
  *
  * The mappings that carry a safety meaning:
  *
- *  - a shop measurement is `SHOP`, the customer's own manual one `MANUAL`
- *    (the gate that wants a repeat for an alarm-level manual value);
+ *  - a measurement is `SHOP` only on a SHOP aquarium and only if its source is
+ *    not the customer's own manual one; everything else, an unknown or missing
+ *    source included, is `MANUAL` (barracuda, #1757): the gate that wants a
+ *    repeat for an alarm-level manual value must not be opened by a guess, and
+ *    a wrong guess toward MANUAL costs a repeat measurement, a wrong guess
+ *    toward SHOP costs a lifted alarm;
  *  - `alert` is `measurementStatus(...) === "ALERT"` against the SAME band
  *    this input carries, so the engine and the screens call the same value an
  *    alarm;
@@ -104,6 +108,8 @@ export interface RawRecommendation {
 
 export interface RecommendationRawData {
   now: Date;
+  /** Whose aquarium this is for the asking account: its own, or the linked customer's. */
+  origin: "OWN" | "SHOP";
   parameter: string;
   aquarium: RawAquarium;
   measurements: readonly RawMeasurement[];
@@ -115,6 +121,29 @@ export interface RecommendationRawData {
 
 /** The refusal code of a projected row whose refusal list is missing. */
 export const PROJECTION_REFUSALS_MISSING = "PROJECTION_REFUSALS_MISSING";
+
+/**
+ * THE AGE OF THE DOSE LIST IS THE AGE OF THE RUN THE ROWS CAME FROM (barracuda,
+ * #1757). The rows and the latest run are two reads; a build that commits
+ * between them would give the OLD rows the NEW run's time, and a list that
+ * failed to build for thirty hours would pass the gate at the moment of its
+ * first success. Every row carries the `runId` of the full rebuild it came
+ * from, so the time comes from THAT run: all rows from one SUCCEEDED run, or
+ * the list is stale (null). An empty set has no age to speak of (no row, no
+ * dose), and keeps the latest successful run's time.
+ */
+export function doseListBuiltAt(
+  rows: readonly { runId: string }[],
+  runs: readonly { id: string; status: string; finishedAt: Date }[],
+  latestSuccessAt: Date | null,
+): Date | null {
+  if (rows.length === 0) return latestSuccessAt;
+  const runIds = new Set(rows.map((row) => row.runId));
+  if (runIds.size !== 1) return null;
+  const run = runs.find((candidate) => candidate.id === [...runIds][0]);
+  if (!run || run.status !== "SUCCEEDED") return null;
+  return run.finishedAt;
+}
 
 export function parseReservedChanges(
   value: unknown,
@@ -174,7 +203,10 @@ export function buildRecommendationInput(
         parameter: row.parameterCode,
         value,
         measuredAt: row.measuredAt,
-        source: row.source === REEFCLUB_MANUAL_SOURCE ? "MANUAL" : "SHOP",
+        source:
+          raw.origin === "SHOP" && row.source !== REEFCLUB_MANUAL_SOURCE
+            ? "SHOP"
+            : "MANUAL",
         alert: band !== undefined && measurementStatus(value, band) === "ALERT",
       };
     });

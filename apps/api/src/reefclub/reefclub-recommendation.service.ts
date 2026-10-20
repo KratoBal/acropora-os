@@ -17,6 +17,7 @@ import { ReefClubDatabase } from "./reefclub-database.js";
 import {
   RECOMMENDATION_HISTORY_DAYS,
   buildRecommendationInput,
+  doseListBuiltAt,
 } from "./reefclub-recommendation-input.js";
 
 /**
@@ -58,18 +59,6 @@ export interface ReefClubRecommendationAnswer {
   effectEndsAt?: string;
   product?: { id: string | null; name: string };
   source?: string;
-}
-
-/** The projection's last SUCCESSFUL run is the age of the dose list. */
-async function doseListBuiltAt(
-  tx: Prisma.TransactionClient,
-): Promise<Date | null> {
-  const run = await tx.reefClubDoseProjectionRun.findFirst({
-    where: { status: "SUCCEEDED" },
-    orderBy: { finishedAt: "desc" },
-    select: { finishedAt: true },
-  });
-  return run?.finishedAt ?? null;
 }
 
 class DoseRowGone extends Error {}
@@ -128,7 +117,7 @@ export class ReefClubRecommendationService {
         targets: { select: { parameterCode: true, min: true, max: true } },
       },
     });
-    const [measurements, rows, builtAt, administrations, recommendations] =
+    const [measurements, rows, administrations, recommendations] =
       await Promise.all([
         tx.aquariumMeasurement.findMany({
           where: {
@@ -146,7 +135,6 @@ export class ReefClubRecommendationService {
           },
         }),
         tx.reefClubDoseRow.findMany(),
-        doseListBuiltAt(tx),
         tx.reefClubAdministeredDose.findMany({
           where: {
             aquariumId: grant.aquariumId,
@@ -178,13 +166,33 @@ export class ReefClubRecommendationService {
         }),
       ]);
 
+    // The age comes from the run the ROWS came from (all of them from one
+    // successful full rebuild), never from "the latest run" read separately.
+    const runs = await tx.reefClubDoseProjectionRun.findMany({
+      where: { id: { in: [...new Set(rows.map((row) => row.runId))] } },
+      select: { id: true, status: true, finishedAt: true },
+    });
+    const latestSuccess =
+      rows.length === 0
+        ? await tx.reefClubDoseProjectionRun.findFirst({
+            where: { status: "SUCCEEDED" },
+            orderBy: { finishedAt: "desc" },
+            select: { finishedAt: true },
+          })
+        : null;
+
     const input = buildRecommendationInput({
       now,
+      origin: grant.origin,
       parameter,
       aquarium,
       measurements,
       rows,
-      doseListBuiltAt: builtAt,
+      doseListBuiltAt: doseListBuiltAt(
+        rows,
+        runs,
+        latestSuccess?.finishedAt ?? null,
+      ),
       administrations,
       recommendations,
     });

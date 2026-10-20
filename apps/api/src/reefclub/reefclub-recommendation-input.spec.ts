@@ -6,6 +6,7 @@ import { recommend } from "@acropora/aquarium-calc";
 import {
   PROJECTION_REFUSALS_MISSING,
   buildRecommendationInput,
+  doseListBuiltAt,
   parseReservedChanges,
   type RawAdministration,
   type RawDoseRow,
@@ -71,6 +72,7 @@ const recommendation = (
 function raw(over: Partial<RecommendationRawData> = {}): RecommendationRawData {
   return {
     now: NOW,
+    origin: "OWN",
     parameter: "KH",
     aquarium: {
       systemVolumeLiters: dec(200),
@@ -87,22 +89,50 @@ function raw(over: Partial<RecommendationRawData> = {}): RecommendationRawData {
 }
 
 describe("a mérések", () => {
-  it("a bolti forrás SHOP, a vevő kézi mérése MANUAL; az alkalom azonosítója az ideje", () => {
-    const input = buildRecommendationInput(
-      raw({
-        measurements: [
-          measurement(),
-          measurement({ id: "m-bolt", source: "bolt", measuredAt: ago(30) }),
-        ],
-      }),
+  it("SHOP csak bolti akváriumban és nem a vevő kézi forrásával; minden más, az ismeretlen vagy hiányzó forrás is, MANUAL (barracuda, #1757)", () => {
+    const sources = (origin: "OWN" | "SHOP") =>
+      buildRecommendationInput(
+        raw({
+          origin,
+          measurements: [
+            measurement({ id: "m-kezi", source: "REEFCLUB_MANUAL" }),
+            measurement({ id: "m-bolt", source: "bolt", measuredAt: ago(30) }),
+            measurement({ id: "m-null", source: null, measuredAt: ago(31) }),
+            measurement({
+              id: "m-uj",
+              source: "kulso-app",
+              measuredAt: ago(32),
+            }),
+          ],
+        }),
+      ).measurements.map((point) => [point.id, point.source]);
+    assert.deepEqual(sources("SHOP"), [
+      ["m-kezi", "MANUAL"],
+      ["m-bolt", "SHOP"],
+      ["m-null", "SHOP"],
+      ["m-uj", "SHOP"],
+    ]);
+    // the customer's own aquarium: nothing there can be the shop's, whatever the source says
+    assert.deepEqual(sources("OWN"), [
+      ["m-kezi", "MANUAL"],
+      ["m-bolt", "MANUAL"],
+      ["m-null", "MANUAL"],
+      ["m-uj", "MANUAL"],
+    ]);
+  });
+
+  it("a saját akváriumban a hiányzó forrású riasztás ismétlést kér, nem oldódik fel bolti mérésként", () => {
+    const result = recommend(
+      buildRecommendationInput(
+        raw({ measurements: [measurement({ value: dec(4), source: null })] }),
+      ),
     );
-    assert.deepEqual(
-      input.measurements.map((point) => [point.id, point.source]),
-      [
-        ["m-kh", "MANUAL"],
-        ["m-bolt", "SHOP"],
-      ],
-    );
+    assert.ok(result.kind === "NO_DOSE");
+    assert.equal(result.reason, "NEEDS_REPEAT_MEASUREMENT");
+  });
+
+  it("az alkalom azonosítója a mérés ideje", () => {
+    const input = buildRecommendationInput(raw());
     assert.equal(input.measurements[0]!.occasionId, ago(1).toISOString());
   });
 
@@ -198,6 +228,70 @@ describe("a térfogat és a lista kora", () => {
       buildRecommendationInput(raw()).doseListBuiltAt?.getTime(),
       ago(1).getTime(),
     );
+  });
+});
+
+describe("a lista kora a sorok futásából (barracuda, #1757)", () => {
+  const run = (id: string, over: object = {}) => ({
+    id,
+    status: "SUCCEEDED",
+    finishedAt: ago(2),
+    ...over,
+  });
+  const LATEST = ago(0.1);
+
+  it("a sorok futásának ideje, nem a legutóbbi futásé", () => {
+    assert.equal(
+      doseListBuiltAt(
+        [{ runId: "r1" }, { runId: "r1" }],
+        [run("r1")],
+        LATEST,
+      )?.getTime(),
+      ago(2).getTime(),
+    );
+  });
+
+  it("két futás sorai, hiányzó vagy nem SUCCEEDED futás: elavult (null)", () => {
+    assert.equal(
+      doseListBuiltAt(
+        [{ runId: "r1" }, { runId: "r2" }],
+        [run("r1"), run("r2")],
+        LATEST,
+      ),
+      null,
+    );
+    assert.equal(doseListBuiltAt([{ runId: "r1" }], [], LATEST), null);
+    assert.equal(
+      doseListBuiltAt(
+        [{ runId: "r1" }],
+        [run("r1", { status: "FAILED" })],
+        LATEST,
+      ),
+      null,
+    );
+  });
+
+  it("üres sorhalmaz: marad a legutóbbi sikeres futás ideje (onnan úgysem jön adag)", () => {
+    assert.equal(doseListBuiltAt([], [], LATEST)?.getTime(), LATEST.getTime());
+    assert.equal(doseListBuiltAt([], [], null), null);
+  });
+
+  it("a motor a harminc órás sorokra nem ad adagot, akkor sem, ha a legutóbbi futás friss", () => {
+    const rows = [doseRow()];
+    const stale = recommend(
+      buildRecommendationInput(
+        raw({
+          rows,
+          doseListBuiltAt: doseListBuiltAt(
+            [{ runId: "r1" }],
+            [run("r1", { finishedAt: ago(30) })],
+            ago(0.1),
+          ),
+        }),
+      ),
+    );
+    assert.ok(stale.kind === "NO_DOSE");
+    assert.equal(stale.reason, "DOSE_LIST_STALE");
   });
 });
 
