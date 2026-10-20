@@ -150,6 +150,8 @@ export type ProjectionSchedulerDatabase = Pick<
   | "productKnowledgeFact"
   /** A márka változása (t11): az átnevezés és a SEO-mezők a terméket nem érintik. */
   | "brand"
+  /** A kezdőlap kapcsolója (az admin szerkesztő-oldali kapcsolója, egy sor). */
+  | "homepageContent"
 >;
 
 /** A futtato, amit a `runOnce` hiv. Parameter, hogy cserelheto legyen. */
@@ -280,7 +282,15 @@ export class MedusaProjectionScheduler
     this.homepageOn =
       deps?.homepageSwitchedOn ??
       (() =>
-        projectHomepageContentInRound(this.environment, prismaHomepageSource));
+        projectHomepageContentInRound(this.environment, {
+          switchedOn: async () =>
+            (
+              await this.db.homepageContent.findUnique({
+                where: { key: "main" },
+                select: { projectionEnabled: true },
+              })
+            )?.projectionEnabled === true,
+        }));
     this.runHomepageContent =
       deps?.runHomepageContent ??
       (async () =>
