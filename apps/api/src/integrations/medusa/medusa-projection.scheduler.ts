@@ -24,6 +24,13 @@ import {
 } from "./medusa-projection.cli.js";
 import { prismaRedirectSource } from "./medusa-redirect.cli.js";
 import {
+  describeHomepageProjection,
+  prismaHomepageSource,
+  projectHomepageContent,
+  projectHomepageContentInRound,
+  type HomepageProjectionOutcome,
+} from "./medusa-homepage-projection.js";
+import {
   describeLandingProjection,
   prismaLandingSource,
   projectLandingPages,
@@ -183,6 +190,8 @@ export interface MedusaProjectionSchedulerDeps {
   runRedirects?: () => Promise<RedirectProjectionOutcome>;
   /** A landing oldalak köre (SEO P1-14). */
   runLandingPages?: () => Promise<LandingPageOutcome[]>;
+  /** A kezdőlap tartalmának köre (Balázs, 2026-10-20). */
+  runHomepageContent?: () => Promise<HomepageProjectionOutcome>;
 }
 
 /**
@@ -215,6 +224,7 @@ export class MedusaProjectionScheduler
   private readonly now: () => Date;
   private readonly runRedirects: () => Promise<RedirectProjectionOutcome>;
   private readonly runLandingPages: () => Promise<LandingPageOutcome[]>;
+  private readonly runHomepageContent: () => Promise<HomepageProjectionOutcome>;
   /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
   private egymasUtaniUresKorok = 0;
 
@@ -264,6 +274,17 @@ export class MedusaProjectionScheduler
           prismaLandingSource,
           true,
         ));
+    this.runHomepageContent =
+      deps?.runHomepageContent ??
+      (async () =>
+        projectHomepageContent(
+          await medusaClientForProjection(storedCredentialProvider(), {
+            stdout: (value) => this.logNemUres(value, "log"),
+            stderr: (value) => this.logNemUres(value, "warn"),
+          }),
+          prismaHomepageSource,
+          true,
+        ));
   }
 
   onModuleInit(): void {
@@ -302,6 +323,7 @@ export class MedusaProjectionScheduler
     */
     await this.atiranyitasKor();
     await this.landingKor();
+    await this.kezdolapKor();
     const kezdet = this.now();
     const akcio = await this.akcioHatarAzonositok();
     const teny = await this.tenyValtozasAzonositok();
@@ -443,6 +465,26 @@ export class MedusaProjectionScheduler
     } catch (error) {
       this.naplo.warn(
         `Landing oldalak: a kor nem futott le (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
+   * A KEZDŐLAP TARTALMÁNAK EGY KÖRE, a landing oldalak után, ugyanazzal a
+   * szabállyal: a hiba csak napló, a termék-vetítést nem állítja meg. A mentés
+   * maga is kér egy kört, ez a tartalék, ha az elmaradt vagy elbukott.
+   */
+  private async kezdolapKor(): Promise<void> {
+    if (!projectHomepageContentInRound(this.environment)) return;
+    try {
+      const eredmeny = await this.runHomepageContent();
+      if (eredmeny.status !== "unchanged" && eredmeny.status !== "nothing")
+        this.naplo.log(describeHomepageProjection(eredmeny));
+    } catch (error) {
+      this.naplo.warn(
+        `Kezdolap tartalom: a kor nem futott le (${
           error instanceof Error ? error.message : String(error)
         })`,
       );

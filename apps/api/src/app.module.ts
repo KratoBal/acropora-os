@@ -15,6 +15,7 @@ import { AppService } from "./app.service.js";
 import { AquariumsModule } from "./aquariums/aquariums.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { BrandsModule } from "./brands/brands.module.js";
+import { HomepageContentModule } from "./homepage-content/homepage-content.module.js";
 import { SeoLandingModule } from "./seo-landing/seo-landing.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
@@ -81,6 +82,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     AuthModule,
     BrandsModule,
     SeoLandingModule,
+    HomepageContentModule,
     ProductModule,
     UnasImportModule,
     InventoryModule,

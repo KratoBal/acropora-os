@@ -1561,6 +1561,20 @@ model SeoLandingPage {
   updatedAt        DateTime @updatedAt
 }
 
+/// A webshop kezdolapjanak szerkesztheto tartalma (Balazs, 2026-10-20): a
+/// szovegek FELULIRASAI (a hianyzo kulcs a kirakat kezdoerteket mutatja) es a
+/// hero diak (`null` = nincs beallitva, `[]` = nincs hero). Egy sor van, a `key`
+/// ("main") egyedi; a commerce `homepage_content` modulja vetitve kapja.
+model HomepageContent {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  texts       Json
+  slides      Json?
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 /// SEO P0 PR 10 (C6): egy termek egy Acropora-kategoriaban. Termekenkent
 /// legfeljebb EGY primary: a migracio reszleges egyedi indexe tartja (a Prisma
 /// sema nem tudja kifejezni). A primary adja a morzsat es a
