@@ -62,6 +62,11 @@ export function MeasurementForm({
     // answer was lost. That is right for a plain retry, and wrong once the user
     // changed the moment or a value since: the screen would say "saved" over
     // values that were never stored. Different content, a new id.
+    //
+    // THE LIMIT, both ways visible and neither silent (barracuda): if the first
+    // answer was lost AND the user changed the MOMENT, the new id makes a second
+    // occasion next to the first (which has the old values); if only the values
+    // changed, the same moment answers 409 from the server and its words are shown.
     const content = JSON.stringify([
       at.toISOString(),
       entries.map((e) => [e.parameter.code, e.value]),
