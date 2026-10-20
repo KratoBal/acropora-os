@@ -12,6 +12,18 @@ export const homepageContentApi = {
   get(token: string, signal?: AbortSignal) {
     return apiRequest<HomepageContent>("/homepage-content", token, { signal });
   },
+  /** The administrator's switch: send the content to the shop and allow uploads. */
+  setProjection(token: string, enabled: boolean) {
+    return apiRequest<{ projectionEnabled: boolean }>(
+      "/homepage-content/projection",
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      },
+    );
+  },
   /** One image to the shop's file storage; the answer is its public address. */
   uploadImage(token: string, file: File) {
     const form = new FormData();

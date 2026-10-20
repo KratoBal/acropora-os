@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -11,14 +12,12 @@ import {
   type HomepageSlide,
 } from "@acropora/types";
 
-import {
-  detectImageContentType,
-  imageFileNameFor,
-} from "../integrations/medusa/image-content-type.js";
+import { detectImageContentType } from "../integrations/medusa/image-content-type.js";
 
 export const HOMEPAGE_CONTENT_STORE = Symbol("HOMEPAGE_CONTENT_STORE");
 export const HOMEPAGE_CONTENT_PROJECTOR = Symbol("HOMEPAGE_CONTENT_PROJECTOR");
 export const HOMEPAGE_IMAGE_UPLOADER = Symbol("HOMEPAGE_IMAGE_UPLOADER");
+export const HOMEPAGE_ENVIRONMENT = Symbol("HOMEPAGE_ENVIRONMENT");
 
 /** A hero or band image: the web shop's own formats, at most 8 MB. */
 export const HOMEPAGE_IMAGE_LIMITS = {
@@ -34,12 +33,19 @@ export interface HomepageImageUpload {
 
 /**
  * Puts the image on the shop's file storage and returns its public address.
- * `null` means the shop is switched off in this environment (the same flag as
- * the projection: an upload is a write to the shop too).
+ * The service calls it only where the projection is switched on (an upload is
+ * a write to the shop too).
  */
 export type HomepageImageUploader = (
   image: HomepageImageUpload,
-) => Promise<{ url: string } | null>;
+) => Promise<{ url: string }>;
+
+/** The extension of what the bytes are; the editor's own file name is never used. */
+const EXTENSION = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+} as const;
 
 /** The only record today; another key would be another home page variant. */
 export const MAIN_HOMEPAGE_KEY = "main";
@@ -48,11 +54,18 @@ export interface HomepageContentRow {
   key: string;
   texts: unknown;
   slides: unknown;
+  projectionEnabled: boolean;
   updatedAt: Date;
 }
 
 export interface HomepageContentStore {
   find(key: string): Promise<HomepageContentRow | null>;
+  /** The administrator's switch, one row write (the row is created if missing). */
+  setProjection(
+    key: string,
+    enabled: boolean,
+    userId: string,
+  ): Promise<HomepageContentRow>;
   /** The whole record, one transaction. */
   save(
     key: string,
@@ -67,13 +80,36 @@ export interface HomepageContentStore {
  * the scheduled round tries again).
  */
 export type HomepageProjectionResult = "off" | "sent" | "unchanged" | "failed";
-export type HomepageContentProjector = () => Promise<HomepageProjectionResult>;
+/** One round; the service asks for it only where the projection is switched on. */
+export type HomepageContentProjector = () => Promise<"sent" | "unchanged">;
+
+/**
+ * IS THE PROJECTION ON HERE: the administrator's switch (a database row) OR the
+ * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable. The variable's ABSENCE does
+ * not turn it off: the test environment's variables are not ours to write, so
+ * the switch lives in the editor (acrobot 33456).
+ */
+export function homepageProjectionOn(
+  env: NodeJS.ProcessEnv,
+  row: Pick<HomepageContentRow, "projectionEnabled"> | null,
+): boolean {
+  return (
+    env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true" ||
+    row?.projectionEnabled === true
+  );
+}
 
 /** The stored record, read defensively: a hand-edited row cannot break a read. */
 export function toHomepageContent(
   row: HomepageContentRow | null,
 ): HomepageContent {
-  if (!row) return { texts: {}, slides: null, updatedAt: null };
+  if (!row)
+    return {
+      texts: {},
+      slides: null,
+      updatedAt: null,
+      projectionEnabled: false,
+    };
   const texts: Record<string, string> = {};
   if (typeof row.texts === "object" && row.texts !== null)
     for (const [key, value] of Object.entries(row.texts))
@@ -82,6 +118,7 @@ export function toHomepageContent(
     texts,
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
     updatedAt: row.updatedAt.toISOString(),
+    projectionEnabled: row.projectionEnabled === true,
   };
 }
 
@@ -100,6 +137,8 @@ export class HomepageContentService {
     private readonly project: HomepageContentProjector,
     @Inject(HOMEPAGE_IMAGE_UPLOADER)
     private readonly uploadToShop: HomepageImageUploader,
+    @Inject(HOMEPAGE_ENVIRONMENT)
+    private readonly environment: NodeJS.ProcessEnv,
   ) {}
 
   /**
@@ -124,16 +163,38 @@ export class HomepageContentService {
       throw new BadRequestException(
         "Csak JPEG, PNG vagy WebP kép tölthető fel (a fájl tartalma dönt, nem a neve).",
       );
-    const uploaded = await this.uploadToShop({
-      fileName: imageFileNameFor(file.originalname, contentType),
+    const row = await this.store.find(MAIN_HOMEPAGE_KEY);
+    if (!homepageProjectionOn(this.environment, row))
+      throw new ServiceUnavailableException(
+        "A webshopba küldés ki van kapcsolva (kapcsold be a szerkesztő oldalon), a kép nem tölthető fel.",
+      );
+    /*
+      THE NAME IS OURS, NOT THE EDITOR'S (barracuda, #1721). The browser's
+      `originalname` is client data: a hand-built request can send
+      "../../x.png" or "a\\b.png", and the shop's local file provider joins the
+      directory part of a name to its upload folder. Nothing of it goes on: a
+      random name and the extension of what the bytes are.
+    */
+    return this.uploadToShop({
+      fileName: `kezdolap-${randomUUID()}${EXTENSION[contentType as keyof typeof EXTENSION]}`,
       contentType,
       content: file.buffer,
     });
-    if (!uploaded)
-      throw new ServiceUnavailableException(
-        "A webshopba küldés ebben a környezetben ki van kapcsolva, a kép nem tölthető fel.",
-      );
-    return uploaded;
+  }
+
+  /** The administrator's switch: send the content to the web shop (and allow uploads). */
+  async setProjection(
+    enabled: unknown,
+    userId: string,
+  ): Promise<{ projectionEnabled: boolean }> {
+    if (typeof enabled !== "boolean")
+      throw new BadRequestException("enabled: true vagy false");
+    const row = await this.store.setProjection(
+      MAIN_HOMEPAGE_KEY,
+      enabled,
+      userId,
+    );
+    return { projectionEnabled: row.projectionEnabled };
   }
 
   async get(): Promise<HomepageContent> {
@@ -151,11 +212,13 @@ export class HomepageContentService {
     if (!parsed.ok) throw new BadRequestException(parsed.message);
     const row = await this.store.save(MAIN_HOMEPAGE_KEY, parsed.value, userId);
     let projection: HomepageProjectionResult;
-    try {
-      projection = await this.project();
-    } catch {
-      projection = "failed";
-    }
+    if (!homepageProjectionOn(this.environment, row)) projection = "off";
+    else
+      try {
+        projection = await this.project();
+      } catch {
+        projection = "failed";
+      }
     return { content: toHomepageContent(row), projection };
   }
 }

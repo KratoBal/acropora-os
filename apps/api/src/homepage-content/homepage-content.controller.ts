@@ -39,6 +39,19 @@ export class HomepageContentController {
     return this.content.save(body, user.id);
   }
 
+  /**
+   * The administrator's switch (`settings.manage`, as the Medusa connection):
+   * send the content to the web shop, and allow image uploads to it.
+   */
+  @Put("projection")
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  setProjection(
+    @Body() body: { enabled?: unknown },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.content.setProjection(body?.enabled, user.id);
+  }
+
   /** One image for an image field or a slide; the answer is its public address. */
   @Post("images")
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)

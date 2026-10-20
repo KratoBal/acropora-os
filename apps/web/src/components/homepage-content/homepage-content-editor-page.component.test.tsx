@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   get: vi.fn(),
   save: vi.fn(),
   uploadImage: vi.fn(),
+  setProjection: vi.fn(),
 }));
 vi.mock("@/lib/api/homepage-content", () => ({ homepageContentApi: api }));
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
@@ -56,6 +57,7 @@ const stored = (over: Record<string, unknown> = {}) => ({
   texts: {},
   slides: null,
   updatedAt: null,
+  projectionEnabled: false,
   ...over,
 });
 const echo = (projection = "off") =>
@@ -69,6 +71,7 @@ beforeEach(() => {
   api.get.mockReset().mockResolvedValue(stored());
   api.save.mockReset();
   api.uploadImage.mockReset();
+  api.setProjection.mockReset();
   echo();
 });
 
@@ -262,5 +265,34 @@ describe("HomepageContentEditorPage", () => {
         ) as HTMLInputElement
       ).value,
     ).toBe("");
+  });
+
+  it("HP-ED-SWITCH: the administrator's switch is not part of the save and is sent on its own", async () => {
+    api.setProjection.mockResolvedValue({ projectionEnabled: true });
+    render(<HomepageContentEditorPage />);
+    const box = (await screen.findByLabelText(
+      /menjen a webshopba/,
+    )) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(api.setProjection).toHaveBeenCalledWith("token-1", true),
+    );
+    expect(await screen.findByText(/be van kapcsolva/)).toBeTruthy();
+    expect(api.save).not.toHaveBeenCalled();
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent()).toEqual({ texts: {}, slides: null });
+  });
+
+  it("HP-ED-SWITCH-RIGHTS: an editor without settings.manage sees the switch but cannot use it", async () => {
+    auth.role = "MANAGER";
+    render(<HomepageContentEditorPage />);
+    const box = (await screen.findByLabelText(
+      /menjen a webshopba/,
+    )) as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    fireEvent.click(box);
+    expect(api.setProjection).not.toHaveBeenCalled();
   });
 });

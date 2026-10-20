@@ -315,6 +315,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     key: "business",
     texts: "business",
     slides: "business",
+    projectionEnabled: "business",
     updatedById: "identifier",
   },
   UnasCategoryMapping: {

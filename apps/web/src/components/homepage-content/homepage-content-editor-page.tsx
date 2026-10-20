@@ -88,6 +88,10 @@ export function HomepageContentEditorPage() {
   const [texts, setTexts] = useState<Record<string, string>>({});
   const [ownSlides, setOwnSlides] = useState(false);
   const [slides, setSlides] = useState<HomepageSlide[]>([]);
+  const [projectionEnabled, setProjectionEnabled] = useState(false);
+  const canSwitch = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
+  );
 
   useEffect(() => {
     if (!canManage) return;
@@ -98,6 +102,7 @@ export function HomepageContentEditorPage() {
         setTexts(content.texts);
         setOwnSlides(content.slides !== null);
         setSlides(content.slides ?? []);
+        setProjectionEnabled(content.projectionEnabled);
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -111,6 +116,25 @@ export function HomepageContentEditorPage() {
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, [canManage, token]);
+
+  /** The administrator's switch: takes effect at once, it is not part of the save. */
+  const switchProjection = async (enabled: boolean) => {
+    setError(null);
+    setSaved(null);
+    try {
+      const result = await homepageContentApi.setProjection(token, enabled);
+      setProjectionEnabled(result.projectionEnabled);
+      setSaved(
+        result.projectionEnabled
+          ? "A küldés a webshopba be van kapcsolva. A következő mentéstől (és az ütemezett körtől) a tartalom megy a boltba."
+          : "A küldés a webshopba ki van kapcsolva.",
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A kapcsoló nem váltott.",
+      );
+    }
+  };
 
   /** One image to the shop; the address that comes back goes into the field. */
   const uploadImage = async (file: File): Promise<string | null> => {
@@ -150,6 +174,7 @@ export function HomepageContentEditorPage() {
       setTexts(result.content.texts);
       setOwnSlides(result.content.slides !== null);
       setSlides(result.content.slides ?? []);
+      setProjectionEnabled(result.content.projectionEnabled);
       setSaved(PROJECTION_TEXT[result.projection]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "A mentés sikertelen.");
@@ -192,6 +217,23 @@ export function HomepageContentEditorPage() {
         />
       ) : null}
       {saved ? <Alert variant="info" title={saved} /> : null}
+      <Card className="space-y-2 p-6">
+        <h2 className="font-semibold">Küldés a webshopba</h2>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={projectionEnabled}
+            disabled={!canSwitch}
+            onChange={(event) => void switchProjection(event.target.checked)}
+          />
+          A kezdőlap tartalma menjen a webshopba (és a képek is feltölthetők
+          legyenek)
+        </label>
+        <p className="text-xs text-dusk-600">
+          Kikapcsolva a mentés csak itt tárolódik, a webshop a terv szövegeit
+          mutatja. {canSwitch ? "" : "A kapcsolót az adminisztrátor váltja."}
+        </p>
+      </Card>
       <form className="space-y-6" onSubmit={submit}>
         <Card className="space-y-4 p-6">
           <h2 className="font-semibold">Nyitó csúszka</h2>

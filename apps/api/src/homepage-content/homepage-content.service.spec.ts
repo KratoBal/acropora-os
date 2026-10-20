@@ -11,7 +11,6 @@ import {
   toHomepageContent,
   type HomepageContentRow,
   type HomepageContentStore,
-  type HomepageProjectionResult,
 } from "./homepage-content.service.js";
 
 /*
@@ -22,10 +21,19 @@ import {
   an empty list on the way out (that would mean "no hero" in the shop).
 */
 function setup(
-  projection: () => Promise<HomepageProjectionResult>,
-  shopOn = true,
+  projection: () => Promise<"sent" | "unchanged">,
+  options: { switchedOn?: boolean; env?: NodeJS.ProcessEnv } = {},
 ) {
-  let row: HomepageContentRow | null = null;
+  let row: HomepageContentRow | null =
+    options.switchedOn === false
+      ? null
+      : {
+          key: "main",
+          texts: {},
+          slides: null,
+          projectionEnabled: true,
+          updatedAt: new Date("2026-10-20T11:00:00Z"),
+        };
   const saved: { input: HomepageContentInput; userId: string }[] = [];
   const store: HomepageContentStore = {
     find: async () => row,
@@ -35,6 +43,17 @@ function setup(
         key,
         texts: input.texts,
         slides: input.slides,
+        projectionEnabled: row?.projectionEnabled ?? false,
+        updatedAt: new Date("2026-10-20T12:00:00Z"),
+      };
+      return row;
+    },
+    setProjection: async (key, enabled) => {
+      row = {
+        key,
+        texts: row?.texts ?? {},
+        slides: row?.slides ?? null,
+        projectionEnabled: enabled,
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
       return row;
@@ -49,25 +68,25 @@ function setup(
         fileName: image.fileName,
         contentType: image.contentType,
       });
-      return shopOn
-        ? { url: `https://shop.example/static/${image.fileName}` }
-        : null;
+      return { url: `https://shop.example/static/${image.fileName}` };
     },
+    options.env ?? {},
   );
   return { service, saved, uploads };
 }
 
 describe("HomepageContentService", () => {
-  it("answers 'nothing set' before the first save", async () => {
-    const { service } = setup(async () => "off");
+  it("answers 'nothing set, switch off' before the first save", async () => {
+    const { service } = setup(async () => "sent", { switchedOn: false });
     assert.deepEqual(await service.get(), {
       texts: {},
       slides: null,
       updatedAt: null,
+      projectionEnabled: false,
     });
   });
 
-  it("stores a valid record with the user and asks for one projection", async () => {
+  it("stores a valid record with the user and asks for one projection when the switch is on", async () => {
     let asked = 0;
     const { service, saved } = setup(async () => {
       asked++;
@@ -84,6 +103,53 @@ describe("HomepageContentService", () => {
     ]);
     assert.equal(out.content.slides, null);
     assert.equal((await service.get()).texts["mit.cim"], "Új");
+  });
+
+  it("does not project, and says off, when neither the switch nor the variable is on", async () => {
+    let asked = 0;
+    const { service, saved } = setup(
+      async () => {
+        asked++;
+        return "sent";
+      },
+      { switchedOn: false },
+    );
+    const out = await service.save({ texts: {}, slides: [] }, "u-1");
+    assert.equal(out.projection, "off");
+    assert.equal(asked, 0);
+    assert.equal(saved.length, 1);
+  });
+
+  it("the variable turns it on without the switch, its absence does not turn the switch off", async () => {
+    let asked = 0;
+    const projection = async () => {
+      asked++;
+      return "sent" as const;
+    };
+    const viaVariable = setup(projection, {
+      switchedOn: false,
+      env: { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
+    });
+    assert.equal(
+      (await viaVariable.service.save({ texts: {}, slides: null }, "u"))
+        .projection,
+      "sent",
+    );
+    const viaSwitch = setup(projection, { env: {} });
+    assert.equal(
+      (await viaSwitch.service.save({ texts: {}, slides: null }, "u"))
+        .projection,
+      "sent",
+    );
+    const other = setup(projection, {
+      switchedOn: false,
+      env: { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
+    });
+    assert.equal(
+      (await other.service.save({ texts: {}, slides: null }, "u")).projection,
+      "off",
+    );
+    assert.equal(asked, 2);
   });
 
   it("keeps the save when the projection fails", async () => {
@@ -111,6 +177,21 @@ describe("HomepageContentService", () => {
     assert.equal(saved.length, 0);
     assert.equal(asked, 0);
   });
+
+  it("the administrator's switch is its own write and keeps the content", async () => {
+    const { service } = setup(async () => "sent", { switchedOn: false });
+    await service.save({ texts: { "mit.cim": "Új" }, slides: null }, "u-1");
+    assert.deepEqual(await service.setProjection(true, "admin"), {
+      projectionEnabled: true,
+    });
+    const content = await service.get();
+    assert.equal(content.projectionEnabled, true);
+    assert.equal(content.texts["mit.cim"], "Új");
+    await assert.rejects(
+      service.setProjection("igen", "admin"),
+      BadRequestException,
+    );
+  });
 });
 
 describe("toHomepageContent", () => {
@@ -119,11 +200,13 @@ describe("toHomepageContent", () => {
       key: "main",
       texts: { "mit.cim": "ok", "mit.alcim": 5 },
       slides: "nem lista",
+      projectionEnabled: "igen",
       updatedAt: new Date("2026-10-20T12:00:00Z"),
-    } as HomepageContentRow;
+    } as unknown as HomepageContentRow;
     const content = toHomepageContent(row);
     assert.deepEqual(content.texts, { "mit.cim": "ok" });
     assert.equal(content.slides, null);
+    assert.equal(content.projectionEnabled, false);
   });
 });
 
@@ -135,22 +218,36 @@ describe("HomepageContentService.uploadImage", () => {
   const gif = Buffer.from("GIF89a....");
   const html = Buffer.from("<html><script>alert(1)</script></html>");
 
-  it("names the file after what it IS, not what the editor called it", async () => {
-    const { service, uploads } = setup(async () => "off");
-    const out = await service.uploadImage({
-      originalname: "hero.png",
-      buffer: jpeg,
-    });
-    assert.equal(out.url, "https://shop.example/static/hero.jpg");
-    assert.deepEqual(uploads, [
-      { fileName: "hero.jpg", contentType: "image/jpeg" },
-    ]);
+  it("names the file after what it IS and never after the client's name", async () => {
+    const { service, uploads } = setup(async () => "sent");
+    await service.uploadImage({ originalname: "hero.png", buffer: jpeg });
     await service.uploadImage({ originalname: "kep.jpg", buffer: png });
-    assert.equal(uploads[1]?.contentType, "image/png");
+    assert.match(uploads[0]?.fileName ?? "", /^kezdolap-[0-9a-f-]{36}\.jpg$/);
+    assert.equal(uploads[0]?.contentType, "image/jpeg");
+    assert.match(uploads[1]?.fileName ?? "", /^kezdolap-[0-9a-f-]{36}\.png$/);
+    assert.notEqual(uploads[0]?.fileName, uploads[1]?.fileName);
+  });
+
+  it("takes nothing of a hostile client name into the shop's file name (barracuda, #1721)", async () => {
+    const { service, uploads } = setup(async () => "sent");
+    for (const originalname of [
+      "../../x.png",
+      "a\\b.png",
+      ".htaccess",
+      "a/b/c.webp",
+      "..\\..\\y.jpg",
+    ])
+      await service.uploadImage({ originalname, buffer: jpeg });
+    assert.equal(uploads.length, 5);
+    for (const upload of uploads) {
+      assert.doesNotMatch(upload.fileName, /[/\\]/);
+      assert.ok(!upload.fileName.startsWith("."));
+      assert.match(upload.fileName, /^[A-Za-z0-9._-]+$/);
+    }
   });
 
   it("refuses what is not a JPEG, PNG or WebP image, before the shop sees it", async () => {
-    const { service, uploads } = setup(async () => "off");
+    const { service, uploads } = setup(async () => "sent");
     for (const buffer of [html, gif, Buffer.alloc(0), Buffer.from("x")])
       await assert.rejects(
         service.uploadImage({ originalname: "kep.jpg", buffer }),
@@ -160,7 +257,7 @@ describe("HomepageContentService.uploadImage", () => {
   });
 
   it("refuses an image over 8 MB", async () => {
-    const { service, uploads } = setup(async () => "off");
+    const { service, uploads } = setup(async () => "sent");
     const big = Buffer.concat([jpeg, Buffer.alloc(8 * 1024 * 1024)]);
     await assert.rejects(
       service.uploadImage({ originalname: "nagy.jpg", buffer: big }),
@@ -170,10 +267,13 @@ describe("HomepageContentService.uploadImage", () => {
   });
 
   it("says so when the shop is switched off, instead of pretending", async () => {
-    const { service } = setup(async () => "off", false);
+    const { service, uploads } = setup(async () => "sent", {
+      switchedOn: false,
+    });
     await assert.rejects(
       service.uploadImage({ originalname: "kep.jpg", buffer: jpeg }),
       ServiceUnavailableException,
     );
+    assert.equal(uploads.length, 0);
   });
 });

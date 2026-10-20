@@ -38,6 +38,8 @@ export type HomepageProjectionOutcome =
 export interface HomepageSource {
   /** The stored content, or `null` when nobody has saved any yet. */
   content(): Promise<HomepageContentInput | null>;
+  /** The administrator's switch in the editor (a database row). */
+  switchedOn(): Promise<boolean>;
 }
 
 const slideRecord = (slide: HomepageSlide): MedusaHomepageSlide => ({
@@ -105,10 +107,17 @@ export function describeHomepageProjection(
   return `Kezdolap tartalom: ${outcome.status}`;
 }
 
-/** Off by default, like the other rounds: the projection writes to another system. */
-export const projectHomepageContentInRound = (
+/**
+ * Off by default, like the other rounds: the projection writes to another
+ * system. Switched on by the variable OR by the administrator's switch in the
+ * editor; the variable's absence does not turn it off (acrobot 33456: the test
+ * environment's variables are not ours to write).
+ */
+export const projectHomepageContentInRound = async (
   env: NodeJS.ProcessEnv,
-): boolean => env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true";
+  source: Pick<HomepageSource, "switchedOn">,
+): Promise<boolean> =>
+  env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true" || (await source.switchedOn());
 
 export const prismaHomepageSource: HomepageSource = {
   content: async () => {
@@ -119,4 +128,11 @@ export const prismaHomepageSource: HomepageSource = {
     const { texts, slides } = toHomepageContent(row);
     return { texts, slides };
   },
+  switchedOn: async () =>
+    (
+      await prisma.homepageContent.findUnique({
+        where: { key: MAIN_HOMEPAGE_KEY },
+        select: { projectionEnabled: true },
+      })
+    )?.projectionEnabled === true,
 };

@@ -1044,6 +1044,13 @@ export interface HomepageContentInput {
 
 export interface HomepageContent extends HomepageContentInput {
   updatedAt: string | null;
+  /**
+   * Whether this environment sends the content to the web shop (and lets the
+   * editor upload images to it). An administrator's switch in the editor; the
+   * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable also turns it on, but its
+   * absence does not turn it off.
+   */
+  projectionEnabled: boolean;
 }
 
 export const HOMEPAGE_LIMITS = {
