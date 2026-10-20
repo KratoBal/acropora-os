@@ -72,6 +72,7 @@ function input(over: Partial<RecommendationInput> = {}): RecommendationInput {
     rows: [row()],
     administrations: [],
     priorRecommendations: [],
+    doseListBuiltAt: ago(1),
     ...over,
   };
 }
@@ -1267,6 +1268,118 @@ describe("the sentence never writes a zero dose", () => {
     assert.equal(
       reasonOf({ rows: [row({ effectPer100L: 5000, step: 0.0001 })] }),
       "INCOMPLETE_DOSE_TEMPLATE",
+    );
+  });
+});
+
+describe("a stale dose list gives no dose, and a recommendation without its product is an unknown effect (service PR)", () => {
+  it("DOSE_LIST_STALE: never built, or built more than 26 hours ago; 26 hours is still fine", () => {
+    assert.equal(reasonOf({ doseListBuiltAt: null }), "DOSE_LIST_STALE");
+    assert.equal(reasonOf({ doseListBuiltAt: ago(26.1) }), "DOSE_LIST_STALE");
+    assert.ok(doseOf({ doseListBuiltAt: ago(26) }));
+    assert.ok(doseOf({ doseListBuiltAt: ago(1) }));
+  });
+
+  it("a stale list is reported before the customer is asked to measure or give the volume, but after an open proposal (which is shown again)", () => {
+    assert.equal(
+      reasonOf({
+        doseListBuiltAt: null,
+        volumeLiters: null,
+        measurements: [],
+      }),
+      "DOSE_LIST_STALE",
+    );
+    assert.equal(
+      reasonOf({
+        doseListBuiltAt: null,
+        priorRecommendations: [
+          prior({
+            id: "rec-open",
+            status: "OPEN",
+            createdAt: ago(1),
+            effectEndsAt: new Date(NOW.getTime() + 11 * HOUR),
+          }),
+        ],
+      }),
+      "ACTIVE_RECOMMENDATION",
+    );
+  });
+
+  it("UNKNOWN_EFFECT_DOSE: an open or expired recommendation whose product is gone (null) cannot be checked", () => {
+    for (const status of ["OPEN", "EXPIRED"] as const)
+      assert.equal(
+        reasonOf({
+          priorRecommendations: [
+            prior({
+              status,
+              productId: null,
+              createdAt: ago(20),
+              effectEndsAt: ago(8),
+              changes: [{ parameter: "KH", change: 0.2 }],
+            }),
+          ],
+        }),
+        "UNKNOWN_EFFECT_DOSE",
+        status,
+      );
+    // answered (the recorded dose carries it), not given, or older than 24 hours: not this rule
+    for (const over of [
+      { status: "NOT_GIVEN" as const },
+      { createdAt: ago(25), effectEndsAt: ago(13) },
+    ])
+      assert.ok(
+        doseOf({
+          priorRecommendations: [
+            prior({
+              productId: null,
+              createdAt: ago(20),
+              effectEndsAt: ago(8),
+              changes: [{ parameter: "KH", change: 0.2 }],
+              ...over,
+            }),
+          ],
+        }),
+      );
+  });
+
+  it("a side parameter with such a recommendation drops the combined product out (the pure one is taken)", () => {
+    const bands = { KH: { min: 7, max: 9 }, KALCIUM: { min: 380, max: 450 } };
+    const combo = [
+      row({ rowId: "r-c-kh", productId: "p-combo", productName: "Összetett" }),
+      row({
+        rowId: "r-c-ca",
+        productId: "p-combo",
+        productName: "Összetett",
+        parameter: "KALCIUM",
+        effectPer100L: 5,
+      }),
+    ];
+    const gone = prior({
+      parameter: "KALCIUM",
+      productId: null,
+      createdAt: ago(20),
+      effectEndsAt: ago(8),
+      changes: [{ parameter: "KALCIUM", change: 5 }],
+    });
+    const over = {
+      bands,
+      measurements: [point("KH", 6), point("KALCIUM", 400)],
+      priorRecommendations: [gone],
+    };
+    assert.equal(reasonOf({ ...over, rows: combo }), "NO_USABLE_PRODUCT");
+    assert.equal(
+      doseOf({
+        ...over,
+        rows: [
+          ...combo,
+          row({
+            rowId: "r-pure",
+            productId: "p-z-pure",
+            productName: "Tiszta",
+          }),
+        ],
+      }).product.productId,
+      "p-z-pure",
     );
   });
 });

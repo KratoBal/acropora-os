@@ -55,6 +55,8 @@ export function noDoseSentence(
       return `A ${label} a célsávban van; nincs szükség adagolásra.`;
     case "ACTIVE_RECOMMENDATION":
       return `A ${label} paraméterre már van érvényes javaslatod; jelezd a beadást, vagy várd meg a hatásidő végét.`;
+    case "DOSE_LIST_STALE":
+      return "Az adagoláshoz szükséges termék-adag lista most nem friss; adagot nem javaslunk, kérdezd a boltot.";
     case "NO_VOLUME":
       return "Add meg az akvárium nettó térfogatát, hogy adagot tudjunk számolni.";
     case "NO_TARGET_BAND":

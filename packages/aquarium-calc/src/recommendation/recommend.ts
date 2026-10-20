@@ -2,6 +2,7 @@ import {
   DAILY_LIMITS,
   DEFAULT_EFFECT_HOURS,
   FUTURE_TOLERANCE_MS,
+  MAX_DOSE_LIST_AGE_HOURS,
   HOUR_MS,
   MAX_DEVIATION_IN_BAND_WIDTHS,
   MAX_MEASUREMENT_AGE_DAYS,
@@ -193,6 +194,14 @@ export function recommend(
       activeRecommendationId: open.id,
     });
 
+  // 2b. a dose list that is missing or too old gives no dose, whatever else is asked
+  if (
+    input.doseListBuiltAt === null ||
+    now.getTime() - input.doseListBuiltAt.getTime() >
+      MAX_DOSE_LIST_AGE_HOURS * HOUR_MS
+  )
+    return refuse("DOSE_LIST_STALE");
+
   // 3. what a dose needs to start from
   const volume = input.volumeLiters;
   if (volume === null || !Number.isFinite(volume) || volume <= 0)
@@ -263,6 +272,15 @@ export function recommend(
       (given) =>
         given.at.getTime() >= windowStart.getTime() &&
         effectOf(given, param).kind === "UNKNOWN",
+    ) ||
+    // a recommendation counted as given whose product is gone: its effect cannot be checked
+    input.priorRecommendations.some(
+      (earlier) =>
+        earlier.productId === null &&
+        earlier.createdAt.getTime() >= windowStart.getTime() &&
+        (earlier.status === "OPEN" || earlier.status === "EXPIRED") &&
+        (earlier.parameter === param ||
+          earlier.changes.some((change) => change.parameter === param)),
     );
 
   // 6. a dose still working, or a measurement older than the last dose. The
