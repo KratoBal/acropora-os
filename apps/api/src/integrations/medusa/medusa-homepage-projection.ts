@@ -6,6 +6,7 @@ import {
   toHomepageContent,
 } from "../../homepage-content/homepage-content.service.js";
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
+import { MEDUSA_PRODUCT_REFERENCE } from "./medusa-product-link.repository.js";
 
 /** A slide as the commerce validator wants it (snake case). */
 export interface MedusaHomepageSlide {
@@ -30,6 +31,8 @@ export interface MedusaHomepageSlide {
 export interface MedusaHomepageContentRecord {
   texts: Record<string, string>;
   slides: MedusaHomepageSlide[] | null;
+  /** The "Egyedi korallok" band's product handles, in order (commerce #555). */
+  featured_handles?: string[] | null;
 }
 
 export type HomepageProjectionOutcome =
@@ -40,6 +43,8 @@ export interface HomepageSource {
   content(): Promise<HomepageContentInput | null>;
   /** The administrator's switch in the editor (a database row). */
   switchedOn(): Promise<boolean>;
+  /** The Medusa product ids of the products marked for the band, in order. */
+  featured(): Promise<string[]>;
 }
 
 const slideRecord = (slide: HomepageSlide): MedusaHomepageSlide => ({
@@ -58,10 +63,12 @@ const slideRecord = (slide: HomepageSlide): MedusaHomepageSlide => ({
 
 export function homepageRecord(
   content: HomepageContentInput,
+  featuredHandles: readonly string[] = [],
 ): MedusaHomepageContentRecord {
   return {
     texts: { ...content.texts },
     slides: content.slides === null ? null : content.slides.map(slideRecord),
+    featured_handles: [...featuredHandles],
   };
 }
 
@@ -75,6 +82,8 @@ export function homepageRecordDiffers(
     JSON.stringify([
       Object.entries(r.texts ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)),
       r.slides === undefined ? null : r.slides,
+      // null and "never sent" are the same as an empty band
+      r.featured_handles ?? [],
     ]);
   return pick(current) !== pick(wanted);
 }
@@ -87,14 +96,31 @@ export function homepageRecordDiffers(
 export async function projectHomepageContent(
   client: Pick<
     MedusaAdminClient,
-    "fetchHomepageContent" | "setHomepageContent"
+    "fetchHomepageContent" | "setHomepageContent" | "fetchProductHandle"
   >,
   source: HomepageSource,
   apply: boolean,
 ): Promise<HomepageProjectionOutcome> {
-  const content = await source.content();
-  if (!content) return { status: "nothing" };
-  const wanted = homepageRecord(content);
+  const [content, featuredIds] = await Promise.all([
+    source.content(),
+    source.featured(),
+  ]);
+  // nothing stored and nothing marked: nothing to send
+  if (!content && !featuredIds.length) return { status: "nothing" };
+  /*
+    THE BAND'S HANDLES come from the shop itself (the product's own handle),
+    not from our slug: the shop's handle follows the handle switch, and only the
+    shop knows which one is live. A product the shop no longer has is left out.
+  */
+  const handles: string[] = [];
+  for (const id of featuredIds) {
+    const handle = await client.fetchProductHandle(id);
+    if (handle) handles.push(handle);
+  }
+  const wanted = homepageRecord(
+    content ?? { texts: {}, slides: null },
+    handles,
+  );
   const current = await client.fetchHomepageContent();
   if (!homepageRecordDiffers(current, wanted)) return { status: "unchanged" };
   if (apply) await client.setHomepageContent(wanted);
@@ -129,6 +155,26 @@ export const prismaHomepageSource: HomepageSource = {
     if (!row) return null;
     const { texts, slides } = toHomepageContent(row);
     return { texts, slides };
+  },
+  featured: async () => {
+    const rows = await prisma.homepageFeaturedProduct.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { productId: true },
+    });
+    if (!rows.length) return [];
+    const links = await prisma.externalReference.findMany({
+      where: {
+        system: MEDUSA_PRODUCT_REFERENCE.system,
+        entityType: MEDUSA_PRODUCT_REFERENCE.entityType,
+        entityId: { in: rows.map((r) => r.productId) },
+      },
+      select: { entityId: true, externalId: true },
+    });
+    const byProduct = new Map(links.map((l) => [l.entityId, l.externalId]));
+    return rows.flatMap((r) => {
+      const id = byProduct.get(r.productId);
+      return id ? [id] : [];
+    });
   },
   switchedOn: async () =>
     (

@@ -4,6 +4,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import {
@@ -48,6 +49,15 @@ const EXTENSION = {
   "image/webp": ".webp",
 } as const;
 
+/** The "Egyedi korallok" band shows at most this many (commerce #555). */
+export const HOMEPAGE_FEATURED_MAX = 12;
+
+export interface HomepageFeaturedRow {
+  productId: string;
+  name: string;
+  sortOrder: number;
+}
+
 /** The only record today; another key would be another home page variant. */
 export const MAIN_HOMEPAGE_KEY = "main";
 
@@ -67,6 +77,18 @@ export interface HomepageContentStore {
     enabled: boolean,
     userId: string,
   ): Promise<HomepageContentRow>;
+  /** The products marked for the band, in order. */
+  featuredList(): Promise<HomepageFeaturedRow[]>;
+  /**
+   * Marks or unmarks one product. `unknown-product`: no such product; `full`:
+   * marking would exceed `max` (an already marked product is never "full").
+   */
+  setFeatured(
+    productId: string,
+    featured: boolean,
+    userId: string,
+    max: number,
+  ): Promise<"ok" | "unknown-product" | "full">;
   /** The whole record, one transaction. */
   save(
     key: string,
@@ -211,6 +233,53 @@ export class HomepageContentService {
       userId,
     );
     return { projectionEnabled: row.projectionEnabled };
+  }
+
+  /** The products marked for the "Egyedi korallok" band, in order. */
+  featured(): Promise<HomepageFeaturedRow[]> {
+    return this.store.featuredList();
+  }
+
+  /**
+   * The per-product marker (Balázs, 2026-10-20). A change asks for one
+   * projection round where the projection is on, like a content save, and its
+   * failure never fails the marker.
+   */
+  async setFeatured(
+    productId: unknown,
+    featured: unknown,
+    userId: string,
+  ): Promise<{
+    featured: boolean;
+    list: HomepageFeaturedRow[];
+    projection: HomepageProjectionResult;
+  }> {
+    if (typeof productId !== "string" || !productId)
+      throw new BadRequestException("productId: kötelező");
+    if (typeof featured !== "boolean")
+      throw new BadRequestException("featured: true vagy false");
+    const outcome = await this.store.setFeatured(
+      productId,
+      featured,
+      userId,
+      HOMEPAGE_FEATURED_MAX,
+    );
+    if (outcome === "unknown-product")
+      throw new NotFoundException("Nincs ilyen termék.");
+    if (outcome === "full")
+      throw new ConflictException(
+        `A kezdőlapon legfeljebb ${HOMEPAGE_FEATURED_MAX} egyedi korall látszik.`,
+      );
+    const row = await this.store.find(MAIN_HOMEPAGE_KEY);
+    let projection: HomepageProjectionResult;
+    if (!homepageProjectionOn(this.environment, row)) projection = "off";
+    else
+      try {
+        projection = await this.project();
+      } catch {
+        projection = "failed";
+      }
+    return { featured, list: await this.store.featuredList(), projection };
   }
 
   async get(): Promise<HomepageContent> {

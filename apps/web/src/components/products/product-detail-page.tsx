@@ -30,6 +30,7 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
+import { ProductHomepageCard } from "@/components/products/product-homepage-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
@@ -1196,11 +1197,18 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           {
             id: "shipping",
             main: (
-              <ProductShippingProfileCard
-                token={token}
-                productId={product.id}
-                canManage={canManage}
-              />
+              <>
+                <ProductShippingProfileCard
+                  token={token}
+                  productId={product.id}
+                  canManage={canManage}
+                />
+                <ProductHomepageCard
+                  token={token}
+                  productId={product.id}
+                  canManage={canManage}
+                />
+              </>
             ),
             side: stock,
           },

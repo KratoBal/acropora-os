@@ -38,11 +38,15 @@ const slide = {
   imageAlt: "alt",
 };
 
-function fakeClient(current: MedusaHomepageContentRecord | null) {
+function fakeClient(
+  current: MedusaHomepageContentRecord | null,
+  handles: Record<string, string | null> = {},
+) {
   const writes: MedusaHomepageContentRecord[] = [];
   return {
     writes,
     client: {
+      fetchProductHandle: async (id: string) => handles[id] ?? null,
       fetchHomepageContent: async () => current,
       setHomepageContent: async (r: MedusaHomepageContentRecord) => {
         writes.push(r);
@@ -95,7 +99,11 @@ describe("projectHomepageContent", () => {
     const { client, writes } = fakeClient(null);
     const out = await projectHomepageContent(
       client,
-      { content: async () => content(), switchedOn: async () => true },
+      {
+        content: async () => content(),
+        switchedOn: async () => true,
+        featured: async () => [],
+      },
       true,
     );
     assert.equal(out.status, "sent");
@@ -108,7 +116,11 @@ describe("projectHomepageContent", () => {
       (
         await projectHomepageContent(
           same.client,
-          { content: async () => content(), switchedOn: async () => true },
+          {
+            content: async () => content(),
+            switchedOn: async () => true,
+            featured: async () => [],
+          },
           true,
         )
       ).status,
@@ -120,7 +132,11 @@ describe("projectHomepageContent", () => {
       (
         await projectHomepageContent(
           dry.client,
-          { content: async () => content(), switchedOn: async () => true },
+          {
+            content: async () => content(),
+            switchedOn: async () => true,
+            featured: async () => [],
+          },
           false,
         )
       ).status,
@@ -133,11 +149,89 @@ describe("projectHomepageContent", () => {
     const { client, writes } = fakeClient(null);
     const out = await projectHomepageContent(
       client,
-      { content: async () => null, switchedOn: async () => true },
+      {
+        content: async () => null,
+        switchedOn: async () => true,
+        featured: async () => [],
+      },
       true,
     );
     assert.equal(out.status, "nothing");
     assert.equal(writes.length, 0);
+  });
+});
+
+describe("the featured band", () => {
+  const source = (
+    ids: string[],
+    stored: HomepageContentInput | null = content(),
+  ) => ({
+    content: async () => stored,
+    switchedOn: async () => true,
+    featured: async () => ids,
+  });
+
+  it("sends the shop's own handles of the marked products, in order, and leaves out a product the shop lost", async () => {
+    const { client, writes } = fakeClient(null, { m1: "k-1", m3: "k-3" });
+    const out = await projectHomepageContent(
+      client,
+      source(["m1", "m2", "m3"]),
+      true,
+    );
+    assert.equal(out.status, "sent");
+    assert.deepEqual(writes[0]?.featured_handles, ["k-1", "k-3"]);
+  });
+
+  it("marked products with nothing stored still send (texts empty, slides not set)", async () => {
+    const { client, writes } = fakeClient(null, { m1: "k-1" });
+    const out = await projectHomepageContent(
+      client,
+      source(["m1"], null),
+      true,
+    );
+    assert.equal(out.status, "sent");
+    assert.deepEqual(writes[0], {
+      texts: {},
+      slides: null,
+      featured_handles: ["k-1"],
+    });
+  });
+
+  it("nothing stored and nothing marked sends nothing", async () => {
+    const { client, writes } = fakeClient(null);
+    assert.equal(
+      (await projectHomepageContent(client, source([], null), true)).status,
+      "nothing",
+    );
+    assert.equal(writes.length, 0);
+  });
+
+  it("a changed band is a difference, an unchanged one is not, and none equals an empty list", async () => {
+    const base = homepageRecord(content(), ["k-1"]);
+    const { client, writes } = fakeClient(base, { m1: "k-1", m2: "k-2" });
+    assert.equal(
+      (await projectHomepageContent(client, source(["m1"]), true)).status,
+      "unchanged",
+    );
+    assert.equal(
+      (await projectHomepageContent(client, source(["m1", "m2"]), true)).status,
+      "sent",
+    );
+    assert.deepEqual(writes[0]?.featured_handles, ["k-1", "k-2"]);
+    assert.equal(
+      homepageRecordDiffers(
+        { texts: {}, slides: null, featured_handles: null },
+        homepageRecord({ texts: {}, slides: null }),
+      ),
+      false,
+    );
+    assert.equal(
+      homepageRecordDiffers(
+        { texts: {}, slides: null },
+        homepageRecord({ texts: {}, slides: null }, ["x"]),
+      ),
+      true,
+    );
   });
 });
 

@@ -3,11 +3,13 @@ import { describe, it } from "node:test";
 import {
   BadRequestException,
   ConflictException,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import type { HomepageContentInput } from "@acropora/types";
 
 import {
+  HOMEPAGE_FEATURED_MAX,
   HomepageContentService,
   toHomepageContent,
   type HomepageContentRow,
@@ -39,6 +41,7 @@ function setup(
           updatedAt: new Date("2026-10-20T11:00:00Z"),
         };
   const saved: { input: HomepageContentInput; userId: string }[] = [];
+  const marked = new Set<string>();
   const store: HomepageContentStore = {
     find: async () => row,
     save: async (key, input, userId) => {
@@ -51,6 +54,22 @@ function setup(
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
       return row;
+    },
+    featuredList: async () =>
+      [...marked].map((productId, i) => ({
+        productId,
+        name: `Termék ${productId}`,
+        sortOrder: i,
+      })),
+    setFeatured: async (productId, featured, _userId, max) => {
+      if (productId === "nincs") return "unknown-product";
+      if (!featured) {
+        marked.delete(productId);
+        return "ok";
+      }
+      if (!marked.has(productId) && marked.size >= max) return "full";
+      marked.add(productId);
+      return "ok";
     },
     setProjection: async (key, enabled) => {
       row = {
@@ -308,5 +327,80 @@ describe("HomepageContentService.uploadImage", () => {
       ServiceUnavailableException,
     );
     assert.equal(uploads.length, 0);
+  });
+});
+
+describe("HomepageContentService featured marker", () => {
+  it("marks, lists in order, unmarks, and asks for one projection where it is on", async () => {
+    let asked = 0;
+    const { service } = setup(async () => {
+      asked++;
+      return "sent";
+    });
+    const a = await service.setFeatured("p1", true, "u");
+    assert.equal(a.projection, "sent");
+    await service.setFeatured("p2", true, "u");
+    assert.deepEqual(
+      (await service.featured()).map((r) => r.productId),
+      ["p1", "p2"],
+    );
+    const gone = await service.setFeatured("p1", false, "u");
+    assert.deepEqual(
+      gone.list.map((r) => r.productId),
+      ["p2"],
+    );
+    assert.equal(asked, 3);
+  });
+
+  it("does not project where it is off, and says so", async () => {
+    let asked = 0;
+    const { service } = setup(
+      async () => {
+        asked++;
+        return "sent";
+      },
+      { env: {} },
+    );
+    assert.equal(
+      (await service.setFeatured("p1", true, "u")).projection,
+      "off",
+    );
+    assert.equal(asked, 0);
+  });
+
+  it("keeps the marker when the projection fails", async () => {
+    const { service } = setup(async () => {
+      throw new Error("shop down");
+    });
+    const out = await service.setFeatured("p1", true, "u");
+    assert.equal(out.projection, "failed");
+    assert.equal(out.list.length, 1);
+  });
+
+  it("refuses a bad body, an unknown product and a thirteenth marked product", async () => {
+    const { service } = setup(async () => "sent");
+    await assert.rejects(
+      service.setFeatured("", true, "u"),
+      BadRequestException,
+    );
+    await assert.rejects(
+      service.setFeatured("p1", "igen", "u"),
+      BadRequestException,
+    );
+    await assert.rejects(
+      service.setFeatured("nincs", true, "u"),
+      NotFoundException,
+    );
+    for (let i = 0; i < 12; i++) await service.setFeatured(`m${i}`, true, "u");
+    await assert.rejects(
+      service.setFeatured("m12", true, "u"),
+      ConflictException,
+    );
+    // an already marked product is never "full", and unmarking always works
+    await service.setFeatured("m0", true, "u");
+    await service.setFeatured("m1", false, "u");
+    await service.setFeatured("m12", true, "u");
+    assert.equal((await service.featured()).length, 12);
+    assert.equal(HOMEPAGE_FEATURED_MAX, 12);
   });
 });
