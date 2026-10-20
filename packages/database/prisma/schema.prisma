@@ -1319,6 +1319,7 @@ model Product {
   @@index([catalogAuthority, isActive, webshopSellable])
   @@index([mirrorSource, mirrorState])
   @@index([missingSince])
+  homepageFeatured HomepageFeaturedProduct?
 }
 
 model ProductDescriptionImageReference {
@@ -1576,6 +1577,23 @@ model HomepageContent {
   updatedById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+/// A webshop kezdolapjanak "Egyedi korallok" savjaban mutatott termekek
+/// (Balazs, 2026-10-20: termekenkenti jelolo). Egy termek legfeljebb egyszer; a
+/// sorrend a `sortOrder`, az elso a nagy kartya. A vetites a Medusa-handle-ket
+/// kuldi a commerce `homepage_content` rekordba (`featured_handles`).
+model HomepageFeaturedProduct {
+  id          String   @id @default(cuid())
+  productId   String   @unique
+  sortOrder   Int      @default(0)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([sortOrder])
 }
 
 /// SEO P0 PR 10 (C6): egy termek egy Acropora-kategoriaban. Termekenkent

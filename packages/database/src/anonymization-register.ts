@@ -317,6 +317,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     slides: "business",
     updatedById: "identifier",
   },
+  HomepageFeaturedProduct: {
+    updatedById: "identifier",
+  },
   UnasCategoryMapping: {
     note: "freeText",
   },

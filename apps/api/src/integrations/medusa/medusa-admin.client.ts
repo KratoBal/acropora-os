@@ -1233,6 +1233,9 @@ export interface MedusaAdminClient {
    */
   fetchHomepageContent(): Promise<MedusaHomepageContentRecord | null>;
 
+  /** A shop product's own handle; `null` when the shop has no such product. */
+  fetchProductHandle(productId: string): Promise<string | null>;
+
   setHomepageContent(
     record: MedusaHomepageContentRecord,
   ): Promise<MedusaHomepageContentRecord>;
@@ -2512,6 +2515,19 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         homepage_content: MedusaHomepageContentRecord | null;
       }>("/admin/homepage-content");
       return body.homepage_content ?? null;
+    } catch (error) {
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
+  }
+
+  async fetchProductHandle(productId: string): Promise<string | null> {
+    try {
+      const body = await this.request<{
+        product?: { handle?: string | null } | null;
+      }>(`/admin/products/${encodeURIComponent(productId)}?fields=id,handle`);
+      return body.product?.handle ?? null;
     } catch (error) {
       if (error instanceof MedusaAdminHttpError && error.status === 404)
         return null;

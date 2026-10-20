@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Put,
   UploadedFile,
@@ -50,6 +51,24 @@ export class HomepageContentController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.content.setProjection(body?.enabled, user.id);
+  }
+
+  /** The products marked for the "Egyedi korallok" band, in order. */
+  @Get("featured")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
+  featured() {
+    return this.content.featured();
+  }
+
+  /** Marks or unmarks one product for the band (the product page's checkbox). */
+  @Put("featured/:productId")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  setFeatured(
+    @Param("productId") productId: string,
+    @Body() body: { featured?: unknown },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.content.setFeatured(productId, body?.featured, user.id);
   }
 
   /** One image for an image field or a slide; the answer is its public address. */
