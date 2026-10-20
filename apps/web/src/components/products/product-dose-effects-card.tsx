@@ -4,6 +4,7 @@ import {
   Alert,
   Badge,
   Button,
+  ConfirmDialog,
   Input,
   PilotSection,
   Select,
@@ -318,27 +319,14 @@ export function ProductDoseEffectsCard({
               >
                 Szerkesztés
               </Button>
-              {archiving === row.id ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() =>
-                    void act(() => doseEffectApi.archive(token, row.id))
-                  }
-                >
-                  Biztosan archiválod?
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => setArchiving(row.id)}
-                >
-                  Archiválás
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setArchiving(row.id)}
+              >
+                Archiválás
+              </Button>
             </div>
           ) : null}
         </div>
@@ -533,6 +521,21 @@ export function ProductDoseEffectsCard({
           Az összes adag-hatás sor, ellenőrzésre várók
         </Link>
       </p>
+
+      <ConfirmDialog
+        open={archiving !== null}
+        title="Archiválod ezt az adag-hatás sort?"
+        consequence="A sor kikerül az élő listából, és nem használható többé adag-ajánláshoz. A helyére új sor rögzíthető ugyanerre a paraméterre."
+        recovery="A sor és minden változata megmarad az archívumban, de visszaállítani nem lehet: ha mégis kell, rögzítsd újra, és egy második kolléga ellenőrizze."
+        confirmLabel="Archiválás"
+        busy={busy}
+        onConfirm={() => {
+          const id = archiving;
+          setArchiving(null);
+          if (id) void act(() => doseEffectApi.archive(token, id));
+        }}
+        onCancel={() => setArchiving(null)}
+      />
     </PilotSection>
   );
 }

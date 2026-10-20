@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductDoseEffectsCard } from "./product-dose-effects-card";
@@ -196,6 +202,26 @@ describe("ProductDoseEffectsCard", () => {
           effectHours: null,
         }),
       ),
+    );
+  });
+
+  it("az archiválás előbb a közös kérdést teszi fel; Mégsem után nem hív semmit, megerősítés után a sort archiválja", async () => {
+    api.forProduct.mockReturnValue(kesobb({ items: [sor()] }));
+    api.archive.mockReturnValue(kesobb(undefined));
+    kartya();
+    fireEvent.click(await screen.findByText("Archiválás"));
+    const kerdes = screen.getByRole("dialog");
+    expect(
+      within(kerdes).getByText(/Archiválod ezt az adag-hatás sort/),
+    ).toBeTruthy();
+    fireEvent.click(within(kerdes).getByText("Mégsem"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.archive).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Archiválás"));
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("Archiválás"));
+    await waitFor(() =>
+      expect(api.archive).toHaveBeenCalledWith("token-1", "sor-1"),
     );
   });
 
