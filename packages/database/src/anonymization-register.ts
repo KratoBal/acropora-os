@@ -246,6 +246,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ReefClubIdentity: {
     subject: "opaqueToken",
   },
+  // The SHA-256 of a single-use shop-link code (slice 5); the raw code exists
+  // only in the colleague's answer and the customer's e-mail.
+  ReefClubLinkCode: {
+    codeHash: "secret",
+  },
   Product: {
     name: "business",
     description: "business",

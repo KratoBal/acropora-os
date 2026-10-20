@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 
 import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
+import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
 import {
   ReefClubCreateAquariumDto,
   ReefClubCreateMeasurementDto,
@@ -46,6 +47,7 @@ export class ReefClubAquariumsController {
   constructor(
     private readonly access: ReefClubAquariumAccess,
     private readonly aquariums: ReefClubAquariumsService,
+    private readonly limits: ReefClubRateLimits,
   ) {}
 
   @Get()
@@ -60,7 +62,9 @@ export class ReefClubAquariumsController {
     @Req() request: ReefClubRequest,
     @Body() body: ReefClubCreateAquariumDto,
   ): Promise<ReefClubAquarium> {
-    return this.aquariums.create(accountOf(request), body);
+    const account = accountOf(request);
+    this.limits.aquariumCreateByAccount.check(account);
+    return this.aquariums.create(account, body);
   }
 
   @Get(":id")
@@ -146,6 +150,7 @@ export class ReefClubAquariumsController {
   ): Promise<ReefClubOccasion> {
     const account = accountOf(request);
     const grant = await this.access.aquariumForAccount(account, id, "WRITE");
+    this.limits.measurementCreateByAccount.check(account);
     return this.aquariums.createMeasurement(account, grant, body);
   }
 

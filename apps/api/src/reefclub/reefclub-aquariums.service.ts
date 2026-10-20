@@ -20,6 +20,7 @@ import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.j
 import { withUniqueCode } from "../common/unique-code.util.js";
 import {
   aquariumAccessWhere,
+  occasionFilter,
   originOf,
   type ReefClubAquariumGrant,
   type ReefClubAquariumOrigin,
@@ -32,6 +33,7 @@ import type {
   ReefClubUpdateAquariumDto,
 } from "./reefclub-aquarium.dto.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
+import { REEFCLUB_MAX_OWN_AQUARIUMS } from "./reefclub-rate-limits.js";
 
 /**
  * THE REEFCLUB AQUARIUM, ITS TARGET RANGES AND ITS MANUAL MEASUREMENTS (plan
@@ -41,8 +43,10 @@ import { ReefClubDatabase } from "./reefclub-database.js";
  * what `ReefClubAquariumAccess.aquariumForAccount` returned, so a method here
  * cannot be called on an aquarium the access function did not approve, and
  * every child query (targets, occasions) is bound to the granted aquarium id
- * (plan 4.2). The list is the one exception: it has no aquarium, and it uses
- * the access function's own query shape.
+ * (plan 4.2), and every occasion query to the access module's
+ * `occasionFilter` (on a shop aquarium: the released occasions only). The
+ * list is the one exception: it has no aquarium, and it uses the access
+ * function's own query shape.
  *
  * EVERY RESPONSE IS AN EXPLICIT FIELD LIST (plan 3.1). The internal columns
  * (the aquarium number, the notes, `maintainedByUs`, the maintainers, the
@@ -144,6 +148,16 @@ export class ReefClubAquariumsService {
     accountId: string,
     input: ReefClubCreateAquariumDto,
   ): Promise<ReefClubAquarium> {
+    // A ceiling, not a race-proof one: two parallel creates at 19 may both
+    // pass. It bounds a public account's use of internal aquarium numbers
+    // (barracuda, #1724 review a); one over the ceiling does no harm.
+    const owned = await this.database.aquarium.count({
+      where: { ownerAccountId: accountId },
+    });
+    if (owned >= REEFCLUB_MAX_OWN_AQUARIUMS)
+      throw new ConflictException(
+        `Legfeljebb ${REEFCLUB_MAX_OWN_AQUARIUMS} saját akváriumod lehet.`,
+      );
     const row = await withUniqueCode(
       { prefix: "AKV", field: "aquariumNumber" },
       (aquariumNumber) =>
@@ -282,7 +296,7 @@ export class ReefClubAquariumsService {
     });
     if (!aquarium) throw reefClubNotFound();
     const rows = await this.database.aquariumMeasurement.findMany({
-      where: { aquariumId: grant.aquariumId },
+      where: await occasionFilter(this.database, grant),
       select: {
         parameterCode: true,
         value: true,
@@ -422,8 +436,15 @@ export class ReefClubAquariumsService {
   ): Promise<void> {
     const measuredAt = occasionMoment(occasionId);
     if (!measuredAt) throw reefClubNotFound();
+    // Only the ReefClub's own manual rows (barracuda, #1724 review c): a
+    // shop row never lies on an own aquarium today, and if it ever does, it
+    // is not the account's to delete.
     const { count } = await this.database.aquariumMeasurement.deleteMany({
-      where: { aquariumId: grant.aquariumId, measuredAt },
+      where: {
+        aquariumId: grant.aquariumId,
+        measuredAt,
+        source: REEFCLUB_MANUAL_SOURCE,
+      },
     });
     if (count === 0) throw reefClubNotFound();
   }

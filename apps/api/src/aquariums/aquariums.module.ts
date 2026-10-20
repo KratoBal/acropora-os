@@ -7,6 +7,8 @@ import { AquariumMaintainersService } from "./aquarium-maintainers.service.js";
 import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
 import { AquariumMeasurementsService } from "./aquarium-measurements.service.js";
+import { AquariumReefClubController } from "./aquarium-reefclub.controller.js";
+import { AquariumReefClubService } from "./aquarium-reefclub.service.js";
 import { AquariumsController } from "./aquariums.controller.js";
 import { JevRecommendationCandidateSource } from "./recommendation/jev-candidate-source.js";
 import { AquariumsRepository } from "./aquariums.repository.js";
@@ -29,12 +31,13 @@ import { MeasurementRecommendationService } from "./recommendation/measurement-r
  */
 @Module({
   imports: [CustomersModule, NotificationsModule],
-  controllers: [AquariumsController],
+  controllers: [AquariumsController, AquariumReefClubController],
   providers: [
     AquariumsRepository,
     AquariumsService,
     AquariumMeasurementsRepository,
     AquariumMeasurementsService,
+    AquariumReefClubService,
     AquariumMeasurementXlsx,
     AquariumMaintainersRepository,
     AquariumMaintainersService,

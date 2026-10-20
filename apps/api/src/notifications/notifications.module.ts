@@ -86,6 +86,7 @@ import { TicketMailService } from "./mail/ticket-mail.service.js";
     HandoverMailService,
     MaintenanceMailService,
     AquariumMeasurementMailService,
+    NotificationLogRepository,
   ],
 })
 export class NotificationsModule {}

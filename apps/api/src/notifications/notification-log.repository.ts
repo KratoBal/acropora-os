@@ -116,6 +116,36 @@ export class NotificationLogRepository extends Repository {
     });
   }
 
+  /**
+   * The release e-mail of a shop measurement to the linked ReefClub accounts
+   * (ReefClub slice 5). The `userId` of an attempt is the ACCOUNT's id here,
+   * not a colleague's: the payload field keeps its name for one reader.
+   */
+  async recordReefClubRelease(input: {
+    aquariumId: string;
+    attempts: NotificationAttempt[];
+  }): Promise<void> {
+    await this.record({
+      eventType: "reefclub.release.notified",
+      aggregateType: "Aquarium",
+      aggregateId: input.aquariumId,
+      attempts: input.attempts,
+    });
+  }
+
+  /** The notice of a new shop link to the customer; `userId` is the customer's id. */
+  async recordReefClubLinkNotice(input: {
+    linkId: string;
+    attempts: NotificationAttempt[];
+  }): Promise<void> {
+    await this.record({
+      eventType: "reefclub.link.notified",
+      aggregateType: "ReefClubCustomerLink",
+      aggregateId: input.linkId,
+      attempts: input.attempts,
+    });
+  }
+
   /** Ugyanaz a kimenetel, anyagigenyre -- lasd a fenti ket metodus fejleceit. */
   async recordMaterialRequestCreated(
     outcome: MaterialRequestNotificationOutcome,

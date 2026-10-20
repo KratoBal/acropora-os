@@ -424,6 +424,12 @@ export interface AquariumMeasurementOccasion {
   notes?: string;
   values: AquariumMeasurementValue[];
   /**
+   * WHEN THE SHOP RELEASED THIS OCCASION TO THE CUSTOMER'S REEFCLUB (ReefClub
+   * plan v6.1, 3.5; slice 5). Missing: not released, the ReefClub does not
+   * show it. A released occasion cannot be deleted in the OS.
+   */
+  releasedAt?: string;
+  /**
    * A JÓVÁHAGYOTT termékajánlás (kártya 2b3983e1), darabokra bontva, a
    * termékek nevével és linkjével. Vázlat soha nem kerül ide: a vevő és a
    * portál csak jóváhagyott szöveget lát.

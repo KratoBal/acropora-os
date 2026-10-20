@@ -54,6 +54,7 @@ describe("a vízmérési termékajánlás", { skip: gate.mode === "skip" }, () =
     {} as never,
     {} as never,
     service,
+    {} as never,
   );
   const aquariumIds: string[] = [];
   let productId = "";
