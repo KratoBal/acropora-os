@@ -1,7 +1,7 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { Prisma, prisma } from "@acropora/database";
@@ -27,7 +27,12 @@ describe(
   { skip: gate.mode === "skip" },
   () => {
     const suffix = randomUUID().slice(0, 8);
-    const tax = `9${suffix.replace(/\D/g, "").padEnd(7, "1").slice(0, 7)}-2-41`;
+    // A tax number of its own for every run (barracuda, #1727): the list's
+    // search below goes by it, so a row of an earlier run left with the same
+    // number must not be able to push this run's row off the first page.
+    // Built from the suffix's digits it was a constant (91111111) whenever the
+    // suffix had none.
+    const tax = `9${String(randomInt(10_000_000)).padStart(7, "0")}-2-41`;
     const invoiceIds: string[] = [];
     const scanIds: string[] = [];
     let supplierId = "";
@@ -243,9 +248,12 @@ describe(
       );
       const listItem = (
         await controller.list(
-          Object.assign(new IncomingDocumentListQueryDto(), {
-            q: `G-${suffix}`,
-          }),
+          // The list's search looks at the supplier's name and tax number,
+          // not the invoice number: the tax number always has its eight
+          // digits. `G-${suffix}` matched only through the digits of the
+          // random suffix, and failed when it had fewer than three
+          // (3.6% of runs; card f46b23ab).
+          Object.assign(new IncomingDocumentListQueryDto(), { q: tax }),
         )
       ).items.find((item) => item.id === rows[0]!.id);
       const detail = await controller.detail(rows[0]!.id);
