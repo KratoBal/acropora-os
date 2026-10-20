@@ -76,22 +76,34 @@ export interface DoseEffectSuggestion {
   }[];
 }
 
-const product = (id: string) =>
-  `/products/${encodeURIComponent(id)}/dose-effects`;
-const row = (id: string) => `/dose-effects/${encodeURIComponent(id)}`;
+// The path shapes the route guard (apps/api/src/mobile/mobile-api-routes.spec.ts)
+// can read: a string prefix and helpers whose single return is a template.
+const products = "/products";
+const doseEffects = "/dose-effects";
+
+function productPath(id: string, suffix = "") {
+  return `${products}/${encodeURIComponent(id)}/dose-effects${suffix}`;
+}
+
+function rowPath(id: string, suffix = "") {
+  return `${doseEffects}/${encodeURIComponent(id)}${suffix}`;
+}
 
 export const doseEffectApi = {
   forProduct(token: string, productId: string) {
-    return apiRequest<{ items: DoseEffectView[] }>(product(productId), token);
+    return apiRequest<{ items: DoseEffectView[] }>(
+      productPath(productId),
+      token,
+    );
   },
   suggestion(token: string, productId: string) {
     return apiRequest<DoseEffectSuggestion>(
-      `${product(productId)}/suggestion`,
+      productPath(productId, "/suggestion"),
       token,
     );
   },
   create(token: string, productId: string, input: DoseEffectInput) {
-    return apiRequest<DoseEffectView>(product(productId), token, {
+    return apiRequest<DoseEffectView>(productPath(productId), token, {
       method: "POST",
       body: JSON.stringify(input),
     });
@@ -99,25 +111,24 @@ export const doseEffectApi = {
   list(token: string, query: { parameterCode?: string } = {}) {
     const params = new URLSearchParams();
     if (query.parameterCode) params.set("parameterCode", query.parameterCode);
-    const suffix = params.toString();
     return apiRequest<{ items: DoseEffectView[] }>(
-      `/dose-effects${suffix ? `?${suffix}` : ""}`,
+      `${doseEffects}?${params.toString()}`,
       token,
     );
   },
   update(token: string, id: string, edit: DoseEffectEdit) {
-    return apiRequest<DoseEffectView>(row(id), token, {
+    return apiRequest<DoseEffectView>(rowPath(id), token, {
       method: "PATCH",
       body: JSON.stringify(edit),
     });
   },
   verify(token: string, id: string, expectedVersion: number) {
-    return apiRequest<DoseEffectView>(`${row(id)}/verify`, token, {
+    return apiRequest<DoseEffectView>(rowPath(id, "/verify"), token, {
       method: "POST",
       body: JSON.stringify({ expectedVersion }),
     });
   },
   archive(token: string, id: string) {
-    return apiRequest<void>(row(id), token, { method: "DELETE" });
+    return apiRequest<void>(rowPath(id), token, { method: "DELETE" });
   },
 };
