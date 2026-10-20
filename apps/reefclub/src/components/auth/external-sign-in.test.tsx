@@ -191,6 +191,86 @@ describe("ExternalSignIn", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("privacy notice version: the server's own version leaves the box usable and shows no warning", async () => {
+    mockApi({
+      "GET /me": () => reply(401, {}),
+      "GET /auth/privacy-consent": () =>
+        reply(200, { version: PRIVACY_NOTICE_VERSION }),
+    });
+    view(BOTH);
+    await screen.findByRole("region", { name: "Belépés külső fiókkal" });
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeEnabled());
+    expect(
+      screen.queryByText("Az adatkezelési tájékoztató szövege frissítés alatt"),
+    ).toBeNull();
+  });
+
+  it("privacy notice version: another server version switches the box off, says why, and no acceptance is sent", async () => {
+    const { calls } = mockApi({
+      "GET /me": () => reply(401, {}),
+      "GET /auth/privacy-consent": () =>
+        reply(200, { version: "adatkezeles-vegleges-2099-01-01" }),
+      "POST /auth/google": () => reply(204),
+    });
+    const user = userEvent.setup();
+    view(BOTH);
+    expect(
+      await screen.findByText(
+        "Az adatkezelési tájékoztató szövege frissítés alatt",
+      ),
+    ).toBeInTheDocument();
+    const box = screen.getByRole("checkbox");
+    expect(box).toBeDisabled();
+    await user.click(box);
+    expect(box).not.toBeChecked();
+
+    // an existing account still signs in, without a version
+    await waitFor(() => expect(googleCallback).toBeDefined());
+    googleCallback!({ credential: "id-token" });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+    expect(calls.find((c) => c.path === "/auth/google")!.body).toEqual({
+      idToken: "id-token",
+    });
+  });
+
+  it("privacy notice version: a box ticked before the server's answer arrives sends no acceptance once the answer says outdated", async () => {
+    let answer: (response: Response) => void = () => {};
+    const { calls } = mockApi({
+      "GET /me": () => reply(401, {}),
+      "GET /auth/privacy-consent": () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+      "POST /auth/google": () => reply(204),
+    });
+    const user = userEvent.setup();
+    view(BOTH);
+    await user.click(await screen.findByRole("checkbox"));
+    expect(screen.getByRole("checkbox")).toBeChecked();
+
+    answer(reply(200, { version: "adatkezeles-vegleges-2099-01-01" }));
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeDisabled());
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    googleCallback!({ credential: "id-token" });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+    expect(calls.find((c) => c.path === "/auth/google")!.body).toEqual({
+      idToken: "id-token",
+    });
+  });
+
+  it("privacy notice version: an unreadable answer blocks nothing (the server's check decides)", async () => {
+    mockApi({
+      "GET /me": () => reply(401, {}),
+      "GET /auth/privacy-consent": () => reply(500, {}),
+    });
+    view(BOTH);
+    await screen.findByRole("region", { name: "Belépés külső fiókkal" });
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeEnabled());
+    expect(
+      screen.queryByText("Az adatkezelési tájékoztató szövege frissítés alatt"),
+    ).toBeNull();
+  });
+
   it("Apple: gives Apple the SHA-256 of a raw nonce and the server the raw one", async () => {
     let signedIn = false;
     const { calls } = mockApi({

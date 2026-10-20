@@ -11,6 +11,11 @@ import {
   loadScript as realLoadScript,
 } from "@/lib/external-scripts";
 import { newRawNonce, sha256Hex } from "@/lib/nonce";
+import {
+  OUTDATED_NOTICE_TEXT,
+  OUTDATED_NOTICE_TITLE,
+  usePrivacyConsent,
+} from "@/lib/privacy-consent";
 import { fetchPublicConfig, type PublicConfig } from "@/lib/public-config";
 
 /**
@@ -25,6 +30,13 @@ import { fetchPublicConfig, type PublicConfig } from "@/lib/public-config";
  * ticked, so a returning user is not asked for it; if the server needs it, its
  * words are shown and the box is the thing to tick. No e-mail merging: a
  * second account with the same address gets the server's 409, as it is.
+ *
+ * THE VERSION THE PAGE SHOWS must be the one the server expects (card 33780bcb,
+ * as in the registration form): when the server answers with another version,
+ * the box is off and cannot be ticked, so no acceptance is collected for a
+ * text the server no longer holds. Signing in with an existing account still
+ * works (no version is sent for it). An unreadable answer blocks nothing: the
+ * server's check is the authority.
  */
 export function ExternalSignIn({
   loadScript = realLoadScript,
@@ -42,8 +54,11 @@ export function ExternalSignIn({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const googleButton = useRef<HTMLDivElement>(null);
+  const notice = usePrivacyConsent();
+  const outdated = notice === "outdated";
 
-  acceptedRef.current = accepted;
+  // read by the provider's callback at the moment it fires; never true for an outdated text
+  acceptedRef.current = accepted && !outdated;
 
   useEffect(() => {
     let alive = true;
@@ -182,11 +197,19 @@ export function ExternalSignIn({
           description={error}
         />
       ) : null}
+      {outdated ? (
+        <Alert
+          variant="danger"
+          title={OUTDATED_NOTICE_TITLE}
+          description={OUTDATED_NOTICE_TEXT}
+        />
+      ) : null}
       <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
           className="mt-1"
-          checked={accepted}
+          checked={accepted && !outdated}
+          disabled={outdated}
           onChange={(event) => setAccepted(event.target.checked)}
         />
         <span>
