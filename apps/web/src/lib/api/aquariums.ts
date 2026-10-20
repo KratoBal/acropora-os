@@ -24,7 +24,47 @@ export interface IssuedReefClubLinkCode {
   emailedTo?: string;
 }
 
+/**
+ * EGY VEVŐ REEFCLUB-ÖSSZEKÖTÉSE (apps/api `CustomerReefClubLink`). Csak a ReefClub-fiók
+ * e-mail címe látszik, az akváriumok adata nem.
+ */
+export interface ReefClubCustomerLink {
+  id: string;
+  accountEmail: string;
+  status: "ACTIVE" | "ENDED";
+  /** ISO időpont. */
+  createdAt: string;
+  endedAt?: string;
+  /** Ki szüntette meg: a vevő a fiókjából, vagy a bolt. */
+  endedBy?: "ACCOUNT" | "SHOP";
+  /** Mikor kapott a vevő értesítést az összekötésről; hiányzik: még nem. */
+  noticeSentAt?: string;
+  /** Minden próba elbukott: a vevő NEM kapott értesítést, és több próba nem jön. */
+  noticeFailed: boolean;
+}
+
 export const aquariumsApi = {
+  /** GET /aquariums/customers/:customerId/reefclub-links (legújabb elöl, a megszűntek is). */
+  async reefClubLinks(
+    token: string,
+    customerId: string,
+    signal?: AbortSignal,
+  ): Promise<ReefClubCustomerLink[]> {
+    const response = await apiRequest<{ links: ReefClubCustomerLink[] }>(
+      `/aquariums/customers/${encodeURIComponent(customerId)}/reefclub-links`,
+      token,
+      { signal },
+    );
+    return response.links;
+  },
+  /** DELETE /aquariums/customers/:customerId/reefclub-links/:linkId (204; csak aktív link szüntethető meg). */
+  endReefClubLink(token: string, customerId: string, linkId: string) {
+    return apiRequest<void>(
+      `/aquariums/customers/${encodeURIComponent(customerId)}/reefclub-links/${encodeURIComponent(linkId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   /** POST /aquariums/customers/:customerId/reefclub-link-code (ReefClub terv v6.1, 3.3). */
   issueReefClubCode(token: string, customerId: string, sendEmail: boolean) {
     return apiRequest<IssuedReefClubLinkCode>(

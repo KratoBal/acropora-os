@@ -11,7 +11,11 @@ import {
   formatExpiry,
 } from "./reefclub-code-panel";
 
-const aquariums = vi.hoisted(() => ({ issueReefClubCode: vi.fn() }));
+const aquariums = vi.hoisted(() => ({
+  issueReefClubCode: vi.fn(),
+  reefClubLinks: vi.fn(),
+  endReefClubLink: vi.fn(),
+}));
 const customers = vi.hoisted(() => ({ detail: vi.fn() }));
 vi.mock("@/lib/api/aquariums", () => ({ aquariumsApi: aquariums }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
@@ -42,11 +46,35 @@ function panel() {
 
 beforeEach(() => {
   aquariums.issueReefClubCode.mockReset();
+  aquariums.reefClubLinks.mockReset().mockResolvedValue([]);
+  aquariums.endReefClubLink.mockReset();
   customers.detail.mockReset().mockResolvedValue(person);
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ReefClubCodePanel", () => {
+  it("names the customer the code is for and shows the customer's links", async () => {
+    aquariums.reefClubLinks.mockResolvedValue([
+      {
+        id: "l-9",
+        accountEmail: "fiok@example.test",
+        status: "ACTIVE",
+        createdAt: "2026-10-20T08:00:00.000Z",
+        noticeFailed: false,
+      },
+    ]);
+    panel();
+    expect(
+      await screen.findByText(/a most kiválasztott vevőnek szól: Minta Vevő/),
+    ).toBeInTheDocument();
+    expect(await screen.findByTestId("reefclub-link-l-9")).toBeInTheDocument();
+    expect(aquariums.reefClubLinks).toHaveBeenCalledWith(
+      "t",
+      "c-1",
+      expect.anything(),
+    );
+  });
+
   it("issues the code without an e-mail by default, shows it big with its expiry, and says it is shown once", async () => {
     aquariums.issueReefClubCode.mockResolvedValue({
       code: "ABCD-EFGH-JKLM",
