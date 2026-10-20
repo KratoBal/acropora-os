@@ -34,6 +34,7 @@ describe(
   { skip: gate.mode === "skip" },
   () => {
     const suffix = `${Date.now() % 1_000_000}`;
+    const suiteStartedAt = new Date();
     const doseEffects = new DoseEffectsService();
     const projection = new DoseProjectionService(doseEffects);
     let product: string;
@@ -56,7 +57,10 @@ describe(
     });
 
     async function removeLeftovers(): Promise<void> {
-      await prisma.reefClubDoseProjectionRun.deleteMany({});
+      // only the runs this suite made (the integration-gate guard allows no unfiltered deleteMany)
+      await prisma.reefClubDoseProjectionRun.deleteMany({
+        where: { startedAt: { gte: suiteStartedAt } },
+      });
       await prisma.product.deleteMany({
         where: { name: { startsWith: PREFIX } },
       });
