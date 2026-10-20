@@ -715,6 +715,23 @@ export const ANONYMIZATION_REGISTER: Readonly<
     verifiedById: "identifier",
     recordedByName: "personName",
   },
+  // ReefClub 8: the log of the automatic recommendation. The snapshot of the input holds
+  // numbers, ids and fixed words (no free text from the customer), and is walked as JSON
+  // anyway; the sentence is built from fixed templates and the product's own name.
+  ReefClubRecommendation: {
+    parameterCode: "business",
+    frameVersion: "business",
+    input: "json",
+    productName: "business",
+    source: "business",
+    text: "business",
+    templateId: "business",
+    reservedChanges: "business",
+  },
+  ReefClubAdministeredDose: {
+    parameterCode: "business",
+    clientOperationId: "identifier",
+  },
   // ReefClub 5a: the share log. The consent version and the read's purpose
   // are fixed words, not free text.
   AquariumShareEvent: {

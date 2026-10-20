@@ -49,6 +49,16 @@ GRANT UPDATE ("status", "endedAt", "endedBy") ON "ReefClubCustomerLink" TO "reef
 -- before that migration.
 GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_app";
 
+-- The automatic recommendation (plan 6.1, slice 8): the log of the issued doses, and the dose the
+-- customer recorded as given. The log's status and feedback time are the only columns that change
+-- after the insert; the recorded dose is written and read, never changed or deleted from here (a
+-- wrong entry is the customer's to record again, not to rewrite: the limit counts what was
+-- recorded). Neither table is ever deleted from by the role; the account's or the aquarium's
+-- deletion cascades with the owner's rights.
+GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
+GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
+GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
+
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).
 GRANT SELECT ("id", "displayName", "type", "isActive") ON "Customer" TO "reefclub_app";
 
@@ -116,6 +126,8 @@ ALTER TABLE "AquariumMeasurementTarget" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "AquariumShareEvent" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubCustomerLink" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "ReefClubLinkCode" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ReefClubRecommendation" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "ReefClubAdministeredDose" ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Aquarium_all_roles" ON "Aquarium";
 CREATE POLICY "Aquarium_all_roles" ON "Aquarium" AS PERMISSIVE FOR ALL TO PUBLIC
@@ -135,6 +147,12 @@ CREATE POLICY "ReefClubCustomerLink_all_roles" ON "ReefClubCustomerLink" AS PERM
 DROP POLICY IF EXISTS "ReefClubLinkCode_all_roles" ON "ReefClubLinkCode";
 CREATE POLICY "ReefClubLinkCode_all_roles" ON "ReefClubLinkCode" AS PERMISSIVE FOR ALL
   TO PUBLIC USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "ReefClubRecommendation_all_roles" ON "ReefClubRecommendation";
+CREATE POLICY "ReefClubRecommendation_all_roles" ON "ReefClubRecommendation" AS PERMISSIVE
+  FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose";
+CREATE POLICY "ReefClubAdministeredDose_all_roles" ON "ReefClubAdministeredDose" AS PERMISSIVE
+  FOR ALL TO PUBLIC USING (true) WITH CHECK (true);
 
 -- The aquarium: only a ReefClub one (it has an owner account) is created, changed or deleted.
 DROP POLICY IF EXISTS "Aquarium_reefclub_insert" ON "Aquarium";
@@ -226,3 +244,71 @@ CREATE POLICY "ReefClubLinkCode_reefclub_update" ON "ReefClubLinkCode" AS RESTRI
     WHERE cu."id" = "ReefClubLinkCode"."customerId" AND cu."type" = 'PERSON' AND cu."isActive"
   ))
   WITH CHECK ("usedAt" IS NOT NULL AND "usedByAccountId" IS NOT NULL);
+
+-- The automatic recommendation (slice 8). A row is written for an aquarium the account owns, or
+-- one whose customer the account has an ACTIVE link to (the shop aquarium it may read), never for
+-- another account's. A new recommendation is OPEN; the only change after that is the customer's
+-- feedback, once (an answered one stays as answered). "Given" and "partly" need the recorded dose
+-- of the same account and aquarium (barracuda, #1753): the limit counts a given recommendation
+-- by that dose, so a status set without it would free the limit. The service writes the dose
+-- first, then the status, in one transaction. A recorded dose that names a
+-- recommendation names one of the same aquarium and the same account.
+DROP POLICY IF EXISTS "ReefClubRecommendation_reefclub_insert" ON "ReefClubRecommendation";
+CREATE POLICY "ReefClubRecommendation_reefclub_insert" ON "ReefClubRecommendation" AS RESTRICTIVE
+  FOR INSERT TO "reefclub_app" WITH CHECK (
+    "status" = 'OPEN' AND "feedbackAt" IS NULL AND EXISTS (
+      SELECT 1 FROM "Aquarium" a
+      WHERE a."id" = "ReefClubRecommendation"."aquariumId"
+        AND (
+          a."ownerAccountId" = "ReefClubRecommendation"."accountId"
+          OR EXISTS (
+            SELECT 1 FROM "ReefClubCustomerLink" l
+            WHERE l."accountId" = "ReefClubRecommendation"."accountId"
+              AND l."customerId" = a."customerId"
+              AND l."status" = 'ACTIVE'
+          )
+        )
+    )
+  );
+DROP POLICY IF EXISTS "ReefClubRecommendation_reefclub_update" ON "ReefClubRecommendation";
+CREATE POLICY "ReefClubRecommendation_reefclub_update" ON "ReefClubRecommendation" AS RESTRICTIVE
+  FOR UPDATE TO "reefclub_app"
+  USING ("status" = 'OPEN')
+  WITH CHECK (
+    "feedbackAt" IS NOT NULL AND (
+      "status" = 'NOT_GIVEN' OR (
+        "status" IN ('GIVEN', 'PARTIAL') AND EXISTS (
+          SELECT 1 FROM "ReefClubAdministeredDose" d
+          WHERE d."recommendationId" = "ReefClubRecommendation"."id"
+            AND d."accountId" = "ReefClubRecommendation"."accountId"
+            AND d."aquariumId" = "ReefClubRecommendation"."aquariumId"
+        )
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministeredDose";
+CREATE POLICY "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministeredDose" AS RESTRICTIVE
+  FOR INSERT TO "reefclub_app" WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM "Aquarium" a
+      WHERE a."id" = "ReefClubAdministeredDose"."aquariumId"
+        AND (
+          a."ownerAccountId" = "ReefClubAdministeredDose"."accountId"
+          OR EXISTS (
+            SELECT 1 FROM "ReefClubCustomerLink" l
+            WHERE l."accountId" = "ReefClubAdministeredDose"."accountId"
+              AND l."customerId" = a."customerId"
+              AND l."status" = 'ACTIVE'
+          )
+        )
+    )
+    AND (
+      "recommendationId" IS NULL OR EXISTS (
+        SELECT 1 FROM "ReefClubRecommendation" r
+        WHERE r."id" = "ReefClubAdministeredDose"."recommendationId"
+          AND r."aquariumId" = "ReefClubAdministeredDose"."aquariumId"
+          AND r."accountId" = "ReefClubAdministeredDose"."accountId"
+      )
+    )
+  );
