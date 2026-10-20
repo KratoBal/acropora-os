@@ -312,3 +312,29 @@ CREATE POLICY "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministere
       )
     )
   );
+
+-- THE REDEMPTION FUNCTION'S OWNER (barracuda #1752, acrobot 33903). A SECURITY DEFINER function runs
+-- with its owner's rights, and its owner is whoever ran `prisma migrate deploy`. If that was a
+-- superuser while the tables belong to another role, the function would run with more rights than it
+-- needs, so it is handed to the tables' owner. Idempotent: nothing happens when the owner already is
+-- the tables' owner, or is no superuser. Changing an owner needs a superuser or the current owner;
+-- otherwise the run stops here with Postgres's own message.
+DO $$
+DECLARE
+  v_function_owner name;
+  v_function_owner_super boolean;
+  v_table_owner name;
+BEGIN
+  SELECT r.rolname, r.rolsuper INTO v_function_owner, v_function_owner_super
+    FROM pg_proc AS p JOIN pg_roles AS r ON r.oid = p.proowner
+   WHERE p.oid = '"reefclub_redeem_link_code"(text, text)'::regprocedure;
+  SELECT pg_get_userbyid(c.relowner) INTO v_table_owner
+    FROM pg_class AS c
+   WHERE c.oid = '"ReefClubLinkCode"'::regclass;
+  IF v_function_owner_super AND v_function_owner <> v_table_owner THEN
+    EXECUTE format(
+      'ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO %I', v_table_owner
+    );
+  END IF;
+END
+$$;

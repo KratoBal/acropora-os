@@ -69,16 +69,29 @@ const SQL_FILE = fileURLToPath(
   ),
 );
 
-/** The file's statements: comment lines dropped, split on the semicolons. */
+/**
+ * The file's statements: comment lines dropped, split on the semicolons that
+ * are not inside a dollar-quoted body (the function owner's DO block has its
+ * own).
+ */
 function statements(sql: string, role: string): string[] {
-  return sql
+  const text = sql
     .split("\n")
     .filter((line) => !line.trim().startsWith("--"))
     .join("\n")
-    .replaceAll('"reefclub_app"', `"${role}"`)
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+    .replaceAll('"reefclub_app"', `"${role}"`);
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const piece of text.split(/(\$\$|;)/)) {
+    if (piece === "$$") quoted = !quoted;
+    if (piece === ";" && !quoted) {
+      parts.push(current);
+      current = "";
+    } else current += piece;
+  }
+  parts.push(current);
+  return parts.map((statement) => statement.trim()).filter(Boolean);
 }
 
 function setCookies(response: Response): Record<string, string> {
@@ -730,6 +743,64 @@ describe(
       );
     });
 
+    it("a beváltó függvény szuperfelhasználó tulajdonosát a fájl a táblák tulajdonosára adja (#1752, acrobot 33903)", async () => {
+      const ownerOf = async () =>
+        (
+          await prisma.$queryRawUnsafe<{ fn: string; tbl: string }[]>(
+            `SELECT pg_get_userbyid(p.proowner) AS fn,
+                    (SELECT pg_get_userbyid(c.relowner) FROM pg_class c
+                      WHERE c.oid = '"ReefClubLinkCode"'::regclass) AS tbl
+               FROM pg_proc p
+              WHERE p.oid = '"reefclub_redeem_link_code"(text, text)'::regprocedure`,
+          )
+        )[0]!;
+      const before = await ownerOf();
+      // the run's own superuser stands for a superuser that ran the migrations
+      const superuser = `reefclub_proba_super_${suffix}`;
+      await prisma.$executeRawUnsafe(
+        `CREATE ROLE "${superuser}" SUPERUSER NOLOGIN`,
+      );
+      try {
+        await prisma.$executeRawUnsafe(
+          `ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "${superuser}"`,
+        );
+        assert.equal(
+          (await ownerOf()).fn,
+          superuser,
+          "kontroll: a csere megtörtént",
+        );
+        for (const statement of statements(
+          readFileSync(SQL_FILE, "utf8"),
+          role,
+        ))
+          await prisma.$executeRawUnsafe(statement);
+        const after = await ownerOf();
+        assert.equal(after.fn, after.tbl);
+        // run again: nothing changes
+        for (const statement of statements(
+          readFileSync(SQL_FILE, "utf8"),
+          role,
+        ))
+          await prisma.$executeRawUnsafe(statement);
+        assert.deepEqual(await ownerOf(), after);
+      } finally {
+        await prisma.$executeRawUnsafe(
+          `ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "${before.fn}"`,
+        );
+        await prisma.$executeRawUnsafe(`DROP ROLE IF EXISTS "${superuser}"`);
+      }
+      // the role keeps its right after the owner change (the ACL stays)
+      assert.equal(
+        (
+          await prisma.$queryRawUnsafe<{ ok: boolean }[]>(
+            `SELECT has_function_privilege($1, '"reefclub_redeem_link_code"(text, text)', 'EXECUTE') AS ok`,
+            role,
+          )
+        )[0]!.ok,
+        true,
+      );
+    });
+
     it("a kódot csak a beváltó függvény váltja be: egyszer, érvényesen, magánszemély vevőre (#1748)", async () => {
       const account = await prisma.reefClubAccount.create({
         data: {
@@ -793,6 +864,22 @@ describe(
       assert.deepEqual(
         [link.accountId, link.customerId, link.codeId, link.status],
         [account.id, customerId, valid.id, "ACTIVE"],
+      );
+      // a second code of the same customer: spent, and answered with the
+      // same active link (barracuda, #1752)
+      const second = await code(customerId, "masodik", 3_600_000);
+      const again = await redeem(second.codeHash);
+      assert.deepEqual(
+        again.map((row) => row.linkId),
+        [first[0]!.linkId],
+      );
+      assert.equal(
+        (
+          await prisma.reefClubLinkCode.findUniqueOrThrow({
+            where: { id: second.id },
+          })
+        ).usedByAccountId,
+        account.id,
       );
       assert.deepEqual(
         {
