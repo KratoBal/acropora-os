@@ -8,14 +8,11 @@ import { PilotButton } from "@/components/pilot/pilot-ui";
 import { aquariumsApi, type IssuedReefClubLinkCode } from "@/lib/api/aquariums";
 import { customersApi } from "@/lib/api/customers";
 
+import { ReefClubLinksList } from "./reefclub-links-list";
+import { formatMoment } from "./reefclub-time";
+
 /** A kód lejárata a bolti időzónában, ahogy a kolléga a vevőnek felolvassa. */
-export function formatExpiry(iso: string): string {
-  return new Intl.DateTimeFormat("hu-HU", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "Europe/Budapest",
-  }).format(new Date(iso));
-}
+export const formatExpiry = formatMoment;
 
 /**
  * Why this customer cannot get a ReefClub code, or null. The SERVER decides (apps/api
@@ -125,9 +122,10 @@ export function ReefClubCodePanel({
       <div>
         <p className="text-sm font-semibold">ReefClub-kód</p>
         <p className="text-xs text-dusk-500">
-          A vevő ezzel a kóddal köti össze a ReefClub-fiókját a bolti
-          nyilvántartással. Egyszer használható, és lejár. A kód csak a kiadás
-          után látszik, később nem olvasható vissza.
+          A kód a most kiválasztott vevőnek szól:{" "}
+          {customer.customer.displayName}. A vevő ezzel a kóddal köti össze a
+          ReefClub-fiókját a bolti nyilvántartással. Egyszer használható, és
+          lejár. A kód csak a kiadás után látszik, később nem olvasható vissza.
         </p>
       </div>
 
@@ -213,6 +211,8 @@ export function ReefClubCodePanel({
           </div>
         </div>
       ) : null}
+
+      <ReefClubLinksList token={token} customerId={customerId} />
     </div>
   );
 }
