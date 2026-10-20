@@ -212,7 +212,8 @@ export class DashboardRepository extends Repository {
       now.getTime() - STALE_MEASUREMENT_AFTER_DAYS * 24 * 60 * 60 * 1000,
     );
     const rows = await this.database.aquarium.findMany({
-      where: { isActive: true },
+      // Not a ReefClub aquarium (plan 4.4): the dashboard is the shop's own.
+      where: { isActive: true, ownerAccountId: null },
       select: {
         id: true,
         name: true,

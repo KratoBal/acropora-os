@@ -153,6 +153,16 @@ export class ReefClubCreateMeasurementDto {
 }
 
 /**
+ * Sharing an own aquarium with the shop (slice 5a): the version of the consent
+ * text the user accepted, stored with the share (plan 4.4).
+ */
+export class ReefClubShareAquariumDto {
+  @IsString()
+  @Matches(/^[A-Za-z0-9._-]{1,40}$/)
+  consentVersion!: string;
+}
+
+/**
  * A shop-link code as the user types it (slice 5). Only the length is bounded
  * here; the shape (alphabet, dashes, spaces) is the service's, so a malformed
  * code gets the same answer as a wrong one.

@@ -17,6 +17,7 @@ import {
   ReefClubCreateAquariumDto,
   ReefClubCreateMeasurementDto,
   ReefClubSetTargetsDto,
+  ReefClubShareAquariumDto,
   ReefClubUpdateAquariumDto,
 } from "./reefclub-aquarium.dto.js";
 import {
@@ -25,6 +26,7 @@ import {
   type ReefClubOccasion,
   type ReefClubTarget,
 } from "./reefclub-aquariums.service.js";
+import type { ReefClubShopView } from "./reefclub-shop-view.js";
 import {
   reefClubAccountOf as accountOf,
   type ReefClubRequest,
@@ -100,6 +102,46 @@ export class ReefClubAquariumsController {
       "WRITE",
     );
     await this.aquariums.remove(grant);
+  }
+
+  /**
+   * Sharing an own aquarium with the shop, revoking it, and the preview of
+   * what the shop would see (plan 4.4; slice 5a). WRITE: only the owner, so a
+   * shop aquarium is the one 404 here (plan 3.4).
+   */
+  @Post(":id/share")
+  async share(
+    @Req() request: ReefClubRequest,
+    @Param("id") id: string,
+    @Body() body: ReefClubShareAquariumDto,
+  ): Promise<ReefClubAquarium> {
+    const account = accountOf(request);
+    const grant = await this.access.aquariumForAccount(account, id, "WRITE");
+    return this.aquariums.share(account, grant, body.consentVersion);
+  }
+
+  @Delete(":id/share")
+  @HttpCode(204)
+  async revoke(
+    @Req() request: ReefClubRequest,
+    @Param("id") id: string,
+  ): Promise<void> {
+    const account = accountOf(request);
+    const grant = await this.access.aquariumForAccount(account, id, "WRITE");
+    await this.aquariums.revoke(account, grant);
+  }
+
+  @Get(":id/share/preview")
+  async sharePreview(
+    @Req() request: ReefClubRequest,
+    @Param("id") id: string,
+  ): Promise<ReefClubShopView> {
+    const grant = await this.access.aquariumForAccount(
+      accountOf(request),
+      id,
+      "WRITE",
+    );
+    return this.aquariums.sharePreview(grant);
   }
 
   @Get(":id/targets")

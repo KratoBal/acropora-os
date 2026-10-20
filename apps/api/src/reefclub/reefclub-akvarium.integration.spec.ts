@@ -59,6 +59,7 @@ const MISSING_OCCASION = "2001-01-01T00:00:00.000Z";
 
 /** A valid body for every swept route that takes one; a missing entry is red. */
 const BODIES: Record<string, unknown> = {
+  "POST /rc/v1/aquariums/:id/share": { consentVersion: "teszt-1" },
   "PATCH /rc/v1/aquariums/:id": { name: `${NAME_PREFIX} átírva` },
   "PUT /rc/v1/aquariums/:id/targets": {
     targets: [{ parameterCode: "KH", min: 7, max: 9 }],
@@ -324,9 +325,9 @@ describe(
       const routes = routesOf(reefclub).filter(
         (route) => paramsOf(route.path).length > 0,
       );
-      // The control on the reading itself: eight aquarium id routes and the
+      // The control on the reading itself: eleven aquarium id routes and the
       // link route.
-      assert.ok(routes.length >= 9, `${routes.length} azonosítós útvonal`);
+      assert.ok(routes.length >= 12, `${routes.length} azonosítós útvonal`);
       for (const route of routes)
         for (const param of paramsOf(route.path))
           assert.ok(
@@ -522,7 +523,7 @@ describe(
         }
       }
       assert.deepEqual(mismatches, []);
-      assert.ok(compared >= 9 * 6, `${compared} összevetés`);
+      assert.ok(compared >= 12 * 6, `${compared} összevetés`);
       assert.equal(await fingerprint(), before, "a sorok megváltoztak");
     });
 
@@ -610,6 +611,7 @@ describe(
         "id",
         "name",
         "origin",
+        "sharedWithShopAt",
         "systemVolumeLiters",
         "waterBodyType",
         "waterType",

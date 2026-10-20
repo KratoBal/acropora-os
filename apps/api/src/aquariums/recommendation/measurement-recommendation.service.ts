@@ -154,7 +154,12 @@ export class MeasurementRecommendationService {
     user: AuthenticatedUser,
   ): Promise<MeasurementRecommendationView | null> {
     requireInternalWriter(user, "Az ajánlás vázlatának megnyitása");
-    const { occasion } = await this.occasionOf(aquariumId, occasionId, user);
+    const { occasion } = await this.occasionOf(
+      aquariumId,
+      occasionId,
+      user,
+      "READ",
+    );
     const row = await this.rowOf(aquariumId, occasion.measuredAt);
     return row ? this.view(row) : null;
   }
@@ -174,6 +179,7 @@ export class MeasurementRecommendationService {
       aquariumId,
       occasionId,
       user,
+      "WRITE",
     );
     const deviations = recommendationDeviations(
       occasion,
@@ -198,7 +204,14 @@ export class MeasurementRecommendationService {
       deviations,
       (
         await prisma.aquariumMeasurementRecommendation.findMany({
-          where: { approvedText: { not: null }, aiDraft: { not: null } },
+          // Never a ReefClub aquarium's text as an example for another
+          // customer (plan 4.4); none can exist (the write paths refuse
+          // one), and this says it where the examples are chosen.
+          where: {
+            approvedText: { not: null },
+            aiDraft: { not: null },
+            aquarium: { ownerAccountId: null },
+          },
           orderBy: { approvedAt: "desc" },
           take: 50,
           select: { id: true, input: true, aiDraft: true, approvedText: true },
@@ -377,12 +390,18 @@ export class MeasurementRecommendationService {
     aquariumId: string,
     occasionId: string,
     user: AuthenticatedUser,
+    mode: "READ" | "WRITE",
   ): Promise<{
     aquarium: Awaited<ReturnType<AquariumsService["detail"]>>;
     occasion: AquariumMeasurementOccasion;
     occasions: AquariumMeasurementOccasion[];
   }> {
-    const aquarium = await this.aquariums.detail(aquariumId, user);
+    // A READ of a shared ReefClub aquarium is logged; a WRITE never reaches
+    // one (`AquariumsService.writable`).
+    const aquarium =
+      mode === "READ"
+        ? await this.aquariums.detail(aquariumId, user, "ajánlás")
+        : await this.aquariums.writable(aquariumId, user);
     const { occasions } = await this.measurements.list(aquariumId);
     const occasion = occasions.find((o) => o.id === occasionId);
     if (!occasion)
@@ -395,7 +414,12 @@ export class MeasurementRecommendationService {
     occasionId: string,
     user: AuthenticatedUser,
   ): Promise<Row> {
-    const { occasion } = await this.occasionOf(aquariumId, occasionId, user);
+    const { occasion } = await this.occasionOf(
+      aquariumId,
+      occasionId,
+      user,
+      "WRITE",
+    );
     const row = await this.rowOf(aquariumId, occasion.measuredAt);
     if (!row)
       throw new NotFoundException("Ehhez a méréshez még nincs ajánlás.");

@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 
 import {
   AQUARIUM_MEASUREMENT_PARAMETERS,
@@ -56,15 +56,16 @@ export class AquariumsService {
    */
   private async visibilityFor(
     user: AuthenticatedUser,
+    mode: "READ" | "WRITE",
   ): Promise<Prisma.AquariumWhereInput> {
     const scope = partnerScopeOf(user);
     const unitIds =
       scope.kind === "customer" ? await assignedUnitIdsFor(user.id) : [];
-    return aquariumVisibilityWhere({ scope, unitIds });
+    return aquariumVisibilityWhere({ scope, unitIds, mode });
   }
 
   async list(query: AquariumListQueryDto, user: AuthenticatedUser) {
-    const visibility = await this.visibilityFor(user);
+    const visibility = await this.visibilityFor(user, "READ");
     return this.repository.list(
       {
         page: query.page,
@@ -96,8 +97,37 @@ export class AquariumsService {
     return { ...aquarium, canAssignAssets };
   }
 
-  async detail(id: string, user: AuthenticatedUser) {
-    const visibility = await this.visibilityFor(user);
+  /**
+   * READING ONE AQUARIUM. A shared ReefClub aquarium is readable here, and
+   * every such read is logged with the colleague and what they read (plan
+   * 4.4: "ki nézte, mikor"); the log outlives a revoke, the content does not.
+   * `purpose` names the read for that log (the detail, the measurements, the
+   * PDF, the XLSX, the recommendation).
+   */
+  async detail(id: string, user: AuthenticatedUser, purpose = "részlet") {
+    const visibility = await this.visibilityFor(user, "READ");
+    const aquarium = await this.repository.detail(id, visibility);
+    if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
+    if (aquarium.reefClubSharedAt)
+      await prisma.aquariumShareEvent.create({
+        data: {
+          aquariumId: aquarium.id,
+          kind: "INTERNAL_READ",
+          userId: user.id,
+          purpose,
+        },
+      });
+    return this.withCanAssignAssets(aquarium, user);
+  }
+
+  /**
+   * THE AQUARIUM A CHANGE MAY TOUCH: the internal WRITE view, which never
+   * includes a ReefClub aquarium, shared or not (plan 4.4: the OS does not
+   * write the customer's ReefClub data). Every write path goes through this,
+   * so a shared aquarium answers a write with the same 404 as a private one.
+   */
+  async writable(id: string, user: AuthenticatedUser) {
+    const visibility = await this.visibilityFor(user, "WRITE");
     const aquarium = await this.repository.detail(id, visibility);
     if (!aquarium) throw new NotFoundException("Az akvárium nem található.");
     return this.withCanAssignAssets(aquarium, user);
@@ -308,7 +338,7 @@ export class AquariumsService {
     user: AuthenticatedUser,
   ) {
     requireInternalWriter(user, "Akvárium szerkesztése");
-    const existing = await this.detail(id, user);
+    const existing = await this.writable(id, user);
     if (input.targets !== undefined) this.checkTargets(input.targets);
     if (input.ownershipType || input.customerId !== undefined) {
       const problem = aquariumCustomerRequirementProblem({
@@ -364,7 +394,7 @@ export class AquariumsService {
     user: AuthenticatedUser,
   ) {
     requireInternalWriter(user, "Berendezés felvitele");
-    await this.detail(aquariumId, user);
+    await this.writable(aquariumId, user);
     const problem = aquariumEquipmentProblem(input);
     if (problem)
       throw new BadRequestException(
@@ -381,7 +411,7 @@ export class AquariumsService {
     user: AuthenticatedUser,
   ) {
     requireInternalWriter(user, "Berendezés törlése");
-    await this.detail(aquariumId, user);
+    await this.writable(aquariumId, user);
     try {
       const removed = await this.repository.removeEquipment(
         aquariumId,
