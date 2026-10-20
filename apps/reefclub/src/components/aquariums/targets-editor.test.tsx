@@ -2,6 +2,11 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  aquariumMeasurementParametersFor,
+  aquariumMeasurementTargetRange,
+} from "@acropora/types";
+
 import { mockApi, reply } from "@/test/mock-api";
 
 import { AquariumDetail } from "./aquarium-detail";
@@ -117,6 +122,51 @@ describe("TargetsEditor", () => {
     await user.type(screen.getByLabelText("pH alsó határ"), "sok");
     expect(screen.getByText("Számot írj, például 8,2.")).toBeInTheDocument();
     expect(calls).toEqual([]);
+  });
+
+  it("a stored range for a parameter that is not on the list now goes back unchanged, not deleted silently", async () => {
+    const { calls } = mockApi({
+      "PUT /aquariums/a1/targets": () => reply(200, { targets: [] }),
+    });
+    const user = userEvent.setup();
+    // the aquarium is marine now; GH is a fresh-water parameter, a range kept from before the water type changed
+    render(
+      <TargetsEditor
+        aquarium={OWN}
+        targets={[
+          { parameterCode: "GH", min: 6, max: null },
+          { parameterCode: "PH", min: 8, max: 8.4 },
+        ]}
+        onSaved={async () => {}}
+      />,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Célsávok szerkesztése" }),
+    );
+    expect(screen.queryByLabelText("GH alsó határ")).toBeNull();
+    await user.clear(screen.getByLabelText("pH felső határ"));
+    await user.type(screen.getByLabelText("pH felső határ"), "8,3");
+    await user.click(screen.getByRole("button", { name: "Célsávok mentése" }));
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === "PUT")).toBe(true),
+    );
+    expect(calls.find((c) => c.method === "PUT")!.body).toEqual({
+      targets: [
+        { parameterCode: "GH", min: 6 },
+        { parameterCode: "PH", min: 8, max: 8.3 },
+      ],
+    });
+  });
+
+  it("every default range the editor can name has BOTH bounds as numbers (the 'alap:' line prints both)", () => {
+    for (const parameter of aquariumMeasurementParametersFor("TENGERI")) {
+      const range = aquariumMeasurementTargetRange("TENGERI", parameter.code);
+      if (range === undefined) continue;
+      expect(Number.isFinite(range.min), parameter.code).toBe(true);
+      expect(Number.isFinite(range.max), parameter.code).toBe(true);
+    }
+    // fresh water has none at all
+    expect(aquariumMeasurementTargetRange("EDESVIZI", "PH")).toBeUndefined();
   });
 
   it("emptying every row sends an empty set, which removes the own ranges", async () => {

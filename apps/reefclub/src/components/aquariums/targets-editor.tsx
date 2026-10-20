@@ -53,6 +53,19 @@ export function TargetsEditor({
 
   const problems = new Map<string, string>();
   const body: { parameterCode: string; min?: number; max?: number }[] = [];
+  // THE STORED RANGES THIS FORM DOES NOT SHOW GO BACK UNCHANGED (barracuda, #1744 note a):
+  // the form lists the parameters of the CURRENT water type, but the save sends the whole
+  // set and the server removes what is not sent. An own range kept for a parameter that
+  // is not on the list now (the water type was changed since) would be deleted silently.
+  const shown = new Set<string>(parameters.map((parameter) => parameter.code));
+  for (const stored of targets) {
+    if (shown.has(stored.parameterCode)) continue;
+    body.push({
+      parameterCode: stored.parameterCode,
+      ...(stored.min !== null ? { min: stored.min } : {}),
+      ...(stored.max !== null ? { max: stored.max } : {}),
+    });
+  }
   for (const parameter of parameters) {
     const row = rows[parameter.code] ?? { min: "", max: "" };
     const min = row.min.trim() === "" ? undefined : parseDecimal(row.min);
