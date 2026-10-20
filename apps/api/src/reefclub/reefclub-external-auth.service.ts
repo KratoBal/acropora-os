@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -10,6 +11,10 @@ import {
 
 import { generateSessionToken } from "../auth/session-token.util.js";
 import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
+import {
+  PRIVACY_VERSION_CHANGED,
+  REEFCLUB_PRIVACY_NOTICE_VERSION,
+} from "./reefclub-consent.js";
 import type { ReefClubIssuedSession } from "./reefclub-auth.service.js";
 import {
   APPLE_ISSUERS,
@@ -151,6 +156,10 @@ export class ReefClubExternalAuthService {
         throw new UnprocessableEntityException(
           "Az első belépéshez el kell fogadni az adatkezelési tájékoztatót.",
         );
+      // Only where the version is USED (an account is created): a returning user's
+      // sign-in ignores it, so a stale page does not lock an existing account out.
+      if (options.consentVersion !== REEFCLUB_PRIVACY_NOTICE_VERSION)
+        throw new BadRequestException(PRIVACY_VERSION_CHANGED);
 
       if (!existing) {
         const created = await this.accounts.createExternal({

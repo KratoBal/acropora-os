@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
   Req,
@@ -28,6 +29,7 @@ import {
   reefClubCookieNames,
   reefClubCookieOptions,
 } from "./reefclub-cookies.js";
+import { REEFCLUB_PRIVACY_NOTICE_VERSION } from "./reefclub-consent.js";
 import { ReefClubExternalAuthService } from "./reefclub-external-auth.service.js";
 import {
   reefClubCallerAddress,
@@ -48,6 +50,16 @@ export class ReefClubAuthController {
     private readonly external: ReefClubExternalAuthService,
     private readonly limits: ReefClubRateLimits,
   ) {}
+
+  /**
+   * The privacy-notice version the registration must carry (card 33780bcb). Public: the
+   * registration page reads it before there is an account, and shows the text of this version.
+   */
+  @ReefClubPublic()
+  @Get("privacy-consent")
+  privacyConsent(): { version: string } {
+    return { version: REEFCLUB_PRIVACY_NOTICE_VERSION };
+  }
 
   /** Always 202, for a new address and an existing one alike (plan 3.2). */
   @ReefClubPublic()

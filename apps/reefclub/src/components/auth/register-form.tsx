@@ -5,6 +5,11 @@ import { useState, type FormEvent } from "react";
 
 import { rc } from "@/lib/api";
 import { PRIVACY_NOTICE_LINES, PRIVACY_NOTICE_VERSION } from "@/lib/consent";
+import {
+  OUTDATED_NOTICE_TEXT,
+  OUTDATED_NOTICE_TITLE,
+  usePrivacyConsent,
+} from "@/lib/privacy-consent";
 
 /** The server's minimum (`ReefClubRegisterDto`): ten characters. */
 export const PASSWORD_MIN = 10;
@@ -17,6 +22,7 @@ export function RegisterForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const notice = usePrivacyConsent();
 
   const problem =
     password.length > 0 && password.length < PASSWORD_MIN
@@ -60,7 +66,8 @@ export function RegisterForm() {
     email.trim() !== "" &&
     password.length >= PASSWORD_MIN &&
     again === password &&
-    accepted;
+    accepted &&
+    notice !== "outdated";
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
@@ -109,6 +116,13 @@ export function RegisterForm() {
           onChange={(event) => setAgain(event.target.value)}
         />
       </FormField>
+      {notice === "outdated" ? (
+        <Alert
+          variant="danger"
+          title={OUTDATED_NOTICE_TITLE}
+          description={OUTDATED_NOTICE_TEXT}
+        />
+      ) : null}
       <details className="rounded-lg border border-line bg-pilot-grey-50 p-3 text-sm">
         <summary className="cursor-pointer font-semibold">
           Az adatkezelési tájékoztató (tervezet)
