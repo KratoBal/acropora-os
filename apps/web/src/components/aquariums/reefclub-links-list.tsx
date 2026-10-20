@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert } from "@acropora/ui";
+import { Alert, ConfirmDialog } from "@acropora/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { PilotButton } from "@/components/pilot/pilot-ui";
@@ -32,8 +32,9 @@ function noticeText(link: ReefClubCustomerLink): string {
 /**
  * A VEVŐ REEFCLUB-ÖSSZEKÖTÉSEI ÉS MEGSZÜNTETÉSÜK (kártya reefclub-kod-gomb, 2. rész): a
  * kolléga látja, melyik ReefClub-fiók kapcsolódik a vevőhöz, és megszüntetheti, ha a vevő
- * nem ő csinálta. A megszüntetés kétlépéses (Megszüntetés, majd Igen), mert a fiók
- * elveszíti a vevő bolti akváriumait, és visszavonás nincs (csak új kóddal köthető újra). Csak az aktív linkhez
+ * nem ő csinálta. A megszüntetés a közös ConfirmDialoggal kérdez (mit tesz, mi vész el, hogyan
+ * szerezhető vissza), mert a fiók elveszíti a vevő bolti akváriumait, és visszavonás
+ * nincs (csak új kóddal köthető újra). Csak az aktív linkhez
  * van gomb; a megszűntek előzményként állnak.
  */
 export function ReefClubLinksList({
@@ -81,7 +82,6 @@ export function ReefClubLinksList({
     setError(null);
     try {
       await aquariumsApi.endReefClubLink(token, customerId, linkId);
-      setConfirming(null);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -90,11 +90,17 @@ export function ReefClubLinksList({
       );
     } finally {
       setEnding(null);
+      setConfirming(null);
     }
     // a lista a szerver állapotát mutassa akkor is, ha a megszüntetés elbukott
     // (például közben a vevő maga megszüntette)
     await load();
   }
+
+  const pendingLink =
+    links.state === "ready"
+      ? (links.links.find((link) => link.id === confirming) ?? null)
+      : null;
 
   return (
     <div className="flex flex-col gap-2" data-testid="reefclub-links">
@@ -153,51 +159,33 @@ export function ReefClubLinksList({
               <p className="text-dusk-600">{noticeText(link)}</p>
 
               {link.status === "ACTIVE" ? (
-                confirming === link.id ? (
-                  <div className="mt-2 flex flex-col gap-2">
-                    <p className="text-dusk-700">
-                      Biztosan megszünteted? A fiók ezután nem látja a vevő
-                      bolti akváriumait. A vevő új kóddal újra összeköthet.
-                    </p>
-                    <div className="flex gap-2">
-                      <PilotButton
-                        type="button"
-                        disabled={ending === link.id}
-                        onClick={() => void end(link.id)}
-                      >
-                        {ending === link.id
-                          ? "Megszüntetés…"
-                          : "Igen, megszüntetem"}
-                      </PilotButton>
-                      <PilotButton
-                        type="button"
-                        variant="secondary"
-                        disabled={ending === link.id}
-                        onClick={() => setConfirming(null)}
-                      >
-                        Mégsem
-                      </PilotButton>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-2">
-                    <PilotButton
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setError(null);
-                        setConfirming(link.id);
-                      }}
-                    >
-                      Összekötés megszüntetése
-                    </PilotButton>
-                  </div>
-                )
+                <div className="mt-2">
+                  <PilotButton
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setError(null);
+                      setConfirming(link.id);
+                    }}
+                  >
+                    Összekötés megszüntetése
+                  </PilotButton>
+                </div>
               ) : null}
             </li>
           ))}
         </ul>
       ) : null}
+      <ConfirmDialog
+        open={pendingLink !== null}
+        title={`Megszünteted ezt a ReefClub-összekötést: ${pendingLink?.accountEmail ?? ""}?`}
+        consequence="A fiók ezután nem látja a vevő bolti akváriumait. Semmilyen adat nem törlődik, csak a kapcsolat szűnik meg."
+        recovery="A vevő új ReefClub-kóddal újra összeköthet: a bolt kiad egy új kódot, és a vevő megadja a fiókjában."
+        confirmLabel="Megszüntetés"
+        busy={ending !== null}
+        onConfirm={() => pendingLink && void end(pendingLink.id)}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }

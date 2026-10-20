@@ -49,7 +49,7 @@ function list() {
 beforeEach(() => {
   aquariums.reefClubLinks
     .mockReset()
-    .mockResolvedValue([active, endedByAccount]);
+    .mockResolvedValue([endedByAccount, active]);
   aquariums.endReefClubLink.mockReset().mockResolvedValue(undefined);
 });
 
@@ -85,16 +85,21 @@ describe("ReefClubLinksList", () => {
     ).toHaveLength(1);
   });
 
-  it("asks before ending, and Mégsem ends nothing", async () => {
+  it("asks with the common dialog before ending, and Mégsem ends nothing", async () => {
     list();
     fireEvent.click(
       await screen.findByRole("button", { name: "Összekötés megszüntetése" }),
     );
-    expect(screen.getByText(/Biztosan megszünteted/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("aktiv@example.test");
+    // a három rész: mit teszünk, mi vész el, hogyan szerezhető vissza
+    expect(dialog).toHaveTextContent("nem látja a vevő bolti akváriumait");
+    expect(dialog).toHaveTextContent("Semmilyen adat nem törlődik");
+    expect(dialog).toHaveTextContent("új ReefClub-kóddal újra összeköthet");
     expect(aquariums.endReefClubLink).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
-    expect(screen.queryByText(/Biztosan megszünteted/)).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(aquariums.endReefClubLink).not.toHaveBeenCalled();
   });
 
@@ -111,7 +116,7 @@ describe("ReefClubLinksList", () => {
         endedAt: "2026-10-20T21:00:00.000Z",
       },
     ]);
-    fireEvent.click(screen.getByRole("button", { name: "Igen, megszüntetem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Megszüntetés" }));
 
     await waitFor(() =>
       expect(aquariums.endReefClubLink).toHaveBeenCalledWith("t", "c-1", "l-1"),
@@ -131,11 +136,12 @@ describe("ReefClubLinksList", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Összekötés megszüntetése" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Igen, megszüntetem" }));
+    fireEvent.click(screen.getByRole("button", { name: "Megszüntetés" }));
 
     expect(
       await screen.findByText("Az aktív összekapcsolás nem található."),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(aquariums.reefClubLinks).toHaveBeenCalledTimes(2);
   });
 
