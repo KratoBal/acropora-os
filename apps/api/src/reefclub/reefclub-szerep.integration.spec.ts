@@ -26,6 +26,9 @@ import {
   REEFCLUB_SHARE_CONSENT_VERSION,
 } from "./reefclub-consent.js";
 import { hashLinkCode, normalizeLinkCode } from "./reefclub-link-code.js";
+import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
+import { ReefClubDatabase } from "./reefclub-database.js";
+import { ReefClubRecommendationService } from "./reefclub-recommendation.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
 /**
@@ -1198,6 +1201,178 @@ describe(
         await prisma.reefClubDoseProjectionRun.deleteMany({
           where: { id: run.id },
         });
+      }
+    });
+
+    it("a szereppel az automatikus ajánlás: adag, ugyanaz újra mutatva, párhuzamos kérés, elavult lista, idegen akvárium (8. szelet, szolgáltatás)", async () => {
+      // Its own fixtures on the owner connection: two accounts, two own aquariums of 200 litres with a
+      // KH of 6,0 an hour ago, a real product and dose-list row, and a projection built just now.
+      const accountA = await prisma.reefClubAccount.create({
+        data: {
+          email: email("szolg-a"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const accountB = await prisma.reefClubAccount.create({
+        data: {
+          email: email("szolg-b"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const makeAquarium = async (name: string) => {
+        const aquarium = await prisma.aquarium.create({
+          data: {
+            aquariumNumber: `RCS-${suffix}-${name}`,
+            ownerAccountId: accountA.id,
+            ownershipType: "CUSTOMER",
+            name: `${NAME_PREFIX} ${name}`,
+            waterType: "TENGERI",
+            systemVolumeLiters: 200,
+          },
+        });
+        await prisma.aquariumMeasurement.create({
+          data: {
+            aquariumId: aquarium.id,
+            parameterCode: "KH",
+            value: 6,
+            unit: "dKH",
+            measuredAt: new Date(Date.now() - 3_600_000),
+            source: "REEFCLUB_MANUAL",
+            recordedByAccountId: accountA.id,
+          },
+        });
+        return aquarium.id;
+      };
+      const main = await makeAquarium("ajanlas-1");
+      const racing = await makeAquarium("ajanlas-2");
+      const stale = await makeAquarium("ajanlas-3");
+
+      const product = await prisma.product.create({
+        data: { name: `${NAME_PREFIX} ajánlás termék ${suffix}` },
+      });
+      const effect = await prisma.productDoseEffect.create({
+        data: {
+          productId: product.id,
+          parameterCode: "KH",
+          direction: "EMEL",
+          effectPer100L: 0.25,
+          doseUnit: "ML",
+          doseStep: 1,
+          maxDailyDosePer100L: 20,
+          effectHours: 12,
+          source: "Gyártói címke (próba)",
+          version: 4,
+          recordedAt: new Date(),
+        },
+      });
+      const run = await prisma.reefClubDoseProjectionRun.create({
+        data: {
+          status: "SUCCEEDED",
+          trigger: "STARTUP",
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          rowCount: 1,
+        },
+      });
+      await prisma.reefClubDoseRow.create({
+        data: {
+          runId: run.id,
+          sourceId: effect.id,
+          sourceVersion: 4,
+          productId: product.id,
+          productName: product.name,
+          parameterCode: "KH",
+          direction: "EMEL",
+          effectPer100L: 0.25,
+          doseUnit: "ML",
+          doseStep: 1,
+          maxDailyDosePer100L: 20,
+          effectHours: 12,
+          source: "Gyártói címke (próba)",
+          refusals: [],
+        },
+      });
+
+      // The table is shared with other suites, whose runs would decide "the last successful build"
+      // for us: both the fresh and the stale case must stand on THIS run, so every other
+      // successful run is moved back first.
+      await prisma.reefClubDoseProjectionRun.updateMany({
+        where: { status: "SUCCEEDED", id: { not: run.id } },
+        data: { finishedAt: new Date(Date.now() - 48 * 3_600_000) },
+      });
+      const database = new ReefClubDatabase(roleUrl);
+      const service = new ReefClubRecommendationService(
+        new ReefClubAquariumAccess(database),
+        database,
+      );
+      try {
+        // 1 a dose: 1 dKH (the limit) x 2 units / 0,25 = 8 ml, logged with the row's version
+        const first = await service.recommend(accountA.id, main, "KH");
+        assert.equal(first.outcome, "DOSE");
+        assert.equal(first.amount, 8);
+        assert.equal(first.unit, "ML");
+        assert.match(first.text, /8 ml/);
+        const logged = await prisma.reefClubRecommendation.findMany({
+          where: { aquariumId: main },
+        });
+        assert.equal(logged.length, 1);
+        assert.equal(logged[0]!.status, "OPEN");
+        assert.equal(logged[0]!.doseEffectVersion, 4);
+        assert.equal(logged[0]!.doseEffectId, effect.id);
+        assert.equal(logged[0]!.amount.toNumber(), 8);
+
+        // 2 the same request shows the same proposal and writes nothing more
+        const again = await service.recommend(accountA.id, main, "KH");
+        assert.equal(again.outcome, "ACTIVE");
+        assert.equal(again.recommendationId, first.recommendationId);
+        assert.equal(
+          await prisma.reefClubRecommendation.count({
+            where: { aquariumId: main },
+          }),
+          1,
+        );
+
+        // 3 two requests at once: one dose, the other sees it (one lock per aquarium)
+        const [x, y] = await Promise.all([
+          service.recommend(accountA.id, racing, "KH"),
+          service.recommend(accountA.id, racing, "KH"),
+        ]);
+        assert.deepEqual([x.outcome, y.outcome].sort(), ["ACTIVE", "DOSE"]);
+        assert.equal(
+          await prisma.reefClubRecommendation.count({
+            where: { aquariumId: racing },
+          }),
+          1,
+        );
+
+        // 4 a projection older than 26 hours gives no dose, and writes nothing
+        await prisma.reefClubDoseProjectionRun.updateMany({
+          where: { status: "SUCCEEDED" },
+          data: { finishedAt: new Date(Date.now() - 27 * 3_600_000) },
+        });
+        const old = await service.recommend(accountA.id, stale, "KH");
+        assert.equal(old.outcome, "NO_DOSE");
+        assert.equal(old.reason, "DOSE_LIST_STALE");
+        assert.equal(
+          await prisma.reefClubRecommendation.count({
+            where: { aquariumId: stale },
+          }),
+          0,
+        );
+
+        // 5 another account asks for an aquarium it may not read: the one 404
+        await assert.rejects(
+          () => service.recommend(accountB.id, main, "KH"),
+          /Nem található/,
+        );
+      } finally {
+        await database.$disconnect();
+        await prisma.reefClubDoseProjectionRun.deleteMany({
+          where: { id: run.id },
+        });
+        await prisma.product.deleteMany({ where: { id: product.id } });
       }
     });
   },

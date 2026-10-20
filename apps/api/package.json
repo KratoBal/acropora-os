@@ -68,6 +68,7 @@
     "nav:opg-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/cash-registers/cash-register-backfill.cli.js"
   },
   "dependencies": {
+    "@acropora/aquarium-calc": "workspace:*",
     "@acropora/database": "workspace:*",
     "@acropora/jev": "workspace:*",
     "@acropora/rich-text": "workspace:*",
