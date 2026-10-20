@@ -68,6 +68,7 @@ tmp/unas-import/
 *.sql
 !packages/database/prisma/migrations/**/*.sql
 !packages/database/prisma/diagnostics/**/*.sql
+!packages/database/sql/**/*.sql
 !**/fixtures/**/*.sql
 !**/*.example.sql
 acropora-pre-m1.sql
