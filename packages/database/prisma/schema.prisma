@@ -1263,28 +1263,37 @@ model ReefClubLinkCode {
 /// `ReefClubCustomerLink_active_key`). Megszunteteskor a sor megmarad
 /// (`ENDED`, ki es mikor): ez a naplo.
 ///
-/// `customerNoticeAt`: az uj osszerendelesrol a vevo nyilvantartott e-mail
-/// cimere megy ertesites (barracuda, a v1 atnezese). A levelet a BELSO
-/// folyamat kuldi (a ReefClub-folyamat a 6. szelettol a vevo e-mail cimet nem
-/// olvashatja), percenkent, ennek a mezonek az ures soraira.
+/// AZ ERTESITES (barracuda, a v1 atnezese es a #1725 review): az uj
+/// osszerendelesrol a vevo nyilvantartott e-mail cimere megy level. A levelet a
+/// BELSO folyamat kuldi (a ReefClub-folyamat a 6. szelettol a vevo e-mail cimet
+/// nem olvashatja), percenkent:
+///   `customerNoticeClaimedAt`  egy folyamat foglalta; 10 perc utan lejar, es a
+///                              kovetkezo kor ujra felveszi (ha a folyamat a
+///                              foglalas es a kuldes kozott leallt)
+///   `customerNoticeAt`         CSAK a sikeres kuldes utan irodik
+///   `customerNoticeAttempts`   a sikertelen kuldesek szama; az otodik utan a
+///                              sor kiesik, hibaszintu naplosor
+///                              (`REEFCLUB_LINK_NOTICE_FAILED`) es a belso
+///                              listaban `noticeFailed` jelzi
 model ReefClubCustomerLink {
-  id                     String               @id @default(cuid())
-  accountId              String
-  customerId             String
-  status                 ReefClubLinkStatus   @default(ACTIVE)
+  id                      String               @id @default(cuid())
+  accountId               String
+  customerId              String
+  status                  ReefClubLinkStatus   @default(ACTIVE)
   /// A bevaltott kod.
-  codeId                 String?              @unique
-  createdAt              DateTime             @default(now())
-  endedAt                DateTime?
-  endedBy                ReefClubLinkEndedBy?
+  codeId                  String?              @unique
+  createdAt               DateTime             @default(now())
+  endedAt                 DateTime?
+  endedBy                 ReefClubLinkEndedBy?
   /// A kollega, ha a bolt szuntette meg.
-  endedByUserId          String?
-  customerNoticeAt       DateTime?
-  customerNoticeAttempts Int                  @default(0)
-  account                ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  customer               Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  code                   ReefClubLinkCode?    @relation(fields: [codeId], references: [id], onDelete: SetNull)
-  endedByUser            User?                @relation("ReefClubLinkEndedBy", fields: [endedByUserId], references: [id], onDelete: SetNull)
+  endedByUserId           String?
+  customerNoticeAt        DateTime?
+  customerNoticeClaimedAt DateTime?
+  customerNoticeAttempts  Int                  @default(0)
+  account                 ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  customer                Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  code                    ReefClubLinkCode?    @relation(fields: [codeId], references: [id], onDelete: SetNull)
+  endedByUser             User?                @relation("ReefClubLinkEndedBy", fields: [endedByUserId], references: [id], onDelete: SetNull)
 
   @@index([accountId, status])
   @@index([customerId, status])
@@ -1391,6 +1400,7 @@ model Product {
   copyBlocks                 ProductCopy[]
   /// az elhullási napló bejegyzései (kártya 115c9740)
   mortalityRecords           MortalityRecord[]
+  homepageFeatured           HomepageFeaturedProduct?
 
   @@index([brandId])
   @@index([categoryId])
@@ -1400,7 +1410,6 @@ model Product {
   @@index([catalogAuthority, isActive, webshopSellable])
   @@index([mirrorSource, mirrorState])
   @@index([missingSince])
-  homepageFeatured HomepageFeaturedProduct?
 }
 
 model ProductDescriptionImageReference {

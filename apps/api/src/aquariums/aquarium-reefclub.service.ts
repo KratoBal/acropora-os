@@ -48,12 +48,25 @@ import {
  * is made in the ReefClub process, but from slice 6 that process cannot read
  * the customer's e-mail address (the column-level role, plan 2.1). So the
  * link row carries `customerNoticeAt`, and this process sends the notice for
- * every row where it is empty, once a minute (`sweepLinkNotices`). A row is
- * claimed with a conditional update before the send, so two API processes do
- * not both send it; a failed send gives the claim back, up to five tries.
+ * every row where it is empty, once a minute (`sweepLinkNotices`).
+ *
+ * THE NOTICE MUST NOT BE LOST QUIETLY (barracuda, #1725 review): it is what
+ * makes a code in the wrong hands noticeable. So:
+ *   - the claim is a LEASE (`customerNoticeClaimedAt`), taken with a
+ *     conditional update so two processes do not both send; a claim older
+ *     than `LINK_NOTICE_LEASE_MS` is taken again, so a process that stopped
+ *     between claim and send (deploy, OOM) does not leave the row looking
+ *     sent;
+ *   - `customerNoticeAt` is written only after a successful send;
+ *   - a failed send gives the lease back and counts an attempt; the last one
+ *     writes an error line (`REEFCLUB_LINK_NOTICE_FAILED`, with the link id),
+ *     and the internal link list shows `noticeFailed`.
+ * At least once, not exactly once: a process that stops after the send and
+ * before the mark sends it again after the lease.
  */
 export const LINK_NOTICE_INTERVAL_MS = 60_000;
 export const LINK_NOTICE_MAX_ATTEMPTS = 5;
+export const LINK_NOTICE_LEASE_MS = 10 * 60_000;
 
 /**
  * The shop's measurement sender (Balázs, 2026-09-24: the water-measurement
@@ -89,6 +102,10 @@ export interface CustomerReefClubLink {
   createdAt: string;
   endedAt?: string;
   endedBy?: "ACCOUNT" | "SHOP";
+  /** When the customer was told about this link; missing: not yet. */
+  noticeSentAt?: string;
+  /** Every attempt failed: the customer was NOT told, and no more tries come. */
+  noticeFailed: boolean;
 }
 
 @Injectable()
@@ -197,6 +214,8 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
         createdAt: true,
         endedAt: true,
         endedBy: true,
+        customerNoticeAt: true,
+        customerNoticeAttempts: true,
         account: { select: { email: true } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
@@ -208,6 +227,12 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
       createdAt: row.createdAt.toISOString(),
       ...(row.endedAt ? { endedAt: row.endedAt.toISOString() } : {}),
       ...(row.endedBy ? { endedBy: row.endedBy } : {}),
+      ...(row.customerNoticeAt
+        ? { noticeSentAt: row.customerNoticeAt.toISOString() }
+        : {}),
+      noticeFailed:
+        !row.customerNoticeAt &&
+        row.customerNoticeAttempts >= LINK_NOTICE_MAX_ATTEMPTS,
     }));
   }
 
@@ -289,25 +314,23 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** One pass over the links whose customer has not been told yet. */
-  async sweepLinkNotices(): Promise<number> {
+  async sweepLinkNotices(now = new Date()): Promise<number> {
     const pending = await prisma.reefClubCustomerLink.findMany({
-      where: {
-        customerNoticeAt: null,
-        customerNoticeAttempts: { lt: LINK_NOTICE_MAX_ATTEMPTS },
-      },
+      where: claimableNotice(now),
       select: { id: true },
       orderBy: { createdAt: "asc" },
       take: 50,
     });
     let sent = 0;
-    for (const { id } of pending) if (await this.sendLinkNotice(id)) sent++;
+    for (const { id } of pending)
+      if (await this.sendLinkNotice(id, now)) sent++;
     return sent;
   }
 
-  private async sendLinkNotice(linkId: string): Promise<boolean> {
+  private async sendLinkNotice(linkId: string, now: Date): Promise<boolean> {
     const claimed = await prisma.reefClubCustomerLink.updateMany({
-      where: { id: linkId, customerNoticeAt: null },
-      data: { customerNoticeAt: new Date() },
+      where: { id: linkId, ...claimableNotice(now) },
+      data: { customerNoticeClaimedAt: now },
     });
     if (claimed.count === 0) return false;
     const link = await prisma.reefClubCustomerLink.findUniqueOrThrow({
@@ -335,16 +358,25 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
           }),
         ),
       );
-      attempt = { userId: link.customerId, delivered: true };
-    } catch (error) {
-      // The claim goes back, with one more attempt counted.
       await prisma.reefClubCustomerLink.update({
         where: { id: linkId },
+        data: { customerNoticeAt: new Date() },
+      });
+      attempt = { userId: link.customerId, delivered: true };
+    } catch (error) {
+      // The lease goes back, with one more attempt counted.
+      const after = await prisma.reefClubCustomerLink.update({
+        where: { id: linkId },
         data: {
-          customerNoticeAt: null,
+          customerNoticeClaimedAt: null,
           customerNoticeAttempts: { increment: 1 },
         },
+        select: { customerNoticeAttempts: true },
       });
+      if (after.customerNoticeAttempts >= LINK_NOTICE_MAX_ATTEMPTS)
+        this.logger.error(
+          `REEFCLUB_LINK_NOTICE_FAILED link=${linkId}: az új összekapcsolásról a vevő ${after.customerNoticeAttempts} próbálkozás után sem kapott értesítést (${error instanceof Error ? error.message : "ismeretlen hiba"}). Több próba nem lesz.`,
+        );
       attempt = {
         userId: link.customerId,
         delivered: false,
@@ -354,4 +386,20 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
     await this.log.recordReefClubLinkNotice({ linkId, attempts: [attempt] });
     return attempt.delivered;
   }
+}
+
+/** A notice not sent yet, with tries left, and no live lease on it. */
+function claimableNotice(now: Date) {
+  return {
+    customerNoticeAt: null,
+    customerNoticeAttempts: { lt: LINK_NOTICE_MAX_ATTEMPTS },
+    OR: [
+      { customerNoticeClaimedAt: null },
+      {
+        customerNoticeClaimedAt: {
+          lt: new Date(now.getTime() - LINK_NOTICE_LEASE_MS),
+        },
+      },
+    ],
+  };
 }

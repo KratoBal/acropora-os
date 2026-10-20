@@ -79,6 +79,10 @@ describe(
   () => {
     const suffix = `${Date.now() % 1_000_000}`;
     const mails: OutgoingMail[] = [];
+    /** While true, every internal send fails (the notice failure test). */
+    let failMail = false;
+    /** Runs inside a send, before it returns: what a crash there would leave. */
+    let duringSend: ((mail: OutgoingMail) => Promise<void>) | null = null;
     let internal: INestApplication;
     let reefclub: INestApplication;
     let internalBase: string;
@@ -309,6 +313,8 @@ describe(
       // replaced, so the production code builds the mails and they land here.
       const sender = internal.get<MailSender>(MAIL_SENDER, { strict: false });
       sender.send = async (mail) => {
+        if (failMail) throw new Error("teszt: a küldés elbukik");
+        if (duringSend) await duringSend(mail);
         mails.push(mail);
       };
       await internal.listen(0, "127.0.0.1");
@@ -474,6 +480,109 @@ describe(
       assert.equal(
         mails.slice(again).filter((m) => m.to.includes(email("vevo-C"))).length,
         0,
+      );
+    });
+
+    /** A link written straight in the table, for an account made the same way. */
+    async function rawLink(name: string): Promise<string> {
+      const account = await prisma.reefClubAccount.create({
+        data: {
+          email: email(name),
+          emailVerifiedAt: new Date(),
+          consentVersion: "teszt-1",
+          consentAt: new Date(),
+        },
+      });
+      return (
+        await prisma.reefClubCustomerLink.create({
+          data: { accountId: account.id, customerId: customerC },
+        })
+      ).id;
+    }
+
+    it("értesítés: egy foglalt, de el nem küldött sor a foglalás lejárta után újra kimegy (#1725 review)", async () => {
+      const service = internal.get(AquariumReefClubService, { strict: false });
+      const id = await rawLink("lease");
+      const claimed = new Date();
+      // A process claimed it and stopped before sending.
+      await prisma.reefClubCustomerLink.update({
+        where: { id },
+        data: { customerNoticeClaimedAt: claimed },
+      });
+      const toLease = () =>
+        mails.filter((m) => m.text.includes(email("lease"))).length;
+      // If the process stopped DURING the send, the row must not look sent:
+      // read it at that moment.
+      const markedDuringSend: (Date | null)[] = [];
+      duringSend = async (mail) => {
+        if (!mail.text.includes(email("lease"))) return;
+        const current = await prisma.reefClubCustomerLink.findUniqueOrThrow({
+          where: { id },
+        });
+        markedDuringSend.push(current.customerNoticeAt);
+      };
+      try {
+        await service.sweepLinkNotices(new Date(claimed.getTime() + 60_000));
+        assert.equal(toLease(), 0, "élő foglalás mellett nem mehet ki");
+        await service.sweepLinkNotices(
+          new Date(claimed.getTime() + 11 * 60_000),
+        );
+      } finally {
+        duringSend = null;
+      }
+      assert.equal(toLease(), 1, "a lejárt foglalás után ki kell mennie");
+      assert.deepEqual(
+        markedDuringSend,
+        [null],
+        "küldés közben a sor már kiküldöttnek látszik: egy ott leálló folyamat után senki nem küldené el",
+      );
+      const row = await prisma.reefClubCustomerLink.findUniqueOrThrow({
+        where: { id },
+      });
+      assert.ok(row.customerNoticeAt, "a sikeres küldés után jelölve");
+    });
+
+    it("értesítés: az ötödik sikertelen küldés után hibasor és noticeFailed, és nincs több próba (#1725 review)", async () => {
+      const service = internal.get(AquariumReefClubService, { strict: false });
+      const errors: string[] = [];
+      const logger = (service as unknown as { logger: object }).logger;
+      (service as unknown as { logger: object }).logger = {
+        ...logger,
+        error: (message: string) => errors.push(message),
+        warn: () => undefined,
+      };
+      const id = await rawLink("hiba");
+      failMail = true;
+      try {
+        for (let round = 0; round < 6; round++)
+          await service.sweepLinkNotices();
+      } finally {
+        failMail = false;
+        (service as unknown as { logger: object }).logger = logger;
+      }
+      const row = await prisma.reefClubCustomerLink.findUniqueOrThrow({
+        where: { id },
+      });
+      assert.equal(row.customerNoticeAt, null);
+      assert.equal(row.customerNoticeAttempts, 5, "a hatodik kör nem próbál");
+      assert.equal(
+        errors.filter((line) =>
+          line.startsWith(`REEFCLUB_LINK_NOTICE_FAILED link=${id}`),
+        ).length,
+        1,
+      );
+      const links = await os(
+        `/aquariums/customers/${customerC}/reefclub-links`,
+      );
+      const listed = (
+        (await links.json()) as {
+          links: { id: string; noticeFailed: boolean; noticeSentAt?: string }[];
+        }
+      ).links;
+      assert.equal(listed.find((l) => l.id === id)?.noticeFailed, true);
+      assert.ok(
+        listed.some((l) => l.noticeSentAt && !l.noticeFailed),
+        "a sikeres értesítésű sor noticeSentAt-et visz",
       );
     });
 

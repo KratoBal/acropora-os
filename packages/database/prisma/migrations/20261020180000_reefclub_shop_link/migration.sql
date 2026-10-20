@@ -38,6 +38,7 @@ CREATE TABLE "ReefClubCustomerLink" (
     "endedBy" "ReefClubLinkEndedBy",
     "endedByUserId" TEXT,
     "customerNoticeAt" TIMESTAMP(3),
+    "customerNoticeClaimedAt" TIMESTAMP(3),
     "customerNoticeAttempts" INTEGER NOT NULL DEFAULT 0,
 
     CONSTRAINT "ReefClubCustomerLink_pkey" PRIMARY KEY ("id")
