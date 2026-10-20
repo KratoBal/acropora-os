@@ -520,7 +520,16 @@ export function PilotPosTerminalPage() {
 
   const sendToInvoice = () => {
     if (!canInvoice || cart.length === 0 || missingVat.length > 0) return;
-    const key = writePosInvoiceHandoff(window.sessionStorage, invoiceLines);
+    const key = writePosInvoiceHandoff(
+      () => window.sessionStorage,
+      invoiceLines,
+    );
+    if (key === null) {
+      setError(
+        "A böngésző nem engedi a webhely-adatot, ezért a kosarat nem tudom átadni a számlázásnak. Engedélyezd a webhely-adatot ennél az oldalnál, vagy készítsd el a számlát kézzel.",
+      );
+      return;
+    }
     router.push(
       `/penzugy/szamlazas/uj?${POS_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
     );

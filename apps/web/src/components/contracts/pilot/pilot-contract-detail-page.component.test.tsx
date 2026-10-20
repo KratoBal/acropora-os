@@ -849,6 +849,30 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
     karbantartásiként mentett szerződésből is nyitható lenne; ha számla után a
     szerződés visszaállhatna karbantartásira (barracuda, #1661).
   */
+  it("WEB-CONTRACT-INVOICE-BLOCKED: tiltott webhely-adatnál a Számla nem nyit, és megmondja miért", async () => {
+    navigation.push.mockReset();
+    api.detail.mockReset().mockResolvedValue({
+      ...contract(),
+      kind: "PURCHASE",
+      items: [item],
+    });
+    const blocked = vi
+      .spyOn(window, "sessionStorage", "get")
+      .mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+    try {
+      render(<PilotContractDetailPage contractId="contract-1" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Számla" }));
+      expect(navigation.push).not.toHaveBeenCalled();
+      expect(
+        await screen.findByText(/A böngésző nem engedi a webhely-adatot/),
+      ).toBeInTheDocument();
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it("WEB-CONTRACT-INVOICE-OPEN: a mentett beszerzési szerződésből kitöltött Új számla nyílik", async () => {
     window.sessionStorage.clear();
     navigation.push.mockReset();
@@ -867,7 +891,7 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
       [
         target.pathname,
         readContractInvoiceHandoff(
-          window.sessionStorage,
+          () => window.sessionStorage,
           target.searchParams.get("szerzodes")!,
         ),
       ],
@@ -926,7 +950,7 @@ describe("PilotContractDetailPage -- a szerződés fajtája", () => {
       "http://localhost",
     );
     const handoff = readContractInvoiceHandoff(
-      window.sessionStorage,
+      () => window.sessionStorage,
       target.searchParams.get("szerzodes")!,
     );
     expect(

@@ -98,13 +98,24 @@ export function posInvoiceHandoffLines(
   }));
 }
 
+/**
+ * A TÁR GETTERT KAP, nem Storage-et (kártya ff52b935, a #1729 mintája): ahol a
+ * böngésző a webhely-adatot tiltja, maga a `window.sessionStorage` olvasása
+ * dob (SecurityError), és argumentumként kiértékelve ez a `try` ELŐTT történne
+ * meg. Az olvasás ilyenkor `null`, a törlés néma, az írás `null` (a hívó
+ * kimondja, hogy az átadás nem megy).
+ */
 export function writePosInvoiceHandoff(
-  storage: Pick<Storage, "setItem">,
+  getStorage: () => Pick<Storage, "setItem">,
   lines: PosInvoiceHandoffLine[],
   key: string = crypto.randomUUID(),
-): string {
-  storage.setItem(STORAGE_PREFIX + key, JSON.stringify(lines));
-  return key;
+): string | null {
+  try {
+    getStorage().setItem(STORAGE_PREFIX + key, JSON.stringify(lines));
+    return key;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -113,19 +124,23 @@ export function writePosInvoiceHandoff(
  * adja vissza); a törlés az első mentésé (`clearPosInvoiceHandoff`).
  */
 export function clearPosInvoiceHandoff(
-  storage: Pick<Storage, "removeItem">,
+  getStorage: () => Pick<Storage, "removeItem">,
   key: string,
 ): void {
-  storage.removeItem(STORAGE_PREFIX + key);
+  try {
+    getStorage().removeItem(STORAGE_PREFIX + key);
+  } catch {
+    // a tár nem érhető el: nincs mit törölni
+  }
 }
 
 export function readPosInvoiceHandoff(
-  storage: Pick<Storage, "getItem">,
+  getStorage: () => Pick<Storage, "getItem">,
   key: string,
 ): PosInvoiceHandoffLine[] | null {
-  const raw = storage.getItem(STORAGE_PREFIX + key);
-  if (!raw) return null;
   try {
+    const raw = getStorage().getItem(STORAGE_PREFIX + key);
+    if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as PosInvoiceHandoffLine[]) : null;
   } catch {

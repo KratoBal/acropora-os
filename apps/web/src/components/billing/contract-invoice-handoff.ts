@@ -42,23 +42,34 @@ export interface ContractInvoiceHandoff {
   }>;
 }
 
+/**
+ * A TÁR GETTERT KAP, nem Storage-et (kártya ff52b935, a #1729 mintája): ahol a
+ * böngésző a webhely-adatot tiltja, maga a `window.sessionStorage` olvasása
+ * dob (SecurityError), és argumentumként kiértékelve ez a `try` ELŐTT történne
+ * meg. Az olvasás ilyenkor `null`, a törlés néma, az írás `null` (a hívó
+ * kimondja, hogy az átadás nem megy).
+ */
 export function writeContractInvoiceHandoff(
-  storage: Pick<Storage, "setItem">,
+  getStorage: () => Pick<Storage, "setItem">,
   handoff: ContractInvoiceHandoff,
   key: string = crypto.randomUUID(),
-): string {
-  storage.setItem(STORAGE_PREFIX + key, JSON.stringify(handoff));
-  return key;
+): string | null {
+  try {
+    getStorage().setItem(STORAGE_PREFIX + key, JSON.stringify(handoff));
+    return key;
+  } catch {
+    return null;
+  }
 }
 
 /** A kulcs csomagja, vagy `null`, ha nincs vagy olvashatatlan. Nem töröl. */
 export function readContractInvoiceHandoff(
-  storage: Pick<Storage, "getItem">,
+  getStorage: () => Pick<Storage, "getItem">,
   key: string,
 ): ContractInvoiceHandoff | null {
-  const raw = storage.getItem(STORAGE_PREFIX + key);
-  if (!raw) return null;
   try {
+    const raw = getStorage().getItem(STORAGE_PREFIX + key);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ContractInvoiceHandoff>;
     return typeof parsed.contractId === "string" &&
       typeof parsed.customerId === "string" &&
@@ -73,10 +84,14 @@ export function readContractInvoiceHandoff(
 
 /** Az első mentés törli: egy visszalépés ne nyisson második vázlatot. */
 export function clearContractInvoiceHandoff(
-  storage: Pick<Storage, "removeItem">,
+  getStorage: () => Pick<Storage, "removeItem">,
   key: string,
 ): void {
-  storage.removeItem(STORAGE_PREFIX + key);
+  try {
+    getStorage().removeItem(STORAGE_PREFIX + key);
+  } catch {
+    // a tár nem érhető el: nincs mit törölni
+  }
 }
 
 /**
