@@ -293,6 +293,37 @@ describe("PilotPosTerminalPage", () => {
    * kosarat a munkamenet-tárba teszi, és az Új számla oldalra visz a kulcsával.
    * A kedvezmények a sor bruttójában vannak, a pénztár végösszegével azonosan.
    */
+  it("with site data blocked, the cart is not handed to the invoice and the page says why", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    navigation.push.mockReset();
+    const blocked = vi
+      .spyOn(window, "sessionStorage", "get")
+      .mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+    try {
+      render(createElement(PilotPosTerminalPage));
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "Termék keresése" }),
+        { target: { value: "reef" } },
+      );
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      });
+      fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+      fireEvent.click(screen.getByRole("button", { name: "Számlázás" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Tovább a számlához/ }),
+      );
+      expect(navigation.push).not.toHaveBeenCalled();
+      expect(
+        await screen.findByText(/A böngésző nem engedi a webhely-adatot/),
+      ).toBeInTheDocument();
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it("a Számlázás eladás nélkül az Új számla oldalra viszi a kosarat, kedvezménnyel", async () => {
     api.searchProducts.mockResolvedValue([searchResult]);
     window.sessionStorage.clear();
@@ -336,7 +367,7 @@ describe("PilotPosTerminalPage", () => {
     expect(target.pathname).toBe("/penzugy/szamlazas/uj");
     const key = target.searchParams.get("pos");
     expect(key).toBeTruthy();
-    expect(readPosInvoiceHandoff(window.sessionStorage, key!)).toEqual([
+    expect(readPosInvoiceHandoff(() => window.sessionStorage, key!)).toEqual([
       {
         productId: "product-1",
         variantId: "variant-1",
@@ -455,7 +486,7 @@ describe("PilotPosTerminalPage", () => {
       "http://localhost",
     ).searchParams.get("pos")!;
     expect(
-      readPosInvoiceHandoff(window.sessionStorage, key),
+      readPosInvoiceHandoff(() => window.sessionStorage, key),
       "POS-WEB-MANUAL-INVOICE",
     ).toEqual([
       {
@@ -560,7 +591,7 @@ describe("PilotPosTerminalPage", () => {
       "http://localhost",
     ).searchParams.get("pos")!;
     expect(
-      readPosInvoiceHandoff(window.sessionStorage, key)!.map(
+      readPosInvoiceHandoff(() => window.sessionStorage, key)!.map(
         (line) => line.lineGross,
       ),
     ).toEqual([5127, 738]);

@@ -163,6 +163,7 @@ export function PilotContractDetailPage({
   const [saved, setSaved] = useState<ContractSummary | null>(null);
   const [contract, setContract] = useState<ContractSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const [numberError, setNumberError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -642,12 +643,19 @@ export function PilotContractDetailPage({
           : null;
   const openInvoice = () => {
     if (invoiceBlocker !== null || !saved) return;
-    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+    const key = writeContractInvoiceHandoff(() => window.sessionStorage, {
       contractId: saved.id,
       customerId: saved.customerId,
       contractNumber: saved.number,
       lines: contractInvoiceHandoffLines(saved.items, savedBilling),
     });
+    if (key === null) {
+      setInvoiceError(
+        "A böngésző nem engedi a webhely-adatot, ezért a szerződés tételeit nem tudom átadni a számlázásnak. Engedélyezd a webhely-adatot ennél az oldalnál, vagy készítsd el a számlát kézzel.",
+      );
+      return;
+    }
+    setInvoiceError(null);
     router.push(
       `/penzugy/szamlazas/uj?${CONTRACT_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
     );
@@ -693,6 +701,13 @@ export function PilotContractDetailPage({
         <div className="flex flex-1 flex-col gap-4 px-8 py-6">
           {error ? (
             <Alert variant="danger" title="Mentési hiba" description={error} />
+          ) : null}
+          {invoiceError ? (
+            <Alert
+              variant="danger"
+              title="A számla nem nyitható meg"
+              description={invoiceError}
+            />
           ) : null}
           <PilotCard>
             <PilotCardHeader title="Szerződés adatai" />

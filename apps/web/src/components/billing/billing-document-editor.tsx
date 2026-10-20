@@ -220,7 +220,10 @@ export function BillingDocumentEditor({
   */
   useEffect(() => {
     if (documentId || !posHandoffKey) return;
-    const lines = readPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
+    const lines = readPosInvoiceHandoff(
+      () => window.sessionStorage,
+      posHandoffKey,
+    );
     if (!lines || lines.length === 0) return;
     setState((current) =>
       current && current.lines.length === 0
@@ -241,7 +244,7 @@ export function BillingDocumentEditor({
   useEffect(() => {
     if (documentId || !contractHandoffKey) return;
     const handoff = readContractInvoiceHandoff(
-      window.sessionStorage,
+      () => window.sessionStorage,
       contractHandoffKey,
     );
     if (!handoff) return;
@@ -376,9 +379,12 @@ export function BillingDocumentEditor({
     // után a kulcs törlődik, különben egy visszalépés ugyanazokkal a sorokkal
     // nyitna, és a következő mentés egy második vázlatot hozna létre.
     if (created && posHandoffKey)
-      clearPosInvoiceHandoff(window.sessionStorage, posHandoffKey);
+      clearPosInvoiceHandoff(() => window.sessionStorage, posHandoffKey);
     if (created && contractHandoffKey)
-      clearContractInvoiceHandoff(window.sessionStorage, contractHandoffKey);
+      clearContractInvoiceHandoff(
+        () => window.sessionStorage,
+        contractHandoffKey,
+      );
     return { detail, created };
   };
 

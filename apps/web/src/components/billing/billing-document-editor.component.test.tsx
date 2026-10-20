@@ -321,6 +321,34 @@ describe("BillingDocumentEditor", () => {
     nem töltődnek be, ha a termék, a változat, a kulcs vagy a bruttó elveszne,
     vagy ha a vevő magától kitöltődne.
   */
+  /*
+    KÁRTYA ff52b935 (barracuda, #1729): ahol a böngésző a webhely-adatot tiltja,
+    a tár olvasása dob. MI PIROSÍT: a kosár-kulccsal nyitott szerkesztő elszáll,
+    vagy az első mentés (a vázlat már létrejött a szerveren) "nem sikerült"
+    hibát mutat és nem vált útra, mert a kulcs törlése dobott.
+  */
+  it("with site data blocked, a cart key opens the editor and the first save is not reported as failed", async () => {
+    const blocked = vi
+      .spyOn(window, "sessionStorage", "get")
+      .mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+    try {
+      render(<BillingDocumentEditor posHandoffKey="cart-key" />);
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+      fireEvent.click(
+        screen.getByRole("button", { name: /Vázlat mentése|Mentés…/ }),
+      );
+      await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(navigation.replace).toHaveBeenCalledTimes(1));
+      expect(screen.queryByText(/insecure/)).toBeNull();
+      expect(screen.queryByText(/A vázlat mentése nem sikerült/)).toBeNull();
+    } finally {
+      blocked.mockRestore();
+    }
+  });
+
   it("prefills the lines from the POS cart, leaving the customer to pick", async () => {
     window.sessionStorage.clear();
     products.detail.mockResolvedValue({
@@ -328,19 +356,22 @@ describe("BillingDocumentEditor", () => {
         { id: "variant-1", sku: "RS-RM500", name: null, isActive: true },
       ],
     });
-    const key = writePosInvoiceHandoff(window.sessionStorage, [
-      {
-        productId: "product-1",
-        variantId: "variant-1",
-        sku: "RS-RM500",
-        productName: "Red Sea ReefMat 500",
-        unit: "db",
-        quantity: 2,
-        vatRatePercent: "27",
-        lineGross: 35856,
-      },
-    ]);
-    render(<BillingDocumentEditor posHandoffKey={key} />);
+    const key = writePosInvoiceHandoff(
+      () => window.sessionStorage,
+      [
+        {
+          productId: "product-1",
+          variantId: "variant-1",
+          sku: "RS-RM500",
+          productName: "Red Sea ReefMat 500",
+          unit: "db",
+          quantity: 2,
+          vatRatePercent: "27",
+          lineGross: 35856,
+        },
+      ],
+    );
+    render(<BillingDocumentEditor posHandoffKey={key!} />);
 
     expect(
       await screen.findByDisplayValue("Red Sea ReefMat 500"),
@@ -370,7 +401,7 @@ describe("BillingDocumentEditor", () => {
       }),
     ]);
     // az első mentés után a kosár nem nyílik újra (barracuda, #1642)
-    expect(readPosInvoiceHandoff(window.sessionStorage, key)).toBeNull();
+    expect(readPosInvoiceHandoff(() => window.sessionStorage, key!)).toBeNull();
   });
 
   /*
@@ -381,7 +412,7 @@ describe("BillingDocumentEditor", () => {
   */
   it("WEB-INVOICE-FROM-CONTRACT: the purchase contract fills the customer, the reference and the lines", async () => {
     window.sessionStorage.clear();
-    const key = writeContractInvoiceHandoff(window.sessionStorage, {
+    const key = writeContractInvoiceHandoff(() => window.sessionStorage, {
       contractId: "contract-2",
       customerId: "cust-1",
       contractNumber: "SZ2026/0000020",
@@ -395,7 +426,7 @@ describe("BillingDocumentEditor", () => {
         },
       ],
     });
-    render(<BillingDocumentEditor contractHandoffKey={key} />);
+    render(<BillingDocumentEditor contractHandoffKey={key!} />);
     await screen.findByText(/Adószám: 12345678-2-42/);
     expect(screen.getByDisplayValue("SZ2026/0000020")).toBeInTheDocument();
     fireEvent.click(
@@ -410,7 +441,7 @@ describe("BillingDocumentEditor", () => {
         created.reference,
         [created.sourceType, created.sourceId],
         created.lines,
-        readContractInvoiceHandoff(window.sessionStorage, key),
+        readContractInvoiceHandoff(() => window.sessionStorage, key!),
       ],
       "WEB-INVOICE-FROM-CONTRACT",
     ).toEqual([
@@ -444,27 +475,30 @@ describe("BillingDocumentEditor", () => {
       unit: "db",
       vatRatePercent: "27",
     };
-    const key = writePosInvoiceHandoff(window.sessionStorage, [
-      {
-        ...line,
-        productId: "product-a",
-        variantId: "variant-a",
-        sku: "AF-1",
-        productName: "Aqua Forest Pro",
-        quantity: 3,
-        lineGross: 5127,
-      },
-      {
-        ...line,
-        productId: "product-b",
-        variantId: "variant-b",
-        sku: "CM-1",
-        productName: "Coral Mix",
-        quantity: 1,
-        lineGross: 738,
-      },
-    ]);
-    render(<BillingDocumentEditor posHandoffKey={key} />);
+    const key = writePosInvoiceHandoff(
+      () => window.sessionStorage,
+      [
+        {
+          ...line,
+          productId: "product-a",
+          variantId: "variant-a",
+          sku: "AF-1",
+          productName: "Aqua Forest Pro",
+          quantity: 3,
+          lineGross: 5127,
+        },
+        {
+          ...line,
+          productId: "product-b",
+          variantId: "variant-b",
+          sku: "CM-1",
+          productName: "Coral Mix",
+          quantity: 1,
+          lineGross: 738,
+        },
+      ],
+    );
+    render(<BillingDocumentEditor posHandoffKey={key!} />);
 
     expect(await screen.findByDisplayValue("Coral Mix")).toBeInTheDocument();
     expect(within(summary()).getByText("Bruttó").nextSibling).toHaveTextContent(
