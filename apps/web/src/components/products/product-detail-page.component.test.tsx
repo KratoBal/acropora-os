@@ -52,6 +52,18 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
 vi.mock("@/lib/api/products", () => ({ productApi: api }));
+// The dose list card (ReefClub slice 7) asks its own API: no row, no suggestion.
+vi.mock("@/lib/api/dose-effects", () => ({
+  doseEffectApi: {
+    forProduct: vi.fn(async () => ({ items: [] })),
+    suggestion: vi.fn(async () => ({
+      productId: "product-1",
+      jev: { status: "NONE", effects: [], sourceRef: null },
+      dosing: null,
+      rows: [],
+    })),
+  },
+}));
 
 const detail: ProductDetail = {
   id: "product-1",
@@ -276,6 +288,8 @@ describe("ProductDetailPage mirror ownership", () => {
       "Katalógusgazda",
       "Alapadatok",
       "Szállítási jellemzők",
+      // the product dose list (ReefClub slice 7) under the shipping card
+      "Adag-hatás",
       "Készlet és beszerzés",
       "UNAS terméktükör",
       "Csatornák",
