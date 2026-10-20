@@ -108,7 +108,7 @@ export function ReefClubCodePanel({
   }
 
   if (customer.state === "loading")
-    return <p className="text-sm text-slate-500">ReefClub-kód: betöltés…</p>;
+    return <p className="text-sm text-dusk-500">ReefClub-kód: betöltés…</p>;
   if (customer.state === "failed")
     return (
       <Alert
@@ -124,7 +124,7 @@ export function ReefClubCodePanel({
     <div className="flex flex-col gap-3" data-testid="reefclub-code-panel">
       <div>
         <p className="text-sm font-semibold">ReefClub-kód</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           A vevő ezzel a kóddal köti össze a ReefClub-fiókját a bolti
           nyilvántartással. Egyszer használható, és lejár. A kód csak a kiadás
           után látszik, később nem olvasható vissza.
@@ -134,7 +134,7 @@ export function ReefClubCodePanel({
       {blocker ? (
         <p
           role="note"
-          className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700"
+          className="rounded-lg bg-dusk-50 p-3 text-sm text-dusk-700"
         >
           {blocker}
         </p>
@@ -174,10 +174,10 @@ export function ReefClubCodePanel({
 
       {issued ? (
         <div
-          className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3"
+          className="flex flex-col gap-2 rounded-lg border border-dusk-200 p-3"
           data-testid="reefclub-issued-code"
         >
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-dusk-500">
             A vevőnek ezt a kódot kell megadnia a ReefClubban:
           </p>
           <p
@@ -186,11 +186,11 @@ export function ReefClubCodePanel({
           >
             {issued.code}
           </p>
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-dusk-700">
             Érvényes eddig: <strong>{formatExpiry(issued.expiresAt)}</strong>
           </p>
           {issued.emailedTo ? (
-            <p className="text-sm text-slate-700">
+            <p className="text-sm text-dusk-700">
               Elküldtük ide: {issued.emailedTo}
             </p>
           ) : null}
@@ -206,7 +206,7 @@ export function ReefClubCodePanel({
               <span className="text-sm text-emerald-700">Kimásolva.</span>
             ) : null}
             {copied === "no" ? (
-              <span className="text-sm text-slate-600">
+              <span className="text-sm text-dusk-600">
                 A vágólap nem érhető el: jelöld ki és másold a kódot.
               </span>
             ) : null}
