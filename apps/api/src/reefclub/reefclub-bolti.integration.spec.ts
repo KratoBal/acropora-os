@@ -731,6 +731,42 @@ describe(
       assert.equal(await linkCount(email("b")), before);
     });
 
+    it("egy élő kód vevőnként: az új kód kiadása lejáratja ugyanannak a vevőnek a fel nem használt régi kódjait, a többi vevőét és a felhasználtat nem", async () => {
+      const own = await customer("egyelo", "PERSON");
+      const other = await customer("egyelo-masik", "PERSON");
+      const first = await issueCode(own);
+      const second = await issueCode(own);
+      const otherCode = await issueCode(other);
+      const session = await login("egyelo");
+      const rowOf = (code: string) =>
+        prisma.reefClubLinkCode.findUniqueOrThrow({
+          where: { codeHash: hashLinkCode(normalizeLinkCode(code)!) },
+        });
+
+      // the first code is retired at the moment the second is issued: the row stays, expired and unused
+      const retired = await rowOf(first);
+      assert.equal(retired.usedAt, null);
+      assert.ok(retired.expiresAt.getTime() <= Date.now(), "a régi kód lejárt");
+      assert.equal((await redeem(session, first)).status, 400);
+
+      // the other customer's code and the newest code are alive
+      assert.ok((await rowOf(otherCode)).expiresAt.getTime() > Date.now());
+      assert.equal((await redeem(session, otherCode)).status, 201);
+      assert.equal((await redeem(session, second)).status, 201);
+
+      // a used code is the record of a link: a third issue leaves it as it was
+      const usedBefore = await rowOf(second);
+      assert.ok(usedBefore.usedAt);
+      const third = await issueCode(own);
+      const usedAfter = await rowOf(second);
+      assert.equal(usedAfter.usedAt?.getTime(), usedBefore.usedAt?.getTime());
+      assert.equal(
+        usedAfter.expiresAt.getTime(),
+        usedBefore.expiresAt.getTime(),
+      );
+      assert.ok((await rowOf(third)).expiresAt.getTime() > Date.now());
+    });
+
     it("5.2/7: öt hibás kód után a jó kód sem köt össze (fiókonkénti zár)", async () => {
       const locked = await login("zar");
       for (let index = 0; index < 5; index++)

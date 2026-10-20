@@ -171,22 +171,42 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
         "A vevőnek nincs e-mail címe. ReefClub-kód csak e-mail címmel adható ki, mert minden új összekapcsolásról értesítést kap.",
       );
 
-    const code = newLinkCode();
-    const expiresAt = new Date(Date.now() + LINK_CODE_TTL_MS);
-    await prisma.reefClubLinkCode.create({
-      data: {
-        customerId: customer.id,
-        codeHash: hashLinkCode(normalizeLinkCode(code)!),
-        expiresAt,
-        issuedById: user.id,
-      },
-    });
-    if (!sendEmail) return { code, expiresAt: expiresAt.toISOString() };
-
-    if (!this.sender)
+    // BEFORE anything is written: a code the colleague is told cannot be sent
+    // must not retire the customer's earlier codes for nothing.
+    if (sendEmail && !this.sender)
       throw new BadRequestException(
         "Az e-mail küldés jelenleg nincs beállítva; a kód a képernyőn érvényes.",
       );
+
+    const code = newLinkCode();
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + LINK_CODE_TTL_MS);
+    // ONE LIVE CODE PER CUSTOMER (acrobot, before the public opening): a new
+    // code retires the customer's earlier unused ones in the same transaction,
+    // so two clicks never leave two valid codes out. Expiring (not deleting)
+    // keeps the row; a redemption needs `expiresAt > now`. A used code is left
+    // as it is: it is the record of a link.
+    await prisma.$transaction([
+      prisma.reefClubLinkCode.updateMany({
+        where: {
+          customerId: customer.id,
+          usedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { expiresAt: now },
+      }),
+      prisma.reefClubLinkCode.create({
+        data: {
+          customerId: customer.id,
+          codeHash: hashLinkCode(normalizeLinkCode(code)!),
+          expiresAt,
+          issuedById: user.id,
+        },
+      }),
+    ]);
+    if (!sendEmail || !this.sender)
+      return { code, expiresAt: expiresAt.toISOString() };
+
     await this.sender.send(
       fromShop(
         linkCodeMail({
