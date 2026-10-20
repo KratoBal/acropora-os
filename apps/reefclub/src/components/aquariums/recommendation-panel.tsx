@@ -90,8 +90,8 @@ export function RecommendationPanel({
         </h2>
         <p className="text-sm text-pilot-grey-600">
           A javaslat a legfrissebb méréseden és a termékek ellenőrzött adagolási
-          adatain alapul, rögzített mondatokkal, szám nélküli magyarázat nélkül.
-          Ha bizonytalan vagy, kérdezd a boltot.
+          adatain alapul, és rögzített mondatokban érkezik. Ha bizonytalan vagy,
+          kérdezd a boltot.
         </p>
       </div>
 
