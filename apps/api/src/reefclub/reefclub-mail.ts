@@ -4,6 +4,12 @@ import type {
   OutgoingMail,
 } from "../notifications/mail/mail.port.js";
 
+import {
+  reefClubSmtpConfig,
+  reefClubSmtpRequested,
+  ReefClubSmtpMailSender,
+} from "./reefclub-smtp-mail.js";
+
 export const REEFCLUB_MAIL_SENDER = Symbol("REEFCLUB_MAIL_SENDER");
 
 const DEFAULT_WEB_URL = "http://localhost:3005";
@@ -48,9 +54,15 @@ export function reefClubMailEnvironment(
   };
 }
 
+/**
+ * The SMTP sender (Brevo, `reefclub-smtp-mail.ts`) as soon as any
+ * `REEFCLUB_SMTP_*` name is set; otherwise the Gmail one, as before.
+ */
 export function createReefClubMailSender(
   environment: Record<string, string | undefined> = process.env,
 ): MailSender {
+  if (reefClubSmtpRequested(environment))
+    return new ReefClubSmtpMailSender(reefClubSmtpConfig(environment));
   return new GmailMailSender(fetch, reefClubMailEnvironment(environment));
 }
 
