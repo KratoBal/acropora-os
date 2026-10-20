@@ -204,6 +204,31 @@ describe("AquariumDetail: an own aquarium", () => {
     expect(ids[0]).toBe(ids[1]);
   });
 
+  it("uses a NEW operation id when the values changed after a failed send, so the new values are not swallowed by the old occasion", async () => {
+    let attempts = 0;
+    const { calls } = routes(OWN, [], {
+      "POST /aquariums/a1/measurements": () => {
+        attempts += 1;
+        return attempts === 1 ? reply(502, {}) : reply(201, NEW_OCCASION);
+      },
+    });
+    const user = userEvent.setup();
+    render(<AquariumDetail id="a1" />);
+    await user.type(await screen.findByLabelText(/^pH \(/), "8,2");
+    await user.click(screen.getByRole("button", { name: "Mérés mentése" }));
+    expect(
+      await screen.findByText("A mérés nem mentődött"),
+    ).toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/^pH \(/));
+    await user.type(screen.getByLabelText(/^pH \(/), "8,4");
+    await user.click(screen.getByRole("button", { name: "Mérés mentése" }));
+    await waitFor(() => expect(attempts).toBe(2));
+    const posts = calls
+      .filter((c) => c.method === "POST")
+      .map((c) => c.body as { clientOperationId: string });
+    expect(posts[0]!.clientOperationId).not.toBe(posts[1]!.clientOperationId);
+  });
+
   it("refuses a moment in the future and a value that is not a number, before sending anything", async () => {
     const { calls } = routes(OWN, []);
     const user = userEvent.setup();
