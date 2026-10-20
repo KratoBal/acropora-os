@@ -20,7 +20,7 @@ export const DOSE_PROJECTION_INTERVAL_MS = 60 * 60 * 1000;
 export const DOSE_PROJECTION_STARTUP_DELAY_MS = 30 * 1000;
 const RUN_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
 /** One number for `pg_advisory_xact_lock`: the rebuilds of two instances do not interleave. */
-const ADVISORY_LOCK_KEY = 8_201_001;
+export const DOSE_PROJECTION_LOCK_KEY = 8_201_001;
 
 export interface DoseProjectionOutcome {
   ok: boolean;
@@ -95,11 +95,18 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
   ): Promise<DoseProjectionOutcome> {
     const startedAt = new Date();
     try {
-      const views = await this.doseEffects.list({ includeArchived: true });
-      const rows = views.map(toProjectedRow);
-      await prisma.$transaction(
+      // THE SOURCE IS READ AFTER THE LOCK (barracuda, #1754): with two instances,
+      // a read before the lock could be older than a rebuild that commits while
+      // this one waits, and a SUCCEEDED record written from it would call an old
+      // state fresh. Read after the lock, the state already holds whatever the
+      // other instance committed. (`list` reads on its own connection: it sees
+      // what is committed, and the other instance committed before it released
+      // the lock.)
+      const rowCount = await prisma.$transaction(
         async (tx) => {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_KEY})`;
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DOSE_PROJECTION_LOCK_KEY})`;
+          const views = await this.doseEffects.list({ includeArchived: true });
+          const rows = views.map(toProjectedRow);
           const run = await tx.reefClubDoseProjectionRun.create({
             data: {
               status: "SUCCEEDED",
@@ -119,10 +126,11 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
               finishedAt: { lt: new Date(Date.now() - RUN_KEEP_MS) },
             },
           });
+          return rows.length;
         },
         { timeout: 60_000 },
       );
-      return { ok: true, rowCount: rows.length, errorMessage: null };
+      return { ok: true, rowCount, errorMessage: null };
     } catch (error) {
       const errorMessage = (
         error instanceof Error ? error.message : String(error)

@@ -8,7 +8,10 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { DoseEffectsService } from "./dose-effects.service.js";
-import { DoseProjectionService } from "./dose-projection.service.js";
+import {
+  DOSE_PROJECTION_LOCK_KEY,
+  DoseProjectionService,
+} from "./dose-projection.service.js";
 
 /**
  * THE PROJECTION OF THE PRODUCT DOSE LIST FOR THE REEFCLUB (plan v6.1, 6.2;
@@ -216,6 +219,34 @@ describe(
       assert.ok((old.ageHours ?? 0) >= 27);
       // the rows' own content did not age: only the run record says it
       assert.ok(old.rowCount > 0);
+    });
+
+    it("a forrást a zár UTÁN olvassa (barracuda, #1754): amíg másik példány tartja a zárat, a lista olvasása nem indul el", async () => {
+      let listCalls = 0;
+      const counting = new DoseProjectionService({
+        list: (query: Parameters<DoseEffectsService["list"]>[0]) => {
+          listCalls += 1;
+          return doseEffects.list(query);
+        },
+      } as unknown as DoseEffectsService);
+
+      let running: Promise<{ ok: boolean }> | null = null;
+      await prisma.$transaction(
+        async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DOSE_PROJECTION_LOCK_KEY})`;
+          running = counting.rebuild("EDIT");
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          assert.equal(
+            listCalls,
+            0,
+            "a másik példány tartja a zárat: a forrás olvasása nem kezdődhetett el",
+          );
+        },
+        { timeout: 20_000 },
+      );
+      const outcome = await running!;
+      assert.equal(outcome.ok, true);
+      assert.equal(listCalls, 1, "a zár elengedése után olvasott");
     });
 
     it("párhuzamos kérések egy várakozó építésbe olvadnak, és az építések sorban futnak", async () => {
