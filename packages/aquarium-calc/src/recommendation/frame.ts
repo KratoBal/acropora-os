@@ -4,22 +4,24 @@
  * how old a measurement may be. One object with a VERSION, because every
  * logged recommendation names the frame it was computed under (plan 6.1).
  *
- * WHAT IS APPROVED AND WHAT IS NOT, marked on each entry:
+ * WHAT IS APPROVED, AND BY WHOM, marked on each entry (`approvedBy`):
  *
- *   JOVAHAGYVA  Balázs approved the number (plan 6.5, 11:36:53 UTC): the
- *               three limits KH 1 dKH, calcium 20 mg/l, magnesium 100 mg/l.
- *   HELYORZO    a PLACEHOLDER, not a professional number. The plan's nitrate
- *               and phosphate limits are "javaslat [N], szakmai jóváhagyásra"
- *               (never measured), and acrobot asked for a marked placeholder
- *               in their place. The engine REFUSES to give a dose from a
- *               placeholder limit unless the caller says so explicitly
- *               (`allowPlaceholderLimits`, meant for tests only): a parameter
- *               whose limit is not approved has no automatic dose.
+ *   JOVAHAGYVA  Balázs approved the number. KH 1 dKH, calcium 20 mg/l and
+ *               magnesium 100 mg/l on 2026-10-15 (plan 6.5, 11:36:53 UTC);
+ *               nitrate 5 mg/l down and 2 up, phosphate 0,03 mg/l down and
+ *               0,02 up on 2026-10-20 (Eldöntendő thread, 21:33 UTC, "Jó",
+ *               memory 2437 or thereabouts). Version v0 of this frame held
+ *               the nitrate and phosphate numbers as placeholders.
+ *   HELYORZO    a PLACEHOLDER, not a professional number. The engine REFUSES
+ *               to give a dose from a limit of this kind unless the caller
+ *               says so explicitly (`allowPlaceholderLimits`, tests only).
+ *               No entry is a placeholder today; the kind stays so that a
+ *               number added later cannot give a dose before it is approved.
  *
  * The data ages (plan 6.3 gate 1) are a proposal for professional approval
  * too, but they only make the engine stricter, so they apply as they stand.
  */
-export const RECOMMENDATION_FRAME_VERSION = "keret-2026-10-20-v0";
+export const RECOMMENDATION_FRAME_VERSION = "keret-2026-10-20-v1";
 
 /** The parameters the automatic dose covers (plan 6.3 gate 4). */
 export const RECOMMENDATION_PARAMETERS = [
@@ -43,6 +45,8 @@ export interface DailyLimit {
   /** The largest change in the parameter's own unit over a rolling 24 hours. */
   maxChangePer24h: number;
   approval: LimitApproval;
+  /** Who approved it and when; null for a placeholder. */
+  approvedBy: string | null;
 }
 
 /**
@@ -55,42 +59,53 @@ export const DAILY_LIMITS: readonly DailyLimit[] = [
     direction: "EMEL",
     maxChangePer24h: 1,
     approval: "JOVAHAGYVA",
+    approvedBy: "Balázs 2026-10-15 (ReefClub szál, 11:36:53 UTC)",
   },
   {
     parameter: "KALCIUM",
     direction: "EMEL",
     maxChangePer24h: 20,
     approval: "JOVAHAGYVA",
+    approvedBy: "Balázs 2026-10-15 (ReefClub szál, 11:36:53 UTC)",
   },
   {
     parameter: "MAGNEZIUM",
     direction: "EMEL",
     maxChangePer24h: 100,
     approval: "JOVAHAGYVA",
+    approvedBy: "Balázs 2026-10-15 (ReefClub szál, 11:36:53 UTC)",
   },
   {
     parameter: "NITRAT",
     direction: "CSOKKENT",
     maxChangePer24h: 5,
-    approval: "HELYORZO",
+    approval: "JOVAHAGYVA",
+    approvedBy:
+      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
   },
   {
     parameter: "NITRAT",
     direction: "EMEL",
     maxChangePer24h: 2,
-    approval: "HELYORZO",
+    approval: "JOVAHAGYVA",
+    approvedBy:
+      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
   },
   {
     parameter: "FOSZFAT",
     direction: "CSOKKENT",
     maxChangePer24h: 0.03,
-    approval: "HELYORZO",
+    approval: "JOVAHAGYVA",
+    approvedBy:
+      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
   },
   {
     parameter: "FOSZFAT",
     direction: "EMEL",
     maxChangePer24h: 0.02,
-    approval: "HELYORZO",
+    approval: "JOVAHAGYVA",
+    approvedBy:
+      "Balázs 2026-10-20 (Eldöntendő szál, 21:33 UTC, emlék 2437 körül)",
   },
 ];
 
@@ -119,8 +134,9 @@ export const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 export function dailyLimitFor(
   parameter: string,
   direction: DoseDirection,
+  limits: readonly DailyLimit[] = DAILY_LIMITS,
 ): DailyLimit | undefined {
-  return DAILY_LIMITS.find(
+  return limits.find(
     (limit) => limit.parameter === parameter && limit.direction === direction,
   );
 }

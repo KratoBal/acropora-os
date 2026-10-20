@@ -1,4 +1,5 @@
 import type {
+  DailyLimit,
   DoseDirection,
   DoseUnit,
   RecommendationParameter,
@@ -108,6 +109,8 @@ export interface RecommendationInput {
 export interface RecommendationOptions {
   /** Tests only: use a limit marked HELYORZO. Never set it in production code. */
   allowPlaceholderLimits?: boolean;
+  /** Tests only: another limit list than the frame's `DAILY_LIMITS`. */
+  limits?: readonly DailyLimit[];
 }
 
 /** Why there is no dose; each has a fixed sentence (templates.ts). */

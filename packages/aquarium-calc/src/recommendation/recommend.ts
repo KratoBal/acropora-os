@@ -1,4 +1,5 @@
 import {
+  DAILY_LIMITS,
   DEFAULT_EFFECT_HOURS,
   FUTURE_TOLERANCE_MS,
   HOUR_MS,
@@ -129,6 +130,7 @@ export function recommend(
 ): RecommendationResult {
   const { now } = input;
   const allowPlaceholders = options.allowPlaceholderLimits === true;
+  const limits = options.limits ?? DAILY_LIMITS;
   const windowStart = new Date(now.getTime() - ROLLING_WINDOW_HOURS * HOUR_MS);
 
   function logEntry(
@@ -215,7 +217,7 @@ export function recommend(
   if (value < band.min) direction = "EMEL";
   else if (value > band.max) direction = "CSOKKENT";
   else return refuse("IN_RANGE", measurement);
-  const limit = dailyLimitFor(parameter, direction);
+  const limit = dailyLimitFor(parameter, direction, limits);
   if (!limit) return refuse("OUT_OF_CIRCLE", measurement);
 
   const rows = liveRows(input.rows);
@@ -321,7 +323,7 @@ export function recommend(
 
   // 12. the limit: approved, and what is left of it in the rolling 24 hours
   const limitUsable = (param: string, dir: DoseDirection) => {
-    const found = dailyLimitFor(param, dir);
+    const found = dailyLimitFor(param, dir, limits);
     return found && (found.approval === "JOVAHAGYVA" || allowPlaceholders)
       ? found
       : undefined;

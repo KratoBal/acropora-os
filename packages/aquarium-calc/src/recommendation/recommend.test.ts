@@ -479,17 +479,19 @@ describe("6.7: nitrate and phosphate", () => {
       }),
     ],
   } satisfies Partial<RecommendationInput>;
-  const options = { allowPlaceholderLimits: true };
+  /** The frame's nitrate-reduction limit turned back into a placeholder, as it was in v0. */
+  const placeholderLimits = DAILY_LIMITS.map((limit) =>
+    limit.parameter === "NITRAT" && limit.direction === "CSOKKENT"
+      ? { ...limit, approval: "HELYORZO" as const, approvedBy: null }
+      : limit,
+  );
 
-  it("reduces nitrate when phosphate is measured at the same visit and inside its band (test-only placeholder limit)", () => {
-    // limit 5 (placeholder) -> 5 x 2 / 2 = 5 ml; -5 mg/l reserved
-    const result = doseOf(
-      {
-        ...nitrate,
-        measurements: [point("NITRAT", 14), point("FOSZFAT", 0.05)],
-      },
-      options,
-    );
+  it("reduces nitrate when phosphate is measured at the same visit and inside its band", () => {
+    // approved limit 5 -> 5 x 2 / 2 = 5 ml; -5 mg/l reserved
+    const result = doseOf({
+      ...nitrate,
+      measurements: [point("NITRAT", 14), point("FOSZFAT", 0.05)],
+    });
     assert.equal(result.amount, 5);
     assert.deepEqual(result.log.reservedChanges, [
       { parameter: "NITRAT", change: -5 },
@@ -516,7 +518,7 @@ describe("6.7: nitrate and phosphate", () => {
     ];
     for (const [name, measurements] of cases)
       assert.equal(
-        reasonOf({ ...nitrate, measurements }, options),
+        reasonOf({ ...nitrate, measurements }),
         "NITRATE_PHOSPHATE_GUARD",
         name,
       );
@@ -524,35 +526,49 @@ describe("6.7: nitrate and phosphate", () => {
 
   it("NITRATE_PHOSPHATE_GUARD: a phosphate of exactly 0 is undetectable even where the band starts at 0", () => {
     assert.equal(
-      reasonOf(
-        {
-          ...nitrate,
-          bands: { NITRAT: { min: 0, max: 10 }, FOSZFAT: { min: 0, max: 0.1 } },
-          measurements: [point("NITRAT", 14), point("FOSZFAT", 0)],
-        },
-        options,
-      ),
+      reasonOf({
+        ...nitrate,
+        bands: { NITRAT: { min: 0, max: 10 }, FOSZFAT: { min: 0, max: 0.1 } },
+        measurements: [point("NITRAT", 14), point("FOSZFAT", 0)],
+      }),
       "NITRATE_PHOSPHATE_GUARD",
     );
   });
 
-  it("LIMIT_NOT_APPROVED: the placeholder limit gives no dose unless a test allows it", () => {
+  it("LIMIT_NOT_APPROVED: a limit that is only a placeholder gives no dose unless a test allows it", () => {
+    const over = {
+      ...nitrate,
+      measurements: [point("NITRAT", 14), point("FOSZFAT", 0.05)],
+    };
     assert.equal(
-      reasonOf({
-        ...nitrate,
-        measurements: [point("NITRAT", 14), point("FOSZFAT", 0.05)],
-      }),
+      reasonOf(over, { limits: placeholderLimits }),
       "LIMIT_NOT_APPROVED",
+    );
+    assert.equal(
+      doseOf(over, { limits: placeholderLimits, allowPlaceholderLimits: true })
+        .amount,
+      5,
     );
   });
 
-  it("only Balázs's three limits are approved in the frame", () => {
+  it("every limit in the frame is approved, with who approved it and when (Balázs, 2026-10-15 and 2026-10-20)", () => {
     assert.deepEqual(
-      DAILY_LIMITS.filter((limit) => limit.approval === "JOVAHAGYVA").map(
-        (limit) => `${limit.parameter}:${limit.maxChangePer24h}`,
+      DAILY_LIMITS.map(
+        (limit) =>
+          `${limit.parameter}:${limit.direction}:${limit.maxChangePer24h}:${limit.approval}`,
       ),
-      ["KH:1", "KALCIUM:20", "MAGNEZIUM:100"],
+      [
+        "KH:EMEL:1:JOVAHAGYVA",
+        "KALCIUM:EMEL:20:JOVAHAGYVA",
+        "MAGNEZIUM:EMEL:100:JOVAHAGYVA",
+        "NITRAT:CSOKKENT:5:JOVAHAGYVA",
+        "NITRAT:EMEL:2:JOVAHAGYVA",
+        "FOSZFAT:CSOKKENT:0.03:JOVAHAGYVA",
+        "FOSZFAT:EMEL:0.02:JOVAHAGYVA",
+      ],
     );
+    for (const limit of DAILY_LIMITS)
+      assert.match(limit.approvedBy ?? "", /^Balázs 2026-10-(15|20) /);
   });
 });
 
@@ -722,6 +738,12 @@ describe("the products", () => {
   });
 });
 
+const placeholderLimitsForSide = DAILY_LIMITS.map((limit) =>
+  limit.parameter === "NITRAT" && limit.direction === "CSOKKENT"
+    ? { ...limit, approval: "HELYORZO" as const, approvedBy: null }
+    : limit,
+);
+
 describe("a product that moves more than one parameter (gate 6)", () => {
   // "Minta KH+Ca": per ml per 100 l, KH +0,25 and calcium +5
   const combo = (calciumEffect = 5) => [
@@ -803,23 +825,26 @@ describe("a product that moves more than one parameter (gate 6)", () => {
   });
 
   it("drops out when the other parameter's limit is not approved", () => {
-    // a product that also LOWERS nitrate: nitrate's limit is a placeholder
+    // a product that also LOWERS nitrate, while the nitrate-reduction limit is only a placeholder
     assert.equal(
-      reasonOf({
-        bands: { ...bands, NITRAT: { min: 0, max: 10 } },
-        rows: [
-          row({ productId: "p-x", productName: "Minta X" }),
-          row({
-            rowId: "r-x-no3",
-            productId: "p-x",
-            productName: "Minta X",
-            parameter: "NITRAT",
-            direction: "CSOKKENT",
-            effectPer100L: 1,
-          }),
-        ],
-        measurements: [point("KH", 6), point("NITRAT", 8)],
-      }),
+      reasonOf(
+        {
+          bands: { ...bands, NITRAT: { min: 0, max: 10 } },
+          rows: [
+            row({ productId: "p-x", productName: "Minta X" }),
+            row({
+              rowId: "r-x-no3",
+              productId: "p-x",
+              productName: "Minta X",
+              parameter: "NITRAT",
+              direction: "CSOKKENT",
+              effectPer100L: 1,
+            }),
+          ],
+          measurements: [point("KH", 6), point("NITRAT", 8)],
+        },
+        { limits: placeholderLimitsForSide },
+      ),
       "NO_USABLE_PRODUCT",
     );
   });
