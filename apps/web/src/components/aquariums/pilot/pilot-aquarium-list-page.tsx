@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import {
-  OWNERSHIP_LABEL,
+  ownershipLabel,
   WATER_BODY_LABEL,
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
@@ -331,7 +331,7 @@ export function PilotAquariumListPage() {
                       <PilotBadge
                         variant={item.ownershipType === "OWN" ? "teal" : "grey"}
                       >
-                        {OWNERSHIP_LABEL[item.ownershipType]}
+                        {ownershipLabel(item)}
                       </PilotBadge>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">

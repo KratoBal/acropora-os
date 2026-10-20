@@ -31,7 +31,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ApiError } from "@/lib/api/client";
 import { aquariumsApi } from "@/lib/api/aquariums";
 import {
-  OWNERSHIP_LABEL,
+  ownershipLabel,
   WATER_BODY_LABEL,
   WATER_TYPE_LABEL,
 } from "../aquarium-labels";
@@ -345,9 +345,7 @@ export function PilotMeasurementHistoryPage({
                   {WATER_TYPE_LABEL[aquarium.waterType]}
                 </PilotBadge>
               ) : null}
-              <PilotBadge variant="grey">
-                {OWNERSHIP_LABEL[aquarium.ownershipType]}
-              </PilotBadge>
+              <PilotBadge variant="grey">{ownershipLabel(aquarium)}</PilotBadge>
               <PilotBadge variant="grey">
                 {WATER_BODY_LABEL[aquarium.waterBodyType]}
               </PilotBadge>

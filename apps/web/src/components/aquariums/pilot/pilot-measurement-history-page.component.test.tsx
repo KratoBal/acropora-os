@@ -67,6 +67,42 @@ beforeEach(() => {
 
 /** Card 77767969: the measurement report PDF of one occasion, from its row. */
 describe("PilotMeasurementHistoryPage", () => {
+  /**
+   * acrobot 33818: Balázs saw a shared ReefClub aquarium as "Ügyfél". The API
+   * marks it (`reefClubSharedAt`); the badge has to say so.
+   */
+  it("a shared ReefClub aquarium is badged as one, a shop customer's stays Ügyfél", async () => {
+    aquariums.detail.mockResolvedValueOnce({
+      id: "aq-1",
+      name: "Otthon",
+      ownershipType: "CUSTOMER",
+      waterBodyType: "AKVARIUM",
+      reefClubSharedAt: "2026-10-20T18:29:05.000Z",
+      targets: [],
+      equipment: [],
+      maintainers: [],
+    });
+    const { unmount } = render(
+      <PilotMeasurementHistoryPage aquariumId="aq-1" />,
+    );
+    expect(await screen.findByText("ReefClub akvárium")).toBeTruthy();
+    expect(screen.queryByText("Ügyfél")).toBeNull();
+    unmount();
+
+    aquariums.detail.mockResolvedValueOnce({
+      id: "aq-1",
+      name: "Bolti",
+      ownershipType: "CUSTOMER",
+      waterBodyType: "AKVARIUM",
+      targets: [],
+      equipment: [],
+      maintainers: [],
+    });
+    render(<PilotMeasurementHistoryPage aquariumId="aq-1" />);
+    expect(await screen.findByText("Ügyfél")).toBeTruthy();
+    expect(screen.queryByText("ReefClub akvárium")).toBeNull();
+  });
+
   it("an occasion's row downloads its measurement report PDF", async () => {
     render(<PilotMeasurementHistoryPage aquariumId="aq-1" />);
     fireEvent.click(await screen.findByText("PDF letöltése"));

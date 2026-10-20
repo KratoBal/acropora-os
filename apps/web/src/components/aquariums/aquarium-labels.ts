@@ -10,6 +10,21 @@ export const OWNERSHIP_LABEL: Record<AquariumOwnershipType, string> = {
   CUSTOMER: "Ügyfél",
 };
 
+/**
+ * THE OWNERSHIP BADGE (ReefClub slice 5a; acrobot 33818, Balázs saw "Ügyfél" on
+ * a shared one): a customer's own ReefClub aquarium, shared with the shop, is a
+ * "ReefClub akvárium", not a shop customer's. The API marks it with
+ * `reefClubSharedAt`; without it the ownership type decides, as before.
+ */
+export function ownershipLabel(aquarium: {
+  ownershipType: AquariumOwnershipType;
+  reefClubSharedAt?: string;
+}): string {
+  return aquarium.reefClubSharedAt
+    ? "ReefClub akvárium"
+    : OWNERSHIP_LABEL[aquarium.ownershipType];
+}
+
 export const WATER_BODY_LABEL: Record<WaterBodyType, string> = {
   AKVARIUM: "Akvárium",
   TO: "Tó",
