@@ -41,6 +41,11 @@ import { ReefClubAppModule } from "./reefclub.module.js";
  *   - with the same role, the invoice, worksheet, product and user tables, the
  *     customer's phone and e-mail, the aquarium's internal columns and the
  *     share log cannot be read (5.4: "hibát kell adjon").
+ *   - with the same role, a shop aquarium, its measurements and target ranges
+ *     cannot be changed or deleted, a link needs a code the account claimed,
+ *     an ended link stays ended and a claimed code stays claimed (the
+ *     row-level policies of the file; barracuda, #1730). Each refused shape
+ *     has a control of the same shape on an own aquarium that succeeds.
  *
  * The rows are written by the test's own (owner) connection where the
  * ReefClub has no route for them (the shop's customer, its release, a code).
@@ -464,6 +469,240 @@ describe(
         await read('SELECT "displayName" FROM "Customer" LIMIT 1'),
         "OLVASHATÓ",
         "kontroll: a megengedett oszlop olvasható",
+      );
+    });
+
+    it("a szereppel a belső sorok nem írhatók, a ReefClub sajátjai igen (#1730 barracuda, sorszintű házirend)", async () => {
+      // Its own fixtures, on the owner connection: an account with an own
+      // aquarium, a target range on the shop aquarium, an ended link and a
+      // claimed code. The shop aquarium and its measurement come from before().
+      const account = await prisma.reefClubAccount.create({
+        data: {
+          email: email("iras"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const own = await prisma.aquarium.create({
+        data: {
+          aquariumNumber: `RCS-${suffix}-S`,
+          ownerAccountId: account.id,
+          ownershipType: "CUSTOMER",
+          name: `${NAME_PREFIX} saját`,
+        },
+      });
+      const shopMeasurement = await prisma.aquariumMeasurement.findFirstOrThrow(
+        { where: { aquariumId: shopAquariumId }, select: { id: true } },
+      );
+      const shopTarget = await prisma.aquariumMeasurementTarget.create({
+        data: { aquariumId: shopAquariumId, parameterCode: "KH", min: 7 },
+      });
+      const ended = await prisma.reefClubCustomerLink.create({
+        data: {
+          accountId: account.id,
+          customerId,
+          status: "ENDED",
+          endedAt: new Date(),
+          endedBy: "ACCOUNT",
+        },
+      });
+      const used = await prisma.reefClubLinkCode.create({
+        data: {
+          customerId,
+          codeHash: `szerep-iras-${suffix}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+          usedAt: new Date(),
+          usedByAccountId: account.id,
+        },
+      });
+
+      // A refused INSERT is the row-level security error; a refused UPDATE or
+      // DELETE matches no row. Every refused shape has a control of the same
+      // shape on the account's own aquarium that must succeed: without it a
+      // missing column grant would read as the policy.
+      const write = (sql: string, ...values: unknown[]) =>
+        asRole.$executeRawUnsafe(sql, ...values).then(
+          (count) => count,
+          (error: unknown) =>
+            /row-level security/i.test(String(error))
+              ? "SORSZINTŰ TILTÁS"
+              : /permission denied/i.test(String(error))
+                ? "OSZLOP/TÁBLA TILTÁS"
+                : String(error),
+        );
+      const measurementSql =
+        'INSERT INTO "AquariumMeasurement" ("id", "aquariumId", "parameterCode", "value", "unit", "measuredAt", "source", "recordedByAccountId") VALUES ($1, $2, \'KH\', 7, \'dKH\', $3::timestamp(3), $4, $5)';
+      const targetSql =
+        'INSERT INTO "AquariumMeasurementTarget" ("id", "aquariumId", "parameterCode", "min", "updatedAt") VALUES ($1, $2, \'CA\', 400, now())';
+      const aquariumSql =
+        'INSERT INTO "Aquarium" ("id", "aquariumNumber", "ownerAccountId", "ownershipType", "name", "updatedAt") VALUES ($1, $2, $3, \'CUSTOMER\', $4, now())';
+      const shareSql =
+        'INSERT INTO "AquariumShareEvent" ("id", "aquariumId", "kind", "accountId") VALUES ($1, $2, \'SHARED\', $3)';
+      const result: Record<string, unknown> = {
+        "kontroll: saját akvárium átnevezése": await write(
+          'UPDATE "Aquarium" SET "name" = $1 WHERE "id" = $2',
+          `${NAME_PREFIX} saját 2`,
+          own.id,
+        ),
+        "bolti akvárium átnevezése": await write(
+          'UPDATE "Aquarium" SET "name" = $1 WHERE "id" = $2',
+          `${NAME_PREFIX} átírva`,
+          shopAquariumId,
+        ),
+        "bolti akvárium törlése": await write(
+          'DELETE FROM "Aquarium" WHERE "id" = $1',
+          shopAquariumId,
+        ),
+        "kontroll: ReefClub-akvárium felvétele": await write(
+          aquariumSql,
+          `szerep-akv-${suffix}`,
+          `RCS-${suffix}-K`,
+          account.id,
+          `${NAME_PREFIX} kontroll`,
+        ),
+        "tulajdonos nélküli akvárium felvétele": await write(
+          aquariumSql,
+          `szerep-akv2-${suffix}`,
+          `RCS-${suffix}-B`,
+          null,
+          `${NAME_PREFIX} belső`,
+        ),
+        "kontroll: kézi mérés a saját akváriumra": await write(
+          measurementSql,
+          `szerep-mer-${suffix}`,
+          own.id,
+          "2026-07-01T08:00:00.000Z",
+          "REEFCLUB_MANUAL",
+          account.id,
+        ),
+        "kézi mérés a bolti akváriumra": await write(
+          measurementSql,
+          `szerep-mer2-${suffix}`,
+          shopAquariumId,
+          "2026-07-02T08:00:00.000Z",
+          "REEFCLUB_MANUAL",
+          account.id,
+        ),
+        "bolti forrású mérés a saját akváriumra": await write(
+          measurementSql,
+          `szerep-mer3-${suffix}`,
+          own.id,
+          "2026-07-03T08:00:00.000Z",
+          "bolt",
+          account.id,
+        ),
+        "kontroll: saját kézi mérés törlése": await write(
+          'DELETE FROM "AquariumMeasurement" WHERE "id" = $1',
+          `szerep-mer-${suffix}`,
+        ),
+        "bolti mérés törlése": await write(
+          'DELETE FROM "AquariumMeasurement" WHERE "id" = $1',
+          shopMeasurement.id,
+        ),
+        "kontroll: célsáv a saját akváriumra": await write(
+          targetSql,
+          `szerep-cel-${suffix}`,
+          own.id,
+        ),
+        "célsáv a bolti akváriumra": await write(
+          targetSql,
+          `szerep-cel2-${suffix}`,
+          shopAquariumId,
+        ),
+        "bolti célsáv átírása": await write(
+          'UPDATE "AquariumMeasurementTarget" SET "min" = 1 WHERE "id" = $1',
+          shopTarget.id,
+        ),
+        "bolti célsáv törlése": await write(
+          'DELETE FROM "AquariumMeasurementTarget" WHERE "id" = $1',
+          shopTarget.id,
+        ),
+        "kontroll: megosztási napló a saját akváriumról": await write(
+          shareSql,
+          `szerep-nap-${suffix}`,
+          own.id,
+          account.id,
+        ),
+        "megosztási napló a bolti akváriumról": await write(
+          shareSql,
+          `szerep-nap2-${suffix}`,
+          shopAquariumId,
+          account.id,
+        ),
+        "összekapcsolás kód nélkül": await write(
+          'INSERT INTO "ReefClubCustomerLink" ("id", "accountId", "customerId", "status") VALUES ($1, $2, $3, \'ACTIVE\')',
+          `szerep-lnk-${suffix}`,
+          account.id,
+          customerId,
+        ),
+        "lezárt összekapcsolás újranyitása": await write(
+          'UPDATE "ReefClubCustomerLink" SET "status" = \'ACTIVE\' WHERE "id" = $1',
+          ended.id,
+        ),
+        "összekapcsolás átírása másik fiókra": await write(
+          'UPDATE "ReefClubCustomerLink" SET "accountId" = $1 WHERE "id" = $2',
+          account.id,
+          ended.id,
+        ),
+        "beváltott kód visszanyitása": await write(
+          'UPDATE "ReefClubLinkCode" SET "usedAt" = NULL WHERE "id" = $1',
+          used.id,
+        ),
+      };
+      assert.deepEqual(result, {
+        "kontroll: saját akvárium átnevezése": 1,
+        "bolti akvárium átnevezése": 0,
+        "bolti akvárium törlése": 0,
+        "kontroll: ReefClub-akvárium felvétele": 1,
+        "tulajdonos nélküli akvárium felvétele": "SORSZINTŰ TILTÁS",
+        "kontroll: kézi mérés a saját akváriumra": 1,
+        "kézi mérés a bolti akváriumra": "SORSZINTŰ TILTÁS",
+        "bolti forrású mérés a saját akváriumra": "SORSZINTŰ TILTÁS",
+        "kontroll: saját kézi mérés törlése": 1,
+        "bolti mérés törlése": 0,
+        "kontroll: célsáv a saját akváriumra": 1,
+        "célsáv a bolti akváriumra": "SORSZINTŰ TILTÁS",
+        "bolti célsáv átírása": 0,
+        "bolti célsáv törlése": 0,
+        "kontroll: megosztási napló a saját akváriumról": 1,
+        "megosztási napló a bolti akváriumról": "SORSZINTŰ TILTÁS",
+        "összekapcsolás kód nélkül": "SORSZINTŰ TILTÁS",
+        "lezárt összekapcsolás újranyitása": 0,
+        "összekapcsolás átírása másik fiókra": "OSZLOP/TÁBLA TILTÁS",
+        "beváltott kód visszanyitása": 0,
+      });
+
+      // And on the owner connection: the shop rows are as they were.
+      const shop = await prisma.aquarium.findUniqueOrThrow({
+        where: { id: shopAquariumId },
+        select: { name: true, _count: { select: { measurements: true } } },
+      });
+      assert.deepEqual(shop, {
+        name: `${NAME_PREFIX} bolti`,
+        _count: { measurements: 1 },
+      });
+      assert.equal(
+        (
+          await prisma.aquariumMeasurementTarget.findUniqueOrThrow({
+            where: { id: shopTarget.id },
+          })
+        ).min?.toNumber(),
+        7,
+      );
+      assert.equal(
+        (
+          await prisma.reefClubCustomerLink.findUniqueOrThrow({
+            where: { id: ended.id },
+          })
+        ).status,
+        "ENDED",
+      );
+      assert.ok(
+        (
+          await prisma.reefClubLinkCode.findUniqueOrThrow({
+            where: { id: used.id },
+          })
+        ).usedAt,
       );
     });
   },
