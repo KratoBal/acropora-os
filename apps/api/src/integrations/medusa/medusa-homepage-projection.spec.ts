@@ -7,6 +7,7 @@ import {
   homepageRecordDiffers,
   projectHomepageContent,
   projectHomepageContentInRound,
+  shopFeaturedHandles,
   type MedusaHomepageContentRecord,
 } from "./medusa-homepage-projection.js";
 
@@ -180,6 +181,51 @@ describe("the featured band", () => {
     );
     assert.equal(out.status, "sent");
     assert.deepEqual(writes[0]?.featured_handles, ["k-1", "k-3"]);
+  });
+
+  it("sends only handles the shop's validator accepts: pattern, unique, at most twelve; the rest is named, never sent (barracuda, #1723)", async () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => `k-${i}`);
+    const raw = [
+      "Nagy-Betu",
+      "k-0",
+      "k-0",
+      "a..b",
+      "a/b",
+      "-x",
+      ...twelve.slice(1),
+      "k-extra",
+      "ekezetes-é",
+    ];
+    const handles = Object.fromEntries(raw.map((h, i) => [`m${i}`, h]));
+    const { client, writes } = fakeClient(null, handles);
+    const out = await projectHomepageContent(
+      client,
+      source(Object.keys(handles)),
+      true,
+    );
+    assert.equal(out.status, "sent");
+    assert.deepEqual(writes[0]?.featured_handles, twelve);
+    assert.equal(new Set(writes[0]?.featured_handles).size, 12);
+    for (const h of writes[0]?.featured_handles ?? [])
+      assert.match(h, /^[a-z0-9][a-z0-9._-]*$/);
+    assert.ok("skippedHandles" in out);
+    assert.deepEqual("skippedHandles" in out ? out.skippedHandles : [], [
+      "Nagy-Betu",
+      "k-0",
+      "a..b",
+      "a/b",
+      "-x",
+      "k-extra",
+      "ekezetes-é",
+    ]);
+  });
+
+  it("shopFeaturedHandles keeps the order and drops nothing valid below the limit", () => {
+    assert.deepEqual(shopFeaturedHandles(["b", "a", "c-1"]), {
+      handles: ["b", "a", "c-1"],
+      skipped: [],
+    });
+    assert.deepEqual(shopFeaturedHandles([]), { handles: [], skipped: [] });
   });
 
   it("marked products with nothing stored still send (texts empty, slides not set)", async () => {

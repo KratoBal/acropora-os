@@ -497,7 +497,10 @@ export class MedusaProjectionScheduler
     try {
       if (!(await this.homepageOn())) return;
       const eredmeny = await this.runHomepageContent();
-      if (eredmeny.status !== "unchanged" && eredmeny.status !== "nothing")
+      if (
+        (eredmeny.status !== "unchanged" && eredmeny.status !== "nothing") ||
+        ("skippedHandles" in eredmeny && eredmeny.skippedHandles?.length)
+      )
         this.naplo.log(describeHomepageProjection(eredmeny));
     } catch (error) {
       this.naplo.warn(

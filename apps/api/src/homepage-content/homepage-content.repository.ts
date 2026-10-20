@@ -8,6 +8,9 @@ import type {
   HomepageFeaturedRow,
 } from "./homepage-content.service.js";
 
+/** The fixed advisory-lock key of the "Egyedi korallok" band (any constant, used only here). */
+export const FEATURED_LOCK_KEY = 7290012601n;
+
 /** The home page content in Postgres: one row per key, written whole. */
 @Injectable()
 export class HomepageContentRepository implements HomepageContentStore {
@@ -38,6 +41,17 @@ export class HomepageContentRepository implements HomepageContentStore {
     max: number,
   ): Promise<"ok" | "unknown-product" | "full"> {
     return prisma.$transaction(async (tx) => {
+      /*
+        ONE LOCK FOR THE WHOLE BAND (barracuda, #1723). The limit is "count
+        first, then create", and under READ COMMITTED two concurrent marks both
+        see 11 and both create: thirteen rows, and the shop's validator (at most
+        12) would then refuse the whole home page record. The advisory lock,
+        held to the end of the transaction, makes the count and the create one
+        step; unmarking waits too, so a mark never counts a row that is about to
+        go. `SELECT 1 FROM (SELECT lock)` because Prisma cannot read the void
+        column the bare function returns.
+      */
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${FEATURED_LOCK_KEY}::bigint)) AS held`;
       if (!featured) {
         await tx.homepageFeaturedProduct.deleteMany({ where: { productId } });
         return "ok" as const;

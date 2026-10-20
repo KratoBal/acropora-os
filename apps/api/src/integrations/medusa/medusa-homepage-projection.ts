@@ -36,7 +36,12 @@ export interface MedusaHomepageContentRecord {
 }
 
 export type HomepageProjectionOutcome =
-  { status: "unchanged" | "sent" | "would-send" } | { status: "nothing" };
+  | {
+      status: "unchanged" | "sent" | "would-send";
+      /** Marked products whose handle the shop would refuse, left out. */
+      skippedHandles?: string[];
+    }
+  | { status: "nothing" };
 
 export interface HomepageSource {
   /** The stored content, or `null` when nobody has saved any yet. */
@@ -60,6 +65,36 @@ const slideRecord = (slide: HomepageSlide): MedusaHomepageSlide => ({
   image_url: slide.imageUrl,
   image_alt: slide.imageAlt,
 });
+
+/**
+ * THE BAND'S HANDLES, FIT FOR THE SHOP'S VALIDATOR (barracuda, #1723). The shop
+ * (commerce #555) refuses the WHOLE home page record, texts and slides too, if
+ * the list has a handle outside `^[a-z0-9][a-z0-9._-]*$`, a `..`, a duplicate or
+ * more than 12 entries; a refused record would fail the same way every round
+ * until someone unmarked a product. So the list is filtered to the shop's rules
+ * BEFORE it is sent, and what is left out is returned by name (the caller logs
+ * it): an odd handle costs its own card, never the page.
+ */
+export const FEATURED_HANDLE_PATTERN = /^[a-z0-9][a-z0-9._-]*$/;
+export const FEATURED_HANDLE_MAX = 12;
+
+export function shopFeaturedHandles(raw: readonly string[]): {
+  handles: string[];
+  skipped: string[];
+} {
+  const handles: string[] = [];
+  const skipped: string[] = [];
+  for (const handle of raw) {
+    const fine =
+      handle.length <= 200 &&
+      FEATURED_HANDLE_PATTERN.test(handle) &&
+      !handle.includes("..") &&
+      !handles.includes(handle) &&
+      handles.length < FEATURED_HANDLE_MAX;
+    (fine ? handles : skipped).push(handle);
+  }
+  return { handles, skipped };
+}
 
 export function homepageRecord(
   content: HomepageContentInput,
@@ -117,20 +152,27 @@ export async function projectHomepageContent(
     const handle = await client.fetchProductHandle(id);
     if (handle) handles.push(handle);
   }
+  const fit = shopFeaturedHandles(handles);
   const wanted = homepageRecord(
     content ?? { texts: {}, slides: null },
-    handles,
+    fit.handles,
   );
+  const skippedHandles = fit.skipped.length ? fit.skipped : undefined;
   const current = await client.fetchHomepageContent();
-  if (!homepageRecordDiffers(current, wanted)) return { status: "unchanged" };
+  if (!homepageRecordDiffers(current, wanted))
+    return { status: "unchanged", skippedHandles };
   if (apply) await client.setHomepageContent(wanted);
-  return { status: apply ? "sent" : "would-send" };
+  return { status: apply ? "sent" : "would-send", skippedHandles };
 }
 
 export function describeHomepageProjection(
   outcome: HomepageProjectionOutcome,
 ): string {
-  return `Kezdolap tartalom: ${outcome.status}`;
+  const skipped =
+    "skippedHandles" in outcome && outcome.skippedHandles?.length
+      ? ` (kihagyott kiemelt handle: ${outcome.skippedHandles.join(", ")})`
+      : "";
+  return `Kezdolap tartalom: ${outcome.status}${skipped}`;
 }
 
 /**
