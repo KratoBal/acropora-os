@@ -854,7 +854,7 @@ describe(
         const squatterLink = tokenIn(lastMailTo(address));
         const squatter = await prisma.reefClubAccount.findUniqueOrThrow({
           where: { email: address },
-          select: { id: true },
+          select: { id: true, consentAt: true },
         });
         // A session cannot exist on an unverified account through the API; one is
         // planted to measure that the takeover removes it anyway.
@@ -868,10 +868,18 @@ describe(
           },
         });
 
-        // taken BEFORE the call: the takeover sets consentAt to its own `new Date()`, which is
-        // never earlier than this (same process, same clock): a comparison with the squatter's
-        // timestamp could tie on a fast machine and fail for nothing
+        // The takeover sets consentAt to its own `new Date()`, never earlier than a time taken
+        // just before the call (same process, same clock). A comparison with the squatter's
+        // timestamp could tie on a fast machine; a time taken after a 2 ms gap cannot, and the
+        // precondition below pins that the squatter's consentAt is strictly earlier, so the
+        // assertion after the call decides in BOTH directions: a takeover that did NOT set
+        // consentAt would leave the squatter's, and that is below `beforeTakeover`.
+        await new Promise((resolve) => setTimeout(resolve, 2));
         const beforeTakeover = new Date();
+        assert.ok(
+          squatter.consentAt.getTime() < beforeTakeover.getTime(),
+          "előfeltétel: a foglaló hozzájárulása korábbi, mint az átvétel pillanata",
+        );
         const owner = await google(
           sub("g-tulaj"),
           address,
