@@ -1142,15 +1142,15 @@ model Session {
 /// neki belso jogot, mert a belso orok (`AuthGuard`) ezt a tablat nem is
 /// olvassak. Az e-mail kisbetusitve, levagott szokozokkel all itt.
 model ReefClubAccount {
-  id                   String                 @id @default(cuid())
-  email                String                 @unique
+  id                   String                     @id @default(cuid())
+  email                String                     @unique
   /// scrypt lenyomat (`users/password.util.ts`); ures, ha a fiok csak kulso
   /// belepessel el (a 3. szelet: Google, Apple).
   passwordHash         String?
   /// Ures: a fiok nem lephet be jelszoval.
   emailVerifiedAt      DateTime?
   /// A bolti meres veglegesitesekor menjen-e level (3.5 pont).
-  notifyOnRelease      Boolean                @default(true)
+  notifyOnRelease      Boolean                    @default(true)
   /// Az elfogadott adatkezelesi tajekoztato verzioja es az elfogadas ideje.
   consentVersion       String
   consentAt            DateTime
@@ -1159,8 +1159,8 @@ model ReefClubAccount {
   /// osszerendelesei es megosztasai megszuntek), es 30 nap utan a sor a
   /// sajat akvariumaival, kezi meresivel, kulso belepeseivel egyutt torlodik.
   deletionRequestedAt  DateTime?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
   sessions             ReefClubSession[]
   tokens               ReefClubAccountToken[]
   identities           ReefClubIdentity[]
@@ -1172,6 +1172,9 @@ model ReefClubAccount {
   customerLinks        ReefClubCustomerLink[]
   redeemedLinkCodes    ReefClubLinkCode[]
   aquariumShareEvents  AquariumShareEvent[]
+  /// Az automatikus ajanlasok es a rogzitett beadott adagok (8. szelet).
+  recommendations      ReefClubRecommendation[]
+  administeredDoses    ReefClubAdministeredDose[]
 }
 
 enum ReefClubIdentityProvider {
@@ -1428,6 +1431,9 @@ model Product {
   homepageFeatured           HomepageFeaturedProduct?
   /// A termek adag-hatas sorai (ReefClub 7. szelet). Lasd a `ProductDoseEffect` fejlecet.
   doseEffects                ProductDoseEffect[]
+  /// Az ajanlasok es a rogzitett adagok, amelyek ezt a termeket nevezik meg (ReefClub 8. szelet).
+  reefClubRecommendations    ReefClubRecommendation[]
+  reefClubDoses              ReefClubAdministeredDose[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -1684,16 +1690,16 @@ model SeoLandingPage {
 /// hero diak (`null` = nincs beallitva, `[]` = nincs hero). Egy sor van, a `key`
 /// ("main") egyedi; a commerce `homepage_content` modulja vetitve kapja.
 model HomepageContent {
-  id          String   @id @default(cuid())
-  key         String   @unique
-  texts       Json
-  slides      Json?
+  id                String   @id @default(cuid())
+  key               String   @unique
+  texts             Json
+  slides            Json?
   /// Az adminisztrator kapcsoloja: kuldjuk-e a tartalmat a webshopba (es
   /// toltheto-e fel kep). Alapbol ki; a kornyezeti valtozo hianya nem tiltja.
-  projectionEnabled Boolean @default(false)
-  updatedById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  projectionEnabled Boolean  @default(false)
+  updatedById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 /// A webshop kezdolapjanak "Egyedi korallok" savjaban mutatott termekek
@@ -4250,31 +4256,33 @@ model Aquarium {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
-  customer         Customer?                           @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  ownerAccount     ReefClubAccount?                    @relation(fields: [ownerAccountId], references: [id], onDelete: Cascade)
-  department       WorksheetDepartment?                @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  measurements     AquariumMeasurement[]
-  serviceJobs      ServiceJob[]
-  assets           Asset[]
+  customer                Customer?                           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  ownerAccount            ReefClubAccount?                    @relation(fields: [ownerAccountId], references: [id], onDelete: Cascade)
+  department              WorksheetDepartment?                @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  measurements            AquariumMeasurement[]
+  serviceJobs             ServiceJob[]
+  assets                  Asset[]
   /// A FELSZERELT BERENDEZÉSEK, SAJÁT TÁBLÁBAN -- NEM az `Asset` (eszköz-
   /// nyilvántartás). Lásd az `AquariumEquipment` fejlécét, miért két
   /// különböző fogalom.
-  equipment        AquariumEquipment[]
+  equipment               AquariumEquipment[]
   /// KI TARTJA KARBAN -- TÖBB BELSŐ KOLLÉGA IS LEHET. Lásd az
   /// `AquariumMaintainer` fejlécét: ez a lista a valódi forrás, a fenti
   /// `responsibleUserId`/`maintainedByUs` mezők a sémán maradnak, de a
   /// felület már ezt a listát mutatja.
-  maintainers      AquariumMaintainer[]
+  maintainers             AquariumMaintainer[]
   /// AZ AKVÁRIUM SAJÁT VÍZÉRTÉK-CÉLTARTOMÁNYAI. Lásd az
   /// `AquariumMeasurementTarget` fejlécét.
-  targets          AquariumMeasurementTarget[]
+  targets                 AquariumMeasurementTarget[]
   /// A vízmérési ajánlások (kártya 2b3983e1), alkalmanként egy.
-  recommendations  AquariumMeasurementRecommendation[]
-  mortalityRecords MortalityRecord[]
+  recommendations         AquariumMeasurementRecommendation[]
+  mortalityRecords        MortalityRecord[]
   /// A bolti meresi alkalmak veglegesitese (ReefClub 5. szelet).
-  releases         AquariumMeasurementRelease[]
+  releases                AquariumMeasurementRelease[]
   /// A megosztas, a visszavonas es a belso olvasasok naplója (5a. szelet).
-  shareEvents      AquariumShareEvent[]
+  shareEvents             AquariumShareEvent[]
+  reefClubRecommendations ReefClubRecommendation[]
+  reefClubDoses           ReefClubAdministeredDose[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -6257,8 +6265,10 @@ model AquariumMeasurement {
   /// egymás mellett is korlátlanul állhat.
   clientOperationId   String?
 
-  aquarium          Aquarium         @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
-  recordedByAccount ReefClubAccount? @relation(fields: [recordedByAccountId], references: [id], onDelete: SetNull)
+  aquarium               Aquarium                 @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  recordedByAccount      ReefClubAccount?         @relation(fields: [recordedByAccountId], references: [id], onDelete: SetNull)
+  /// Az ajanlasok, amelyek erre a merésre épültek (ReefClub 8. szelet).
+  basisOfRecommendations ReefClubRecommendation[]
 
   @@unique([aquariumId, clientOperationId, parameterCode])
   /// EGY ALKALOM EGY PARAMÉTERT LEGFELJEBB EGYSZER VISEL. Ez korábban
@@ -10088,6 +10098,8 @@ model ProductDoseEffect {
   verifiedBy          User?                      @relation("DoseEffectVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
   archivedBy          User?                      @relation("DoseEffectArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
   versions            ProductDoseEffectVersion[]
+  /// Az ajanlasok, amelyek ebbol a sorbol szamoltak (ReefClub 8. szelet).
+  recommendations     ReefClubRecommendation[]
 
   @@index([productId])
   @@index([parameterCode, direction])
@@ -10121,4 +10133,113 @@ model ProductDoseEffectVersion {
 
   @@unique([effectId, version])
   @@index([recordedById])
+}
+
+enum ReefClubRecommendationStatus {
+  /// Kiadva, a vevo meg nem jelzett vissza. A hatasido utan (`effectEndsAt`) a szamitas
+  /// "lejart, visszajelzes nelkul" allapotnak veszi, es beadottnak szamitja a korlatban.
+  OPEN
+  /// "Beadtam": az ajanlott mennyiseg beadott lett (a beadott adag sora kulon all).
+  GIVEN
+  /// "Reszben": a beadott mennyiseget a vevo megadta (a beadott adag sora kulon all).
+  PARTIAL
+  /// "Nem adtam be": a foglalas felszabadul.
+  NOT_GIVEN
+}
+
+/// EGY AUTOMATIKUSAN KIADOTT AJANLAS A NAPLOBAN (ReefClub terv v6.1, 2.2 es 6.1; 8. szelet).
+/// Csak a KIADOTT adag kerul ide; az elutasitas (nincs adag) nem ajanlas, minden
+/// kerdezesnel ujraszamolodik, es nem naplozodik. A sor azt tartja meg, ami az
+/// utolagos visszanezeshez es a napi felso hatarhoz kell: a bemenetet, a keret
+/// verziojat, a termek-adag sor VERZIOJAT (egy rossz sor utan visszakereshetove
+/// teszi, kik kaptak belole adagot), az AJANLOTT mennyiseget mertekegyseggel, idotavval
+/// es forrassal, es a foglalt valtozasokat. Az ajanlott mennyiseg KULON all a beadottol
+/// (`ReefClubAdministeredDose`): az ajanlas nem bizonyitja, hogy beadta.
+///
+/// A sor nem torolheto a ReefClub-szerepbol; a fiok vagy az akvarium torlesekor
+/// a lanc viszi (Cascade). A termek, a sor es a meres idegen kulcsa SetNull: a
+/// bemenet pillanatkepe (`input`) akkor is megmarad.
+model ReefClubRecommendation {
+  id                 String                       @id @default(cuid())
+  aquariumId         String
+  /// Ki kerte (a ReefClub-fiok).
+  accountId          String
+  parameterCode      String
+  /// KH, KALCIUM, MAGNEZIUM, NITRAT, FOSZFAT: a kor, amire adag szamolhato.
+  direction          DoseEffectDirection
+  /// A keret verzioja (`RECOMMENDATION_FRAME_VERSION`).
+  frameVersion       String
+  /// A bemenet pillanatkepe: a felhasznalt meres, a savok, a terfogat, a sor szamai, a
+  /// korabbi ajanlasok es beadasok azonositoi. Szabad szoveg nincs benne.
+  input              Json
+  basisMeasurementId String?
+  basisMeasuredAt    DateTime
+  doseEffectId       String?
+  doseEffectVersion  Int
+  productId          String?
+  /// A termek neve a kiadaskor: a nev valtozhat, a mondat nem.
+  productName        String
+  amount             Decimal                      @db.Decimal(19, 6)
+  doseUnit           DoseUnit
+  durationDays       Int
+  effectHours        Int
+  /// A termek-adag sor forrasa a kiadaskor.
+  source             String
+  /// A kiadott mondat betuhiven es a sablon azonositoja.
+  text               String
+  templateId         String
+  /// Amit az ajanlas foglal: [{ parameter, change }], elojeles valtozas parameterenkent.
+  reservedChanges    Json
+  status             ReefClubRecommendationStatus @default(OPEN)
+  /// Meddig tart a hatasido; utana visszajelzes nelkul "lejart".
+  effectEndsAt       DateTime
+  feedbackAt         DateTime?
+  createdAt          DateTime                     @default(now())
+  aquarium           Aquarium                     @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  account            ReefClubAccount              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  basisMeasurement   AquariumMeasurement?         @relation(fields: [basisMeasurementId], references: [id], onDelete: SetNull)
+  doseEffect         ProductDoseEffect?           @relation(fields: [doseEffectId], references: [id], onDelete: SetNull)
+  product            Product?                     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  doses              ReefClubAdministeredDose[]
+
+  @@index([aquariumId, parameterCode, createdAt])
+  @@index([aquariumId, status])
+  @@index([accountId])
+  @@index([basisMeasurementId])
+  @@index([doseEffectId])
+  @@index([productId])
+}
+
+/// A VEVO ALTAL TENYLEGESEN BEADOTT ADAG (ReefClub terv v6.1, 2.2 es 6.5; 8. szelet).
+/// KULON az ajanlottol: az ajanlas nem bizonyitja, hogy beadta, es a beadott nem
+/// bizonyitja, hogy ajanlottuk. Csak az kerul ide, amit a vevo rogzitett; a "beadottnak
+/// vett" ajanlas SOHA nem (az csak a szamitasban el). Ismeretlen hatasu beadas: `productId`
+/// ures ("mas termek"), vagy a mennyiseg / egyseg hianyzik; a korlat az ilyen utan arra a
+/// parameterre nem ad adagot.
+model ReefClubAdministeredDose {
+  id                String                  @id @default(cuid())
+  aquariumId        String
+  accountId         String
+  /// Mire szantak.
+  parameterCode     String
+  /// Ha egy ajanlashoz tartozik, annak az azonositoja.
+  recommendationId  String?
+  /// Ures: "mas termek" (ismeretlen hatas).
+  productId         String?
+  amount            Decimal?                @db.Decimal(19, 6)
+  doseUnit          DoseUnit?
+  administeredAt    DateTime
+  /// A telefon ketszeri beküldése ellen, mint a merésnél.
+  clientOperationId String?
+  createdAt         DateTime                @default(now())
+  aquarium          Aquarium                @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  account           ReefClubAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  recommendation    ReefClubRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+  product           Product?                @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([aquariumId, clientOperationId])
+  @@index([aquariumId, parameterCode, administeredAt])
+  @@index([accountId])
+  @@index([recommendationId])
+  @@index([productId])
 }

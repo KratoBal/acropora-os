@@ -49,6 +49,16 @@ GRANT UPDATE ("status", "endedAt", "endedBy") ON "ReefClubCustomerLink" TO "reef
 -- before that migration.
 GRANT EXECUTE ON FUNCTION "reefclub_redeem_link_code"(text, text) TO "reefclub_app";
 
+-- The automatic recommendation (plan 6.1, slice 8): the log of the issued doses, and the dose the
+-- customer recorded as given. The log's status and feedback time are the only columns that change
+-- after the insert; the recorded dose is written and read, never changed or deleted from here (a
+-- wrong entry is the customer's to record again, not to rewrite: the limit counts what was
+-- recorded). Neither table is ever deleted from by the role; the account's or the aquarium's
+-- deletion cascades with the owner's rights.
+GRANT SELECT, INSERT ON "ReefClubRecommendation" TO "reefclub_app";
+GRANT UPDATE ("status", "feedbackAt") ON "ReefClubRecommendation" TO "reefclub_app";
+GRANT SELECT, INSERT ON "ReefClubAdministeredDose" TO "reefclub_app";
+
 -- The customer: only what a shop link shows and checks (plan 2.1: never the phone or e-mail).
 GRANT SELECT ("id", "displayName", "type", "isActive") ON "Customer" TO "reefclub_app";
 
