@@ -33,6 +33,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../../packages/aquarium-calc
       '@acropora/database':
         specifier: workspace:*
         version: link:../../packages/database

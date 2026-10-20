@@ -194,11 +194,14 @@ export function recommend(
       activeRecommendationId: open.id,
     });
 
-  // 2b. a dose list that is missing or too old gives no dose, whatever else is asked
+  // 2b. a dose list that is missing or too old gives no dose, whatever else is asked.
+  // Written so that an invalid date (NaN) also closes: the comparison is "not fresh enough".
   if (
     input.doseListBuiltAt === null ||
-    now.getTime() - input.doseListBuiltAt.getTime() >
+    !(
+      now.getTime() - input.doseListBuiltAt.getTime() <=
       MAX_DOSE_LIST_AGE_HOURS * HOUR_MS
+    )
   )
     return refuse("DOSE_LIST_STALE");
 

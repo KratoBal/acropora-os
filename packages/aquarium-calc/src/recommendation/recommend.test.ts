@@ -1278,6 +1278,11 @@ describe("a stale dose list gives no dose, and a recommendation without its prod
     assert.equal(reasonOf({ doseListBuiltAt: ago(26.1) }), "DOSE_LIST_STALE");
     assert.ok(doseOf({ doseListBuiltAt: ago(26) }));
     assert.ok(doseOf({ doseListBuiltAt: ago(1) }));
+    // an invalid date is not fresh either
+    assert.equal(
+      reasonOf({ doseListBuiltAt: new Date(Number.NaN) }),
+      "DOSE_LIST_STALE",
+    );
   });
 
   it("a stale list is reported before the customer is asked to measure or give the volume, but after an open proposal (which is shown again)", () => {
