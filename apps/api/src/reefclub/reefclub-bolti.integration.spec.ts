@@ -280,6 +280,9 @@ describe(
           `/rc/v1/aquariums/${id}/measurements/${encodeURIComponent(OCCASION_RELEASED)}`,
           undefined,
         ],
+        ["POST", `/rc/v1/aquariums/${id}/share`, { consentVersion: "teszt-1" }],
+        ["DELETE", `/rc/v1/aquariums/${id}/share`, undefined],
+        ["GET", `/rc/v1/aquariums/${id}/share/preview`, undefined],
       ];
       const out: Record<string, { status: number; body: string }> = {};
       for (const [method, path, body] of calls) {
@@ -678,7 +681,8 @@ describe(
       const shop = await aquariumRoutes(sessionA, c1);
       const mismatches: string[] = [];
       for (const [route, got] of Object.entries(shop)) {
-        if (route.startsWith("GET ")) {
+        // The preview is the owner's (WRITE): a shop aquarium has none.
+        if (route.startsWith("GET ") && !route.includes("/share/")) {
           if (got.status !== 200)
             mismatches.push(`${route}: olvasás ${got.status}`);
           continue;
@@ -700,11 +704,13 @@ describe(
         "id",
         "name",
         "origin",
+        "sharedWithShopAt",
         "systemVolumeLiters",
         "waterBodyType",
         "waterType",
       ]);
       assert.equal(body.origin, "SHOP");
+      assert.equal(body.sharedWithShopAt, null);
     });
 
     it("5.2/7: lejárt, felhasznált és cég vevőhöz írt kód nem köt össze", async () => {

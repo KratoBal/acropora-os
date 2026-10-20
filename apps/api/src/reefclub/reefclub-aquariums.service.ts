@@ -34,6 +34,7 @@ import type {
 } from "./reefclub-aquarium.dto.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
 import { REEFCLUB_MAX_OWN_AQUARIUMS } from "./reefclub-rate-limits.js";
+import { type ReefClubShopView, shopViewOf } from "./reefclub-shop-view.js";
 
 /**
  * THE REEFCLUB AQUARIUM, ITS TARGET RANGES AND ITS MANUAL MEASUREMENTS (plan
@@ -64,6 +65,11 @@ export interface ReefClubAquarium {
   waterBodyType: "AKVARIUM" | "TO";
   waterType: "EDESVIZI" | "TENGERI" | null;
   systemVolumeLiters: number | null;
+  /**
+   * When the account shared it with the shop (slice 5a); null: private. Always
+   * null on a shop aquarium, which has no share state.
+   */
+  sharedWithShopAt: string | null;
   createdAt: string;
 }
 
@@ -102,6 +108,7 @@ const AQUARIUM_FIELDS = {
   waterBodyType: true,
   waterType: true,
   systemVolumeLiters: true,
+  sharedWithShopAt: true,
   createdAt: true,
 } as const;
 
@@ -205,6 +212,57 @@ export class ReefClubAquariumsService {
       select: AQUARIUM_FIELDS,
     });
     return toAquarium(row, accountId);
+  }
+
+  /**
+   * SHARING WITH THE SHOP (plan 4.4; slice 5a): an explicit step, with the
+   * consent version, logged. Sharing a shared one keeps its first moment and
+   * logs nothing new. Revoking empties the moment: the next internal request
+   * no longer sees the aquarium, nor any of its earlier data.
+   */
+  async share(
+    accountId: string,
+    grant: ReefClubAquariumGrant,
+    consentVersion: string,
+  ): Promise<ReefClubAquarium> {
+    await this.database.$transaction(async (tx) => {
+      const { count } = await tx.aquarium.updateMany({
+        where: { id: grant.aquariumId, sharedWithShopAt: null },
+        data: {
+          sharedWithShopAt: new Date(),
+          shareConsentVersion: consentVersion,
+        },
+      });
+      if (count === 1)
+        await tx.aquariumShareEvent.create({
+          data: {
+            aquariumId: grant.aquariumId,
+            kind: "SHARED",
+            accountId,
+            consentVersion,
+          },
+        });
+    });
+    return this.detail(accountId, grant);
+  }
+
+  async revoke(accountId: string, grant: ReefClubAquariumGrant): Promise<void> {
+    await this.database.$transaction(async (tx) => {
+      const { count } = await tx.aquarium.updateMany({
+        where: { id: grant.aquariumId, sharedWithShopAt: { not: null } },
+        data: { sharedWithShopAt: null, shareConsentVersion: null },
+      });
+      if (count === 1)
+        await tx.aquariumShareEvent.create({
+          data: { aquariumId: grant.aquariumId, kind: "REVOKED", accountId },
+        });
+    });
+  }
+
+  async sharePreview(grant: ReefClubAquariumGrant): Promise<ReefClubShopView> {
+    const view = await shopViewOf(this.database, grant.aquariumId);
+    if (!view) throw reefClubNotFound();
+    return view;
   }
 
   /** The aquarium with its targets and measurements (Cascade). */
@@ -478,6 +536,7 @@ function toAquarium(row: AquariumRow, accountId: string): ReefClubAquarium {
     waterBodyType: row.waterBodyType,
     waterType: row.waterType,
     systemVolumeLiters: row.systemVolumeLiters?.toNumber() ?? null,
+    sharedWithShopAt: row.sharedWithShopAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
