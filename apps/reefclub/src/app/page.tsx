@@ -2,6 +2,8 @@
 
 import { Button } from "@acropora/ui";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { useSession } from "@/lib/session";
 
@@ -11,7 +13,12 @@ import { useSession } from "@/lib/session";
  * reefclub-szelet-9.
  */
 export default function ReefClubHome() {
+  const router = useRouter();
   const { state, signOut } = useSession();
+
+  useEffect(() => {
+    if (state.status === "user") router.replace("/akvariumok");
+  }, [state.status, router]);
 
   return (
     <main className="mx-auto max-w-xl px-4 py-16">

@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SessionProvider } from "@/lib/session";
@@ -36,8 +35,9 @@ describe("ReefClub start page", () => {
     );
   });
 
-  it("shows who is signed in, and signing out ends the session and goes to the sign-in page", async () => {
-    const { calls } = mockApi({
+  it("sends a signed-in visitor to the aquarium list", async () => {
+    router.replace.mockReset();
+    mockApi({
       "GET /me": () =>
         reply(200, {
           email: "kovacs@example.test",
@@ -45,18 +45,11 @@ describe("ReefClub start page", () => {
           notifyOnRelease: true,
           consentVersion: "v1",
         }),
-      "POST /auth/logout": () => reply(204),
     });
-    const user = userEvent.setup();
     home();
-    expect(await screen.findByText("kovacs@example.test")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Kilépés" }));
     await waitFor(() =>
-      expect(router.replace).toHaveBeenCalledWith("/belepes"),
+      expect(router.replace).toHaveBeenCalledWith("/akvariumok"),
     );
-    expect(
-      calls.some((c) => c.method === "POST" && c.path === "/auth/logout"),
-    ).toBe(true);
   });
 
   it("says the service is away when the session cannot be read for another reason than 401", async () => {
