@@ -250,11 +250,7 @@ export function HomepageContentEditorPage() {
                 <TextField
                   key={field.key}
                   field={field}
-                  value={
-                    Object.prototype.hasOwnProperty.call(texts, field.key)
-                      ? texts[field.key]
-                      : null
-                  }
+                  value={texts[field.key] ?? null}
                   onChange={(value) =>
                     setTexts((current) => ({ ...current, [field.key]: value }))
                   }

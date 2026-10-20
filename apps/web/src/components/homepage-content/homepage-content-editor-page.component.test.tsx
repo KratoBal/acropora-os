@@ -72,6 +72,8 @@ beforeEach(() => {
   echo();
 });
 
+/** The body of the first save call. */
+const sent = () => api.save.mock.calls[0]![1];
 const field = (label: string) => screen.findByLabelText(label);
 const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
@@ -101,7 +103,7 @@ describe("HomepageContentEditorPage", () => {
     });
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].texts).toEqual({
+    expect(sent().texts).toEqual({
       "mit.cim": "Régi felülírás",
       "hero.tenyek.1.cim": "Új cím",
     });
@@ -112,7 +114,7 @@ describe("HomepageContentEditorPage", () => {
     await field("Hero: Első tény: címsor");
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1]).toEqual({ texts: {}, slides: null });
+    expect(sent()).toEqual({ texts: {}, slides: null });
   });
 
   it("HP-ED-RESET: Alapérték drops the override; an emptied field is an override, not a reset", async () => {
@@ -133,7 +135,7 @@ describe("HomepageContentEditorPage", () => {
     });
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].texts).toEqual({
+    expect(sent().texts).toEqual({
       "hero.tenyek.2.cim": "",
     });
   });
@@ -151,16 +153,16 @@ describe("HomepageContentEditorPage", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
-    fireEvent.click(screen.getAllByRole("button", { name: "Dia törlése" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Dia törlése" })[0]!);
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].slides).toHaveLength(4);
+    expect(sent().slides).toHaveLength(4);
 
     api.save.mockClear();
     fireEvent.click(screen.getByLabelText(/Alap diák/));
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].slides).toBeNull();
+    expect(sent().slides).toBeNull();
   });
 
   it("HP-ED-EMPTYLIST: own slides with none left is an empty list (no hero), not null", async () => {
@@ -169,7 +171,7 @@ describe("HomepageContentEditorPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Dia törlése" }));
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].slides).toEqual([]);
+    expect(sent().slides).toEqual([]);
   });
 
   it("HP-ED-ADDRESS: an unsafe address is refused before the server", async () => {
@@ -243,9 +245,7 @@ describe("HomepageContentEditorPage", () => {
     );
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(api.save.mock.calls[0][1].texts["mit.1.kep"]).toBe(
-      "https://shop.example/static/a.jpg",
-    );
+    expect(sent().texts["mit.1.kep"]).toBe("https://shop.example/static/a.jpg");
 
     api.uploadImage.mockRejectedValueOnce(
       new Error("A webshopba küldés ki van kapcsolva"),
