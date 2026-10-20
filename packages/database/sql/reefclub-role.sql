@@ -248,7 +248,10 @@ CREATE POLICY "ReefClubLinkCode_reefclub_update" ON "ReefClubLinkCode" AS RESTRI
 -- The automatic recommendation (slice 8). A row is written for an aquarium the account owns, or
 -- one whose customer the account has an ACTIVE link to (the shop aquarium it may read), never for
 -- another account's. A new recommendation is OPEN; the only change after that is the customer's
--- feedback, once (an answered one stays as answered). A recorded dose that names a
+-- feedback, once (an answered one stays as answered). "Given" and "partly" need the recorded dose
+-- of the same account and aquarium (barracuda, #1753): the limit counts a given recommendation
+-- by that dose, so a status set without it would free the limit. The service writes the dose
+-- first, then the status, in one transaction. A recorded dose that names a
 -- recommendation names one of the same aquarium and the same account.
 DROP POLICY IF EXISTS "ReefClubRecommendation_reefclub_insert" ON "ReefClubRecommendation";
 CREATE POLICY "ReefClubRecommendation_reefclub_insert" ON "ReefClubRecommendation" AS RESTRICTIVE
@@ -271,7 +274,18 @@ DROP POLICY IF EXISTS "ReefClubRecommendation_reefclub_update" ON "ReefClubRecom
 CREATE POLICY "ReefClubRecommendation_reefclub_update" ON "ReefClubRecommendation" AS RESTRICTIVE
   FOR UPDATE TO "reefclub_app"
   USING ("status" = 'OPEN')
-  WITH CHECK ("status" <> 'OPEN' AND "feedbackAt" IS NOT NULL);
+  WITH CHECK (
+    "feedbackAt" IS NOT NULL AND (
+      "status" = 'NOT_GIVEN' OR (
+        "status" IN ('GIVEN', 'PARTIAL') AND EXISTS (
+          SELECT 1 FROM "ReefClubAdministeredDose" d
+          WHERE d."recommendationId" = "ReefClubRecommendation"."id"
+            AND d."accountId" = "ReefClubRecommendation"."accountId"
+            AND d."aquariumId" = "ReefClubRecommendation"."aquariumId"
+        )
+      )
+    )
+  );
 
 DROP POLICY IF EXISTS "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministeredDose";
 CREATE POLICY "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministeredDose" AS RESTRICTIVE
