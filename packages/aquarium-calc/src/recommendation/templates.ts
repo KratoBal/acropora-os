@@ -119,6 +119,8 @@ export function doseSentence(input: DoseSentenceInput): string | null {
     return null;
   if (input.source.trim() === "") return null;
   if (!(input.amount > 0) || !Number.isFinite(input.amount)) return null;
+  // an amount that the sentence would write as 0 is not a dose
+  if (!(Math.round(input.amount * 1000) / 1000 > 0)) return null;
   if (input.productName.trim() === "") return null;
 
   const state = input.direction === "EMEL" ? "alacsony" : "magas";

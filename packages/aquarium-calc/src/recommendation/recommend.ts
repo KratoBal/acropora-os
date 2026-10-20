@@ -20,6 +20,7 @@ import {
   noDoseTemplateId,
 } from "./templates.js";
 import type {
+  AdministrationRecord,
   DoseResult,
   DoseRow,
   MeasurementPoint,
@@ -71,8 +72,7 @@ import type {
  *  - one recommendation is ONE DAY's dose (`durationDays` 1): 6.5 forbids a
  *    new correction without a new measurement, so a multi-day course would
  *    ask for a second request the rules refuse;
- *  - among usable products the one that moves the fewest other parameters is
- *    taken, then the lowest product id;
+ 
  *  - a product that moves another parameter is usable only if that parameter
  *    has an approved limit, a fresh measurement and a band, and the change
  *    keeps it INSIDE its band; a product with no such room drops out.
@@ -228,27 +228,67 @@ export function recommend(
           (row) => row.productId === productId && row.parameter === param,
         );
 
-  // 6. a dose still working, or a measurement older than the last dose
+  // WHAT A RECORDED DOSE DOES TO A PARAMETER. A dose "touches" a parameter if it
+  // was meant for it OR the product has ANY row for it (a refused row too: the
+  // product moves the parameter whether or not the row may still be used). A
+  // touching dose whose effect cannot be counted (no live row, no amount, another
+  // unit) is UNKNOWN, and an unknown effect is a refusal, never an omission.
+  const productHasRowFor = (productId: string | null, param: string) =>
+    productId !== null &&
+    input.rows.some(
+      (row) => row.productId === productId && row.parameter === param,
+    );
+  const touches = (given: AdministrationRecord, param: string) =>
+    given.parameter === param || productHasRowFor(given.productId, param);
+  type Effect =
+    { kind: "NONE" } | { kind: "UNKNOWN" } | { kind: "KNOWN"; change: number };
+  function effectOf(given: AdministrationRecord, param: string): Effect {
+    if (!touches(given, param)) return { kind: "NONE" };
+    const row = rowFor(given.productId, param);
+    if (
+      !row ||
+      given.amount === null ||
+      !(given.amount > 0) ||
+      given.unit === null ||
+      given.unit !== row.unit
+    )
+      return { kind: "UNKNOWN" };
+    return {
+      kind: "KNOWN",
+      change:
+        sign(row.direction) * (given.amount / volumeUnits) * row.effectPer100L,
+    };
+  }
+  const unknownEffectIn24h = (param: string) =>
+    input.administrations.some(
+      (given) =>
+        given.at.getTime() >= windowStart.getTime() &&
+        effectOf(given, param).kind === "UNKNOWN",
+    );
+
+  // 6. a dose still working, or a measurement older than the last dose. The
+  // same question is asked of every parameter a product moves (below).
   const hoursOf = (row: DoseRow | undefined) =>
     row?.effectHours ?? DEFAULT_EFFECT_HOURS;
-  let lastEffectEnd = 0;
-  for (const prior of input.priorRecommendations) {
-    if (prior.status === "NOT_GIVEN") continue;
-    const touches =
-      prior.parameter === parameter ||
-      prior.changes.some((change) => change.parameter === parameter);
-    if (touches)
-      lastEffectEnd = Math.max(lastEffectEnd, prior.effectEndsAt.getTime());
+  function lastEffectEndFor(param: string): number {
+    let end = 0;
+    for (const prior of input.priorRecommendations) {
+      if (prior.status === "NOT_GIVEN") continue;
+      const touched =
+        prior.parameter === param ||
+        prior.changes.some((change) => change.parameter === param);
+      if (touched) end = Math.max(end, prior.effectEndsAt.getTime());
+    }
+    for (const given of input.administrations) {
+      if (!touches(given, param)) continue;
+      end = Math.max(
+        end,
+        given.at.getTime() + hoursOf(rowFor(given.productId, param)) * HOUR_MS,
+      );
+    }
+    return end;
   }
-  for (const given of input.administrations) {
-    const row = rowFor(given.productId, parameter);
-    if (given.parameter !== parameter && !row) continue;
-    lastEffectEnd = Math.max(
-      lastEffectEnd,
-      given.at.getTime() + hoursOf(row) * HOUR_MS,
-    );
-  }
-  if (lastEffectEnd > measurement.measuredAt.getTime())
+  if (lastEffectEndFor(parameter) > measurement.measuredAt.getTime())
     return refuse("REMEASURE_AFTER_DOSE", measurement);
 
   // 7. the same measurement does not open a second correction a day later
@@ -306,20 +346,9 @@ export function recommend(
       return refuse("NITRATE_PHOSPHATE_GUARD", measurement);
   }
 
-  // 11. a dose of unknown effect in the last 24 hours on this parameter
-  const unknown = input.administrations.some((given) => {
-    if (given.parameter !== parameter) return false;
-    if (given.at.getTime() < windowStart.getTime()) return false;
-    const row = rowFor(given.productId, parameter);
-    return (
-      !row ||
-      given.amount === null ||
-      !(given.amount > 0) ||
-      given.unit === null ||
-      given.unit !== row.unit
-    );
-  });
-  if (unknown) return refuse("UNKNOWN_EFFECT_DOSE", measurement);
+  // 11. a dose of unknown effect on this parameter in the last 24 hours, whatever it was meant for
+  if (unknownEffectIn24h(parameter))
+    return refuse("UNKNOWN_EFFECT_DOSE", measurement);
 
   // 12. the limit: approved, and what is left of it in the rolling 24 hours
   const limitUsable = (param: string, dir: DoseDirection) => {
@@ -342,10 +371,9 @@ export function recommend(
     }
     for (const given of input.administrations) {
       if (given.at.getTime() < windowStart.getTime()) continue;
-      if (given.amount === null || !(given.amount > 0)) continue;
-      const row = rowFor(given.productId, param);
-      if (!row || row.direction !== dir || given.unit !== row.unit) continue;
-      total += (given.amount / volumeUnits) * row.effectPer100L;
+      const effect = effectOf(given, param);
+      if (effect.kind === "KNOWN" && Math.sign(effect.change) === sign(dir))
+        total += Math.abs(effect.change);
     }
     return total;
   }
@@ -375,6 +403,8 @@ export function recommend(
   const viable: Viable[] = [];
   let sawAboveMax = false;
   let sawBelowStep = false;
+  let sawUnknown = false;
+  let sawIncomplete = false;
 
   for (const productId of productIds) {
     const own = candidates.find((row) => row.productId === productId)!;
@@ -404,6 +434,15 @@ export function recommend(
         const sideBand = usableBand(input.bands[row.parameter]);
         const sidePoint = latestOf(input.measurements, row.parameter);
         if (!sideLimit || !sideBand || !sidePoint) {
+          usable = false;
+          break;
+        }
+        // the same two questions as for the dosed parameter: a dose after
+        // that measurement, and a dose of unknown effect
+        if (
+          lastEffectEndFor(row.parameter) > sidePoint.measuredAt.getTime() ||
+          unknownEffectIn24h(row.parameter)
+        ) {
           usable = false;
           break;
         }
@@ -437,19 +476,36 @@ export function recommend(
       continue;
     }
     const per100 = stepped / volumeUnits;
-    const givenPer100 =
-      input.administrations
-        .filter(
-          (given) =>
-            given.productId === productId &&
-            given.at.getTime() >= windowStart.getTime() &&
-            given.amount !== null &&
-            given.unit === own.unit,
-        )
-        .reduce((sum, given) => sum + (given.amount ?? 0), 0) / volumeUnits;
+    // what this product already gave in 24 hours: recorded doses, and the
+    // recommendations counted as given (open or expired); one in another unit
+    // cannot be added, and that is a refusal
+    let givenUnits = 0;
+    let unitMismatch = false;
+    for (const given of input.administrations) {
+      if (given.productId !== productId) continue;
+      if (given.at.getTime() < windowStart.getTime()) continue;
+      if (given.amount !== null && given.unit === own.unit)
+        givenUnits += given.amount;
+      else unitMismatch = true;
+    }
+    for (const earlier of input.priorRecommendations) {
+      if (earlier.productId !== productId) continue;
+      if (earlier.createdAt.getTime() < windowStart.getTime()) continue;
+      if (earlier.status !== "OPEN" && earlier.status !== "EXPIRED") continue;
+      if (earlier.unit === own.unit) givenUnits += earlier.amount;
+      else unitMismatch = true;
+    }
+    if (unitMismatch) {
+      sawUnknown = true;
+      continue;
+    }
+    if (own.maxDailyDosePer100L === null) {
+      sawIncomplete = true;
+      continue;
+    }
     if (
-      own.maxDailyDosePer100L === null ||
-      per100 > own.maxDailyDosePer100L - givenPer100 + TOLERANCE
+      per100 >
+      own.maxDailyDosePer100L - givenUnits / volumeUnits + TOLERANCE
     ) {
       sawAboveMax = true;
       continue;
@@ -476,17 +532,35 @@ export function recommend(
 
   if (viable.length === 0)
     return refuse(
-      sawAboveMax
-        ? "DOSE_ABOVE_MANUFACTURER_MAX"
-        : sawBelowStep
-          ? "DOSE_BELOW_STEP"
-          : "NO_USABLE_PRODUCT",
+      sawUnknown
+        ? "UNKNOWN_EFFECT_DOSE"
+        : sawAboveMax
+          ? "DOSE_ABOVE_MANUFACTURER_MAX"
+          : sawBelowStep
+            ? "DOSE_BELOW_STEP"
+            : sawIncomplete
+              ? "INCOMPLETE_DOSE_TEMPLATE"
+              : "NO_USABLE_PRODUCT",
       measurement,
     );
 
+  // Among usable products: the fewest other parameters moved; then the one in
+  // stock in the shop (unknown after in stock, out of stock last); then the
+  // cheaper dose (price per dose unit x the amount; unknown last); only then
+  // the product id, so the order is the same every time. Stock and price are
+  // optional on the row: until the service fills them, the id decides.
+  const stockRank = (row: DoseRow) =>
+    row.inStock === true ? 0 : row.inStock === false ? 2 : 1;
+  const doseCost = (candidate: Viable) =>
+    candidate.row.pricePerDoseUnit === null ||
+    candidate.row.pricePerDoseUnit === undefined
+      ? Number.POSITIVE_INFINITY
+      : candidate.row.pricePerDoseUnit * candidate.amount;
   viable.sort(
     (a, b) =>
       a.sideCount - b.sideCount ||
+      stockRank(a.row) - stockRank(b.row) ||
+      (doseCost(a) === doseCost(b) ? 0 : doseCost(a) < doseCost(b) ? -1 : 1) ||
       (a.row.productId < b.row.productId
         ? -1
         : a.row.productId > b.row.productId

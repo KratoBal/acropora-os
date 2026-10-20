@@ -82,6 +82,9 @@ function prior(over: Partial<PriorRecommendation> = {}): PriorRecommendation {
     createdAt: ago(20),
     parameter: "KH",
     basisMeasurementId: "m-old",
+    productId: "p-kh",
+    amount: 8,
+    unit: "ML",
     status: "EXPIRED",
     effectEndsAt: ago(8),
     changes: [{ parameter: "KH", change: 1 }],
@@ -865,6 +868,406 @@ describe("a product that moves more than one parameter (gate 6)", () => {
     const a = row({ rowId: "r-a", productId: "p-a", productName: "A" });
     const b = row({ rowId: "r-b", productId: "p-b", productName: "B" });
     assert.equal(doseOf({ rows: [b, a] }).product.productId, "p-a");
+  });
+});
+
+describe("a dose whose effect cannot be counted is a refusal, never an omission (review of #1751)", () => {
+  const bands = { KH: { min: 7, max: 9 }, KALCIUM: { min: 380, max: 450 } };
+  const combo = [
+    row({
+      rowId: "r-combo-kh",
+      productId: "p-combo",
+      productName: "Minta KH+Ca",
+      effectHours: 2,
+    }),
+    row({
+      rowId: "r-combo-ca",
+      productId: "p-combo",
+      productName: "Minta KH+Ca",
+      parameter: "KALCIUM",
+      effectPer100L: 5,
+      effectHours: 2,
+    }),
+  ];
+
+  it("UNKNOWN_EFFECT_DOSE: a dose of a two-component product recorded for the OTHER parameter in another unit also moved this one", () => {
+    // 10 g recorded for calcium 3 hours ago; the product's rows are in ml. The KH row's effect time (2 h) is over and KH
+    // was measured after it, so only the unknown effect on KH can stop the request.
+    const over = {
+      bands,
+      rows: combo,
+      measurements: [point("KH", 6), point("KALCIUM", 400)],
+      administrations: [
+        given({
+          parameter: "KALCIUM",
+          productId: "p-combo",
+          amount: 10,
+          unit: "G" as const,
+          at: ago(3),
+        }),
+      ],
+    };
+    assert.equal(reasonOf(over), "UNKNOWN_EFFECT_DOSE");
+    // control: the same dose in the rows' unit is counted, and the request goes through
+    const counted = recommend(
+      input({
+        ...over,
+        administrations: [
+          given({
+            parameter: "KALCIUM",
+            productId: "p-combo",
+            amount: 2,
+            unit: "ML",
+            at: ago(3),
+          }),
+        ],
+      }),
+    );
+    assert.equal(counted.kind, "DOSE");
+  });
+
+  it("a product whose row for this parameter was refused since still moved it: the dose is not left out (the default 24 hour effect time applies)", () => {
+    const refusedKh = row({
+      rowId: "r-old-kh",
+      productId: "p-old",
+      productName: "Minta régi",
+      refusals: ["NOT_VERIFIED"],
+    });
+    const liveCa = row({
+      rowId: "r-old-ca",
+      productId: "p-old",
+      productName: "Minta régi",
+      parameter: "KALCIUM",
+      effectPer100L: 5,
+    });
+    assert.equal(
+      reasonOf({
+        bands,
+        rows: [row(), refusedKh, liveCa],
+        measurements: [point("KH", 6), point("KALCIUM", 400)],
+        administrations: [
+          given({
+            parameter: "KALCIUM",
+            productId: "p-old",
+            amount: 4,
+            unit: "ML",
+            at: ago(3),
+          }),
+        ],
+      }),
+      "REMEASURE_AFTER_DOSE",
+    );
+  });
+
+  it("a side parameter with a dose of unknown effect drops the product out (the pure one is taken)", () => {
+    const mystery = given({
+      parameter: "KALCIUM",
+      productId: null,
+      amount: 5,
+      unit: "ML",
+      at: ago(30),
+    });
+    // 30 hours ago is outside the window: a control that it does not block
+    assert.equal(
+      doseOf({
+        bands,
+        rows: combo,
+        measurements: [point("KH", 6), point("KALCIUM", 400)],
+        administrations: [mystery],
+      }).product.productId,
+      "p-combo",
+    );
+    const recent = { ...mystery, at: ago(5) };
+    assert.equal(
+      reasonOf({
+        bands,
+        rows: combo,
+        measurements: [point("KH", 6), point("KALCIUM", 400)],
+        administrations: [recent],
+      }),
+      "NO_USABLE_PRODUCT",
+    );
+    const pure = row({
+      rowId: "r-pure",
+      productId: "p-z-pure",
+      productName: "Tiszta",
+    });
+    assert.equal(
+      doseOf({
+        bands,
+        rows: [...combo, pure],
+        measurements: [point("KH", 6), point("KALCIUM", 400)],
+        administrations: [recent],
+      }).product.productId,
+      "p-z-pure",
+    );
+  });
+
+  it("a side parameter whose last dose has an uncountable effect (another unit) drops the product out even after its effect time", () => {
+    // a calcium-only product (rows in ml) recorded in grams 3 h ago; its effect time (2 h) is over and calcium was
+    // measured after it, so ONLY the unknown effect can stop the combined product for the KH request
+    const caOnly = row({
+      rowId: "r-ca-only",
+      productId: "p-ca-only",
+      productName: "Minta csak Ca",
+      parameter: "KALCIUM",
+      effectPer100L: 5,
+      effectHours: 2,
+    });
+    const over = {
+      bands,
+      rows: [...combo, caOnly],
+      measurements: [
+        point("KH", 6),
+        point("KALCIUM", 400, { measuredAt: ago(0.5) }),
+      ],
+    };
+    assert.equal(
+      reasonOf({
+        ...over,
+        administrations: [
+          given({
+            parameter: "KALCIUM",
+            productId: "p-ca-only",
+            amount: 10,
+            unit: "G",
+            at: ago(3),
+          }),
+        ],
+      }),
+      "NO_USABLE_PRODUCT",
+    );
+    // control: the same dose in ml is counted, and the combined product is usable
+    assert.equal(
+      doseOf({
+        ...over,
+        administrations: [
+          given({
+            parameter: "KALCIUM",
+            productId: "p-ca-only",
+            amount: 2,
+            unit: "ML",
+            at: ago(3),
+          }),
+        ],
+      }).product.productId,
+      "p-combo",
+    );
+  });
+
+  it("a side parameter measured BEFORE the last dose that moved it drops the product out", () => {
+    // calcium 440 measured 10 h ago; 6 ml of a calcium product (+15 mg/l) recorded 8 h ago with a 6 h effect time:
+    // the real calcium is about 455, outside the band, and the 440 says nothing about it
+    const caProduct = row({
+      rowId: "r-ca",
+      productId: "p-ca",
+      productName: "Minta Ca",
+      parameter: "KALCIUM",
+      effectPer100L: 5,
+      effectHours: 6,
+    });
+    const over = {
+      bands: { KH: { min: 7, max: 9 }, KALCIUM: { min: 400, max: 450 } },
+      rows: [...combo, caProduct],
+      administrations: [
+        given({
+          parameter: "KALCIUM",
+          productId: "p-ca",
+          amount: 6,
+          unit: "ML",
+          at: ago(8),
+        }),
+      ],
+    };
+    assert.equal(
+      reasonOf({
+        ...over,
+        measurements: [
+          point("KH", 6),
+          point("KALCIUM", 440, { measuredAt: ago(10) }),
+        ],
+      }),
+      "NO_USABLE_PRODUCT",
+    );
+    // measured after the effect ended (2 hours ago): 440 is today's value, and 15 mg/l is already used of the limit
+    assert.equal(
+      doseOf({
+        ...over,
+        measurements: [
+          point("KH", 6),
+          point("KALCIUM", 440, { measuredAt: ago(1) }),
+        ],
+      }).product.productId,
+      "p-combo",
+    );
+  });
+});
+
+describe("the maker's maximum counts open and expired recommendations (review of #1751)", () => {
+  // magnesium: needed 60 (limit 100 does not bind), 10 mg/l per ml per 100 l, so 12 ml = 6 per 100 l; maximum 8
+  const magnesium = (priorOver: Partial<PriorRecommendation>) => ({
+    parameter: "MAGNEZIUM",
+    bands: { MAGNEZIUM: { min: 1250, max: 1350 } },
+    measurements: [point("MAGNEZIUM", 1240)],
+    rows: [
+      row({
+        rowId: "r-mg",
+        productId: "p-mg",
+        productName: "Minta Mg",
+        parameter: "MAGNEZIUM",
+        effectPer100L: 10,
+        maxDailyDosePer100L: 8,
+      }),
+    ],
+    priorRecommendations: [
+      prior({
+        parameter: "MAGNEZIUM",
+        productId: "p-mg",
+        amount: 8,
+        unit: "ML",
+        changes: [{ parameter: "MAGNEZIUM", change: 40 }],
+        ...priorOver,
+      }),
+    ],
+  });
+
+  it("an expired recommendation of the product (8 ml = 4 per 100 l) plus 6 per 100 l is over 8", () => {
+    assert.equal(
+      reasonOf(magnesium({ status: "EXPIRED" })),
+      "DOSE_ABOVE_MANUFACTURER_MAX",
+    );
+    // a recommendation the customer said was not given does not count
+    assert.equal(doseOf(magnesium({ status: "NOT_GIVEN" })).amount, 12);
+  });
+
+  it("a recommendation of another product, or older than 24 hours, does not count against this product's maximum", () => {
+    assert.equal(
+      doseOf(magnesium({ productId: "p-other", changes: [] })).amount,
+      12,
+    );
+    assert.equal(
+      doseOf(
+        magnesium({
+          createdAt: ago(25),
+          effectEndsAt: ago(13),
+          changes: [],
+        }),
+      ).amount,
+      12,
+    );
+  });
+
+  it("UNKNOWN_EFFECT_DOSE: an earlier recommendation of the product in another unit cannot be added", () => {
+    assert.equal(
+      reasonOf(magnesium({ unit: "G", changes: [] })),
+      "UNKNOWN_EFFECT_DOSE",
+    );
+  });
+});
+
+describe("choosing between equal products (acrobot, barracuda 33872)", () => {
+  const a = row({ rowId: "r-a", productId: "p-a", productName: "A" });
+  const b = row({ rowId: "r-b", productId: "p-b", productName: "B" });
+
+  it("the one in stock first, then unknown, then out of stock", () => {
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...a, inStock: false },
+          { ...b, inStock: true },
+        ],
+      }).product.productId,
+      "p-b",
+    );
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...a, inStock: false },
+          { ...b, inStock: null },
+        ],
+      }).product.productId,
+      "p-b",
+    );
+  });
+
+  it("then the cheaper dose (price per dose unit x the amount), unknown price last", () => {
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...a, inStock: true, pricePerDoseUnit: 20 },
+          { ...b, inStock: true, pricePerDoseUnit: 10 },
+        ],
+      }).product.productId,
+      "p-b",
+    );
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...a, inStock: true, pricePerDoseUnit: null },
+          { ...b, inStock: true, pricePerDoseUnit: 10 },
+        ],
+      }).product.productId,
+      "p-b",
+    );
+  });
+
+  it("only then the product id; the price is per dose, so a pricier unit with a smaller dose can win", () => {
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...b, inStock: true, pricePerDoseUnit: 10 },
+          { ...a, inStock: true, pricePerDoseUnit: 10 },
+        ],
+      }).product.productId,
+      "p-a",
+    );
+    // A: effect 0,25 -> 8 ml at 20 = 160; B: effect 0,5 -> 4 ml at 30 = 120
+    assert.equal(
+      doseOf({
+        rows: [
+          { ...a, inStock: true, pricePerDoseUnit: 20 },
+          { ...b, effectPer100L: 0.5, inStock: true, pricePerDoseUnit: 30 },
+        ],
+      }).product.productId,
+      "p-b",
+    );
+  });
+
+  it("stock and price do not outrank fewer moved parameters", () => {
+    const side = row({
+      rowId: "r-c-ca",
+      productId: "p-0-combo",
+      productName: "Összetett",
+      parameter: "KALCIUM",
+      effectPer100L: 5,
+      inStock: true,
+      pricePerDoseUnit: 1,
+    });
+    const combo = {
+      ...a,
+      productId: "p-0-combo",
+      rowId: "r-c-kh",
+      inStock: true,
+      pricePerDoseUnit: 1,
+    };
+    assert.equal(
+      doseOf({
+        bands: { KH: { min: 7, max: 9 }, KALCIUM: { min: 380, max: 450 } },
+        rows: [combo, side, { ...b, inStock: false, pricePerDoseUnit: 999 }],
+        measurements: [point("KH", 6), point("KALCIUM", 400)],
+      }).product.productId,
+      "p-b",
+    );
+  });
+});
+
+describe("the sentence never writes a zero dose", () => {
+  it("INCOMPLETE_DOSE_TEMPLATE: an amount that rounds to 0 in the sentence is not a dose", () => {
+    // effect 5000 per ml: 1 x 2 / 5000 = 0,0004 ml, step 0,0001
+    assert.equal(
+      reasonOf({ rows: [row({ effectPer100L: 5000, step: 0.0001 })] }),
+      "INCOMPLETE_DOSE_TEMPLATE",
+    );
   });
 });
 

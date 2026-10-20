@@ -57,6 +57,16 @@ export interface DoseRow {
   effectHours: number | null;
   source: string;
   refusals: readonly string[];
+  /**
+   * Whether the shop has the product in stock; null or missing: not known.
+   * Used only to choose between products that would do equally well.
+   */
+  inStock?: boolean | null;
+  /**
+   * The price of ONE dose unit (in `unit`), in forint; null or missing: not
+   * known. Used only to choose between products that would do equally well.
+   */
+  pricePerDoseUnit?: number | null;
 }
 
 /**
@@ -87,6 +97,14 @@ export interface PriorRecommendation {
   createdAt: Date;
   parameter: string;
   basisMeasurementId: string;
+  /**
+   * What it recommended: the product and the amount in the row's unit. The
+   * manufacturer's daily maximum counts an open or expired recommendation as
+   * given, so the log keeps these three with it.
+   */
+  productId: string;
+  amount: number;
+  unit: DoseUnit;
   status: PriorRecommendationStatus;
   /** When its effect time ends; an OPEN one before this is the one valid proposal. */
   effectEndsAt: Date;
