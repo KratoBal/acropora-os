@@ -23,6 +23,8 @@
  * that slips past the shape turns that spec red rather than reaching here.
  */
 
+import { assertReefClubSmtpComplete } from "./reefclub-smtp-mail.js";
+
 export const REEFCLUB_ENV_PREFIX = "REEFCLUB_";
 
 /**
@@ -109,6 +111,8 @@ export const REEFCLUB_REQUIRED_IN_PRODUCTION = [
 export function assertReefClubEnvironment(
   environment: Record<string, string | undefined> = process.env,
 ): void {
+  // a half-set SMTP configuration is a deploy mistake: named here, at the start
+  assertReefClubSmtpComplete(environment);
   const forbidden = forbiddenEnvironmentNames(environment);
   if (forbidden.length > 0) {
     // Names only, never values.
