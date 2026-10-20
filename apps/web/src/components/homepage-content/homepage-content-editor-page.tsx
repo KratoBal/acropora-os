@@ -89,6 +89,7 @@ export function HomepageContentEditorPage() {
   const [ownSlides, setOwnSlides] = useState(false);
   const [slides, setSlides] = useState<HomepageSlide[]>([]);
   const [projectionEnabled, setProjectionEnabled] = useState(false);
+  const [projectionAllowed, setProjectionAllowed] = useState(true);
   const canSwitch = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
   );
@@ -103,6 +104,7 @@ export function HomepageContentEditorPage() {
         setOwnSlides(content.slides !== null);
         setSlides(content.slides ?? []);
         setProjectionEnabled(content.projectionEnabled);
+        setProjectionAllowed(content.projectionAllowed);
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -175,6 +177,7 @@ export function HomepageContentEditorPage() {
       setOwnSlides(result.content.slides !== null);
       setSlides(result.content.slides ?? []);
       setProjectionEnabled(result.content.projectionEnabled);
+      setProjectionAllowed(result.content.projectionAllowed);
       setSaved(PROJECTION_TEXT[result.projection]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "A mentés sikertelen.");
@@ -223,7 +226,7 @@ export function HomepageContentEditorPage() {
           <input
             type="checkbox"
             checked={projectionEnabled}
-            disabled={!canSwitch}
+            disabled={!canSwitch || !projectionAllowed}
             onChange={(event) => void switchProjection(event.target.checked)}
           />
           A kezdőlap tartalma menjen a webshopba (és a képek is feltölthetők
@@ -233,6 +236,13 @@ export function HomepageContentEditorPage() {
           Kikapcsolva a mentés csak itt tárolódik, a webshop a terv szövegeit
           mutatja. {canSwitch ? "" : "A kapcsolót az adminisztrátor váltja."}
         </p>
+        {!projectionAllowed ? (
+          <Alert
+            variant="info"
+            title="Ebben a környezetben a webshopba küldés nincs engedélyezve"
+            description="A kapcsoló itt hatástalan: a küldéshez a környezet engedélye is kell (MEDUSA_PROJECT_HOMEPAGE_CONTENT). A tartalom mentése így is működik."
+          />
+        ) : null}
       </Card>
       <form className="space-y-6" onSubmit={submit}>
         <Card className="space-y-4 p-6">

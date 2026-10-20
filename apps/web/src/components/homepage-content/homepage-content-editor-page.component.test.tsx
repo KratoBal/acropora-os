@@ -58,6 +58,7 @@ const stored = (over: Record<string, unknown> = {}) => ({
   slides: null,
   updatedAt: null,
   projectionEnabled: false,
+  projectionAllowed: true,
   ...over,
 });
 const echo = (projection = "off") =>
@@ -292,6 +293,20 @@ describe("HomepageContentEditorPage", () => {
       /menjen a webshopba/,
     )) as HTMLInputElement;
     expect(box.disabled).toBe(true);
+    fireEvent.click(box);
+    expect(api.setProjection).not.toHaveBeenCalled();
+  });
+
+  it("HP-ED-ALLOWED: where the environment does not allow it the switch is disabled and the page says so", async () => {
+    api.get.mockResolvedValue(
+      stored({ projectionEnabled: true, projectionAllowed: false }),
+    );
+    render(<HomepageContentEditorPage />);
+    const box = (await screen.findByLabelText(
+      /menjen a webshopba/,
+    )) as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(await screen.findByText(/nincs engedélyezve/)).toBeTruthy();
     fireEvent.click(box);
     expect(api.setProjection).not.toHaveBeenCalled();
   });

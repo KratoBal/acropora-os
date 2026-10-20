@@ -109,15 +109,17 @@ export function describeHomepageProjection(
 
 /**
  * Off by default, like the other rounds: the projection writes to another
- * system. Switched on by the variable OR by the administrator's switch in the
- * editor; the variable's absence does not turn it off (acrobot 33456: the test
- * environment's variables are not ours to write).
+ * system. It runs ONLY where the environment allows it (the variable, true on
+ * the test OS, absent on the production OS) AND the administrator's switch in
+ * the editor is on. An AND, not an OR (acrobot 33495, barracuda #1721): the
+ * commerce exception covers the test shop, so a switch alone must never be able
+ * to write into the Medusa the production OS points at.
  */
 export const projectHomepageContentInRound = async (
   env: NodeJS.ProcessEnv,
   source: Pick<HomepageSource, "switchedOn">,
 ): Promise<boolean> =>
-  env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true" || (await source.switchedOn());
+  env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true" && (await source.switchedOn());
 
 export const prismaHomepageSource: HomepageSource = {
   content: async () => {

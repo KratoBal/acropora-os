@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   ServiceUnavailableException,
@@ -84,24 +85,31 @@ export type HomepageProjectionResult = "off" | "sent" | "unchanged" | "failed";
 export type HomepageContentProjector = () => Promise<"sent" | "unchanged">;
 
 /**
- * IS THE PROJECTION ON HERE: the administrator's switch (a database row) OR the
- * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable. The variable's ABSENCE does
- * not turn it off: the test environment's variables are not ours to write, so
- * the switch lives in the editor (acrobot 33456).
+ * DOES THIS ENVIRONMENT ALLOW WRITING TO THE WEB SHOP: the
+ * `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true` variable. The commerce exception is
+ * for the TEST shop only; the production OS has the variable off, and an
+ * administrator's switch there must not be able to write into the Medusa the
+ * production OS points at (acrobot 33495, barracuda #1721).
+ */
+export function homepageProjectionAllowed(env: NodeJS.ProcessEnv): boolean {
+  return env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true";
+}
+
+/**
+ * IS THE PROJECTION ON HERE: the environment allows it AND the administrator's
+ * switch is on (an AND, not an OR: a missing variable makes the switch inert).
  */
 export function homepageProjectionOn(
   env: NodeJS.ProcessEnv,
   row: Pick<HomepageContentRow, "projectionEnabled"> | null,
 ): boolean {
-  return (
-    env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true" ||
-    row?.projectionEnabled === true
-  );
+  return homepageProjectionAllowed(env) && row?.projectionEnabled === true;
 }
 
 /** The stored record, read defensively: a hand-edited row cannot break a read. */
 export function toHomepageContent(
   row: HomepageContentRow | null,
+  projectionAllowed = false,
 ): HomepageContent {
   if (!row)
     return {
@@ -109,6 +117,7 @@ export function toHomepageContent(
       slides: null,
       updatedAt: null,
       projectionEnabled: false,
+      projectionAllowed,
     };
   const texts: Record<string, string> = {};
   if (typeof row.texts === "object" && row.texts !== null)
@@ -119,6 +128,7 @@ export function toHomepageContent(
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
     updatedAt: row.updatedAt.toISOString(),
     projectionEnabled: row.projectionEnabled === true,
+    projectionAllowed,
   };
 }
 
@@ -166,7 +176,7 @@ export class HomepageContentService {
     const row = await this.store.find(MAIN_HOMEPAGE_KEY);
     if (!homepageProjectionOn(this.environment, row))
       throw new ServiceUnavailableException(
-        "A webshopba küldés ki van kapcsolva (kapcsold be a szerkesztő oldalon), a kép nem tölthető fel.",
+        "A webshopba küldés ki van kapcsolva vagy ebben a környezetben nincs engedélyezve, a kép nem tölthető fel.",
       );
     /*
       THE NAME IS OURS, NOT THE EDITOR'S (barracuda, #1721). The browser's
@@ -189,6 +199,12 @@ export class HomepageContentService {
   ): Promise<{ projectionEnabled: boolean }> {
     if (typeof enabled !== "boolean")
       throw new BadRequestException("enabled: true vagy false");
+    // turning it ON where the environment does not allow writing to the shop
+    // would be a switch that does nothing: refuse it, and say why
+    if (enabled && !homepageProjectionAllowed(this.environment))
+      throw new ConflictException(
+        "Ebben a környezetben a webshopba küldés nincs engedélyezve (MEDUSA_PROJECT_HOMEPAGE_CONTENT), a kapcsoló nem kapcsolható be.",
+      );
     const row = await this.store.setProjection(
       MAIN_HOMEPAGE_KEY,
       enabled,
@@ -198,7 +214,10 @@ export class HomepageContentService {
   }
 
   async get(): Promise<HomepageContent> {
-    return toHomepageContent(await this.store.find(MAIN_HOMEPAGE_KEY));
+    return toHomepageContent(
+      await this.store.find(MAIN_HOMEPAGE_KEY),
+      homepageProjectionAllowed(this.environment),
+    );
   }
 
   async save(
@@ -219,6 +238,12 @@ export class HomepageContentService {
       } catch {
         projection = "failed";
       }
-    return { content: toHomepageContent(row), projection };
+    return {
+      content: toHomepageContent(
+        row,
+        homepageProjectionAllowed(this.environment),
+      ),
+      projection,
+    };
   }
 }

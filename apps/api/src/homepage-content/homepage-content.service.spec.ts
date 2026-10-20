@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   BadRequestException,
+  ConflictException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import type { HomepageContentInput } from "@acropora/types";
@@ -20,6 +21,9 @@ import {
   but "nothing set" (empty texts, null slides); a null slides list turning into
   an empty list on the way out (that would mean "no hero" in the shop).
 */
+/** The test OS: the environment allows writing to the shop. */
+const ALLOWED: NodeJS.ProcessEnv = { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" };
+
 function setup(
   projection: () => Promise<"sent" | "unchanged">,
   options: { switchedOn?: boolean; env?: NodeJS.ProcessEnv } = {},
@@ -70,7 +74,7 @@ function setup(
       });
       return { url: `https://shop.example/static/${image.fileName}` };
     },
-    options.env ?? {},
+    options.env ?? ALLOWED,
   );
   return { service, saved, uploads };
 }
@@ -83,6 +87,7 @@ describe("HomepageContentService", () => {
       slides: null,
       updatedAt: null,
       projectionEnabled: false,
+      projectionAllowed: true,
     });
   });
 
@@ -120,36 +125,55 @@ describe("HomepageContentService", () => {
     assert.equal(saved.length, 1);
   });
 
-  it("the variable turns it on without the switch, its absence does not turn the switch off", async () => {
+  it("is an AND: the switch without the environment's permission sends nothing (acrobot 33495)", async () => {
     let asked = 0;
     const projection = async () => {
       asked++;
       return "sent" as const;
     };
-    const viaVariable = setup(projection, {
-      switchedOn: false,
-      env: { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
-    });
+    for (const env of [
+      {},
+      { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
+      { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" },
+    ]) {
+      const production = setup(projection, { env });
+      const out = await production.service.save(
+        { texts: {}, slides: null },
+        "u",
+      );
+      assert.equal(out.projection, "off");
+      assert.equal(out.content.projectionEnabled, true);
+      assert.equal(out.content.projectionAllowed, false);
+    }
+    // the permission without the switch sends nothing either
+    const permissionOnly = setup(projection, { switchedOn: false });
     assert.equal(
-      (await viaVariable.service.save({ texts: {}, slides: null }, "u"))
+      (await permissionOnly.service.save({ texts: {}, slides: null }, "u"))
         .projection,
-      "sent",
-    );
-    const viaSwitch = setup(projection, { env: {} });
-    assert.equal(
-      (await viaSwitch.service.save({ texts: {}, slides: null }, "u"))
-        .projection,
-      "sent",
-    );
-    const other = setup(projection, {
-      switchedOn: false,
-      env: { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
-    });
-    assert.equal(
-      (await other.service.save({ texts: {}, slides: null }, "u")).projection,
       "off",
     );
-    assert.equal(asked, 2);
+    assert.equal(asked, 0);
+    // both: it sends
+    const both = setup(projection);
+    assert.equal(
+      (await both.service.save({ texts: {}, slides: null }, "u")).projection,
+      "sent",
+    );
+    assert.equal(asked, 1);
+  });
+
+  it("the switch cannot be turned ON where the environment does not allow it, but can be turned off", async () => {
+    const { service } = setup(async () => "sent", {
+      switchedOn: false,
+      env: {},
+    });
+    await assert.rejects(
+      service.setProjection(true, "admin"),
+      ConflictException,
+    );
+    assert.deepEqual(await service.setProjection(false, "admin"), {
+      projectionEnabled: false,
+    });
   });
 
   it("keeps the save when the projection fails", async () => {
@@ -262,6 +286,15 @@ describe("HomepageContentService.uploadImage", () => {
     await assert.rejects(
       service.uploadImage({ originalname: "nagy.jpg", buffer: big }),
       BadRequestException,
+    );
+    assert.equal(uploads.length, 0);
+  });
+
+  it("an upload is a write to the shop too: no environment permission, no upload", async () => {
+    const { service, uploads } = setup(async () => "sent", { env: {} });
+    await assert.rejects(
+      service.uploadImage({ originalname: "kep.jpg", buffer: jpeg }),
+      ServiceUnavailableException,
     );
     assert.equal(uploads.length, 0);
   });

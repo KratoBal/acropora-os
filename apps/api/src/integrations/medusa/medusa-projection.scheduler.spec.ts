@@ -1176,12 +1176,12 @@ describe("MedusaProjectionScheduler kezdolap kore", () => {
     assert.equal(hivas, 0);
   });
 
-  it("az admin kapcsolója változó nélkül is elindítja, és a küldést naplózza", async () => {
+  it("a kapcsoló ÉS a környezet engedélye együtt indítja, és a küldést naplózza", async () => {
     let hivas = 0;
     const n = naplo();
     await scheduler(
       dbKapcsoloval(true),
-      BEKAPCSOLVA,
+      { ...BEKAPCSOLVA, MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
       async () => {
         hivas += 1;
         return { status: "sent" };
@@ -1195,7 +1195,20 @@ describe("MedusaProjectionScheduler kezdolap kore", () => {
     );
   });
 
-  it("a változó kapcsoló nélkül is elindítja", async () => {
+  it("az admin kapcsolója a környezet engedélye nélkül nem indítja el (éles OS)", async () => {
+    let hivas = 0;
+    for (const environment of [
+      BEKAPCSOLVA,
+      { ...BEKAPCSOLVA, MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" },
+    ])
+      await scheduler(dbKapcsoloval(true), environment, async () => {
+        hivas += 1;
+        return { status: "sent" };
+      }).runOnce();
+    assert.equal(hivas, 0);
+  });
+
+  it("a környezet engedélye kapcsoló nélkül sem indítja el", async () => {
     let hivas = 0;
     await scheduler(
       dbKapcsoloval(false),
@@ -1205,14 +1218,14 @@ describe("MedusaProjectionScheduler kezdolap kore", () => {
         return { status: "unchanged" };
       },
     ).runOnce();
-    assert.equal(hivas, 1);
+    assert.equal(hivas, 0);
   });
 
   it("egy hiba naplóba megy, és a termékek köre fut tovább", async () => {
     const n = naplo();
     const eredmeny = await scheduler(
       dbKapcsoloval(true),
-      BEKAPCSOLVA,
+      { ...BEKAPCSOLVA, MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" },
       async () => {
         throw new Error("a bolt nem valaszol");
       },
