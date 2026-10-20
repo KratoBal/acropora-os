@@ -29,7 +29,11 @@ import {
 } from "../reefclub/reefclub-link-code.js";
 import { reefClubWebUrl } from "../reefclub/reefclub-mail.js";
 import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
-import { linkCodeMail, linkNoticeMail, releaseMail } from "./reefclub-shop-mail.js";
+import {
+  linkCodeMail,
+  linkNoticeMail,
+  releaseMail,
+} from "./reefclub-shop-mail.js";
 
 /**
  * THE OS SIDE OF THE REEFCLUB SHOP LINK (ReefClub plan v6.1, 3.3 and 3.5;
@@ -65,7 +69,8 @@ function fromShop(
   return {
     ...mail,
     from: formatMailFrom(
-      environment.AQUARIUM_MEASUREMENT_MAIL_FROM_NAME?.trim() || "Acropora Kft.",
+      environment.AQUARIUM_MEASUREMENT_MAIL_FROM_NAME?.trim() ||
+        "Acropora Kft.",
       address,
     ),
   };
@@ -168,9 +173,9 @@ export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
     await this.sender.send(
       fromShop(
         linkCodeMail({
-        to: email,
-        customerName: customer.displayName,
-        code,
+          to: email,
+          customerName: customer.displayName,
+          code,
           expiresAt,
           webUrl: reefClubWebUrl(),
         }),

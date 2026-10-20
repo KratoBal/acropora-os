@@ -39,8 +39,10 @@ import { ReefClubAppModule } from "./reefclub.module.js";
  * same request on B's own aquarium succeeds, so a 404 is the access rule and
  * not a malformed request.
  *
- * In slice 4 there is no shop link yet (slice 5), so "foreign" here is
- * everything that is not the caller's own. The internal side is measured too:
+ * B has no link to C, D or E, so all of them are foreign to B here; the
+ * shop-link half (A linked to C, plan points 3, 5, 6, 7) is
+ * `reefclub-bolti.integration.spec.ts`. The link routes (`/shop-links/:id`)
+ * are in this sweep too, with the link of another account as the foreign id. The internal side is measured too:
  * a ReefClub aquarium is not an internal row (plan 4.4), so the internal
  * detail route answers 404 for it.
  *
@@ -156,6 +158,10 @@ describe(
     let dOccasion: string;
     let e1: string;
     const customerIds: string[] = [];
+    /** A link of another account (Z, to C): the foreign link id of the sweep. */
+    let zLink: string;
+    /** B's own link (to F, a customer without aquariums): the control's. */
+    let bLink: string;
 
     const email = (name: string) => `${name}-${suffix}@${TEST_EMAIL_DOMAIN}`;
 
@@ -184,7 +190,12 @@ describe(
       const key = `${route.method} ${route.path}`;
       const hasBody = ["POST", "PUT", "PATCH"].includes(route.method);
       if (hasBody) assert.ok(key in BODIES, `nincs mintatörzs ehhez: ${key}`);
-      const response = await rc(fill(route.path, values), {
+      // The `:id` of a link route is a link id, of every other route an
+      // aquarium id.
+      const filled = route.path.startsWith("/rc/v1/shop-links/")
+        ? { ...values, id: values.linkId! }
+        : values;
+      const response = await rc(fill(route.path, filled), {
         method: route.method,
         body: hasBody ? BODIES[key] : undefined,
         session,
@@ -283,7 +294,7 @@ describe(
     /** Every row the sweep could touch, in one hash. */
     async function fingerprint(): Promise<string> {
       const ids = [a1, a2, b1, c1, c2, d1, e1];
-      const [aquariums, targets, measurements] = await Promise.all([
+      const [aquariums, targets, measurements, links] = await Promise.all([
         prisma.aquarium.findMany({
           where: { id: { in: ids } },
           orderBy: { id: "asc" },
@@ -296,10 +307,15 @@ describe(
           where: { aquariumId: { in: ids } },
           orderBy: { id: "asc" },
         }),
+        prisma.reefClubCustomerLink.findMany({
+          where: { id: { in: [zLink, bLink] } },
+          orderBy: { id: "asc" },
+        }),
       ]);
       assert.equal(aquariums.length, ids.length);
+      assert.equal(links.length, 2);
       return createHash("sha256")
-        .update(JSON.stringify({ aquariums, targets, measurements }))
+        .update(JSON.stringify({ aquariums, targets, measurements, links }))
         .digest("hex");
     }
 
@@ -308,8 +324,9 @@ describe(
       const routes = routesOf(reefclub).filter(
         (route) => paramsOf(route.path).length > 0,
       );
-      // The control on the reading itself: slice 4 has eight id routes.
-      assert.ok(routes.length >= 8, `${routes.length} azonosítós útvonal`);
+      // The control on the reading itself: eight aquarium id routes and the
+      // link route.
+      assert.ok(routes.length >= 9, `${routes.length} azonosítós útvonal`);
       for (const route of routes)
         for (const param of paramsOf(route.path))
           assert.ok(
@@ -388,6 +405,36 @@ describe(
           source: "bolt",
         },
       });
+
+      const z = await prisma.reefClubAccount.create({
+        data: {
+          email: email("z"),
+          emailVerifiedAt: new Date(),
+          consentVersion: "teszt-1",
+          consentAt: new Date(),
+        },
+      });
+      zLink = (
+        await prisma.reefClubCustomerLink.create({
+          data: { accountId: z.id, customerId: customerIds[0]! },
+        })
+      ).id;
+      const f = await prisma.customer.create({
+        data: {
+          customerNumber: `RCA-${suffix}-F`,
+          type: "PERSON",
+          displayName: `${NAME_PREFIX} F`,
+        },
+      });
+      customerIds.push(f.id);
+      const b = await prisma.reefClubAccount.findUniqueOrThrow({
+        where: { email: email("b") },
+      });
+      bLink = (
+        await prisma.reefClubCustomerLink.create({
+          data: { accountId: b.id, customerId: f.id },
+        })
+      ).id;
     });
 
     after(async () => {
@@ -440,13 +487,16 @@ describe(
     }
 
     it("5.2/1: B munkamenetével minden idegen akvárium-azonosító minden azonosítós útvonalon bájtra a nem létező 404-e, és semmi nem változik", async () => {
-      const foreign: Record<string, { id: string; occasionId: string }> = {
-        "A saját (privát)": { id: a1, occasionId: a1Occasion },
-        "A második saját": { id: a2, occasionId: a1Occasion },
-        "C bolti 1": { id: c1, occasionId: dOccasion },
-        "C bolti 2": { id: c2, occasionId: dOccasion },
-        "D bolti": { id: d1, occasionId: dOccasion },
-        "E cég": { id: e1, occasionId: dOccasion },
+      const foreign: Record<
+        string,
+        { id: string; occasionId: string; linkId: string }
+      > = {
+        "A saját (privát)": { id: a1, occasionId: a1Occasion, linkId: zLink },
+        "A második saját": { id: a2, occasionId: a1Occasion, linkId: zLink },
+        "C bolti 1": { id: c1, occasionId: dOccasion, linkId: zLink },
+        "C bolti 2": { id: c2, occasionId: dOccasion, linkId: zLink },
+        "D bolti": { id: d1, occasionId: dOccasion, linkId: zLink },
+        "E cég": { id: e1, occasionId: dOccasion, linkId: zLink },
       };
       const before = await fingerprint();
       const mismatches: string[] = [];
@@ -454,7 +504,7 @@ describe(
       for (const route of idRoutes()) {
         const missing = await answer(
           route,
-          { id: MISSING_ID, occasionId: MISSING_OCCASION },
+          { id: MISSING_ID, occasionId: MISSING_OCCASION, linkId: MISSING_ID },
           sessionB,
         );
         assert.equal(
@@ -472,7 +522,7 @@ describe(
         }
       }
       assert.deepEqual(mismatches, []);
-      assert.ok(compared >= 8 * 6, `${compared} összevetés`);
+      assert.ok(compared >= 9 * 6, `${compared} összevetés`);
       assert.equal(await fingerprint(), before, "a sorok megváltoztak");
     });
 
@@ -521,7 +571,7 @@ describe(
             : b1;
         const got = await answer(
           route,
-          { id: target, occasionId: b1Occasion },
+          { id: target, occasionId: b1Occasion, linkId: bLink },
           sessionB,
         );
         if (got.status < 200 || got.status > 299)

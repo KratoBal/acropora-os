@@ -200,11 +200,10 @@ export class AquariumMeasurementsRepository {
       return { releasedAt: created.releasedAt, created: true };
     } catch (error) {
       if (!isPrismaUniqueConstraintViolation(error, "measuredAt")) throw error;
-      const winner =
-        await prisma.aquariumMeasurementRelease.findUniqueOrThrow({
-          where: { aquariumId_measuredAt: { aquariumId, measuredAt } },
-          select: { releasedAt: true },
-        });
+      const winner = await prisma.aquariumMeasurementRelease.findUniqueOrThrow({
+        where: { aquariumId_measuredAt: { aquariumId, measuredAt } },
+        select: { releasedAt: true },
+      });
       return { releasedAt: winner.releasedAt, created: false };
     }
   }
