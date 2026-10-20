@@ -81,6 +81,16 @@ export class ReefClubRateLimits {
    */
   readonly aquariumCreateByAccount = new IpRateLimiter(10, 1_000, HOUR);
   readonly measurementCreateByAccount = new IpRateLimiter(60, 10_000, HOUR);
+  /**
+   * The recommendation and the dose endpoints (barracuda, endpoints): per
+   * ACCOUNT (one account over many aquariums) and per AQUARIUM (many accounts
+   * over one shop aquarium). A recommendation reserves the daily limit, so a
+   * flood of requests is a flood of reservations.
+   */
+  readonly recommendationByAccount = new IpRateLimiter(30, 5_000, HOUR);
+  readonly recommendationByAquarium = new IpRateLimiter(60, 5_000, HOUR);
+  readonly doseByAccount = new IpRateLimiter(120, 10_000, HOUR);
+  readonly doseByAquarium = new IpRateLimiter(240, 10_000, HOUR);
   /** Every shop-link redemption attempt, right or wrong. */
   readonly shopLinkByAddress = new IpRateLimiter(20, 1_000, MINUTE);
   /**

@@ -61,6 +61,22 @@ export interface ReefClubRecommendationAnswer {
   source?: string;
 }
 
+export interface ReefClubRecommendationItem {
+  id: string;
+  parameter: string;
+  text: string;
+  amount: number;
+  unit: "ML" | "G" | "CSEPP";
+  durationDays: number;
+  product: { id: string | null; name: string };
+  source: string;
+  status: "OPEN" | "EXPIRED" | "GIVEN" | "PARTIAL" | "NOT_GIVEN";
+  createdAt: string;
+  effectEndsAt: string;
+  /** Issued for another account linked to the same shop customer. */
+  byOtherAccount: boolean;
+}
+
 class DoseRowGone extends Error {}
 
 @Injectable()
@@ -95,6 +111,49 @@ export class ReefClubRecommendationService {
         return this.staleAnswer(parameter, now);
       throw error;
     }
+  }
+
+  /**
+   * THE OPEN AND RECENT RECOMMENDATIONS OF THE AQUARIUM, WITHOUT WRITING
+   * ANYTHING (plan 3.4; a GET must not reserve the limit). Every account that
+   * may read the aquarium sees them, those of a linked account marked as
+   * another account's: it is the same tank, and its limit is shared. The other
+   * account's e-mail is never in the answer.
+   */
+  async list(
+    accountId: string,
+    aquariumId: string,
+    now: Date = new Date(),
+  ): Promise<{ items: ReefClubRecommendationItem[] }> {
+    const grant = await this.access.aquariumForAccount(
+      accountId,
+      aquariumId,
+      "READ",
+    );
+    const since = new Date(now.getTime() - 7 * 24 * 3_600_000);
+    const rows = await this.database.reefClubRecommendation.findMany({
+      where: { aquariumId: grant.aquariumId, createdAt: { gte: since } },
+      orderBy: { createdAt: "desc" },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        parameter: row.parameterCode,
+        text: row.text,
+        amount: row.amount.toNumber(),
+        unit: row.doseUnit,
+        durationDays: row.durationDays,
+        product: { id: row.productId, name: row.productName },
+        source: row.source,
+        status:
+          row.status === "OPEN" && row.effectEndsAt.getTime() <= now.getTime()
+            ? "EXPIRED"
+            : row.status,
+        createdAt: row.createdAt.toISOString(),
+        effectEndsAt: row.effectEndsAt.toISOString(),
+        byOtherAccount: row.accountId !== accountId,
+      })),
+    };
   }
 
   private async inTransaction(

@@ -64,7 +64,7 @@ describe("a beadott adag rögzítése", () => {
     });
   });
 
-  it("a jövőbeli időpont tiltott (5 perc óraeltérés belefér), a 24 óránál régebbi is (24 óra még belefér)", () => {
+  it("a jövőbeli időpont tiltott (5 perc óraeltérés belefér), a 7 napnál régebbi is (7 nap még belefér)", () => {
     assert.equal(
       refusedCode({ administeredAt: new Date(NOW.getTime() + 10 * 60000) }),
       "TIME_IN_FUTURE",
@@ -78,14 +78,14 @@ describe("a beadott adag rögzítése", () => {
     );
     assert.equal(
       refusedCode(
-        { administeredAt: ago(24.1), recommendationId: null },
+        { administeredAt: ago(7 * 24 + 0.1), recommendationId: null },
         { recommendation: null },
       ),
       "TIME_TOO_OLD",
     );
     assert.equal(
       checkDoseEntry(
-        entry({ administeredAt: ago(24), recommendationId: null }),
+        entry({ administeredAt: ago(7 * 24), recommendationId: null }),
         context({ recommendation: null }),
       ).kind,
       "OK",
@@ -178,6 +178,30 @@ describe("az ajánláshoz kötött adag", () => {
       "RECOMMENDATION_OTHER_PRODUCT",
     );
     assert.equal(refusedCode({ unit: "G" }), "RECOMMENDATION_OTHER_UNIT");
+  });
+
+  it("részleges válasznál legfeljebb az ajánlott mennyiség (barracuda): több nem 'részben'", () => {
+    assert.equal(
+      refusedCode({ amount: 9, confirmed: true }, { partial: true }),
+      "PARTIAL_ABOVE_RECOMMENDED",
+    );
+    // at most: the recommended amount and less are fine (less needs the confirmation)
+    assert.equal(
+      checkDoseEntry(entry({ amount: 8 }), context({ partial: true })).kind,
+      "OK",
+    );
+    assert.equal(
+      checkDoseEntry(
+        entry({ amount: 3, confirmed: true }),
+        context({ partial: true }),
+      ).kind,
+      "OK",
+    );
+    // without "partly" the same 9 ml is a (confirmed) plain dose of the recommendation
+    assert.equal(
+      checkDoseEntry(entry({ amount: 9, confirmed: true }), context()).kind,
+      "OK",
+    );
   });
 
   it("az ajánlás kiadása előtti időpont tiltott", () => {

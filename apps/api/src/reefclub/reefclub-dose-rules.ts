@@ -1,9 +1,16 @@
 import {
   FUTURE_TOLERANCE_MS,
   RECOMMENDATION_PARAMETERS,
-  ROLLING_WINDOW_HOURS,
   dailyLimitFor,
 } from "@acropora/aquarium-calc";
+
+/**
+ * How far back a dose may be dated: the longest age a measurement may have
+ * (seven days, plan 6.3). Older is refused (barracuda, endpoints): an entry
+ * that far back could only fill in a history, and the limit's 24 hour window
+ * would not count it anyway.
+ */
+export const DOSE_MAX_AGE_DAYS = 7;
 
 /**
  * WHAT THE CUSTOMER MAY RECORD AS GIVEN (ReefClub plan v6.1, 6.5; slice 8,
@@ -12,12 +19,11 @@ import {
  * the recommended amount, and the daily limit counts what is recorded here.
  * That makes the entry a thing to guard from both sides:
  *
- *  - NOT IN THE FUTURE and NOT OLDER THAN THE LIMIT'S WINDOW (barracuda,
- *    #1753): a dose dated further ahead than the clock's tolerance would hold
- *    the next recommendation back for good, and one dated before the rolling
- *    window would drop out of the limit it was given inside. The window is the
- *    same 24 hours the limit uses, so an entry the limit would not count is not
- *    taken either;
+ *  - NOT IN THE FUTURE and NOT OLDER THAN SEVEN DAYS (barracuda, #1753 and
+ *    the endpoints): a dose dated further ahead than the clock's tolerance
+ *    would hold the next recommendation back for good, and a dose dated long
+ *    ago can only fill in a history (the limit counts the last 24 hours, the
+ *    effect time reaches back further);
  *  - A DOSE OF A LISTED PRODUCT CARRIES ITS AMOUNT AND UNIT, or neither: a
  *    half-known dose is an "unknown effect" and stops the parameter, which is
  *    the customer's to choose ("another product"), not a form accident;
@@ -69,6 +75,12 @@ export interface DoseContext {
   knownProductIds: ReadonlySet<string>;
   row: DoseRowFacts | null;
   recommendation: LinkedRecommendation | null;
+  /**
+   * The dose answers a recommendation with "partly": at most the recommended
+   * amount (barracuda, endpoints): more is not "partly", it is a plain dose,
+   * recorded apart from the recommendation.
+   */
+  partial?: boolean;
 }
 
 export type DoseRefusalCode =
@@ -82,6 +94,7 @@ export type DoseRefusalCode =
   | "RECOMMENDATION_OTHER_PARAMETER"
   | "RECOMMENDATION_OTHER_PRODUCT"
   | "RECOMMENDATION_OTHER_UNIT"
+  | "PARTIAL_ABOVE_RECOMMENDED"
   | "BEFORE_RECOMMENDATION";
 
 export type DoseWarningCode = "ABOVE_MAKER_MAX" | "ABOVE_DAILY_LIMIT";
@@ -102,7 +115,7 @@ const MESSAGES: Record<DoseRefusalCode, string> = {
   INVALID_PARAMETER: "Ehhez a paraméterhez nem rögzíthető adag.",
   TIME_IN_FUTURE: "A beadás időpontja a jövőben van; javítsd az időpontot.",
   TIME_TOO_OLD:
-    "A beadás időpontja legfeljebb 24 órával lehet korábbi; régebbi adagot nem rögzítünk, mert a napi korlát már nem számol vele.",
+    "A beadás időpontja legfeljebb 7 nappal lehet korábbi; régebbi adagot nem rögzítünk.",
   AMOUNT_UNIT_INCOMPLETE:
     "A mennyiséget és a mértékegységet együtt add meg, vagy egyiket se; ha nem tudod, jelöld meg, hogy más terméket adtál be.",
   AMOUNT_NOT_POSITIVE:
@@ -116,6 +129,8 @@ const MESSAGES: Record<DoseRefusalCode, string> = {
     "Az ajánláshoz az ajánlott termék adagját rögzítheted; más terméket külön, ajánlás nélkül rögzíts.",
   RECOMMENDATION_OTHER_UNIT:
     "Az ajánláshoz az ajánlott mértékegységben rögzíthetsz adagot.",
+  PARTIAL_ABOVE_RECOMMENDED:
+    "Részleges beadásnál legfeljebb az ajánlott mennyiséget adhatod meg; ha többet adtál be, rögzítsd külön adagként, ajánlás nélkül.",
   BEFORE_RECOMMENDATION:
     "A beadás időpontja az ajánlás kiadása előtti; az ajánláshoz nem rögzíthető.",
 };
@@ -138,7 +153,7 @@ export function checkDoseEntry(
   if (!Number.isFinite(at)) return refused("TIME_IN_FUTURE");
   if (at - now.getTime() > FUTURE_TOLERANCE_MS)
     return refused("TIME_IN_FUTURE");
-  if (now.getTime() - at > ROLLING_WINDOW_HOURS * 3_600_000)
+  if (now.getTime() - at > DOSE_MAX_AGE_DAYS * 24 * 3_600_000)
     return refused("TIME_TOO_OLD");
 
   if ((entry.amount === null) !== (entry.unit === null))
@@ -169,6 +184,12 @@ export function checkDoseEntry(
       return refused("RECOMMENDATION_OTHER_UNIT");
     if (at < recommendation.createdAt.getTime() - FUTURE_TOLERANCE_MS)
       return refused("BEFORE_RECOMMENDATION");
+    if (
+      context.partial &&
+      entry.amount !== null &&
+      entry.amount > recommendation.amount
+    )
+      return refused("PARTIAL_ABOVE_RECOMMENDED");
     if (
       entry.amount !== null &&
       entry.amount !== recommendation.amount &&

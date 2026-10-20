@@ -42,6 +42,18 @@ export interface RecordDoseRequest {
   clientOperationId?: string | null;
 }
 
+export interface ReefClubDoseItem {
+  id: string;
+  parameter: string;
+  /** Null: "another product". */
+  product: { id: string; name: string | null } | null;
+  amount: number | null;
+  unit: DoseUnit | null;
+  administeredAt: string;
+  recommendationId: string | null;
+  byOtherAccount: boolean;
+}
+
 export type DoseAnswer = "GIVEN" | "PARTIAL" | "NOT_GIVEN";
 
 export interface AnswerRequest {
@@ -144,6 +156,52 @@ export class ReefClubDosesService {
     );
   }
 
+  /**
+   * THE RECORDED DOSES OF THE AQUARIUM (plan 3.4), without writing. Every
+   * account that may read the aquarium sees them (the same tank, one shared
+   * limit), those of another account marked as such; no e-mail address.
+   */
+  async list(
+    accountId: string,
+    aquariumId: string,
+    now: Date = new Date(),
+  ): Promise<{ items: ReefClubDoseItem[] }> {
+    const grant = await this.access.aquariumForAccount(
+      accountId,
+      aquariumId,
+      "READ",
+    );
+    const since = new Date(now.getTime() - 30 * 24 * 3_600_000);
+    const [doses, rows] = await Promise.all([
+      this.database.reefClubAdministeredDose.findMany({
+        where: {
+          aquariumId: grant.aquariumId,
+          administeredAt: { gte: since },
+        },
+        orderBy: { administeredAt: "desc" },
+      }),
+      this.database.reefClubDoseRow.findMany({
+        select: { productId: true, productName: true },
+      }),
+    ]);
+    const names = new Map(rows.map((row) => [row.productId, row.productName]));
+    return {
+      items: doses.map((dose) => ({
+        id: dose.id,
+        parameter: dose.parameterCode,
+        product:
+          dose.productId === null
+            ? null
+            : { id: dose.productId, name: names.get(dose.productId) ?? null },
+        amount: dose.amount?.toNumber() ?? null,
+        unit: dose.doseUnit,
+        administeredAt: dose.administeredAt.toISOString(),
+        recommendationId: dose.recommendationId,
+        byOtherAccount: dose.accountId !== accountId,
+      })),
+    };
+  }
+
   async answer(
     accountId: string,
     aquariumId: string,
@@ -210,6 +268,7 @@ export class ReefClubDosesService {
           entry,
           now,
           recommendation,
+          request.answer === "PARTIAL",
         );
         const early = fromCheck(check.result);
         if (early) return early;
@@ -258,6 +317,7 @@ export class ReefClubDosesService {
       createdAt: Date;
       status: "OPEN" | "GIVEN" | "PARTIAL" | "NOT_GIVEN";
     },
+    partial = false,
   ): Promise<{ result: DoseCheck }> {
     const aquarium = await tx.aquarium.findUniqueOrThrow({
       where: { id: aquariumId },
@@ -303,6 +363,7 @@ export class ReefClubDosesService {
     return {
       result: checkDoseEntry(entry, {
         now,
+        partial,
         volumeLiters: aquarium.systemVolumeLiters?.toNumber() ?? null,
         knownProductIds: new Set(rows.map((candidate) => candidate.productId)),
         row: row
