@@ -243,9 +243,12 @@ describe(
       );
       const listItem = (
         await controller.list(
-          Object.assign(new IncomingDocumentListQueryDto(), {
-            q: `G-${suffix}`,
-          }),
+          // The list's search looks at the supplier's name and tax number,
+          // not the invoice number: the tax number always has its eight
+          // digits. `G-${suffix}` matched only through the digits of the
+          // random suffix, and failed when it had fewer than three
+          // (3.6% of runs; card f46b23ab).
+          Object.assign(new IncomingDocumentListQueryDto(), { q: tax }),
         )
       ).items.find((item) => item.id === rows[0]!.id);
       const detail = await controller.detail(rows[0]!.id);
