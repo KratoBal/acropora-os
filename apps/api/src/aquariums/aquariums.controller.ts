@@ -189,6 +189,21 @@ export class AquariumsController {
   }
 
   /**
+   * RELEASE OF A SHOP OCCASION TO THE CUSTOMER'S REEFCLUB (ReefClub plan
+   * v6.1, 3.5): the manage right, internal only (the service refuses a
+   * partner), idempotent.
+   */
+  @Post(":id/measurements/:occasionId/release")
+  @RequirePermissions(PERMISSIONS.AQUARIUMS_MANAGE)
+  releaseMeasurement(
+    @Param("id") id: string,
+    @Param("occasionId") occasionId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.measurements.release(id, occasionId, user);
+  }
+
+  /**
    * AZ `occasionId` A MÉRÉSI ALKALOM `measuredAt` ÉRTÉKÉNEK ISO-ALAKJA,
    * URL-KÓDOLVA -- lásd `aquarium-measurements.repository.ts` fejlécét,
    * miért nincs külön azonosító.

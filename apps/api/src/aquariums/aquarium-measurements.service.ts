@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -13,6 +15,7 @@ import { NotificationsService } from "../notifications/notifications.service.js"
 import { requireInternalWriter } from "../worksheets/worksheet-internal-write.js";
 import { AquariumMeasurementXlsx } from "./aquarium-measurement-xlsx.js";
 import { AquariumMeasurementsRepository } from "./aquarium-measurements.repository.js";
+import { AquariumReefClubService } from "./aquarium-reefclub.service.js";
 import { AquariumsService } from "./aquariums.service.js";
 import {
   deviationCount,
@@ -30,6 +33,9 @@ import type { CreateAquariumMeasurementDto } from "./dto/aquarium-measurement.dt
 
 @Injectable()
 export class AquariumMeasurementsService {
+  private readonly logger = new Logger(AquariumMeasurementsService.name);
+  private pending: Promise<void> = Promise.resolve();
+
   constructor(
     private readonly repository: AquariumMeasurementsRepository,
     private readonly aquariums: AquariumsService,
@@ -37,6 +43,7 @@ export class AquariumMeasurementsService {
     private readonly mail: AquariumMeasurementMailService,
     private readonly xlsx: AquariumMeasurementXlsx,
     private readonly recommendations: MeasurementRecommendationService,
+    private readonly reefclub: AquariumReefClubService,
   ) {}
 
   async list(aquariumId: string, user: AuthenticatedUser) {
@@ -110,9 +117,75 @@ export class AquariumMeasurementsService {
   ): Promise<void> {
     requireInternalWriter(user, "Vízmérés törlése");
     await this.requireAquarium(aquariumId, user);
+    // A RELEASED OCCASION IS NOT CHANGED SILENTLY (ReefClub plan 3.5): the
+    // customer may already have read it in the ReefClub. A mistake found after
+    // the release needs its own correction step, which this slice does not
+    // have; until then the delete is refused, not done quietly.
+    const moment = new Date(occasionId);
+    if (
+      !Number.isNaN(moment.getTime()) &&
+      (await this.repository.isReleased(aquariumId, moment))
+    )
+      throw new ConflictException(
+        "A véglegesített mérés nem törölhető: a vevő már láthatja a ReefClubban.",
+      );
     const removed = await this.repository.delete(aquariumId, occasionId);
     if (removed === 0)
       throw new NotFoundException("A mérési alkalom nem található.");
+  }
+
+  /**
+   * RELEASE OF A SHOP OCCASION TO THE CUSTOMER'S REEFCLUB (ReefClub plan v6.1,
+   * 3.5; slice 5). Internal only. Idempotent: the second call answers the
+   * first release and sends nothing. Only an aquarium with a customer can be
+   * released (the ReefClub reads shop aquariums through the customer's link).
+   *
+   * The e-mail to the linked accounts goes after the answer, without making
+   * the colleague wait, the same rule as the push notices here; `settled()`
+   * lets a test wait for it.
+   */
+  async release(
+    aquariumId: string,
+    occasionId: string,
+    user: AuthenticatedUser,
+  ): Promise<AquariumMeasurementOccasion> {
+    requireInternalWriter(user, "Vízmérés véglegesítése");
+    const aquarium = await this.requireAquarium(aquariumId, user);
+    if (!aquarium.customerId)
+      throw new BadRequestException(
+        "Csak vevőhöz tartozó akvárium mérése véglegesíthető.",
+      );
+    const { occasions } = await this.repository.list(aquariumId);
+    const occasion = occasions.find((o) => o.id === occasionId);
+    if (!occasion)
+      throw new NotFoundException("A mérési alkalom nem található.");
+    const result = await this.repository.release(
+      aquariumId,
+      new Date(occasion.measuredAt),
+      user.id,
+    );
+    if (result.created) {
+      const customerId = aquarium.customerId;
+      this.pending = this.pending
+        .then(() =>
+          this.reefclub.notifyRelease({
+            aquariumId,
+            aquariumName: aquarium.name,
+            customerId,
+          }),
+        )
+        .catch((error: unknown) =>
+          this.logger.warn(
+            `A véglegesítés értesítése elbukott: ${error instanceof Error ? error.message : "ismeretlen hiba"}`,
+          ),
+        );
+    }
+    return { ...occasion, releasedAt: result.releasedAt.toISOString() };
+  }
+
+  /** Resolves when every release e-mail started so far has been tried. */
+  settled(): Promise<void> {
+    return this.pending;
   }
 
   /**

@@ -60,6 +60,7 @@ function makeService(
       {} as never,
       {} as never,
       { approvedSegments: async () => new Map() } as never,
+      {} as never,
     ),
     repository,
   };

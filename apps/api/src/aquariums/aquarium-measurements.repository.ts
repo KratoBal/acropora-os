@@ -156,9 +156,65 @@ export class AquariumMeasurementsRepository {
           })
         : [];
     const nameById = new Map(users.map((u) => [u.id, u.displayName]));
+    const releases = await prisma.aquariumMeasurementRelease.findMany({
+      where: { aquariumId },
+      select: { measuredAt: true, releasedAt: true },
+    });
+    const releasedAt = new Map(
+      releases.map((r) => [r.measuredAt.toISOString(), r.releasedAt]),
+    );
     return {
-      occasions: groupIntoOccasions(rows, (id) => nameById.get(id)),
+      occasions: groupIntoOccasions(rows, (id) => nameById.get(id)).map(
+        (occasion) => {
+          const released = releasedAt.get(occasion.id);
+          return released
+            ? { ...occasion, releasedAt: released.toISOString() }
+            : occasion;
+        },
+      ),
     };
+  }
+
+  /**
+   * THE RELEASE OF A SHOP OCCASION TO THE CUSTOMER'S REEFCLUB (ReefClub plan
+   * v6.1, 3.5; slice 5). Idempotent on the (aquarium, moment) unique index:
+   * the second call returns the first release with `created: false`, so the
+   * caller sends the e-mail once. Two calls at the same moment: the loser's
+   * insert meets the index and reads the winner's row.
+   */
+  async release(
+    aquariumId: string,
+    measuredAt: Date,
+    actorUserId: string,
+  ): Promise<{ releasedAt: Date; created: boolean }> {
+    const existing = await prisma.aquariumMeasurementRelease.findUnique({
+      where: { aquariumId_measuredAt: { aquariumId, measuredAt } },
+      select: { releasedAt: true },
+    });
+    if (existing) return { releasedAt: existing.releasedAt, created: false };
+    try {
+      const created = await prisma.aquariumMeasurementRelease.create({
+        data: { aquariumId, measuredAt, releasedById: actorUserId },
+        select: { releasedAt: true },
+      });
+      return { releasedAt: created.releasedAt, created: true };
+    } catch (error) {
+      if (!isPrismaUniqueConstraintViolation(error, "measuredAt")) throw error;
+      const winner =
+        await prisma.aquariumMeasurementRelease.findUniqueOrThrow({
+          where: { aquariumId_measuredAt: { aquariumId, measuredAt } },
+          select: { releasedAt: true },
+        });
+      return { releasedAt: winner.releasedAt, created: false };
+    }
+  }
+
+  async isReleased(aquariumId: string, measuredAt: Date): Promise<boolean> {
+    const row = await prisma.aquariumMeasurementRelease.findUnique({
+      where: { aquariumId_measuredAt: { aquariumId, measuredAt } },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   async byClientOperationId(

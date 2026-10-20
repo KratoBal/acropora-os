@@ -1059,6 +1059,9 @@ model User {
   incomingReadingsReviewed            IncomingDocumentReading[]           @relation("IncomingDocumentReadingReviewedBy")
   measurementRecommendationsRequested AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationRequestedBy")
   measurementRecommendationsApproved  AquariumMeasurementRecommendation[] @relation("MeasurementRecommendationApprovedBy")
+  issuedReefClubLinkCodes             ReefClubLinkCode[]                  @relation("ReefClubLinkCodeIssuer")
+  endedReefClubLinks                  ReefClubCustomerLink[]              @relation("ReefClubLinkEndedBy")
+  releasedMeasurements                AquariumMeasurementRelease[]        @relation("MeasurementReleasedBy")
 
   @@index([role, isActive])
   /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
@@ -1155,6 +1158,9 @@ model ReefClubAccount {
   aquariums            Aquarium[]
   /// A fiok altal rogzitett kezi meresek. Lasd az `AquariumMeasurement.recordedByAccountId` fejlecet.
   recordedMeasurements AquariumMeasurement[]
+  /// A fiok bolti osszerendelesei (5. szelet).
+  customerLinks        ReefClubCustomerLink[]
+  redeemedLinkCodes    ReefClubLinkCode[]
 }
 
 enum ReefClubIdentityProvider {
@@ -1212,6 +1218,77 @@ model ReefClubAccountToken {
   account   ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, purpose])
+}
+
+enum ReefClubLinkStatus {
+  ACTIVE
+  ENDED
+}
+
+enum ReefClubLinkEndedBy {
+  /// A ReefClub-felhasznalo szuntette meg (DELETE /rc/v1/shop-links/:id).
+  ACCOUNT
+  /// A bolt szuntette meg az OS-ben (peldaul mert a vevo jelezte, hogy nem o kototte).
+  SHOP
+}
+
+/// EGYSZER HASZNALATOS OSSZERENDELESI KOD (ReefClub terv v6.1, 2.2 es 3.3; 5.
+/// szelet). A bolt adja ki egy azonositott, MAGANSZEMELY vevonek az OS-ben; a
+/// vevo a ReefClubban valtja be. Csak a lenyomata all itt (SHA-256), a nyers
+/// kod egyszer jelenik meg a kiadonak (es kerese a vevo levelben).
+model ReefClubLinkCode {
+  id              String                @id @default(cuid())
+  customerId      String
+  codeHash        String                @unique
+  expiresAt       DateTime
+  /// Kitoltott: a kodot mar bevaltottak, tobbet nem hasznalhato.
+  usedAt          DateTime?
+  usedByAccountId String?
+  /// A kiado kollega.
+  issuedById      String?
+  createdAt       DateTime              @default(now())
+  customer        Customer              @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  usedByAccount   ReefClubAccount?      @relation(fields: [usedByAccountId], references: [id], onDelete: SetNull)
+  issuedBy        User?                 @relation("ReefClubLinkCodeIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
+  link            ReefClubCustomerLink?
+
+  @@index([customerId])
+  @@index([usedByAccountId])
+  @@index([issuedById])
+}
+
+/// A REEFCLUB-FIOK ES A BOLTI VEVO OSSZERENDELESE (terv 2.2, 3.3 es 4.2). Egy
+/// vevohoz tobb fiok is kotheto (csalad); egy fiok es egy vevo kozott
+/// legfeljebb EGY aktiv sor all (reszleges egyedi index a migracioban,
+/// `ReefClubCustomerLink_active_key`). Megszunteteskor a sor megmarad
+/// (`ENDED`, ki es mikor): ez a naplo.
+///
+/// `customerNoticeAt`: az uj osszerendelesrol a vevo nyilvantartott e-mail
+/// cimere megy ertesites (barracuda, a v1 atnezese). A levelet a BELSO
+/// folyamat kuldi (a ReefClub-folyamat a 6. szelettol a vevo e-mail cimet nem
+/// olvashatja), percenkent, ennek a mezonek az ures soraira.
+model ReefClubCustomerLink {
+  id                     String               @id @default(cuid())
+  accountId              String
+  customerId             String
+  status                 ReefClubLinkStatus   @default(ACTIVE)
+  /// A bevaltott kod.
+  codeId                 String?              @unique
+  createdAt              DateTime             @default(now())
+  endedAt                DateTime?
+  endedBy                ReefClubLinkEndedBy?
+  /// A kollega, ha a bolt szuntette meg.
+  endedByUserId          String?
+  customerNoticeAt       DateTime?
+  customerNoticeAttempts Int                  @default(0)
+  account                ReefClubAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  customer               Customer             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  code                   ReefClubLinkCode?    @relation(fields: [codeId], references: [id], onDelete: SetNull)
+  endedByUser            User?                @relation("ReefClubLinkEndedBy", fields: [endedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, status])
+  @@index([customerId, status])
+  @@index([endedByUserId])
 }
 
 model Product {
@@ -2720,10 +2797,13 @@ model Customer {
   contracts            Contract[]
   /// Set when this row is a service partner's mirror rather than a buyer.
   /// The customer list uses its absence to tell the two apart.
-  partner              Supplier?             @relation("PartnerWorksheetMirror")
+  partner              Supplier?              @relation("PartnerWorksheetMirror")
   /// A fiokok, amik ENNEK a vevonek a neveben lepnek be. Nem a mi kollegaink.
-  portalUsers          User[]                @relation("CustomerPortalUser")
+  portalUsers          User[]                 @relation("CustomerPortalUser")
   quotes               Quote[]
+  /// ReefClub 5. szelet: a vevo bolti osszerendelesei es a neki kiadott kodok.
+  reefClubLinks        ReefClubCustomerLink[]
+  reefClubLinkCodes    ReefClubLinkCode[]
 
   @@index([displayName])
   @@index([email])
@@ -4147,6 +4227,8 @@ model Aquarium {
   /// A vízmérési ajánlások (kártya 2b3983e1), alkalmanként egy.
   recommendations  AquariumMeasurementRecommendation[]
   mortalityRecords MortalityRecord[]
+  /// A bolti meresi alkalmak veglegesitese (ReefClub 5. szelet).
+  releases         AquariumMeasurementRelease[]
 
   @@index([customerId, isActive])
   @@index([departmentId])
@@ -6146,6 +6228,26 @@ model AquariumMeasurement {
   @@unique([aquariumId, measuredAt, parameterCode])
   @@index([aquariumId, parameterCode, measuredAt])
   @@index([recordedByAccountId])
+}
+
+/// EGY BOLTI MERESI ALKALOM VEGLEGESITESE (ReefClub terv v6.1, 2.2 es 3.5; 5.
+/// szelet). Az alkalomnak nincs sajat tablaja (a sorai ugyanazt a
+/// `measuredAt`-et viszik, lasd `aquarium-measurements.repository.ts`), ezert
+/// a veglegesites is az (akvarium, `measuredAt`) parra all, egyedi indexszel:
+/// a masodik veglegesites nem ir uj sort (idempotens). A ReefClubban a bolti
+/// akvariumnak CSAK a veglegesitett alkalmai latszanak, es a veglegesitett
+/// alkalom az OS-ben nem torolheto (a bolt nem irja at csendben, terv 3.5).
+model AquariumMeasurementRelease {
+  id           String   @id @default(cuid())
+  aquariumId   String
+  measuredAt   DateTime
+  releasedAt   DateTime @default(now())
+  releasedById String?
+  aquarium     Aquarium @relation(fields: [aquariumId], references: [id], onDelete: Cascade)
+  releasedBy   User?    @relation("MeasurementReleasedBy", fields: [releasedById], references: [id], onDelete: SetNull)
+
+  @@unique([aquariumId, measuredAt])
+  @@index([releasedById])
 }
 
 enum MeasurementRecommendationStatus {

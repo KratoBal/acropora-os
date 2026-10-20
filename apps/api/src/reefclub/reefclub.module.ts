@@ -30,6 +30,8 @@ import {
 import { ReefClubMeController } from "./reefclub-me.controller.js";
 import { ReefClubRateLimits } from "./reefclub-rate-limits.js";
 import { ReefClubSessionRepository } from "./reefclub-session.repository.js";
+import { ReefClubShopLinksController } from "./reefclub-shop-links.controller.js";
+import { ReefClubShopLinksService } from "./reefclub-shop-links.service.js";
 import { ReefClubGuard } from "./reefclub.guard.js";
 
 export interface ReefClubModuleOptions {
@@ -72,6 +74,7 @@ export class ReefClubModule {
         ReefClubAuthController,
         ReefClubMeController,
         ReefClubAquariumsController,
+        ReefClubShopLinksController,
         ReefClubHealthController,
       ],
       providers: [
@@ -86,6 +89,7 @@ export class ReefClubModule {
         ReefClubExternalAuthService,
         ReefClubAquariumAccess,
         ReefClubAquariumsService,
+        ReefClubShopLinksService,
         {
           provide: REEFCLUB_IDENTITY_KEYS,
           useFactory: () =>

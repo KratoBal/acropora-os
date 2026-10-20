@@ -151,3 +151,14 @@ export class ReefClubCreateMeasurementDto {
   @Type(() => ReefClubMeasurementValueDto)
   values!: ReefClubMeasurementValueDto[];
 }
+
+/**
+ * A shop-link code as the user types it (slice 5). Only the length is bounded
+ * here; the shape (alphabet, dashes, spaces) is the service's, so a malformed
+ * code gets the same answer as a wrong one.
+ */
+export class ReefClubRedeemLinkCodeDto {
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+}

@@ -6,8 +6,8 @@ import { ReefClubDatabase } from "./reefclub-database.js";
 /**
  * THE ONE ACCESS FUNCTION OF THE REEFCLUB AQUARIUM ROUTES (plan v6.1, 4.2).
  *
- *   READ:  the account owns the aquarium, OR (slice 5) the aquarium's customer
- *          has an active link with the account
+ *   READ:  the account owns the aquarium, OR the aquarium is an active one of
+ *          a private-person customer who has an ACTIVE link with the account
  *   WRITE: the account owns the aquarium
  *   else:  404, with the same body as an id that does not exist
  *
@@ -17,15 +17,16 @@ import { ReefClubDatabase } from "./reefclub-database.js";
  * loaded by its own id: the repository receives the aquarium id this function
  * approved and adds it to every child query.
  *
- * THE SHOP HALF OF READ IS SLICE 5 (plan 9): the customer link table does not
- * exist yet, so today READ and WRITE reach the same rows. The function already
- * takes the mode and returns the origin, so slice 5 adds one branch here and
- * no caller changes. The release condition of a shop occasion (only released
- * occasions are readable) belongs here too, not in an endpoint.
+ * THE RELEASE CONDITION IS PART OF THE FUNCTION, not of an endpoint (plan
+ * 4.2): on a shop aquarium only the occasions the shop released are readable,
+ * and `occasionFilter` is the one place that says so. Every occasion query of
+ * the ReefClub adds it.
+ *
+ * Ending a link takes effect on the next request: nothing here is cached.
  */
 export type ReefClubAccessMode = "READ" | "WRITE";
 
-/** OWN: the account's own aquarium. SHOP (slice 5): the linked customer's. */
+/** OWN: the account's own aquarium. SHOP: the linked customer's. */
 export type ReefClubAquariumOrigin = "OWN" | "SHOP";
 
 export interface ReefClubAquariumGrant {
@@ -52,8 +53,16 @@ export function aquariumAccessWhere(
 ): Prisma.AquariumWhereInput {
   const own: Prisma.AquariumWhereInput = { ownerAccountId: accountId };
   if (mode === "WRITE") return own;
-  // Slice 5 adds the active-link branch of the customer here.
-  return { OR: [own] };
+  const shop: Prisma.AquariumWhereInput = {
+    isActive: true,
+    customer: {
+      // A code is issued to a private person only (plan 3.3); the type is
+      // checked here too, so a customer turned company later drops out.
+      type: "PERSON",
+      reefClubLinks: { some: { accountId, status: "ACTIVE" } },
+    },
+  };
+  return { OR: [own, shop] };
 }
 
 @Injectable()
@@ -80,6 +89,26 @@ export class ReefClubAquariumAccess {
       origin: originOf(row.ownerAccountId, accountId),
     };
   }
+}
+
+/**
+ * The occasions of the granted aquarium the account may read, as a condition
+ * on `AquariumMeasurement`: all of them on an own aquarium, the released ones
+ * on a shop aquarium.
+ */
+export async function occasionFilter(
+  database: Pick<ReefClubDatabase, "aquariumMeasurementRelease">,
+  grant: ReefClubAquariumGrant,
+): Promise<Prisma.AquariumMeasurementWhereInput> {
+  if (grant.origin === "OWN") return { aquariumId: grant.aquariumId };
+  const released = await database.aquariumMeasurementRelease.findMany({
+    where: { aquariumId: grant.aquariumId },
+    select: { measuredAt: true },
+  });
+  return {
+    aquariumId: grant.aquariumId,
+    measuredAt: { in: released.map((release) => release.measuredAt) },
+  };
 }
 
 export function originOf(
