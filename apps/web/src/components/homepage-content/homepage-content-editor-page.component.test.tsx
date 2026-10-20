@@ -13,7 +13,11 @@ import { HomepageContentEditorPage } from "./homepage-content-editor-page";
   hero) instead of null (not set); an unsafe address reaching the server; a
   sixth slide; a viewer able to edit; the projection result not told.
 */
-const api = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn() }));
+const api = vi.hoisted(() => ({
+  get: vi.fn(),
+  save: vi.fn(),
+  uploadImage: vi.fn(),
+}));
 vi.mock("@/lib/api/homepage-content", () => ({ homepageContentApi: api }));
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -64,6 +68,7 @@ beforeEach(() => {
   auth.role = "OWNER";
   api.get.mockReset().mockResolvedValue(stored());
   api.save.mockReset();
+  api.uploadImage.mockReset();
   echo();
 });
 
@@ -213,5 +218,49 @@ describe("HomepageContentEditorPage", () => {
     render(<HomepageContentEditorPage />);
     expect(screen.getByText("Nincs hozzáférésed")).toBeTruthy();
     expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it("HP-ED-IMAGE: an uploaded image's address goes into the field and is saved; a failed upload leaves it", async () => {
+    api.uploadImage.mockResolvedValueOnce({
+      url: "https://shop.example/static/a.jpg",
+    });
+    render(<HomepageContentEditorPage />);
+    const picker = await screen.findByLabelText(
+      "Mit keresel ma? 1. terület: Kép: feltöltés",
+    );
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], "a.jpg", {
+      type: "image/jpeg",
+    });
+    fireEvent.change(picker, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByLabelText(
+            "Mit keresel ma? 1. terület: Kép",
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("https://shop.example/static/a.jpg"),
+    );
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(api.save.mock.calls[0][1].texts["mit.1.kep"]).toBe(
+      "https://shop.example/static/a.jpg",
+    );
+
+    api.uploadImage.mockRejectedValueOnce(
+      new Error("A webshopba küldés ki van kapcsolva"),
+    );
+    fireEvent.change(
+      screen.getByLabelText("Mit keresel ma? 2. terület: Kép: feltöltés"),
+      { target: { files: [file] } },
+    );
+    expect(await screen.findByText(/ki van kapcsolva/)).toBeTruthy();
+    expect(
+      (
+        screen.getByLabelText(
+          "Mit keresel ma? 2. terület: Kép",
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("");
   });
 });

@@ -14,8 +14,10 @@ import { HomepageContentRepository } from "./homepage-content.repository.js";
 import {
   HOMEPAGE_CONTENT_PROJECTOR,
   HOMEPAGE_CONTENT_STORE,
+  HOMEPAGE_IMAGE_UPLOADER,
   HomepageContentService,
   type HomepageContentProjector,
+  type HomepageImageUploader,
 } from "./homepage-content.service.js";
 
 /**
@@ -35,12 +37,31 @@ export const homepageProjector: HomepageContentProjector = async () => {
   return outcome.status === "sent" ? "sent" : "unchanged";
 };
 
+/**
+ * The upload an editor asks for: the Medusa file module, only where the
+ * projection is switched on (an upload is a write to the shop).
+ */
+export const homepageImageUploader: HomepageImageUploader = async (image) => {
+  if (!projectHomepageContentInRound(process.env)) return null;
+  const client = await medusaClientForProjection(storedCredentialProvider(), {
+    stdout: () => undefined,
+    stderr: () => undefined,
+  });
+  const uploaded = await client.uploadFile({
+    filename: image.fileName,
+    contentType: image.contentType,
+    content: image.content,
+  });
+  return { url: uploaded.url };
+};
+
 @Module({
   controllers: [HomepageContentController],
   providers: [
     HomepageContentService,
     { provide: HOMEPAGE_CONTENT_STORE, useClass: HomepageContentRepository },
     { provide: HOMEPAGE_CONTENT_PROJECTOR, useValue: homepageProjector },
+    { provide: HOMEPAGE_IMAGE_UPLOADER, useValue: homepageImageUploader },
   ],
 })
 export class HomepageContentModule {}

@@ -12,6 +12,15 @@ export const homepageContentApi = {
   get(token: string, signal?: AbortSignal) {
     return apiRequest<HomepageContent>("/homepage-content", token, { signal });
   },
+  /** One image to the shop's file storage; the answer is its public address. */
+  uploadImage(token: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<{ url: string }>("/homepage-content/images", token, {
+      method: "POST",
+      body: form,
+    });
+  },
   save(token: string, input: HomepageContentInput) {
     return apiRequest<HomepageContentSaved>("/homepage-content", token, {
       method: "PUT",

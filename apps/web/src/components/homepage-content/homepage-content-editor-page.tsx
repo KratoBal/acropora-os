@@ -112,6 +112,19 @@ export function HomepageContentEditorPage() {
     return () => controller.abort();
   }, [canManage, token]);
 
+  /** One image to the shop; the address that comes back goes into the field. */
+  const uploadImage = async (file: File): Promise<string | null> => {
+    setError(null);
+    try {
+      return (await homepageContentApi.uploadImage(token, file)).url;
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A kép feltöltése sikertelen.",
+      );
+      return null;
+    }
+  };
+
   const groups = useMemo(() => {
     const byGroup = new Map<string, HomepageTextField[]>();
     for (const field of HOMEPAGE_TEXT_FIELDS)
@@ -211,6 +224,7 @@ export function HomepageContentEditorPage() {
                   key={index}
                   index={index}
                   slide={slide}
+                  onUpload={uploadImage}
                   onChange={(patch) => setSlide(index, patch)}
                   onRemove={() =>
                     setSlides((list) => list.filter((_, i) => i !== index))
@@ -244,6 +258,7 @@ export function HomepageContentEditorPage() {
                   onChange={(value) =>
                     setTexts((current) => ({ ...current, [field.key]: value }))
                   }
+                  onUpload={uploadImage}
                   onReset={() =>
                     setTexts((current) => {
                       const { [field.key]: _gone, ...rest } = current;
@@ -270,12 +285,14 @@ function TextField({
   value,
   onChange,
   onReset,
+  onUpload,
 }: {
   field: HomepageTextField;
   /** `null`: not edited, the starting value shows. */
   value: string | null;
   onChange: (value: string) => void;
   onReset: () => void;
+  onUpload: (file: File) => Promise<string | null>;
 }) {
   const edited = value !== null;
   const shown = edited ? value : field.default;
@@ -306,6 +323,13 @@ function TextField({
       >
         {control}
       </FormField>
+      {field.type === "image" ? (
+        <ImageUpload
+          label={`${field.group}: ${field.label}: feltöltés`}
+          onUpload={onUpload}
+          onUploaded={onChange}
+        />
+      ) : null}
       <div className="mt-1 flex items-center gap-3 text-xs text-dusk-600">
         {edited ? (
           <>
@@ -334,11 +358,13 @@ function SlideFields({
   slide,
   onChange,
   onRemove,
+  onUpload,
 }: {
   index: number;
   slide: HomepageSlide;
   onChange: (patch: Partial<HomepageSlide>) => void;
   onRemove: () => void;
+  onUpload: (file: File) => Promise<string | null>;
 }) {
   const n = index + 1;
   const text = (
@@ -401,8 +427,54 @@ function SlideFields({
         {text("képaláírás", "caption", HOMEPAGE_LIMITS.caption)}
         {text("képaláírás, második sor", "caption2", HOMEPAGE_LIMITS.caption)}
         {address("kép címe", "imageUrl", HOMEPAGE_LIMITS.address)}
+        <ImageUpload
+          label={`${n}. dia: kép feltöltése`}
+          onUpload={onUpload}
+          onUploaded={(url) => onChange({ imageUrl: url })}
+        />
         {text("kép leírása", "imageAlt", HOMEPAGE_LIMITS.imageAlt)}
       </div>
     </div>
+  );
+}
+
+/**
+ * A FILE PICKER FOR AN IMAGE: JPEG, PNG or WebP, which the server also checks
+ * from the bytes. The uploaded image's address goes into the field; a failed
+ * upload says so in the page's error and leaves the field as it was.
+ */
+function ImageUpload({
+  label,
+  onUpload,
+  onUploaded,
+}: {
+  label: string;
+  onUpload: (file: File) => Promise<string | null>;
+  onUploaded: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <label className="mt-1 block text-xs text-dusk-600">
+      {busy ? "Feltöltés..." : "Kép feltöltése"}
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        aria-label={label}
+        disabled={busy}
+        className="ml-2"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          try {
+            const url = await onUpload(file);
+            if (url) onUploaded(url);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </label>
   );
 }
