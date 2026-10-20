@@ -281,7 +281,7 @@ export function ProductDoseEffectsCard({
             Forrás: {row.source}
           </p>
           <p className="text-xs text-dusk-500">
-            {row.version}. változat · rögzítette {row.recordedBy?.name ?? "?"}
+            {row.version}. változat · rögzítette {row.recordedByName ?? "?"}
             {row.verifiedBy
               ? ` · ellenőrizte ${row.verifiedBy.name}`
               : " · még nincs ellenőrizve"}
@@ -298,7 +298,10 @@ export function ProductDoseEffectsCard({
           ) : null}
           {canManage && !draft ? (
             <div className="flex flex-wrap gap-2 pt-1">
-              {!row.verifiedBy && row.recordedBy?.id !== currentUserId ? (
+              {/* a recorder that is gone cannot be verified (the server says 400): no button */}
+              {!row.verifiedBy &&
+              row.recordedBy &&
+              row.recordedBy.id !== currentUserId ? (
                 <Button
                   size="sm"
                   disabled={busy}

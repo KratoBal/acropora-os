@@ -30,6 +30,8 @@ export interface DoseEffectView {
   source: string;
   version: number;
   recordedBy: { id: string; name: string } | null;
+  /** Also when the recorder's account is gone (then `recordedBy` is null). */
+  recordedByName: string | null;
   recordedAt: string;
   verifiedBy: { id: string; name: string } | null;
   verifiedAt: string | null;
