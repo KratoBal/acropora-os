@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { NextConfig } from "next";
 
+import { resolveReefClubApiUrl } from "./src/lib/api-url";
+
 /**
  * THE REEFCLUB API ADDRESS, BAKED IN AT BUILD TIME (Next stores rewrites in the
  * routes manifest), the way apps/partner does with API_URL. It must be the
@@ -14,30 +16,14 @@ import type { NextConfig } from "next";
  * the `/rc/v1` answers come from the same host
  * (apps/api/src/reefclub/reefclub-cookies.ts, barracuda #1717 point C).
  */
-const apiUrl = (() => {
-  const configured = process.env.REEFCLUB_API_URL?.trim();
-  if (configured) return configured.replace(/\/$/, "");
-
+const apiUrl = resolveReefClubApiUrl(process.env, () => {
   try {
-    const rootEnv = readFileSync(
-      join(process.cwd(), "..", "..", ".env"),
-      "utf8",
-    );
-    const value = rootEnv
-      .split("\n")
-      .map((line) => line.trim())
-      .find((line) => line.startsWith("REEFCLUB_API_URL="))
-      ?.slice("REEFCLUB_API_URL=".length)
-      .trim();
-    if (value) return value.replace(/^(["'])(.*)\1$/, "$2").replace(/\/$/, "");
+    return readFileSync(join(process.cwd(), "..", "..", ".env"), "utf8");
   } catch {
     // Docker and CI provide REEFCLUB_API_URL directly.
+    return null;
   }
-
-  throw new Error(
-    "REEFCLUB_API_URL is required when building @acropora/reefclub.",
-  );
-})();
+});
 
 const nextConfig: NextConfig = {
   output: "standalone",
