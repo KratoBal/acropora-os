@@ -146,7 +146,7 @@ describe("HomepageContentService.uploadImage", () => {
       { fileName: "hero.jpg", contentType: "image/jpeg" },
     ]);
     await service.uploadImage({ originalname: "kep.jpg", buffer: png });
-    assert.equal(uploads[1].contentType, "image/png");
+    assert.equal(uploads[1]?.contentType, "image/png");
   });
 
   it("refuses what is not a JPEG, PNG or WebP image, before the shop sees it", async () => {
