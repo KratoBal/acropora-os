@@ -30,6 +30,7 @@ import { MeasurementChart } from "./measurement-chart";
 import { MeasurementForm } from "./measurement-form";
 import { OccasionList } from "./occasion-list";
 import { SharePanel } from "./share-panel";
+import { TargetsEditor } from "./targets-editor";
 
 /**
  * An aquarium: its data, its own target ranges, the measurements with a chart,
@@ -88,6 +89,18 @@ export function AquariumDetail({ id }: { id: string }) {
           Célsávok
         </h2>
         <Targets state={targets.state} />
+        {own && targets.state.status === "ready" ? (
+          <TargetsEditor
+            // a new answer from the server (after a save) starts the form from it
+            key={JSON.stringify(targets.state.data)}
+            aquarium={data}
+            targets={targets.state.data}
+            onSaved={async () => {
+              // the occasions carry the range each value was judged against
+              await Promise.all([targets.reload(), occasions.reload()]);
+            }}
+          />
+        ) : null}
       </section>
 
       <section aria-labelledby="measurements-title" className="space-y-4">
