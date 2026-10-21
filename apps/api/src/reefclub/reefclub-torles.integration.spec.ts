@@ -452,6 +452,32 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
         ).sharedWithShopAt?.toISOString() ?? null,
       ];
     };
+    // REAL CHILD IDS on the locked account's own aquarium (barracuda, #1774 review): with made-up
+    // ones the answer and the occasion delete would be 404 for the missing child as well, and would
+    // not measure the access. The occasion of 2026-07-01 is the fixture's own measurement; the
+    // recommendation is this case's own, written before the counts and removed at the end.
+    const realRec = await prisma.reefClubRecommendation.create({
+      data: {
+        aquariumId: ownId,
+        accountId,
+        parameterCode: "KH",
+        direction: "EMEL",
+        frameVersion: "proba",
+        input: {},
+        basisMeasuredAt: new Date("2026-07-01T08:00:00Z"),
+        doseEffectVersion: 1,
+        productName: `${NAME_PREFIX} ajánlás`,
+        amount: 8,
+        doseUnit: "ML",
+        durationDays: 1,
+        effectHours: 12,
+        source: "proba",
+        text: "proba",
+        templateId: "proba",
+        reservedChanges: [],
+        effectEndsAt: new Date(Date.now() + 12 * 3_600_000),
+      },
+    });
     const rowsBefore = await rowsOf();
     const answer = async (method: string, path: string, body?: unknown) => {
       const r = await rc(path, { method, body, session: other });
@@ -466,7 +492,10 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
             ":occasionId",
             encodeURIComponent("2026-07-01T08:00:00.000Z"),
           )
-          .replace(":recId", "c0000000000000000000ajanlas");
+          .replace(
+            ":recId",
+            id === missing ? "c0000000000000000000ajanlas" : realRec.id,
+          );
       const none = await answer(method, fill(route, missing), body);
       assert.equal(none.status, 404, `nem létező: ${method} ${route}`);
       for (const [who, id] of [
@@ -480,6 +509,16 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
     }
     assert.deepEqual(mismatches, []);
     assert.deepEqual(await rowsOf(), rowsBefore, "egy írás sem hagyott sort");
+    assert.equal(
+      (
+        await prisma.reefClubRecommendation.findUniqueOrThrow({
+          where: { id: realRec.id },
+        })
+      ).status,
+      "OPEN",
+      "a valódi ajánlásra adott válasz sem ment át",
+    );
+    await prisma.reefClubRecommendation.delete({ where: { id: realRec.id } });
     const list = (await (
       await rc("/rc/v1/aquariums", { session: other })
     ).json()) as { items?: { id: string }[] } | { id: string }[];
