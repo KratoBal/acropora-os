@@ -134,6 +134,16 @@ describe("doseProjectionHealth", () => {
     });
   });
 
+  it("a read that does not answer in time is null, and /health does not wait for it", async () => {
+    const started = Date.now();
+    const health = await doseProjectionHealth(
+      () => new Promise(() => undefined),
+      50,
+    );
+    assert.equal(health, null);
+    assert.ok(Date.now() - started < 1000, "returned after the timeout");
+  });
+
   it("a read that throws is null, not an exception", async () => {
     const health = await doseProjectionHealth(async () => {
       throw new Error("relation does not exist");

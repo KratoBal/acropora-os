@@ -41,17 +41,34 @@ export function applicationHealth(): HealthResponse["application"] {
  * login. A failed read is `null`, never an exception: the projection is the fleet's alarm, and it
  * must not make /health answer 503 (the container's health check restarts on that).
  */
+export const DOSE_PROJECTION_HEALTH_TIMEOUT_MS = 1500;
+
+/**
+ * Not only a failed read, a slow one too (barracuda, #1763): a query waiting on a lock or on a full
+ * pool would hold /health past the container's check, and that restarts it just like a 503. After
+ * `timeoutMs` the answer is `null` with a warning; the read itself is not cancelled.
+ */
 export async function doseProjectionHealth(
   read: () => Promise<Parameters<typeof toDoseProjectionHealth>[0]> = () =>
     readDoseProjectionStatus(),
+  timeoutMs: number = DOSE_PROJECTION_HEALTH_TIMEOUT_MS,
 ): Promise<DoseProjectionHealth | null> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`no answer in ${timeoutMs} ms`)),
+      timeoutMs,
+    );
+  });
   try {
-    return toDoseProjectionHealth(await read());
+    return toDoseProjectionHealth(await Promise.race([read(), timeout]));
   } catch (error) {
     new Logger("Health").warn(
       `doseProjection could not be read: ${error instanceof Error ? error.message : String(error)}`,
     );
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
