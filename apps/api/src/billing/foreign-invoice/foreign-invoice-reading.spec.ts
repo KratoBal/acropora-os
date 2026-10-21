@@ -579,6 +579,34 @@ describe("the totals row of a Hungarian invoice table", () => {
     assert.equal(values.netAmount, null);
   });
 
+  it("fills only what is empty when the labelled values agree with the row, and nothing when one disagrees", () => {
+    // a címke nettót ad (másik tábla vagy másik összeg), az összesítő sor mást mond: a sor semmit nem tölt
+    const disagree = read([
+      HEADER,
+      "Subtotal | 1 500",
+      "Összesen: | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(disagree.values.netAmount, "1500.00");
+    assert.equal(disagree.values.vatAmount, null);
+    assert.equal(disagree.values.grossAmount, null);
+    // egyező címkézett érték mellett a hiányzó mezőket tölti
+    const agree = read([
+      HEADER,
+      "Subtotal | 2 000",
+      "Összesen: | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(agree.values.netAmount, "2000.00");
+    assert.equal(agree.values.vatAmount, "540.00");
+    assert.equal(agree.values.grossAmount, "2540.00");
+  });
+
+  it("leaves a credit note (all three amounts negative) empty", () => {
+    assert.equal(
+      read([HEADER, "Összesen: | -2 000 | -540 | -2 540"]).values.netAmount,
+      null,
+    );
+  });
+
   it("never overwrites a value the labels already gave, and leaves the English invoices alone", () => {
     const labelled = read([...DE, HEADER, "Összesen: | 9 | 9 | 18"]);
     assert.equal(labelled.values.netAmount, "100.00");

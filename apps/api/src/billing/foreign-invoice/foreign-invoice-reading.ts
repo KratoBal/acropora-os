@@ -242,9 +242,13 @@ function labelledAmount(
  * csoport 7 számlájából a nettó és a bruttó egyet sem olvasott ki.
  *
  * NEM TALÁLGATÁS, HÁROM FELTÉTEL EGYÜTT: (1) a sor "Összesen"-nel kezdődik és PONTOSAN három összeg áll
- * benne; (2) valamelyik előtte álló sor fejléc, amiben a "nettó" a "bruttó" előtt áll; (3) a három
- * összeg kijön: nettó + ÁFA = bruttó (két fillér tűréssel, nem negatív ÁFA). Több, egymástól eltérő
- * ilyen sor (több táblázat) vagy bármelyik feltétel hiánya: nem döntünk.
+ * benne; (2) valamelyik előtte álló sor (nem feltétlenül a táblázat fejléce: az első olyan, amelyben a
+ * "nettó" a "bruttó" előtt áll; az aritmetika a tévedést kiszűri) fejléc-szerű; (3) a három összeg kijön:
+ * nettó + ÁFA = bruttó (két fillér tűréssel, nem negatív ÁFA). Több, egymástól eltérő ilyen sor (több
+ * táblázat) vagy bármelyik feltétel hiánya: nem döntünk.
+ *
+ * A NEGATÍV ÁFA KIZÁRÁSA A JÓVÁÍRÓ (mind a három összeg negatív) SZÁMLÁT IS ÜRESEN HAGYJA: biztonságos,
+ * csak tudni kell róla a mérésnél (barracuda, #1795).
  */
 const TOTALS_LABEL = /^\s*(összesen|osszesen|mind[öo]sszesen|total)\b\s*:?/iu;
 const NET_HEADER = /nett[óo]|netto/iu;
@@ -359,9 +363,22 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
     else if (REVERSE_CHARGE.test(lines.join("\n")))
       set("vatAmount", decimal(0), "TEXT");
-    // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül
+    // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
+    // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
+    // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
     const totals = totalsRow(lines);
-    if (totals) {
+    const agrees = (
+      field: "netAmount" | "vatAmount" | "grossAmount",
+      amount: number,
+    ) =>
+      values[field] === null ||
+      Math.abs(Number(values[field]) - amount) <= 0.02;
+    if (
+      totals &&
+      agrees("netAmount", totals.net) &&
+      agrees("vatAmount", totals.vat) &&
+      agrees("grossAmount", totals.gross)
+    ) {
       set("netAmount", decimal(totals.net), "TEXT");
       set("vatAmount", decimal(totals.vat), "TEXT");
       set("grossAmount", decimal(totals.gross), "TEXT");
