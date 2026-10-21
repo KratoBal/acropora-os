@@ -26,7 +26,8 @@ const DIRECT_READ =
 const ALLOWED: Record<string, string> = {};
 
 function sources(): { file: string; text: string }[] {
-  return readdirSync(SOURCE)
+  // recursive: a subfolder of src/reefclub is read too (barracuda, #1774 review)
+  return (readdirSync(SOURCE, { recursive: true }) as string[])
     .filter((name) => name.endsWith(".ts") && !name.endsWith(".spec.ts"))
     .map((name) => ({ file: name, text: readFileSync(SOURCE + name, "utf8") }));
 }
