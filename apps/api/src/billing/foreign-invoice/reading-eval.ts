@@ -55,6 +55,12 @@ export interface EvalSample {
   expected: IncomingReadingValues;
   /** azok a mezok, ahol a jovahagyott ertek kezzel javitott (sources = MANUAL) */
   manualFields: readonly IncomingReadingField[];
+  /**
+   * A MINTA CSOPORTJA (pl. "feed", "nav", "verified"): a helyes ertek forrasa. A
+   * jelentes csoportonkent is ad szazalekot, mert a forrasok mas-mas szamlakat
+   * fednek (a Szamlazz.hu feed magyar kiallitok, a VERIFIED kulfoldi is).
+   */
+  group?: string;
 }
 
 export type EvalMode = "A" | "B";
@@ -230,6 +236,23 @@ export function evaluate(
     }
   }
   return report;
+}
+
+/** A mintak csoportonkent; a csoport nelkuliak a "(nincs csoport)" alatt. */
+export function evaluateByGroup(
+  samples: readonly EvalSample[],
+  mode: EvalMode,
+): Map<string, EvalReport> {
+  const byGroup = new Map<string, EvalSample[]>();
+  for (const sample of samples) {
+    const key = sample.group?.trim() || "(nincs csoport)";
+    byGroup.set(key, [...(byGroup.get(key) ?? []), sample]);
+  }
+  return new Map(
+    [...byGroup.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, group]) => [key, evaluate(group, mode)]),
+  );
 }
 
 // ---- osszesites ------------------------------------------------------------

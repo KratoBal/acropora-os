@@ -6,6 +6,7 @@ import type { IncomingReadingValues } from "@acropora/types";
 import {
   EVAL_FIELDS,
   evaluate,
+  evaluateByGroup,
   formatReport,
   judge,
   percentages,
@@ -239,6 +240,31 @@ describe("a pontozas szabalyai", () => {
     const report = evaluate(ten, "B");
     assert.equal(report.withoutPairing, 10);
     assert.match(formatReport(report), /parositas nelkuli minta: 10/);
+  });
+});
+
+describe("csoportonkenti jelentes", () => {
+  it("a csoportok kulon szazalekot kapnak, a rontas csak a sajat csoportjat viszi le", () => {
+    const feed = ten.slice(0, 5).map((s) => ({ ...s, group: "feed" }));
+    const verified = ten
+      .slice(5)
+      .map((s, i) => ({
+        ...s,
+        group: "verified",
+        lines: invoiceLines(i + 6, { number: "Referenznummer" }),
+      }));
+    const groups = evaluateByGroup([...feed, ...verified], "A");
+    assert.deepEqual([...groups.keys()], ["feed", "verified"]);
+    assert.equal(pct(groups.get("feed")!, "documentNumber").correct, 100);
+    assert.equal(pct(groups.get("verified")!, "documentNumber").correct, 0);
+    assert.equal(pct(groups.get("verified")!, "grossAmount").correct, 100);
+  });
+
+  it("csoport nelkuli mintak egy kozos csoportba kerulnek", () => {
+    assert.deepEqual(
+      [...evaluateByGroup(ten, "A").keys()],
+      ["(nincs csoport)"],
+    );
   });
 });
 

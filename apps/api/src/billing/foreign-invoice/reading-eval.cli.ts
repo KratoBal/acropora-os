@@ -8,6 +8,7 @@ import {
   BLANK_PAIRING,
   EVAL_FIELDS,
   evaluate,
+  evaluateByGroup,
   formatReport,
   judge,
   readSample,
@@ -29,7 +30,8 @@ import {
  *   lines-cache/        az ertekelo irja: a PDF-bol kinyert sorok (a PDF mtime-ja szerint ujraszamolva)
  *   results/            az ertekelo irja, CSAK --reszletek-kel: mintankenti itelet (itt van az ertek is)
  *
- * Egy minta: { id, pdf? | lines?, adapter, pairing, expected{11 mezo}, manualFields[] }.
+ * Egy minta: { id, pdf? | lines?, adapter, pairing, expected{11 mezo}, manualFields[], group? }.
+ * A `group` (pl. feed, nav, verified) a helyes ertek forrasa: a jelentes csoportonkent is ad szazalekot.
  *
  * A KIMENET a stdout-on CSAK mezonev es szazalek (lasd `formatReport`): ezt lehet
  * tovabbmondani. A mintankenti elteres a mappaban marad.
@@ -45,6 +47,7 @@ interface RawSample {
   pairing?: unknown;
   expected?: unknown;
   manualFields?: unknown;
+  group?: unknown;
 }
 
 function fail(message: string): never {
@@ -101,6 +104,7 @@ async function loadSamples(dir: string): Promise<EvalSample[]> {
       pairing: (raw.pairing ?? null) as EvalSample["pairing"],
       expected: expected as unknown as EvalSample["expected"],
       manualFields: manual as IncomingReadingField[],
+      group: typeof raw.group === "string" ? raw.group : undefined,
     });
   }
   return samples;
@@ -144,6 +148,13 @@ async function main() {
   for (const mode of modes) {
     console.log(formatReport(evaluate(samples, mode)));
     console.log("");
+    const groups = evaluateByGroup(samples, mode);
+    if (groups.size > 1)
+      for (const [name, report] of groups) {
+        console.log(`#### csoport: ${name}`);
+        console.log(formatReport(report));
+        console.log("");
+      }
     if (!details) continue;
     const rows = samples.map((sample) => {
       const read = readSample(sample, mode);
