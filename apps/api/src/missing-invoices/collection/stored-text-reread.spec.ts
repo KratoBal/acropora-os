@@ -416,6 +416,25 @@ describe("re-reading a stored document's text", () => {
     );
   });
 
+  it("an older bank reference is kept, and the report shows the fresh one beside it (barracuda, #1787)", async () => {
+    const { deps: d, saved } = amblard(
+      "UPLOAD",
+      "AMBLARD SAS F2602896 KARTYAS VASARLAS",
+    );
+    const documents = await d.documents();
+    documents[0]!.textReading = { ...AMBLARD_OLD, bankReference: "REGI-77123" };
+    const rows = await rereadStoredText(
+      { ...d, documents: async () => documents },
+      SELECT,
+      false,
+    );
+    assert.equal(saved.length, 0);
+    assert.match(
+      rereadReport(rows, false),
+      / \| banki hivatkozás megtartva REGI-77123, friss F2602896\n/,
+    );
+  });
+
   it("the control: a debit that does not name it leaves the upload without a number, unchanged", async () => {
     const { deps: d, saved } = amblard("UPLOAD", "AMBLARD SAS");
     const rows = await rereadStoredText(d, SELECT, true);

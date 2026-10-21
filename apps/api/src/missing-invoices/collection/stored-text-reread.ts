@@ -35,7 +35,11 @@ import { readUploadText } from "./upload-text.js";
  * A KÉZI FELTÖLTÉS a feltöltés saját láncán megy át (`readUploadText`, acrobot
  * 34581), ha a hívó megadja a párosított terhelés közleményét: így a banki
  * hivatkozás a SAJÁT terhelésből jön, ahogy 2026-10-21 óta a feltöltésnél is.
- * Egy meglévő banki hivatkozás ott is megmarad.
+ * A CLI mindig megadja, tehát ott MINDEN kiválasztás (`--ids`, `--number`,
+ * `--unread-uploads`, `--failed-uploads`) alatt minden feltöltés így olvasódik;
+ * párosított terhelés nélkül üres listával. Egy meglévő banki hivatkozás ott is
+ * megmarad, de ha a friss olvasaté más, a jelentés kiírja mind a kettőt, és a
+ * száraz futás átnézője dönt (barracuda, #1787).
  *
  * A FAJTA (`kind`) EGY IRÁNYBAN VÁLTOZHAT: számlából díjbekérő, ha a szöveg
  * díjbekérőnek mondja magát (ugyanaz a `looksLikeProforma`, amivel a begyűjtés
@@ -111,6 +115,8 @@ export interface StoredTextRereadRow {
   amount?: { before: string | null; after: string | null };
   /** a banki hivatkozás előtte és utána, ha bármelyik van */
   reference?: { before: string | null; after: string | null };
+  /** ha a friss olvasat banki hivatkozása eltér a megtartottól: mind a kettő */
+  keptReference?: { kept: string | null; fresh: string | null };
   changed: boolean;
 }
 
@@ -186,7 +192,8 @@ export async function rereadStoredText(
     const knownOnce = () =>
       (known ??= deps.knownNumbers?.() ?? Promise.resolve([]));
     let fresh: InvoiceTextReading;
-    if (document.origin === "UPLOAD" && deps.narratives) {
+    const uploadChain = document.origin === "UPLOAD" && !!deps.narratives;
+    if (uploadChain && deps.narratives) {
       // a feltöltés saját lánca, a párosított terhelés közleményével
       fresh = await readUploadText(
         lines,
@@ -250,9 +257,20 @@ export async function rereadStoredText(
       before: old?.bankReference ?? null,
       after: next.bankReference ?? null,
     };
+    const keptReference = {
+      kept: reference.after,
+      fresh: fresh.bankReference ?? null,
+    };
     const shown = {
       ...(amount.before || amount.after ? { amount } : {}),
       ...(reference.before !== reference.after ? { reference } : {}),
+      // csak a feltöltés láncán: a begyűjtés hivatkozása nem a szövegből jön,
+      // ott a friss olvasatban sosincs, és minden sor zajt adna
+      ...(uploadChain &&
+      keptReference.fresh !== null &&
+      keptReference.fresh !== keptReference.kept
+        ? { keptReference }
+        : {}),
     };
     const clears = oldNumber !== null && next.invoiceNumber === null;
     if (clears && !allowClear) {
@@ -303,6 +321,10 @@ export function rereadReport(
                 }${
                   row.reference
                     ? ` | banki hivatkozás ${row.reference.before ?? "-"} -> ${row.reference.after ?? "-"}`
+                    : ""
+                }${
+                  row.keptReference
+                    ? ` | banki hivatkozás megtartva ${row.keptReference.kept ?? "-"}, friss ${row.keptReference.fresh ?? "-"}`
                     : ""
                 }${row.changed ? "" : "  (változatlan)"}`
         }\n`,
