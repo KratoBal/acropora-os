@@ -6,6 +6,7 @@ import type { SupplierInvoiceImportResult } from "@acropora/types";
 import {
   parseForeignDate,
   readForeignInvoice,
+  totalsRow,
   type ForeignReadingInput,
 } from "./foreign-invoice-reading.js";
 
@@ -493,5 +494,124 @@ describe("what does not fit its column is left empty, with a warning", () => {
     assert.equal(values.issueDate, "2026-09-20");
     // a szkennelt PDF figyelmeztetése marad, tárolhatósági nem jön
     assert.equal(warnings.filter((w) => w.includes("nem tárolható")).length, 0);
+  });
+});
+
+/**
+ * AZ OSSZESITO SOR ("Összesen: | nettó | áfa | bruttó", kártya dbab22cd, első kísérlet). Kitalált
+ * szövegek: a valódi mintákból csak a SOR ALAKJA jött (a hangoló félen mért), érték nem.
+ */
+describe("the totals row of a Hungarian invoice table", () => {
+  const HEADER =
+    "Megnevezés | Menny. | Egységár | Nettó ár | ÁFA | ÁFA érték | Bruttó ár";
+  const ROW = "Kitalált termék | 2 db | 1 000 | 2 000 | 27% | 540 | 2 540";
+  const read = (lines: string[]) =>
+    readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: pairing({
+        number: "",
+        supplierName: "",
+        date: "",
+        currency: "",
+      }),
+    });
+
+  it("reads net, VAT and gross from 'Összesen: | a | b | c' under a net-to-gross header", () => {
+    const { values, sources } = read([
+      HEADER,
+      ROW,
+      "Összesen: | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(values.netAmount, "2000.00");
+    assert.equal(values.vatAmount, "540.00");
+    assert.equal(values.grossAmount, "2540.00");
+    assert.equal(sources.netAmount, "TEXT");
+    assert.equal(sources.grossAmount, "TEXT");
+  });
+
+  it("takes the unit and the thousands separators in the cells", () => {
+    const { values } = read([
+      "Nettó | ÁFA | Bruttó",
+      "Összesen: | 12 345 Ft | 3 333 Ft | 15 678 Ft",
+    ]);
+    assert.equal(values.netAmount, "12345.00");
+    assert.equal(values.grossAmount, "15678.00");
+  });
+
+  it("reads nothing when net + VAT does not give the gross (a wrong number is worse than an empty one)", () => {
+    const { values } = read([HEADER, "Összesen: | 2 000 | 540 | 2 600"]);
+    assert.equal(values.netAmount, null);
+    assert.equal(values.grossAmount, null);
+  });
+
+  it("reads nothing without a net-to-gross header above the row", () => {
+    const { values } = read(["Összesen: | 2 000 | 540 | 2 540"]);
+    assert.equal(values.netAmount, null);
+    // fordított fejléc (bruttó az elején): az összesítő sor nem dönt. (A cimkézett olvasó a fejléc
+    // alatti sort a "Nettó" cimke után tovább olvassa: ez a meglévő viselkedés, itt nem vizsgáljuk.)
+    assert.equal(
+      totalsRow(["Bruttó | ÁFA | Nettó", "Összesen: | 2 000 | 540 | 2 540"]),
+      null,
+    );
+  });
+
+  it("reads nothing when the row does not carry exactly three amounts", () => {
+    assert.equal(read([HEADER, "Összesen: | 2 540"]).values.grossAmount, null);
+    // egy negyedik összeg is kizár, akkor is, ha az első három kijönne
+    assert.equal(
+      read([HEADER, "Összesen: | 2 000 | 540 | 2 540 | 100"]).values.netAmount,
+      null,
+    );
+    assert.equal(
+      read([HEADER, "Összesen: | 1 | 2 000 | 540 | 2 540"]).values.netAmount,
+      null,
+    );
+  });
+
+  it("does not decide between two different totals rows", () => {
+    const { values } = read([
+      HEADER,
+      "Összesen: | 2 000 | 540 | 2 540",
+      HEADER,
+      "Összesen: | 1 000 | 270 | 1 270",
+    ]);
+    assert.equal(values.netAmount, null);
+  });
+
+  it("fills only what is empty when the labelled values agree with the row, and nothing when one disagrees", () => {
+    // a címke nettót ad (másik tábla vagy másik összeg), az összesítő sor mást mond: a sor semmit nem tölt
+    const disagree = read([
+      HEADER,
+      "Subtotal | 1 500",
+      "Összesen: | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(disagree.values.netAmount, "1500.00");
+    assert.equal(disagree.values.vatAmount, null);
+    assert.equal(disagree.values.grossAmount, null);
+    // egyező címkézett érték mellett a hiányzó mezőket tölti
+    const agree = read([
+      HEADER,
+      "Subtotal | 2 000",
+      "Összesen: | 2 000 | 540 | 2 540",
+    ]);
+    assert.equal(agree.values.netAmount, "2000.00");
+    assert.equal(agree.values.vatAmount, "540.00");
+    assert.equal(agree.values.grossAmount, "2540.00");
+  });
+
+  it("leaves a credit note (all three amounts negative) empty", () => {
+    assert.equal(
+      read([HEADER, "Összesen: | -2 000 | -540 | -2 540"]).values.netAmount,
+      null,
+    );
+  });
+
+  it("never overwrites a value the labels already gave, and leaves the English invoices alone", () => {
+    const labelled = read([...DE, HEADER, "Összesen: | 9 | 9 | 18"]);
+    assert.equal(labelled.values.netAmount, "100.00");
+    assert.equal(labelled.values.grossAmount, "119.00");
+    const english = read(EN_SAAS);
+    assert.equal(english.values.netAmount, "20.00");
   });
 });

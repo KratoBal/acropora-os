@@ -233,6 +233,50 @@ function labelledAmount(
   return found.size === 1 ? [...found][0]! : null;
 }
 
+/**
+ * AZ OSSZESITO SOR: "Összesen: | nettó | ÁFA | bruttó" (kártya dbab22cd, az első kiserlet).
+ *
+ * A magyar (Számlázz.hu és társai) számlák táblázata a végén egy "Összesen:" sort ad három összeggel,
+ * a fejléce `nettó | áfa | bruttó`. A cimkézett olvasó ezt nem találta meg: a címke és az összeg
+ * nem egy sorban áll, vagy a sorban három szám van. Mérve a hangoló félen (2026-10-21): a feed
+ * csoport 7 számlájából a nettó és a bruttó egyet sem olvasott ki.
+ *
+ * NEM TALÁLGATÁS, HÁROM FELTÉTEL EGYÜTT: (1) a sor "Összesen"-nel kezdődik és PONTOSAN három összeg áll
+ * benne; (2) valamelyik előtte álló sor (nem feltétlenül a táblázat fejléce: az első olyan, amelyben a
+ * "nettó" a "bruttó" előtt áll; az aritmetika a tévedést kiszűri) fejléc-szerű; (3) a három összeg kijön:
+ * nettó + ÁFA = bruttó (két fillér tűréssel, nem negatív ÁFA). Több, egymástól eltérő ilyen sor (több
+ * táblázat) vagy bármelyik feltétel hiánya: nem döntünk.
+ *
+ * A NEGATÍV ÁFA KIZÁRÁSA A JÓVÁÍRÓ (mind a három összeg negatív) SZÁMLÁT IS ÜRESEN HAGYJA: biztonságos,
+ * csak tudni kell róla a mérésnél (barracuda, #1795).
+ */
+const TOTALS_LABEL = /^\s*(összesen|osszesen|mind[öo]sszesen|total)\b\s*:?/iu;
+const NET_HEADER = /nett[óo]|netto/iu;
+const GROSS_HEADER = /brutt[óo]|brutto/iu;
+
+export function totalsRow(
+  lines: readonly string[],
+): { net: number; vat: number; gross: number } | null {
+  const found = new Map<string, { net: number; vat: number; gross: number }>();
+  lines.forEach((raw, index) => {
+    const line = raw.normalize("NFC");
+    const hit = TOTALS_LABEL.exec(line);
+    if (!hit) return;
+    const values = amountsIn(line.slice(hit.index + hit[0].length));
+    if (values.length !== 3) return;
+    const [net, vat, gross] = values as [number, number, number];
+    if (vat < 0 || Math.abs(net + vat - gross) > 0.02) return;
+    const header = lines.slice(0, index).some((earlier) => {
+      const n = earlier.normalize("NFC").search(NET_HEADER);
+      const g = earlier.normalize("NFC").search(GROSS_HEADER);
+      return n >= 0 && g > n;
+    });
+    if (!header) return;
+    found.set(`${net}|${vat}|${gross}`, { net, vat, gross });
+  });
+  return found.size === 1 ? [...found.values()][0]! : null;
+}
+
 const decimal = (value: number) => value.toFixed(2);
 const HU_TAX = /^\d{8}-\d-\d{2}$/;
 const EU_NOT_HU =
@@ -319,6 +363,26 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     if (vat !== null) set("vatAmount", decimal(vat), "TEXT");
     else if (REVERSE_CHARGE.test(lines.join("\n")))
       set("vatAmount", decimal(0), "TEXT");
+    // a cimkézett olvasás után: ami már megvan, azt az összesítő sor nem írja felül, és ha egy már
+    // meglévő érték ELTÉR az összesítő sortól (két táblázat, másik összeg), az sor semmit nem tölt:
+    // a három mező nem mondhat ellent egymásnak (barracuda, #1795)
+    const totals = totalsRow(lines);
+    const agrees = (
+      field: "netAmount" | "vatAmount" | "grossAmount",
+      amount: number,
+    ) =>
+      values[field] === null ||
+      Math.abs(Number(values[field]) - amount) <= 0.02;
+    if (
+      totals &&
+      agrees("netAmount", totals.net) &&
+      agrees("vatAmount", totals.vat) &&
+      agrees("grossAmount", totals.gross)
+    ) {
+      set("netAmount", decimal(totals.net), "TEXT");
+      set("vatAmount", decimal(totals.vat), "TEXT");
+      set("grossAmount", decimal(totals.gross), "TEXT");
+    }
   } else {
     warnings.push(
       "A PDF-nek nincs szövegrétege (szkennelt számla): a mezőket kézzel kell kitölteni.",
