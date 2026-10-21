@@ -590,6 +590,8 @@ export class MedusaProjectionScheduler
     const sorok = await this.db.productKnowledgeFact.findMany({
       where: {
         updatedAt: { gt: new Date(most.getTime() - AKCIO_ABLAK_MS), lte: most },
+        // egy automatikus tény nem megy ki, tehát vetítést sem indít
+        acceptedByRule: null,
       },
       select: { productId: true, updatedAt: true },
     });

@@ -1089,6 +1089,37 @@ describe("a tény-változás is esedékessé tesz (SEO P0 PR 8)", () => {
       assert.deepEqual(kapott, vart);
     }
   });
+
+  /**
+   * MI PIROSÍT (Product Knowledge 2. lépés, kártya 85c38ab1): a szabály szerint,
+   * automatikusan elfogadott tény vetítést indít, pedig nem mehet ki.
+   */
+  it("az automatikusan elfogadott tény nem tesz esedékessé", async () => {
+    const { db, hivasok } = adatbazis(
+      [termek({ updatedAt: REGEN })],
+      kotes(new Date(MOST.getTime() - 60_000)),
+      undefined,
+      [],
+      [],
+      [{ productId: "prod-1", updatedAt: MOST }],
+    );
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: futtato(0).run,
+      runPricing: arFuttato().run,
+      environment: BEKAPCSOLVA,
+      logger: naplo().logger,
+      now: () => new Date(MOST.getTime() + 1_000),
+    });
+    await scheduler.runOnce();
+    const kerdes = hivasok.find(
+      (h) => h.metodus === "productKnowledgeFact.findMany",
+    );
+    assert.ok(kerdes, "a tény-változást nem kérdezte");
+    const where = (kerdes.args as { where: Record<string, unknown> }).where;
+    assert.ok("acceptedByRule" in where, JSON.stringify(where));
+    assert.equal(where.acceptedByRule, null);
+  });
 });
 
 describe("a márka változása is esedékessé teszi a termékeit (t11)", () => {

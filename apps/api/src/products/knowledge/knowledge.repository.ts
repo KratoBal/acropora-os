@@ -83,6 +83,12 @@ export interface KnowledgeStore {
     fieldResultId: string;
     acceptedById: string;
     acceptedAt: Date;
+    /**
+     * The rule that accepted it (`AUTO_V1`, `knowledge-auto-accept`); absent
+     * or null: a person did. A person's accept writes null, so it CONFIRMS an
+     * automatic fact, and only then may the fact leave the OS.
+     */
+    acceptedByRule?: string | null;
   }): Promise<void>;
   /**
    * AZ ELFOGADOTT EAN MINT VONALKÓD (SEO P0 PR 4, C3). Létrehozza a változat
@@ -302,6 +308,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       fieldResultId: input.fieldResultId,
       acceptedById: input.acceptedById,
       acceptedAt: input.acceptedAt,
+      acceptedByRule: input.acceptedByRule ?? null,
     };
     // `scopeKey` is `coalesce(variantId, '')` (the migration's CHECK): the
     // unique key, because a NULL in a unique index never collides

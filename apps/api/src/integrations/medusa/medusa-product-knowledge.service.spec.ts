@@ -368,8 +368,10 @@ describe("the knowledge rows the runner reads", () => {
       "p-kz",
     );
     assert.equal(rows.facts[0]!.sourceType, "SUPPLIER_PAGE");
+    // only a person's fact leaves the OS (Product Knowledge step 2)
     assert.deepEqual((asked[0] as { where: unknown }).where, {
       productId: "p-kz",
+      acceptedByRule: null,
     });
   });
 

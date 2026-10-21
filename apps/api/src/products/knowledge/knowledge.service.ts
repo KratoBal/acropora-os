@@ -158,6 +158,12 @@ export class ProductKnowledgeService {
     fieldResultId: unknown,
     user: Actor,
     variantId?: unknown,
+    /**
+     * The rule that accepts it instead of a person (`AUTO_ACCEPT_RULE`, the
+     * `knowledge-auto-accept` command); `user` is then the person who ran it.
+     * Absent: a person accepts, and that clears an earlier rule's mark.
+     */
+    rule?: string,
   ): Promise<ProductKnowledge> {
     const result = await this.currentResult(productId, fieldResultId);
     const decision = factFromResult(result);
@@ -180,6 +186,7 @@ export class ProductKnowledgeService {
       fieldResultId: result.id,
       acceptedById: user.id,
       acceptedAt: this.now(),
+      acceptedByRule: rule ?? null,
     });
     return this.knowledge(productId);
   }
