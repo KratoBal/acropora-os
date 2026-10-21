@@ -366,6 +366,71 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
     assert.equal(log[0]!.completedAt, null);
   });
 
+  it("5.2/11: a zárolt fiók azonosítóival egy másik fiókból semmi nem érhető el, a nem létező 404-ével bájtra azonosan", async () => {
+    await prisma.reefClubAccount.create({
+      data: {
+        email: email("b"),
+        passwordHash: await hashPassword(PASSWORD),
+        emailVerifiedAt: new Date(),
+        consentVersion: "teszt-1",
+        consentAt: new Date(),
+      },
+    });
+    const response = await login(email("b"));
+    assert.equal(response.status, 204);
+    const cookies = setCookies(response);
+    const other: Session = {
+      cookie: `rc_session=${cookies.rc_session}; rc_csrf=${cookies.rc_csrf}`,
+      csrf: cookies.rc_csrf!,
+    };
+    const missing = "c0000000000000000000torles";
+    const probes: [string, string, unknown?][] = [
+      ["GET", "/rc/v1/aquariums/:id"],
+      ["PATCH", "/rc/v1/aquariums/:id", { name: `${NAME_PREFIX} átírva` }],
+      ["DELETE", "/rc/v1/aquariums/:id"],
+      ["GET", "/rc/v1/aquariums/:id/measurements"],
+      ["GET", "/rc/v1/aquariums/:id/targets"],
+      ["GET", "/rc/v1/aquariums/:id/share/preview"],
+      ["DELETE", "/rc/v1/aquariums/:id/share"],
+      ["GET", "/rc/v1/aquariums/:id/recommendations"],
+      ["GET", "/rc/v1/aquariums/:id/doses"],
+    ];
+    const answer = async (method: string, path: string, body?: unknown) => {
+      const r = await rc(path, { method, body, session: other });
+      return { status: r.status, body: await r.text() };
+    };
+    const mismatches: string[] = [];
+    for (const [method, route, body] of probes) {
+      const none = await answer(method, route.replace(":id", missing), body);
+      assert.equal(none.status, 404, `nem létező: ${method} ${route}`);
+      for (const [who, id] of [
+        ["a zárolt fiók saját akváriuma", ownId],
+        ["a zárolt fiók volt bolti akváriuma", shopId],
+      ] as const) {
+        const got = await answer(method, route.replace(":id", id), body);
+        if (got.status !== 404 || got.body !== none.body)
+          mismatches.push(`${method} ${route} [${who}]: ${got.status}`);
+      }
+    }
+    assert.deepEqual(mismatches, []);
+    const list = (await (
+      await rc("/rc/v1/aquariums", { session: other })
+    ).json()) as { items?: { id: string }[] } | { id: string }[];
+    const ids = (Array.isArray(list) ? list : (list.items ?? [])).map(
+      (a) => a.id,
+    );
+    assert.equal(ids.includes(ownId), false);
+    assert.equal(ids.includes(shopId), false);
+    const own = await prisma.aquarium.findUniqueOrThrow({
+      where: { id: ownId },
+      select: { name: true, ownerAccountId: true },
+    });
+    assert.deepEqual(own, {
+      name: `${NAME_PREFIX} saját`,
+      ownerAccountId: accountId,
+    });
+  });
+
   it("a végleges törlés 30 nap előtt nem fut, utána igen; a bolti nyilvántartás és a napló megmarad", async () => {
     const service = deletion();
     assert.equal(
