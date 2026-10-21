@@ -279,6 +279,77 @@ export function totalsRow(
 }
 
 /**
+ * A FEJLEC-SOR ALATTI ERTEKSOR (kártya dbab22cd, harmadik kísérlet): a magyar számla metaadat-táblázata
+ * egy fejléc-sor (`Számlaszám | Fizetési mód`, vagy `Teljesítés kelte | Számla kelte | Fizetési határidő`)
+ * és alatta az értékek, CELLÁNKÉNT egymás alatt. A címkézett olvasó a címke utáni szöveget keresi, ez
+ * a cella alatti cellát.
+ *
+ * FELTÉTELEK EGYÜTT: a fejléc-sor és az alatta álló sor CELLASZÁMA egyezik; a cimkét felismerjük (pontos
+ * cella, nem részlet); a dátum-cella EGYETLEN dátumot tartalmaz (egy "2026.10.03-2026.10.05" tartomány
+ * nem); a számlaszám-cella nem üres, tartalmaz számjegyet és legfeljebb 40 karakter. Egy mezőre több,
+ * egymástól eltérő jelölt: nem döntünk.
+ */
+type TableField =
+  "documentNumber" | "issueDate" | "fulfillmentDate" | "dueDate";
+const TABLE_LABELS: [TableField, RegExp][] = [
+  [
+    "documentNumber",
+    /^(sz[áa]mlasz[áa]m|sz[áa]mla\s+sz[áa]ma|sz[áa]mla\s+sorsz[áa]ma|sorsz[áa]m|sorsz[áa]ma|invoice\s+(no|number)\.?|rechnungs(nummer|nr\.?))\s*:?$/iu,
+  ],
+  [
+    "issueDate",
+    /^(sz[áa]mla\s+kelte|kelte|kelt|ki[áa]ll[íi]t[áa]s\s+(d[áa]tuma|kelte)|invoice\s+date|rechnungsdatum)\s*:?$/iu,
+  ],
+  [
+    "fulfillmentDate",
+    /^(teljes[íi]t[ée]s(\s+kelte|\s+d[áa]tuma)?|date\s+of\s+supply|leistungsdatum)\s*:?$/iu,
+  ],
+  [
+    "dueDate",
+    /^(fizet[ée]si\s+hat[áa]rid[őo]|esed[ée]kess[ée]g|due\s+date|f[äa]lligkeitsdatum)\s*:?$/iu,
+  ],
+];
+const DATE_IN_CELL =
+  /(?<!\d)(\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}\.\s?\d{1,2}\.\s?\d{4})(?!\d)/gu;
+
+export function tableRowFields(
+  lines: readonly string[],
+): Partial<Record<TableField, string>> {
+  const found = new Map<TableField, Set<string>>();
+  lines.forEach((raw, index) => {
+    const header = raw
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const next = lines[index + 1]
+      ?.normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    if (header.length < 2 || !next || next.length !== header.length) return;
+    header.forEach((label, column) => {
+      const field = TABLE_LABELS.find(([, pattern]) =>
+        pattern.test(label),
+      )?.[0];
+      if (!field) return;
+      const cell = next[column] ?? "";
+      let value: string | null = null;
+      if (field === "documentNumber") {
+        value = cell && /\d/.test(cell) && cell.length <= 40 ? cell : null;
+      } else if ((cell.match(DATE_IN_CELL) ?? []).length === 1) {
+        value = parseForeignDate(cell);
+      }
+      if (!value) return;
+      if (!found.has(field)) found.set(field, new Set());
+      found.get(field)!.add(value);
+    });
+  });
+  const result: Partial<Record<TableField, string>> = {};
+  for (const [field, values] of found)
+    if (values.size === 1) result[field] = [...values][0]!;
+  return result;
+}
+
+/**
  * A SZALLITO NEVE A SZOVEGBOL (kártya dbab22cd, második kísérlet). Eddig az olvasó a szállító nevét
  * a szövegből SOHA nem olvasta (csak az illesztő vagy a párosítás adta): a hangoló félen 22,7 %.
  *
@@ -389,9 +460,21 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
         set("supplierTaxNumber", text.supplierTaxNumber, "TEXT");
       else set("supplierEuTaxNumber", text.supplierTaxNumber, "TEXT");
     }
+    /*
+      A FEJLEC ALATTI CELLA ELOBBRE VALO A DATUMNAL (a cimke a sor VEGEN all): a cimkézett olvasó a
+      "Fizetési határidő" cimke utáni üres rész miatt a KÖVETKEZŐ SOR ELSŐ dátumát vette volna (a
+      teljesítésit); az oszlop szerinti olvasás pontos. A mintán a három dátum egy napra esett, ezért
+      nem mutatkozott; kitalált szövegen kiderült.
+    */
+    const table = tableRowFields(lines);
+    set("issueDate", table.issueDate, "TEXT");
+    set("fulfillmentDate", table.fulfillmentDate, "TEXT");
+    set("dueDate", table.dueDate, "TEXT");
     set("issueDate", labelledDate(lines, ISSUE_LABEL), "TEXT");
     set("dueDate", labelledDate(lines, DUE_LABEL), "TEXT");
     set("fulfillmentDate", labelledDate(lines, SUPPLY_LABEL), "TEXT");
+    // a számlaszámot a cimkézett olvasás után csak az üres hely tölti
+    set("documentNumber", table.documentNumber, "TEXT");
 
     const total = labelledTotal(lines);
     if (total) {

@@ -7,6 +7,7 @@ import {
   parseForeignDate,
   readForeignInvoice,
   supplierNameFromText,
+  tableRowFields,
   totalsRow,
   type ForeignReadingInput,
 } from "./foreign-invoice-reading.js";
@@ -738,5 +739,114 @@ describe("the supplier name from the text", () => {
       }).values.supplierName,
       null,
     );
+  });
+});
+
+/**
+ * A FEJLEC-SOR ALATTI ERTEKSOR (kártya dbab22cd, harmadik kísérlet): a magyar számla metaadat-táblázata. Kitalált
+ * számok és dátumok; a valódi mintákból csak a fejlécek ALAKJA jött.
+ */
+describe("the value row under a header row", () => {
+  const read = (lines: string[]) =>
+    readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: {
+        number: "",
+        supplierName: "",
+        date: "",
+        gross: null,
+        currency: "",
+        debits: [],
+      },
+    }).values;
+
+  it("reads the three dates under 'Teljesítés kelte | Számla kelte | Fizetési határidő'", () => {
+    const v = read([
+      "Teljesítés kelte | Számla kelte | Fizetési határidő",
+      "2026.09.28. | 2026.10.03. | 2026.10.17.",
+    ]);
+    assert.equal(v.fulfillmentDate, "2026-09-28");
+    assert.equal(v.issueDate, "2026-10-03");
+    assert.equal(v.dueDate, "2026-10-17");
+  });
+
+  it("reads the number under 'Számlaszám | Fizetési mód' and ignores the unknown column", () => {
+    const v = read([
+      "Számlaszám | Fizetési mód",
+      "KT-26/0123 | 8 nap átutalás",
+    ]);
+    assert.equal(v.documentNumber, "KT-26/0123");
+  });
+
+  it("maps by column, so a five-column header with a number column at the end works", () => {
+    const v = read([
+      "Fizetési mód | Teljesítés | Kelt | Fizetési határidő | Sorszám",
+      "átutalás | 2026.09.28. | 2026.10.03. | 2026.10.17. | KT 123",
+    ]);
+    assert.equal(v.issueDate, "2026-10-03");
+    assert.equal(v.fulfillmentDate, "2026-09-28");
+    assert.equal(v.documentNumber, "KT 123");
+  });
+
+  it("needs the same number of cells in the header and the value row", () => {
+    assert.deepEqual(
+      tableRowFields([
+        "Számla kelte | Fizetési határidő",
+        "2026.10.03. | 2026.10.17. | extra",
+      ]),
+      {},
+    );
+    assert.deepEqual(
+      tableRowFields(["Számla kelte | Fizetési határidő", "2026.10.03."]),
+      {},
+    );
+  });
+
+  it("takes only a cell with ONE date (a range is no date) and only a recognised label", () => {
+    assert.deepEqual(
+      tableRowFields([
+        "Számla kelte | Fizetési mód",
+        "2026.10.03-2026.10.05 | átutalás",
+      ]),
+      {},
+    );
+    assert.deepEqual(
+      tableRowFields(["Megjegyzés | Fizetési mód", "2026.10.03. | átutalás"]),
+      {},
+    );
+  });
+
+  it("takes a number cell only with a digit and not longer than 40 characters", () => {
+    assert.deepEqual(
+      tableRowFields(["Számlaszám | Fizetési mód", "nincs | átutalás"]),
+      {},
+    );
+    assert.deepEqual(
+      tableRowFields([
+        "Számlaszám | Fizetési mód",
+        `${"1".repeat(41)} | átutalás`,
+      ]),
+      {},
+    );
+  });
+
+  it("does not decide when two header rows name different values", () => {
+    const fields = tableRowFields([
+      "Számla kelte | Fizetési mód",
+      "2026.10.03. | átutalás",
+      "Számla kelte | Fizetési mód",
+      "2026.10.04. | átutalás",
+    ]);
+    assert.equal(fields.issueDate, undefined);
+  });
+
+  it("the labelled reading wins: a table cell only fills what is empty", () => {
+    const v = read([
+      "Invoice number KITALALT-0001",
+      "Számlaszám | Fizetési mód",
+      "MAS-9999 | átutalás",
+    ]);
+    assert.equal(v.documentNumber, "KITALALT-0001");
   });
 });
