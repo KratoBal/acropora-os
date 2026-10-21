@@ -77,7 +77,11 @@ export function paymentStateOf(row: {
  * díjbekérő (a Számlázz.hu típusa D, vagy a párosító PROFORMA-nak olvasta).
  */
 export function bankMatchOf(
-  row: { sourceDocumentId: string | null; kindCode: string },
+  row: {
+    sourceDocumentId: string | null;
+    kindCode: string;
+    grossAmount: Prisma.Decimal;
+  },
   pairings: ReadonlyMap<string, DocumentPairing>,
 ): IncomingBankMatch {
   const pairing = row.sourceDocumentId
@@ -89,6 +93,9 @@ export function bankMatchOf(
     return { state: "NOT_TO_PAIR", reason: "PROFORMA", debits: [] };
   if (pairing && pairing.debits.length > 0)
     return { state: "PAIRED", reason: null, debits: pairing.debits };
+  // nulla végösszeg: nincs mit fizetni; a kézi párosítás fent nyer (847bca33)
+  if (row.grossAmount.isZero())
+    return { state: "NOT_TO_PAIR", reason: "ZERO_TOTAL", debits: [] };
   return { state: "UNPAIRED", reason: null, debits: [] };
 }
 

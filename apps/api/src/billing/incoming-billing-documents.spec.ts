@@ -138,7 +138,7 @@ describe("bankMatchOf", () => {
     found?: DocumentPairing,
   ) =>
     bankMatchOf(
-      { sourceDocumentId, kindCode },
+      { sourceDocumentId, kindCode, grossAmount: D(12700) },
       new Map(found ? [["doc-1", found]] : []),
     );
 
@@ -289,6 +289,25 @@ describe("incomingPaymentOf", () => {
       new Map([["doc-1", pairing()]]),
     );
     assert.deepEqual(result({ kindCode: "D" }, proforma)[0], "UNPAID");
+  });
+});
+
+/*
+  A NULLA VÉGÖSSZEGŰ SZÁMLA (kártya 847bca33). MI PIROSÍT: ha banki párt vár
+  (UNPAIRED); ha egy kézi párosítást felülír.
+*/
+describe("a zero-total invoice is not to be paired", () => {
+  it("unpaired: NOT_TO_PAIR with its reason; paired by hand: PAIRED", () => {
+    assert.deepEqual(bankMatchOf(row({ grossAmount: D(0) }), new Map()), {
+      state: "NOT_TO_PAIR",
+      reason: "ZERO_TOTAL",
+      debits: [],
+    });
+    assert.equal(
+      bankMatchOf(row({ grossAmount: D(0) }), new Map([["doc-1", pairing()]]))
+        .state,
+      "PAIRED",
+    );
   });
 });
 

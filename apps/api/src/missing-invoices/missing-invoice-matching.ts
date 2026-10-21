@@ -764,7 +764,7 @@ export function mergeManualUploads(
   });
 }
 
-export function matchMonth(input: {
+export interface MatchMonthInput {
   debits: readonly MatchableDebit[];
   documents: readonly CandidateDocument[];
   /** terhelés -> kézzel párosított dokumentum(ok) azonosítója */
@@ -782,7 +782,20 @@ export function matchMonth(input: {
    * nem jelent elmaradt visszatérítést. Nélküle semmi sem „elmaradt”.
    */
   asOf?: string;
-}): Map<string, MatchOutcome> {
+}
+
+/**
+ * A NULLA VÉGÖSSZEGŰ SZÁMLÁHOZ NINCS FIZETÉS (kártya 847bca33, acrobot 34444).
+ * Élesben a Pólus PS2026/01452 két tétele -485 000 és +485 000: helyesbítő,
+ * végösszege 0. Eddig jelöltként állt a partner nem párosodott terhelései
+ * mellett, és a „van számla a partnertől” jelzést is adta. Csak ebből a kettőből
+ * marad ki: a sztornózott vásárlás eredetije is nulla lehet (Tesla
+ * 4042A0000031808), és a kézi párosítás is megmarad.
+ */
+const zeroTotal = (d: CandidateDocument) =>
+  d.gross !== null && d.gross.isZero();
+
+export function matchMonth(input: MatchMonthInput): Map<string, MatchOutcome> {
   const byId = new Map<string, CandidateDocument>();
   for (const d of input.documents) {
     byId.set(d.id, d);
@@ -1331,12 +1344,13 @@ export function matchMonth(input: {
   }
   for (const debit of open) {
     if (outcomes.has(debit.id)) continue;
-    const candidates = partnerDocs(debit, 0.6);
+    const candidates = partnerDocs(debit, 0.6).filter((d) => !zeroTotal(d));
     // A „van-e számla a partnertől” kérdés az ÖSSZES számlára szól, a más
     // fizetés által már elvittekre is (a második Alza-fizetés számlája
     // létezik, csak az elsőé lett): Nem párosodott, nem Nincs számla.
     const partnerHasDocuments = input.documents.some(
       (d) =>
+        !zeroTotal(d) &&
         inWindow(debit.bookingDate, d.date) &&
         debit.counterpartyName &&
         samePartner(d.supplierName, debit.counterpartyName, 0.6),

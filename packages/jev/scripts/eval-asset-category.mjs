@@ -117,7 +117,6 @@ try {
         model: true,
         kind: true,
         performance: true,
-        powerConsumption: true,
         departmentId: true,
         performanceUnit: { select: { name: true } },
         parentAsset: { select: { categoryRef: { select: { name: true } } } },
@@ -131,7 +130,6 @@ try {
       kind: a.kind,
       performance: a.performance?.toFixed() ?? null,
       performanceUnit: a.performanceUnit?.name ?? null,
-      powerConsumption: a.powerConsumption?.toFixed() ?? null,
       parentCategory: a.parentAsset?.categoryRef?.name ?? null,
       departmentPath: utvonal(a.departmentId),
     };

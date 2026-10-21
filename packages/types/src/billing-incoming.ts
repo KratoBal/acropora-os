@@ -32,7 +32,8 @@ export const INCOMING_PAYMENT_STATE_LABELS: Readonly<
 /**
  * A BANKI PÁROSÍTÁS, a Hiányzó számlák meglévő számításából (új logika nélkül).
  * NOT_TO_PAIR csak két esetben (acrobot 25879, Balázs 09-30-i döntése): a számla
- * nem a cégre szól, vagy díjbekérő.
+ * nem a cégre szól, vagy díjbekérő. A harmadik, a nulla végösszegű számla
+ * (kártya 847bca33, acrobot 34444) ennek technikai következménye: fizetés nincs.
  */
 export const INCOMING_BANK_MATCH_STATES = [
   "PAIRED",
@@ -52,16 +53,17 @@ export const INCOMING_BANK_MATCH_LABELS: Readonly<
 
 /** A „nem párosítandó” oka, a felületen kiírva. */
 export const INCOMING_NOT_TO_PAIR_REASON_LABELS: Readonly<
-  Record<"NOT_COMPANY" | "PROFORMA", string>
+  Record<"NOT_COMPANY" | "PROFORMA" | "ZERO_TOTAL", string>
 > = {
   NOT_COMPANY: "A számla nem a cégre szól.",
   PROFORMA: "Díjbekérő, nem számla: nem kerül banki párosításra.",
+  ZERO_TOTAL: "Nulla végösszegű számla, nincs fizetés.",
 };
 
 export interface IncomingBankMatch {
   state: IncomingBankMatchState;
   /** NOT_TO_PAIR oka. */
-  reason: "NOT_COMPANY" | "PROFORMA" | null;
+  reason: "NOT_COMPANY" | "PROFORMA" | "ZERO_TOTAL" | null;
   /** A párosított terhelések (egy számlát több terhelés is fizethet). */
   debits: { bookingDate: string; amount: DecimalText; currency: string }[];
 }

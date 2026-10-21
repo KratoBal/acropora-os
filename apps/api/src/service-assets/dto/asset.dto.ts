@@ -56,6 +56,7 @@ const ASSET_STATUSES = [
   "RETIRED",
 ] as const;
 const ASSET_CRITICALITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
+const ASSET_PHASE_CONNECTIONS = ["PHASE_1", "PHASE_3"] as const;
 const ASSET_OWNER_TYPES = ["CUSTOMER", "SUPPLIER"] as const;
 /**
  * A FAJTAK LISTAJA EGY FORRASBOL JON, ES EZ 2026-09-22 OTA IGY VAN.
@@ -408,10 +409,25 @@ export class CreateAssetDto {
    */
   @IsString() @IsOptional() volume?: string;
   /**
-   * A FOGYASZTAS, MINDIG kW-BAN. Az ALAKOT a szolgaltatas ellenorzi a kozos
-   * `normalizePerformanceValue` fuggvennyel, ugyanugy, mint a `volume`-nal.
+   * AZ ARAMFELVETEL, AMPERBEN -- SZABAD SZOVEG ("6,15/5,5"), NINCS
+   * ALAK-ELLENORZES. Lasd az `AssetDetail.currentDraw` fejleceit.
    */
-  @IsString() @IsOptional() powerConsumption?: string;
+  @IsString() @MaxLength(40) @IsOptional() currentDraw?: string;
+  /** A BEKOTES. Lasd az `AssetDetail.phaseConnection` fejleceit. */
+  @IsIn(ASSET_PHASE_CONNECTIONS)
+  @IsOptional()
+  phaseConnection?: (typeof ASSET_PHASE_CONNECTIONS)[number];
+  /**
+   * A KORABBI, kW-BAN VEZETETT `powerConsumption` MEZO -- KIVEZETVE (Balazs,
+   * 2026-10-21, kanban 541e2716). Azert marad a DTO-ban, es nem torlodik: a
+   * globalis `forbidNonWhitelisted` miatt egy regi mobil-build (vagy egy
+   * offline sorban rekedt, a frissites elott keszult mentes) 400-at kapna, es
+   * a sor soha nem ürülne. A tarolo NEM dobja el: ha az eredeti bejegyzes ures,
+   * "0,75 kW" alakban oda teszi (`legacy-power-consumption.ts`); ha nem ures,
+   * az eredeti bejegyzes nyer. A ketlepcsos kivezetes masodik lepese a mezo
+   * torlese, ha mar nincs regi build.
+   */
+  @IsOptional() powerConsumption?: unknown;
   /**
    * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
    * Lasd az `AssetDetail.powerConsumptionRaw` fejleceit.
@@ -583,11 +599,19 @@ export class UpdateAssetDto {
   @IsString()
   volume?: string | null;
   /**
-   * A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal.
+   * AZ ARAMFELVETEL (A, szabad szoveg) -- `null` torol, a mezo elhagyasa
+   * erintetlenul hagyja.
    */
-  @ValidateIf((_object, value) => value !== undefined && value !== null)
   @IsString()
-  powerConsumption?: string | null;
+  @MaxLength(40)
+  @IsOptional()
+  currentDraw?: string | null;
+  /** A BEKOTES -- `null` torol, a mezo elhagyasa erintetlenul hagyja. */
+  @IsIn(ASSET_PHASE_CONNECTIONS)
+  @IsOptional()
+  phaseConnection?: (typeof ASSET_PHASE_CONNECTIONS)[number] | null;
+  /** KIVEZETVE, figyelmen kivul hagyva -- lasd a `CreateAssetDto` jegyzetet. */
+  @IsOptional() powerConsumption?: unknown;
   /**
    * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.
    */

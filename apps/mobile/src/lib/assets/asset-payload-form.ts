@@ -28,6 +28,14 @@ function szoveg(value: unknown): string {
 }
 
 /**
+ * A BEKOTES KODJA, VAGY URES -- egy ismeretlen szoveg nem kerulhet a
+ * valasztoba (a sor torzse egy korabbi verzio irta, nem megbizhato bemenet).
+ */
+function bekotes(value: unknown): "PHASE_1" | "PHASE_3" | "" {
+  return value === "PHASE_1" || value === "PHASE_3" ? value : "";
+}
+
+/**
  * A DÁTUM-MEZŐK A TÖRZSBEN TELJES ISO ALAKBAN ÁLLNAK
  * (`buildAssetCreatePayload` `${installed.value}T00:00:00.000Z`-t ír), az
  * ŰRLAP MEZŐJE VISZONT `ÉÉÉÉ-HH-NN`-t VÁR (lásd `dateFromInput`/
@@ -103,7 +111,8 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
       az indok, mint felette: a sorban allo felvitel se veszitse el.
     */
     volume: szoveg(row.volume),
-    powerConsumption: szoveg(row.powerConsumption),
+    currentDraw: szoveg(row.currentDraw),
+    phaseConnection: bekotes(row.phaseConnection),
     powerConsumptionRaw: szoveg(row.powerConsumptionRaw),
     electricalCode: szoveg(row.electricalCode),
     installedAt: datumSzoveg(row.installedAt),
