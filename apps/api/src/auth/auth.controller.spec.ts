@@ -394,6 +394,9 @@ describe("AuthController", () => {
         JEV_PILOT_USER_IDS: testUser.id,
         QUOTES_ENABLED: "pilot",
         QUOTES_PILOT_USER_IDS: testUser.id,
+        MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true",
+        REEFCLUB_WEB_URL: "https://reefclub-staging.acropora.hu",
+        REEFCLUB_LINKING_ENABLED: "true",
       },
     ]) {
       const controller = new AuthController(

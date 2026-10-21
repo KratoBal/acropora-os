@@ -300,6 +300,11 @@ describe(
       return out;
     }
 
+    const LINKING_ENV = {
+      REEFCLUB_WEB_URL: "http://localhost:3005",
+      REEFCLUB_LINKING_ENABLED: "true",
+    };
+    const savedEnv: Record<string, string | undefined> = {};
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
@@ -315,6 +320,12 @@ describe(
         },
       });
 
+      // issuing a code is switched on only where the ReefClub runs (acrobot 34365); the address is the
+      // default one, so the mails' links and the ReefClub's allowed origin stay what they were
+      for (const [key, value] of Object.entries(LINKING_ENV)) {
+        savedEnv[key] = process.env[key];
+        process.env[key] = value;
+      }
       internal = await NestFactory.create(AppModule, { logger: false });
       configureApp(internal);
       // The one sender instance every internal service holds: its `send` is
@@ -369,6 +380,10 @@ describe(
     });
 
     after(async () => {
+      for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
       await reefclub?.close();
       await internal?.close();
       await removeLeftovers();

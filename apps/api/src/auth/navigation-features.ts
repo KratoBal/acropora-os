@@ -1,5 +1,6 @@
 import type { NavigationFeature } from "@acropora/types";
 
+import { homepageProjectionAllowed } from "../homepage-content/homepage-content.service.js";
 import {
   enrichmentAvailabilityFor,
   pilotUserIds,
@@ -21,6 +22,11 @@ export const NAVIGATION_ENV = Symbol("NAVIGATION_ENV");
  *                            empty list means nobody); anything else is off.
  *                            It hides the MENU only: the API is guarded by the
  *                            quotes.* permissions, not by this switch.
+ *   homepage-content         the web shop home page editor: the environment
+ *                            may write the test shop (`MEDUSA_PROJECT_HOMEPAGE_CONTENT=true`).
+ *                            The API endpoints follow the same switch (404 off).
+ *   reefclub-linking         issuing ReefClub codes: `reefClubLinkingOn`. The
+ *                            endpoints follow the same switch (404 off).
  */
 export function navigationFeatures(
   env: NodeJS.ProcessEnv,
@@ -30,7 +36,21 @@ export function navigationFeatures(
   if (enrichmentAvailabilityFor(env, userId) !== "off")
     features.add("jev-product-enrichment");
   if (quotesMenuOn(env, userId)) features.add("quotes");
+  if (homepageProjectionAllowed(env)) features.add("homepage-content");
+  if (reefClubLinkingOn(env)) features.add("reefclub-linking");
   return features;
+}
+
+/**
+ * ISSUING A REEFCLUB CODE IS ON (acrobot 34365): the ReefClub's web address is set AND the explicit
+ * switch says `true`. Production has neither: the code would invite a customer to a service that does
+ * not run there, and the e-mail's link would fall back to `http://localhost:3005` (`reefclub-mail.ts`).
+ */
+export function reefClubLinkingOn(env: NodeJS.ProcessEnv): boolean {
+  return (
+    Boolean(env.REEFCLUB_WEB_URL?.trim()) &&
+    env.REEFCLUB_LINKING_ENABLED === "true"
+  );
 }
 
 export function quotesMenuOn(env: NodeJS.ProcessEnv, userId: string): boolean {

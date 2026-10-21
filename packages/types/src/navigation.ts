@@ -63,6 +63,12 @@ export type NavigationVisibility =
 /**
  * A SERVER SWITCH AN ENTRY ALSO WAITS ON, beyond the role rule.
  *
+ * `homepage-content` is `MEDUSA_PROJECT_HOMEPAGE_CONTENT=true`: the web shop home page editor exists
+ * only where the OS may write the test shop (the commerce exception is for the TEST shop only;
+ * acrobot 34365). `reefclub-linking` is `REEFCLUB_WEB_URL` set AND `REEFCLUB_LINKING_ENABLED=true`:
+ * issuing a ReefClub code (and e-mailing it to a customer) exists only where the ReefClub runs, so
+ * no customer gets a letter about a service that is not there, or a localhost link.
+ *
  * `jev-product-enrichment` is `JEV_PRODUCT_ENRICHMENT` not being `off`
  * (docs/jev-product-intelligence/v1-discovery.md, answer 6). Only the server
  * reads the variable; it passes the switches that are on to
@@ -72,6 +78,8 @@ export type NavigationVisibility =
 export const NAVIGATION_FEATURES = [
   "jev-product-enrichment",
   "quotes",
+  "homepage-content",
+  "reefclub-linking",
 ] as const;
 export type NavigationFeature = (typeof NAVIGATION_FEATURES)[number];
 
@@ -478,6 +486,26 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     id: "brands",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.PRODUCTS_VIEW),
+  },
+  {
+    /**
+     * A WEBSHOP KEZDŐLAP SZERKESZTŐJE (/admin/kezdolap). A márkák joga, mint az API végpontjaié, és
+     * csak ahol a környezet a teszt-webshopba írhat (`homepage-content`): élesen nem látszik.
+     */
+    id: "homepage-content",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PRODUCTS_VIEW),
+    feature: "homepage-content",
+  },
+  {
+    /**
+     * A „ReefClub-kód kiadása” panel a vevő akváriumán (nem menüpont: a panelt ez a bejegyzés
+     * kapcsolja). Ugyanaz a jog, mint a végpontoké (`aquariums.manage`), és csak ahol a ReefClub fut.
+     */
+    id: "reefclub-linking",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.AQUARIUMS_MANAGE),
+    feature: "reefclub-linking",
   },
   {
     id: "settings-general",

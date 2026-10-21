@@ -111,8 +111,8 @@ export const SETTINGS_AREAS: SettingsArea[] = [
         description:
           "A kezdőlap szövegei, hivatkozásai, képei és a nyitó csúszka diái.",
         href: "/admin/kezdolap",
-        // a márkák jogával (products.view), mint az API végpontja
-        entryId: "brands",
+        // a saját bejegyzése: a márkák joga ÉS a környezet kapcsolója (élesen nem látszik)
+        entryId: "homepage-content",
       },
     ],
   },
