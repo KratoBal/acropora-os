@@ -4,6 +4,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { assertKnownNodeEnv } from "./common/node-env.guard.js";
 import { configureReefClubApp } from "./reefclub/reefclub-app.configuration.js";
+import { DIAG_ENV, DIAG_WINDOW_MS } from "./reefclub/reefclub-diag.js";
 import { assertReefClubEnvironment } from "./reefclub/reefclub-environment.js";
 import { ReefClubAppModule } from "./reefclub/reefclub.module.js";
 
@@ -16,6 +17,11 @@ import { ReefClubAppModule } from "./reefclub/reefclub.module.js";
 async function bootstrap() {
   assertKnownNodeEnv();
   assertReefClubEnvironment(process.env);
+
+  if (process.env[DIAG_ENV] === "true")
+    console.warn(
+      `FIGYELEM: ${DIAG_ENV}=true: a /rc/v1/health az indulástól ${DIAG_WINDOW_MS / 60_000} percig kiírja a hívó címét és az X-Forwarded-For láncot (csak mérésre).`,
+    );
 
   const app = await NestFactory.create(ReefClubAppModule.forRoot());
 
