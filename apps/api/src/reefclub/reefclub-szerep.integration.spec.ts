@@ -755,19 +755,22 @@ describe(
       );
     });
 
-    it("a beváltó függvény szuperfelhasználó tulajdonosát a fájl a táblák tulajdonosára adja (#1752, acrobot 33903)", async () => {
+    it("a beváltó függvény a saját, nem szuper, belépni nem tudó szerepéé, pontosan a kellő jogokkal (b6133bd8, barracuda 33975)", async () => {
       const ownerOf = async () =>
         (
-          await prisma.$queryRawUnsafe<{ fn: string; tbl: string }[]>(
-            `SELECT pg_get_userbyid(p.proowner) AS fn,
-                    (SELECT pg_get_userbyid(c.relowner) FROM pg_class c
-                      WHERE c.oid = '"ReefClubLinkCode"'::regclass) AS tbl
-               FROM pg_proc p
+          await prisma.$queryRawUnsafe<{ fn: string }[]>(
+            `SELECT pg_get_userbyid(p.proowner) AS fn FROM pg_proc p
               WHERE p.oid = '"reefclub_redeem_link_code"(text, text)'::regprocedure`,
           )
-        )[0]!;
-      const before = await ownerOf();
-      // the run's own superuser stands for a superuser that ran the migrations
+        )[0]!.fn;
+      const apply = async () => {
+        for (const statement of statements(
+          readFileSync(SQL_FILE, "utf8"),
+          role,
+        ))
+          await prisma.$executeRawUnsafe(statement);
+      };
+      // a superuser that ran the migrations owns it again; the file hands it back
       const superuser = `reefclub_proba_super_${suffix}`;
       await prisma.$executeRawUnsafe(
         `CREATE ROLE "${superuser}" SUPERUSER NOLOGIN`,
@@ -777,38 +780,172 @@ describe(
           `ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "${superuser}"`,
         );
         assert.equal(
-          (await ownerOf()).fn,
+          await ownerOf(),
           superuser,
           "kontroll: a csere megtörtént",
         );
-        for (const statement of statements(
-          readFileSync(SQL_FILE, "utf8"),
-          role,
-        ))
-          await prisma.$executeRawUnsafe(statement);
-        const after = await ownerOf();
-        assert.equal(after.fn, after.tbl);
-        // run again: nothing changes
-        for (const statement of statements(
-          readFileSync(SQL_FILE, "utf8"),
-          role,
-        ))
-          await prisma.$executeRawUnsafe(statement);
-        assert.deepEqual(await ownerOf(), after);
+        await apply();
+        assert.equal(await ownerOf(), "reefclub_definer");
+        await apply(); // idempotent
+        assert.equal(await ownerOf(), "reefclub_definer");
       } finally {
+        // whatever the file did, the probe superuser owns nothing when it is dropped
         await prisma.$executeRawUnsafe(
-          `ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "${before.fn}"`,
+          `ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "reefclub_definer"`,
         );
         await prisma.$executeRawUnsafe(`DROP ROLE IF EXISTS "${superuser}"`);
       }
+
+      const facts = (
+        await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
+          `SELECT r.rolsuper, r.rolcanlogin, r.rolbypassrls, r.rolcreaterole, r.rolcreatedb,
+                  (SELECT count(*)::int FROM pg_auth_members m WHERE m.roleid = r.oid) AS members,
+                  pg_has_role($1, 'reefclub_definer', 'MEMBER') AS "appIsMember",
+                  has_schema_privilege($1, 'public', 'CREATE') AS "appCreatesInPublic",
+                  has_schema_privilege('reefclub_definer', 'public', 'CREATE') AS "definerCreatesInPublic"
+             FROM pg_roles r WHERE r.rolname = 'reefclub_definer'`,
+          role,
+        )
+      )[0];
+      assert.deepEqual(facts, {
+        rolsuper: false,
+        rolcanlogin: false,
+        rolbypassrls: false,
+        rolcreaterole: false,
+        rolcreatedb: false,
+        members: 0,
+        appIsMember: false,
+        appCreatesInPublic: false,
+        definerCreatesInPublic: false,
+      });
+
+      // the rights, column by column: what the function uses, and nothing next to it
+      const can = async (sql: string) =>
+        (
+          await prisma.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT ${sql} AS ok`)
+        )[0]!.ok;
+      const col = (table: string, column: string, privilege: string) =>
+        `has_column_privilege('reefclub_definer', '"${table}"', '${column}', '${privilege}')`;
+      const rights: Record<string, boolean> = {};
+      for (const [table, privilege, columns] of [
+        [
+          "ReefClubLinkCode",
+          "SELECT",
+          [
+            "id",
+            "customerId",
+            "codeHash",
+            "usedAt",
+            "expiresAt",
+            "usedByAccountId",
+            "issuedById",
+          ],
+        ],
+        [
+          "ReefClubLinkCode",
+          "UPDATE",
+          ["usedAt", "usedByAccountId", "codeHash", "expiresAt", "customerId"],
+        ],
+        [
+          "Customer",
+          "SELECT",
+          ["id", "type", "isActive", "displayName", "email", "phone"],
+        ],
+        [
+          "ReefClubCustomerLink",
+          "INSERT",
+          [
+            "id",
+            "accountId",
+            "customerId",
+            "status",
+            "codeId",
+            "createdAt",
+            "endedAt",
+          ],
+        ],
+        [
+          "ReefClubCustomerLink",
+          "SELECT",
+          [
+            "id",
+            "createdAt",
+            "accountId",
+            "customerId",
+            "status",
+            "codeId",
+            "endedByUserId",
+          ],
+        ],
+        ["ReefClubCustomerLink", "UPDATE", ["status"]],
+      ] as const)
+        for (const column of columns)
+          rights[`${table}.${column} ${privilege}`] = await can(
+            col(table, column, privilege),
+          );
+      for (const [label, sql] of [
+        [
+          "ReefClubLinkCode DELETE",
+          `has_table_privilege('reefclub_definer', '"ReefClubLinkCode"', 'DELETE')`,
+        ],
+        [
+          "ReefClubCustomerLink DELETE",
+          `has_table_privilege('reefclub_definer', '"ReefClubCustomerLink"', 'DELETE')`,
+        ],
+        [
+          "Aquarium bármi",
+          `has_any_column_privilege('reefclub_definer', '"Aquarium"', 'SELECT')`,
+        ],
+        [
+          "ReefClubAccount bármi",
+          `has_any_column_privilege('reefclub_definer', '"ReefClubAccount"', 'SELECT')`,
+        ],
+      ] as const)
+        rights[label] = await can(sql);
+      assert.deepEqual(rights, {
+        "ReefClubLinkCode.id SELECT": true,
+        "ReefClubLinkCode.customerId SELECT": true,
+        "ReefClubLinkCode.codeHash SELECT": true,
+        "ReefClubLinkCode.usedAt SELECT": true,
+        "ReefClubLinkCode.expiresAt SELECT": true,
+        "ReefClubLinkCode.usedByAccountId SELECT": false,
+        "ReefClubLinkCode.issuedById SELECT": false,
+        "ReefClubLinkCode.usedAt UPDATE": true,
+        "ReefClubLinkCode.usedByAccountId UPDATE": true,
+        "ReefClubLinkCode.codeHash UPDATE": false,
+        "ReefClubLinkCode.expiresAt UPDATE": false,
+        "ReefClubLinkCode.customerId UPDATE": false,
+        "Customer.id SELECT": true,
+        "Customer.type SELECT": true,
+        "Customer.isActive SELECT": true,
+        "Customer.displayName SELECT": true,
+        "Customer.email SELECT": false,
+        "Customer.phone SELECT": false,
+        "ReefClubCustomerLink.id INSERT": true,
+        "ReefClubCustomerLink.accountId INSERT": true,
+        "ReefClubCustomerLink.customerId INSERT": true,
+        "ReefClubCustomerLink.status INSERT": true,
+        "ReefClubCustomerLink.codeId INSERT": true,
+        "ReefClubCustomerLink.createdAt INSERT": true,
+        "ReefClubCustomerLink.endedAt INSERT": false,
+        "ReefClubCustomerLink.id SELECT": true,
+        "ReefClubCustomerLink.createdAt SELECT": true,
+        "ReefClubCustomerLink.accountId SELECT": true,
+        "ReefClubCustomerLink.customerId SELECT": true,
+        "ReefClubCustomerLink.status SELECT": true,
+        "ReefClubCustomerLink.codeId SELECT": false,
+        "ReefClubCustomerLink.endedByUserId SELECT": false,
+        "ReefClubCustomerLink.status UPDATE": false,
+        "ReefClubLinkCode DELETE": false,
+        "ReefClubCustomerLink DELETE": false,
+        "Aquarium bármi": false,
+        "ReefClubAccount bármi": false,
+      });
       // the role keeps its right after the owner change (the ACL stays)
       assert.equal(
-        (
-          await prisma.$queryRawUnsafe<{ ok: boolean }[]>(
-            `SELECT has_function_privilege($1, '"reefclub_redeem_link_code"(text, text)', 'EXECUTE') AS ok`,
-            role,
-          )
-        )[0]!.ok,
+        await can(
+          `has_function_privilege('${role}', '"reefclub_redeem_link_code"(text, text)', 'EXECUTE')`,
+        ),
         true,
       );
     });
