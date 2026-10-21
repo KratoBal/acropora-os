@@ -41,10 +41,9 @@ import {
   looksLikeReminder,
   bankReference,
   cardPaymentMatch,
-  compactNumber,
-  customerIds,
   isOwnInvoiceText,
   readInvoiceText,
+  withBankReference,
   withKnownNumber,
   withLabelledTotal,
   type KnownInvoiceNumber,
@@ -604,22 +603,7 @@ export class InvoiceCollectionService {
                 }),
             cardPayment: payment,
           };
-        } else
-          /*
-            AZ ÜGYFÉL-AZONOSÍTÓ BANKI HIVATKOZÁS LEHET, SZÁMLASZÁM NEM
-            (FleetCor, 2026-10-04: a terhelés közleménye a HU00008659
-            ügyfél-azonosítót hordozza, és ez minden havi számlán ugyanaz).
-          */
-          textReading =
-            textReading.invoiceNumber ||
-            customerIds(lines).has(compactNumber(reference))
-              ? { ...textReading, bankReference: reference }
-              : {
-                  ...textReading,
-                  invoiceNumber: reference,
-                  numberFrom: "BANK",
-                  bankReference: reference,
-                };
+        } else textReading = withBankReference(textReading, lines, reference);
       }
       // a bruttó és a pénznem a címkés végösszegből, ha más nem adja (37b8643d)
       textReading = withLabelledTotal(textReading, lines);

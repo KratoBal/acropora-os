@@ -364,6 +364,31 @@ export function bankReference(
 }
 
 /**
+ * A BANKI HIVATKOZÁS AZ OLVASATBAN: a begyűjtés és a kézi feltöltés közös lépése
+ * (kártya 847bca33). Ha az olvasó nem talált számot, a hivatkozás lesz a szám;
+ * ha talált, a hivatkozás mellé kerül.
+ *
+ * AZ ÜGYFÉL-AZONOSÍTÓ BANKI HIVATKOZÁS LEHET, SZÁMLASZÁM NEM (FleetCor,
+ * 2026-10-04: a terhelés közleménye a HU00008659 ügyfél-azonosítót hordozza, és
+ * ez minden havi számlán ugyanaz).
+ */
+export function withBankReference(
+  reading: InvoiceTextReading,
+  lines: readonly string[],
+  reference: string,
+): InvoiceTextReading {
+  return reading.invoiceNumber ||
+    customerIds(lines).has(compactNumber(reference))
+    ? { ...reading, bankReference: reference }
+    : {
+        ...reading,
+        invoiceNumber: reference,
+        numberFrom: "BANK",
+        bankReference: reference,
+      };
+}
+
+/**
  * A SAJÁT KIMENŐ SZÁMLÁNK: a szövegben a saját bankszámlánk áll (a kiállító
  * jele; #1315). A begyűjtés ezért nem tárolja (OWN_INVOICE), és a régebben
  * tárolt sorokat ugyanez a próba jelöli meg (`own-invoice-mark`).

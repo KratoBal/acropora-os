@@ -29,7 +29,12 @@ function pdf(lines: string[]): Promise<Buffer> {
   });
 }
 
-function setup() {
+function setup(
+  options: {
+    narrative?: string;
+    known?: { number: string; supplierTaxNumber: string }[];
+  } = {},
+) {
   const uploads: Record<string, unknown>[] = [];
   const resolved: { bankTransactionId: string; documentId: string }[] = [];
   const repository = {
@@ -51,7 +56,7 @@ function setup() {
         bookingDate: new Date("2026-08-12T00:00:00Z"),
         counterpartyAccount: null,
         counterpartyName: "Allianz Hungária Zrt.",
-        narrative: "",
+        narrative: options.narrative ?? "",
         transactionType: "ÁTUTALÁS",
         comment: null,
         categoryOverride: null,
@@ -65,6 +70,7 @@ function setup() {
     setPayee: async () => undefined,
     navNumbers: async (base: string) =>
       base === "27045364" ? ["4042V0000011711", "4042V0000010763"] : [],
+    knownNumbers: async () => options.known ?? [],
     uploadAndPair: async (input: Record<string, unknown>) => {
       uploads.push(input);
       return "doc-1";
@@ -213,5 +219,100 @@ describe("uploading an invoice from the drawer", () => {
     assert.equal(uploads[0]!.importResult, null);
     assert.equal(reading?.invoiceNumber, "4042V0000011711");
     assert.match(reading?.supplierTaxNumber ?? "", /27045364/);
+  });
+
+  /*
+    A BEGYŰJTÉS TÖBBI LÉPÉSE A FELTÖLTÉSEN IS (kártya 847bca33). Élesben egy
+    francia szállító számlája a levélből számmal jött be, a feltöltésből szám
+    nélkül, ezért a két példány nem vonódott össze, és a jelölt-listában a
+    fájlnév állt a szám helyén. MI PIROSÍT: ha a feltöltés nem nézi a saját
+    terhelése közleményét, az ismert számokat vagy a címkés végösszeget.
+  */
+  const AMBLARD = [
+    "AMBLARD SAS",
+    "TVA intracommunautaire: FR61393374657",
+    "Client: Acropora Kft., HU23916229",
+    "Référence F2602896",
+    "Montant total 180,00 EUR",
+  ];
+  const textReadingOf = (upload: Record<string, unknown>) =>
+    upload.textReading as {
+      invoiceNumber: string | null;
+      numberFrom: string | null;
+      supplierTaxNumber: string | null;
+      bankReference?: string;
+      gross?: string;
+      currency?: string;
+    } | null;
+
+  it("a foreign invoice takes its number from its OWN debit's narrative, and its total from the label", async () => {
+    const { missing, uploads } = setup({
+      narrative: "AMBLARD SAS F2602896 KARTYAS VASARLAS",
+    });
+    await missing.upload(
+      "debit-1",
+      { originalname: "HUAAB[30].PDF", buffer: await pdf(AMBLARD) },
+      "INVOICE",
+      USER,
+    );
+    const reading = textReadingOf(uploads[0]!);
+    assert.deepEqual(
+      [
+        reading?.invoiceNumber,
+        reading?.numberFrom,
+        reading?.bankReference,
+        reading?.supplierTaxNumber,
+        reading?.gross,
+        reading?.currency,
+      ],
+      ["F2602896", "BANK", "F2602896", "FR61393374657", "180", "EUR"],
+    );
+  });
+
+  it("the control: the same PDF beside a debit that does not name it stays without a number", async () => {
+    const { missing, uploads } = setup({ narrative: "AMBLARD SAS" });
+    await missing.upload(
+      "debit-1",
+      { originalname: "HUAAB[30].PDF", buffer: await pdf(AMBLARD) },
+      "INVOICE",
+      USER,
+    );
+    const reading = textReadingOf(uploads[0]!);
+    assert.deepEqual(
+      [reading?.invoiceNumber, reading?.numberFrom, reading?.gross],
+      [null, null, "180"],
+    );
+  });
+
+  it("a known incoming number in the text names the invoice when the supplier's tax number is not in it", async () => {
+    const { missing, uploads } = setup({
+      known: [{ number: "U26/03861-SZ", supplierTaxNumber: "11223344-2-13" }],
+    });
+    await missing.upload(
+      "debit-1",
+      {
+        originalname: "szamla.pdf",
+        buffer: await pdf([
+          "Tisza 97 Kft.",
+          "Vevő: Acropora Kft., 23916229-2-42",
+          "Számla",
+          "U26/03861-SZ",
+          "Végösszeg: 12 700 Ft",
+        ]),
+      },
+      "INVOICE",
+      USER,
+    );
+    const reading = textReadingOf(uploads[0]!);
+    assert.deepEqual(
+      [
+        reading?.invoiceNumber,
+        reading?.numberFrom,
+        reading?.supplierTaxNumber,
+        reading?.gross,
+        reading?.currency,
+      ],
+      ["U26/03861-SZ", "NAV", "11223344-2-13", "12700", "HUF"],
+    );
   });
 });

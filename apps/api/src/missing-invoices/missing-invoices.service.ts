@@ -1,5 +1,9 @@
 import {
+  bankReference,
   readInvoiceText,
+  withBankReference,
+  withKnownNumber,
+  withLabelledTotal,
   type InvoiceTextReading,
 } from "./collection/invoice-text.js";
 import {
@@ -579,8 +583,8 @@ export class MissingInvoicesService {
     user: AuthenticatedUser,
   ): Promise<MissingInvoiceItemDetail> {
     const computed = await this.compute();
-    if (!computed.items.some((item) => item.id === id))
-      throw new NotFoundException("A banki terhelés nem található.");
+    const debit = computed.items.find((item) => item.id === id);
+    if (!debit) throw new NotFoundException("A banki terhelés nem található.");
     if (!file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-")))
       throw new BadRequestException("Csak PDF tölthető fel.");
     let importResult: SupplierInvoiceImportResult | null = null;
@@ -621,6 +625,33 @@ export class MissingInvoicesService {
         ...hints,
         navNumbers: () => navNumbers,
       });
+      /*
+        A BEGYŰJTÉS TÖBBI LÉPÉSE IS (kártya 847bca33, 2026-10-21). Élesben egy
+        francia szállító (Amblard) számlája a levélből F2602896 számmal jött be,
+        ugyanez a feltöltésből szám nélkül: a feltöltés csak a fájlnevet és a
+        NAV-számokat nézte, egy külföldi szállítónak pedig NAV-száma nincs. Szám
+        nélkül a feltöltés kulcsa üres számú, ezért soha nem vonódik össze a
+        levélből jött példánnyal, és a jelölt-listában a fájlnév áll a szám
+        helyén. Itt a banki hivatkozás a SAJÁT terhelés közleményéből jön: a
+        feltöltésnél ezt a terhelést pontosan ismerjük, a begyűjtés az összeset
+        nézi. A kártyás fizetés és a saját-számla próba kimarad: a feltöltést
+        ember kötötte ehhez a terheléshez.
+      */
+      if (textReading.numberFrom !== "NAV")
+        textReading = withKnownNumber(
+          textReading,
+          lines,
+          await this.repository.knownNumbers(),
+        );
+      if (textReading.numberFrom !== "NAV") {
+        const reference = bankReference(lines, textReading, hints, [
+          debit.narrative,
+        ]);
+        if (reference)
+          textReading = withBankReference(textReading, lines, reference);
+      }
+      // a bruttó és a pénznem a címkés végösszegből (37b8643d), mint a begyűjtésnél
+      textReading = withLabelledTotal(textReading, lines);
     }
     const documentId = await this.repository.uploadAndPair({
       bankTransactionId: id,

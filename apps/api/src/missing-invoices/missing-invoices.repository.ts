@@ -1,5 +1,9 @@
 import { postedPurchaseForArrival } from "../billing/purchase-incoming.js";
-import type { InvoiceTextReading } from "./collection/invoice-text.js";
+import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
+import type {
+  InvoiceTextReading,
+  KnownInvoiceNumber,
+} from "./collection/invoice-text.js";
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
 import type { SupplierInvoiceImportResult } from "@acropora/types";
@@ -873,6 +877,14 @@ export class MissingInvoicesRepository {
       select: { navInvoiceNumber: true },
     });
     return rows.map((row) => row.navInvoiceNumber);
+  }
+
+  /**
+   * Az ismert bejövő számlaszámok (NAV, Számlázz.hu, rögzített beszerzés): a
+   * feltöltés ugyanazzal a listával olvas, mint a begyűjtés.
+   */
+  knownNumbers(): Promise<KnownInvoiceNumber[]> {
+    return new InvoiceCollectionRepository().knownNumbers();
   }
 
   async uploadAndPair(input: {
