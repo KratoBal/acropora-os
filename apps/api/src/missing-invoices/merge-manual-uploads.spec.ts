@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   matchMonth,
   mergeManualUploads,
+  shownNumber,
   type CandidateDocument,
   type MatchableDebit,
 } from "./missing-invoice-matching.js";
@@ -58,7 +59,10 @@ const feed = (
   ...overrides,
 });
 
-/** Olvashatatlan feltöltés: a száma a fájlnév, bruttó és `inv:` azonosság nélkül. */
+/**
+ * Olvashatatlan feltöltés: szám nélkül, a fájlneve külön mezőben (kártya
+ * 847bca33: a fájlnév nem szám), bruttó és `inv:` azonosság nélkül.
+ */
 const upload = (
   id: string,
   fileName: string,
@@ -66,7 +70,8 @@ const upload = (
 ): CandidateDocument => ({
   id,
   source: "UPLOAD",
-  number: fileName,
+  number: "",
+  fileName,
   date: "2026-09-14",
   gross: null,
   currency: "HUF",
@@ -434,6 +439,16 @@ describe("mergeManualUploads, the monthly recurring invoice", () => {
         ]),
       ),
       [],
+    );
+  });
+});
+
+describe("an unread upload's number (card 847bca33)", () => {
+  it("is empty; the screen shows the file name, marked as not a number", () => {
+    const unread = upload("u-1", "HUAAB[30].PDF");
+    assert.deepEqual(
+      [unread.number, shownNumber(unread), shownNumber(feed("f-1"))],
+      ["", "olvasatlan feltöltés: HUAAB[30].PDF", "4042V0000011711"],
     );
   });
 });

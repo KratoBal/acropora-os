@@ -104,20 +104,34 @@ describe("uploading an invoice from the drawer", () => {
     assert.equal(uploads.length, 0);
   });
 
-  it("refuses a file that only starts like a PDF", async () => {
-    const { missing, uploads } = setup();
-    await assert.rejects(
-      missing.upload(
-        "debit-1",
-        { originalname: "torott.pdf", buffer: Buffer.from("%PDF-1.4 torott") },
-        "INVOICE",
-        USER,
-      ),
-      (error: unknown) =>
-        error instanceof BadRequestException &&
-        /nem olvasható/.test(error.message),
+  /*
+    A SZÖVEG NÉLKÜLI PDF IS TÁROLÓDIK (kártya 847bca33, acrobot 34446): élesben
+    egy tömörített PDF (kompress.pdf) feltöltése nem hagyott sort, mert a
+    szövegkinyerés kivétele 400-zal elutasította. MI PIROSÍT: ha a feltöltés
+    újra elutasítja, vagy olvasatot, vevőt találgat egy szöveg nélküli fájlra.
+  */
+  it("stores a PDF whose text cannot be read: unread, no reading, an unknown payee", async () => {
+    const { missing, uploads, resolved } = setup();
+    await missing.upload(
+      "debit-1",
+      { originalname: "kompress.pdf", buffer: Buffer.from("%PDF-1.4 torott") },
+      "INVOICE",
+      USER,
     );
-    assert.equal(uploads.length, 0);
+    assert.equal(uploads.length, 1);
+    assert.deepEqual(
+      [
+        uploads[0]!.fileName,
+        uploads[0]!.importResult,
+        uploads[0]!.textReading,
+        uploads[0]!.payee,
+        uploads[0]!.bankTransactionId,
+      ],
+      ["kompress.pdf", null, null, "UNKNOWN", "debit-1"],
+    );
+    assert.deepEqual(resolved, [
+      { bankTransactionId: "debit-1", documentId: "doc-1" },
+    ]);
   });
 
   it("stores an unreadable-format PDF too, checks the payee from its text, and keeps the kind", async () => {

@@ -213,9 +213,16 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
       "INVOICE",
       actor,
     );
+    // az olvasatlan feltöltés száma nem a fájlneve (kártya 847bca33): a
+    // felület a fájlnevet jelölve mutatja
     assert.deepEqual(
-      [after.state, after.matchedBy, after.document?.source],
-      ["FOUND", "MANUAL", "UPLOAD"],
+      [
+        after.state,
+        after.matchedBy,
+        after.document?.source,
+        after.document?.number,
+      ],
+      ["FOUND", "MANUAL", "UPLOAD", "olvasatlan feltöltés: ismeretlen.pdf"],
     );
     const stored = await prisma.incomingSupplierDocument.findFirst({
       where: { origin: "UPLOAD", uploadedByUserId: actor.id },

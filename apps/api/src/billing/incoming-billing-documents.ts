@@ -13,6 +13,7 @@ import type {
 import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
+import { shownNumber } from "../missing-invoices/missing-invoice-matching.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -377,7 +378,8 @@ export function notInFeedTest(
     ![document.id, ...(document.aliasIds ?? [])].some((id) =>
       feedSources.has(id),
     ) &&
-    !feedNumbers.has(compactNumber(document.number));
+    // az olvasatlan feltöltés száma üres: az nem egy feed-sor száma
+    !(document.number && feedNumbers.has(compactNumber(document.number)));
 }
 
 /** A csak postafiókos sor azonosítójának előtagja; utána a jelölt dokumentum azonosítója. */
@@ -426,7 +428,8 @@ function mailboxListItem(
     origin: "MAILBOX",
     // jóváhagyás után a sor a feedből jön, ide csak ellenőrizetlen jut
     review: "TO_REVIEW",
-    documentNumber: document.number,
+    // az olvasatlan feltöltésnél a fájlneve, jelölve; a kinyert szám felülírja
+    documentNumber: shownNumber(document),
     kindCode: MAILBOX_KIND_CODE,
     kindLabel: externalKindLabel(MAILBOX_KIND_CODE),
     invoiceFormat: null,

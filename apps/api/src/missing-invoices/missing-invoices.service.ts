@@ -39,6 +39,7 @@ import {
 import {
   matchMonth,
   mergeManualUploads,
+  shownNumber,
   type CandidateDocument,
   type ItemState,
   type MatchOutcome,
@@ -294,7 +295,7 @@ export class MissingInvoicesService {
       ...item,
       candidates: (outcome?.candidates ?? []).map((d) => ({
         documentId: d.id,
-        number: d.number,
+        number: shownNumber(d),
         date: d.date,
         gross:
           d.gross === null
@@ -309,7 +310,7 @@ export class MissingInvoicesService {
         .filter((d) => d.payee === "UNKNOWN" || d.payeeMarked)
         .map((d) => ({
           documentId: d.id,
-          number: d.number,
+          number: shownNumber(d),
           payee: d.payee,
           marked: d.payeeMarked === true,
         })),
@@ -593,11 +594,20 @@ export class MissingInvoicesService {
         `A feltöltött ${file.originalname} beszállítói formátuma ismeretlen; adat nélkül tárolva.`,
       );
     }
+    /*
+      A SZÖVEG NÉLKÜLI PDF IS TÁROLÓDIK (kártya 847bca33, acrobot 34446): a fenti
+      ígéret szerint a fel nem ismert fájl adat nélkül is párosul. Eddig a
+      szövegkinyerés kivétele 400-zal elutasította a feltöltést, és nem maradt
+      utána sor; élesben egy tömörített PDF (kompress.pdf) így nem került be.
+      Most olvasatlan: szám és olvasat nélkül, a vevője ismeretlen.
+    */
     let lines: string[] = [];
     try {
       lines = await pdfTextLines(new Uint8Array(file.buffer));
     } catch {
-      throw new BadRequestException("A PDF nem olvasható.");
+      this.logger.warn(
+        `A feltöltött ${file.originalname} szövege nem olvasható; olvasatlanként tárolva.`,
+      );
     }
     const text = lines.join("\n");
     /*
@@ -609,7 +619,7 @@ export class MissingInvoicesService {
       NAV- vagy Számlázz.hu-sorral.
     */
     let textReading: InvoiceTextReading | null = null;
-    if (!importResult) {
+    if (!importResult && lines.length > 0) {
       const hints = { fileName: file.originalname };
       const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
       const navNumbers = supplier
@@ -728,7 +738,7 @@ export class MissingInvoicesService {
     };
     const documentsOf = (id: string) =>
       (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
-        number: document.number,
+        number: shownNumber(document),
         originalId:
           document.originalId ?? (document.hasOriginal ? document.id : null),
         ...dataNoteOf(document),
@@ -754,7 +764,7 @@ export class MissingInvoicesService {
         paperOriginal: item.paperOriginal,
         ...(labelOf(item) ? { label: labelOf(item) } : {}),
         documents: documentsOf(item.id).map((d) => ({
-          number: d.number,
+          number: shownNumber(d),
           file: (d.originalId && files.get(d.originalId)) || null,
           ...(d.dataNote ? { dataNote: d.dataNote } : {}),
         })),
@@ -917,12 +927,12 @@ export class MissingInvoicesService {
         document: document
           ? {
               id: document.id,
-              number: document.number,
+              number: shownNumber(document),
               source: document.source,
             }
           : null,
         matchedBy: outcome.matchedBy,
-        documentNumbers: outcome.documents.map((d) => d.number),
+        documentNumbers: outcome.documents.map((d) => shownNumber(d)),
         missingNumbers: outcome.missingNumbers ?? [],
         amountDifference: outcome.amountDifference
           ? {

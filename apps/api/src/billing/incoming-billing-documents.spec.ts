@@ -742,6 +742,36 @@ describe("mailboxOnlyPaidItems", () => {
     );
   });
 
+  /*
+    THE UNREAD UPLOAD (card 847bca33): its number used to be its file name, and
+    the row showed "HUAAB[30].PDF" as an invoice number. WHAT TURNS RED: the
+    row shows the file name unmarked, or an empty number is taken for a feed
+    row's (empty) number and the row disappears.
+  */
+  it("an unread upload's row shows its file name marked as not a number, and an empty number matches no feed row", () => {
+    const unread = pairing({
+      document: candidate({
+        id: "upload-huaab",
+        source: "UPLOAD",
+        number: "",
+        fileName: "HUAAB[30].PDF",
+        gross: null,
+        supplierName: "",
+      }),
+      debits: [
+        { bookingDate: "2026-09-16", amount: "179520", currency: "HUF" },
+      ],
+    });
+    const items = mailboxOnlyPaidItems(
+      [row({ sourceDocumentId: "other", documentNumber: "" })],
+      new Map([["upload-huaab", unread]]),
+    );
+    assert.deepEqual(
+      items.map((item) => item.documentNumber),
+      ["olvasatlan feltöltés: HUAAB[30].PDF"],
+    );
+  });
+
   it("one pairing under its id and its aliases is one row", () => {
     const shared = pairing({
       document: { ...hetzner, aliasIds: ["mail-hetzner-2"] },
