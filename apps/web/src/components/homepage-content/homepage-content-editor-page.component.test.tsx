@@ -20,7 +20,11 @@ const api = vi.hoisted(() => ({
   setProjection: vi.fn(),
 }));
 vi.mock("@/lib/api/homepage-content", () => ({ homepageContentApi: api }));
-const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
+const auth = vi.hoisted(() => ({
+  role: "OWNER" as UserRole,
+  // the server's switch reaches the page through the menu it serves (`homepage-content`)
+  served: true,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -35,6 +39,9 @@ vi.mock("@/components/auth/auth-provider", () => ({
         customerId: null,
         supplierId: null,
       },
+      navigation: auth.served
+        ? [{ id: "homepage-content", surfaces: ["web"] }]
+        : [],
     } satisfies Session,
   }),
 }));
@@ -69,6 +76,7 @@ const echo = (projection = "off") =>
 
 beforeEach(() => {
   auth.role = "OWNER";
+  auth.served = true;
   api.get.mockReset().mockResolvedValue(stored());
   api.save.mockReset();
   api.uploadImage.mockReset();
@@ -217,6 +225,15 @@ describe("HomepageContentEditorPage", () => {
     await field("Mit keresel ma?: Címsor");
     save();
     expect(await screen.findByText("a szerver nem érhető el")).toBeTruthy();
+  });
+
+  // MI PIROSÍT: ha a szerkesztő a szerver kapcsolója nélkül is betöltene vagy írna (élesen a
+  // commerce-kivétel nem él; acrobot 34365)
+  it("HP-ED-OFF: without the environment's switch there is no editor and nothing is loaded", () => {
+    auth.served = false;
+    render(<HomepageContentEditorPage />);
+    expect(screen.getByText("Ebben a környezetben nem elérhető")).toBeTruthy();
+    expect(api.get).not.toHaveBeenCalled();
   });
 
   it("HP-ED-VIEWER: without products.manage there is no editor", () => {

@@ -13,6 +13,7 @@ import {
   type WaterBodyType,
   type WaterType,
   type WorksheetDepartmentSummary,
+  servedNavigationFeatures,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -140,6 +141,10 @@ export function PilotAquariumEditorPage({
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.AQUARIUMS_MANAGE),
+  );
+  // a ReefClub-kód kiadása csak ott, ahol a ReefClub fut (a szerver kapcsolója; élesen KI)
+  const reefClubLinking = servedNavigationFeatures(session?.navigation).has(
+    "reefclub-linking",
   );
 
   useEffect(() => {
@@ -532,7 +537,9 @@ export function PilotAquariumEditorPage({
                         setDepartmentId("");
                       }}
                     />
-                    {isEdit && customerSelection.customerId ? (
+                    {isEdit &&
+                    reefClubLinking &&
+                    customerSelection.customerId ? (
                       <ReefClubCodePanel
                         token={token}
                         customerId={customerSelection.customerId}

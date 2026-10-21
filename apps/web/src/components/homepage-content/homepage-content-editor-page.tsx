@@ -17,6 +17,7 @@ import {
   PERMISSIONS,
   type HomepageSlide,
   type HomepageTextField,
+  servedNavigationFeatures,
 } from "@acropora/types";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -81,6 +82,11 @@ export function HomepageContentEditorPage() {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
+  // a szerkesztő csak ott él, ahol a környezet a teszt-webshopba írhat (a szerver kapcsolója;
+  // élesen KI, a végpontok is 404-et adnak): a commerce-kivétel csak a tesztre szól
+  const available = servedNavigationFeatures(session?.navigation).has(
+    "homepage-content",
+  );
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +101,7 @@ export function HomepageContentEditorPage() {
   );
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || !available) return;
     const controller = new AbortController();
     homepageContentApi
       .get(token, controller.signal)
@@ -117,7 +123,7 @@ export function HomepageContentEditorPage() {
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [canManage, token]);
+  }, [available, canManage, token]);
 
   /** The administrator's switch: takes effect at once, it is not part of the save. */
   const switchProjection = async (enabled: boolean) => {
@@ -186,6 +192,14 @@ export function HomepageContentEditorPage() {
     }
   };
 
+  if (!available)
+    return (
+      <Alert
+        variant="info"
+        title="Ebben a környezetben nem elérhető"
+        description="A webshop kezdőlapja csak a teszt-webshophoz szerkeszthető."
+      />
+    );
   if (!canManage)
     return (
       <Alert

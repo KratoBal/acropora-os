@@ -75,6 +75,10 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "PUSH_REDIRECT_TO_USER_IDS",
   "QUOTES_ENABLED",
   "QUOTES_PILOT_USER_IDS",
+  // the internal API's switch for issuing ReefClub codes (#1778): a boolean, and the ReefClub's own
+  // web address, which the ReefClub process reads anyway (`REEFCLUB_WEB_URL`); neither is a secret
+  "REEFCLUB_LINKING_ENABLED",
+  "REEFCLUB_WEB_URL",
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
   "RELEASE_IMAGE_COMMIT_SHA",

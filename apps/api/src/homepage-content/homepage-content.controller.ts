@@ -3,6 +3,9 @@ import {
   Body,
   Controller,
   Get,
+  Inject,
+  NotFoundException,
+  Optional,
   Param,
   Post,
   Put,
@@ -15,9 +18,11 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { NAVIGATION_ENV } from "../auth/navigation-features.js";
 import {
   HOMEPAGE_IMAGE_LIMITS,
   HomepageContentService,
+  homepageProjectionAllowed,
 } from "./homepage-content.service.js";
 
 /**
@@ -26,17 +31,34 @@ import {
  */
 @Controller("homepage-content")
 export class HomepageContentController {
-  constructor(private readonly content: HomepageContentService) {}
+  constructor(
+    private readonly content: HomepageContentService,
+    /**
+     * AZ ÉLES KAPCSOLÓ (acrobot 34365): a kezdőlap-szerkesztő csak ott él, ahol a környezet a teszt-
+     * webshopba írhat (`MEDUSA_PROJECT_HOMEPAGE_CONTENT=true`). A commerce-kivétel csak a tesztre szól:
+     * élesen minden végpont 404, a szerkesztő nem írhat az éles OS adatbázisába sem.
+     */
+    @Optional()
+    @Inject(NAVIGATION_ENV)
+    private readonly environment: NodeJS.ProcessEnv = process.env,
+  ) {}
+
+  private requireHomepage(): void {
+    if (!homepageProjectionAllowed(this.environment))
+      throw new NotFoundException();
+  }
 
   @Get()
   @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
   get() {
+    this.requireHomepage();
     return this.content.get();
   }
 
   @Put()
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
   save(@Body() body: unknown, @CurrentUser() user: AuthenticatedUser) {
+    this.requireHomepage();
     return this.content.save(body, user.id);
   }
 
@@ -50,6 +72,7 @@ export class HomepageContentController {
     @Body() body: { enabled?: unknown },
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    this.requireHomepage();
     return this.content.setProjection(body?.enabled, user.id);
   }
 
@@ -57,6 +80,7 @@ export class HomepageContentController {
   @Get("featured")
   @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
   featured() {
+    this.requireHomepage();
     return this.content.featured();
   }
 
@@ -68,6 +92,7 @@ export class HomepageContentController {
     @Body() body: { featured?: unknown },
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    this.requireHomepage();
     return this.content.setFeatured(productId, body?.featured, user.id);
   }
 
@@ -81,6 +106,7 @@ export class HomepageContentController {
     }),
   )
   uploadImage(@UploadedFile() file: Express.Multer.File | undefined) {
+    this.requireHomepage();
     if (!file) throw new BadRequestException("A feltöltendő kép kötelező.");
     return this.content.uploadImage(file);
   }

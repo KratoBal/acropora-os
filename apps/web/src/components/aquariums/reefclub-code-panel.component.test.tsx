@@ -216,13 +216,18 @@ describe("where the panel is mounted", () => {
   // Source-level wiring check, and its limit is said: it reads the file, it does not render
   // the 900-line editor. It pins WHERE the panel sits (edit mode, a customer chosen, inside the
   // ownership card) so a refactor that moves it to the create form fails here.
-  it("the editor mounts it only when editing and a customer is chosen", () => {
+  // MI PIROSÍT: ha a panel a szerver kapcsolója nélkül is megjelenne (élesen a ReefClub nem fut, egy
+  // kiadott kód és a levele lokálhosztra mutatna; acrobot 34365)
+  it("the editor mounts it only when editing, the linking switch is served and a customer is chosen", () => {
     const source = readFileSync(
       join(__dirname, "pilot", "pilot-aquarium-editor-page.tsx"),
       "utf8",
     );
     expect(source).toMatch(
-      /isEdit && customerSelection\.customerId \?\s*\(\s*<ReefClubCodePanel/,
+      /isEdit\s*&&\s*reefClubLinking\s*&&\s*customerSelection\.customerId\s*\?\s*\(\s*<ReefClubCodePanel/,
+    );
+    expect(source).toMatch(
+      /const reefClubLinking = servedNavigationFeatures\(session\?\.navigation\)\.has\(\s*"reefclub-linking",?\s*\)/,
     );
     expect(source.match(/<ReefClubCodePanel/g)).toHaveLength(1);
   });
