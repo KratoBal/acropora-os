@@ -54,6 +54,8 @@ export interface MailPdfCandidate {
   id: string;
   documentNumber: string;
   issueDate: Date;
+  /** A feed-sor bruttó végösszege, tizedes szövegként (`ExternalBillingDocument.grossAmount`). */
+  grossAmount: string;
 }
 
 export interface MailPdf {
@@ -127,6 +129,26 @@ export function textCarriesOurTaxNumber(text: string): boolean {
   ).test(text);
 }
 
+/**
+ * A FIZETENDŐ VÉGÖSSZEG A FEED-SORÉ (barracuda és acrobot, #1777 utáni lépés). A számlaszámot és az
+ * adószámunkat egy hamisító is beírhatja a PDF-be; a végösszeget nem tudja: az a Számlázz.hu/NAV oldali
+ * adatból jön (`ExternalBillingDocument.grossAmount`), és csak a kiállító ismeri.
+ *
+ * A PDF alakja (acrobot mérése 2026-10-21, két valódi októberi cmfx-PDF): a `FIZETENDŐ BRUTTÓ
+ * VÉGÖSSZEG:` felirat után áll az összeg, egész forintra, sima szóközös ezres tagolással, tizedes
+ * nélkül; a `HUF` külön cellában. Ugyanez a szám az áfa-sorban is előfordulhat, ezért NEM elég, hogy a
+ * szöveg valahol tartalmazza: a felirat UTÁNI első számcsoport számít (a sorba rendezett szövegben a
+ * cellák között ` | ` áll). Egy nem egész feed-összeg (devizás számla) nem kerekítődik: nem egyezik.
+ */
+export function pdfPayableMatches(text: string, grossAmount: string): boolean {
+  // the group is greedy and read as a whole number: a longer number, or a fractional feed amount, is unequal
+  const match = /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)/.exec(
+    text,
+  );
+  if (!match) return false;
+  return Number(match[1]!.replace(/ /g, "")) === Number(grossAmount);
+}
+
 export type MailPdfOutcome =
   | { kind: "STORED" | "WOULD_STORE"; documentNumber: string; bytes: number }
   | { kind: "NO_MAIL"; documentNumber: string }
@@ -135,6 +157,7 @@ export type MailPdfOutcome =
         | "NOT_PDF"
         | "NUMBER_NOT_IN_PDF"
         | "NOT_OUR_INVOICE"
+        | "AMOUNT_MISMATCH"
         | "STORE_FAILED"
         | "NOT_AUTHENTICATED";
       documentNumber: string;
@@ -190,7 +213,8 @@ export async function fillExternalPdfsFromMail(input: {
       outcomes.push({ kind: "NOT_AUTHENTICATED", documentNumber: number });
       continue;
     }
-    let verdict: "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "NOT_OUR_INVOICE" =
+    let verdict:
+      "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "NOT_OUR_INVOICE" | "AMOUNT_MISMATCH" =
       "NOT_PDF";
     let chosen: MailPdf | null = null;
     for (const pdf of trusted) {
@@ -202,6 +226,10 @@ export async function fillExternalPdfsFromMail(input: {
       }
       if (!textCarriesOurTaxNumber(text.join("\n"))) {
         verdict = "NOT_OUR_INVOICE";
+        continue;
+      }
+      if (!pdfPayableMatches(text.join("\n"), row.grossAmount)) {
+        verdict = "AMOUNT_MISMATCH";
         continue;
       }
       chosen = pdf;
@@ -256,14 +284,25 @@ export async function fillExternalPdfsFromMail(input: {
 export async function mailPdfCandidates(
   month: string,
 ): Promise<MailPdfCandidate[]> {
-  return prisma.externalBillingDocument.findMany({
+  // one awaited call, not a `.then` chain: the select-field guard
+  // (unas-prisma-select-mezok.spec.ts) reads `prisma.<model>.findMany({`
+  const rows = await prisma.externalBillingDocument.findMany({
     where: {
       source: "SZAMLAZZ",
       pdfStorageKey: null,
       documentNumber: { not: "" },
       issueDate: monthRange(month),
     },
-    select: { id: true, documentNumber: true, issueDate: true },
+    select: {
+      id: true,
+      documentNumber: true,
+      issueDate: true,
+      grossAmount: true,
+    },
     orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
   });
+  return rows.map((row) => ({
+    ...row,
+    grossAmount: row.grossAmount.toString(),
+  }));
 }

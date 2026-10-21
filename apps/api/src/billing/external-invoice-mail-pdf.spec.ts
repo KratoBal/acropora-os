@@ -8,6 +8,7 @@ import {
   fillExternalPdfsFromMail,
   numberFromCmfxFileName,
   textCarriesNumber,
+  pdfPayableMatches,
   textCarriesOurTaxNumber,
   type MailPdf,
 } from "./external-invoice-mail-pdf.js";
@@ -18,6 +19,9 @@ import {
   futás írna; ha egy levél, amelynek nincs számla-sora, csendben elveszne.
 */
 
+// the payable total as pdfTextLines puts it in a line (acrobot's measurement: the label, a cell, the
+// amount with plain-space thousands, HUF in its own cell at the other end), matching the default gross
+const PAYABLE = "HUF | FIZETENDŐ BRUTTÓ VÉGÖSSZEG: | 29 210";
 // an invoice we issued carries our tax number as the issuer's; `ours: false` is another cmfx customer's
 const pdf = (
   fileName: string,
@@ -29,16 +33,21 @@ const pdf = (
   messageId,
   fileName,
   buffer: Buffer.from(
-    `%PDF-1.4\n${ours ? "Eladó adószáma: 23916229-2-42\n" : "Eladó adószáma: 11111111-2-41\n"}${text}\n`,
+    `%PDF-1.4\n${ours ? "Eladó adószáma: 23916229-2-42\n" : "Eladó adószáma: 11111111-2-41\n"}${text}\n${PAYABLE}\n`,
   ),
   authenticated,
 });
 const textOf = async (bytes: Uint8Array) =>
-  Buffer.from(bytes).toString("latin1").split("\n");
-const candidate = (id: string, documentNumber: string) => ({
+  Buffer.from(bytes).toString("utf8").split("\n");
+const candidate = (
+  id: string,
+  documentNumber: string,
+  grossAmount = "29210.00",
+) => ({
   id,
   documentNumber,
   issueDate: new Date("2026-10-05T00:00:00.000Z"),
+  grossAmount,
 });
 
 function recorder() {
@@ -256,6 +265,48 @@ describe("the letter really came from cmfx", () => {
         textCarriesOurTaxNumber("11111111-2-41"),
       ],
       [true, true, false, false, false],
+    );
+  });
+
+  // MI PIROSÍT: ha a végösszeget nem a felirat UTÁN keresné (az áfa-sorban is ott állhat), ha
+  // kerekítene, vagy ha felirat nélkül is egyezést mondana (a barracuda #1777 utáni szabálya)
+  it("the payable total after its label must equal the feed row's gross, in whole forints", () => {
+    const line = (amount: string) =>
+      `HUF | FIZETENDŐ BRUTTÓ VÉGÖSSZEG: | ${amount}`;
+    assert.deepEqual(
+      [
+        pdfPayableMatches(line("29 210"), "29210.00"),
+        pdfPayableMatches(line("129 210"), "129210"),
+        pdfPayableMatches(line("950"), "950.0000"),
+        // the same number elsewhere (the VAT line), the label with another amount: no match
+        pdfPayableMatches(
+          `27 % ÁFA: 29 210 HUF (6 210)\n${line("31 000")}`,
+          "29210.00",
+        ),
+        // no label at all, only the number in the text
+        pdfPayableMatches("NETTÓ VÉGÖSSZEG: | 29 210", "29210.00"),
+        // a longer number after the label is not a match
+        pdfPayableMatches(line("29 2100"), "29210"),
+        // a non-integer feed amount (a foreign-currency invoice) is never rounded into a match
+        pdfPayableMatches(line("29 210"), "29210.40"),
+      ],
+      [true, true, true, false, false, false, false],
+    );
+  });
+
+  it("a forged PDF with our number and our tax number but another total is AMOUNT_MISMATCH, never stored", async () => {
+    const r = recorder();
+    const report = await fillExternalPdfsFromMail({
+      candidates: [candidate("row-1", "ACRW-2026/00536", "45000.00")],
+      pdfs: [pdf("E-ACRW-2026-00536-f00d.pdf", "Számla ACRW-2026/00536")],
+      apply: true,
+      textOf,
+      documents: r.documents,
+      store: r.store,
+    });
+    assert.deepEqual(
+      [report.outcomes.map((o) => `${o.kind} ${o.documentNumber}`), r.puts],
+      [["AMOUNT_MISMATCH ACRW-2026/00536"], []],
     );
   });
 
