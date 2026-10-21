@@ -46,6 +46,19 @@ describe("a gyártói adagolás a leírásból", () => {
     assert.equal(r.raw, "1 ml/100 L/day");
   });
 
+  // Aquaforest Component A (2026-10-21): three doses on one page, two of them
+  // without a period word. A period-less dose is unread, not a remark.
+  it("egy gyakoriság nélküli adag-mondat a jó mellett is visszatartja az értéket", () => {
+    const r = readDosing(
+      "Dose 5 ml per 100 l once a week. Alternatively dose 1 ml per 100 l for every 20 ppm of calcium consumed.",
+    );
+    assert.equal(r.raw, null);
+    assert.ok(
+      r.notes.some((n) => /nincs gyakoriság/.test(n)),
+      JSON.stringify(r.notes),
+    );
+  });
+
   it("ugyanaz az adag kétszer: egy érték", () => {
     const r = readDosing(
       "Dose 1 ml per 100 l daily. In short: 1 ml/100 l/day.",

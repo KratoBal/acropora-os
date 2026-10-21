@@ -23,6 +23,9 @@ import { kivonat, normalizalt } from "./water-effects-lexicon.js";
  * - a unit the canonical form cannot hold or a person has to interpret
  *   (gallon, gram, capful, measuring spoon), or a period other than a day or
  *   a week (every other day, monthly).
+ * Any such sentence holds the value back, even next to a clean one. Only the
+ * pack's reach (bottle, treats, enough, reicht, elegendő, tartalom...) is
+ * noted and blocks nothing.
  */
 export interface DosingReading {
   /** The canonical dose (`5 ml/100 L/day`), or `null`. */
@@ -133,12 +136,19 @@ export function readDosing(text: string): DosingReading {
     );
     const otherPeriod = OTHER_PERIOD.test(sentence);
     const where = at(from, to);
-    // A DOSE STATEMENT is a sentence with a period and something measured. Without
-    // a period an amount and a volume are mostly the pack's reach ("500 ml
-    // 10 000 literhez"): said, but it does not block another sentence.
+    // The pack's reach first ("500 ml 10 000 literhez", "A 250 ml bottle treats
+    // 2500 l per week"): said, and it blocks nothing, with or without a period.
+    if (amounts.length > 0 && volumes.length > 0 && REACH.test(sentence)) {
+      notes.push(`adagolás: kiszerelés-mondat, nem adag: ${where}`);
+      continue;
+    }
+    // An amount per volume WITHOUT a period is a dose we cannot read ("1 ml per
+    // 100 l for every 20 ppm"), not a harmless remark: it holds the value back
+    // like any other unread dose (Aquaforest Component A, 2026-10-21: three doses
+    // on one page, two of them without a period word).
     if (periods.length === 0 && !otherPeriod) {
       if (amounts.length > 0 && volumes.length > 0)
-        notes.push(`adagolás: nincs gyakoriság (naponta, hetente): ${where}`);
+        refuse(`adagolás: nincs gyakoriság (naponta, hetente): ${where}`);
       continue;
     }
     if (amounts.length === 0 && volumes.length === 0 && !odd) continue;
