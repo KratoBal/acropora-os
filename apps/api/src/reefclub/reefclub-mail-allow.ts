@@ -62,6 +62,19 @@ export function reefClubMailAllow(
   return { kind: "on", domains, addresses };
 }
 
+/*
+  ONE PLAIN ADDRESS, OR NOTHING (barracuda, #1765 review). The decision reads the
+  part after the last "@", while a sender delivers the whole string: a recipient
+  carrying two addresses ("x@gmail.com, y@acropora.hu", or a display-name form
+  "Somebody <x@gmail.com>, y@acropora.hu") would pass on its tail and be delivered
+  to both, and a line break could inject a header. So under the gate only a plain
+  address passes: exactly one "@", and no comma, semicolon, angle bracket, quote,
+  whitespace or control character. The callers validate too, but a public test
+  site's gate must not depend on every caller doing so.
+*/
+const PLAIN_ADDRESS =
+  /^[^@\s,;<>"'\u0000-\u001f\u007f]+@[^@\s,;<>"'\u0000-\u001f\u007f]+$/;
+
 /** Whether one recipient may get a mail under the gate. */
 export function reefClubMailAllowed(
   allow: ReefClubMailAllow,
@@ -69,6 +82,7 @@ export function reefClubMailAllowed(
 ): boolean {
   if (allow.kind === "off") return true;
   const normalized = address.trim().toLowerCase();
+  if (!PLAIN_ADDRESS.test(normalized)) return false;
   if (allow.addresses.has(normalized)) return true;
   const at = normalized.lastIndexOf("@");
   return at > 0 && allow.domains.has(normalized.slice(at + 1));

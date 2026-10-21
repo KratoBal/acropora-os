@@ -85,6 +85,30 @@ describe("REEFCLUB_MAIL_ALLOW: the value", () => {
     assert.equal(reefClubMailAllowed(allow, "acropora.hu"), false);
   });
 
+  it("only one plain address passes: a list, a display name or a line break does not (barracuda, #1765)", () => {
+    const allow = reefClubMailAllow({
+      REEFCLUB_MAIL_ALLOW: "acropora.hu,tester@example.com",
+    });
+    for (const sneaky of [
+      "x@gmail.com, y@acropora.hu",
+      "Barki <x@gmail.com>, y@acropora.hu",
+      "x@gmail.com; y@acropora.hu",
+      "y@acropora.hu\r\nBcc: x@gmail.com",
+      "y@acropora.hu\nx@gmail.com",
+      '"x@gmail.com"@acropora.hu',
+      "x@gmail.com@acropora.hu",
+      "<y@acropora.hu>",
+      "y @acropora.hu",
+    ])
+      assert.equal(
+        reefClubMailAllowed(allow, sneaky),
+        false,
+        JSON.stringify(sneaky),
+      );
+    assert.equal(reefClubMailAllowed(allow, "y@acropora.hu"), true);
+    assert.equal(reefClubMailAllowed(allow, "tester@example.com"), true);
+  });
+
   it("an @domain entry is a domain too", () => {
     const allow = reefClubMailAllow({ REEFCLUB_MAIL_ALLOW: "@acropora.hu" });
     assert.equal(reefClubMailAllowed(allow, "info@acropora.hu"), true);
