@@ -110,7 +110,7 @@ export function DoseEffectListPage() {
               <p className="text-dusk-700">
                 {parameterLabel(row.parameterCode)}{" "}
                 {row.direction === "EMEL" ? "emel" : "csökkent"} · {row.version}
-                . változat · rögzítette {row.recordedBy?.name ?? "?"}
+                . változat · rögzítette {row.recordedByName ?? "?"}
               </p>
               {row.refusals.length > 0 ? (
                 <p className="text-xs text-amber-700">

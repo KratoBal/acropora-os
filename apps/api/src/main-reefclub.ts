@@ -4,6 +4,7 @@ import { NestFactory } from "@nestjs/core";
 
 import { assertKnownNodeEnv } from "./common/node-env.guard.js";
 import { configureReefClubApp } from "./reefclub/reefclub-app.configuration.js";
+import { DIAG_UNTIL_ENV, diagState } from "./reefclub/reefclub-diag.js";
 import { assertReefClubEnvironment } from "./reefclub/reefclub-environment.js";
 import { ReefClubAppModule } from "./reefclub/reefclub.module.js";
 
@@ -16,6 +17,16 @@ import { ReefClubAppModule } from "./reefclub/reefclub.module.js";
 async function bootstrap() {
   assertKnownNodeEnv();
   assertReefClubEnvironment(process.env);
+
+  const diag = diagState(process.env);
+  if (diag.state === "OPEN")
+    console.warn(
+      `FIGYELEM: a /rc/v1/health kiírja a hívó címét és az X-Forwarded-For láncot ${diag.until!.toISOString()}-ig (${DIAG_UNTIL_ENV}); csak mérésre.`,
+    );
+  else if (diag.state === "INVALID" || diag.state === "TOO_FAR")
+    console.warn(
+      `FIGYELEM: a ${DIAG_UNTIL_ENV} értéke ${diag.state === "INVALID" ? "érvénytelen (időzónás ISO időpont kell)" : "az indulástól számítva több mint 2 órára van"}, a diagnosztika ZÁRVA marad.`,
+    );
 
   const app = await NestFactory.create(ReefClubAppModule.forRoot());
 

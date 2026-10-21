@@ -44,6 +44,7 @@ const sor = (overrides: Record<string, unknown> = {}) => ({
   source: "https://gyarto.example.invalid/kh",
   version: 3,
   recordedBy: { id: "masik", name: "Másik Kolléga" },
+  recordedByName: "Másik Kolléga",
   recordedAt: "2026-10-20T10:00:00.000Z",
   verifiedBy: null,
   verifiedAt: null,
@@ -108,7 +109,7 @@ describe("ProductDoseEffectsCard", () => {
     api.forProduct.mockReturnValue(
       kesobb({
         items: [
-          sor({ recordedBy: { id: "en", name: "Én" } }),
+          sor({ recordedBy: { id: "en", name: "Én" }, recordedByName: "Én" }),
           sor({ id: "sor-2", parameterCode: "KALCIUM" }),
         ],
       }),
@@ -223,6 +224,18 @@ describe("ProductDoseEffectsCard", () => {
     await waitFor(() =>
       expect(api.archive).toHaveBeenCalledWith("token-1", "sor-1"),
     );
+  });
+
+  it("megszűnt rögzítőnél a változat őrzött nevét írja, és nem kínál ellenőrzést (#1742 b, c)", async () => {
+    api.forProduct.mockReturnValue(
+      kesobb({
+        items: [sor({ recordedBy: null, recordedByName: "Volt Kolléga" })],
+      }),
+    );
+    kartya();
+    expect(await screen.findByText(/rögzítette Volt Kolléga/)).toBeTruthy();
+    expect(screen.getByText("Szerkesztés")).toBeTruthy();
+    expect(screen.queryByText("Ellenőriztem")).toBeNull();
   });
 
   it("jogosultság nélkül nincs írási gomb", async () => {

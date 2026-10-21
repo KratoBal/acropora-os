@@ -4,15 +4,18 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "../../app.module.js";
+import { isRecommendableOnUnas } from "../../aquariums/recommendation/jev-candidate-source.js";
 import { configureApp } from "../../app.configuration.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { hashPassword } from "../../users/password.util.js";
+
+import { purchasability } from "./dose-effects.service.js";
 
 /**
  * THE PRODUCT DOSE LIST THROUGH THE OS API (ReefClub plan v6.1, 6.2; slice 7).
@@ -496,6 +499,100 @@ describe(
       assert.equal(versions.body.items[0].recordedBy, null);
 
       assert.equal(versions.body.items[0].recordedByName, "Adag-lista t");
+
+      // ...and the live row's view keeps it too (barracuda, #1742 b).
+      const listed = await call("v", `/products/${product}/dose-effects`);
+      const live = (
+        listed.body.items as {
+          id: string;
+          recordedBy: unknown;
+          recordedByName: string | null;
+        }[]
+      ).find((item) => item.id === created.body.id);
+      assert.equal(live?.recordedBy, null);
+      assert.equal(live?.recordedByName, "Adag-lista t");
+    });
+
+    it("vásárolhatóság: a kötegelt út ugyanazt mondja, mint a szabály a teljes UNAS-adattal (#1742 a)", async () => {
+      // Every shape the rule reads differently: the Inquire values, no Inquire,
+      // a payload that is not an object, no snapshot, no or another listing,
+      // and an inactive product.
+      const shapes: {
+        label: string;
+        status: string | null;
+        payload?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+        isActive?: boolean;
+      }[] = [
+        {
+          label: "Inquire true",
+          status: "1",
+          payload: { Inquire: true, Name: "x" },
+        },
+        { label: "Inquire 1", status: "1", payload: { Inquire: 1 } },
+        { label: 'Inquire "1"', status: "2", payload: { Inquire: "1" } },
+        { label: "Inquire 0", status: "1", payload: { Inquire: 0 } },
+        { label: 'Inquire "0"', status: "1", payload: { Inquire: "0" } },
+        { label: "Inquire false", status: "1", payload: { Inquire: false } },
+        {
+          label: "nincs Inquire",
+          status: "1",
+          payload: { Name: "x", Price: 10 },
+        },
+        { label: "tömb payload", status: "1", payload: [1, 2] },
+        { label: "JSON null payload", status: "1", payload: Prisma.JsonNull },
+        { label: "nincs pillanatkép", status: "1" },
+        { label: "nincs UNAS-listázás", status: null, payload: { Inquire: 0 } },
+        { label: "3-as állapot", status: "3", payload: { Inquire: 0 } },
+        {
+          label: "inaktív termék",
+          status: "1",
+          payload: { Inquire: 0 },
+          isActive: false,
+        },
+      ];
+      const ids = new Map<string, string>();
+      for (const shape of shapes) {
+        const created = await prisma.product.create({
+          data: {
+            name: `${PREFIX}paritás ${shape.label} ${suffix}`,
+            isActive: shape.isActive ?? true,
+            ...(shape.status
+              ? {
+                  channelListings: {
+                    create: [{ channel: "UNAS", externalStatus: shape.status }],
+                  },
+                }
+              : {}),
+            ...(shape.payload !== undefined
+              ? { unasSnapshot: { create: { rawPayload: shape.payload } } }
+              : {}),
+          },
+        });
+        ids.set(created.id, shape.label);
+      }
+      const batched = await purchasability([...ids.keys()]);
+      const full = await prisma.product.findMany({
+        where: { id: { in: [...ids.keys()] } },
+        select: {
+          id: true,
+          isActive: true,
+          channelListings: { select: { channel: true, externalStatus: true } },
+          unasSnapshot: { select: { rawPayload: true } },
+        },
+      });
+      const byRule = Object.fromEntries(
+        full.map((row) => [
+          ids.get(row.id)!,
+          row.isActive && isRecommendableOnUnas(row),
+        ]),
+      );
+      const byBatch = Object.fromEntries(
+        [...ids].map(([id, label]) => [label, batched.get(id)]),
+      );
+      assert.deepEqual(byBatch, byRule);
+      // and the rule itself is not trivially uniform here
+      assert.ok(Object.values(byRule).includes(true));
+      assert.ok(Object.values(byRule).includes(false));
     });
 
     it("adatbázis-CHECK: a rögzítő nem lehet az ellenőrző, a szám nem lehet nulla", async () => {
