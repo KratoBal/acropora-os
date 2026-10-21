@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { PartnerUnitsReason } from "../partners/units-empty-text";
 
 /**
  * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
@@ -100,7 +101,7 @@ export interface PartnerUnit {
 }
 
 export function listPartnerUnits(partnerId: string) {
-  return apiRequest<{ items: PartnerUnit[] }>(
+  return apiRequest<{ items: PartnerUnit[]; reason?: PartnerUnitsReason }>(
     `${BASE}/${encodeURIComponent(partnerId)}/units`,
   );
 }

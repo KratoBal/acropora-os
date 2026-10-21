@@ -20,6 +20,7 @@ import {
   type AssetDetail,
 } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
+import { partnerUnitsEmptyText } from "@/lib/partners/units-empty-text";
 import {
   listPerformanceUnits,
   type UnitOfMeasureRow,
@@ -704,6 +705,15 @@ export default function AssetEditScreen() {
             {unitsQuery.isError ? (
               <Text style={styles.cardText}>
                 A partner helyszínei nem tölthetők be. A többi mező menthető.
+              </Text>
+            ) : null}
+            {/* kártya 227a2137: eddig itt az üres lista mondat nélkül állt */}
+            {unitsQuery.isSuccess && unitsQuery.data.items.length === 0 ? (
+              <Text style={styles.cardText}>
+                {partnerUnitsEmptyText({
+                  fromCache: false,
+                  reason: unitsQuery.data.reason,
+                })}
               </Text>
             ) : null}
             {/*
