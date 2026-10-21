@@ -817,6 +817,41 @@ describe("the value row under a header row", () => {
     );
   });
 
+  it("the bare 'Sorszám' label is the item-number column of the line table, not the invoice number", () => {
+    // tétel-táblázat: "Sorszám | Megnevezés | Mennyiség" alatta "1 | ..." -> nincs számlaszám
+    assert.deepEqual(
+      tableRowFields([
+        "Sorszám | Megnevezés | Mennyiség",
+        "1 | Kitalált termék | 2 db",
+      ]),
+      {},
+    );
+    assert.deepEqual(
+      tableRowFields([
+        "Sorszám | Megnevezés | Mennyiség",
+        "12 | Kitalált termék | 2 db",
+      ]),
+      {},
+    );
+    // az explicit címke elfogadja a puszta számot is
+    assert.equal(
+      tableRowFields(["Számlaszám | Fizetési mód", "20260123 | átutalás"])
+        .documentNumber,
+      "20260123",
+    );
+    // a puszta címke alatt a számlaszám-szerű érték (betű vagy elválasztó) rendben van
+    assert.equal(
+      tableRowFields(["Fizetési mód | Sorszám", "átutalás | KT 123"])
+        .documentNumber,
+      "KT 123",
+    );
+    assert.equal(
+      tableRowFields(["Sorszám | Fizetési mód", "2026/123 | átutalás"])
+        .documentNumber,
+      "2026/123",
+    );
+  });
+
   it("takes a number cell only with a digit and not longer than 40 characters", () => {
     assert.deepEqual(
       tableRowFields(["Számlaszám | Fizetési mód", "nincs | átutalás"]),

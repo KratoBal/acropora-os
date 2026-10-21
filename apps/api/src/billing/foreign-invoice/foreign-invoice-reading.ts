@@ -289,6 +289,7 @@ export function totalsRow(
  * nem); a számlaszám-cella nem üres, tartalmaz számjegyet és legfeljebb 40 karakter. Egy mezőre több,
  * egymástól eltérő jelölt: nem döntünk.
  */
+// A puszta "Kelt" is kiállítási dátum: egy "Kelt | Aláírás" aláírás-blokk ugyanazt a napot adja (keltezés), ez nem tévedés (barracuda, #1797).
 type TableField =
   "documentNumber" | "issueDate" | "fulfillmentDate" | "dueDate";
 const TABLE_LABELS: [TableField, RegExp][] = [
@@ -309,6 +310,16 @@ const TABLE_LABELS: [TableField, RegExp][] = [
     /^(fizet[ée]si\s+hat[áa]rid[őo]|esed[ée]kess[ée]g|due\s+date|f[äa]lligkeitsdatum)\s*:?$/iu,
   ],
 ];
+/**
+ * A PUSZTA "SORSZÁM" / "SORSZÁMA" CÍMKE kétértelmű (barracuda, #1797): a tétel-táblázat első oszlopa is
+ * az ("Sorszám | Megnevezés | Mennyiség", alatta "1 | Termék | 2 db"). Ott az érték egy tétel sorszáma,
+ * nem a számlaszám, és "egy rossz szám rosszabb, mint egy üres", ráadásul a számlaszám KULCS. Ezért a
+ * puszta címke csak olyan értéket ad, ami nem lehet tétel-sorszám: betű vagy elválasztó (/, -, szóköz) van
+ * benne. A kifejezett címkék (számlaszám, számla sorszáma, számla száma, invoice number) ezt nem kérik.
+ */
+const AMBIGUOUS_NUMBER_LABEL = /^sorsz[áa]m(a)?\s*:?$/iu;
+const LOOKS_LIKE_INVOICE_NUMBER = /[\p{L}/\-\s]/u;
+
 const DATE_IN_CELL =
   /(?<!\d)(\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}\.\s?\d{1,2}\.\s?\d{4})(?!\d)/gu;
 
@@ -335,6 +346,13 @@ export function tableRowFields(
       let value: string | null = null;
       if (field === "documentNumber") {
         value = cell && /\d/.test(cell) && cell.length <= 40 ? cell : null;
+        // a puszta "Sorszám" cimke alatt csak számlaszám-szerű érték (betű vagy elválasztó) fogadható el
+        if (
+          value &&
+          AMBIGUOUS_NUMBER_LABEL.test(label) &&
+          !LOOKS_LIKE_INVOICE_NUMBER.test(value)
+        )
+          value = null;
       } else if ((cell.match(DATE_IN_CELL) ?? []).length === 1) {
         value = parseForeignDate(cell);
       }
