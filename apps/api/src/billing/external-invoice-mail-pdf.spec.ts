@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { main } from "./external-invoice-mail-pdf.cli.js";
+import { main, readCmfxMail } from "./external-invoice-mail-pdf.cli.js";
 import {
+  cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
   numberFromCmfxFileName,
+  textCarriesNumber,
   type MailPdf,
 } from "./external-invoice-mail-pdf.js";
 
@@ -15,10 +17,16 @@ import {
   futás írna; ha egy levél, amelynek nincs számla-sora, csendben elveszne.
 */
 
-const pdf = (fileName: string, text: string, messageId = "m1"): MailPdf => ({
+const pdf = (
+  fileName: string,
+  text: string,
+  messageId = "m1",
+  authenticated = true,
+): MailPdf => ({
   messageId,
   fileName,
   buffer: Buffer.from(`%PDF-1.4\n${text}\n`),
+  authenticated,
 });
 const textOf = async (bytes: Uint8Array) =>
   Buffer.from(bytes).toString("latin1").split("\n");
@@ -48,16 +56,41 @@ function recorder() {
 }
 
 describe("the invoice number from a cmfx attachment name", () => {
-  it("reads the number the cmfx name carries, and nothing from another shape", () => {
+  it("reads the number the cmfx name carries, a hex hash of digits only too, and nothing from another shape", () => {
     assert.deepEqual(
       [
-        numberFromCmfxFileName("E-ACRW-2026-00536-a1b2c3d4.pdf"),
-        numberFromCmfxFileName("e-ACRW-2026-00512-ZZ9.PDF"),
+        numberFromCmfxFileName("E-ACRW-2026-00536-17ff96d.pdf"),
+        numberFromCmfxFileName("e-ACRW-2026-00512-D501602.PDF"),
+        // a 7-digit hex hash of digits only (about 3.7%): still read, not dropped (acrobot, #1777)
+        numberFromCmfxFileName("E-ACRW-2026-00537-1234567.pdf"),
+        numberFromCmfxFileName("E-ACRW-2026-00538-zz9.pdf"),
         numberFromCmfxFileName("ACRW-2026-00536.pdf"),
-        numberFromCmfxFileName("E-ACRW-2026-00536.pdf"),
         numberFromCmfxFileName("szamla.pdf"),
       ],
-      ["ACRW-2026/00536", "ACRW-2026/00512", null, null, null],
+      [
+        "ACRW-2026/00536",
+        "ACRW-2026/00512",
+        "ACRW-2026/00537",
+        null,
+        null,
+        null,
+      ],
+    );
+  });
+
+  it("a name without a hash reads a wrong number, and that is visible, never stored", async () => {
+    assert.equal(numberFromCmfxFileName("E-ACRW-2026-00536.pdf"), "ACRW/2026");
+    const report = await fillExternalPdfsFromMail({
+      candidates: [candidate("row-1", "ACRW-2026/00536")],
+      pdfs: [pdf("E-ACRW-2026-00536.pdf", "Számla ACRW-2026/00536")],
+      apply: true,
+      textOf,
+      documents: recorder().documents,
+      store: recorder().store,
+    });
+    assert.deepEqual(
+      [report.outcomes.map((o) => o.kind), report.notCandidates],
+      [["NO_MAIL"], ["ACRW/2026"]],
     );
   });
 
@@ -65,6 +98,186 @@ describe("the invoice number from a cmfx attachment name", () => {
     assert.equal(
       cmfxMailQuery("2026-10"),
       "from:ertesito@cmfx.hu has:attachment after:2026/10/01 before:2026/11/11",
+    );
+  });
+});
+
+/*
+  A LEVÉL EREDETE (barracuda, #1777). MI PIROSÍT: ha a levélben ÁLLÍTOTT feladó vagy egy a küldő által
+  beírt, lejjebb álló „mx.google.com” fejléc elég lenne; ha végződés-alapú domain-egyezés átengedné az
+  evilcmfx.hu-t; ha a DMARC vagy a DKIM egyedül elég lenne.
+*/
+describe("the letter really came from cmfx", () => {
+  // acrobot's measurement, 2026-10-21: the top header of all five real cmfx letters
+  const real =
+    "mx.google.com; dkim=pass header.i=@cmfx.hu header.s=cmfx header.b=AbCd; spf=pass (google.com: domain of ertesito@cmfx.hu designates 192.0.2.1 as permitted sender) smtp.mailfrom=ertesito@cmfx.hu; dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=cmfx.hu";
+
+  it("the real shape passes, by header.i or header.d", () => {
+    assert.equal(cmfxMailAuthenticated([real]), true);
+    assert.equal(
+      cmfxMailAuthenticated([
+        real.replace("header.i=@cmfx.hu", "header.d=cmfx.hu"),
+      ]),
+      true,
+    );
+  });
+
+  it("only the TOP header counts, and it must be Gmail's", () => {
+    const forged =
+      "mx.google.com; dkim=pass header.i=@cmfx.hu; dmarc=pass header.from=cmfx.hu";
+    assert.deepEqual(
+      [
+        cmfxMailAuthenticated([]),
+        cmfxMailAuthenticated([
+          "relay.example; dkim=pass header.i=@cmfx.hu; dmarc=pass header.from=cmfx.hu",
+        ]),
+        // the real Gmail verdict says fail; a forged "mx.google.com" line below it must not rescue it
+        cmfxMailAuthenticated([
+          "mx.google.com; dkim=none; spf=softfail smtp.mailfrom=x@evil.example; dmarc=fail header.from=cmfx.hu",
+          forged,
+        ]),
+        cmfxMailAuthenticated(["hamis.example; x", forged]),
+      ],
+      [false, false, false, false],
+    );
+  });
+
+  it("the domain matches exactly: no evilcmfx.hu, no cmfx.hu.evil, no subdomain", () => {
+    const top = (dkim: string, from = "cmfx.hu") =>
+      cmfxMailAuthenticated([
+        `mx.google.com; dkim=pass ${dkim}; dmarc=pass header.from=${from}`,
+      ]);
+    assert.deepEqual(
+      [
+        top("header.i=@evilcmfx.hu"),
+        top("header.d=evilcmfx.hu"),
+        top("header.d=cmfx.hu.evil.example"),
+        top("header.i=@mail.cmfx.hu"),
+        top("header.i=@cmfx.hu", "evilcmfx.hu"),
+        top("header.i=@cmfx.hu"),
+      ],
+      [false, false, false, false, false, true],
+    );
+  });
+
+  it("DKIM and DMARC both: either alone is not enough", () => {
+    assert.deepEqual(
+      [
+        cmfxMailAuthenticated([
+          "mx.google.com; dkim=pass header.i=@cmfx.hu; dmarc=fail header.from=cmfx.hu",
+        ]),
+        cmfxMailAuthenticated([
+          "mx.google.com; dkim=fail header.i=@cmfx.hu; dmarc=pass header.from=cmfx.hu",
+        ]),
+        cmfxMailAuthenticated([
+          "mx.google.com; spf=pass smtp.mailfrom=ertesito@cmfx.hu",
+        ]),
+      ],
+      [false, false, false],
+    );
+  });
+
+  it("a forged letter with a good PDF is NOT stored; a real one beside it is", async () => {
+    const r = recorder();
+    const report = await fillExternalPdfsFromMail({
+      candidates: [
+        candidate("row-1", "ACRW-2026/00536"),
+        candidate("row-2", "ACRW-2026/00537"),
+      ],
+      pdfs: [
+        pdf(
+          "E-ACRW-2026-00536-f00.pdf",
+          "Számla ACRW-2026/00536",
+          "fake",
+          false,
+        ),
+        pdf(
+          "E-ACRW-2026-00537-a11.pdf",
+          "Számla ACRW-2026/00537",
+          "real",
+          true,
+        ),
+      ],
+      apply: true,
+      textOf,
+      documents: r.documents,
+      store: r.store,
+    });
+    assert.deepEqual(
+      [
+        report.outcomes.map((o) => `${o.kind} ${o.documentNumber}`),
+        report.unauthenticatedFiles,
+        r.puts,
+      ],
+      [
+        ["NOT_AUTHENTICATED ACRW-2026/00536", "STORED ACRW-2026/00537"],
+        1,
+        ["external-invoice/row-2/cmfx.pdf"],
+      ],
+    );
+  });
+
+  it("the number in the PDF text is bounded: no longer number, no letter or digit before it", () => {
+    assert.deepEqual(
+      [
+        textCarriesNumber("Számlaszám: ACRW-2026/00536\n", "ACRW-2026/00536"),
+        textCarriesNumber("Számlaszám: ACRW-2026/005360", "ACRW-2026/00536"),
+        textCarriesNumber("XACRW-2026/00536", "ACRW-2026/00536"),
+        textCarriesNumber("(ACRW-2026/00536)", "ACRW-2026/00536"),
+      ],
+      [true, false, false, true],
+    );
+  });
+});
+
+describe("reading the cmfx letters from Gmail", () => {
+  // MI PIROSÍT: ha az olvasó nem a levél saját ítéletét adná tovább (pl. mindig hitelesnek venné), vagy
+  // a keresés nem a hónap cmfx-leveleit kérné
+  it("each PDF carries its own letter's verdict; a letter from another sender is left out", async () => {
+    const queries: string[] = [];
+    const real =
+      "mx.google.com; dkim=pass header.i=@cmfx.hu; dmarc=pass header.from=cmfx.hu";
+    const messages: Record<string, { sender: string; ar: string[] }> = {
+      real: { sender: "ertesito@cmfx.hu", ar: [real] },
+      forged: {
+        sender: "ertesito@cmfx.hu",
+        ar: ["mx.google.com; dkim=none; dmarc=fail header.from=cmfx.hu", real],
+      },
+      other: { sender: "valaki@example.com", ar: [real] },
+    };
+    const pdfs = await readCmfxMail(
+      {
+        async gmailMessageIds(_user, query) {
+          queries.push(query);
+          return Object.keys(messages);
+        },
+        async gmailPdfMessage(_user, id) {
+          return {
+            id,
+            receivedAt: null,
+            subject: null,
+            sender: messages[id]!.sender,
+            pdfs: [
+              {
+                fileName: `E-ACRW-2026-00536-${id === "real" ? "a" : "b"}.pdf`,
+                buffer: Buffer.from("%PDF-"),
+              },
+            ],
+            authenticationResults: messages[id]!.ar,
+            skippedTooLarge: 0,
+          };
+        },
+      },
+      "info@acropora.hu",
+      "2026-10",
+    );
+    assert.deepEqual(queries, [cmfxMailQuery("2026-10")]);
+    assert.deepEqual(
+      pdfs.map((p) => [p.messageId, p.authenticated]),
+      [
+        ["real", true],
+        ["forged", false],
+      ],
     );
   });
 });
@@ -80,15 +293,16 @@ describe("pairing the letters with the month's rows without a PDF", () => {
         candidate("row-4", "ACRW-2026/00539"),
       ],
       pdfs: [
-        pdf("E-ACRW-2026-00536-h1.pdf", "Számla ACRW-2026/00536"),
+        pdf("E-ACRW-2026-00536-a1.pdf", "Számla ACRW-2026/00536"),
         // the name says 00538, the content is another invoice: not stored
-        pdf("E-ACRW-2026-00538-h2.pdf", "Számla ACRW-2026/00999"),
+        pdf("E-ACRW-2026-00538-b2.pdf", "Számla ACRW-2026/00999"),
         {
           messageId: "m3",
-          fileName: "E-ACRW-2026-00539-h3.pdf",
+          fileName: "E-ACRW-2026-00539-c3.pdf",
           buffer: Buffer.from("<html>"),
+          authenticated: true,
         },
-        pdf("E-ACRW-2026-00600-h4.pdf", "Számla ACRW-2026/00600"),
+        pdf("E-ACRW-2026-00600-d4.pdf", "Számla ACRW-2026/00600"),
         pdf("rendeles.pdf", "x"),
       ],
       apply: false,
@@ -118,9 +332,9 @@ describe("pairing the letters with the month's rows without a PDF", () => {
         candidate("row-2", "ACRW-2026/00540"),
       ],
       pdfs: [
-        pdf("E-ACRW-2026-00536-old.pdf", "Számla ACRW-2026/00999", "m1"),
-        pdf("E-ACRW-2026-00536-new.pdf", "Számla ACRW-2026/00536", "m2"),
-        pdf("E-ACRW-2026-00540-h.pdf", "Számla ACRW-2026/00540", "m3"),
+        pdf("E-ACRW-2026-00536-0dd.pdf", "Számla ACRW-2026/00999", "m1"),
+        pdf("E-ACRW-2026-00536-bee.pdf", "Számla ACRW-2026/00536", "m2"),
+        pdf("E-ACRW-2026-00540-e.pdf", "Számla ACRW-2026/00540", "m3"),
       ],
       apply: true,
       textOf,
@@ -160,10 +374,10 @@ describe("external-invoice-mail-pdf:fill", () => {
           candidate("row-2", "ACRW-2026/00537"),
         ],
         mail: async () => [
-          pdf("E-ACRW-2026-00536-h1.pdf", "ACRW-2026/00536"),
-          pdf("E-ACRW-2026-00600-h2.pdf", "ACRW-2026/00600"),
-          pdf("E-ACRW-2026-00601-h3.pdf", "ACRW-2026/00601"),
-          pdf("E-ACRW-2026-00450-h4.pdf", "ACRW-2026/00450"),
+          pdf("E-ACRW-2026-00536-a1.pdf", "ACRW-2026/00536"),
+          pdf("E-ACRW-2026-00600-a2.pdf", "ACRW-2026/00600"),
+          pdf("E-ACRW-2026-00601-a3.pdf", "ACRW-2026/00601"),
+          pdf("E-ACRW-2026-00450-a4.pdf", "ACRW-2026/00450"),
         ],
         rowsByNumber: async () => [
           {

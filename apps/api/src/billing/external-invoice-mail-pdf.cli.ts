@@ -2,10 +2,7 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
-import {
-  GoogleReadonlyClient,
-  type GoogleReadonlyCredentials,
-} from "../integrations/google/google-readonly.client.js";
+import { GoogleReadonlyClient } from "../integrations/google/google-readonly.client.js";
 import { supplierInvoiceMailCredentials } from "../purchasing/expected-arrivals/supplier-invoice-mail.config.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
@@ -15,6 +12,7 @@ import {
 } from "../service-assets/document-store/document-store.provider.js";
 import {
   CMFX_SENDER,
+  cmfxMailAuthenticated,
   cmfxMailQuery,
   fillExternalPdfsFromMail,
   mailPdfCandidates,
@@ -46,7 +44,8 @@ import {
  *
  * Kilépés: 0 rendben (szárazon: nincs mit tárolni); 1 száraz futás, VAN mit tárolni; 2 rossz hónap,
  * hiányzó levélkulcs vagy `--apply` dokumentumtár nélkül; 3 legalább egy számla PDF-je megvolt, de
- * nem tárolódott (NOT_PDF, NUMBER_NOT_IN_PDF, STORE_FAILED).
+ * nem tárolódott (NOT_PDF, NUMBER_NOT_IN_PDF, STORE_FAILED), vagy csak hitelesítetlen levélben jött
+ * (NOT_AUTHENTICATED: a Gmail legfelső ítélete nem igazolja a cmfx DKIM-aláírását és DMARC-ját).
  */
 export async function main(
   argv: readonly string[],
@@ -98,7 +97,11 @@ export async function main(
     }
     const user =
       environment.INVOICE_COLLECTION_INFO_USER?.trim() || "info@acropora.hu";
-    mail = (m) => readCmfxMail(credentials, user, m);
+    const google = new GoogleReadonlyClient({
+      credentials,
+      requestGapMs: REQUEST_GAP_MS,
+    });
+    mail = (m) => readCmfxMail(google, user, m);
   }
 
   const candidates = await (deps.candidates ?? mailPdfCandidates)(month);
@@ -133,13 +136,20 @@ export async function main(
         : `MASIK_HONAP ${row.issueDate.toISOString().slice(0, 7)}`;
     io.out(`${state.padEnd(17)} ${number}\n`);
   }
+  if (report.unauthenticatedFiles)
+    io.out(
+      `Hitelesítetlen levél PDF-je (nem cmfx-aláírású, nem tárolódik): ${report.unauthenticatedFiles}\n`,
+    );
   if (report.unrecognizedFiles)
     io.out(`Nem cmfx alakú melléklet-név: ${report.unrecognizedFiles}\n`);
 
   const count = (kind: string) =>
     report.outcomes.filter((o) => o.kind === kind).length;
   const failed =
-    count("NOT_PDF") + count("NUMBER_NOT_IN_PDF") + count("STORE_FAILED");
+    count("NOT_PDF") +
+    count("NUMBER_NOT_IN_PDF") +
+    count("STORE_FAILED") +
+    count("NOT_AUTHENTICATED");
   io.out(
     `Összesen: ${apply ? `tárolva ${count("STORED")}` : `tárolná ${count("WOULD_STORE")}`}, levél nélkül ${count("NO_MAIL")}, ` +
       `hibás ${failed}, számla-sor nélküli levél ${report.notCandidates.filter((n) => !byNumber.has(n)).length}\n`,
@@ -180,23 +190,29 @@ async function prismaRowsByNumber(
  */
 const REQUEST_GAP_MS = 250;
 
-/** A hónap cmfx-levelei és PDF-mellékletei. */
-async function readCmfxMail(
-  credentials: GoogleReadonlyCredentials,
+/**
+ * A hónap cmfx-levelei és PDF-mellékletei, mindegyik a levél hitelesítési ítéletével. Exportálva, hogy
+ * a teszt hamis Gmail-klienssel mérje: a hitelesítés bekötése nem maradhat bizonyítatlan (#1777).
+ */
+export async function readCmfxMail(
+  google: Pick<GoogleReadonlyClient, "gmailMessageIds" | "gmailPdfMessage">,
   user: string,
   month: string,
 ): Promise<MailPdf[]> {
-  const google = new GoogleReadonlyClient({
-    credentials,
-    requestGapMs: REQUEST_GAP_MS,
-  });
   const pdfs: MailPdf[] = [];
   for (const id of await google.gmailMessageIds(user, cmfxMailQuery(month))) {
     const message = await google.gmailPdfMessage(user, id);
     // a keresés a feladóra szűr; a fejléc a második őr, egy továbbított levél ne számítson
     if (message.sender?.toLowerCase() !== CMFX_SENDER) continue;
     for (const pdf of message.pdfs)
-      pdfs.push({ messageId: id, fileName: pdf.fileName, buffer: pdf.buffer });
+      pdfs.push({
+        messageId: id,
+        fileName: pdf.fileName,
+        buffer: pdf.buffer,
+        authenticated: cmfxMailAuthenticated(
+          message.authenticationResults ?? [],
+        ),
+      });
   }
   return pdfs;
 }

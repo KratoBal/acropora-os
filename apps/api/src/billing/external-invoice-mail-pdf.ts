@@ -26,14 +26,15 @@ export const CMFX_PDF_DOCUMENT_ID = "cmfx.pdf";
 export const CMFX_SENDER = "ertesito@cmfx.hu";
 
 /**
- * A cmfx melléklet-nevéből a számlaszám; ha a név nem ilyen alakú, `null`. A záró hash-részben
- * betűnek is kell lennie: enélkül egy hash nélküli név (`E-ACRW-2026-00536.pdf`) `ACRW/2026`-ot adna.
- * Egy csupa számjegyből álló hash így kimarad, és a „nem cmfx alakú” számban látszik, nem rossz számként.
+ * A cmfx melléklet-nevéből a számlaszám; ha a név nem ilyen alakú, `null`. A záró rész hexadecimális
+ * hash (mérve: 7 jegyű, pl. `17ff96d`). NEM kell benne betű (acrobot, #1777): egy 7 jegyű hex kb. 3,7%
+ * eséllyel csupa számjegy, és egy betűt kérő szabály havonta nagyjából minden 27. számlát csendben
+ * kiejtene. Az ára: egy hash NÉLKÜLI név (`E-ACRW-2026-00536.pdf`) rossz számot ad (`ACRW/2026`), de az
+ * nem néma: nincs ilyen jelölt, tehát „nincs számla-sora” sorként látszik, és a PDF-szöveg
+ * szám-ellenőrzése miatt sehová nem tárolódik. A valódi őr az a szöveg-ellenőrzés, nem ez a minta.
  */
 export function numberFromCmfxFileName(fileName: string): string | null {
-  const match = /^E-(.+)-(\d+)-([^-]*[A-Za-z][^-]*)\.pdf$/i.exec(
-    fileName.trim(),
-  );
+  const match = /^E-(.+)-(\d+)-([0-9a-f]+)\.pdf$/i.exec(fileName.trim());
   return match ? `${match[1]}/${match[2]}` : null;
 }
 
@@ -58,13 +59,66 @@ export interface MailPdf {
   messageId: string;
   fileName: string;
   buffer: Buffer;
+  /** A levél eredete igazolt (`cmfxMailAuthenticated`); hamis feladójú levél PDF-je nem jelölt. */
+  authenticated: boolean;
+}
+
+/**
+ * A LEVÉL TÉNYLEG A CMFX-TŐL JÖTT-E (barracuda, #1777). A `From` a levélben ÁLLÍTOTT feladó: bárki
+ * beírhatja, aki az info@-ra ír, és egy hamis PDF így egy valódi számla nevében a könyvelői csomagba
+ * kerülne (a számlaszámok kitalálhatók). Az eredetet a fogadó szerver ítélete igazolja: a Gmail a
+ * levél TETEJÉRE írja a saját `Authentication-Results: mx.google.com; ...` fejlécét. Csak a LEGFELSŐ
+ * ilyen fejlécnek hiszünk, és csak ha az a Gmailé: a küldő is beírhat egy hamis fejlécet, de az a
+ * Gmailé alatt áll.
+ *
+ * Elfogadott (barracuda és acrobot, #1777): UGYANABBAN a legfelső fejlécben `dkim=pass`, ahol az aláíró
+ * domain (`header.d`, vagy a `header.i` domainje) PONTOSAN cmfx.hu, ÉS `dmarc=pass header.from=cmfx.hu`.
+ * A DKIM a tartalomhoz köti az aláírást, a DMARC a DKIM-domaint a `From`-hoz: a kettő együtt a
+ * legerősebb. Mérve 2026-10-21 (acrobot, öt októberi cmfx-levél): mind az ötnél a legfelső fejléc
+ * `mx.google.com`, benne `dkim=pass header.i=@cmfx.hu` és `dmarc=pass header.from=cmfx.hu`. A
+ * domain-egyezés pontos, nem végződés-alapú: egy evilcmfx.hu nem megy át, és aldomain sem.
+ *
+ * MIÉRT A LEGFELSŐ, ÉS NEM „AZ MX.GOOGLE.COM-OS”: a küldő a saját levelébe egy `mx.google.com; dkim=pass`
+ * kezdetű sort is beírhat; ha a fejlécek közül azt keresnénk, ami mx.google.com-mal kezdődik, a hamis
+ * sor is megfelelne. A Gmail sajátja mindig felül áll, tehát csak az első fejlécet nézzük, és annak
+ * kell a Gmailének lennie. Ha valaha nem az áll felül, a levél NEM_HITELES lesz: látható, nem néma.
+ */
+export function cmfxMailAuthenticated(results: readonly string[]): boolean {
+  const top = results[0]?.trim() ?? "";
+  if (!/^mx\.google\.com\s*;/i.test(top)) return false;
+  const parts = top.split(";").map((part) => part.trim().toLowerCase());
+  // the domain ends where the token ends: no letter, digit, dot or hyphen may follow
+  const end = String.raw`(?![a-z0-9.-])`;
+  const dkim = parts.some(
+    (part) =>
+      /^dkim=pass\b/.test(part) &&
+      new RegExp(
+        String.raw`(?:^|\s)header\.(?:d=cmfx\.hu|i=[^\s@]*@cmfx\.hu)${end}`,
+      ).test(part),
+  );
+  const dmarc = parts.some(
+    (part) =>
+      /^dmarc=pass\b/.test(part) &&
+      new RegExp(String.raw`(?:^|\s)header\.from=cmfx\.hu${end}`).test(part),
+  );
+  return dkim && dmarc;
+}
+
+/**
+ * A számlaszám a PDF szövegében, HATÁROLVA (barracuda, #1777): az ACRW-2026/00536 ne találjon rá az
+ * ACRW-2026/005360-ra, és egy betű vagy számjegy se álljon előtte.
+ */
+export function textCarriesNumber(text: string, number: string): boolean {
+  const escaped = number.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  return new RegExp(`(?<![A-Za-z0-9])${escaped}(?![0-9])`).test(text);
 }
 
 export type MailPdfOutcome =
   | { kind: "STORED" | "WOULD_STORE"; documentNumber: string; bytes: number }
   | { kind: "NO_MAIL"; documentNumber: string }
   | {
-      kind: "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "STORE_FAILED";
+      kind:
+        "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "STORE_FAILED" | "NOT_AUTHENTICATED";
       documentNumber: string;
     };
 
@@ -74,6 +128,8 @@ export interface MailPdfReport {
   notCandidates: string[];
   /** Mellékletek, amelyeknek a neve nem a cmfx alakja. */
   unrecognizedFiles: number;
+  /** PDF-ek hitelesítetlen levélből (`cmfxMailAuthenticated`): egyik sem tárolódik. */
+  unauthenticatedFiles: number;
 }
 
 /**
@@ -110,12 +166,18 @@ export async function fillExternalPdfsFromMail(input: {
       outcomes.push({ kind: "NO_MAIL", documentNumber: number });
       continue;
     }
+    // a hitelesítetlen levél PDF-je meg sem nyílik: ha csak ilyen jött, az a sor oka
+    const trusted = pdfs.filter((pdf) => pdf.authenticated);
+    if (!trusted.length) {
+      outcomes.push({ kind: "NOT_AUTHENTICATED", documentNumber: number });
+      continue;
+    }
     let verdict: "NOT_PDF" | "NUMBER_NOT_IN_PDF" = "NOT_PDF";
     let chosen: MailPdf | null = null;
-    for (const pdf of pdfs) {
+    for (const pdf of trusted) {
       if (pdf.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") continue;
       const text = await input.textOf(pdf.buffer).catch(() => [] as string[]);
-      if (!text.join("\n").includes(number)) {
+      if (!textCarriesNumber(text.join("\n"), number)) {
         verdict = "NUMBER_NOT_IN_PDF";
         continue;
       }
@@ -156,7 +218,12 @@ export async function fillExternalPdfsFromMail(input: {
   const notCandidates = [...byNumber.keys()]
     .filter((number) => !wanted.has(number))
     .sort();
-  return { outcomes, notCandidates, unrecognizedFiles };
+  return {
+    outcomes,
+    notCandidates,
+    unrecognizedFiles,
+    unauthenticatedFiles: input.pdfs.filter((pdf) => !pdf.authenticated).length,
+  };
 }
 
 /**
