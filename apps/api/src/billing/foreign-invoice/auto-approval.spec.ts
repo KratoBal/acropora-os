@@ -6,6 +6,7 @@ import type { IncomingReadingValues } from "@acropora/types";
 import {
   autoApproval,
   navFilledFields,
+  sameSupplierName,
   type NavConfirmation,
 } from "./auto-approval.js";
 import { formatAutoApprove } from "./incoming-auto-approve.cli.js";
@@ -140,6 +141,57 @@ describe("automatic approval", () => {
       "supplierName",
       "vatAmount",
     ]);
+  });
+
+  it("NAV: the supplier name is the NAV's when the read one agrees in substance, and a differing read name keeps the row for a person", () => {
+    // egyező, de más alakú név (cégforma-szó, ékezet, kisbetű): a NAV neve lesz, NAV forrásjellel
+    const same = decide({
+      values: {
+        ...HU,
+        supplierName: "kitalalt MEDENCETECHNIKA Korlátolt Felelősségű Társaság",
+      },
+      sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+    });
+    assert.equal(same.approve, true);
+    if (!same.approve) return;
+    assert.equal(same.values.supplierName, "Kitalált Medencetechnika Kft.");
+    assert.equal(same.sources.supplierName, "NAV");
+    // más cég neve (pl. a szövegből rosszul olvasott név): átnézésre marad, a figyelmeztetés megnevezi
+    const other = decide({
+      values: { ...HU, supplierName: "Kitalált Másik Szolgáltató Zrt." },
+      sources: { grossAmount: "TEXT", supplierName: "TEXT" },
+    });
+    assert.equal(other.approve, false);
+    if (other.approve) return;
+    assert.match(other.reason, /a kiolvasott szállítónév .* eltér a NAV-tól/);
+    // az egyik a másik része (kiegészített vagy rövidített név): egyezik, és a név a NAV-é lesz
+    for (const read of [
+      "Kitalált Medencetechnika Magyarország Kft.",
+      "Kitalált Medencetechnika",
+    ]) {
+      const part = decide({ values: { ...HU, supplierName: read } });
+      assert.equal(part.approve, true, read);
+      if (part.approve)
+        assert.equal(part.values.supplierName, "Kitalált Medencetechnika Kft.");
+    }
+    // üres név: a NAV tölti, ahogy eddig
+    assert.equal(decide({}).approve, true);
+  });
+
+  it("the name comparison: legal words, accents and case do not count; a different company does", () => {
+    assert.ok(
+      sameSupplierName(
+        "Elektro-Light Kft.",
+        "ELEKTRO LIGHT Korlátolt Felelősségű Társaság",
+      ),
+    );
+    assert.ok(
+      sameSupplierName("Elektro-Light", "Elektro-Light Magyarország Zrt."),
+    );
+    assert.ok(!sameSupplierName("Elektro-Light Kft.", "Elektro-Dark Kft."));
+    assert.ok(!sameSupplierName("Kft.", "Kft."));
+    assert.ok(!sameSupplierName("", "Elektro-Light"));
+    assert.ok(!sameSupplierName("Alfa Béta Kft.", "Gamma Delta Kft."));
   });
 
   it("NAV: a gross that differs from the NAV, another supplier's invoice of the same number, or no NAV row is not approved", () => {
