@@ -5,6 +5,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   diagnoseReport,
+  diagnoseSummary,
   diagnoseUnpaired,
   type DiagnoseDebit,
   type DiagnoseRow,
@@ -120,5 +121,33 @@ describe("why an incoming invoice reads as unpaired", () => {
       ["--since", "--all"],
     ])
       assert.equal(parseSince(bad), null, JSON.stringify(bad));
+  });
+
+  it("--osszesito: one number per issue month and the total (acrobot 34662); a far due date does not throw", () => {
+    const lines = diagnoseUnpaired(
+      [
+        row({ id: "a" }),
+        row({ id: "b", documentNumber: "TST-2026/2" }),
+        row({
+          id: "c",
+          documentNumber: "TST-2026/3",
+          issueDate: new Date("2026-10-02T00:00:00Z"),
+        }),
+        // every date beyond 2090: the window falls back to the issue date instead of failing
+        row({
+          id: "d",
+          documentNumber: "TST-2099/1",
+          issueDate: new Date("2099-12-31T00:00:00Z"),
+          dueDate: null,
+          lastPaymentDate: null,
+        }),
+      ],
+      new Map(),
+      [],
+    );
+    assert.equal(
+      diagnoseSummary(lines),
+      "2026-09\t2\n2026-10\t1\n2099-12\t1\nÖSSZESEN\t4\n",
+    );
   });
 });

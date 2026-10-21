@@ -9,6 +9,7 @@ import { MissingInvoicesService } from "../missing-invoices/missing-invoices.ser
 import { SupplierInvoiceImportService } from "../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import {
   diagnoseReport,
+  diagnoseSummary,
   diagnoseUnpaired,
   type DiagnoseDebit,
 } from "./incoming-bank-diagnose.js";
@@ -67,13 +68,26 @@ async function main(argv: readonly string[]): Promise<number> {
       page: 1,
       pageSize: 1_000_000,
     });
+    // barracuda #1789: if a maximum page size ever cut the page, the missing debits would read as "no debit of
+    // this amount", which is exactly a false diagnosis; so a short page stops the run
+    if (detail.items.length !== detail.pagination.totalItems) {
+      process.stderr.write(
+        `A ${month} hónap lapja ${detail.items.length} terhelést adott ${detail.pagination.totalItems} helyett: a diagnózis hamis lenne, nem fut tovább.\n`,
+      );
+      return 3;
+    }
     debits.push(...detail.items);
   }
   process.stdout.write(
     `CSAK OLVASÁS, kelte ${since} óta, ${rows.length} Számlázz.hu-sor, ${debits.length} terhelés (${months.join(", ")})\n`,
   );
+  const lines = diagnoseUnpaired(rows, pairings, debits);
+  // acrobot 34662: the daily check takes one number per month, instead of a count of BankTransactionMatch rows
+  // (that table holds the manual pairings only, so a count of it overstates)
   process.stdout.write(
-    diagnoseReport(diagnoseUnpaired(rows, pairings, debits)),
+    argv.includes("--osszesito")
+      ? diagnoseSummary(lines)
+      : diagnoseReport(lines),
   );
   return 0;
 }

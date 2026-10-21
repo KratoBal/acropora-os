@@ -47,6 +47,8 @@ export type DiagnoseDebit = Pick<
 
 export interface DiagnoseLine {
   number: string;
+  /** YYYY-MM: a kelte hónapja, az összesítőhöz */
+  month: string;
   supplier: string;
   gross: string;
   /** a feed szerint fizetett-e (a lista „Fizetve” oszlopa ebből is jöhet) */
@@ -88,10 +90,11 @@ export function diagnoseUnpaired(
     const from = day(new Date(row.issueDate.getTime() - 30 * DAY));
     const last = [row.dueDate, row.lastPaymentDate, row.issueDate]
       .filter((d): d is Date => d !== null && d.getUTCFullYear() < 2090)
-      .reduce((a, b) => (a > b ? a : b));
+      .reduce((a, b) => (a > b ? a : b), row.issueDate);
     const to = day(new Date(last.getTime() + 15 * DAY));
     lines.push({
       number: row.documentNumber,
+      month: day(row.issueDate).slice(0, 7),
       supplier: row.supplierName,
       gross: `${row.grossAmount.toFixed(2)} ${row.currency}`,
       paidByFeed: paymentStateOf(row) === "PAID",
@@ -137,5 +140,23 @@ export function diagnoseReport(lines: readonly DiagnoseLine[]): string {
                 .join("")
         }`,
     ),
+  ].join("");
+}
+
+/**
+ * EGY SZÁM HAVONTA (acrobot 34662): hány Számlázz.hu-sor párosítatlan a listán,
+ * a kelte hónapja szerint; a napi ellenőrzés ezt olvassa a saját
+ * `BankTransactionMatch`-számlálása helyett. Soronként `HÓNAP<TAB>DARAB`, a
+ * végén `ÖSSZESEN<TAB>DARAB`.
+ */
+export function diagnoseSummary(lines: readonly DiagnoseLine[]): string {
+  const byMonth = new Map<string, number>();
+  for (const line of lines)
+    byMonth.set(line.month, (byMonth.get(line.month) ?? 0) + 1);
+  return [
+    ...[...byMonth]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => `${month}\t${count}\n`),
+    `ÖSSZESEN\t${lines.length}\n`,
   ].join("");
 }
