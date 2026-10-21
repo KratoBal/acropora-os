@@ -122,10 +122,19 @@ export async function apiRequest<T>(
       409: "Az adat időközben megváltozott. Frissítsd a listát.",
       422: "A művelet üzleti feltételei nem teljesülnek.",
     };
+    /**
+     * AZ ÁLTALÁNOS HIBASZÖVEG KIÍRJA A STÁTUSZT IS (2026-10-21, Balázs egy
+     * bejövő számla jóváhagyásánál). Az API minden hibája JSON, tehát ez a
+     * szöveg csak akkor jelenik meg, ha a válasz NEM az API-tól jött vagy nem
+     * JSON: a Next rewrite-proxy időtúllépése (csupasz 500), egy megszakadt
+     * kapcsolat (szintén 500), vagy a Traefik 502/503/504 oldala. Státusz
+     * nélkül a három megkülönböztethetetlen volt, és a hibát nem lehetett
+     * visszakeresni.
+     */
     throw new ApiError(
       serverMessage ??
         fallback[response.status] ??
-        "A kérés feldolgozása nem sikerült.",
+        `A kérés feldolgozása nem sikerült (HTTP ${response.status}).`,
       response.status,
     );
   }

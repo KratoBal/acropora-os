@@ -202,4 +202,73 @@ describe("apiRequest", () => {
       apiRequest("/units-of-measure/u1", "dev_abc123", { method: "DELETE" }),
     ).resolves.toBeUndefined();
   });
+
+  /**
+   * A NEM JSON HIBAVALASZ KIIRJA A STATUSZT (2026-10-21): a proxy vagy a
+   * Traefik hibaoldala szoveg, nem JSON, es eddig mindegyikbol ugyanaz a mondat
+   * lett, a statusz nelkul.
+   */
+  it("names the HTTP status when the error answer is not JSON (proxy / gateway)", async () => {
+    for (const status of [500, 502, 504]) {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status,
+        json: async () => {
+          throw new SyntaxError("Unexpected token B in JSON");
+        },
+      });
+
+      await expect(
+        apiRequest("/billing/incoming-documents/x/review/approve", "", {
+          method: "POST",
+          body: "{}",
+        }),
+      ).rejects.toThrow(
+        new RegExp(`A kérés feldolgozása nem sikerült \\(HTTP ${status}\\)\\.`),
+      );
+    }
+  });
+
+  it("carries the status on the error, not only in the text", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    });
+
+    await expect(apiRequest("/x", "")).rejects.toMatchObject({ status: 502 });
+  });
+
+  it("keeps the server's own message untouched when the answer is JSON (no status appended)", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ message: "Internal server error" }),
+    });
+
+    await expect(apiRequest("/x", "")).rejects.toThrow(
+      /^Internal server error$/,
+    );
+  });
+
+  it("keeps the dedicated sentences for 400, 404, 409 and 422 (they already name the cause)", async () => {
+    const expected: Record<number, string> = {
+      400: "A megadott adatok nem érvényesek.",
+      404: "A kért import batch nem található.",
+      409: "Az adat időközben megváltozott. Frissítsd a listát.",
+      422: "A művelet üzleti feltételei nem teljesülnek.",
+    };
+    for (const [status, text] of Object.entries(expected)) {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: Number(status),
+        json: async () => {
+          throw new SyntaxError("not json");
+        },
+      });
+      await expect(apiRequest("/x", "")).rejects.toThrow(text);
+    }
+  });
 });
