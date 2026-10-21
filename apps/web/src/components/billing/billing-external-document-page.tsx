@@ -27,6 +27,7 @@ import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { OWN_MARK_SOURCE_LABELS, PaymentBadge } from "./billing-payment";
+import { pdfMissingText } from "./billing-pdf-state";
 
 /** Az áfakulcs, ahogy a számlán áll: szám mellé %, a jelölés (AAM, TAM) magában. */
 const vatRateText = (rate: string) =>
@@ -39,16 +40,12 @@ export const EXTERNAL_SOURCE_NAME: Record<ExternalBillingSource, string> = {
 };
 
 /** Miért nincs PDF, egy mondatban (a hibakód a lap alján marad). */
-const PDF_MISSING_TEXT: Record<string, string> = {
-  DOCUMENT_STORE_NOT_CONFIGURED:
-    "Nincs letöltve: a dokumentumtár nincs beállítva.",
-};
-
 /**
  * A KÜLSŐ KIMENŐ SZÁMLA ADATLAPJA (acrobot 25812): ugyanaz a kinézet, mint a
  * mieinké, CSAK OLVASÁSRA. Nincs szerkesztés, sztornó, újraküldés. A
- * Számlázz.hu-ból jött számlához PDF nincs (a Számlázz.hu nem adja); az OTP
- * eBIZ-ből jötthöz a napi szinkron letölti (2026-10-02).
+ * Számlázz.hu-ból jött számla PDF-jét a feed nem adja; a Számlázz.hu-s letöltés
+ * hozza (#1658, kézzel indított parancs), az OTP eBIZ-ből jötthöz a napi
+ * szinkron (2026-10-02). Ha nincs, a `pdfMissingText` mondja meg, miért.
  */
 export function BillingExternalDocumentPage({
   documentId,
@@ -364,15 +361,10 @@ export function BillingExternalDocumentPage({
                   >
                     {pdfBusy ? "Megnyitás…" : "PDF megnyitása"}
                   </Button>
-                ) : ebiz ? (
-                  detail.pdfMissingReason ? (
-                    (PDF_MISSING_TEXT[detail.pdfMissingReason] ??
-                    `Nem sikerült letölteni (${detail.pdfMissingReason}).`)
-                  ) : (
-                    "Még nincs letöltve; a következő szinkron megpróbálja."
-                  )
                 ) : (
-                  "Nincs (a Számlázz.hu nem adja)"
+                  // a Számlázz.hu-s sor PDF-jét 2026-10-12 óta a letöltés hozza (#1658): a régi
+                  // „a Számlázz.hu nem adja” szöveg ezt már nem mondta igazul
+                  pdfMissingText(detail.pdfMissingReason, detail.source)
                 )}
               </PilotDataItem>
               {ebiz ? null : (

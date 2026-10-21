@@ -112,6 +112,7 @@ export type {
   BillingDocumentListTarget,
   BillingDocumentOrigin,
   BillingDocumentPdfInfo,
+  BillingDocumentPdfState,
   BillingOwnPaymentMark,
   BillingPaymentSource,
   BillingExternalDocumentDetail,

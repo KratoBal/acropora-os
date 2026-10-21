@@ -11,6 +11,7 @@ import { formatMoney } from "./billing-editor-state";
 import { BillingDocumentStatus } from "./billing-document-status";
 import { ExternalBadge } from "./billing-external-document-page";
 import { PaymentBadge } from "./billing-payment";
+import { PdfStateBadge } from "./billing-pdf-state";
 
 export const BILLING_LIST_PATH = "/penzugy/szamlazas";
 
@@ -138,6 +139,13 @@ export const BILLING_DOCUMENT_COLUMNS: readonly PilotTableColumn<BillingDocument
       ),
     },
     {
+      // megvan-e a PDF, és ha nincs, miért (Balázs, 2026-10-21); ugyanaz, amit a havi csomag lát
+      id: "pdf",
+      header: "PDF",
+      width: "180px",
+      cell: (item) => <PdfStateBadge item={item} />,
+    },
+    {
       id: "status",
       header: "Állapot",
       width: "170px",
@@ -183,7 +191,7 @@ export function BillingDocumentTable({
           item.cancelled ? " (sztornózott)" : ""
         }, ${item.customerName} megnyitása`
       }
-      minWidth={960}
+      minWidth={1140}
     />
   );
 }

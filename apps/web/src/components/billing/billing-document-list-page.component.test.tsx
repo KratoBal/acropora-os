@@ -72,6 +72,7 @@ function item(
     paidAmount: null,
     lastPaymentDate: null,
     paymentSource: null,
+    pdf: { available: true, missingReason: null },
     ...overrides,
   };
 }
@@ -262,6 +263,70 @@ describe("BillingDocumentListPage", () => {
     expect(
       within(rows[4]!).getByText("Fizetve (kártya, a rendeléskor)"),
     ).toBeInTheDocument();
+  });
+
+  // MI PIROSÍT: ha a PDF-állapot nem a válaszból jönne; ha a hiányzó PDF oka elveszne vagy a
+  // Számlázz.hu-s soron automatikus letöltést ígérne (az kézzel indul); ha egy vázlat PDF-et várna.
+  it("shows whether the PDF is there, and why not when it is missing (Balázs, 2026-10-21)", async () => {
+    const ext = (
+      id: string,
+      pdf: BillingDocumentListItem["pdf"],
+      externalSource: "SZAMLAZZ" | "EBIZ" = "SZAMLAZZ",
+    ) =>
+      item({
+        id,
+        documentNumber: id,
+        opens: "EXTERNAL_DETAIL",
+        origin: "EXTERNAL",
+        externalKindLabel: "Számla",
+        externalSource,
+        pdf,
+      });
+    api.list.mockResolvedValue(
+      response([
+        item({}),
+        item({
+          id: "own-2",
+          documentNumber: "AC-2026-001250",
+          pdf: { available: false, missingReason: "OWN_PDF_NOT_STORED" },
+        }),
+        item({
+          id: "draft",
+          documentNumber: null,
+          status: "DRAFT",
+          opens: "EDITOR",
+          pdf: null,
+        }),
+        ext("ACRW-2026/00601", { available: false, missingReason: null }),
+        ext("ACRW-2026/00602", {
+          available: false,
+          missingReason: "SZAMLAZZ_PDF_REJECTED_7",
+        }),
+        ext("E-77", { available: false, missingReason: null }, "EBIZ"),
+        ext("ACRW-2026/00603", {
+          available: false,
+          missingReason: "SZAMLAZZ_PDF_HTTP_503",
+        }),
+      ]),
+    );
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    expect(within(rows[0]!).getByText("Megvan")).toBeInTheDocument();
+    expect(rows[1]).toHaveTextContent(
+      "NincsA kiállításkor nem tárolódott PDF.",
+    );
+    expect(within(rows[2]!).queryByText("Megvan")).toBeNull();
+    expect(within(rows[2]!).queryByText("Nincs")).toBeNull();
+    expect(rows[3]).toHaveTextContent(
+      "Még nincs letöltve: a Számlázz.hu-s letöltés ezen a soron még nem futott.",
+    );
+    expect(rows[4]).toHaveTextContent(
+      "A Számlázz.hu ezt a számlaszámot nem ismeri.",
+    );
+    expect(rows[5]).toHaveTextContent(
+      "Még nincs letöltve; a következő eBIZ-szinkron megpróbálja.",
+    );
+    expect(rows[6]).toHaveTextContent("A Számlázz.hu nem adta ki (HTTP 503).");
   });
 
   it("the source filter goes to the request, and back from the URL", async () => {

@@ -120,6 +120,21 @@ export interface BillingDocumentListItem {
    * Számlázz.hu felületén (a feed ikre mondja). A külső sornál hiányzik.
    */
   cancelled?: boolean;
+  /**
+   * MEGVAN-E A PDF (Balázs, 2026-10-21: „látszódjon, hogy megvan a pdf”), ugyanúgy, ahogy a havi
+   * könyvelői csomag látja: a saját számlánál a tárolt PDF, a külsőnél a feed-sor PDF-je (a Számlázz.hu
+   * letöltés vagy az eBIZ szinkron tölti). `null`: nem kiállított bizonylat, PDF nem várható.
+   */
+  pdf: BillingDocumentPdfState | null;
+}
+
+export interface BillingDocumentPdfState {
+  available: boolean;
+  /**
+   * Ha nincs PDF: a letöltés hibakódja (pl. `SZAMLAZZ_PDF_REJECTED_7`), saját számlánál
+   * `OWN_PDF_NOT_STORED`; `null`, ha a letöltés még nem próbálta meg.
+   */
+  missingReason: string | null;
 }
 
 /**

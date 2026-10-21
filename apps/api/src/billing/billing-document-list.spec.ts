@@ -53,6 +53,7 @@ function row(
     customer: { companyName: "Új Név Kft.", displayName: "Új Név" },
     lines: [line("1566.93", "1.5")],
     createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    pdfStorageKey: null,
     ...overrides,
   } as BillingDocumentListRow;
 }
@@ -178,6 +179,8 @@ const external = (
   customerTaxNumber: "12345678-2-42",
   cancelled: false,
   payments: [],
+  pdfStorageKey: null,
+  pdfMissingReason: null,
   ...overrides,
 });
 
@@ -496,6 +499,7 @@ describe("the external documents on the list", () => {
       paidAmount: "0",
       lastPaymentDate: null,
       paymentSource: null,
+      pdf: { available: false, missingReason: null },
     });
     assert.deepEqual(
       [
@@ -798,6 +802,78 @@ describe("the buyer's name from the webshop order (acrobot 26096)", () => {
   elnyeli; a saját sor elveszíti az iker kifizetési adatát; a darabszám a
   kihagyott ikret is számolja.
 */
+/*
+  A PDF MEGLÉTE A LISTÁN (Balázs, 2026-10-21: „látszódjon, hogy megvan a pdf”), ugyanaz, amit a havi
+  könyvelői csomag lát (outgoing-package.service.ts).
+*/
+describe("the PDF state on the list (Balázs, 2026-10-21)", () => {
+  // MI PIROSÍT: ha egy tárolt PDF nélküli sor „megvan”-t mutatna; ha a letöltés oka elveszne; ha egy
+  // vázlat PDF-et várna; ha a saját sor az ikre PDF-jét kölcsönözné (a csomag nem teszi).
+  it("an external row: stored, failed with its reason, or not tried yet", () => {
+    assert.deepEqual(
+      [
+        toExternalListItem(
+          external({ pdfStorageKey: "external-invoice/ext-1/szamlazz.pdf" }),
+        ).pdf,
+        toExternalListItem(
+          external({ pdfMissingReason: "SZAMLAZZ_PDF_REJECTED_7" }),
+        ).pdf,
+        toExternalListItem(external()).pdf,
+      ],
+      [
+        { available: true, missingReason: null },
+        { available: false, missingReason: "SZAMLAZZ_PDF_REJECTED_7" },
+        { available: false, missingReason: null },
+      ],
+    );
+    // a régi ok egy azóta tárolt PDF mellett nem látszik: a PDF megvan
+    assert.deepEqual(
+      toExternalListItem(
+        external({
+          pdfStorageKey: "external-invoice/ext-1/szamlazz.pdf",
+          pdfMissingReason: "SZAMLAZZ_PDF_HTTP_500",
+        }),
+      ).pdf,
+      { available: true, missingReason: null },
+    );
+  });
+
+  it("an own row: only an issued one has a PDF state, and a missing one says it was not stored", () => {
+    const issued = {
+      status: "ISSUED",
+      invoiceNumber: "ACRW-2026/00508",
+    } as const;
+    assert.deepEqual(
+      [
+        toListItem(
+          row({ ...issued, pdfStorageKey: "invoice/doc-1/szamla.pdf" }),
+        ).pdf,
+        toListItem(row({ ...issued })).pdf,
+        toListItem(row()).pdf,
+      ],
+      [
+        { available: true, missingReason: null },
+        { available: false, missingReason: "OWN_PDF_NOT_STORED" },
+        null,
+      ],
+    );
+  });
+
+  it("an own row keeps its own PDF state next to a twin that has one, as the package does", () => {
+    const own = toListItem(
+      row({ status: "ISSUED", invoiceNumber: "ACRW-2026/00508" }),
+    );
+    const merged = withTwinPayment(
+      own,
+      external({ pdfStorageKey: "external-invoice/ext-1/szamlazz.pdf" }),
+    );
+    assert.deepEqual(merged.pdf, {
+      available: false,
+      missingReason: "OWN_PDF_NOT_STORED",
+    });
+  });
+});
+
 describe("the own invoice and its Számlázz.hu twin (N2)", () => {
   it("the twin is left out by number, and the other filters stay", () => {
     assert.equal(withoutOwnTwins(null, ["A"]), null);

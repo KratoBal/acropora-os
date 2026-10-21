@@ -138,7 +138,25 @@ export function toListItem(
     lastPaymentDate: null,
     paymentSource: null,
     cancelled: (row.correctionInvoices?.length ?? 0) > 0,
+    pdf: ownPdfState(row),
   };
+}
+
+/** A saját számla tárolt PDF-je nem jöhet létre utólag letöltéssel: ha nincs, az ok mindig ez. */
+export const OWN_PDF_NOT_STORED = "OWN_PDF_NOT_STORED";
+
+/**
+ * A SAJÁT SOR PDF-JE, ahogy a havi csomag látja (`outgoing-package.service.ts`): csak a kiállított
+ * bizonylatnak van, és a csomag a saját sorét veszi akkor is, ha a feed-ikernek van PDF-je. A lista
+ * ezért nem kölcsönzi az ikerét: ami itt „megvan”, az a csomagban is megvan.
+ */
+function ownPdfState(
+  row: Pick<BillingDocumentListRow, "status" | "pdfStorageKey">,
+): BillingDocumentListItem["pdf"] {
+  if (row.status !== "ISSUED") return null;
+  return row.pdfStorageKey
+    ? { available: true, missingReason: null }
+    : { available: false, missingReason: OWN_PDF_NOT_STORED };
 }
 
 /*
@@ -289,6 +307,8 @@ export interface ExternalListRow {
   payments: Prisma.JsonValue;
   /** `SZAMLAZZ` vagy `EBIZ` (2026-10-02). */
   source: string;
+  pdfStorageKey: string | null;
+  pdfMissingReason: string | null;
 }
 
 /**
@@ -600,6 +620,9 @@ export function toExternalListItem(
     externalKindLabel: externalKindLabel(row.kindCode),
     externalSource: row.source === "EBIZ" ? "EBIZ" : "SZAMLAZZ",
     ...externalPaymentFields(row, simplePay, marks),
+    pdf: row.pdfStorageKey
+      ? { available: true, missingReason: null }
+      : { available: false, missingReason: row.pdfMissingReason },
   };
 }
 
