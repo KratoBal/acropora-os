@@ -382,8 +382,13 @@ export function tableRowFields(
  */
 const LEGAL_FORM =
   /(?<![\p{L}\p{N}])(kft|zrt|nyrt|kkt|bt|gmbh|ag|ltd|limited|inc|llc|b\.?v\.?|s\.?r\.?l|sarl|s\.?a\.?s|oy)(?![\p{L}\p{N}])/iu;
-const SELLER_HEADER = /el[áa]d[óo]|kiáll[íi]t[óo]|sz[áa]ll[íi]t[óo]/iu;
-const BUYER_HEADER = /vev[őo]/iu;
+const SELLER_HEADER =
+  /el[áa]d[óo]|kiáll[íi]t[óo]|kibocs[áa]t[óo]|sz[áa]ll[íi]t[óo]|szolg[áa]ltat[óo]|\b(seller|supplier|vendor|sold\s+by|issued\s+by|from)\b/iu;
+const BUYER_HEADER =
+  /vev[őo]|\b(buyer|bill(ed)?\s+to|sold\s+to|customer|client)\b/iu;
+/** egy cella, ami csak a "szállító" cimkéje ("Eladó neve:", "Seller:") */
+const SELLER_LABEL_CELL =
+  /^(el[áa]d[óo]|sz[áa]ll[íi]t[óo]|kiáll[íi]t[óo]|kibocs[áa]t[óo]|szolg[áa]ltat[óo]|seller|supplier|vendor|sold\s+by|issued\s+by|from)(\s+neve)?\s*:?$/iu;
 
 function plausibleName(raw: string | undefined): string | null {
   const name = (raw ?? "").normalize("NFC").trim().replace(/\s+/g, " ");
@@ -406,6 +411,18 @@ export function supplierNameFromText(lines: readonly string[]): string | null {
     const below = plausibleName(lines[index + 1]?.split(" | ")[0]);
     if (below) candidates.add(below);
   });
+  // "Eladó neve: | Kitalált Kft.": a szállító-cimke cellája és a név ugyanabban a sorban
+  for (const line of lines) {
+    const cells = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    cells.forEach((cell, column) => {
+      if (!SELLER_LABEL_CELL.test(cell)) return;
+      const name = plausibleName(cells[column + 1]);
+      if (name) candidates.add(name);
+    });
+  }
   return candidates.size === 1 ? [...candidates][0]! : null;
 }
 
