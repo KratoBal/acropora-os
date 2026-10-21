@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { prisma, PrismaClient } from "@acropora/database";
+import { prisma, PrismaClient, type Prisma } from "@acropora/database";
 import type { INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
@@ -1472,11 +1472,76 @@ describe(
           1,
         );
 
-        // 3 two requests at once: one dose, the other sees it (one lock per aquarium)
+        // 3 two requests at once: one dose, the other sees it (one lock per aquarium).
+        //
+        // THE RACE IS FORCED, NOT HOPED FOR (plan 5.3, break 13; re-run 2026-10-21): two plain
+        // concurrent calls did not overlap in practice, and this case stayed green with the lock
+        // removed. So each transaction meets a barrier at its first read after the lock, and waits
+        // there for the other one (at most 1,5 s). With the lock, the second cannot reach the
+        // barrier until the first has committed: the first waits out the 1,5 s, writes, and the
+        // second reads its row. Without the lock, both read before either writes: two doses.
+        const racingDatabase = new ReefClubDatabase(roleUrl);
+        let arrived = 0;
+        let releaseBoth!: () => void;
+        const together = new Promise<void>(
+          (resolve) => (releaseBoth = resolve),
+        );
+        const barrier = async () => {
+          arrived += 1;
+          if (arrived >= 2) releaseBoth();
+          await Promise.race([
+            together,
+            new Promise((resolve) => setTimeout(resolve, 1_500)),
+          ]);
+        };
+        const transaction = racingDatabase.$transaction.bind(racingDatabase);
+        (racingDatabase as unknown as { $transaction: unknown }).$transaction =
+          (
+            work: (tx: Prisma.TransactionClient) => Promise<unknown>,
+            options: unknown,
+          ) =>
+            (transaction as (w: unknown, o: unknown) => Promise<unknown>)(
+              (tx: Prisma.TransactionClient) =>
+                work(
+                  new Proxy(tx, {
+                    get(target, property) {
+                      const value = Reflect.get(target, property) as unknown;
+                      if (property !== "aquarium") return value;
+                      const aquarium =
+                        value as Prisma.TransactionClient["aquarium"];
+                      return new Proxy(aquarium, {
+                        get(delegate, method) {
+                          const inner = Reflect.get(
+                            delegate,
+                            method,
+                          ) as unknown;
+                          if (
+                            method !== "findUniqueOrThrow" ||
+                            typeof inner !== "function"
+                          )
+                            return inner;
+                          return async (...args: unknown[]) => {
+                            await barrier();
+                            return (
+                              inner as (...a: unknown[]) => unknown
+                            ).apply(delegate, args);
+                          };
+                        },
+                      });
+                    },
+                  }),
+                ),
+              options,
+            );
+        const racingService = new ReefClubRecommendationService(
+          new ReefClubAquariumAccess(racingDatabase),
+          racingDatabase,
+        );
         const [x, y] = await Promise.all([
-          service.recommend(accountA.id, racing, "KH"),
-          service.recommend(accountA.id, racing, "KH"),
-        ]);
+          racingService.recommend(accountA.id, racing, "KH"),
+          racingService.recommend(accountA.id, racing, "KH"),
+        ]).finally(() => racingDatabase.$disconnect());
+        assert.equal(arrived, 2, "mindkét kérés a sorompóhoz ért");
         assert.deepEqual([x.outcome, y.outcome].sort(), ["ACTIVE", "DOSE"]);
         assert.equal(
           await prisma.reefClubRecommendation.count({
