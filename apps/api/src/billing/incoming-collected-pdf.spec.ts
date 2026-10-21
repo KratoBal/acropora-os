@@ -9,6 +9,7 @@ import {
 import { Prisma } from "@acropora/database";
 
 import { IncomingBillingDocumentsController } from "./incoming-billing-documents.controller.js";
+import { ATTACH_PREFIX } from "./incoming-pdf-attach.js";
 import {
   collectedPdfIds,
   collectedPdfIndex,
@@ -121,6 +122,8 @@ function controller(input: {
   billRow: Record<string, unknown> | null;
   contents: Record<string, Buffer>;
   collected: CollectedDocument[];
+  /** the documents attached to a row by hand (`incoming-pdf-attach.ts`) */
+  attached?: { id: string; gmailMessageId: string }[];
 }) {
   const read: string[] = [];
   const database = {
@@ -134,7 +137,11 @@ function controller(input: {
         const content = input.contents[where.id];
         return content ? { content: new Uint8Array(content) } : null;
       },
-      findMany: async () => input.collected,
+      // the attached-PDF lookup asks by key prefix; every other query is the collected index
+      findMany: async (args?: { where?: unknown }) =>
+        JSON.stringify(args?.where ?? {}).includes(ATTACH_PREFIX)
+          ? (input.attached ?? [])
+          : input.collected,
     },
     // the list also asks for the recorded purchase invoices (card 83f31a95)
     purchaseInvoice: { findMany: async () => [] },
@@ -161,6 +168,17 @@ describe("a bejövő számla PDF-végpontja", () => {
     });
     assert.ok((await subject.pdf("in-1")) instanceof StreamableFile);
     assert.deepEqual(read, ["feed-1"]);
+  });
+
+  it("a kézzel csatolt PDF a feed után, a begyűjtött előtt jön (acrobot 34672)", async () => {
+    const { subject, read } = controller({
+      billRow: { ...billRow, id: "in-1" },
+      contents: { "feed-1": XML, "att-1": PDF, "col-1": PDF },
+      collected: [doc()],
+      attached: [{ id: "att-1", gmailMessageId: `${ATTACH_PREFIX}in-1:abc` }],
+    });
+    assert.ok((await subject.pdf("in-1")) instanceof StreamableFile);
+    assert.deepEqual(read, ["feed-1", "att-1"]);
   });
 
   it("ha a feed nem PDF-et hozott, a begyűjtött PDF megy ki", async () => {
@@ -256,6 +274,35 @@ describe("a lista és az adatlap a begyűjtött PDF-et is jelzi", () => {
     );
     assert.equal(
       (await nelkule.list({ page: 1, pageSize: 20 } as never)).items[0]!.hasPdf,
+      false,
+    );
+  });
+
+  it("egy kézzel csatolt PDF a magyar adószám nélküli sornál is jelez; egy MÁSIK sorhoz csatolt nem", async () => {
+    const foreign = {
+      ...fullRow,
+      supplierTaxNumber: null,
+      supplierEuTaxNumber: "IE9999999XX",
+    };
+    const mine = controller({
+      billRow: foreign,
+      contents: {},
+      collected: [],
+      attached: [{ id: "att-1", gmailMessageId: `${ATTACH_PREFIX}in-1:abc` }],
+    }).subject;
+    const other = controller({
+      billRow: foreign,
+      contents: {},
+      collected: [],
+      attached: [{ id: "att-2", gmailMessageId: `${ATTACH_PREFIX}in-2:abc` }],
+    }).subject;
+    assert.equal((await mine.detail("in-1")).hasPdf, true);
+    assert.equal(
+      (await mine.list({ page: 1, pageSize: 20 } as never)).items[0]!.hasPdf,
+      true,
+    );
+    assert.equal(
+      (await other.list({ page: 1, pageSize: 20 } as never)).items[0]!.hasPdf,
       false,
     );
   });

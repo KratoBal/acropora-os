@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -11,7 +12,11 @@ import {
   Put,
   Query,
   StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { prisma } from "@acropora/database";
 import {
   PERMISSIONS,
@@ -28,6 +33,7 @@ import { MissingInvoicesService } from "../missing-invoices/missing-invoices.ser
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
+import { attachedPdfIds, attachIncomingPdf } from "./incoming-pdf-attach.js";
 import {
   incomingListResponse,
   toIncomingDetail,
@@ -47,6 +53,8 @@ import {
 } from "./purchase-incoming.js";
 
 const PDF_MAGIC = Buffer.from("%PDF-");
+/** a Hiányzó számlák feltöltésének határa, ugyanaz (`missing-invoices.controller.ts`) */
+const ATTACH_MAX_BYTES = 15 * 1024 * 1024;
 
 /** A PDF válasza, a számlaszámból képzett biztonságos fájlnévvel. */
 function pdfFile(content: Buffer, documentNumber: string) {
@@ -79,19 +87,22 @@ export class IncomingBillingDocumentsController {
   async list(
     @Query() query: IncomingDocumentListQueryDto,
   ): Promise<IncomingDocumentListResponse> {
-    const [rows, pairings, collected, readings, purchases] = await Promise.all([
-      this.database.incomingBillingDocument.findMany(),
-      this.missing.documentPairings(),
-      this.collectedIndex(),
-      this.reviews.pendingReadings(),
-      loadPurchaseSubjects(this.database),
-    ]);
+    const [rows, pairings, collected, readings, purchases, attached] =
+      await Promise.all([
+        this.database.incomingBillingDocument.findMany(),
+        this.missing.documentPairings(),
+        this.collectedIndex(),
+        this.reviews.pendingReadings(),
+        loadPurchaseSubjects(this.database),
+        attachedPdfIds(this.database),
+      ]);
     const manualPaid = await loadManualPurchasePayments(this.database, rows);
     return incomingListResponse(
       incomingListItems({
         rows,
         pairings,
-        hasCollectedPdf: (row) => collectedPdfIds(row, collected).length > 0,
+        hasCollectedPdf: (row) =>
+          attached.has(row.id) || collectedPdfIds(row, collected).length > 0,
         readings,
         purchases,
         manualPaid,
@@ -148,15 +159,16 @@ export class IncomingBillingDocumentsController {
       where: { id },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    const [pairings, collected, manualPaid] = await Promise.all([
+    const [pairings, collected, manualPaid, attached] = await Promise.all([
       this.missing.documentPairings(),
       this.collectedIndex(),
       loadManualPurchasePayments(this.database, [row]),
+      attachedPdfIds(this.database, [row.id]),
     ]);
     return toIncomingDetail(
       row,
       pairings,
-      collectedPdfIds(row, collected).length > 0,
+      attached.has(row.id) || collectedPdfIds(row, collected).length > 0,
       manualPaid.get(row.externalId) ?? null,
     );
   }
@@ -198,17 +210,67 @@ export class IncomingBillingDocumentsController {
     const row = await this.database.incomingBillingDocument.findUnique({
       where: { id },
       select: {
+        id: true,
         documentNumber: true,
         supplierTaxNumber: true,
         sourceDocumentId: true,
       },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
+    // the feed's own PDF first, then the one a person attached to this row, then the collected one
     const content = await this.firstPdf([
       ...(row.sourceDocumentId ? [row.sourceDocumentId] : []),
+      ...((await attachedPdfIds(this.database, [row.id])).get(row.id) ?? []),
       ...collectedPdfIds(row, await this.collectedIndex()),
     ]);
     return pdfFile(content, row.documentNumber);
+  }
+
+  /**
+   * PDF CSATOLÁSA A SORHOZ (acrobot 34672; `incoming-pdf-attach.ts`): ahol a
+   * feed nem hozott és begyűjtött sincs. Ugyanaz a jog és ugyanaz a fájlméret,
+   * mint a Hiányzó számlák feltöltésénél; PDF-es sorra 409.
+   */
+  @Post("incoming-documents/:id/pdf")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: ATTACH_MAX_BYTES },
+    }),
+  )
+  async attachPdf(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentDetail> {
+    if (!file) throw new BadRequestException("A fájl kötelező.");
+    const row = await this.database.incomingBillingDocument.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        hasPdf: true,
+        documentNumber: true,
+        supplierTaxNumber: true,
+        sourceDocumentId: true,
+      },
+    });
+    if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
+    const [collected, attached] = await Promise.all([
+      this.collectedIndex(),
+      attachedPdfIds(this.database, [row.id]),
+    ]);
+    await attachIncomingPdf(this.database, {
+      rowId: row.id,
+      file,
+      userId: user.id,
+      hasPdf:
+        row.hasPdf ||
+        attached.has(row.id) ||
+        collectedPdfIds(row, collected).length > 0,
+    });
+    return this.detail(row.id);
   }
 
   /**
