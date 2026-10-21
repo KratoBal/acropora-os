@@ -29,6 +29,7 @@ import { useLoad } from "@/lib/use-load";
 import { MeasurementChart } from "./measurement-chart";
 import { MeasurementForm } from "./measurement-form";
 import { OccasionList } from "./occasion-list";
+import { RecommendationPanel } from "./recommendation-panel";
 import { SharePanel } from "./share-panel";
 import { TargetsEditor } from "./targets-editor";
 
@@ -142,6 +143,8 @@ export function AquariumDetail({ id }: { id: string }) {
           </>
         ) : null}
       </section>
+
+      <RecommendationPanel aquarium={data} />
 
       {own ? <SharePanel aquarium={data} onChanged={aquarium.reload} /> : null}
 
