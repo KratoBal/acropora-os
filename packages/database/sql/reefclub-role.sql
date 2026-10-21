@@ -319,28 +319,53 @@ CREATE POLICY "ReefClubAdministeredDose_reefclub_insert" ON "ReefClubAdministere
     )
   );
 
--- THE REDEMPTION FUNCTION'S OWNER (barracuda #1752, acrobot 33903). A SECURITY DEFINER function runs
--- with its owner's rights, and its owner is whoever ran `prisma migrate deploy`. If that was a
--- superuser while the tables belong to another role, the function would run with more rights than it
--- needs, so it is handed to the tables' owner. Idempotent: nothing happens when the owner already is
--- the tables' owner, or is no superuser. Changing an owner needs a superuser or the current owner;
--- otherwise the run stops here with Postgres's own message.
+-- THE REDEMPTION FUNCTION'S OWNER: A ROLE OF ITS OWN (card b6133bd8; acrobot 33969, barracuda 33975).
+-- A SECURITY DEFINER function runs with its owner's rights. On the stage, as most likely in
+-- production, the tables and the migrations belong to one superuser, so the function ran as a
+-- superuser. It belongs to "reefclub_definer" instead: NOLOGIN, no superuser, no BYPASSRLS, nobody is
+-- its member (above all not "reefclub_app": a member could SET ROLE to it and read the codes), and
+-- it holds exactly the column rights the function's statements use. It is not a table owner, so
+-- row-level security binds it too (the permissive policies let the function's statements through;
+-- the restrictive ones name "reefclub_app" only).
+--
+-- WHEN THE FUNCTION CHANGES, THESE GRANTS CHANGE IN THE SAME PR: a column the function starts to use
+-- without a grant here stops it with a permission error (closed, not silent).
+--
+-- Creating a role and changing an owner need a superuser: this part is why the file is run as one.
 DO $$
-DECLARE
-  v_function_owner name;
-  v_function_owner_super boolean;
-  v_table_owner name;
 BEGIN
-  SELECT r.rolname, r.rolsuper INTO v_function_owner, v_function_owner_super
-    FROM pg_proc AS p JOIN pg_roles AS r ON r.oid = p.proowner
-   WHERE p.oid = '"reefclub_redeem_link_code"(text, text)'::regprocedure;
-  SELECT pg_get_userbyid(c.relowner) INTO v_table_owner
-    FROM pg_class AS c
-   WHERE c.oid = '"ReefClubLinkCode"'::regclass;
-  IF v_function_owner_super AND v_function_owner <> v_table_owner THEN
-    EXECUTE format(
-      'ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO %I', v_table_owner
-    );
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reefclub_definer') THEN
+    CREATE ROLE "reefclub_definer" NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
   END IF;
 END
 $$;
+ALTER ROLE "reefclub_definer" NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
+-- Nobody is its member: a member could SET ROLE to it and read the codes directly.
+DO $$
+DECLARE
+  v_member name;
+BEGIN
+  FOR v_member IN
+    SELECT pg_get_userbyid(m.member) FROM pg_auth_members AS m
+     WHERE m.roleid = (SELECT oid FROM pg_roles WHERE rolname = 'reefclub_definer')
+  LOOP
+    EXECUTE format('REVOKE "reefclub_definer" FROM %I', v_member);
+  END LOOP;
+END
+$$;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM "reefclub_definer";
+GRANT USAGE ON SCHEMA public TO "reefclub_definer";
+GRANT SELECT ("id", "customerId", "codeHash", "usedAt", "expiresAt") ON "ReefClubLinkCode"
+  TO "reefclub_definer";
+GRANT UPDATE ("usedAt", "usedByAccountId") ON "ReefClubLinkCode" TO "reefclub_definer";
+GRANT SELECT ("id", "type", "isActive", "displayName") ON "Customer" TO "reefclub_definer";
+GRANT INSERT ("id", "accountId", "customerId", "status", "codeId", "createdAt")
+  ON "ReefClubCustomerLink" TO "reefclub_definer";
+GRANT SELECT ("id", "createdAt", "accountId", "customerId", "status") ON "ReefClubCustomerLink"
+  TO "reefclub_definer";
+ALTER FUNCTION "reefclub_redeem_link_code"(text, text) OWNER TO "reefclub_definer";
+
+-- Objects created in "public" would be among the names the function resolves (its search_path is
+-- "public, pg_temp"). PostgreSQL before 15 lets every role create there; nobody but the owner needs
+-- to (barracuda 33975). A no-op from 15 on.
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
