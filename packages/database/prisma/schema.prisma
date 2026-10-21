@@ -566,8 +566,8 @@ enum AssetCriticality {
   CRITICAL
 }
 
-/// AZ ESZKOZ BEKOTESE (Balazs, 2026-10-21, kanban 541e2716): "I. fazis" vagy
-/// "III. fazis". A felirat a felulet dolga, az ertek stabil kod.
+/// AZ ESZKOZ BEKOTESE (Balazs, 2026-10-21, kanban 541e2716): "I fazis" vagy
+/// "III fazis". A felirat a felulet dolga, az ertek stabil kod.
 enum AssetPhaseConnection {
   PHASE_1
   PHASE_3

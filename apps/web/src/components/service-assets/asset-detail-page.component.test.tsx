@@ -649,7 +649,7 @@ describe("AssetDetailPage áramfelvétele és bekötése", () => {
     expect(screen.getByText("0,75 kW")).toBeTruthy();
     expect(screen.getByText("Bekötés")).toBeTruthy();
     // A KÓD NEM SZIVÁROG KI: a felirat jelenik meg, nem a PHASE_1.
-    expect(screen.getByText("I. fázis")).toBeTruthy();
+    expect(screen.getByText("I fázis")).toBeTruthy();
     expect(screen.queryByText("PHASE_1")).toBeNull();
     // A régi sor nincs többé.
     expect(screen.queryByText("Fogyasztás")).toBeNull();

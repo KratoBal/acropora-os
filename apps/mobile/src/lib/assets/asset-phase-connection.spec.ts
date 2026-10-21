@@ -23,7 +23,7 @@ describe("a bekötés-nevek modulja", () => {
   it("a választó a két kért feliratot adja, ebben a sorrendben", () => {
     assert.deepEqual(
       ASSET_PHASE_CONNECTION_OPTIONS.map((option) => option.label),
-      ["I. fázis", "III. fázis"],
+      ["I fázis", "III fázis"],
     );
   });
 });
