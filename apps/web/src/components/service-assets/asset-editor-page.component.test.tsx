@@ -1370,3 +1370,80 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
     expect(kuldott.phaseConnection).toBe(null);
   });
 });
+
+/**
+ * A MEZO MELLETT KIIRT EGYSEG (Kelecsenyi Ferenc kerese, 2026-10-21): az
+ * Aramfelvetel mellett "A", a Fogyasztas (eredeti bejegyzes) mellett "kW".
+ */
+describe("AssetEditorPage mezők egysége", () => {
+  it("az egység a mező mellett áll, a mezővel egy sorban", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const aram = await screen.findByLabelText("Áramfelvétel");
+    const fogyasztas = screen.getByLabelText("Fogyasztás (eredeti bejegyzés)");
+    const aramEgyseg = aram.closest("div.flex")?.querySelector("span");
+    const fogyasztasEgyseg = fogyasztas
+      .closest("div.flex")
+      ?.querySelector("span");
+    expect(aramEgyseg?.textContent).toBe("A");
+    expect(fogyasztasEgyseg?.textContent).toBe("kW");
+  });
+
+  it("az egység nem kerül a mentett értékbe", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    api.update.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Áramfelvétel"), "6,15/5,5");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]?.[2]?.currentDraw).toBe("6,15/5,5");
+  });
+
+  /**
+   * A perjeles Fogyasztás mellett NEM áll kW (acrobot döntése, barracuda
+   * észrevétele): a megjelenítés sem írja ki, a mező melletti egység se
+   * állítsa. Az Áramfelvételnél a perjeles alak is kap A-t.
+   */
+  it("perjeles fogyasztás mellett nincs kW, az áramfelvétel mellett marad az A", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "6,15/5,5",
+      powerConsumptionRaw: "6,15/5,5",
+    } as unknown as AssetDetail);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const aram = await screen.findByLabelText("Áramfelvétel");
+    await waitFor(() => expect(aram).toHaveProperty("value", "6,15/5,5"));
+    const fogyasztas = screen.getByLabelText("Fogyasztás (eredeti bejegyzés)");
+    expect(aram.closest("div.flex")?.querySelector("span")?.textContent).toBe(
+      "A",
+    );
+    expect(fogyasztas.closest("div.flex")?.querySelector("span")).toBeNull();
+  });
+
+  it("tiszta számnál a kW látszik", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({
+      ...asset,
+      powerConsumptionRaw: "1,5",
+    } as unknown as AssetDetail);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const fogyasztas = await screen.findByLabelText(
+      "Fogyasztás (eredeti bejegyzés)",
+    );
+    await waitFor(() => expect(fogyasztas).toHaveProperty("value", "1,5"));
+    expect(
+      fogyasztas.closest("div.flex")?.querySelector("span")?.textContent,
+    ).toBe("kW");
+  });
+});

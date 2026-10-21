@@ -20,7 +20,10 @@ import {
   type AssetDocumentType,
   type AssetQrCode,
   type AssetStatus,
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
+  withAssetUnit,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -544,10 +547,20 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     2026-10-21, kanban 541e2716). A korabbi kW-szam helyett:
                     a "Fogyasztas" ma mar csak az eredeti bejegyzes.
                   */}
-                  <Data label="Áramfelvétel (A)" value={asset.currentDraw} />
+                  <Data
+                    label="Áramfelvétel"
+                    value={withAssetUnit(
+                      asset.currentDraw,
+                      ASSET_CURRENT_DRAW_UNIT,
+                    )}
+                  />
                   <Data
                     label="Fogyasztás (eredeti bejegyzés)"
-                    value={asset.powerConsumptionRaw}
+                    value={withAssetUnit(
+                      asset.powerConsumptionRaw,
+                      ASSET_POWER_CONSUMPTION_UNIT,
+                      { onlyPlainNumber: true },
+                    )}
                   />
                   <Data
                     label="Bekötés"

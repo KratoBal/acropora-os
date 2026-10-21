@@ -46,6 +46,11 @@ import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
 import { ASSET_PHASE_CONNECTION_LABELS } from "@/lib/assets/asset-phase-connection";
+import {
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
+  withAssetUnit,
+} from "@/lib/assets/asset-units";
 import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { qrRuns } from "@/lib/assets/qr-runs";
@@ -552,10 +557,20 @@ export default function AssetDetailScreen() {
                 kanban 541e2716). A korabbi kW-szam helyett: a "Fogyasztas"
                 ma mar csak az eredeti bejegyzes.
               */}
-              <Info label="Áramfelvétel (A)" value={asset.currentDraw} />
+              <Info
+                label="Áramfelvétel"
+                value={withAssetUnit(
+                  asset.currentDraw,
+                  ASSET_CURRENT_DRAW_UNIT,
+                )}
+              />
               <Info
                 label="Fogyasztás (eredeti bejegyzés)"
-                value={asset.powerConsumptionRaw}
+                value={withAssetUnit(
+                  asset.powerConsumptionRaw,
+                  ASSET_POWER_CONSUMPTION_UNIT,
+                  { onlyPlainNumber: true },
+                )}
               />
               <Info
                 label="Bekötés"

@@ -185,7 +185,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   performance: "Teljesítmény",
   performanceUnitId: "Teljesítmény mértékegysége",
   volume: "Térfogat",
-  currentDraw: "Áramfelvétel (A)",
+  currentDraw: "Áramfelvétel",
   phaseConnection: "Bekötés",
   powerConsumptionRaw: "Fogyasztás (eredeti bejegyzés)",
   electricalCode: "FP / Elektromos",

@@ -18,8 +18,12 @@ import {
   type AssetCategory,
   type AssetFunction,
   type AquariumSummary,
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
+  assetUnitApplies,
 } from "@acropora/types";
+import { AssetUnitAdornment } from "../asset-unit-adornment";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -700,23 +704,43 @@ export function PilotAssetCreatePage() {
                 label="Áramfelvétel"
                 help="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
               >
-                <PilotInput
-                  value={currentDraw}
-                  onChange={setCurrentDraw}
-                  placeholder="pl. 6,15/5,5"
-                  aria-label="Áramfelvétel"
-                />
+                <AssetUnitAdornment
+                  unit={
+                    assetUnitApplies(currentDraw)
+                      ? ASSET_CURRENT_DRAW_UNIT
+                      : undefined
+                  }
+                  className="text-sm text-pilot-grey-500"
+                >
+                  <PilotInput
+                    value={currentDraw}
+                    onChange={setCurrentDraw}
+                    placeholder="pl. 6,15/5,5"
+                    aria-label="Áramfelvétel"
+                  />
+                </AssetUnitAdornment>
               </PilotFormField>
               <PilotFormField
                 label="Fogyasztás (eredeti bejegyzés)"
                 help="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
               >
-                <PilotInput
-                  value={powerConsumptionRaw}
-                  onChange={setPowerConsumptionRaw}
-                  placeholder="pl. 6,15/5,5"
-                  aria-label="Fogyasztás (eredeti bejegyzés)"
-                />
+                <AssetUnitAdornment
+                  unit={
+                    assetUnitApplies(powerConsumptionRaw, {
+                      onlyPlainNumber: true,
+                    })
+                      ? ASSET_POWER_CONSUMPTION_UNIT
+                      : undefined
+                  }
+                  className="text-sm text-pilot-grey-500"
+                >
+                  <PilotInput
+                    value={powerConsumptionRaw}
+                    onChange={setPowerConsumptionRaw}
+                    placeholder="pl. 6,15/5,5"
+                    aria-label="Fogyasztás (eredeti bejegyzés)"
+                  />
+                </AssetUnitAdornment>
               </PilotFormField>
               <PilotFormField label="Bekötés">
                 <PilotSelect

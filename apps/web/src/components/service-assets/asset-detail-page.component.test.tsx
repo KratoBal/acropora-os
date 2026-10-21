@@ -643,8 +643,9 @@ describe("AssetDetailPage áramfelvétele és bekötése", () => {
     } as unknown as AssetDetail);
     render(<AssetDetailPage assetId="asset-1" />);
 
-    expect(await screen.findByText("Áramfelvétel (A)")).toBeTruthy();
-    expect(screen.getByText("6,15/5,5")).toBeTruthy();
+    expect(await screen.findByText("Áramfelvétel")).toBeTruthy();
+    // Az egység az érték MELLETT áll (Kelecsenyi Ferenc kérése): amper.
+    expect(screen.getByText("6,15/5,5 A")).toBeTruthy();
     expect(screen.getByText("Fogyasztás (eredeti bejegyzés)")).toBeTruthy();
     expect(screen.getByText("0,75 kW")).toBeTruthy();
     expect(screen.getByText("Bekötés")).toBeTruthy();
@@ -653,5 +654,46 @@ describe("AssetDetailPage áramfelvétele és bekötése", () => {
     expect(screen.queryByText("PHASE_1")).toBeNull();
     // A régi sor nincs többé.
     expect(screen.queryByText("Fogyasztás")).toBeNull();
+  });
+});
+
+describe("AssetDetailPage fogyasztás-mezőinek egysége", () => {
+  it("az egység nélküli érték megkapja: A az áramfelvételnél, kW a fogyasztásnál", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "3",
+      powerConsumptionRaw: "6,15/5,5",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("3 A")).toBeTruthy();
+    // A perjeles Fogyasztás NEM kap egységet (acrobot döntése): a migráció
+    // sem tudta, mi az, a kiírás se állítsa.
+    expect(screen.getByText("6,15/5,5")).toBeTruthy();
+    expect(screen.queryByText("6,15/5,5 kW")).toBeNull();
+  });
+
+  it("a tiszta számú Fogyasztás megkapja a kW-ot", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      powerConsumptionRaw: "1,5",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("1,5 kW")).toBeTruthy();
+  });
+
+  it("a már egységes érték nem kap másodikat", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "3 A",
+      powerConsumptionRaw: "0,75 kW",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("3 A")).toBeTruthy();
+    expect(screen.getByText("0,75 kW")).toBeTruthy();
+    expect(screen.queryByText("3 A A")).toBeNull();
+    expect(screen.queryByText("0,75 kW kW")).toBeNull();
   });
 });
