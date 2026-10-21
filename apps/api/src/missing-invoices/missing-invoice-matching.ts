@@ -95,6 +95,25 @@ export interface CandidateDocument {
    * párosít név nélkül (acrobot 26084, Tesland / MEDIAVOX).
    */
   cardPaid?: boolean;
+  /**
+   * A FELTÖLTÖTT FÁJL NEVE (kártya 847bca33). Nem számlaszám: egy olvasatlan
+   * feltöltés száma üres, és a fájlnév csak azonosít (a felületen és a
+   * feltöltés beolvasztásánál, `absorbUploads`). Korábban a fájlnév állt a szám
+   * helyén, és így került a Bejövő számlák sorába és az olvasatba is számként
+   * (`Invoice-OHCYTT2R-0012.pdf`, `HUAAB[30].PDF`).
+   */
+  fileName?: string;
+}
+
+/**
+ * A felületen mutatott szám: az olvasatlan feltöltésnél a fájlneve, jelölve,
+ * hogy nem számlaszám. Az adat (`number`) üres marad.
+ */
+export function shownNumber(
+  document: Pick<CandidateDocument, "number" | "fileName">,
+): string {
+  if (document.number) return document.number;
+  return document.fileName ? `olvasatlan feltöltés: ${document.fileName}` : "";
 }
 
 export interface MatchableDebit {
@@ -688,7 +707,7 @@ export function mergeManualUploads(
   const taken = new Set<CandidateDocument>();
   for (const [upload, uploadDebits] of pairedTo) {
     if (!unreadable(upload)) continue;
-    const name = baseName(upload.number);
+    const name = baseName(upload.fileName ?? upload.number);
     const invoices = documents.filter(
       (d) =>
         d !== upload &&

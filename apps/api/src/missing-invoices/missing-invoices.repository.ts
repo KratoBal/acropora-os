@@ -671,11 +671,13 @@ export class MissingInvoicesRepository {
                 : document.uploadKind === "PREMIUM_NOTICE"
                   ? "PREMIUM_NOTICE"
                   : "UPLOAD",
+        // a fájlnév nem szám: külön mezőben áll (kártya 847bca33)
         number:
           linked?.supplierInvoiceNumber ??
           result?.invoiceNumber ??
           reading?.invoiceNumber ??
-          (upload ? document.fileName : ""),
+          "",
+        ...(upload ? { fileName: document.fileName } : {}),
         // egy bankszámlaszám (IBAN) nem hivatkozás: minden fizetésben ott áll
         references:
           reading?.bankReference && !looksLikeBankAccount(reading.bankReference)
