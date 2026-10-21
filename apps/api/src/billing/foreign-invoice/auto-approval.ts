@@ -101,6 +101,64 @@ export function autoApproval(input: {
   return byBank(values, sources, input.debits, input.problems);
 }
 
+/*
+  A SZÁLLÍTÓNÉV A NAV-VAL (barracuda #1796/#1798, acrobot 34865). A NAV-egyezést a számlaszám és az adószám-törzs
+  adja; a név harmadik, független kulcs. Az olvasó a nevet a PDF szövegéből is kiolvassa (első sor, "Eladó"
+  cella), és egy rossz név addig a NAV-nál MARADT és jóváhagyódott, mert a NAV csak a hiányt töltötte. Mostantól:
+  ha a kiolvasott név a NAV-étól ÉRDEMBEN eltér, a sor nem megy magától, az átnézésre marad; ha egyezik, a név
+  a NAV-é lesz ("NAV" forrásjellel): a NAV a hivatalos alak.
+  "Érdemben": ékezet-, kis/nagybetű- és írásjel-független szavak, a cégforma-szavak (Kft., Zrt., Korlátolt
+  Felelősségű Társaság, GmbH, ...) nélkül; azonos, vagy az egyik a másik része (Elektro-Light / Elektro-Light
+  Magyarország). Üres szó-halmaz nem egyezik.
+*/
+const LEGAL_WORDS = new Set([
+  "kft",
+  "zrt",
+  "nyrt",
+  "bt",
+  "kkt",
+  "rt",
+  "ev",
+  "gmbh",
+  "ag",
+  "ltd",
+  "limited",
+  "inc",
+  "llc",
+  "bv",
+  "sarl",
+  "srl",
+  "oy",
+  "korlatolt",
+  "felelossegu",
+  "tarsasag",
+  "zartkoruen",
+  "mukodo",
+  "reszvenytarsasag",
+  "betei",
+  "kozkereseti",
+  "egyeni",
+  "vallalkozo",
+]);
+
+function nameWords(name: string): Set<string> {
+  const folded = name.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return new Set(
+    (folded.match(/[\p{L}\p{N}]+/gu) ?? []).filter(
+      (word) => !LEGAL_WORDS.has(word),
+    ),
+  );
+}
+
+/** Egyezik-e két szállítónév érdemben (lásd fent). */
+export function sameSupplierName(read: string, nav: string): boolean {
+  const a = nameWords(read);
+  const b = nameWords(nav);
+  if (a.size === 0 || b.size === 0) return false;
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  return [...small].every((word) => large.has(word));
+}
+
 function byNav(
   values: IncomingReadingValues,
   sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>,
@@ -170,8 +228,22 @@ function byNav(
         reason: `a kiolvasott ${field} (${fixed(read)}) eltér a NAV-tól (${fixed(navValue)})`,
       };
 
+  if (
+    values.supplierName &&
+    !sameSupplierName(values.supplierName, row.supplierName)
+  )
+    return {
+      approve: false,
+      reason: `a kiolvasott szállítónév („${values.supplierName.slice(0, 60)}”) eltér a NAV-tól („${row.supplierName.slice(0, 60)}”): kézi döntés`,
+    };
+
   const filled: IncomingReadingValues = { ...values };
   const filledSources = { ...sources };
+  // egyezésnél a név a NAV-é (hivatalos alak, "NAV" forrásjellel)
+  if (filled.supplierName) {
+    filled.supplierName = row.supplierName;
+    filledSources.supplierName = "NAV";
+  }
   const fill = <K extends IncomingReadingField>(
     field: K,
     value: IncomingReadingValues[K],
