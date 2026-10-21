@@ -118,6 +118,14 @@ describe("BillingExternalDocumentPage", () => {
     expect(screen.getByText("a legutóbbi a 2 közül")).toBeInTheDocument();
     // a webshop rendelésszáma (`alap.rendelesszam`, acrobot 25964)
     expect(screen.getByText("47679-665706")).toBeInTheDocument();
+    // a PDF a #1658 óta letölthető: a lap nem mondja, hogy „a Számlázz.hu nem adja”, hanem hogy ezen a
+    // soron még nem futott a letöltés (ugyanaz a szöveg, mint a listán; Balázs, 2026-10-21)
+    expect(
+      screen.getByText(
+        "Még nincs letöltve: a Számlázz.hu-s letöltés ezen a soron még nem futott.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/nem adja/)).toBeNull();
     // a KONTROLL a gombokra: a lapon csak a „Vissza a listához” link van
     expect(screen.queryAllByRole("button")).toEqual([]);
     expect(
