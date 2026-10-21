@@ -208,6 +208,35 @@ describe("readForeignInvoice", () => {
     assert.equal(sources.vatAmount, undefined);
   });
 
+  it("an EU supplier whose gross comes from the pairing: VAT stays empty, and the warning names why (acrobot 34653)", () => {
+    const adapter = {
+      supplier: {
+        name: "De Jong Marinelife B.V.",
+        vatId: "NL802708705B01",
+        country: "NL",
+      },
+      invoiceNumber: "26007910",
+      invoiceDate: "2026-10-02",
+      dueDate: null,
+      currency: "EUR",
+      netTotal: 1703.08,
+      lines: [],
+    } as unknown as SupplierInvoiceImportResult;
+    const { values, warnings } = readForeignInvoice({
+      lines: null,
+      adapter,
+      pairing: pairing({ gross: "1703.08", currency: "EUR" }),
+    });
+    assert.equal(values.vatAmount, null);
+    assert.ok(
+      warnings.some((w) =>
+        /Közösségi beszerzésnek látszik \(NL802708705B01.*a bruttó a banki párosításból jön/.test(
+          w,
+        ),
+      ),
+    );
+  });
+
   it("USD text with a HUF pairing: the HUF amount is not taken as the gross", () => {
     const { values } = readForeignInvoice({
       // ÁFA-sor nélkül: itt csak a deviza-feltétel véd, az ellentmondás-szabály nem

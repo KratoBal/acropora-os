@@ -757,6 +757,31 @@ describe("helpers", () => {
     );
   });
 
+  it("a missing VAT next to an EU tax number and net = gross names the intra-community case; a Hungarian one does not (De Jong, acrobot 34628)", () => {
+    const noVat = {
+      ...COMPLETE,
+      supplierEuTaxNumber: "NL802708705B01",
+      netAmount: "1703.08",
+      vatAmount: "",
+      grossAmount: "1703.08",
+    };
+    const problems = approvalProblems(normalizedInput(noVat));
+    assert.match(problems[0]!, /Hiányzó mező: ÁFA\./);
+    assert.match(problems[1]!, /Közösségi beszerzésnek látszik .*írj be 0-t/);
+    // the controls: a Hungarian supplier, and an EU one whose net differs from the gross
+    const hu = {
+      ...noVat,
+      supplierTaxNumber: "12345678-2-13",
+      supplierEuTaxNumber: "HU12345678",
+    };
+    assert.equal(approvalProblems(normalizedInput(hu)).length, 1);
+    assert.equal(
+      approvalProblems(normalizedInput({ ...noVat, grossAmount: "2026.67" }))
+        .length,
+      1,
+    );
+  });
+
   it("mergedSources marks only the changed fields", () => {
     const before = normalizedInput(COMPLETE);
     const after = { ...before, dueDate: "2026-10-20" };
