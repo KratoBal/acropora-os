@@ -92,6 +92,7 @@ export class ProductKnowledgeService {
         public: fact.public,
         acceptedAt: fact.acceptedAt.toISOString(),
         acceptedBy: fact.acceptedBy,
+        acceptedByRule: fact.acceptedByRule,
         fieldResultId: fact.fieldResultId,
         source: {
           sourceType: fact.source
@@ -174,6 +175,13 @@ export class ProductKnowledgeService {
       decision,
       variantId,
     );
+    // A RULE ACCEPTS ONLY A FACT THAT STAYS IN THE OS (barracuda, #1801): a field
+    // with a native shop target (the barcode, weight, size) leaves through
+    // another road than the filtered fact projection, without the rule's mark.
+    if (rule !== undefined && scope.definition.medusaNativeField)
+      throw new ConflictException(
+        `a rule does not accept ${result.field}: it has a native shop field`,
+      );
     if (scope.definition.medusaNativeField === "VARIANT_BARCODE")
       return this.acceptAsBarcode(productId, result.id, decision, scope, user);
     const fact = {

@@ -8,6 +8,7 @@ import {
   conflictingFields,
   factFor,
   isAcceptable,
+  offersAccept,
 } from "./jev-knowledge";
 
 /** Invented values only. */
@@ -53,6 +54,23 @@ describe("termékismeret a felülvizsgálati soron", () => {
     ).toBe(
       "Elfogadva ütközésként, érték nélkül (2. változat) A webshopban nem jelenik meg, amíg az ütközés nincs feloldva.",
     );
+  });
+
+  // Product Knowledge 2. lépés: a szabály ténye látszik, és ember erősíti meg
+  it("a szabály ténye megerősítésre vár, és ugyanarra az eredményre felajánlja a megerősítést", () => {
+    const auto = fact({ acceptedByRule: "AUTO_V1" });
+    expect(acceptedLine(auto, { fieldResultId: "fr-1" })).toBe(
+      "Szabály fogadta el (AUTO_V1): 100 ml. Megerősítésre vár: amíg ember meg nem erősíti, a webshopba nem kerül ki.",
+    );
+    expect(offersAccept(auto, { fieldResultId: "fr-1" })).toBe(true);
+    // az ember ténye ugyanarra az eredményre: nincs mit felajánlani
+    expect(offersAccept(fact({}), { fieldResultId: "fr-1" })).toBe(false);
+    expect(
+      offersAccept(fact({ acceptedByRule: null }), { fieldResultId: "fr-1" }),
+    ).toBe(false);
+    // a régi API (nincs mező) ember ténye
+    expect(offersAccept(fact({}), { fieldResultId: "fr-2" })).toBe(true);
+    expect(offersAccept(null, { fieldResultId: "fr-1" })).toBe(true);
   });
 
   it("csak az ellenőrzött, a javaslat és az ütközés fogadható el", () => {

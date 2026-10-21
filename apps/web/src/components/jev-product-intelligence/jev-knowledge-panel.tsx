@@ -32,6 +32,7 @@ import {
   conflictMentions,
   copyStateLabel,
   isAcceptable,
+  offersAccept,
   type ConflictingField,
 } from "./jev-knowledge";
 import { FIELD_LABEL } from "./jev-presentation";
@@ -61,8 +62,11 @@ export function JevAcceptAction({
   onAccept: (fieldResultId: string) => void;
 }) {
   const line = acceptedLine(fact, review);
-  const current = fact?.fieldResultId === review.fieldResultId;
-  const offer = canApprove && isAcceptable(review) && !current;
+  const confirm =
+    Boolean(fact?.acceptedByRule) &&
+    fact?.fieldResultId === review.fieldResultId;
+  const offer =
+    canApprove && isAcceptable(review) && offersAccept(fact, review);
   if (!line && !offer) return null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-pilot-grey-100 pt-2 text-xs leading-4">
@@ -76,9 +80,11 @@ export function JevAcceptAction({
           disabled={busy}
           onClick={() => onAccept(review.fieldResultId)}
         >
-          {review.status === "CONFLICTING_SOURCES"
-            ? "Elfogad ütközésként"
-            : "Elfogad"}
+          {confirm
+            ? "Megerősít"
+            : review.status === "CONFLICTING_SOURCES"
+              ? "Elfogad ütközésként"
+              : "Elfogad"}
         </PilotButton>
       ) : null}
     </div>

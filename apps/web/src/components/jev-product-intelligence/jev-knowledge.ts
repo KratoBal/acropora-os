@@ -55,6 +55,18 @@ export function factFor(
 }
 
 /**
+ * MAY THIS ROW OFFER ITS RESULT: not accepted yet, or accepted by a RULE on this
+ * very result, which a person confirms by accepting it (Product Knowledge 2. lépés).
+ */
+export function offersAccept(
+  fact: ProductKnowledgeFact | null,
+  review: Pick<ProductFieldReview, "fieldResultId">,
+): boolean {
+  if (fact?.fieldResultId !== review.fieldResultId) return true;
+  return Boolean(fact.acceptedByRule);
+}
+
+/**
  * WHAT THE ROW SAYS ABOUT THE ACCEPTED STATE.
  *
  * A fact accepted from an OLDER result than the one shown says so: newer
@@ -66,6 +78,9 @@ export function acceptedLine(
   review: Pick<ProductFieldReview, "fieldResultId">,
 ): string | null {
   if (!fact) return null;
+  // Product Knowledge 2. lépés: a szabály tényét ember erősíti meg; addig nem megy ki
+  if (fact.acceptedByRule && fact.fieldResultId === review.fieldResultId)
+    return `Szabály fogadta el (${fact.acceptedByRule}): ${fact.value ?? "—"}${fact.unit ? ` ${fact.unit}` : ""}. Megerősítésre vár: amíg ember meg nem erősíti, a webshopba nem kerül ki.`;
   const what =
     fact.status === "CONFLICTING_SOURCES"
       ? "Elfogadva ütközésként, érték nélkül"

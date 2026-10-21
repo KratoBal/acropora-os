@@ -102,6 +102,13 @@ export interface ProductKnowledgeFact {
   public: boolean;
   acceptedAt: string;
   acceptedBy: { id: string; displayName: string };
+  /**
+   * The rule that accepted it (`AUTO_V1`, Product Knowledge step 2), or `null`:
+   * a person did. A rule's fact stays in the OS until a person accepts the same
+   * result. Absent on an older API (the two apps deploy one after the other):
+   * read it as `null`.
+   */
+  acceptedByRule?: string | null;
   /** The JEV field result this fact was accepted from. */
   fieldResultId: string;
   /**
