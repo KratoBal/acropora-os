@@ -93,6 +93,20 @@ export class IncomingForeignReadScheduler
         );
         return "FAILED";
       }
+      /*
+        AUTOMATIKUS JÓVÁHAGYÁS, ugyanebben a körben, az olvasás után (acrobot
+        34633, Balázs „2 mehet”): a NAV vagy a bank által megerősített olvasat ember
+        nélkül jóváhagyott. Ugyanaz a kapcsoló viszi, mint az olvasást; a naplóba
+        csak számok kerülnek, számla-adat nem.
+      */
+      const approved = await this.reviews.autoApprovePending({
+        apply: true,
+        since: this.settings.since,
+      });
+      if (approved.approved || approved.failed)
+        this.logger.log(
+          `Incoming auto-approval: ${approved.approved} approved, ${approved.failed} failed, ${approved.considered - approved.approvable} left to review`,
+        );
       return "APPLIED";
     } catch (error) {
       // a hibaüzenet számla-adatot hordozhat, ezért csak a fajtája megy a naplóba

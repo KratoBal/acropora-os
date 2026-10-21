@@ -170,7 +170,9 @@ export type IncomingReadingSource =
   | "PAIRING"
   | "MANUAL"
   /** a rögzített beszerzési számlából (kártya 83f31a95) */
-  | "PURCHASE";
+  | "PURCHASE"
+  /** a NAV-adatból, az automatikus jóváhagyásnál (acrobot 34633) */
+  | "NAV";
 
 /** Honnan jött egy mező értéke, az ellenőrző lapon a mező mellett. */
 export const INCOMING_READING_SOURCE_LABELS: Readonly<
@@ -181,6 +183,7 @@ export const INCOMING_READING_SOURCE_LABELS: Readonly<
   PAIRING: "Banki párosításból",
   MANUAL: "Kézi",
   PURCHASE: "Rögzített beszerzésből",
+  NAV: "NAV-adatból",
 };
 
 export interface IncomingReadingValues {
