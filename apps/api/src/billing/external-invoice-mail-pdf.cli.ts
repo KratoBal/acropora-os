@@ -44,7 +44,8 @@ import {
  *
  * Kilépés: 0 rendben (szárazon: nincs mit tárolni); 1 száraz futás, VAN mit tárolni; 2 rossz hónap,
  * hiányzó levélkulcs vagy `--apply` dokumentumtár nélkül; 3 legalább egy számla PDF-je megvolt, de
- * nem tárolódott (NOT_PDF, NUMBER_NOT_IN_PDF, STORE_FAILED), vagy csak hitelesítetlen levélben jött
+ * nem tárolódott (NOT_PDF, NUMBER_NOT_IN_PDF, NOT_OUR_INVOICE: a saját adószámunk nincs benne,
+ * STORE_FAILED), vagy csak hitelesítetlen levélben jött
  * (NOT_AUTHENTICATED: a Gmail legfelső ítélete nem igazolja a cmfx DKIM-aláírását és DMARC-ját).
  */
 export async function main(
@@ -148,6 +149,7 @@ export async function main(
   const failed =
     count("NOT_PDF") +
     count("NUMBER_NOT_IN_PDF") +
+    count("NOT_OUR_INVOICE") +
     count("STORE_FAILED") +
     count("NOT_AUTHENTICATED");
   io.out(

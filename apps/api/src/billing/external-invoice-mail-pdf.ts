@@ -1,4 +1,5 @@
 import { prisma } from "@acropora/database";
+import { ACROPORA_COMPANY } from "@acropora/types";
 
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { storageKeyFor } from "../service-assets/document-store/document-storage-key.js";
@@ -113,12 +114,29 @@ export function textCarriesNumber(text: string, number: string): boolean {
   return new RegExp(`(?<![A-Za-z0-9])${escaped}(?![0-9])`).test(text);
 }
 
+/**
+ * A KIÁLLÍTÓ A MI CÉGÜNK (barracuda, #1777 v2): a DKIM a cmfx.hu-t igazolja, nem az Acroporát. A cmfx
+ * számlázó szolgáltatás, MINDEN ügyfele levele cmfx.hu alá kerül, tehát egy másik cmfx-ügyfél is küldhet
+ * ACRW-előtagú számlát az info@-ra. A saját adószámunk törzsszáma (határolva: előtte és utána nem áll
+ * számjegy, így a `23916229-2-42` és a `HU23916229` is illik) a PDF-ben ezt a véletlen keveredést zárja
+ * ki. Egy SZÁNDÉKOS hamisítót nem: a PDF szövegét ő írja.
+ */
+export function textCarriesOurTaxNumber(text: string): boolean {
+  return new RegExp(
+    `(?<![0-9])${ACROPORA_COMPANY.taxNumberBase}(?![0-9])`,
+  ).test(text);
+}
+
 export type MailPdfOutcome =
   | { kind: "STORED" | "WOULD_STORE"; documentNumber: string; bytes: number }
   | { kind: "NO_MAIL"; documentNumber: string }
   | {
       kind:
-        "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "STORE_FAILED" | "NOT_AUTHENTICATED";
+        | "NOT_PDF"
+        | "NUMBER_NOT_IN_PDF"
+        | "NOT_OUR_INVOICE"
+        | "STORE_FAILED"
+        | "NOT_AUTHENTICATED";
       documentNumber: string;
     };
 
@@ -172,13 +190,18 @@ export async function fillExternalPdfsFromMail(input: {
       outcomes.push({ kind: "NOT_AUTHENTICATED", documentNumber: number });
       continue;
     }
-    let verdict: "NOT_PDF" | "NUMBER_NOT_IN_PDF" = "NOT_PDF";
+    let verdict: "NOT_PDF" | "NUMBER_NOT_IN_PDF" | "NOT_OUR_INVOICE" =
+      "NOT_PDF";
     let chosen: MailPdf | null = null;
     for (const pdf of trusted) {
       if (pdf.buffer.subarray(0, 5).toString("latin1") !== "%PDF-") continue;
       const text = await input.textOf(pdf.buffer).catch(() => [] as string[]);
       if (!textCarriesNumber(text.join("\n"), number)) {
         verdict = "NUMBER_NOT_IN_PDF";
+        continue;
+      }
+      if (!textCarriesOurTaxNumber(text.join("\n"))) {
+        verdict = "NOT_OUR_INVOICE";
         continue;
       }
       chosen = pdf;

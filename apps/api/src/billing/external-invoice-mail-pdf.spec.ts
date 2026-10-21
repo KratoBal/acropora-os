@@ -8,6 +8,7 @@ import {
   fillExternalPdfsFromMail,
   numberFromCmfxFileName,
   textCarriesNumber,
+  textCarriesOurTaxNumber,
   type MailPdf,
 } from "./external-invoice-mail-pdf.js";
 
@@ -17,15 +18,19 @@ import {
   futás írna; ha egy levél, amelynek nincs számla-sora, csendben elveszne.
 */
 
+// an invoice we issued carries our tax number as the issuer's; `ours: false` is another cmfx customer's
 const pdf = (
   fileName: string,
   text: string,
   messageId = "m1",
   authenticated = true,
+  ours = true,
 ): MailPdf => ({
   messageId,
   fileName,
-  buffer: Buffer.from(`%PDF-1.4\n${text}\n`),
+  buffer: Buffer.from(
+    `%PDF-1.4\n${ours ? "Eladó adószáma: 23916229-2-42\n" : "Eladó adószáma: 11111111-2-41\n"}${text}\n`,
+  ),
   authenticated,
 });
 const textOf = async (bytes: Uint8Array) =>
@@ -214,6 +219,43 @@ describe("the letter really came from cmfx", () => {
         1,
         ["external-invoice/row-2/cmfx.pdf"],
       ],
+    );
+  });
+
+  it("another cmfx customer's invoice with our number in it is NOT_OUR_INVOICE, never stored", async () => {
+    const r = recorder();
+    const report = await fillExternalPdfsFromMail({
+      candidates: [candidate("row-1", "ACRW-2026/00536")],
+      pdfs: [
+        pdf(
+          "E-ACRW-2026-00536-c0ffee.pdf",
+          "Számla ACRW-2026/00536",
+          "other",
+          true,
+          false,
+        ),
+      ],
+      apply: true,
+      textOf,
+      documents: r.documents,
+      store: r.store,
+    });
+    assert.deepEqual(
+      [report.outcomes.map((o) => `${o.kind} ${o.documentNumber}`), r.puts],
+      [["NOT_OUR_INVOICE ACRW-2026/00536"], []],
+    );
+  });
+
+  it("our tax number is matched bounded: with its suffix or the HU prefix, not inside a longer number", () => {
+    assert.deepEqual(
+      [
+        textCarriesOurTaxNumber("Adószám: 23916229-2-42"),
+        textCarriesOurTaxNumber("EU adószám: HU23916229"),
+        textCarriesOurTaxNumber("123916229"),
+        textCarriesOurTaxNumber("239162291"),
+        textCarriesOurTaxNumber("11111111-2-41"),
+      ],
+      [true, true, false, false, false],
     );
   });
 
