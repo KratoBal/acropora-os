@@ -24,7 +24,10 @@ import { configureReefClubApp } from "./reefclub-app.configuration.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
 import { reefClubProviderConfigs } from "./reefclub-external-auth.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
-import { REEFCLUB_PRIVACY_NOTICE_VERSION } from "./reefclub-consent.js";
+import {
+  REEFCLUB_PRIVACY_NOTICE_VERSION,
+  REEFCLUB_SHARE_CONSENT_VERSION,
+} from "./reefclub-consent.js";
 
 /**
  * ACCOUNT DELETION (plan v6.1, 4.5 and 3.2; acceptance 7.9; slice 6).
@@ -394,25 +397,89 @@ describe("ReefClub: fióktörlés", { skip: gate.mode === "skip" }, () => {
       ["DELETE", "/rc/v1/aquariums/:id/share"],
       ["GET", "/rc/v1/aquariums/:id/recommendations"],
       ["GET", "/rc/v1/aquariums/:id/doses"],
+      // the writes too (barracuda, #1768 review): another account's POST gets the same 404 and
+      // writes no row; the bodies are valid, so a 400 cannot pass for the access answer
+      [
+        "POST",
+        "/rc/v1/aquariums/:id/measurements",
+        {
+          measuredAt: "2026-03-03T03:03:03.000Z",
+          values: [{ parameterCode: "KH", value: 8 }],
+        },
+      ],
+      ["DELETE", "/rc/v1/aquariums/:id/measurements/:occasionId"],
+      [
+        "PUT",
+        "/rc/v1/aquariums/:id/targets",
+        {
+          targets: [{ parameterCode: "KH", min: 7, max: 9 }],
+        },
+      ],
+      [
+        "POST",
+        "/rc/v1/aquariums/:id/share",
+        { consentVersion: REEFCLUB_SHARE_CONSENT_VERSION },
+      ],
+      ["POST", "/rc/v1/aquariums/:id/recommendations", { parameter: "KH" }],
+      [
+        "POST",
+        "/rc/v1/aquariums/:id/recommendations/:recId/answer",
+        { answer: "NOT_GIVEN" },
+      ],
+      [
+        "POST",
+        "/rc/v1/aquariums/:id/doses",
+        {
+          parameter: "KH",
+          productId: null,
+          amount: null,
+          unit: null,
+          administeredAt: new Date(Date.now() - 60_000).toISOString(),
+          clientOperationId: "torles-proba-adag-1",
+        },
+      ],
     ];
+    const rowsOf = async () => {
+      const where = { aquariumId: { in: [ownId, shopId] } };
+      return [
+        await prisma.aquariumMeasurement.count({ where }),
+        await prisma.aquariumMeasurementTarget.count({ where }),
+        await prisma.aquariumShareEvent.count({ where }),
+        await prisma.reefClubRecommendation.count({ where }),
+        await prisma.reefClubAdministeredDose.count({ where }),
+        (
+          await prisma.aquarium.findUniqueOrThrow({ where: { id: ownId } })
+        ).sharedWithShopAt?.toISOString() ?? null,
+      ];
+    };
+    const rowsBefore = await rowsOf();
     const answer = async (method: string, path: string, body?: unknown) => {
       const r = await rc(path, { method, body, session: other });
       return { status: r.status, body: await r.text() };
     };
     const mismatches: string[] = [];
     for (const [method, route, body] of probes) {
-      const none = await answer(method, route.replace(":id", missing), body);
+      const fill = (path: string, id: string) =>
+        path
+          .replace(":id", id)
+          .replace(
+            ":occasionId",
+            encodeURIComponent("2026-07-01T08:00:00.000Z"),
+          )
+          .replace(":recId", "c0000000000000000000ajanlas");
+      const none = await answer(method, fill(route, missing), body);
       assert.equal(none.status, 404, `nem létező: ${method} ${route}`);
       for (const [who, id] of [
         ["a zárolt fiók saját akváriuma", ownId],
         ["a zárolt fiók volt bolti akváriuma", shopId],
       ] as const) {
-        const got = await answer(method, route.replace(":id", id), body);
+        const got = await answer(method, fill(route, id), body);
         if (got.status !== 404 || got.body !== none.body)
           mismatches.push(`${method} ${route} [${who}]: ${got.status}`);
       }
     }
     assert.deepEqual(mismatches, []);
+    assert.deepEqual(await rowsOf(), rowsBefore, "egy írás sem hagyott sort");
     const list = (await (
       await rc("/rc/v1/aquariums", { session: other })
     ).json()) as { items?: { id: string }[] } | { id: string }[];
