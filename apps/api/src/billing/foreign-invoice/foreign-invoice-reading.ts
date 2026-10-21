@@ -1,4 +1,5 @@
 import {
+  ACROPORA_COMPANY,
   INCOMING_READING_SOURCE_LABELS,
   type IncomingReadingField,
   type IncomingReadingSource,
@@ -277,6 +278,48 @@ export function totalsRow(
   return found.size === 1 ? [...found.values()][0]! : null;
 }
 
+/**
+ * A SZALLITO NEVE A SZOVEGBOL (kártya dbab22cd, második kísérlet). Eddig az olvasó a szállító nevét
+ * a szövegből SOHA nem olvasta (csak az illesztő vagy a párosítás adta): a hangoló félen 22,7 %.
+ *
+ * Mérve a hangoló félen: a név 22-ből 20 számlán megvan a szövegben, 11-nél a legelső sorban, 6-nál az
+ * "Eladó ... | Vevő ..." fejléc alatti sor első celláiban. EZ A KETTŐ az, amit olvasunk, és mindkettőhöz
+ * JOGI FORMA kell a névben (Kft., Zrt., GmbH, Ltd, ...): egy jogi forma nélküli első sor lehet "SZÁMLA" vagy
+ * "Invoice" is, azt nem találgatjuk. A saját cégünk neve (a vevő) soha nem lehet a szállító.
+ *
+ * Ha a két hely MÁS nevet ad, nem döntünk. Az illesztő és a banki párosítás neve elsőbbséget élvez
+ * (ez csak a hiányt tölti), tehát élesben, párosítással, semmi nem változik: a nyereség ott van, ahol
+ * párosítás nincs.
+ */
+const LEGAL_FORM =
+  /(?<![\p{L}\p{N}])(kft|zrt|nyrt|kkt|bt|gmbh|ag|ltd|limited|inc|llc|b\.?v\.?|s\.?r\.?l|sarl|s\.?a\.?s|oy)(?![\p{L}\p{N}])/iu;
+const SELLER_HEADER = /el[áa]d[óo]|kiáll[íi]t[óo]|sz[áa]ll[íi]t[óo]/iu;
+const BUYER_HEADER = /vev[őo]/iu;
+
+function plausibleName(raw: string | undefined): string | null {
+  const name = (raw ?? "").normalize("NFC").trim().replace(/\s+/g, " ");
+  if (!name || name.length > 80) return null;
+  if (!LEGAL_FORM.test(name)) return null;
+  const buyer = ACROPORA_COMPANY.name.toLowerCase().split(/\s+/)[0]!;
+  if (name.toLowerCase().includes(buyer)) return null;
+  return name;
+}
+
+export function supplierNameFromText(lines: readonly string[]): string | null {
+  const candidates = new Set<string>();
+  const first = lines.find((line) => line.trim());
+  const top = plausibleName(first?.split(" | ")[0]);
+  if (top) candidates.add(top);
+  lines.forEach((line, index) => {
+    const sellerAt = line.search(SELLER_HEADER);
+    const buyerAt = line.search(BUYER_HEADER);
+    if (sellerAt < 0 || buyerAt < 0 || sellerAt > buyerAt) return;
+    const below = plausibleName(lines[index + 1]?.split(" | ")[0]);
+    if (below) candidates.add(below);
+  });
+  return candidates.size === 1 ? [...candidates][0]! : null;
+}
+
 const decimal = (value: number) => value.toFixed(2);
 const HU_TAX = /^\d{8}-\d-\d{2}$/;
 const EU_NOT_HU =
@@ -394,6 +437,9 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
   set("documentNumber", pairing.number, "PAIRING");
   set("issueDate", pairing.date, "PAIRING");
   set("currency", pairing.currency?.toUpperCase(), "PAIRING");
+  // a név a szövegből csak a HIÁNYT tölti: az illesztő és a párosítás neve elsőbbséget élvez
+  if (values.supplierName === null && hasText)
+    set("supplierName", supplierNameFromText(lines), "TEXT");
   /*
     A PÁROSÍTÁS BRUTTÓJA GYENGE FORRÁS (barracuda, acrobot 27658): illesztős
     külföldi számlánál ez az illesztő NETTÓJA, kártyás fizetésnél a TERHELÉS,

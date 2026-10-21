@@ -6,6 +6,7 @@ import type { SupplierInvoiceImportResult } from "@acropora/types";
 import {
   parseForeignDate,
   readForeignInvoice,
+  supplierNameFromText,
   totalsRow,
   type ForeignReadingInput,
 } from "./foreign-invoice-reading.js";
@@ -613,5 +614,129 @@ describe("the totals row of a Hungarian invoice table", () => {
     assert.equal(labelled.values.grossAmount, "119.00");
     const english = read(EN_SAAS);
     assert.equal(english.values.netAmount, "20.00");
+  });
+});
+
+/**
+ * A SZALLITO NEVE A SZOVEGBOL (kártya dbab22cd, második kísérlet). Kitalált nevek; a valódi mintákból csak
+ * a HELY (első sor, az "Eladó | Vevő" fejléc alatti sor) és a szabály jött.
+ */
+describe("the supplier name from the text", () => {
+  it("takes the first line when it carries a legal form", () => {
+    assert.equal(
+      supplierNameFromText(["Kitalált Akvárium Kft.", "Számla", "Összesen"]),
+      "Kitalált Akvárium Kft.",
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Kitalált Aquaristik GmbH | 1234 Kitalált-város",
+        "Rechnung",
+      ]),
+      "Kitalált Aquaristik GmbH",
+    );
+  });
+
+  it("does not take a first line without a legal form (it may be a title)", () => {
+    assert.equal(
+      supplierNameFromText(["SZÁMLA", "Kitalált Akvárium Kft."]),
+      null,
+    );
+    assert.equal(
+      supplierNameFromText(["Invoice", "Kitalált Aquaristik GmbH"]),
+      null,
+    );
+    assert.equal(supplierNameFromText(["Kitalált Cég"]), null);
+  });
+
+  it("reads the cell under a seller-before-buyer header", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Számla",
+        "Eladó neve és címe: | Vevő neve és címe:",
+        "Kitalált Szállító Zrt. | Vevő Kft.",
+        "Kitalált utca 1.",
+      ]),
+      "Kitalált Szállító Zrt.",
+    );
+  });
+
+  it("does not guess from a buyer-before-seller header (the first cell would be the buyer)", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Vevő neve: | Eladó neve:",
+        "Kitalált Vevő Kft. | Kitalált Szállító Zrt.",
+      ]),
+      null,
+    );
+  });
+
+  it("never returns our own company, whichever place names it", () => {
+    assert.equal(supplierNameFromText(["Acropora Kft.", "Számla"]), null);
+    assert.equal(
+      supplierNameFromText([
+        "Vevő | Eladó",
+        "Acropora Kft. | Kitalált Szállító Zrt.",
+      ]),
+      null,
+    );
+  });
+
+  it("does not decide when the two places name different companies", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Kitalált Első Kft.",
+        "Eladó neve: | Vevő neve:",
+        "Kitalált Második Kft. | Vevő Zrt.",
+      ]),
+      null,
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Kitalált Első Kft.",
+        "Eladó neve: | Vevő neve:",
+        "Kitalált Első Kft. | Vevő Zrt.",
+      ]),
+      "Kitalált Első Kft.",
+    );
+  });
+
+  it("is a fallback: the adapter and the bank pairing name come first, the text fills the gap", () => {
+    const lines = ["Kitalált Akvárium Kft.", "Invoice no: KT-1"];
+    const blank = {
+      number: "",
+      supplierName: "",
+      date: "",
+      gross: null,
+      currency: "",
+      debits: [],
+    };
+    const alone = readForeignInvoice({ lines, adapter: null, pairing: blank });
+    assert.equal(alone.values.supplierName, "Kitalált Akvárium Kft.");
+    assert.equal(alone.sources.supplierName, "TEXT");
+    const paired = readForeignInvoice({
+      lines,
+      adapter: null,
+      pairing: { ...blank, supplierName: "Párosítás szerinti név" },
+    });
+    assert.equal(paired.values.supplierName, "Párosítás szerinti név");
+    assert.equal(paired.sources.supplierName, "PAIRING");
+  });
+
+  it("reads nothing from a scanned invoice", () => {
+    assert.equal(
+      readForeignInvoice({
+        lines: null,
+        adapter: null,
+        pairing: {
+          number: "",
+          supplierName: "",
+          date: "",
+          gross: null,
+          currency: "",
+          debits: [],
+        },
+      }).values.supplierName,
+      null,
+    );
   });
 });
