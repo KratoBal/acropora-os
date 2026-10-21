@@ -20,6 +20,7 @@
     "service-token": "tsc -p tsconfig.json && node --env-file=../../.env dist/tasks/service-token.cli.js",
     "document:inline-report": "tsc -p tsconfig.json && node --env-file=../../.env dist/service-assets/document-store/inline-document-report.cli.js",
     "external-invoice-pdf:fill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/external-invoice-pdf.cli.js",
+    "external-invoice-mail-pdf:fill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/external-invoice-mail-pdf.cli.js",
     "store:reconcile": "tsc -p tsconfig.json && node --env-file=../../.env dist/service-assets/document-store/store-reconciliation.cli.js",
     "medusa:categories": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-category.cli.js",
     "medusa:store-categories": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-store-category.cli.js",

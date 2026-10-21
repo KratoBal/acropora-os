@@ -51,7 +51,15 @@ describe("GoogleReadonlyClient", () => {
           payload: {
             headers: [
               { name: "From", value: "Szállító Kft. <Szamla@Szallito.HU>" },
+              {
+                name: "Authentication-Results",
+                value: "mx.google.com; dkim=pass header.i=@szallito.hu",
+              },
               { name: "Subject", value: "Számla" },
+              {
+                name: "Authentication-Results",
+                value: "hamis.example; dkim=pass",
+              },
             ],
             parts: [
               { mimeType: "text/plain", body: { data: base64Url("szia") } },
@@ -79,6 +87,11 @@ describe("GoogleReadonlyClient", () => {
       ],
       ["szamla@szallito.hu", [["SZ-1.pdf", "%PDF-1.4 szamla"]]],
     );
+    // every Authentication-Results header, in order: the caller decides which receiver to believe
+    assert.deepEqual(message.authenticationResults, [
+      "mx.google.com; dkim=pass header.i=@szallito.hu",
+      "hamis.example; dkim=pass",
+    ]);
     assert.ok(
       requested.some((path) =>
         path.startsWith("/gmail/v1/users/balazs%40acropora.hu/messages/m-1"),

@@ -68,6 +68,12 @@ export interface GmailPdfMessage {
   subject: string | null;
   sender: string | null;
   pdfs: Array<{ fileName: string; buffer: Buffer }>;
+  /**
+   * Az összes `Authentication-Results` fejléc, sorrendben (a legfelső a Gmailé). A levél eredetének
+   * ellenőrzéséhez (barracuda, #1777): a `From` a levélben ÁLLÍTOTT feladó, ezt a fogadó szerver
+   * ítélete (DKIM, SPF) igazolja. A hívó dolga, hogy csak a saját fogadójáét (`mx.google.com`) higgye el.
+   */
+  authenticationResults?: string[];
 }
 
 export interface DrivePdfFile {
@@ -310,6 +316,9 @@ export class GoogleReadonlyClient {
       subject: header("subject"),
       sender: senderAddress(header("from")),
       pdfs,
+      authenticationResults: (message.payload?.headers ?? [])
+        .filter((h) => h.name?.toLowerCase() === "authentication-results")
+        .map((h) => h.value?.trim() ?? ""),
       skippedTooLarge,
     };
   }

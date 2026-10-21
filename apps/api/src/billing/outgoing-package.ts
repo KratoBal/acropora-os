@@ -17,7 +17,9 @@ import { externalDocumentType } from "./billing-document-list.js";
  *
  * Három forrás: az OS-ben kiállított számla (`Invoice`), a Számlázz.hu
  * felületén kiállított (a feed sora, a PDF-et a `external-invoice-pdf:fill`
- * hozza le) és az eBIZ-ben kiállított (`ExternalBillingDocument`). EGY
+ * hozza le; a cmfx-ben kiállított webshop-számláét, amit a Számlázz.hu nem
+ * ismer, az `external-invoice-mail-pdf:fill` a vevőnek küldött levélből) és az
+ * eBIZ-ben kiállított (`ExternalBillingDocument`). EGY
  * SZÁMLASZÁM EGY SOR: az OS-ben kiállított számla a Számlázz.hu feedjében is
  * visszajön, és ugyanaz a szám kétszer nem kerülhet a könyvelő elé. Az OS
  * sora nyer (az ő PDF-je a kiállításkor tárolódott), utána a Számlázz.hu-é.
