@@ -44,16 +44,6 @@ const isDirection = (v: string): v is WaterParameterDirection =>
   (WATER_PARAMETER_DIRECTIONS as readonly string[]).includes(v);
 
 /**
- * `KALCIUM:EMEL; kh:emel` -> the canonical `KALCIUM:EMEL;KH:EMEL`: pairs
- * separated by `;` or `,`, each `CODE:DIRECTION`, case and spacing free, sorted
- * by code, a repeated pair once. Two sources agree exactly when their canonical
- * sets are equal, so one source saying "calcium" and another "calcium and
- * magnesium" is a conflict for a human, never a merged fact.
- *
- * Refused: an empty value, an unknown code or direction, and one code in both
- * directions (a product does not raise and lower the same parameter).
- */
-/**
  * THE PARAMETERS TO MEASURE, WITHOUT A DIRECTION (Product Knowledge, the
  * test-dependent dose: "measure calcium and KH first"): `KALCIUM;KH`. The same
  * code set as the effects; sorted, each code once.
@@ -75,6 +65,16 @@ export function parseWaterParameterCodes(
   return { ok: true, codes, canonical: codes.join(";") };
 }
 
+/**
+ * `KALCIUM:EMEL; kh:emel` -> the canonical `KALCIUM:EMEL;KH:EMEL`: pairs
+ * separated by `;` or `,`, each `CODE:DIRECTION`, case and spacing free, sorted
+ * by code, a repeated pair once. Two sources agree exactly when their canonical
+ * sets are equal, so one source saying "calcium" and another "calcium and
+ * magnesium" is a conflict for a human, never a merged fact.
+ *
+ * Refused: an empty value, an unknown code or direction, and one code in both
+ * directions (a product does not raise and lower the same parameter).
+ */
 export function parseWaterParameterEffects(
   raw: string,
 ):
