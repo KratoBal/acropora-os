@@ -27,6 +27,11 @@ import {
   manufacturerSites,
   sourceUrlProblem,
 } from "./enrichment-sources.js";
+import {
+  AI_DOSING_PATH_ENV,
+  dosingExtractorFromEnv,
+  type DosingExtractor,
+} from "./dosing-extraction.js";
 import type { EnrichmentFetch } from "./polite-fetcher.js";
 
 /**
@@ -70,6 +75,8 @@ export interface EnrichmentCliDeps {
   fetch: EnrichmentFetch;
   sleep: (ms: number) => Promise<void>;
   now: () => Date;
+  /** The AI dosing reader; absent: from the environment (`ACROPORA_AI_DOSING_PATH`). */
+  dosingExtractor?: DosingExtractor | null;
 }
 
 type Output = {
@@ -219,6 +226,16 @@ export async function runEnrichmentCli(
       `Figyelem: ${parsed.products.length} termék, a korlát ${productLimit}; a futás a korlátnál megáll.\n`,
     );
 
+  // the AI call costs a model call per manufacturer page: the plan says whether it would run
+  const dosingExtractor =
+    deps.dosingExtractor !== undefined
+      ? deps.dosingExtractor
+      : dosingExtractorFromEnv(deps.env);
+  out.stdout(
+    dosingExtractor
+      ? "Adagolás (AI): be, gyártói laponként egy hívás.\n"
+      : `Adagolás (AI): ki (${AI_DOSING_PATH_ENV} és az AI beállítás nélkül nem hívja).\n`,
+  );
   if (!argv.includes("--apply")) {
     out.stdout(
       "Terv: semmi nem ment ki a hálózatra, semmi nem tárolódott. Futtatás: --apply --actor <userId>\n",
@@ -251,6 +268,7 @@ export async function runEnrichmentCli(
         fetch: deps.fetch,
         sleep: deps.sleep,
         now: deps.now,
+        ...(dosingExtractor ? { dosingExtractor } : {}),
       },
     );
   } catch (error) {

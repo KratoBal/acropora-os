@@ -15,6 +15,7 @@ import {
   type EnrichmentRunStore,
   type ProductFailure,
   type ProductFacts,
+  type RunDeps,
   type RunProductInput,
   type StoredCheck,
 } from "./enrichment-run.js";
@@ -88,6 +89,7 @@ async function run(
     requestLimit?: number;
     suppliers?: Record<string, string>;
     failSave?: (check: StoredCheck) => Error | null;
+    dosingExtractor?: RunDeps["dosingExtractor"];
   } = {},
 ) {
   const network = scriptedNetwork(table);
@@ -110,6 +112,9 @@ async function run(
       fetch: network.fetch,
       sleep: clock.sleep,
       now: clock.now,
+      ...(options.dosingExtractor
+        ? { dosingExtractor: options.dosingExtractor }
+        : {}),
     },
   );
   return { summary, network, ...memory };
@@ -283,6 +288,96 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(
       checks[0]!.fields.find((f) => f.field === "ean")!.sourceType,
       "MANUFACTURER_PAGE",
+    );
+  });
+
+  // Product Knowledge, the three dosing states (card 85c38ab1): the AI reads the
+  // manufacturer's page only, and its answer becomes ordinary candidates
+  it("a gyártói lap szövege az AI-hoz megy, a kereskedőé nem; a válasz mezőként jön", async () => {
+    const asked: { productName: string; pageText: string }[] = [];
+    const guidance = "Dose according to your weekly KH and calcium tests.";
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "BULK_REEF_SUPPLY", url: `${BRS}/p/1` }],
+        },
+      ],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: `<html><body><nav>Menü</nav><p>${guidance}</p></body></html>`,
+        },
+        [`${BRS}/p/1`]: { status: 200, body: productPage({}) },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        dosingExtractor: {
+          extract: async (input) => {
+            asked.push(input);
+            return {
+              kind: "ANSWER",
+              mode: "TEST_DEPENDENT",
+              dose: null,
+              tests: ["KH", "KALCIUM"],
+              guidance,
+              excerpt: guidance,
+              reason: "",
+            };
+          },
+        },
+      },
+    );
+    assert.equal(asked.length, 1);
+    assert.equal(asked[0]!.pageText, guidance);
+    const field = (key: string) =>
+      checks[0]!.fields.find((f) => f.field === key)!;
+    assert.deepEqual(
+      [
+        field("dosingMode").status,
+        field("dosingMode").value,
+        field("dosingMode").sourceType,
+      ],
+      ["VERIFIED", "TEST_DEPENDENT", "MANUFACTURER_PAGE"],
+    );
+    assert.equal(field("dosingTests").value, "KALCIUM;KH");
+    assert.equal(field("dosingGuidance").value, guidance);
+  });
+
+  // barracuda, #1805: the description's dose (#1800) and an AI "no data" contradict
+  it("a leírás adagja mellett az AI nincs-adata nem lesz állapot", async () => {
+    const { checks } = await run(
+      [{ productId: "p-1", sources: [] }],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: productPage({ description: "Dose 1 drop per 100 l daily." }),
+        },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        dosingExtractor: {
+          extract: async () => ({
+            kind: "ANSWER",
+            mode: "NO_DATA",
+            dose: null,
+            tests: [],
+            guidance: null,
+            excerpt: null,
+            reason: "nincs adag",
+          }),
+        },
+      },
+    );
+    const field = (key: string) =>
+      checks[0]!.fields.find((f) => f.field === key)!;
+    assert.deepEqual(
+      [field("dosing").value, field("dosingMode").status],
+      ["1 drop/100 L/day", "MISSING"],
+    );
+    assert.match(
+      checks[0]!.fetches[0]!.reason ?? "",
+      /az AI szerint nincs adat, az olvasó 1 drop\/100 L\/day/,
     );
   });
 

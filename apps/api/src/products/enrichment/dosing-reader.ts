@@ -51,11 +51,11 @@ const RANGE = new RegExp(
 );
 const PERIODS: readonly [RegExp, "day" | "week"][] = [
   [
-    /\b(?:daily|a day|per day|every day|each day|taglich|pro tag|je tag|am tag|naponta|naponkent|minden nap)\b|\/\s*(?:day|tag|nap)\b/g,
+    /\b(?:daily|a day|per day|every day|each day|taglich|pro tag|je tag|am tag|naponta|naponkent|napi|minden nap)\b|\/\s*(?:day|tag|nap)\b/g,
     "day",
   ],
   [
-    /\b(?:weekly|a week|per week|every week|each week|wochentlich|pro woche|je woche|hetente|hetenkent|minden heten)\b|\/\s*(?:week|woche|het)\b/g,
+    /\b(?:weekly|a week|per week|every week|each week|wochentlich|pro woche|je woche|hetente|hetenkent|heti|minden heten)\b|\/\s*(?:week|woche|het)\b/g,
     "week",
   ],
 ];

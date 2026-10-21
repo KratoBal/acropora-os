@@ -9,6 +9,11 @@ import {
 } from "@acropora/jev/product-enrichment";
 
 import { withBulkReefSupplyTable } from "./bulk-reef-supply-extract.js";
+import {
+  dosingStatement,
+  visiblePageText,
+  type DosingExtractor,
+} from "./dosing-extraction.js";
 import { extractMarineAquaticsStatement } from "./marine-aquatics-extract.js";
 import {
   ENRICHED_FIELDS,
@@ -180,6 +185,11 @@ export interface RunDeps {
   fetch: EnrichmentFetch;
   sleep: (ms: number) => Promise<void>;
   now: () => Date;
+  /**
+   * The manufacturer's dosing through Acropora AI (`dosing-extraction.ts`);
+   * absent: not called. Only a MANUFACTURER page is sent.
+   */
+  dosingExtractor?: DosingExtractor;
 }
 
 export interface RunSummary {
@@ -391,20 +401,39 @@ async function checkProduct(
         : source.kind === "BULK_REEF_SUPPLY"
           ? withBulkReefSupplyTable(structured, page.html)
           : structured;
+    // the three dosing states, from the manufacturer's own page only
+    const dosingAi =
+      source.kind === "MANUFACTURER" && deps.dosingExtractor
+        ? await (async () => {
+            const pageText = visiblePageText(page.html);
+            return dosingStatement(
+              await deps.dosingExtractor!.extract({
+                productName: facts.name,
+                pageText,
+              }),
+              pageText,
+              statement.values.find((v) => v.field === "dosing")?.raw ?? null,
+            );
+          })()
+        : null;
     fetches.push({
       sourceKind: source.kind,
       url: page.url,
       outcome: "FETCHED",
       // a szótár megjegyzései (tagadott találat, kétirányú kód) a lap mellé
       reason:
-        [statement.note, ...(statement.lexiconNotes ?? [])]
+        [
+          statement.note,
+          ...(statement.lexiconNotes ?? []),
+          ...(dosingAi?.notes ?? []),
+        ]
           .filter(Boolean)
           .join("; ") || null,
       httpStatus: page.httpStatus,
       fetchedAt: page.fetchedAt,
-      fieldCount: statement.values.length,
+      fieldCount: statement.values.length + (dosingAi?.values.length ?? 0),
     });
-    for (const value of statement.values)
+    for (const value of [...statement.values, ...(dosingAi?.values ?? [])])
       pageCandidates.push({
         field: value.field,
         kind: source.kind,

@@ -34,6 +34,10 @@ export const ENRICHED_FIELDS = [
   "waterParameterEffects",
   // a gyártói adagolás (Product Knowledge 2a, kártya 85c38ab1): a leírásból
   "dosing",
+  // a három adagolási állapot: a gyártói lapról, az Acropora AI kivonatával
+  "dosingMode",
+  "dosingGuidance",
+  "dosingTests",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
