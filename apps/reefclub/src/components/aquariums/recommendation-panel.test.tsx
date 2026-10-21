@@ -357,6 +357,36 @@ describe("a beadott adag rögzítése", () => {
     ).toBeEnabled();
   });
 
+  it("listás terméknél a mértékegység a termék javaslatáé és nem állítható (barracuda, #1760)", async () => {
+    const user = userEvent.setup();
+    const { calls } = view({
+      ...lists([
+        recommendation({
+          product: { id: "p-g", name: "Minta por" },
+          unit: "G",
+        }),
+      ]),
+      "POST /aquariums/a1/doses": () =>
+        reply(201, { doseId: "d-4", warnings: [] }),
+    });
+    const unit = await screen.findByLabelText("Mértékegység");
+    expect(unit).toHaveValue("ML");
+    expect(unit).toBeEnabled();
+    await user.selectOptions(screen.getByLabelText("Termék"), "p-g");
+    expect(screen.getByLabelText("Mértékegység")).toHaveValue("G");
+    expect(screen.getByLabelText("Mértékegység")).toBeDisabled();
+    await user.type(screen.getByLabelText("Mennyiség"), "3");
+    await user.click(screen.getByRole("button", { name: "Adag rögzítése" }));
+    await waitFor(() =>
+      expect(calls.some((call) => call.method === "POST")).toBe(true),
+    );
+    expect(calls.find((call) => call.method === "POST")!.body).toMatchObject({
+      productId: "p-g",
+      amount: 3,
+      unit: "G",
+    });
+  });
+
   it("a mentés a mennyiséget tizedesvesszővel is érti, és a figyelmeztetést kiírja", async () => {
     const user = userEvent.setup();
     const { calls } = view({

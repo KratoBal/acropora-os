@@ -497,6 +497,10 @@ function DoseForm({
     RECOMMENDATION_PARAMETERS[0],
   );
   const [productId, setProductId] = useState(OTHER_PRODUCT);
+  // a listed product is dosed in the unit its recommendation names (barracuda, #1760):
+  // another unit would make the dose an unknown effect to the engine
+  const listedUnit = (id: string): DoseUnit | undefined =>
+    items.find((item) => item.product.id === id)?.unit;
   const [amountText, setAmountText] = useState("");
   const [unit, setUnit] = useState<DoseUnit>("ML");
   const [moment, setMoment] = useState(() => localInputValue(now()));
@@ -589,7 +593,11 @@ function DoseForm({
           <Select
             id="dose-product"
             value={productId}
-            onChange={(event) => setProductId(event.target.value)}
+            onChange={(event) => {
+              setProductId(event.target.value);
+              const fixed = listedUnit(event.target.value);
+              if (fixed) setUnit(fixed);
+            }}
           >
             <option value={OTHER_PRODUCT}>Más termék (nem ismert hatás)</option>
             {products.map(([id, name]) => (
@@ -618,6 +626,7 @@ function DoseForm({
           <Select
             id="dose-unit"
             value={unit}
+            disabled={listed}
             onChange={(event) => setUnit(event.target.value as DoseUnit)}
           >
             {(Object.keys(UNIT_LABEL) as DoseUnit[]).map((code) => (
