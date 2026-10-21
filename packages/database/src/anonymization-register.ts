@@ -769,6 +769,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     partnerInternalCode: "identifier",
     inventoryNumber: "identifier",
     powerConsumptionRaw: "business",
+    currentDraw: "business",
     electricalCode: "business",
     description: "freeText",
     notes: "freeText",

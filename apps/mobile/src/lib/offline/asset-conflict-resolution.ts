@@ -1,4 +1,5 @@
 import { ASSET_CRITICALITY_LABELS } from "../assets/asset-criticality";
+import { ASSET_PHASE_CONNECTION_LABELS } from "../assets/asset-phase-connection";
 import { ASSET_STATUS_LABELS } from "../assets/asset-status";
 import type { UpdateAssetInput } from "../assets/asset-fields";
 import { normalizeAssetLabelCode } from "../assets/asset-label-mirror";
@@ -121,8 +122,10 @@ export interface CurrentAssetLike {
    * all: a `ComparableField` a `UpdateAssetInput` kulcsaibol szarmazik.
    */
   volume?: string | null;
-  powerConsumption?: string | null;
-  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  /** Az aramfelvetel (A, szabad szoveg) es a bekotes -- Balazs, 2026-10-21. */
+  currentDraw?: string | null;
+  phaseConnection?: string | null;
+  /** A fogyasztas eredeti szovege (kW). */
   powerConsumptionRaw?: string | null;
   /**
    * A tablazat elso oszlopa, felulet-felirata "FP / Elektromos" (Balazs
@@ -182,7 +185,8 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   performance: "Teljesítmény",
   performanceUnitId: "Teljesítmény mértékegysége",
   volume: "Térfogat",
-  powerConsumption: "Fogyasztás",
+  currentDraw: "Áramfelvétel (A)",
+  phaseConnection: "Bekötés",
   powerConsumptionRaw: "Fogyasztás (eredeti bejegyzés)",
   electricalCode: "FP / Elektromos",
 };
@@ -501,8 +505,11 @@ function assignField(
     case "volume":
       target.volume = source.volume;
       return;
-    case "powerConsumption":
-      target.powerConsumption = source.powerConsumption;
+    case "currentDraw":
+      target.currentDraw = source.currentDraw;
+      return;
+    case "phaseConnection":
+      target.phaseConnection = source.phaseConnection;
       return;
     case "powerConsumptionRaw":
       target.powerConsumptionRaw = source.powerConsumptionRaw;
@@ -546,6 +553,10 @@ function enyem(
     return patch.parentAssetId ? (parentLabel ?? patch.parentAssetId) : ONALLO;
   if (field === "criticality")
     return szoveg(ASSET_CRITICALITY_LABELS, patch.criticality);
+  if (field === "phaseConnection")
+    return patch.phaseConnection
+      ? szoveg(ASSET_PHASE_CONNECTION_LABELS, patch.phaseConnection)
+      : URES;
   if (field === "departmentId") return helyszin(patch.departmentId, unitNames);
   if (field === "categoryId") return kategoria(patch.categoryId, categoryNames);
   if (field === "functionId") return kategoria(patch.functionId, functionNames);
@@ -560,6 +571,10 @@ function ovek(
   if (field === "status") return szoveg(ASSET_STATUS_LABELS, current.status);
   if (field === "criticality")
     return szoveg(ASSET_CRITICALITY_LABELS, current.criticality);
+  if (field === "phaseConnection")
+    return current.phaseConnection
+      ? szoveg(ASSET_PHASE_CONNECTION_LABELS, current.phaseConnection)
+      : URES;
   if (field === "departmentId")
     return current.unit
       ? (unitNames?.[current.unit.id] ?? current.unit.name)

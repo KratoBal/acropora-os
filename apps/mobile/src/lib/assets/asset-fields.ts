@@ -18,6 +18,8 @@ export type AssetStatus =
   | "RETIRED";
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
+/** A bekotes: egy fazis vagy harom (Balazs, 2026-10-21). */
+export type AssetPhaseConnection = "PHASE_1" | "PHASE_3";
 
 /**
  * The PATCH body for `/service/assets/:id`, mirroring the server's
@@ -99,7 +101,9 @@ export interface UpdateAssetInput {
    */
   volume?: string | null;
   /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal, mindig kW-ban. */
-  powerConsumption?: string | null;
+  /** Az aramfelvetel (A, szabad szoveg) es a bekotes -- Balazs, 2026-10-21. */
+  currentDraw?: string | null;
+  phaseConnection?: AssetPhaseConnection | null;
   /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
   powerConsumptionRaw?: string | null;
   /** A tablazat elso oszlopa ("MAT kod / Elektromos") -- `null` torli. */

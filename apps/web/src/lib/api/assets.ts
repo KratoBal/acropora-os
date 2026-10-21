@@ -31,7 +31,6 @@ export interface AssetCategorySuggestionInput {
   kind?: string;
   performance?: string;
   performanceUnitId?: string;
-  powerConsumption?: string;
   parentAssetId?: string;
   departmentId?: string;
 }

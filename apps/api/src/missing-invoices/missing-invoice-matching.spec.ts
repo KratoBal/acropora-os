@@ -1880,3 +1880,54 @@ describe("a paper original without any digital invoice (acrobot 25745, Aqua-Ligh
     );
   });
 });
+
+/*
+  A NULLA VÉGÖSSZEGŰ SZÁMLA (kártya 847bca33, élesen a Pólus PS2026/01452: két
+  tétel, -485 000 és +485 000). MI PIROSÍT: ha egy partner-terhelés mellett
+  jelöltként áll, vagy a „van számla a partnertől” jelzést adja; ha a kézi
+  párosítást is elnyeli. Kifejezett azonosítók, nem számláló.
+*/
+describe("a zero-total invoice has no payment (card 847bca33)", () => {
+  const polus = (gross: string) =>
+    doc({
+      id: `polus-${gross}`,
+      number: "PS2026/01452",
+      gross: D(gross),
+      supplierName: "Pólus 2001 Tömítéstechnikai Bt.",
+      date: "2026-10-19",
+    });
+  const payment = debit({
+    id: "polus-debit",
+    bookingDate: "2026-10-20",
+    amount: D(377000),
+    counterpartyName: "Pólus 2001 Bt.",
+  });
+
+  it("is neither a candidate nor a sign that the partner has invoices", () => {
+    const outcome = run([payment], [polus("0")]).get("polus-debit")!;
+    assert.deepEqual(
+      [outcome.state, outcome.candidates.map((c) => c.id)],
+      ["NO_INVOICE", []],
+    );
+  });
+
+  it("the control: a non-zero invoice of the partner that does not fit is a candidate", () => {
+    const outcome = run([payment], [polus("1")]).get("polus-debit")!;
+    assert.deepEqual(
+      [outcome.state, outcome.candidates.map((c) => c.id)],
+      ["NOT_MATCHED", ["polus-1"]],
+    );
+  });
+
+  it("a person's manual pairing to it still stands", () => {
+    const outcome = run(
+      [payment],
+      [polus("0")],
+      new Map([["polus-debit", ["polus-0"]]]),
+    ).get("polus-debit")!;
+    assert.deepEqual(
+      [outcome.matchedBy, outcome.documents.map((d) => d.id)],
+      ["MANUAL", ["polus-0"]],
+    );
+  });
+});

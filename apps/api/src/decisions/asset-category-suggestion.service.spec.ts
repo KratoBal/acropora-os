@@ -62,7 +62,6 @@ function tarolo(opciok: { mentett?: Record<string, unknown> | null } = {}) {
             kind: "EQUIPMENT",
             performance: null,
             performanceUnitId: null,
-            powerConsumption: null,
             parentAssetId: null,
             departmentId: "d1",
             categoryId: "cat_lig",
@@ -367,7 +366,6 @@ describe("a feloldás mentéskor", () => {
     kind: "EQUIPMENT",
     performance: null,
     performanceUnitId: null,
-    powerConsumption: null,
     parentAssetId: null,
     departmentId: "d1",
   };

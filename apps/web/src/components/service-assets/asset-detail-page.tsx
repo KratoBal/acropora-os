@@ -20,6 +20,7 @@ import {
   type AssetDocumentType,
   type AssetQrCode,
   type AssetStatus,
+  assetPhaseConnectionLabel,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -537,25 +538,25 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     label="Térfogat"
                     value={performanceText(asset.volume, "m³")}
                   />
-                  <Data
-                    label="Fogyasztás"
-                    value={performanceText(asset.powerConsumption, "kW")}
-                  />
                   {/*
-                    AZ EREDETI FOGYASZTAS-SZOVEG, HA ELTER A KIIRT SZAMTOL.
-                    Balazs kerese (2026-09-23): a fogyasztast ossze akarja
-                    adni, tehat a `powerConsumption` szammma valt -- de a
-                    FANK-adatok tobb mint fele "P1/P2" alaku volt, es ez a
-                    mezo orzi, mi allt eredetileg a cellaban. Ha a ketto
-                    egyezik, nincs ertelme ketszer kiirni.
+                    AZ ARAMFELVETEL (A-ben, szabad szoveg), AZ EREDETI
+                    FOGYASZTAS-BEJEGYZES (kW) ES A BEKOTES (Balazs,
+                    2026-10-21, kanban 541e2716). A korabbi kW-szam helyett:
+                    a "Fogyasztas" ma mar csak az eredeti bejegyzes.
                   */}
-                  {asset.powerConsumptionRaw &&
-                  asset.powerConsumptionRaw !== asset.powerConsumption ? (
-                    <Data
-                      label="Fogyasztás (eredeti)"
-                      value={asset.powerConsumptionRaw}
-                    />
-                  ) : null}
+                  <Data label="Áramfelvétel (A)" value={asset.currentDraw} />
+                  <Data
+                    label="Fogyasztás (eredeti bejegyzés)"
+                    value={asset.powerConsumptionRaw}
+                  />
+                  <Data
+                    label="Bekötés"
+                    value={
+                      asset.phaseConnection
+                        ? assetPhaseConnectionLabel[asset.phaseConnection]
+                        : undefined
+                    }
+                  />
                   <Data label="Terméktörzs" value={asset.product?.name} />
                   <Data
                     label="Telepítés"

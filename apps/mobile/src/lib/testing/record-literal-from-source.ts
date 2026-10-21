@@ -49,7 +49,13 @@ export function recordLiteralFromSource(
     throw new Error(`nincs "${exportName}" Record-export ebben: ${filePath}`);
   const body = match[1] ?? "";
   const result: Record<string, string> = {};
-  for (const line of body.matchAll(/([A-Z_]+):\s*"([^"]*)"/g))
+  // A kulcs szamjegyet is tartalmazhat (`PHASE_1`): enelkul a sor CSENDBEN
+  // kimaradt, es egy ures eredmeny egy ures tablaval egyezett volna.
+  for (const line of body.matchAll(/([A-Z][A-Z0-9_]*):\s*"([^"]*)"/g))
     result[line[1]!] = line[2]!;
+  if (Object.keys(result).length === 0)
+    throw new Error(
+      `a "${exportName}" blokkban nincs egyetlen KULCS: "ertek" sor sem: ${filePath}`,
+    );
   return result;
 }

@@ -100,7 +100,6 @@ export class DecisionRunRepository {
         kind: true,
         performance: true,
         performanceUnitId: true,
-        powerConsumption: true,
         parentAssetId: true,
         departmentId: true,
         categoryId: true,

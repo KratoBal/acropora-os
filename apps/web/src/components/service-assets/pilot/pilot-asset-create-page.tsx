@@ -12,11 +12,13 @@ import {
   type AssetListItem,
   type AssetOwnerOption,
   type AssetOwnerType,
+  type AssetPhaseConnection,
   type AssetStatus,
   type UnitOfMeasure,
   type AssetCategory,
   type AssetFunction,
   type AquariumSummary,
+  assetPhaseConnectionLabel,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -188,7 +190,11 @@ export function PilotAssetCreatePage() {
   const [performanceUnits, setPerformanceUnits] = useState<UnitOfMeasure[]>([]);
   const [performanceUnitsFailed, setPerformanceUnitsFailed] = useState(false);
   const [volume, setVolume] = useState("");
-  const [powerConsumption, setPowerConsumption] = useState("");
+  /** Az aramfelvetel (A, szabad szoveg) es a bekotes -- Balazs, 2026-10-21. */
+  const [currentDraw, setCurrentDraw] = useState("");
+  const [phaseConnection, setPhaseConnection] = useState<
+    AssetPhaseConnection | ""
+  >("");
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   const [electricalCode, setElectricalCode] = useState("");
   const [installedAt, setInstalledAt] = useState("");
@@ -212,10 +218,8 @@ export function PilotAssetCreatePage() {
     manufacturer: "",
     model: "",
     performance: "",
-    powerConsumption: "",
   });
-  const rogzit = () =>
-    setRogzitett({ name, manufacturer, model, performance, powerConsumption });
+  const rogzit = () => setRogzitett({ name, manufacturer, model, performance });
   const javaslat = useCategorySuggestion({
     token,
     clientOperationId,
@@ -227,8 +231,6 @@ export function PilotAssetCreatePage() {
       performance:
         normalizePerformanceValue(rogzitett.performance) ?? undefined,
       performanceUnitId: performanceUnitId || undefined,
-      powerConsumption:
-        normalizePerformanceValue(rogzitett.powerConsumption) ?? undefined,
       parentAssetId: parentAssetId || undefined,
       departmentId: departmentId || undefined,
     },
@@ -492,8 +494,8 @@ export function PilotAssetCreatePage() {
         performance: normalizePerformanceValue(performance) ?? undefined,
         performanceUnitId: performanceUnitId || undefined,
         volume: normalizePerformanceValue(volume) ?? undefined,
-        powerConsumption:
-          normalizePerformanceValue(powerConsumption) ?? undefined,
+        currentDraw: currentDraw.trim() || undefined,
+        phaseConnection: phaseConnection || undefined,
         powerConsumptionRaw: powerConsumptionRaw.trim() || undefined,
         installedAt: toIsoDate(installedAt),
         warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
@@ -695,20 +697,19 @@ export function PilotAssetCreatePage() {
                 />
               </PilotFormField>
               <PilotFormField
-                label="Fogyasztás"
-                help="kW-ban. Tizedesvesszővel is írható (például 0,5)."
+                label="Áramfelvétel"
+                help="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
               >
                 <PilotInput
-                  value={powerConsumption}
-                  onChange={setPowerConsumption}
-                  inputMode="decimal"
-                  placeholder="pl. 0,75"
-                  aria-label="Fogyasztás"
+                  value={currentDraw}
+                  onChange={setCurrentDraw}
+                  placeholder="pl. 6,15/5,5"
+                  aria-label="Áramfelvétel"
                 />
               </PilotFormField>
               <PilotFormField
                 label="Fogyasztás (eredeti bejegyzés)"
-                help="Ha a tábla cellája P1/P2 alakú volt (például 6,15/5,5), ide írd be változatlanul."
+                help="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
               >
                 <PilotInput
                   value={powerConsumptionRaw}
@@ -716,6 +717,24 @@ export function PilotAssetCreatePage() {
                   placeholder="pl. 6,15/5,5"
                   aria-label="Fogyasztás (eredeti bejegyzés)"
                 />
+              </PilotFormField>
+              <PilotFormField label="Bekötés">
+                <PilotSelect
+                  value={phaseConnection}
+                  onChange={(value) =>
+                    setPhaseConnection(value as AssetPhaseConnection | "")
+                  }
+                  aria-label="Bekötés"
+                >
+                  <option value="">Nincs megadva</option>
+                  {Object.entries(assetPhaseConnectionLabel).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ),
+                  )}
+                </PilotSelect>
               </PilotFormField>
               <PilotFormField label="Kritikusság">
                 <PilotSelect
