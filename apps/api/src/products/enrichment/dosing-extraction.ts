@@ -22,9 +22,10 @@ import type { ExtractedValue } from "./page-extract.js";
  * becomes a JEV candidate,
  * - the excerpt (and the guidance) is in THIS page's text, spacing aside;
  * - a fixed dose goes through the `dosing` field's own parser, AND the
- *   deterministic reader, run on the excerpt alone, reads the same dose. Two
- *   independent readings must agree; anything else goes to a person (a page
- *   with two doses in one sentence, for one: the reader refuses it);
+ *   deterministic reader reads the same dose twice: on the excerpt, and on the
+ *   WHOLE page (the model picks the excerpt, so on a page with three doses it
+ *   could pick the clean one; barracuda, #1805). Anything else goes to a person;
+ * - a NO_DATA does not stand next to a dose the reader found on the page;
  * - the parameters to measure are valid codes.
  * Anything that fails gives no value, only a note on the fetch.
  */
@@ -165,10 +166,15 @@ export interface DosingStatement {
   notes: string[];
 }
 
-/** The AI's answer, checked against this page, as the run's candidates. */
+/**
+ * The AI's answer, checked against this page, as the run's candidates.
+ * `alreadyRead`: the dose the deterministic reader took from the page's JSON-LD
+ * description (#1800), if any: a NO_DATA must not stand next to it.
+ */
 export function dosingStatement(
   answer: DosingExtractorAnswer,
   pageText: string,
+  alreadyRead: string | null = null,
 ): DosingStatement {
   if (answer.kind === "UNAVAILABLE")
     return {
@@ -184,8 +190,14 @@ export function dosingStatement(
   for (const text of [answer.excerpt, answer.guidance])
     if (text !== null && !page.includes(squash(text)))
       return { values: [], notes: ["adagolás (AI): a kivonat nincs a lapon"] };
+  // the page's own words are an excerpt; the model's reason is not evidence and
+  // is named so (barracuda, #1805): the page can steer it
   const where = (text: string | null) =>
-    `AI-kivonat = ${JSON.stringify((text ?? answer.reason).slice(0, 200))}`;
+    text !== null
+      ? `AI-kivonat = ${JSON.stringify(text.slice(0, 200))}`
+      : `AI-indoklás (nem lapszöveg) = ${JSON.stringify(answer.reason.slice(0, 200))}`;
+  // the deterministic reader on the WHOLE page: one dose, or none it could read
+  const wholePage = readDosing(pageText);
   const value = (
     field: ExtractedValue["field"],
     raw: string,
@@ -196,11 +208,21 @@ export function dosingStatement(
     excerpt: where(text),
   });
 
-  if (answer.mode === "NO_DATA")
+  if (answer.mode === "NO_DATA") {
+    // "no data" next to a dose the reader found is a contradiction, not a state
+    const found = wholePage.raw ?? alreadyRead;
+    if (found !== null)
+      return {
+        values: [],
+        notes: [
+          `adagolás (AI): az AI szerint nincs adat, az olvasó ${found} adagot olvasott`,
+        ],
+      };
     return {
       values: [value("dosingMode", "NO_DATA", answer.excerpt)],
       notes: [],
     };
+  }
 
   if (answer.mode === "FIXED") {
     const parsed = parseDose(answer.dose ?? "");
@@ -218,6 +240,16 @@ export function dosingStatement(
         values: [],
         notes: [
           `adagolás (AI): a saját olvasás eltér (AI ${parsed.canonical}, olvasó ${own.raw ?? "nincs érték"}${own.notes.length ? `: ${own.notes.map((n) => n.split(": ")[1]).join("; ")}` : ""})`,
+        ],
+      };
+    // AND on the whole page (barracuda, #1805): the model picks the excerpt, so
+    // on a page with three doses it could pick the one that reads clean. The
+    // page must hold exactly this dose and nothing the reader cannot read.
+    if (wholePage.raw !== parsed.canonical)
+      return {
+        values: [],
+        notes: [
+          `adagolás (AI): a teljes lap olvasása eltér (AI ${parsed.canonical}, lap ${wholePage.raw ?? "nincs érték"}${wholePage.notes.length ? `: ${wholePage.notes.map((n) => n.split(": ")[1]).join("; ")}` : ""})`,
         ],
       };
     return {

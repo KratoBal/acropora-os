@@ -344,6 +344,43 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(field("dosingGuidance").value, guidance);
   });
 
+  // barracuda, #1805: the description's dose (#1800) and an AI "no data" contradict
+  it("a leírás adagja mellett az AI nincs-adata nem lesz állapot", async () => {
+    const { checks } = await run(
+      [{ productId: "p-1", sources: [] }],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: productPage({ description: "Dose 1 drop per 100 l daily." }),
+        },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        dosingExtractor: {
+          extract: async () => ({
+            kind: "ANSWER",
+            mode: "NO_DATA",
+            dose: null,
+            tests: [],
+            guidance: null,
+            excerpt: null,
+            reason: "nincs adag",
+          }),
+        },
+      },
+    );
+    const field = (key: string) =>
+      checks[0]!.fields.find((f) => f.field === key)!;
+    assert.deepEqual(
+      [field("dosing").value, field("dosingMode").status],
+      ["1 drop/100 L/day", "MISSING"],
+    );
+    assert.match(
+      checks[0]!.fetches[0]!.reason ?? "",
+      /az AI szerint nincs adat, az olvasó 1 drop\/100 L\/day/,
+    );
+  });
+
   // PD-013 calibration: reaching the limit stops the run and says so.
   it("a lekérés-korlátnál a futás megáll, jelzi, és a félbe maradt terméket nem tárolja", async () => {
     const two = { "p-1": facts(), "p-2": facts({ productId: "p-2" }) };

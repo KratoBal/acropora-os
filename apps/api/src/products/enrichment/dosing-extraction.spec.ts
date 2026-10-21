@@ -63,6 +63,59 @@ describe("az AI adagolás-válasza az OS-ben", () => {
     );
   });
 
+  // barracuda, #1805: the model picks the excerpt; the page holds three ways to dose
+  it("a kivonat egyadagos, de a lap nem: a teljes lap olvasása visszatartja", () => {
+    const first = "Dose 5 ml per 100 l once a week.";
+    const page = `${first} Alternatively dose 1 ml per 100 l for every 20 ppm of calcium consumed.`;
+    const r = dosingStatement(
+      answer({ mode: "FIXED", dose: "5 ml/100 L/week", excerpt: first }),
+      page,
+    );
+    assert.deepEqual(r.values, []);
+    assert.match(
+      r.notes[0]!,
+      /a teljes lap olvasása eltér \(AI 5 ml\/100 L\/week, lap nincs érték/,
+    );
+    // control: the same excerpt on a page that holds only this dose
+    assert.equal(
+      dosingStatement(
+        answer({ mode: "FIXED", dose: "5 ml/100 L/week", excerpt: first }),
+        `Kitalált. ${first}`,
+      ).values.length,
+      2,
+    );
+  });
+
+  it("nincs adat, miközben az olvasó adagot talált: ellentmondás, nem állapot", () => {
+    const page = "Kitalált. Dose 1 ml per 100 l daily.";
+    const onPage = dosingStatement(answer({ reason: "nincs" }), page);
+    assert.deepEqual(onPage.values, []);
+    assert.match(
+      onPage.notes[0]!,
+      /az AI szerint nincs adat, az olvasó 1 ml\/100 L\/day adagot olvasott/,
+    );
+    // the description's dose (JSON-LD, #1800) counts the same
+    assert.deepEqual(
+      dosingStatement(
+        answer({ reason: "nincs" }),
+        "Kitalált.",
+        "1 drop/100 L/day",
+      ).values,
+      [],
+    );
+  });
+
+  it("a nincs-adat indoklása nem kivonatként áll", () => {
+    const r = dosingStatement(
+      answer({ reason: "a lapon nincs adag" }),
+      "Kitalált.",
+    );
+    assert.equal(
+      r.values[0]!.excerpt,
+      'AI-indoklás (nem lapszöveg) = "a lapon nincs adag"',
+    );
+  });
+
   it("eltérő számú adag: az olvasó mást olvas, emberhez megy", () => {
     const sentence = "Dose 1 ml per 100 l daily.";
     const r = dosingStatement(

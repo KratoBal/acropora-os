@@ -412,6 +412,7 @@ async function checkProduct(
                 pageText,
               }),
               pageText,
+              statement.values.find((v) => v.field === "dosing")?.raw ?? null,
             );
           })()
         : null;
