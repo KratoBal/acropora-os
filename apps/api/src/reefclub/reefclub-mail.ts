@@ -5,6 +5,10 @@ import type {
 } from "../notifications/mail/mail.port.js";
 
 import {
+  ReefClubAllowlistMailSender,
+  reefClubMailAllow,
+} from "./reefclub-mail-allow.js";
+import {
   reefClubSmtpConfig,
   reefClubSmtpRequested,
   ReefClubSmtpMailSender,
@@ -56,14 +60,21 @@ export function reefClubMailEnvironment(
 
 /**
  * The SMTP sender (Brevo, `reefclub-smtp-mail.ts`) as soon as any
- * `REEFCLUB_SMTP_*` name is set; otherwise the Gmail one, as before.
+ * `REEFCLUB_SMTP_*` name is set; otherwise the Gmail one, as before. With
+ * `REEFCLUB_MAIL_ALLOW` set (the test site only) it is wrapped in the
+ * allow-list gate (`reefclub-mail-allow.ts`); unset, the sender is returned as
+ * it is, which is the production state.
  */
 export function createReefClubMailSender(
   environment: Record<string, string | undefined> = process.env,
 ): MailSender {
-  if (reefClubSmtpRequested(environment))
-    return new ReefClubSmtpMailSender(reefClubSmtpConfig(environment));
-  return new GmailMailSender(fetch, reefClubMailEnvironment(environment));
+  const sender: MailSender = reefClubSmtpRequested(environment)
+    ? new ReefClubSmtpMailSender(reefClubSmtpConfig(environment))
+    : new GmailMailSender(fetch, reefClubMailEnvironment(environment));
+  const allow = reefClubMailAllow(environment);
+  return allow.kind === "on"
+    ? new ReefClubAllowlistMailSender(sender, allow)
+    : sender;
 }
 
 /*
