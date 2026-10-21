@@ -243,6 +243,15 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
+/** Az olvasat a beolvasás óta megváltozott: az automatikus jóváhagyás nem ír rá. */
+class ReadingChangedError extends Error {
+  constructor() {
+    super(
+      "az olvasat közben megváltozott (szerkesztették vagy jóváhagyták): kimarad",
+    );
+  }
+}
+
 @Injectable()
 export class IncomingReviewService {
   private readonly database: Database = prisma;
@@ -360,6 +369,11 @@ export class IncomingReviewService {
     audit: {
       action: string;
       metadata: (reading: StoredReading) => Prisma.InputJsonObject;
+      /**
+       * Az első lépés a tranzakcióban (barracuda #1790): az automatikus jóváhagyás
+       * itt írja az olvasatot, feltételesen. Ha dob, semmi nem íródik.
+       */
+      guard?: (tx: Prisma.TransactionClient) => Promise<void>;
     },
   ): Promise<StoredReading> {
     // az olvasat dokumentuma: összevont számlánál nem a sor azonosítója (P2003)
@@ -376,6 +390,7 @@ export class IncomingReviewService {
     */
     const { pdfDocumentId } = await this.sourceOf(pairing);
     const verified = await this.database.$transaction(async (tx) => {
+      if (audit.guard) await audit.guard(tx);
       const taken = await tx.incomingBillingDocument.findUnique({
         where: {
           source_externalId: { source: "MAILBOX", externalId: documentId },
@@ -492,9 +507,12 @@ export class IncomingReviewService {
     ];
     const nav = numbers.length
       ? await this.database.navIncomingInvoice.findMany({
+          // the modifications and cancellations too: they refer to the number through originalInvoiceNumber
           where: {
-            navInvoiceNumber: { in: numbers },
-            invoiceOperation: "CREATE",
+            OR: [
+              { navInvoiceNumber: { in: numbers } },
+              { originalInvoiceNumber: { in: numbers } },
+            ],
           },
           select: {
             navInvoiceNumber: true,
@@ -502,6 +520,8 @@ export class IncomingReviewService {
             supplierName: true,
             invoiceIssueDate: true,
             invoiceDeliveryDate: true,
+            invoiceOperation: true,
+            originalInvoiceNumber: true,
             currency: true,
             invoiceNetAmount: true,
             invoiceVatAmount: true,
@@ -518,6 +538,8 @@ export class IncomingReviewService {
       currency: row.currency,
       netAmount: row.invoiceNetAmount?.toFixed(2) ?? null,
       vatAmount: row.invoiceVatAmount?.toFixed(2) ?? null,
+      operation: row.invoiceOperation,
+      originalInvoiceNumber: row.originalInvoiceNumber,
     }));
     const report: AutoApproveReport = {
       considered: pending.length,
@@ -531,6 +553,7 @@ export class IncomingReviewService {
       const decision = autoApproval({
         values,
         sources: (reading.sources ?? {}) as ForeignReading["sources"],
+        kind: pairing.kind,
         debits: pairing.debits,
         nav: confirmations,
         problems: approvalProblems,
@@ -557,14 +580,10 @@ export class IncomingReviewService {
       let reason: string | null = null;
       if (options.apply) {
         try {
-          const updated = await this.database.incomingDocumentReading.update({
-            where: { id: reading.id },
-            data: { ...columns(decision.values), sources: decision.sources },
-          });
           await this.verify(
             pairing,
             pairing.document.id,
-            updated,
+            reading,
             decision.values,
             null,
             {
@@ -573,11 +592,46 @@ export class IncomingReviewService {
                 basis: decision.basis,
                 navFields: navFilledFields(decision.sources),
               }),
+              /*
+                A BEOLVASÁS ÓTA VÁLTOZATLAN OLVASATRA ÍR, a jóváhagyással egy
+                tranzakcióban (barracuda #1790): ha közben ember szerkesztette
+                vagy jóváhagyta, a pillanatkép régi, és az ő értékeit írná felül.
+              */
+              guard: async (tx) => {
+                const { count } = await tx.incomingDocumentReading.updateMany({
+                  where: {
+                    id: reading.id,
+                    state: "TO_REVIEW",
+                    updatedAt: reading.updatedAt,
+                  },
+                  data: {
+                    ...columns(decision.values),
+                    sources: decision.sources,
+                  },
+                });
+                if (count !== 1) throw new ReadingChangedError();
+              },
             },
           );
           report.approved += 1;
           written = true;
         } catch (error) {
+          if (
+            error instanceof ReadingChangedError ||
+            error instanceof ConflictException
+          ) {
+            report.approvable -= 1;
+            report.rows.push({
+              ...base,
+              basis: null,
+              reason:
+                error instanceof ReadingChangedError
+                  ? error.message
+                  : "közben jóváhagyták",
+              written: false,
+            });
+            continue;
+          }
           report.failed += 1;
           reason = prismaErrorSummary(error);
         }

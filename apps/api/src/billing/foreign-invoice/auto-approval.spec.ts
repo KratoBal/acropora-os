@@ -48,6 +48,8 @@ const NAV: NavConfirmation = {
   currency: "HUF",
   netAmount: "166984.25",
   vatAmount: "45085.75",
+  operation: "CREATE",
+  originalInvoiceNumber: null,
 };
 const FOREIGN: IncomingReadingValues = {
   ...EMPTY,
@@ -63,6 +65,7 @@ const FOREIGN: IncomingReadingValues = {
 const decide = (over: Partial<Parameters<typeof autoApproval>[0]>) =>
   autoApproval({
     values: HU,
+    kind: "INVOICE",
     sources: { grossAmount: "TEXT" },
     debits: [],
     nav: [NAV],
@@ -71,6 +74,42 @@ const decide = (over: Partial<Parameters<typeof autoApproval>[0]>) =>
   });
 
 describe("automatic approval", () => {
+  it("NAV: a cancelled or modified invoice is not approved; another number's cancellation is no obstacle (barracuda #1790)", () => {
+    const storno: NavConfirmation = {
+      ...NAV,
+      navInvoiceNumber: "KS26/12999",
+      operation: "STORNO",
+      originalInvoiceNumber: "KS26/12106",
+    };
+    const reason =
+      "a NAV-ban módosítás vagy sztornó hivatkozik rá: kézi döntés";
+    assert.deepEqual(decide({ nav: [NAV, storno] }), {
+      approve: false,
+      reason,
+    });
+    assert.deepEqual(
+      decide({ nav: [NAV, { ...storno, operation: "MODIFY" }] }),
+      { approve: false, reason },
+    );
+    assert.equal(
+      decide({ nav: [NAV, { ...storno, originalInvoiceNumber: "KS26/11111" }] })
+        .approve,
+      true,
+    );
+  });
+
+  it("a pro forma is never approved by itself, even fully read and paid exactly (barracuda #1790)", () => {
+    const result = decide({
+      values: FOREIGN,
+      kind: "PROFORMA",
+      debits: [{ amount: "-15900", currency: "HUF" }],
+    });
+    assert.deepEqual(result, {
+      approve: false,
+      reason: "díjbekérő vagy nem számla: kézi döntés",
+    });
+  });
+
   it("NAV: a Hungarian reading the NAV confirms is approved, the missing fields filled from the NAV and marked so", () => {
     const result = decide({});
     assert.equal(result.approve, true);

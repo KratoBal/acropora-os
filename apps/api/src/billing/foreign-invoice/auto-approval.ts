@@ -37,6 +37,9 @@ export interface NavConfirmation {
   currency: string;
   netAmount: string | null;
   vatAmount: string | null;
+  /** CREATE, MODIFY vagy STORNO: a módosítás és a storno az eredeti számra hivatkozik */
+  operation: "CREATE" | "MODIFY" | "STORNO";
+  originalInvoiceNumber: string | null;
 }
 
 export interface AutoApprovalDebit {
@@ -64,6 +67,8 @@ const fixed = (value: number) => value.toFixed(2);
 
 export function autoApproval(input: {
   values: IncomingReadingValues;
+  /** a párosított dokumentum fajtája (`DocumentPairing.kind`) */
+  kind: string;
   sources: Partial<Record<IncomingReadingField, IncomingReadingSource>>;
   debits: readonly AutoApprovalDebit[];
   /** a NAV-sorok ugyanezzel a számmal (bármilyen szállítóé: a szűrés itt történik) */
@@ -72,6 +77,15 @@ export function autoApproval(input: {
   problems: (values: IncomingReadingValues) => string[];
 }): AutoApproval {
   const { values, sources } = input;
+  /*
+    CSAK SZÁMLA (barracuda #1790): egy díjbekérő minden mezője kiolvasható, és
+    előre fizetésnél a terhelés pontosan annyi; jóváhagyva a végszámla mellett
+    kétszer kerülne a könyvekbe. A lista (`mailboxOnlyPairings`) ma is csak
+    INVOICE párosítást ad ide; ez a sor a döntés saját feltétele, nem egy
+    másik helyen álló szűrőé.
+  */
+  if (input.kind !== "INVOICE")
+    return { approve: false, reason: "díjbekérő vagy nem számla: kézi döntés" };
   const base =
     hungarianTaxBase(values.supplierTaxNumber) ??
     hungarianTaxBase(values.supplierEuTaxNumber);
@@ -97,10 +111,30 @@ function byNav(
   if (!values.documentNumber)
     return { approve: false, reason: "nincs számlaszám" };
   const number = numberKey(values.documentNumber);
-  const rows = nav.filter(
+  const sameSupplier = nav.filter(
+    (row) => hungarianTaxBase(row.supplierTaxNumber) === base,
+  );
+  /*
+    A MÓDOSÍTOTT VAGY SZTORNÓZOTT SZÁMLA NEM MEGY MAGÁTÓL (barracuda #1790): a
+    CREATE sor a módosítás után is ott áll, tehát egy sztornózott számla
+    jóváhagyódna, vagy az üres összeg a módosítás ELŐTTI értékkel töltődne.
+    A módosító és a sztornó számla az eredetire az `originalInvoiceNumber`
+    mezőben hivatkozik.
+  */
+  if (
+    sameSupplier.some(
+      (row) =>
+        row.operation !== "CREATE" &&
+        numberKey(row.originalInvoiceNumber ?? "") === number,
+    )
+  )
+    return {
+      approve: false,
+      reason: "a NAV-ban módosítás vagy sztornó hivatkozik rá: kézi döntés",
+    };
+  const rows = sameSupplier.filter(
     (row) =>
-      numberKey(row.navInvoiceNumber) === number &&
-      hungarianTaxBase(row.supplierTaxNumber) === base,
+      row.operation === "CREATE" && numberKey(row.navInvoiceNumber) === number,
   );
   if (rows.length === 0)
     return {

@@ -254,5 +254,86 @@ describe(
         0,
       );
     });
+
+    it("a reading a person changes after it was read is not written over (barracuda #1790)", async () => {
+      const stale = `${PREFIX}stale`;
+      await prisma.incomingSupplierDocument.create({
+        data: {
+          id: stale,
+          gmailMessageId: stale,
+          fileName: "invoice.pdf",
+          sizeBytes: 9,
+          sha256: stale,
+          content: new Uint8Array(Buffer.from("%PDF-1.4 ")),
+          status: "FAILED",
+          kind: "INVOICE",
+          origin: "COLLECTED_MAIL",
+        },
+      });
+      await prisma.incomingDocumentReading.create({
+        data: {
+          documentId: stale,
+          documentNumber: `${PREFIX}F-8`,
+          supplierName: "Kitalált Előfizetés Ltd.",
+          supplierEuTaxNumber: "IE9999999XX",
+          issueDate: new Date("2026-09-19T00:00:00Z"),
+          currency: "HUF",
+          netAmount: new Prisma.Decimal("15900"),
+          vatAmount: new Prisma.Decimal("0"),
+          grossAmount: new Prisma.Decimal("15900"),
+          sources: { grossAmount: "TEXT" },
+          warnings: [],
+          hasText: true,
+        },
+      });
+      pairings.set(stale, pairing(stale, `${PREFIX}F-8`, "15900", "15900"));
+      // the readings are read, and right after that a person corrects this one on the review page
+      const human = "Ember javította Kft.";
+      const readings = new Proxy(prisma.incomingDocumentReading, {
+        get(model, property) {
+          if (property === "findMany")
+            return async (args: Prisma.IncomingDocumentReadingFindManyArgs) => {
+              const rows = await model.findMany(args);
+              await prisma.incomingDocumentReading.update({
+                where: { documentId: stale },
+                data: { supplierName: human },
+              });
+              return rows;
+            };
+          const value = Reflect.get(model, property) as unknown;
+          return typeof value === "function" ? value.bind(model) : value;
+        },
+      });
+      const database = new Proxy(prisma, {
+        get(client, property) {
+          if (property === "incomingDocumentReading") return readings;
+          const value = Reflect.get(client, property) as unknown;
+          return typeof value === "function" ? value.bind(client) : value;
+        },
+      });
+      const racing = new IncomingReviewService({
+        documentPairings: async () => pairings,
+      } as never);
+      Object.assign(racing, { database });
+      const report = await racing.autoApprovePending({ apply: true });
+      const row = report.rows.find((r) => r.documentId === stale);
+      assert.deepEqual(
+        [row?.written, row?.reason],
+        [
+          false,
+          "az olvasat közben megváltozott (szerkesztették vagy jóváhagyták): kimarad",
+        ],
+      );
+      const after = await prisma.incomingDocumentReading.findUniqueOrThrow({
+        where: { documentId: stale },
+      });
+      assert.deepEqual([after.state, after.supplierName], ["TO_REVIEW", human]);
+      assert.equal(
+        await prisma.incomingBillingDocument.count({
+          where: { externalId: stale },
+        }),
+        0,
+      );
+    });
   },
 );
