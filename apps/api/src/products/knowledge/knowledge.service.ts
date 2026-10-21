@@ -158,6 +158,12 @@ export class ProductKnowledgeService {
     fieldResultId: unknown,
     user: Actor,
     variantId?: unknown,
+    /**
+     * The rule that accepts it instead of a person (`AUTO_ACCEPT_RULE`, the
+     * `knowledge-auto-accept` command); `user` is then the person who ran it.
+     * Absent: a person accepts, and that clears an earlier rule's mark.
+     */
+    rule?: string,
   ): Promise<ProductKnowledge> {
     const result = await this.currentResult(productId, fieldResultId);
     const decision = factFromResult(result);
@@ -170,7 +176,7 @@ export class ProductKnowledgeService {
     );
     if (scope.definition.medusaNativeField === "VARIANT_BARCODE")
       return this.acceptAsBarcode(productId, result.id, decision, scope, user);
-    await this.store.upsertFact({
+    const fact = {
       productId,
       variantId: scope.variantId,
       field: result.field,
@@ -180,7 +186,15 @@ export class ProductKnowledgeService {
       fieldResultId: result.id,
       acceptedById: user.id,
       acceptedAt: this.now(),
-    });
+    };
+    if (rule === undefined)
+      await this.store.upsertFact({ ...fact, acceptedByRule: null });
+    else if (
+      !(await this.store.upsertRuleFact({ ...fact, acceptedByRule: rule }))
+    )
+      throw new ConflictException(
+        `a person has accepted ${result.field}: the rule does not overwrite it`,
+      );
     return this.knowledge(productId);
   }
 

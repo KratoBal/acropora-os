@@ -1,5 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
+
+import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
 import type { ProductCopyBlock } from "@acropora/types";
 
 import type { StoredCheck } from "../enrichment/enrichment-run.js";
@@ -83,7 +85,25 @@ export interface KnowledgeStore {
     fieldResultId: string;
     acceptedById: string;
     acceptedAt: Date;
+    /**
+     * The rule that accepted it (`AUTO_V1`, `knowledge-auto-accept`); absent
+     * or null: a person did. A person's accept writes null, so it CONFIRMS an
+     * automatic fact, and only then may the fact leave the OS.
+     */
+    acceptedByRule?: string | null;
   }): Promise<void>;
+  /**
+   * THE RULE'S WRITE (`knowledge-auto-accept`): like `upsertFact`, but it
+   * never overwrites a person's fact, and the guard is IN the write, not in a
+   * read before it (barracuda, #1801: a person accepting between the dry run
+   * and `--apply` would otherwise lose the fact to the rule). `false`: a
+   * person's fact stands, nothing was written.
+   */
+  upsertRuleFact(
+    input: Parameters<KnowledgeStore["upsertFact"]>[0] & {
+      acceptedByRule: string;
+    },
+  ): Promise<boolean>;
   /**
    * AZ ELFOGADOTT EAN MINT VONALKÓD (SEO P0 PR 4, C3). Létrehozza a változat
    * `ProductBarcode` sorát (`source = JEV`, a bizonyítékkal), és primary-vé teszi,
@@ -302,6 +322,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       fieldResultId: input.fieldResultId,
       acceptedById: input.acceptedById,
       acceptedAt: input.acceptedAt,
+      acceptedByRule: input.acceptedByRule ?? null,
     };
     // `scopeKey` is `coalesce(variantId, '')` (the migration's CHECK): the
     // unique key, because a NULL in a unique index never collides
@@ -324,6 +345,49 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
       },
       update: { ...data, revision: { increment: 1 } },
     });
+  }
+
+  async upsertRuleFact(
+    input: Parameters<KnowledgeStore["upsertRuleFact"]>[0],
+  ): Promise<boolean> {
+    const scopeKey = input.variantId ?? "";
+    const data = {
+      value: input.value,
+      unit: input.unit,
+      status: input.status,
+      fieldResultId: input.fieldResultId,
+      acceptedById: input.acceptedById,
+      acceptedAt: input.acceptedAt,
+      acceptedByRule: input.acceptedByRule,
+    };
+    // an earlier RULE fact is updated; a person's (acceptedByRule NULL) is not
+    const updated = await prisma.productKnowledgeFact.updateMany({
+      where: {
+        productId: input.productId,
+        scopeKey,
+        field: input.field,
+        acceptedByRule: { not: null },
+      },
+      data: { ...data, revision: { increment: 1 } },
+    });
+    if (updated.count > 0) return true;
+    try {
+      await prisma.productKnowledgeFact.create({
+        data: {
+          productId: input.productId,
+          variantId: input.variantId,
+          scopeKey,
+          field: input.field,
+          revision: 1,
+          ...data,
+        },
+      });
+      return true;
+    } catch (error) {
+      // the unique key holds a row the update did not take: a person's fact
+      if (isPrismaErrorCode(error, "P2002")) return false;
+      throw error;
+    }
   }
 
   async definition(field: string): Promise<FactDefinition | null> {

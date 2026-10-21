@@ -139,7 +139,9 @@ export async function knowledgeRowsFor(
   const tables = db as KnowledgeRowsDatabase;
   const [facts, copy, kiadhato, nativ] = await Promise.all([
     tables.productKnowledgeFact.findMany({
-      where: { productId },
+      // an automatically accepted fact stays in the OS until a person
+      // confirms it (Product Knowledge step 2, card 85c38ab1)
+      where: { productId, acceptedByRule: null },
       orderBy: [{ field: "asc" }, { scopeKey: "asc" }],
       select: {
         field: true,

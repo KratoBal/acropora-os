@@ -324,4 +324,70 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
       /ProductKnowledgeFact_scopeKey_check/,
     );
   });
+
+  /**
+   * A SZABÁLY ÍRÁSA (Product Knowledge 2. lépés, barracuda #1801): a jelölés az
+   * adatbázisban, az emberi elfogadás nullázza, és a szabály egy emberi tényt
+   * az ÍRÁSBAN nem ír felül (nem egy előtte álló olvasásban).
+   */
+  it("a szabály jelöl, az ember megerősít, és a szabály nem írja felül az embert", async () => {
+    const service = knowledge();
+    const actor = { id: userId };
+    // a saját terméke: a közös termék tényeit a többi teszt számolja
+    const { id: productId } = await prisma.product.create({
+      data: { name: `${PREFIX}Szabály ${suffix}` },
+    });
+    const result = await service.addEvidence(
+      productId,
+      {
+        field: "dosing",
+        raw: "1 Tropfen je 100 Liter /Tag",
+        value: "1 drop/100 L/day",
+        url: "https://gyarto.example.invalid/amino-szabaly",
+        sourceType: "MANUFACTURER_PAGE",
+      },
+      actor,
+    );
+    const sor = () =>
+      prisma.productKnowledgeFact.findUniqueOrThrow({
+        where: {
+          productId_scopeKey_field: {
+            productId,
+            scopeKey: "",
+            field: "dosing",
+          },
+        },
+        select: { acceptedByRule: true, revision: true },
+      });
+    await service.accept(
+      productId,
+      result.fieldResultId,
+      actor,
+      undefined,
+      "AUTO_V1",
+    );
+    assert.equal((await sor()).acceptedByRule, "AUTO_V1");
+    // egy korábbi szabály-tényt a szabály frissít
+    await service.accept(
+      productId,
+      result.fieldResultId,
+      actor,
+      undefined,
+      "AUTO_V1",
+    );
+    assert.deepEqual(await sor(), { acceptedByRule: "AUTO_V1", revision: 2 });
+    await service.accept(productId, result.fieldResultId, actor);
+    assert.equal((await sor()).acceptedByRule, null);
+    await assert.rejects(
+      service.accept(
+        productId,
+        result.fieldResultId,
+        actor,
+        undefined,
+        "AUTO_V1",
+      ),
+      /a person has accepted dosing/,
+    );
+    assert.deepEqual(await sor(), { acceptedByRule: null, revision: 3 });
+  });
 });

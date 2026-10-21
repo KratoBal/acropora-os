@@ -8730,33 +8730,40 @@ model ProductEnrichmentFieldResult {
 /// együtt CSAK a mutatott JEV eredményben áll. Nincs `sourceType`/`sourceRef`
 /// oszlop: a forrás a mutatón át olvasható, így semmi nincs két helyen.
 model ProductKnowledgeFact {
-  id            String                       @id @default(cuid())
-  productId     String
-  product       Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id             String                       @id @default(cuid())
+  productId      String
+  product        Product                      @relation(fields: [productId], references: [id], onDelete: Cascade)
   /// Változat-szintű tény változata; NULL = termékszintű (SEO P0 PR 3). Csak OS-változat
   /// (az FK köti), Medusa-azonosító soha.
-  variantId     String?
-  variant       ProductVariant?              @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId      String?
+  variant        ProductVariant?              @relation(fields: [variantId], references: [id], onDelete: Cascade)
   /// `coalesce(variantId, '')`, a CHECK köti (a migráció): az egyedi kulcs része, mert a
   /// NULL egy egyedi indexben nem ütközik.
-  scopeKey      String                       @default("") @db.VarChar(32)
+  scopeKey       String                       @default("") @db.VarChar(32)
   /// A JEV mezőkulcs (`packages/jev/src/product-enrichment/fields.ts`).
-  field         String                       @db.VarChar(48)
+  field          String                       @db.VarChar(48)
   /// Csak VERIFIED/SUGGESTED (vagy emberi feloldás) mellett; ütközésnél NULL.
-  value         String?
+  value          String?
   /// Mennyiségnél a kanonikus egység (pl. "ml"), egyébként NULL.
-  unit          String?                      @db.VarChar(16)
+  unit           String?                      @db.VarChar(16)
   /// A JEV státusz változatlanul (VERIFIED, SUGGESTED, CONFLICTING_SOURCES).
-  status        String                       @db.VarChar(32)
+  status         String                       @db.VarChar(32)
   /// Az a JEV eredmény, amiből elfogadtuk. RESTRICT: lásd a migrációt.
-  fieldResultId String
-  fieldResult   ProductEnrichmentFieldResult @relation(fields: [fieldResultId], references: [id], onDelete: Restrict)
-  acceptedById  String
-  acceptedBy    User                         @relation("ProductKnowledgeFactAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
-  acceptedAt    DateTime
+  fieldResultId  String
+  fieldResult    ProductEnrichmentFieldResult @relation(fields: [fieldResultId], references: [id], onDelete: Restrict)
+  acceptedById   String
+  acceptedBy     User                         @relation("ProductKnowledgeFactAcceptedBy", fields: [acceptedById], references: [id], onDelete: Restrict)
+  acceptedAt     DateTime
+  /// SZABÁLY SZERINTI AUTOMATIKUS ELFOGADÁS (Product Knowledge 2. lépés, kártya
+  /// 85c38ab1): a szabály neve (`AUTO_V1`), ha a tényt nem ember, hanem a
+  /// `knowledge-auto-accept` parancs fogadta el (`acceptedBy` a futtató ember).
+  /// NULL: ember fogadta el. Az ilyen tény az OS-ben marad: a Medusa-vetítés
+  /// (tény, változat-méret, esedékesség) NEM viszi ki, amíg egy emberi elfogadás
+  /// ugyanarra az eredményre nullára nem állítja (a webshop befagyasztva).
+  acceptedByRule String?                      @db.VarChar(32)
   /// Minden elfogadás és feloldás növeli; a szöveg elavultsága ehhez mér.
-  revision      Int
-  updatedAt     DateTime                     @updatedAt
+  revision       Int
+  updatedAt      DateTime                     @updatedAt
 
   @@unique([productId, scopeKey, field])
   @@index([fieldResultId])

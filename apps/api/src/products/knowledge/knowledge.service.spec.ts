@@ -44,6 +44,8 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
     sourceType: string | null;
   })[] = [];
   const facts = new Map<string, FactRecord>();
+  /** `acceptedByRule` per fact key, as the store wrote it (null: a person). */
+  const rules = new Map<string, string | null>();
   const copy = new Map<ProductCopyBlock, CopyRecord>();
   const barcodes: {
     variantId: string;
@@ -105,6 +107,7 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
       // the Prisma key: product, scopeKey (`variantId ?? ""`), field
       const key = `${input.variantId ?? ""}|${input.field}`;
       const previous = facts.get(key);
+      rules.set(key, input.acceptedByRule ?? null);
       const result = results.find((r) => r.id === input.fieldResultId)!;
       facts.set(key, {
         field: input.field,
@@ -126,6 +129,13 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
           retrievedAt: null,
         },
       });
+    },
+    upsertRuleFact: async (input) => {
+      // the Prisma write's guard: a person's fact (no rule) is not overwritten
+      const key = `${input.variantId ?? ""}|${input.field}`;
+      if (facts.has(key) && rules.get(key) === null) return false;
+      await store.upsertFact(input);
+      return true;
     },
     copy: async () => [...copy.values()],
     saveCopy: async (input) => {
@@ -150,7 +160,7 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
       });
     },
   };
-  return { store, results, facts, copy, barcodes };
+  return { store, results, facts, rules, copy, barcodes };
 }
 
 function service(memory = memoryStore()) {
@@ -274,6 +284,46 @@ describe("product knowledge: the conflict path end to end", () => {
       (await projected(memory)).facts.map((f) => [f.field, f.status]),
       [["dosing", "VERIFIED"]],
     );
+  });
+});
+
+describe("product knowledge: accepted by rule (Product Knowledge step 2)", () => {
+  /**
+   * WHAT TURNS IT RED: the rule's name does not reach the store, or a person's
+   * later accept of the same result keeps it (the fact would stay hidden from
+   * the shop for good, or a person's confirmation would not count).
+   */
+  it("the rule's accept is marked; a person's accept of the same result clears the mark", async () => {
+    const { knowledge, memory } = service();
+    const daily = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(
+      PRODUCT,
+      daily.fieldResultId,
+      USER,
+      undefined,
+      "AUTO_V1",
+    );
+    assert.equal(memory.rules.get("|dosing"), "AUTO_V1");
+    await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
+    assert.equal(memory.rules.get("|dosing"), null);
+  });
+
+  // barracuda, #1801: a person accepting between the dry run and --apply
+  it("the rule does not overwrite a person's fact, even on the same result", async () => {
+    const { knowledge, memory } = service();
+    const daily = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
+    await assert.rejects(
+      knowledge.accept(
+        PRODUCT,
+        daily.fieldResultId,
+        USER,
+        undefined,
+        "AUTO_V1",
+      ),
+      /a person has accepted dosing/,
+    );
+    assert.equal(memory.rules.get("|dosing"), null);
   });
 });
 

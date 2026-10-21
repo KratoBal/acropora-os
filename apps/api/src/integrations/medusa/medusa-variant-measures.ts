@@ -161,7 +161,12 @@ export interface MeasureSourceDatabase {
   };
   productKnowledgeFact: {
     findMany(args: {
-      where: { productId: string; field: { in: string[] }; status: "VERIFIED" };
+      where: {
+        productId: string;
+        field: { in: string[] };
+        status: "VERIFIED";
+        acceptedByRule: null;
+      };
       select: { field: true; variantId: true; value: true; unit: true };
     }): Promise<MeasureFact[]>;
   };
@@ -194,6 +199,8 @@ export async function variantMeasuresFor(
       productId,
       field: { in: [...nativeFields.keys()] },
       status: "VERIFIED",
+      // an automatic fact stays in the OS until a person confirms it
+      acceptedByRule: null,
     },
     select: { field: true, variantId: true, value: true, unit: true },
   });
