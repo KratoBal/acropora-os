@@ -44,7 +44,8 @@ function invoiceLines(
   const net = 100 + n;
   const vat = Math.round(net * 21) / 100;
   return [
-    `Koholt Akvarium ${n} GmbH`,
+    // jogi forma NELKUL: a szoveg szallito-nev szabalya (jogi formas elso sor) igy nem olvassa ki, a parositas nevet adja
+    `Koholt Akvarium ${n}`,
     `VAT ID: DE1000000${String(n).padStart(2, "0")}`,
     `${overrides.number ?? "Invoice No"}: KT-2026-${String(n).padStart(4, "0")}`,
     `${overrides.date ?? "Invoice date"}: 2026-03-${String((n % 27) + 1).padStart(2, "0")}`,
