@@ -136,7 +136,7 @@ export function readDosing(text: string): DosingReading {
     );
     const otherPeriod = OTHER_PERIOD.test(sentence);
     const where = at(from, to);
-    // The pack's reach first ("500 ml 10 000 literhez", "A 250 ml bottle treats
+    // The pack's reach first ("500 ml 10 000 literhez elegendő", "A 250 ml bottle treats
     // 2500 l per week"): said, and it blocks nothing, with or without a period.
     if (amounts.length > 0 && volumes.length > 0 && REACH.test(sentence)) {
       notes.push(`adagolás: kiszerelés-mondat, nem adag: ${where}`);
