@@ -33,6 +33,7 @@ import {
   toIncomingListItem,
 } from "../incoming-billing-documents.js";
 import {
+  isEuNotHungarian,
   readForeignInvoice,
   type ForeignReading,
 } from "./foreign-invoice-reading.js";
@@ -153,6 +154,21 @@ export function approvalProblems(values: IncomingReadingValues): string[] {
           .join(", ")}.`,
       ]
     : [];
+  // De Jong Marinelife (acrobot 34628): "Hiányzó mező: ÁFA" did not say what to write. A non-Hungarian EU tax
+  // number with net equal to gross is an intra-community acquisition: the hint names it; nothing is filled in
+  if (
+    values.vatAmount === null &&
+    values.netAmount &&
+    values.grossAmount &&
+    new Prisma.Decimal(values.netAmount)
+      .minus(values.grossAmount)
+      .abs()
+      .lte(SUM_TOLERANCE) &&
+    isEuNotHungarian(values.supplierEuTaxNumber)
+  )
+    problems.push(
+      "Közösségi beszerzésnek látszik (EU adószám, a nettó egyenlő a bruttóval): ha a számlán nincs ÁFA, írj be 0-t.",
+    );
   if (values.netAmount && values.vatAmount && values.grossAmount) {
     const sum = new Prisma.Decimal(values.netAmount).plus(values.vatAmount);
     if (sum.minus(values.grossAmount).abs().gt(SUM_TOLERANCE))

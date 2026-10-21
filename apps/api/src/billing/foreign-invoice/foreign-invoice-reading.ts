@@ -235,6 +235,13 @@ function labelledAmount(
 
 const decimal = (value: number) => value.toFixed(2);
 const HU_TAX = /^\d{8}-\d-\d{2}$/;
+const EU_NOT_HU =
+  /^(AT|BE|BG|CY|CZ|DE|DK|EE|EL|ES|FI|FR|HR|IE|IT|LT|LU|LV|MT|NL|PL|PT|RO|SE|SI|SK|XI)[0-9A-Z]{2,13}$/;
+
+/** Egy EU-tagállam közösségi adószáma, a magyar kivételével (`NL802708705B01`, `IE4143435AH`). */
+export function isEuNotHungarian(value: string | null | undefined): boolean {
+  return EU_NOT_HU.test((value ?? "").replace(/\s/g, "").toUpperCase());
+}
 
 // ---- a kinyerés ------------------------------------------------------------
 
@@ -367,6 +374,25 @@ export function readForeignInvoice(input: ForeignReadingInput): ForeignReading {
     // adózás 0 ÁFÁ-ját a REVERSE_CHARGE szabály adja.
     values.vatAmount = decimal(gross - net);
     sources.vatAmount = sources.grossAmount ?? "TEXT";
+  } else if (
+    net !== null &&
+    gross !== null &&
+    vat === null &&
+    pairingGross &&
+    Math.abs(net - gross) <= 0.02 &&
+    isEuNotHungarian(values.supplierEuTaxNumber)
+  ) {
+    /*
+      KÖZÖSSÉGI BESZERZÉSNEK LÁTSZIK, DE NEM TÖLTJÜK KI (Balázs, De Jong
+      Marinelife, acrobot 34628 és 34653). Ha a nettó és a bruttó két független
+      forrásból egyezik, a fenti ág már 0 ÁFÁ-t számol. Ide csak az a sor jut,
+      ahol a bruttó a PÁROSÍTÁSBÓL jön: illesztős számlánál az az illesztő
+      nettója, tehát az egyezés szerkezeti, nem bizonyíték arra, hogy nincs
+      ÁFA. Az ellenőrző lap ezért megnevezi a mezőt és az okot.
+    */
+    warnings.push(
+      `Közösségi beszerzésnek látszik (${values.supplierEuTaxNumber}, a nettó egyenlő a bruttóval), de a bruttó a banki párosításból jön, nem a számláról: az ÁFÁ-t kézzel kell megadni (közösségi beszerzésnél 0).`,
+    );
   }
 
   /*
