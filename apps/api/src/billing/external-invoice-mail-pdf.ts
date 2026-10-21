@@ -284,23 +284,25 @@ export async function fillExternalPdfsFromMail(input: {
 export async function mailPdfCandidates(
   month: string,
 ): Promise<MailPdfCandidate[]> {
-  return prisma.externalBillingDocument
-    .findMany({
-      where: {
-        source: "SZAMLAZZ",
-        pdfStorageKey: null,
-        documentNumber: { not: "" },
-        issueDate: monthRange(month),
-      },
-      select: {
-        id: true,
-        documentNumber: true,
-        issueDate: true,
-        grossAmount: true,
-      },
-      orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
-    })
-    .then((rows) =>
-      rows.map((row) => ({ ...row, grossAmount: row.grossAmount.toString() })),
-    );
+  // one awaited call, not a `.then` chain: the select-field guard
+  // (unas-prisma-select-mezok.spec.ts) reads `prisma.<model>.findMany({`
+  const rows = await prisma.externalBillingDocument.findMany({
+    where: {
+      source: "SZAMLAZZ",
+      pdfStorageKey: null,
+      documentNumber: { not: "" },
+      issueDate: monthRange(month),
+    },
+    select: {
+      id: true,
+      documentNumber: true,
+      issueDate: true,
+      grossAmount: true,
+    },
+    orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
+  });
+  return rows.map((row) => ({
+    ...row,
+    grossAmount: row.grossAmount.toString(),
+  }));
 }
