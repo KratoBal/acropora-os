@@ -9,6 +9,7 @@ import {
   type InvoiceTextReading,
   type KnownInvoiceNumber,
 } from "./invoice-text.js";
+import { readUploadText } from "./upload-text.js";
 
 /**
  * EGY MÁR TÁROLT DOKUMENTUM ÁLTALÁNOS OLVASÁSA ÚJRA, A MAI SZABÁLYOKKAL
@@ -30,6 +31,15 @@ import {
  * Ha az új olvasás nem talál számot, a régi szám marad, KIVÉVE ha az a
  * szövegben ügyfél-azonosítóként áll, vagy adószám: az soha nem számlaszám.
  * Egy adószám banki hivatkozásnak sem marad meg (acrobot 26158, UNAS).
+ *
+ * A KÉZI FELTÖLTÉS a feltöltés saját láncán megy át (`readUploadText`, acrobot
+ * 34581), ha a hívó megadja a párosított terhelés közleményét: így a banki
+ * hivatkozás a SAJÁT terhelésből jön, ahogy 2026-10-21 óta a feltöltésnél is.
+ * A CLI mindig megadja, tehát ott MINDEN kiválasztás (`--ids`, `--number`,
+ * `--unread-uploads`, `--failed-uploads`) alatt minden feltöltés így olvasódik;
+ * párosított terhelés nélkül üres listával. Egy meglévő banki hivatkozás ott is
+ * megmarad, de ha a friss olvasaté más, a jelentés kiírja mind a kettőt, és a
+ * száraz futás átnézője dönt (barracuda, #1787).
  *
  * A FAJTA (`kind`) EGY IRÁNYBAN VÁLTOZHAT: számlából díjbekérő, ha a szöveg
  * díjbekérőnek mondja magát (ugyanaz a `looksLikeProforma`, amivel a begyűjtés
@@ -56,6 +66,12 @@ export interface StoredTextSelector {
    * nem olvasott (a feltöltés 2026-10-05-ig csak a mintán ment át)
    */
   unreadUploads?: true;
+  /**
+   * a kézi feltöltések, amiket a szállítói minta nem ismert fel (FAILED), akkor
+   * is, ha az általános olvasó már olvasta őket: a 2026-10-21-i lánc (saját
+   * terhelés közleménye) előtt tárolt olvasat pótlása; `since`: ettől a naptól
+   */
+  failedUploads?: { since: Date | null };
 }
 
 export interface StoredTextRereadDeps {
@@ -68,6 +84,11 @@ export interface StoredTextRereadDeps {
    * minden úgy megy, mint eddig.
    */
   knownNumbers?(): Promise<readonly KnownInvoiceNumber[]>;
+  /**
+   * A dokumentumhoz párosított terhelés(ek) közleménye. Ha megvan, a kézi
+   * feltöltés a feltöltés láncán olvasódik újra (`readUploadText`).
+   */
+  narratives?(documentId: string): Promise<readonly string[]>;
   save(
     id: string,
     reading: InvoiceTextReading,
@@ -92,6 +113,10 @@ export interface StoredTextRereadRow {
   after: Brief | null;
   /** a bruttó és a pénznem előtte és utána („-76096 HUF”), ha bármelyik van */
   amount?: { before: string | null; after: string | null };
+  /** a banki hivatkozás előtte és utána, ha bármelyik van */
+  reference?: { before: string | null; after: string | null };
+  /** ha a friss olvasat banki hivatkozása eltér a megtartottól: mind a kettő */
+  keptReference?: { kept: string | null; fresh: string | null };
   changed: boolean;
 }
 
@@ -164,17 +189,36 @@ export async function rereadStoredText(
       continue;
     }
     const hints = { fileName: document.fileName, subject: document.subject };
-    const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
-    const navNumbers = supplier ? await deps.navNumbers(taxBase(supplier)) : [];
-    const read = readInvoiceText(lines, {
-      ...hints,
-      navNumbers: () => navNumbers,
-    });
-    // ugyanaz a szabály, mint a begyűjtésnél (`withKnownNumber`)
-    const fresh =
-      read.supplierTaxNumber || !deps.knownNumbers
-        ? read
-        : withKnownNumber(read, lines, await (known ??= deps.knownNumbers()));
+    const knownOnce = () =>
+      (known ??= deps.knownNumbers?.() ?? Promise.resolve([]));
+    let fresh: InvoiceTextReading;
+    const uploadChain = document.origin === "UPLOAD" && !!deps.narratives;
+    if (uploadChain && deps.narratives) {
+      // a feltöltés saját lánca, a párosított terhelés közleményével
+      fresh = await readUploadText(
+        lines,
+        hints,
+        await deps.narratives(document.id),
+        {
+          navNumbers: (base) => deps.navNumbers(base),
+          knownNumbers: knownOnce,
+        },
+      );
+    } else {
+      const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
+      const navNumbers = supplier
+        ? await deps.navNumbers(taxBase(supplier))
+        : [];
+      const read = readInvoiceText(lines, {
+        ...hints,
+        navNumbers: () => navNumbers,
+      });
+      // ugyanaz a szabály, mint a begyűjtésnél (`withKnownNumber`)
+      fresh =
+        read.supplierTaxNumber || !deps.knownNumbers
+          ? read
+          : withKnownNumber(read, lines, await knownOnce());
+    }
     const oldNumber = old?.invoiceNumber ?? null;
     const keepOld =
       fresh.invoiceNumber === null &&
@@ -209,7 +253,25 @@ export async function rereadStoredText(
         JSON.stringify(brief(next, kind)) ||
       (old?.bankReference ?? null) !== (next.bankReference ?? null) ||
       amount.before !== amount.after;
-    const shown = amount.before || amount.after ? { amount } : {};
+    const reference = {
+      before: old?.bankReference ?? null,
+      after: next.bankReference ?? null,
+    };
+    const keptReference = {
+      kept: reference.after,
+      fresh: fresh.bankReference ?? null,
+    };
+    const shown = {
+      ...(amount.before || amount.after ? { amount } : {}),
+      ...(reference.before !== reference.after ? { reference } : {}),
+      // csak a feltöltés láncán: a begyűjtés hivatkozása nem a szövegből jön,
+      // ott a friss olvasatban sosincs, és minden sor zajt adna
+      ...(uploadChain &&
+      keptReference.fresh !== null &&
+      keptReference.fresh !== keptReference.kept
+        ? { keptReference }
+        : {}),
+    };
     const clears = oldNumber !== null && next.invoiceNumber === null;
     if (clears && !allowClear) {
       rows.push({
@@ -255,6 +317,14 @@ export function rereadReport(
               : `${show(row.before)} -> ${show(row.after)}${
                   row.amount && row.amount.before !== row.amount.after
                     ? ` | bruttó ${row.amount.before ?? "-"} -> ${row.amount.after ?? "-"}`
+                    : ""
+                }${
+                  row.reference
+                    ? ` | banki hivatkozás ${row.reference.before ?? "-"} -> ${row.reference.after ?? "-"}`
+                    : ""
+                }${
+                  row.keptReference
+                    ? ` | banki hivatkozás megtartva ${row.keptReference.kept ?? "-"}, friss ${row.keptReference.fresh ?? "-"}`
                     : ""
                 }${row.changed ? "" : "  (változatlan)"}`
         }\n`,
