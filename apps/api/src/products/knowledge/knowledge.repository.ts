@@ -36,6 +36,8 @@ export interface FactRecord {
   public: boolean;
   acceptedAt: Date;
   acceptedBy: { id: string; displayName: string };
+  /** The rule that accepted it, or `null`: a person (Product Knowledge step 2). */
+  acceptedByRule: string | null;
   fieldResultId: string;
   /** Read through the pointer, never stored on the fact. */
   source: {
@@ -276,6 +278,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
         status: true,
         revision: true,
         acceptedAt: true,
+        acceptedByRule: true,
         fieldResultId: true,
         acceptedBy: { select: { id: true, displayName: true } },
         fieldResult: {
@@ -303,6 +306,7 @@ export class PrismaKnowledgeStore implements KnowledgeStore {
         revision: row.revision,
         public: kiadhato.has(row.field),
         acceptedAt: row.acceptedAt,
+        acceptedByRule: row.acceptedByRule,
         acceptedBy: row.acceptedBy,
         fieldResultId: row.fieldResultId,
         source: {

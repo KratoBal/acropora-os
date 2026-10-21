@@ -367,6 +367,11 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
       "AUTO_V1",
     );
     assert.equal((await sor()).acceptedByRule, "AUTO_V1");
+    // a panel ezt a nézetet olvassa: a szabály neve az adatbázisból jön át
+    assert.deepEqual(
+      (await service.knowledge(productId)).facts.map((f) => f.acceptedByRule),
+      ["AUTO_V1"],
+    );
     // egy korábbi szabály-tényt a szabály frissít
     await service.accept(
       productId,

@@ -122,6 +122,7 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
           id: input.acceptedById,
           displayName: "Kitalált Elfogadó",
         },
+        acceptedByRule: input.acceptedByRule ?? null,
         fieldResultId: input.fieldResultId,
         source: {
           sourceType: result.sourceType,
@@ -304,8 +305,17 @@ describe("product knowledge: accepted by rule (Product Knowledge step 2)", () =>
       "AUTO_V1",
     );
     assert.equal(memory.rules.get("|dosing"), "AUTO_V1");
-    await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
+    // the view the panel reads names the rule, so a person can see what to confirm
+    assert.deepEqual(
+      (await knowledge.knowledge(PRODUCT)).facts.map((f) => f.acceptedByRule),
+      ["AUTO_V1"],
+    );
+    const view = await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
     assert.equal(memory.rules.get("|dosing"), null);
+    assert.deepEqual(
+      view.facts.map((f) => f.acceptedByRule),
+      [null],
+    );
   });
 
   // barracuda, #1801: a person accepting between the dry run and --apply
@@ -524,6 +534,18 @@ describe("product knowledge: the variant a fact belongs to (SEO P0 PR 3)", () =>
       [["weight", "v-egy", 1]],
     );
     assert.deepEqual([...memory.facts.keys()], ["v-egy|weight"]);
+  });
+
+  // barracuda, #1801: a native field (weight, size, barcode) leaves through the
+  // variant projection, past the rule's filter; the rule may not accept it
+  it("the rule does not accept a field with a native shop target", async () => {
+    const { knowledge, memory } = service(memoryStore(["v-egy"]));
+    const r = await knowledge.addEvidence(PRODUCT, WEIGHT, USER);
+    await assert.rejects(
+      knowledge.accept(PRODUCT, r.fieldResultId, USER, undefined, "AUTO_V1"),
+      /a rule does not accept weight: it has a native shop field/,
+    );
+    assert.equal(memory.facts.size, 0);
   });
 
   it("one variant: a second acceptance bumps the same row, it does not open a new one", async () => {
