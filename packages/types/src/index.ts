@@ -460,6 +460,7 @@ export {
   ASSET_POWER_CONSUMPTION_UNIT,
   assetCriticalityLabel,
   assetPhaseConnectionLabel,
+  assetUnitApplies,
   withAssetUnit,
   assetEventLabel,
 } from "./asset-management.js";

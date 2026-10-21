@@ -12,14 +12,15 @@ export function AssetUnitAdornment({
   children,
   className = "text-sm text-dusk-500",
 }: {
-  unit: string;
+  /** Hiányzó egységnél csak a mező áll (lásd `assetUnitApplies`). */
+  unit?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <div className="flex items-center gap-2">
       <div className="min-w-0 flex-1">{children}</div>
-      <span className={className}>{unit}</span>
+      {unit ? <span className={className}>{unit}</span> : null}
     </div>
   );
 }

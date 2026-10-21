@@ -667,7 +667,20 @@ describe("AssetDetailPage fogyasztás-mezőinek egysége", () => {
     render(<AssetDetailPage assetId="asset-1" />);
 
     expect(await screen.findByText("3 A")).toBeTruthy();
-    expect(screen.getByText("6,15/5,5 kW")).toBeTruthy();
+    // A perjeles Fogyasztás NEM kap egységet (acrobot döntése): a migráció
+    // sem tudta, mi az, a kiírás se állítsa.
+    expect(screen.getByText("6,15/5,5")).toBeTruthy();
+    expect(screen.queryByText("6,15/5,5 kW")).toBeNull();
+  });
+
+  it("a tiszta számú Fogyasztás megkapja a kW-ot", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      powerConsumptionRaw: "1,5",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("1,5 kW")).toBeTruthy();
   });
 
   it("a már egységes érték nem kap másodikat", async () => {

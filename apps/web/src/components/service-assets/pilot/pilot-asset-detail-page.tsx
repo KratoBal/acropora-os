@@ -525,6 +525,7 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                     value={withAssetUnit(
                       asset.powerConsumptionRaw,
                       ASSET_POWER_CONSUMPTION_UNIT,
+                      { onlyPlainNumber: true },
                     )}
                   />
                   <Field

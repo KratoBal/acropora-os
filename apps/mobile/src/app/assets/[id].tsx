@@ -569,6 +569,7 @@ export default function AssetDetailScreen() {
                 value={withAssetUnit(
                   asset.powerConsumptionRaw,
                   ASSET_POWER_CONSUMPTION_UNIT,
+                  { onlyPlainNumber: true },
                 )}
               />
               <Info

@@ -136,14 +136,40 @@ export const ASSET_POWER_CONSUMPTION_UNIT = "kW";
  * a kiiras. Ha az ertekben mar van betu (`0,75 kW`, `3 A`, vagy szabad
  * megjegyzes), valtozatlanul marad -- az egysegen nem ismetel, a szoveget nem
  * talalgatja. Ures ertek `undefined`: nincs mit kiirni.
+ *
+ * `onlyPlainNumber`: az egyseg CSAK egyetlen szam mogott jelenik meg
+ * (`0,75`, `3.5`); a perjeles vagy tobbszamos alak (`6,15/5,5`) egyseg nelkul
+ * marad. A "Fogyasztas (eredeti bejegyzes)" igy kapja (acrobot dontese,
+ * 2026-10-21): a #1779 migracio sem tudta, mi az a perjeles cella, a kiiras
+ * se allitsa. Az Aramfelvetel definicio szerint mindig amper, ott nem kell.
  */
 export function withAssetUnit(
   value: string | null | undefined,
   unit: string,
+  options: { onlyPlainNumber?: boolean } = {},
 ): string | undefined {
   const text = value?.trim();
   if (!text) return undefined;
-  return /\p{L}/u.test(text) ? text : `${text} ${unit}`;
+  return assetUnitApplies(text, options) ? `${text} ${unit}` : text;
+}
+
+/**
+ * IGAZ, HA AZ EGYSEG ILLIK AZ ERTEK MELLE. Ures ertek mellett IGAZ (a
+ * szerkeszto ures mezoje mellett latszik, mibe vezetik), betut tartalmazo
+ * ertek mellett HAMIS (mar van egysege), es `onlyPlainNumber` mellett a
+ * perjeles vagy tobbszamos alak mellett is HAMIS. A szerkesztoben ez dont arrol,
+ * hogy a mezo melletti egyseg latszik-e: ne alljon egy "6,15/5,5" mellett a
+ * "kW", amit a megjelenites sem ir ki.
+ */
+export function assetUnitApplies(
+  value: string | null | undefined,
+  options: { onlyPlainNumber?: boolean } = {},
+): boolean {
+  const text = value?.trim() ?? "";
+  if (!text) return true;
+  if (/\p{L}/u.test(text)) return false;
+  if (options.onlyPlainNumber && !/^\d+([.,]\d+)?$/.test(text)) return false;
+  return true;
 }
 
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";

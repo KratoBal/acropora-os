@@ -21,6 +21,7 @@ import {
   ASSET_CURRENT_DRAW_UNIT,
   ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
+  assetUnitApplies,
 } from "@acropora/types";
 import { AssetUnitAdornment } from "../asset-unit-adornment";
 import Link from "next/link";
@@ -704,7 +705,11 @@ export function PilotAssetCreatePage() {
                 help="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
               >
                 <AssetUnitAdornment
-                  unit={ASSET_CURRENT_DRAW_UNIT}
+                  unit={
+                    assetUnitApplies(currentDraw)
+                      ? ASSET_CURRENT_DRAW_UNIT
+                      : undefined
+                  }
                   className="text-sm text-pilot-grey-500"
                 >
                   <PilotInput
@@ -720,7 +725,13 @@ export function PilotAssetCreatePage() {
                 help="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
               >
                 <AssetUnitAdornment
-                  unit={ASSET_POWER_CONSUMPTION_UNIT}
+                  unit={
+                    assetUnitApplies(powerConsumptionRaw, {
+                      onlyPlainNumber: true,
+                    })
+                      ? ASSET_POWER_CONSUMPTION_UNIT
+                      : undefined
+                  }
                   className="text-sm text-pilot-grey-500"
                 >
                   <PilotInput

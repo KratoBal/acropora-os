@@ -14,19 +14,22 @@ export function UnitFieldRow({
   unit,
   children,
 }: {
-  unit: string;
+  /** Hiányzó egységnél csak a mező áll (lásd `assetUnitApplies`). */
+  unit?: string;
   children: ReactNode;
 }) {
   const { tokens } = useAppTheme();
   return (
     <View style={styles.row}>
       <View style={styles.field}>{children}</View>
-      <Text
-        accessibilityLabel={`Egység: ${unit}`}
-        style={[styles.unit, { color: tokens.textSecondary }]}
-      >
-        {unit}
-      </Text>
+      {unit ? (
+        <Text
+          accessibilityLabel={`Egység: ${unit}`}
+          style={[styles.unit, { color: tokens.textSecondary }]}
+        >
+          {unit}
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -89,6 +89,7 @@ import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connect
 import {
   ASSET_CURRENT_DRAW_UNIT,
   ASSET_POWER_CONSUMPTION_UNIT,
+  assetUnitApplies,
 } from "@/lib/assets/asset-units";
 import { UnitFieldRow } from "@/components/assets/unit-field-row";
 
@@ -941,6 +942,7 @@ export default function NewAssetScreen() {
               value={powerConsumptionRaw}
               onChangeText={setPowerConsumptionRaw}
               unit={ASSET_POWER_CONSUMPTION_UNIT}
+              plainNumberUnit
             />
             <Text style={styles.label}>Bekötés</Text>
             <View style={styles.kindGrid}>
@@ -1454,6 +1456,8 @@ function Field(props: {
   keyboardType?: "default" | "number-pad" | "decimal-pad";
   /** A mező mellé kiírt egység (Kelecsenyi Ferenc kérése, 2026-10-21). */
   unit?: string;
+  /** Az egység csak egyetlen szám mellett látszik (a perjeles alak mellett nem). */
+  plainNumberUnit?: boolean;
   /**
    * A MATRICAKOD NAGYBETUS. A tarolt alak csak nagybetut fogad, es a
    * normalizalas amugy is felfele alakit -- de ha a billentyuzet kisbetut
@@ -1478,7 +1482,17 @@ function Field(props: {
     <View style={styles.field}>
       <Text style={styles.label}>{props.label}</Text>
       {props.unit ? (
-        <UnitFieldRow unit={props.unit}>{input}</UnitFieldRow>
+        <UnitFieldRow
+          unit={
+            assetUnitApplies(props.value, {
+              onlyPlainNumber: props.plainNumberUnit,
+            })
+              ? props.unit
+              : undefined
+          }
+        >
+          {input}
+        </UnitFieldRow>
       ) : (
         input
       )}

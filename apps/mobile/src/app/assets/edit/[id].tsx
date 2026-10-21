@@ -49,6 +49,7 @@ import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connect
 import {
   ASSET_CURRENT_DRAW_UNIT,
   ASSET_POWER_CONSUMPTION_UNIT,
+  assetUnitApplies,
 } from "@/lib/assets/asset-units";
 import { UnitFieldRow } from "@/components/assets/unit-field-row";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
@@ -95,6 +96,8 @@ const TEXT_FIELDS: {
   multiline?: boolean;
   /** A mező mellé kiírt egység (Kelecsenyi Ferenc kérése, 2026-10-21). */
   unit?: string;
+  /** Az egység csak egyetlen szám mellett látszik (a perjeles alak mellett nem). */
+  plainNumberUnit?: boolean;
 }[] = [
   { key: "manufacturer", label: "Gyártó" },
   { key: "model", label: "Modell" },
@@ -113,6 +116,7 @@ const TEXT_FIELDS: {
     key: "powerConsumptionRaw",
     label: "Fogyasztás (eredeti bejegyzés)",
     unit: ASSET_POWER_CONSUMPTION_UNIT,
+    plainNumberUnit: true,
   },
   /**
    * A TABLAZAT ELSO OSZLOPA, SZABAD SZOVEG, NINCS ALAK-ELLENORZES --
@@ -794,7 +798,17 @@ export default function AssetEditScreen() {
               <View style={styles.field}>
                 <Text style={styles.label}>{field.label}</Text>
                 {field.unit ? (
-                  <UnitFieldRow unit={field.unit}>{input}</UnitFieldRow>
+                  <UnitFieldRow
+                    unit={
+                      assetUnitApplies(form[field.key], {
+                        onlyPlainNumber: field.plainNumberUnit,
+                      })
+                        ? field.unit
+                        : undefined
+                    }
+                  >
+                    {input}
+                  </UnitFieldRow>
                 ) : (
                   input
                 )}

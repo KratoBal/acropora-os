@@ -14,13 +14,31 @@ export const ASSET_POWER_CONSUMPTION_UNIT = "kW";
 /**
  * Az ertek egyseggel, MEGJELENITESRE. A tarolt szoveg nem valtozik. Ha az
  * ertekben mar van betu (`0,75 kW`, `3 A`, szabad megjegyzes), valtozatlan;
- * ures ertekbol `undefined` lesz.
+ * ures ertekbol `undefined` lesz. `onlyPlainNumber`: az egyseg csak egyetlen
+ * szam mogott jelenik meg, a perjeles alak (`6,15/5,5`) egyseg nelkul marad.
  */
 export function withAssetUnit(
   value: string | null | undefined,
   unit: string,
+  options: { onlyPlainNumber?: boolean } = {},
 ): string | undefined {
   const text = value?.trim();
   if (!text) return undefined;
-  return /\p{L}/u.test(text) ? text : `${text} ${unit}`;
+  return assetUnitApplies(text, options) ? `${text} ${unit}` : text;
+}
+
+/**
+ * Igaz, ha az egyseg illik az ertek melle (ures: igaz; betus: hamis;
+ * `onlyPlainNumber` mellett a perjeles alak: hamis). A szerkesztoben dont
+ * arrol, hogy a mezo melletti egyseg latszik-e.
+ */
+export function assetUnitApplies(
+  value: string | null | undefined,
+  options: { onlyPlainNumber?: boolean } = {},
+): boolean {
+  const text = value?.trim() ?? "";
+  if (!text) return true;
+  if (/\p{L}/u.test(text)) return false;
+  if (options.onlyPlainNumber && !/^\d+([.,]\d+)?$/.test(text)) return false;
+  return true;
 }
