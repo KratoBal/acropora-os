@@ -115,9 +115,16 @@ describe(
            ('c-szokoz',         6.15,     '   '),
            ('d-van-eredeti',    5.5,      '6,15/5,5'),
            ('e-nincs-semmi',    NULL,     NULL),
-           ('f-csak-eredeti',   NULL,     '2,2 kW'),
+           ('f-mar-kw',         NULL,     '2,2 kW'),
            ('g-sok-tizedes',    0.000001, NULL),
-           ('h-nulla',          0,        NULL)`,
+           ('h-nulla',          0,        NULL),
+           ('i-szokozos-szam',  NULL,     ' 4 '),
+           ('j-szoveg',         NULL,     'nincs adat'),
+           ('k-csak-szokoz',    NULL,     '   '),
+           ('l-pont-tizedes',   NULL,     '0.75'),
+           ('m-vesszo-tizedes', NULL,     '1,5'),
+           ('n-perjeles',       NULL,     '3/4'),
+           ('o-tobb-szam',      NULL,     '1,5 2')`,
       );
       await runMigration();
     });
@@ -139,20 +146,36 @@ describe(
       assert.equal(byId["h-nulla"], "0 kW");
     });
 
-    it("a kitöltött eredeti bejegyzést nem írja felül", async () => {
+    it("a kitöltött, TISZTA SZÁM alakú eredeti bejegyzés mögé ' kW' kerül, a szöveg változtatása nélkül", async () => {
+      const byId = Object.fromEntries((await rows()).map((r) => [r.id, r.raw]));
+      assert.equal(byId["i-szokozos-szam"], "4 kW"); // körülvágva
+      assert.equal(byId["l-pont-tizedes"], "0.75 kW"); // a pont nem változik vesszővé
+      assert.equal(byId["m-vesszo-tizedes"], "1,5 kW");
+    });
+
+    it("a perjeles és a többszámos bejegyzés ÉRINTETLEN: nem tudni, kW-e", async () => {
       const byId = Object.fromEntries((await rows()).map((r) => [r.id, r.raw]));
       assert.equal(byId["d-van-eredeti"], "6,15/5,5");
-      assert.equal(byId["f-csak-eredeti"], "2,2 kW");
+      assert.equal(byId["n-perjeles"], "3/4");
+      assert.equal(byId["o-tobb-szam"], "1,5 2");
+    });
+
+    it("a már mértékegységes vagy szöveges bejegyzést nem írja újra", async () => {
+      const byId = Object.fromEntries((await rows()).map((r) => [r.id, r.raw]));
+      assert.equal(byId["f-mar-kw"], "2,2 kW");
+      assert.equal(byId["j-szoveg"], "nincs adat");
     });
 
     it("ahol nem volt szám, az eredeti bejegyzés sem változik", async () => {
       const byId = Object.fromEntries((await rows()).map((r) => [r.id, r.raw]));
       assert.equal(byId["e-nincs-semmi"], null);
+      // a csak szóközt tartalmazó, szám nélküli eredeti sem kap mértékegységet
+      assert.equal(byId["k-csak-szokoz"], "   ");
     });
 
     it("MINDEN soron üres az áramfelvétel, és a bekötés is", async () => {
       const all = await rows();
-      assert.equal(all.length, 8);
+      assert.equal(all.length, 15);
       assert.ok(all.every((r) => r.currentDraw === null));
       assert.ok(all.every((r) => r.phase === null));
     });
