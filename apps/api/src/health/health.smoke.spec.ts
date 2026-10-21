@@ -24,12 +24,20 @@ describe("GET /health HTTP smoke", () => {
         application?: { status?: string };
         database?: { status?: string };
         redis?: { status?: string };
+        doseProjection?: Record<string, unknown> | null;
       };
 
       assert.equal(response.status, 200);
       assert.equal(body.application?.status, "ok");
       assert.equal(body.database?.status, "ok");
       assert.equal(body.redis?.status, "ok");
+      // card 2f0d7acd: the dose-list projection, numbers and flags only
+      assert.deepEqual(Object.keys(body.doseProjection ?? {}).sort(), [
+        "ageHours",
+        "failingSinceLastSuccess",
+        "rowCount",
+        "stale",
+      ]);
     } finally {
       await app.close();
     }

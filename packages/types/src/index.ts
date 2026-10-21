@@ -293,6 +293,18 @@ export interface DependencyHealth {
   error?: string;
 }
 
+/**
+ * THE DOSE-LIST PROJECTION ON /health (card 2f0d7acd): the four numbers and flags the fleet's
+ * monitor needs, readable without a login. Never the failure's text: that stays behind
+ * PRODUCTS_VIEW on GET /dose-effects/projection.
+ */
+export interface DoseProjectionHealth {
+  stale: boolean;
+  ageHours: number | null;
+  rowCount: number;
+  failingSinceLastSuccess: boolean;
+}
+
 export interface HealthResponse {
   /**
    * A FUTO KIADAS AZONOSSAGA.
@@ -323,6 +335,12 @@ export interface HealthResponse {
   redis: DependencyHealth;
   uptime: number;
   timestamp: string;
+  /**
+   * The ReefClub dose-list projection (slice 8), numbers and flags only. `null`: it could not be
+   * read. It never changes the health's own status: a stale projection is the fleet's alarm, not a
+   * reason to restart the API.
+   */
+  doseProjection?: DoseProjectionHealth | null;
 }
 
 export interface NavigationItem {

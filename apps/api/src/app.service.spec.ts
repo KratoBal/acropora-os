@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applicationHealth } from "./app.service.js";
+import { applicationHealth, doseProjectionHealth } from "./app.service.js";
 
 /**
  * AMIT EZ A FAJL ORIZ.
@@ -99,5 +99,55 @@ describe("applicationHealth", () => {
       assert.equal(application.status, "ok");
       assert.equal(application.version, "0.1.0");
     });
+  });
+});
+
+/**
+ * THE DOSE-LIST PROJECTION ON /health (card 2f0d7acd): read by the fleet without a login, so only
+ * numbers and flags, and a failed read never throws (a 503 would make the container restart).
+ */
+describe("doseProjectionHealth", () => {
+  it("passes the four numbers and flags, never the failure's text or times", async () => {
+    const health = await doseProjectionHealth(async () => ({
+      stale: true,
+      maxAgeHours: 26,
+      ageHours: 30.5,
+      rowCount: 12,
+      lastSuccess: {
+        trigger: "SCHEDULED",
+        startedAt: "2026-10-20T00:00:00.000Z",
+        finishedAt: "2026-10-20T00:00:01.000Z",
+        rowCount: 12,
+      },
+      lastFailure: {
+        trigger: "EDIT",
+        finishedAt: "2026-10-21T00:00:00.000Z",
+        errorMessage: "titkos belső hiba a 10.0.0.5 gépen",
+      },
+      failingSinceLastSuccess: true,
+    }));
+    assert.deepEqual(health, {
+      stale: true,
+      ageHours: 30.5,
+      rowCount: 12,
+      failingSinceLastSuccess: true,
+    });
+  });
+
+  it("a read that does not answer in time is null, and /health does not wait for it", async () => {
+    const started = Date.now();
+    const health = await doseProjectionHealth(
+      () => new Promise(() => undefined),
+      50,
+    );
+    assert.equal(health, null);
+    assert.ok(Date.now() - started < 1000, "returned after the timeout");
+  });
+
+  it("a read that throws is null, not an exception", async () => {
+    const health = await doseProjectionHealth(async () => {
+      throw new Error("relation does not exist");
+    });
+    assert.equal(health, null);
   });
 });
