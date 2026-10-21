@@ -37,6 +37,11 @@ import {
   readForeignInvoice,
   type ForeignReading,
 } from "./foreign-invoice-reading.js";
+import {
+  autoApproval,
+  navFilledFields,
+  type NavConfirmation,
+} from "./auto-approval.js";
 import { prismaErrorSummary } from "./error-summary.js";
 import { storedValues, type StoredReading } from "./reading-values.js";
 import {
@@ -238,6 +243,15 @@ export class NoMailboxDocumentError extends Error {
   }
 }
 
+/** Az olvasat a beolvasás óta megváltozott: az automatikus jóváhagyás nem ír rá. */
+class ReadingChangedError extends Error {
+  constructor() {
+    super(
+      "az olvasat közben megváltozott (szerkesztették vagy jóváhagyták): kimarad",
+    );
+  }
+}
+
 @Injectable()
 export class IncomingReviewService {
   private readonly database: Database = prisma;
@@ -319,6 +333,49 @@ export class IncomingReviewService {
     const problems = approvalProblems(values);
     if (problems.length) throw new BadRequestException(problems.join(" "));
     const stored = await this.storeManual(pairing, values, userId);
+    const verified = await this.verify(
+      pairing,
+      documentId,
+      stored,
+      values,
+      userId,
+      {
+        action: "billing.incoming-reading.approved",
+        // mely mezőket írt át ember a kinyerthez képest
+        metadata: (reading) => ({
+          manualFields: Object.entries(
+            (reading.sources ?? {}) as Record<string, string>,
+          )
+            .filter(([, source]) => source === "MANUAL")
+            .map(([field]) => field),
+        }),
+      },
+    );
+    return this.view(pairing, verified, null);
+  }
+
+  /**
+   * A JÓVÁHAGYÁS MAGJA: a tárolt (kitöltött) olvasatból rendes bejövő számla-sor
+   * lesz, az olvasat VERIFIED. A kézi és az automatikus jóváhagyás is ezt hívja
+   * (acrobot 34633): ugyanaz a sor, ugyanaz a zárolás, csak a szerző és a napló
+   * más. Automatikusnál a szerző `null`, az alapot a napló mondja meg.
+   */
+  private async verify(
+    pairing: DocumentPairing,
+    documentId: string,
+    stored: StoredReading,
+    values: IncomingReadingValues,
+    userId: string | null,
+    audit: {
+      action: string;
+      metadata: (reading: StoredReading) => Prisma.InputJsonObject;
+      /**
+       * Az első lépés a tranzakcióban (barracuda #1790): az automatikus jóváhagyás
+       * itt írja az olvasatot, feltételesen. Ha dob, semmi nem íródik.
+       */
+      guard?: (tx: Prisma.TransactionClient) => Promise<void>;
+    },
+  ): Promise<StoredReading> {
     // az olvasat dokumentuma: összevont számlánál nem a sor azonosítója (P2003)
     const readingDocumentId = stored.documentId;
     const document = await this.database.incomingSupplierDocument.findUnique({
@@ -333,6 +390,7 @@ export class IncomingReviewService {
     */
     const { pdfDocumentId } = await this.sourceOf(pairing);
     const verified = await this.database.$transaction(async (tx) => {
+      if (audit.guard) await audit.guard(tx);
       const taken = await tx.incomingBillingDocument.findUnique({
         where: {
           source_externalId: { source: "MAILBOX", externalId: documentId },
@@ -385,24 +443,202 @@ export class IncomingReviewService {
       await tx.auditLog.create({
         data: {
           userId,
-          action: "billing.incoming-reading.approved",
+          action: audit.action,
           entityType: "IncomingBillingDocument",
           entityId: row.id,
           metadata: {
             documentId,
             readingId: reading.id,
-            // mely mezőket írt át ember a kinyerthez képest
-            manualFields: Object.entries(
-              (reading.sources ?? {}) as Record<string, string>,
-            )
-              .filter(([, source]) => source === "MANUAL")
-              .map(([field]) => field),
+            ...audit.metadata(reading),
           },
         },
       });
       return reading;
     });
-    return this.view(pairing, verified, null);
+    return verified;
+  }
+
+  /**
+   * AUTOMATIKUS JÓVÁHAGYÁS (acrobot 34633, Balázs „2 mehet”, 34636): a tárolt
+   * „Ellenőrizendő” olvasatok közül az, amelyiket egy független forrás megerősít
+   * (`auto-approval.ts`: NAV-egyezés a magyar, banki egyezés a külföldi
+   * szállítónál), ember nélkül jóváhagyott lesz. A szerző `null`, a napló
+   * (`billing.incoming-reading.auto-approved`) mondja meg az alapot és a NAV-ból
+   * töltött mezőket. Alapból NEM ír: `apply` nélkül csak jelent. Az olvasást
+   * (`readPending`) nem helyettesíti: ami még nincs olvasva, az kimarad.
+   */
+  async autoApprovePending(options: {
+    apply: boolean;
+    /** YYYY-MM-DD: csak az ennél nem régebbi számlák */
+    since?: string | null;
+  }): Promise<AutoApproveReport> {
+    const [feed, pairings, stored] = await Promise.all([
+      this.database.incomingBillingDocument.findMany({
+        select: { sourceDocumentId: true, documentNumber: true },
+      }),
+      this.missing.documentPairings(),
+      this.database.incomingDocumentReading.findMany({
+        where: { state: "TO_REVIEW" },
+      }),
+    ]);
+    const byDocument = new Map(stored.map((row) => [row.documentId, row]));
+    const pending = mailboxOnlyPairings(feed, pairings)
+      .filter(
+        (pairing) => !options.since || pairing.document.date >= options.since,
+      )
+      .map((pairing) => ({
+        pairing,
+        reading: readingDocumentIds(pairing.document)
+          .map((id) => byDocument.get(id))
+          .find((row): row is StoredReading => row !== undefined),
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is { pairing: DocumentPairing; reading: StoredReading } =>
+          entry.reading !== undefined,
+      );
+    const numbers = [
+      ...new Set(
+        pending
+          .map(({ reading }) => reading.documentNumber)
+          .filter((n): n is string => !!n),
+      ),
+    ];
+    const nav = numbers.length
+      ? await this.database.navIncomingInvoice.findMany({
+          // the modifications and cancellations too: they refer to the number through originalInvoiceNumber
+          where: {
+            OR: [
+              { navInvoiceNumber: { in: numbers } },
+              { originalInvoiceNumber: { in: numbers } },
+            ],
+          },
+          select: {
+            navInvoiceNumber: true,
+            supplierTaxNumber: true,
+            supplierName: true,
+            invoiceIssueDate: true,
+            invoiceDeliveryDate: true,
+            invoiceOperation: true,
+            originalInvoiceNumber: true,
+            currency: true,
+            invoiceNetAmount: true,
+            invoiceVatAmount: true,
+          },
+        })
+      : [];
+    const confirmations: NavConfirmation[] = nav.map((row) => ({
+      navInvoiceNumber: row.navInvoiceNumber,
+      supplierTaxNumber: row.supplierTaxNumber,
+      supplierName: row.supplierName,
+      invoiceIssueDate: row.invoiceIssueDate.toISOString().slice(0, 10),
+      invoiceDeliveryDate:
+        row.invoiceDeliveryDate?.toISOString().slice(0, 10) ?? null,
+      currency: row.currency,
+      netAmount: row.invoiceNetAmount?.toFixed(2) ?? null,
+      vatAmount: row.invoiceVatAmount?.toFixed(2) ?? null,
+      operation: row.invoiceOperation,
+      originalInvoiceNumber: row.originalInvoiceNumber,
+    }));
+    const report: AutoApproveReport = {
+      considered: pending.length,
+      approvable: 0,
+      approved: 0,
+      failed: 0,
+      rows: [],
+    };
+    for (const { pairing, reading } of pending) {
+      const values = storedValues(reading);
+      const decision = autoApproval({
+        values,
+        sources: (reading.sources ?? {}) as ForeignReading["sources"],
+        kind: pairing.kind,
+        debits: pairing.debits,
+        nav: confirmations,
+        problems: approvalProblems,
+      });
+      const base = {
+        documentId: pairing.document.id,
+        number: values.documentNumber,
+        supplier: values.supplierName,
+        gross: values.grossAmount
+          ? `${values.grossAmount} ${values.currency ?? "?"}`
+          : null,
+      };
+      if (!decision.approve) {
+        report.rows.push({
+          ...base,
+          basis: null,
+          reason: decision.reason,
+          written: false,
+        });
+        continue;
+      }
+      report.approvable += 1;
+      let written = false;
+      let reason: string | null = null;
+      if (options.apply) {
+        try {
+          await this.verify(
+            pairing,
+            pairing.document.id,
+            reading,
+            decision.values,
+            null,
+            {
+              action: "billing.incoming-reading.auto-approved",
+              metadata: () => ({
+                basis: decision.basis,
+                navFields: navFilledFields(decision.sources),
+              }),
+              /*
+                A BEOLVASÁS ÓTA VÁLTOZATLAN OLVASATRA ÍR, a jóváhagyással egy
+                tranzakcióban (barracuda #1790): ha közben ember szerkesztette
+                vagy jóváhagyta, a pillanatkép régi, és az ő értékeit írná felül.
+              */
+              guard: async (tx) => {
+                const { count } = await tx.incomingDocumentReading.updateMany({
+                  where: {
+                    id: reading.id,
+                    state: "TO_REVIEW",
+                    updatedAt: reading.updatedAt,
+                  },
+                  data: {
+                    ...columns(decision.values),
+                    sources: decision.sources,
+                  },
+                });
+                if (count !== 1) throw new ReadingChangedError();
+              },
+            },
+          );
+          report.approved += 1;
+          written = true;
+        } catch (error) {
+          if (
+            error instanceof ReadingChangedError ||
+            error instanceof ConflictException
+          ) {
+            report.approvable -= 1;
+            report.rows.push({
+              ...base,
+              basis: null,
+              reason:
+                error instanceof ReadingChangedError
+                  ? error.message
+                  : "közben jóváhagyták",
+              written: false,
+            });
+            continue;
+          }
+          report.failed += 1;
+          reason = prismaErrorSummary(error);
+        }
+      }
+      report.rows.push({ ...base, basis: decision.basis, reason, written });
+    }
+    return report;
   }
 
   /**
@@ -1013,4 +1249,23 @@ function scanOf(subject: PurchaseSubject): string {
       "Előbb csatold a számla képét a beszerzési számlához: ellenőrizni és jóváhagyni csak képpel lehet.",
     );
   return scan;
+}
+
+/** Az automatikus jóváhagyás jelentése: soronként az alap, vagy a kihagyás oka. */
+export interface AutoApproveReport {
+  /** a tárolt, még ellenőrizendő olvasatok a jelöltek között */
+  considered: number;
+  approvable: number;
+  approved: number;
+  failed: number;
+  rows: {
+    documentId: string;
+    number: string | null;
+    supplier: string | null;
+    gross: string | null;
+    basis: "NAV" | "BANK" | null;
+    /** kihagyásnál az ok; íráskor bukott sornál a hiba fajtája */
+    reason: string | null;
+    written: boolean;
+  }[];
 }
