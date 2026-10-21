@@ -53,6 +53,11 @@ export interface DoseEffectView {
   source: string;
   version: number;
   recordedBy: { id: string; name: string } | null;
+  /**
+   * The recorder's name, also when the account is gone (`recordedBy` is then
+   * null): the latest version keeps it (barracuda, #1742 b).
+   */
+  recordedByName: string | null;
   recordedAt: string;
   verifiedBy: { id: string; name: string } | null;
   verifiedAt: string | null;
@@ -101,6 +106,12 @@ const ROW_SELECT = {
   recordedBy: { select: { id: true, displayName: true } },
   verifiedBy: { select: { id: true, displayName: true } },
   archivedBy: { select: { id: true, displayName: true } },
+  // the latest version's name of the recorder, for a recorder that is gone
+  versions: {
+    orderBy: { version: "desc" },
+    take: 1,
+    select: { recordedByName: true },
+  },
   // Not the listings and the UNAS snapshot: those are read once per product,
   // in one query, and only the snapshot's `Inquire` (barracuda, #1731 b).
   product: { select: { name: true } },
@@ -450,6 +461,10 @@ export class DoseEffectsService {
         recordedBy: row.recordedBy
           ? { id: row.recordedBy.id, name: row.recordedBy.displayName }
           : null,
+        recordedByName:
+          row.recordedBy?.displayName ??
+          row.versions[0]?.recordedByName ??
+          null,
         recordedAt: row.recordedAt.toISOString(),
         verifiedBy: row.verifiedBy
           ? { id: row.verifiedBy.id, name: row.verifiedBy.displayName }
@@ -542,11 +557,12 @@ async function latestJevEffects(
 
 /**
  * Whether each product can be bought: active, UNAS status 1 or 2, and not
- * inquiry-only. The internal recommendation's rule (`isRecommendableOnUnas`),
+ * inquiry-only. Exported for the parity test against the rule's full input
+ * (barracuda, #1742 a). The internal recommendation's rule (`isRecommendableOnUnas`),
  * fed from one query that reads only the snapshot's `Inquire`, not the whole
  * UNAS payload (barracuda, #1731 b).
  */
-async function purchasability(
+export async function purchasability(
   productIds: readonly string[],
 ): Promise<Map<string, boolean>> {
   if (productIds.length === 0) return new Map();
