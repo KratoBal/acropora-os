@@ -87,6 +87,42 @@ describe("a gyártói adagolás a leírásból", () => {
     }
   });
 
+  it("ezres elválasztó a vízmennyiségben: nincs érték, nem ezerszeres adag (barracuda, #1800)", () => {
+    for (const text of [
+      "Add 10 ml per 1,000 l weekly.",
+      "10 ml pro 1.000 Liter wöchentlich.",
+      "10 ml 10 000 literhez hetente.",
+      "10 ml 10 000 literhez hetente.",
+    ]) {
+      const r = readDosing(text);
+      assert.equal(r.raw, null, text);
+      assert.ok(
+        r.notes.some((n) => /ezres elválasztó/.test(n)),
+        `${text} -> ${JSON.stringify(r.notes)}`,
+      );
+    }
+    // kontroll: a tizedes vessző és a három tizedesjegyű nulla-egész marad
+    assert.equal(readDosing("Dose 0,5 ml/100 l/day.").raw, "0.5 ml/100 L/day");
+    assert.equal(
+      readDosing("Dose 10 ml per 1000 l weekly.").raw,
+      "10 ml/1000 L/week",
+    );
+  });
+
+  it("a kiszerelés hatótávja gyakorisággal sem adag, és a valódit nem tartja vissza", () => {
+    for (const text of [
+      "A 250 ml bottle treats 2500 l per week.",
+      "500 ml reicht für 1000 l pro Woche.",
+    ])
+      assert.equal(readDosing(text).raw, null, text);
+    assert.equal(
+      readDosing(
+        "A 250 ml bottle treats 2500 l per week. Dose 1 ml per 100 l daily.",
+      ).raw,
+      "1 ml/100 L/day",
+    );
+  });
+
   it("egy olvashatatlan adag-mondat a jó mondat mellett is visszatartja az értéket", () => {
     const r = readDosing(
       "Dose 1 ml per 100 l daily. US: 1 ml per 25 gallons daily.",

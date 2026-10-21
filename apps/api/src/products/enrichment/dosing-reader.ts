@@ -76,6 +76,20 @@ const OTHER_UNIT =
 /** A dose that depends on something: then the page's number is not THE dose. */
 const CONDITIONAL =
   /\b(?:depending on|according to (?:the )?(?:test|measur|consumption|need)|based on (?:test|measur|consumption)|as needed|if needed|if necessary|first (?:week|weeks|days|day|month)|initially|start(?:ing)? (?:with|dose)|ramp|gradually|half (?:the )?dose|double (?:the )?dose|je nach|bei bedarf|anfangs|zu beginn|in der ersten|erste woche|ersten woche|kezdetben|eleinte|az elso het|elso heten|meres(?:ek)? alapjan|meresi eredmeny|fogyasztas(?:tol|nak megfelelo)|igeny szerint|szukseg szerint|szukseg eseten)\b/;
+/**
+ * A THOUSANDS GROUP ("1,000 l", "1.000 Liter", "10 000 literhez"): `NUM` takes
+ * one separator as a decimal, so "1,000 l" would be ONE litre, a thousandfold
+ * dose (barracuda, #1800). Refused, not read. "0.125 ml" is a decimal, not a group.
+ */
+const THOUSANDS =
+  /(?<!\d)(?!0[.,]\d)\d{1,3}(?:[\s.,'’\u00a0\u202f]\d{3})+(?!\d)/;
+/**
+ * The pack's reach, not a dose ("A 250 ml bottle treats 2500 l per week",
+ * "reicht für 1000 l pro Woche"): a period word does not make it an
+ * instruction (barracuda, #1800).
+ */
+const REACH =
+  /\b(?:bottles?|flasche|flakon|uveg|treats?|enough|sufficient|reicht|ausreichend|elegendo|eleg|kiszereles|tartalom|inhalt|contents?)\b/;
 const QUALIFIER =
   /(?:\b(?:max|maximum|min|minimum|up to|approx|approximately|about|ca|bis zu|hochstens|maximal|legfeljebb|kb|korulbelul|akar)\b|[~≤≥<>±])/;
 
@@ -128,6 +142,10 @@ export function readDosing(text: string): DosingReading {
       continue;
     }
     if (amounts.length === 0 && volumes.length === 0 && !odd) continue;
+    if (REACH.test(sentence)) {
+      notes.push(`adagolás: kiszerelés-mondat, nem adag: ${where}`);
+      continue;
+    }
     if (otherPeriod) {
       refuse(`adagolás: nem napi és nem heti gyakoriság: ${where}`);
       continue;
@@ -139,6 +157,10 @@ export function readDosing(text: string): DosingReading {
     // a period with only one of the two ("1 ml naponta", "100 literenként naponta")
     if (amounts.length === 0 || volumes.length === 0) {
       refuse(`adagolás: hiányzik a mennyiség vagy a vízmennyiség: ${where}`);
+      continue;
+    }
+    if (THOUSANDS.test(sentence)) {
+      refuse(`adagolás: ezres elválasztó, kézi: ${where}`);
       continue;
     }
     if (RANGE.test(sentence)) {
