@@ -701,6 +701,67 @@ describe("the supplier name from the text", () => {
     );
   });
 
+  it("knows the Hungarian 'Kibocsátó' and 'Szolgáltató' words, below a header and in the same row", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Számla",
+        "Kibocsátó | Vevő",
+        "Kitalált Kibocsátó Zrt. | Vevő Kft.",
+      ]),
+      "Kitalált Kibocsátó Zrt.",
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Levelezési cím:",
+        "Szolgáltató neve: | Kitalált Szolgáltató Zrt.",
+      ]),
+      "Kitalált Szolgáltató Zrt.",
+    );
+  });
+
+  it("reads the English seller headers and the same-row 'Seller:' label (invented names)", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Invoice",
+        "Seller | Buyer",
+        "Kitalált Aquaristik GmbH | Vevő Kft.",
+      ]),
+      "Kitalált Aquaristik GmbH",
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Invoice",
+        "Supplier | Bill to",
+        "Kitalált Supply Ltd | Vevő Kft.",
+      ]),
+      "Kitalált Supply Ltd",
+    );
+    assert.equal(
+      supplierNameFromText(["Invoice", "Seller: | Kitalált Corp Inc"]),
+      "Kitalált Corp Inc",
+    );
+  });
+
+  it("does not take a buyer label, a buyer-first header or our own company from those places", () => {
+    assert.equal(
+      supplierNameFromText(["Vevő neve: | Kitalált Vevő Kft."]),
+      null,
+    );
+    assert.equal(supplierNameFromText(["Bill to: | Kitalált Vevő Ltd"]), null);
+    assert.equal(
+      supplierNameFromText([
+        "Buyer | Seller",
+        "Kitalált Vevő Kft. | Kitalált Eladó Kft.",
+      ]),
+      null,
+    );
+    assert.equal(supplierNameFromText(["Seller: | Acropora Kft."]), null);
+  });
+
+  it("the same-row label also needs a legal form in the name", () => {
+    assert.equal(supplierNameFromText(["Seller: | Kitalált Cég"]), null);
+  });
+
   it("is a fallback: the adapter and the bank pairing name come first, the text fills the gap", () => {
     const lines = ["Kitalált Akvárium Kft.", "Invoice no: KT-1"];
     const blank = {
