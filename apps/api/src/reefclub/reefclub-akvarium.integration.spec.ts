@@ -720,6 +720,36 @@ describe(
       );
     });
 
+    it("gazda a törzsben, PATCH-csel (5.2/4): elutasítva, és a sor gazdája a hívó fiók marad", async () => {
+      const ownerOf = () =>
+        prisma.aquarium.findUniqueOrThrow({
+          where: { id: b1 },
+          select: {
+            ownerAccountId: true,
+            customerId: true,
+            departmentId: true,
+          },
+        });
+      const before = await ownerOf();
+      assert.ok(before.ownerAccountId, "a B1 a B fiók saját akváriuma");
+      for (const field of ["ownerAccountId", "customerId", "departmentId"]) {
+        const response = await rc(`/rc/v1/aquariums/${b1}`, {
+          method: "PATCH",
+          body: { name: `${NAME_PREFIX} B1 gazda-${field}`, [field]: c1 },
+          session: sessionB,
+        });
+        assert.equal(response.status, 400, field);
+      }
+      assert.deepEqual(await ownerOf(), before);
+      assert.equal(
+        await prisma.aquarium.count({
+          where: { name: { startsWith: `${NAME_PREFIX} B1 gazda-` } },
+        }),
+        0,
+        "az elutasított kérés a nevet sem írta át",
+      );
+    });
+
     it("célsáv és kézi mérés: a közös értékelés adja a státuszt, az irányt és a trendet", async () => {
       const put = await rc(`/rc/v1/aquariums/${a2}/targets`, {
         method: "PUT",
