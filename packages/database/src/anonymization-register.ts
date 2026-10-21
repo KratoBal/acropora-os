@@ -1361,6 +1361,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     value: "business",
     unit: "business",
     status: "business",
+    acceptedByRule: "business",
   },
   ProductCopy: {
     body: "business",
