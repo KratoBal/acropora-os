@@ -44,6 +44,28 @@ const isDirection = (v: string): v is WaterParameterDirection =>
   (WATER_PARAMETER_DIRECTIONS as readonly string[]).includes(v);
 
 /**
+ * THE PARAMETERS TO MEASURE, WITHOUT A DIRECTION (Product Knowledge, the
+ * test-dependent dose: "measure calcium and KH first"): `KALCIUM;KH`. The same
+ * code set as the effects; sorted, each code once.
+ */
+export function parseWaterParameterCodes(
+  raw: string,
+):
+  | { ok: true; codes: WaterParameterCode[]; canonical: string }
+  | { ok: false; reason: string } {
+  const parts = raw
+    .split(/[;,]/)
+    .map((p) => p.trim().toUpperCase())
+    .filter((p) => p !== "");
+  if (parts.length === 0) return { ok: false, reason: "empty" };
+  for (const part of parts)
+    if (!isCode(part))
+      return { ok: false, reason: `"${part}": not a measurement code` };
+  const codes = [...new Set(parts as WaterParameterCode[])].sort();
+  return { ok: true, codes, canonical: codes.join(";") };
+}
+
+/**
  * `KALCIUM:EMEL; kh:emel` -> the canonical `KALCIUM:EMEL;KH:EMEL`: pairs
  * separated by `;` or `,`, each `CODE:DIRECTION`, case and spacing free, sorted
  * by code, a repeated pair once. Two sources agree exactly when their canonical

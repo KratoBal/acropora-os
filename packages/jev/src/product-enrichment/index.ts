@@ -86,6 +86,7 @@ export {
 export {
   WATER_PARAMETER_CODES,
   WATER_PARAMETER_DIRECTIONS,
+  parseWaterParameterCodes,
   parseWaterParameterEffects,
   type WaterParameterCode,
   type WaterParameterDirection,

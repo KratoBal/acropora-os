@@ -395,4 +395,37 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
     );
     assert.deepEqual(await sor(), { acceptedByRule: null, revision: 3 });
   });
+
+  // A három adagolási állapot (Balázs 2026-10-21 22:08 UTC): a definíció a
+  // migrációból jön, az érték a mező saját normalizálóján megy át
+  it("a mérendő paraméterek és a mód elfogadható, kanonikus alakban", async () => {
+    const service = knowledge();
+    const actor = { id: userId };
+    const { id: productId } = await prisma.product.create({
+      data: { name: `${PREFIX}Mód ${suffix}` },
+    });
+    const url = "https://gyarto.example.invalid/teszt-fuggo";
+    for (const [field, raw, value] of [
+      ["dosingTests", "Measure KH and calcium first", "KH;KALCIUM"],
+      ["dosingMode", "dose according to your test results", "test_dependent"],
+    ] as const) {
+      const r = await service.addEvidence(
+        productId,
+        { field, raw, value, url, sourceType: "MANUFACTURER_PAGE" },
+        actor,
+      );
+      await service.accept(
+        productId,
+        r.fieldResultId,
+        actor,
+        undefined,
+        "AUTO_V1",
+      );
+    }
+    const facts = (await service.knowledge(productId)).facts;
+    assert.deepEqual(facts.map((f) => [f.field, f.value, f.public]).sort(), [
+      ["dosingMode", "TEST_DEPENDENT", false],
+      ["dosingTests", "KALCIUM;KH", false],
+    ]);
+  });
 });
