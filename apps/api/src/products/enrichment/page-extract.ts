@@ -1,5 +1,6 @@
 import type { ProductEnrichmentFieldKey } from "@acropora/types";
 
+import { readDosing } from "./dosing-reader.js";
 import { readWaterEffects } from "./water-effects-lexicon.js";
 
 /**
@@ -31,6 +32,8 @@ export const ENRICHED_FIELDS = [
   "voltage",
   // a vízmérési ajánlás (kártya 2b3983e1): a leírásból, a szótárral
   "waterParameterEffects",
+  // a gyártói adagolás (Product Knowledge 2a, kártya 85c38ab1): a leírásból
+  "dosing",
 ] as const satisfies readonly ProductEnrichmentFieldKey[];
 export type EnrichedField = (typeof ENRICHED_FIELDS)[number];
 
@@ -220,6 +223,9 @@ export function extractPageStatement(html: string): PageStatement {
     for (const n of reading.negated) lexiconNotes.push(`tagadva: ${n}`);
     for (const code of reading.contradicted)
       lexiconNotes.push(`${code}: mindkét irány, nincs érték`);
+    const dose = readDosing(description);
+    put("dosing", dose.raw, "description", dose.excerpt ?? undefined);
+    lexiconNotes.push(...dose.notes);
   }
   return {
     values: [...values.values()],

@@ -293,7 +293,7 @@ const TAGADAS = new Set([
  * ahány egységből áll (barracuda, #1669: eddig egy emoji eggyel rövidebb lett,
  * és a kivonat a nyers szövegben elcsúszott).
  */
-function normalizalt(text: string): string {
+export function normalizalt(text: string): string {
   return [...text]
     .map((orig) => {
       const n = orig.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -317,7 +317,7 @@ export interface WaterEffectsReading {
 const KORNYEZET = 40;
 
 /** A szöveg egy darabja a találat körül, szóközre igazítva. */
-function kivonat(text: string, start: number, end: number): string {
+export function kivonat(text: string, start: number, end: number): string {
   let from = Math.max(0, start - KORNYEZET);
   let to = Math.min(text.length, end + KORNYEZET);
   // egy emoji két fele közé nem vágunk (barracuda, #1669)
