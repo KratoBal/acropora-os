@@ -382,10 +382,14 @@ export function tableRowFields(
  */
 const LEGAL_FORM =
   /(?<![\p{L}\p{N}])(kft|zrt|nyrt|kkt|bt|gmbh|ag|ltd|limited|inc|llc|b\.?v\.?|s\.?r\.?l|sarl|s\.?a\.?s|oy)(?![\p{L}\p{N}])/iu;
-const SELLER_HEADER =
-  /el[áa]d[óo]|kiáll[íi]t[óo]|kibocs[áa]t[óo]|sz[áa]ll[íi]t[óo]|szolg[áa]ltat[óo]|\b(seller|supplier|vendor|sold\s+by|issued\s+by|from)\b/iu;
-const BUYER_HEADER =
-  /vev[őo]|\b(buyer|bill(ed)?\s+to|sold\s+to|customer|client)\b/iu;
+/**
+ * A FEJLÉC-SOR CELLÁI (barracuda, #1798): az eladó-szó egy cella ELEJÉN áll ("Eladó neve és címe:",
+ * "Seller"), a vevő-szó egy KÉSŐBBI cella elején; egy mondat közepi "from" ("Valid from ...") nem fejléc.
+ */
+const SELLER_CELL_START =
+  /^(el[áa]d[óo]|kiáll[íi]t[óo]|kibocs[áa]t[óo]|sz[áa]ll[íi]t[óo]|szolg[áa]ltat[óo]|seller|supplier|vendor|sold\s+by|issued\s+by|from)(?![\p{L}])/iu;
+const BUYER_CELL_START =
+  /^(vev[őo]|buyer|bill(ed)?\s+to|sold\s+to|customer|client)(?![\p{L}])/iu;
 /** egy cella, ami csak a "szállító" cimkéje ("Eladó neve:", "Seller:") */
 const SELLER_LABEL_CELL =
   /^(el[áa]d[óo]|sz[áa]ll[íi]t[óo]|kiáll[íi]t[óo]|kibocs[áa]t[óo]|szolg[áa]ltat[óo]|seller|supplier|vendor|sold\s+by|issued\s+by|from)(\s+neve)?\s*:?$/iu;
@@ -405,10 +409,26 @@ export function supplierNameFromText(lines: readonly string[]): string | null {
   const top = plausibleName(first?.split(" | ")[0]);
   if (top) candidates.add(top);
   lines.forEach((line, index) => {
-    const sellerAt = line.search(SELLER_HEADER);
-    const buyerAt = line.search(BUYER_HEADER);
-    if (sellerAt < 0 || buyerAt < 0 || sellerAt > buyerAt) return;
-    const below = plausibleName(lines[index + 1]?.split(" | ")[0]);
+    const header = line
+      .normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    const sellerAt = header.findIndex((cell) => SELLER_CELL_START.test(cell));
+    if (sellerAt < 0) return;
+    if (!header.slice(sellerAt + 1).some((cell) => BUYER_CELL_START.test(cell)))
+      return;
+    const row = lines[index + 1]
+      ?.normalize("NFC")
+      .split(" | ")
+      .map((cell) => cell.trim());
+    if (!row) return;
+    // az ELADÓ OSZLOPÁNAK cellája (nem az első): ha a sor cellaszáma eltér a fejlécétől, csak az
+    // első oszlop eladó-oszlop esetén biztos a hely (a név-sor gyakran extra címke-cellákat hordoz)
+    const cell =
+      row.length === header.length || sellerAt === 0
+        ? row[sellerAt]
+        : undefined;
+    const below = plausibleName(cell);
     if (below) candidates.add(below);
   });
   // "Eladó neve: | Kitalált Kft.": a szállító-cimke cellája és a név ugyanabban a sorban

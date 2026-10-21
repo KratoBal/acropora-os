@@ -742,6 +742,38 @@ describe("the supplier name from the text", () => {
     );
   });
 
+  it("a sentence with 'from' in the middle is no header; the seller column's cell is read, not the first one", () => {
+    assert.equal(
+      supplierNameFromText([
+        "Valid from 2026-10-01 for customer 4711",
+        "Kitalált Cég Kft. | Máshol",
+      ]),
+      null,
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Period from | Customer no.",
+        "Kitalált Cég Kft. | 4711",
+      ]),
+      null,
+    );
+    assert.equal(
+      supplierNameFromText([
+        "Számla | Eladó | Vevő",
+        "2026/12 | Kitalált Eladó Kft. | Vevő Zrt.",
+      ]),
+      "Kitalált Eladó Kft.",
+    );
+    // eltérő cellaszám és az eladó nem az első oszlop: nem találgatunk
+    assert.equal(
+      supplierNameFromText([
+        "Számla | Eladó | Vevő",
+        "Kitalált Eladó Kft. | 2026/12",
+      ]),
+      null,
+    );
+  });
+
   it("does not take a buyer label, a buyer-first header or our own company from those places", () => {
     assert.equal(
       supplierNameFromText(["Vevő neve: | Kitalált Vevő Kft."]),
