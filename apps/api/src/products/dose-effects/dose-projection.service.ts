@@ -158,17 +158,24 @@ export class DoseProjectionService implements OnModuleInit, OnModuleDestroy {
   }
 
   async status(now: Date = new Date()): Promise<DoseProjectionStatus> {
-    const [success, failure, rowCount] = await Promise.all([
-      prisma.reefClubDoseProjectionRun.findFirst({
-        where: { status: "SUCCEEDED" },
-        orderBy: { finishedAt: "desc" },
-      }),
-      prisma.reefClubDoseProjectionRun.findFirst({
-        where: { status: "FAILED" },
-        orderBy: { finishedAt: "desc" },
-      }),
-      prisma.reefClubDoseRow.count(),
-    ]);
-    return doseProjectionStatus({ success, failure, rowCount, now });
+    return readDoseProjectionStatus(now);
   }
+}
+
+/** The status from the database; also read by /health (card 2f0d7acd), without the service. */
+export async function readDoseProjectionStatus(
+  now: Date = new Date(),
+): Promise<DoseProjectionStatus> {
+  const [success, failure, rowCount] = await Promise.all([
+    prisma.reefClubDoseProjectionRun.findFirst({
+      where: { status: "SUCCEEDED" },
+      orderBy: { finishedAt: "desc" },
+    }),
+    prisma.reefClubDoseProjectionRun.findFirst({
+      where: { status: "FAILED" },
+      orderBy: { finishedAt: "desc" },
+    }),
+    prisma.reefClubDoseRow.count(),
+  ]);
+  return doseProjectionStatus({ success, failure, rowCount, now });
 }

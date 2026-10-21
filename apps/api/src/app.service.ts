@@ -1,8 +1,10 @@
 import { checkDatabaseHealth } from "@acropora/database";
-import { Injectable } from "@nestjs/common";
-import type { HealthResponse } from "@acropora/types";
+import { Injectable, Logger } from "@nestjs/common";
+import type { DoseProjectionHealth, HealthResponse } from "@acropora/types";
 
 import { releaseCommitSources } from "./common/release-info.util.js";
+import { toDoseProjectionHealth } from "./products/dose-effects/dose-projection.rules.js";
+import { readDoseProjectionStatus } from "./products/dose-effects/dose-projection.service.js";
 import { checkRedisHealth } from "./health/redis-health.js";
 
 /**
@@ -34,6 +36,25 @@ export function applicationHealth(): HealthResponse["application"] {
   };
 }
 
+/**
+ * THE DOSE-LIST PROJECTION ON /health (card 2f0d7acd): the fleet's monitor reads it without a
+ * login. A failed read is `null`, never an exception: the projection is the fleet's alarm, and it
+ * must not make /health answer 503 (the container's health check restarts on that).
+ */
+export async function doseProjectionHealth(
+  read: () => Promise<Parameters<typeof toDoseProjectionHealth>[0]> = () =>
+    readDoseProjectionStatus(),
+): Promise<DoseProjectionHealth | null> {
+  try {
+    return toDoseProjectionHealth(await read());
+  } catch (error) {
+    new Logger("Health").warn(
+      `doseProjection could not be read: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+}
+
 @Injectable()
 export class AppService {
   getWelcome() {
@@ -44,9 +65,10 @@ export class AppService {
   }
 
   async getHealth(): Promise<HealthResponse> {
-    const [database, redis] = await Promise.all([
+    const [database, redis, doseProjection] = await Promise.all([
       checkDatabaseHealth(),
       checkRedisHealth(),
+      doseProjectionHealth(),
     ]);
 
     return {
@@ -55,6 +77,7 @@ export class AppService {
       redis,
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
+      doseProjection,
     };
   }
 }

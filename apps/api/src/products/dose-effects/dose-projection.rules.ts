@@ -1,3 +1,4 @@
+import type { DoseProjectionHealth } from "@acropora/types";
 import type { DoseEffectView } from "./dose-effects.service.js";
 
 /**
@@ -100,6 +101,18 @@ export interface DoseProjectionStatus {
   } | null;
   /** True if the last failure is newer than the last success: the rebuilder is failing NOW. */
   failingSinceLastSuccess: boolean;
+}
+
+/** The public part of the status for /health: numbers and flags, never the failure's text. */
+export function toDoseProjectionHealth(
+  status: DoseProjectionStatus,
+): DoseProjectionHealth {
+  return {
+    stale: status.stale,
+    ageHours: status.ageHours,
+    rowCount: status.rowCount,
+    failingSinceLastSuccess: status.failingSinceLastSuccess,
+  };
 }
 
 export function doseProjectionStatus(input: {
