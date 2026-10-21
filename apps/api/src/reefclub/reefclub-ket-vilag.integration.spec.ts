@@ -746,6 +746,103 @@ describe(
       );
     });
 
+    it("5.2/12: A tokenje B fiókot nem érinti: a megerősítő csak A-t erősíti meg, a visszaállító csak A jelszavát cseréli", async () => {
+      // two unverified registrations at once: A's confirmation token must not confirm B
+      const addressA = email("token-a");
+      const addressB = email("token-b");
+      for (const address of [addressA, addressB])
+        assert.equal(
+          (
+            await rc("/rc/v1/auth/register", {
+              method: "POST",
+              body: {
+                email: address,
+                password: PASSWORD,
+                consentVersion: REEFCLUB_PRIVACY_NOTICE_VERSION,
+              },
+            })
+          ).status,
+          202,
+        );
+      await settle();
+      const verifyA = tokenIn(lastMailTo(addressA));
+      assert.equal(
+        (
+          await rc("/rc/v1/auth/verify-email", {
+            method: "POST",
+            body: { token: verifyA },
+          })
+        ).status,
+        204,
+      );
+      const verifiedAt = async (address: string) =>
+        (
+          await prisma.reefClubAccount.findUniqueOrThrow({
+            where: { email: address },
+            select: { emailVerifiedAt: true },
+          })
+        ).emailVerifiedAt;
+      assert.ok(await verifiedAt(addressA), "A megerősítve");
+      assert.equal(await verifiedAt(addressB), null, "B megerősítetlen marad");
+      assert.equal(
+        (
+          await rc("/rc/v1/auth/login", {
+            method: "POST",
+            body: { email: addressB, password: PASSWORD },
+          })
+        ).status,
+        403,
+        "B A tokenjével sem lép be",
+      );
+
+      // two verified accounts: A's reset token changes A's password only
+      const nameC = "token-c";
+      const nameD = "token-d";
+      const sessionD = await verifiedLogin(nameD);
+      await verifiedLogin(nameC);
+      assert.equal(
+        (
+          await rc("/rc/v1/auth/password-reset", {
+            method: "POST",
+            body: { email: email(nameC) },
+          })
+        ).status,
+        202,
+      );
+      await settle();
+      const resetC = tokenIn(lastMailTo(email(nameC)));
+      assert.equal(
+        (
+          await rc("/rc/v1/auth/password-reset/confirm", {
+            method: "POST",
+            body: { token: resetC, password: NEW_PASSWORD },
+          })
+        ).status,
+        204,
+      );
+      const login = (name: string, password: string) =>
+        rc("/rc/v1/auth/login", {
+          method: "POST",
+          body: { email: email(name), password },
+        });
+      assert.equal(
+        (await login(nameD, NEW_PASSWORD)).status,
+        401,
+        "D jelszava nem lett az új",
+      );
+      assert.equal(
+        (await login(nameD, PASSWORD)).status,
+        204,
+        "D régi jelszava él",
+      );
+      assert.equal(
+        (await rc("/rc/v1/me", { cookie: sessionD.cookie })).status,
+        200,
+        "D munkamenete megmaradt",
+      );
+      assert.equal((await login(nameC, NEW_PASSWORD)).status, 204);
+    });
+
     describe("Google- és Apple-belépés (3. szelet)", () => {
       const sub = (name: string) => `${name}-${suffix}`;
 
