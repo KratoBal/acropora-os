@@ -667,6 +667,85 @@ describe(
         );
     });
 
+    it("5.2/17: a feltételezett beadás (lejárt, visszajelzés nélküli ajánlás) sehol nem látszik adagként: a vevő naplójában, az előnézetben és a bolt nézetében sem", async () => {
+      // The engine counts an expired recommendation with no answer as given, for the limit only. It
+      // must never show as a dose: the customer's log lists recorded doses, and the shop's view and
+      // the preview carry no dose at all. A recorded dose is written only by the customer.
+      const { ownerAccountId } = await prisma.aquarium.findUniqueOrThrow({
+        where: { id: sharedId },
+        select: { ownerAccountId: true },
+      });
+      const marker = `FELTETELEZETT-${Date.now()}`;
+      const assumed = await prisma.reefClubRecommendation.create({
+        data: {
+          aquariumId: sharedId,
+          accountId: ownerAccountId!,
+          parameterCode: "KH",
+          direction: "EMEL",
+          frameVersion: "proba",
+          input: {},
+          basisMeasuredAt: new Date(Date.now() - 30 * 3_600_000),
+          doseEffectVersion: 1,
+          productName: marker,
+          amount: 8,
+          doseUnit: "ML",
+          durationDays: 1,
+          effectHours: 12,
+          source: "proba",
+          text: `Adj 8 ml ${marker} terméket.`,
+          templateId: "proba",
+          reservedChanges: [],
+          // past its effect time with no answer: the engine reads it as EXPIRED, i.e. given
+          effectEndsAt: new Date(Date.now() - 2 * 3_600_000),
+        },
+      });
+      try {
+        const doses = await rc(`/rc/v1/aquariums/${sharedId}/doses`, {
+          session: sessionA,
+        });
+        assert.equal(doses.status, 200);
+        const log = (await doses.json()) as {
+          items: { recommendationId: string | null }[];
+        };
+        assert.equal(
+          log.items.filter((d) => d.recommendationId === assumed.id).length,
+          0,
+          "a vevő adag-naplójában nincs",
+        );
+        const preview = await rc(`/rc/v1/aquariums/${sharedId}/share/preview`, {
+          session: sessionA,
+        });
+        assert.equal(preview.status, 200);
+        const previewText = await preview.text();
+        const seen: string[] = [];
+        if (previewText.includes(marker) || previewText.includes(assumed.id))
+          seen.push("előnézet");
+        // every internal GET route of the shared aquarium: the shop's view in all its forms
+        for (const route of aquariumRoutes().filter(
+          (r) => r.method === "GET",
+        )) {
+          const { status, body } = await call(route, sharedId, OCCASION);
+          if (
+            status === 200 &&
+            (body.includes(marker) || body.includes(assumed.id))
+          )
+            seen.push(`${route.method} ${route.path}`);
+        }
+        assert.deepEqual(seen, []);
+        assert.equal(
+          await prisma.reefClubAdministeredDose.count({
+            where: { recommendationId: assumed.id },
+          }),
+          0,
+          "beadás-sor nem keletkezett belőle",
+        );
+      } finally {
+        await prisma.reefClubRecommendation.delete({
+          where: { id: assumed.id },
+        });
+      }
+    });
+
     it("5.2/21: a visszavonás után a korábbi adat semmilyen belső úton nem érhető el, a belső olvasások naplója megmarad", async () => {
       const readsBefore = await prisma.aquariumShareEvent.count({
         where: { aquariumId: sharedId, kind: "INTERNAL_READ" },
