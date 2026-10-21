@@ -1518,6 +1518,14 @@ describe(
       // A KH and a calcium request at the same moment. Locks per parameter, taken in the order of the
       // request, would deadlock here (one asks KH then calcium, the other the reverse); the service
       // holds ONE lock per aquarium, and this case keeps it so.
+      //
+      // WHAT IT MEASURES, AND WHAT IT DOES NOT (barracuda, #1769): the lock is taken BEFORE anything is
+      // read, so the deadlock is reached whatever the dose list says: this case measures that both
+      // requests finish. It does NOT measure what they hand out: the dose list's age comes from the
+      // rows' runs (#1757), and on the shared test database other suites' rows are in the table, so
+      // the list here reads as stale and no proposal is made. Moving the other suites' runs back
+      // would touch rows that are not this case's; issuing is measured by the recommendation case
+      // above, on rows of its own.
       const account = await prisma.reefClubAccount.create({
         data: {
           email: email("ket-param"),
@@ -1604,10 +1612,6 @@ describe(
           },
         });
       }
-      await prisma.reefClubDoseProjectionRun.updateMany({
-        where: { status: "SUCCEEDED", id: { not: run.id } },
-        data: { finishedAt: new Date(Date.now() - 48 * 3_600_000) },
-      });
       const database = new ReefClubDatabase(roleUrl);
       const service = new ReefClubRecommendationService(
         new ReefClubAquariumAccess(database),
@@ -1618,22 +1622,17 @@ describe(
           service.recommend(account.id, aquarium.id, "KH"),
           service.recommend(account.id, aquarium.id, "KALCIUM"),
         ]);
+        // both finished, and neither was the deadlock victim (Postgres 40P01)
         assert.deepEqual(
           settled.map((s) =>
-            s.status === "fulfilled" ? "ok" : String(s.reason).slice(0, 160),
+            s.status === "fulfilled"
+              ? "ok"
+              : /40P01|deadlock/i.test(String(s.reason))
+                ? "holtpont"
+                : String(s.reason).slice(0, 160),
           ),
           ["ok", "ok"],
         );
-        const rows = await prisma.reefClubRecommendation.findMany({
-          where: { aquariumId: aquarium.id },
-          select: { parameterCode: true },
-        });
-        // at most one proposal per parameter, whatever the two outcomes were
-        for (const parameter of ["KH", "KALCIUM"])
-          assert.ok(
-            rows.filter((r) => r.parameterCode === parameter).length <= 1,
-            parameter,
-          );
       } finally {
         await database.$disconnect();
         await prisma.reefClubDoseProjectionRun.deleteMany({
