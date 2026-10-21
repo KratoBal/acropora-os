@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { GmailMailSender } from "../notifications/mail/gmail-mail.sender.js";
-import type { MailSender, OutgoingMail } from "../notifications/mail/mail.port.js";
+import type {
+  MailSender,
+  OutgoingMail,
+} from "../notifications/mail/mail.port.js";
 import type { ReefClubAccountRepository } from "./reefclub-account.repository.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
 import { createReefClubMailSender } from "./reefclub-mail.js";
@@ -22,7 +25,10 @@ import { ReefClubSmtpMailSender } from "./reefclub-smtp-mail.js";
  * failing because its mail was held back; and, the other way, the gate being
  * on without the variable (production must send as before).
  */
-const mail = (to: string[], extra: Partial<OutgoingMail> = {}): OutgoingMail => ({
+const mail = (
+  to: string[],
+  extra: Partial<OutgoingMail> = {},
+): OutgoingMail => ({
   to,
   subject: "Erősítsd meg az e-mail címed",
   text: "x",
@@ -54,7 +60,11 @@ function gate(value: string) {
 
 describe("REEFCLUB_MAIL_ALLOW: the value", () => {
   it("unset or blank is off, and every address may get a mail (the production state)", () => {
-    for (const env of [{}, { REEFCLUB_MAIL_ALLOW: "" }, { REEFCLUB_MAIL_ALLOW: "   " }]) {
+    for (const env of [
+      {},
+      { REEFCLUB_MAIL_ALLOW: "" },
+      { REEFCLUB_MAIL_ALLOW: "   " },
+    ]) {
       const allow = reefClubMailAllow(env);
       assert.equal(allow.kind, "off");
       assert.equal(reefClubMailAllowed(allow, "anybody@example.com"), true);
@@ -62,7 +72,9 @@ describe("REEFCLUB_MAIL_ALLOW: the value", () => {
   });
 
   it("a domain matches exactly; an address matches itself; case and spaces do not matter", () => {
-    const allow = reefClubMailAllow({ REEFCLUB_MAIL_ALLOW: " Acropora.HU , Tester@Example.com " });
+    const allow = reefClubMailAllow({
+      REEFCLUB_MAIL_ALLOW: " Acropora.HU , Tester@Example.com ",
+    });
     assert.equal(reefClubMailAllowed(allow, "info@acropora.hu"), true);
     assert.equal(reefClubMailAllowed(allow, " Balazs@ACROPORA.hu "), true);
     assert.equal(reefClubMailAllowed(allow, "tester@example.com"), true);
@@ -82,7 +94,11 @@ describe("REEFCLUB_MAIL_ALLOW: the value", () => {
     for (const value of ["acropora", "*", "@", "foo bar@acropora.hu", ","]) {
       const allow = reefClubMailAllow({ REEFCLUB_MAIL_ALLOW: value });
       assert.equal(allow.kind, "on", value);
-      assert.equal(reefClubMailAllowed(allow, "info@acropora.hu"), false, value);
+      assert.equal(
+        reefClubMailAllowed(allow, "info@acropora.hu"),
+        false,
+        value,
+      );
     }
   });
 });
@@ -91,7 +107,10 @@ describe("the gate on the sender", () => {
   it("a listed recipient gets the mail unchanged", async () => {
     const g = gate("acropora.hu");
     await g.sender.send(mail(["info@acropora.hu"]));
-    assert.deepEqual(g.sent.map((m) => m.to), [["info@acropora.hu"]]);
+    assert.deepEqual(
+      g.sent.map((m) => m.to),
+      [["info@acropora.hu"]],
+    );
     assert.deepEqual(g.warnings, []);
   });
 
@@ -100,16 +119,25 @@ describe("the gate on the sender", () => {
     await g.sender.send(mail(["valodi.vevo@gmail.com"]));
     assert.deepEqual(g.sent, []);
     assert.equal(g.warnings.length, 1);
-    assert.match(g.warnings[0]!, /1 címzettje nincs a REEFCLUB_MAIL_ALLOW listáján/);
+    assert.match(
+      g.warnings[0]!,
+      /1 címzettje nincs a REEFCLUB_MAIL_ALLOW listáján/,
+    );
     assert.doesNotMatch(g.warnings[0]!, /valodi|gmail/);
   });
 
   it("a mixed list keeps only the listed recipients, cc and bcc included", async () => {
     const g = gate("acropora.hu");
     await g.sender.send(
-      mail(["info@acropora.hu", "x@gmail.com"], { cc: ["y@gmail.com", "luca@acropora.hu"], bcc: ["z@gmail.com"] }),
+      mail(["info@acropora.hu", "x@gmail.com"], {
+        cc: ["y@gmail.com", "luca@acropora.hu"],
+        bcc: ["z@gmail.com"],
+      }),
     );
-    assert.deepEqual(g.sent.map((m) => [m.to, m.cc, m.bcc]), [[["info@acropora.hu"], ["luca@acropora.hu"], []]]);
+    assert.deepEqual(
+      g.sent.map((m) => [m.to, m.cc, m.bcc]),
+      [[["info@acropora.hu"], ["luca@acropora.hu"], []]],
+    );
     assert.match(g.warnings[0]!, /3 címzettje/);
   });
 
@@ -123,8 +151,17 @@ describe("the gate on the sender", () => {
     };
     assert.ok(createReefClubMailSender(smtp) instanceof ReefClubSmtpMailSender);
     assert.ok(createReefClubMailSender({}) instanceof GmailMailSender);
-    assert.ok(createReefClubMailSender({ ...smtp, REEFCLUB_MAIL_ALLOW: "acropora.hu" }) instanceof ReefClubAllowlistMailSender);
-    assert.ok(createReefClubMailSender({ REEFCLUB_MAIL_ALLOW: "acropora.hu" }) instanceof ReefClubAllowlistMailSender);
+    assert.ok(
+      createReefClubMailSender({
+        ...smtp,
+        REEFCLUB_MAIL_ALLOW: "acropora.hu",
+      }) instanceof ReefClubAllowlistMailSender,
+    );
+    assert.ok(
+      createReefClubMailSender({
+        REEFCLUB_MAIL_ALLOW: "acropora.hu",
+      }) instanceof ReefClubAllowlistMailSender,
+    );
   });
 });
 

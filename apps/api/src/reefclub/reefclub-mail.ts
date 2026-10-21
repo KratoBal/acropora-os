@@ -72,7 +72,9 @@ export function createReefClubMailSender(
     ? new ReefClubSmtpMailSender(reefClubSmtpConfig(environment))
     : new GmailMailSender(fetch, reefClubMailEnvironment(environment));
   const allow = reefClubMailAllow(environment);
-  return allow.kind === "on" ? new ReefClubAllowlistMailSender(sender, allow) : sender;
+  return allow.kind === "on"
+    ? new ReefClubAllowlistMailSender(sender, allow)
+    : sender;
 }
 
 /*

@@ -32,9 +32,14 @@ export const REEFCLUB_MAIL_ALLOW = "REEFCLUB_MAIL_ALLOW";
 
 export type ReefClubMailAllow =
   | { kind: "off" }
-  | { kind: "on"; domains: ReadonlySet<string>; addresses: ReadonlySet<string> };
+  | {
+      kind: "on";
+      domains: ReadonlySet<string>;
+      addresses: ReadonlySet<string>;
+    };
 
-const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
+const DOMAIN =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
 export function reefClubMailAllow(
   environment: Record<string, string | undefined> = process.env,
@@ -58,7 +63,10 @@ export function reefClubMailAllow(
 }
 
 /** Whether one recipient may get a mail under the gate. */
-export function reefClubMailAllowed(allow: ReefClubMailAllow, address: string): boolean {
+export function reefClubMailAllowed(
+  allow: ReefClubMailAllow,
+  address: string,
+): boolean {
   if (allow.kind === "off") return true;
   const normalized = address.trim().toLowerCase();
   if (allow.addresses.has(normalized)) return true;
@@ -82,9 +90,12 @@ export class ReefClubAllowlistMailSender implements MailSender {
     const cc = keep(mail.cc);
     const bcc = keep(mail.bcc);
     const dropped =
-      mail.to.length - to.length +
-      (mail.cc?.length ?? 0) - (cc?.length ?? 0) +
-      (mail.bcc?.length ?? 0) - (bcc?.length ?? 0);
+      mail.to.length -
+      to.length +
+      (mail.cc?.length ?? 0) -
+      (cc?.length ?? 0) +
+      (mail.bcc?.length ?? 0) -
+      (bcc?.length ?? 0);
     if (dropped > 0)
       this.logger.warn(
         `A ReefClub-levél ${dropped} címzettje nincs a ${REEFCLUB_MAIL_ALLOW} listáján, neki nem ment ki (teszt levél-kapu).`,
