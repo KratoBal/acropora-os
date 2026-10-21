@@ -102,7 +102,12 @@ rights the function's statements use (card b6133bd8). Creating that role and cha
 function's owner need a superuser, so **run this file as a superuser** (it stops with Postgres's
 message otherwise). **A PR that changes the function changes the definer's grants in the same PR**;
 a column used without a grant stops the function with a permission error. The file also revokes
-`CREATE` on the `public` schema from `PUBLIC` (a no-op from PostgreSQL 15). Check:
+`CREATE` on the `public` schema from `PUBLIC` (a no-op from PostgreSQL 15). That revoke applies to
+every role: **before the first run, check who owns the `public` schema**
+(`SELECT nspowner::regrole FROM pg_namespace WHERE nspname = 'public';`) and that the role running
+`prisma migrate deploy` is that owner or a superuser. A migration role that is neither, and created
+its tables through `PUBLIC`'s right until now, would stop at the next deploy with a permission error
+(loud and reversible: `GRANT CREATE ON SCHEMA public TO <that role>`). Check:
 `SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE proname = 'reefclub_redeem_link_code';`
 (expected: `reefclub_definer`).
 
