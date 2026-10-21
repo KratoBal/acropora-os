@@ -27,7 +27,10 @@
 
 import { validateGtin } from "./gtin.js";
 import { parseDose, parseQuantity, type Dimension } from "./units.js";
-import { parseWaterParameterEffects } from "./water-parameters.js";
+import {
+  parseWaterParameterCodes,
+  parseWaterParameterEffects,
+} from "./water-parameters.js";
 
 export type Tier = "A" | "B" | "C";
 
@@ -39,6 +42,10 @@ export type FieldKind =
   | { kind: "dose" }
   /** Measurement codes with a direction (`water-parameters.ts`). */
   | { kind: "parameterEffects" }
+  /** Measurement codes without a direction: what to measure. */
+  | { kind: "parameterCodes" }
+  /** One of a closed set of upper-case words. */
+  | { kind: "enum"; values: readonly string[] }
   | { kind: "text" };
 
 export type ClaimPolicy = "none" | "value" | "prose";
@@ -283,6 +290,37 @@ export const FIELD_SPECS = {
     claims: "value",
     tierFromDecision: false,
   },
+  /**
+   * THE THREE DOSING STATES (Balázs, 2026-10-21 22:08 UTC, card 85c38ab1):
+   * FIXED (the `dosing` field holds the dose), TEST_DEPENDENT (no fixed dose:
+   * measure first, then dose as the manufacturer says, `dosingGuidance` and
+   * `dosingTests`), NO_DATA (the manufacturer's source was read and gives none,
+   * which is not the same as never looked). Copied from evidence only.
+   */
+  dosingMode: {
+    tier: "C",
+    kind: { kind: "enum", values: ["FIXED", "TEST_DEPENDENT", "NO_DATA"] },
+    claims: "value",
+    tierFromDecision: false,
+  },
+  /**
+   * The manufacturer's guidance for a test-dependent dose, in its own words
+   * (verbatim excerpt as the evidence). Prose: "a gyártó szerint", never a
+   * property of the product.
+   */
+  dosingGuidance: {
+    tier: "C",
+    kind: text,
+    claims: "prose",
+    tierFromDecision: false,
+  },
+  /** What to measure before dosing: `KALCIUM;KH` (the effects' code set). */
+  dosingTests: {
+    tier: "C",
+    kind: { kind: "parameterCodes" },
+    claims: "value",
+    tierFromDecision: false,
+  },
   /** The GPSR manufacturer block: name, postal address, email. */
   manufacturerInfo: {
     tier: "C",
@@ -375,6 +413,16 @@ export function normalizeFieldValue(
     case "parameterEffects": {
       const r = parseWaterParameterEffects(raw);
       return r.ok ? { ok: true, value: r.canonical } : r;
+    }
+    case "parameterCodes": {
+      const r = parseWaterParameterCodes(raw);
+      return r.ok ? { ok: true, value: r.canonical } : r;
+    }
+    case "enum": {
+      const v = collapse(raw).toUpperCase();
+      return kind.values.includes(v)
+        ? { ok: true, value: v }
+        : { ok: false, reason: `"${v}": not one of ${kind.values.join(", ")}` };
     }
     case "text": {
       const v = collapse(raw);

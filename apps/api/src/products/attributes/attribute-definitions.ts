@@ -67,7 +67,14 @@ export interface AttributeDefinitionSeed {
  * mennyiseg / viztérfogat / idoszak.
  */
 export const KIND_DATA_TYPE: Record<
-  "gtin" | "identifier" | "quantity" | "dose" | "parameterEffects" | "text",
+  | "gtin"
+  | "identifier"
+  | "quantity"
+  | "dose"
+  | "parameterEffects"
+  | "parameterCodes"
+  | "enum"
+  | "text",
   AttributeDataType
 > = {
   gtin: "STRING",
@@ -76,6 +83,9 @@ export const KIND_DATA_TYPE: Record<
   dose: "DOSE",
   // a kanonikus `KOD:IRANY;...` szöveg (JEV `water-parameters.ts`)
   parameterEffects: "TEXT",
+  // a mérendő paraméterek `KOD;KOD` szövege, és a zárt szókészlet (Product Knowledge)
+  parameterCodes: "TEXT",
+  enum: "TEXT",
   text: "TEXT",
 };
 
@@ -327,6 +337,62 @@ export const ATTRIBUTE_DEFINITION_ADDITIONS: readonly {
     definition: {
       key: "waterParameterEffects",
       label: "Mozgatott vízparaméterek",
+      dataType: "TEXT",
+      dimension: null,
+      canonicalUnit: null,
+      scope: "PRODUCT",
+      tier: "C",
+      claimPolicy: "VALUE",
+      validation: null,
+      public: false,
+      aiVisible: true,
+      merchantVisible: false,
+      medusaNativeField: null,
+    },
+  },
+  // A HÁROM ADAGOLÁSI ÁLLAPOT (Balázs, 2026-10-21 22:08 UTC, kártya 85c38ab1): az AI
+  // olvassa, a webshop nem (befagyasztás, és egy útmutató nem bolti tény)
+  {
+    migration: "20261022000000_dosing_states_definitions",
+    definition: {
+      key: "dosingMode",
+      label: "Adagolás módja",
+      dataType: "TEXT",
+      dimension: null,
+      canonicalUnit: null,
+      scope: "PRODUCT",
+      tier: "C",
+      claimPolicy: "VALUE",
+      validation: null,
+      public: false,
+      aiVisible: true,
+      merchantVisible: false,
+      medusaNativeField: null,
+    },
+  },
+  {
+    migration: "20261022000000_dosing_states_definitions",
+    definition: {
+      key: "dosingGuidance",
+      label: "Adagolási útmutató (a gyártó szerint)",
+      dataType: "TEXT",
+      dimension: null,
+      canonicalUnit: null,
+      scope: "PRODUCT",
+      tier: "C",
+      claimPolicy: "PROSE",
+      validation: null,
+      public: false,
+      aiVisible: true,
+      merchantVisible: false,
+      medusaNativeField: null,
+    },
+  },
+  {
+    migration: "20261022000000_dosing_states_definitions",
+    definition: {
+      key: "dosingTests",
+      label: "Adagolás előtt mérendő",
       dataType: "TEXT",
       dimension: null,
       canonicalUnit: null,

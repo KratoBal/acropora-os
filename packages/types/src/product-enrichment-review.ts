@@ -80,6 +80,9 @@ export const PRODUCT_ENRICHMENT_FIELDS = {
   packageContents: "C",
   dosing: "C",
   manufacturerClaims: "C",
+  dosingMode: "C",
+  dosingGuidance: "C",
+  dosingTests: "C",
   manufacturerInfo: "C",
   waterParameterEffects: "C",
 } as const satisfies Record<string, ProductFieldTier>;

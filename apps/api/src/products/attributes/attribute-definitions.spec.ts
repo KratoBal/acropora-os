@@ -40,7 +40,7 @@ const by = new Map(CURRENT_ATTRIBUTE_DEFINITIONS.map((d) => [d.key, d]));
 
 describe("attribute definitions vs FIELD_SPECS", () => {
   it("every fact key has exactly one definition, the copy keys none", () => {
-    assert.equal(TENY_KULCSOK.length, 26);
+    assert.equal(TENY_KULCSOK.length, 29);
     assert.deepEqual(
       [...CURRENT_ATTRIBUTE_DEFINITIONS.map((d) => d.key)].sort(),
       [...TENY_KULCSOK].sort(),
@@ -189,6 +189,26 @@ describe("attribute definitions vs FIELD_SPECS", () => {
     );
   });
 
+  // Product Knowledge (Balázs 2026-10-21 22:08 UTC): az AI olvassa, a webshop nem
+  it("the three dosing-state fields are for the AI, not shop facts", () => {
+    for (const key of ["dosingMode", "dosingGuidance", "dosingTests"]) {
+      const d = by.get(key)!;
+      assert.deepEqual(
+        [
+          d.dataType,
+          d.tier,
+          d.public,
+          d.aiVisible,
+          d.merchantVisible,
+          d.medusaNativeField,
+        ],
+        ["TEXT", "C", false, true, false, null],
+        key,
+      );
+    }
+    assert.equal(by.get("dosingGuidance")!.claimPolicy, "PROSE");
+  });
+
   it("today the ean is a per-variant barcode, not a public fact; nothing else changed", () => {
     const ean = CURRENT_ATTRIBUTE_DEFINITIONS.find((d) => d.key === "ean")!;
     assert.deepEqual(
@@ -197,7 +217,13 @@ describe("attribute definitions vs FIELD_SPECS", () => {
     );
     assert.deepEqual(
       CURRENT_ATTRIBUTE_DEFINITIONS.filter((d) => !d.public).map((d) => d.key),
-      ["ean", "waterParameterEffects"],
+      [
+        "ean",
+        "waterParameterEffects",
+        "dosingMode",
+        "dosingGuidance",
+        "dosingTests",
+      ],
     );
     assert.equal(
       CURRENT_ATTRIBUTE_DEFINITIONS.length,
