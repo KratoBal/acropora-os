@@ -105,6 +105,25 @@ describe("az AI adagolás-válasza az OS-ben", () => {
     );
   });
 
+  it("tesztfüggő, miközben az olvasó fix adagot talált: ugyanúgy ellentmondás", () => {
+    const guidance = "Check KH weekly.";
+    const page = `Kitalált. Dose 1 ml per 100 l daily. ${guidance}`;
+    const r = dosingStatement(
+      answer({
+        mode: "TEST_DEPENDENT",
+        tests: ["KH"],
+        guidance,
+        excerpt: guidance,
+      }),
+      page,
+    );
+    assert.deepEqual(r.values, []);
+    assert.match(
+      r.notes[0]!,
+      /az AI szerint tesztfüggő, az olvasó 1 ml\/100 L\/day adagot olvasott/,
+    );
+  });
+
   it("a nincs-adat indoklása nem kivonatként áll", () => {
     const r = dosingStatement(
       answer({ reason: "a lapon nincs adag" }),

@@ -208,16 +208,17 @@ export function dosingStatement(
     excerpt: where(text),
   });
 
+  // "no data" or "test-dependent" next to a fixed dose the reader found (on the
+  // page or in the description) is a contradiction, not a state (barracuda, #1805)
+  const found = wholePage.raw ?? alreadyRead;
+  if (answer.mode !== "FIXED" && found !== null)
+    return {
+      values: [],
+      notes: [
+        `adagolás (AI): az AI szerint ${answer.mode === "NO_DATA" ? "nincs adat" : "tesztfüggő"}, az olvasó ${found} adagot olvasott`,
+      ],
+    };
   if (answer.mode === "NO_DATA") {
-    // "no data" next to a dose the reader found is a contradiction, not a state
-    const found = wholePage.raw ?? alreadyRead;
-    if (found !== null)
-      return {
-        values: [],
-        notes: [
-          `adagolás (AI): az AI szerint nincs adat, az olvasó ${found} adagot olvasott`,
-        ],
-      };
     return {
       values: [value("dosingMode", "NO_DATA", answer.excerpt)],
       notes: [],
