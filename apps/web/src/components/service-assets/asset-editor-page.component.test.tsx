@@ -1308,7 +1308,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
       screen
         .getAllByRole("option", { name: /fázis/ })
         .map((option) => option.textContent),
-    ).toEqual(["I. fázis", "III. fázis"]);
+    ).toEqual(["I fázis", "III fázis"]);
   });
 
   it("a Bekötés az eredeti bejegyzés ALATT áll, az Áramfelvétel fölötte", async () => {
@@ -1332,7 +1332,7 @@ describe("AssetEditorPage áramfelvétele és bekötése", () => {
 
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText("Áramfelvétel"), " 6,15/5,5 ");
-    await user.selectOptions(screen.getByLabelText("Bekötés"), "III. fázis");
+    await user.selectOptions(screen.getByLabelText("Bekötés"), "III fázis");
     await user.click(
       screen.getByRole("button", { name: "Módosítások mentése" }),
     );

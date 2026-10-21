@@ -117,8 +117,8 @@ export const assetCriticalityLabel: Record<AssetCriticality, string> = {
 export type AssetPhaseConnection = "PHASE_1" | "PHASE_3";
 
 export const assetPhaseConnectionLabel: Record<AssetPhaseConnection, string> = {
-  PHASE_1: "I. fázis",
-  PHASE_3: "III. fázis",
+  PHASE_1: "I fázis",
+  PHASE_3: "III fázis",
 };
 
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";

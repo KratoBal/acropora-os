@@ -1,8 +1,8 @@
 import type { AssetPhaseConnection } from "./asset-fields";
 
 /**
- * A BEKOTES FELIRATAI (Balazs, 2026-10-21, kanban 541e2716): "I. fazis" vagy
- * "III. fazis". Az ertek stabil kod, a felirat a felulet dolga -- ugyanaz a
+ * A BEKOTES FELIRATAI (Balazs, 2026-10-21, kanban 541e2716): "I fazis" vagy
+ * "III fazis". Az ertek stabil kod, a felirat a felulet dolga -- ugyanaz a
  * ket felirat, mint a webes feluleten (`assetPhaseConnectionLabel` a
  * `packages/types`-ban).
  *
@@ -14,8 +14,8 @@ export const ASSET_PHASE_CONNECTION_LABELS: Record<
   AssetPhaseConnection,
   string
 > = {
-  PHASE_1: "I. fázis",
-  PHASE_3: "III. fázis",
+  PHASE_1: "I fázis",
+  PHASE_3: "III fázis",
 };
 
 /** A valaszto sorrendje: eloszor az egy fazis. */
