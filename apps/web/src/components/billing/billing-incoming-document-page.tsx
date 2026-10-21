@@ -62,6 +62,15 @@ export function BillingIncomingDocumentPage({
   const [error, setError] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  // acrobot 34672 (PS2026/01452): where no PDF arrived, a person with finance rights attaches one to the row; the
+  // mailbox-only and purchase rows (prefixed ids) have no feed row to attach to
+  const canAttach = Boolean(
+    session &&
+    hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE) &&
+    !documentId.includes(":"),
+  );
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -101,6 +110,23 @@ export function BillingIncomingDocumentPage({
       );
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const attachPdf = async (file: File | undefined) => {
+    if (!file) return;
+    setAttachBusy(true);
+    setAttachError(null);
+    try {
+      setDetail(
+        await billingDocumentsApi.attachIncomingPdf(token, documentId, file),
+      );
+    } catch (cause) {
+      setAttachError(
+        cause instanceof Error ? cause.message : "A PDF nem csatolható.",
+      );
+    } finally {
+      setAttachBusy(false);
     }
   };
 
@@ -463,6 +489,27 @@ export function BillingIncomingDocumentPage({
                 {pdfError ? (
                   <p role="alert" className="text-xs text-pilot-red-700">
                     {pdfError}
+                  </p>
+                ) : null}
+              </div>
+            ) : canAttach ? (
+              <div className="mt-4 space-y-2">
+                <label className="block text-xs text-pilot-grey-600">
+                  PDF csatolása, ha a számlát máshonnan megkaptad
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    className="mt-1 block text-xs"
+                    disabled={attachBusy}
+                    aria-label="PDF csatolása"
+                    onChange={(event) =>
+                      void attachPdf(event.target.files?.[0])
+                    }
+                  />
+                </label>
+                {attachError ? (
+                  <p role="alert" className="text-xs text-pilot-red-700">
+                    {attachError}
                   </p>
                 ) : null}
               </div>

@@ -119,6 +119,20 @@ export const billingDocumentsApi = {
     return pdfBlob(response, "A számla PDF-je nem tölthető le.");
   },
   /**
+   * PDF CSATOLÁSA egy bejövő számlához, amelyhez nem érkezett (acrobot 34672):
+   * a feed-sor azonosítójával; PDF-es sorra a szerver 409-et ad. A válasz a sor
+   * friss adatlapja.
+   */
+  attachIncomingPdf(token: string, id: string, file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/pdf`,
+      token,
+      { method: "POST", body },
+    );
+  },
+  /**
    * A POSTAFIÓKOS SOR ELLENŐRZÉSE (kártya e4c3b0fb): a kinyert adat, a
    * forrásaival és a figyelmeztetésekkel. Az azonosító a lista sorának
    * azonosítója (`mailbox:<id>`). Az olvasás nem ír.

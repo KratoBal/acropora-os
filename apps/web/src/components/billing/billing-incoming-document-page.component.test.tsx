@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
 const api = vi.hoisted(() => ({
   incomingDetail: vi.fn(),
   incomingPdf: vi.fn(),
+  attachIncomingPdf: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -196,5 +197,38 @@ describe("BillingIncomingDocumentPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Nincs fizetve")).toBeNull();
     expect(screen.getByText("A számla nem a cégre szól.")).toBeInTheDocument();
+  });
+
+  it("without a PDF, finance can attach one; the page then offers it (acrobot 34672)", async () => {
+    api.incomingDetail.mockResolvedValue(detail({ hasPdf: false }));
+    api.attachIncomingPdf
+      .mockReset()
+      .mockResolvedValue(detail({ hasPdf: true }));
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    const input = await screen.findByLabelText("PDF csatolása");
+    const file = new File(["%PDF-1.4"], "kompress.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(api.attachIncomingPdf).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        file,
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: "PDF megnyitása" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("PDF csatolása")).toBeNull();
+  });
+
+  it("a mailbox-only row has no feed row to attach to: no attach input", async () => {
+    api.incomingDetail.mockResolvedValue(detail({ hasPdf: false }));
+    render(<BillingIncomingDocumentPage documentId="mailbox:doc-1" />);
+    expect(
+      await screen.findByText("Ehhez a számlához nem érkezett"),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("PDF csatolása")).toBeNull();
   });
 });
