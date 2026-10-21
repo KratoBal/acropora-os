@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
@@ -38,6 +41,15 @@ import {
  * feed-sorait, és kiírja, mit tárolna. `--apply`: a PDF a dokumentumtárba, a sor `pdfStorageKey`-je
  * rá mutat. A Gmailben és a cmfx-ben semmit nem változtat.
  *
+ * A LEVÉL NÉLKÜLI SZÁMLÁK (Balázs 2026-10-21: „a 2026/ kezdetű számlákat a cmfx állítja ki, csak nem mindig
+ * mennek ki emailben”): `--dir <mappa>` a levelek helyett egy mappa PDF-jeit olvassa. A fájlnév a cmfx
+ * levél-mellékletének alakja (`E-2026-00082-0.pdf`, `E-ACRW-2026-00518-0.pdf`); ilyen nevet a flotta
+ * cmfx-letöltője (agents/nautilus/scripts/cmfx-belepes-proba.mjs --mentes) ad. A mappát a futtató
+ * ember teszi oda, tehát a fájl eredete az övé: a levél-hitelesítés itt nem értelmezhető, a szám, az
+ * adószámunk és a fizetendő végösszeg ellenőrzése viszont ugyanúgy fut, és ugyanúgy tárol.
+ *
+ *   node dist/billing/external-invoice-mail-pdf.cli.js --month ÉÉÉÉ-HH --dir /tmp/cmfx-pdf [--apply]
+ *
  * Soronként: STORED / WOULD_STORE / NO_MAIL / NOT_PDF / NUMBER_NOT_IN_PDF / STORE_FAILED, utána a
  * levélben talált, de nem jelölt számok, okkal (már van PDF-je; másik hónap sora; NINCS SZÁMLA-SORA:
  * a feed nem hozta a számlát, a PDF megvan).
@@ -74,6 +86,13 @@ export async function main(
     return 2;
   }
   const apply = argv.includes("--apply");
+  const dirAt = argv.indexOf("--dir");
+  const dir = dirAt >= 0 ? (argv[dirAt + 1] ?? "") : null;
+  // `--dir --apply`: the flag after --dir is not a folder (barracuda #1786)
+  if (dir !== null && (!dir || dir.startsWith("--"))) {
+    io.err("A --dir után a mappa kell.\n");
+    return 2;
+  }
 
   const documents = (
     deps.documents ??
@@ -88,7 +107,7 @@ export async function main(
     );
     return 2;
   }
-  let mail = deps.mail;
+  let mail = deps.mail ?? (dir ? () => readPdfDir(dir) : undefined);
   if (!mail) {
     const credentials = supplierInvoiceMailCredentials(environment);
     if (!credentials) {
@@ -118,8 +137,17 @@ export async function main(
   });
 
   io.out(
-    `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
+    dir
+      ? `Fájl a ${dir} mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
+      : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
   );
+  // the folder's files with their size and fingerprint: the person reviewing the dry run compares them with the
+  // downloader's lines, through the copies between the fleet and the production container (barracuda #1786)
+  if (dir)
+    for (const pdf of pdfs)
+      io.out(
+        `FAJL ${pdf.fileName} ${pdf.buffer.length} bájt sha256:${createHash("sha256").update(pdf.buffer).digest("hex").slice(0, 16)}\n`,
+      );
   for (const outcome of report.outcomes)
     io.out(
       `${outcome.kind.padEnd(17)} ${outcome.documentNumber}${"bytes" in outcome ? ` (${outcome.bytes} bájt)` : ""}\n`,
@@ -163,6 +191,24 @@ export async function main(
     return count("WOULD_STORE") ? 1 : failed ? 3 : 0;
   }
   return failed ? 3 : 0;
+}
+
+/**
+ * Egy mappa PDF-jei a levél-út alakjában. A futtató ember tette oda (`--dir`): az eredetet ő igazolja,
+ * ezért `authenticated`; a szám, az adószám és az összeg ellenőrzése ettől még lefut.
+ */
+export async function readPdfDir(dir: string): Promise<MailPdf[]> {
+  const names = (await readdir(dir))
+    .filter((name) => name.toLowerCase().endsWith(".pdf"))
+    .sort();
+  return Promise.all(
+    names.map(async (fileName) => ({
+      messageId: `dir:${fileName}`,
+      fileName,
+      buffer: await readFile(join(dir, fileName)),
+      authenticated: true,
+    })),
+  );
 }
 
 export interface NumberRow {

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import { main, readCmfxMail } from "./external-invoice-mail-pdf.cli.js";
@@ -518,6 +521,71 @@ describe("external-invoice-mail-pdf:fill", () => {
     });
     assert.equal(noStore.code, 2);
     assert.match(noStore.err, /dokumentumtár nincs beállítva/);
+  });
+
+  /*
+    THE INVOICES WITHOUT A LETTER (Balázs 2026-10-21: the 2026/ series is issued in cmfx but not always mailed).
+    `--dir` reads the PDFs the fleet's cmfx downloader saved, named in the letter attachment's shape. WHAT TURNS
+    RED: the folder is not read, its file names do not map to the numbers, a non-PDF file is taken, the checks
+    (number, our tax number, payable total) are skipped for it, or it stores under another key than the letter's.
+  */
+  it("--dir: the folder's PDFs instead of the letters, the same checks and the same store", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cmfx-dir-"));
+    try {
+      await writeFile(
+        join(dir, "E-2026-00082-0.pdf"),
+        pdf("E-2026-00082-0.pdf", "2026/00082").buffer,
+      );
+      await writeFile(
+        join(dir, "E-ACRW-2026-00518-0.pdf"),
+        pdf("E-ACRW-2026-00518-0.pdf", "ACRW-2026/00518", "m", true, false)
+          .buffer,
+      );
+      await writeFile(join(dir, "jegyzet.txt"), "nem pdf");
+      const go = async (argv: string[]) => {
+        let out = "";
+        let err = "";
+        const r = recorder();
+        const code = await main(
+          argv,
+          { out: (t) => (out += t), err: (t) => (err += t) },
+          {
+            candidates: async () => [
+              candidate("row-82", "2026/00082"),
+              candidate("row-518", "ACRW-2026/00518"),
+              candidate("row-83", "2026/00083"),
+            ],
+            rowsByNumber: async () => [],
+            documents: () => r.documents,
+            store: r.store,
+            textOf,
+          },
+          {},
+        );
+        return { code, out, err, r };
+      };
+      const dry = await go(["--month", "2026-10", "--dir", dir]);
+      assert.equal(dry.code, 1);
+      assert.match(dry.out, /^Fájl a .* mappából \(2026-10\): 2 PDF/m);
+      assert.match(dry.out, /^WOULD_STORE\s+2026\/00082 \(\d+ bájt\)$/m);
+      // another cmfx customer's PDF in the folder: refused as in the letter path
+      assert.match(dry.out, /^NOT_OUR_INVOICE\s+ACRW-2026\/00518$/m);
+      assert.match(dry.out, /^NO_MAIL\s+2026\/00083$/m);
+      // each file with its size and fingerprint, to compare with the downloader's lines
+      assert.match(
+        dry.out,
+        /^FAJL E-2026-00082-0\.pdf \d+ bájt sha256:[0-9a-f]{16}$/m,
+      );
+      assert.deepEqual(dry.r.puts, []);
+      const applied = await go(["--month", "2026-10", "--dir", dir, "--apply"]);
+      assert.deepEqual(applied.r.puts, ["external-invoice/row-82/cmfx.pdf"]);
+      assert.equal((await go(["--month", "2026-10", "--dir"])).code, 2);
+      // the flag after --dir is not a folder: refused before anything, not read as one
+      const swapped = await go(["--month", "2026-10", "--dir", "--apply"]);
+      assert.deepEqual([swapped.code, swapped.r.puts], [2, []]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("without the info@ mail key it stops before reading anything", async () => {
