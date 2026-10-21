@@ -718,6 +718,92 @@ describe(
       assert.equal(body.sharedWithShopAt, null);
     });
 
+    it("5.2/9: minden /rc/v1 GET-válasz teljes mélységében: tiltott mező és belső érték sehol", async () => {
+      // The routes come from the loaded app's router, so a new GET route is swept without an edit.
+      // A is linked to C here, and C1 has a released occasion: the shop side is reachable.
+      const router = (
+        reefclub.getHttpAdapter().getInstance() as {
+          router: {
+            stack: {
+              route?: { path: string; methods: Record<string, boolean> };
+            }[];
+          };
+        }
+      ).router;
+      const getRoutes = router.stack
+        .filter((layer) => layer.route?.methods.get)
+        .map((layer) => layer.route!.path)
+        .filter((path) => path.startsWith("/rc/v1/"));
+      assert.ok(getRoutes.length >= 10, `${getRoutes.length} GET-útvonal`);
+      const fill: Record<string, string> = {
+        id: c1,
+        occasionId: encodeURIComponent(OCCASION_RELEASED),
+        recId: "c0000000000000000000nincs",
+      };
+      // the names the plan lists (caretakers, note, maintainedByUs, the recording colleague, the
+      // customer's phone and e-mail, an internal user id), as keys at any depth
+      const forbiddenKeys = new Set([
+        "maintainers",
+        "maintainedByUs",
+        "notes",
+        "note",
+        "responsibleUserId",
+        "recordedById",
+        "recordedByUserId",
+        "recordedByName",
+        "issuedById",
+        "userId",
+        "customerId",
+        "departmentId",
+        "phone",
+      ]);
+      // and the fixture's internal VALUES anywhere in the text
+      const forbiddenValues = [
+        "belső jegyzet",
+        "belső megjegyzés a mérésről",
+        "+36 1 000 0000",
+        email("vevo-C"),
+        email("belso"),
+        "Bolti próba belső kolléga",
+      ];
+      const keysOf = (value: unknown, out: string[] = []): string[] => {
+        if (Array.isArray(value)) for (const item of value) keysOf(item, out);
+        else if (value && typeof value === "object")
+          for (const [key, inner] of Object.entries(value)) {
+            out.push(key);
+            keysOf(inner, out);
+          }
+        return out;
+      };
+      const findings: string[] = [];
+      let answered = 0;
+      for (const route of getRoutes) {
+        const params = [...route.matchAll(/:(\w+)/g)].map((m) => m[1]!);
+        const unknown = params.filter((p) => !(p in fill));
+        assert.deepEqual(unknown, [], `ismeretlen paraméter: ${route}`);
+        const path = route.replace(/:(\w+)/g, (_, p: string) => fill[p]!);
+        const response = await rc(path, { session: sessionA });
+        const text = await response.text();
+        if (response.status === 200) answered += 1;
+        for (const value of forbiddenValues)
+          if (text.includes(value)) findings.push(`${route}: érték „${value}”`);
+        let body: unknown = null;
+        try {
+          body = JSON.parse(text);
+        } catch {
+          continue;
+        }
+        for (const key of keysOf(body))
+          if (forbiddenKeys.has(key)) findings.push(`${route}: mező „${key}”`);
+        // the account's own e-mail is the one e-mail that may appear, and only on /rc/v1/me
+        if (route !== "/rc/v1/me" && keysOf(body).includes("email"))
+          findings.push(`${route}: mező „email”`);
+      }
+      assert.deepEqual(findings, []);
+      // a sweep that only met 404s would prove nothing
+      assert.ok(answered >= 6, `${answered} útvonal adott 200-at`);
+    });
+
     it("5.2/7: lejárt, felhasznált és cég vevőhöz írt kód nem köt össze", async () => {
       const before = await linkCount(email("b"));
       await codeRow(customerC, "LEJAR-TKDAA", new Date(Date.now() - 1000));
