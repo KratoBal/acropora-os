@@ -22,7 +22,13 @@
 export const AUTO_ACCEPT_RULE = "AUTO_V1";
 
 /** The fields the rule may accept; one at a time, by decision. */
-export const AUTO_ACCEPT_FIELDS = ["dosing"] as const;
+export const AUTO_ACCEPT_FIELDS = [
+  "dosing",
+  // the three dosing states (Balázs, 2026-10-21 22:08 UTC; slice 3)
+  "dosingMode",
+  "dosingGuidance",
+  "dosingTests",
+] as const;
 
 const MANUFACTURER_SOURCES = new Set([
   "MANUFACTURER_PAGE",
@@ -87,6 +93,10 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
   if (!result) return { kind: "SKIP", reason: "nincs eredmény" };
   if (result.status !== "VERIFIED" || result.value === null)
     return { kind: "SKIP", reason: `státusz ${result.status}` };
+  // "no data" is what Balázs asked to see himself (2026-10-21 20:44 UTC: "vagy
+  // nem talált hozzá adatot"): never by rule
+  if (input.field === "dosingMode" && result.value === "NO_DATA")
+    return { kind: "SKIP", reason: "nincs adat: ember nézi meg" };
   if (fact && fact.acceptedByRule === null)
     return { kind: "SKIP", reason: "ember már elfogadta (nem írom felül)" };
   if (fact && fact.fieldResultId === result.id)

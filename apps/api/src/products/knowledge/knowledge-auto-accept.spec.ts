@@ -174,6 +174,45 @@ describe("a szabály", () => {
   });
 });
 
+describe("a három adagolási állapot (3. szelet)", () => {
+  it("a tesztfüggő mód, az útmutató és a mérendők ugyanazzal a szabállyal mennek", () => {
+    for (const [field, value] of [
+      ["dosingMode", "TEST_DEPENDENT"],
+      ["dosingMode", "FIXED"],
+      ["dosingGuidance", "Mérje a KH-t hetente."],
+      ["dosingTests", "KALCIUM;KH"],
+    ] as const)
+      assert.equal(
+        autoAcceptDecision(input({ field, result: dosing({ value }) })).kind,
+        "ACCEPT",
+        `${field} ${value}`,
+      );
+  });
+
+  // Balázs, 2026-10-21 20:44 UTC: what was not found, he sees himself
+  it("a nincs-adat soha nem megy szabállyal, akármilyen erős a forrás", () => {
+    assert.deepEqual(
+      autoAcceptDecision(
+        input({ field: "dosingMode", result: dosing({ value: "NO_DATA" }) }),
+      ),
+      { kind: "SKIP", reason: "nincs adat: ember nézi meg" },
+    );
+  });
+
+  it("a gyártói forrás és az azonosság itt is kötelező", () => {
+    assert.equal(
+      autoAcceptDecision(
+        input({
+          field: "dosingMode",
+          result: dosing({ value: "TEST_DEPENDENT" }),
+          identity: [null, null],
+        }),
+      ).kind,
+      "SKIP",
+    );
+  });
+});
+
 describe("a futtató", () => {
   const deps = (accepted: string[][]) => ({
     latestResult: async (_p: string, field: string) =>
@@ -187,15 +226,21 @@ describe("a futtató", () => {
   it("szárazon nem ír, --apply-jal a szabály nevével ír", async () => {
     const accepted: string[][] = [];
     const dry = await runAutoAccept(["p1"], false, deps(accepted));
+    // the four dosing fields, in the rule's order; only `dosing` has a result here
     assert.deepEqual(
-      dry.map((o) => o.kind),
-      ["WOULD_ACCEPT"],
+      dry.map((o) => [o.field, o.kind]),
+      [
+        ["dosing", "WOULD_ACCEPT"],
+        ["dosingMode", "SKIP"],
+        ["dosingGuidance", "SKIP"],
+        ["dosingTests", "SKIP"],
+      ],
     );
     assert.equal(accepted.length, 0);
     const wet = await runAutoAccept(["p1"], true, deps(accepted));
     assert.deepEqual(
       wet.map((o) => o.kind),
-      ["ACCEPTED"],
+      ["ACCEPTED", "SKIP", "SKIP", "SKIP"],
     );
     assert.deepEqual(accepted, [["p1", "fr-dosing", AUTO_ACCEPT_RULE]]);
   });
