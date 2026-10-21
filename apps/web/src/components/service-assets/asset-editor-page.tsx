@@ -52,7 +52,12 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "./asset-labels";
-import { assetPhaseConnectionLabel } from "@acropora/types";
+import {
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
+  assetPhaseConnectionLabel,
+} from "@acropora/types";
+import { AssetUnitAdornment } from "./asset-unit-adornment";
 import {
   parentAssetRows,
   parentAssetTruncation,
@@ -1105,23 +1110,29 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               label="Áramfelvétel"
               description="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
             >
-              <Input
-                aria-label="Áramfelvétel"
-                value={currentDraw}
-                onChange={(event) => setCurrentDraw(event.target.value)}
-                placeholder="pl. 6,15/5,5"
-              />
+              <AssetUnitAdornment unit={ASSET_CURRENT_DRAW_UNIT}>
+                <Input
+                  aria-label="Áramfelvétel"
+                  value={currentDraw}
+                  onChange={(event) => setCurrentDraw(event.target.value)}
+                  placeholder="pl. 6,15/5,5"
+                />
+              </AssetUnitAdornment>
             </FormField>
             <FormField
               label="Fogyasztás (eredeti bejegyzés)"
               description="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
             >
-              <Input
-                aria-label="Fogyasztás (eredeti bejegyzés)"
-                value={powerConsumptionRaw}
-                onChange={(event) => setPowerConsumptionRaw(event.target.value)}
-                placeholder="pl. 6,15/5,5"
-              />
+              <AssetUnitAdornment unit={ASSET_POWER_CONSUMPTION_UNIT}>
+                <Input
+                  aria-label="Fogyasztás (eredeti bejegyzés)"
+                  value={powerConsumptionRaw}
+                  onChange={(event) =>
+                    setPowerConsumptionRaw(event.target.value)
+                  }
+                  placeholder="pl. 6,15/5,5"
+                />
+              </AssetUnitAdornment>
             </FormField>
             <FormField label="Bekötés">
               <Select

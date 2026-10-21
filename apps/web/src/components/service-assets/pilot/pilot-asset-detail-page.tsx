@@ -17,7 +17,10 @@ import {
   type AssetDocumentType,
   type AssetQrCode,
   type AssetStatus,
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
   assetPhaseConnectionLabel,
+  withAssetUnit,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -510,10 +513,19 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                       asset.performanceUnit?.code,
                     )}
                   />
-                  <Field label="Áramfelvétel (A)" value={asset.currentDraw} />
+                  <Field
+                    label="Áramfelvétel"
+                    value={withAssetUnit(
+                      asset.currentDraw,
+                      ASSET_CURRENT_DRAW_UNIT,
+                    )}
+                  />
                   <Field
                     label="Fogyasztás (eredeti bejegyzés)"
-                    value={asset.powerConsumptionRaw}
+                    value={withAssetUnit(
+                      asset.powerConsumptionRaw,
+                      ASSET_POWER_CONSUMPTION_UNIT,
+                    )}
                   />
                   <Field
                     label="Bekötés"

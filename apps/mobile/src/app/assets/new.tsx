@@ -86,6 +86,11 @@ import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { ASSET_KIND_OPTIONS as kinds } from "@/lib/assets/asset-kind";
 import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connection";
+import {
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
+} from "@/lib/assets/asset-units";
+import { UnitFieldRow } from "@/components/assets/unit-field-row";
 
 export default function NewAssetScreen() {
   const router = useRouter();
@@ -926,14 +931,16 @@ export default function NewAssetScreen() {
               all; ures is lehet, ugyanarra koppintva leszedheto.
             */}
             <Field
-              label="Áramfelvétel (A)"
+              label="Áramfelvétel"
               value={currentDraw}
               onChangeText={setCurrentDraw}
+              unit={ASSET_CURRENT_DRAW_UNIT}
             />
             <Field
               label="Fogyasztás (eredeti bejegyzés)"
               value={powerConsumptionRaw}
               onChangeText={setPowerConsumptionRaw}
+              unit={ASSET_POWER_CONSUMPTION_UNIT}
             />
             <Text style={styles.label}>Bekötés</Text>
             <View style={styles.kindGrid}>
@@ -1445,6 +1452,8 @@ function Field(props: {
   value: string;
   onChangeText(value: string): void;
   keyboardType?: "default" | "number-pad" | "decimal-pad";
+  /** A mező mellé kiírt egység (Kelecsenyi Ferenc kérése, 2026-10-21). */
+  unit?: string;
   /**
    * A MATRICAKOD NAGYBETUS. A tarolt alak csak nagybetut fogad, es a
    * normalizalas amugy is felfele alakit -- de ha a billentyuzet kisbetut
@@ -1455,17 +1464,24 @@ function Field(props: {
 }) {
   const { tokens } = useAppTheme();
   const styles = useMemo(() => createStyles(tokens), [tokens]);
+  const input = (
+    <TextInput
+      autoCapitalize={props.autoCapitalize}
+      value={props.value}
+      onChangeText={props.onChangeText}
+      keyboardType={props.keyboardType}
+      placeholderTextColor={tokens.textMuted}
+      style={styles.input}
+    />
+  );
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{props.label}</Text>
-      <TextInput
-        autoCapitalize={props.autoCapitalize}
-        value={props.value}
-        onChangeText={props.onChangeText}
-        keyboardType={props.keyboardType}
-        placeholderTextColor={tokens.textMuted}
-        style={styles.input}
-      />
+      {props.unit ? (
+        <UnitFieldRow unit={props.unit}>{input}</UnitFieldRow>
+      ) : (
+        input
+      )}
     </View>
   );
 }

@@ -46,6 +46,11 @@ import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
 import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connection";
+import {
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
+} from "@/lib/assets/asset-units";
+import { UnitFieldRow } from "@/components/assets/unit-field-row";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
 import {
   MATRICA_ALAK_UZENET,
@@ -88,6 +93,8 @@ const TEXT_FIELDS: {
   key: keyof AssetEditForm & string;
   label: string;
   multiline?: boolean;
+  /** A mező mellé kiírt egység (Kelecsenyi Ferenc kérése, 2026-10-21). */
+  unit?: string;
 }[] = [
   { key: "manufacturer", label: "Gyártó" },
   { key: "model", label: "Modell" },
@@ -101,8 +108,12 @@ const TEXT_FIELDS: {
    * a Bekotes valaszto kozvetlenul az eredeti bejegyzes ALATT all (lasd a
    * `TEXT_FIELDS.map` hurkot).
    */
-  { key: "currentDraw", label: "Áramfelvétel (A)" },
-  { key: "powerConsumptionRaw", label: "Fogyasztás (eredeti bejegyzés)" },
+  { key: "currentDraw", label: "Áramfelvétel", unit: ASSET_CURRENT_DRAW_UNIT },
+  {
+    key: "powerConsumptionRaw",
+    label: "Fogyasztás (eredeti bejegyzés)",
+    unit: ASSET_POWER_CONSUMPTION_UNIT,
+  },
   /**
    * A TABLAZAT ELSO OSZLOPA, SZABAD SZOVEG, NINCS ALAK-ELLENORZES --
    * ugyanabbol az okbol illik a generikus mintaba, mint a
@@ -765,39 +776,46 @@ export default function AssetEditScreen() {
           />
         ) : null}
 
-        {TEXT_FIELDS.map((field) => (
-          <Fragment key={field.key}>
-            <View style={styles.field}>
-              <Text style={styles.label}>{field.label}</Text>
-              <TextInput
-                accessibilityLabel={field.label}
-                value={form[field.key]}
-                onChangeText={(value) =>
-                  setForm({ ...form, [field.key]: value })
-                }
-                multiline={field.multiline}
-                style={[styles.input, field.multiline && styles.inputMultiline]}
-                placeholderTextColor={tokens.textMuted}
-                placeholder="Nincs megadva"
-                editable={!save.isPending}
-              />
-            </View>
-            {/*
+        {TEXT_FIELDS.map((field) => {
+          const input = (
+            <TextInput
+              accessibilityLabel={field.label}
+              value={form[field.key]}
+              onChangeText={(value) => setForm({ ...form, [field.key]: value })}
+              multiline={field.multiline}
+              style={[styles.input, field.multiline && styles.inputMultiline]}
+              placeholderTextColor={tokens.textMuted}
+              placeholder="Nincs megadva"
+              editable={!save.isPending}
+            />
+          );
+          return (
+            <Fragment key={field.key}>
+              <View style={styles.field}>
+                <Text style={styles.label}>{field.label}</Text>
+                {field.unit ? (
+                  <UnitFieldRow unit={field.unit}>{input}</UnitFieldRow>
+                ) : (
+                  input
+                )}
+              </View>
+              {/*
               A BEKOTES KOZVETLENUL A "FOGYASZTAS (EREDETI BEJEGYZES)" ALATT
               (Balazs, 2026-10-21): egy-ketto valasztas, ures is lehet.
             */}
-            {field.key === "powerConsumptionRaw" ? (
-              <Choice
-                label="Bekötés"
-                options={PHASE_CONNECTION_CHOICES}
-                value={form.phaseConnection}
-                onChange={(value) =>
-                  setForm({ ...form, phaseConnection: value })
-                }
-              />
-            ) : null}
-          </Fragment>
-        ))}
+              {field.key === "powerConsumptionRaw" ? (
+                <Choice
+                  label="Bekötés"
+                  options={PHASE_CONNECTION_CHOICES}
+                  value={form.phaseConnection}
+                  onChange={(value) =>
+                    setForm({ ...form, phaseConnection: value })
+                  }
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
 
         {/*
           A VALASZTHATO EGYSEGEK KOZE BEKERUL AZ IS, AMI MAR AZ ESZKOZON ALL.

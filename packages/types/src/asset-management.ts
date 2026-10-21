@@ -121,6 +121,31 @@ export const assetPhaseConnectionLabel: Record<AssetPhaseConnection, string> = {
   PHASE_3: "III fázis",
 };
 
+/**
+ * A KET FOGYASZTAS-MEZO EGYSEGE (Kelecsenyi Ferenc kerese, 2026-10-21, kanban
+ * 541e2716): az adatlapon es a szerkesztoben az ertek MELLETT all. Az egyseg
+ * a mezo definiciojabol jon, nem kitalalt: az Aramfelvetel AMPERBEN van, a
+ * "Fogyasztas (eredeti bejegyzes)" KILOWATTBAN (lasd a `schema.prisma`
+ * `Asset.powerConsumptionRaw` es `Asset.currentDraw` kommentjet).
+ */
+export const ASSET_CURRENT_DRAW_UNIT = "A";
+export const ASSET_POWER_CONSUMPTION_UNIT = "kW";
+
+/**
+ * AZ ERTEK EGYSEGGEL, MEGJELENITESRE. A tarolt szoveg SOSEM valtozik: ez csak
+ * a kiiras. Ha az ertekben mar van betu (`0,75 kW`, `3 A`, vagy szabad
+ * megjegyzes), valtozatlanul marad -- az egysegen nem ismetel, a szoveget nem
+ * talalgatja. Ures ertek `undefined`: nincs mit kiirni.
+ */
+export function withAssetUnit(
+  value: string | null | undefined,
+  unit: string,
+): string | undefined {
+  const text = value?.trim();
+  if (!text) return undefined;
+  return /\p{L}/u.test(text) ? text : `${text} ${unit}`;
+}
+
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
 /**

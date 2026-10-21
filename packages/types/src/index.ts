@@ -456,8 +456,11 @@ export {
   assetKindLabel,
   assetStatusLabel,
   assetStatusTone,
+  ASSET_CURRENT_DRAW_UNIT,
+  ASSET_POWER_CONSUMPTION_UNIT,
   assetCriticalityLabel,
   assetPhaseConnectionLabel,
+  withAssetUnit,
   assetEventLabel,
 } from "./asset-management.js";
 export {
