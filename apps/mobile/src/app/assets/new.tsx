@@ -32,6 +32,7 @@ import {
   queuePhotosForRecording,
 } from "@/lib/assets/photo-after-record";
 import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
+import { partnerUnitsEmptyText } from "@/lib/partners/units-empty-text";
 import { listPerformanceUnits } from "@/lib/api/units-of-measure";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import { ParentAssetPicker } from "@/components/assets/parent-asset-picker";
@@ -417,6 +418,11 @@ export default function NewAssetScreen() {
 
   const ownersFromCache = ownersQuery.isError;
   const unitsFromCache = unitsQuery.isError;
+  // kártya 227a2137: az üres lista mondata az okhoz igazodik (lásd units-empty-text.ts)
+  const unitsEmptyText = partnerUnitsEmptyText({
+    fromCache: unitsFromCache,
+    reason: unitsQuery.data?.reason,
+  });
 
   /**
    * A HELYSZIN-SOROK EGY FORRASBOL, mert eddig KETTO volt, es a masodik nem
@@ -1076,10 +1082,10 @@ export default function NewAssetScreen() {
                     </Text>
                   </View>
                 ) : null}
-                {!unitsQuery.isPending && units.options.length === 0 ? (
-                  <Text style={styles.hint}>
-                    Ehhez a partnerhez még nincs felvéve helyszín.
-                  </Text>
+                {!unitsQuery.isPending &&
+                units.options.length === 0 &&
+                unitsEmptyText ? (
+                  <Text style={styles.hint}>{unitsEmptyText}</Text>
                 ) : null}
                 {/*
                 LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a

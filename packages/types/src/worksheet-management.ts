@@ -134,6 +134,14 @@ export interface WorksheetDepartmentSummary {
 
 export interface WorksheetDepartmentListResponse {
   items: WorksheetDepartmentSummary[];
+  /**
+   * WHY THE LIST IS EMPTY, WHEN IT CAN BE SAID (card 227a2137). Only on a partner's units, and only
+   * after the caller's scope covered the partner: `SUPPLIER_NOT_LINKED` means the partner has no
+   * customer row (`Supplier.customerId`), so its sites cannot be reached -- an office fix, not "no
+   * site yet". Absent: the list is what it is (a partner outside the caller's scope is also a plain
+   * empty list, on purpose: its existence must not leak).
+   */
+  reason?: "SUPPLIER_NOT_LINKED";
 }
 
 export interface CreateWorksheetDepartmentInput {

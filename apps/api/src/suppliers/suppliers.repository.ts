@@ -312,7 +312,12 @@ export class SuppliersRepository extends Repository {
       where: { id: supplierId },
       select: { customerId: true },
     });
-    if (!supplier?.customerId) return { items: [] };
+    if (!supplier) return { items: [] };
+    // A PARTNER NINCS VEVO-SORHOZ KOTVE (kartya 227a2137): a helyszinei nem erhetok el, es ez
+    // irodai javitas, nem "meg nincs helyszin". Kimondhato, mert a hatokor fent mar lefedte a
+    // partnert; a hatokoron kivuli partner tovabbra is csupasz ures lista.
+    if (!supplier.customerId)
+      return { items: [], reason: "SUPPLIER_NOT_LINKED" };
     // LAPOSAN jon vissza, a fat a hivo epiti fel a parentId mezobol. Egy
     // rekurziv lekerdezes itt tobbet vinne, mint amennyit er: egy partner
     // helyszinei elférnek egy koteg­ben, es igy egy uj szint nem valtoztat

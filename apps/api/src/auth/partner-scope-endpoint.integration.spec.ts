@@ -1858,11 +1858,34 @@ describe(
         );
 
         const foreign = await suppliers.units(supplierB, asSupplierA);
-        assert.deepEqual(foreign.items, []);
+        assert.deepEqual(foreign, { items: [] });
         assert.ok(
           unitOfSupplierB.length > 0,
           "a mércéhez kell egy létező idegen alegység",
         );
+      });
+
+      /**
+       * KARTYA 227a2137: a vevo-sorhoz nem kotott partner ures listaja nem "meg nincs helyszin".
+       * A belso felhasznalo (hatokoron belul) az okot is megkapja; egy idegen partner-felhasznalo
+       * ugyanerre a partnerre csupasz ures listat kap, ok nelkul -- a letezes nem szivaroghat ki.
+       */
+      it("a vevő-sorhoz nem kötött partner: belül az ok, kívülről csupasz üres lista", async () => {
+        const unlinked = await prisma.supplier.create({
+          data: {
+            code: `${TEST_SUPPLIER_PREFIX}${suffix}-N`,
+            name: `PS-INT nem kötött partner ${suffix}`,
+            isService: true,
+          },
+        });
+        assert.equal(unlinked.customerId, null, "a mérce: nincs vevő-sor");
+        assert.deepEqual(await suppliers.units(unlinked.id, asInternal), {
+          items: [],
+          reason: "SUPPLIER_NOT_LINKED",
+        });
+        assert.deepEqual(await suppliers.units(unlinked.id, asSupplierA), {
+          items: [],
+        });
       });
     });
   },
