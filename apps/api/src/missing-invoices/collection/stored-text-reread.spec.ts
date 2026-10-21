@@ -350,6 +350,89 @@ describe("re-reading a stored document's text", () => {
     assert.equal(saved[0]!.reading.bankReference, "03861-SZ");
   });
 
+  /*
+    A FAILED FELTÖLTÉSEK A FELTÖLTÉS LÁNCÁN (acrobot 34581). Élesben az Amblard
+    számla feltöltése 2026-10-21 előtt szám nélkül tárolódott: a feltöltés nem
+    nézte a saját terhelése közleményét. MI PIROSÍT: ha az újraolvasás a
+    feltöltésnél nem a párosított terhelés közleményét használja, vagy ha egy
+    nem feltöltött dokumentumot is így olvas.
+  */
+  const AMBLARD = [
+    "AMBLARD SAS",
+    "TVA intracommunautaire: FR61393374657",
+    "Client: Acropora Kft., HU23916229",
+    "Référence F2602896",
+    "Montant total 180,00 EUR",
+  ];
+  const AMBLARD_OLD: InvoiceTextReading = {
+    invoiceNumber: null,
+    numberFrom: null,
+    supplierTaxNumber: "FR61393374657",
+    gross: "180",
+    currency: "EUR",
+  };
+  const amblard = (origin: string, narrative: string) => {
+    const { deps: d, saved } = deps([
+      {
+        lines: AMBLARD,
+        fileName: "HUAAB[30].PDF",
+        subject: null,
+        textReading: AMBLARD_OLD,
+        origin,
+      },
+    ]);
+    const asked: string[] = [];
+    return {
+      saved,
+      asked,
+      deps: {
+        ...d,
+        knownNumbers: async () => [],
+        narratives: async (id: string) => (asked.push(id), [narrative]),
+      },
+    };
+  };
+
+  it("a FAILED upload takes its number from its OWN debit's narrative, and the report shows the reference", async () => {
+    const {
+      deps: d,
+      saved,
+      asked,
+    } = amblard("UPLOAD", "AMBLARD SAS F2602896 KARTYAS VASARLAS");
+    const rows = await rereadStoredText(d, SELECT, true);
+    assert.deepEqual(asked, ["doc-1"]);
+    assert.deepEqual(
+      [
+        saved[0]?.reading.invoiceNumber,
+        saved[0]?.reading.numberFrom,
+        saved[0]?.reading.bankReference,
+        saved[0]?.reading.gross,
+      ],
+      ["F2602896", "BANK", "F2602896", "180"],
+    );
+    assert.match(
+      rereadReport(rows, false),
+      /-:- \(FR61393374657\) \[INVOICE\] -> BANK:F2602896 \(FR61393374657\) \[INVOICE\] \| banki hivatkozás - -> F2602896\n/,
+    );
+  });
+
+  it("the control: a debit that does not name it leaves the upload without a number, unchanged", async () => {
+    const { deps: d, saved } = amblard("UPLOAD", "AMBLARD SAS");
+    const rows = await rereadStoredText(d, SELECT, true);
+    assert.equal(saved.length, 0);
+    assert.equal(rows[0]!.changed, false);
+  });
+
+  it("a collected document is not read on the upload's chain, even with a narrative at hand", async () => {
+    const { deps: d, asked } = amblard(
+      "COLLECTED_MAIL",
+      "AMBLARD SAS F2602896 KARTYAS VASARLAS",
+    );
+    const rows = await rereadStoredText(d, SELECT, false);
+    assert.deepEqual(asked, []);
+    assert.equal(rows[0]!.after?.invoiceNumber, null);
+  });
+
   it("the command needs an explicit selection", () => {
     assert.equal(parseSelector(["--apply"]), null);
     assert.deepEqual(parseSelector(["--ids", "a, b", "--apply"]), {
@@ -366,5 +449,27 @@ describe("re-reading a stored document's text", () => {
       number: null,
       unreadUploads: true,
     });
+    // a FAILED feltöltések, a nap budapesti éjfelétől (2026-10-01 00:00 CEST)
+    assert.deepEqual(
+      parseSelector(["--failed-uploads", "--since", "2026-10-01"]),
+      {
+        ids: [],
+        number: null,
+        failedUploads: { since: new Date("2026-09-30T22:00:00.000Z") },
+      },
+    );
+    assert.deepEqual(parseSelector(["--failed-uploads"]), {
+      ids: [],
+      number: null,
+      failedUploads: { since: null },
+    });
+    // egy elírt nap vagy egy magában álló --since nem fut le csendben mindenre
+    assert.equal(
+      parseSelector(["--failed-uploads", "--since", "2026-10-32"]),
+      null,
+    );
+    assert.equal(parseSelector(["--failed-uploads", "--since", "10-01"]), null);
+    assert.equal(parseSelector(["--failed-uploads", "--since"]), null);
+    assert.equal(parseSelector(["--ids", "a", "--since", "2026-10-01"]), null);
   });
 });

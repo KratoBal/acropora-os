@@ -1,11 +1,5 @@
-import {
-  bankReference,
-  readInvoiceText,
-  withBankReference,
-  withKnownNumber,
-  withLabelledTotal,
-  type InvoiceTextReading,
-} from "./collection/invoice-text.js";
+import { type InvoiceTextReading } from "./collection/invoice-text.js";
+import { readUploadText } from "./collection/upload-text.js";
 import {
   BadRequestException,
   ConflictException,
@@ -623,46 +617,21 @@ export class MissingInvoicesService {
       NAV- vagy Számlázz.hu-sorral.
     */
     let textReading: InvoiceTextReading | null = null;
-    if (!importResult && lines.length > 0) {
-      const hints = { fileName: file.originalname };
-      const supplier = readInvoiceText(lines, hints).supplierTaxNumber;
-      const navNumbers = supplier
-        ? await this.repository.navNumbers(
-            supplier.replace(/^HU/, "").replace(/\D/g, "").slice(0, 8),
-          )
-        : [];
-      textReading = readInvoiceText(lines, {
-        ...hints,
-        navNumbers: () => navNumbers,
-      });
-      /*
-        A BEGYŰJTÉS TÖBBI LÉPÉSE IS (kártya 847bca33, 2026-10-21). Élesben egy
-        francia szállító (Amblard) számlája a levélből F2602896 számmal jött be,
-        ugyanez a feltöltésből szám nélkül: a feltöltés csak a fájlnevet és a
-        NAV-számokat nézte, egy külföldi szállítónak pedig NAV-száma nincs. Szám
-        nélkül a feltöltés kulcsa üres számú, ezért soha nem vonódik össze a
-        levélből jött példánnyal, és a jelölt-listában a fájlnév áll a szám
-        helyén. Itt a banki hivatkozás a SAJÁT terhelés közleményéből jön: a
-        feltöltésnél ezt a terhelést pontosan ismerjük, a begyűjtés az összeset
-        nézi. A kártyás fizetés és a saját-számla próba kimarad: a feltöltést
-        ember kötötte ehhez a terheléshez.
-      */
-      if (textReading.numberFrom !== "NAV")
-        textReading = withKnownNumber(
-          textReading,
-          lines,
-          await this.repository.knownNumbers(),
-        );
-      if (textReading.numberFrom !== "NAV") {
-        const reference = bankReference(lines, textReading, hints, [
-          debit.narrative,
-        ]);
-        if (reference)
-          textReading = withBankReference(textReading, lines, reference);
-      }
-      // a bruttó és a pénznem a címkés végösszegből (37b8643d), mint a begyűjtésnél
-      textReading = withLabelledTotal(textReading, lines);
-    }
+    /*
+      A BEGYŰJTÉS TÖBBI LÉPÉSE IS (kártya 847bca33, 2026-10-21): az ismert
+      számok, a SAJÁT terhelés közleményéből a banki hivatkozás, és a címkés
+      végösszeg. Élesben egy francia szállító (Amblard) számlája a levélből
+      F2602896 számmal jött be, ugyanez a feltöltésből szám nélkül, ezért a két
+      példány soha nem vonódott össze. A lánc a `readUploadText`-ben áll, mert a
+      tárolt feltöltések újraolvasása is azt futtatja (acrobot 34581).
+    */
+    if (!importResult && lines.length > 0)
+      textReading = await readUploadText(
+        lines,
+        { fileName: file.originalname },
+        [debit.narrative],
+        this.repository,
+      );
     const documentId = await this.repository.uploadAndPair({
       bankTransactionId: id,
       fileName: file.originalname,
