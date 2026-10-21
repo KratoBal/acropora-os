@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { Prisma, prisma } from "@acropora/database";
 
+import { ATTACH_PREFIX } from "../../billing/incoming-pdf-attach.js";
 import { startOfBudapestDay } from "../../dashboard/budapest-day.js";
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { InvoiceCollectionRepository } from "./invoice-collection.repository.js";
@@ -69,6 +70,54 @@ const isDay = (text: string) =>
   !Number.isNaN(Date.parse(`${text}T00:00:00Z`)) &&
   new Date(`${text}T00:00:00Z`).toISOString().startsWith(text);
 
+/**
+ * A KIVÁLASZTÁS LEKÉRDEZÉSE (kiemelve, hogy a valódi adatbázison mérhető legyen:
+ * a csatolt PDF a `--failed-uploads` alól kimarad, barracuda #1792).
+ */
+export function storedTextWhere(
+  s: StoredTextSelector,
+): Prisma.IncomingSupplierDocumentWhereInput {
+  return {
+    OR: [
+      ...(s.ids.length ? [{ id: { in: [...s.ids] } }] : []),
+      ...(s.unreadUploads
+        ? [
+            {
+              origin: "UPLOAD",
+              importResult: { equals: Prisma.AnyNull },
+              textReading: { equals: Prisma.AnyNull },
+            },
+          ]
+        : []),
+      ...(s.failedUploads
+        ? [
+            {
+              origin: "UPLOAD",
+              status: "FAILED" as const,
+              importResult: { equals: Prisma.AnyNull },
+              // a PDF attached to an incoming invoice row carries that row's reading by design
+              // (incoming-pdf-attach.ts); a reread from its text would overwrite it (barracuda #1792)
+              NOT: { gmailMessageId: { startsWith: ATTACH_PREFIX } },
+              ...(s.failedUploads.since
+                ? { createdAt: { gte: s.failedUploads.since } }
+                : {}),
+            },
+          ]
+        : []),
+      ...(s.number
+        ? [
+            {
+              textReading: {
+                path: ["invoiceNumber"],
+                equals: s.number,
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   const apply = argv.includes("--apply");
   const allowClear = argv.includes("--allow-clear");
@@ -84,42 +133,7 @@ async function main(argv: readonly string[]): Promise<number> {
     {
       documents: (s) =>
         prisma.incomingSupplierDocument.findMany({
-          where: {
-            OR: [
-              ...(s.ids.length ? [{ id: { in: [...s.ids] } }] : []),
-              ...(s.unreadUploads
-                ? [
-                    {
-                      origin: "UPLOAD",
-                      importResult: { equals: Prisma.AnyNull },
-                      textReading: { equals: Prisma.AnyNull },
-                    },
-                  ]
-                : []),
-              ...(s.failedUploads
-                ? [
-                    {
-                      origin: "UPLOAD",
-                      status: "FAILED" as const,
-                      importResult: { equals: Prisma.AnyNull },
-                      ...(s.failedUploads.since
-                        ? { createdAt: { gte: s.failedUploads.since } }
-                        : {}),
-                    },
-                  ]
-                : []),
-              ...(s.number
-                ? [
-                    {
-                      textReading: {
-                        path: ["invoiceNumber"],
-                        equals: s.number,
-                      },
-                    },
-                  ]
-                : []),
-            ],
-          },
+          where: storedTextWhere(s),
           orderBy: { createdAt: "asc" },
           select: {
             id: true,

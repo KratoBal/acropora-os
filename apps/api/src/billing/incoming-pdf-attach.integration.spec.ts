@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import { storedTextWhere } from "../missing-invoices/collection/stored-text-reread.cli.js";
 import {
   collectedPdfIds,
   loadCollectedPdfIndex,
@@ -114,6 +115,29 @@ describe(
           },
         }),
         1,
+      );
+      // the failed-uploads reread leaves it alone: its reading is the row's by design (barracuda #1792)
+      const reread = await prisma.incomingSupplierDocument.findMany({
+        where: storedTextWhere({
+          ids: [],
+          number: null,
+          failedUploads: { since: null },
+        }),
+        select: { id: true },
+      });
+      assert.equal(
+        reread.some((d) => d.id === documentId),
+        false,
+        "the attached PDF is not reread",
+      );
+      // the control: the same query naming the document by id finds it, so the exclusion is the selector's
+      const named = await prisma.incomingSupplierDocument.findMany({
+        where: storedTextWhere({ ids: [documentId], number: null }),
+        select: { id: true },
+      });
+      assert.deepEqual(
+        named.map((d) => d.id),
+        [documentId],
       );
     });
   },
