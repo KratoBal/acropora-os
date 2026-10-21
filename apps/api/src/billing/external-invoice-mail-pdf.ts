@@ -141,12 +141,12 @@ export function textCarriesOurTaxNumber(text: string): boolean {
  * cellák között ` | ` áll). Egy nem egész feed-összeg (devizás számla) nem kerekítődik: nem egyezik.
  */
 export function pdfPayableMatches(text: string, grossAmount: string): boolean {
-  const gross = Number(grossAmount);
-  if (!Number.isInteger(gross)) return false;
-  const match =
-    /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)(?![\d])/.exec(text);
+  // the group is greedy and read as a whole number: a longer number, or a fractional feed amount, is unequal
+  const match = /FIZETENDŐ\s+BRUTTÓ\s+VÉGÖSSZEG:[\s|]*(\d(?:[\d ]*\d)?)/.exec(
+    text,
+  );
   if (!match) return false;
-  return Number(match[1]!.replace(/ /g, "")) === gross;
+  return Number(match[1]!.replace(/ /g, "")) === Number(grossAmount);
 }
 
 export type MailPdfOutcome =
