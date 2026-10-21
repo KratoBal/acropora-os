@@ -310,6 +310,26 @@ export function runReport(summary: RunSummary): string {
     lines.push(
       `    mezők: ${[...counts].map(([status, n]) => `${status} ${n}`).join(", ")}`,
     );
+    // the dosing fields one by one (Product Knowledge, card 85c38ab1): the run's
+    // output is the measurement. The guidance is page text: only its length.
+    const dosing = (key: string, label: string, showValue = true) => {
+      const f = check.fields.find((x) => x.field === key);
+      if (!f) return null;
+      const v =
+        f.value === null
+          ? ""
+          : showValue
+            ? ` ${f.value}`
+            : ` (${f.value.length} jel)`;
+      return `${label} ${f.status}${v}`;
+    };
+    const parts = [
+      dosing("dosingMode", "mód"),
+      dosing("dosing", "adag"),
+      dosing("dosingTests", "mérendő"),
+      dosing("dosingGuidance", "útmutató", false),
+    ].filter((p): p is string => p !== null);
+    if (parts.length) lines.push(`    adagolás: ${parts.join("; ")}`);
   }
   return `${lines.join("\n")}\n`;
 }

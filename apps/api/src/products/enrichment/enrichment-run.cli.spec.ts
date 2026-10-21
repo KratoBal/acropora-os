@@ -4,9 +4,10 @@ import { describe, it } from "node:test";
 import {
   parseRunInput,
   runEnrichmentCli,
+  runReport,
   type EnrichmentCliDeps,
 } from "./enrichment-run.cli.js";
-import type { EnrichmentRunStore } from "./enrichment-run.js";
+import type { EnrichmentRunStore, RunSummary } from "./enrichment-run.js";
 import {
   fakeClock,
   productPage,
@@ -185,6 +186,44 @@ describe("a kézi indítás parancssora", () => {
       2,
     );
     assert.match(c.text().stderr, /1 és 50 közötti/);
+  });
+
+  // Product Knowledge (card 85c38ab1): the output is the measurement, and the
+  // guidance is page text, so only its length is printed
+  it("a jelentés termékenként kiírja az adagolás mezőit, az útmutatónak csak a hosszát", () => {
+    const field = (key: string, status: string, value: string | null) => ({
+      field: key,
+      status,
+      value,
+    });
+    const report = runReport({
+      runId: "r-1",
+      status: "COMPLETED",
+      productCount: 1,
+      requestCount: 1,
+      limit: null,
+      failures: [],
+      checks: [
+        {
+          productId: "p-1",
+          checkedAt: new Date(0),
+          sourceCount: 1,
+          fieldCount: 3,
+          fetches: [],
+          fields: [
+            field("dosingMode", "VERIFIED", "TEST_DEPENDENT"),
+            field("dosing", "MISSING", null),
+            field("dosingTests", "VERIFIED", "KALCIUM;KH"),
+            field("dosingGuidance", "VERIFIED", "Mérje a KH-t hetente."),
+          ],
+        },
+      ],
+    } as unknown as RunSummary);
+    assert.match(
+      report,
+      /\n {4}adagolás: mód VERIFIED TEST_DEPENDENT; adag MISSING; mérendő VERIFIED KALCIUM;KH; útmutató VERIFIED \(21 jel\)\n/,
+    );
+    assert.doesNotMatch(report, /Mérje a KH-t/);
   });
 
   it("a hibás bemenet minden hibáját felsorolja", () => {
