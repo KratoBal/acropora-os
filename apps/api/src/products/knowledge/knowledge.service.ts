@@ -176,7 +176,7 @@ export class ProductKnowledgeService {
     );
     if (scope.definition.medusaNativeField === "VARIANT_BARCODE")
       return this.acceptAsBarcode(productId, result.id, decision, scope, user);
-    await this.store.upsertFact({
+    const fact = {
       productId,
       variantId: scope.variantId,
       field: result.field,
@@ -186,8 +186,15 @@ export class ProductKnowledgeService {
       fieldResultId: result.id,
       acceptedById: user.id,
       acceptedAt: this.now(),
-      acceptedByRule: rule ?? null,
-    });
+    };
+    if (rule === undefined)
+      await this.store.upsertFact({ ...fact, acceptedByRule: null });
+    else if (
+      !(await this.store.upsertRuleFact({ ...fact, acceptedByRule: rule }))
+    )
+      throw new ConflictException(
+        `a person has accepted ${result.field}: the rule does not overwrite it`,
+      );
     return this.knowledge(productId);
   }
 

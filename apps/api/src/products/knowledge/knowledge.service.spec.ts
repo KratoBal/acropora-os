@@ -130,6 +130,13 @@ function memoryStore(variantIds: string[] = ["v-egy"]) {
         },
       });
     },
+    upsertRuleFact: async (input) => {
+      // the Prisma write's guard: a person's fact (no rule) is not overwritten
+      const key = `${input.variantId ?? ""}|${input.field}`;
+      if (facts.has(key) && rules.get(key) === null) return false;
+      await store.upsertFact(input);
+      return true;
+    },
     copy: async () => [...copy.values()],
     saveCopy: async (input) => {
       const previous = copy.get(input.block);
@@ -298,6 +305,24 @@ describe("product knowledge: accepted by rule (Product Knowledge step 2)", () =>
     );
     assert.equal(memory.rules.get("|dosing"), "AUTO_V1");
     await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
+    assert.equal(memory.rules.get("|dosing"), null);
+  });
+
+  // barracuda, #1801: a person accepting between the dry run and --apply
+  it("the rule does not overwrite a person's fact, even on the same result", async () => {
+    const { knowledge, memory } = service();
+    const daily = await knowledge.addEvidence(PRODUCT, DAILY, USER);
+    await knowledge.accept(PRODUCT, daily.fieldResultId, USER);
+    await assert.rejects(
+      knowledge.accept(
+        PRODUCT,
+        daily.fieldResultId,
+        USER,
+        undefined,
+        "AUTO_V1",
+      ),
+      /a person has accepted dosing/,
+    );
     assert.equal(memory.rules.get("|dosing"), null);
   });
 });

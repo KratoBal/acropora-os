@@ -12,6 +12,7 @@ import {
   type AutoResult,
 } from "./knowledge-auto-accept.js";
 import { runAutoAcceptCli } from "./knowledge-auto-accept.cli.js";
+import { projectedCopy, type CopyRow } from "./knowledge.policy.js";
 
 /**
  * THE RULE'S ACCEPT (Product Knowledge step 2, card 85c38ab1). WHAT TURNS IT
@@ -277,5 +278,33 @@ describe("az automatikus tény nem megy ki a boltba", () => {
       assert.ok("acceptedByRule" in where, JSON.stringify(where));
       assert.equal(where.acceptedByRule, null);
     }
+  });
+});
+
+describe("a szöveg sem viszi ki az automatikus tényt (barracuda, #1801)", () => {
+  /**
+   * The projection reads the facts with `acceptedByRule: null`, so an automatic
+   * `dosing` is not in its list. An approved text built on it must then stay
+   * out too: otherwise the fact leaves through the prose. Positive control: the
+   * same text on a person's fact goes out.
+   */
+  const lead: CopyRow = {
+    block: "lead",
+    body: "Naponta 1 csepp 100 literenként.",
+    status: "APPROVED",
+    revision: 1,
+    basedOn: { dosing: 1 },
+    usedFields: ["dosing"],
+  };
+  const emberi = {
+    field: "dosing",
+    variantId: null,
+    revision: 1,
+    status: "VERIFIED",
+    public: true,
+  };
+  it("az automatikus tényre épülő szöveg nem megy ki, az emberire igen", () => {
+    assert.equal(projectedCopy([lead], [], "ACROPORA"), null);
+    assert.ok(projectedCopy([lead], [emberi], "ACROPORA")?.description);
   });
 });
