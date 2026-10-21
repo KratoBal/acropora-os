@@ -55,13 +55,6 @@ export function factFor(
 }
 
 /**
- * WHAT THE ROW SAYS ABOUT THE ACCEPTED STATE.
- *
- * A fact accepted from an OLDER result than the one shown says so: newer
- * evidence arrived after the acceptance, and the reviewer must see that the
- * row and the knowledge no longer describe the same result.
- */
-/**
  * MAY THIS ROW OFFER ITS RESULT: not accepted yet, or accepted by a RULE on this
  * very result, which a person confirms by accepting it (Product Knowledge 2. lépés).
  */
@@ -73,6 +66,13 @@ export function offersAccept(
   return Boolean(fact.acceptedByRule);
 }
 
+/**
+ * WHAT THE ROW SAYS ABOUT THE ACCEPTED STATE.
+ *
+ * A fact accepted from an OLDER result than the one shown says so: newer
+ * evidence arrived after the acceptance, and the reviewer must see that the
+ * row and the knowledge no longer describe the same result.
+ */
 export function acceptedLine(
   fact: ProductKnowledgeFact | null,
   review: Pick<ProductFieldReview, "fieldResultId">,
