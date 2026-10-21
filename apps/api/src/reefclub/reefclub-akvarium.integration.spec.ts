@@ -67,6 +67,18 @@ const BODIES: Record<string, unknown> = {
   "PUT /rc/v1/aquariums/:id/targets": {
     targets: [{ parameterCode: "KH", min: 7, max: 9 }],
   },
+  "POST /rc/v1/aquariums/:id/recommendations": { parameter: "KH" },
+  "POST /rc/v1/aquariums/:id/recommendations/:recId/answer": {
+    answer: "NOT_GIVEN",
+  },
+  "POST /rc/v1/aquariums/:id/doses": {
+    parameter: "KH",
+    productId: null,
+    amount: null,
+    unit: null,
+    administeredAt: new Date(Date.now() - 60_000).toISOString(),
+    clientOperationId: "akvarium-proba-adag-1",
+  },
   "POST /rc/v1/aquariums/:id/measurements": {
     measuredAt: "2026-03-03T03:03:03.000Z",
     values: [{ parameterCode: "KH", value: 8 }],
@@ -74,7 +86,7 @@ const BODIES: Record<string, unknown> = {
 };
 
 /** The path parameters this suite knows how to fill; any other one is red. */
-const KNOWN_PARAMS = new Set(["id", "occasionId"]);
+const KNOWN_PARAMS = new Set(["id", "occasionId", "recId"]);
 
 interface Route {
   method: string;
@@ -166,6 +178,9 @@ describe(
     let zLink: string;
     /** B's own link (to F, a customer without aquariums): the control's. */
     let bLink: string;
+    /** An open recommendation of A's on a1, and of B's on b1 (the answer route's ids). */
+    let aRec: string;
+    let bRec: string;
 
     const email = (name: string) => `${name}-${suffix}@${TEST_EMAIL_DOMAIN}`;
 
@@ -439,6 +454,38 @@ describe(
           data: { accountId: b.id, customerId: f.id },
         })
       ).id;
+      // Open recommendations for the answer route's id: A's on a1, B's on b1. Numbers
+      // only, no product (the sweep wants ids, not doses).
+      const openRecommendation = (aquariumId: string, accountId: string) =>
+        prisma.reefClubRecommendation
+          .create({
+            data: {
+              aquariumId,
+              accountId,
+              parameterCode: "KH",
+              direction: "EMEL",
+              frameVersion: "keret-proba",
+              input: {},
+              basisMeasuredAt: new Date(),
+              doseEffectVersion: 1,
+              productName: "Minta",
+              amount: 8,
+              doseUnit: "ML",
+              durationDays: 1,
+              effectHours: 12,
+              source: "próba",
+              text: "mondat",
+              templateId: "dose-v1",
+              reservedChanges: [],
+              effectEndsAt: new Date(Date.now() + 12 * 3_600_000),
+            },
+          })
+          .then((row) => row.id);
+      const a = await prisma.reefClubAccount.findUniqueOrThrow({
+        where: { email: email("a") },
+      });
+      aRec = await openRecommendation(a1, a.id);
+      bRec = await openRecommendation(b1, b.id);
     });
 
     after(async () => {
@@ -493,14 +540,44 @@ describe(
     it("5.2/1: B munkamenetével minden idegen akvárium-azonosító minden azonosítós útvonalon bájtra a nem létező 404-e, és semmi nem változik", async () => {
       const foreign: Record<
         string,
-        { id: string; occasionId: string; linkId: string }
+        { id: string; occasionId: string; linkId: string; recId: string }
       > = {
-        "A saját (privát)": { id: a1, occasionId: a1Occasion, linkId: zLink },
-        "A második saját": { id: a2, occasionId: a1Occasion, linkId: zLink },
-        "C bolti 1": { id: c1, occasionId: dOccasion, linkId: zLink },
-        "C bolti 2": { id: c2, occasionId: dOccasion, linkId: zLink },
-        "D bolti": { id: d1, occasionId: dOccasion, linkId: zLink },
-        "E cég": { id: e1, occasionId: dOccasion, linkId: zLink },
+        "A saját (privát)": {
+          id: a1,
+          occasionId: a1Occasion,
+          linkId: zLink,
+          recId: aRec,
+        },
+        "A második saját": {
+          id: a2,
+          occasionId: a1Occasion,
+          linkId: zLink,
+          recId: aRec,
+        },
+        "C bolti 1": {
+          id: c1,
+          occasionId: dOccasion,
+          linkId: zLink,
+          recId: aRec,
+        },
+        "C bolti 2": {
+          id: c2,
+          occasionId: dOccasion,
+          linkId: zLink,
+          recId: aRec,
+        },
+        "D bolti": {
+          id: d1,
+          occasionId: dOccasion,
+          linkId: zLink,
+          recId: aRec,
+        },
+        "E cég": {
+          id: e1,
+          occasionId: dOccasion,
+          linkId: zLink,
+          recId: aRec,
+        },
       };
       const before = await fingerprint();
       const mismatches: string[] = [];
@@ -508,7 +585,12 @@ describe(
       for (const route of idRoutes()) {
         const missing = await answer(
           route,
-          { id: MISSING_ID, occasionId: MISSING_OCCASION, linkId: MISSING_ID },
+          {
+            id: MISSING_ID,
+            occasionId: MISSING_OCCASION,
+            linkId: MISSING_ID,
+            recId: MISSING_ID,
+          },
           sessionB,
         );
         assert.equal(
@@ -575,7 +657,7 @@ describe(
             : b1;
         const got = await answer(
           route,
-          { id: target, occasionId: b1Occasion, linkId: bLink },
+          { id: target, occasionId: b1Occasion, linkId: bLink, recId: bRec },
           sessionB,
         );
         if (got.status < 200 || got.status > 299)

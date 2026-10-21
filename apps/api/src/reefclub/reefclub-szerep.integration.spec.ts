@@ -28,6 +28,7 @@ import {
 import { hashLinkCode, normalizeLinkCode } from "./reefclub-link-code.js";
 import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
 import { ReefClubDatabase } from "./reefclub-database.js";
+import { ReefClubDosesService } from "./reefclub-doses.service.js";
 import { ReefClubRecommendationService } from "./reefclub-recommendation.service.js";
 import { ReefClubAppModule } from "./reefclub.module.js";
 
@@ -1365,6 +1366,250 @@ describe(
         // 5 another account asks for an aquarium it may not read: the one 404
         await assert.rejects(
           () => service.recommend(accountB.id, main, "KH"),
+          /Nem található/,
+        );
+      } finally {
+        await database.$disconnect();
+        await prisma.reefClubDoseProjectionRun.deleteMany({
+          where: { id: run.id },
+        });
+        await prisma.product.deleteMany({ where: { id: product.id } });
+      }
+    });
+
+    it("a szereppel a beadott adag és a visszajelzés: az adag előbb, a státusz utána; megerősítés, kettős válasz, idempotencia, idegen fiók (8. szelet, adag)", async () => {
+      const account = await prisma.reefClubAccount.create({
+        data: {
+          email: email("adag-a"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const stranger = await prisma.reefClubAccount.create({
+        data: {
+          email: email("adag-b"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const aquarium = await prisma.aquarium.create({
+        data: {
+          aquariumNumber: `RCS-${suffix}-DZ`,
+          ownerAccountId: account.id,
+          ownershipType: "CUSTOMER",
+          name: `${NAME_PREFIX} adag`,
+          waterType: "TENGERI",
+          systemVolumeLiters: 200,
+        },
+      });
+      const product = await prisma.product.create({
+        data: { name: `${NAME_PREFIX} adag termék ${suffix}` },
+      });
+      const run = await prisma.reefClubDoseProjectionRun.create({
+        data: {
+          status: "SUCCEEDED",
+          trigger: "STARTUP",
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          rowCount: 1,
+        },
+      });
+      await prisma.reefClubDoseRow.create({
+        data: {
+          runId: run.id,
+          sourceId: `szerep-adag-${suffix}`,
+          sourceVersion: 1,
+          productId: product.id,
+          productName: product.name,
+          parameterCode: "KH",
+          direction: "EMEL",
+          effectPer100L: 0.25,
+          doseUnit: "ML",
+          doseStep: 1,
+          maxDailyDosePer100L: 20,
+          source: "próba",
+          refusals: [],
+        },
+      });
+      const open = (name: string) =>
+        prisma.reefClubRecommendation.create({
+          data: {
+            id: `szerep-adag-${name}-${suffix}`,
+            aquariumId: aquarium.id,
+            accountId: account.id,
+            parameterCode: "KH",
+            direction: "EMEL",
+            frameVersion: "keret-proba",
+            input: {},
+            basisMeasuredAt: new Date(),
+            doseEffectVersion: 1,
+            productId: product.id,
+            productName: product.name,
+            amount: 8,
+            doseUnit: "ML",
+            durationDays: 1,
+            effectHours: 12,
+            source: "próba",
+            text: "mondat",
+            templateId: "dose-v1",
+            reservedChanges: [{ parameter: "KH", change: 1 }],
+            effectEndsAt: new Date(Date.now() + 12 * 3_600_000),
+          },
+        });
+      const given = await open("given");
+      const partial = await open("partial");
+      const notGiven = await open("notgiven");
+      const reused = await open("reused");
+
+      const database = new ReefClubDatabase(roleUrl);
+      const service = new ReefClubDosesService(
+        new ReefClubAquariumAccess(database),
+        database,
+      );
+      try {
+        // GIVEN: the recommended amount is recorded first, then the status
+        const g = await service.answer(account.id, aquarium.id, given.id, {
+          answer: "GIVEN",
+        });
+        assert.equal(g.outcome, "RECORDED");
+        const doses = await prisma.reefClubAdministeredDose.findMany({
+          where: { recommendationId: given.id },
+        });
+        assert.equal(doses.length, 1);
+        assert.equal(doses[0]!.amount?.toNumber(), 8);
+        assert.equal(doses[0]!.productId, product.id);
+        assert.equal(
+          (
+            await prisma.reefClubRecommendation.findUniqueOrThrow({
+              where: { id: given.id },
+            })
+          ).status,
+          "GIVEN",
+        );
+
+        // answered twice: refused, and nothing more is written
+        const twice = await service.answer(account.id, aquarium.id, given.id, {
+          answer: "GIVEN",
+        });
+        assert.equal(twice.outcome, "REFUSED");
+        assert.equal(
+          await prisma.reefClubAdministeredDose.count({
+            where: { recommendationId: given.id },
+          }),
+          1,
+        );
+
+        // PARTIAL: a different amount needs the confirmation, then it is recorded
+        const unconfirmed = await service.answer(
+          account.id,
+          aquarium.id,
+          partial.id,
+          {
+            answer: "PARTIAL",
+            amount: 3,
+          },
+        );
+        assert.equal(unconfirmed.outcome, "NEEDS_CONFIRMATION");
+        assert.equal(
+          (
+            await prisma.reefClubRecommendation.findUniqueOrThrow({
+              where: { id: partial.id },
+            })
+          ).status,
+          "OPEN",
+          "a megerősítés nélküli válasz semmit nem ír",
+        );
+        const confirmed = await service.answer(
+          account.id,
+          aquarium.id,
+          partial.id,
+          {
+            answer: "PARTIAL",
+            amount: 3,
+            confirmed: true,
+          },
+        );
+        assert.equal(confirmed.outcome, "RECORDED");
+        assert.equal(
+          (
+            await prisma.reefClubAdministeredDose.findFirstOrThrow({
+              where: { recommendationId: partial.id },
+            })
+          ).amount?.toNumber(),
+          3,
+        );
+
+        // NOT_GIVEN: no dose, the status only
+        const none = await service.answer(
+          account.id,
+          aquarium.id,
+          notGiven.id,
+          {
+            answer: "NOT_GIVEN",
+          },
+        );
+        assert.equal(none.outcome, "RECORDED");
+        assert.equal(
+          await prisma.reefClubAdministeredDose.count({
+            where: { recommendationId: notGiven.id },
+          }),
+          0,
+        );
+
+        // a free dose: the future is refused, "another product" is recorded, the same key is the same dose
+        const future = await service.record(account.id, aquarium.id, {
+          parameter: "KH",
+          productId: null,
+          amount: null,
+          unit: null,
+          administeredAt: new Date(Date.now() + 3_600_000),
+        });
+        assert.equal(future.outcome, "REFUSED");
+        const other = {
+          parameter: "KH",
+          productId: null,
+          amount: null,
+          unit: null,
+          administeredAt: new Date(Date.now() - 60_000),
+          clientOperationId: `szerep-adag-op-${suffix}`,
+        } as const;
+        const first = await service.record(account.id, aquarium.id, other);
+        const second = await service.record(account.id, aquarium.id, other);
+        assert.equal(first.outcome, "RECORDED");
+        assert.equal(second.outcome, "RECORDED");
+        assert.equal(
+          first.outcome === "RECORDED" && second.outcome === "RECORDED"
+            ? first.doseId === second.doseId
+            : false,
+          true,
+        );
+
+        // a key a free dose already used is a refusal, not the unique index's 500 (barracuda, #1759)
+        const clash = await service.answer(account.id, aquarium.id, reused.id, {
+          answer: "GIVEN",
+          clientOperationId: other.clientOperationId,
+        });
+        assert.equal(clash.outcome, "REFUSED");
+        assert.equal(
+          clash.outcome === "REFUSED" ? clash.code : "",
+          "OPERATION_ID_USED",
+        );
+        assert.equal(
+          (
+            await prisma.reefClubRecommendation.findUniqueOrThrow({
+              where: { id: reused.id },
+            })
+          ).status,
+          "OPEN",
+          "a visszautasított válasz semmit nem ír",
+        );
+
+        // an account that may not read the aquarium: the one 404
+        await assert.rejects(
+          () =>
+            service.answer(stranger.id, aquarium.id, partial.id, {
+              answer: "NOT_GIVEN",
+            }),
           /Nem található/,
         );
       } finally {

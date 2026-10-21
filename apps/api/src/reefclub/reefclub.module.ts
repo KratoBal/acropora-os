@@ -5,7 +5,9 @@ import { ReefClubAccountDeletionService } from "./reefclub-account-deletion.serv
 import { ReefClubAccountRepository } from "./reefclub-account.repository.js";
 import { ReefClubAquariumAccess } from "./reefclub-aquarium-access.js";
 import { ReefClubAquariumsController } from "./reefclub-aquariums.controller.js";
+import { ReefClubRecommendationsController } from "./reefclub-recommendations.controller.js";
 import { ReefClubAquariumsService } from "./reefclub-aquariums.service.js";
+import { ReefClubDosesService } from "./reefclub-doses.service.js";
 import { ReefClubRecommendationService } from "./reefclub-recommendation.service.js";
 import { ReefClubAuthController } from "./reefclub-auth.controller.js";
 import { ReefClubAuthService } from "./reefclub-auth.service.js";
@@ -76,6 +78,7 @@ export class ReefClubModule {
         ReefClubAuthController,
         ReefClubMeController,
         ReefClubAquariumsController,
+        ReefClubRecommendationsController,
         ReefClubShopLinksController,
         ReefClubHealthController,
       ],
@@ -92,6 +95,7 @@ export class ReefClubModule {
         ReefClubAquariumAccess,
         ReefClubAquariumsService,
         ReefClubRecommendationService,
+        ReefClubDosesService,
         ReefClubShopLinksService,
         ReefClubAccountDeletionService,
         {
