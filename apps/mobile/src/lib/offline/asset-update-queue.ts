@@ -106,7 +106,8 @@ export interface QueuedAssetUpdateBase {
    * FUGGETLENUL A TELJESITMENYTOL. Kanban 8c77cf3e, 2026-09-23.
    */
   volume?: string | null;
-  powerConsumption?: string | null;
+  currentDraw?: string | null;
+  phaseConnection?: "PHASE_1" | "PHASE_3" | null;
   powerConsumptionRaw?: string | null;
   /** A tablazat elso oszlopa ("MAT kod / Elektromos"), ahogy a szerkesztes kezdetekor allt. */
   electricalCode?: string | null;

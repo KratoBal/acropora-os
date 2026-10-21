@@ -625,3 +625,33 @@ describe("AssetDetailPage electricalCode felirata", () => {
     expect(screen.queryByText(/MAT kód/)).toBeNull();
   });
 });
+
+/**
+ * AZ ARAMFELVETEL, A FOGYASZTAS (EREDETI BEJEGYZES) ES A BEKOTES AZ ADATLAPON
+ * (Balazs, 2026-10-21, kanban 541e2716). A regi "Fogyasztas" sor (kW-szam)
+ * megszunt; a "Fogyasztas (eredeti bejegyzes)" mostantol MINDIG kiiratik,
+ * ahol van erteke -- a korabbi "csak ha elter a szamtol" feltetel a szam
+ * kivezetesevel ertelmet vesztette.
+ */
+describe("AssetDetailPage áramfelvétele és bekötése", () => {
+  it("kiírja az áramfelvételt, az eredeti bejegyzést és a bekötés feliratát", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "6,15/5,5",
+      powerConsumptionRaw: "0,75 kW",
+      phaseConnection: "PHASE_1",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Áramfelvétel (A)")).toBeTruthy();
+    expect(screen.getByText("6,15/5,5")).toBeTruthy();
+    expect(screen.getByText("Fogyasztás (eredeti bejegyzés)")).toBeTruthy();
+    expect(screen.getByText("0,75 kW")).toBeTruthy();
+    expect(screen.getByText("Bekötés")).toBeTruthy();
+    // A KÓD NEM SZIVÁROG KI: a felirat jelenik meg, nem a PHASE_1.
+    expect(screen.getByText("I. fázis")).toBeTruthy();
+    expect(screen.queryByText("PHASE_1")).toBeNull();
+    // A régi sor nincs többé.
+    expect(screen.queryByText("Fogyasztás")).toBeNull();
+  });
+});

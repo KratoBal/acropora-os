@@ -519,3 +519,74 @@ describe("buildAssetPatch: the parent", () => {
     );
   });
 });
+
+/**
+ * AZ ARAMFELVETEL ES A BEKOTES A SZERKESZTON (Balazs, 2026-10-21, kanban
+ * 541e2716). Az aramfelvetel szabad szoveg (a TEXT_FIELDS hurok viszi), a
+ * bekotes valasztas: a valtozatlan nem megy, az urites `null`, es mindketto
+ * bekerul az alapertekek koze, kulonben az offline utkozes-feloldo nem tudna,
+ * MIHEZ kepest keszult a javitas.
+ */
+describe("az áramfelvétel és a bekötés a szerkesztőn", () => {
+  const ertekkel: EditableAsset = {
+    ...asset,
+    currentDraw: "6,15/5,5",
+    phaseConnection: "PHASE_3",
+  };
+
+  it("az űrlap a mostani értékekből töltődik, üres eszközön üres szöveg", () => {
+    const form = assetEditFormFrom(ertekkel);
+    assert.equal(form.currentDraw, "6,15/5,5");
+    assert.equal(form.phaseConnection, "PHASE_3");
+    const ures = assetEditFormFrom(asset);
+    assert.equal(ures.currentDraw, "");
+    assert.equal(ures.phaseConnection, "");
+  });
+
+  it("változatlan űrlapnál egyik sem megy a kérésbe", () => {
+    const patch = buildAssetPatch(ertekkel, assetEditFormFrom(ertekkel));
+    assert.equal("currentDraw" in patch, false);
+    assert.equal("phaseConnection" in patch, false);
+  });
+
+  it("az átírt értékek mennek, körülvágva, a bekötés kódként", () => {
+    const form = {
+      ...assetEditFormFrom(ertekkel),
+      currentDraw: " 3 ",
+      phaseConnection: "PHASE_1" as const,
+    };
+    const patch = buildAssetPatch(ertekkel, form);
+    assert.equal(patch.currentDraw, "3");
+    assert.equal(patch.phaseConnection, "PHASE_1");
+  });
+
+  it("az üres mező törlést küld: mindkettő `null`", () => {
+    const form = {
+      ...assetEditFormFrom(ertekkel),
+      currentDraw: "",
+      phaseConnection: "" as const,
+    };
+    const patch = buildAssetPatch(ertekkel, form);
+    assert.equal(patch.currentDraw, null);
+    assert.equal(patch.phaseConnection, null);
+  });
+
+  it("a megváltozott mezők a sor alapértékei közé is bekerülnek", () => {
+    const form = {
+      ...assetEditFormFrom(ertekkel),
+      currentDraw: "3",
+      phaseConnection: "PHASE_1" as const,
+    };
+    const patch = buildAssetPatch(ertekkel, form);
+    const alap = baseValuesFor(ertekkel, patch);
+    assert.equal(alap.currentDraw, "6,15/5,5");
+    assert.equal(alap.phaseConnection, "PHASE_3");
+  });
+
+  it("KONTROLL: az érintetlen mező nem kerül az alapértékek közé", () => {
+    const form = { ...assetEditFormFrom(ertekkel), currentDraw: "3" };
+    const patch = buildAssetPatch(ertekkel, form);
+    const alap = baseValuesFor(ertekkel, patch);
+    assert.equal("phaseConnection" in alap, false);
+  });
+});

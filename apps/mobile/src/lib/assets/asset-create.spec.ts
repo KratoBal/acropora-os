@@ -43,7 +43,8 @@ const form: AssetCreateForm = {
   performance: "",
   performanceUnitId: "",
   volume: "",
-  powerConsumption: "",
+  currentDraw: "",
+  phaseConnection: "",
   powerConsumptionRaw: "",
   electricalCode: "",
   installedAt: "",
@@ -598,66 +599,50 @@ describe("a térfogat a payloadban", () => {
 });
 
 /**
- * A FOGYASZTÁS ÁTALAKULT: Balázs 2026-09-23-i döntése ("igen, össze akarja
- * adni") miatt a mező mostantól ÖSSZEADHATÓ SZÁM, ugyanazt az alak-szabályt
- * kapja, mint a `volume`. A tábla EREDETI cellája (a "P1/P2" alak is) a
- * KÜLÖN `powerConsumptionRaw` mezőbe kerül, változatlanul -- lásd lejjebb.
- * Kanban 8c77cf3e.
+ * AZ ÁRAMFELVÉTEL ÉS A BEKÖTÉS (Balázs, 2026-10-21, kanban 541e2716): a korábbi
+ * kW-szám helyett SZABAD SZÖVEG, A-ben ("6,15/5,5"), és egy két értékű
+ * választás, ami üres is lehet. A régi alak-ellenőrzés megszűnt: a perjeles
+ * alak, ami korábban elbukott, most éppen a kívánt bevitel.
  */
-describe("a fogyasztás a payloadban", () => {
-  it("a vessző pontra fordul, ugyanúgy mint a térfogatnál", () => {
+describe("az áramfelvétel és a bekötés a payloadban", () => {
+  it("a P1/P2 alak VÁLTOZATLANUL átmegy, csak körülvágva", () => {
     const result = buildAssetCreatePayload({
       ...form,
-      powerConsumption: "0,75",
+      currentDraw: " 6,15/5,5 ",
     });
 
     assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, "0.75");
+    assert.equal(result.payload.currentDraw, "6,15/5,5");
   });
 
-  it("rossz alakra ELBUKIK, és a mezőre mutat", () => {
-    const result = buildAssetCreatePayload({
-      ...form,
-      powerConsumption: "6,15/5,5",
-    });
-
-    assert.equal(result.ok, false);
-    assert.equal(!result.ok && result.field, "powerConsumption");
-    assert.match(
-      !result.ok ? result.message : "",
-      /A fogyasztás csak szám lehet/,
-    );
-  });
-
-  it("üres választásnál az érték `undefined`, tehát a kérésből kimarad", () => {
+  it("üres választásnál mindkettő `undefined`, tehát a kérésből kimarad", () => {
     const result = buildAssetCreatePayload(form);
 
     assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, undefined);
+    assert.equal(result.payload.currentDraw, undefined);
+    assert.equal(result.payload.phaseConnection, undefined);
   });
 
   it("KONTROLL: a csupa szóköz is `undefined`-re esik", () => {
-    const result = buildAssetCreatePayload({
-      ...form,
-      powerConsumption: "   ",
-    });
+    const result = buildAssetCreatePayload({ ...form, currentDraw: "   " });
 
     assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, undefined);
+    assert.equal(result.payload.currentDraw, undefined);
   });
 
-  /**
-   * KONTROLL: a térfogattal EGYEZŐEN nincs pár-kényszer -- egy önmagában
-   * álló érték itt NEM hiba.
-   */
-  it("KONTROLL: egyedül is átmegy, nincs mit hiányolni mellé", () => {
-    const result = buildAssetCreatePayload({
-      ...form,
-      powerConsumption: "5.5",
-    });
+  it("a bekötés kódja megy el, nem a felirat", () => {
+    for (const kod of ["PHASE_1", "PHASE_3"] as const) {
+      const result = buildAssetCreatePayload({ ...form, phaseConnection: kod });
+      assert.ok(result.ok);
+      assert.equal(result.payload.phaseConnection, kod);
+    }
+  });
+
+  it("a régi `powerConsumption` kulcs nincs a payloadban", () => {
+    const result = buildAssetCreatePayload({ ...form, currentDraw: "5" });
 
     assert.ok(result.ok);
-    assert.equal(result.payload.powerConsumption, "5.5");
+    assert.equal("powerConsumption" in result.payload, false);
   });
 });
 

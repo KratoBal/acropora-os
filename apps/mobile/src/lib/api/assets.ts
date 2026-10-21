@@ -9,6 +9,7 @@ import type {
   AssetCriticality,
   AssetKind,
   AssetOwnerType,
+  AssetPhaseConnection,
   AssetStatus,
   UpdateAssetInput,
 } from "@/lib/assets/asset-fields";
@@ -25,6 +26,7 @@ export type {
   AssetCriticality,
   AssetKind,
   AssetOwnerType,
+  AssetPhaseConnection,
   AssetStatus,
   UpdateAssetInput,
 };
@@ -150,11 +152,13 @@ export interface AssetDetail extends AssetListItem {
    */
   volume?: string;
   /**
-   * AZ OSSZEADHATO SZAM. Balazs kerese (2026-09-23): ossze akarja adni a
-   * fogyasztast, tehat ez SZAM, nem szabad szoveg.
+   * AZ ARAMFELVETEL, AMPERBEN -- SZABAD SZOVEG ("6,15/5,5"). Balazs kerese,
+   * 2026-10-21 (kanban 541e2716): a korabbi kW-szam helyett.
    */
-  powerConsumption?: string;
-  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  currentDraw?: string;
+  /** A BEKOTES: egy fazis vagy harom. Ures is lehet. */
+  phaseConnection?: AssetPhaseConnection;
+  /** A fogyasztas eredeti szovege (kW), valtozatlanul. */
   powerConsumptionRaw?: string;
   /**
    * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"), NYERS SZOVEGKENT.
@@ -262,9 +266,11 @@ export interface CreateAssetInput {
   labelCode?: string;
   /** A terfogat, mindig m3-ben. Elhagyhato. */
   volume?: string;
-  /** A fogyasztas, mindig kW-ban -- az osszeadhato szam. Elhagyhato. */
-  powerConsumption?: string;
-  /** A fogyasztas eredeti szovege. Elhagyhato. */
+  /** Az aramfelvetel, A-ben, szabad szoveg. Elhagyhato. */
+  currentDraw?: string;
+  /** A bekotes. Elhagyhato. */
+  phaseConnection?: AssetPhaseConnection;
+  /** A fogyasztas eredeti szovege (kW). Elhagyhato. */
   powerConsumptionRaw?: string;
   /** A tablazat elso oszlopa ("MAT kod / Elektromos"). Elhagyhato. */
   electricalCode?: string;
