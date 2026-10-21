@@ -21,6 +21,7 @@ import {
   type AssetListItem,
   type AssetOwnerOption,
   type AssetOwnerType,
+  type AssetPhaseConnection,
   type AssetStatus,
   type UnitOfMeasure,
   type AssetCategory,
@@ -51,6 +52,7 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "./asset-labels";
+import { assetPhaseConnectionLabel } from "@acropora/types";
 import {
   parentAssetRows,
   parentAssetTruncation,
@@ -199,13 +201,19 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * teljesitmennyel.
    */
   const [volume, setVolume] = useState("");
-  const [powerConsumption, setPowerConsumption] = useState("");
   /**
-   * A FOGYASZTAS EREDETI SZOVEGE -- Balazs kerese (2026-09-23): a
-   * fogyasztast ossze akarja adni, tehat a `powerConsumption` szamma valt.
-   * A FANK-adatok tobb mint fele "P1/P2" alaku volt, es ez a mezo orzi az
-   * eredeti bejegyzest -- ha az import majd feldolgozza, ebbol ellenorizheto
-   * vissza, melyik szamot valasztottuk.
+   * AZ ARAMFELVETEL, AMPERBEN -- SZABAD SZOVEG (Balazs, 2026-10-21, kanban
+   * 541e2716). A korabbi, kW-ban vezetett `powerConsumption` szam helyett:
+   * ugyanolyan alak, mint az eredeti bejegyzes ("6,15/5,5"), de A-ben.
+   */
+  const [currentDraw, setCurrentDraw] = useState("");
+  /** A BEKOTES: egy fazis vagy harom. Ures is lehet. */
+  const [phaseConnection, setPhaseConnection] = useState<
+    AssetPhaseConnection | ""
+  >("");
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE, kW-BAN -- ez 2026-10-21 ota a fogyasztas
+   * egyetlen tarolt alakja ("0,75 kW", "6,15/5,5").
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   /**
@@ -302,7 +310,8 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             : undefined,
         );
         setVolume(asset.volume ?? "");
-        setPowerConsumption(asset.powerConsumption ?? "");
+        setCurrentDraw(asset.currentDraw ?? "");
+        setPhaseConnection(asset.phaseConnection ?? "");
         setPowerConsumptionRaw(asset.powerConsumptionRaw ?? "");
         setElectricalCode(asset.electricalCode ?? "");
         setInstalledAt(inputDate(asset.installedAt));
@@ -631,11 +640,12 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // leszedi a teljesitmenyt, egy `null` elbukik.
             performance: normalizePerformanceValue(performance),
             performanceUnitId: performanceUnitId || null,
-            // FUGGETLEN A TELJESITMENYTOL: a `volume` es a `powerConsumption`
-            // ugyanazt a normalizalast kapja, mint a `performance`. A
+            // FUGGETLEN A TELJESITMENYTOL: a `volume` ugyanazt a normalizalast
+            // kapja, mint a `performance`. Az `currentDraw` es a
             // `powerConsumptionRaw` szabad szoveg, csak korulvagas.
             volume: normalizePerformanceValue(volume),
-            powerConsumption: normalizePerformanceValue(powerConsumption),
+            currentDraw: currentDraw.trim() || null,
+            phaseConnection: phaseConnection || null,
             powerConsumptionRaw: powerConsumptionRaw.trim() || null,
             expectedUpdatedAt: updatedAt,
           })
@@ -666,8 +676,8 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             performance: normalizePerformanceValue(performance) ?? undefined,
             performanceUnitId: performanceUnitId || undefined,
             volume: normalizePerformanceValue(volume) ?? undefined,
-            powerConsumption:
-              normalizePerformanceValue(powerConsumption) ?? undefined,
+            currentDraw: currentDraw.trim() || undefined,
+            phaseConnection: phaseConnection || undefined,
             powerConsumptionRaw: powerConsumptionRaw.trim() || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
@@ -1087,25 +1097,24 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               />
             </FormField>
             {/*
-              A FOGYASZTAS SZAMMA VALT (Balazs kerese, 2026-09-23): ossze
-              akarja adni egy rendszerre, ami csak szamon mukodik. A "P1/P2"
-              alaku eredeti bejegyzeseket a masik mezo orzi valtozatlanul.
+              AZ ARAMFELVETEL (Balazs, 2026-10-21): a korabbi "Fogyasztas" szam
+              helyett, A-ben, szabad szovegkent -- ugyanaz az alak, mint az
+              eredeti bejegyzesnel ("6,15/5,5"). Nem osszeadhato.
             */}
             <FormField
-              label="Fogyasztás"
-              description="kW-ban. Tizedesvesszővel is írható (például 0,5)."
+              label="Áramfelvétel"
+              description="A-ben. Két motor esetén per jellel (például 6,15/5,5)."
             >
               <Input
-                aria-label="Fogyasztás"
-                inputMode="decimal"
-                value={powerConsumption}
-                onChange={(event) => setPowerConsumption(event.target.value)}
-                placeholder="pl. 0,75"
+                aria-label="Áramfelvétel"
+                value={currentDraw}
+                onChange={(event) => setCurrentDraw(event.target.value)}
+                placeholder="pl. 6,15/5,5"
               />
             </FormField>
             <FormField
               label="Fogyasztás (eredeti bejegyzés)"
-              description="Ha a tábla cellája P1/P2 alakú volt (például 6,15/5,5), ide írd be változatlanul."
+              description="kW-ban, változatlanul. Két motor esetén per jellel (például 6,15/5,5)."
             >
               <Input
                 aria-label="Fogyasztás (eredeti bejegyzés)"
@@ -1113,6 +1122,26 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 onChange={(event) => setPowerConsumptionRaw(event.target.value)}
                 placeholder="pl. 6,15/5,5"
               />
+            </FormField>
+            <FormField label="Bekötés">
+              <Select
+                aria-label="Bekötés"
+                value={phaseConnection}
+                onChange={(event) =>
+                  setPhaseConnection(
+                    event.target.value as AssetPhaseConnection | "",
+                  )
+                }
+              >
+                <option value="">Nincs megadva</option>
+                {Object.entries(assetPhaseConnectionLabel).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
+              </Select>
             </FormField>
             {/*
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat

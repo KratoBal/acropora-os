@@ -2,6 +2,7 @@ import type { QueuedAssetUpdateBase } from "../offline/asset-update-queue";
 
 import type {
   AssetCriticality,
+  AssetPhaseConnection,
   AssetStatus,
   UpdateAssetInput,
 } from "./asset-fields";
@@ -71,8 +72,13 @@ export interface EditableAsset {
    * 2026-09-23.
    */
   volume?: string;
-  powerConsumption?: string;
-  /** A fogyasztas eredeti szovege -- lasd a `powerConsumption` fejleceit. */
+  /**
+   * AZ ARAMFELVETEL (A, szabad szoveg, pl. "6,15/5,5") ES A BEKOTES. Balazs
+   * kerese, 2026-10-21 (kanban 541e2716): a korabbi kW-szam helyett.
+   */
+  currentDraw?: string;
+  phaseConnection?: AssetPhaseConnection;
+  /** A fogyasztas eredeti szovege (kW), valtozatlanul. */
   powerConsumptionRaw?: string;
   /**
    * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"). Balazs kerese,
@@ -172,7 +178,9 @@ export interface AssetEditForm {
    * mindig fix egységben értendő (m3, illetve kW), nincs mértékegység-mező.
    */
   volume: string;
-  powerConsumption: string;
+  /** Szabad szoveg, A-ben. A bekotes ures is lehet (`""`). */
+  currentDraw: string;
+  phaseConnection: AssetPhaseConnection | "";
   powerConsumptionRaw: string;
   electricalCode: string;
 }
@@ -185,10 +193,11 @@ const TEXT_FIELDS = [
   "description",
   "notes",
   /**
-   * A FOGYASZTAS EREDETI SZOVEGE IDE ILLIK, A `volume`/`powerConsumption`-nel
+   * AZ ARAMFELVETEL ES A FOGYASZTAS EREDETI SZOVEGE IDE ILLIK, A `volume`-mal
    * ELLENTETBEN: szabad szoveg, nincs alak-ellenorzese, tehat a generikus
    * mintaba tartozik.
    */
+  "currentDraw",
   "powerConsumptionRaw",
   /**
    * A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos") -- SZABAD SZOVEG, NINCS
@@ -216,7 +225,8 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     performance: asset.performance ?? "",
     performanceUnitId: asset.performanceUnit?.id ?? "",
     volume: asset.volume ?? "",
-    powerConsumption: asset.powerConsumption ?? "",
+    currentDraw: asset.currentDraw ?? "",
+    phaseConnection: asset.phaseConnection ?? "",
     powerConsumptionRaw: asset.powerConsumptionRaw ?? "",
     electricalCode: asset.electricalCode ?? "",
   };
@@ -323,14 +333,13 @@ export function buildAssetPatch(
   if (terfogat !== regiTerfogat) patch.volume = terfogat;
 
   /**
-   * A FOGYASZTAS -- AZ OSSZEADHATO SZAM, UGYANAZ A SZABALY, MINT A
-   * TERFOGATNAL. Balazs kerese (2026-09-23): ossze akarja adni a
-   * fogyasztast, tehat ez SZAM. A `powerConsumptionRaw` (lent, a
-   * `TEXT_FIELDS` hurokban) orzi az eredeti "P1/P2" alaku szoveget.
+   * A BEKOTES: valasztas, ures is lehet. A valtozatlan nem megy, az urites
+   * `null` (torles). Az aramfelvetel szabad szoveg, a `TEXT_FIELDS` hurok
+   * viszi (fent).
    */
-  const fogyasztas = normalizePerformanceValue(form.powerConsumption);
-  const regiFogyasztas = asset.powerConsumption ?? null;
-  if (fogyasztas !== regiFogyasztas) patch.powerConsumption = fogyasztas;
+  const bekotes = form.phaseConnection;
+  if (bekotes !== (asset.phaseConnection ?? ""))
+    patch.phaseConnection = bekotes === "" ? null : bekotes;
 
   /**
    * A FUNKCIO -- FUGGETLENUL A KATEGORIATOL, ugyanaz a szabaly, mint felette:
@@ -423,19 +432,6 @@ export function assetVolumeEditProblem(
 }
 
 /**
- * A FOGYASZTAS ALAKJA, A MENTES ELOTT -- SZO SZERINT A `assetVolumeEditProblem`
- * SZERKEZETE. Balazs kerese (2026-09-23): a fogyasztast ossze akarja adni,
- * tehat ez is SZAM lett, es ugyanugy alak-ellenorzest igenyel.
- */
-export function assetPowerConsumptionEditProblem(
-  form: AssetEditForm,
-): "malformed" | null {
-  const ertek = form.powerConsumption.trim();
-  if (ertek === "") return null;
-  return normalizePerformanceValue(ertek) === null ? "malformed" : null;
-}
-
-/**
  * A TELJESÍTMÉNY-PÁR BAJA, A MENTÉS ELŐTT -- ÉS EZ AZ OFFLINE SOR MIATT KELL.
  *
  * Kapcsolat nélkül a mentés SORBA kerül, nem a szerverhez: egy fél pár így
@@ -508,8 +504,8 @@ export function baseValuesFor(
    * a teljesitmeny -- de kulon-kulon, mert nincs koztuk par-kenyszer.
    */
   if ("volume" in patch) base.volume = asset.volume ?? null;
-  if ("powerConsumption" in patch)
-    base.powerConsumption = asset.powerConsumption ?? null;
+  if ("phaseConnection" in patch)
+    base.phaseConnection = asset.phaseConnection ?? null;
   for (const field of TEXT_FIELDS)
     if (field in patch) base[field] = asset[field] ?? null;
   /**

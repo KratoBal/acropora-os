@@ -566,6 +566,13 @@ enum AssetCriticality {
   CRITICAL
 }
 
+/// AZ ESZKOZ BEKOTESE (Balazs, 2026-10-21, kanban 541e2716): "I. fazis" vagy
+/// "III. fazis". A felirat a felulet dolga, az ertek stabil kod.
+enum AssetPhaseConnection {
+  PHASE_1
+  PHASE_3
+}
+
 enum AssetEventType {
   CREATED
   UPDATED
@@ -4385,8 +4392,8 @@ model AquariumEquipment {
 /// törzsében nyilvántartott beszállító. A cím és az akvárium csak vevőnél
 /// használható, finomabb elhelyezésként.
 model Asset {
-  id                  String           @id @default(cuid())
-  assetNumber         String           @unique
+  id                  String                @id @default(cuid())
+  assetNumber         String                @unique
   /// A KLIENS ÁLTAL ADOTT MŰVELET-AZONOSÍTÓ, A HELYSZÍNI RÖGZÍTÉS
   /// IDEMPOTENCIA-KULCSA.
   ///
@@ -4410,8 +4417,8 @@ model Asset {
   ///
   /// A NULL nem egyenlő önmagával, tehát a kulcs nélküli sorok (minden mai sor
   /// és minden webes felvitel) korlátlanul állhatnak egymás mellett.
-  clientOperationId   String?          @unique
-  qrToken             String           @unique @default(uuid()) @db.Uuid
+  clientOperationId   String?               @unique
+  qrToken             String                @unique @default(uuid()) @db.Uuid
   customerId          String?
   supplierId          String?
   customerAddressId   String?
@@ -4438,9 +4445,9 @@ model Asset {
   aquariumId          String?
   parentAssetId       String?
   productVariantId    String?
-  kind                AssetKind        @default(EQUIPMENT)
-  status              AssetStatus      @default(ACTIVE)
-  criticality         AssetCriticality @default(NORMAL)
+  kind                AssetKind             @default(EQUIPMENT)
+  status              AssetStatus           @default(ACTIVE)
+  criticality         AssetCriticality      @default(NORMAL)
   name                String
   /// A KATEGORIA SZOVEGES ALAKJA -- KIVEZETES ALATT.
   ///
@@ -4478,51 +4485,46 @@ model Asset {
   /// A KET MEZO EGYUTT MOZOG, es ezt CHECK is orzi a tablan: egy "500" onmagaban
   /// nem informacio, hanem talalgatasra hivas (watt? liter per ora?). Ugyanaz az
   /// alak, mint a matrica `assignment_pairing_check`-je.
-  performance         Decimal?         @db.Decimal(19, 6)
+  performance         Decimal?              @db.Decimal(19, 6)
   /// A mezo neve NEM `unitId`: az MAR FOGLALT ezen a modellen, es a HELYSZINT
   /// jelenti (`Asset.unitId` -> `PartnerUnit`). Lasd a `UnitOfMeasure` fejlecet.
   performanceUnitId   String?
   /// `Restrict`, nem `SetNull`: ha egy mertekegyseget valaki torolni akar,
   /// amire eszkozok hivatkoznak, az NEM csendben uritse ki a mezoket -- a
   /// kivezetes utja az `isActive = false`, ami a valasztobol veszi ki.
-  performanceUnit     UnitOfMeasure?   @relation("AssetPerformanceUnit", fields: [performanceUnitId], references: [id], onDelete: Restrict)
+  performanceUnit     UnitOfMeasure?        @relation("AssetPerformanceUnit", fields: [performanceUnitId], references: [id], onDelete: Restrict)
   /// A BERENDEZES TERFOGATA, MINDIG m3-BEN.
   ///
   /// Balazs kerese, 2026-09-23 (kanban 8c77cf3e), a FANK Excel-tablazat
   /// alapjan (`Terfogat (m3)` oszlop, 59 kitoltott soron). NINCS kulon
   /// mertekegyseg-mezo, mert a FANK-ban ez az oszlop MINDIG m3 -- ellentetben
   /// a `performance`-szel, ahol a szerelo tobb egyseg kozul valaszt.
-  volume              Decimal?         @db.Decimal(19, 6)
-  /// A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM.
+  volume              Decimal?              @db.Decimal(19, 6)
+  /// AZ ARAMFELVETEL, AMPERBEN -- SZOVEG, NEM SZAM (Balazs, 2026-10-21).
   ///
-  /// Balazs kerese, 2026-09-23 (kanban 8c77cf3e), a FANK Excel `Fogyasztas
-  /// (ossz. kW vagy P1/P2)` oszlopa alapjan.
+  /// Balazs kerese (Szerviz es eszkoznyilvantartas szal, 2026-10-21 09:03 es
+  /// 09:05 UTC, kanban 541e2716): a regi `powerConsumption` (kW-ban, DECIMAL)
+  /// helyett EZ a mezo, ugyanolyan alakban, mint a "Fogyasztas (eredeti
+  /// bejegyzes)" ("6,15/5,5": ket motor erteke egy cellaban), de A-BEN.
   ///
-  /// NEM UGYANAZ, MINT A `performance`: 136 soron EGYSZERRE van kitoltve a
-  /// Teljesitmeny (m3/h, a `performance` mezot tolti) ES a Fogyasztas (kW) --
-  /// tehat a ket ertek FUGGETLEN, egy eszkoznek EGYSZERRE lehet mindket
-  /// adata, es a `performance` egy-ertek-egy-mertekegyseg parja nem tudna
-  /// mindkettot tartani.
-  ///
-  /// MIERT DECIMAL, NEM SZOVEG -- ES EZ VALTOZAS A KORABBI DONTESHEZ KEPEST.
-  /// Elsore szoveg volt (lasd `powerConsumptionRaw` lejjebb, miert): a FANK
-  /// 276 kitoltott soraiabol 142 (51%) "P1/P2" alaku, ket motor-teljesitmeny
-  /// egy cellaban (pl. "6,15/5,5"). Balazs viszont kimondta (2026-09-23,
-  /// acrobot kerdesere): OSSZE AKARJA ADNI a fogyasztast egy rendszerre --
-  /// ez csak szamon mukodik. A P1/P2 sorokon MELYIK szam kerul ide, azt az
-  /// IMPORT dolgozza fel (ma meg nem letezik); ez a mezo maga barmelyiket
-  /// befogadja, amit a bevitel ad.
-  powerConsumption    Decimal?         @db.Decimal(19, 6)
+  /// MIERT SZOVEG, ES MIERT NEM OSSZEADHATO TOBBE. A 2026-09-23-i dontes a
+  /// kW-ot DECIMAL-ra tette, mert Balazs ossze akarta adni a fogyasztast egy
+  /// rendszerre. Ez a keres megszunteti: az ampert nem adjuk ossze (a ketto
+  /// nem azonos feszultseg es fazis mellett nem ertelmezheto osszeg), es a
+  /// "P1/P2" alak szoveg. A regi kW-szam a migracioban a `powerConsumptionRaw`
+  /// mezobe kerult ("0,75 kW"), ahol az ERETI bejegyzes uresen allt, es utana
+  /// minden soron kiuresedett.
+  currentDraw         String?
+  /// A BEKOTES: egy fazis vagy harom (Balazs, 2026-10-21). Ures is lehet.
+  phaseConnection     AssetPhaseConnection?
   /// A FOGYASZTAS EREDETI, VALTOZATLAN SZOVEGE -- A TABLA CELLAJA, BETURE.
   ///
   /// Ketto mezo egy adat helyett, es ez szandekos (acrobot dontese,
-  /// 2026-09-23): ha csak a `powerConsumption` szamot tartanank meg, a
-  /// "6,15/5,5" alak MASODIK erteke eltunne, es soha tobbe nem tudnank meg,
-  /// mi allt ott -- a valasztott szam felteves, nem meres. Ez a mezo azert
-  /// van, hogy a felteves barmikor visszaellenorizheto es visszafejtheto
-  /// legyen. A tarolasi ara nulla: opcionalis, es a legtobb esetben (ahol a
-  /// FANK-ban egyetlen szam allt) ugyanazt az erteket hordozza, mint a
-  /// `powerConsumption`, csak szovegkent.
+  /// 2026-09-23): ha csak egy szamot tartanank meg, a "6,15/5,5" alak
+  /// MASODIK erteke eltunne, es soha tobbe nem tudnank meg, mi allt ott.
+  /// 2026-10-21 ota ez a mezo AZ EGYETLEN fogyasztas-adat (kW, szovegben,
+  /// "0,75 kW" vagy "6,15/5,5"): a regi kW-szam ide masolodott, ahol ez a
+  /// mezo ures volt (lasd a `20261021120000_asset_current_draw` migraciot).
   powerConsumptionRaw String?
   /// A TABLAZAT ELSO OSZLOPA ("MAT kod / Elektromos"), SAJAT MEZOKENT.
   ///
@@ -4541,10 +4543,10 @@ model Asset {
   electricalCode      String?
   /// `Restrict`, ugyanugy, mint a mertekegysegnel: egy kategoria, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
-  categoryRef         AssetCategory?   @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)
+  categoryRef         AssetCategory?        @relation("AssetCategory", fields: [categoryId], references: [id], onDelete: Restrict)
   /// `Restrict`, ugyanugy, mint a kategorianal: egy funkcio, amire eszkoz
   /// mutat, nem torolheto ki alola. A kivezetes `isActive`-kal megy.
-  functionRef         AssetFunction?   @relation("AssetFunction", fields: [functionId], references: [id], onDelete: Restrict)
+  functionRef         AssetFunction?        @relation("AssetFunction", fields: [functionId], references: [id], onDelete: Restrict)
   description         String?
   installedAt         DateTime?
   purchasedAt         DateTime?
@@ -4556,8 +4558,8 @@ model Asset {
   archivedAt          DateTime?
   createdById         String?
   updatedById         String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   customer        Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
   supplier        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: Restrict)

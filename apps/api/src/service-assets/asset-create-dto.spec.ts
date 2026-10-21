@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import { plainToInstance } from "class-transformer";
 import { validateSync } from "class-validator";
 
-import { CreateAssetDto } from "./dto/asset.dto.js";
+import { CreateAssetDto, UpdateAssetDto } from "./dto/asset.dto.js";
 
 /**
  * A MATRICAKOD A FELVITELI AGON IS A HATARON AKAD EL.
@@ -178,5 +178,107 @@ describe("az eszköz-felvitel öt idegen kulcsa (hely, alegység, akvárium, sz�
     const uzenet = uzenetek({ ...ALAP, departmentId: 42 });
     assert.ok(uzenet.length > 0, "a validáció nem fut: a mérés semmit nem ér");
     assert.ok(uzenet.some((m) => m.includes("must be a string")));
+  });
+});
+
+/**
+ * AZ ARAMFELVETEL ES A BEKOTES (Balazs, 2026-10-21, kanban 541e2716).
+ *
+ * A VALOS PIPE-ALAKKAL MERUNK (`whitelist` + `forbidNonWhitelisted`, mint az
+ * `app.configuration.ts`-ben), mert a regi `powerConsumption` mezo sorsa pont
+ * ezen mulik: ha a DTO-bol kikerul, egy regi mobil-build (vagy az offline
+ * sorban rekedt mentes) 400-at kap, es a sor soha nem urul ki.
+ */
+function pipeUzenetek<T extends object>(
+  osztaly: new () => T,
+  torzs: Record<string, unknown>,
+): string[] {
+  return validateSync(plainToInstance(osztaly, torzs), {
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  }).flatMap((error) => Object.values(error.constraints ?? {}));
+}
+
+/** A módosítás kötelező alaptagja: az optimista zár időbélyege. */
+const UPDATE_ALAP = { expectedUpdatedAt: "2026-10-21T10:00:00.000Z" };
+
+describe("az eszköz áramfelvétele és bekötése", () => {
+  it("a szabad szövegű áramfelvétel átmegy, a P1/P2 alak is", () => {
+    assert.deepEqual(
+      pipeUzenetek(CreateAssetDto, { ...ALAP, currentDraw: "6,15/5,5" }),
+      [],
+    );
+    assert.deepEqual(
+      pipeUzenetek(UpdateAssetDto, { ...UPDATE_ALAP, currentDraw: "0,75" }),
+      [],
+    );
+  });
+
+  it("az áramfelvétel hossza korlátos, és a hibaüzenet megnevezi a mezőt", () => {
+    const uzenet = pipeUzenetek(CreateAssetDto, {
+      ...ALAP,
+      currentDraw: "1".repeat(41),
+    });
+    assert.ok(
+      uzenet.some((m) => m.includes("currentDraw")),
+      uzenet.join("; "),
+    );
+  });
+
+  it("a bekötés két kódja átmegy, minden más elbukik", () => {
+    for (const kod of ["PHASE_1", "PHASE_3"]) {
+      assert.deepEqual(
+        pipeUzenetek(CreateAssetDto, { ...ALAP, phaseConnection: kod }),
+        [],
+      );
+      assert.deepEqual(
+        pipeUzenetek(UpdateAssetDto, { ...UPDATE_ALAP, phaseConnection: kod }),
+        [],
+      );
+    }
+    for (const rossz of ["PHASE_2", "I. fázis", ""]) {
+      const uzenet = pipeUzenetek(CreateAssetDto, {
+        ...ALAP,
+        phaseConnection: rossz,
+      });
+      assert.ok(
+        uzenet.some((m) => m.includes("phaseConnection")),
+        `${rossz}: ${uzenet.join("; ")}`,
+      );
+    }
+  });
+
+  it("a módosításnál a null törli az áramfelvételt és a bekötést", () => {
+    assert.deepEqual(
+      pipeUzenetek(UpdateAssetDto, {
+        ...UPDATE_ALAP,
+        currentDraw: null,
+        phaseConnection: null,
+      }),
+      [],
+    );
+  });
+
+  /** A kivezetett mezo: a regi kliens kuldese nem lehet 400. */
+  it("a kivezetett `powerConsumption` még átmegy a pipe-on, mindkét osztályon", () => {
+    assert.deepEqual(
+      pipeUzenetek(CreateAssetDto, { ...ALAP, powerConsumption: "0,75" }),
+      [],
+    );
+    assert.deepEqual(
+      pipeUzenetek(UpdateAssetDto, { ...UPDATE_ALAP, powerConsumption: null }),
+      [],
+    );
+  });
+
+  it("POZITÍV KONTROLL: egy ismeretlen mező ugyanezen a pipe-on elbukik", () => {
+    const uzenet = pipeUzenetek(CreateAssetDto, {
+      ...ALAP,
+      powerConsumptionX: "1",
+    });
+    assert.ok(
+      uzenet.some((m) => m.includes("should not exist")),
+      uzenet.join("; "),
+    );
   });
 });

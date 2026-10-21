@@ -109,6 +109,18 @@ export const assetCriticalityLabel: Record<AssetCriticality, string> = {
   CRITICAL: "Kritikus",
 };
 
+/**
+ * AZ ESZKOZ BEKOTESE: egy fazis vagy harom (Balazs, 2026-10-21). Az ertek
+ * stabil kod, a felirat a felulet dolga -- ugyanaz a ket felirat a webes es a
+ * mobil feluleten.
+ */
+export type AssetPhaseConnection = "PHASE_1" | "PHASE_3";
+
+export const assetPhaseConnectionLabel: Record<AssetPhaseConnection, string> = {
+  PHASE_1: "I. fázis",
+  PHASE_3: "III. fázis",
+};
+
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
 /**
@@ -466,24 +478,21 @@ export interface AssetDetail extends AssetListItem {
    */
   volume?: string;
   /**
-   * A BERENDEZES FOGYASZTASA, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM,
-   * SZOVEGKENT (ugyanazon okbol, mint a `volume`).
+   * AZ ARAMFELVETEL, AMPERBEN -- SZOVEG, NEM SZAM.
    *
-   * Balazs kerese (2026-09-23, acrobot kerdesere): ossze akarja adni a
-   * fogyasztast egy rendszerre, tehat ennek SZAMNAK kell lennie -- lasd a
-   * `powerConsumptionRaw` fejleceit arrol, mi tortenik a "P1/P2" alaku
-   * forrasertekekkel.
+   * Balazs kerese (2026-10-21, kanban 541e2716): a korabbi, kW-ban tarolt
+   * `powerConsumption` szam helyett. Ugyanaz az alak, mint a `powerConsumptionRaw`:
+   * ket motor erteke egy cellaban ("6,15/5,5"), de A-ben. SZABAD SZOVEG, nincs
+   * alak-ellenorzes, es nem osszeadhato: az ampert nem adjuk ossze.
    */
-  powerConsumption?: string;
+  currentDraw?: string;
+  /** A BEKOTES: egy fazis vagy harom. Ures is lehet. */
+  phaseConnection?: AssetPhaseConnection;
   /**
-   * A FOGYASZTAS EREDETI, VALTOZATLAN SZOVEGE -- A FORRAS CELLAJA, BETURE.
+   * A FOGYASZTAS EREDETI SZOVEGE kW-BAN ("0,75 kW", "6,15/5,5"), VALTOZATLANUL.
    *
-   * Lemerve (murena, 2026-09-23, kanban 8c77cf3e): a FANK-adatok tobb mint
-   * fele "P1/P2" alaku, ket motor-teljesitmeny egy cellaban (pl.
-   * "6,15/5,5"), nem egy tizedes szam. A `powerConsumption` csak EGY szamot
-   * tud tartani (ott, ahol az import majd eldonti, melyiket) -- ez a mezo
-   * azert van, hogy a masik ne veszjen el, es a valasztas barmikor
-   * visszaellenorizheto legyen.
+   * 2026-10-21 ota ez a fogyasztas EGYETLEN tarolt alakja: a korabbi kW-szam a
+   * migracioban ide masolodott, ahol ez a mezo ures volt, es utana kiuresedett.
    */
   powerConsumptionRaw?: string;
   /**
@@ -631,12 +640,11 @@ export interface CreateAssetInput {
    * kulon mertekegyseg-mezo (a FANK-adatokban ez az oszlop mindig m3).
    */
   volume?: string;
-  /**
-   * A FOGYASZTAS, MINDIG kW-BAN -- AZ OSSZEADHATO SZAM. Lasd az
-   * `AssetDetail.powerConsumption` fejleceit.
-   */
-  powerConsumption?: string;
-  /** A fogyasztas eredeti szovege, lasd az `AssetDetail.powerConsumptionRaw`-t. */
+  /** Az aramfelvetel amperben, szabad szoveg -- lasd az `AssetDetail.currentDraw`-t. */
+  currentDraw?: string;
+  /** A bekotes -- lasd az `AssetDetail.phaseConnection`-t. */
+  phaseConnection?: AssetPhaseConnection;
+  /** A fogyasztas eredeti szovege (kW), lasd az `AssetDetail.powerConsumptionRaw`-t. */
   powerConsumptionRaw?: string;
   /** Lásd az `AssetDetail.electricalCode` fejlécét. */
   electricalCode?: string;
@@ -710,8 +718,10 @@ export interface UpdateAssetInput {
    * elhagyasa erintetlenul hagyja.
    */
   volume?: string | null;
-  /** A FOGYASZTAS -- ugyanaz az alak, mint a `volume`-nal. */
-  powerConsumption?: string | null;
+  /** Az aramfelvetel (A, szabad szoveg) -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
+  currentDraw?: string | null;
+  /** A bekotes -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
+  phaseConnection?: AssetPhaseConnection | null;
   /** A fogyasztas eredeti szovege -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
   powerConsumptionRaw?: string | null;
   /** Lásd az `AssetDetail.electricalCode` fejlécét. `null` törli. */

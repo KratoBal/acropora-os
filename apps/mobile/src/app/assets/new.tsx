@@ -25,6 +25,7 @@ import {
   uploadAssetDocuments,
   type AssetKind,
   type AssetOwnerOption,
+  type AssetPhaseConnection,
 } from "@/lib/api/assets";
 import {
   describePhotoQueueing,
@@ -84,6 +85,7 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 import { ASSET_KIND_OPTIONS as kinds } from "@/lib/assets/asset-kind";
+import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connection";
 
 export default function NewAssetScreen() {
   const router = useRouter();
@@ -229,11 +231,17 @@ export default function NewAssetScreen() {
    * ES fogyasztas (kW), tehat kulon mezok, nincs mertekegyseg-parjuk.
    */
   const [volume, setVolume] = useState("");
-  const [powerConsumption, setPowerConsumption] = useState("");
   /**
-   * A FOGYASZTAS EREDETI SZOVEGE -- Balazs kerese (2026-09-23): a
-   * fogyasztast ossze akarja adni, tehat a `powerConsumption` szamma valt.
-   * Ez a mezo orzi a "P1/P2" alaku eredeti bejegyzest.
+   * AZ ARAMFELVETEL (A-BEN, SZABAD SZOVEG) ES A BEKOTES -- Balazs kerese,
+   * 2026-10-21 (kanban 541e2716): a korabbi kW-szam helyett.
+   */
+  const [currentDraw, setCurrentDraw] = useState("");
+  const [phaseConnection, setPhaseConnection] = useState<
+    AssetPhaseConnection | ""
+  >("");
+  /**
+   * A FOGYASZTAS EREDETI SZOVEGE (kW), VALTOZATLANUL -- a "P1/P2" alaku
+   * bejegyzes is ide kerul.
    */
   const [powerConsumptionRaw, setPowerConsumptionRaw] = useState("");
   /**
@@ -714,7 +722,8 @@ export default function NewAssetScreen() {
       performance,
       performanceUnitId,
       volume,
-      powerConsumption,
+      currentDraw,
+      phaseConnection,
       powerConsumptionRaw,
       electricalCode,
       installedAt,
@@ -911,22 +920,52 @@ export default function NewAssetScreen() {
             />
             <FieldError error={error} field="volume" />
             {/*
-              A FOGYASZTAS SZAMMA VALT (Balazs kerese, 2026-09-23): ossze
-              akarja adni egy rendszerre. A "P1/P2" alaku eredeti
-              bejegyzeseket a masik mezo orzi valtozatlanul.
+              AZ ARAMFELVETEL (A-ben) SZABAD SZOVEG, NEM SZAM (Balazs,
+              2026-10-21): a "6,15/5,5" alakhoz perjel kell, ezert NEM
+              decimalis billentyuzet. A Bekotes az eredeti bejegyzes ALATT
+              all; ures is lehet, ugyanarra koppintva leszedheto.
             */}
             <Field
-              label="Fogyasztás (kW)"
-              value={powerConsumption}
-              onChangeText={setPowerConsumption}
-              keyboardType="decimal-pad"
+              label="Áramfelvétel (A)"
+              value={currentDraw}
+              onChangeText={setCurrentDraw}
             />
-            <FieldError error={error} field="powerConsumption" />
             <Field
               label="Fogyasztás (eredeti bejegyzés)"
               value={powerConsumptionRaw}
               onChangeText={setPowerConsumptionRaw}
             />
+            <Text style={styles.label}>Bekötés</Text>
+            <View style={styles.kindGrid}>
+              {ASSET_PHASE_CONNECTION_OPTIONS.map((item) => (
+                <Pressable
+                  key={item.value}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Bekötés: ${item.label}`}
+                  accessibilityState={{
+                    selected: phaseConnection === item.value,
+                  }}
+                  onPress={() =>
+                    setPhaseConnection((current) =>
+                      current === item.value ? "" : item.value,
+                    )
+                  }
+                  style={[
+                    styles.kindButton,
+                    phaseConnection === item.value && styles.kindSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.kindText,
+                      phaseConnection === item.value && styles.kindTextSelected,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             {/*
               A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban
               8c77cf3e): "kapjon sajat mezot". A FELIRAT MASODSZOR

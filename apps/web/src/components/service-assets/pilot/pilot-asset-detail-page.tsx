@@ -17,6 +17,7 @@ import {
   type AssetDocumentType,
   type AssetQrCode,
   type AssetStatus,
+  assetPhaseConnectionLabel,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -509,9 +510,18 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                       asset.performanceUnit?.code,
                     )}
                   />
+                  <Field label="Áramfelvétel (A)" value={asset.currentDraw} />
                   <Field
-                    label="Fogyasztás"
-                    value={performanceText(asset.powerConsumption, "kW")}
+                    label="Fogyasztás (eredeti bejegyzés)"
+                    value={asset.powerConsumptionRaw}
+                  />
+                  <Field
+                    label="Bekötés"
+                    value={
+                      asset.phaseConnection
+                        ? assetPhaseConnectionLabel[asset.phaseConnection]
+                        : undefined
+                    }
                   />
                   <Field
                     label="Térfogat"
@@ -519,20 +529,12 @@ export function PilotAssetDetailPage({ assetId }: { assetId: string }) {
                   />
                   <Field label="FP / Elektromos" value={asset.electricalCode} />
                   {/*
-                    A FIGMA-TERV NEM KÉR "TERMÉKTÖRZS" ÉS "FOGYASZTÁS (EREDETI)"
-                    MEZŐT, DE EZEK VALÓS ADATOK -- lásd a mai adatlap
-                    (asset-detail-page.tsx) fejlécét: a "P1/P2" alakú eredeti
-                    fogyasztás-szöveget csak akkor mutatjuk, ha eltér a
-                    kiírt számtól. Nem hagyjuk el csendben.
+                    A FIGMA-TERV NEM KÉR "TERMÉKTÖRZS", "ÁRAMFELVÉTEL",
+                    "FOGYASZTÁS (EREDETI BEJEGYZÉS)" ÉS "BEKÖTÉS" MEZŐT, DE
+                    EZEK VALÓS ADATOK (Balázs, 2026-10-21): nem hagyjuk el
+                    csendben.
                   */}
                   <Field label="Terméktörzs" value={asset.product?.name} />
-                  {asset.powerConsumptionRaw &&
-                  asset.powerConsumptionRaw !== asset.powerConsumption ? (
-                    <Field
-                      label="Fogyasztás (eredeti)"
-                      value={asset.powerConsumptionRaw}
-                    />
-                  ) : null}
                 </div>
                 {asset.description ? (
                   <div className="border-t border-pilot-grey-100 px-5 py-4">

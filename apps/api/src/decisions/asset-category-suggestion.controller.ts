@@ -28,7 +28,6 @@ export class AssetCategorySuggestionDto {
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
   @IsString() @IsOptional() @MaxLength(40) performance?: string;
   @IsString() @IsOptional() performanceUnitId?: string;
-  @IsString() @IsOptional() @MaxLength(40) powerConsumption?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsString() @IsOptional() departmentId?: string;
 }

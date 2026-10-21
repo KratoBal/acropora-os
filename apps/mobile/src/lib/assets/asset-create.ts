@@ -1,4 +1,8 @@
-import type { AssetKind, AssetOwnerType } from "./asset-fields";
+import type {
+  AssetKind,
+  AssetOwnerType,
+  AssetPhaseConnection,
+} from "./asset-fields";
 import {
   assetLabelCreateProblem,
   normalizeAssetLabelCode,
@@ -38,12 +42,6 @@ export const MATRICA_ALAK_UZENET =
  */
 export const VOLUME_ALAK_UZENET =
   "A térfogat csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).";
-
-/**
- * A FOGYASZTÁS ROSSZ ALAKJÁNAK MONDATA -- UGYANAZ AZ INDOK, MINT A TÉRFOGATNÁL.
- */
-export const POWER_CONSUMPTION_ALAK_UZENET =
-  "A fogyasztás csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500). Az eredeti értéket a másik mezőbe írd.";
 
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
@@ -120,12 +118,13 @@ export interface AssetCreateForm {
    */
   volume: string;
   /**
-   * AZ ÖSSZEADHATÓ SZÁM -- Balázs kérése (2026-09-23): össze akarja adni a
-   * fogyasztást, tehát ez SZÁM, ugyanazzal az alak-szabállyal, mint a
-   * `volume`. A "P1/P2" alakú eredeti bejegyzést a `powerConsumptionRaw`
-   * őrzi, arra nincs alak-megkötés.
+   * AZ ÁRAMFELVÉTEL, AMPERBEN -- SZABAD SZÖVEG ("6,15/5,5"), nincs
+   * alak-ellenőrzés. Balázs kérése, 2026-10-21 (kanban 541e2716): a korábbi
+   * kW-szám helyett. A bekötés választás, üres is lehet (`""`).
    */
-  powerConsumption: string;
+  currentDraw: string;
+  phaseConnection: AssetPhaseConnection | "";
+  /** A fogyasztás eredeti szövege, kW-ban, változatlanul. */
   powerConsumptionRaw: string;
   /**
    * A TÁBLÁZAT ELSŐ OSZLOPA. Balázs kérése, 2026-09-23 (kanban 8c77cf3e):
@@ -182,9 +181,11 @@ export interface AssetCreatePayload {
   performanceUnitId?: string;
   /** A normalizált térfogat-érték, a teljesítménytől függetlenül. */
   volume?: string;
-  /** A normalizált fogyasztás-érték -- az összeadható szám. */
-  powerConsumption?: string;
-  /** A fogyasztás eredeti szövege, ha a kezelő megadta. */
+  /** Az áramfelvétel (A, szabad szöveg), ha a kezelő megadta. */
+  currentDraw?: string;
+  /** A bekötés, ha a kezelő választott. */
+  phaseConnection?: AssetPhaseConnection;
+  /** A fogyasztás eredeti szövege (kW), ha a kezelő megadta. */
   powerConsumptionRaw?: string;
   /** A táblázat első oszlopa ("FP / Elektromos"), ha a kezelő megadta. */
   electricalCode?: string;
@@ -205,7 +206,6 @@ export type AssetCreateField =
   | "labelCode"
   | "performance"
   | "volume"
-  | "powerConsumption"
   | "installedAt"
   | "warrantyExpiresAt"
   | "interval";
@@ -440,22 +440,6 @@ export function buildAssetCreatePayload(
       message: VOLUME_ALAK_UZENET,
     };
 
-  /**
-   * A FOGYASZTÁS ALAKJA -- SZÓ SZERINT A TÉRFOGATÉ, DE MÁS MEZŐVEL: az
-   * `AssetCreatePayload.powerConsumptionRaw` szabad szöveg, arra nincs
-   * alak-ellenőrzés.
-   */
-  const powerConsumptionText = form.powerConsumption.trim();
-  const powerConsumptionValue = normalizePerformanceValue(
-    form.powerConsumption,
-  );
-  if (powerConsumptionText !== "" && powerConsumptionValue === null)
-    return {
-      ok: false,
-      field: "powerConsumption",
-      message: POWER_CONSUMPTION_ALAK_UZENET,
-    };
-
   const intervalText = form.interval.trim();
   let serviceIntervalDays: number | undefined;
   if (intervalText) {
@@ -541,9 +525,11 @@ export function buildAssetCreatePayload(
       performanceUnitId: performanceValue
         ? form.performanceUnitId.trim()
         : undefined,
-      // A TERFOGAT ES A FOGYASZTAS -- FUGGETLEN A TELJESITMENYTOL, nincs par.
+      // A TERFOGAT -- FUGGETLEN A TELJESITMENYTOL, nincs par. Az aramfelvetel
+      // es a fogyasztas eredeti szovege szabad szoveg: csak korulvagas.
       volume: volumeValue ?? undefined,
-      powerConsumption: powerConsumptionValue ?? undefined,
+      currentDraw: form.currentDraw.trim() || undefined,
+      phaseConnection: form.phaseConnection || undefined,
       powerConsumptionRaw: form.powerConsumptionRaw.trim() || undefined,
       electricalCode: form.electricalCode.trim() || undefined,
       /**

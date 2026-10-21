@@ -429,6 +429,7 @@ export type {
   AssetCustomerSummary,
   AssetDetail,
   AssetDeletionBlockers,
+  AssetPhaseConnection,
   AssetDocumentSummary,
   AssetDocumentText,
   AssetDocumentType,
@@ -456,6 +457,7 @@ export {
   assetStatusLabel,
   assetStatusTone,
   assetCriticalityLabel,
+  assetPhaseConnectionLabel,
   assetEventLabel,
 } from "./asset-management.js";
 export {

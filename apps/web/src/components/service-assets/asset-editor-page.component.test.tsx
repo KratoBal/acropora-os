@@ -1269,3 +1269,104 @@ describe("AssetEditorPage szülőeszköz-választója", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * AZ ARAMFELVETEL ES A BEKOTES (Balazs, 2026-10-21, kanban 541e2716).
+ *
+ * Ket dolgot merunk: a mezok ott vannak, ahol Balazs kerte (az "Aramfelvetel"
+ * a regi "Fogyasztas" helyen, a "Bekotes" az "eredeti bejegyzes" ALATT), es a
+ * mentes a DROTON a helyes alakot kuldi -- szoveg, nem szam, es az urites
+ * `null` (torles), mert a bekotes ures is lehet.
+ */
+describe("AssetEditorPage áramfelvétele és bekötése", () => {
+  it("a betöltött értékeket mutatja, a régi „Fogyasztás” mező nincs többé", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "6,15/5,5",
+      phaseConnection: "PHASE_3",
+      powerConsumptionRaw: "0,75 kW",
+    } as unknown as AssetDetail);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    expect(await screen.findByLabelText("Áramfelvétel")).toHaveProperty(
+      "value",
+      "6,15/5,5",
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Bekötés")).toHaveProperty(
+        "value",
+        "PHASE_3",
+      ),
+    );
+    expect(
+      screen.getByLabelText("Fogyasztás (eredeti bejegyzés)"),
+    ).toHaveProperty("value", "0,75 kW");
+    // A régi, számként vezetett mező nem maradhat meg a felületen.
+    expect(screen.queryByLabelText("Fogyasztás")).toBeNull();
+    expect(
+      screen
+        .getAllByRole("option", { name: /fázis/ })
+        .map((option) => option.textContent),
+    ).toEqual(["I. fázis", "III. fázis"]);
+  });
+
+  it("a Bekötés az eredeti bejegyzés ALATT áll, az Áramfelvétel fölötte", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const aram = await screen.findByLabelText("Áramfelvétel");
+    const eredeti = screen.getByLabelText("Fogyasztás (eredeti bejegyzés)");
+    const bekotes = screen.getByLabelText("Bekötés");
+    const kovetkezik = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(aram.compareDocumentPosition(eredeti) & kovetkezik).toBeTruthy();
+    expect(eredeti.compareDocumentPosition(bekotes) & kovetkezik).toBeTruthy();
+  });
+
+  it("a mentés szövegként küldi az áramfelvételt és a bekötés kódját", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    api.update.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Áramfelvétel"), " 6,15/5,5 ");
+    await user.selectOptions(screen.getByLabelText("Bekötés"), "III. fázis");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const kuldott = api.update.mock.calls[0]?.[2];
+    expect(kuldott?.currentDraw).toBe("6,15/5,5");
+    expect(kuldott?.phaseConnection).toBe("PHASE_3");
+    // A régi kulcs el sem mehet: a szerver kivezette.
+    expect("powerConsumption" in (kuldott ?? {})).toBe(false);
+  });
+
+  it("az üres mező törlést küld: a bekötés és az áramfelvétel is null", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({
+      ...asset,
+      currentDraw: "3",
+      phaseConnection: "PHASE_1",
+    } as unknown as AssetDetail);
+    api.update.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const user = userEvent.setup();
+    await user.clear(await screen.findByLabelText("Áramfelvétel"));
+    await user.selectOptions(screen.getByLabelText("Bekötés"), "");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    const kuldott = JSON.parse(
+      JSON.stringify(api.update.mock.calls[0]?.[2] ?? {}),
+    );
+    expect(kuldott.currentDraw).toBe(null);
+    expect(kuldott.phaseConnection).toBe(null);
+  });
+});

@@ -45,6 +45,7 @@ import {
 import { ApiError, ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { ASSET_CRITICALITY_LABELS } from "@/lib/assets/asset-criticality";
+import { ASSET_PHASE_CONNECTION_LABELS } from "@/lib/assets/asset-phase-connection";
 import { ASSET_KIND_LABELS } from "@/lib/assets/asset-kind";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { qrRuns } from "@/lib/assets/qr-runs";
@@ -545,27 +546,25 @@ export default function AssetDetailScreen() {
                 label="Térfogat"
                 value={asset.volume ? `${asset.volume} m³` : undefined}
               />
+              {/*
+                AZ ARAMFELVETEL (A-ben, szabad szoveg), AZ EREDETI
+                FOGYASZTAS-BEJEGYZES (kW) ES A BEKOTES (Balazs, 2026-10-21,
+                kanban 541e2716). A korabbi kW-szam helyett: a "Fogyasztas"
+                ma mar csak az eredeti bejegyzes.
+              */}
+              <Info label="Áramfelvétel (A)" value={asset.currentDraw} />
               <Info
-                label="Fogyasztás"
+                label="Fogyasztás (eredeti bejegyzés)"
+                value={asset.powerConsumptionRaw}
+              />
+              <Info
+                label="Bekötés"
                 value={
-                  asset.powerConsumption
-                    ? `${asset.powerConsumption} kW`
+                  asset.phaseConnection
+                    ? ASSET_PHASE_CONNECTION_LABELS[asset.phaseConnection]
                     : undefined
                 }
               />
-              {/*
-                AZ EREDETI FOGYASZTAS-SZOVEG, HA ELTER A KIIRT SZAMTOL.
-                Balazs kerese (2026-09-23): a fogyasztast ossze akarja adni,
-                tehat a `powerConsumption` szamma valt -- ez a mezo orzi, mi
-                allt eredetileg a cellaban (pl. "6,15/5,5").
-              */}
-              {asset.powerConsumptionRaw &&
-              asset.powerConsumptionRaw !== asset.powerConsumption ? (
-                <Info
-                  label="Fogyasztás (eredeti)"
-                  value={asset.powerConsumptionRaw}
-                />
-              ) : null}
               {/*
                 A TABLAZAT ELSO OSZLOPA. Balazs kerese, 2026-09-23 (kanban
                 8c77cf3e): "kapjon sajat mezot". A FELIRAT MASODSZOR

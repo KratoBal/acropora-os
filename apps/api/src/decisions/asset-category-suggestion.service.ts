@@ -55,7 +55,6 @@ export interface SuggestionFields {
   readonly kind?: string | null;
   readonly performance?: string | null;
   readonly performanceUnitId?: string | null;
-  readonly powerConsumption?: string | null;
   readonly parentAssetId?: string | null;
   readonly departmentId?: string | null;
 }
@@ -125,7 +124,6 @@ export class AssetCategorySuggestionService {
       kind: fields.kind ?? null,
       performance: fields.performance ?? null,
       performanceUnit,
-      powerConsumption: fields.powerConsumption ?? null,
       parentCategory,
       departmentPath,
     };
@@ -278,7 +276,6 @@ export class AssetCategorySuggestionService {
           kind: mentett.kind,
           performance: mentett.performance?.toFixed() ?? null,
           performanceUnitId: mentett.performanceUnitId,
-          powerConsumption: mentett.powerConsumption?.toFixed() ?? null,
           parentAssetId: mentett.parentAssetId,
           departmentId: mentett.departmentId,
         }),

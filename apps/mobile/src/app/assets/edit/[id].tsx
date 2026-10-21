@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -32,7 +32,6 @@ import {
   assetLabelEditProblem,
   assetPerformanceEditProblem,
   assetVolumeEditProblem,
-  assetPowerConsumptionEditProblem,
   hasAssetChanges,
   PERFORMANCE_PROBLEM_MESSAGES,
   type AssetEditForm,
@@ -46,11 +45,11 @@ import {
 import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
 import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
+import { ASSET_PHASE_CONNECTION_OPTIONS } from "@/lib/assets/asset-phase-connection";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
 import {
   MATRICA_ALAK_UZENET,
   VOLUME_ALAK_UZENET,
-  POWER_CONSUMPTION_ALAK_UZENET,
 } from "@/lib/assets/asset-create";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
@@ -76,6 +75,15 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { useAppTheme } from "@/lib/theme/useAppTheme";
 import type { ThemeTokens } from "@/lib/theme/tokens";
 
+/** A bekotes valasztoja: az "ures" is valasztas (nincs megadva). */
+const PHASE_CONNECTION_CHOICES: {
+  value: AssetEditForm["phaseConnection"];
+  label: string;
+}[] = [
+  { value: "", label: "Nincs megadva" },
+  ...ASSET_PHASE_CONNECTION_OPTIONS,
+];
+
 const TEXT_FIELDS: {
   key: keyof AssetEditForm & string;
   label: string;
@@ -86,13 +94,14 @@ const TEXT_FIELDS: {
   { key: "serialNumber", label: "Sorozatszám" },
   { key: "partnerInternalCode", label: "Partner azonosítója" },
   /**
-   * A FOGYASZTAS MOSTANTOL OSSZEADHATO SZAM, tehat NEM ide kerul: annak
-   * decimalis billentyuzete es sajat alak-ellenorzese van, lasd lejjebb, a
-   * terfogat melletti bespoke mezot. Kanban 8c77cf3e, 2026-09-23.
-   *
-   * A tabla EREDETI cellaja (`powerConsumptionRaw`) viszont szabad szoveg,
-   * tehat AZ illik a generikus mintaba.
+   * AZ ARAMFELVETEL (A-BEN) ES A FOGYASZTAS EREDETI CELLAJA: mindketto
+   * SZABAD SZOVEG ("6,15/5,5"), tehat a generikus mintaba illenek, NEM
+   * decimalis billentyuzettel -- az nem ad perjelet. Balazs kerese,
+   * 2026-10-21 (kanban 541e2716): az aramfelvetel a korabbi kW-szam helyett;
+   * a Bekotes valaszto kozvetlenul az eredeti bejegyzes ALATT all (lasd a
+   * `TEXT_FIELDS.map` hurkot).
    */
+  { key: "currentDraw", label: "Áramfelvétel (A)" },
   { key: "powerConsumptionRaw", label: "Fogyasztás (eredeti bejegyzés)" },
   /**
    * A TABLAZAT ELSO OSZLOPA, SZABAD SZOVEG, NINCS ALAK-ELLENORZES --
@@ -397,13 +406,6 @@ export default function AssetEditScreen() {
        * `assetVolumeEditProblem` fejleceit.
        */
       if (assetVolumeEditProblem(form)) throw new Error(VOLUME_ALAK_UZENET);
-      /**
-       * A FOGYASZTAS ALAKJA UGYANITT, ES UGYANAZERT -- lasd az
-       * `assetPowerConsumptionEditProblem` fejleceit. Kanban 8c77cf3e,
-       * 2026-09-23.
-       */
-      if (assetPowerConsumptionEditProblem(form))
-        throw new Error(POWER_CONSUMPTION_ALAK_UZENET);
       const asset = betoltott;
       const patch = buildAssetPatch(editable(asset), form);
       /**
@@ -764,19 +766,37 @@ export default function AssetEditScreen() {
         ) : null}
 
         {TEXT_FIELDS.map((field) => (
-          <View key={field.key} style={styles.field}>
-            <Text style={styles.label}>{field.label}</Text>
-            <TextInput
-              accessibilityLabel={field.label}
-              value={form[field.key]}
-              onChangeText={(value) => setForm({ ...form, [field.key]: value })}
-              multiline={field.multiline}
-              style={[styles.input, field.multiline && styles.inputMultiline]}
-              placeholderTextColor={tokens.textMuted}
-              placeholder="Nincs megadva"
-              editable={!save.isPending}
-            />
-          </View>
+          <Fragment key={field.key}>
+            <View style={styles.field}>
+              <Text style={styles.label}>{field.label}</Text>
+              <TextInput
+                accessibilityLabel={field.label}
+                value={form[field.key]}
+                onChangeText={(value) =>
+                  setForm({ ...form, [field.key]: value })
+                }
+                multiline={field.multiline}
+                style={[styles.input, field.multiline && styles.inputMultiline]}
+                placeholderTextColor={tokens.textMuted}
+                placeholder="Nincs megadva"
+                editable={!save.isPending}
+              />
+            </View>
+            {/*
+              A BEKOTES KOZVETLENUL A "FOGYASZTAS (EREDETI BEJEGYZES)" ALATT
+              (Balazs, 2026-10-21): egy-ketto valasztas, ures is lehet.
+            */}
+            {field.key === "powerConsumptionRaw" ? (
+              <Choice
+                label="Bekötés"
+                options={PHASE_CONNECTION_CHOICES}
+                value={form.phaseConnection}
+                onChange={(value) =>
+                  setForm({ ...form, phaseConnection: value })
+                }
+              />
+            ) : null}
+          </Fragment>
         ))}
 
         {/*
@@ -811,28 +831,6 @@ export default function AssetEditScreen() {
             accessibilityLabel="Térfogat (m³)"
             value={form.volume}
             onChangeText={(value) => setForm({ ...form, volume: value })}
-            keyboardType="decimal-pad"
-            style={styles.input}
-            placeholderTextColor={tokens.textMuted}
-            placeholder="Nincs megadva"
-            editable={!save.isPending}
-          />
-        </View>
-
-        {/*
-          A FOGYASZTAS -- OSSZEADHATO SZAM, ugyanazert bespoke, mint a
-          terfogat. Az EREDETI cella (powerConsumptionRaw) a TEXT_FIELDS
-          generikus listajaban all, lasd feljebb. Kanban 8c77cf3e,
-          2026-09-23.
-        */}
-        <View style={styles.field}>
-          <Text style={styles.label}>Fogyasztás (kW)</Text>
-          <TextInput
-            accessibilityLabel="Fogyasztás (kW)"
-            value={form.powerConsumption}
-            onChangeText={(value) =>
-              setForm({ ...form, powerConsumption: value })
-            }
             keyboardType="decimal-pad"
             style={styles.input}
             placeholderTextColor={tokens.textMuted}
