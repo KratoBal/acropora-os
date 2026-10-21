@@ -59,7 +59,15 @@ export interface AutoInput {
   /** The latest finished `ean` and `manufacturerSku` results. */
   identity: readonly (AutoResult | null)[];
   /** The product-level fact of the field, if there is one. */
-  fact: { fieldResultId: string; acceptedByRule: string | null } | null;
+  fact: ExistingFact | null;
+}
+
+/** The product-level fact of a field, as the rule reads it. */
+export interface ExistingFact {
+  fieldResultId: string;
+  acceptedByRule: string | null;
+  /** The accepted value (`null` for a conflict); the group reads the mode. */
+  value: string | null;
 }
 
 export type AutoDecision =
@@ -126,12 +134,73 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
   return { kind: "ACCEPT", fieldResultId: result.id, value: result.value };
 }
 
+type DosingField = (typeof AUTO_ACCEPT_FIELDS)[number];
+
+/**
+ * THE DOSING FIELDS DECIDED AS ONE GROUP (barracuda, #1807). Field by field, the
+ * rule could leave contradicting facts behind, across runs or pages: a fixed
+ * dose next to a test-dependent mode, a mode without its guidance. The facts
+ * already accepted count as much as this run's results. The mode in force is
+ * the one accepted now, else the accepted fact's:
+ * - TEST_DEPENDENT: no fixed dose beside it, and it comes with its guidance and
+ *   its tests (now or already accepted), else the three wait for a person;
+ * - FIXED: only with a dose (now or already accepted); no guidance or tests;
+ * - NO_DATA (a person's fact): nothing by rule beside it;
+ * - no mode: a dose may stand alone (the first slice's shape), guidance and
+ *   tests may not.
+ */
+export function dosingGroup(
+  decisions: ReadonlyMap<DosingField, AutoDecision>,
+  facts: ReadonlyMap<DosingField, ExistingFact | null>,
+): Map<DosingField, AutoDecision> {
+  const out = new Map(decisions);
+  const accepting = (f: DosingField) => out.get(f)?.kind === "ACCEPT";
+  const has = (f: DosingField) => accepting(f) || facts.get(f) != null;
+  const skip = (f: DosingField, reason: string) => {
+    if (accepting(f)) out.set(f, { kind: "SKIP", reason });
+  };
+  const nowMode = out.get("dosingMode");
+  if (nowMode?.kind === "ACCEPT") {
+    if (nowMode.value === "TEST_DEPENDENT") {
+      if (has("dosing"))
+        skip("dosingMode", "ellentmond: fix adag áll mellette");
+      else if (!has("dosingGuidance") || !has("dosingTests"))
+        skip(
+          "dosingMode",
+          "tesztfüggő csoport hiányos (útmutató vagy mérendő)",
+        );
+    } else if (nowMode.value === "FIXED" && !has("dosing"))
+      skip("dosingMode", "fix mód adag nélkül");
+  }
+  const mode =
+    out.get("dosingMode")?.kind === "ACCEPT"
+      ? (out.get("dosingMode") as { value: string }).value
+      : (facts.get("dosingMode")?.value ?? null);
+  // a test-dependent mode refused just now takes its guidance and tests with it
+  const failedNow =
+    decisions.get("dosingMode")?.kind === "ACCEPT" &&
+    (decisions.get("dosingMode") as { value: string }).value ===
+      "TEST_DEPENDENT" &&
+    out.get("dosingMode")?.kind === "SKIP";
+  if (mode === "TEST_DEPENDENT") skip("dosing", "ellentmond: tesztfüggő mód");
+  else {
+    const why = failedNow
+      ? "a tesztfüggő mód nem ment át"
+      : mode === "FIXED"
+        ? "fix mód mellett nincs útmutató"
+        : mode === "NO_DATA"
+          ? "ellentmond: nincs-adat tény"
+          : "mód nélkül nem áll";
+    skip("dosingGuidance", why);
+    skip("dosingTests", why);
+    if (mode === "NO_DATA") skip("dosing", "ellentmond: nincs-adat tény");
+  }
+  return out;
+}
+
 export interface AutoAcceptDeps {
   latestResult(productId: string, field: string): Promise<AutoResult | null>;
-  productFact(
-    productId: string,
-    field: string,
-  ): Promise<{ fieldResultId: string; acceptedByRule: string | null } | null>;
+  productFact(productId: string, field: string): Promise<ExistingFact | null>;
   /** The service's own accept, with the rule's name (all its checks run). */
   accept(productId: string, fieldResultId: string, rule: string): Promise<void>;
 }
@@ -154,13 +223,25 @@ export async function runAutoAccept(
     const identity = await Promise.all(
       IDENTITY_FIELDS.map((f) => deps.latestResult(productId, f)),
     );
+    // every field decided first, then as one group, then written
+    const facts = new Map<DosingField, ExistingFact | null>();
+    const single = new Map<DosingField, AutoDecision>();
     for (const field of AUTO_ACCEPT_FIELDS) {
-      const decision = autoAcceptDecision({
+      const fact = await deps.productFact(productId, field);
+      facts.set(field, fact);
+      single.set(
         field,
-        result: await deps.latestResult(productId, field),
-        identity,
-        fact: await deps.productFact(productId, field),
-      });
+        autoAcceptDecision({
+          field,
+          result: await deps.latestResult(productId, field),
+          identity,
+          fact,
+        }),
+      );
+    }
+    const grouped = dosingGroup(single, facts);
+    for (const field of AUTO_ACCEPT_FIELDS) {
+      const decision = grouped.get(field)!;
       if (decision.kind === "SKIP") {
         out.push({ productId, field, kind: "SKIP", detail: decision.reason });
         continue;

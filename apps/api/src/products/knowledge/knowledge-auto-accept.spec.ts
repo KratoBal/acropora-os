@@ -6,6 +6,7 @@ import { variantMeasuresFor } from "../../integrations/medusa/medusa-variant-mea
 import {
   AUTO_ACCEPT_RULE,
   autoAcceptDecision,
+  dosingGroup,
   runAutoAccept,
   type AutoEvidence,
   type AutoInput,
@@ -141,7 +142,9 @@ describe("a szabály", () => {
       ],
       [
         "ember elfogadta",
-        input({ fact: { fieldResultId: "regi", acceptedByRule: null } }),
+        input({
+          fact: { fieldResultId: "regi", acceptedByRule: null, value: null },
+        }),
         /ember már elfogadta/,
       ],
       [
@@ -150,6 +153,7 @@ describe("a szabály", () => {
           fact: {
             fieldResultId: "fr-dosing",
             acceptedByRule: AUTO_ACCEPT_RULE,
+            value: null,
           },
         }),
         /már elfogadva/,
@@ -166,7 +170,11 @@ describe("a szabály", () => {
     assert.equal(
       autoAcceptDecision(
         input({
-          fact: { fieldResultId: "regi", acceptedByRule: AUTO_ACCEPT_RULE },
+          fact: {
+            fieldResultId: "regi",
+            acceptedByRule: AUTO_ACCEPT_RULE,
+            value: null,
+          },
         }),
       ).kind,
       "ACCEPT",
@@ -213,6 +221,140 @@ describe("a három adagolási állapot (3. szelet)", () => {
   });
 });
 
+// barracuda, #1807: field by field the rule could leave contradicting facts behind
+describe("az adagolás mezői egy csoportként", () => {
+  type F = "dosing" | "dosingMode" | "dosingGuidance" | "dosingTests";
+  const ok = (value: string) => ({
+    kind: "ACCEPT" as const,
+    fieldResultId: `fr-${value}`,
+    value,
+  });
+  const no = { kind: "SKIP" as const, reason: "nincs eredmény" };
+  const fact = (value: string) => ({
+    fieldResultId: "regi",
+    acceptedByRule: null,
+    value,
+  });
+  const group = (
+    now: Partial<Record<F, ReturnType<typeof ok> | typeof no>>,
+    facts: Partial<Record<F, ReturnType<typeof fact>>> = {},
+  ) => {
+    const all: F[] = ["dosing", "dosingMode", "dosingGuidance", "dosingTests"];
+    const out = dosingGroup(
+      new Map(all.map((f) => [f, now[f] ?? no])),
+      new Map(all.map((f) => [f, facts[f] ?? null])),
+    );
+    return Object.fromEntries(
+      all.map((f) => [
+        f,
+        out.get(f)!.kind === "ACCEPT"
+          ? "ACCEPT"
+          : (out.get(f) as { reason: string }).reason,
+      ]),
+    );
+  };
+
+  it("teljes tesztfüggő csoport, fix adag nélkül: mind a három megy", () => {
+    assert.deepEqual(
+      group({
+        dosingMode: ok("TEST_DEPENDENT"),
+        dosingGuidance: ok("Mérje."),
+        dosingTests: ok("KH"),
+      }),
+      {
+        dosing: "nincs eredmény",
+        dosingMode: "ACCEPT",
+        dosingGuidance: "ACCEPT",
+        dosingTests: "ACCEPT",
+      },
+    );
+  });
+
+  it("hiányos tesztfüggő csoport: a mód és a társa is emberhez", () => {
+    const r = group({
+      dosingMode: ok("TEST_DEPENDENT"),
+      dosingTests: ok("KH"),
+    });
+    assert.deepEqual(
+      [r.dosingMode, r.dosingTests],
+      [
+        "tesztfüggő csoport hiányos (útmutató vagy mérendő)",
+        "a tesztfüggő mód nem ment át",
+      ],
+    );
+  });
+
+  it("tesztfüggő mód fix adag mellett nem megy, se most, se egy korábbi adag-tény mellett", () => {
+    const now = group({
+      dosing: ok("1 ml/100 L/day"),
+      dosingMode: ok("TEST_DEPENDENT"),
+      dosingGuidance: ok("x"),
+      dosingTests: ok("KH"),
+    });
+    assert.deepEqual(
+      [now.dosing, now.dosingMode, now.dosingGuidance],
+      [
+        "ACCEPT",
+        "ellentmond: fix adag áll mellette",
+        "a tesztfüggő mód nem ment át",
+      ],
+    );
+    const earlier = group(
+      {
+        dosingMode: ok("TEST_DEPENDENT"),
+        dosingGuidance: ok("x"),
+        dosingTests: ok("KH"),
+      },
+      { dosing: fact("1 ml/100 L/day") },
+    );
+    assert.equal(earlier.dosingMode, "ellentmond: fix adag áll mellette");
+  });
+
+  it("egy elfogadott tesztfüggő mód mellé nem jön fix adag", () => {
+    assert.equal(
+      group(
+        { dosing: ok("1 ml/100 L/day") },
+        { dosingMode: fact("TEST_DEPENDENT") },
+      ).dosing,
+      "ellentmond: tesztfüggő mód",
+    );
+  });
+
+  it("fix mód csak adaggal, és mellette nincs útmutató", () => {
+    assert.equal(
+      group({ dosingMode: ok("FIXED") }).dosingMode,
+      "fix mód adag nélkül",
+    );
+    const r = group({
+      dosing: ok("1 ml/100 L/day"),
+      dosingMode: ok("FIXED"),
+      dosingGuidance: ok("x"),
+    });
+    assert.deepEqual(
+      [r.dosing, r.dosingMode, r.dosingGuidance],
+      ["ACCEPT", "ACCEPT", "fix mód mellett nincs útmutató"],
+    );
+    assert.equal(
+      group({ dosingMode: ok("FIXED") }, { dosing: fact("1 ml/100 L/day") })
+        .dosingMode,
+      "ACCEPT",
+    );
+  });
+
+  it("mód nélkül az adag egyedül mehet, az útmutató nem; nincs-adat tény mellé semmi", () => {
+    const r = group({ dosing: ok("1 ml/100 L/day"), dosingGuidance: ok("x") });
+    assert.deepEqual(
+      [r.dosing, r.dosingGuidance],
+      ["ACCEPT", "mód nélkül nem áll"],
+    );
+    assert.equal(
+      group({ dosing: ok("1 ml/100 L/day") }, { dosingMode: fact("NO_DATA") })
+        .dosing,
+      "ellentmond: nincs-adat tény",
+    );
+  });
+});
+
 describe("a futtató", () => {
   const deps = (accepted: string[][]) => ({
     latestResult: async (_p: string, field: string) =>
@@ -242,6 +384,26 @@ describe("a futtató", () => {
       wet.map((o) => o.kind),
       ["ACCEPTED", "SKIP", "SKIP", "SKIP"],
     );
+    assert.deepEqual(accepted, [["p1", "fr-dosing", AUTO_ACCEPT_RULE]]);
+  });
+
+  it("a futtató a csoport döntését írja, nem a mezőnkéntit", async () => {
+    const accepted: string[][] = [];
+    const out = await runAutoAccept(["p1"], true, {
+      ...deps(accepted),
+      latestResult: async (_p: string, field: string) =>
+        field === "dosing"
+          ? dosing()
+          : field === "dosingMode"
+            ? dosing({ id: "fr-mode", value: "TEST_DEPENDENT" })
+            : field === "ean"
+              ? ean()
+              : null,
+    });
+    assert.deepEqual(out.map((o) => [o.field, o.kind]).slice(0, 2), [
+      ["dosing", "ACCEPTED"],
+      ["dosingMode", "SKIP"],
+    ]);
     assert.deepEqual(accepted, [["p1", "fr-dosing", AUTO_ACCEPT_RULE]]);
   });
 
