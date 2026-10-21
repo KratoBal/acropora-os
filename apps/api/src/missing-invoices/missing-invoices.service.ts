@@ -109,7 +109,13 @@ function shiftMonth(month: string, by: number): string {
 export interface DocumentPairing {
   payee: CandidateDocument["payee"];
   kind: CandidateDocument["kind"];
-  debits: { bookingDate: string; amount: string; currency: string }[];
+  debits: {
+    bookingDate: string;
+    amount: string;
+    currency: string;
+    /** a bank által közölt eredeti összeg, ha a terhelés átváltott (az automatikus jóváhagyásnak) */
+    original?: { amount: string; currency: string } | null;
+  }[];
   /**
    * A TERHELÉSEK A TELJES SZÁMLÁT FIZETIK (murena lelete, 26014): minden
    * párosított terhelés Megvan vagy Eredeti hiányzik, összeg-eltérés nélkül.
@@ -380,6 +386,7 @@ export class MissingInvoicesService {
           bookingDate: item.bookingDate,
           amount: item.amount,
           currency: item.currency,
+          original: item.original,
         });
       }
     }

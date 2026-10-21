@@ -11,6 +11,7 @@ import {
 } from "./incoming-foreign-read.scheduler.js";
 import type {
   IncomingReviewService,
+  AutoApproveReport,
   PendingReport,
 } from "./incoming-review.service.js";
 
@@ -169,10 +170,20 @@ describe("the scheduler run", () => {
     rows: [],
     ...over,
   });
-  const scheduler = (readPending: () => Promise<PendingReport>) => {
+  const scheduler = (
+    readPending: () => Promise<PendingReport>,
+    autoApprovePending: () => Promise<AutoApproveReport> = async () => ({
+      considered: 0,
+      approvable: 0,
+      approved: 0,
+      failed: 0,
+      rows: [],
+    }),
+  ) => {
     const lines: string[] = [];
     const run = new IncomingForeignReadScheduler({
       readPending,
+      autoApprovePending,
     } as unknown as IncomingReviewService);
     const logger = {
       log: (m: string) => lines.push(`log ${m}`),
@@ -197,6 +208,24 @@ describe("the scheduler run", () => {
     assert.deepEqual(lines, [
       "log Foreign invoice reading: 2 new",
       "warn Foreign invoice reading: 1 row(s) skipped: doc-9 PrismaClientKnownRequestError P2020",
+    ]);
+  });
+
+  it("after the reading, the confirmed rows are approved; the log carries counts only (acrobot 34633)", async () => {
+    const { run, lines } = scheduler(
+      async () => report({ written: 1 }),
+      async () => ({
+        considered: 5,
+        approvable: 3,
+        approved: 3,
+        failed: 0,
+        rows: [],
+      }),
+    );
+    assert.equal(await run.runOnce(), "APPLIED");
+    assert.deepEqual(lines, [
+      "log Foreign invoice reading: 1 new",
+      "log Incoming auto-approval: 3 approved, 0 failed, 2 left to review",
     ]);
   });
 
