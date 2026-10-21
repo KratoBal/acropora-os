@@ -1514,6 +1514,137 @@ describe(
       }
     });
 
+    it("5.2/20: két paraméter egyszerre ugyanarra az akváriumra (KH+Ca és Ca termékkel): mindkét kérés lefut, egyik sem gördül vissza", async () => {
+      // A KH and a calcium request at the same moment. Locks per parameter, taken in the order of the
+      // request, would deadlock here (one asks KH then calcium, the other the reverse); the service
+      // holds ONE lock per aquarium, and this case keeps it so.
+      const account = await prisma.reefClubAccount.create({
+        data: {
+          email: email("ket-param"),
+          consentVersion: "proba",
+          consentAt: new Date(),
+        },
+      });
+      const aquarium = await prisma.aquarium.create({
+        data: {
+          aquariumNumber: `RCS-${suffix}-ket-param`,
+          ownerAccountId: account.id,
+          ownershipType: "CUSTOMER",
+          name: `${NAME_PREFIX} ket-param`,
+          waterType: "TENGERI",
+          systemVolumeLiters: 200,
+        },
+      });
+      for (const [parameterCode, value, unit] of [
+        ["KH", 6, "dKH"],
+        ["KALCIUM", 380, "mg/l"],
+      ] as const)
+        await prisma.aquariumMeasurement.create({
+          data: {
+            aquariumId: aquarium.id,
+            parameterCode,
+            value,
+            unit,
+            measuredAt: new Date(Date.now() - 3_600_000),
+            source: "REEFCLUB_MANUAL",
+            recordedByAccountId: account.id,
+          },
+        });
+      const combined = await prisma.product.create({
+        data: { name: `${NAME_PREFIX} KH+Ca ${suffix}` },
+      });
+      const calcium = await prisma.product.create({
+        data: { name: `${NAME_PREFIX} Ca ${suffix}` },
+      });
+      const run = await prisma.reefClubDoseProjectionRun.create({
+        data: {
+          status: "SUCCEEDED",
+          trigger: "STARTUP",
+          startedAt: new Date(),
+          finishedAt: new Date(),
+          rowCount: 3,
+        },
+      });
+      for (const [product, parameterCode, effectPer100L] of [
+        [combined, "KH", 0.25],
+        [combined, "KALCIUM", 5],
+        [calcium, "KALCIUM", 5],
+      ] as const) {
+        const effect = await prisma.productDoseEffect.create({
+          data: {
+            productId: product.id,
+            parameterCode,
+            direction: "EMEL",
+            effectPer100L,
+            doseUnit: "ML",
+            doseStep: 1,
+            maxDailyDosePer100L: 20,
+            effectHours: 12,
+            source: "Gyártói címke (próba)",
+            version: 1,
+            recordedAt: new Date(),
+          },
+        });
+        await prisma.reefClubDoseRow.create({
+          data: {
+            runId: run.id,
+            sourceId: effect.id,
+            sourceVersion: 1,
+            productId: product.id,
+            productName: product.name,
+            parameterCode,
+            direction: "EMEL",
+            effectPer100L,
+            doseUnit: "ML",
+            doseStep: 1,
+            maxDailyDosePer100L: 20,
+            effectHours: 12,
+            source: "Gyártói címke (próba)",
+            refusals: [],
+          },
+        });
+      }
+      await prisma.reefClubDoseProjectionRun.updateMany({
+        where: { status: "SUCCEEDED", id: { not: run.id } },
+        data: { finishedAt: new Date(Date.now() - 48 * 3_600_000) },
+      });
+      const database = new ReefClubDatabase(roleUrl);
+      const service = new ReefClubRecommendationService(
+        new ReefClubAquariumAccess(database),
+        database,
+      );
+      try {
+        const settled = await Promise.allSettled([
+          service.recommend(account.id, aquarium.id, "KH"),
+          service.recommend(account.id, aquarium.id, "KALCIUM"),
+        ]);
+        assert.deepEqual(
+          settled.map((s) =>
+            s.status === "fulfilled" ? "ok" : String(s.reason).slice(0, 160),
+          ),
+          ["ok", "ok"],
+        );
+        const rows = await prisma.reefClubRecommendation.findMany({
+          where: { aquariumId: aquarium.id },
+          select: { parameterCode: true },
+        });
+        // at most one proposal per parameter, whatever the two outcomes were
+        for (const parameter of ["KH", "KALCIUM"])
+          assert.ok(
+            rows.filter((r) => r.parameterCode === parameter).length <= 1,
+            parameter,
+          );
+      } finally {
+        await database.$disconnect();
+        await prisma.reefClubDoseProjectionRun.deleteMany({
+          where: { id: run.id },
+        });
+        await prisma.product.deleteMany({
+          where: { id: { in: [combined.id, calcium.id] } },
+        });
+      }
+    });
+
     it("a szereppel a beadott adag és a visszajelzés: az adag előbb, a státusz utána; megerősítés, kettős válasz, idempotencia, idegen fiók (8. szelet, adag)", async () => {
       const account = await prisma.reefClubAccount.create({
         data: {
