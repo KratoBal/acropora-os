@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -87,7 +88,8 @@ export async function main(
   const apply = argv.includes("--apply");
   const dirAt = argv.indexOf("--dir");
   const dir = dirAt >= 0 ? (argv[dirAt + 1] ?? "") : null;
-  if (dir !== null && !dir) {
+  // `--dir --apply`: the flag after --dir is not a folder (barracuda #1786)
+  if (dir !== null && (!dir || dir.startsWith("--"))) {
     io.err("A --dir után a mappa kell.\n");
     return 2;
   }
@@ -139,6 +141,13 @@ export async function main(
       ? `Fájl a ${dir} mappából (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`
       : `Levél a ${CMFX_SENDER} címről (${month}): ${pdfs.length} PDF; PDF nélküli feed-sor: ${candidates.length}\n`,
   );
+  // the folder's files with their size and fingerprint: the person reviewing the dry run compares them with the
+  // downloader's lines, through the copies between the fleet and the production container (barracuda #1786)
+  if (dir)
+    for (const pdf of pdfs)
+      io.out(
+        `FAJL ${pdf.fileName} ${pdf.buffer.length} bájt sha256:${createHash("sha256").update(pdf.buffer).digest("hex").slice(0, 16)}\n`,
+      );
   for (const outcome of report.outcomes)
     io.out(
       `${outcome.kind.padEnd(17)} ${outcome.documentNumber}${"bytes" in outcome ? ` (${outcome.bytes} bájt)` : ""}\n`,

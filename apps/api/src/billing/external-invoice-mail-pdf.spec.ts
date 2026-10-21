@@ -571,10 +571,18 @@ describe("external-invoice-mail-pdf:fill", () => {
       // another cmfx customer's PDF in the folder: refused as in the letter path
       assert.match(dry.out, /^NOT_OUR_INVOICE\s+ACRW-2026\/00518$/m);
       assert.match(dry.out, /^NO_MAIL\s+2026\/00083$/m);
+      // each file with its size and fingerprint, to compare with the downloader's lines
+      assert.match(
+        dry.out,
+        /^FAJL E-2026-00082-0\.pdf \d+ bájt sha256:[0-9a-f]{16}$/m,
+      );
       assert.deepEqual(dry.r.puts, []);
       const applied = await go(["--month", "2026-10", "--dir", dir, "--apply"]);
       assert.deepEqual(applied.r.puts, ["external-invoice/row-82/cmfx.pdf"]);
       assert.equal((await go(["--month", "2026-10", "--dir"])).code, 2);
+      // the flag after --dir is not a folder: refused before anything, not read as one
+      const swapped = await go(["--month", "2026-10", "--dir", "--apply"]);
+      assert.deepEqual([swapped.code, swapped.r.puts], [2, []]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
