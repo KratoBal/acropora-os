@@ -243,16 +243,34 @@ describe("a pontozas szabalyai", () => {
   });
 });
 
+describe("a nem merheto mezo", () => {
+  it("az unmeasured mezo sem elvartnak, sem uresnek, sem feleslegesnek nem szamit", () => {
+    const eu = ten.map((s) => ({
+      ...s,
+      expected: { ...s.expected, supplierEuTaxNumber: null },
+      unmeasured: ["supplierEuTaxNumber" as const],
+    }));
+    const plain = ten.map((s) => ({
+      ...s,
+      expected: { ...s.expected, supplierEuTaxNumber: null },
+    }));
+    // nelkule az olvasott adoszam "felesleges" (nincs elvart ertek), vele nem szamit semmit
+    assert.equal(evaluate(plain, "A").groups.ALL.supplierEuTaxNumber.extra, 10);
+    const counts = evaluate(eu, "A").groups.ALL.supplierEuTaxNumber;
+    assert.equal(counts.extra, 0);
+    assert.equal(counts.blankExpected, 0);
+    assert.equal(counts.expected, 0);
+  });
+});
+
 describe("csoportonkenti jelentes", () => {
   it("a csoportok kulon szazalekot kapnak, a rontas csak a sajat csoportjat viszi le", () => {
     const feed = ten.slice(0, 5).map((s) => ({ ...s, group: "feed" }));
-    const verified = ten
-      .slice(5)
-      .map((s, i) => ({
-        ...s,
-        group: "verified",
-        lines: invoiceLines(i + 6, { number: "Referenznummer" }),
-      }));
+    const verified = ten.slice(5).map((s, i) => ({
+      ...s,
+      group: "verified",
+      lines: invoiceLines(i + 6, { number: "Referenznummer" }),
+    }));
     const groups = evaluateByGroup([...feed, ...verified], "A");
     assert.deepEqual([...groups.keys()], ["feed", "verified"]);
     assert.equal(pct(groups.get("feed")!, "documentNumber").correct, 100);

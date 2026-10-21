@@ -5,7 +5,6 @@ import type { IncomingReadingField } from "@acropora/types";
 
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import {
-  BLANK_PAIRING,
   EVAL_FIELDS,
   evaluate,
   evaluateByGroup,
@@ -30,7 +29,7 @@ import {
  *   lines-cache/        az ertekelo irja: a PDF-bol kinyert sorok (a PDF mtime-ja szerint ujraszamolva)
  *   results/            az ertekelo irja, CSAK --reszletek-kel: mintankenti itelet (itt van az ertek is)
  *
- * Egy minta: { id, pdf? | lines?, adapter, pairing, expected{11 mezo}, manualFields[], group? }.
+ * Egy minta: { id, pdf? | lines?, adapter, pairing, expected{11 mezo}, manualFields[], group?, unmeasured? }.
  * A `group` (pl. feed, nav, verified) a helyes ertek forrasa: a jelentes csoportonkent is ad szazalekot.
  *
  * A KIMENET a stdout-on CSAK mezonev es szazalek (lasd `formatReport`): ezt lehet
@@ -48,12 +47,28 @@ interface RawSample {
   expected?: unknown;
   manualFields?: unknown;
   group?: unknown;
+  unmeasured?: unknown;
 }
 
 function fail(message: string): never {
   console.error(message);
   process.exit(1);
 }
+
+/**
+ * A JSON.parse hibauzenete az ujabb Node-ban a bemenet egy reszletet is idezi: egy serult
+ * mintafajl igy szamla-adatot irhatna ki. Ezert a hiba CSAK a helyet nevezi meg.
+ */
+function parseSample(text: string, where: string): RawSample {
+  try {
+    return JSON.parse(text) as RawSample;
+  } catch {
+    return fail(`Hibas JSON a mintafajlban: ${where}`);
+  }
+}
+
+/** Csak biztonsagos csoportnev kerul a stdout-ra (kisbetu, szam, kotojel): egy szabad szoveg szamla-adat lehetne. */
+const SAFE_GROUP = /^[a-z0-9-]{1,24}$/;
 
 /** Beolvassa a mintakat; a hiba CSAK a minta azonositojat nevezi meg, tartalmat soha. */
 async function loadSamples(dir: string): Promise<EvalSample[]> {
@@ -63,14 +78,19 @@ async function loadSamples(dir: string): Promise<EvalSample[]> {
   for (const name of names.sort()) {
     if (!name.endsWith(".json")) continue;
     raws.push(
-      JSON.parse(await readFile(join(sampleDir, name), "utf8")) as RawSample,
+      parseSample(
+        await readFile(join(sampleDir, name), "utf8"),
+        `samples/${name}`,
+      ),
     );
   }
   const jsonl = await readFile(join(dir, "samples.jsonl"), "utf8").catch(
     () => "",
   );
-  for (const line of jsonl.split("\n"))
-    if (line.trim()) raws.push(JSON.parse(line) as RawSample);
+  jsonl.split("\n").forEach((line, index) => {
+    if (line.trim())
+      raws.push(parseSample(line, `samples.jsonl, ${index + 1}. sor`));
+  });
   if (raws.length === 0)
     fail(`Nincs minta: ${sampleDir} es samples.jsonl ures vagy hianyzik.`);
 
@@ -88,6 +108,12 @@ async function loadSamples(dir: string): Promise<EvalSample[]> {
       if (!(field in expected))
         fail(`A(z) ${id} minta expected-jebol hianyzik a(z) ${field} mezo.`);
     const manual = Array.isArray(raw.manualFields) ? raw.manualFields : [];
+    const unmeasured = Array.isArray(raw.unmeasured) ? raw.unmeasured : [];
+    for (const field of unmeasured)
+      if (!EVAL_FIELDS.includes(field as IncomingReadingField))
+        fail(
+          `A(z) ${id} minta unmeasured-jeben ismeretlen mezo van: ${String(field)}`,
+        );
     for (const field of manual)
       if (!EVAL_FIELDS.includes(field as IncomingReadingField))
         fail(
@@ -105,6 +131,7 @@ async function loadSamples(dir: string): Promise<EvalSample[]> {
       expected: expected as unknown as EvalSample["expected"],
       manualFields: manual as IncomingReadingField[],
       group: typeof raw.group === "string" ? raw.group : undefined,
+      unmeasured: unmeasured as IncomingReadingField[],
     });
   }
   return samples;
@@ -151,7 +178,13 @@ async function main() {
     const groups = evaluateByGroup(samples, mode);
     if (groups.size > 1)
       for (const [name, report] of groups) {
-        console.log(`#### csoport: ${name}`);
+        console.log(
+          `#### csoport: ${SAFE_GROUP.test(name) ? name : "(nem engedelyezett csoportnev)"}`,
+        );
+        if (name === "verified")
+          console.log(
+            "(az elvart ertek nagyreszt magabol az olvasobol jott, amit ember elfogadott: itt a helyes% reszben stabilitast mer, nem fuggetlen igazsagot)",
+          );
         console.log(formatReport(report));
         console.log("");
       }
@@ -174,10 +207,7 @@ async function main() {
             },
           ]),
         ),
-        usedPairing:
-          mode === "B" &&
-          sample.pairing !== null &&
-          sample.pairing !== BLANK_PAIRING,
+        usedPairing: mode === "B" && sample.pairing !== null,
       };
     });
     await mkdir(join(dir, "results"), { recursive: true });

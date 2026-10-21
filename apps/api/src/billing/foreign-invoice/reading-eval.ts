@@ -61,6 +61,11 @@ export interface EvalSample {
    * fednek (a Szamlazz.hu feed magyar kiallitok, a VERIFIED kulfoldi is).
    */
   group?: string;
+  /**
+   * AZ A CSOPORT-FORRASBOL NEM MERHETO MEZOK (pl. a feed `supplierEuTaxNumber`-e, amihez
+   * nincs olvasasi jog): ezek ebben a mintaban sem elvartnak, sem uresnek nem szamitanak.
+   */
+  unmeasured?: readonly IncomingReadingField[];
 }
 
 export type EvalMode = "A" | "B";
@@ -205,12 +210,14 @@ export function evaluate(
   for (const sample of samples) {
     const read = readSample(sample, mode);
     const manual = new Set(sample.manualFields);
+    const skipped = new Set(sample.unmeasured ?? []);
     const allRight: Record<Group, boolean | null> = {
       AUTO: null,
       MANUAL: null,
       ALL: null,
     };
     for (const field of EVAL_FIELDS) {
+      if (skipped.has(field)) continue;
       const expected = sample.expected[field];
       const actual = read[field];
       const verdict = judge(field, expected, actual);
