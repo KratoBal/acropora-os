@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Header,
   Inject,
   Req,
   ServiceUnavailableException,
@@ -21,9 +22,9 @@ import { ReefClubPublic } from "./reefclub.guard.js";
 /**
  * GET /rc/v1/health: the process is up and its own database connection works.
  * The answer names no table and no version, because it is public. Only with
- * `REEFCLUB_DIAG_CLIENT_ADDRESS=true`, and then for the first hour of the
- * process only, it also shows the caller's computed address and the chain it
- * came from (`reefclub-diag.ts`).
+ * `REEFCLUB_DIAG_CLIENT_ADDRESS_UNTIL` (an absolute, near expiry), it also
+ * shows the caller's computed address and the chain it came from
+ * (`reefclub-diag.ts`). Every answer is `no-store`.
  */
 @Controller("rc/v1/health")
 export class ReefClubHealthController {
@@ -33,6 +34,8 @@ export class ReefClubHealthController {
 
   @ReefClubPublic()
   @Get()
+  // The diag answer carries the caller's address, which is personal data: nothing on the way may keep it.
+  @Header("Cache-Control", "no-store")
   async health(
     @Req()
     request: {
