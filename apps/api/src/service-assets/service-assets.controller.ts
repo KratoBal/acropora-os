@@ -9,6 +9,7 @@ import {
   ForbiddenException,
   Get,
   Header,
+  Headers,
   Param,
   Patch,
   Post,
@@ -37,6 +38,10 @@ import {
   UpdateAssetDocumentCaptionDto,
   UploadAssetDocumentDto,
 } from "./dto/asset.dto.js";
+import {
+  carriesLegacyPowerConsumption,
+  recordDroppedLegacyPowerConsumption,
+} from "./legacy-power-consumption-audit.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import { XLSX_MIME } from "../missing-invoices/missing-invoices-xlsx.js";
 
@@ -403,21 +408,43 @@ export class ServiceAssetsController {
 
   @Post()
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  create(
+  async create(
     @Body() input: CreateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers("user-agent") userAgent?: string,
   ) {
-    return this.service.create(input, user.id, partnerScopeOf(user));
+    const created = await this.service.create(
+      input,
+      user.id,
+      partnerScopeOf(user),
+    );
+    if (carriesLegacyPowerConsumption(input))
+      await recordDroppedLegacyPowerConsumption(
+        "create",
+        user.id,
+        created.id,
+        userAgent,
+      );
+    return created;
   }
 
   @Patch(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  update(
+  async update(
     @Param("id") id: string,
     @Body() input: UpdateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
+    @Headers("user-agent") userAgent?: string,
   ) {
-    return this.service.update(id, input, user.id, user);
+    const updated = await this.service.update(id, input, user.id, user);
+    if (carriesLegacyPowerConsumption(input))
+      await recordDroppedLegacyPowerConsumption(
+        "update",
+        user.id,
+        id,
+        userAgent,
+      );
+    return updated;
   }
 
   /**
