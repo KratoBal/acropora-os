@@ -141,6 +141,12 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
   // every product on it takes the very same dose from it; a different dose, or
   // a product with none from it (only a UNAS link), still goes to a person, and
   // so do guidance and tests, which carry no dose to compare.
+  // It LEANS ON TWO OTHER GUARDS (barracuda, #1812): a wrong link (the Triton
+  // potassium product on the magnesium page) takes the very same dose as the
+  // product it belongs to, so it is stopped only by the identity check below
+  // (its own EAN or part number is not on that page) and, on a family page,
+  // by the run's whole-page reading (#1805: a page with several doses gives
+  // none).
   const sameDose = (ref: string) =>
     (input.field === "dosing" ||
       (input.field === "dosingMode" && result.value === "FIXED")) &&

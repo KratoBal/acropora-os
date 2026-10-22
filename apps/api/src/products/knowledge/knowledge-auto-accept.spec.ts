@@ -403,6 +403,27 @@ describe("a megosztott lap kivétele: ugyanaz az adag (acrobot 35067)", () => {
     );
   });
 
+  // the measured wrong link (acrobot 35078): the potassium product's UNAS link
+  // is the magnesium page, so its dose there equals the magnesium product's;
+  // the exception lets it pass, the identity check must not
+  it("rossz link, azonos adag: a termék azonossága nem igazolt a lapon, ember", () => {
+    const d = autoAcceptDecision(
+      on([DOSE], {
+        identity: [
+          ean({
+            evidence: [
+              own,
+              page({ sourceRef: "https://gyarto.example.invalid/kalium" }),
+            ],
+          }),
+          null,
+        ],
+      }),
+    );
+    assert.equal(d.kind, "SKIP");
+    assert.match((d as { reason: string }).reason, /azonossága nem igazolt/);
+  });
+
   it("eltérő adag, adag nélküli társ, saját adag nélkül, vagy nem adag-mező: ember", () => {
     for (const [why, d] of [
       ["eltérő adag (Core7)", on(["2 ml/100 L/day"])],
