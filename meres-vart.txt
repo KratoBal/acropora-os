@@ -3,6 +3,7 @@
 not ok - KONTROLL: régi kulcs nélküli felvitel és módosítás nem ír sort
 # (e) a failing audit write is not swallowed:
 not ok - a hibázó naplóírás nem dob, a kérés sikeres marad
+# (d) also writes a second row for the asset the update test created, so the exactly-one-row test goes red too:
+not ok - módosítás: a régi kulcs (null is) egy sort ír az update ággal
 # Unaffected:
-ok - módosítás: a régi kulcs (null is) egy sort ír az update ággal
 ok - a User-Agent 160 karakterre vágva kerül a sorba
