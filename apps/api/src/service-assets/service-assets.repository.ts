@@ -2004,7 +2004,7 @@ export class ServiceAssetsRepository extends Repository {
           phaseConnection: input.phaseConnection,
           powerConsumptionRaw: rawWithLegacyFallback(
             optionalText(input.powerConsumptionRaw),
-            existing.powerConsumptionRaw,
+            null,
             legacyPowerConsumptionToRaw(input.powerConsumption),
           ),
           archivedAt:
