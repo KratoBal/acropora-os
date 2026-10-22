@@ -13,7 +13,9 @@
  *   or `manufacturerSku` result is VERIFIED with our value AND that page in it);
  * - none of those pages belongs to ANOTHER product too: another product's UNAS
  *   manufacturer link, or another product's run evidence (a page for two
- *   products, or a wrong link, cannot tell whose dose it states; acrobot 35034);
+ *   products, or a wrong link, cannot tell whose dose it states; acrobot 35034),
+ *   unless every product on it takes the very same dose from it (the sizes of
+ *   one agent; acrobot 35067);
  * - no person has accepted this field yet (a person's fact is never
  *   overwritten), and this very result is not accepted already.
  * Anything else stays for a person, with the reason.
@@ -63,8 +65,13 @@ export interface AutoInput {
   identity: readonly (AutoResult | null)[];
   /** The product-level fact of the field, if there is one. */
   fact: ExistingFact | null;
-  /** This product's pages that belong to another product too. */
-  sharedPages: ReadonlySet<string>;
+  /**
+   * This product's pages that belong to another product too, each with the
+   * dose every such product takes from it (`null`: none from this page).
+   */
+  sharedPages: ReadonlyMap<string, readonly (string | null)[]>;
+  /** This product's own dose (the `dosing` result's value), or null. */
+  ownDose: string | null;
 }
 
 /** The product-level fact of a field, as the rule reads it. */
@@ -129,8 +136,21 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
       reason: `nem gyártói forrás (${foreign.sourceType})`,
     };
 
+  // ONE EXCEPTION (acrobot 35067): the sizes of one agent share their page and
+  // its dose. The dose and its FIXED mode may come from a shared page when
+  // every product on it takes the very same dose from it; a different dose, or
+  // a product with none from it (only a UNAS link), still goes to a person, and
+  // so do guidance and tests, which carry no dose to compare.
+  const sameDose = (ref: string) =>
+    (input.field === "dosing" ||
+      (input.field === "dosingMode" && result.value === "FIXED")) &&
+    input.ownDose !== null &&
+    (input.sharedPages.get(ref) ?? []).every((d) => d === input.ownDose);
   const shared = pages.find(
-    (e) => e.sourceRef && input.sharedPages.has(e.sourceRef),
+    (e) =>
+      e.sourceRef &&
+      input.sharedPages.has(e.sourceRef) &&
+      !sameDose(e.sourceRef),
   );
   if (shared)
     return {
@@ -227,11 +247,14 @@ export function dosingGroup(
 export interface AutoAcceptDeps {
   latestResult(productId: string, field: string): Promise<AutoResult | null>;
   productFact(productId: string, field: string): Promise<ExistingFact | null>;
-  /** Of `pages`, those that are another product's UNAS link or run evidence. */
+  /**
+   * Of `pages`, those that are another product's UNAS link or run evidence,
+   * each with the dose every such product takes from it (`null`: none).
+   */
   sharedPages(
     productId: string,
     pages: readonly string[],
-  ): Promise<Set<string>>;
+  ): Promise<Map<string, (string | null)[]>>;
   /** The service's own accept, with the rule's name (all its checks run). */
   accept(productId: string, fieldResultId: string, rule: string): Promise<void>;
 }
@@ -265,7 +288,10 @@ export async function runAutoAccept(
     const sharedPages =
       refs.size > 0
         ? await deps.sharedPages(productId, [...refs])
-        : new Set<string>();
+        : new Map<string, (string | null)[]>();
+    const dose = results.get("dosing");
+    const ownDose =
+      dose?.status === "VERIFIED" && dose.value !== null ? dose.value : null;
     // every field decided first, then as one group, then written
     const facts = new Map<DosingField, ExistingFact | null>();
     const single = new Map<DosingField, AutoDecision>();
@@ -280,6 +306,7 @@ export async function runAutoAccept(
           identity,
           fact,
           sharedPages,
+          ownDose,
         }),
       );
     }

@@ -55,7 +55,8 @@ const input = (over: Partial<AutoInput> = {}): AutoInput => ({
   result: dosing(),
   identity: [ean(), null],
   fact: null,
-  sharedPages: new Set(),
+  sharedPages: new Map(),
+  ownDose: null,
   ...over,
 });
 
@@ -141,7 +142,7 @@ describe("a szabály", () => {
       // states, even with our EAN on it (acrobot 35034)
       [
         "a lap másik termékhez is tartozik",
-        input({ sharedPages: new Set([PAGE]) }),
+        input({ sharedPages: new Map([[PAGE, [null]]]) }),
         /másik termékhez is tartozik/,
       ],
       [
@@ -384,12 +385,61 @@ describe("az adagolás mezői egy csoportként", () => {
   });
 });
 
+describe("a megosztott lap kivétele: ugyanaz az adag (acrobot 35067)", () => {
+  const DOSE = "1 drop/100 L/day";
+  const on = (doses: (string | null)[], over: Partial<AutoInput> = {}) =>
+    input({ sharedPages: new Map([[PAGE, doses]]), ownDose: DOSE, ...over });
+
+  it("ha minden rajta osztozó termék ugyanazt az adagot kapja, az adag és a fix mód elfogadható", () => {
+    assert.equal(autoAcceptDecision(on([DOSE, DOSE])).kind, "ACCEPT");
+    assert.equal(
+      autoAcceptDecision(
+        on([DOSE], {
+          field: "dosingMode",
+          result: dosing({ id: "fr-mode", value: "FIXED" }),
+        }),
+      ).kind,
+      "ACCEPT",
+    );
+  });
+
+  it("eltérő adag, adag nélküli társ, saját adag nélkül, vagy nem adag-mező: ember", () => {
+    for (const [why, d] of [
+      ["eltérő adag (Core7)", on(["2 ml/100 L/day"])],
+      ["egy társnak nincs adagja erről a lapról", on([DOSE, null])],
+      ["nincs saját adag", on([DOSE], { ownDose: null })],
+      [
+        "tesztfüggő mód",
+        on([DOSE], {
+          field: "dosingMode",
+          result: dosing({ id: "fr-mode", value: "TEST_DEPENDENT" }),
+        }),
+      ],
+      [
+        "útmutató",
+        on([DOSE], {
+          field: "dosingGuidance",
+          result: dosing({ id: "fr-g", value: "mérjen hetente" }),
+        }),
+      ],
+    ] as const) {
+      const d2 = autoAcceptDecision(d);
+      assert.equal(d2.kind, "SKIP", why);
+      assert.match(
+        (d2 as { reason: string }).reason,
+        /másik termékhez is tartozik/,
+        why,
+      );
+    }
+  });
+});
+
 describe("a futtató", () => {
   const deps = (accepted: string[][]) => ({
     latestResult: async (_p: string, field: string) =>
       field === "dosing" ? dosing() : field === "ean" ? ean() : null,
     productFact: async () => null,
-    sharedPages: async () => new Set<string>(),
+    sharedPages: async () => new Map<string, (string | null)[]>(),
     accept: async (p: string, id: string, rule: string) => {
       accepted.push([p, id, rule]);
     },
@@ -402,12 +452,21 @@ describe("a futtató", () => {
       ...deps(accepted),
       sharedPages: async (p: string, pages: readonly string[]) => {
         asked.push([p, [...pages]]);
-        return new Set([PAGE]);
+        return new Map([[PAGE, [null]]]);
       },
     });
     assert.deepEqual(asked, [["p1", [PAGE]]]);
     assert.match(out[0]!.detail, /másik termékhez is tartozik/);
     assert.deepEqual(accepted, []);
+  });
+
+  it("a futtató a saját adagot adja a döntésnek: azonos adagú megosztott lapról elfogad", async () => {
+    const accepted: string[][] = [];
+    await runAutoAccept(["p1"], true, {
+      ...deps(accepted),
+      sharedPages: async () => new Map([[PAGE, [dosing().value]]]),
+    });
+    assert.deepEqual(accepted, [["p1", "fr-dosing", AUTO_ACCEPT_RULE]]);
   });
 
   it("szárazon nem ír, --apply-jal a szabály nevével ír", async () => {
