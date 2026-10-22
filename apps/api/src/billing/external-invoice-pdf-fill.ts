@@ -189,7 +189,7 @@ export const prismaExternalPdfStore: ExternalPdfStore = {
   // erases it. The daily schedule runs beside the manual commands.
   async setPdf(id, pdfStorageKey, pdfMissingReason) {
     const { count } = await prisma.externalBillingDocument.updateMany({
-      where: { id, pdfStorageKey: null },
+      where: { id },
       data: { pdfStorageKey, pdfMissingReason },
     });
     return count > 0;
