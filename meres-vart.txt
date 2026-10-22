@@ -1,6 +1,8 @@
 # 7bf3e4d1 (PR 1819): break A = setPdf writes without the "still no PDF" condition.
-# Must turn exactly this red:
+# Must turn exactly these red:
 not ok - a write never overwrites a stored PDF, and a failure mark never erases it
-# Unaffected (the stored row is no candidate, the listing is unchanged):
+# The third test is red as a CONSEQUENCE: the broken write of the second test replaced the stored row's key,
+# and the third test checks that the stored row is untouched after the daily run.
+not ok - the daily run fills the rows without a PDF and touches no other
+# Unaffected (the listing is unchanged):
 ok - lists the rows without a PDF; a stored one and a number Számlázz.hu rejected stay out
-ok - the daily run fills the rows without a PDF and touches no other
