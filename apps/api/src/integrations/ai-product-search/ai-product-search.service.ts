@@ -12,6 +12,7 @@ import {
   chooseDescription,
   chooseParameters,
 } from "./ai-product-search.document.js";
+import { plainText } from "./ai-product-search.text.js";
 import type {
   AiProductSearchHit,
   AiProductSearchResult,
@@ -145,6 +146,24 @@ export class AiProductSearchService {
       lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
       mirrorState: row.mirrorState,
       missingSince: row.missingSince?.toISOString() ?? null,
+      knowledge: (row.knowledgeFacts ?? []).flatMap((fact) => {
+        // cleaned like a description, and no address written in it either
+        const value = plainText(fact.value)
+          ?.replace(/https?:\/\/\S+|www\.\S+/gi, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        return value
+          ? [
+              {
+                field: fact.field,
+                value,
+                unit: fact.unit,
+                source: fact.fieldResult.sourceType,
+                confirmed: fact.acceptedByRule === null,
+              },
+            ]
+          : [];
+      }),
     };
   }
 }

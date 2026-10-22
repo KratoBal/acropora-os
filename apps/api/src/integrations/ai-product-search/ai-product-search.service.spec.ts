@@ -182,6 +182,7 @@ describe("AiProductSearchService projekció", () => {
       "descriptionLong",
       "descriptionShort",
       "descriptionSource",
+      "knowledge",
       "lastSyncedAt",
       "mirrorState",
       "missingSince",
@@ -258,5 +259,65 @@ describe("az ár és a készlet kora", () => {
     ]).search({ query: "balling" });
 
     assert.equal(result.hits[0]!.stock?.at, null);
+  });
+});
+
+/**
+ * THE PRODUCT'S KNOWLEDGE IN THE AI'S HIT (Product Knowledge 4. szelet, kártya
+ * 85c38ab1). WHAT TURNS IT RED: an address reaches the model through a fact's
+ * value; a rule's fact passes as a person's; an empty value travels.
+ */
+describe("a termékismeret a találatban", () => {
+  it("érték, egység, a forrás fajtája és a megerősítés; cím nélkül", async () => {
+    const result = await serviceWith([
+      row({
+        knowledgeFacts: [
+          {
+            field: "dosingGuidance",
+            value:
+              "Mérje a KH-t hetente, részletek: https://gyarto.example.invalid/x www.gyarto.example.invalid",
+            unit: null,
+            acceptedByRule: "AUTO_V1",
+            fieldResult: { sourceType: "MANUFACTURER_PAGE" },
+          },
+          {
+            field: "dosingTests",
+            value: "KALCIUM;KH",
+            unit: null,
+            acceptedByRule: null,
+            fieldResult: { sourceType: "MANUFACTURER_PAGE" },
+          },
+          {
+            field: "dosingMode",
+            value: null,
+            unit: null,
+            acceptedByRule: null,
+            fieldResult: { sourceType: null },
+          },
+        ],
+      }),
+    ]).search({ query: "x" });
+    assert.deepEqual(result.hits[0]!.knowledge, [
+      {
+        field: "dosingGuidance",
+        value: "Mérje a KH-t hetente, részletek:",
+        unit: null,
+        source: "MANUFACTURER_PAGE",
+        confirmed: false,
+      },
+      {
+        field: "dosingTests",
+        value: "KALCIUM;KH",
+        unit: null,
+        source: "MANUFACTURER_PAGE",
+        confirmed: true,
+      },
+    ]);
+    assert.doesNotMatch(JSON.stringify(result.hits[0]), /gyarto\.example/);
+  });
+
+  it("tények nélküli sor: üres lista", async () => {
+    const result = await serviceWith([row()]).search({ query: "x" });
+    assert.deepEqual(result.hits[0]!.knowledge, []);
   });
 });

@@ -38,6 +38,17 @@ export interface ProductSearchRow {
     /** When the snapshot row was last written; the price's time. */
     updatedAt: Date;
   } | null;
+  /**
+   * The accepted facts the projection may show (VERIFIED, product-level, an
+   * `aiVisible` definition); absent in a row built before Product Knowledge.
+   */
+  knowledgeFacts?: Array<{
+    field: string;
+    value: string | null;
+    unit: string | null;
+    acceptedByRule: string | null;
+    fieldResult: { sourceType: string | null };
+  }>;
 }
 
 @Injectable()
@@ -111,6 +122,19 @@ export class AiProductSearchRepository extends Repository {
         where: { isActive: true },
         orderBy: { sku: "asc" as const },
       },
+      // Product Knowledge (card 85c38ab1): the accepted facts, product-level and
+      // VERIFIED; the source's KIND only, never its address (`sourceRef`)
+      knowledgeFacts: {
+        where: { scopeKey: "", status: "VERIFIED" },
+        orderBy: { field: "asc" as const },
+        select: {
+          field: true,
+          value: true,
+          unit: true,
+          acceptedByRule: true,
+          fieldResult: { select: { sourceType: true } },
+        },
+      },
       unasSnapshot: {
         select: {
           descriptionShort: true,
@@ -132,7 +156,21 @@ export class AiProductSearchRepository extends Repository {
      * identical to the surface, and the person judging the answer cannot tell
      * a thin catalogue from a narrow window.
      */
-    const rows = await this.database.product.findMany({ where, select });
+    const [found, visible] = await Promise.all([
+      this.database.product.findMany({ where, select }),
+      // only what the definitions let the AI see (`aiVisible`), today
+      this.database.attributeDefinition.findMany({
+        where: { aiVisible: true, isActive: true },
+        select: { key: true },
+      }),
+    ]);
+    const aiKeys = new Set(visible.map((d) => d.key));
+    const rows = (found as ProductSearchRow[]).map((row) => ({
+      ...row,
+      knowledgeFacts: (row.knowledgeFacts ?? []).filter((f) =>
+        aiKeys.has(f.field),
+      ),
+    }));
 
     /**
      * A MOTOR SORRENDJE DÖNT, NEM AZ ADATBÁZISÉ.

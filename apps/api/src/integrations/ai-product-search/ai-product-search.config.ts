@@ -51,7 +51,7 @@ export const AI_PRODUCT_SEARCH_MAX_HITS = 10;
  * judgement about an answer is only interpretable if we know what the answer
  * was built from. When the projection changes shape, this changes with it.
  */
-export const AI_PRODUCT_SEARCH_PROJECTION_VERSION = "2026-08-27.1";
+export const AI_PRODUCT_SEARCH_PROJECTION_VERSION = "2026-10-22.1";
 
 /**
  * Returns the configured token record id, or `null` when it is absent or

@@ -118,6 +118,28 @@ export interface AiProductSearchHit {
    * knowledge, and dropping it silently would throw that knowledge away.
    */
   missingSince: string | null;
+  /**
+   * THE PRODUCT'S ACCEPTED KNOWLEDGE (Product Knowledge, card 85c38ab1): the
+   * product-level, VERIFIED facts whose definition is `aiVisible`, e.g. the
+   * three dosing states (`dosingMode`, `dosing`, `dosingGuidance`,
+   * `dosingTests`). A rule's fact travels too, marked (acrobot 34936: the rule
+   * exists for the AI; the shop gets only a person's).
+   *
+   * NO URL: `source` is the kind of source (`MANUFACTURER_PAGE`, ...), never
+   * its address, and the values are cleaned of any address written in them.
+   * The answer names the source by its kind ("a gyártó oldala szerint").
+   */
+  knowledge: AiProductKnowledgeFact[];
+}
+
+export interface AiProductKnowledgeFact {
+  field: string;
+  value: string;
+  unit: string | null;
+  /** The evidence's kind (`MANUFACTURER_PAGE`, `SUPPLIER_PAGE`, ...); no address. */
+  source: string | null;
+  /** A person accepted it (`false`: the rule did, AUTO_V1, not yet confirmed). */
+  confirmed: boolean;
 }
 
 /**
