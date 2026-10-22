@@ -418,14 +418,14 @@ export class CreateAssetDto {
   @IsOptional()
   phaseConnection?: (typeof ASSET_PHASE_CONNECTIONS)[number];
   /**
-   * A KORABBI, kW-BAN VEZETETT `powerConsumption` MEZO -- KIVEZETVE (Balazs,
-   * 2026-10-21, kanban 541e2716). Azert marad a DTO-ban, es nem torlodik: a
-   * globalis `forbidNonWhitelisted` miatt egy regi mobil-build (vagy egy
-   * offline sorban rekedt, a frissites elott keszult mentes) 400-at kapna, es
-   * a sor soha nem ürülne. A tarolo NEM dobja el: ha az eredeti bejegyzes ures,
-   * "0,75 kW" alakban oda teszi (`legacy-power-consumption.ts`); ha nem ures,
-   * az eredeti bejegyzes nyer. A ketlepcsos kivezetes masodik lepese a mezo
-   * torlese, ha mar nincs regi build.
+   * @deprecated A KORABBI, kW-BAN VEZETETT `powerConsumption` MEZO -- KIVEZETVE
+   * (Balazs, 2026-10-21, kanban 541e2716; a kulcs sorsa: acrobot, 2026-10-22,
+   * kanban 3cc20b59). A DTO-ban azert marad, es nem torlodik, mert a globalis
+   * `forbidNonWhitelisted` miatt egy regi mobil-build (vagy egy offline sorban
+   * rekedt, a frissites elott keszult mentes) 400-at kapna, es a sor soha nem
+   * urulne. ELFOGADJUK ES ELDOBJUK: a tarolo nem olvassa, semmit nem ir belole
+   * (a regi szam a migracioban mar atkerult az eredeti bejegyzesbe). A mezo
+   * 2026-12-31 utan torolheto a DTO-bol is, ha mar nincs regi build.
    */
   @IsOptional() powerConsumption?: unknown;
   /**
@@ -610,7 +610,7 @@ export class UpdateAssetDto {
   @IsIn(ASSET_PHASE_CONNECTIONS)
   @IsOptional()
   phaseConnection?: (typeof ASSET_PHASE_CONNECTIONS)[number] | null;
-  /** KIVEZETVE, figyelmen kivul hagyva -- lasd a `CreateAssetDto` jegyzetet. */
+  /** @deprecated Elfogadva es eldobva (2026-12-31 utan torolheto) -- lasd a `CreateAssetDto` jegyzetet. */
   @IsOptional() powerConsumption?: unknown;
   /**
    * A FOGYASZTAS EREDETI SZOVEGE -- SZABAD SZOVEG, NINCS ALAK-ELLENORZES.

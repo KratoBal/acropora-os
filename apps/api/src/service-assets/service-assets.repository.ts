@@ -1,7 +1,3 @@
-import {
-  legacyPowerConsumptionToRaw,
-  rawWithLegacyFallback,
-} from "./legacy-power-consumption.js";
 import { assignedUnitIdsFor } from "../service-jobs/assigned-units.query.js";
 import { isTextReadable } from "./asset-document-text.js";
 import {
@@ -1434,12 +1430,9 @@ export class ServiceAssetsRepository extends Repository {
                     volume,
                     currentDraw: optionalText(input.currentDraw),
                     phaseConnection: input.phaseConnection,
-                    powerConsumptionRaw:
-                      rawWithLegacyFallback(
-                        optionalText(input.powerConsumptionRaw),
-                        null,
-                        legacyPowerConsumptionToRaw(input.powerConsumption),
-                      ) ?? undefined,
+                    powerConsumptionRaw: optionalText(
+                      input.powerConsumptionRaw,
+                    ),
                     clientOperationId: input.clientOperationId ?? null,
                     archivedAt:
                       input.status === "RETIRED" ? new Date() : undefined,
@@ -2002,11 +1995,7 @@ export class ServiceAssetsRepository extends Repository {
           volume,
           currentDraw: optionalText(input.currentDraw),
           phaseConnection: input.phaseConnection,
-          powerConsumptionRaw: rawWithLegacyFallback(
-            optionalText(input.powerConsumptionRaw),
-            existing.powerConsumptionRaw,
-            legacyPowerConsumptionToRaw(input.powerConsumption),
-          ),
+          powerConsumptionRaw: optionalText(input.powerConsumptionRaw),
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
