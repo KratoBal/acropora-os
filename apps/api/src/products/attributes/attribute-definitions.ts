@@ -307,7 +307,9 @@ export const ATTRIBUTE_DEFINITION_CHANGES: readonly {
   change: Pick<
     AttributeDefinitionSeed,
     "scope" | "medusaNativeField" | "public"
-  >;
+  > &
+    // optional: an older change without it keeps its exact UPDATE (the spec reads it)
+    Partial<Pick<AttributeDefinitionSeed, "aiVisible">>;
 }[] = [
   {
     // az elfogadott EAN `ProductBarcode` sor, változatonként, és nem tény (C3, D1)
@@ -317,6 +319,18 @@ export const ATTRIBUTE_DEFINITION_CHANGES: readonly {
       scope: "VARIANT",
       medusaNativeField: "VARIANT_BARCODE",
       public: false,
+    },
+  },
+  {
+    // Product Knowledge 4. szelet (kártya 85c38ab1): az AI chat olvassa az
+    // adagolást; a hatókör, a natív cél és a nyilvánosság változatlan
+    migration: "20261022010000_dosing_ai_visible",
+    key: "dosing",
+    change: {
+      scope: "PRODUCT",
+      medusaNativeField: null,
+      public: true,
+      aiVisible: true,
     },
   },
 ];
@@ -438,7 +452,11 @@ export function changeSql(
   return (
     `UPDATE "AttributeDefinition" SET "scope" = '${c.change.scope}', ` +
     `"medusaNativeField" = ${c.change.medusaNativeField ? `'${c.change.medusaNativeField}'` : "NULL"}, ` +
-    `"public" = ${String(c.change.public)}, "updatedAt" = CURRENT_TIMESTAMP ` +
+    `"public" = ${String(c.change.public)}, ` +
+    (c.change.aiVisible === undefined
+      ? ""
+      : `"aiVisible" = ${String(c.change.aiVisible)}, `) +
+    `"updatedAt" = CURRENT_TIMESTAMP ` +
     `WHERE "key" = ${sqlSzoveg(c.key)};`
   );
 }

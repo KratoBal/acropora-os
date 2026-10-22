@@ -8,6 +8,8 @@ import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import { PrismaEnrichmentReader } from "../enrichment/enrichment-read.repository.js";
 import { PrismaEnrichmentFactsReader } from "../enrichment/enrichment-run.store.js";
 import type { ProductService } from "../product.service.js";
+import { AiProductSearchRepository } from "../../integrations/ai-product-search/ai-product-search.repository.js";
+import { writeSearchDocument } from "../../integrations/ai-product-search/ai-product-search.writer.js";
 import { PrismaKnowledgeStore } from "./knowledge.repository.js";
 import { ProductKnowledgeService } from "./knowledge.service.js";
 
@@ -60,6 +62,14 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
     // SEO P0 PR 3: the variant the scope test makes (its facts went above)
     await prisma.productVariant.deleteMany({ where: mine });
     await prisma.productCopy.deleteMany({ where: mine });
+    // the AI search test's document (4. szelet), if a failure left it behind
+    const ids = await prisma.product.findMany({
+      where: { name: { startsWith: PREFIX } },
+      select: { id: true },
+    });
+    await prisma.aiProductSearchDocument.deleteMany({
+      where: { productId: { in: ids.map((p) => p.id) } },
+    });
     await prisma.productEnrichmentRun.deleteMany({
       where: { requestedBy: { email: { endsWith: EMAIL_DOMAIN } } },
     });
@@ -427,5 +437,47 @@ describe("Termékismeret, adatbázison", { skip: gate.mode === "skip" }, () => {
       ["dosingMode", "TEST_DEPENDENT", false],
       ["dosingTests", "KALCIUM;KH", false],
     ]);
+  });
+
+  // Product Knowledge 4. szelet: the AI search carries the AI-visible facts, from
+  // real rows, through the repository's own query; no address, no hidden field
+  it("az AI keresés a termék AI-nak látható tényeit hozza, a többit nem", async () => {
+    const service = knowledge();
+    const actor = { id: userId };
+    const word = `Kitaláltszó${suffix}`;
+    const { id: productId } = await prisma.product.create({
+      data: { name: `${PREFIX}${word} Kalcium` },
+    });
+    const url = "https://gyarto.example.invalid/ai-kereses";
+    for (const [field, raw, value] of [
+      ["dosingTests", "Measure KH and calcium first", "KH;KALCIUM"],
+      ["dosingMode", "dose according to your test results", "TEST_DEPENDENT"],
+      ["packSize", "Inhalt: 500 ml", "500 ml"],
+    ] as const) {
+      const r = await service.addEvidence(
+        productId,
+        { field, raw, value, url, sourceType: "MANUFACTURER_PAGE" },
+        actor,
+      );
+      await service.accept(productId, r.fieldResultId, actor);
+    }
+    assert.ok(await writeSearchDocument(prisma, productId));
+    const { rows } = await new AiProductSearchRepository().search(word, 10);
+    const hit = rows.find((r) => r.id === productId);
+    assert.ok(hit, "the product is found");
+    // packSize is not aiVisible: it does not travel
+    assert.deepEqual(
+      (hit.knowledgeFacts ?? []).map((f) => [
+        f.field,
+        f.value,
+        f.fieldResult.sourceType,
+      ]),
+      [
+        ["dosingMode", "TEST_DEPENDENT", "MANUFACTURER_PAGE"],
+        ["dosingTests", "KALCIUM;KH", "MANUFACTURER_PAGE"],
+      ],
+    );
+    assert.doesNotMatch(JSON.stringify(hit.knowledgeFacts), /gyarto\.example/);
+    await prisma.aiProductSearchDocument.deleteMany({ where: { productId } });
   });
 });
