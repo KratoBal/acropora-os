@@ -26,6 +26,7 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
 import { ExternalBillingDocumentsController } from "./external-billing-documents.controller.js";
 import { OutgoingPackageController } from "./outgoing-package.controller.js";
 import { OutgoingPackageService } from "./outgoing-package.service.js";
+import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js";
 
 /**
  * A SZÁMLÁZÁS MODUL: a vázlat (murena), a kiállítás, a lista, a PDF és a kiküldés (nautilus). A
@@ -61,6 +62,7 @@ import { OutgoingPackageService } from "./outgoing-package.service.js";
     BillingDocumentEmailService,
     BillingDocumentEmailDraftService,
     OutgoingPackageService,
+    ExternalInvoicePdfScheduler,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

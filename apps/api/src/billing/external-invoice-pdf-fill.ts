@@ -171,9 +171,12 @@ export const prismaExternalPdfStore: ExternalPdfStore = {
       orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
     });
   },
+  // Conditional on "still no PDF": a PDF stored in the meantime (the cmfx
+  // letter fill, an eBIZ sync) is never overwritten, and a failure mark never
+  // erases it. The daily schedule runs beside the manual commands.
   async setPdf(id, pdfStorageKey, pdfMissingReason) {
-    await prisma.externalBillingDocument.update({
-      where: { id },
+    await prisma.externalBillingDocument.updateMany({
+      where: { id, pdfStorageKey: null },
       data: { pdfStorageKey, pdfMissingReason },
     });
   },
