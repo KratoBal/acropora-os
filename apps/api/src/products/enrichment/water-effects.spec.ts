@@ -241,6 +241,30 @@ describe("a kategória-szabály a UNAS-ágra", () => {
     );
   });
 
+  it("a tény-olvasó a márka-kategóriából a gyártó domainjeit adja (acrobot 35067)", () => {
+    const facts = (name: string) =>
+      productFactsFrom({
+        id: "p-2",
+        name: "Kitalált nyomelem",
+        brand: null,
+        unasSnapshot: null,
+        categories: [
+          {
+            category: {
+              name,
+              parent: { name: "Nyomelemek", parent: { name: "Termékek" } },
+            },
+          },
+        ],
+        variants: [],
+      });
+    assert.deepEqual(facts("Triton").categoryBrandSites, [
+      "triton.de",
+      "triton-reagents.de",
+    ]);
+    assert.equal(facts("Kitalált márka").categoryBrandSites, undefined);
+  });
+
   it("a tény-olvasó a kategória-állítást UNAS_CURRENT forrásként adja", () => {
     const f = productFactsFrom({
       id: "p-1",

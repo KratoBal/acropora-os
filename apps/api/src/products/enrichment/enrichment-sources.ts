@@ -142,18 +142,56 @@ export function sourceUrlProblem(
 }
 
 /**
- * The manufacturer's base domains for a product: the brand's website and the
- * UNAS manufacturer link. A link that points at one of the retailers is not a
- * manufacturer site, so it is left out.
+ * THE MANUFACTURER'S SITES BY BRAND CATEGORY (Product Knowledge, acrobot
+ * 35067): `Product.brandId` is empty across the catalogue, and the brand lives
+ * in a UNAS category named after it. The brand's own domains, taken from the
+ * links the manufacturer's dosing pages are on (reeftrak, 2026-10-22). A
+ * short list here, not the product master: the JEV does not write that.
+ */
+export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
+  {
+    "fauna marin": ["faunamarin.de", "faunamarincorals.de"],
+    triton: ["triton.de", "triton-reagents.de"],
+    "red sea": ["redseafish.com"],
+    aquaforest: ["aquaforest.eu"],
+  };
+
+/**
+ * The brand domains a product's category chains name: a category whose WHOLE
+ * name is a listed brand. Two different brands give none: a product under
+ * both cannot tell whose site is the manufacturer's.
+ */
+export function brandSitesFromCategories(
+  chains: readonly (readonly string[])[],
+): string[] {
+  const brands = new Set<string>();
+  for (const chain of chains)
+    for (const name of chain) {
+      const key = name.trim().toLowerCase();
+      if (BRAND_CATEGORY_SITES[key]) brands.add(key);
+    }
+  return brands.size === 1 ? [...BRAND_CATEGORY_SITES[[...brands][0]!]!] : [];
+}
+
+/**
+ * The manufacturer's base domains for a product: the brand's website, the
+ * UNAS manufacturer link, and the brand category's listed domains. A link
+ * that points at one of the retailers is not a manufacturer site, so it is
+ * left out.
  */
 export function manufacturerSites(
   brandWebsiteUrl: string | null | undefined,
   unasManufacturerUrl: string | null | undefined,
+  categorySites: readonly string[] = [],
 ): string[] {
   const retailers = Object.values(RETAILER_DOMAINS);
   return [
     ...new Set(
-      [baseDomainOf(brandWebsiteUrl), baseDomainOf(unasManufacturerUrl)]
+      [
+        baseDomainOf(brandWebsiteUrl),
+        baseDomainOf(unasManufacturerUrl),
+        ...categorySites.map((site) => baseDomainOf(site)),
+      ]
         .filter((base): base is string => base !== null)
         .filter((base) => !retailers.some((r) => hostBelongsTo(base, r))),
     ),

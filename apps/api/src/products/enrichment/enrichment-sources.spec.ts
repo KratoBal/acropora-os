@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   baseDomainOf,
+  brandSitesFromCategories,
   manufacturerSites,
   sourceUrlProblem,
 } from "./enrichment-sources.js";
@@ -124,6 +125,65 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
         SITES,
       ),
       null,
+    );
+  });
+
+  // acrobot 35067: Product.brandId is empty, the brand is a UNAS category
+  it("a márka-kategória a lista domainjeit adja gyártói webhelynek, de csak egy márkánál", () => {
+    const chain = (...names: string[]) => names;
+    assert.deepEqual(
+      brandSitesFromCategories([
+        chain("Termékek", "Nyomelemek", "Fauna Marin"),
+      ]),
+      ["faunamarin.de", "faunamarincorals.de"],
+    );
+    // the whole name, case aside; a part of a name is not the brand
+    assert.deepEqual(
+      brandSitesFromCategories([chain("Nyomelemek", " RED SEA ")]),
+      ["redseafish.com"],
+    );
+    assert.deepEqual(
+      brandSitesFromCategories([chain("Nyomelemek", "Red Sea Max")]),
+      [],
+    );
+    // two different brands: whose site is the manufacturer's cannot be told
+    assert.deepEqual(
+      brandSitesFromCategories([
+        chain("Nyomelemek", "Triton"),
+        chain("Aminosavak", "Aquaforest"),
+      ]),
+      [],
+    );
+    // the same brand twice is one brand
+    assert.deepEqual(
+      brandSitesFromCategories([
+        chain("Nyomelemek", "Triton"),
+        chain("Foszfátmegkötők", "Triton"),
+      ]),
+      ["triton.de", "triton-reagents.de"],
+    );
+    assert.deepEqual(brandSitesFromCategories([chain("Nyomelemek")]), []);
+    // the category's sites join the manufacturer's, a retailer still does not
+    assert.deepEqual(
+      manufacturerSites(null, null, [
+        "aquaforest.eu",
+        "www.bulkreefsupply.com",
+      ]),
+      ["aquaforest.eu"],
+    );
+    assert.equal(
+      sourceUrlProblem("MANUFACTURER", "https://aquaforest.eu/en/products/x/", {
+        manufacturer: manufacturerSites(null, null, ["aquaforest.eu"]),
+        supplier: null,
+      }),
+      null,
+    );
+    assert.equal(
+      sourceUrlProblem("MANUFACTURER", "https://aquaforest.eu/en/products/x/", {
+        manufacturer: manufacturerSites(null, null, []),
+        supplier: null,
+      }),
+      "NO_MANUFACTURER_SITE",
     );
   });
 
