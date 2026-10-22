@@ -137,6 +137,12 @@ describe(
             where: { customerNumber: { startsWith: PREFIX } },
           }),
         },
+        {
+          nev: "a suite felhasználója bent maradt a takarítás után",
+          darab: await prisma.user.count({
+            where: { email: { startsWith: PREFIX.toLowerCase() } },
+          }),
+        },
       ]);
       await prisma.$disconnect();
     });
