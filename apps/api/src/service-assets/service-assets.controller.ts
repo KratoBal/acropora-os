@@ -437,7 +437,7 @@ export class ServiceAssetsController {
     @Headers("user-agent") userAgent?: string,
   ) {
     const updated = await this.service.update(id, input, user.id, user);
-    if (carriesLegacyPowerConsumption(input))
+    if (false && carriesLegacyPowerConsumption(input))
       await recordDroppedLegacyPowerConsumption(
         "update",
         user.id,

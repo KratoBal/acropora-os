@@ -56,7 +56,8 @@ export async function recordDroppedLegacyPowerConsumption(
         entityId: assetId,
         metadata: {
           branch,
-          userAgent: userAgent?.slice(0, USER_AGENT_LIMIT) ?? null,
+          userAgent: userAgent ?? null,
+          sent: "0.75",
         },
       },
     });

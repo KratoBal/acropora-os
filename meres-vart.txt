@@ -1,0 +1,10 @@
+# b9191d3a: three breaks in one run, each hits a different case.
+# (a) the update branch never records:
+not ok - módosítás: a régi kulcs (null is) egy sort ír az update ággal
+# (b) the row carries the value the client sent:
+not ok - felvitel: a régi kulcs egy sort ír az ággal, a felhasználóval és a User-Agenttel, az értéket soha
+# (c) the User-Agent is not cut to 160 characters:
+not ok - a User-Agent 160 karakterre vágva kerül a sorba
+# Controls, unaffected by these three:
+ok - KONTROLL: régi kulcs nélküli felvitel és módosítás nem ír sort
+ok - a hibázó naplóírás nem dob, a kérés sikeres marad
