@@ -144,7 +144,8 @@ type DosingField = (typeof AUTO_ACCEPT_FIELDS)[number];
  * the one accepted now, else the accepted fact's:
  * - TEST_DEPENDENT: no fixed dose beside it, and it comes with its guidance and
  *   its tests (now or already accepted), else the three wait for a person;
- * - FIXED: only with a dose (now or already accepted); no guidance or tests;
+ * - FIXED: only with a dose (now or already accepted); no guidance or tests,
+ *   neither now nor already accepted (an earlier test-dependent group);
  * - NO_DATA (a person's fact): nothing by rule beside it;
  * - no mode: a dose may stand alone (the first slice's shape), guidance and
  *   tests may not.
@@ -169,8 +170,19 @@ export function dosingGroup(
           "dosingMode",
           "tesztfüggő csoport hiányos (útmutató vagy mérendő)",
         );
-    } else if (nowMode.value === "FIXED" && !has("dosing"))
-      skip("dosingMode", "fix mód adag nélkül");
+    } else if (nowMode.value === "FIXED") {
+      if (!has("dosing")) skip("dosingMode", "fix mód adag nélkül");
+      // the mirror (barracuda, #1808): an earlier test-dependent group's guidance
+      // or tests still stand; a person decides which page is today's
+      else if (
+        facts.get("dosingGuidance") != null ||
+        facts.get("dosingTests") != null
+      ) {
+        const why = "ellentmond: tesztfüggő útmutató vagy mérendő áll mellette";
+        skip("dosingMode", why);
+        skip("dosing", why);
+      }
+    }
   }
   const mode =
     out.get("dosingMode")?.kind === "ACCEPT"

@@ -341,6 +341,26 @@ describe("az adagolás mezői egy csoportként", () => {
     );
   });
 
+  // barracuda, #1808: the mirror of the test-dependent check
+  it("fix mód és adag nem megy egy korábbi tesztfüggő útmutató vagy mérendő mellé", () => {
+    for (const earlier of [
+      { dosingGuidance: fact("Mérje.") },
+      { dosingTests: fact("KH") },
+    ]) {
+      const r = group(
+        { dosing: ok("1 ml/100 L/day"), dosingMode: ok("FIXED") },
+        earlier,
+      );
+      assert.deepEqual(
+        [r.dosing, r.dosingMode],
+        [
+          "ellentmond: tesztfüggő útmutató vagy mérendő áll mellette",
+          "ellentmond: tesztfüggő útmutató vagy mérendő áll mellette",
+        ],
+      );
+    }
+  });
+
   it("mód nélkül az adag egyedül mehet, az útmutató nem; nincs-adat tény mellé semmi", () => {
     const r = group({ dosing: ok("1 ml/100 L/day"), dosingGuidance: ok("x") });
     assert.deepEqual(
