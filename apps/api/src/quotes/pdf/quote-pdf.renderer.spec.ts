@@ -575,6 +575,39 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     assert.equal(text.match(/bruttó 127 000 Ft/g)?.length, 2, text);
   });
 
+  /** Luca (2026-10-22): a net-only quote ends "1 400 000 Ft + ÁFA", with the net item prices kept. */
+  it("a net quote shows the net lines and a net total with + ÁFA, and no VAT or gross rows", async () => {
+    const text = async (priceDisplay: "NET" | "GROSS") =>
+      (
+        await readPdfTextLines(
+          (
+            await renderQuotePdf(
+              input(
+                [
+                  block("SECTION", {
+                    title: "A",
+                    items: [item("Tétel", { quantity: d("2") })],
+                  }),
+                ],
+                { priceDisplay },
+              ),
+            )
+          ).bytes,
+        )
+      )
+        .map((l) => l.text)
+        .join(" | ");
+    const net = await text("NET");
+    assert.match(net, /NETTÓ VÉGÖSSZEG/);
+    assert.match(net, /200 000 Ft \+ ÁFA/);
+    assert.match(net, /2 db × 100 000 Ft/);
+    assert.doesNotMatch(net, /BRUTTÓ/);
+    assert.doesNotMatch(net, /ÁFA 27%/);
+    const gross = await text("GROSS");
+    assert.match(gross, /BRUTTÓ VÉGÖSSZEG/);
+    assert.doesNotMatch(gross, /\+ ÁFA/);
+  });
+
   it("an English quote has the English tagline, labels, options band and footer", async () => {
     const text = (
       await readPdfTextLines(

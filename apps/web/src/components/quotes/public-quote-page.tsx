@@ -176,7 +176,7 @@ export function PublicQuotePage({ token }: { token: string }) {
             <div className="space-y-1 border-t border-pilot-grey-100 px-4 py-3 text-right text-sm">
               <p className="font-semibold text-pilot-grey-900">
                 Nettó összesen:{" "}
-                {formatQuoteMoney(quote.netTotal, quote.currency)}
+                {formatQuoteMoney(quote.netTotal, quote.currency)} + ÁFA
               </p>
               {Number(quote.optionalNetTotal) > 0 ? (
                 <p className="text-pilot-grey-600">

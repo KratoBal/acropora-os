@@ -36,6 +36,7 @@ import {
   formatQuoteDay,
   isAbort,
   QUOTE_BLOCK_LABEL,
+  QUOTE_PRICE_DISPLAY,
 } from "./quote-format";
 import { QUOTE_TEMPLATES_PATH, templateCopy } from "./quote-templates-page";
 
@@ -67,11 +68,6 @@ const BLOCK_HINT: Record<QuoteBlockKindValue, string> = {
   TERMS: "Feltételek",
   IMAGE: "Kép",
   PAGE_BREAK: "Oldaltörés",
-};
-const PRICE_DISPLAY: Record<QuotePriceDisplay, string> = {
-  NET: "Nettó árak",
-  GROSS: "Bruttó árak",
-  BOTH: "Nettó és bruttó",
 };
 const EMPTY = JSON.stringify(EMPTY_QUOTE_RICH_TEXT);
 
@@ -531,10 +527,10 @@ export function QuoteTemplateEditorPage({
                   change({ priceDisplay: value as QuotePriceDisplay })
                 }
               >
-                {(Object.keys(PRICE_DISPLAY) as QuotePriceDisplay[]).map(
+                {(Object.keys(QUOTE_PRICE_DISPLAY) as QuotePriceDisplay[]).map(
                   (value) => (
                     <option key={value} value={value}>
-                      {PRICE_DISPLAY[value]}
+                      {QUOTE_PRICE_DISPLAY[value]}
                     </option>
                   ),
                 )}

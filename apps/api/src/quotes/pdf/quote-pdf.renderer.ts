@@ -91,6 +91,7 @@ const LABELS = {
     netTotal: "NETTÓ VÉGÖSSZEG",
     withoutOptions: "OPCIÓK NÉLKÜL",
     netNote: "Az árak az ÁFA-t nem tartalmazzák.",
+    plusVat: "+ ÁFA",
     schedule: "Fizetési ütemezés",
     netPrefix: "nettó",
     grossPrefix: "bruttó",
@@ -111,6 +112,7 @@ const LABELS = {
     netTotal: "NET TOTAL",
     withoutOptions: "WITHOUT OPTIONS",
     netNote: "Prices exclude VAT.",
+    plusVat: "+ VAT",
     schedule: "Payment schedule",
     netPrefix: "net",
     grossPrefix: "gross",
@@ -682,7 +684,10 @@ function drawSummary(
         ]),
       ];
   const totalLabel = `${net ? labels.netTotal : labels.grossTotal}${hasOptions ? ` · ${labels.withoutOptions}` : ""}`;
-  const totalValue = money(net ? totals.net : totals.gross);
+  // a net-only quote reads "1 400 000 Ft + ÁFA": the buyer sees what is still to come
+  const totalValue = net
+    ? `${money(totals.net)} ${labels.plusVat}`
+    : money(totals.gross);
   const boxHeight =
     SUMMARY_PAD +
     rows.length * SUMMARY_ROW +

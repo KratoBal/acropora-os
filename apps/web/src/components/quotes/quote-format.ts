@@ -4,6 +4,7 @@ import type {
   QuoteAcceptanceRecordedSource,
   QuoteBlockKindValue,
   QuoteCloseReasonValue,
+  QuotePriceDisplay,
   QuoteStatusValue,
 } from "@acropora/types";
 
@@ -58,6 +59,13 @@ export const QUOTE_VERSION_STATUS: Record<
   DRAFT: { label: "Piszkozat", variant: "amber" },
   PUBLISHED: { label: "Publikált", variant: "blue" },
   SUPERSEDED: { label: "Felülírt", variant: "grey" },
+};
+
+/** How the prices read on the PDF: the net-only quote ends "… Ft + ÁFA". */
+export const QUOTE_PRICE_DISPLAY: Record<QuotePriceDisplay, string> = {
+  NET: "Csak nettó + ÁFA",
+  GROSS: "Bruttó (ÁFA-val)",
+  BOTH: "Nettó és bruttó",
 };
 
 export const QUOTE_BLOCK_LABEL: Record<QuoteBlockKindValue, string> = {
