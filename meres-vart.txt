@@ -1,0 +1,10 @@
+# 3cc20b59 step 2: the fold is put back on BOTH branches; the drop cases must turn red, the controls stay green.
+# Create branch:
+not ok - felvitel: a régi kulcs egyedül nem ír az eredeti bejegyzésbe
+# Update branch:
+not ok - módosítás: üres tárolt bejegyzés + régi kulcs -> üres marad
+not ok - módosítás: kitöltött tárolt bejegyzés + régi kulcs -> a tárolt érték marad
+# Controls, unaffected by the fold:
+ok - felvitel: a kérés saját eredeti bejegyzése a régi kulcs mellett érintetlen
+ok - módosítás: a kérés saját eredeti bejegyzése a régi kulcs mellett nyer
+ok - KONTROLL: régi kulcs nélkül az eredeti bejegyzés mentődik, felvitelkor és módosításkor

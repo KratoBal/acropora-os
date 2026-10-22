@@ -1430,9 +1430,11 @@ export class ServiceAssetsRepository extends Repository {
                     volume,
                     currentDraw: optionalText(input.currentDraw),
                     phaseConnection: input.phaseConnection,
-                    powerConsumptionRaw: optionalText(
-                      input.powerConsumptionRaw,
-                    ),
+                    powerConsumptionRaw:
+                      optionalText(input.powerConsumptionRaw) ??
+                      (typeof input.powerConsumption === "string"
+                        ? `${input.powerConsumption} kW`
+                        : undefined),
                     clientOperationId: input.clientOperationId ?? null,
                     archivedAt:
                       input.status === "RETIRED" ? new Date() : undefined,
@@ -1995,7 +1997,11 @@ export class ServiceAssetsRepository extends Repository {
           volume,
           currentDraw: optionalText(input.currentDraw),
           phaseConnection: input.phaseConnection,
-          powerConsumptionRaw: optionalText(input.powerConsumptionRaw),
+          powerConsumptionRaw:
+            optionalText(input.powerConsumptionRaw) ??
+            (typeof input.powerConsumption === "string"
+              ? `${input.powerConsumption} kW`
+              : undefined),
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
