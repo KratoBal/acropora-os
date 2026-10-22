@@ -217,6 +217,26 @@ describe("az AI adagolás-válasza az OS-ben", () => {
       kind: "REFUSED",
       refusal: "EXCERPT_NOT_IN_PAGE",
     });
+    // the kivonat-műszer (ai-agent #44): where the excerpt leaves the page, shown
+    assert.deepEqual(
+      extractorAnswerOf({
+        refusal: "EXCERPT_NOT_IN_PAGE",
+        refusalDetail: "excerpt 29/40 U+2019",
+      }),
+      { kind: "REFUSED", refusal: "EXCERPT_NOT_IN_PAGE excerpt 29/40 U+2019" },
+    );
+    // any other shape carries text, and is dropped, not shown
+    for (const refusalDetail of [
+      "excerpt 29/40 U+2019 Dose 1 ml",
+      "Dose 1 ml per 100 l",
+      "excerpt 29/40",
+      42,
+    ])
+      assert.deepEqual(
+        extractorAnswerOf({ refusal: "EXCERPT_NOT_IN_PAGE", refusalDetail }),
+        { kind: "REFUSED", refusal: "EXCERPT_NOT_IN_PAGE" },
+        String(refusalDetail),
+      );
     assert.equal(extractorAnswerOf({ mode: "DAILY" }).kind, "UNAVAILABLE");
     assert.equal(extractorAnswerOf(null).kind, "UNAVAILABLE");
   });
