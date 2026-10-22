@@ -26,6 +26,7 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
 import { ExternalBillingDocumentsController } from "./external-billing-documents.controller.js";
 import { OutgoingPackageController } from "./outgoing-package.controller.js";
 import { OutgoingPackageService } from "./outgoing-package.service.js";
+import { ExternalInvoiceMailPdfScheduler } from "./external-invoice-mail-pdf.scheduler.js";
 import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js";
 
 /**
@@ -63,6 +64,7 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     BillingDocumentEmailDraftService,
     OutgoingPackageService,
     ExternalInvoicePdfScheduler,
+    ExternalInvoiceMailPdfScheduler,
     documentStoreProvider,
   ],
   // a webshop rendelés számlája ugyanazon a vázlaton és kiállításon megy

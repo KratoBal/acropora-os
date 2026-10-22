@@ -150,7 +150,13 @@ export function pdfPayableMatches(text: string, grossAmount: string): boolean {
 }
 
 export type MailPdfOutcome =
-  | { kind: "STORED" | "WOULD_STORE"; documentNumber: string; bytes: number }
+  // ALREADY_HAD: the PDF checked out, but the row got one in the meantime (the conditional write
+  // touched nothing), so it is not counted as stored
+  | {
+      kind: "STORED" | "WOULD_STORE" | "ALREADY_HAD";
+      documentNumber: string;
+      bytes: number;
+    }
   | { kind: "NO_MAIL"; documentNumber: string }
   | {
       kind:
@@ -185,9 +191,8 @@ export async function fillExternalPdfsFromMail(input: {
   textOf: (bytes: Uint8Array) => Promise<string[]>;
   documents: Pick<DocumentStore, "put"> | null;
   store: {
-    // the shared store answers `false` when the row already had a PDF (nothing written); this
-    // command still counts the write as STORED, which only a PDF stored in the very same
-    // moment could make untrue
+    // the shared store answers `false` when the row already had a PDF (nothing written):
+    // the outcome is then ALREADY_HAD, not STORED
     setPdf(
       id: string,
       pdfStorageKey: string,
@@ -262,9 +267,13 @@ export async function fillExternalPdfsFromMail(input: {
     try {
       if (!input.documents) throw new Error("no document store");
       await input.documents.put(key, chosen.buffer);
-      await input.store.setPdf(row.id, storageKeyFor(key), null);
+      const written = await input.store.setPdf(
+        row.id,
+        storageKeyFor(key),
+        null,
+      );
       outcomes.push({
-        kind: "STORED",
+        kind: written === false ? "ALREADY_HAD" : "STORED",
         documentNumber: number,
         bytes: chosen.buffer.length,
       });

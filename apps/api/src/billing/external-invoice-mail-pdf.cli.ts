@@ -72,7 +72,9 @@ export async function main(
     mail?: (month: string) => Promise<MailPdf[]>;
     rowsByNumber?: (numbers: readonly string[]) => Promise<NumberRow[]>;
     documents?: () => Pick<DocumentStore, "put"> | null;
-    store?: { setPdf(id: string, key: string, reason: null): Promise<void> };
+    store?: {
+      setPdf(id: string, key: string, reason: null): Promise<boolean | void>;
+    };
     textOf?: (bytes: Uint8Array) => Promise<string[]>;
   } = {},
   environment: NodeJS.ProcessEnv = process.env,
@@ -183,7 +185,7 @@ export async function main(
     count("STORE_FAILED") +
     count("NOT_AUTHENTICATED");
   io.out(
-    `Összesen: ${apply ? `tárolva ${count("STORED")}` : `tárolná ${count("WOULD_STORE")}`}, levél nélkül ${count("NO_MAIL")}, ` +
+    `Összesen: ${apply ? `tárolva ${count("STORED")}, közben már volt ${count("ALREADY_HAD")}` : `tárolná ${count("WOULD_STORE")}`}, levél nélkül ${count("NO_MAIL")}, ` +
       `hibás ${failed}, számla-sor nélküli levél ${report.notCandidates.filter((n) => !byNumber.has(n)).length}\n`,
   );
   if (!apply) {
@@ -238,7 +240,7 @@ async function prismaRowsByNumber(
  * szünet nélküli letöltés 188 fájl után GOOGLE_RATE_LIMITED). Itt nem importálva: a begyűjtő
  * szolgáltatás a teljes beszerzési modult húzná be egy parancssori futásba.
  */
-const REQUEST_GAP_MS = 250;
+export const REQUEST_GAP_MS = 250;
 
 /**
  * A hónap cmfx-levelei és PDF-mellékletei, mindegyik a levél hitelesítési ítéletével. Exportálva, hogy
