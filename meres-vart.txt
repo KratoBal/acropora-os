@@ -1,0 +1,8 @@
+# b9191d3a: two breaks in one run.
+# (d) the hook fires on every create and update:
+not ok - KONTROLL: régi kulcs nélküli felvitel és módosítás nem ír sort
+# (e) a failing audit write is not swallowed:
+not ok - a hibázó naplóírás nem dob, a kérés sikeres marad
+# Unaffected:
+ok - módosítás: a régi kulcs (null is) egy sort ír az update ággal
+ok - a User-Agent 160 karakterre vágva kerül a sorba

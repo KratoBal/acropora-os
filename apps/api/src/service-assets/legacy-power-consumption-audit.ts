@@ -61,6 +61,7 @@ export async function recordDroppedLegacyPowerConsumption(
       },
     });
   } catch (error) {
+    throw error;
     logger.warn(
       `A regi powerConsumption kulcs eldobasanak naplozasa kimaradt: ${
         error instanceof Error ? error.message : "ismeretlen hiba"
