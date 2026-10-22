@@ -55,7 +55,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "AQUARIUM_MEASUREMENT_MAIL_FROM_NAME",
   "ASSET_QR_BASE_URL",
   "BILLING_ISSUE_ENABLED",
-  // the daily PDF catch-up switch (a boolean, #1819)
+  // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
+  "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
   "EXTERNAL_INVOICE_PDF_SCHEDULE",
   "HANDOVER_MAIL_MAX_ATTACHMENT_BYTES",
   "INCOMING_FOREIGN_READ_ENABLED",

@@ -60,12 +60,16 @@ export const EXTERNAL_INVOICE_PDF_ENV = Symbol("EXTERNAL_INVOICE_PDF_ENV");
 
 const OFF_VALUES = new Set(["0", "false", "off", "no"]);
 
-/** Default ON: only an explicit off value switches the run off. */
+/** Default ON: only an explicit off value switches a schedule off (shared by the two PDF schedules). */
+export function scheduleSwitchOn(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === undefined || !OFF_VALUES.has(normalized);
+}
+
 export function externalInvoicePdfScheduleOn(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  const value = env.EXTERNAL_INVOICE_PDF_SCHEDULE?.trim().toLowerCase();
-  return value === undefined || !OFF_VALUES.has(value);
+  return scheduleSwitchOn(env.EXTERNAL_INVOICE_PDF_SCHEDULE);
 }
 
 /** This month and the one before it, as YYYY-MM, by the Budapest calendar. */
