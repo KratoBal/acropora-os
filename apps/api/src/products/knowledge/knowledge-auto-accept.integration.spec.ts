@@ -59,8 +59,11 @@ describe(
         return p.id;
       };
       own = await product("Sajat", `${BASE}/own`);
-      // another product's UNAS link: other case, trailing slash
-      flex = await product("Flex", `${BASE.toUpperCase()}/core-flex/`);
+      // another product's UNAS link: other case, trailing slash, query, fragment
+      flex = await product(
+        "Flex",
+        `${BASE.toUpperCase()}/core-flex/?utm_source=unas#reviews`,
+      );
       // another product's run evidence, no UNAS link
       mg = await product("Mg", null);
       const service = new ProductKnowledgeService(
@@ -82,7 +85,7 @@ describe(
           },
           { id: userId },
         );
-      await evidence(mg, `${BASE}/mg`);
+      await evidence(mg, `${BASE}/mg?variant=1`);
       // the product's own evidence on its own link: never "another product"
       await evidence(own, `${BASE}/own`);
     });
@@ -123,15 +126,16 @@ describe(
     }
 
     it("a másik termék UNAS-linkje és futás-bizonyítéka megosztott, a saját nem", async () => {
+      // the asked page may carry a fragment too
       const pages = [
         `${BASE}/core-flex`,
-        `${BASE}/mg`,
+        `${BASE}/mg#dosing`,
         `${BASE}/own`,
         `${BASE}/senki`,
       ];
       assert.deepEqual([...(await sharedPages(own, pages))].sort(), [
         `${BASE}/core-flex`,
-        `${BASE}/mg`,
+        `${BASE}/mg#dosing`,
       ]);
       // from the other side: the flex product's own link is not shared with itself
       assert.deepEqual(

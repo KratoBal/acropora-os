@@ -135,7 +135,9 @@ async function latestResult(
 /**
  * Of a product's pages, those that belong to ANOTHER product too: its UNAS
  * manufacturer link, or a page in its run evidence (any field). Compared
- * without case and trailing slash: a wider match only sends more to a person.
+ * without query, fragment, case and trailing slash (a UNAS link with
+ * `?utm_source=` is the run's clean page; barracuda, #1810): a wider match
+ * only sends more to a person.
  */
 export async function sharedPages(
   productId: string,
@@ -143,12 +145,16 @@ export async function sharedPages(
 ): Promise<Set<string>> {
   const shared = new Set<string>();
   for (const page of pages) {
-    const key = page.toLowerCase().replace(/\/+$/, "");
+    const key = page
+      .split("#")[0]!
+      .split("?")[0]!
+      .toLowerCase()
+      .replace(/\/+$/, "");
     const rows = await prisma.$queryRaw<{ hit: number }[]>`
       SELECT 1 AS hit
       FROM "UnasProductSnapshot" s
       WHERE s."productId" <> ${productId}
-        AND rtrim(lower(s."manufacturerUrl"), '/') = ${key}
+        AND rtrim(lower(split_part(split_part(s."manufacturerUrl", '#', 1), '?', 1)), '/') = ${key}
       UNION ALL
       SELECT 1 AS hit
       FROM "ProductEnrichmentFieldResult" f
@@ -157,7 +163,7 @@ export async function sharedPages(
         CASE WHEN jsonb_typeof(f.evidence) = 'array' THEN f.evidence ELSE '[]'::jsonb END
       ) e
       WHERE c."productId" <> ${productId}
-        AND rtrim(lower(e->>'sourceRef'), '/') = ${key}
+        AND rtrim(lower(split_part(split_part(e->>'sourceRef', '#', 1), '?', 1)), '/') = ${key}
       LIMIT 1`;
     if (rows.length > 0) shared.add(page);
   }
