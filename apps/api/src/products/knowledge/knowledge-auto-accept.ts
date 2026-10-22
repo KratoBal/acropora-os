@@ -11,6 +11,9 @@
  * - each of those pages also proves the product is ours: our own EAN or
  *   manufacturer part number, and the same page states the same one (the `ean`
  *   or `manufacturerSku` result is VERIFIED with our value AND that page in it);
+ * - none of those pages belongs to ANOTHER product too: another product's UNAS
+ *   manufacturer link, or another product's run evidence (a page for two
+ *   products, or a wrong link, cannot tell whose dose it states; acrobot 35034);
  * - no person has accepted this field yet (a person's fact is never
  *   overwritten), and this very result is not accepted already.
  * Anything else stays for a person, with the reason.
@@ -60,6 +63,8 @@ export interface AutoInput {
   identity: readonly (AutoResult | null)[];
   /** The product-level fact of the field, if there is one. */
   fact: ExistingFact | null;
+  /** This product's pages that belong to another product too. */
+  sharedPages: ReadonlySet<string>;
 }
 
 /** The product-level fact of a field, as the rule reads it. */
@@ -122,6 +127,13 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
     return {
       kind: "SKIP",
       reason: `nem gyártói forrás (${foreign.sourceType})`,
+    };
+
+  const shared = pages.find((e) => e.sourceRef && input.sharedPages.has(e.sourceRef));
+  if (shared)
+    return {
+      kind: "SKIP",
+      reason: `a forrás-lap másik termékhez is tartozik: ${shared.sourceRef}`,
     };
 
   const proven = identityPages(input.identity);
@@ -213,6 +225,8 @@ export function dosingGroup(
 export interface AutoAcceptDeps {
   latestResult(productId: string, field: string): Promise<AutoResult | null>;
   productFact(productId: string, field: string): Promise<ExistingFact | null>;
+  /** Of `pages`, those that are another product's UNAS link or run evidence. */
+  sharedPages(productId: string, pages: readonly string[]): Promise<Set<string>>;
   /** The service's own accept, with the rule's name (all its checks run). */
   accept(productId: string, fieldResultId: string, rule: string): Promise<void>;
 }
@@ -235,6 +249,16 @@ export async function runAutoAccept(
     const identity = await Promise.all(
       IDENTITY_FIELDS.map((f) => deps.latestResult(productId, f)),
     );
+    const results = new Map<DosingField, AutoResult | null>();
+    for (const field of AUTO_ACCEPT_FIELDS)
+      results.set(field, await deps.latestResult(productId, field));
+    // the pages these results stand on, asked once per product
+    const refs = new Set<string>();
+    for (const r of results.values())
+      for (const e of evidenceOf(r?.evidence))
+        if (e.accepted && isReadPage(e) && e.sourceRef) refs.add(e.sourceRef);
+    const sharedPages =
+      refs.size > 0 ? await deps.sharedPages(productId, [...refs]) : new Set<string>();
     // every field decided first, then as one group, then written
     const facts = new Map<DosingField, ExistingFact | null>();
     const single = new Map<DosingField, AutoDecision>();
@@ -245,9 +269,10 @@ export async function runAutoAccept(
         field,
         autoAcceptDecision({
           field,
-          result: await deps.latestResult(productId, field),
+          result: results.get(field)!,
           identity,
           fact,
+          sharedPages,
         }),
       );
     }
