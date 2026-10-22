@@ -86,6 +86,8 @@ describe(
           { id: userId },
         );
       await evidence(mg, `${BASE}/mg?variant=1`);
+      // the flex product's dose stands on ANOTHER page: no dose from core-flex
+      await evidence(flex, `${BASE}/flex-masik`);
       // the product's own evidence on its own link: never "another product"
       await evidence(own, `${BASE}/own`);
     });
@@ -125,7 +127,7 @@ describe(
       ]);
     }
 
-    it("a másik termék UNAS-linkje és futás-bizonyítéka megosztott, a saját nem", async () => {
+    it("a másik termék UNAS-linkje és futás-bizonyítéka megosztott, a saját nem, és a lap a társak adagjával jön", async () => {
       // the asked page may carry a fragment too
       const pages = [
         `${BASE}/core-flex`,
@@ -133,10 +135,17 @@ describe(
         `${BASE}/own`,
         `${BASE}/senki`,
       ];
-      assert.deepEqual([...(await sharedPages(own, pages))].sort(), [
-        `${BASE}/core-flex`,
-        `${BASE}/mg#dosing`,
-      ]);
+      // the flex product has only the UNAS link: no dose from the page (null);
+      // the mg product's verified dose stands on its page
+      assert.deepEqual(
+        [...(await sharedPages(own, pages))].sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+        [
+          [`${BASE}/core-flex`, [null]],
+          [`${BASE}/mg#dosing`, ["1 drop/100 L/day"]],
+        ],
+      );
       // from the other side: the flex product's own link is not shared with itself
       assert.deepEqual(
         [...(await sharedPages(flex, [`${BASE}/core-flex`]))],

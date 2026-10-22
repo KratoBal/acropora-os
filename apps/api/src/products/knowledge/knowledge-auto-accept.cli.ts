@@ -132,31 +132,38 @@ async function latestResult(
     : null;
 }
 
+/** A page as the shared-page check compares it: no query, fragment, case or trailing slash. */
+function pageKey(url: string): string {
+  return url.split("#")[0]!.split("?")[0]!.toLowerCase().replace(/\/+$/, "");
+}
+
 /**
  * Of a product's pages, those that belong to ANOTHER product too: its UNAS
  * manufacturer link, or a page in its run evidence (any field). Compared
  * without query, fragment, case and trailing slash (a UNAS link with
  * `?utm_source=` is the run's clean page; barracuda, #1810): a wider match
  * only sends more to a person.
+ *
+ * Each shared page comes with the dose every such product takes from it: its
+ * latest VERIFIED `dosing` result, when an accepted page of it is this page;
+ * `null` otherwise (a product with only the UNAS link has no dose from it).
+ * The rule accepts from a shared page only when all of them equal its own
+ * (acrobot 35067).
  */
 export async function sharedPages(
   productId: string,
   pages: readonly string[],
-): Promise<Set<string>> {
-  const shared = new Set<string>();
+): Promise<Map<string, (string | null)[]>> {
+  const shared = new Map<string, (string | null)[]>();
   for (const page of pages) {
-    const key = page
-      .split("#")[0]!
-      .split("?")[0]!
-      .toLowerCase()
-      .replace(/\/+$/, "");
-    const rows = await prisma.$queryRaw<{ hit: number }[]>`
-      SELECT 1 AS hit
+    const key = pageKey(page);
+    const others = await prisma.$queryRaw<{ productId: string }[]>`
+      SELECT s."productId"
       FROM "UnasProductSnapshot" s
       WHERE s."productId" <> ${productId}
         AND rtrim(lower(split_part(split_part(s."manufacturerUrl", '#', 1), '?', 1)), '/') = ${key}
-      UNION ALL
-      SELECT 1 AS hit
+      UNION
+      SELECT c."productId"
       FROM "ProductEnrichmentFieldResult" f
       JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
       CROSS JOIN LATERAL jsonb_array_elements(
@@ -164,8 +171,24 @@ export async function sharedPages(
       ) e
       WHERE c."productId" <> ${productId}
         AND rtrim(lower(split_part(split_part(e->>'sourceRef', '#', 1), '?', 1)), '/') = ${key}
-      LIMIT 1`;
-    if (rows.length > 0) shared.add(page);
+      ORDER BY 1`;
+    if (others.length === 0) continue;
+    const doses: (string | null)[] = [];
+    for (const other of others) {
+      const dose = await latestResult(other.productId, "dosing");
+      const fromHere =
+        dose?.status === "VERIFIED" &&
+        dose.value !== null &&
+        dose.evidence.some(
+          (e) =>
+            e.accepted &&
+            e.sourceKind !== "OS" &&
+            e.sourceRef !== null &&
+            pageKey(e.sourceRef) === key,
+        );
+      doses.push(fromHere ? dose!.value : null);
+    }
+    shared.set(page, doses);
   }
   return shared;
 }
