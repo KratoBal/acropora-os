@@ -4,8 +4,9 @@
 not ok - felvitel: kitöltött eredeti bejegyzés + régi kulcs -> az eredeti bejegyzés nyer
 # Break B (update branch: stored value replaced by null):
 not ok - módosítás: kitöltött TÁROLT bejegyzés + régi kulcs -> a tárolt érték marad
+# Break A also drops a create-time entry when no old key is sent (the swap loses the request's own value):
+not ok - KONTROLL: régi kulcs nélkül egy másik mezőt író módosítás nem érinti az eredeti bejegyzést
 # Positive controls, unaffected by either break:
 ok - felvitel: üres eredeti bejegyzés + régi kulcs -> a kW-érték, magyar alakban
 ok - módosítás: üres tárolt bejegyzés + régi kulcs -> a kW-érték
 ok - módosítás: a kérésben saját eredeti bejegyzés + régi kulcs -> a kérés nyer
-ok - KONTROLL: régi kulcs nélkül egy másik mezőt író módosítás nem érinti az eredeti bejegyzést
