@@ -116,9 +116,11 @@ export async function apiRequest<T>(
     } catch {
       serverMessage = undefined;
     }
+    // 404 comes from every endpoint (an asset, a ticket, a measurement), so its
+    // sentence names no entity: it used to say "import batch" everywhere (219b4806).
     const fallback: Record<number, string> = {
       400: "A megadott adatok nem érvényesek.",
-      404: "A kért import batch nem található.",
+      404: "A keresett elem nem található.",
       409: "Az adat időközben megváltozott. Frissítsd a listát.",
       422: "A művelet üzleti feltételei nem teljesülnek.",
     };

@@ -256,7 +256,7 @@ describe("apiRequest", () => {
   it("keeps the dedicated sentences for 400, 404, 409 and 422 (they already name the cause)", async () => {
     const expected: Record<number, string> = {
       400: "A megadott adatok nem érvényesek.",
-      404: "A kért import batch nem található.",
+      404: "A keresett elem nem található.",
       409: "Az adat időközben megváltozott. Frissítsd a listát.",
       422: "A művelet üzleti feltételei nem teljesülnek.",
     };
