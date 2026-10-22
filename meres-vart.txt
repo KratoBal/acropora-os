@@ -1,0 +1,6 @@
+# 7bf3e4d1 (PR 1819): break B = the candidate query no longer excludes rows that already have a PDF.
+# Must turn exactly these red:
+not ok - lists the rows without a PDF; a stored one and a number Számlázz.hu rejected stay out
+not ok - the daily run fills the rows without a PDF and touches no other
+# Unaffected (the write itself is still conditional):
+ok - a write never overwrites a stored PDF, and a failure mark never erases it

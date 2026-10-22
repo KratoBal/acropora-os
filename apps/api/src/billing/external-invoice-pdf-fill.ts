@@ -167,7 +167,6 @@ export const prismaExternalPdfStore: ExternalPdfStore = {
     return prisma.externalBillingDocument.findMany({
       where: {
         source: "SZAMLAZZ",
-        pdfStorageKey: null,
         documentNumber: { not: "" },
         ...(month ? { issueDate: monthRange(month) } : {}),
         // a `not` a NULL-t is kizárná, ezért a hiba nélküli sor külön ág
