@@ -187,7 +187,8 @@ describe("az eszköz-felvitel öt idegen kulcsa (hely, alegység, akvárium, sz�
  * A VALOS PIPE-ALAKKAL MERUNK (`whitelist` + `forbidNonWhitelisted`, mint az
  * `app.configuration.ts`-ben), mert a regi `powerConsumption` mezo sorsa pont
  * ezen mulik: ha a DTO-bol kikerul, egy regi mobil-build (vagy az offline
- * sorban rekedt mentes) 400-at kap, es a sor soha nem urul ki.
+ * sorban rekedt mentes) 400-at kap, es a sor soha nem urul ki. A mezo a DTO-ban
+ * marad (`@deprecated`, 2026-12-31 utan torolheto), a tarolo eldobja.
  */
 function pipeUzenetek<T extends object>(
   osztaly: new () => T,
@@ -259,7 +260,7 @@ describe("az eszköz áramfelvétele és bekötése", () => {
     );
   });
 
-  /** A kivezetett mezo: a regi kliens kuldese nem lehet 400. */
+  /** A kivezetett mezo: a regi kliens kuldese nem lehet 400 (a tarolo eldobja: lasd az integracios specet). */
   it("a kivezetett `powerConsumption` még átmegy a pipe-on, mindkét osztályon", () => {
     assert.deepEqual(
       pipeUzenetek(CreateAssetDto, { ...ALAP, powerConsumption: "0,75" }),
