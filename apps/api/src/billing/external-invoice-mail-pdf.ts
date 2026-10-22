@@ -185,7 +185,14 @@ export async function fillExternalPdfsFromMail(input: {
   textOf: (bytes: Uint8Array) => Promise<string[]>;
   documents: Pick<DocumentStore, "put"> | null;
   store: {
-    setPdf(id: string, pdfStorageKey: string, reason: null): Promise<void>;
+    // the shared store answers `false` when the row already had a PDF (nothing written); this
+    // command still counts the write as STORED, which only a PDF stored in the very same
+    // moment could make untrue
+    setPdf(
+      id: string,
+      pdfStorageKey: string,
+      reason: null,
+    ): Promise<boolean | void>;
   };
 }): Promise<MailPdfReport> {
   const byNumber = new Map<string, MailPdf[]>();
