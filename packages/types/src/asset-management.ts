@@ -691,11 +691,6 @@ export interface CreateAssetInput {
    * kulon mertekegyseg-mezo (a FANK-adatokban ez az oszlop mindig m3).
    */
   volume?: string;
-  /**
-   * KIVEZETVE (2026-10-21): a regi kW-szam. A szerver az ures eredeti
-   * bejegyzesbe teszi at ("0,75 kW"); uj kod nem kuldi.
-   */
-  powerConsumption?: unknown;
   /** Az aramfelvetel amperben, szabad szoveg -- lasd az `AssetDetail.currentDraw`-t. */
   currentDraw?: string;
   /** A bekotes -- lasd az `AssetDetail.phaseConnection`-t. */
@@ -774,11 +769,6 @@ export interface UpdateAssetInput {
    * elhagyasa erintetlenul hagyja.
    */
   volume?: string | null;
-  /**
-   * KIVEZETVE (2026-10-21): a regi kW-szam. A szerver az ures eredeti
-   * bejegyzesbe teszi at ("0,75 kW"); uj kod nem kuldi.
-   */
-  powerConsumption?: unknown;
   /** Az aramfelvetel (A, szabad szoveg) -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */
   currentDraw?: string | null;
   /** A bekotes -- `null` torli, a mezo elhagyasa erintetlenul hagyja. */

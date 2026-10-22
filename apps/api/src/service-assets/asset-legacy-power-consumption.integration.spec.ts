@@ -15,24 +15,20 @@ import { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 
 /**
- * THE RETIRED `powerConsumption` KEY, THROUGH BOTH REPOSITORY BRANCHES
- * (kanban 3cc20b59, step 1 of retiring the key; barracuda's note on #1779).
+ * THE RETIRED `powerConsumption` KEY IS ACCEPTED AND DROPPED, ON BOTH
+ * REPOSITORY BRANCHES (kanban 3cc20b59, step 2; acrobot, 2026-10-22).
  *
- * `legacy-power-consumption.spec.ts` measures the pure function. It cannot see
- * the CALL: `rawWithLegacyFallback(requested, current, legacy)` takes two
- * strings that mean different things, and the create branch passes `null` as
- * `current` where the update branch passes the STORED value. A swapped
- * argument there compiles, passes the pure-function spec, and silently lets
- * the legacy kW number overwrite a filled original entry (or drop it).
+ * The DTO still takes the old kW key (`@deprecated`, removable after
+ * 2026-12-31) so an installed old mobile build, or a write queued offline
+ * before the update, gets a 2xx instead of a 400 that would keep the queued
+ * row stuck forever. The repository must NOT write anything from it: the old
+ * number was folded into the original entry once, by the migration. Step 1
+ * (#1814) measured the fold; this suite measures that it is gone.
  *
- * So this suite goes through the controller to the database, once per branch,
- * with the OLD key in the request body (the controller is called directly, so
- * the global validation pipe is not in the way; the pipe has its own spec in
- * `asset-create-dto.spec.ts`).
- *
- * Retiring the key means deleting this suite's old-key cases in the SAME
- * commit that deletes the key; until then they are the only thing that runs
- * the folding end to end.
+ * The controller is called directly (so the global validation pipe is not in
+ * the way); that the pipe lets the key through has its own spec in
+ * `asset-create-dto.spec.ts`. Together the two are "the request is 2xx and
+ * writes nothing".
  */
 const gate = integrationDatabaseGate(process.env);
 
@@ -59,7 +55,7 @@ async function removeLeftovers() {
 }
 
 describe(
-  "a kivezetett powerConsumption kulcs a felvitel és a módosítás ágán is az eredeti bejegyzésbe hajtódik",
+  "a kivezetett powerConsumption kulcs a felvitel és a módosítás ágán is elfogadva és eldobva",
   { skip: gate.mode === "skip" },
   () => {
     const assets = new ServiceAssetsController(
@@ -179,39 +175,32 @@ describe(
       return row?.powerConsumptionRaw ?? null;
     }
 
-    // --- create branch (`current` is `null`) ---
+    // --- create branch ---
 
-    it("felvitel: üres eredeti bejegyzés + régi kulcs -> a kW-érték, magyar alakban", async () => {
-      const created = await createAsset("felvitel üres", {
+    it("felvitel: a régi kulcs egyedül nem ír az eredeti bejegyzésbe", async () => {
+      const created = await createAsset("felvitel egyedül", {
         powerConsumption: "0.75",
       });
-      assert.equal(await storedRaw(created.id), "0,75 kW");
+      assert.equal(await storedRaw(created.id), null);
     });
 
-    it("felvitel: kitöltött eredeti bejegyzés + régi kulcs -> az eredeti bejegyzés nyer", async () => {
-      const created = await createAsset("felvitel kitöltött", {
+    it("felvitel: a kérés saját eredeti bejegyzése a régi kulcs mellett érintetlen", async () => {
+      const created = await createAsset("felvitel saját", {
         powerConsumptionRaw: "6,15/5,5",
         powerConsumption: "9",
       });
       assert.equal(await storedRaw(created.id), "6,15/5,5");
     });
 
-    it("felvitel: nem szám a régi kulcsban -> figyelmen kívül marad, nem találgatunk", async () => {
-      const created = await createAsset("felvitel szöveg", {
-        powerConsumption: "kb. egy kW",
-      });
+    // --- update branch ---
+
+    it("módosítás: üres tárolt bejegyzés + régi kulcs -> üres marad", async () => {
+      const created = await createAsset("módosítás üres", {});
+      await updateAsset(created, { powerConsumption: "1.50" });
       assert.equal(await storedRaw(created.id), null);
     });
 
-    // --- update branch (`current` is the STORED value) ---
-
-    it("módosítás: üres tárolt bejegyzés + régi kulcs -> a kW-érték", async () => {
-      const created = await createAsset("módosítás üres", {});
-      await updateAsset(created, { powerConsumption: "1.50" });
-      assert.equal(await storedRaw(created.id), "1,5 kW");
-    });
-
-    it("módosítás: kitöltött TÁROLT bejegyzés + régi kulcs -> a tárolt érték marad", async () => {
+    it("módosítás: kitöltött tárolt bejegyzés + régi kulcs -> a tárolt érték marad", async () => {
       const created = await createAsset("módosítás kitöltött", {
         powerConsumptionRaw: "3 kW",
       });
@@ -219,7 +208,7 @@ describe(
       assert.equal(await storedRaw(created.id), "3 kW");
     });
 
-    it("módosítás: a kérésben saját eredeti bejegyzés + régi kulcs -> a kérés nyer", async () => {
+    it("módosítás: a kérés saját eredeti bejegyzése a régi kulcs mellett nyer", async () => {
       const created = await createAsset("módosítás kérés", {});
       await updateAsset(created, {
         powerConsumptionRaw: "4/4",
@@ -229,15 +218,17 @@ describe(
     });
 
     /**
-     * CONTROL: without the old key the original entry is left alone. Without
-     * it the cases above would also pass if the fold ran on EVERY write.
+     * CONTROL: the original entry itself still saves without the old key.
+     * Without it the cases above would also pass if the repository stopped
+     * writing the original entry at all.
      */
-    it("KONTROLL: régi kulcs nélkül egy másik mezőt író módosítás nem érinti az eredeti bejegyzést", async () => {
+    it("KONTROLL: régi kulcs nélkül az eredeti bejegyzés mentődik, felvitelkor és módosításkor", async () => {
       const created = await createAsset("kontroll", {
         powerConsumptionRaw: "2,2 kW",
       });
-      await updateAsset(created, { manufacturer: "Grundfos" });
       assert.equal(await storedRaw(created.id), "2,2 kW");
+      await updateAsset(created, { powerConsumptionRaw: "2,5 kW" });
+      assert.equal(await storedRaw(created.id), "2,5 kW");
     });
   },
 );
