@@ -104,6 +104,39 @@ describe("a kézi indítás parancssora", () => {
     assert.match(c.text().stdout, /ELUTASÍTVA \(HOST_NOT_ALLOWED\)/);
   });
 
+  // acrobot 35067: no brand website, no UNAS link; the brand category names the site
+  it("a tervben a márka-kategória webhelye gyártói webhely, nélküle NO_MANUFACTURER_SITE", async () => {
+    const input = JSON.stringify({
+      products: [
+        {
+          productId: "p-1",
+          sources: [
+            {
+              kind: "MANUFACTURER",
+              url: "https://aquaforest.eu/en/products/x/",
+            },
+          ],
+        },
+      ],
+    });
+    const plan = async (categoryBrandSites?: string[]) => {
+      const d = deps({ JEV_PRODUCT_ENRICHMENT: "review" }, input);
+      const facts = d.value.facts.productFacts;
+      d.value.facts.productFacts = async (id) => {
+        const f = await facts(id);
+        return f && categoryBrandSites ? { ...f, categoryBrandSites } : f;
+      };
+      const c = capture();
+      await runEnrichmentCli(["--input", "x.json"], c.out, d.value);
+      return c.text().stdout;
+    };
+    assert.match(
+      await plan(["aquaforest.eu"]),
+      /olvasható\s+https:\/\/aquaforest\.eu\/en\/products\/x\//,
+    );
+    assert.match(await plan(), /ELUTASÍTVA \(NO_MANUFACTURER_SITE\)/);
+  });
+
   it("kikapcsolt kapcsolóval nem fut (1); szereplő nélkül nem fut (2)", async () => {
     const off = deps({});
     assert.equal(

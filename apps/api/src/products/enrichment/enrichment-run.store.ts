@@ -7,6 +7,7 @@ import type {
   ProductFacts,
   StoredCheck,
 } from "./enrichment-run.js";
+import { brandSitesFromCategories } from "./enrichment-sources.js";
 import { waterEffectsFromCategories } from "./water-effects-category.js";
 
 /**
@@ -202,15 +203,16 @@ export function productFactsFrom(product: {
     if (ean) current.ean = ean;
     if (mpn && !mpnIsGtin) current.manufacturerSku = mpn;
   }
-  const hatas = waterEffectsFromCategories(
-    (product.categories ?? []).map((c) => ({ chain: lanc(c.category) })),
-  );
+  const chains = (product.categories ?? []).map((c) => lanc(c.category));
+  const hatas = waterEffectsFromCategories(chains.map((chain) => ({ chain })));
+  const categoryBrandSites = brandSitesFromCategories(chains);
   if (hatas) current.waterParameterEffects = hatas.raw;
   return {
     productId: product.id,
     name: product.name,
     brandWebsiteUrl: product.brand?.websiteUrl ?? null,
     unasManufacturerUrl: product.unasSnapshot?.manufacturerUrl ?? null,
+    ...(categoryBrandSites.length > 0 ? { categoryBrandSites } : {}),
     current,
     ...(hatas
       ? {
