@@ -129,7 +129,9 @@ export function autoAcceptDecision(input: AutoInput): AutoDecision {
       reason: `nem gyártói forrás (${foreign.sourceType})`,
     };
 
-  const shared = pages.find((e) => e.sourceRef && input.sharedPages.has(e.sourceRef));
+  const shared = pages.find(
+    (e) => e.sourceRef && input.sharedPages.has(e.sourceRef),
+  );
   if (shared)
     return {
       kind: "SKIP",
@@ -226,7 +228,10 @@ export interface AutoAcceptDeps {
   latestResult(productId: string, field: string): Promise<AutoResult | null>;
   productFact(productId: string, field: string): Promise<ExistingFact | null>;
   /** Of `pages`, those that are another product's UNAS link or run evidence. */
-  sharedPages(productId: string, pages: readonly string[]): Promise<Set<string>>;
+  sharedPages(
+    productId: string,
+    pages: readonly string[],
+  ): Promise<Set<string>>;
   /** The service's own accept, with the rule's name (all its checks run). */
   accept(productId: string, fieldResultId: string, rule: string): Promise<void>;
 }
@@ -258,7 +263,9 @@ export async function runAutoAccept(
       for (const e of evidenceOf(r?.evidence))
         if (e.accepted && isReadPage(e) && e.sourceRef) refs.add(e.sourceRef);
     const sharedPages =
-      refs.size > 0 ? await deps.sharedPages(productId, [...refs]) : new Set<string>();
+      refs.size > 0
+        ? await deps.sharedPages(productId, [...refs])
+        : new Set<string>();
     // every field decided first, then as one group, then written
     const facts = new Map<DosingField, ExistingFact | null>();
     const single = new Map<DosingField, AutoDecision>();
