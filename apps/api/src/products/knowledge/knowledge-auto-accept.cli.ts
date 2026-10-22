@@ -132,6 +132,44 @@ async function latestResult(
     : null;
 }
 
+/**
+ * Of a product's pages, those that belong to ANOTHER product too: its UNAS
+ * manufacturer link, or a page in its run evidence (any field). Compared
+ * without query, fragment, case and trailing slash (a UNAS link with
+ * `?utm_source=` is the run's clean page; barracuda, #1810): a wider match
+ * only sends more to a person.
+ */
+export async function sharedPages(
+  productId: string,
+  pages: readonly string[],
+): Promise<Set<string>> {
+  const shared = new Set<string>();
+  for (const page of pages) {
+    const key = page
+      .split("#")[0]!
+      .split("?")[0]!
+      .toLowerCase()
+      .replace(/\/+$/, "");
+    const rows = await prisma.$queryRaw<{ hit: number }[]>`
+      SELECT 1 AS hit
+      FROM "UnasProductSnapshot" s
+      WHERE s."productId" <> ${productId}
+        AND rtrim(lower(split_part(split_part(s."manufacturerUrl", '#', 1), '?', 1)), '/') = ${key}
+      UNION ALL
+      SELECT 1 AS hit
+      FROM "ProductEnrichmentFieldResult" f
+      JOIN "ProductEnrichmentRunProduct" c ON c.id = f."checkId"
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(f.evidence) = 'array' THEN f.evidence ELSE '[]'::jsonb END
+      ) e
+      WHERE c."productId" <> ${productId}
+        AND rtrim(lower(split_part(split_part(e->>'sourceRef', '#', 1), '?', 1)), '/') = ${key}
+      LIMIT 1`;
+    if (rows.length > 0) shared.add(page);
+  }
+  return shared;
+}
+
 async function main(): Promise<void> {
   const code = await runAutoAcceptCli(
     process.argv.slice(2),
@@ -162,6 +200,7 @@ async function main(): Promise<void> {
             select: { id: true },
           })) !== null,
         latestResult,
+        sharedPages,
         productFact: (productId, field) =>
           prisma.productKnowledgeFact.findUnique({
             where: {

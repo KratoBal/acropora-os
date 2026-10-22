@@ -18,7 +18,8 @@ import { projectedCopy, type CopyRow } from "./knowledge.policy.js";
 /**
  * THE RULE'S ACCEPT (Product Knowledge step 2, card 85c38ab1). WHAT TURNS IT
  * RED: a result accepted from a retailer's page, from a reviewer's entry, from
- * a page that does not prove the product is ours, over a person's fact; a dry
+ * a page that does not prove the product is ours, from a page that belongs to
+ * another product too, over a person's fact; a dry
  * run that writes; or an automatic fact that reaches the shop's projection.
  */
 const PAGE = "https://gyarto.example.invalid/amino";
@@ -54,6 +55,7 @@ const input = (over: Partial<AutoInput> = {}): AutoInput => ({
   result: dosing(),
   identity: [ean(), null],
   fact: null,
+  sharedPages: new Set(),
   ...over,
 });
 
@@ -134,6 +136,13 @@ describe("a szabály", () => {
           ],
         }),
         /azonossága nem igazolt/,
+      ],
+      // a page for two products (or a wrong link) cannot tell whose dose it
+      // states, even with our EAN on it (acrobot 35034)
+      [
+        "a lap másik termékhez is tartozik",
+        input({ sharedPages: new Set([PAGE]) }),
+        /másik termékhez is tartozik/,
       ],
       [
         "az azonosság nem VERIFIED",
@@ -380,9 +389,25 @@ describe("a futtató", () => {
     latestResult: async (_p: string, field: string) =>
       field === "dosing" ? dosing() : field === "ean" ? ean() : null,
     productFact: async () => null,
+    sharedPages: async () => new Set<string>(),
     accept: async (p: string, id: string, rule: string) => {
       accepted.push([p, id, rule]);
     },
+  });
+
+  it("a megosztott lapot termékenként egyszer kérdezi, a saját lapjaival, és nem fogad el róla", async () => {
+    const accepted: string[][] = [];
+    const asked: [string, string[]][] = [];
+    const out = await runAutoAccept(["p1"], true, {
+      ...deps(accepted),
+      sharedPages: async (p: string, pages: readonly string[]) => {
+        asked.push([p, [...pages]]);
+        return new Set([PAGE]);
+      },
+    });
+    assert.deepEqual(asked, [["p1", [PAGE]]]);
+    assert.match(out[0]!.detail, /másik termékhez is tartozik/);
+    assert.deepEqual(accepted, []);
   });
 
   it("szárazon nem ír, --apply-jal a szabály nevével ír", async () => {
