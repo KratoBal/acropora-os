@@ -150,10 +150,18 @@ export function sourceUrlProblem(
  */
 export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
   {
-    "fauna marin": ["faunamarin.de", "faunamarincorals.de"],
-    triton: ["triton.de", "triton-reagents.de"],
-    "red sea": ["redseafish.com"],
-    aquaforest: ["aquaforest.eu"],
+    // Each line is a TRUST ANCHOR (barracuda, #1813): a page on it becomes a
+    // MANUFACTURER_PAGE, which the AUTO_V1 rule accepts without a person, and
+    // a reseller's page carries the product's EAN too. A domain goes here only
+    // as the brand's own; the basis is written beside it.
+    // Left out until verified: faunamarincorals.de and triton-reagents.de
+    // (linked from UNAS and reeftrak, which shows someone linked there, not
+    // whose it is; their Impressum was not reachable from here, 2026-10-22).
+    // A page there stays NO_MANUFACTURER_SITE unless UNAS links that product.
+    "fauna marin": ["faunamarin.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    triton: ["triton.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    "red sea": ["redseafish.com"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    aquaforest: ["aquaforest.eu"], // the brand's own site, widely known; reeftrak links, 2026-10-22
   };
 
 /**

@@ -135,7 +135,7 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       brandSitesFromCategories([
         chain("Termékek", "Nyomelemek", "Fauna Marin"),
       ]),
-      ["faunamarin.de", "faunamarincorals.de"],
+      ["faunamarin.de"],
     );
     // the whole name, case aside; a part of a name is not the brand
     assert.deepEqual(
@@ -160,7 +160,7 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
         chain("Nyomelemek", "Triton"),
         chain("Foszfátmegkötők", "Triton"),
       ]),
-      ["triton.de", "triton-reagents.de"],
+      ["triton.de"],
     );
     assert.deepEqual(brandSitesFromCategories([chain("Nyomelemek")]), []);
     // the category's sites join the manufacturer's, a retailer still does not

@@ -258,10 +258,7 @@ describe("a kategória-szabály a UNAS-ágra", () => {
         ],
         variants: [],
       });
-    assert.deepEqual(facts("Triton").categoryBrandSites, [
-      "triton.de",
-      "triton-reagents.de",
-    ]);
+    assert.deepEqual(facts("Triton").categoryBrandSites, ["triton.de"]);
     assert.equal(facts("Kitalált márka").categoryBrandSites, undefined);
   });
 
