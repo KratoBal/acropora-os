@@ -58,13 +58,28 @@ const MODES = ["FIXED", "TEST_DEPENDENT", "NO_DATA"] as const;
 const str = (v: unknown) =>
   typeof v === "string" && v.trim() ? v.trim() : null;
 
+/**
+ * The AI service's detail of a refusal (acropora-ai-agent #44): where a
+ * not-found excerpt leaves the page, as a field, two counts and a character
+ * code. Taken only in exactly this shape: the note is shown, so no text rides
+ * along.
+ */
+const REFUSAL_DETAIL =
+  /^(?:excerpt|guidance) \d{1,4}\/\d{1,4} (?:U\+[0-9A-F]{4,6}|-)$/;
+
 /** The answer's body as the AI service sends it; anything else is UNAVAILABLE. */
 export function extractorAnswerOf(body: unknown): DosingExtractorAnswer {
   if (typeof body !== "object" || body === null)
     return { kind: "UNAVAILABLE", reason: "no JSON body" };
   const b = body as Record<string, unknown>;
-  if (typeof b.refusal === "string")
-    return { kind: "REFUSED", refusal: b.refusal.slice(0, 64) };
+  if (typeof b.refusal === "string") {
+    const detail =
+      typeof b.refusalDetail === "string" &&
+      REFUSAL_DETAIL.test(b.refusalDetail)
+        ? ` ${b.refusalDetail}`
+        : "";
+    return { kind: "REFUSED", refusal: `${b.refusal.slice(0, 64)}${detail}` };
+  }
   if (
     typeof b.mode !== "string" ||
     !(MODES as readonly string[]).includes(b.mode)
