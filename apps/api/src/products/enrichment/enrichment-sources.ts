@@ -142,18 +142,64 @@ export function sourceUrlProblem(
 }
 
 /**
- * The manufacturer's base domains for a product: the brand's website and the
- * UNAS manufacturer link. A link that points at one of the retailers is not a
- * manufacturer site, so it is left out.
+ * THE MANUFACTURER'S SITES BY BRAND CATEGORY (Product Knowledge, acrobot
+ * 35067): `Product.brandId` is empty across the catalogue, and the brand lives
+ * in a UNAS category named after it. The brand's own domains, taken from the
+ * links the manufacturer's dosing pages are on (reeftrak, 2026-10-22). A
+ * short list here, not the product master: the JEV does not write that.
+ */
+export const BRAND_CATEGORY_SITES: Readonly<Record<string, readonly string[]>> =
+  {
+    // Each line is a TRUST ANCHOR (barracuda, #1813): a page on it becomes a
+    // MANUFACTURER_PAGE, which the AUTO_V1 rule accepts without a person, and
+    // a reseller's page carries the product's EAN too. A domain goes here only
+    // as the brand's own; the basis is written beside it.
+    // Left out until verified: faunamarincorals.de and triton-reagents.de
+    // (linked from UNAS and reeftrak, which shows someone linked there, not
+    // whose it is; their Impressum was not reachable from here, 2026-10-22).
+    // A page there stays NO_MANUFACTURER_SITE unless UNAS links that product.
+    "fauna marin": ["faunamarin.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    triton: ["triton.de"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    "red sea": ["redseafish.com"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+    aquaforest: ["aquaforest.eu"], // the brand's own site, widely known; reeftrak links, 2026-10-22
+  };
+
+/**
+ * The brand domains a product's category chains name: a category whose WHOLE
+ * name is a listed brand. Two different brands give none: a product under
+ * both cannot tell whose site is the manufacturer's.
+ */
+export function brandSitesFromCategories(
+  chains: readonly (readonly string[])[],
+): string[] {
+  const brands = new Set<string>();
+  for (const chain of chains)
+    for (const name of chain) {
+      const key = name.trim().toLowerCase();
+      if (BRAND_CATEGORY_SITES[key]) brands.add(key);
+    }
+  return brands.size === 1 ? [...BRAND_CATEGORY_SITES[[...brands][0]!]!] : [];
+}
+
+/**
+ * The manufacturer's base domains for a product: the brand's website, the
+ * UNAS manufacturer link, and the brand category's listed domains. A link
+ * that points at one of the retailers is not a manufacturer site, so it is
+ * left out.
  */
 export function manufacturerSites(
   brandWebsiteUrl: string | null | undefined,
   unasManufacturerUrl: string | null | undefined,
+  categorySites: readonly string[] = [],
 ): string[] {
   const retailers = Object.values(RETAILER_DOMAINS);
   return [
     ...new Set(
-      [baseDomainOf(brandWebsiteUrl), baseDomainOf(unasManufacturerUrl)]
+      [
+        baseDomainOf(brandWebsiteUrl),
+        baseDomainOf(unasManufacturerUrl),
+        ...categorySites.map((site) => baseDomainOf(site)),
+      ]
         .filter((base): base is string => base !== null)
         .filter((base) => !retailers.some((r) => hostBelongsTo(base, r))),
     ),

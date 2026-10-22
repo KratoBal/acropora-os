@@ -213,6 +213,32 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(ma.reason, null);
   });
 
+  // acrobot 35067: the brand category names the manufacturer's site; the run
+  // reads the given manufacturer page, and refuses it without the category
+  it("a márka-kategória webhelyén álló gyártói lapot a futás elfogadja forrásnak", async () => {
+    const url = "https://aquaforest.eu/en/products/x/";
+    const input = [
+      { productId: "p-1", sources: [{ kind: "MANUFACTURER" as const, url }] },
+    ];
+    const table = {
+      [url]: { status: 200, body: productPage({ gtin13: "5901234123457" }) },
+    };
+    const withCategory = await run(input, table, {
+      facts: { "p-1": facts({ categoryBrandSites: ["aquaforest.eu"] }) },
+    });
+    assert.notEqual(withCategory.checks[0]!.fetches[0]!.outcome, "REFUSED");
+    assert.equal(
+      withCategory.network.requests.some((r) => r.url === url),
+      true,
+    );
+    const without = await run(input, table);
+    assert.deepEqual(
+      without.checks[0]!.fetches.map((f) => [f.outcome, f.reason]),
+      [["REFUSED", "NO_MANUFACTURER_SITE"]],
+    );
+    assert.equal(without.network.requests.length, 0);
+  });
+
   // PD-013 calibration: a URL outside the four sources is refused, never requested.
   it("a négy forráson kívüli URL-t elutasítja, és le sem kéri", async () => {
     const { checks, network } = await run(

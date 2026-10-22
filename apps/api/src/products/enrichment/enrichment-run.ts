@@ -73,6 +73,8 @@ export interface ProductFacts {
   name: string;
   brandWebsiteUrl: string | null;
   unasManufacturerUrl: string | null;
+  /** The manufacturer domains the product's brand category names (`brandSitesFromCategories`). */
+  categoryBrandSites?: readonly string[];
   /** Our own current values, raw, per field. */
   current: Partial<Record<EnrichedField, string>>;
   /**
@@ -348,6 +350,7 @@ async function checkProduct(
   const manufacturer = manufacturerSites(
     facts.brandWebsiteUrl,
     facts.unasManufacturerUrl,
+    facts.categoryBrandSites,
   );
   const fetches: StoredFetch[] = [];
   const pageCandidates: {

@@ -206,6 +206,7 @@ export async function runEnrichmentCli(
     const manufacturer = manufacturerSites(
       facts.brandWebsiteUrl,
       facts.unasManufacturerUrl,
+      facts.categoryBrandSites,
     );
     for (const source of sourcesFor(product, facts)) {
       const supplier =
