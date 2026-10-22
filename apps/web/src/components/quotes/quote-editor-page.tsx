@@ -22,6 +22,7 @@ import {
   type QuoteDetailDto,
   type QuoteInternalBlock,
   type QuoteInternalVersion,
+  type QuotePriceDisplay,
   type QuoteSnippetDto,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
@@ -44,6 +45,7 @@ import {
   formatQuoteMoney,
   isAbort,
   QUOTE_BLOCK_LABEL,
+  QUOTE_PRICE_DISPLAY,
 } from "./quote-format";
 import { QuoteItemDrawer } from "./quote-item-drawer";
 import { QUOTES_PATH } from "./quote-list-page";
@@ -339,7 +341,7 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
       ) : null}
 
       <PilotCard>
-        <div className="grid gap-5 p-5 sm:grid-cols-4">
+        <div className="grid gap-5 p-5 sm:grid-cols-5">
           <Fact label="Partner" value={quote.customerName ?? "—"} />
           <Fact label="Verzió" value={`v${v.versionNumber} · piszkozat`} />
           <div>
@@ -361,6 +363,30 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
             />
           </div>
           <Fact label="Pénznem" value={v.currency} />
+          <div>
+            <p className="text-xs text-pilot-grey-600">Árak megjelenítése</p>
+            <PilotSelect
+              chevron
+              aria-label="Árak megjelenítése"
+              value={v.priceDisplay}
+              disabled={busy}
+              onChange={(value) =>
+                void write(() =>
+                  quotesApi.updateVersion(token, quote.id, v.id, {
+                    priceDisplay: value as QuotePriceDisplay,
+                  }),
+                )
+              }
+            >
+              {(Object.keys(QUOTE_PRICE_DISPLAY) as QuotePriceDisplay[]).map(
+                (value) => (
+                  <option key={value} value={value}>
+                    {QUOTE_PRICE_DISPLAY[value]}
+                  </option>
+                ),
+              )}
+            </PilotSelect>
+          </div>
         </div>
       </PilotCard>
 

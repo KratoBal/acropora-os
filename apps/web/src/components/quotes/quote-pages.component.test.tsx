@@ -1113,6 +1113,27 @@ describe("Ajánlat szerkesztő (569:171)", () => {
     expect(api.costing).not.toHaveBeenCalled();
   });
 
+  it("az árak megjelenítése ajánlatonként váltható: a verzió értékét mutatja, váltáskor elküldi", async () => {
+    api.detail.mockResolvedValue(quote([version({ priceDisplay: "GROSS" })]));
+    api.updateVersion.mockResolvedValue(
+      quote([version({ priceDisplay: "NET" })]),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    const select = (await screen.findByLabelText(
+      "Árak megjelenítése",
+    )) as HTMLSelectElement;
+    expect(select.value).toBe("GROSS");
+    expect(
+      Array.from(select.options).map((option) => option.textContent),
+    ).toEqual(["Csak nettó + ÁFA", "Bruttó (ÁFA-val)", "Nettó és bruttó"]);
+    fireEvent.change(select, { target: { value: "NET" } });
+    await waitFor(() => expect(api.updateVersion).toHaveBeenCalledTimes(1));
+    expect(api.updateVersion.mock.calls[0]!.slice(2)).toEqual([
+      "v2",
+      { priceDisplay: "NET" },
+    ]);
+  });
+
   it("új blokk: a szöveges blokk üres dokumentummal, a fejezet szöveg nélkül jön létre", async () => {
     api.detail.mockResolvedValue(quote([version()]));
     api.addBlock.mockResolvedValue(quote([version()]));

@@ -55,6 +55,14 @@ const reply = (status: number, body: unknown) =>
 describe("Az elfogadó link oldala (#1582 P4b)", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it("a nettó összeg mellett ott áll, hogy + ÁFA", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(reply(200, page())));
+    render(<PublicQuotePage token="tok-123" />);
+    expect(
+      await screen.findByText(/Nettó összesen:\s*100\s000 Ft \+ ÁFA/),
+    ).toBeTruthy();
+  });
+
   it("a kért opcióval, a megadott névvel, egy kérés-azonosítóval fogad el", async () => {
     const fetchMock = vi
       .fn()
