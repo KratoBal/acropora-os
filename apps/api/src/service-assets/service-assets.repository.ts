@@ -1436,8 +1436,8 @@ export class ServiceAssetsRepository extends Repository {
                     phaseConnection: input.phaseConnection,
                     powerConsumptionRaw:
                       rawWithLegacyFallback(
-                        optionalText(input.powerConsumptionRaw),
                         null,
+                        optionalText(input.powerConsumptionRaw),
                         legacyPowerConsumptionToRaw(input.powerConsumption),
                       ) ?? undefined,
                     clientOperationId: input.clientOperationId ?? null,
@@ -2004,7 +2004,7 @@ export class ServiceAssetsRepository extends Repository {
           phaseConnection: input.phaseConnection,
           powerConsumptionRaw: rawWithLegacyFallback(
             optionalText(input.powerConsumptionRaw),
-            existing.powerConsumptionRaw,
+            null,
             legacyPowerConsumptionToRaw(input.powerConsumption),
           ),
           archivedAt:
