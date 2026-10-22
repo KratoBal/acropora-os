@@ -78,6 +78,7 @@ describe(
       });
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       if (gate.mode !== "run") return;
       await create("missing", {});
       await create("stored", { pdfStorageKey: STORED_KEY });
@@ -111,15 +112,22 @@ describe(
     });
 
     it("a write never overwrites a stored PDF, and a failure mark never erases it", async () => {
-      await prismaExternalPdfStore.setPdf(
-        ids.stored,
-        "external-invoice/x/szamlazz.pdf",
-        null,
+      // `false`: nothing was written, so the daily run does not count it as stored
+      assert.equal(
+        await prismaExternalPdfStore.setPdf(
+          ids.stored,
+          "external-invoice/x/szamlazz.pdf",
+          null,
+        ),
+        false,
       );
-      await prismaExternalPdfStore.setPdf(
-        ids.stored,
-        null,
-        "SZAMLAZZ_PDF_FAILED",
+      assert.equal(
+        await prismaExternalPdfStore.setPdf(
+          ids.stored,
+          null,
+          "SZAMLAZZ_PDF_FAILED",
+        ),
+        false,
       );
       assert.deepEqual(await fresh("stored"), {
         pdfStorageKey: STORED_KEY,

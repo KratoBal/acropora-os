@@ -120,8 +120,9 @@ export async function main(
     store,
   });
   const failed = outcomes.filter((o) => o.kind === "FAILED");
+  const alreadyHad = outcomes.filter((o) => o.kind === "ALREADY_HAD").length;
   io.out(
-    `Letöltve (kulcs: ${credential.revision}): ${outcomes.length - failed.length}, nem jött meg: ${failed.length}\n` +
+    `Letöltve (kulcs: ${credential.revision}): ${outcomes.length - failed.length - alreadyHad}, közben már volt PDF: ${alreadyHad}, nem jött meg: ${failed.length}\n` +
       failed
         .map(
           (o) =>

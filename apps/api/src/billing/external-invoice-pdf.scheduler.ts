@@ -85,6 +85,8 @@ export interface ExternalPdfRunSummary {
   months: [string, string];
   examined: number;
   stored: number;
+  /** The PDF arrived, but the row had one by then: not written, not counted as stored. */
+  alreadyHad: number;
   failed: number;
 }
 
@@ -101,7 +103,7 @@ export async function runExternalInvoicePdfFill(
   deps: ExternalPdfRunDeps,
 ): Promise<ExternalPdfRunSummary> {
   const months = lastTwoMonths(deps.now);
-  const empty = { months, examined: 0, stored: 0, failed: 0 };
+  const empty = { months, examined: 0, stored: 0, alreadyHad: 0, failed: 0 };
   if (!deps.documents) return { ...empty, skipped: "DOCUMENT_STORE_NOT_SET" };
   let candidates: ExternalPdfCandidate[];
   try {
@@ -131,13 +133,15 @@ export async function runExternalInvoicePdfFill(
     documents: deps.documents,
     store: deps.store,
   });
-  const failed = outcomes.filter((o) => o.kind === "FAILED").length;
+  const count = (kind: (typeof outcomes)[number]["kind"]) =>
+    outcomes.filter((o) => o.kind === kind).length;
   return {
     skipped: null,
     months,
     examined: candidates.length,
-    stored: outcomes.length - failed,
-    failed,
+    stored: count("STORED"),
+    alreadyHad: count("ALREADY_HAD"),
+    failed: count("FAILED"),
   };
 }
 
@@ -146,7 +150,7 @@ export function externalPdfRunLine(summary: ExternalPdfRunSummary): string {
   const scope = `${summary.months[1]}, ${summary.months[0]}`;
   if (summary.skipped)
     return `Külső számla PDF-pótlás (${scope}): nem futott le (${summary.skipped}), vizsgált ${summary.examined}`;
-  return `Külső számla PDF-pótlás (${scope}): vizsgált ${summary.examined}, pótolt ${summary.stored}, hiba ${summary.failed}`;
+  return `Külső számla PDF-pótlás (${scope}): vizsgált ${summary.examined}, pótolt ${summary.stored}, közben már volt ${summary.alreadyHad}, hiba ${summary.failed}`;
 }
 
 @Injectable()
@@ -209,6 +213,7 @@ export class ExternalInvoicePdfScheduler
         months,
         examined: 0,
         stored: 0,
+        alreadyHad: 0,
         failed: 0,
       };
     }

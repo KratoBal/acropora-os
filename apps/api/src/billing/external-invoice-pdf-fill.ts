@@ -42,15 +42,23 @@ export interface ExternalPdfStore {
     month: string | null,
     options?: { retryUnknown?: boolean },
   ): Promise<ExternalPdfCandidate[]>;
+  /**
+   * Writes the PDF key or the failure reason. `false`: the row already had a
+   * PDF, so nothing was written (the write is conditional on "still none").
+   * A store that returns nothing is taken as written.
+   */
   setPdf(
     id: string,
     pdfStorageKey: string | null,
     pdfMissingReason: string | null,
-  ): Promise<void>;
+  ): Promise<boolean | void>;
 }
 
 export type ExternalPdfOutcome =
   | { id: string; documentNumber: string; kind: "STORED"; bytes: number }
+  // the PDF arrived, but the row got one in the meantime (the cmfx letter fill, an
+  // eBIZ sync): nothing was written, and an orphan file stays under this key
+  | { id: string; documentNumber: string; kind: "ALREADY_HAD"; bytes: number }
   | { id: string; documentNumber: string; kind: "FAILED"; reason: string };
 
 export async function fillExternalInvoicePdfs(input: {
@@ -79,16 +87,21 @@ export async function fillExternalInvoicePdfs(input: {
     };
     // egy tár- vagy adatbázis-hiba ennél a számlánál áll meg, nem a futásnál
     // (barracuda, #1658)
+    let written: boolean | void;
     try {
       await input.documents.put(key, bytes);
-      await input.store.setPdf(row.id, storageKeyFor(key), null);
+      written = await input.store.setPdf(row.id, storageKeyFor(key), null);
     } catch {
       const reason = "SZAMLAZZ_PDF_STORE_FAILED";
       await markFailed(input.store, row.id, reason);
       outcomes.push({ ...base, kind: "FAILED", reason });
       continue;
     }
-    outcomes.push({ ...base, kind: "STORED", bytes: bytes.length });
+    outcomes.push({
+      ...base,
+      kind: written === false ? "ALREADY_HAD" : "STORED",
+      bytes: bytes.length,
+    });
   }
   return outcomes;
 }
@@ -175,9 +188,10 @@ export const prismaExternalPdfStore: ExternalPdfStore = {
   // letter fill, an eBIZ sync) is never overwritten, and a failure mark never
   // erases it. The daily schedule runs beside the manual commands.
   async setPdf(id, pdfStorageKey, pdfMissingReason) {
-    await prisma.externalBillingDocument.updateMany({
+    const { count } = await prisma.externalBillingDocument.updateMany({
       where: { id, pdfStorageKey: null },
       data: { pdfStorageKey, pdfMissingReason },
     });
+    return count > 0;
   },
 };

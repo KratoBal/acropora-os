@@ -118,6 +118,26 @@ describe("a pótlás", () => {
     );
   });
 
+  it("ha a sor közben PDF-et kapott, a tár nem ír, és az eredmény ALREADY_HAD, nem STORED", async () => {
+    const t = tar();
+    const out = await fillExternalInvoicePdfs({
+      candidates: [1, 2].map(jelolt),
+      agentKey: "k",
+      client: { downloadInvoicePdf: async () => valasz() },
+      documents: t.documents,
+      store: {
+        setPdf: async (id, key, reason) => {
+          t.marks.push([id, key, reason]);
+          return id !== "e1";
+        },
+      },
+    });
+    assert.deepEqual(
+      out.map((o) => o.kind),
+      ["ALREADY_HAD", "STORED"],
+    );
+  });
+
   it("egy tár- vagy adatbázis-hiba csak annál a számlánál áll meg (barracuda, #1658)", async () => {
     const t = tar();
     let put = 0;

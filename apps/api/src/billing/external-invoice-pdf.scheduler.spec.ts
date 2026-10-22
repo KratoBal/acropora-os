@@ -142,7 +142,7 @@ describe("a run", () => {
     );
     assert.equal(
       externalPdfRunLine(summary),
-      "Külső számla PDF-pótlás (2026-09, 2026-10): vizsgált 0, pótolt 0, hiba 0",
+      "Külső számla PDF-pótlás (2026-09, 2026-10): vizsgált 0, pótolt 0, közben már volt 0, hiba 0",
     );
   });
 
@@ -162,7 +162,28 @@ describe("a run", () => {
     );
     assert.equal(
       externalPdfRunLine(summary),
-      "Külső számla PDF-pótlás (2026-09, 2026-10): vizsgált 3, pótolt 2, hiba 1",
+      "Külső számla PDF-pótlás (2026-09, 2026-10): vizsgált 3, pótolt 2, közben már volt 0, hiba 1",
+    );
+  });
+
+  it("a PDF that arrives for a row that got one in the meantime is counted apart, not as stored", async () => {
+    const f = fixture({ "2026-10": [row(1), row(2), row(3)] });
+    f.deps.store = {
+      ...f.deps.store,
+      // the second row already has a PDF by the time of the write
+      setPdf: async (id, key, reason) => {
+        f.marks.push([id, key, reason]);
+        return id !== "e2";
+      },
+    };
+    const summary = await runExternalInvoicePdfFill(f.deps);
+    assert.deepEqual(
+      [summary.stored, summary.alreadyHad, summary.failed],
+      [2, 1, 0],
+    );
+    assert.equal(
+      externalPdfRunLine(summary),
+      "Külső számla PDF-pótlás (2026-09, 2026-10): vizsgált 3, pótolt 2, közben már volt 1, hiba 0",
     );
   });
 
