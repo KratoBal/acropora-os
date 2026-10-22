@@ -167,7 +167,7 @@ async function main(): Promise<void> {
             where: {
               productId_scopeKey_field: { productId, scopeKey: "", field },
             },
-            select: { fieldResultId: true, acceptedByRule: true },
+            select: { fieldResultId: true, acceptedByRule: true, value: true },
           }),
         accept: async (productId, fieldResultId, rule) => {
           if (!actorId) throw new Error("no actor: a dry run does not accept");
