@@ -51,6 +51,16 @@ function monthQueryString(query: MonthQuery): string {
   return params.toString();
 }
 
+function collectionItemsQueryString(query: {
+  verdict?: string;
+  source?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (query.verdict) params.set("verdict", query.verdict);
+  if (query.source) params.set("source", query.source);
+  return params.toString();
+}
+
 export const missingInvoicesApi = {
   /**
    * A JEV JAVASLATAI A BEGYŰJTÉSBŐL (levél-válogatás, 4. szelet; acrobot 25803):
@@ -73,12 +83,8 @@ export const missingInvoicesApi = {
     query: { verdict?: string; source?: string },
     signal?: AbortSignal,
   ) {
-    const params = new URLSearchParams();
-    if (query.verdict) params.set("verdict", query.verdict);
-    if (query.source) params.set("source", query.source);
-    const qs = params.toString();
     return apiRequest<InvoiceCollectionItemsResponse>(
-      `${base}/collection-items${qs ? `?${qs}` : ""}`,
+      `${base}/collection-items?${collectionItemsQueryString(query)}`,
       token,
       { signal },
     );
