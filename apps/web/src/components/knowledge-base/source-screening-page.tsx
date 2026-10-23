@@ -74,6 +74,7 @@ export const STUDY_LABELS: Record<string, string> = {
   META_ANALYSIS: "Metaanalízis",
   MANUFACTURER: "Gyártói anyag",
   OWN_MEASUREMENT: "Saját mérés",
+  MODELLING: "Modell-szimuláció",
 };
 
 /**

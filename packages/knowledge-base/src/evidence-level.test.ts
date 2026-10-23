@@ -35,6 +35,7 @@ describe("rule 1: design tier per source", () => {
     AQUARIUM_CASE: "SINGLE_REPORT",
     MANUFACTURER: "SINGLE_REPORT",
     REVIEW: "SINGLE_REPORT",
+    MODELLING: "SINGLE_REPORT",
   };
   for (const type of STUDY_TYPES)
     it(`${type}, controlled, ${MIN_REPLICATES}+ replicates -> ${expected[type]}`, () => {

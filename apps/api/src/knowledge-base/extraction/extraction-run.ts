@@ -1,7 +1,11 @@
 import type { Vocabulary } from "@acropora/knowledge-base";
 
 import { DISCOVERY_USER_AGENT } from "../discovery/scholarly-client.js";
-import { checkClaims } from "./claim-check.js";
+import {
+  checkClaims,
+  keepOwnFindings,
+  type CheckedClaim,
+} from "./claim-check.js";
 import type { ClaimExtractor } from "./claim-extractor.js";
 import type { ExtractionStore } from "./extraction-store.js";
 import { sha256 } from "./extraction-store.js";
@@ -169,7 +173,7 @@ export async function extractSource(
     environments: deps.vocabulary.environments.map((t) => t.key),
     effects: deps.vocabulary.effects.map((t) => t.key),
   };
-  const checked = [];
+  let checked: CheckedClaim[] = [];
   let extractedBy = "unknown";
   let answered = 0;
   const chunks = chunkSections(sections);
@@ -215,6 +219,19 @@ export async function extractSource(
         ? "AI_UNAVAILABLE"
         : "AI_REFUSED",
     );
+  // only this source's own findings, its study fields once (acrobot 35808)
+  const own = keepOwnFindings(checked);
+  for (const code of own.refusedClaims) count(outcome.refusedClaims, code);
+  for (const code of own.refusedFields) count(outcome.refusedFields, code);
+  checked = own.claims;
+  outcome.fields = checked.reduce(
+    (n, c) => n + c.anchors.filter((a) => a.proposed === undefined).length,
+    0,
+  );
+  outcome.questions = checked.reduce(
+    (n, c) => n + c.anchors.filter((a) => a.proposed !== undefined).length,
+    0,
+  );
   outcome.claims = checked.length;
   if (!apply) return { ...outcome, status: "PREVIEWED" };
   const saved = await deps.store.saveSource({
