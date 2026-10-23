@@ -111,6 +111,12 @@ describe("a quantity's substance and its one-sided bound (acrobot 35808)", () =>
     assert.equal(oneSidedBound("mg/l", "≤ 0.1 mg/L PO4", 0.1), "UPPER");
     assert.equal(oneSidedBound("µmol/l", "> 2 µM phosphate", 2), "LOWER");
     assert.equal(oneSidedBound("µmol/l", "at least 2 µM", 2), "LOWER");
+    assert.equal(oneSidedBound("µmol/l", "exceeding 2 µM", 2), "LOWER");
+    // "not exceeding" is the upper one, not both (barracuda 35814 b): the
+    // matches do not overlap, so the upper branch takes "not exceeding" whole
+    // and "exceeding" is not matched again inside it (measured: a lookbehind
+    // against it changed no result)
+    assert.equal(oneSidedBound("µmol/l", "not exceeding 3 µM", 3), "UPPER");
     assert.equal(oneSidedBound("µmol/l", "at 2 µM phosphate", 2), null);
     assert.equal(oneSidedBound("µmol/l", "0.5–2 µM", 2), null);
     // the comparator belongs to another number

@@ -202,16 +202,18 @@ describe("the OS's own check of the AI's claims", () => {
     );
   });
 
-  it("only a phosphate value is converted, and a '<' number is an upper bound alone (acrobot 35808)", () => {
+  it("only a phosphate value is a quantity, and a '<' number is an upper bound alone (acrobot 35808, barracuda 35814)", () => {
     const text = [
       PASSAGE,
       "Bleaching was aggravated when nitrate exceeded 9 µmol/l, and mitigated below 9 µM ammonium.",
       "Under heat stress, colonies kept at nitrate < 9 µmol L−1 bleached less.",
       "Inflowing water held 0.58 ± 0.20 µM phosphate.",
       "Growth was highest at < 0.1 mg/L PO4.",
+      "Colonies kept at phosphate < 2 µmol L−1 grew more; when phosphate exceeded 1 µM they bleached.",
+      "Tanks not exceeding 3 µM phosphate kept their colour.",
     ].join("\n");
-    const quantityOf = (quantity: Record<string, unknown>) => {
-      const claim = checkClaims(
+    const checked = (quantity: Record<string, unknown>) =>
+      checkClaims(
         [
           aiClaim({
             fields: [{ field: "quantity", ...quantity }],
@@ -221,54 +223,28 @@ describe("the OS's own check of the AI's claims", () => {
         [{ locator: "Results", text }],
         vocabulary,
       ).claims[0]!;
+    const quantityOf = (quantity: Record<string, unknown>) => {
+      const claim = checked(quantity);
       assert.deepEqual(claim.refused, []);
       return claim.quantity;
     };
-    // the case on stage: a nitrate of 9 µmol/l, given as 9-9, shown as 0.85 mg/l PO4
-    assert.deepEqual(
-      quantityOf({
-        min: 9,
-        max: 9,
-        unit: "µmol/l",
-        basis: null,
-        anchor: "colonies kept at nitrate < 9 µmol L−1",
-      }),
-      {
-        min: null,
-        max: 9,
-        unit: "µmol/l",
-        basis: null,
-        normalizedMinMgL: null,
-        normalizedMaxMgL: null,
-      },
-    );
-    // a lower bound, written in words; still nitrate, still unconverted
-    assert.deepEqual(
-      quantityOf({
-        min: 9,
-        max: null,
-        unit: "µmol/l",
-        anchor: "when nitrate exceeded 9 µmol/l",
-      }),
-      {
-        min: 9,
-        max: null,
-        unit: "µmol/l",
-        basis: null,
-        normalizedMinMgL: null,
-        normalizedMaxMgL: null,
-      },
-    );
-    // phosphate named next to ammonium: not decided by a rule, not converted
-    assert.equal(
-      quantityOf({
-        min: 9,
-        max: 9,
-        unit: "µmol/l",
-        anchor: "and mitigated below 9 µM ammonium",
-      })?.normalizedMaxMgL,
-      null,
-    );
+    const unconverted = { normalizedMinMgL: null, normalizedMaxMgL: null };
+    // the case on stage: a nitrate of 9 µmol/l in a phosphate claim is no
+    // quantity of it at all (a later gate would read it as PO4: barracuda 35814 a)
+    for (const anchor of [
+      "colonies kept at nitrate < 9 µmol L−1",
+      "when nitrate exceeded 9 µmol/l",
+      // phosphate named next to ammonium: not decided by a rule
+      "and mitigated below 9 µM ammonium",
+    ]) {
+      const claim = checked({ min: 9, max: 9, unit: "µmol/l", anchor });
+      assert.deepEqual(
+        claim.refused,
+        [{ field: "quantity", refusal: "QUANTITY_NOT_PHOSPHATE" }],
+        anchor,
+      );
+      assert.equal(claim.quantity, null);
+    }
     // a phosphate value converts as before; a plain value keeps both ends
     assert.deepEqual(
       quantityOf({
@@ -302,6 +278,57 @@ describe("the OS's own check of the AI's claims", () => {
         basis: "PO4",
         normalizedMinMgL: null,
         normalizedMaxMgL: 0.1,
+      },
+    );
+    // the stage shape on phosphate: 2-2 given, "< 2" written
+    assert.deepEqual(
+      quantityOf({
+        min: 2,
+        max: 2,
+        unit: "µmol/l",
+        anchor: "kept at phosphate < 2 µmol L−1",
+      }),
+      {
+        min: null,
+        max: 2,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMaxMgL: 0.18994,
+      },
+    );
+    // a lower bound, written in words
+    assert.deepEqual(
+      quantityOf({
+        min: 1,
+        max: null,
+        unit: "µmol/l",
+        anchor: "when phosphate exceeded 1 µM",
+      }),
+      {
+        min: 1,
+        max: null,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMinMgL: 0.09497,
+      },
+    );
+    // "not exceeding" is an upper bound, not both (barracuda 35814 b)
+    assert.deepEqual(
+      quantityOf({
+        min: 3,
+        max: 3,
+        unit: "µmol/l",
+        anchor: "Tanks not exceeding 3 µM phosphate",
+      }),
+      {
+        min: null,
+        max: 3,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMaxMgL: 0.28491,
       },
     );
   });

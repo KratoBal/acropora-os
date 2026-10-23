@@ -92,6 +92,8 @@ const REFUSAL_TEXT: Record<string, string> = {
   UNKNOWN_VALUE: "érvénytelen érték",
   NO_VALUE: "hiányzó érték",
   ANCHOR_TOO_SHORT: "a horgony túl rövid ehhez a mezőhöz",
+  QUANTITY_NOT_PHOSPHATE:
+    "a horgony nem foszfát-értékről szól (nitrát, ammónium): ez nem a foszfát mennyisége, vesd el",
 };
 
 export function reviewErrorText(message: string): string {
@@ -787,7 +789,7 @@ function FieldRow(props: {
                 "mg/l",
                 "PO4",
               )}`
-            : "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól."}
+            : "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól, ez a mennyiség nem fogadható el."}
         </p>
       ) : null}
       {props.editing ? (

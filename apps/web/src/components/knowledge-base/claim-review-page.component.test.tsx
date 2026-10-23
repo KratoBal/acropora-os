@@ -430,7 +430,7 @@ describe("Állítás ellenőrzése", () => {
     await screen.findByText("Kitalált foszfát-kísérlet");
     expect(row("quantity").textContent).not.toContain("≈");
     expect(row("quantity").textContent).toContain(
-      "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól.",
+      "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól, ez a mennyiség nem fogadható el.",
     );
     // a phosphate upper bound alone is still converted, from its one end
     api.claimReview.mockResolvedValue({
