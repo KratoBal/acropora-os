@@ -86,7 +86,13 @@ export class PriceListSuggestionRepository {
     return stored;
   }
 
-  /** A függő javaslatok azonosítói: a cikkszámnak még nincs kötése. Egy lapnyi, és az összes száma. */
+  /**
+   * A függő javaslatok azonosítói, CIKKSZÁMONKÉNT lapozva: a lap `limit` darab
+   * (beszállító, cikkszám) párt hoz, MINDEN függő jelöltjükkel, így egy cikkszám
+   * jelöltjei sosem esnek két lapra (a lap szélén a csoport nem csonka, és az első
+   * jelölt valóban a legjobb). A cikkszámnak még nincs kötése. `total` a függő
+   * cikkszámok száma.
+   */
   async pendingIds(
     supplierId: string | undefined,
     limit: number,
@@ -95,21 +101,30 @@ export class PriceListSuggestionRepository {
     const supplier = supplierId ?? null;
     const [rows, count] = await Promise.all([
       this.database.$queryRaw<{ id: string }[]>`
+        WITH skus AS (
+          SELECT s."supplierId", s."supplierSku"
+          FROM "SupplierPriceSuggestion" s
+          WHERE s.status = 'PENDING'
+            AND (${supplier}::text IS NULL OR s."supplierId" = ${supplier})
+            AND NOT EXISTS (
+              SELECT 1 FROM "SupplierPriceMatch" m
+              WHERE m."supplierId" = s."supplierId" AND m."supplierSku" = s."supplierSku")
+          GROUP BY s."supplierId", s."supplierSku"
+          ORDER BY s."supplierId", s."supplierSku"
+          LIMIT ${limit} OFFSET ${offset})
         SELECT s.id FROM "SupplierPriceSuggestion" s
+        JOIN skus k ON k."supplierId" = s."supplierId" AND k."supplierSku" = s."supplierSku"
         WHERE s.status = 'PENDING'
-          AND (${supplier}::text IS NULL OR s."supplierId" = ${supplier})
-          AND NOT EXISTS (
-            SELECT 1 FROM "SupplierPriceMatch" m
-            WHERE m."supplierId" = s."supplierId" AND m."supplierSku" = s."supplierSku")
-        ORDER BY s."supplierId", s."supplierSku", s.score DESC, s.id
-        LIMIT ${limit} OFFSET ${offset}`,
+        ORDER BY s."supplierId", s."supplierSku", s.score DESC, s.id`,
       this.database.$queryRaw<{ total: number }[]>`
-        SELECT count(*)::int AS total FROM "SupplierPriceSuggestion" s
-        WHERE s.status = 'PENDING'
-          AND (${supplier}::text IS NULL OR s."supplierId" = ${supplier})
-          AND NOT EXISTS (
-            SELECT 1 FROM "SupplierPriceMatch" m
-            WHERE m."supplierId" = s."supplierId" AND m."supplierSku" = s."supplierSku")`,
+        SELECT count(*)::int AS total FROM (
+          SELECT 1 FROM "SupplierPriceSuggestion" s
+          WHERE s.status = 'PENDING'
+            AND (${supplier}::text IS NULL OR s."supplierId" = ${supplier})
+            AND NOT EXISTS (
+              SELECT 1 FROM "SupplierPriceMatch" m
+              WHERE m."supplierId" = s."supplierId" AND m."supplierSku" = s."supplierSku")
+          GROUP BY s."supplierId", s."supplierSku") t`,
     ]);
     return { ids: rows.map((row) => row.id), total: count[0]?.total ?? 0 };
   }

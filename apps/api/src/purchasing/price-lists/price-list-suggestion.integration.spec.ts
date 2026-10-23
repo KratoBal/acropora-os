@@ -375,5 +375,38 @@ describe(
       });
       assert.deepEqual(codes, [{ code: "4006381333931" }]);
     });
+    it("pages by sku: a sku's candidates are never split over two pages, and the total counts skus", async () => {
+      // three pending skus with two candidates each
+      for (const sku of ["P-A", "P-B", "P-C"])
+        for (const [variantId, score] of [
+          [variant2kg, 0.9],
+          [variant500g, 0.8],
+        ] as const)
+          await prisma.supplierPriceSuggestion.create({
+            data: { supplierId, supplierSku: sku, variantId, score, basis: {} },
+          });
+      const first = await suggestionRepository.pendingIds(supplierId, 2, 0);
+      assert.equal(first.total, 3);
+      assert.equal(first.ids.length, 4);
+      const second = await suggestionRepository.pendingIds(supplierId, 2, 2);
+      assert.equal(second.total, 3);
+      assert.equal(second.ids.length, 2);
+      const details = await suggestionRepository.details(first.ids);
+      // each sku appears with both candidates, the better one first
+      assert.deepEqual(
+        details.map((row) => [row.supplierSku, Number(row.score)]),
+        [
+          ["P-A", 0.9],
+          ["P-A", 0.8],
+          ["P-B", 0.9],
+          ["P-B", 0.8],
+        ],
+      );
+      const rest = await suggestionRepository.details(second.ids);
+      assert.deepEqual(
+        rest.map((row) => row.supplierSku),
+        ["P-C", "P-C"],
+      );
+    });
   },
 );
