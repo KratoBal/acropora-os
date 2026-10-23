@@ -5,6 +5,7 @@ import { Prisma } from "@acropora/database";
 
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
+  isPdfOriginal,
   mergeSameInvoice,
   normalizeAccount,
 } from "./missing-invoices.repository.js";
@@ -304,5 +305,110 @@ describe("a VAT group member's two tax numbers", () => {
       ]),
     );
     assert.equal(merged.find((d) => d.id === "nav-1")?.aliasIds, undefined);
+  });
+});
+
+/**
+ * A KÖNYVELŐI CSOMAG FÁJLJA PDF LEGYEN (acrobot 35571, Coral Sands RE67900,
+ * 2026-10-23): a postafiók az XRechnung XML-jét és a PDF-et két dokumentumként
+ * hozza, azonos forrással és fajtával. A csomag-építő csak %PDF- fejlécű fájlt
+ * fűz be. MI PIROSÍT: ha az XML lesz az eredeti, akármilyen sorrendben állnak a
+ * dokumentumok; ha a PDF-et díjbekérőnek olvasták, és emiatt az XML megelőzi; ha
+ * egy önmagában álló XML elveszik az eredeti szerepből; ha egy ismeretlen nevű
+ * fájl nem-PDF-nek számít.
+ */
+describe("isPdfOriginal", () => {
+  it("is false only for a known non-PDF extension, in any case, and ignores trailing spaces", () => {
+    for (const name of [
+      "xrechnung_Invoice RE67900.xml",
+      "INVOICE.XML",
+      "export.csv",
+      "lista.xlsx",
+      "a.pdf.xml",
+      "x.xml ",
+    ])
+      assert.equal(isPdfOriginal(name), false, name);
+  });
+
+  it("is true for a PDF, for a name with no extension and for an unknown one", () => {
+    for (const name of [
+      "Invoice RE67900.pdf",
+      "SZAMLA.PDF",
+      "invoice",
+      "scan.jpeg",
+      "a.xmlx",
+      "xml",
+    ])
+      assert.equal(isPdfOriginal(name), true, name);
+  });
+});
+
+describe("mergeSameInvoice prefers a PDF original over an XML one", () => {
+  const xml = doc({
+    id: "mb-xml",
+    source: "MAILBOX",
+    gross: null,
+    payee: "UNKNOWN",
+    hasOriginal: true,
+    originalIsPdf: false,
+  });
+  const pdf = doc({
+    id: "mb-pdf",
+    source: "MAILBOX",
+    gross: null,
+    payee: "UNKNOWN",
+    hasOriginal: true,
+    originalIsPdf: true,
+  });
+  const keys = new Map([
+    ["mb-xml", "re67900|de152405660"],
+    ["mb-pdf", "re67900|de152405660"],
+  ]);
+
+  it("takes the PDF as the original whichever order the two documents come in", () => {
+    assert.equal(mergeSameInvoice([xml, pdf], keys)[0]!.originalId, "mb-pdf");
+    assert.equal(mergeSameInvoice([pdf, xml], keys)[0]!.originalId, "mb-pdf");
+  });
+
+  it("takes the PDF even when its kind was read as a pro forma and the XML's as an invoice", () => {
+    const misread = doc({ ...pdf, kind: "PROFORMA" });
+    assert.equal(
+      mergeSameInvoice([xml, misread], keys)[0]!.originalId,
+      "mb-pdf",
+    );
+    assert.equal(
+      mergeSameInvoice([misread, xml], keys)[0]!.originalId,
+      "mb-pdf",
+    );
+  });
+
+  it("keeps the XML as the original when there is no PDF", () => {
+    const nav = doc({ id: "nav-1" });
+    const merged = mergeSameInvoice(
+      [nav, xml],
+      new Map([
+        ["nav-1", "re67900|de152405660"],
+        ["mb-xml", "re67900|de152405660"],
+      ]),
+    );
+    assert.equal(merged[0]!.originalId, "mb-xml");
+  });
+
+  it("treats a document with no format information as a PDF", () => {
+    const unknown = doc({
+      id: "mb-unknown",
+      source: "MAILBOX",
+      gross: null,
+      payee: "UNKNOWN",
+      hasOriginal: true,
+    });
+    const merged = mergeSameInvoice(
+      [xml, unknown],
+      new Map([
+        ["mb-xml", "k|x"],
+        ["mb-unknown", "k|x"],
+      ]),
+    );
+    assert.equal(merged[0]!.originalId, "mb-unknown");
   });
 });

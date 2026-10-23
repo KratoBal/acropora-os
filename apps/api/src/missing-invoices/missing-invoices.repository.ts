@@ -61,6 +61,19 @@ function invoiceKey(
 const VAT_GROUP_TAX_BASE = /^17\d{6}$/;
 
 /**
+ * ISMERT NEM-PDF FÁJLNÉV (az XRechnung/ZUGFeRD XML-je, adatfájlok). Csak az
+ * ismert kiterjesztés számít nem-PDF-nek: egy kiterjesztés nélküli vagy ismeretlen
+ * nevű fájl PDF-nek számít, mert a postafiók a PDF-et néha `application/octet-stream`
+ * néven hozza.
+ */
+const NON_PDF_FILE = /\.(?:xml|json|csv|xlsx?|txt|html?)$/i;
+
+/** Igaz, ha a fájlnév alapján a fájl PDF-nek vehető: ismert nem-PDF kiterjesztés nélkül mindig. */
+export function isPdfOriginal(fileName: string): boolean {
+  return !NON_PDF_FILE.test(fileName.trim());
+}
+
+/**
  * AZ ÁFA-CSOPORT TAGJA KÉT ADÓSZÁMMAL ÉRKEZIK (barracuda mérése, 2026-10-05:
  * osszevonas-kulcs-meres-2026-10-05.md). A NAV-sor a csoport azonosítóját adja
  * szállítóként (17-tel kezdődik), a Számlázz.hu-továbbítás a tag saját
@@ -168,12 +181,21 @@ export function mergeSameInvoice(
           vár.
       Ezért előbb a FORRÁS dönt (postafiók, Drive, feltöltés a feed előtt),
       utána a FAJTA (számla a díjbekérő előtt), azonos helyen az eredeti
-      sorrend. A forrás áll elöl, mert a postafiókos PDF fajta-olvasata
+      sorrend.
+
+      A FÁJLFORMÁTUM MINDEN ELŐTT DÖNT (acrobot 35571, Coral Sands RE67900,
+      2026-10-23): a postafiók az XRechnung XML-jét és a PDF-et két dokumentumként
+      hozza, azonos forrással és fajtával, tehát döntetlen volt, és a sorrend
+      rendezetlen. A csomag-építő csak %PDF- fejlécű fájlt fűz be, tehát egy XML
+      eredeti a tételt fájl nélkül hagyta. A nem-PDF kiterjesztésű fájl ezért
+      mindig rosszabb rangú a PDF-nél, de ha nincs PDF, az XML marad az eredeti. A forrás áll elöl, mert a postafiókos PDF fajta-olvasata
       tévedhet (az UNAS PDF-et díjbekérőnek olvastuk), a feed XML-je viszont
       soha nem az a fájl, amit a könyvelő kér.
     */
     const rank = (d: CandidateDocument) =>
-      (d.source === "SZAMLAZZ" ? 2 : 0) + (d.kind === "INVOICE" ? 0 : 1);
+      (d.originalIsPdf === false ? 4 : 0) +
+      (d.source === "SZAMLAZZ" ? 2 : 0) +
+      (d.kind === "INVOICE" ? 0 : 1);
     const original = group
       .filter((d) => d.hasOriginal)
       .reduce<CandidateDocument | undefined>(
@@ -728,6 +750,7 @@ export class MissingInvoicesRepository {
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
+        originalIsPdf: isPdfOriginal(document.fileName),
         identities: document.sha256 ? [`sha:${document.sha256}`] : [],
         ...(card?.debitIds?.length ? { cardPaymentIds: card.debitIds } : {}),
         ...(cardPaidIds.has(document.id) ? { cardPaid: true } : {}),
