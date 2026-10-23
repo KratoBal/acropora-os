@@ -209,35 +209,40 @@ describe("PriceListsPage", () => {
     expect(api.list).toHaveBeenCalledTimes(1);
   });
 
-  it("deletes only after a second click, and says the matches stay", async () => {
+  it("deletes only after the shared dialog is confirmed, and says the matches stay", async () => {
     render(<PriceListsPage />);
     const row = (await screen.findByText("dejong-week41.csv")).closest("tr")!;
     fireEvent.click(
       within(row).getByRole("button", { name: "dejong-week41.csv törlése" }),
     );
     expect(api.remove).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Törlöd ezt az árlistát?",
+    });
     expect(
-      screen.getByText(/a termékpárosítások megmaradnak/),
+      within(dialog).getByText(
+        /dejong-week41\.csv.*A termékpárosítások megmaradnak/,
+      ),
     ).toBeInTheDocument();
-    fireEvent.click(
-      within(row).getByRole("button", { name: "Biztosan törlöm" }),
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlés" }));
     await waitFor(() =>
       expect(api.remove).toHaveBeenCalledWith("token-1", "list-1"),
     );
   });
 
-  it("lets the second click be taken back", async () => {
+  it("lets the dialog be cancelled: nothing is deleted and the dialog closes", async () => {
     render(<PriceListsPage />);
     const row = (await screen.findByText("dejong-week41.csv")).closest("tr")!;
     fireEvent.click(
       within(row).getByRole("button", { name: "dejong-week41.csv törlése" }),
     );
-    fireEvent.click(within(row).getByRole("button", { name: "Mégsem" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Mégsem",
+      }),
+    );
     expect(api.remove).not.toHaveBeenCalled();
-    expect(
-      within(row).getByRole("button", { name: "dejong-week41.csv törlése" }),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("gives a viewer the list without the upload form and without the delete button", async () => {

@@ -1,6 +1,7 @@
 "use client";
 import {
   Alert,
+  ConfirmDialog,
   EmptyState,
   PilotDataTable,
   PilotPageHeader,
@@ -260,39 +261,19 @@ export function PriceListsPage() {
           {
             id: "actions",
             header: <span className="sr-only">Törlés</span>,
-            width: "260px",
+            width: "120px",
             align: "right" as const,
-            cell: (list: SupplierPriceListSummary) =>
-              confirmingId === list.id ? (
-                <span className="flex items-center justify-end gap-2">
-                  <PilotButton
-                    size="action"
-                    variant="danger"
-                    disabled={busy}
-                    onClick={() => void remove(list.id)}
-                  >
-                    Biztosan törlöm
-                  </PilotButton>
-                  <PilotButton
-                    size="action"
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => setConfirmingId(null)}
-                  >
-                    Mégsem
-                  </PilotButton>
-                </span>
-              ) : (
-                <PilotButton
-                  size="action"
-                  variant="secondary"
-                  disabled={busy}
-                  aria-label={`${list.fileName} törlése`}
-                  onClick={() => setConfirmingId(list.id)}
-                >
-                  Törlés
-                </PilotButton>
-              ),
+            cell: (list: SupplierPriceListSummary) => (
+              <PilotButton
+                size="action"
+                variant="secondary"
+                disabled={busy}
+                aria-label={`${list.fileName} törlése`}
+                onClick={() => setConfirmingId(list.id)}
+              >
+                Törlés
+              </PilotButton>
+            ),
           },
         ]
       : []),
@@ -434,13 +415,22 @@ export function PriceListsPage() {
           description={deleteError}
         />
       ) : null}
-      {confirmingId ? (
-        <Alert
-          variant="info"
-          title="A lista törlése"
-          description="A lista sorai törlődnek, a termékpárosítások megmaradnak. Törlés után ugyanaz a fájl újra feltölthető."
-        />
-      ) : null}
+      <ConfirmDialog
+        open={confirmingId !== null}
+        title="Törlöd ezt az árlistát?"
+        consequence={`A lista sorai törlődnek${
+          lists?.find((list) => list.id === confirmingId)
+            ? ` (${lists.find((list) => list.id === confirmingId)!.fileName})`
+            : ""
+        }. A termékpárosítások megmaradnak.`}
+        recovery="A fájlt nem tároljuk, de ugyanaz a fájl törlés után újra feltölthető."
+        confirmLabel="Törlés"
+        busy={busy}
+        onConfirm={() => {
+          if (confirmingId) void remove(confirmingId);
+        }}
+        onCancel={() => setConfirmingId(null)}
+      />
       {loadError ? (
         <Alert
           variant="danger"
