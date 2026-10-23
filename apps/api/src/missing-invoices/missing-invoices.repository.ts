@@ -61,19 +61,6 @@ function invoiceKey(
 const VAT_GROUP_TAX_BASE = /^17\d{6}$/;
 
 /**
- * ISMERT NEM-PDF FÁJLNÉV (az XRechnung/ZUGFeRD XML-je, adatfájlok). Csak az
- * ismert kiterjesztés számít nem-PDF-nek: egy kiterjesztés nélküli vagy ismeretlen
- * nevű fájl PDF-nek számít, mert a postafiók a PDF-et néha `application/octet-stream`
- * néven hozza.
- */
-const NON_PDF_FILE = /\.(?:xml|json|csv|xlsx?|txt|html?)$/i;
-
-/** Igaz, ha a fájlnév alapján a fájl PDF-nek vehető: ismert nem-PDF kiterjesztés nélkül mindig. */
-export function isPdfOriginal(fileName: string): boolean {
-  return !NON_PDF_FILE.test(fileName.trim());
-}
-
-/**
  * AZ ÁFA-CSOPORT TAGJA KÉT ADÓSZÁMMAL ÉRKEZIK (barracuda mérése, 2026-10-05:
  * osszevonas-kulcs-meres-2026-10-05.md). A NAV-sor a csoport azonosítóját adja
  * szállítóként (17-tel kezdődik), a Számlázz.hu-továbbítás a tag saját
@@ -187,8 +174,9 @@ export function mergeSameInvoice(
       2026-10-23): a postafiók az XRechnung XML-jét és a PDF-et két dokumentumként
       hozza, azonos forrással és fajtával, tehát döntetlen volt, és a sorrend
       rendezetlen. A csomag-építő csak %PDF- fejlécű fájlt fűz be, tehát egy XML
-      eredeti a tételt fájl nélkül hagyta. A nem-PDF kiterjesztésű fájl ezért
-      mindig rosszabb rangú a PDF-nél, de ha nincs PDF, az XML marad az eredeti. A forrás áll elöl, mert a postafiókos PDF fajta-olvasata
+      eredeti a tételt fájl nélkül hagyta. A nem %PDF- tartalmú fájl ezért
+      mindig rosszabb rangú a PDF-nél, de ha nincs PDF, az XML marad az eredeti. A FÁJL TARTALMA dönt, nem a neve
+      (task pdf-tartalom-felismeres): a `.xml` nevű, de PDF tartalmú fájl PDF, a `.pdf` nevű XML nem. A forrás áll elöl, mert a postafiókos PDF fajta-olvasata
       tévedhet (az UNAS PDF-et díjbekérőnek olvastuk), a feed XML-je viszont
       soha nem az a fájl, amit a könyvelő kér.
     */
@@ -432,6 +420,23 @@ export class MissingInvoicesRepository {
     }
   }
 
+  /**
+   * AZOK A POSTAFIÓK-DOKUMENTUMOK, AMELYEK TARTALMA TÉNYLEG PDF (task
+   * pdf-tartalom-felismeres): az első öt bájt `%PDF-`, ugyanaz a fejléc, amit a
+   * könyvelői csomag építője követel. A fájlnév nem bizonyíték: a postafiók a PDF-et
+   * néha kiterjesztés nélkül vagy `application/octet-stream` néven hozza, az XML
+   * pedig `.pdf` nevet is kaphat. A bájtokat az adatbázis nézi meg (`substring`),
+   * mert egy jelölt-lekérdezésbe több száz PDF teljes tartalmát behúzni nem fér bele.
+   */
+  async pdfContentIds(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.database.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "IncomingSupplierDocument"
+      WHERE "id" = ANY(${[...ids]})
+        AND substring("content" from 1 for 5) = decode('255044462d', 'hex')`;
+    return new Set(rows.map((row) => row.id));
+  }
+
   /** A jelöltek egy dátumablakban, mind a négy forrásból. */
   async candidates(from: string, to: string): Promise<CandidateDocument[]> {
     const range = {
@@ -619,6 +624,7 @@ export class MissingInvoicesRepository {
     for (const invoice of nav)
       if (invoice.purchaseInvoiceId && keys.has(invoice.id))
         navKeyByPurchase.set(invoice.purchaseInvoiceId, keys.get(invoice.id)!);
+    const pdfIds = await this.pdfContentIds(mailbox.map((d) => d.id));
     for (const document of mailbox) {
       const result =
         document.importResult as unknown as SupplierInvoiceImportResult | null;
@@ -750,7 +756,7 @@ export class MissingInvoicesRepository {
         payee: (document.payeeCheck as Payee | null) ?? "UNKNOWN",
         payeeMarked: document.payeeMarkedAt !== null,
         hasOriginal: true,
-        originalIsPdf: isPdfOriginal(document.fileName),
+        originalIsPdf: pdfIds.has(document.id),
         identities: document.sha256 ? [`sha:${document.sha256}`] : [],
         ...(card?.debitIds?.length ? { cardPaymentIds: card.debitIds } : {}),
         ...(cardPaidIds.has(document.id) ? { cardPaid: true } : {}),

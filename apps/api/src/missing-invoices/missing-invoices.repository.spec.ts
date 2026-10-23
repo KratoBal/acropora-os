@@ -5,7 +5,6 @@ import { Prisma } from "@acropora/database";
 
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
-  isPdfOriginal,
   mergeSameInvoice,
   normalizeAccount,
 } from "./missing-invoices.repository.js";
@@ -317,32 +316,6 @@ describe("a VAT group member's two tax numbers", () => {
  * egy önmagában álló XML elveszik az eredeti szerepből; ha egy ismeretlen nevű
  * fájl nem-PDF-nek számít.
  */
-describe("isPdfOriginal", () => {
-  it("is false only for a known non-PDF extension, in any case, and ignores trailing spaces", () => {
-    for (const name of [
-      "xrechnung_Invoice RE67900.xml",
-      "INVOICE.XML",
-      "export.csv",
-      "lista.xlsx",
-      "a.pdf.xml",
-      "x.xml ",
-    ])
-      assert.equal(isPdfOriginal(name), false, name);
-  });
-
-  it("is true for a PDF, for a name with no extension and for an unknown one", () => {
-    for (const name of [
-      "Invoice RE67900.pdf",
-      "SZAMLA.PDF",
-      "invoice",
-      "scan.jpeg",
-      "a.xmlx",
-      "xml",
-    ])
-      assert.equal(isPdfOriginal(name), true, name);
-  });
-});
-
 describe("mergeSameInvoice prefers a PDF original over an XML one", () => {
   const xml = doc({
     id: "mb-xml",
