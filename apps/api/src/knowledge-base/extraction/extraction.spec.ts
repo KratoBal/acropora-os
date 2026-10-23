@@ -5,6 +5,7 @@ import { vocabularyV1 } from "@acropora/knowledge-base";
 
 import {
   checkClaims,
+  citesAnotherWork,
   keepOwnFindings,
   type CheckedClaim,
 } from "./claim-check.js";
@@ -52,7 +53,10 @@ describe("the JATS text, by section", () => {
       text,
       /As Neil et al\., 2025 showed\. See Fig\. 1 and Acropora\./,
     );
-    // the "[12]" shape is what #1854's CITED_RESULT reads
+    // the "[12]" shape is what CITED_RESULT reads
+    const cited = text.split("\n").find((l) => l.includes("growth [12]"))!;
+    assert.doesNotMatch(cited, /et al/);
+    assert.equal(citesAnotherWork(cited), true);
   });
 
   it("chunks pack whole sections, and split a long one at line breaks", () => {
