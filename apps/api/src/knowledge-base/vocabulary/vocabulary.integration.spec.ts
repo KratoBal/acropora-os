@@ -27,8 +27,10 @@ import {
  * transaction; the gate keeps reading the approved version until the approver
  * approves the draft, whole; every write leaves its AuditLog row.
  *
- * The vocabulary is one table for the whole system: this spec starts and ends
- * with it empty (the code's version 1 is then the approved one).
+ * The vocabulary is one table for the whole system: this spec needs it empty
+ * at the start (the code's version 1 is then the approved one), stops if it is
+ * not, and so removes only rows it wrote itself (the integration gate's rule:
+ * no spec empties a table unfiltered).
  */
 const gate = integrationDatabaseGate(process.env);
 const DOI_PREFIX = "10.5555/kb-vocabulary-int-";
@@ -39,6 +41,10 @@ describe(
   { skip: gate.mode === "skip" },
   () => {
     const suffix = Date.now() % 1_000_000;
+    // version 1 lives in code, so every database row is version 2 or later;
+    // with the table empty at the start (asserted below) and the specs run one
+    // at a time, every such row at the end is this spec's
+    const ours = { version: { gte: 2 } };
     const vocabulary = new VocabularyRepository();
     const review = new ClaimReviewRepository();
     let userId = "";
@@ -47,7 +53,11 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
-      assert.equal(await prisma.knowledgeVocabularyEntry.count(), 0);
+      assert.equal(
+        await prisma.knowledgeVocabularyEntry.count(),
+        0,
+        "the vocabulary table is not empty: this spec does not run on a database with a vocabulary",
+      );
       userId = (
         await prisma.user.create({
           data: {
@@ -109,7 +119,7 @@ describe(
       await prisma.auditLog.deleteMany({
         where: { user: { email: { endsWith: `@${EMAIL_DOMAIN}` } } },
       });
-      await prisma.knowledgeVocabularyEntry.deleteMany({});
+      await prisma.knowledgeVocabularyEntry.deleteMany({ where: ours });
       await prisma.knowledgeFieldAnchor.deleteMany({
         where: { passage: where },
       });
@@ -131,8 +141,8 @@ describe(
       });
       nincsMaradek([
         {
-          nev: "KnowledgeVocabularyEntry",
-          darab: await prisma.knowledgeVocabularyEntry.count(),
+          nev: "KnowledgeVocabularyEntry (2. változattól)",
+          darab: await prisma.knowledgeVocabularyEntry.count({ where: ours }),
         },
         {
           nev: "KnowledgeSource (doi elotag)",
