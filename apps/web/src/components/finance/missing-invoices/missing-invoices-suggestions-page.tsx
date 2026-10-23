@@ -19,6 +19,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
+import { CollectionItemsSection } from "./missing-invoices-collection-items";
 import { formatAmount, formatDay } from "./missing-invoices-model";
 
 /**
@@ -257,6 +258,7 @@ export function MissingInvoicesSuggestionsPage() {
           minWidth={960}
         />
       )}
+      <CollectionItemsSection token={token} />
     </PilotThemeRoot>
   );
 }

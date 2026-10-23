@@ -1,5 +1,6 @@
 import type {
   BankStatementImportResult,
+  InvoiceCollectionItemsResponse,
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceJevSuggestion,
 } from "@acropora/types";
@@ -59,6 +60,25 @@ export const missingInvoicesApi = {
   suggestions(token: string, signal?: AbortSignal) {
     return apiRequest<InvoiceCollectionSuggestionsResponse>(
       `${base}/suggestions`,
+      token,
+      { signal },
+    );
+  },
+  /**
+   * A GYŰJTŐ ÍTÉLETEI (acrobot 35522): mi lett a levelekből. Csak olvas; a fájl
+   * tartalma nem jön ki, és a nem tárolt fájloké nincs is meg.
+   */
+  collectionItems(
+    token: string,
+    query: { verdict?: string; source?: string },
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams();
+    if (query.verdict) params.set("verdict", query.verdict);
+    if (query.source) params.set("source", query.source);
+    const qs = params.toString();
+    return apiRequest<InvoiceCollectionItemsResponse>(
+      `${base}/collection-items${qs ? `?${qs}` : ""}`,
       token,
       { signal },
     );
