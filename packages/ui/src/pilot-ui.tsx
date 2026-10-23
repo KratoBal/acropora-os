@@ -259,6 +259,7 @@ export function PilotButton({
   fullWidth = false,
   size = "md",
   "aria-label": ariaLabel,
+  "aria-pressed": ariaPressed,
   title,
 }: {
   children: ReactNode;
@@ -276,6 +277,11 @@ export function PilotButton({
    * ami a `PilotInput` sajat `aria-label` propjat is indokolta.
    */
   "aria-label"?: string;
+  /**
+   * ADDITÍV: a kapcsoló-gombhoz (szűrő, amelyik be van nyomva). Elhagyva a
+   * gomb attribútum nélkül marad, mint eddig.
+   */
+  "aria-pressed"?: boolean;
 }) {
   const base = `inline-flex items-center justify-center gap-1.5 rounded-md transition-all duration-100 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${fullWidth ? "w-full" : ""}`;
   /*
@@ -324,6 +330,7 @@ export function PilotButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
       title={title}
     >
       {children}

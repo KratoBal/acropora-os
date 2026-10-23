@@ -1058,9 +1058,15 @@ export {
   MISSING_INVOICE_STATE_LABELS,
   MISSING_INVOICE_MONTH_STATUSES,
   MISSING_INVOICE_TABS,
+  INVOICE_COLLECTION_ITEM_SOURCES,
+  INVOICE_COLLECTION_ITEM_VERDICTS,
 } from "./missing-invoices.js";
 export type {
   BankStatementImportResult,
+  InvoiceCollectionItemRow,
+  InvoiceCollectionItemSource,
+  InvoiceCollectionItemVerdict,
+  InvoiceCollectionItemsResponse,
   InvoiceCollectionSuggestion,
   InvoiceCollectionSuggestionDecision,
   InvoiceCollectionSuggestionsResponse,

@@ -15,6 +15,9 @@ import { SzamlazzFeedsService } from "./szamlazz-feeds.service.js";
 import { MissingInvoicesRepository } from "./missing-invoices.repository.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
+import { InvoiceCollectionItemsController } from "./collection/invoice-collection-items.controller.js";
+import { InvoiceCollectionItemsRepository } from "./collection/invoice-collection-items.repository.js";
+import { InvoiceCollectionItemsService } from "./collection/invoice-collection-items.service.js";
 import { InvoiceCollectionSuggestionsController } from "./collection/invoice-collection-suggestions.controller.js";
 import { InvoiceCollectionSuggestionsRepository } from "./collection/invoice-collection-suggestions.repository.js";
 import { InvoiceCollectionSuggestionsService } from "./collection/invoice-collection-suggestions.service.js";
@@ -29,6 +32,7 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
   controllers: [
     IncomingBillingDocumentsController,
     InvoiceCollectionSuggestionsController,
+    InvoiceCollectionItemsController,
     MissingInvoicesController,
     SzamlazzBanktranzController,
     SzamlazzFeedsController,
@@ -42,6 +46,8 @@ import { MissingInvoiceJevService } from "./missing-invoice-jev.service.js";
     InvoiceCollectionScheduler,
     InvoiceCollectionService,
     InvoiceCollectionSuggestionsRepository,
+    InvoiceCollectionItemsRepository,
+    InvoiceCollectionItemsService,
     InvoiceCollectionSuggestionsService,
     LetterClassJevService,
     MissingInvoiceJevRepository,

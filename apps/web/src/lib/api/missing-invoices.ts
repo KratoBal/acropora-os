@@ -1,5 +1,6 @@
 import type {
   BankStatementImportResult,
+  InvoiceCollectionItemsResponse,
   InvoiceCollectionSuggestionsResponse,
   MissingInvoiceJevSuggestion,
 } from "@acropora/types";
@@ -50,6 +51,16 @@ function monthQueryString(query: MonthQuery): string {
   return params.toString();
 }
 
+function collectionItemsQueryString(query: {
+  verdict?: string;
+  source?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (query.verdict) params.set("verdict", query.verdict);
+  if (query.source) params.set("source", query.source);
+  return params.toString();
+}
+
 export const missingInvoicesApi = {
   /**
    * A JEV JAVASLATAI A BEGYŰJTÉSBŐL (levél-válogatás, 4. szelet; acrobot 25803):
@@ -59,6 +70,21 @@ export const missingInvoicesApi = {
   suggestions(token: string, signal?: AbortSignal) {
     return apiRequest<InvoiceCollectionSuggestionsResponse>(
       `${base}/suggestions`,
+      token,
+      { signal },
+    );
+  },
+  /**
+   * A GYŰJTŐ ÍTÉLETEI (acrobot 35522): mi lett a levelekből. Csak olvas; a fájl
+   * tartalma nem jön ki, és a nem tárolt fájloké nincs is meg.
+   */
+  collectionItems(
+    token: string,
+    query: { verdict?: string; source?: string },
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<InvoiceCollectionItemsResponse>(
+      `${base}/collection-items?${collectionItemsQueryString(query)}`,
       token,
       { signal },
     );
