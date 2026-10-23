@@ -165,23 +165,88 @@ describe("a változat beszállítói beszerzési árai", () => {
     expect(screen.queryByText("legolcsóbb")).toBeNull();
   });
 
-  it("does not colour prices in different currencies, and says why", () => {
+  it("compares prices in different currencies in forints, and says that they were converted", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([
+          // 100 EUR at 400 Ft is 40 000 Ft: dearer than the 30 000 Ft row
+          row({
+            supplierId: "eur",
+            supplierName: "Beszállító eur",
+            supplierSku: "SKU-eur",
+            unitPrice: "100.00",
+            currency: "EUR",
+            purchaseHuf: "40000.00",
+            fxRate: "400",
+            fxDate: "2026-10-22",
+          }),
+          row({
+            supplierId: "huf",
+            supplierName: "Beszállító huf",
+            supplierSku: "SKU-huf",
+            unitPrice: "30000.00",
+            currency: "HUF",
+            purchaseHuf: "30000.00",
+            fxRate: null,
+            fxDate: null,
+          }),
+        ])}
+      />,
+    );
+    expect([rankOfRow("eur"), rankOfRow("huf")]).toEqual([
+      "dearest",
+      "cheapest",
+    ]);
+    expect(
+      screen.getByText("legolcsóbb (forintra átszámolva)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("legdrágább (forintra átszámolva)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Az árak eltérő pénznemben vannak \(EUR, HUF\): az összevetés az MNB-árfolyammal forintra átszámolt beszerzési árra szól \(az árfolyam napja: 2026\. 10\. 22\.\)\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not colour different currencies when a row has no exchange rate, and says why", () => {
     render(
       <SupplierPricesTable
         prices={prices([
           priced("10.00", "a", "EUR"),
-          priced("5.00", "b", "USD"),
+          row({
+            supplierId: "b",
+            supplierName: "Beszállító b",
+            supplierSku: "SKU-b",
+            unitPrice: "5.00",
+            currency: "USD",
+            purchaseHuf: null,
+            profitHuf: null,
+            profitPercent: null,
+            fxRate: null,
+            fxDate: null,
+          }),
         ])}
       />,
     );
     expect([rankOfRow("a"), rankOfRow("b")]).toEqual(["none", "none"]);
-    expect(screen.queryByText("legolcsóbb")).toBeNull();
-    expect(screen.queryByText("legdrágább")).toBeNull();
+    expect(screen.queryByText(/legolcsóbb/)).toBeNull();
     expect(
       screen.getByText(
-        /Az árak eltérő pénznemben vannak \(EUR, USD\), ezért nem hasonlítjuk össze és nem színezzük őket\./,
+        /Az árak eltérő pénznemben vannak \(EUR, USD\), és nem mindegyikhez van árfolyam, ezért nem hasonlítjuk össze és nem színezzük őket\./,
       ),
-    ).toBeTruthy();
+    ).toBeInTheDocument();
+  });
+
+  it("compares in forints, not in the lists' own units, when currencies differ", () => {
+    // by the lists' own units 20 USD is the dearest; in forints the 10 EUR row is
+    expect(
+      rankPrices([
+        row({ currency: "EUR", unitPrice: "10.00", purchaseHuf: "4000.00" }),
+        row({ currency: "USD", unitPrice: "20.00", purchaseHuf: "3600.00" }),
+      ]).ranks,
+    ).toEqual(["dearest", "cheapest"]);
   });
 
   it("shows a missing exchange rate as a words, not a zero", () => {
