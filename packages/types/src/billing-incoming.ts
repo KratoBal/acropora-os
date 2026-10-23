@@ -304,7 +304,28 @@ export interface IncomingDocumentLine {
   grossAmount: DecimalText;
 }
 
+/**
+ * A SZÁMLÁVAL EGY VÁRHATÓ BEÉRKEZÉSEN ÁLLÓ TÖBBI DOKUMENTUM (acrobot 35579): a
+ * külföldi szállító díjbekérője és számlája a rendelésszám szerint egy várható
+ * beérkezés (Várható beérkezések), és a postafiókból jóváhagyott sor adatlapján
+ * ez a kapcsolat eddig nem látszott. Csak olvasható összefoglaló; a fájl
+ * tartalma nem megy ki.
+ */
+export interface IncomingRelatedDocument {
+  id: string;
+  /** DIJBEKERŐ (PROFORMA) vagy SZÁMLA (INVOICE); `null`, ha a dokumentumot nem olvasták. */
+  kind: "INVOICE" | "PROFORMA" | null;
+  fileName: string;
+  invoiceNumber: string | null;
+  orderReference: string | null;
+  receivedAt: string | null;
+  /** A dokumentum állapota a beérkezésen (READ, DUPLICATE, SUPERSEDED, LATE_CORRECTION, FAILED, ...). */
+  status: string;
+}
+
 export interface IncomingDocumentDetail extends IncomingDocumentListItem {
+  /** A feed- vagy postafiókos sor dokumentumával egy várható beérkezésen álló többi dokumentum (díjbekérő, korábbi vagy javított számla); üres, ha nincs. */
+  relatedDocuments: IncomingRelatedDocument[];
   /**
    * Adatlapja a feed sorának van: ott a formátum és az összegek megvannak. A
    * jóváhagyott postafiókos sor is ide tartozik (`MAILBOX`, kártya e4c3b0fb).

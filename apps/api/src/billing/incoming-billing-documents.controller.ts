@@ -34,6 +34,7 @@ import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
 import { attachedPdfIds, attachIncomingPdf } from "./incoming-pdf-attach.js";
+import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
   toIncomingDetail,
@@ -159,17 +160,20 @@ export class IncomingBillingDocumentsController {
       where: { id },
     });
     if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
-    const [pairings, collected, manualPaid, attached] = await Promise.all([
-      this.missing.documentPairings(),
-      this.collectedIndex(),
-      loadManualPurchasePayments(this.database, [row]),
-      attachedPdfIds(this.database, [row.id]),
-    ]);
+    const [pairings, collected, manualPaid, attached, related] =
+      await Promise.all([
+        this.missing.documentPairings(),
+        this.collectedIndex(),
+        loadManualPurchasePayments(this.database, [row]),
+        attachedPdfIds(this.database, [row.id]),
+        loadRelatedDocuments(this.database, row.sourceDocumentId),
+      ]);
     return toIncomingDetail(
       row,
       pairings,
       attached.has(row.id) || collectedPdfIds(row, collected).length > 0,
       manualPaid.get(row.externalId) ?? null,
+      related,
     );
   }
 

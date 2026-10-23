@@ -48,6 +48,20 @@ const bankPillTone = (state: IncomingDocumentDetail["bankMatch"]["state"]) =>
  * nélkül „Nincs adat” áll, nem „Nincs fizetve”. PDF-gomb csak ott van, ahol
  * a Számlázz.hu valódi PDF-et küldött.
  */
+/** A kapcsolódó dokumentum fajtája és állapota magyarul (a beérkezés állapotai: `expected-arrival.intake.ts`). */
+const RELATED_KIND_LABELS = {
+  PROFORMA: "Díjbekérő",
+  INVOICE: "Számla",
+  UNKNOWN: "Dokumentum",
+} as const;
+const RELATED_STATUS_LABELS: Record<string, string> = {
+  READ: "Beolvasva",
+  DUPLICATE: "Másolat",
+  SUPERSEDED: "Javított változat váltotta",
+  LATE_CORRECTION: "Késői javítás",
+  FAILED: "Nem olvasható",
+};
+
 export function BillingIncomingDocumentPage({
   documentId,
 }: {
@@ -321,6 +335,50 @@ export function BillingIncomingDocumentPage({
               </p>
             )}
           </PilotSection>
+
+          {detail.relatedDocuments.length ? (
+            <PilotSection
+              title="Kapcsolódó bizonylatok"
+              subtitle="Ugyanazzal a rendeléssel érkezett, a Várható beérkezések kötötte dokumentumok: a díjbekérő, a korábbi vagy a javított számla."
+            >
+              <ul
+                aria-label="Kapcsolódó bizonylatok"
+                className="divide-y divide-pilot-grey-100 text-sm"
+              >
+                {detail.relatedDocuments.map((related) => (
+                  <li
+                    key={related.id}
+                    className="flex items-start justify-between gap-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-pilot-grey-900">
+                        {RELATED_KIND_LABELS[related.kind ?? "UNKNOWN"]}
+                        {related.invoiceNumber
+                          ? ` · ${related.invoiceNumber}`
+                          : ""}
+                      </p>
+                      <p className="truncate text-xs text-pilot-grey-500">
+                        {[
+                          related.fileName,
+                          related.orderReference
+                            ? `rendelés ${related.orderReference}`
+                            : null,
+                          related.receivedAt
+                            ? formatDay(related.receivedAt.slice(0, 10))
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xs text-pilot-grey-600">
+                      {RELATED_STATUS_LABELS[related.status] ?? related.status}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </PilotSection>
+          ) : null}
 
           <PilotSection title="ÁFA-összesítő" subtitle="Kulcsonként.">
             <ul className="divide-y divide-pilot-grey-100 text-sm">
