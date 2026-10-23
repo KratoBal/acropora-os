@@ -378,9 +378,10 @@ describe("extracting one source", () => {
           extractedBy: string;
           contentHash: string;
           runId?: string;
+          replaceCandidatesBy?: string;
         }) => {
           calls.push(
-            `save:${input.claims.length}:${input.extractedBy}:${input.contentHash.length}${input.runId ? `:${input.runId}` : ""}`,
+            `save:${input.claims.length}:${input.extractedBy}:${input.contentHash.length}${input.runId ? `:${input.runId}` : ""}${input.replaceCandidatesBy ? `:replace=${input.replaceCandidatesBy}` : ""}`,
           );
           return {
             claimsCreated: input.claims.length,
@@ -464,6 +465,48 @@ describe("extracting one source", () => {
     assert.equal(
       (await extractSource("x", true, missing.value)).reason,
       "NOT_FOUND",
+    );
+  });
+
+  it("re-extraction: an extracted source is read again and stored in the actor's name; a retracted one still is not (acrobot 35808)", async () => {
+    const d = deps(
+      { reextract: { actorUserId: "u1" } },
+      { alreadyExtracted: true },
+    );
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.status, "EXTRACTED");
+    assert.ok(
+      d.calls.includes("save:1:m claim-extraction/v1:64:replace=u1"),
+      d.calls.join(" "),
+    );
+    // a preview names no actor and stores nothing
+    const preview = deps(
+      { reextract: { actorUserId: null } },
+      { alreadyExtracted: true },
+    );
+    assert.equal(
+      (await extractSource("src1", false, preview.value)).status,
+      "PREVIEWED",
+    );
+    assert.ok(!preview.calls.some((c) => c.startsWith("save:")));
+    const retracted = deps(
+      { reextract: { actorUserId: "u1" } },
+      { alreadyExtracted: true, retracted: true },
+    );
+    assert.equal(
+      (await extractSource("src1", true, retracted.value)).reason,
+      "RETRACTED",
+    );
+    // without the flag the second read is still skipped
+    assert.equal(
+      (
+        await extractSource(
+          "src1",
+          true,
+          deps({}, { alreadyExtracted: true }).value,
+        )
+      ).reason,
+      "ALREADY_EXTRACTED",
     );
   });
 

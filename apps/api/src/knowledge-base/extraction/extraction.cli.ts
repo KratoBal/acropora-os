@@ -34,11 +34,15 @@ import {
  * THE CLAIM EXTRACTION, BY HAND (plan v4, 9.2 S3).
  *
  *   pnpm --filter @acropora/api knowledge:extract --source <id>[,<id>...]
- *       [--apply --actor <userId>]
+ *       [--apply --actor <userId>] [--reextract]
  *
  * WITHOUT `--apply` it downloads the open full texts, calls the AI service
  * and checks every claim, and stores nothing: the output says what WOULD be
  * stored, as counts and codes.
+ *
+ * `--reextract` reads an already extracted source again; with `--apply` the
+ * source's still CANDIDATE claims are withdrawn in the actor's name, in the
+ * same transaction as the new ones are stored (a reviewed claim stays).
  *
  * WITH `--apply` it stores CANDIDATE claims with PENDING field anchors, and
  * needs an existing actor. BOTH need `KNOWLEDGE_DISCOVERY=on` (the research
@@ -97,6 +101,11 @@ export function outcomeReport(outcomes: readonly SourceOutcome[]): string {
         `- ${o.sourceId}: ${o.status}${o.reason ? ` (${o.reason})` : ""}, ${o.sections} szakasz, ${o.calls} AI-hívás`,
         `    állítás ${o.claims}, mező ${o.fields}, szerkesztői kérdés ${o.questions}, tárolt állítás ${o.claimsCreated}`,
         `    elvetett állítás: ${codes(o.refusedClaims)}; elvetett mező: ${codes(o.refusedFields)}; AI nem válaszolt: ${codes(o.unavailable)}`,
+        ...(o.claimsWithdrawn
+          ? [
+              `    újrakiolvasás: ${o.claimsWithdrawn} korábbi, ellenőrizetlen állítás visszavonva`,
+            ]
+          : []),
         ...(o.chunksDropped
           ? [
               `    KIMARADT DARAB (a ${MAX_CHUNKS_PER_SOURCE}-os korlát fölött): ${o.chunksDropped}`,
@@ -120,7 +129,7 @@ export async function runExtractionCli(
   const ids = parseSourceIds(option(argv, "--source"));
   if (typeof ids === "string") {
     out.stderr(
-      `${ids}\nHasználat: --source <id>[,<id>...] [--apply --actor <userId>]\n`,
+      `${ids}\nHasználat: --source <id>[,<id>...] [--apply --actor <userId>] [--reextract]\n`,
     );
     return 2;
   }
@@ -139,9 +148,11 @@ export async function runExtractionCli(
     return 1;
   }
   const apply = argv.includes("--apply");
+  const reextract = argv.includes("--reextract");
   let runId: string | null = null;
+  let actor: string | null = null;
   if (apply) {
-    const actor = option(argv, "--actor");
+    actor = option(argv, "--actor");
     if (!actor || !(await deps.actorExists(actor))) {
       out.stderr("Az --apply-hoz létező felhasználó kell: --actor <userId>\n");
       return 2;
@@ -179,6 +190,7 @@ export async function runExtractionCli(
           vocabulary: deps.vocabulary,
           now: deps.now,
           ...(runId ? { runId } : {}),
+          ...(reextract ? { reextract: { actorUserId: actor } } : {}),
         }),
       );
     const created = outcomes.reduce((n, o) => n + o.claimsCreated, 0);

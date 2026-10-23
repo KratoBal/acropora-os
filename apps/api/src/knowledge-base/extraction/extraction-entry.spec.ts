@@ -34,7 +34,7 @@ import { JATS, aiClaim } from "./extraction-test-fixtures.js";
  */
 const SRC = "cmsrc00000001";
 
-function fakes() {
+function fakes(alreadyExtracted = false) {
   const calls: string[] = [];
   const staleBefore: string[] = [];
   const store = {
@@ -43,11 +43,16 @@ function fakes() {
       pmcid: "PMC1",
       retracted: false,
       included: true,
-      alreadyExtracted: false,
+      alreadyExtracted,
       retractionUnchecked: false,
     }),
-    saveSource: async (input: { claims: unknown[] }) => {
-      calls.push(`save:${input.claims.length}`);
+    saveSource: async (input: {
+      claims: unknown[];
+      replaceCandidatesBy?: string;
+    }) => {
+      calls.push(
+        `save:${input.claims.length}${input.replaceCandidatesBy ? `:replace=${input.replaceCandidatesBy}` : ""}`,
+      );
       return {
         claimsCreated: input.claims.length,
         anchorsCreated: 0,
@@ -109,8 +114,8 @@ function output() {
 }
 
 describe("knowledge:extract", () => {
-  const cli = (over: Partial<ExtractionCliDeps> = {}) => {
-    const f = fakes();
+  const cli = (over: Partial<ExtractionCliDeps> = {}, extracted = false) => {
+    const f = fakes(extracted);
     const deps: ExtractionCliDeps = {
       ...f.base,
       actorExists: async (id) => id === "u-1",
@@ -147,6 +152,40 @@ describe("knowledge:extract", () => {
       "finish:run-1:1",
       "stop",
     ]);
+  });
+
+  it("--reextract reads an extracted source again, and with --apply withdraws in the actor's name (acrobot 35808)", async () => {
+    const skipped = cli({}, true);
+    const o1 = output();
+    await runExtractionCli(
+      ["--source", SRC, "--apply", "--actor", "u-1"],
+      o1.sink,
+      skipped.deps,
+    );
+    assert.match(o1.out.stdout, /SKIPPED \(ALREADY_EXTRACTED\)/);
+    const again = cli({}, true);
+    const o2 = output();
+    assert.equal(
+      await runExtractionCli(
+        ["--source", SRC, "--apply", "--actor", "u-1", "--reextract"],
+        o2.sink,
+        again.deps,
+      ),
+      0,
+    );
+    assert.ok(
+      again.calls.includes("save:1:replace=u-1"),
+      again.calls.join(" "),
+    );
+    const preview = cli({}, true);
+    const o3 = output();
+    await runExtractionCli(
+      ["--source", SRC, "--reextract"],
+      o3.sink,
+      preview.deps,
+    );
+    assert.match(o3.out.stdout, /PREVIEWED/);
+    assert.deepEqual(preview.calls, []);
   });
 
   it("the switch, the AI, the actor, the ids, the one running run", async () => {
@@ -287,8 +326,11 @@ describe("knowledge:extract", () => {
 
 describe("the extraction endpoint", () => {
   const USER = { id: "u-1" } as AuthenticatedUser;
-  const service = (over: Partial<ExtractionServiceDeps> = {}) => {
-    const f = fakes();
+  const service = (
+    over: Partial<ExtractionServiceDeps> = {},
+    extracted = false,
+  ) => {
+    const f = fakes(extracted);
     return {
       ...f,
       svc: new KnowledgeExtractionService({ ...f.base, ...over }),
@@ -314,6 +356,17 @@ describe("the extraction endpoint", () => {
       "finish:run-1:1",
       "stop",
     ]);
+  });
+
+  it("reextract: true reads an extracted source again in the caller's name; without it the source is skipped", async () => {
+    const t = service({}, true);
+    await t.svc.start({ sourceIds: [SRC], reextract: true }, USER);
+    await t.svc.inFlight.get("run-1");
+    assert.ok(t.calls.includes("save:1:replace=u-1"), t.calls.join(" "));
+    const plain = service({}, true);
+    await plain.svc.start({ sourceIds: [SRC] }, USER);
+    await plain.svc.inFlight.get("run-1");
+    assert.ok(!plain.calls.some((c) => c.startsWith("save:")));
   });
 
   it("403 with the switch off, 503 without the AI, 400 on bad ids, 409 when one runs", async () => {
