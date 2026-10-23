@@ -820,7 +820,7 @@ export function withKnownNumber(
 const OWN_NAME = /^acropora/;
 
 /** A szöveg pénzösszeg-alakú számai, értékként (két tizedesre kerekítve, centben). */
-function moneyValues(text: string): Set<number> {
+export function moneyValues(text: string): Set<number> {
   const values = new Set<number>();
   const token =
     /(?<![\d.,])(\d{1,3}(?:[ \u00a0.,]\d{3})+(?:[.,]\d{1,4})?|\d+(?:[.,]\d{1,4})?)(?![\d])/g;

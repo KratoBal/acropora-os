@@ -17,6 +17,7 @@ import {
   INVOICE_COLLECTION_RULES_VERSION,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
+import type { KnownInvoiceFacts } from "./invoice-corroboration.js";
 import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 import type { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
@@ -79,6 +80,13 @@ function setup(input: {
   nav?: Record<string, string[]>;
   /** az összes ismert bejövő szám, szállítótól függetlenül (`knownNumbers`) */
   knownInvoices?: KnownInvoiceNumber[];
+  /**
+   * az ismert számla jelei a kötés második jeléhez; alapból a szállító neve a
+   * feladó tartományával egyezik (szamla@szallito.hu), tehát a kötés megáll
+   */
+  facts?: KnownInvoiceFacts;
+  /** a levél feladója (alapból szamla@szallito.hu) */
+  sender?: string;
   debits?: string[];
   cardDebits?: CardDebit[];
   retryDue?: boolean;
@@ -143,6 +151,8 @@ function setup(input: {
     sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     knownNumbers: async () => input.knownInvoices ?? [],
+    knownInvoiceFacts: async () =>
+      input.facts ?? { grossCents: [], supplierNames: ["Szallito Kft"] },
     ownAccounts: async () => ["1170900220624460"],
     debitNarratives: async () => input.debits ?? [],
     cardDebits: async () => input.cardDebits ?? [],
@@ -186,7 +196,7 @@ function setup(input: {
         id,
         receivedAt: null,
         subject: input.subjects?.[id] ?? null,
-        sender: "szamla@szallito.hu",
+        sender: input.sender ?? "szamla@szallito.hu",
         pdfs: input.messages[id]!,
         skippedTooLarge: 0,
       };
@@ -921,6 +931,96 @@ describe("InvoiceCollectionService", () => {
       }),
       [["U26/03861-SZ", "NAV", "14880568-2-43"]],
     );
+  });
+
+  /*
+    A SZÁM EGYEDÜL NEM KÖT (kártya 285d8ffc, barracuda 35534). MI PIROSÍT: ha az
+    ismert számot tartalmazó, de a számlasorhoz semmi mással nem illő PDF (idegen
+    feladó, idegen név, más összeg) továbbra is a számlához kötődne; ha a három jel
+    bármelyike hiába állna; ha a visszautasított fájl elveszne ahelyett, hogy
+    emberre várna (UNASSIGNED).
+  */
+  describe("a known number alone does not tie a PDF (card 285d8ffc)", () => {
+    const pdfLines = [
+      "Számla",
+      "Vevő: Acropora Kft., adószám: 23916229-2-42",
+      "Fizetés módja | Számla kelte | Számla sorszáma",
+      "Átutalás 8 nap | 2026.10.05 | U26/03861-SZ",
+      "Számlaérték összesen: 73 139,00 Ft",
+    ];
+    const known = [
+      { number: "U26/03861-SZ", supplierTaxNumber: "14880568-2-43" },
+    ];
+    const run = async (options: {
+      facts: KnownInvoiceFacts;
+      sender?: string;
+      lines?: string[];
+    }) => {
+      const invoice = await pdf(options.lines ?? pdfLines);
+      const { collection, stored } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: {
+          "m-1": [{ fileName: "szamla.pdf", buffer: invoice }],
+        },
+        knownInvoices: known,
+        facts: options.facts,
+        sender: options.sender ?? "valaki@mas-domain.example",
+      });
+      await collection.run("MANUAL");
+      return stored;
+    };
+
+    it("does not tie a PDF whose amount, name and sender all fail to match: it is kept for a person", async () => {
+      const stored = await run({
+        facts: {
+          grossCents: [1234500],
+          supplierNames: ["Tisza Kereskedelmi Kft"],
+        },
+      });
+      assert.deepEqual(tied(stored), []);
+      assert.equal(untied(stored).length, 1);
+      const reading = untied(stored)[0]!.textReading as {
+        invoiceNumber: string | null;
+        numberFrom: string | null;
+      };
+      // the number did not stick: nothing downstream can tie the file by it
+      assert.deepEqual(
+        [reading.invoiceNumber, reading.numberFrom],
+        [null, null],
+      );
+    });
+
+    it("ties it when the gross amount stands in the text", async () => {
+      const stored = await run({
+        facts: {
+          grossCents: [7313900],
+          supplierNames: ["Tisza Kereskedelmi Kft"],
+        },
+      });
+      assert.equal(tied(stored).length, 1);
+    });
+
+    it("ties it when the supplier's name stands in the text, and not when only another name does", async () => {
+      const lines = [...pdfLines, "Kiállító: Tisza Kereskedelmi Kft."];
+      const other = await run({
+        facts: { grossCents: [1], supplierNames: ["Duna Kereskedelmi Kft"] },
+        lines,
+      });
+      assert.equal(tied(other).length, 0);
+      const named = await run({
+        facts: { grossCents: [1], supplierNames: ["Tisza Kereskedelmi Kft"] },
+        lines,
+      });
+      assert.equal(tied(named).length, 1);
+    });
+
+    it("ties it when the sender's domain carries the supplier's name", async () => {
+      const stored = await run({
+        facts: { grossCents: [1], supplierNames: ["Tisza Kereskedelmi Kft"] },
+        sender: "Számlázás <szamla@tisza97.example>",
+      });
+      assert.equal(tied(stored).length, 1);
+    });
   });
 
   it("re-evaluates for real with apply: an ordinary run that re-reads although it is not due", async () => {

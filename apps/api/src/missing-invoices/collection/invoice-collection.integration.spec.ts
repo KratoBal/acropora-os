@@ -322,6 +322,49 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
     assert.deepEqual(await repository.navNumbers("99887766"), ["U26/03861-SZ"]);
   });
 
+  // a kötés második jele (kártya 285d8ffc): az ismert számla összege és szállítóneve
+  it("gives the gross amount in cents and the supplier name of a known number, and nothing for another supplier or a storno", async () => {
+    const row = (externalId: string, kindCode: string, tax: string) =>
+      prisma.incomingBillingDocument.create({
+        data: {
+          source: "SZAMLAZZ",
+          externalId,
+          feedMessageId: "collect-it-feed-msg",
+          feedReceivedAt: new Date("2026-10-05T14:31:00Z"),
+          kindCode,
+          documentNumber: "U26/04000-SZ",
+          electronic: true,
+          issueDate: new Date("2026-10-05T00:00:00Z"),
+          currency: "HUF",
+          supplierName: "Tisza 97 Kft.",
+          supplierTaxNumber: tax,
+          buyerName: "Acropora Kft.",
+          netAmount: 57590,
+          vatAmount: 15549,
+          grossAmount: 73139,
+          lines: [],
+          vatSummary: [],
+          payments: [],
+          paymentsKnown: false,
+          paidAmount: 0,
+        },
+      });
+    await row("collect-it-feed-f1", "SZ", "99887766-2-03");
+    assert.deepEqual(
+      await repository.knownInvoiceFacts("U26/04000-SZ", "99887766"),
+      { grossCents: [7313900], supplierNames: ["Tisza 97 Kft."] },
+    );
+    // another supplier's base number, and a number nobody knows
+    assert.deepEqual(
+      await repository.knownInvoiceFacts("U26/04000-SZ", "11223344"),
+      { grossCents: [], supplierNames: [] },
+    );
+    assert.deepEqual(await repository.knownInvoiceFacts("MAS-1", "99887766"), {
+      grossCents: [],
+      supplierNames: [],
+    });
+  });
+
   // a feed új sora önmagában is újraolvasást ad: nem kell új terhelésre várni
   it("a new feed row since the last complete run makes the UNMATCHED re-read due", async () => {
     const run = await prisma.invoiceCollectionRun.create({

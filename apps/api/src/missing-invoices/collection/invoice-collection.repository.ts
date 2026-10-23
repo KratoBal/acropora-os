@@ -8,6 +8,7 @@ import {
   type InvoiceCollectionSource,
   unmatchedRetryDue,
 } from "./invoice-collection.config.js";
+import type { KnownInvoiceFacts } from "./invoice-corroboration.js";
 import type { CardDebit, KnownInvoiceNumber } from "./invoice-text.js";
 
 const ACTIVE_KEY = "ACTIVE";
@@ -267,6 +268,67 @@ export class InvoiceCollectionRepository {
         supplierTaxNumber: row.supplier.taxNumber!,
       })),
     ];
+  }
+
+  /**
+   * AZ ISMERT SZÁMLA JELEI A KÖTÉS MÁSODIK JELÉHEZ (kártya 285d8ffc): a bruttó
+   * összege (centben) és a szállító neve, abból a három forrásból, amelyből az
+   * ismert szám jött. A számot ugyanúgy, szóról szóra keressük, ahogy az ismert
+   * számok listájában áll.
+   */
+  async knownInvoiceFacts(
+    number: string,
+    supplierTaxBase: string,
+  ): Promise<KnownInvoiceFacts> {
+    if (!/^\d{8}$/.test(supplierTaxBase))
+      return { grossCents: [], supplierNames: [] };
+    const [nav, feed, purchases] = await Promise.all([
+      this.database.navIncomingInvoice.findMany({
+        where: {
+          navInvoiceNumber: number,
+          supplierTaxNumber: { startsWith: supplierTaxBase },
+          invoiceOperation: "CREATE",
+        },
+        select: {
+          supplierName: true,
+          invoiceNetAmount: true,
+          invoiceVatAmount: true,
+        },
+      }),
+      this.database.incomingBillingDocument.findMany({
+        where: {
+          documentNumber: number,
+          supplierTaxNumber: { startsWith: supplierTaxBase },
+          kindCode: { in: [...FEED_BASE_KINDS] },
+        },
+        select: { supplierName: true, grossAmount: true },
+      }),
+      this.database.purchaseInvoice.findMany({
+        where: {
+          status: "POSTED",
+          supplierInvoiceNumber: number,
+          supplier: { taxNumber: { startsWith: supplierTaxBase } },
+        },
+        select: { supplier: { select: { name: true } } },
+      }),
+    ]);
+    const cents = (value: Prisma.Decimal | null) =>
+      value === null ? [] : [Math.round(Number(value) * 100)];
+    return {
+      grossCents: [
+        ...nav.flatMap((row) =>
+          row.invoiceNetAmount !== null && row.invoiceVatAmount !== null
+            ? cents(row.invoiceNetAmount.plus(row.invoiceVatAmount))
+            : [],
+        ),
+        ...feed.flatMap((row) => cents(row.grossAmount)),
+      ],
+      supplierNames: [
+        ...nav.map((row) => row.supplierName),
+        ...feed.map((row) => row.supplierName),
+        ...purchases.map((row) => row.supplier.name),
+      ].filter(Boolean),
+    };
   }
 
   /** A saját bankszámláink számjegyei; egy PDF-ben ezek a kiállító jelei. */
