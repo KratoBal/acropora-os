@@ -1,5 +1,10 @@
 import type { MailSender } from "../notifications/mail/mail.port.js";
+import { mailRedirect } from "../notifications/mail/ticket-mail.rules.js";
 import { createReefClubMailSender } from "../reefclub/reefclub-mail.js";
+import {
+  REEFCLUB_MAIL_ALLOW,
+  reefClubMailAllow,
+} from "../reefclub/reefclub-mail-allow.js";
 import { reefClubSmtpRequested } from "../reefclub/reefclub-smtp-mail.js";
 
 /**
@@ -31,10 +36,25 @@ import { reefClubSmtpRequested } from "../reefclub/reefclub-smtp-mail.js";
  */
 export const REEFCLUB_SHOP_MAIL_SENDER = Symbol("REEFCLUB_SHOP_MAIL_SENDER");
 
+/**
+ * THE NEW ROAD MUST NOT OPEN WHAT THE OLD ONE KEPT SHUT (barracuda, #1824 review).
+ * The shared sender is held on a non-production site by `TICKET_MAIL_REDIRECT_TO`:
+ * an address sends every letter there, and unset is `block` (nothing goes out;
+ * production sets it to `off` on purpose, `ticket-mail.rules.ts` `mailRedirect`).
+ * The ReefClub sender does not read that variable: its only gate is
+ * `REEFCLUB_MAIL_ALLOW`, and unset that gate is off. So wherever the redirect is
+ * NOT explicitly `off`, the ReefClub road needs the allow-list, or the start stops,
+ * naming it: the same rule as a half-set SMTP configuration.
+ */
 export function createReefClubShopMailSender(
   environment: Record<string, string | undefined> = process.env,
 ): MailSender | null {
-  return reefClubSmtpRequested(environment)
-    ? createReefClubMailSender(environment)
-    : null;
+  if (!reefClubSmtpRequested(environment)) return null;
+  const redirect = mailRedirect(environment.TICKET_MAIL_REDIRECT_TO);
+  if (redirect.kind !== "off" && reefClubMailAllow(environment).kind !== "on")
+    throw new Error(
+      `A belső API nem indul: a ReefClub bolti levelei az SMTP-n mennének, de a TICKET_MAIL_REDIRECT_TO nem "off" (${redirect.kind}), ` +
+        `tehát ez nem éles környezet, és hiányzik a ${REEFCLUB_MAIL_ALLOW}. Állítsd be, vagy vedd ki a REEFCLUB_SMTP_* neveket.`,
+    );
+  return createReefClubMailSender(environment);
 }

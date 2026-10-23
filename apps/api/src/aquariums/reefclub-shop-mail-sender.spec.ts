@@ -33,18 +33,52 @@ describe("the shop-side ReefClub letters' sender (reefclub-c3-ertesito-proba)", 
     );
   });
 
-  it("REEFCLUB_SMTP_* set: the ReefClub's own SMTP sender, the same one the ReefClub process builds", () => {
-    assert.ok(
-      createReefClubShopMailSender(SMTP) instanceof ReefClubSmtpMailSender,
-    );
-  });
-
-  it("on the test site the allow-list gate wraps it, as in the ReefClub process", () => {
+  it("production (redirect explicitly off) with REEFCLUB_SMTP_*: the ReefClub's own SMTP sender, as the ReefClub process builds it", () => {
     assert.ok(
       createReefClubShopMailSender({
         ...SMTP,
+        TICKET_MAIL_REDIRECT_TO: "off",
+      }) instanceof ReefClubSmtpMailSender,
+    );
+  });
+
+  it("the test site (redirect to an address) with SMTP and the allow-list: the allow-list gate wraps it", () => {
+    assert.ok(
+      createReefClubShopMailSender({
+        ...SMTP,
+        TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
         REEFCLUB_MAIL_ALLOW: "acropora.hu",
       }) instanceof ReefClubAllowlistMailSender,
+    );
+  });
+
+  it("the test site (redirect to an address) with SMTP but NO allow-list: the start stops, naming REEFCLUB_MAIL_ALLOW", () => {
+    assert.throws(
+      () =>
+        createReefClubShopMailSender({
+          ...SMTP,
+          TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+        }),
+      /REEFCLUB_MAIL_ALLOW/,
+    );
+  });
+
+  it("the redirect unset (block: nothing goes out on the shared road) with SMTP but no allow-list: also stops", () => {
+    assert.throws(
+      () => createReefClubShopMailSender(SMTP),
+      /REEFCLUB_MAIL_ALLOW/,
+    );
+  });
+
+  it("an allow-list that is set but empty counts as missing", () => {
+    assert.throws(
+      () =>
+        createReefClubShopMailSender({
+          ...SMTP,
+          TICKET_MAIL_REDIRECT_TO: "teszt@acropora.hu",
+          REEFCLUB_MAIL_ALLOW: "  ",
+        }),
+      /REEFCLUB_MAIL_ALLOW/,
     );
   });
 
@@ -53,6 +87,7 @@ describe("the shop-side ReefClub letters' sender (reefclub-c3-ertesito-proba)", 
       () =>
         createReefClubShopMailSender({
           REEFCLUB_SMTP_HOST: "smtp.example.test",
+          TICKET_MAIL_REDIRECT_TO: "off",
         }),
       /REEFCLUB_SMTP_PASSWORD/,
     );
