@@ -111,7 +111,7 @@ export interface SupplierPriceSuggestionItem {
 
 export interface SupplierPriceSuggestionsResponse {
   items: SupplierPriceSuggestionItem[];
-  /** Az összes függő javaslat a szűrésre (az oldal csak egy részét hozza). */
+  /** Az összes függő CIKKSZÁM a szűrésre; az oldal 100 cikkszámot hoz, mindegyiket az összes jelöltjével. */
   total: number;
 }
 
