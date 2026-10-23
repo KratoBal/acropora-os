@@ -233,7 +233,7 @@ export class PriceListRepository {
     if (listIds.length === 0) return new Map();
     const rows = await this.database.$queryRaw<CoverageRaw[]>`
       WITH ours AS (
-        SELECT DISTINCT lpad(regexp_replace(code, '\D', '', 'g'), 14, '0') AS gtin
+        SELECT DISTINCT lpad(regexp_replace(code, '[^0-9]', '', 'g'), 14, '0') AS gtin
         FROM "ProductBarcode"
       )
       SELECT e."listId" AS "listId",
