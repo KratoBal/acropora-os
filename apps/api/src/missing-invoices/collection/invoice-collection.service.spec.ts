@@ -50,11 +50,29 @@ const env = (prefixes: string[], extra: Record<string, string> = {}) => ({
   ...extra,
 });
 
+/**
+ * The files that were tied to something (stored as ordinary collected
+ * documents), and the ones stored for a person to assign (`UNASSIGNED`; acrobot
+ * 35522/35529). An untied invoice-looking PDF used to be dropped; it is kept.
+ */
+const tied = (stored: CollectedDocumentInput[]) =>
+  stored.filter((document) => !document.unassigned);
+const untied = (stored: CollectedDocumentInput[]) =>
+  stored.filter((document) => document.unassigned === true);
+
 function setup(input: {
   environment: NodeJS.ProcessEnv;
   messages: Record<string, { fileName: string; buffer: Buffer }[]>;
+  /** a Drive-mappa PDF-jei (alapból üres) */
+  drive?: { id: string; name: string; buffer: Buffer }[];
+  /** a levelek tárgya, levélazonosító szerint (alapból nincs) */
+  subjects?: Record<string, string>;
   seen?: string[];
   known?: Buffer[];
+  /** a már TÁROLT, de még nem párosodott (`UNASSIGNED`) példányok tartalma */
+  unassigned?: Buffer[];
+  /** a promote közben döntöttek róla: null a visszatérése */
+  promoteDecided?: boolean;
   failingUser?: string;
   failingCode?: string;
   failingDetail?: string;
@@ -81,6 +99,7 @@ function setup(input: {
 }) {
   const classified: string[] = [];
   const stored: CollectedDocumentInput[] = [];
+  const promoted: { id: string; document: CollectedDocumentInput }[] = [];
   const recorded: string[] = [];
   const fetched: string[] = [];
   const started: string[] = [];
@@ -91,6 +110,11 @@ function setup(input: {
   const gaps: (number | undefined)[] = [];
   const knownShas = new Set(
     (input.known ?? []).map((b) =>
+      createHash("sha256").update(b).digest("hex"),
+    ),
+  );
+  const unassignedShas = new Set(
+    (input.unassigned ?? []).map((b) =>
       createHash("sha256").update(b).digest("hex"),
     ),
   );
@@ -105,7 +129,17 @@ function setup(input: {
     },
     touchRun: async (id: string) => void touched.push(id),
     verdictOf: async () => input.before ?? null,
-    hasContent: async (sha: string) => knownShas.has(sha),
+    documentByContent: async (sha: string) =>
+      knownShas.has(sha)
+        ? { id: "doc-known", reviewState: null }
+        : unassignedShas.has(sha)
+          ? { id: "doc-unassigned", reviewState: "UNASSIGNED" }
+          : null,
+    promote: async (id: string, document: CollectedDocumentInput) => {
+      if (input.promoteDecided) return null;
+      promoted.push({ id, document });
+      return id;
+    },
     sameNumberDocuments: async (n: string) => input.storedNumbers?.[n] ?? [],
     navNumbers: async (base: string) => input.nav?.[base] ?? [],
     knownNumbers: async () => input.knownInvoices ?? [],
@@ -151,14 +185,21 @@ function setup(input: {
       return {
         id,
         receivedAt: null,
-        subject: null,
+        subject: input.subjects?.[id] ?? null,
         sender: "szamla@szallito.hu",
         pdfs: input.messages[id]!,
         skippedTooLarge: 0,
       };
     },
-    driveFolderPdfs: async () => [],
-    driveFile: async () => Buffer.alloc(0),
+    driveFolderPdfs: async () =>
+      (input.drive ?? []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        modifiedAt: null,
+        sizeBytes: file.buffer.length,
+      })),
+    driveFile: async (id: string) =>
+      input.drive?.find((file) => file.id === id)?.buffer ?? Buffer.alloc(0),
   });
   const reader = {
     read: async () => {
@@ -186,6 +227,7 @@ function setup(input: {
     ),
     classified,
     stored,
+    promoted,
     recorded,
     started,
     touched,
@@ -240,7 +282,7 @@ describe("InvoiceCollectionService", () => {
     });
     const counts = await collection.run("MANUAL");
     assert.deepEqual(
-      stored.map((d) => [
+      tied(stored).map((d) => [
         d.source,
         d.fileName,
         d.kind,
@@ -263,10 +305,33 @@ describe("InvoiceCollectionService", () => {
         ],
       ],
     );
+    // the supplier's invoice nothing ties is KEPT for a person (its verdict row
+    // is written with the document, not through `record`)
+    assert.deepEqual(
+      untied(stored).map((d) => [
+        d.fileName,
+        d.kind,
+        d.payee,
+        d.read,
+        d.textReading,
+      ]),
+      [
+        [
+          "RE67456.pdf",
+          "INVOICE",
+          "NOT_COMPANY",
+          false,
+          {
+            invoiceNumber: "RE67456",
+            numberFrom: "LABEL",
+            supplierTaxNumber: "DE152405660",
+          },
+        ],
+      ],
+    );
     assert.deepEqual(recorded, [
       "m-1/akcio.pdf:NOT_INVOICE",
       "m-1/E-ACRW-2026-00439.pdf:OWN_INVOICE",
-      "m-1/RE67456.pdf:UNMATCHED",
     ]);
     assert.deepEqual(
       [
@@ -308,7 +373,7 @@ describe("InvoiceCollectionService", () => {
     });
     await collection.run("MANUAL");
     assert.deepEqual(
-      stored.map((d) => [d.fileName, d.payee, d.textReading]),
+      tied(stored).map((d) => [d.fileName, d.payee, d.textReading]),
       [
         [
           "F2602896.PDF",
@@ -322,7 +387,11 @@ describe("InvoiceCollectionService", () => {
         ],
       ],
     );
-    assert.deepEqual(recorded, ["m-1/F2609999.PDF:UNMATCHED"]);
+    assert.deepEqual(
+      untied(stored).map((d) => [d.fileName, d.payee]),
+      [["F2609999.PDF", "NOT_COMPANY"]],
+    );
+    assert.deepEqual(recorded, []);
   });
 
   // FleetCor (acrobot 26153, 2026-10-04): the debit narrative carries our
@@ -413,7 +482,7 @@ describe("InvoiceCollectionService", () => {
     });
     await collection.run("MANUAL");
     assert.deepEqual(
-      stored.map((d) => [
+      tied(stored).map((d) => [
         d.fileName,
         (d.textReading as { cardPayment?: unknown } | null)?.cardPayment,
       ]),
@@ -429,7 +498,11 @@ describe("InvoiceCollectionService", () => {
         ],
       ],
     );
-    assert.deepEqual(recorded, ["m-1/Hetzner_masik.pdf:UNMATCHED"]);
+    assert.deepEqual(
+      untied(stored).map((d) => d.fileName),
+      ["Hetzner_masik.pdf"],
+    );
+    assert.deepEqual(recorded, []);
   });
 
   it("skips the payment reminder but stores the invoice attached next to it (De Jong, 2026-09-24)", async () => {
@@ -509,8 +582,13 @@ describe("InvoiceCollectionService", () => {
       ],
     });
     await collection.run("MANUAL");
-    assert.deepEqual(stored, []);
-    assert.deepEqual(recorded, ["m-1/doc.pdf:UNMATCHED"]);
+    // nothing ties it (the IBAN is not a reference): kept UNASSIGNED, not tied
+    assert.deepEqual(tied(stored), []);
+    assert.deepEqual(
+      untied(stored).map((d) => d.fileName),
+      ["doc.pdf"],
+    );
+    assert.deepEqual(recorded, []);
   });
 
   it("stores an invoice whose order number the debit narrative names, keeping its own number", async () => {
@@ -545,13 +623,17 @@ describe("InvoiceCollectionService", () => {
     });
     await collection.run("MANUAL");
     assert.deepEqual(
-      stored.map((d) => [
+      tied(stored).map((d) => [
         d.fileName,
         (d.textReading as { bankReference?: string } | null)?.bankReference,
       ]),
       [["Rechnung 40142365 - Kunden-Nr. 33620.pdf", "20144304"]],
     );
-    assert.deepEqual(recorded, ["m-1/Rechnung 40199999.pdf:UNMATCHED"]);
+    assert.deepEqual(
+      untied(stored).map((d) => d.fileName),
+      ["Rechnung 40199999.pdf"],
+    );
+    assert.deepEqual(recorded, []);
   });
 
   it("skips a content it already has and a mail it has already read", async () => {
@@ -858,7 +940,7 @@ describe("InvoiceCollectionService", () => {
    * ha a küszöb alatti, a más osztályú, a hibázó vagy a hiányzó besorolás is
    * javaslat lenne; ha a javaslat nem a futás azonosítójával tárolódna.
    */
-  it("a Jev incoming-invoice class above the threshold is stored as a suggestion, anything else stays UNMATCHED", async () => {
+  it("a Jev incoming-invoice class above the threshold is stored as a suggestion, anything else is kept UNASSIGNED", async () => {
     const unmatched = await pdf([
       "INVOICE",
       "SIA Waterro",
@@ -914,9 +996,13 @@ describe("InvoiceCollectionService", () => {
       undefined,
     ]) {
       const s = await run(classify);
+      // no suggestion: the invoice-looking PDF is kept for a person instead of dropped
       assert.deepEqual(
-        [s.stored, s.recorded],
-        [[], ["m-1/WR26-0220.pdf:UNMATCHED"]],
+        [
+          s.stored.map((d) => [d.fileName, d.unassigned, d.suggestion]),
+          s.recorded,
+        ],
+        [[["WR26-0220.pdf", true, undefined]], []],
       );
     }
     // a küszöb config: 0,95-ös küszöb mellett a 0,9 nem javaslat
@@ -928,7 +1014,11 @@ describe("InvoiceCollectionService", () => {
       }),
       env(["GMAIL_FOXPOST"], { JEV_INVOICE_COLLECTION_THRESHOLD: "0,95" }),
     );
-    assert.deepEqual(strict.recorded, ["m-1/WR26-0220.pdf:UNMATCHED"]);
+    assert.deepEqual(
+      strict.stored.map((d) => [d.fileName, d.unassigned, d.suggestion]),
+      [["WR26-0220.pdf", true, undefined]],
+    );
+    assert.deepEqual(strict.recorded, []);
   });
 
   /**
@@ -1006,5 +1096,266 @@ describe("unmatchedRetryDue", () => {
     );
     assert.equal(unmatchedRetryDue(last, 0, now, "2026-09-30.1"), true);
     assert.equal(unmatchedRetryDue(last, 0, now, null), true);
+  });
+});
+
+/**
+ * NEM PÁROSODOTT, DE TÁROLJUK (acrobot 35522/35529; Balázs 12:53 UTC: a PDF a
+ * könyvelői csomagba kell). MI PIROSÍT: ha egy számlának ítélt, de semmihez
+ * nem kötött PDF eldobódik; ha a balazs@ postafiók (Balázs saját levelezése)
+ * ilyen fájlja mégis tárolódik; ha egy beszkennelt PDF a fájlneve ellenére
+ * NOT_INVOICE marad, vagy ha egy emlékeztető, szerződés a nevével bekerül; ha
+ * az újraolvasás második dokumentumot hoz létre az előléptetés helyett; ha egy
+ * közben meghozott emberi döntést az újraolvasás felülír; ha a száraz futás ír.
+ */
+describe("InvoiceCollectionService keeps what nothing ties (UNASSIGNED)", () => {
+  const untiedInvoice = () =>
+    pdf(["Invoice", "Supplier VAT: DE152405660", "Invoice number: RE67456"]);
+  const navInvoice = () =>
+    pdf([
+      "SZÁMLA",
+      "Eladó: Szállító Kft., adószám: 12345678-2-42",
+      "Vevő: Acropora Kft., adószám: 23916229-2-13",
+      "Számla sorszáma: SZ-2026/0815",
+    ]);
+
+  it("keeps an untied invoice from info@ as UNASSIGNED, with sender and subject, and counts it unmatched", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+      subjects: { "m-1": "Ihre Rechnung RE67456" },
+    });
+    const counts = await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [
+        d.source,
+        d.fileName,
+        d.unassigned,
+        d.suggestion,
+        d.sender,
+        d.subject,
+        d.read,
+        d.importResult,
+      ]),
+      [
+        [
+          "INFO_MAIL",
+          "RE67456.pdf",
+          true,
+          undefined,
+          "szamla@szallito.hu",
+          "Ihre Rechnung RE67456",
+          false,
+          null,
+        ],
+      ],
+    );
+    assert.deepEqual(recorded, []);
+    assert.deepEqual(
+      [counts.storedCount, counts.unmatchedCount, counts.suggestedCount],
+      [0, 1, 0],
+    );
+  });
+
+  it("does NOT keep an untied file from the balazs@ mailbox (Balázs's own correspondence)", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_BALAZS"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    const counts = await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
+    assert.equal(counts.unmatchedCount, 1);
+  });
+
+  it("keeps an untied invoice from the Drive folder", async () => {
+    const buffer = await untiedInvoice();
+    const { collection, stored } = setup({
+      environment: env(["GOOGLE_DRIVE"], {
+        MISSING_INVOICES_DRIVE_FOLDER_URL:
+          "https://drive.google.com/drive/folders/abcdefghij1234567890",
+      }),
+      messages: {},
+      drive: [{ id: "f-1", name: "RE67456.pdf", buffer }],
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [d.source, d.fileName, d.unassigned]),
+      [["DRIVE", "RE67456.pdf", true]],
+    );
+  });
+
+  it("keeps a scanned PDF (no text layer) when its file name says it is an invoice", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "Számla 2026-10-22.pdf", buffer: await pdf([]) }],
+      },
+    });
+    const counts = await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [d.fileName, d.unassigned, d.textReading, d.kind]),
+      [["Számla 2026-10-22.pdf", true, null, "INVOICE"]],
+    );
+    assert.deepEqual(recorded, []);
+    assert.equal(counts.unmatchedCount, 1);
+  });
+
+  it("keeps a scanned PDF when only the SUBJECT says it is an invoice", async () => {
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "scan0042.pdf", buffer: await pdf([]) }],
+      },
+      subjects: { "m-1": "Szamla J55388 - 22.10.2026" },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(
+      stored.map((d) => [d.fileName, d.unassigned]),
+      [["scan0042.pdf", true]],
+    );
+  });
+
+  it("leaves a scanned PDF NOT_INVOICE when neither the name nor the subject says invoice", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "scan0042.pdf", buffer: await pdf([]) }],
+      },
+      subjects: { "m-1": "Fwd: kép" },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/scan0042.pdf:NOT_INVOICE"]);
+  });
+
+  it("leaves a scanned reminder, contract or offer NOT_INVOICE even with the invoice word in the name", async () => {
+    for (const fileName of [
+      "Számla emlékeztető 2026-10.pdf",
+      "Zahlungserinnerung Rechnung 123.pdf",
+      "Szerződés számla melléklet.pdf",
+      "Árajánlat számla előtt.pdf",
+    ]) {
+      const { collection, stored, recorded } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName, buffer: await pdf([]) }] },
+      });
+      await collection.run("MANUAL");
+      assert.deepEqual(stored, [], fileName);
+      assert.deepEqual(recorded, [`m-1/${fileName}:NOT_INVOICE`], fileName);
+    }
+  });
+
+  it("a text PDF with no invoice word stays NOT_INVOICE, whatever its name says", async () => {
+    const { collection, stored, recorded } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [
+          {
+            fileName: "Számla.pdf",
+            buffer: await pdf([
+              "Akciós ajánlatunk a hétre, rengeteg termék kedvezményes áron kapható.",
+              "Látogasson el webáruházunkba, és válogasson a teljes kínálatunkból.",
+            ]),
+          },
+        ],
+      },
+    });
+    await collection.run("MANUAL");
+    assert.deepEqual(stored, []);
+    assert.deepEqual(recorded, ["m-1/Számla.pdf:NOT_INVOICE"]);
+  });
+
+  it("the dry re-evaluation keeps nothing", async () => {
+    const { collection, stored } = setup({
+      environment: env(["GMAIL_FOXPOST"]),
+      messages: {
+        "m-1": [{ fileName: "RE67456.pdf", buffer: await untiedInvoice() }],
+      },
+    });
+    const { changes } = await collection.reevaluate(false);
+    assert.deepEqual(stored, []);
+    // the dry list still says UNMATCHED (it writes and keeps nothing)
+    assert.deepEqual(
+      changes.map((c) => [c.fileName, c.after]),
+      [["RE67456.pdf", "UNMATCHED"]],
+    );
+  });
+
+  describe("a read again copy that is stored but not tied", () => {
+    it("stays as it is when it still ties to nothing: no second document, no promotion", async () => {
+      const buffer = await untiedInvoice();
+      const { collection, stored, promoted, recorded } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
+        unassigned: [buffer],
+      });
+      const counts = await collection.run("MANUAL");
+      assert.deepEqual([stored, promoted], [[], []]);
+      assert.deepEqual(recorded, ["m-1/RE67456.pdf:UNMATCHED"]);
+      assert.deepEqual([counts.storedCount, counts.duplicateCount], [0, 0]);
+    });
+
+    it("is PROMOTED, not stored twice, when it ties now (a NAV number appeared)", async () => {
+      const buffer = await navInvoice();
+      const { collection, stored, promoted, recorded } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "szamla.pdf", buffer }] },
+        unassigned: [buffer],
+        nav: { "12345678": ["SZ-2026/0815"] },
+      });
+      const counts = await collection.run("MANUAL");
+      assert.deepEqual(stored, []);
+      assert.equal(promoted.length, 1);
+      assert.equal(promoted[0]!.id, "doc-unassigned");
+      assert.equal(promoted[0]!.document.unassigned, undefined);
+      assert.deepEqual(promoted[0]!.document.textReading, {
+        invoiceNumber: "SZ-2026/0815",
+        numberFrom: "NAV",
+        supplierTaxNumber: "12345678-2-42",
+      });
+      assert.deepEqual(recorded, []);
+      assert.equal(counts.storedCount, 1);
+    });
+
+    it("is not promoted over a decision a person made meanwhile: it reads as a duplicate", async () => {
+      const buffer = await navInvoice();
+      const { collection, stored, promoted, recorded } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "szamla.pdf", buffer }] },
+        unassigned: [buffer],
+        promoteDecided: true,
+        nav: { "12345678": ["SZ-2026/0815"] },
+      });
+      const counts = await collection.run("MANUAL");
+      assert.deepEqual([stored, promoted], [[], []]);
+      assert.deepEqual(recorded, ["m-1/szamla.pdf:DUPLICATE"]);
+      assert.deepEqual([counts.storedCount, counts.duplicateCount], [0, 1]);
+    });
+
+    it("is promoted to the Jev's suggestion when the classifier now recognises it", async () => {
+      const buffer = await untiedInvoice();
+      const { collection, stored, promoted } = setup({
+        environment: env(["GMAIL_FOXPOST"]),
+        messages: { "m-1": [{ fileName: "RE67456.pdf", buffer }] },
+        unassigned: [buffer],
+        classify: async () => ({
+          kind: "BEJOVO_SZAMLA",
+          confidence: 0.9,
+          decisionRunId: "run-jev-2",
+        }),
+      });
+      const counts = await collection.run("MANUAL");
+      assert.deepEqual(stored, []);
+      assert.deepEqual(
+        promoted.map((p) => [p.id, p.document.suggestion]),
+        [["doc-unassigned", { confidence: 0.9, decisionRunId: "run-jev-2" }]],
+      );
+      assert.equal(counts.suggestedCount, 1);
+    });
   });
 });

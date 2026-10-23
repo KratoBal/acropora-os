@@ -60,6 +60,7 @@ const suggestion = (
   fileName: string,
 ): InvoiceCollectionSuggestion => ({
   documentId,
+  state: "SUGGESTED",
   fileName,
   sender: "invoice@waterro.lv",
   subject: "Invoice request",
@@ -121,6 +122,32 @@ describe("MissingInvoicesSuggestionsPage", () => {
       expect(
         screen.getByText("Nincs döntésre váró javaslat."),
       ).toBeInTheDocument(),
+    );
+  });
+
+  /**
+   * MI PIROSÍT: ha a nem párosodott fájl a Jev javaslataként látszana (az
+   * Állapot), vagy a bizonyossága 0%-ként; ha az elfogadása másik végpontot
+   * hívna, mint a javaslaté.
+   */
+  it("labels an untied file 'Nem párosodott' with no confidence, and accepts it through the same endpoint", async () => {
+    api.suggestions.mockResolvedValue({
+      items: [
+        {
+          ...suggestion("doc-u", "RE67456.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+        },
+      ],
+    });
+    render(<MissingInvoicesSuggestionsPage />);
+    const row = await rowOf("RE67456.pdf");
+    expect(within(row).getByText("Nem párosodott")).toBeInTheDocument();
+    expect(within(row).queryByText("A Jev javasolta")).toBeNull();
+    expect(within(row).queryByText("0%")).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Elfogad" }));
+    await waitFor(() =>
+      expect(api.acceptSuggestion).toHaveBeenCalledWith("token-1", "doc-u"),
     );
   });
 

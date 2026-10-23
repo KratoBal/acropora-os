@@ -26,6 +26,7 @@ export function toSuggestion(row: SuggestionRow): InvoiceCollectionSuggestion {
   const gross = reading.gross;
   return {
     documentId: row.id,
+    state: row.reviewState === "UNASSIGNED" ? "UNASSIGNED" : "SUGGESTED",
     fileName: row.fileName,
     sender: row.sender,
     subject: row.subject,

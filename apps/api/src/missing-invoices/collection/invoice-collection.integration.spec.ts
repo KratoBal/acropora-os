@@ -521,4 +521,140 @@ describe("a számla-begyűjtés tárolása", { skip: gate.mode === "skip" }, () 
       resolvedValue: "NOT_INVOICE",
     });
   });
+  /**
+   * A NEM PÁROSODOTT FÁJL TÁROLÁSA (acrobot 35522/35529; Balázs 12:53 UTC: a PDF
+   * a könyvelői csomagba kell), a valódi adatbázison. MI PIROSÍT: ha az
+   * `UNASSIGNED` dokumentum jelölt lenne döntés előtt; ha a sora nem UNMATCHED
+   * maradna (az újraolvasás ezt keresi); ha az előléptetés másodszor is hatna,
+   * vagy nem UNASSIGNED dokumentumon; ha az elfogadás nem tenne jelöltté és
+   * STORED-dá; ha az elvetés után a tartalom megmaradna.
+   */
+  it("keeps an untied file UNASSIGNED: not a candidate, promotable once, accepted it is a candidate, rejected it is gone", async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: "collect-it-reviewer-unassigned@example.invalid",
+        displayName: "Begyűjtés teszt 2",
+        role: "OWNER",
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    const keep = (externalId: string) =>
+      repository.store({
+        source: "INFO_MAIL",
+        externalId,
+        fileName: "RE67456.pdf",
+        sender: "invoice@szallito.example",
+        subject: "Ihre Rechnung",
+        receivedAt: new Date("2026-08-06T10:00:00Z"),
+        content: Buffer.from(`%PDF-1.4 ${externalId}`),
+        sha256: `${externalId}-sha`,
+        read: false,
+        kind: "INVOICE",
+        importResult: null,
+        textReading: { invoiceNumber: "RE67456", gross: "1063.00" },
+        payee: "NOT_COMPANY",
+        unassigned: true,
+      });
+    const docA = await keep("collect-it-un-a");
+    const docB = await keep("collect-it-un-b");
+    const docC = await keep("collect-it-un-c");
+    const candidates = async () =>
+      (
+        await new MissingInvoicesRepository().candidates(
+          "2026-08-01",
+          "2026-08-31",
+        )
+      ).flatMap((d) => [d.id, ...(d.aliasIds ?? [])]);
+    const item = (externalId: string) =>
+      prisma.invoiceCollectionItem.findFirstOrThrow({
+        where: { externalId },
+        select: { verdict: true, documentId: true },
+      });
+
+    // tárolva, de nem jelölt; a sora UNMATCHED és a dokumentumra mutat
+    const before = await candidates();
+    for (const id of [docA, docB, docC])
+      assert.equal(before.includes(id), false);
+    assert.deepEqual(await item("collect-it-un-a"), {
+      verdict: "UNMATCHED",
+      documentId: docA,
+    });
+    assert.deepEqual(
+      await repository.documentByContent("collect-it-un-a-sha"),
+      {
+        id: docA,
+        reviewState: "UNASSIGNED",
+      },
+    );
+    const suggestions = new InvoiceCollectionSuggestionsRepository();
+    assert.deepEqual(
+      (await suggestions.list())
+        .filter((row) => [docA, docB, docC].includes(row.id))
+        .map((row) => [row.reviewState, row.suggestionConfidence])
+        .sort(),
+      Array(3).fill(["UNASSIGNED", null]),
+    );
+
+    // előléptetés: rendes begyűjtött dokumentum, STORED sor; másodszor nem hat
+    const tiedInput = {
+      source: "INFO_MAIL" as const,
+      externalId: "collect-it-un-a",
+      fileName: "RE67456.pdf",
+      sender: "invoice@szallito.example",
+      subject: "Ihre Rechnung",
+      receivedAt: new Date("2026-08-06T10:00:00Z"),
+      content: Buffer.from("%PDF-1.4 collect-it-un-a"),
+      sha256: "collect-it-un-a-sha",
+      read: false,
+      kind: "INVOICE" as const,
+      importResult: null,
+      textReading: { invoiceNumber: "SZ-2026/0815", numberFrom: "NAV" },
+      payee: "COMPANY",
+    };
+    assert.equal(await repository.promote(docA, tiedInput), docA);
+    assert.equal(await repository.promote(docA, tiedInput), null);
+    assert.equal((await candidates()).includes(docA), true);
+    assert.deepEqual(await item("collect-it-un-a"), {
+      verdict: "STORED",
+      documentId: docA,
+    });
+    assert.equal(
+      (
+        await prisma.incomingSupplierDocument.findUniqueOrThrow({
+          where: { id: docA },
+          select: { payeeCheck: true },
+        })
+      ).payeeCheck,
+      "COMPANY",
+    );
+    assert.deepEqual(
+      await repository.documentByContent("collect-it-un-a-sha"),
+      {
+        id: docA,
+        reviewState: null,
+      },
+    );
+
+    // elfogadva: jelölt, a sor STORED; másodszor nem dönthető
+    assert.equal(await suggestions.accept(docB, user.id), true);
+    assert.equal(await suggestions.accept(docB, user.id), false);
+    assert.equal((await candidates()).includes(docB), true);
+    assert.deepEqual(await item("collect-it-un-b"), {
+      verdict: "STORED",
+      documentId: docB,
+    });
+
+    // elvetve: a tartalom törlődik, a sor NOT_INVOICE; másodszor nem dönthető
+    assert.equal(await suggestions.reject(docC, user.id), true);
+    assert.equal(await suggestions.reject(docC, user.id), false);
+    assert.equal(
+      await prisma.incomingSupplierDocument.count({ where: { id: docC } }),
+      0,
+    );
+    assert.deepEqual(await item("collect-it-un-c"), {
+      verdict: "NOT_INVOICE",
+      documentId: null,
+    });
+  });
 });

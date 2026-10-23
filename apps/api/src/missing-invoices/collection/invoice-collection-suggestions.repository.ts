@@ -1,11 +1,25 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
+import { UNASSIGNED } from "./invoice-collection.repository.js";
+
 /** A javasolt dokumentum állapota (`IncomingSupplierDocument.reviewState`). */
 export const SUGGESTED = "SUGGESTED";
 
+/**
+ * A DÖNTÉSRE VÁRÓ DOKUMENTUM KÉT ÁLLAPOTA: a Jev javaslata (`SUGGESTED`, van
+ * bizonyossága), és a számlának ítélt, de semmihez nem kötött fájl
+ * (`UNASSIGNED`, acrobot 35522/35529: a PDF a könyvelői csomagba kell). Mindkettő
+ * tárolt, nem jelölt, és ugyanazt a két döntést kapja: elfogad, elvet.
+ */
+export const PENDING_STATES = [SUGGESTED, UNASSIGNED];
+
+/** A begyűjtés sora a döntésre váró dokumentumnál: a Jev-javaslaté SUGGESTED, a nem párosodotté UNMATCHED. */
+const PENDING_VERDICTS = [SUGGESTED, "UNMATCHED"];
+
 export interface SuggestionRow {
   id: string;
+  reviewState: string | null;
   fileName: string;
   sender: string | null;
   subject: string | null;
@@ -22,9 +36,10 @@ export type SuggestionDecided = boolean;
 /**
  * A JEV JAVASLATAINAK ADATBÁZIS-OLDALA (levél-válogatás terv, 4. szelet;
  * acrobot 25803). Egy javaslat egy `reviewState = SUGGESTED` dokumentum, és a
- * begyűjtés `SUGGESTED` ítéletű sora mutat rá.
+ * begyűjtés `SUGGESTED` ítéletű sora mutat rá. Ugyanígy dönt az `UNASSIGNED`
+ * dokumentumról (számlának ítélt, semmihez nem kötött fájl; a sora UNMATCHED).
  *
- * MINDKÉT DÖNTÉS FELTÉTELES ÍRÁS: csak SUGGESTED állapotú dokumentumon hat, tehát
+ * MINDKÉT DÖNTÉS FELTÉTELES ÍRÁS: csak döntésre váró állapotú dokumentumon hat, tehát
  * egy közben meghozott másik döntést nem ír felül, és kétszer sem fut le.
  */
 @Injectable()
@@ -33,10 +48,11 @@ export class InvoiceCollectionSuggestionsRepository {
 
   list(): Promise<SuggestionRow[]> {
     return this.database.incomingSupplierDocument.findMany({
-      where: { reviewState: SUGGESTED },
+      where: { reviewState: { in: PENDING_STATES } },
       orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
+        reviewState: true,
         fileName: true,
         sender: true,
         subject: true,
@@ -52,7 +68,7 @@ export class InvoiceCollectionSuggestionsRepository {
   /** A javasolt PDF, hogy a döntő lássa; csak döntésre váró dokumentumé. */
   file(id: string): Promise<{ fileName: string; content: Uint8Array } | null> {
     return this.database.incomingSupplierDocument.findFirst({
-      where: { id, reviewState: SUGGESTED },
+      where: { id, reviewState: { in: PENDING_STATES } },
       select: { fileName: true, content: true },
     });
   }
@@ -65,16 +81,17 @@ export class InvoiceCollectionSuggestionsRepository {
   accept(id: string, userId: string): Promise<SuggestionDecided> {
     return this.database.$transaction(async (transaction) => {
       const before = await transaction.incomingSupplierDocument.findFirst({
-        where: { id, reviewState: SUGGESTED },
+        where: { id, reviewState: { in: PENDING_STATES } },
         select: {
           fileName: true,
+          reviewState: true,
           suggestionConfidence: true,
           suggestionDecisionRunId: true,
         },
       });
       if (!before) return false;
       const { count } = await transaction.incomingSupplierDocument.updateMany({
-        where: { id, reviewState: SUGGESTED },
+        where: { id, reviewState: { in: PENDING_STATES } },
         data: {
           reviewState: null,
           reviewedAt: new Date(),
@@ -83,7 +100,7 @@ export class InvoiceCollectionSuggestionsRepository {
       });
       if (count === 0) return false;
       await transaction.invoiceCollectionItem.updateMany({
-        where: { documentId: id, verdict: SUGGESTED },
+        where: { documentId: id, verdict: { in: PENDING_VERDICTS } },
         data: { verdict: "STORED" },
       });
       await resolveRun(transaction, before.suggestionDecisionRunId, "ACCEPTED");
@@ -95,6 +112,7 @@ export class InvoiceCollectionSuggestionsRepository {
           entityId: id,
           metadata: {
             fileName: before.fileName,
+            state: before.reviewState,
             confidence: before.suggestionConfidence?.toString() ?? null,
             decisionRunId: before.suggestionDecisionRunId,
           },
@@ -114,9 +132,10 @@ export class InvoiceCollectionSuggestionsRepository {
     return this.database
       .$transaction(async (transaction) => {
         const before = await transaction.incomingSupplierDocument.findFirst({
-          where: { id, reviewState: SUGGESTED },
+          where: { id, reviewState: { in: PENDING_STATES } },
           select: {
             fileName: true,
+            reviewState: true,
             sha256: true,
             suggestionConfidence: true,
             suggestionDecisionRunId: true,
@@ -124,12 +143,12 @@ export class InvoiceCollectionSuggestionsRepository {
         });
         if (!before) return false;
         await transaction.invoiceCollectionItem.updateMany({
-          where: { documentId: id, verdict: SUGGESTED },
+          where: { documentId: id, verdict: { in: PENDING_VERDICTS } },
           data: { verdict: "NOT_INVOICE", documentId: null },
         });
         const { count } = await transaction.incomingSupplierDocument.deleteMany(
           {
-            where: { id, reviewState: SUGGESTED },
+            where: { id, reviewState: { in: PENDING_STATES } },
           },
         );
         // közben egy elfogadás megelőzte: a sor-módosítás se maradjon meg
@@ -147,6 +166,7 @@ export class InvoiceCollectionSuggestionsRepository {
             entityId: id,
             metadata: {
               fileName: before.fileName,
+              state: before.reviewState,
               sha256: before.sha256,
               confidence: before.suggestionConfidence?.toString() ?? null,
               decisionRunId: before.suggestionDecisionRunId,

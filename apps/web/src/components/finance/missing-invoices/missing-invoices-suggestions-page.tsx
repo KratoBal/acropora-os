@@ -153,6 +153,13 @@ export function MissingInvoicesSuggestionsPage() {
         item.receivedAt ? formatDay(item.receivedAt.slice(0, 10)) : "—",
     },
     {
+      id: "state",
+      header: "Állapot",
+      width: "150px",
+      cell: (item) =>
+        item.state === "UNASSIGNED" ? "Nem párosodott" : "A Jev javasolta",
+    },
+    {
       id: "confidence",
       header: "Bizonyosság",
       width: "110px",
@@ -223,10 +230,14 @@ export function MissingInvoicesSuggestionsPage() {
           Javasolt számlák
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-pilot-grey-600">
-          A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához,
-          de a Jev bejövő számlának látta. Amíg nem döntesz róluk, nem kerülnek
-          a párosítás jelöltjei közé. Elfogadva jelöltek lesznek, elvetve
-          törlődnek.
+          A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához
+          vagy terheléshez, de számlának látszanak: vagy a Jev látta bejövő
+          számlának (van bizonyossága), vagy nem párosodtak (a fájlnév, a tárgy
+          vagy a szöveg szerint számla, de a szám, a szállító vagy a fizetés nem
+          egyezik semmivel). Amíg nem döntesz róluk, nem kerülnek a párosítás
+          jelöltjei közé, de a PDF megvan. Elfogadva jelöltek lesznek, elvetve
+          törlődnek. Ha később összekötheti őket egy új adat, a begyűjtés maga
+          köti.
         </p>
       </header>
       {actionError ? (

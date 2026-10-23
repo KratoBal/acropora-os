@@ -360,6 +360,11 @@ export interface MissingInvoiceJevSuggestion {
  */
 export interface InvoiceCollectionSuggestion {
   documentId: string;
+  /**
+   * SUGGESTED: a Jev bejövő számlának látta (van bizonyossága). UNASSIGNED: számlának
+   * ítélt fájl, amit semmi nem kötött (nincs bizonyosság). Mindkettő döntésre vár.
+   */
+  state: "SUGGESTED" | "UNASSIGNED";
   fileName: string;
   sender: string | null;
   subject: string | null;
