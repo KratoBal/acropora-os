@@ -19,6 +19,8 @@ function fakeTransaction(options: {
   entryGtin?: string | null;
   variantBarcodes?: number;
   ownedCode?: boolean;
+  // another approval took the code between the lookup and the insert
+  raceLost?: boolean;
 }) {
   const created: Record<string, unknown>[] = [];
   const logs: Record<string, unknown>[] = [];
@@ -37,9 +39,17 @@ function fakeTransaction(options: {
     productBarcode: {
       count: async () => options.variantBarcodes ?? 0,
       findFirst: async () => (options.ownedCode ? { id: "other" } : null),
-      create: async ({ data }: { data: Record<string, unknown> }) => {
-        created.push(data);
-        return { id: "bc-1" };
+      createMany: async ({
+        data,
+        skipDuplicates,
+      }: {
+        data: Record<string, unknown>[];
+        skipDuplicates?: boolean;
+      }) => {
+        assert.equal(skipDuplicates, true);
+        if (options.raceLost) return { count: 0 };
+        created.push(...data);
+        return { count: data.length };
       },
     },
     auditLog: {
@@ -67,16 +77,23 @@ describe("fillBarcodeFromPair", () => {
   it("gives a variant without any barcode the supplier's, stored as the package shows it, primary, typed, sourced, and logged", async () => {
     const { transaction, created, logs } = fakeTransaction({});
     assert.equal(await fillBarcodeFromPair(transaction, input), "ADDED");
-    assert.deepEqual(created, [
-      {
-        variantId: "v-1",
-        code: VALID_EAN13,
-        isPrimary: true,
-        type: "EAN13",
-        source: "IMPORT",
-      },
-    ]);
+    const { id, ...stored } = created[0]!;
+    assert.equal(typeof id, "string");
+    assert.deepEqual(
+      [stored],
+      [
+        {
+          variantId: "v-1",
+          code: VALID_EAN13,
+          isPrimary: true,
+          type: "EAN13",
+          source: "SUPPLIER_PRICE_LIST",
+        },
+      ],
+    );
     assert.equal(logs.length, 1);
+    // the audit row names the stored barcode: the backfill migration relies on it
+    assert.equal(logs[0]!.entityId, id);
     assert.equal(logs[0]!.action, "product-barcode.added-from-price-list");
     assert.deepEqual(logs[0]!.metadata, {
       variantId: "v-1",
@@ -85,6 +102,15 @@ describe("fillBarcodeFromPair", () => {
       supplierSku: "H-1",
       suggestionId: "sg-1",
     });
+  });
+
+  it("ends as OWNED_BY_OTHER, with nothing logged, when a concurrent approval took the code first", async () => {
+    const { transaction, created, logs } = fakeTransaction({ raceLost: true });
+    assert.equal(
+      await fillBarcodeFromPair(transaction, input),
+      "OWNED_BY_OTHER",
+    );
+    assert.deepEqual([created, logs], [[], []]);
   });
 
   it("looks the barcode up on the supplier's own rows for this sku only", async () => {

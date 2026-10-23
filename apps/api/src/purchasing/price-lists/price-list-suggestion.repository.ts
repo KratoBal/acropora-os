@@ -257,14 +257,24 @@ export class PriceListSuggestionRepository {
             where: { id: existing.id },
             data,
           });
-        else
-          await transaction.supplierPriceMatch.create({
-            data: {
-              supplierId: suggestion.supplierId,
-              supplierSku: suggestion.supplierSku,
-              ...data,
-            },
+        else {
+          // skipDuplicates: a concurrent approval of the same sku already created the
+          // pairing; that one stands and this one is skipped, not a 500
+          const { count } = await transaction.supplierPriceMatch.createMany({
+            data: [
+              {
+                supplierId: suggestion.supplierId,
+                supplierSku: suggestion.supplierSku,
+                ...data,
+              },
+            ],
+            skipDuplicates: true,
           });
+          if (count === 0) {
+            skipped += 1;
+            continue;
+          }
+        }
         // the approved pair may fill the variant's missing barcode (never overwrite one)
         if (
           (await fillBarcodeFromPair(transaction, {
