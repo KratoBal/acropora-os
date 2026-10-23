@@ -6,10 +6,14 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import type { DiscoveryInput, DiscoveryResult } from "./discovery-run.js";
+import { runDiscoveryCli } from "./discovery-run.cli.js";
+import { EUROPE_PMC_BASE } from "./discovery-run.js";
 import {
   PrismaDiscoveryStore,
+  RunAbandoned,
   RunAlreadyRunning,
 } from "./discovery-run.store.js";
+import { europePmcList, scriptedApis } from "./discovery-test-fixtures.js";
 import type { SourceCandidate, VersionCandidate } from "./records.js";
 
 /**
@@ -455,6 +459,88 @@ describe(
         startedAt: new Date(),
       });
       await store.failRun(next, "TestDone");
+    });
+
+    it("a late finish of a run failed as stale writes nothing (barracuda, #1834 v3)", async () => {
+      const runId = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(Date.now() - 60 * 60_000),
+      });
+      await prisma.knowledgeDiscoveryRun.update({
+        where: { id: runId },
+        data: { heartbeatAt: new Date(Date.now() - 60 * 60_000) },
+      });
+      assert.equal(
+        await store.abandonStale(new Date(Date.now() - 5 * 60_000)),
+        1,
+      );
+      await assert.rejects(
+        store.finishRun(
+          runId,
+          result([candidate({ doi: `${DOI_PREFIX}${suffix}-late` })]),
+        ),
+        RunAbandoned,
+      );
+      assert.equal(
+        await prisma.knowledgeSource.count({
+          where: { doi: `${DOI_PREFIX}${suffix}-late` },
+        }),
+        0,
+        "the transaction stored nothing",
+      );
+      await store.failRun(runId, "Late");
+      const row = await prisma.knowledgeDiscoveryRun.findUniqueOrThrow({
+        where: { id: runId },
+      });
+      assert.equal(row.status, "FAILED");
+      assert.deepEqual(
+        row.report,
+        { error: "STALE_RUNNING" },
+        "failRun does not overwrite it",
+      );
+      await assert.rejects(
+        store.finishRun(runId, { ...result([]), status: "INCOMPLETE" }),
+        RunAbandoned,
+      );
+    });
+
+    it("the CLI --apply starts beside a RUNNING row silent for over 5 minutes (barracuda, #1834 v3)", async () => {
+      const dead = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(Date.now() - 60 * 60_000),
+      });
+      const network = scriptedApis([
+        [
+          `${EUROPE_PMC_BASE}/search?query=phosphate`,
+          { status: 200, body: europePmcList([], 0) },
+        ],
+      ]);
+      const out = { stdout: "", stderr: "" };
+      const code = await runDiscoveryCli(
+        ["--input", "x.json", "--apply", "--actor", userId],
+        { stdout: (t) => (out.stdout += t), stderr: (t) => (out.stderr += t) },
+        {
+          env: { KNOWLEDGE_DISCOVERY: "on" },
+          readInput: async () =>
+            JSON.stringify({
+              label: "integracios-cli",
+              europePmc: [{ query: "phosphate AND Acropora", maxResults: 5 }],
+            }),
+          store,
+          actorExists: async () => true,
+          fetch: network.fetch,
+          sleep: async () => undefined,
+          now: () => new Date(),
+          every: () => () => undefined,
+        },
+      );
+      assert.equal(code, 0, out.stderr);
+      const old = await prisma.knowledgeDiscoveryRun.findUniqueOrThrow({
+        where: { id: dead },
+      });
+      assert.equal(old.status, "FAILED");
     });
   },
 );

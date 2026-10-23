@@ -16,6 +16,7 @@ import {
   everyInterval,
   DISCOVERY_SWITCH_ENV,
   MAX_REQUEST_LIMIT,
+  STALE_AFTER_MS,
   parseDiscoveryInput,
   runDiscovery,
 } from "./discovery-run.js";
@@ -48,8 +49,8 @@ import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
  * process that died under it, and is marked FAILED before the next start. A
  * long run is not cut by its length, only by its silence.
  */
+export { STALE_AFTER_MS };
 export const DISCOVERY_DEPS = Symbol("KNOWLEDGE_DISCOVERY_DEPS");
-export const STALE_AFTER_MS = 5 * HEARTBEAT_MS;
 export const LIST_LIMIT = 20;
 
 export interface DiscoveryServiceDeps {

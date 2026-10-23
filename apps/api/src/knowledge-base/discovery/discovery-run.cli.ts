@@ -8,6 +8,7 @@ import {
   DISCOVERY_SWITCH_ENV,
   HEARTBEAT_MS,
   MAX_REQUEST_LIMIT,
+  STALE_AFTER_MS,
   everyInterval,
   parseDiscoveryInput,
   runDiscovery,
@@ -17,7 +18,9 @@ import {
 import {
   PrismaDiscoveryStore,
   type DiscoveryStore,
+  RunAbandoned,
   RunAlreadyRunning,
+  type DiscoveryRunLedger,
   type StoreSummary,
 } from "./discovery-run.store.js";
 import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
@@ -50,13 +53,15 @@ import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
  * Exit: 0 finished; 1 the switch is off; 2 bad input or unknown actor; 3 the
  * run stopped (request limit, or Crossref refused) and nothing was stored;
  * 4 stored, but some works matched more than one row (each one reported);
- * 5 another run is RUNNING (one at a time, the database holds the rule).
+ * 5 another run is RUNNING (one at a time, the database holds the rule);
+ * 6 this run was failed as stale by another start while it ran (nothing of
+ * its result was written).
  */
 
 export interface DiscoveryCliDeps {
   env: NodeJS.ProcessEnv;
   readInput: (path: string) => Promise<string>;
-  store: DiscoveryStore;
+  store: DiscoveryStore & Pick<DiscoveryRunLedger, "abandonStale">;
   actorExists: (userId: string) => Promise<boolean>;
   fetch: ApiFetch;
   sleep: (ms: number) => Promise<void>;
@@ -131,6 +136,12 @@ export async function runDiscoveryCli(
   let runId: string | null = null;
   if (apply)
     try {
+      // a killed CLI run (Ctrl-C, OOM, a restart) leaves its row RUNNING: fail
+      // it once it is silent, as the endpoint does, or the index would stop
+      // every later start on a dead run (barracuda, #1834 v3)
+      await deps.store.abandonStale(
+        new Date(deps.now().getTime() - STALE_AFTER_MS),
+      );
       runId = await deps.store.startRun({
         input: parsed.input,
         requestedById: actor!,
@@ -157,6 +168,12 @@ export async function runDiscoveryCli(
       deps,
     );
   } catch (error) {
+    if (error instanceof RunAbandoned) {
+      out.stderr(
+        "A futást közben egy másik indítás elhagyottnak jelölte (5 percig nem jött szívverés); az eredménye nem tárolódott.\n",
+      );
+      return 6;
+    }
     // the name only: an error's text may carry an API's answer
     if (runId)
       await deps.store.failRun(runId, (error as Error)?.name ?? "Error");

@@ -8,7 +8,11 @@ import {
   type DiscoveryCliDeps,
 } from "./discovery-run.cli.js";
 import { CROSSREF_BASE, EUROPE_PMC_BASE } from "./discovery-run.js";
-import { RunAlreadyRunning, type StoreSummary } from "./discovery-run.store.js";
+import {
+  RunAbandoned,
+  RunAlreadyRunning,
+  type StoreSummary,
+} from "./discovery-run.store.js";
 import {
   crossrefList,
   europePmcList,
@@ -42,6 +46,7 @@ function deps(
   },
 ) {
   const calls: string[] = [];
+  const staleBefore: string[] = [];
   const network = scriptedApis([
     [
       `${EUROPE_PMC_BASE}/search?query=phosphate`,
@@ -80,6 +85,10 @@ function deps(
       heartbeat: async (runId) => {
         calls.push(`beat:${runId}`);
       },
+      abandonStale: async (before) => {
+        staleBefore.push(before.toISOString());
+        return 0;
+      },
     },
     // the heartbeat beats once at once, so the test sees it, and stops after
     every: (beat) => {
@@ -92,7 +101,7 @@ function deps(
     now: clock.now,
     ...over,
   };
-  return { value, calls, network };
+  return { value, calls, network, staleBefore };
 }
 
 function output() {
@@ -217,6 +226,7 @@ describe("knowledge:discover", () => {
         startRun: async () => "run-1",
         failRun: async () => undefined,
         heartbeat: async () => undefined,
+        abandonStale: async () => 0,
         finishRun: async () => ({
           ...SUMMARY,
           ambiguous: [
@@ -307,5 +317,36 @@ describe("knowledge:discover", () => {
     assert.equal(code, 5);
     assert.equal(d.network.asked.length, 0);
     assert.match(o.out.stderr, /Már fut egy felderítés/);
+  });
+
+  it("--apply fails a silent RUNNING row first, so a killed CLI run cannot block the next (barracuda, #1834 v3)", async () => {
+    const d = deps();
+    await runDiscoveryCli(
+      ["--input", "x.json", "--apply", "--actor", "u-1"],
+      output().sink,
+      d.value,
+    );
+    // fakeClock starts at 14:00:00Z; silent for 5 minutes = before 13:55:00Z
+    assert.deepEqual(d.staleBefore, ["2026-10-23T13:55:00.000Z"]);
+    // a preview starts no run and fails nothing
+    const p = deps();
+    await runDiscoveryCli(["--input", "x.json"], output().sink, p.value);
+    assert.deepEqual(p.staleBefore, []);
+  });
+
+  it("a run failed as stale while it ran: exit 6, its result not stored", async () => {
+    const d = deps();
+    d.value.store.finishRun = async (runId) => {
+      throw new RunAbandoned(runId);
+    };
+    const o = output();
+    const code = await runDiscoveryCli(
+      ["--input", "x.json", "--apply", "--actor", "u-1"],
+      o.sink,
+      d.value,
+    );
+    assert.equal(code, 6);
+    assert.match(o.out.stderr, /elhagyottnak jelölte/);
+    assert.ok(!d.calls.some((c) => c.startsWith("fail:")));
   });
 });

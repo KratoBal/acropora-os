@@ -63,6 +63,8 @@ export const MAX_REQUEST_LIMIT = 1_000;
 export const DISCOVERY_SWITCH_ENV = "KNOWLEDGE_DISCOVERY";
 /** How often a stored run says it is alive (`KnowledgeDiscoveryRun.heartbeatAt`). */
 export const HEARTBEAT_MS = 60_000;
+/** A RUNNING row silent this long belongs to a process that died under it. */
+export const STALE_AFTER_MS = 5 * HEARTBEAT_MS;
 
 /** The default heartbeat timer: it never keeps the process alive by itself. */
 export function everyInterval(beat: () => void, ms: number): () => void {

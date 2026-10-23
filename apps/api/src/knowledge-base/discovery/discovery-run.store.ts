@@ -142,6 +142,18 @@ export interface DiscoveryRunDetail extends DiscoveryRunRow {
   report: unknown;
 }
 
+/**
+ * The run's own row is no longer RUNNING: another start found it silent and
+ * failed it as stale (barracuda, #1834 v3). Its result is not written, so a
+ * late finish cannot overwrite STALE_RUNNING while a second run goes on.
+ */
+export class RunAbandoned extends Error {
+  constructor(readonly runId: string) {
+    super(`knowledge discovery run ${runId} is no longer RUNNING`);
+    this.name = "RunAbandoned";
+  }
+}
+
 /** Another run is RUNNING: the database's partial unique index said so. */
 export class RunAlreadyRunning extends Error {
   constructor() {
@@ -279,8 +291,9 @@ export class PrismaDiscoveryStore
   }
 
   async failRun(runId: string, reason: string): Promise<void> {
-    await prisma.knowledgeDiscoveryRun.update({
-      where: { id: runId },
+    // only its own RUNNING row: a run failed as stale keeps STALE_RUNNING
+    await prisma.knowledgeDiscoveryRun.updateMany({
+      where: { id: runId, status: "RUNNING" },
       data: {
         status: "FAILED",
         report: { error: reason.slice(0, 64) },
@@ -315,14 +328,22 @@ export class PrismaDiscoveryStore
     });
     if (result.status !== "FINISHED") {
       const summary = { ...emptySummary(), runId };
-      await prisma.knowledgeDiscoveryRun.update({
-        where: { id: runId },
+      const done = await prisma.knowledgeDiscoveryRun.updateMany({
+        where: { id: runId, status: "RUNNING" },
         data: record(summary),
       });
+      if (done.count === 0) throw new RunAbandoned(runId);
       return summary;
     }
     return prisma.$transaction(
       async (tx) => {
+        // the row is still ours, and stays locked until the end: a start that
+        // would fail it as stale waits for this transaction
+        const ours = await tx.knowledgeDiscoveryRun.updateMany({
+          where: { id: runId, status: "RUNNING" },
+          data: { heartbeatAt: new Date() },
+        });
+        if (ours.count === 0) throw new RunAbandoned(runId);
         const created = { id: runId };
         const summary = emptySummary();
         summary.runId = runId;
