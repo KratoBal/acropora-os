@@ -77,6 +77,9 @@ export class KnowledgeExtractionService {
     const ids = parseSourceIds(
       (body as Record<string, unknown> | null)?.sourceIds,
     );
+    // read an already extracted source again, withdrawing its unreviewed claims
+    const reextract =
+      (body as Record<string, unknown> | null)?.reextract === true;
     if (typeof ids === "string") throw new BadRequestException(ids);
 
     await store.abandonStale(
@@ -114,6 +117,7 @@ export class KnowledgeExtractionService {
             vocabulary: this.deps.vocabulary,
             now: this.deps.now,
             runId,
+            ...(reextract ? { reextract: { actorUserId: user.id } } : {}),
           }),
         );
       await store.finishRun(

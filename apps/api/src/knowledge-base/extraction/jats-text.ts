@@ -18,7 +18,11 @@
  *   introduction reports OTHER papers' findings, and a claim taken from it
  *   would cite this paper for someone else's result.
  * - A table cell ends with " | ", a row, paragraph, title or caption with a
- *   line break; inline markup (italic, sup, xref) leaves no gap.
+ *   line break; inline markup (italic, sup, xref) leaves no gap, except that a
+ *   numbered citation (`<xref ref-type="bibr">12</xref>`) keeps its mark as
+ *   "[12]": stripped bare, "growth<xref>12</xref>." read "growth12." and the
+ *   own-findings rule could not see that the sentence cites another work
+ *   (barracuda, #1854 review, 35831).
  */
 export interface TextSection {
   locator: string;
@@ -65,6 +69,15 @@ export function jatsText(fragment: string): string {
     fragment
       .replace(/<(graphic|inline-graphic|media)\b[^>]*?\/>/gi, "")
       .replace(/<(graphic|inline-graphic|media)\b[\s\S]*?<\/\1>/gi, "")
+      .replace(
+        /<xref\b[^>]*\bref-type\s*=\s*["']bibr["'][^>]*>([\s\S]*?)<\/xref>/gi,
+        (whole, inner: string) => {
+          const mark = inner.replace(/<[^>]+>/g, "").trim();
+          return /^\d{1,3}(?:\s*[,–-]\s*\d{1,3})*$/.test(mark)
+            ? ` [${mark}]`
+            : whole;
+        },
+      )
       .replace(/<\/(td|th)>/gi, " | ")
       .replace(
         /<\/(p|title|caption|label|tr|list-item|table-wrap|fig|disp-quote|def-item)>|<break\s*\/?>/gi,

@@ -77,6 +77,9 @@ describe(
           select: { claimId: true },
         })
       ).map((e) => e.claimId);
+      await prisma.auditLog.deleteMany({
+        where: { user: { email: { endsWith: `@${EMAIL_DOMAIN}` } } },
+      });
       await prisma.knowledgeFieldAnchor.deleteMany({
         where: { passage: where },
       });
@@ -156,6 +159,7 @@ describe(
         claimsCreated: 1,
         anchorsCreated: 10,
         questions: 1,
+        claimsWithdrawn: 0,
       });
 
       const version = await prisma.knowledgeSourceVersion.findFirstOrThrow({
@@ -374,8 +378,99 @@ describe(
         claimsCreated: 0,
         anchorsCreated: 0,
         questions: 0,
+        claimsWithdrawn: 0,
       });
       assert.equal((await store.source(other.id))?.alreadyExtracted, true);
+    });
+
+    it("re-extraction: the unreviewed claims are withdrawn with their pending fields, a reviewed one stays, one AuditLog row (acrobot 35808)", async () => {
+      const again = await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${DOI_PREFIX}${suffix}-again`,
+          title: "Kitalált újraolvasott",
+          discoveredVia: "MANUAL",
+          versions: {
+            create: { versionKind: "ORIGINAL", detectedVia: "MANUAL" },
+          },
+        },
+      });
+      const { claims } = checkClaims(
+        [aiClaim(), aiClaim()],
+        jatsSections(JATS),
+        vocabularyV1(),
+      );
+      await store.saveSource({
+        sourceId: again.id,
+        contentHash: sha256(JATS),
+        extractedBy: "m claim-extraction/v1",
+        claims,
+        verifiedAt: new Date(),
+      });
+      const onSource = { passage: { sourceVersion: { sourceId: again.id } } };
+      const first = await prisma.knowledgeClaimEvidence.findMany({
+        where: onSource,
+        select: { claimId: true },
+        orderBy: { claimId: "asc" },
+      });
+      assert.equal(first.length, 2);
+      // the editor reviewed one of them
+      await prisma.knowledgeClaim.update({
+        where: { id: first[0]!.claimId },
+        data: { status: "VERIFIED" },
+      });
+      assert.equal((await store.source(again.id))?.alreadyExtracted, true);
+
+      const saved = await store.saveSource({
+        sourceId: again.id,
+        contentHash: sha256(JATS),
+        extractedBy: "m claim-extraction/v2",
+        claims: claims.slice(0, 1),
+        verifiedAt: new Date(),
+        replaceCandidatesBy: userId,
+      });
+      assert.equal(saved.claimsWithdrawn, 1);
+      assert.equal(saved.claimsCreated, 1);
+      const statuses = await prisma.knowledgeClaim.findMany({
+        where: { evidence: { some: onSource } },
+        select: { id: true, status: true },
+      });
+      assert.deepEqual(statuses.map((s) => s.status).sort(), [
+        "CANDIDATE",
+        "VERIFIED",
+        "WITHDRAWN",
+      ]);
+      const withdrawn = statuses.find((s) => s.status === "WITHDRAWN")!;
+      assert.equal(withdrawn.id, first[1]!.claimId);
+      // its fields are decided, by the actor; the new claim's are pending
+      assert.equal(
+        await prisma.knowledgeFieldAnchor.count({
+          where: {
+            claimEvidence: { claimId: withdrawn.id },
+            NOT: { decision: "REJECTED", decidedById: userId },
+          },
+        }),
+        0,
+      );
+      const created = statuses.find((s) => s.status === "CANDIDATE")!;
+      assert.ok(
+        (await prisma.knowledgeFieldAnchor.count({
+          where: {
+            claimEvidence: { claimId: created.id },
+            decision: "PENDING",
+          },
+        })) > 0,
+      );
+      const audit = await prisma.auditLog.findMany({
+        where: { userId, action: "KNOWLEDGE_CLAIMS_REEXTRACTED" },
+        select: { entityId: true, metadata: true },
+      });
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.entityId, again.id);
+      assert.equal(
+        (audit[0]!.metadata as Record<string, unknown>).claimsWithdrawn,
+        1,
+      );
     });
   },
 );
