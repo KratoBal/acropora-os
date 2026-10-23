@@ -5,14 +5,7 @@ import type {
   BuyerSnapshot,
   SentLineAmounts,
 } from "./billing-document-issue.js";
-
-/** A Számlázás modul saját sorai; ugyanaz a hatókör, mint a vázlat repository-jában. */
-const OWN_ROWS = {
-  direction: "OUTBOUND",
-  source: "SZAMLAZZ",
-  sourceType: { not: null },
-  completionCertificateId: null,
-} satisfies Prisma.InvoiceWhereInput;
+import { OWN_ROWS } from "./billing-own-rows.js";
 
 /**
  * A KIÁLLÍTÁS ÁLLAPOTÁTMENETEI (#1267 állapotgépe), a karbantartási számla
