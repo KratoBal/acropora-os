@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -411,6 +412,44 @@ describe("Állítás ellenőrzése", () => {
     );
     await decideAll();
     expect(saveButton().disabled).toBe(false);
+  });
+
+  it("nem foszfát-érték: nincs mg/l PO₄ átváltás, és egy felső határ alsó nélkül (acrobot 35808)", async () => {
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      quantity: {
+        min: null,
+        max: "9",
+        unit: "µmol/l",
+        basis: null,
+        normalizedMinMgL: null,
+        normalizedMaxMgL: null,
+      },
+    });
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    expect(row("quantity").textContent).not.toContain("≈");
+    expect(row("quantity").textContent).toContain(
+      "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól.",
+    );
+    // a phosphate upper bound alone is still converted, from its one end
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      quantity: {
+        min: null,
+        max: "2",
+        unit: "µmol/l",
+        basis: null,
+        normalizedMinMgL: null,
+        normalizedMaxMgL: "0.189942",
+      },
+    });
+    cleanup();
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    expect(row("quantity").textContent).toContain(
+      "≈ legfeljebb 0,189942 mg/l PO₄",
+    );
   });
 
   it("ellenőrzött, nem visszavont forrásnál nincs figyelmeztetés", async () => {
