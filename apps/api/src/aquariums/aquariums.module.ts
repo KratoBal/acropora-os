@@ -19,6 +19,10 @@ import {
   RECOMMENDATION_CANDIDATE_SOURCE,
 } from "./recommendation/measurement-recommendation.contract.js";
 import { MeasurementRecommendationService } from "./recommendation/measurement-recommendation.service.js";
+import {
+  createReefClubShopMailSender,
+  REEFCLUB_SHOP_MAIL_SENDER,
+} from "./reefclub-shop-mail-sender.js";
 
 /**
  * A `CustomersModule` IMPORTÁLVA, NEM ÚJRAÍRVA.
@@ -38,6 +42,11 @@ import { MeasurementRecommendationService } from "./recommendation/measurement-r
     AquariumMeasurementsRepository,
     AquariumMeasurementsService,
     AquariumReefClubService,
+    {
+      // null when the internal API has no REEFCLUB_SMTP_*: the service then keeps the shared sender
+      provide: REEFCLUB_SHOP_MAIL_SENDER,
+      useFactory: () => createReefClubShopMailSender(),
+    },
     AquariumMeasurementXlsx,
     AquariumMaintainersRepository,
     AquariumMaintainersService,

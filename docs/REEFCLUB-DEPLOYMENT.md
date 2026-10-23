@@ -75,6 +75,32 @@ start if one is present (`reefclub-environment.ts`, plan 2.1).
 | `REEFCLUB_DIAG_CLIENT_ADDRESS_UNTIL`                                                                                                        | no                     | measurement only, OFF by default: an ISO time with a zone; while it is in the future AND at most two hours after the process started, `GET /rc/v1/health` shows the computed caller address and the `X-Forwarded-For` chain (addresses only). A missing, malformed, past or too distant value is closed (the start names a malformed or too distant one); a forgotten value expires by the clock, not by restarts. Every health answer is `no-store` |
 | `REEFCLUB_TRUSTED_PROXY_HOPS`                                                                                                               | no                     | proxies in front that append to `X-Forwarded-For` (default 1); set from a measurement of the chain                                                                                                                                                                                                                                                                                                                                                   |
 
+### The shop-side ReefClub letters, sent by the internal API
+
+Three ReefClub letters are written by the **internal API**, not by the ReefClub process: the link
+code, the link notice and the measurement-release notice (`aquarium-reefclub.service.ts`). With
+`REEFCLUB_SMTP_*` set **on the internal API container too**, they go on the ReefClub's own sender
+(the same `createReefClubMailSender`: Brevo, `REEFCLUB_MAIL_FROM` and `REEFCLUB_MAIL_FROM_NAME`, and on
+the test site the `REEFCLUB_MAIL_ALLOW` gate); a half-set configuration stops the internal API's start,
+naming the missing names. Unset, they stay on the shared `MAIL_SENDER`, as before
+(`reefclub-shop-mail-sender.ts`). The start log says which road is in use. Only the SMTP names move
+the letters: the internal API never takes the ReefClub mailbox's Gmail credentials.
+
+**Outside production the allow-list is required (barracuda, #1824 review).** The shared sender is held
+there by `TICKET_MAIL_REDIRECT_TO` (an address: every letter goes there; unset: nothing goes out), and
+the ReefClub sender does not read it. So when `REEFCLUB_SMTP_*` is set on the internal API and
+`TICKET_MAIL_REDIRECT_TO` is anything but `off`, `REEFCLUB_MAIL_ALLOW` must be set too, or the internal
+API's start stops naming it. Production sets `TICKET_MAIL_REDIRECT_TO=off`, and there the allow-list
+stays unset, as in the ReefClub process.
+
+**Which key (acrobot, 2026-10-23):** on the test site the existing Brevo SMTP key may be set on both
+containers. **In production the internal API gets a second, separately revocable Brevo SMTP key**,
+never the ReefClub process's own one, so either container's key can be revoked without the other.
+What a second key does NOT give (background knowledge, not measured here; check it in Brevo's own
+documentation before relying on it): a Brevo SMTP key is, as far as we know, account-wide, so it can
+send from any sender verified in the Brevo account, not only from `reefclub@`. Separate revocation, yes;
+a narrower scope, no.
+
 ## The database role
 
 `packages/database/sql/reefclub-role.sql` grants the ReefClub role exactly what the process
