@@ -61,6 +61,10 @@ export async function loadRelatedDocuments(
     where: {
       expectedArrivalId: own.expectedArrivalId,
       id: { not: sourceDocumentId },
+      // a döntésre váró (SUGGESTED, UNASSIGNED) vagy más okból félretett gyűjtött
+      // dokumentum nem része a kapcsolatnak, akkor sem, ha egyszer egy beérkezésre
+      // kerülne (barracuda #1831: ma csak az írási utak miatt nem kerülhet ide)
+      reviewState: null,
     },
     orderBy: [{ receivedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     select: {

@@ -118,9 +118,11 @@ describe("loadRelatedDocuments", () => {
       string,
       { where: unknown; select: Record<string, boolean> },
     ];
+    // a döntésre váró (reviewState nem null) dokumentum nem része a listának
     assert.deepEqual(findMany[1].where, {
       expectedArrivalId: "arrival-1",
       id: { not: "doc-own" },
+      reviewState: null,
     });
     assert.equal("content" in findMany[1].select, false);
   });
