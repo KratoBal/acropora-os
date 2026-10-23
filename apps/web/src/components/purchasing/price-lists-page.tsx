@@ -92,10 +92,10 @@ export function CoverageCell({
       </span>
       {coverage.unmatchedBarcodeKnownToUs > 0 ? (
         <span className="text-pilot-amber-700">
-          Figyelem: a párosítatlan, vonalkódos sorok közül{" "}
+          Ellenőrizendő: a párosítatlan, vonalkódos sorok közül{" "}
           {coverage.unmatchedBarcodeKnownToUs} vonalkódja szerepel a mi
-          vonalkód-táblánkban, és mégsem párosodott (nálunk eltérő alakban
-          tárolt vonalkód).
+          vonalkód-táblánkban, és mégsem párosodott: vagy a cikkszám ellentmond
+          a vonalkódnak, vagy a vonalkód nálunk másképp van tárolva.
         </span>
       ) : null}
     </span>

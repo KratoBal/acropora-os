@@ -317,12 +317,22 @@ describe(
       await prisma.productBarcode.create({
         data: { variantId: variants.B!, code: "999 000 000 0024" },
       });
+      // a barcode on TWO of our variants (the same code in two written forms) is a
+      // conflict, not a mistake: the matcher rightly ties nothing, and the
+      // diagnostic must not count it
+      await prisma.productBarcode.createMany({
+        data: [
+          { variantId: variants.A!, code: "9990000000031" },
+          { variantId: variants.B!, code: "09990000000031" },
+        ],
+      });
       const result = await upload(
         hertlein([
           { code: "P1", ean: EAN_A, price: "12,10" },
           { code: "P2", ean: "9990000000024", price: "4,10" },
           { code: "P3", ean: "", price: "7,00" },
           { code: "P4", ean: "", price: "3,00" },
+          { code: "P5", ean: "9990000000031", price: "2,00" },
         ]),
         `${PREFIX}v4.csv`,
       );
@@ -333,7 +343,7 @@ describe(
         { ...coverage, listId: undefined },
         {
           listId: undefined,
-          rows: 4,
+          rows: 5,
           eanAuto: 0,
           eanApproved: 0,
           codeAuto: 1,
@@ -341,7 +351,7 @@ describe(
           nameAuto: 0,
           nameApproved: 0,
           rejected: 1,
-          unmatchedWithBarcode: 1,
+          unmatchedWithBarcode: 2,
           unmatchedWithoutBarcode: 1,
           unmatchedBarcodeKnownToUs: 1,
         },
