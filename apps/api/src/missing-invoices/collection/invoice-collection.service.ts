@@ -633,12 +633,7 @@ export class InvoiceCollectionService {
             .replace(/\D/g, "")
             .slice(0, 8),
         );
-        if (
-          !corroboratedBy(lines, facts, found.sender, {
-            normalizeName,
-            distinctiveWord,
-          })
-        )
+        if (!corroboratedBy(lines, facts, found.sender, { normalizeName }))
           textReading = {
             ...textReading,
             invoiceNumber: null,

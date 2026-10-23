@@ -28,8 +28,60 @@ export type Corroboration = "AMOUNT" | "NAME" | "SENDER";
 
 export interface CorroborationHooks {
   normalizeName: (name: string) => string;
-  /** A név jellemző szava (a normalizált név első, legalább négybetűs szava). */
-  distinctiveWord: (name: string) => string | null;
+}
+
+/**
+ * ÁLTALÁNOS SZAVAK, AMELYEK NEM AZONOSÍTANAK EGY SZÁLLÍTÓT (barracuda 35766): a
+ * "Magyar Telekom" jellemző szava "magyar", a "Global Trade"-é "global", és ezek
+ * szinte minden magyar, illetve nemzetközi számla szövegében önálló szóként
+ * állnak, tehát a név-jel magától teljesülne. A lista ítélet, nem mérés: rövid
+ * és szándékosan szűk, bővíthető, ha egy valódi szállítónál kiderül, hogy a
+ * jel magától teljesül.
+ */
+const GENERIC_SIGN_WORDS = new Set([
+  "magyar",
+  "magyarorszag",
+  "hungary",
+  "global",
+  "trade",
+  "trading",
+  "service",
+  "services",
+  "team",
+  "group",
+  "system",
+  "systems",
+  "solutions",
+  "europe",
+  "european",
+  "euro",
+  "center",
+  "centre",
+  "partner",
+  "partners",
+  "holding",
+  "consulting",
+  "logistics",
+  "szolgaltato",
+  "szolgáltató",
+  "ipari",
+  "kozponti",
+  "központi",
+]);
+
+/**
+ * A SZÁLLÍTÓNÉV JELLEMZŐ SZAVAI: a normalizált név legalább négybetűs szavai az
+ * általános szavak nélkül, legfeljebb az első kettő. A név-jelhez MINDEGYIK kell
+ * (a "Gumi Profi" egy "gumi" szóra nem elég), a feladó-jelhez az első.
+ */
+export function nameSigns(
+  name: string,
+  normalizeName: (name: string) => string,
+): string[] {
+  return normalizeName(name)
+    .split(" ")
+    .filter((word) => word.length >= 4 && !GENERIC_SIGN_WORDS.has(word))
+    .slice(0, 2);
 }
 
 /** A feladó címének tartománya betűkre-számjegyekre szűrve ("A <a@gumi-profi.hu>" -> "gumiprofihu"). */
@@ -50,12 +102,13 @@ export function corroboratedBy(
   if (facts.grossCents.some((cents) => cents > 0 && values.has(cents)))
     return "AMOUNT";
   const words = new Set(hooks.normalizeName(text).split(" "));
-  const distinctive = facts.supplierNames
-    .map((name) => hooks.distinctiveWord(name))
-    .filter((word): word is string => word !== null);
-  if (distinctive.some((word) => words.has(word))) return "NAME";
+  const signs = facts.supplierNames
+    .map((name) => nameSigns(name, hooks.normalizeName))
+    .filter((words) => words.length > 0);
+  if (signs.some((needed) => needed.every((word) => words.has(word))))
+    return "NAME";
   const domain = senderDomain(sender);
-  if (domain && distinctive.some((word) => domain.includes(word)))
+  if (domain && signs.some((needed) => domain.includes(needed[0]!)))
     return "SENDER";
   return null;
 }
