@@ -78,6 +78,13 @@ export interface CandidateDocument {
    */
   originalId?: string;
   /**
+   * A DOKUMENTUM FÁJLJA PDF-E (acrobot 35571, Coral Sands RE67900). `false`, ha a
+   * fájlnév ismert nem-PDF kiterjesztésű (az XRechnung XML-je); hiányzik vagy igaz,
+   * ha PDF vagy ismeretlen. A könyvelői csomag csak PDF-et fűz be, ezért az
+   * összevonásnál a PDF megelőzi a nem-PDF társát (`mergeSameInvoice`).
+   */
+  originalIsPdf?: boolean;
+  /**
    * AMI ALAPJÁN KÉT DOKUMENTUM UGYANAZ A SZÁMLA (acrobot 25636): `sha:<fájl
    * lenyomata>` és `inv:<számlaszám|szállító>`. Az összevont jelölt a társaié
    * is. Ha egy azonosság két terheléshez párosul, az Kétszer fizetett számla.
