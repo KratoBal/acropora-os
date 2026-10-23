@@ -50,6 +50,7 @@ import {
   stornoOffered,
   useBillingStorno,
 } from "./billing-document-storno";
+import { BillingDocumentRelated } from "./billing-document-related";
 import { BILLING_LIST_PATH, formatDay } from "./billing-document-table";
 import { formatMoney, trimDecimal } from "./billing-editor-state";
 import { useBillingDocumentPdf } from "./use-billing-document-pdf";
@@ -523,6 +524,8 @@ export function BillingDocumentDetailPage({
               </PilotDataItem>
             </PilotDataGrid>
           </PilotSection>
+
+          <BillingDocumentRelated documents={detail.relatedDocuments ?? []} />
 
           <PilotSection
             title="Tételek"

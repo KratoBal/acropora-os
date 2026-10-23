@@ -1000,4 +1000,50 @@ describe("the advance from a proforma", () => {
       screen.queryByRole("button", { name: "Előlegszámla készítése" }),
     ).toBeNull();
   });
+
+  it("shows the chain of related documents from the server, and nothing for a lone document", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        relatedDocuments: [
+          {
+            id: "p9",
+            documentType: "PROFORMA",
+            number: "D-9",
+            status: "ISSUED",
+            issueDate: "2026-09-20",
+            grossAmount: "355600.0000",
+            currency: "HUF",
+            current: false,
+            cancelsId: null,
+          },
+          {
+            id: "doc-1",
+            documentType: "INVOICE",
+            number: "AC-2026-001248",
+            status: "ISSUED",
+            issueDate: "2026-09-30",
+            grossAmount: "355600.0000",
+            currency: "HUF",
+            current: true,
+            cancelsId: null,
+          },
+        ],
+      }),
+    );
+    const { unmount } = render(
+      <BillingDocumentDetailPage documentId="doc-1" />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "AC-2026-001248" });
+    expect(
+      screen.getByRole("link", { name: "Díjbekérő · D-9" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    api.detail.mockResolvedValue(detail({ relatedDocuments: [] }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("heading", { level: 1, name: "AC-2026-001248" });
+    expect(
+      screen.queryByRole("list", { name: "Kapcsolódó bizonylatok" }),
+    ).toBeNull();
+  });
 });

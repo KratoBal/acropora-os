@@ -113,6 +113,7 @@ function setup(start: Record<string, BillingDocumentRow>) {
       return { created: true };
     },
     feedPaid: async () => true,
+    related: async () => [],
     finalInvoiceOf: async () => null,
     purchaseContractItemIds: async () => new Set(["ci-1"]),
   } as unknown as BillingDocumentsRepository;
