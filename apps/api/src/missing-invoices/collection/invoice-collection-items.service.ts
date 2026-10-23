@@ -44,12 +44,28 @@ export function parseLimit(value: string | undefined): number {
   return parsed;
 }
 
+/** A tárolt fájlok ítéletei: ezek dokumentumként úgyis ott vannak a rendszerben. */
+const STORED_VERDICTS: ReadonlySet<string> = new Set(["STORED", "SUGGESTED"]);
+
+/**
+ * A balazs@ postafiók (Balázs saját levelezése) NEM tárolt fájljairól a
+ * fájlnév és a levélazonosító nem megy ki (barracuda #1827): a `finance.view`
+ * jog nem Balázs magánlevelezésének a jele, és egy nem számla melléklet neve
+ * (szerződés, ajánlat, emlékeztető) magánügyre is utalhat. Az ítélet, a forrás
+ * és az idő kimegy, a darabszámok is. Az info@ és a Drive sorai teljesek. Egy
+ * ismeretlen ítélet a visszatartott oldalon áll: a hiba iránya a titkosság.
+ */
+function withheld(row: CollectionItemRow): boolean {
+  return row.source === "BALAZS_MAIL" && !STORED_VERDICTS.has(row.verdict);
+}
+
 function toRow(row: CollectionItemRow): InvoiceCollectionItemRow {
+  const hide = withheld(row);
   return {
     id: row.id,
     source: row.source as InvoiceCollectionItemSource,
-    externalId: row.externalId,
-    fileName: row.fileName,
+    externalId: hide ? null : row.externalId,
+    fileName: hide ? null : row.fileName,
     verdict: row.verdict as InvoiceCollectionItemVerdict,
     documentId: row.documentId,
     createdAt: row.createdAt.toISOString(),

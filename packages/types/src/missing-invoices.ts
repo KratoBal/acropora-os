@@ -420,9 +420,15 @@ export type InvoiceCollectionItemSource =
 export interface InvoiceCollectionItemRow {
   id: string;
   source: InvoiceCollectionItemSource;
-  /** A Gmail-levél vagy a Drive-fájl azonosítója. */
-  externalId: string;
-  fileName: string;
+  /**
+   * A Gmail-levél vagy a Drive-fájl azonosítója. `null`: a balazs@ postafiók NEM
+   * tárolt fájljánál nem adjuk ki (barracuda #1827: a postafiók Balázs saját
+   * levelezése, a jog `finance.view`, tehát egy nem számla melléklet neve és
+   * levélazonosítója nem megy ki mindenkinek).
+   */
+  externalId: string | null;
+  /** A fájl neve; `null` ugyanott, ahol az `externalId`. */
+  fileName: string | null;
   verdict: InvoiceCollectionItemVerdict;
   /** Csak tárolt fájlnál (STORED, SUGGESTED). */
   documentId: string | null;

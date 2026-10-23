@@ -86,6 +86,33 @@ describe("CollectionItemsSection", () => {
     expect(within(stored).getByText("Tárolva")).toBeInTheDocument();
   });
 
+  /** barracuda #1827: MI PIROSÍT: ha a visszatartott sorból a fájlnév helyett üres cella vagy "null" látszik. */
+  it("says the file name is withheld where the server withholds it, and still shows the verdict", async () => {
+    api.collectionItems.mockResolvedValueOnce(
+      response({
+        items: [
+          {
+            id: "i-9",
+            source: "BALAZS_MAIL",
+            externalId: null,
+            fileName: null,
+            verdict: "NOT_INVOICE",
+            documentId: null,
+            createdAt: "2026-10-22T14:12:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<CollectionItemsSection token="token-1" />);
+    const hint = await screen.findByText(
+      "A fájlnév nem látszik (a balazs@ postafiók magánlevelezés)",
+    );
+    const row = hint.closest("tr")!;
+    expect(within(row).getByText("Nem számla")).toBeInTheDocument();
+    expect(within(row).getByText("balazs@ levelek")).toBeInTheDocument();
+    expect(screen.queryByText("null")).toBeNull();
+  });
+
   it("puts the count on each verdict filter, from the server's counts", async () => {
     render(<CollectionItemsSection token="token-1" />);
     await screen.findByText("FX01071477.pdf");
