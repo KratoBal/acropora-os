@@ -163,9 +163,12 @@ export function recogniseSentence(
   const keys = <T extends Term>(terms: readonly T[]) =>
     unique(matchTerms(words, terms).map((m) => m.term.key));
 
-  // Negation: one negator outside any subordinate clause is a negation; more
-  // than one, a negator next to a subordinate clause, or a contrast word
-  // ("helyett") cannot be decided by rule.
+  // Negation: one negator directly before a verb ("nem csökkentette", "nincs
+  // hatással"), in a sentence without a subordinate clause, negates the
+  // sentence. Anywhere else its scope is something the rule cannot see ("a
+  // nem kezelt kontrollhoz képest ... csökkentette" still states a decrease),
+  // so it is undecidable, as are two negators and a contrast word ("helyett").
+  const verbMatches = matchTerms(words, vocabulary.directionVerbs);
   const negations = matchTerms(words, vocabulary.negations);
   const negators = negations.filter((m) => m.term.extra.role === "NEGATOR");
   const contrast = negations.filter((m) => m.term.extra.role === "UNDECIDABLE");
@@ -178,9 +181,14 @@ export function recogniseSentence(
     negation = "UNDECIDABLE";
     negationReason = `${negators.length} negators`;
   } else if (negators.length === 1) {
+    const negator = negators[0]!;
+    const next = negator.start + negator.length;
     if (SUBORDINATE.test(lower)) {
       negation = "UNDECIDABLE";
       negationReason = "a negator in a sentence with a subordinate clause";
+    } else if (!verbMatches.some((v) => v.start === next)) {
+      negation = "UNDECIDABLE";
+      negationReason = `"${words[negator.start]}" does not stand directly before a verb, its scope is unknown`;
     } else negation = "NEGATED";
   }
 
@@ -225,11 +233,7 @@ export function recogniseSentence(
     taxa: keys(vocabulary.taxa),
     environments: keys(vocabulary.environments),
     effects: keys(vocabulary.effects),
-    verbDirections: unique(
-      matchTerms(words, vocabulary.directionVerbs).map(
-        (m) => m.term.extra.direction,
-      ),
-    ),
+    verbDirections: unique(verbMatches.map((m) => m.term.extra.direction)),
     negation,
     negationReason,
     certainty: keys(vocabulary.certainty),

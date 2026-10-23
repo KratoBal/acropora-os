@@ -136,6 +136,26 @@ describe("7a row: negation", () => {
     );
   });
 
+  // barracuda, #1825 review (35515): the negator negated a different part.
+  const negatesAnotherPart =
+    "A nem kezelt kontrollhoz képest egy kontrollált kísérletben a zátonyon 0,05 mg/l foszfát csökkentette az Acropora kalcifikációját.";
+
+  it("a negator that is not before the verb does not turn a decrease into 'no effect'", () => {
+    failsWith(negatesAnotherPart, "NEGATION_UNDECIDABLE", noEffect);
+  });
+
+  it("the same sentence is undecidable against a decreasing claim too, not a lucky pass", () => {
+    failsWith(negatesAnotherPart, "NEGATION_UNDECIDABLE");
+  });
+
+  it("a negated taxon ('nem Acropora fajokon') is undecidable, not a negated effect", () => {
+    failsWith(
+      BASE.replace("az Acropora", "a nem Acropora fajok"),
+      "NEGATION_UNDECIDABLE",
+      noEffect,
+    );
+  });
+
   it("a contrast word ('helyett') cannot be decided", () => {
     failsWith(
       BASE.replace("foszfát", "foszfát a nitrát helyett"),
