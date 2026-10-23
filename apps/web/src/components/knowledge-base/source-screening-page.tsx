@@ -76,6 +76,14 @@ const STUDY_LABELS: Record<string, string> = {
   OWN_MEASUREMENT: "Saját mérés",
 };
 
+/**
+ * A „Nem lett új forrás” szám NEM duplikátum-szám (barracuda, #1841): a
+ * felderítés találatai közül mindaz, amiből nem lett új forrás-sor. A futások
+ * ma nem tárolják külön az okokat, ezért a szám az összeg, és így is nevezzük.
+ */
+const NOT_NEW_HINT =
+  "A felderítés találatai, amelyekből nem lett új forrás: ismétlődés (több lekérdezés, több adatbázis vagy egy korábbi futás ugyanazt a művet hozta), nem tárolható találat (ellenőrizetlen DOI, ellentmondó azonosító) és kihagyott rekord. Nem csak duplikátum.";
+
 const STATUS_OPTIONS = [
   { value: "PENDING", label: "Döntésre vár" },
   { value: "INCLUDED", label: "Befogadva" },
@@ -257,7 +265,11 @@ export function SourceScreeningPage() {
             className="flex flex-wrap gap-x-6 gap-y-1 text-[15px] text-pilot-grey-600"
           >
             <SummaryItem label="Talált" value={summary.identified} />
-            <SummaryItem label="Duplikátum" value={summary.duplicatesRemoved} />
+            <SummaryItem
+              label="Nem lett új forrás"
+              value={summary.notNew}
+              title={NOT_NEW_HINT}
+            />
             <SummaryItem label="Döntésre vár" value={summary.pending} />
             <SummaryItem
               label="Kizárt"

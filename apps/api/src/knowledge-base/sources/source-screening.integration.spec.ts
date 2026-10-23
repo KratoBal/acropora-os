@@ -19,6 +19,7 @@ import { SourceScreeningRepository } from "./source-screening.repository.js";
 const gate = integrationDatabaseGate(process.env);
 const DOI_PREFIX = "10.5555/kb-scr-int-";
 const EMAIL_DOMAIN = "knowledge-screening-integration.invalid";
+const RUN_LABEL = "kb-screening-int-";
 
 const query = (raw: Record<string, unknown>): SourceListQuery => {
   const q = parseSourceListQuery(raw);
@@ -89,6 +90,9 @@ describe(
         where: { source: ours },
       });
       await prisma.knowledgeSource.deleteMany({ where: ours });
+      await prisma.knowledgeDiscoveryRun.deleteMany({
+        where: { label: { startsWith: RUN_LABEL } },
+      });
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${EMAIL_DOMAIN}` } },
       });
@@ -96,6 +100,12 @@ describe(
         {
           nev: "KnowledgeSource (doi elotag)",
           darab: await prisma.knowledgeSource.count({ where: ours }),
+        },
+        {
+          nev: "KnowledgeDiscoveryRun (cimke elotag)",
+          darab: await prisma.knowledgeDiscoveryRun.count({
+            where: { label: { startsWith: RUN_LABEL } },
+          }),
         },
         {
           nev: "User (teszt-domain)",
@@ -193,7 +203,50 @@ describe(
       assert.ok(s.included >= 1 && s.excluded >= 1);
       assert.ok(s.excludedByReason.DUPLICATE >= 1);
       assert.equal(s.unique, s.pending + s.included + s.excluded);
-      assert.equal(s.duplicatesRemoved, Math.max(0, s.identified - s.unique));
+    });
+
+    it("'not new' is what a run found and did not store as a new row; a hand-added source moves neither side", async () => {
+      const before = await repo.summary();
+      // a hand-added source: one more row, nothing fetched
+      await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${DOI_PREFIX}${suffix}-manual`,
+          title: "Kitalált kézi forrás",
+          discoveredVia: "MANUAL",
+        },
+      });
+      const manual = await repo.summary();
+      assert.equal(manual.unique, before.unique + 1);
+      assert.equal(manual.identified, before.identified);
+      assert.equal(manual.notNew, before.notNew);
+
+      // a run fetched three records and stored one new row: two are "not new"
+      // (a re-find, a candidate not stored, a skipped record alike)
+      const run = await prisma.knowledgeDiscoveryRun.create({
+        data: {
+          label: `${RUN_LABEL}${suffix}`,
+          status: "FINISHED",
+          input: {},
+          queries: [{ api: "OPENALEX", fetched: 3 }],
+          requestedById: userId,
+          startedAt: new Date(),
+          finishedAt: new Date(),
+        },
+      });
+      await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${DOI_PREFIX}${suffix}-found`,
+          title: "Kitalált felderített forrás",
+          discoveredVia: "OPENALEX",
+          discoveryRunId: run.id,
+        },
+      });
+      const found = await repo.summary();
+      assert.equal(found.identified, manual.identified + 3);
+      assert.equal(found.unique, manual.unique + 1);
+      assert.equal(found.notNew, manual.notNew + 2);
     });
 
     it("the database refuses a reasonless exclusion, 'other' without a note, a decision without its owner", async () => {

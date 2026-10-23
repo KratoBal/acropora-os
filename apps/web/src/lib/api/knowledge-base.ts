@@ -44,7 +44,8 @@ export interface KnowledgeSourceList {
 export interface ScreeningSummary {
   identified: number;
   unique: number;
-  duplicatesRemoved: number;
+  /** Found by a run, but no new source row: NOT only duplicates (see the API). */
+  notNew: number;
   pending: number;
   included: number;
   excluded: number;

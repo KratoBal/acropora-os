@@ -83,7 +83,7 @@ const source = (
 const SUMMARY = {
   identified: 82,
   unique: 75,
-  duplicatesRemoved: 7,
+  notNew: 7,
   pending: 28,
   included: 24,
   excluded: 23,
@@ -120,7 +120,13 @@ describe("Forrásszűrés", () => {
     expect(screen.getByText("Döntésre váró publikációk")).toBeTruthy();
     const counts = screen.getByLabelText("Szűrési napló");
     expect(within(counts).getByText("82")).toBeTruthy();
-    expect(within(counts).getByText("7")).toBeTruthy();
+    // not called a duplicate count: it holds more than duplicates (#1841)
+    const notNew = within(counts).getByText("Nem lett új forrás:");
+    expect(notNew.parentElement?.textContent).toBe("Nem lett új forrás:7");
+    expect(notNew.parentElement?.getAttribute("title")).toMatch(
+      /Nem csak duplikátum/,
+    );
+    expect(within(counts).queryByText(/Duplikátum/)).toBeNull();
     expect(screen.getByText("Visszavont")).toBeTruthy();
     // alapból a döntésre várókat kéri
     expect(api.sources.mock.calls[0]?.[1].get("status")).toBe("PENDING");

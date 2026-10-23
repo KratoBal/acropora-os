@@ -52,13 +52,21 @@ export interface SourceList {
 /**
  * The PRISMA-like counts on top of the screen. `identified` is what the
  * discovery runs fetched (every FINISHED run's queries, re-finds included);
- * `unique` the sources kept; `duplicatesRemoved` the difference: the works
- * found more than once (by two queries, two APIs, or a later run).
+ * `unique` every source row (hand-added ones too); `notNew` the found records
+ * that did NOT become a new source row: identified minus the rows a discovery
+ * run created.
+ *
+ * `notNew` is NOT a duplicate count, and the screen does not call it one
+ * (barracuda, #1841): besides the works found twice (two queries, two APIs, a
+ * later run) it holds the candidates not stored (a DOI the notice check did
+ * not cover, an ambiguous match) and the skipped records. The runs do not
+ * store those apart today, so the honest number is the sum, named as such. A
+ * hand-added source is outside it on both sides.
  */
 export interface ScreeningSummary {
   identified: number;
   unique: number;
-  duplicatesRemoved: number;
+  notNew: number;
   pending: number;
   included: number;
   excluded: number;
@@ -168,12 +176,15 @@ export class SourceScreeningRepository {
   }
 
   async summary(): Promise<ScreeningSummary> {
-    const [runs, unique, byStatus, byReason] = await Promise.all([
+    const [runs, unique, discovered, byStatus, byReason] = await Promise.all([
       prisma.knowledgeDiscoveryRun.findMany({
         where: { status: "FINISHED" },
         select: { queries: true },
       }),
       prisma.knowledgeSource.count(),
+      prisma.knowledgeSource.count({
+        where: { discoveryRunId: { not: null } },
+      }),
       prisma.knowledgeSource.groupBy({
         by: ["screeningStatus"],
         _count: { _all: true },
@@ -216,7 +227,7 @@ export class SourceScreeningRepository {
     return {
       identified,
       unique,
-      duplicatesRemoved: Math.max(0, identified - unique),
+      notNew: Math.max(0, identified - discovered),
       pending: status("PENDING"),
       included: status("INCLUDED"),
       excluded: status("EXCLUDED"),
@@ -230,6 +241,10 @@ export class SourceScreeningRepository {
     actorUserId: string,
   ): Promise<SourceRow> {
     return prisma.$transaction(async (tx) => {
+      // the row is locked before its "before" is read: two decisions at once
+      // queue here, and each AuditLog row holds the state it really replaced
+      // (barracuda, #1841 note a)
+      await tx.$queryRaw`SELECT 1 FROM "KnowledgeSource" WHERE "id" = ${sourceId} FOR UPDATE`;
       const before = await tx.knowledgeSource.findUnique({
         where: { id: sourceId },
         select: {
