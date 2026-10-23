@@ -65,27 +65,52 @@ export type PriceRank = "cheapest" | "dearest" | null;
  * AZ ÁRAK ÖSSZEVETÉSE SZÍNNEL ÉS SZÖVEGGEL (Balázs 2026-10-23 20:42 UTC): ha egy
  * termékhez több beszállítótól van ára, a legolcsóbb zöld, a legdrágább piros,
  * kettő felett a közbülső semleges; egyenlő árnál mindkettő zöld (és nincs
- * piros). CSAK AZONOS PÉNZNEMBEN hasonlítunk: a lista saját pénznemében írt
- * egységárat vetjük össze, az árfolyam és a forintos érték itt nem számít. Eltérő
- * pénznemnél nem színezünk, és a kártya kimondja, miért.
+ * piros).
+ *
+ * AZONOS PÉNZNEMBEN a lista saját pénznemében írt egységárat vetjük össze. EGY
+ * TERMÉK EGYIK ÁRA SEM VALUTÁBAN, A MÁSIK FORINTBAN (acrobot 35869, barracuda
+ * 35866): ilyenkor a szerver által MNB-árfolyammal forintra számolt beszerzési
+ * árat vetjük össze, és a kártya kimondja, hogy átszámolt (az árfolyam napjával).
+ * Ha egy sorhoz nincs árfolyam, nem színezünk, és a kártya ezt is kimondja.
  */
-export function rankPrices(rows: readonly SupplierPriceRow[]): {
+export interface PriceComparison {
   ranks: PriceRank[];
-  mixedCurrencies: string[] | null;
-} {
+  /** Eltérő pénznemek, forintra átszámolva vetettük össze (az árfolyamok napjai). */
+  converted: { currencies: string[]; fxDates: string[] } | null;
+  /** Eltérő pénznemek, de nem minden sorhoz van árfolyam: nincs összevetés. */
+  missingRate: string[] | null;
+}
+
+export function rankPrices(rows: readonly SupplierPriceRow[]): PriceComparison {
   const none = rows.map((): PriceRank => null);
   const currencies = [...new Set(rows.map((row) => row.currency))].sort();
-  if (currencies.length > 1)
-    return { ranks: none, mixedCurrencies: currencies };
-  if (rows.length < 2) return { ranks: none, mixedCurrencies: null };
-  const values = rows.map((row) => Number(row.unitPrice));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  return {
-    ranks: values.map((value): PriceRank =>
+  const rank = (values: number[]): PriceRank[] => {
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    return values.map((value): PriceRank =>
       value === min ? "cheapest" : value === max ? "dearest" : null,
-    ),
-    mixedCurrencies: null,
+    );
+  };
+  if (currencies.length > 1) {
+    if (rows.some((row) => row.purchaseHuf === null))
+      return { ranks: none, converted: null, missingRate: currencies };
+    return {
+      ranks: rank(rows.map((row) => Number(row.purchaseHuf))),
+      converted: {
+        currencies,
+        fxDates: [
+          ...new Set(rows.flatMap((row) => (row.fxDate ? [row.fxDate] : []))),
+        ].sort(),
+      },
+      missingRate: null,
+    };
+  }
+  if (rows.length < 2)
+    return { ranks: none, converted: null, missingRate: null };
+  return {
+    ranks: rank(rows.map((row) => Number(row.unitPrice))),
+    converted: null,
+    missingRate: null,
   };
 }
 
@@ -99,7 +124,7 @@ export function SupplierPricesTable({
 }: {
   prices: VariantSupplierPrices;
 }) {
-  const { ranks, mixedCurrencies } = rankPrices(prices.rows);
+  const { ranks, converted, missingRate } = rankPrices(prices.rows);
   const rankOf = new Map(prices.rows.map((row, index) => [row, ranks[index]!]));
   const columns: PilotTableColumn<SupplierPriceRow>[] = [
     {
@@ -140,6 +165,7 @@ export function SupplierPricesTable({
             {rank ? (
               <PilotBadge variant={rank === "cheapest" ? "success" : "danger"}>
                 {RANK_LABELS[rank]}
+                {converted ? " (forintra átszámolva)" : ""}
               </PilotBadge>
             ) : null}
           </span>
@@ -217,10 +243,22 @@ export function SupplierPricesTable({
           ? `Nettó eladási ár: nincs (${sellingReasonText(prices.sellingReason)}), a haszon nem számítható.`
           : `Nettó eladási ár: ${money(prices.sellingNetHuf, "Ft")}.`}
       </p>
-      {mixedCurrencies ? (
+      {converted ? (
         <p className="text-xs text-pilot-grey-600">
-          Az árak eltérő pénznemben vannak ({mixedCurrencies.join(", ")}), ezért
-          nem hasonlítjuk össze és nem színezzük őket.
+          Az árak eltérő pénznemben vannak ({converted.currencies.join(", ")}):
+          az összevetés az MNB-árfolyammal forintra átszámolt beszerzési árra
+          szól
+          {converted.fxDates.length
+            ? ` (az árfolyam napja: ${converted.fxDates.map(listDay).join(", ")})`
+            : ""}
+          .
+        </p>
+      ) : null}
+      {missingRate ? (
+        <p className="text-xs text-pilot-grey-600">
+          Az árak eltérő pénznemben vannak ({missingRate.join(", ")}), és nem
+          mindegyikhez van árfolyam, ezért nem hasonlítjuk össze és nem
+          színezzük őket.
         </p>
       ) : null}
       <PilotDataTable
