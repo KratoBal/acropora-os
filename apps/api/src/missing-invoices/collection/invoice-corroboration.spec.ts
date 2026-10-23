@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { normalizeName } from "../missing-invoice-matching.js";
-import { corroboratedBy, senderDomain } from "./invoice-corroboration.js";
+import {
+  corroboratedBy,
+  nameSigns,
+  senderDomain,
+} from "./invoice-corroboration.js";
 
 /**
  * A KÖTÉS MÁSODIK JELE (kártya 285d8ffc). Kitalált számlák. MI PIROSÍT: ha az
@@ -10,13 +14,7 @@ import { corroboratedBy, senderDomain } from "./invoice-corroboration.js";
  * egyezésre (rövid szó, részleges összeg) is elég lenne; ha a feladó cím nem a
  * tartományát adná.
  */
-const hooks = {
-  normalizeName,
-  distinctiveWord: (name: string) =>
-    normalizeName(name)
-      .split(" ")
-      .find((word) => word.length >= 4) ?? null,
-};
+const hooks = { normalizeName };
 const lines = [
   "Számla",
   "Kiállító: Tisza Kereskedelmi Kft.",
@@ -89,6 +87,64 @@ describe("corroboratedBy", () => {
       null,
     );
     assert.equal(corroboratedBy(lines, none, "a@tisza.hu", hooks), null);
+  });
+});
+
+describe("generic words are no sign of a supplier (barracuda 35766)", () => {
+  const telekom = { grossCents: [], supplierNames: ["Magyar Telekom Nyrt."] };
+
+  it("does not let 'magyar' alone corroborate a Magyar Telekom invoice", () => {
+    assert.equal(
+      corroboratedBy(
+        ["Számla", "Magyar Államkincstár, magyar nyelvű tájékoztató"],
+        telekom,
+        null,
+        hooks,
+      ),
+      null,
+    );
+    assert.equal(
+      corroboratedBy(["Számla", "Telekom díjak"], telekom, null, hooks),
+      "NAME",
+    );
+  });
+
+  it("does not take a 'magyar' domain for a Magyar Telekom sender, but a Telekom domain", () => {
+    assert.equal(
+      corroboratedBy(["Számla"], telekom, "x@magyar-posta.example", hooks),
+      null,
+    );
+    assert.equal(
+      corroboratedBy(["Számla"], telekom, "x@telekom.example", hooks),
+      "SENDER",
+    );
+  });
+
+  it("gives a name made only of generic words no name or sender sign at all", () => {
+    const generic = { grossCents: [], supplierNames: ["Global Trade Kft."] };
+    assert.deepEqual(nameSigns("Global Trade Kft.", normalizeName), []);
+    assert.equal(
+      corroboratedBy(
+        ["Global trade invoice"],
+        generic,
+        "a@global-trade.example",
+        hooks,
+      ),
+      null,
+    );
+  });
+
+  it("needs both distinctive words of a two-word name in the text", () => {
+    const gumi = { grossCents: [], supplierNames: ["Gumi Profi Team Kft."] };
+    assert.deepEqual(nameSigns("Gumi Profi Team Kft.", normalizeName), [
+      "gumi",
+      "profi",
+    ]);
+    assert.equal(corroboratedBy(["Gumi akció"], gumi, null, hooks), null);
+    assert.equal(
+      corroboratedBy(["Gumi Profi számla"], gumi, null, hooks),
+      "NAME",
+    );
   });
 });
 
