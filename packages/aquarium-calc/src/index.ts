@@ -2,7 +2,19 @@ export {
   alkalinityElevation,
   calciumElevation,
   magnesiumElevation,
+  ATOMIC_WEIGHT,
 } from "./reef-chemistry.js";
+export {
+  PHOSPHATE_MOLAR_MASS,
+  convertPhosphate,
+  parsePhosphateUnit,
+  toMgPerLitrePo4,
+} from "./phosphate-units.js";
+export type {
+  PhosphateBasis,
+  PhosphateConcentration,
+  PhosphateUnit,
+} from "./phosphate-units.js";
 export type {
   AlkalinityElevationInput,
   ConcentrationElevationInput,

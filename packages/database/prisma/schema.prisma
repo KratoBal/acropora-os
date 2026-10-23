@@ -903,6 +903,11 @@ model User {
   /// A termékszöveg-blokkok, amiket utoljára ő szerkesztett, illetve hagyott jóvá.
   editedCopyBlocks       ProductCopy[]                 @relation("ProductCopyEditedBy")
   approvedCopyBlocks     ProductCopy[]                 @relation("ProductCopyApprovedBy")
+  /// Kutatási tudástár (S1): szerkesztői döntések és a mélykutatás tervezetei.
+  decidedApplicability   KnowledgeClaimEvidence[]      @relation("KnowledgeApplicabilityDecidedBy")
+  decidedFieldAnchors    KnowledgeFieldAnchor[]        @relation("KnowledgeFieldAnchorDecidedBy")
+  approvedVocabulary     KnowledgeVocabularyEntry[]    @relation("KnowledgeVocabularyApprovedBy")
+  researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
   email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
@@ -10315,4 +10320,403 @@ model ReefClubDoseRow {
   @@index([runId])
   @@index([productId])
   @@index([parameterCode, direction])
+}
+
+// ---------------------------------------------------------------------------
+// KUTATÁSI TUDÁSTÁR (Research & Knowledge Engine, S1 szelet)
+//
+// Terv: exchange/acroveliq/research-engine-felmeres-2026-10-23.md (v4), 6. és
+// 7a. pont; Balázs jóváhagyása 2026-10-23 11:51 UTC (Discord 1563157803726798859),
+// csak stage. A lánc: Source -> SourceVersion -> Passage (szó szerinti kivonat) ->
+// ClaimEvidence -> Claim. Ebben a szeletben nincs írási út és nincs felület: a
+// táblák üresen jönnek létre, az S2-S4 tölti őket.
+//
+// A bizonyíték-minőség (EvidenceQuality) nem külön tábla, hanem mezők a helyükön:
+// a forrás-szintűek a `KnowledgeSource`-on, az állítás-szintűek a
+// `KnowledgeClaimEvidence`-en. Modell-becsült százalék nincs: a bizonyítéki
+// szintet a `@acropora/knowledge-base` szabálytáblája vezeti le, és nem tároljuk
+// (egy tárolt szint elcsúszhatna a forrásaitól). Az `agreement` szintén számolt.
+//
+// Ami NEM ebben a szeletben van: Conclusion, Article, ArticleCitation (S4-S5),
+// UsagePolicy (S6). A meglévő `ProductKnowledgeFact` nem költözik ide.
+
+enum KnowledgeSourceKind {
+  PEER_REVIEWED
+  PREPRINT
+  REVIEW
+  BOOK
+  MANUFACTURER
+  HOBBY_ARTICLE
+  FORUM
+  OWN_DATA
+}
+
+/// A vizsgálat típusa, zárt lista (7a: a szabálytábla bemenete).
+enum KnowledgeStudyType {
+  CONTROLLED_LAB
+  MESOCOSM
+  FIELD_EXPERIMENT
+  FIELD_OBSERVATIONAL
+  AQUARIUM_CASE
+  AQUARIUM_SURVEY
+  REVIEW
+  META_ANALYSIS
+  MANUFACTURER
+  OWN_MEASUREMENT
+}
+
+/// A mérési módszer, zárt lista; a pontosítás a `measurementMethodDetail`-ben.
+enum KnowledgeMeasurementMethod {
+  COLORIMETRIC_KIT
+  PHOTOMETER
+  LAB_SPECTROPHOTOMETRY
+  AUTOANALYZER
+  ICP_OES
+  ICP_MS
+  ION_CHROMATOGRAPHY
+  OTHER
+  NOT_REPORTED
+}
+
+enum KnowledgeSourceVersionKind {
+  ORIGINAL
+  CORRECTION
+  ERRATUM
+  RETRACTION
+  EXPRESSION_OF_CONCERN
+  UPDATE
+}
+
+enum KnowledgeClaimLayer {
+  SCIENTIFIC
+  HOBBY_EXPERIENCE
+  MANUFACTURER
+  OWN_CONCLUSION
+}
+
+enum KnowledgeClaimStatus {
+  CANDIDATE
+  VERIFIED
+  DISPUTED
+  WITHDRAWN
+  SUPERSEDED
+}
+
+/// A tömeg-alapú érték kémiai bázisa: mg/l PO4 vagy mg/l P (1 mg/l P = 3,07 mg/l PO4).
+enum KnowledgeChemicalBasis {
+  PO4
+  P
+}
+
+enum KnowledgeEffectDirection {
+  INCREASE
+  DECREASE
+  NONE
+}
+
+enum KnowledgeEvidenceStance {
+  SUPPORTS
+  CONTRADICTS
+  QUALIFIES
+}
+
+enum KnowledgeClaimRelationKind {
+  CONTRADICTS
+  REFINES
+  GENERALIZES
+  DEPENDS_ON
+}
+
+enum KnowledgeEnvironment {
+  FIELD
+  LAB
+  MESOCOSM
+  HOME_AQUARIUM
+  PUBLIC_AQUARIUM
+}
+
+/// Szerkesztői döntés: mennyire vihető át a bizonyíték egy otthoni zátonyakváriumra.
+enum KnowledgeApplicability {
+  DIRECT
+  ANALOGOUS
+  LIMITED
+  NOT_APPLICABLE
+}
+
+/// A mezőnkénti horgony szerkesztői döntése (7a, 1.).
+enum KnowledgeAnchorDecision {
+  PENDING
+  ACCEPTED
+  CORRECTED
+  REJECTED
+}
+
+enum KnowledgeVocabularyKind {
+  TAXON
+  ENVIRONMENT
+  EFFECT
+  DIRECTION_VERB
+  NEGATION
+  CERTAINTY
+  SCOPE_PHRASE
+  UNSUPPORTED_CONSTRUCTION
+  UNIT
+}
+
+enum KnowledgeVocabularyStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+/// A mélykutatás eredménye MINDIG tervezet (7. pont, B mód). Egyetlen érték
+/// szándékosan: nincs olyan állapot, amiből jóváhagyott tudás lenne.
+enum KnowledgeResearchDraftStatus {
+  DRAFT
+}
+
+/// Egy mű: cikk, könyvfejezet, gyártói lap, fórum-szál, saját mérési sorozat.
+model KnowledgeSource {
+  id                      String                      @id @default(cuid())
+  kind                    KnowledgeSourceKind
+  /// Kisbetűs DOI (a CHECK köti), hogy a duplikátum-szűrés betűre menjen.
+  doi                     String?                     @unique @db.VarChar(255)
+  openalexId              String?                     @unique @db.VarChar(64)
+  pmid                    String?                     @unique @db.VarChar(32)
+  pmcid                   String?                     @db.VarChar(32)
+  s2Id                    String?                     @db.VarChar(64)
+  url                     String?
+  title                   String
+  /// `[{ "name": "...", "orcid": "..." }]`, a forrás sorrendjében.
+  authors                 Json                        @default("[]")
+  year                    Int?
+  venue                   String?
+  /// CC-BY, CC-BY-NC, ..., CLOSED, UNKNOWN. Nyitott lista, ezért nem enum; az UNKNOWN is érték.
+  license                 String                      @default("UNKNOWN") @db.VarChar(32)
+  oaUrl                   String?
+  /// Honnan került elő (OPENALEX, CROSSREF, EUROPE_PMC, CITATION_GRAPH, MANUAL).
+  discoveredVia           String                      @db.VarChar(32)
+  firstSeenAt             DateTime                    @default(now())
+  /// Bizonyíték-minőség, forrás-szint (EvidenceQuality). NULL: még nincs besorolva.
+  studyType               KnowledgeStudyType?
+  /// Volt-e kontroll; NULL: nincs besorolva. A kontroll leírása a `controlDescription`.
+  controlled              Boolean?
+  controlDescription      String?
+  measurementMethod       KnowledgeMeasurementMethod?
+  measurementMethodDetail String?
+  /// A forrás saját korlátai; a horgony (kivonat) a `KnowledgeFieldAnchor`-ban.
+  limitations             String?
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  versions KnowledgeSourceVersion[]
+  anchors  KnowledgeFieldAnchor[]
+
+  @@index([kind])
+}
+
+/// A mű egy változata: eredeti, javítás, visszavonás. Egy visszavonás a ráépülő
+/// állításokat DISPUTED-re teszi (S2), ezért a sor soha nem törlődik.
+model KnowledgeSourceVersion {
+  id          String                     @id @default(cuid())
+  sourceId    String
+  source      KnowledgeSource            @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  versionKind KnowledgeSourceVersionKind
+  relatedDoi  String?                    @db.VarChar(255)
+  noticeDate  DateTime?
+  /// CROSSREF_UPDATE_TO | RETRACTION_WATCH | MANUAL
+  detectedVia String                     @db.VarChar(32)
+  /// A letöltött szöveg sha256-ja, ha van teljes szöveg.
+  contentHash String?                    @db.VarChar(64)
+  createdAt   DateTime                   @default(now())
+
+  passages KnowledgePassage[]
+
+  @@index([sourceId])
+}
+
+/// Szó szerinti kivonat egy forrásváltozatból: erre épülhet állítás, és ez a
+/// mezőnkénti horgony is.
+model KnowledgePassage {
+  id                 String                 @id @default(cuid())
+  sourceVersionId    String
+  sourceVersion      KnowledgeSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+  /// Oldal, szakasz, táblázat vagy ábra.
+  locator            String                 @db.VarChar(128)
+  text               String
+  textHash           String                 @db.VarChar(64)
+  /// Mikor vetette össze a gép a letöltött szöveggel. NULL: nincs igazolva.
+  verifiedVerbatimAt DateTime?
+  /// A kiolvasó modell és prompt verziója; NULL: ember rögzítette.
+  extractedBy        String?                @db.VarChar(128)
+  createdAt          DateTime               @default(now())
+
+  evidence KnowledgeClaimEvidence[]
+  anchors  KnowledgeFieldAnchor[]
+
+  @@unique([sourceVersionId, locator, textHash])
+}
+
+/// Egy ellenőrizhető állítás, normalizált formában (6. pont, 7a. 1.).
+///
+/// A mennyiség az EREDETI értékkel és egységgel, plusz a normalizált mg/l PO4
+/// tartománnyal áll; a normalizálás a `@acropora/aquarium-calc` determinisztikus
+/// kódja, nem modell. A faj, a környezet és a minta az állítás bizonyítékain
+/// (`KnowledgeClaimEvidence`) áll, mert bizonyítékonként más lehet.
+model KnowledgeClaim {
+  id               String                    @id @default(cuid())
+  layer            KnowledgeClaimLayer
+  /// A szótár téma-kulcsa (pl. PHOSPHATE).
+  subject          String                    @db.VarChar(48)
+  /// Szabad leírás a szerkesztőnek (pl. "Acropora spp., terepi zátony"); a gépi
+  /// összevetés nem ezt, hanem a bizonyítékok `species` és `environment` mezőjét olvassa.
+  population       String?
+  originalMin      Decimal?                  @db.Decimal(18, 9)
+  originalMax      Decimal?                  @db.Decimal(18, 9)
+  /// Az eredeti egység a forrás írásmódja szerint (pl. "µmol/l", "mg/l").
+  originalUnit     String?                   @db.VarChar(16)
+  chemicalBasis    KnowledgeChemicalBasis?
+  normalizedMinMgL Decimal?                  @db.Decimal(18, 9)
+  normalizedMaxMgL Decimal?                  @db.Decimal(18, 9)
+  /// Fény, hőmérséklet, N:P arány, időtartam; szabad JSON, a pilotban nem gépi mező.
+  conditions       Json                      @default("{}")
+  /// A szótár hatás-kulcsa (pl. CALCIFICATION, SKELETAL_DENSITY).
+  effect           String?                   @db.VarChar(48)
+  direction        KnowledgeEffectDirection?
+  status           KnowledgeClaimStatus      @default(CANDIDATE)
+  validFrom        DateTime?
+  validUntil       DateTime?
+  revision         Int                       @default(1)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  evidence      KnowledgeClaimEvidence[]
+  relationsFrom KnowledgeClaimRelation[] @relation("KnowledgeClaimRelationFrom")
+  relationsTo   KnowledgeClaimRelation[] @relation("KnowledgeClaimRelationTo")
+
+  @@index([subject, status])
+}
+
+/// Állítás és kivonat kapcsolata, az állítás-szintű bizonyíték-minőséggel.
+model KnowledgeClaimEvidence {
+  id                       String                  @id @default(cuid())
+  claimId                  String
+  claim                    KnowledgeClaim          @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  passageId                String
+  passage                  KnowledgePassage        @relation(fields: [passageId], references: [id], onDelete: Restrict)
+  stance                   KnowledgeEvidenceStance
+  note                     String?
+  /// Mintaszám és egysége (kolónia, tartály, helyszín). NULL: a forrás nem közli.
+  sampleSize               Int?
+  sampleUnit               String?                 @db.VarChar(32)
+  /// A forrás saját SD/CI/kimutatási határa szó szerint; NULL: nem közölt.
+  uncertainty              String?
+  /// A szótár taxon-kulcsai (pl. ACROPORA, ACROPORA_MILLEPORA).
+  species                  String[]                @default([])
+  environment              KnowledgeEnvironment?
+  conditions               Json                    @default("{}")
+  /// Szerkesztői döntés, okkal; a rendszer szabályból javasol (S4).
+  homeReefApplicability    KnowledgeApplicability?
+  applicabilityReason      String?
+  applicabilityDecidedById String?
+  applicabilityDecidedBy   User?                   @relation("KnowledgeApplicabilityDecidedBy", fields: [applicabilityDecidedById], references: [id], onDelete: Restrict)
+  applicabilityDecidedAt   DateTime?
+  createdAt                DateTime                @default(now())
+
+  anchors KnowledgeFieldAnchor[]
+
+  @@unique([claimId, passageId])
+  @@index([passageId])
+}
+
+/// Állítás és állítás kapcsolata. Az ellentmondás két külön sor marad; az
+/// egyesítés csak emberi következtetésben (Conclusion, S4) történhet.
+model KnowledgeClaimRelation {
+  id          String                     @id @default(cuid())
+  fromClaimId String
+  fromClaim   KnowledgeClaim             @relation("KnowledgeClaimRelationFrom", fields: [fromClaimId], references: [id], onDelete: Restrict)
+  toClaimId   String
+  toClaim     KnowledgeClaim             @relation("KnowledgeClaimRelationTo", fields: [toClaimId], references: [id], onDelete: Restrict)
+  kind        KnowledgeClaimRelationKind
+  note        String?
+  createdAt   DateTime                   @default(now())
+
+  @@unique([fromClaimId, toClaimId, kind])
+  @@index([toClaimId])
+}
+
+/// Egy mezőérték szó szerinti horgonya (7a, 1.): ami nem horgonyozható, az nem
+/// mező. Vagy egy bizonyítékhoz (állítás-szintű mező), vagy egy forráshoz
+/// (forrás-szintű mező) tartozik, pontosan az egyikhez (a CHECK köti).
+model KnowledgeFieldAnchor {
+  id              String                  @id @default(cuid())
+  claimEvidenceId String?
+  claimEvidence   KnowledgeClaimEvidence? @relation(fields: [claimEvidenceId], references: [id], onDelete: Restrict)
+  sourceId        String?
+  source          KnowledgeSource?        @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  /// species, environment, quantity, effect, direction, sampleSize, uncertainty,
+  /// studyType, controlled, measurementMethod, limitations
+  field           String                  @db.VarChar(48)
+  passageId       String
+  passage         KnowledgePassage        @relation(fields: [passageId], references: [id], onDelete: Restrict)
+  /// A szótárra normalizált érték, ahogy a mezőbe került.
+  normalizedValue String?
+  decision        KnowledgeAnchorDecision @default(PENDING)
+  decidedById     String?
+  decidedBy       User?                   @relation("KnowledgeFieldAnchorDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt       DateTime?
+  createdAt       DateTime                @default(now())
+
+  @@index([claimEvidenceId])
+  @@index([sourceId])
+  @@index([passageId])
+}
+
+/// Kontrollált szótár egy bejegyzése (taxon, környezet, hatás, ige, tagadás...).
+/// A gépi összevetés (7a) csak a jóváhagyott változatot használhatja; a K4
+/// tervezet DRAFT állapotban jön.
+model KnowledgeVocabularyEntry {
+  id           String                    @id @default(cuid())
+  kind         KnowledgeVocabularyKind
+  key          String                    @db.VarChar(64)
+  /// A felismert írásmódok (ragozott alakok töve vagy teljes szó, lásd `exactMatch`).
+  forms        String[]
+  /// Igaz: csak teljes szóként illeszkedik (pl. "nem", hogy a "nemzetség" ne legyen tagadás).
+  exactMatch   Boolean                   @default(false)
+  /// Taxonnál a szülő kulcsa (faj -> nemzetség -> csoport).
+  parentKey    String?                   @db.VarChar(64)
+  /// Taxonnál GROUP | GENUS | SPECIES; igénél a minimális bizonyítéki szint kulcsa.
+  rank         String?                   @db.VarChar(32)
+  note         String?
+  status       KnowledgeVocabularyStatus @default(DRAFT)
+  version      Int
+  approvedById String?
+  approvedBy   User?                     @relation("KnowledgeVocabularyApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt   DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([kind, key, version])
+}
+
+/// Mélykutatás ideiglenes eredménye (7. pont, B mód). SOHA nem `KnowledgeClaim`:
+/// nincs kapcsolata az állítás-táblákkal, és a `@acropora/knowledge-base` egy
+/// forrás-olvasó tesztje bukik, ha valahol kód állítást írna belőle.
+model KnowledgeResearchDraft {
+  id              String                       @id @default(cuid())
+  question        String
+  /// A talált források metaadata, ahogy a felderítés adta.
+  sources         Json                         @default("[]")
+  /// Jelölt állítások; az átvétel csak a szerkesztő kézi rögzítésével, a normál úton.
+  candidateClaims Json                         @default("[]")
+  /// Külső forrásokból írt modell-szöveg; a felület ekként jelöli.
+  summary         String
+  /// A szöveget író modell és prompt verziója: a jelölés alapja, ezért kötelező.
+  summaryModel    String                       @db.VarChar(128)
+  status          KnowledgeResearchDraftStatus @default(DRAFT)
+  createdById     String
+  createdBy       User                         @relation("KnowledgeResearchDraftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt       DateTime                     @default(now())
+
+  @@index([createdById])
 }

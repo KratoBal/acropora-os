@@ -27,7 +27,7 @@
  * IUPAC szabványos atomtömegek (2021-es táblázat, 3 tizedesjegyre kerekítve,
  * ahogy a vízkezelési szakirodalom is szokta):
  *   H = 1.008, C = 12.011, O = 15.999, Na = 22.990, Mg = 24.305,
- *   S = 32.06, Cl = 35.453, Ca = 40.078 (g/mol)
+ *   P = 30.974, S = 32.06, Cl = 35.453, Ca = 40.078 (g/mol)
  *
  * === A dKH -> meq/L ÁTVÁLTÁS FORRÁSA ===
  *
@@ -41,13 +41,17 @@
  * tömege megegyezik a moltömegével.
  */
 
-/** g/mol, ld. a fájl fejlécét a forrásért. */
-const ATOMIC_WEIGHT = {
+/**
+ * g/mol, ld. a fájl fejlécét a forrásért. Exportálva: a foszfát-egységváltó
+ * (`phosphate-units.ts`) ugyanezt a táblát használja, nem egy második másolatot.
+ */
+export const ATOMIC_WEIGHT = {
   H: 1.008,
   C: 12.011,
   O: 15.999,
   Na: 22.99,
   Mg: 24.305,
+  P: 30.974,
   S: 32.06,
   Cl: 35.453,
   Ca: 40.078,
