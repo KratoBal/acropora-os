@@ -17,8 +17,21 @@ import {
 const text = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
+/**
+ * A DÖNTÉS NÉLKÜL MARADT `UNASSIGNED` FÁJL FIGYELMEZTETÉSI HATÁRA (acrobot 35565,
+ * 2026-10-23): ennyi nap után a lista jelzi, és a napi számla-ellenőrzés a darabszámot
+ * kapja. AUTOMATIKUS TÖRLÉS NINCS: egy hozzárendeletlen szállítói számla törlése
+ * könyvelési adatot vinne el. Csak az elvetés töröl (azonnal, a tartalmat).
+ */
+export const UNASSIGNED_STALE_AFTER_DAYS = 60;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /** Egy javasolt dokumentum a lista sorává: az olvasó mezői, ha voltak. */
-export function toSuggestion(row: SuggestionRow): InvoiceCollectionSuggestion {
+export function toSuggestion(
+  row: SuggestionRow,
+  now: Date = new Date(),
+): InvoiceCollectionSuggestion {
   const reading =
     row.textReading && typeof row.textReading === "object"
       ? (row.textReading as Record<string, unknown>)
@@ -27,6 +40,10 @@ export function toSuggestion(row: SuggestionRow): InvoiceCollectionSuggestion {
   return {
     documentId: row.id,
     state: row.reviewState === "UNASSIGNED" ? "UNASSIGNED" : "SUGGESTED",
+    stale:
+      row.reviewState === "UNASSIGNED" &&
+      now.getTime() - row.createdAt.getTime() >
+        UNASSIGNED_STALE_AFTER_DAYS * DAY_MS,
     fileName: row.fileName,
     sender: row.sender,
     subject: row.subject,
@@ -59,8 +76,17 @@ export class InvoiceCollectionSuggestionsService {
     private readonly repository: InvoiceCollectionSuggestionsRepository,
   ) {}
 
-  async list(): Promise<InvoiceCollectionSuggestionsResponse> {
-    return { items: (await this.repository.list()).map(toSuggestion) };
+  async list(
+    now: Date = new Date(),
+  ): Promise<InvoiceCollectionSuggestionsResponse> {
+    const items = (await this.repository.list()).map((row) =>
+      toSuggestion(row, now),
+    );
+    return {
+      items,
+      staleAfterDays: UNASSIGNED_STALE_AFTER_DAYS,
+      staleCount: items.filter((item) => item.stale).length,
+    };
   }
 
   async file(id: string): Promise<{ fileName: string; content: Uint8Array }> {

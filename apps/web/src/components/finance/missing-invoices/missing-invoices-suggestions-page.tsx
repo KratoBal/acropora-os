@@ -43,6 +43,7 @@ export function MissingInvoicesSuggestionsPage() {
   const [items, setItems] = useState<InvoiceCollectionSuggestion[] | null>(
     null,
   );
+  const [staleAfterDays, setStaleAfterDays] = useState(60);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -52,7 +53,9 @@ export function MissingInvoicesSuggestionsPage() {
       if (!canView) return;
       setError(null);
       try {
-        setItems((await missingInvoicesApi.suggestions(token, signal)).items);
+        const response = await missingInvoicesApi.suggestions(token, signal);
+        setItems(response.items);
+        setStaleAfterDays(response.staleAfterDays);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -157,7 +160,18 @@ export function MissingInvoicesSuggestionsPage() {
       header: "Állapot",
       width: "150px",
       cell: (item) =>
-        item.state === "UNASSIGNED" ? "Nem párosodott" : "A Jev javasolta",
+        item.state === "UNASSIGNED" ? (
+          <span className="flex flex-col">
+            <span>Nem párosodott</span>
+            {item.stale ? (
+              <span className="text-xs font-medium text-pilot-amber-700">
+                {staleAfterDays} napnál régebben vár
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          "A Jev javasolta"
+        ),
     },
     {
       id: "confidence",
@@ -240,6 +254,13 @@ export function MissingInvoicesSuggestionsPage() {
           köti.
         </p>
       </header>
+      {items && items.some((item) => item.stale) ? (
+        <Alert
+          variant="info"
+          title="Régóta döntésre váró fájlok"
+          description={`${items.filter((item) => item.stale).length} nem párosodott fájl ${staleAfterDays} napnál régebben vár döntésre. Automatikusan nem törlődnek: elfogadva jelöltek lesznek, elvetve törlődik a tartalmuk.`}
+        />
+      ) : null}
       {actionError ? (
         <Alert
           variant="danger"

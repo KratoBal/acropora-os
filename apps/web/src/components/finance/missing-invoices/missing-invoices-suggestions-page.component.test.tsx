@@ -61,6 +61,7 @@ const suggestion = (
 ): InvoiceCollectionSuggestion => ({
   documentId,
   state: "SUGGESTED",
+  stale: false,
   fileName,
   sender: "invoice@waterro.lv",
   subject: "Invoice request",
@@ -82,6 +83,8 @@ beforeEach(() => {
       suggestion("doc-a", "WR26-0220.pdf"),
       suggestion("doc-b", "inv-67.pdf"),
     ],
+    staleAfterDays: 60,
+    staleCount: 0,
   });
   api.collectionItems.mockResolvedValue({
     items: [],
@@ -139,6 +142,8 @@ describe("MissingInvoicesSuggestionsPage", () => {
           confidence: null,
         },
       ],
+      staleAfterDays: 60,
+      staleCount: 0,
     });
     render(<MissingInvoicesSuggestionsPage />);
     const row = await rowOf("RE67456.pdf");
@@ -149,6 +154,53 @@ describe("MissingInvoicesSuggestionsPage", () => {
     await waitFor(() =>
       expect(api.acceptSuggestion).toHaveBeenCalledWith("token-1", "doc-u"),
     );
+  });
+
+  /**
+   * acrobot 35565: a döntés nélkül maradt, nem párosodott fájl a határ után
+   * FIGYELMEZTETÉST kap, de nem törlődik. MI PIROSÍT: ha a régi fájl jelzés nélkül
+   * marad; ha a friss fájl is jelzést kap; ha a jelzés a Jev javaslatára kerül;
+   * ha a lap a határt nem a szervertől veszi.
+   */
+  it("flags a file that has waited past the limit, and says nothing is deleted automatically", async () => {
+    api.suggestions.mockResolvedValue({
+      items: [
+        {
+          ...suggestion("doc-old", "OLD.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+          stale: true,
+        },
+        {
+          ...suggestion("doc-new", "NEW.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+          stale: false,
+        },
+        suggestion("doc-jev", "JEV.pdf"),
+      ],
+      staleAfterDays: 45,
+      staleCount: 1,
+    });
+    render(<MissingInvoicesSuggestionsPage />);
+    const old = await rowOf("OLD.pdf");
+    expect(within(old).getByText("45 napnál régebben vár")).toBeInTheDocument();
+    expect(
+      within(await rowOf("NEW.pdf")).queryByText(/régebben vár/),
+    ).toBeNull();
+    expect(
+      within(await rowOf("JEV.pdf")).queryByText(/régebben vár/),
+    ).toBeNull();
+    const banner = screen.getByText(
+      /1 nem párosodott fájl 45 napnál régebben vár döntésre/,
+    );
+    expect(banner).toHaveTextContent("Automatikusan nem törlődnek");
+  });
+
+  it("shows no warning when nothing has waited past the limit", async () => {
+    render(<MissingInvoicesSuggestionsPage />);
+    await rowOf("WR26-0220.pdf");
+    expect(screen.queryByText("Régóta döntésre váró fájlok")).toBeNull();
   });
 
   /** A KONTROLL A JOGRA: olvasó joggal a lista látszik, döntés-gomb nincs. */
