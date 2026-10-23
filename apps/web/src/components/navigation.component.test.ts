@@ -469,7 +469,7 @@ describe("navigation", () => {
     "/admin/integrations/unas": "products.view",
     "/ai-teszt": "ai-test.view",
     // a kutatási tudástár (S4): a bevezetés után felvett sor, a menü joga az olvasásé
-    "/tudasbazis/forrasok": "knowledge.view",
+    "/tudasbazis": "knowledge.view",
     "/admin/brands": "products.view",
     "/beallitasok": "settings.manage",
     "/admin/integrations/nav": "settings.manage",

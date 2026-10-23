@@ -4,15 +4,19 @@ import { isNavigationEntryVisible } from "@acropora/types";
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { KNOWLEDGE_SOURCES_PATH } from "@/components/navigation";
+import {
+  KNOWLEDGE_BASE_PATH,
+  KNOWLEDGE_SOURCES_PATH,
+} from "@/components/navigation";
 
 /**
  * A TUDÁSBÁZIS FÜLEI (a Figma-terv bal oldali modul-menüje: Áttekintő,
  * Források, Kiolvasás, Állítás-tár, ...). Csak a KÉSZ képernyő kerül ide:
  * egy fül, ami nem visz sehova, rosszabb a hiányánál. Egy fülnél nincs mit
- * váltani, ezért a sor ma nem rajzolódik (a Beszerzés mintája).
+ * váltani, ezért akkor a sor nem rajzolódik (a Beszerzés mintája).
  */
 const KNOWLEDGE_TABS: ReadonlyArray<{ href: string; label: string }> = [
+  { href: KNOWLEDGE_BASE_PATH, label: "Áttekintő" },
   { href: KNOWLEDGE_SOURCES_PATH, label: "Források" },
 ];
 
