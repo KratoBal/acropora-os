@@ -5,6 +5,7 @@ import type {
 } from "@acropora/types";
 
 import { budapestDay } from "./billing-document-list.js";
+import { isOwnRow } from "./billing-own-rows.js";
 
 /**
  * A KIMENŐ BIZONYLATOK LÁNCA (task kimeno-kapcsolodo-bizonylatok; Balázs
@@ -45,6 +46,8 @@ interface ChainRow {
   proformaInvoiceId: string | null;
   referencedInvoiceId: string | null;
   createdAt: Date;
+  direction: string;
+  source: string;
   sourceType: string | null;
   completionCertificateId: string | null;
 }
@@ -84,6 +87,8 @@ export async function loadRelatedBillingDocuments(
         proformaInvoiceId: true,
         referencedInvoiceId: true,
         createdAt: true,
+        direction: true,
+        source: true,
         sourceType: true,
         completionCertificateId: true,
       },
@@ -144,8 +149,8 @@ export async function loadRelatedBillingDocuments(
     grossAmount: row.grossAmount ? row.grossAmount.toFixed(4) : null,
     currency: row.currency,
     current: row.id === startId,
-    // the same test as OWN_ROWS: only those rows have a details page
-    openable: row.sourceType !== null && row.completionCertificateId === null,
+    // only the module's own rows have a details page (the same predicate as OWN_ROWS)
+    openable: isOwnRow(row),
     cancelsId: CANCELLING.includes(row.documentType)
       ? row.referencedInvoiceId
       : null,

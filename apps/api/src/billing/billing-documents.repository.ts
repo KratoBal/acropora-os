@@ -8,18 +8,9 @@ import {
   type RelatedBillingDocuments,
 } from "./billing-document-related.js";
 
-/**
- * A SZÁMLÁZÁS MODUL SAJÁT SORAI: kimenő, Számlázz.hu-forrású bizonylat,
- * kitöltött `sourceType`-pal. A karbantartási piszkozat (`completionCertificateId`)
- * és a bejövő vagy UNAS-tükör sorok NEM ide tartoznak: azoknak más a
- * kiállítási útjuk, és ez az út nem szerkesztheti őket.
- */
-export const OWN_ROWS = {
-  direction: "OUTBOUND",
-  source: "SZAMLAZZ",
-  sourceType: { not: null },
-  completionCertificateId: null,
-} satisfies Prisma.InvoiceWhereInput;
+// the own-row scope lives in one place; re-exported for the existing importers
+export { OWN_ROWS } from "./billing-own-rows.js";
+import { OWN_ROWS } from "./billing-own-rows.js";
 
 /** Mentés csak vázlaton és elutasított kiállításon (#1267 állapotgépe). */
 const EDITABLE = ["DRAFT", "ISSUE_FAILED"] as const;
