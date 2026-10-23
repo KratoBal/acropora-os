@@ -161,9 +161,10 @@ describe("parseHertleinArtikel", () => {
         },
         { code: "2", ean: "40063813339", price: "5,00", retail: "n/a" },
         { code: "3", ean: "0036000291452", price: "5,00" },
+        { code: "4", ean: "42 6011945 355 5", price: "5,00" },
       ),
     );
-    const [first, second, third] = parsed.entries;
+    const [first, second, third, fourth] = parsed.entries;
     assert.equal(first!.gtin, "04006381333931");
     assert.equal(first!.brand, "Example Brand");
     assert.equal(first!.supplierName, 'Example "quoted" name');
@@ -171,6 +172,8 @@ describe("parseHertleinArtikel", () => {
     assert.equal(second!.gtin, null);
     assert.equal(second!.listRetailPrice, null);
     assert.equal(third!.gtin, "00036000291452");
+    // the live Hertlein shape: an EAN written in groups
+    assert.equal(fourth!.gtin, "04260119453555");
     assert.equal(parsed.rejected.length, 0);
   });
 
