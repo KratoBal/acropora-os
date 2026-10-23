@@ -306,6 +306,15 @@ export const PERMISSIONS = {
   /// teszt-fiókja egyéni jogként kaphatja meg. A szerkesztői jogok (olvas,
   /// szerkeszt, jóváhagy) az S4-ben jönnek.
   KNOWLEDGE_RESEARCH_RUN: "knowledge.research.run",
+  /// A KUTATÁSI TUDÁSTÁR OLVASÁSA (S4, a szerkesztői felület „olvas” szintje):
+  /// források, állítások, a szűrés állapota. Semmit nem módosít.
+  KNOWLEDGE_VIEW: "knowledge.view",
+  /// A KUTATÁSI TUDÁSTÁR SZERKESZTÉSE (S4, a „szerkeszt” szint): forrás
+  /// befogadása vagy kizárása okkal, később állítás elfogadása és javítása. Ma a
+  /// szakmai szerkesztő Balázs; csak OWNER/ADMIN, a MANAGER sem (lásd lent),
+  /// egyénileg adható. A végleges jóváhagyás (szótár, következtetés, cikk) külön
+  /// jog lesz, amikor az első ilyen képernyő elkészül.
+  KNOWLEDGE_MANAGE: "knowledge.manage",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -359,6 +368,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.MESSAGES_ADMIN &&
         // A FELDERÍTÉS A KÖZÖS KÜLSŐ KERETET HASZNÁLJA ÉS A TUDÁSTÁRBA ÍR (S2).
         permission !== PERMISSIONS.KNOWLEDGE_RESEARCH_RUN &&
+        // A SZAKMAI DÖNTÉS (befogad, kizár, elfogad) A SZERKESZTŐÉ (S4).
+        permission !== PERMISSIONS.KNOWLEDGE_MANAGE &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --

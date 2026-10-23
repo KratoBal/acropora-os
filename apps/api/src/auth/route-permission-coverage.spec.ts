@@ -57,6 +57,8 @@ const CONTROLLERS = [
   "src/knowledge-base/discovery/discovery-run.controller.ts",
   // Research knowledge base, claim extraction (S3): knowledge.research.run.
   "src/knowledge-base/extraction/extraction.controller.ts",
+  // Research knowledge base, source screening (S4): knowledge.view / knowledge.manage.
+  "src/knowledge-base/sources/source-screening.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 

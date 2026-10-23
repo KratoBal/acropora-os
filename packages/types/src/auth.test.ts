@@ -395,6 +395,9 @@ describe("a MANAGER jogkör-készlete rögzítve van", () => {
         "icp.view",
         "inventory.manage",
         "inventory.view",
+        // a kutatási tudástár olvasása (S4): a vezető látja, a szakmai döntés
+        // (knowledge.manage) és az indítás (knowledge.research.run) nem az övé
+        "knowledge.view",
         // az Üzenetek modul: minden belső emberi szerepkör (acrobot 26174)
         "messages.use",
         // az Elhullási napló (kártya 115c9740, acrobot 27141): a MANAGER mindkettőt
