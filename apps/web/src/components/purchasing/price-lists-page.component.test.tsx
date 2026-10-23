@@ -327,6 +327,13 @@ describe("PriceListsPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("links to the name-based pairing suggestions", async () => {
+    render(<PriceListsPage />);
+    expect(
+      await screen.findByRole("link", { name: /Párosítási javaslatok/ }),
+    ).toHaveAttribute("href", "/beszerzes/arlistak/javaslatok");
+  });
+
   it("shows each list's pairing state: by method, rejected, and unmatched with and without a barcode", async () => {
     render(<PriceListsPage />);
     const cell = await screen.findByTestId("coverage");
