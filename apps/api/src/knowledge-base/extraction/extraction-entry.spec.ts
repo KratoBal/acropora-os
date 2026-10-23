@@ -42,6 +42,7 @@ function fakes() {
       id,
       pmcid: "PMC1",
       retracted: false,
+      included: true,
       alreadyExtracted: false,
       retractionUnchecked: false,
     }),

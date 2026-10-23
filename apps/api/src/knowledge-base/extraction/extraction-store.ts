@@ -26,6 +26,12 @@ export interface SourceForExtraction {
   pmcid: string | null;
   retracted: boolean;
   /**
+   * The editor included it at screening (S4 Forrásszűrés). Only an included
+   * source is read: extraction costs an AI call, and the plan's step 3 reads
+   * what screening let through (acrobot 35716).
+   */
+  included: boolean;
+  /**
    * Its ORIGINAL version carries a full-text hash: an extraction ran on it,
    * whether it found claims or not (barracuda, #1838: a source with no claim
    * left no passage and was read, and paid for, again on every run).
@@ -108,6 +114,7 @@ export class PrismaExtractionStore implements ExtractionStore {
       select: {
         id: true,
         pmcid: true,
+        screeningStatus: true,
         retractionCheckedAt: true,
         versions: { select: { versionKind: true, contentHash: true } },
       },
@@ -117,6 +124,7 @@ export class PrismaExtractionStore implements ExtractionStore {
       id: row.id,
       pmcid: row.pmcid,
       retracted: row.versions.some((v) => v.versionKind === "RETRACTION"),
+      included: row.screeningStatus === "INCLUDED",
       alreadyExtracted: row.versions.some(
         (v) => v.versionKind === "ORIGINAL" && v.contentHash !== null,
       ),

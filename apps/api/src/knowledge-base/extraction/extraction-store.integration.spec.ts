@@ -124,10 +124,21 @@ describe(
         id: sourceId,
         pmcid: `PMC${suffix}`,
         retracted: false,
+        // not screened yet: the run would skip it (NOT_INCLUDED)
+        included: false,
         alreadyExtracted: false,
         // made here with a DOI but never through Crossref: the check did not run
         retractionUnchecked: true,
       });
+      await prisma.knowledgeSource.update({
+        where: { id: sourceId },
+        data: {
+          screeningStatus: "INCLUDED",
+          screenedById: userId,
+          screenedAt: new Date(),
+        },
+      });
+      assert.equal((await store.source(sourceId))?.included, true);
       const { claims } = checkClaims(
         [aiClaim()],
         jatsSections(JATS),
