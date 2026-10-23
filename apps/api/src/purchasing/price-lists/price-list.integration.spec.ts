@@ -178,6 +178,7 @@ describe(
         autoByEan: 1,
         autoByCode: 1,
         conflicts: 0,
+        previouslyRejected: 0,
         unmatched: 1,
       });
 
@@ -263,7 +264,8 @@ describe(
         autoByEan: 0,
         autoByCode: 0,
         conflicts: 0,
-        unmatched: 1,
+        previouslyRejected: 1,
+        unmatched: 0,
       });
       const p1 = await prisma.supplierPriceMatch.findUniqueOrThrow({
         where: { supplierId_supplierSku: { supplierId, supplierSku: "P1" } },
@@ -290,7 +292,8 @@ describe(
         autoByEan: 0,
         autoByCode: 0,
         conflicts: 0,
-        unmatched: 1,
+        previouslyRejected: 1,
+        unmatched: 0,
       });
       const p1 = await prisma.supplierPriceMatch.findUniqueOrThrow({
         where: { supplierId_supplierSku: { supplierId, supplierSku: "P1" } },
