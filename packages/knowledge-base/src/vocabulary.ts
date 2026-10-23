@@ -265,12 +265,14 @@ export function isAncestor(
 }
 
 // ---------------------------------------------------------------------------
-// THE K4 DRAFT (version 1). Written by the developers for the editor
-// (Balázs) to approve; every row is DRAFT, so no gate may use it until the
-// approved version replaces it. The document for the approval lists the same
-// rows: exchange/acroveliq/research-engine-k4-szotar-tervezet-2026-10-23.md.
+// THE K4 VOCABULARY, VERSION 1, APPROVED. Written by the developers for the
+// editor; Balázs accepted it as the base on the test system, 2026-10-23
+// 13:14 UTC (Discord 1563178794708115548), and asked for an editor's screen
+// to extend it (S4). The document he approved lists the same rows:
+// exchange/acroveliq/research-engine-k4-szotar-tervezet-2026-10-23.md.
+// A change to a row is a new version, approved again; never an edit here.
 
-const draft = (
+const row = (
   kind: VocabularyKind,
   key: string,
   forms: string[],
@@ -281,7 +283,7 @@ const draft = (
   kind,
   key,
   forms,
-  status: "DRAFT",
+  status: "APPROVED",
   version: 1,
   ...extra,
 });
@@ -291,9 +293,9 @@ const taxon = (
   rank: TaxonRank,
   parentKey: string | null,
   forms: string[],
-) => draft("TAXON", key, forms, { rank, parentKey });
+) => row("TAXON", key, forms, { rank, parentKey });
 
-export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
+export const VOCABULARY_V1_ROWS: readonly VocabularyRow[] = [
   taxon("CORAL", "GROUP", null, ["korall"]),
   taxon("STONY_CORAL", "GROUP", "CORAL", ["kőkorall", "zátonyépítő korall"]),
   taxon("SPS", "GROUP", "STONY_CORAL", ["sps", "kis polipú kőkorall"]),
@@ -324,53 +326,53 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
     "seriatopora hystrix",
   ]),
 
-  draft("ENVIRONMENT", "FIELD", [
+  row("ENVIRONMENT", "FIELD", [
     "zátony",
     "korallzátony",
     "terep",
     "természetes élőhely",
   ]),
-  draft("ENVIRONMENT", "LAB", ["labor"]),
-  draft("ENVIRONMENT", "MESOCOSM", ["mezokozmosz"]),
-  draft("ENVIRONMENT", "HOME_AQUARIUM", [
+  row("ENVIRONMENT", "LAB", ["labor"]),
+  row("ENVIRONMENT", "MESOCOSM", ["mezokozmosz"]),
+  row("ENVIRONMENT", "HOME_AQUARIUM", [
     "akvárium",
     "otthoni akvárium",
     "zátonyakvárium",
     "tengeri akvárium",
     "sps-akvárium",
   ]),
-  draft("ENVIRONMENT", "PUBLIC_AQUARIUM", [
+  row("ENVIRONMENT", "PUBLIC_AQUARIUM", [
     "közakvárium",
     "nyilvános akvárium",
   ]),
 
-  draft("EFFECT", "CALCIFICATION", [
+  row("EFFECT", "CALCIFICATION", [
     "kalcifikáció",
     "meszesedés",
     "mészvázépítés",
   ]),
-  draft("EFFECT", "SKELETAL_DENSITY", ["vázsűrűség"]),
-  draft("EFFECT", "GROWTH", ["növekedés"]),
-  draft("EFFECT", "BLEACHING", ["fehéredés", "kifehéredés"]),
-  draft("EFFECT", "BLEACHING_SUSCEPTIBILITY", [
+  row("EFFECT", "SKELETAL_DENSITY", ["vázsűrűség"]),
+  row("EFFECT", "GROWTH", ["növekedés"]),
+  row("EFFECT", "BLEACHING", ["fehéredés", "kifehéredés"]),
+  row("EFFECT", "BLEACHING_SUSCEPTIBILITY", [
     "fehéredés-érzékenység",
     "fehéredési érzékenység",
     "fehéredéssel szembeni érzékenység",
   ]),
-  draft("EFFECT", "COLORATION", ["színezet", "színintenzitás", "elszíneződés"]),
-  draft("EFFECT", "SYMBIONT_DENSITY", [
+  row("EFFECT", "COLORATION", ["színezet", "színintenzitás", "elszíneződés"]),
+  row("EFFECT", "SYMBIONT_DENSITY", [
     "zooxantella-sűrűség",
     "szimbionta-sűrűség",
   ]),
-  draft("EFFECT", "PHOTOSYNTHESIS", ["fotoszintézis"]),
+  row("EFFECT", "PHOTOSYNTHESIS", ["fotoszintézis"]),
 
-  draft(
+  row(
     "DIRECTION_VERB",
     "INCREASE",
     ["növel", "fokoz", "emel", "erősít", "nőtt", "nő"],
     { rank: "INCREASE" },
   ),
-  draft(
+  row(
     "DIRECTION_VERB",
     "DECREASE",
     ["csökken", "gátol", "mérsékel", "gyengít", "visszafog"],
@@ -378,12 +380,12 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
       rank: "DECREASE",
     },
   ),
-  draft("DIRECTION_VERB", "NEUTRAL", ["befolyásol", "hatás"], {
+  row("DIRECTION_VERB", "NEUTRAL", ["befolyásol", "hatás"], {
     rank: "NEUTRAL",
     note: "Irány nélküli hatás: tagadva NINCS HATÁS, állítva nem elég egy irányos állításhoz.",
   }),
 
-  draft(
+  row(
     "NEGATION",
     "NOT",
     ["nem", "nincs", "nincsen", "sincs", "sem", "semmilyen"],
@@ -392,13 +394,13 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
       rank: "NEGATOR",
     },
   ),
-  draft("NEGATION", "CONTRAST", ["helyett", "nélkül", "ellenére"], {
+  row("NEGATION", "CONTRAST", ["helyett", "nélkül", "ellenére"], {
     exactMatch: true,
     rank: "UNDECIDABLE",
     note: "Szembeállító szerkezet: az irány nem dönthető el szabállyal, a mondat kiszűrődik.",
   }),
 
-  draft(
+  row(
     "CERTAINTY",
     "SINGLE_REPORT",
     [
@@ -410,7 +412,7 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
     ],
     { rank: "SINGLE_REPORT" },
   ),
-  draft(
+  row(
     "CERTAINTY",
     "OBSERVATIONAL",
     [
@@ -422,7 +424,7 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
     ],
     { rank: "OBSERVATIONAL" },
   ),
-  draft(
+  row(
     "CERTAINTY",
     "SINGLE_EXPERIMENT",
     [
@@ -436,7 +438,7 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
       note: "Az okozati ige (okozza) kísérletet kíván, megfigyelés nem elég.",
     },
   ),
-  draft(
+  row(
     "CERTAINTY",
     "CONSISTENT_EXPERIMENTS",
     [
@@ -449,22 +451,22 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
     { rank: "CONSISTENT_EXPERIMENTS" },
   ),
 
-  draft("SCOPE_PHRASE", "GENERALISATION", [
+  row("SCOPE_PHRASE", "GENERALISATION", [
     "általánosítva",
     "más fajokra kiterjesztve",
   ]),
-  draft("SCOPE_PHRASE", "COARSER_DATA", [
+  row("SCOPE_PHRASE", "COARSER_DATA", [
     "nemzetség-szintű adat alapján",
     "nemzetségszintű adat alapján",
     "csoportszintű adat alapján",
   ]),
-  draft("SCOPE_PHRASE", "TRANSFER_TO_AQUARIUM", [
+  row("SCOPE_PHRASE", "TRANSFER_TO_AQUARIUM", [
     "akváriumra csak korlátozottan",
     "korlátozottan vihető át",
     "átvihetősége korlátozott",
   ]),
 
-  draft(
+  row(
     "UNSUPPORTED_CONSTRUCTION",
     "CONDITIONAL",
     ["ha", "csak ha", "amennyiben", "feltéve", "hacsak", "kivéve"],
@@ -474,17 +476,17 @@ export const DRAFT_VOCABULARY_ROWS: readonly VocabularyRow[] = [
     },
   ),
 
-  draft("UNIT", "PO4", ["foszfát", "ortofoszfát"], {
+  row("UNIT", "PO4", ["foszfát", "ortofoszfát"], {
     note: "Tömegegység mellett: mg/l PO4.",
   }),
-  draft("UNIT", "P", ["foszfor"], {
+  row("UNIT", "P", ["foszfor"], {
     note: "Tömegegység mellett: mg/l P (1 mg/l P = 3,07 mg/l PO4).",
   }),
 ];
 
-/** The draft, built. A DRAFT vocabulary gates nothing unless the caller opts in. */
-export function draftVocabulary(): Vocabulary {
-  return buildVocabulary(DRAFT_VOCABULARY_ROWS);
+/** Version 1, built: APPROVED, so it may gate (7a). */
+export function vocabularyV1(): Vocabulary {
+  return buildVocabulary(VOCABULARY_V1_ROWS);
 }
 
 /**

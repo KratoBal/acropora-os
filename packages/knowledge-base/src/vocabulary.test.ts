@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 
 import { recogniseSentence } from "./sentence-parts.js";
 import {
-  DRAFT_VOCABULARY_ROWS,
+  VOCABULARY_V1_ROWS,
   VocabularyError,
   buildVocabulary,
-  draftVocabulary,
+  vocabularyV1,
   isAncestor,
   type VocabularyRow,
 } from "./vocabulary.js";
@@ -20,16 +20,16 @@ const row = (over: Partial<VocabularyRow>): VocabularyRow => ({
   ...over,
 });
 
-describe("the K4 draft", () => {
-  it("builds, and is DRAFT: no gate may use it as it is", () => {
-    const v = draftVocabulary();
-    assert.equal(v.status, "DRAFT");
+describe("the K4 vocabulary, version 1", () => {
+  it("builds, and is APPROVED (Balázs, 2026-10-23, Discord 1563178794708115548)", () => {
+    const v = vocabularyV1();
+    assert.equal(v.status, "APPROVED");
     assert.equal(v.version, 1);
-    assert.ok(DRAFT_VOCABULARY_ROWS.every((r) => r.status === "DRAFT"));
+    assert.ok(VOCABULARY_V1_ROWS.every((r) => r.status === "APPROVED"));
   });
 
   it("the taxon tree runs species -> genus -> group", () => {
-    const v = draftVocabulary();
+    const v = vocabularyV1();
     assert.ok(isAncestor(v, "ACROPORA", "ACROPORA_MILLEPORA"));
     assert.ok(isAncestor(v, "SPS", "ACROPORA_MILLEPORA"));
     assert.ok(isAncestor(v, "CORAL", "ACROPORA"));
@@ -140,7 +140,7 @@ describe("buildVocabulary refuses what a gate could misread", () => {
 });
 
 describe("recognition through the draft", () => {
-  const v = draftVocabulary();
+  const v = vocabularyV1();
   it("stems match inflected forms, longest form wins", () => {
     const p = recogniseSentence(
       "Az Acropora milleporán a zátonyakváriumban a fehéredés-érzékenység nőtt.",
