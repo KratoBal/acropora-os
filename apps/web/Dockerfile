@@ -21,7 +21,7 @@
 #    public/ — no devDependencies, no build tools, no unrelated workspace
 #    source.
 
-ARG NODE_VERSION=22.23.1
+ARG NODE_VERSION=22.23.4
 ARG PNPM_VERSION=10.34.5
 # Keep in sync with the "turbo" devDependency version in the root package.json.
 ARG TURBO_VERSION=2.10.5
