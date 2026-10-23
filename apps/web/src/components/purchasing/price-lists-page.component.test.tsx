@@ -13,7 +13,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PriceListsPage } from "./price-lists-page";
+import { PriceListsPage, todayText } from "./price-lists-page";
 
 /**
  * BESZÁLLÍTÓI ÁRLISTÁK (task beszallitoi-arlistak): a feltöltő oldal. A
@@ -266,5 +266,36 @@ describe("PriceListsPage", () => {
     api.list.mockRejectedValueOnce(new Error("Nincs kapcsolat."));
     render(<PriceListsPage />);
     expect(await screen.findByText("Nincs kapcsolat.")).toBeInTheDocument();
+  });
+
+  it("takes today in Budapest: just after midnight there the UTC day is still yesterday", () => {
+    // 2026-10-23 22:30 UTC is 2026-10-24 00:30 in Budapest (CEST)
+    expect(todayText(new Date("2026-10-23T22:30:00.000Z"))).toBe("2026-10-24");
+    // in winter time (CET) the shift is one hour
+    expect(todayText(new Date("2026-12-10T23:30:00.000Z"))).toBe("2026-12-11");
+    expect(todayText(new Date("2026-10-23T12:00:00.000Z"))).toBe("2026-10-23");
+  });
+
+  it("says so when the supplier list cannot be loaded, instead of an empty chooser nobody can explain", async () => {
+    suppliersApi.list.mockRejectedValue(new Error("Nincs kapcsolat."));
+    render(<PriceListsPage />);
+    expect(
+      await screen.findByText(
+        "A beszállítók listája nem tölthető be: Nincs kapcsolat.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says so when there are more suppliers than the chooser shows", async () => {
+    suppliersApi.list.mockResolvedValue({
+      items: [{ id: "sup-1", name: "De Jong Marinelife" }],
+      pagination: { page: 1, pageSize: 100, totalItems: 140, totalPages: 2 },
+    });
+    render(<PriceListsPage />);
+    expect(
+      await screen.findByText(
+        "A választóban csak az első 1 beszállító látszik (összesen 140).",
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -43,8 +43,9 @@ const REJECT_REASON_LABELS: Record<string, string> = {
 
 const FIELD_LABEL = "text-sm font-medium text-pilot-grey-700";
 
-function todayText(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Today in Budapest (YYYY-MM-DD): between midnight and 02:00 the UTC day is still yesterday. */
+export function todayText(now: Date = new Date()): string {
+  return now.toLocaleDateString("sv-SE", { timeZone: "Europe/Budapest" });
 }
 
 function formatListDate(day: string): string {
@@ -107,6 +108,7 @@ export function PriceListsPage() {
   );
 
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
+  const [suppliersNote, setSuppliersNote] = useState<string | null>(null);
   const [lists, setLists] = useState<SupplierPriceListSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -161,8 +163,22 @@ export function PriceListsPage() {
         }),
         controller.signal,
       )
-      .then((response) => setSuppliers(response.items))
-      .catch(() => undefined);
+      .then((response) => {
+        setSuppliers(response.items);
+        setSuppliersNote(
+          response.pagination.totalItems > response.items.length
+            ? `A választóban csak az első ${response.items.length} beszállító látszik (összesen ${response.pagination.totalItems}).`
+            : null,
+        );
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setSuppliersNote(
+          cause instanceof Error
+            ? `A beszállítók listája nem tölthető be: ${cause.message}`
+            : "A beszállítók listája nem tölthető be.",
+        );
+      });
     return () => controller.abort();
   }, [canManage, token]);
 
@@ -324,6 +340,11 @@ export function PriceListsPage() {
                   </option>
                 ))}
               </PilotSelect>
+              {suppliersNote ? (
+                <p role="status" className="text-xs text-pilot-amber-700">
+                  {suppliersNote}
+                </p>
+              ) : null}
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="pl-format" className={FIELD_LABEL}>

@@ -17,7 +17,7 @@ export type {
   StudyType,
 } from "./evidence-level.js";
 export {
-  DRAFT_VOCABULARY_ROWS,
+  VOCABULARY_V1_ROWS,
   ENVIRONMENTS,
   IMPLICIT_DECLARATIVE_LEVEL,
   QUANTITY_TOLERANCE_MG_L_PO4,
@@ -25,7 +25,7 @@ export {
   VOCABULARY_KINDS,
   VocabularyError,
   buildVocabulary,
-  draftVocabulary,
+  vocabularyV1,
   isAncestor,
 } from "./vocabulary.js";
 export type {
@@ -50,3 +50,14 @@ export type {
   ClaimScope,
   Direction,
 } from "./compare.js";
+export {
+  MASS_UNITS,
+  PHOSPHATE_UNITS,
+  basisWritten,
+  numbersAtUnit,
+  numbersOf,
+  squash,
+  taxonInText,
+  unitWritten,
+} from "./anchor-check.js";
+export type { AnchorUnit } from "./anchor-check.js";

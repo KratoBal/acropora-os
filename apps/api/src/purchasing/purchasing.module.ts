@@ -9,6 +9,7 @@ import { ExpectedArrivalService } from "./expected-arrivals/expected-arrival.ser
 import { SupplierInvoiceMailClient } from "./expected-arrivals/supplier-invoice-mail.client.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
 import { PriceListController } from "./price-lists/price-list.controller.js";
+import { PriceListDisplayService } from "./price-lists/price-list-display.service.js";
 import { PriceListRepository } from "./price-lists/price-list.repository.js";
 import { PriceListService } from "./price-lists/price-list.service.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
@@ -60,6 +61,7 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     ExpectedArrivalService,
     PriceListRepository,
     PriceListService,
+    PriceListDisplayService,
   ],
   // the dashboard's "Várható beérkezések" widget reads the same list
   exports: [ExpectedArrivalService],

@@ -18,12 +18,14 @@ import {
   type AuthenticatedUser,
   type SupplierPriceListUploadResult,
   type SupplierPriceListsResponse,
+  type VariantSupplierPrices,
 } from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { MAX_PRICE_LIST_BYTES } from "./parse-price-list.js";
 import { UploadPriceListDto } from "./price-list.dto.js";
+import { PriceListDisplayService } from "./price-list-display.service.js";
 import { PriceListService } from "./price-list.service.js";
 
 /**
@@ -34,7 +36,10 @@ import { PriceListService } from "./price-list.service.js";
  */
 @Controller("purchasing/price-lists")
 export class PriceListController {
-  constructor(private readonly lists: PriceListService) {}
+  constructor(
+    private readonly lists: PriceListService,
+    private readonly display: PriceListDisplayService,
+  ) {}
 
   @Get()
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
@@ -42,6 +47,19 @@ export class PriceListController {
     @Query("supplierId") supplierId?: string,
   ): Promise<SupplierPriceListsResponse> {
     return this.lists.lists(supplierId || undefined);
+  }
+
+  /**
+   * Egy termékváltozat beszállítói árai és a haszon (task beszallitoi-arlistak-4).
+   * `purchasing.view`: a beszerzési ár ugyanaz a körnek látszik, mint a beszerzési
+   * számlák és a termékkereső utolsó beszerzési ára.
+   */
+  @Get("variants/:variantId")
+  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  forVariant(
+    @Param("variantId") variantId: string,
+  ): Promise<VariantSupplierPrices> {
+    return this.display.forVariant(variantId);
   }
 
   @Post()

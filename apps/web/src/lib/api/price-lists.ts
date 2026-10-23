@@ -2,6 +2,7 @@ import type {
   SupplierPriceListFormat,
   SupplierPriceListUploadResult,
   SupplierPriceListsResponse,
+  VariantSupplierPrices,
 } from "@acropora/types";
 
 import { apiRequest } from "./client";
@@ -42,6 +43,13 @@ export const priceListsApi = {
       method: "POST",
       body,
     });
+  },
+  variantPrices(token: string, variantId: string, signal?: AbortSignal) {
+    return apiRequest<VariantSupplierPrices>(
+      `${base}/variants/${encodeURIComponent(variantId)}`,
+      token,
+      { signal },
+    );
   },
   remove(token: string, id: string) {
     return apiRequest<{ removedRows: number }>(
