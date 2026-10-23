@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { Prisma } from "@acropora/database";
 import type {
   SupplierPriceListFormat,
   SupplierPriceListSummary,
@@ -113,20 +114,33 @@ export class PriceListService {
           )} dátummal. Ha javítani akarod, előbb töröld azt a listát.`,
       );
 
-    const listId = await this.repository.create(
-      {
-        supplierId: input.supplierId,
-        format: input.format,
-        listDate,
-        currency,
-        sourceFileName: input.file.originalname.slice(0, 255),
-        sourceSha256,
-        rowCount: parsed.entries.length,
-        rejectedRowCount: parsed.rejected.length,
-        uploadedById: input.userId,
-      },
-      parsed.entries,
-    );
+    // két egyidejű, azonos fájlú feltöltés közül a második az ellenőrzés után, a
+    // mentésnél bukik az egyedi indexen: ugyanaz a válasz, mint a korai ellenőrzésé
+    const listId = await this.repository
+      .create(
+        {
+          supplierId: input.supplierId,
+          format: input.format,
+          listDate,
+          currency,
+          sourceFileName: input.file.originalname.slice(0, 255),
+          sourceSha256,
+          rowCount: parsed.entries.length,
+          rejectedRowCount: parsed.rejected.length,
+          uploadedById: input.userId,
+        },
+        parsed.entries,
+      )
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        )
+          throw new ConflictException(
+            "Ezt a fájlt közben már feltöltötték ennek a beszállítónak.",
+          );
+        throw error;
+      });
 
     const matching = await this.match(input.supplierId, parsed.entries);
     const rejectedByReason: Record<string, number> = {};

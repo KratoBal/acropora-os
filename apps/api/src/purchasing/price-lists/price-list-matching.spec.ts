@@ -62,7 +62,6 @@ describe("decideMatches", () => {
           supplierSku: "A1",
           variantId: "v1",
           method: "EAN",
-          replacesRejected: false,
         },
       ],
     );
@@ -75,7 +74,6 @@ describe("decideMatches", () => {
         supplierSku: "A1",
         variantId: "v9",
         method: "SUPPLIER_CODE",
-        replacesRejected: false,
       },
     ]);
   });
@@ -120,8 +118,9 @@ describe("decideMatches", () => {
     );
   });
 
-  it("does not bring back a rejected pair, and lets a different product replace it", () => {
+  it("never suggests anything for a code a person rejected: not the same product, not a different one", () => {
     const rejected: ExistingMatch = { variantId: "v1", status: "REJECTED" };
+    // the same product again
     assert.deepEqual(
       decide([entry("A1", GTIN)], {
         variants: { [GTIN]: ["v1"] },
@@ -129,20 +128,21 @@ describe("decideMatches", () => {
       }),
       [{ kind: "UNMATCHED", supplierSku: "A1" }],
     );
+    // a different product (the data turned): still a person's call
     assert.deepEqual(
       decide([entry("A1", GTIN)], {
         variants: { [GTIN]: ["v2"] },
         existing: { A1: rejected },
       }),
-      [
-        {
-          kind: "NEW_AUTO",
-          supplierSku: "A1",
-          variantId: "v2",
-          method: "EAN",
-          replacesRejected: true,
-        },
-      ],
+      [{ kind: "UNMATCHED", supplierSku: "A1" }],
+    );
+    // and a code the SupplierProduct knows
+    assert.deepEqual(
+      decide([entry("A1")], {
+        existing: { A1: rejected },
+        known: { A1: "v3" },
+      }),
+      [{ kind: "UNMATCHED", supplierSku: "A1" }],
     );
   });
 
@@ -196,14 +196,12 @@ describe("tallyDecisions", () => {
           supplierSku: "b",
           variantId: "v",
           method: "EAN",
-          replacesRejected: false,
         },
         {
           kind: "NEW_AUTO",
           supplierSku: "c",
           variantId: "v",
           method: "SUPPLIER_CODE",
-          replacesRejected: true,
         },
         { kind: "CONFLICT", supplierSku: "d", reason: "EAN_MANY" },
         { kind: "UNMATCHED", supplierSku: "e" },

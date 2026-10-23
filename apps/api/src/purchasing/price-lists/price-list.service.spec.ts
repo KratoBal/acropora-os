@@ -7,6 +7,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import { Prisma } from "@acropora/database";
+
 import type { MatchDecision } from "./price-list-matching.js";
 import type {
   NewListInput,
@@ -49,6 +51,7 @@ function setup(
       string,
       { variantId: string; status: "AUTO" | "APPROVED" | "REJECTED" }
     >;
+    createError?: unknown;
   } = {},
 ) {
   const created: { input: NewListInput; entries: ParsedPriceEntry[] }[] = [];
@@ -61,6 +64,7 @@ function setup(
         : options.supplier,
     duplicate: async () => options.duplicate ?? null,
     create: async (input: NewListInput, entries: ParsedPriceEntry[]) => {
+      if (options.createError) throw options.createError;
       created.push({ input, entries: [...entries] });
       return "list-1";
     },
@@ -190,6 +194,26 @@ describe("PriceListService.upload", () => {
     assert.match(message, /dejong-week40\.csv/);
     assert.match(message, /töröld/);
     assert.deepEqual(created, []);
+  });
+
+  it("answers a concurrent identical upload (the unique index fails on save) with the same 409, not a 500", async () => {
+    const { service, saved } = setup({
+      createError: new Prisma.PrismaClientKnownRequestError("unique", {
+        code: "P2002",
+        clientVersion: "test",
+      }),
+    });
+    const message = await rejects(
+      service.upload(input(), NOW),
+      ConflictException,
+    );
+    assert.match(message, /közben már feltöltötték/);
+    assert.deepEqual(saved, []);
+  });
+
+  it("does not turn any other save error into a 409", async () => {
+    const { service } = setup({ createError: new Error("lemez tele") });
+    await assert.rejects(service.upload(input(), NOW), /lemez tele/);
   });
 
   it("refuses a supplier that does not exist or is not a supplier", async () => {

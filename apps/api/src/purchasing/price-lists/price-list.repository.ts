@@ -171,23 +171,16 @@ export class PriceListRepository {
   }
 
   /**
-   * Az új automatikus kötések mentése. Az új sor `createMany` (egy közben
-   * létrejött sort nem írunk felül: `skipDuplicates`); egy ELUTASÍTOTT sort csak
-   * akkor ír át másik termékre, ha az még elutasított.
+   * Az új automatikus kötések mentése: csak `createMany`, és `skipDuplicates`.
+   * Meglévő sort SOHA nem ír át: egy közben létrejött, jóváhagyott vagy
+   * elutasított sor érintetlen marad (acrobot 35592).
    */
   async saveAutoMatches(
     supplierId: string,
     decisions: readonly MatchDecision[],
   ): Promise<void> {
     const fresh = decisions.flatMap((decision) =>
-      decision.kind === "NEW_AUTO" && !decision.replacesRejected
-        ? [decision]
-        : [],
-    );
-    const replacing = decisions.flatMap((decision) =>
-      decision.kind === "NEW_AUTO" && decision.replacesRejected
-        ? [decision]
-        : [],
+      decision.kind === "NEW_AUTO" ? [decision] : [],
     );
     await this.database.$transaction(
       async (transaction) => {
@@ -201,21 +194,6 @@ export class PriceListRepository {
               status: "AUTO" as const,
             })),
             skipDuplicates: true,
-          });
-        for (const decision of replacing)
-          await transaction.supplierPriceMatch.updateMany({
-            where: {
-              supplierId,
-              supplierSku: decision.supplierSku,
-              status: "REJECTED",
-            },
-            data: {
-              variantId: decision.variantId,
-              method: decision.method,
-              status: "AUTO",
-              decidedById: null,
-              decidedAt: null,
-            },
           });
       },
       { timeout: 60_000 },

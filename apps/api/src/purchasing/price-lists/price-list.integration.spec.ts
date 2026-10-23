@@ -270,6 +270,37 @@ describe(
         select: { status: true },
       });
       assert.equal(p1.status, "REJECTED");
+
+      it("does not overwrite a rejection even when the barcode now belongs to a different product", async () => {
+        // the data turned: the barcode moves to the other product
+        await prisma.productBarcode.update({
+          where: { code: EAN_A },
+          data: { variantId: variants.B! },
+        });
+        const result = await upload(
+          hertlein([
+            { code: "P1", ean: EAN_A, price: "11,80" },
+            { code: "P3", ean: "", price: "7,00" },
+          ]),
+          `${PREFIX}v3.csv`,
+        );
+        assert.deepEqual(result.matching, {
+          alreadyMatched: 1,
+          autoByEan: 0,
+          autoByCode: 0,
+          conflicts: 0,
+          unmatched: 1,
+        });
+        const p1 = await prisma.supplierPriceMatch.findUniqueOrThrow({
+          where: { supplierId_supplierSku: { supplierId, supplierSku: "P1" } },
+          select: { status: true, variantId: true, decidedById: true },
+        });
+        assert.deepEqual(p1, {
+          status: "REJECTED",
+          variantId: variants.A,
+          decidedById: userId,
+        });
+      });
     });
   },
 );

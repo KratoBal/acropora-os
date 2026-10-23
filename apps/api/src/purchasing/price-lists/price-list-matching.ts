@@ -15,8 +15,11 @@ import { normalizeGtin } from "./gtin.js";
  *      terméket mond: ütközés, nincs kötés, ember dönt;
  *   5. különben nincs kötés (a név-alapú javaslat külön lépés).
  *
- * Egy korábban ELUTASÍTOTT kötés (REJECTED) ugyanarra a termékre nem jön vissza;
- * másik termékre új javaslat írhatja felül.
+ * AZ AUTOMATIKA EMBERI DÖNTÉST SOHA NEM ÍR FELÜL (acrobot 35592, barracuda
+ * #1832): a jóváhagyott kötés marad, és az ELUTASÍTOTT kötés is marad, akár
+ * ugyanarra, akár MÁSIK termékre szólna az automatikus javaslat. Ha az adat
+ * később megváltozik (egy vonalkód átkerül), az elutasítást csak ember oldhatja
+ * fel; az automatika addig nem javasol erre a cikkszámra semmit.
  */
 
 export type MatchStatus = "AUTO" | "APPROVED" | "REJECTED";
@@ -34,8 +37,6 @@ export type MatchDecision =
       supplierSku: string;
       variantId: string;
       method: "EAN" | "SUPPLIER_CODE";
-      /** Igaz, ha egy ELUTASÍTOTT sort ír felül (másik termékre). */
-      replacesRejected: boolean;
     }
   | {
       kind: "CONFLICT";
@@ -60,8 +61,8 @@ export function decideMatches(input: MatchingInput): MatchDecision[] {
     const existing = input.existing.get(sku);
     if (existing && existing.status !== "REJECTED")
       return { kind: "KEEP", supplierSku: sku, variantId: existing.variantId };
-    const rejected =
-      existing?.status === "REJECTED" ? existing.variantId : null;
+    // egy ember által elutasított cikkszámra az automatika semmit nem javasol
+    if (existing) return { kind: "UNMATCHED", supplierSku: sku };
 
     const byEan = entry.gtin
       ? (input.variantsByGtin.get(entry.gtin) ?? new Set<string>())
@@ -74,14 +75,12 @@ export function decideMatches(input: MatchingInput): MatchDecision[] {
       return { kind: "CONFLICT", supplierSku: sku, reason: "EAN_VS_CODE" };
 
     const variantId = eanVariant ?? codeVariant;
-    if (!variantId || variantId === rejected)
-      return { kind: "UNMATCHED", supplierSku: sku };
+    if (!variantId) return { kind: "UNMATCHED", supplierSku: sku };
     return {
       kind: "NEW_AUTO",
       supplierSku: sku,
       variantId,
       method: eanVariant ? "EAN" : "SUPPLIER_CODE",
-      replacesRejected: rejected !== null,
     };
   });
 }
