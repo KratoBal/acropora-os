@@ -63,7 +63,7 @@ const KIND_LABELS: Record<string, string> = {
   OWN_DATA: "Saját mérés",
 };
 
-const STUDY_LABELS: Record<string, string> = {
+export const STUDY_LABELS: Record<string, string> = {
   CONTROLLED_LAB: "Kísérlet",
   MESOCOSM: "Mezokozmosz",
   FIELD_EXPERIMENT: "Terepi kísérlet",

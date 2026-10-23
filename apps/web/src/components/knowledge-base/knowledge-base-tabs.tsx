@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   KNOWLEDGE_BASE_PATH,
+  KNOWLEDGE_CLAIMS_PATH,
   KNOWLEDGE_SOURCES_PATH,
 } from "@/components/navigation";
 
@@ -18,6 +19,7 @@ import {
 const KNOWLEDGE_TABS: ReadonlyArray<{ href: string; label: string }> = [
   { href: KNOWLEDGE_BASE_PATH, label: "Áttekintő" },
   { href: KNOWLEDGE_SOURCES_PATH, label: "Források" },
+  { href: KNOWLEDGE_CLAIMS_PATH, label: "Kiolvasás" },
 ];
 
 export function KnowledgeBaseTabs({ active }: { active: string }) {

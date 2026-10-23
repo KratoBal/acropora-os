@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   KNOWLEDGE_BASE_PATH,
+  KNOWLEDGE_CLAIMS_PATH,
   KNOWLEDGE_SOURCES_PATH,
 } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
@@ -29,7 +30,7 @@ import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
  * A TUDÁSBÁZIS ÁTTEKINTŐJE (Research & Knowledge Engine S4; Figma
  * K2d2lES872xzwQHCMVXtam 3:2). A legfontosabb elem a „Rád vár” sáv: innen egy
  * kattintással a következő teendőhöz jut a szerkesztő. Megnyitás-gomb csak
- * oda van, ahol a képernyő már kész (ma a Forrásszűrés); a többi kártya a
+ * oda van, ahol a képernyő már kész (a Forrásszűrés és a Kiolvasás); a többi kártya a
  * számot mutatja, link nélkül.
  *
  * Egy kutatási projekt van (a pilot kérdése); kutatási-kérdés modell még
@@ -140,6 +141,7 @@ export function KnowledgeOverviewPage() {
               <WaitingCard
                 label="Állítás ellenőrzésre"
                 value={overview.waiting.claimsToCheck}
+                href={KNOWLEDGE_CLAIMS_PATH}
               />
               <WaitingCard
                 label="Probléma döntésre"

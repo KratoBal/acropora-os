@@ -408,6 +408,7 @@ export const unasSettingsNavigation: AppNavigationItem[] = [
  */
 export const KNOWLEDGE_BASE_PATH = "/tudasbazis";
 export const KNOWLEDGE_SOURCES_PATH = "/tudasbazis/forrasok";
+export const KNOWLEDGE_CLAIMS_PATH = "/tudasbazis/kiolvasas";
 
 export const secondaryNavigation: AppNavigationItem[] = [
   {
