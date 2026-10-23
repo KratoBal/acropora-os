@@ -400,6 +400,15 @@ export const unasSettingsNavigation: AppNavigationItem[] = [
   },
 ];
 
+/**
+ * A KUTATÁSI TUDÁSTÁR (S4). A menüpont ma a Forrásszűrésre visz, mert az az
+ * első kész képernyő; az Áttekintő (Figma 3:2) érkezésekor a `/tudasbazis`
+ * lesz a kezdőlapja. A modul fülei a `knowledge-base/knowledge-base-tabs.tsx`
+ * sorában állnak, csak a kész képernyők (holt link nincs).
+ */
+export const KNOWLEDGE_BASE_PATH = "/tudasbazis";
+export const KNOWLEDGE_SOURCES_PATH = "/tudasbazis/forrasok";
+
 export const secondaryNavigation: AppNavigationItem[] = [
   {
     // Belső próbafelület, nem üzemi oldal: ezért NEM az operatív blokkban van,
@@ -409,6 +418,14 @@ export const secondaryNavigation: AppNavigationItem[] = [
     label: "AI teszt",
     icon: "activity",
     entryId: "ai-test",
+  },
+  {
+    // belső szerkesztői modul a teszten (S4): a többi belső próbafelület mellett
+    href: KNOWLEDGE_SOURCES_PATH,
+    label: "Tudásbázis",
+    icon: "file-text",
+    entryId: "knowledge-base",
+    alsoActiveOn: [KNOWLEDGE_BASE_PATH],
   },
   {
     href: "/admin/brands",

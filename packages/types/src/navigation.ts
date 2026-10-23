@@ -489,6 +489,16 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.AI_TEST_VIEW),
   },
   {
+    /**
+     * A KUTATÁSI TUDÁSTÁR (Research & Knowledge Engine, S4; Figma
+     * K2d2lES872xzwQHCMVXtam). Belső szerkesztői modul, csak a teszten él;
+     * az olvasás joga a menü, a döntés (knowledge.manage) a gombok joga.
+     */
+    id: "knowledge-base",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.KNOWLEDGE_VIEW),
+  },
+  {
     id: "brands",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.PRODUCTS_VIEW),

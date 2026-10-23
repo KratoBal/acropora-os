@@ -908,6 +908,7 @@ model User {
   /// Kutatási tudástár (S1): szerkesztői döntések és a mélykutatás tervezetei.
   decidedApplicability   KnowledgeClaimEvidence[]      @relation("KnowledgeApplicabilityDecidedBy")
   decidedFieldAnchors    KnowledgeFieldAnchor[]        @relation("KnowledgeFieldAnchorDecidedBy")
+  screenedSources        KnowledgeSource[]             @relation("KnowledgeSourceScreenedBy")
   approvedVocabulary     KnowledgeVocabularyEntry[]    @relation("KnowledgeVocabularyApprovedBy")
   researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
   knowledgeDiscoveryRuns KnowledgeDiscoveryRun[]       @relation("KnowledgeDiscoveryRunRequestedBy")
@@ -10463,6 +10464,22 @@ enum KnowledgeSourceKind {
   OWN_DATA
 }
 
+/// A forrás szűrési állapota (S4, PRISMA-szerű napló).
+enum KnowledgeScreeningStatus {
+  PENDING
+  INCLUDED
+  EXCLUDED
+}
+
+/// A kizárás oka (a szerkesztői felület leírása szerint).
+enum KnowledgeExclusionReason {
+  NOT_MARINE
+  NOT_CORAL
+  NOT_RELEVANT
+  DUPLICATE
+  OTHER
+}
+
 /// A vizsgálat típusa, zárt lista (7a: a szabálytábla bemenete).
 enum KnowledgeStudyType {
   CONTROLLED_LAB
@@ -10625,6 +10642,14 @@ model KnowledgeSource {
   /// Az a felderítő futás (S2), amelyik először hozta; NULL: kézzel rögzítve.
   discoveryRunId          String?
   discoveryRun            KnowledgeDiscoveryRun?      @relation(fields: [discoveryRunId], references: [id], onDelete: Restrict)
+  /// SZŰRÉS (S4, terv 7. pont 3. lépés): a szerkesztő dönt, okkal. PENDING: döntésre vár.
+  /// Kizárásnál az ok kötelező, és OTHER-nél a megjegyzés is (CHECK a migrációban).
+  screeningStatus         KnowledgeScreeningStatus    @default(PENDING)
+  exclusionReason         KnowledgeExclusionReason?
+  screeningNote           String?                     @db.VarChar(500)
+  screenedById            String?
+  screenedBy              User?                       @relation("KnowledgeSourceScreenedBy", fields: [screenedById], references: [id], onDelete: Restrict)
+  screenedAt              DateTime?
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
 
@@ -10633,6 +10658,7 @@ model KnowledgeSource {
 
   @@index([kind])
   @@index([discoveryRunId])
+  @@index([screeningStatus])
 }
 
 /// A mű egy változata: eredeti, javítás, visszavonás. Egy visszavonás a ráépülő

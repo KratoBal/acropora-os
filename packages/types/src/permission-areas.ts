@@ -197,8 +197,14 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
   {
     key: "knowledge-research",
     label: "Kutatási tudástár",
-    manage: P.KNOWLEDGE_RESEARCH_RUN,
-    extras: [],
+    view: P.KNOWLEDGE_VIEW,
+    manage: P.KNOWLEDGE_MANAGE,
+    extras: [
+      {
+        permission: P.KNOWLEDGE_RESEARCH_RUN,
+        label: "Felderítés és kiolvasás indítása",
+      },
+    ],
   },
   {
     key: "settings",

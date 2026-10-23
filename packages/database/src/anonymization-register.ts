@@ -1626,6 +1626,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     controlDescription: "business",
     measurementMethodDetail: "business",
     limitations: "business",
+    // the editor's own words on a screening decision
+    screeningNote: "freeText",
   },
   KnowledgeSourceVersion: {
     relatedDoi: "identifier",
