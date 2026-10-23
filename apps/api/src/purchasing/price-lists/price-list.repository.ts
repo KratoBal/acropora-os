@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { SupplierPriceListFormat } from "@acropora/types";
 
+import { loadVariantListPrices } from "../../quotes/variant-list-price.js";
+
 import type { ExistingMatch, MatchDecision } from "./price-list-matching.js";
 import type { ParsedPriceEntry } from "./price-list.types.js";
 
@@ -101,6 +103,82 @@ export class PriceListRepository {
       },
       { timeout: 60_000 },
     );
+  }
+
+  /** A mai nettó eladási ár forintban, a változat áfakulcsával; `null`: nincs ilyen változat. */
+  async sellingPrice(variantId: string, now: Date) {
+    return (
+      (await loadVariantListPrices(this.database, [variantId], now)).get(
+        variantId,
+      ) ?? null
+    );
+  }
+
+  /** Az ember vagy az automatika által kötött (nem elutasított) cikkszámok a változatra. */
+  matchesForVariant(variantId: string) {
+    return this.database.supplierPriceMatch.findMany({
+      where: { variantId, status: { in: ["AUTO", "APPROVED"] } },
+      select: {
+        supplierId: true,
+        supplierSku: true,
+        method: true,
+        status: true,
+        supplier: { select: { name: true } },
+      },
+    });
+  }
+
+  /**
+   * A cikkszám legfrissebb sora a beszállító listái közül (lista-dátum, majd a
+   * feltöltés ideje szerint). Egy cikkszám korábbi listái nem számítanak.
+   */
+  async latestEntries(
+    pairs: readonly { supplierId: string; supplierSku: string }[],
+  ) {
+    const latest = new Map<
+      string,
+      {
+        supplierName: string | null;
+        unitPrice: string;
+        listRetailPrice: string | null;
+        listDate: Date;
+        currency: string;
+      }
+    >();
+    const bySupplier = new Map<string, string[]>();
+    for (const pair of pairs)
+      bySupplier.set(pair.supplierId, [
+        ...(bySupplier.get(pair.supplierId) ?? []),
+        pair.supplierSku,
+      ]);
+    for (const [supplierId, skus] of bySupplier) {
+      const rows = await this.database.supplierPriceListEntry.findMany({
+        where: { supplierSku: { in: skus }, list: { supplierId } },
+        orderBy: [
+          { list: { listDate: "desc" } },
+          { list: { createdAt: "desc" } },
+        ],
+        select: {
+          supplierSku: true,
+          supplierName: true,
+          unitPrice: true,
+          listRetailPrice: true,
+          list: { select: { listDate: true, currency: true } },
+        },
+      });
+      for (const row of rows) {
+        const key = `${supplierId}\u0000${row.supplierSku}`;
+        if (latest.has(key)) continue;
+        latest.set(key, {
+          supplierName: row.supplierName,
+          unitPrice: row.unitPrice.toString(),
+          listRetailPrice: row.listRetailPrice?.toString() ?? null,
+          listDate: row.list.listDate,
+          currency: row.list.currency,
+        });
+      }
+    }
+    return latest;
   }
 
   lists(supplierId?: string) {

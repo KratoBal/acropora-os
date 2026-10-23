@@ -1582,4 +1582,6 @@ export type {
   SupplierPriceListSummary,
   SupplierPriceListUploadResult,
   SupplierPriceListsResponse,
+  SupplierPriceRow,
+  VariantSupplierPrices,
 } from "./supplier-price-lists.js";
