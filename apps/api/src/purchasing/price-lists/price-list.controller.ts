@@ -18,13 +18,16 @@ import {
   type AuthenticatedUser,
   type SupplierPriceListUploadResult,
   type SupplierPriceListsResponse,
+  type SupplierPriceSuggestionDecision,
+  type SupplierPriceSuggestionsResponse,
   type VariantSupplierPrices,
 } from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { MAX_PRICE_LIST_BYTES } from "./parse-price-list.js";
-import { UploadPriceListDto } from "./price-list.dto.js";
+import { DecideSuggestionsDto, UploadPriceListDto } from "./price-list.dto.js";
+import { PriceListSuggestionService } from "./price-list-suggestion.service.js";
 import { PriceListDisplayService } from "./price-list-display.service.js";
 import { PriceListService } from "./price-list.service.js";
 
@@ -39,6 +42,7 @@ export class PriceListController {
   constructor(
     private readonly lists: PriceListService,
     private readonly display: PriceListDisplayService,
+    private readonly suggestions: PriceListSuggestionService,
   ) {}
 
   @Get()
@@ -60,6 +64,48 @@ export class PriceListController {
     @Param("variantId") variantId: string,
   ): Promise<VariantSupplierPrices> {
     return this.display.forVariant(variantId);
+  }
+
+  /** A névből javasolt párosítások, amelyekre ember jóváhagyása vár (task arlista-nev-javaslat). */
+  @Get("suggestions")
+  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  pendingSuggestions(
+    @Query("supplierId") supplierId?: string,
+    @Query("offset") offset?: string,
+  ): Promise<SupplierPriceSuggestionsResponse> {
+    const skip = Number(offset);
+    return this.suggestions.pending(
+      supplierId || undefined,
+      Number.isSafeInteger(skip) && skip > 0 ? skip : 0,
+    );
+  }
+
+  @Post("suggestions/approve")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  approveSuggestions(
+    @Body() input: DecideSuggestionsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<SupplierPriceSuggestionDecision> {
+    return this.suggestions.approve(input.ids, user.id);
+  }
+
+  @Post("suggestions/reject")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  rejectSuggestions(
+    @Body() input: DecideSuggestionsDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<SupplierPriceSuggestionDecision> {
+    return this.suggestions.reject(input.ids, user.id);
+  }
+
+  /** Javaslat egy már feltöltött listához (a korábban feltöltöttekhez, vagy új járulék után). */
+  @Post(":id/suggest")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  suggestForList(@Param("id") id: string) {
+    return this.suggestions.generateForList(id);
   }
 
   @Post()

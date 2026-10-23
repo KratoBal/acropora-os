@@ -107,6 +107,7 @@ const uploaded = (
     previouslyRejected: 12,
     unmatched: 6991,
   },
+  nameSuggestions: 481,
   ...overrides,
 });
 
@@ -210,6 +211,9 @@ describe("PriceListsPage", () => {
       "12 korábban elutasított (nem javasoljuk újra)",
     );
     expect(summaryText).toHaveTextContent("6991 párosítatlan");
+    expect(summaryText).toHaveTextContent(
+      "481 sorhoz név alapú javaslat készült, jóváhagyásra vár",
+    );
     // the list reloads after the upload
     await waitFor(() =>
       expect(api.list.mock.calls.length).toBeGreaterThanOrEqual(2),
