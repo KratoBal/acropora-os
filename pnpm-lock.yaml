@@ -391,6 +391,22 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  packages/knowledge-base:
+    dependencies:
+      '@acropora/aquarium-calc':
+        specifier: workspace:*
+        version: link:../aquarium-calc
+    devDependencies:
+      '@acropora/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/rich-text:
     dependencies:
       xss:

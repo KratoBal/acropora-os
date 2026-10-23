@@ -1593,4 +1593,71 @@ export const ANONYMIZATION_REGISTER: Readonly<
   AttributeSetAttribute: {
     group: "business",
   },
+  // Research knowledge base (S1): published literature metadata and the
+  // editors' own analysis of it, no customer data. The authors are published
+  // bylines, kept like a title. The editors' handwritten notes are free text.
+  KnowledgeSource: {
+    doi: "identifier",
+    openalexId: "identifier",
+    pmid: "identifier",
+    pmcid: "identifier",
+    s2Id: "identifier",
+    url: "business",
+    title: "business",
+    authors: "business",
+    venue: "business",
+    license: "business",
+    oaUrl: "business",
+    discoveredVia: "business",
+    controlDescription: "business",
+    measurementMethodDetail: "business",
+    limitations: "business",
+  },
+  KnowledgeSourceVersion: {
+    relatedDoi: "identifier",
+    detectedVia: "business",
+    contentHash: "identifier",
+  },
+  KnowledgePassage: {
+    locator: "business",
+    text: "business",
+    textHash: "identifier",
+    extractedBy: "business",
+  },
+  KnowledgeClaim: {
+    subject: "business",
+    population: "business",
+    originalUnit: "business",
+    conditions: "business",
+    effect: "business",
+  },
+  KnowledgeClaimEvidence: {
+    note: "freeText",
+    sampleUnit: "business",
+    uncertainty: "business",
+    species: "business",
+    conditions: "business",
+    applicabilityReason: "freeText",
+  },
+  KnowledgeClaimRelation: {
+    note: "freeText",
+  },
+  KnowledgeFieldAnchor: {
+    field: "business",
+    normalizedValue: "business",
+  },
+  KnowledgeVocabularyEntry: {
+    key: "business",
+    forms: "business",
+    parentKey: "business",
+    rank: "business",
+    note: "business",
+  },
+  KnowledgeResearchDraft: {
+    question: "freeText",
+    sources: "business",
+    candidateClaims: "business",
+    summary: "business",
+    summaryModel: "business",
+  },
 };
