@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("Tudásbázis áttekintő", () => {
-  it("a Rád vár sáv: a szűrésre váró források a Forrásszűrésre visznek, a többi kártya link nélkül áll", async () => {
+  it("a Rád vár sáv: a szűrés és az ellenőrzés a saját képernyőjére visz, a problémák kártyája link nélkül áll", async () => {
     render(<KnowledgeOverviewPage />);
     const waiting = (
       await screen.findByRole("heading", { name: "Rád vár" })
@@ -75,8 +75,10 @@ describe("Tudásbázis áttekintő", () => {
     expect(within(waiting).getByText("38")).toBeTruthy();
     expect(within(waiting).getByText("14")).toBeTruthy();
     const links = within(waiting).getAllByRole("link", { name: /Megnyitás/ });
-    expect(links).toHaveLength(1);
-    expect(links[0]?.getAttribute("href")).toBe("/tudasbazis/forrasok");
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      "/tudasbazis/forrasok",
+      "/tudasbazis/kiolvasas",
+    ]);
   });
 
   it("a projekt kártya és a folyamat: a kérdés, a szakasz, a négy szám, a hat lépés állapottal", async () => {

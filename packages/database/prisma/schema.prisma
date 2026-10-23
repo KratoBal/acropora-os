@@ -10812,6 +10812,10 @@ model KnowledgeFieldAnchor {
   /// (vagy a latin neve nincs a horgonyban). Ilyenkor `normalizedValue` NULL: ez
   /// nem mező, a szerkesztő dönt róla. Modell-szöveg, 64 nyomtatható jelre vágva.
   proposedValue   String?                 @db.VarChar(64)
+  /// A szerkesztő javított értéke (S4 Kiolvasás ellenőrzése), CSAK `CORRECTED`
+  /// döntéssel. Ugyanazon a horgony-ellenőrzésen ment át, mint a gépi érték
+  /// (ami nem horgonyozható, az nem mező); a gépi `normalizedValue` megmarad.
+  correctedValue  String?                 @db.VarChar(300)
   decision        KnowledgeAnchorDecision @default(PENDING)
   decidedById     String?
   decidedBy       User?                   @relation("KnowledgeFieldAnchorDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)

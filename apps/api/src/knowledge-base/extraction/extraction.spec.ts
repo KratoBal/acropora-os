@@ -264,6 +264,7 @@ describe("extracting one source", () => {
           id,
           pmcid: "PMC1",
           retracted: false,
+          included: true,
           alreadyExtracted: false,
           retractionUnchecked: false,
           ...source,
@@ -341,8 +342,9 @@ describe("extracting one source", () => {
     assert.ok(!d.calls.some((c) => c.startsWith("save:")));
   });
 
-  it("skips, before any request: retracted, already extracted, no PMCID, not found", async () => {
+  it("skips, before any request: not included, retracted, already extracted, no PMCID, not found", async () => {
     for (const [source, reason] of [
+      [{ included: false }, "NOT_INCLUDED"],
       [{ retracted: true }, "RETRACTED"],
       [{ alreadyExtracted: true }, "ALREADY_EXTRACTED"],
       [{ pmcid: null }, "NO_OPEN_FULL_TEXT"],

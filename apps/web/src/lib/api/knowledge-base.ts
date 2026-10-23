@@ -78,7 +78,67 @@ export interface KnowledgeOverview {
   stages: { key: OverviewStage; state: "DONE" | "ACTIVE" | "TODO" }[];
 }
 
+export type Applicability =
+  "DIRECT" | "ANALOGOUS" | "LIMITED" | "NOT_APPLICABLE";
+export type AnchorDecision = "PENDING" | "ACCEPTED" | "CORRECTED" | "REJECTED";
+
+/** One anchored field of a candidate claim (S4 Kiolvasás ellenőrzése). */
+export interface ClaimReviewField {
+  anchorId: string;
+  field: string;
+  /** A study field (studyType, measurementMethod) belongs to the source. */
+  owner: "CLAIM" | "SOURCE";
+  /** The machine's value; null for an editor's question. */
+  value: string | null;
+  /** The model's word the vocabulary does not hold. */
+  question: string | null;
+  anchor: { text: string; locator: string };
+  decision: AnchorDecision;
+  correctedValue: string | null;
+}
+
+export interface ClaimReview {
+  id: string;
+  status: string;
+  source: {
+    id: string;
+    title: string;
+    year: number | null;
+    doi: string | null;
+    url: string | null;
+    retracted: boolean;
+    corrected: boolean;
+  };
+  passage: { text: string; locator: string };
+  fields: ClaimReviewField[];
+  quantity: {
+    min: string | null;
+    max: string | null;
+    unit: string | null;
+    basis: "PO4" | "P" | null;
+    normalizedMinMgL: string | null;
+    normalizedMaxMgL: string | null;
+  } | null;
+  applicability: { value: Applicability; reason: string | null } | null;
+  options: Record<
+    "species" | "environment" | "effect",
+    { key: string; label: string }[]
+  >;
+}
+
+export interface ClaimFieldDecision {
+  anchorId: string;
+  decision: "ACCEPT" | "CORRECT" | "REJECT";
+  value?: unknown;
+}
+
+export interface ClaimReviewInput {
+  decisions: ClaimFieldDecision[];
+  applicability: { value: Applicability; reason: string } | null;
+}
+
 const base = "/knowledge-base/sources";
+const claimsBase = "/knowledge-base/claims";
 const overviewPath = "/knowledge-base/overview";
 
 export const knowledgeBaseApi = {
@@ -93,6 +153,34 @@ export const knowledgeBaseApi = {
       {
         signal,
       },
+    );
+  },
+  reviewQueue(token: string, signal?: AbortSignal) {
+    return apiRequest<{ ids: string[]; total: number }>(
+      `${claimsBase}/review-queue`,
+      token,
+      { signal },
+    );
+  },
+  claimReview(token: string, claimId: string, signal?: AbortSignal) {
+    return apiRequest<ClaimReview>(
+      `${claimsBase}/${encodeURIComponent(claimId)}/review`,
+      token,
+      { signal },
+    );
+  },
+  saveClaimReview(token: string, claimId: string, input: ClaimReviewInput) {
+    return apiRequest<ClaimReview>(
+      `${claimsBase}/${encodeURIComponent(claimId)}/review`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  discardClaim(token: string, claimId: string, reason: string) {
+    return apiRequest<ClaimReview>(
+      `${claimsBase}/${encodeURIComponent(claimId)}/discard`,
+      token,
+      { method: "POST", body: JSON.stringify({ reason }) },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {

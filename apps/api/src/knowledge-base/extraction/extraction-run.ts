@@ -14,7 +14,8 @@ import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
  * one AI call per chunk of sections, the OS's own check of every claim, and,
  * with `apply`, the store. Without `apply` it does everything but the store.
  *
- * A source is skipped, with its reason, when: it is not found; it has a
+ * A source is skipped, with its reason, when: it is not found; the editor
+ * did not include it at screening (NOT_INCLUDED: pending or excluded); it has a
  * RETRACTION version (nothing is built on a retracted work); it was already
  * extracted (its full-text hash is set, claims or not: the store writes it
  * even when nothing was found, so the AI is not paid twice for one text); it has no PMCID or Europe PMC holds no open full text for it
@@ -141,6 +142,7 @@ export async function extractSource(
   const skip = (reason: string) => ({ ...outcome, reason });
   const source = await deps.store.source(sourceId);
   if (!source) return skip("NOT_FOUND");
+  if (!source.included) return skip("NOT_INCLUDED");
   if (source.retracted) return skip("RETRACTED");
   if (source.alreadyExtracted) return skip("ALREADY_EXTRACTED");
   outcome.retractionUnchecked = source.retractionUnchecked;

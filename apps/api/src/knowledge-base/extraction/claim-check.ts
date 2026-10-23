@@ -132,6 +132,20 @@ export interface CheckResult {
   refusedClaims: string[];
 }
 
+/**
+ * The stored text of a quantity and a sample size (the anchor's
+ * `normalizedValue`). The editor's review (S4) compares a kept anchor with the
+ * claim's columns through these, so both sides share one format.
+ */
+export const quantityText = (
+  min: number | null,
+  max: number | null,
+  unit: string,
+  basis: "PO4" | "P" | null,
+) => `${min ?? ""}-${max ?? ""} ${unit}${basis ? ` ${basis}` : ""}`;
+export const sampleSizeText = (n: number, unit: string | null) =>
+  unit ? `${n} ${unit}` : `${n}`;
+
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown) =>
@@ -344,7 +358,7 @@ export function checkClaims(
             // the model's word, as for a question: printable and short
             const unit = proposedOf(str(f.unit) ?? "").slice(0, 32) || null;
             claim.sampleSize = { value: n, unit };
-            accept(unit ? `${n} ${unit}` : `${n}`);
+            accept(sampleSizeText(n, unit));
           }
           break;
         }
@@ -401,9 +415,7 @@ export function checkClaims(
               normalizedMinMgL: norm(min),
               normalizedMaxMgL: norm(max),
             };
-            accept(
-              `${min ?? ""}-${max ?? ""} ${unit}${basis ? ` ${basis}` : ""}`,
-            );
+            accept(quantityText(min, max, unit, basis));
           }
           break;
         }
