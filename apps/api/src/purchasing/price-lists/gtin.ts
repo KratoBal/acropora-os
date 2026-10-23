@@ -17,7 +17,7 @@ const VALID_LENGTHS = new Set([8, 12, 13, 14]);
 
 export function normalizeGtin(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const digits = raw.trim();
+  const digits = raw.replace(/[\s-]/g, "");
   if (!/^\d+$/.test(digits) || !VALID_LENGTHS.has(digits.length)) return null;
   return digits.padStart(14, "0");
 }
