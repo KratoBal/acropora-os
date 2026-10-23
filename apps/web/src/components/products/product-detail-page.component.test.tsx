@@ -33,6 +33,15 @@ const api = vi.hoisted(() => ({
     fields: [],
   })),
 }));
+// The supplier purchase prices card under each variant asks its own API.
+const priceLists = vi.hoisted(() => ({
+  variantPrices: vi.fn(async (_token: string, variantId: string) => ({
+    variantId,
+    sellingNetHuf: "10000.00",
+    sellingReason: null,
+    rows: [],
+  })),
+}));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -52,6 +61,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
 vi.mock("@/lib/api/products", () => ({ productApi: api }));
+vi.mock("@/lib/api/price-lists", () => ({ priceListsApi: priceLists }));
 // The dose list card (ReefClub slice 7) asks its own API: no row, no suggestion.
 vi.mock("@/lib/api/dose-effects", () => ({
   doseEffectApi: {
@@ -755,5 +765,29 @@ describe("ProductDetailPage mirror ownership", () => {
 
     const image = container.querySelector("img");
     expect(image?.hasAttribute("onerror")).toBe(false);
+  });
+
+  it("a beszerzési ár kártya a változat alatt áll annak, akinek van beszerzési joga, és a változat azonosítójával kérdez", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    await screen.findByText(
+      "Ehhez a változathoz nincs párosított beszállítói árlista-sor.",
+    );
+    expect(priceLists.variantPrices).toHaveBeenCalledWith(
+      "token-owner",
+      "variant-1",
+      expect.anything(),
+    );
+  });
+
+  it("beszerzési jog nélkül (SALES) a kártya nem jelenik meg, és a szerver sem kap kérdést", async () => {
+    auth.session = {
+      ...auth.session!,
+      user: { ...auth.session!.user, role: "SALES" },
+    };
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+    expect(screen.queryByTestId("supplier-prices-card")).toBeNull();
+    expect(priceLists.variantPrices).not.toHaveBeenCalled();
   });
 });

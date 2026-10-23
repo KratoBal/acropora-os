@@ -70,3 +70,46 @@ export interface SupplierPriceListUploadResult {
   rejectedByReason: Record<string, number>;
   matching: SupplierPriceListMatching;
 }
+
+/**
+ * EGY TERMÉKVÁLTOZAT BESZÁLLÍTÓI ÁRAI (task beszallitoi-arlistak-4): beszállítónként
+ * a legfrissebb listán álló beszerzési ár, forintra váltva az MNB aznapi
+ * árfolyamán, és a haszon a MI mai nettó eladási árunkon. Az ár LISTAÁR: hogy
+ * nettó-e, azt egy számlasor igazolja (acrobot 35408), ezért a felület nem
+ * mondja nettónak.
+ */
+export interface SupplierPriceRow {
+  supplierId: string;
+  supplierName: string;
+  supplierSku: string;
+  /** A lista szerinti terméknév (a párosítás ellenőrzéséhez). */
+  listedName: string | null;
+  /** A beszerzési egységár a lista pénznemében. */
+  unitPrice: string;
+  currency: string;
+  /** Az ajánlott fogyasztói ár (UVP) a listán, csak tájékoztatásul. */
+  listRetailPrice: string | null;
+  /** A lista dátuma (ÉÉÉÉ-HH-NN) és hány napos. */
+  listDate: string;
+  listAgeDays: number;
+  /** AUTO: a rendszer kötötte (vonalkód vagy ismert cikkszám), ember nem hagyta jóvá. APPROVED: ember jóváhagyta. */
+  matchStatus: "AUTO" | "APPROVED";
+  matchMethod: "EAN" | "SUPPLIER_CODE" | "NAME";
+  /** Az árfolyam (HUF egy devizaegységre) és az MNB jegyzésének napja; `null`, ha nem volt elérhető. */
+  fxRate: string | null;
+  fxDate: string | null;
+  /** A beszerzési ár forintban (`null`, ha nincs árfolyam). */
+  purchaseHuf: string | null;
+  /** A haszon forintban és a nettó eladási ár százalékában; `null`, ha az eladási ár vagy az árfolyam hiányzik. */
+  profitHuf: string | null;
+  profitPercent: string | null;
+}
+
+export interface VariantSupplierPrices {
+  variantId: string;
+  /** A mai nettó eladási ár forintban; `null`, ha nem állapítható meg (lásd `sellingReason`). */
+  sellingNetHuf: string | null;
+  /** Megnevezett ok, ha nincs eladási ár: price-missing, vat-rate-missing, currency-XXX, authority-unknown, ... */
+  sellingReason: string | null;
+  rows: SupplierPriceRow[];
+}

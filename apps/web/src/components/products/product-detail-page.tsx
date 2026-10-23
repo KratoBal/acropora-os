@@ -33,6 +33,7 @@ import { ProductAuthorityCard } from "@/components/products/product-authority-ca
 import { ProductHomepageCard } from "@/components/products/product-homepage-card";
 import { ProductDoseEffectsCard } from "@/components/products/product-dose-effects-card";
 import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
+import { ProductSupplierPricesCard } from "@/components/products/product-supplier-prices-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { JevProductCard } from "@/components/jev-product-intelligence/jev-product-card";
 import { productApi } from "@/lib/api/products";
@@ -642,6 +643,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
+  const canViewPurchasing = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
+  );
   // Külön jog, nem a PRODUCTS_MANAGE: aki napi terméktörzset gondoz, annak a
   // gazdaváltáshoz nem kell jogosultsága (lásd packages/types auth.ts).
   const canTransferAuthority = Boolean(
@@ -1079,6 +1083,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                 token={token}
                 variantId={variant.id}
               />
+
+              {canViewPurchasing ? (
+                <ProductSupplierPricesCard
+                  token={token}
+                  variantId={variant.id}
+                />
+              ) : null}
             </div>
           ))
         ) : (
