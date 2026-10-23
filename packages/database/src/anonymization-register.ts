@@ -1662,6 +1662,9 @@ export const ANONYMIZATION_REGISTER: Readonly<
     field: "business",
     normalizedValue: "business",
     proposedValue: "business",
+    // the editor's correction: passed the same anchor check as normalizedValue
+    // (a vocabulary key or text verbatim in the anchor), so the same class
+    correctedValue: "business",
   },
   KnowledgeVocabularyEntry: {
     key: "business",
