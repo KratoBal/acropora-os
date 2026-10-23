@@ -59,12 +59,48 @@ function listDay(day: string): string {
   return year && month && date ? `${year}. ${month}. ${date}.` : day;
 }
 
+export type PriceRank = "cheapest" | "dearest" | null;
+
+/**
+ * AZ ÁRAK ÖSSZEVETÉSE SZÍNNEL ÉS SZÖVEGGEL (Balázs 2026-10-23 20:42 UTC): ha egy
+ * termékhez több beszállítótól van ára, a legolcsóbb zöld, a legdrágább piros,
+ * kettő felett a közbülső semleges; egyenlő árnál mindkettő zöld (és nincs
+ * piros). CSAK AZONOS PÉNZNEMBEN hasonlítunk: a lista saját pénznemében írt
+ * egységárat vetjük össze, az árfolyam és a forintos érték itt nem számít. Eltérő
+ * pénznemnél nem színezünk, és a kártya kimondja, miért.
+ */
+export function rankPrices(rows: readonly SupplierPriceRow[]): {
+  ranks: PriceRank[];
+  mixedCurrencies: string[] | null;
+} {
+  const none = rows.map((): PriceRank => null);
+  const currencies = [...new Set(rows.map((row) => row.currency))].sort();
+  if (currencies.length > 1)
+    return { ranks: none, mixedCurrencies: currencies };
+  if (rows.length < 2) return { ranks: none, mixedCurrencies: null };
+  const values = rows.map((row) => Number(row.unitPrice));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return {
+    ranks: values.map((value): PriceRank =>
+      value === min ? "cheapest" : value === max ? "dearest" : null,
+    ),
+    mixedCurrencies: null,
+  };
+}
+
+const RANK_LABELS: Record<Exclude<PriceRank, null>, string> = {
+  cheapest: "legolcsóbb",
+  dearest: "legdrágább",
+};
+
 export function SupplierPricesTable({
   prices,
 }: {
   prices: VariantSupplierPrices;
 }) {
-  const cheapest = prices.rows.find((row) => row.purchaseHuf !== null);
+  const { ranks, mixedCurrencies } = rankPrices(prices.rows);
+  const rankOf = new Map(prices.rows.map((row, index) => [row, ranks[index]!]));
   const columns: PilotTableColumn<SupplierPriceRow>[] = [
     {
       id: "supplier",
@@ -73,11 +109,6 @@ export function SupplierPricesTable({
         <span className="flex min-w-0 flex-col">
           <span className="truncate font-semibold text-pilot-grey-900">
             {row.supplierName}
-            {row === cheapest ? (
-              <span className="ml-2">
-                <PilotBadge variant="success">Legolcsóbb</PilotBadge>
-              </span>
-            ) : null}
           </span>
           <span className="truncate text-xs text-pilot-grey-500">
             {row.supplierSku}
@@ -90,7 +121,30 @@ export function SupplierPricesTable({
       id: "unit",
       header: "Beszerzési ár",
       align: "right",
-      cell: (row) => money(row.unitPrice, row.currency),
+      cell: (row) => {
+        const rank = rankOf.get(row) ?? null;
+        return (
+          <span className="flex flex-col items-end gap-1">
+            <span
+              data-rank={rank ?? "none"}
+              className={
+                rank === "cheapest"
+                  ? "font-semibold text-pilot-green-700"
+                  : rank === "dearest"
+                    ? "font-semibold text-pilot-red-700"
+                    : undefined
+              }
+            >
+              {money(row.unitPrice, row.currency)}
+            </span>
+            {rank ? (
+              <PilotBadge variant={rank === "cheapest" ? "success" : "danger"}>
+                {RANK_LABELS[rank]}
+              </PilotBadge>
+            ) : null}
+          </span>
+        );
+      },
     },
     {
       id: "huf",
@@ -163,6 +217,12 @@ export function SupplierPricesTable({
           ? `Nettó eladási ár: nincs (${sellingReasonText(prices.sellingReason)}), a haszon nem számítható.`
           : `Nettó eladási ár: ${money(prices.sellingNetHuf, "Ft")}.`}
       </p>
+      {mixedCurrencies ? (
+        <p className="text-xs text-pilot-grey-600">
+          Az árak eltérő pénznemben vannak ({mixedCurrencies.join(", ")}), ezért
+          nem hasonlítjuk össze és nem színezzük őket.
+        </p>
+      ) : null}
       <PilotDataTable
         columns={columns}
         rows={prices.rows}

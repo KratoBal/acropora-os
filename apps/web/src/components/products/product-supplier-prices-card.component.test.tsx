@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   KNOWN_SELLING_REASONS,
   ProductSupplierPricesCard,
+  rankPrices,
   SupplierPricesTable,
   sellingReasonText,
 } from "./product-supplier-prices-card";
@@ -62,19 +63,132 @@ describe("a változat beszállítói beszerzési árai", () => {
     expect(screen.getByText("20%")).toBeTruthy();
   });
 
-  it("marks only the first forint-priced row as the cheapest", () => {
+  const priced = (unitPrice: string, id: string, currency = "EUR") =>
+    row({
+      supplierId: id,
+      supplierName: `Beszállító ${id}`,
+      supplierSku: `SKU-${id}`,
+      unitPrice,
+      currency,
+    });
+  const rankOfRow = (supplier: string) =>
+    screen
+      .getByText(`Beszállító ${supplier}`)
+      .closest("tr")!
+      .querySelector("[data-rank]")!
+      .getAttribute("data-rank");
+
+  it("marks the cheapest green and the dearest red, in words too, and leaves the middle one alone", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([
+          priced("12.00", "mid"),
+          priced("10.00", "low"),
+          priced("15.00", "high"),
+        ])}
+      />,
+    );
+    expect([rankOfRow("low"), rankOfRow("mid"), rankOfRow("high")]).toEqual([
+      "cheapest",
+      "none",
+      "dearest",
+    ]);
+    expect(screen.getAllByText("legolcsóbb")).toHaveLength(1);
+    expect(screen.getAllByText("legdrágább")).toHaveLength(1);
+    const lowTr = screen.getByText("Beszállító low").closest("tr")!;
+    expect(lowTr.querySelector("[data-rank]")!.className).toContain(
+      "text-pilot-green-700",
+    );
+    expect(
+      screen
+        .getByText("Beszállító high")
+        .closest("tr")!
+        .querySelector("[data-rank]")!.className,
+    ).toContain("text-pilot-red-700");
+    expect(
+      screen
+        .getByText("Beszállító mid")
+        .closest("tr")!
+        .querySelector("[data-rank]")!.className,
+    ).toBe("");
+  });
+
+  it("makes two different prices one green and one red", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([priced("20.00", "a"), priced("10.00", "b")])}
+      />,
+    );
+    expect([rankOfRow("a"), rankOfRow("b")]).toEqual(["dearest", "cheapest"]);
+  });
+
+  it("makes equal prices both green, and no red, as the cheapest", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([priced("10.00", "a"), priced("10", "b")])}
+      />,
+    );
+    expect([rankOfRow("a"), rankOfRow("b")]).toEqual(["cheapest", "cheapest"]);
+    expect(screen.queryByText("legdrágább")).toBeNull();
+  });
+
+  it("keeps every row at the lowest price green and every row at the highest red when three or more differ", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([
+          priced("10", "a"),
+          priced("10", "b"),
+          priced("12", "c"),
+          priced("14", "d"),
+          priced("14", "e"),
+        ])}
+      />,
+    );
+    expect(["a", "b", "c", "d", "e"].map(rankOfRow)).toEqual([
+      "cheapest",
+      "cheapest",
+      "none",
+      "dearest",
+      "dearest",
+    ]);
+  });
+
+  it("compares numbers, not texts: 9.50 is cheaper than 10.00", () => {
+    expect(
+      rankPrices([priced("10.00", "a"), priced("9.50", "b")]).ranks,
+    ).toEqual(["dearest", "cheapest"]);
+  });
+
+  it("does not colour a single price", () => {
+    render(<SupplierPricesTable prices={prices([priced("10.00", "a")])} />);
+    expect(rankOfRow("a")).toBe("none");
+    expect(screen.queryByText("legolcsóbb")).toBeNull();
+  });
+
+  it("does not colour prices in different currencies, and says why", () => {
+    render(
+      <SupplierPricesTable
+        prices={prices([
+          priced("10.00", "a", "EUR"),
+          priced("5.00", "b", "USD"),
+        ])}
+      />,
+    );
+    expect([rankOfRow("a"), rankOfRow("b")]).toEqual(["none", "none"]);
+    expect(screen.queryByText("legolcsóbb")).toBeNull();
+    expect(screen.queryByText("legdrágább")).toBeNull();
+    expect(
+      screen.getByText(
+        /Az árak eltérő pénznemben vannak \(EUR, USD\), ezért nem hasonlítjuk össze és nem színezzük őket\./,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows a missing exchange rate as a words, not a zero", () => {
     render(
       <SupplierPricesTable
         prices={prices([
           row({
-            supplierId: "s-2",
-            supplierName: "Olcsó Kft.",
-            purchaseHuf: "9000.00",
-          }),
-          row({ supplierId: "s-1" }),
-          row({
-            supplierId: "s-3",
-            supplierName: "Árfolyam nélküli Kft.",
             currency: "USD",
             purchaseHuf: null,
             profitHuf: null,
@@ -85,9 +199,6 @@ describe("a változat beszállítói beszerzési árai", () => {
         ])}
       />,
     );
-    expect(screen.getAllByText("Legolcsóbb")).toHaveLength(1);
-    const badge = screen.getByText("Legolcsóbb");
-    expect(badge.closest("span.flex")?.textContent).toContain("Olcsó Kft.");
     expect(screen.getByText("nincs árfolyam")).toBeTruthy();
   });
 
