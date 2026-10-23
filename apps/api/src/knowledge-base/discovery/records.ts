@@ -37,8 +37,13 @@ export interface SourceCandidate {
   /** An open full text the pilot may read; Europe PMC's first, then OpenAlex's. */
   oaUrl: string | null;
   discoveredVia: DiscoveredVia;
-  /** OpenAlex's own retraction flag (it reads Retraction Watch). */
-  retractedFlag: boolean;
+  /**
+   * Later versions an API states on the work's own record, without a notice
+   * DOI: OpenAlex's retraction flag (it reads Retraction Watch), Europe PMC's
+   * publication type and correction list. They matter most for a work with no
+   * DOI, which Crossref cannot check (barracuda, #1834 review).
+   */
+  versionSignals: VersionSignal[];
   /** OpenAlex ids this work cites, for the citation graph. */
   referencedWorks: string[];
 }
@@ -135,7 +140,10 @@ export function fromOpenAlexWork(
       licence,
       oaUrl: best ? (str(best.pdf_url) ?? str(best.landing_page_url)) : null,
       discoveredVia,
-      retractedFlag: w.is_retracted === true,
+      versionSignals:
+        w.is_retracted === true
+          ? [{ versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" }]
+          : [],
       referencedWorks: (Array.isArray(w.referenced_works)
         ? w.referenced_works
         : []
@@ -163,6 +171,21 @@ export function fromEuropePmcResult(result: unknown): Mapped {
   const types = (Array.isArray(pubTypes) ? pubTypes : [pubTypes])
     .filter((t): t is string => typeof t === "string")
     .map((t) => t.toLowerCase());
+  const corrections = (
+    (((r.commentCorrectionList ?? {}) as Record<string, unknown>)
+      .commentCorrection ?? []) as Record<string, unknown>[]
+  )
+    .map((c) => (typeof c?.type === "string" ? c.type.toLowerCase() : ""))
+    .filter(Boolean);
+  // a notice is not literature: the work it changes carries it as a version
+  const notice =
+    types.find((t) => EUROPE_PMC_NOTICE_TYPES.includes(t)) ??
+    corrections.find((c) => EUROPE_PMC_NOTICE_LINKS.includes(c));
+  if (notice)
+    return {
+      ok: false,
+      skipped: { api: "EUROPE_PMC", reason: `notice:${notice}` },
+    };
   const kind: SourceKind =
     r.source === "PPR" || types.includes("preprint")
       ? "PREPRINT"
@@ -219,7 +242,7 @@ export function fromEuropePmcResult(result: unknown): Mapped {
             ? `https://europepmc.org/articles/${pmcid}`
             : null,
       discoveredVia: "EUROPE_PMC",
-      retractedFlag: false,
+      versionSignals: europePmcSignals(types, corrections),
       referencedWorks: [],
     },
   };
@@ -237,7 +260,58 @@ export function crossrefLicence(item: unknown): Licence {
 export type VersionKind =
   "CORRECTION" | "ERRATUM" | "RETRACTION" | "EXPRESSION_OF_CONCERN" | "UPDATE";
 export type DetectedVia =
-  "CROSSREF_UPDATE_TO" | "RETRACTION_WATCH" | "OPENALEX_RETRACTED";
+  | "CROSSREF_UPDATE_TO"
+  | "RETRACTION_WATCH"
+  | "OPENALEX_RETRACTED"
+  | "EUROPE_PMC";
+
+/** A version stated on the work's own record, with no notice DOI. */
+export interface VersionSignal {
+  versionKind: VersionKind;
+  detectedVia: DetectedVia;
+}
+
+/**
+ * EUROPE PMC'S VERSION WORDS, measured 2026-10-23 on `PUB_TYPE:"Retracted
+ * Publication" AND coral` (60 hits): a retracted work has the publication
+ * type "Retracted Publication" and the link "Retraction in"; a corrected one
+ * "Erratum in". The notices themselves are typed "Retraction Notice",
+ * "Published Erratum" or "correction", and link back with "Erratum for".
+ * "Correction in", "Expression of concern in" and "Retraction of" were not in
+ * that sample; they are read by their name, the safer direction.
+ */
+const EUROPE_PMC_NOTICE_TYPES = [
+  "retraction notice",
+  "retraction of publication",
+  "published erratum",
+  "correction",
+  "expression of concern",
+];
+const EUROPE_PMC_NOTICE_LINKS = [
+  "erratum for",
+  "retraction of",
+  "correction for",
+];
+
+function europePmcSignals(
+  types: readonly string[],
+  corrections: readonly string[],
+): VersionSignal[] {
+  const kinds = new Set<VersionKind>();
+  if (
+    types.includes("retracted publication") ||
+    corrections.includes("retraction in")
+  )
+    kinds.add("RETRACTION");
+  if (corrections.includes("erratum in")) kinds.add("ERRATUM");
+  if (corrections.includes("correction in")) kinds.add("CORRECTION");
+  if (corrections.includes("expression of concern in"))
+    kinds.add("EXPRESSION_OF_CONCERN");
+  return [...kinds].map((versionKind) => ({
+    versionKind,
+    detectedVia: "EUROPE_PMC",
+  }));
+}
 
 /** A later change to a work: a correction, a retraction, a concern. */
 export interface VersionCandidate {

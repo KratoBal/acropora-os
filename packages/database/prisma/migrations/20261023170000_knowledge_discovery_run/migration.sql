@@ -1,27 +1,30 @@
 -- Kutatasi tudastar, S2 szelet: a forras-felderito futasainak naploja (terv v4, 9.2 S2;
 -- Balazs jovahagyasa 2026-10-23 11:51 UTC, Discord 1563157803726798859, csak stage).
 --
--- Egy UJ enum, egy UJ (ures) tabla, es a KnowledgeSource egy UJ, nullazhato oszlopa
+-- Egy UJ enum, egy UJ (ures) tabla, es a KnowledgeSource ket UJ, nullazhato oszlopa
+-- (a felderito futas, es hogy mikor futott rajta a Crossref visszavonas-ellenorzes),
 -- indexszel es idegen kulccsal. Meglevo sor nem valtozik, backfill nincs: visszafele
 -- kompatibilis. A User csak Prisma-oldali visszahivatkozast kap.
 --
--- Visszaallitas: ALTER TABLE "KnowledgeSource" DROP COLUMN "discoveryRunId";
--- DROP TABLE "KnowledgeDiscoveryRun"; DROP TYPE "KnowledgeDiscoveryRunStatus";
+-- Visszaallitas: ALTER TABLE "KnowledgeSource" DROP COLUMN "discoveryRunId",
+-- DROP COLUMN "retractionCheckedAt"; DROP TABLE "KnowledgeDiscoveryRun";
+-- DROP TYPE "KnowledgeDiscoveryRunStatus";
 
 -- CreateEnum
-CREATE TYPE "KnowledgeDiscoveryRunStatus" AS ENUM ('FINISHED', 'LIMIT_REACHED', 'INCOMPLETE');
+CREATE TYPE "KnowledgeDiscoveryRunStatus" AS ENUM ('RUNNING', 'FINISHED', 'LIMIT_REACHED', 'INCOMPLETE', 'FAILED');
 
 -- AlterTable
-ALTER TABLE "KnowledgeSource" ADD COLUMN     "discoveryRunId" TEXT;
+ALTER TABLE "KnowledgeSource" ADD COLUMN     "discoveryRunId" TEXT,
+ADD COLUMN     "retractionCheckedAt" TIMESTAMP(3);
 
 -- CreateTable
 CREATE TABLE "KnowledgeDiscoveryRun" (
     "id" TEXT NOT NULL,
     "label" VARCHAR(120) NOT NULL,
-    "status" "KnowledgeDiscoveryRunStatus" NOT NULL,
+    "status" "KnowledgeDiscoveryRunStatus" NOT NULL DEFAULT 'RUNNING',
     "input" JSONB NOT NULL,
-    "queries" JSONB NOT NULL,
-    "requestCount" INTEGER NOT NULL,
+    "queries" JSONB NOT NULL DEFAULT '[]',
+    "requestCount" INTEGER NOT NULL DEFAULT 0,
     "sourcesCreated" INTEGER NOT NULL DEFAULT 0,
     "sourcesMatched" INTEGER NOT NULL DEFAULT 0,
     "versionsCreated" INTEGER NOT NULL DEFAULT 0,
@@ -29,13 +32,16 @@ CREATE TABLE "KnowledgeDiscoveryRun" (
     "report" JSONB NOT NULL DEFAULT '{}',
     "requestedById" TEXT NOT NULL,
     "startedAt" TIMESTAMP(3) NOT NULL,
-    "finishedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
 
     CONSTRAINT "KnowledgeDiscoveryRun_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
 CREATE INDEX "KnowledgeDiscoveryRun_requestedById_idx" ON "KnowledgeDiscoveryRun"("requestedById");
+
+-- CreateIndex
+CREATE INDEX "KnowledgeDiscoveryRun_status_idx" ON "KnowledgeDiscoveryRun"("status");
 
 -- CreateIndex
 CREATE INDEX "KnowledgeSource_discoveryRunId_idx" ON "KnowledgeSource"("discoveryRunId");

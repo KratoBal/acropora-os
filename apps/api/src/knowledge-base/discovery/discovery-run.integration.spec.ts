@@ -22,6 +22,14 @@ import type { SourceCandidate, VersionCandidate } from "./records.js";
  */
 const gate = integrationDatabaseGate(process.env);
 const DOI_PREFIX = "10.5555/kb-int-";
+/** The DOI-less test works are named by PMCID. */
+const PMCID_PREFIX = "PMC55550";
+const OURS = {
+  OR: [
+    { doi: { startsWith: DOI_PREFIX } },
+    { pmcid: { startsWith: PMCID_PREFIX } },
+  ],
+};
 const EMAIL_DOMAIN = "knowledge-discovery-integration.invalid";
 const CLAIM_SUBJECT = "KB_INT_DISCOVERY";
 
@@ -48,7 +56,7 @@ function candidate(over: Partial<SourceCandidate>): SourceCandidate {
     licence: "UNKNOWN",
     oaUrl: null,
     discoveredVia: "OPENALEX",
-    retractedFlag: false,
+    versionSignals: [],
     referencedWorks: [],
     ...over,
   };
@@ -99,8 +107,18 @@ describe(
 
     after(removeLeftovers);
 
+    /** A stored run, the way the CLI and the endpoint store one. */
+    async function save(r: DiscoveryResult) {
+      const runId = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(),
+      });
+      return store.finishRun(runId, r);
+    }
+
     async function removeLeftovers() {
-      const where = { source: { doi: { startsWith: DOI_PREFIX } } };
+      const where = { source: OURS };
       await prisma.knowledgeClaimEvidence.deleteMany({
         where: { passage: { sourceVersion: where } },
       });
@@ -111,9 +129,7 @@ describe(
         where: { sourceVersion: where },
       });
       await prisma.knowledgeSourceVersion.deleteMany({ where });
-      await prisma.knowledgeSource.deleteMany({
-        where: { doi: { startsWith: DOI_PREFIX } },
-      });
+      await prisma.knowledgeSource.deleteMany({ where: OURS });
       await prisma.knowledgeDiscoveryRun.deleteMany({
         where: { requestedBy: { email: { endsWith: `@${EMAIL_DOMAIN}` } } },
       });
@@ -122,10 +138,8 @@ describe(
       });
       nincsMaradek([
         {
-          nev: "KnowledgeSource (doi elotag)",
-          darab: await prisma.knowledgeSource.count({
-            where: { doi: { startsWith: DOI_PREFIX } },
-          }),
+          nev: "KnowledgeSource (doi es pmcid elotag)",
+          darab: await prisma.knowledgeSource.count({ where: OURS }),
         },
         {
           nev: "KnowledgeClaim (teszt-tema)",
@@ -149,9 +163,8 @@ describe(
     }
 
     it("stores new works with an ORIGINAL version, a licence value, and the run", async () => {
-      const summary = await store.save({
-        input: INPUT,
-        result: result([
+      const summary = await save(
+        result([
           candidate({ doi: doiA, openalexId: `W${suffix}1` }),
           candidate({
             doi: doiB,
@@ -159,9 +172,7 @@ describe(
             oaUrl: "https://example.invalid/b",
           }),
         ]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      );
       assert.equal(summary.created, 2);
       assert.equal(summary.matched, 0);
       const rows = await prisma.knowledgeSource.findMany({
@@ -202,9 +213,8 @@ describe(
         ]),
       );
       assert.deepEqual([preview.created, preview.matched], [0, 1]);
-      const summary = await store.save({
-        input: INPUT,
-        result: result([
+      const summary = await save(
+        result([
           // found again by the OpenAlex id only, now with a PMID and a stricter licence
           candidate({
             openalexId: `W${suffix}1`,
@@ -214,9 +224,7 @@ describe(
           }),
           candidate({ doi: doiB, licence: "UNKNOWN" }),
         ]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      );
       assert.deepEqual([summary.created, summary.matched], [0, 2]);
       assert.equal(
         await prisma.knowledgeSource.count({
@@ -270,20 +278,10 @@ describe(
         noticeDate: new Date("2021-12-14T00:00:00Z"),
         detectedVia: "CROSSREF_UPDATE_TO",
       };
-      const first = await store.save({
-        input: INPUT,
-        result: result([candidate({ doi: doiB })], [notice]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      const first = await save(result([candidate({ doi: doiB })], [notice]));
       assert.equal(first.versionsCreated, 1);
       assert.equal(first.claimsDisputed, 1);
-      const again = await store.save({
-        input: INPUT,
-        result: result([candidate({ doi: doiB })], [notice]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      const again = await save(result([candidate({ doi: doiB })], [notice]));
       assert.equal(
         again.versionsCreated,
         0,
@@ -307,23 +305,17 @@ describe(
 
     it("a work matching two rows, or one row with another DOI, is left alone and reported", async () => {
       // its PMID is row A's, its DOI is new: "one work" with two DOIs
-      const otherDoi = await store.save({
-        input: INPUT,
-        result: result([
+      const otherDoi = await save(
+        result([
           candidate({ doi: `${DOI_PREFIX}${suffix}-c`, pmid: `${suffix}7` }),
         ]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      );
       assert.equal(otherDoi.ambiguous.length, 1);
       assert.equal(otherDoi.created + otherDoi.matched, 0);
       // its DOI is row B's, its PMID is row A's
-      const twoRows = await store.save({
-        input: INPUT,
-        result: result([candidate({ doi: doiB, pmid: `${suffix}7` })]),
-        requestedById: userId,
-        startedAt: new Date(),
-      });
+      const twoRows = await save(
+        result([candidate({ doi: doiB, pmid: `${suffix}7` })]),
+      );
       assert.equal(twoRows.ambiguous.length, 1);
       assert.equal(twoRows.ambiguous[0]?.rowIds.length, 2);
       const b = await prisma.knowledgeSource.findUniqueOrThrow({
@@ -336,6 +328,104 @@ describe(
         }),
         2,
       );
+    });
+
+    it("a work with no DOI is stored UNCHECKED: retractionCheckedAt stays NULL, and it is counted", async () => {
+      const pmcid = `${PMCID_PREFIX}${suffix}`;
+      const summary = await save(
+        result([
+          candidate({ doi: `${DOI_PREFIX}${suffix}-d` }),
+          candidate({
+            pmcid,
+            discoveredVia: "EUROPE_PMC",
+            versionSignals: [
+              { versionKind: "RETRACTION", detectedVia: "EUROPE_PMC" },
+            ],
+          }),
+        ]),
+      );
+      assert.equal(summary.retractionUnchecked, 1);
+      const noDoi = await prisma.knowledgeSource.findFirstOrThrow({
+        where: { pmcid },
+        select: {
+          retractionCheckedAt: true,
+          versions: { select: { versionKind: true, detectedVia: true } },
+        },
+      });
+      assert.equal(noDoi.retractionCheckedAt, null);
+      // its own record said retracted: the version is there although Crossref never saw it
+      assert.deepEqual(
+        noDoi.versions.map((v) => [v.versionKind, v.detectedVia]).sort(),
+        [
+          ["ORIGINAL", "EUROPE_PMC"],
+          ["RETRACTION", "EUROPE_PMC"],
+        ],
+      );
+      const withDoi = await prisma.knowledgeSource.findUniqueOrThrow({
+        where: { doi: `${DOI_PREFIX}${suffix}-d` },
+      });
+      assert.ok(
+        withDoi.retractionCheckedAt,
+        "a checked DOI carries the time of its check",
+      );
+      const run = await prisma.knowledgeDiscoveryRun.findUniqueOrThrow({
+        where: { id: summary.runId! },
+      });
+      assert.equal(
+        (run.report as { retractionUnchecked?: number }).retractionUnchecked,
+        1,
+      );
+    });
+
+    it("a run that did not finish records its status and stores no source", async () => {
+      const runId = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(),
+      });
+      const running = await prisma.knowledgeDiscoveryRun.findUniqueOrThrow({
+        where: { id: runId },
+      });
+      assert.equal(running.status, "RUNNING");
+      assert.equal(running.finishedAt, null);
+      const summary = await store.finishRun(runId, {
+        ...result([candidate({ doi: `${DOI_PREFIX}${suffix}-e` })]),
+        status: "INCOMPLETE",
+      });
+      assert.equal(summary.created, 0);
+      assert.equal(
+        await prisma.knowledgeSource.count({
+          where: { doi: `${DOI_PREFIX}${suffix}-e` },
+        }),
+        0,
+      );
+      const done = await prisma.knowledgeDiscoveryRun.findUniqueOrThrow({
+        where: { id: runId },
+      });
+      assert.equal(done.status, "INCOMPLETE");
+      assert.ok(done.finishedAt);
+    });
+
+    it("the ledger: a stale RUNNING run is failed, the list and the detail read back", async () => {
+      const stale = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(Date.now() - 60 * 60_000),
+      });
+      assert.equal((await store.running())?.id, stale);
+      assert.equal(
+        await store.abandonStale(new Date(Date.now() - 30 * 60_000)),
+        1,
+      );
+      assert.equal(await store.running(), null);
+      const detail = await store.getRun(stale);
+      assert.equal(detail?.status, "FAILED");
+      assert.deepEqual(detail?.report, { error: "STALE_RUNNING" });
+      const list = await store.listRuns(50);
+      assert.ok(
+        list.some((r) => r.id === stale && r.requestedBy.id === userId),
+      );
+      assert.equal(await store.getRun("nincs-ilyen"), null);
     });
   },
 );

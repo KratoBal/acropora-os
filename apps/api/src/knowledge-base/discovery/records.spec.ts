@@ -8,6 +8,7 @@ import {
   fromEuropePmcResult,
   fromOpenAlexWork,
 } from "./records.js";
+import { versionsFor } from "./store-plan.js";
 
 describe("OpenAlex work to a candidate", () => {
   it("reads the fixed fields, and normalises every identifier", () => {
@@ -67,7 +68,9 @@ describe("OpenAlex work to a candidate", () => {
       openAlexWork({ is_retracted: true }),
       "MANUAL",
     );
-    assert.ok(mapped.ok && mapped.candidate.retractedFlag);
+    assert.deepEqual(mapped.ok && mapped.candidate.versionSignals, [
+      { versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" },
+    ]);
     assert.equal(mapped.ok && mapped.candidate.discoveredVia, "MANUAL");
   });
 });
@@ -106,6 +109,87 @@ describe("Europe PMC result to a candidate", () => {
       }),
     );
     assert.ok(review.ok && review.candidate.kind === "REVIEW");
+  });
+});
+
+describe("Europe PMC's own version words (barracuda, #1834 review)", () => {
+  // the measured words, 2026-10-23: PUB_TYPE:"Retracted Publication" AND coral
+  it("a retracted record, with no DOI, carries a RETRACTION signal", () => {
+    const mapped = fromEuropePmcResult(
+      europePmcResult({
+        doi: undefined,
+        pubTypeList: { pubType: ["Retracted Publication", "Journal Article"] },
+        commentCorrectionList: {
+          commentCorrection: [
+            { type: "Retraction in", source: "MED", id: "9" },
+          ],
+        },
+      }),
+    );
+    assert.ok(mapped.ok);
+    assert.equal(mapped.candidate.doi, null);
+    assert.deepEqual(mapped.candidate.versionSignals, [
+      { versionKind: "RETRACTION", detectedVia: "EUROPE_PMC" },
+    ]);
+    // and it becomes a stored version although Crossref never saw it
+    assert.deepEqual(versionsFor(mapped.candidate, []), [
+      {
+        versionKind: "RETRACTION",
+        relatedDoi: null,
+        noticeDate: null,
+        detectedVia: "EUROPE_PMC",
+      },
+    ]);
+  });
+
+  it("the link alone is enough, and an erratum is a version too", () => {
+    const linked = fromEuropePmcResult(
+      europePmcResult({
+        commentCorrectionList: {
+          commentCorrection: [
+            { type: "Retraction in" },
+            { type: "Erratum in" },
+          ],
+        },
+      }),
+    );
+    assert.ok(linked.ok);
+    assert.deepEqual(
+      linked.candidate.versionSignals.map((v) => v.versionKind),
+      ["RETRACTION", "ERRATUM"],
+    );
+  });
+
+  it("a notice record is not a source: skipped with its type", () => {
+    for (const [over, reason] of [
+      [
+        { pubTypeList: { pubType: ["Retraction Notice"] } },
+        "notice:retraction notice",
+      ],
+      [
+        { pubTypeList: { pubType: ["Published Erratum"] } },
+        "notice:published erratum",
+      ],
+      [
+        {
+          commentCorrectionList: {
+            commentCorrection: [{ type: "Erratum for" }],
+          },
+        },
+        "notice:erratum for",
+      ],
+    ] as [Record<string, unknown>, string][]) {
+      assert.deepEqual(fromEuropePmcResult(europePmcResult(over)), {
+        ok: false,
+        skipped: { api: "EUROPE_PMC", reason },
+      });
+    }
+  });
+
+  it("an ordinary record has no signal", () => {
+    const mapped = fromEuropePmcResult(europePmcResult());
+    assert.ok(mapped.ok);
+    assert.deepEqual(mapped.candidate.versionSignals, []);
   });
 });
 

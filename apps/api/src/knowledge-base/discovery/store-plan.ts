@@ -2,9 +2,10 @@ import type { SourceCandidate, VersionCandidate } from "./records.js";
 
 /**
  * The versions a work gets from this run: every Crossref notice on its DOI,
- * and a retraction from OpenAlex's flag when Crossref holds no retraction
- * notice for it (OpenAlex reads Retraction Watch; a missed retraction is the
- * costlier mistake, so the flag alone is enough to record it).
+ * and every version its own record states (OpenAlex's retraction flag,
+ * Europe PMC's type and correction list) whose kind no Crossref notice
+ * already covers. A missed retraction is the costlier mistake, so a signal
+ * alone is enough to record it; it carries no notice DOI.
  */
 export function versionsFor(
   candidate: SourceCandidate,
@@ -14,16 +15,14 @@ export function versionsFor(
     ? notices.filter((n) => n.doi === candidate.doi)
     : [];
   const versions = own.map(({ doi: _doi, ...rest }) => rest);
-  if (
-    candidate.retractedFlag &&
-    !versions.some((v) => v.versionKind === "RETRACTION")
-  )
-    versions.push({
-      versionKind: "RETRACTION",
-      relatedDoi: null,
-      noticeDate: null,
-      detectedVia: "OPENALEX_RETRACTED",
-    });
+  for (const signal of candidate.versionSignals)
+    if (!versions.some((v) => v.versionKind === signal.versionKind))
+      versions.push({
+        versionKind: signal.versionKind,
+        relatedDoi: null,
+        noticeDate: null,
+        detectedVia: signal.detectedVia,
+      });
   return versions;
 }
 

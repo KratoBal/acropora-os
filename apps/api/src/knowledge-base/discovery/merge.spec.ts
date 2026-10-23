@@ -20,7 +20,7 @@ function candidate(over: Partial<SourceCandidate>): SourceCandidate {
     licence: "UNKNOWN",
     oaUrl: null,
     discoveredVia: "OPENALEX",
-    retractedFlag: false,
+    versionSignals: [],
     referencedWorks: [],
     ...over,
   };
@@ -89,14 +89,18 @@ describe("merging candidates by identifier", () => {
       }),
       candidate({
         doi: "10.5555/a",
-        retractedFlag: true,
+        versionSignals: [
+          { versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" },
+        ],
         referencedWorks: ["W5"],
       }),
     ]).candidates;
     assert.equal(merged?.licence, "CC-BY-NC");
     assert.equal(merged?.kind, "REVIEW");
     assert.equal(merged?.oaUrl, "https://europepmc.org/articles/PMC1");
-    assert.equal(merged?.retractedFlag, true);
+    assert.deepEqual(merged?.versionSignals, [
+      { versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" },
+    ]);
     assert.deepEqual(merged?.referencedWorks, ["W5"]);
   });
 
@@ -112,7 +116,12 @@ describe("merging candidates by identifier", () => {
 
 describe("what a work stores", () => {
   it("every notice on its DOI, and OpenAlex's retraction flag when Crossref has none", () => {
-    const work = candidate({ doi: "10.5555/a", retractedFlag: true });
+    const work = candidate({
+      doi: "10.5555/a",
+      versionSignals: [
+        { versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" },
+      ],
+    });
     assert.deepEqual(versionsFor(work, []), [
       {
         versionKind: "RETRACTION",
@@ -135,6 +144,25 @@ describe("what a work stores", () => {
       versionsFor(candidate({ doi: "10.5555/b" }), [notice]),
       [],
       "another work's notice is not ours",
+    );
+  });
+
+  it("a signal adds no second version of a kind a Crossref notice already gives", () => {
+    const work = candidate({
+      doi: "10.5555/a",
+      versionSignals: [
+        { versionKind: "RETRACTION", detectedVia: "OPENALEX_RETRACTED" },
+        { versionKind: "RETRACTION", detectedVia: "EUROPE_PMC" },
+        { versionKind: "ERRATUM", detectedVia: "EUROPE_PMC" },
+      ],
+    });
+    assert.deepEqual(
+      versionsFor(work, []).map((v) => [v.versionKind, v.detectedVia]),
+      [
+        ["RETRACTION", "OPENALEX_RETRACTED"],
+        ["ERRATUM", "EUROPE_PMC"],
+      ],
+      "two APIs saying RETRACTION are one version",
     );
   });
 

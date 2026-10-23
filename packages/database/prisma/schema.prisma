@@ -10618,6 +10618,10 @@ model KnowledgeSource {
   measurementMethodDetail String?
   /// A forrás saját korlátai; a horgony (kivonat) a `KnowledgeFieldAnchor`-ban.
   limitations             String?
+  /// Mikor futott rajta utoljára a Crossref visszavonás-ellenőrzés (S2). NULL: SOHA,
+  /// pl. DOI nélküli műnél; ilyenkor a visszavonásáról csak a saját rekordja
+  /// (OpenAlex, Europe PMC) szólhatott, tehát nem tekinthető ellenőrzöttnek.
+  retractionCheckedAt     DateTime?
   /// Az a felderítő futás (S2), amelyik először hozta; NULL: kézzel rögzítve.
   discoveryRunId          String?
   discoveryRun            KnowledgeDiscoveryRun?      @relation(fields: [discoveryRunId], references: [id], onDelete: Restrict)
@@ -10816,23 +10820,26 @@ model KnowledgeVocabularyEntry {
 }
 
 enum KnowledgeDiscoveryRunStatus {
+  RUNNING
   FINISHED
   LIMIT_REACHED
   INCOMPLETE
+  FAILED
 }
 
-/// Egy forrás-felderítő futás (S2, `knowledge:discover --apply`): a pontos
-/// lekérdezések, a dátum és a találatszámok, hogy a keresés reprodukálható
-/// legyen. Csak a tárolt futás kerül ide; a próbafutás (`--apply` nélkül) nem ír.
+/// Egy forrás-felderítő futás (S2: `knowledge:discover --apply` vagy a
+/// `POST /knowledge-base/discovery-runs` végpont): a pontos lekérdezések, a
+/// dátum és a találatszámok, hogy a keresés reprodukálható legyen. A sor a
+/// futás kezdetén RUNNING-gal jön létre; a próbafutás (`--apply` nélkül) nem ír.
 model KnowledgeDiscoveryRun {
   id              String                      @id @default(cuid())
   label           String                      @db.VarChar(120)
-  status          KnowledgeDiscoveryRunStatus
+  status          KnowledgeDiscoveryRunStatus @default(RUNNING)
   /// A bemeneti fájl, ahogy a futás olvasta.
   input           Json
   /// Lekérdezésenként: API, fajta, szöveg, pontos URL, időpont, találatszám, letöltött darab, megállás oka.
-  queries         Json
-  requestCount    Int
+  queries         Json                        @default("[]")
+  requestCount    Int                         @default(0)
   sourcesCreated  Int                         @default(0)
   sourcesMatched  Int                         @default(0)
   versionsCreated Int                         @default(0)
@@ -10842,11 +10849,13 @@ model KnowledgeDiscoveryRun {
   requestedById   String
   requestedBy     User                        @relation("KnowledgeDiscoveryRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
   startedAt       DateTime
-  finishedAt      DateTime                    @default(now())
+  /// NULL: még fut (vagy a folyamat a futás közben leállt).
+  finishedAt      DateTime?
 
   sources KnowledgeSource[]
 
   @@index([requestedById])
+  @@index([status])
 }
 
 /// Mélykutatás ideiglenes eredménye (7. pont, B mód). SOHA nem `KnowledgeClaim`:

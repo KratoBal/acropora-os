@@ -299,6 +299,13 @@ export const PERMISSIONS = {
   /// beszélgetését a létrehozója e nélkül is törölheti; ez az adminé, ezért
   /// csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent).
   MESSAGES_ADMIN: "messages.admin",
+  /// A KUTATÁSI FORRÁS-FELDERÍTÉS INDÍTÁSA ÉS A FUTÁSOK OLVASÁSA (Research &
+  /// Knowledge Engine S2, acrobot 35604). Egy futás külső API-k közös, kulcs
+  /// nélküli keretét használja, és a kutatási tudástárba ír, ezért szűk kör:
+  /// csak OWNER/ADMIN, a MANAGER sem (lásd ROLE_PERMISSIONS lent); a flotta
+  /// teszt-fiókja egyéni jogként kaphatja meg. A szerkesztői jogok (olvas,
+  /// szerkeszt, jóváhagy) az S4-ben jönnek.
+  KNOWLEDGE_RESEARCH_RUN: "knowledge.research.run",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -350,6 +357,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         // MÁS BESZÉLGETÉSÉNEK TÖRLÉSE AZ ADMINÉ (fecbb1fe): egy MANAGER, aki
         // bármit törölhet, mások beszélgetését is eltüntethetné a listájukról.
         permission !== PERMISSIONS.MESSAGES_ADMIN &&
+        // A FELDERÍTÉS A KÖZÖS KÜLSŐ KERETET HASZNÁLJA ÉS A TUDÁSTÁRBA ÍR (S2).
+        permission !== PERMISSIONS.KNOWLEDGE_RESEARCH_RUN &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --

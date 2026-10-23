@@ -57,6 +57,10 @@ export const EUROPE_PMC_PAGE = 100;
 export const DOI_BATCH = 20;
 export const OPENALEX_ID_BATCH = 50;
 export const MAX_RESULTS_PER_QUERY = 1_000;
+export const DEFAULT_REQUEST_LIMIT = 150;
+export const MAX_REQUEST_LIMIT = 1_000;
+/** `on`: a run may store (CLI `--apply`, the start endpoint). Stage only. */
+export const DISCOVERY_SWITCH_ENV = "KNOWLEDGE_DISCOVERY";
 
 export interface DiscoveryInput {
   /** A name for the run; the report and the run record carry it. */

@@ -30,17 +30,32 @@ export interface StoreSummary {
   ambiguous: { identifiers: string; rowIds: string[] }[];
   /** Candidates with a DOI the notice check did not cover: not stored. */
   unchecked: number;
+  /**
+   * Stored works the Crossref retraction check could NOT run on (no DOI):
+   * their `retractionCheckedAt` stays NULL, so no later slice may take them
+   * as checked (barracuda, #1834 review). Counted apart, not hidden.
+   */
+  retractionUnchecked: number;
+}
+
+export interface DiscoveryRunStart {
+  input: DiscoveryInput;
+  requestedById: string;
+  startedAt: Date;
 }
 
 export interface DiscoveryStore {
-  /** Read-only: what a save would do with these candidates. */
+  /** Read-only: what storing these candidates would do. */
   preview(result: DiscoveryResult): Promise<StoreSummary>;
-  save(run: {
-    input: DiscoveryInput;
-    result: DiscoveryResult;
-    requestedById: string;
-    startedAt: Date;
-  }): Promise<StoreSummary>;
+  /** The run record, RUNNING, before any request goes out. */
+  startRun(start: DiscoveryRunStart): Promise<string>;
+  /**
+   * The run's end. Only a FINISHED result stores sources; any other status
+   * records the queries and the reason, and stores nothing.
+   */
+  finishRun(runId: string, result: DiscoveryResult): Promise<StoreSummary>;
+  /** A run that threw: FAILED, with the error's name only (never its text). */
+  failRun(runId: string, reason: string): Promise<void>;
 }
 
 function identifierFilter(
@@ -104,7 +119,88 @@ const asLicence = (value: string): Licence =>
     ? (value as Licence)
     : "UNKNOWN";
 
-export class PrismaDiscoveryStore implements DiscoveryStore {
+/** The run records as the endpoint shows them (S2, acrobot 35604; the S4 overview reads these). */
+export interface DiscoveryRunRow {
+  id: string;
+  label: string;
+  status: string;
+  requestCount: number;
+  sourcesCreated: number;
+  sourcesMatched: number;
+  versionsCreated: number;
+  claimsDisputed: number;
+  startedAt: Date;
+  finishedAt: Date | null;
+  requestedBy: { id: string; displayName: string };
+}
+
+export interface DiscoveryRunDetail extends DiscoveryRunRow {
+  input: unknown;
+  queries: unknown;
+  report: unknown;
+}
+
+export interface DiscoveryRunLedger {
+  /** RUNNING runs started before `before` (the process died under them): FAILED. */
+  abandonStale(before: Date): Promise<number>;
+  /** A run still RUNNING, if any. */
+  running(): Promise<{ id: string; startedAt: Date } | null>;
+  listRuns(limit: number): Promise<DiscoveryRunRow[]>;
+  getRun(id: string): Promise<DiscoveryRunDetail | null>;
+}
+
+const RUN_ROW_SELECT = {
+  id: true,
+  label: true,
+  status: true,
+  requestCount: true,
+  sourcesCreated: true,
+  sourcesMatched: true,
+  versionsCreated: true,
+  claimsDisputed: true,
+  startedAt: true,
+  finishedAt: true,
+  requestedBy: { select: { id: true, displayName: true } },
+} as const;
+
+export class PrismaDiscoveryStore
+  implements DiscoveryStore, DiscoveryRunLedger
+{
+  async abandonStale(before: Date): Promise<number> {
+    const stale = await prisma.knowledgeDiscoveryRun.updateMany({
+      where: { status: "RUNNING", startedAt: { lt: before } },
+      data: {
+        status: "FAILED",
+        report: { error: "STALE_RUNNING" },
+        finishedAt: new Date(),
+      },
+    });
+    return stale.count;
+  }
+
+  async running(): Promise<{ id: string; startedAt: Date } | null> {
+    return prisma.knowledgeDiscoveryRun.findFirst({
+      where: { status: "RUNNING" },
+      select: { id: true, startedAt: true },
+      orderBy: { startedAt: "desc" },
+    });
+  }
+
+  async listRuns(limit: number): Promise<DiscoveryRunRow[]> {
+    return prisma.knowledgeDiscoveryRun.findMany({
+      select: RUN_ROW_SELECT,
+      orderBy: { startedAt: "desc" },
+      take: limit,
+    });
+  }
+
+  async getRun(id: string): Promise<DiscoveryRunDetail | null> {
+    return prisma.knowledgeDiscoveryRun.findUnique({
+      where: { id },
+      select: { ...RUN_ROW_SELECT, input: true, queries: true, report: true },
+    });
+  }
+
   async preview(result: DiscoveryResult): Promise<StoreSummary> {
     const checked = new Set(result.checkedDois);
     const summary = emptySummary();
@@ -122,48 +218,85 @@ export class PrismaDiscoveryStore implements DiscoveryStore {
           identifiers: identifiersOf(candidate),
           rowIds: rows.map((r) => r.id),
         });
-      else if (rows.length === 1) summary.matched += 1;
-      else summary.created += 1;
+      else {
+        if (rows.length === 1) summary.matched += 1;
+        else summary.created += 1;
+        if (!candidate.doi) summary.retractionUnchecked += 1;
+      }
     }
     return summary;
   }
 
-  async save(run: {
-    input: DiscoveryInput;
-    result: DiscoveryResult;
-    requestedById: string;
-    startedAt: Date;
-  }): Promise<StoreSummary> {
-    const { result } = run;
+  async startRun(start: DiscoveryRunStart): Promise<string> {
+    const run = await prisma.knowledgeDiscoveryRun.create({
+      data: {
+        label: start.input.label,
+        status: "RUNNING",
+        input: start.input as unknown as Prisma.InputJsonValue,
+        requestedById: start.requestedById,
+        startedAt: start.startedAt,
+      },
+      select: { id: true },
+    });
+    return run.id;
+  }
+
+  async failRun(runId: string, reason: string): Promise<void> {
+    await prisma.knowledgeDiscoveryRun.update({
+      where: { id: runId },
+      data: {
+        status: "FAILED",
+        report: { error: reason.slice(0, 64) },
+        finishedAt: new Date(),
+      },
+    });
+  }
+
+  async finishRun(
+    runId: string,
+    result: DiscoveryResult,
+  ): Promise<StoreSummary> {
     const checked = new Set(result.checkedDois);
+    const record = (summary: StoreSummary) => ({
+      status: result.status,
+      queries: result.queries as unknown as Prisma.InputJsonValue,
+      requestCount: result.requestCount,
+      report: {
+        skipped: result.skipped,
+        conflicts: result.conflicts,
+        unavailable: result.unavailable,
+        crossrefUnknownDois: result.crossrefUnknownDois,
+        notFoundDois: result.notFoundDois,
+        ambiguous: summary.ambiguous,
+        retractionUnchecked: summary.retractionUnchecked,
+      } as unknown as Prisma.InputJsonValue,
+      sourcesCreated: summary.created,
+      sourcesMatched: summary.matched,
+      versionsCreated: summary.versionsCreated,
+      claimsDisputed: summary.claimsDisputed,
+      finishedAt: new Date(),
+    });
+    if (result.status !== "FINISHED") {
+      const summary = { ...emptySummary(), runId };
+      await prisma.knowledgeDiscoveryRun.update({
+        where: { id: runId },
+        data: record(summary),
+      });
+      return summary;
+    }
     return prisma.$transaction(
       async (tx) => {
-        const created = await tx.knowledgeDiscoveryRun.create({
-          data: {
-            label: run.input.label,
-            status: result.status,
-            input: run.input as unknown as Prisma.InputJsonValue,
-            queries: result.queries as unknown as Prisma.InputJsonValue,
-            requestCount: result.requestCount,
-            report: {
-              skipped: result.skipped,
-              conflicts: result.conflicts,
-              unavailable: result.unavailable,
-              crossrefUnknownDois: result.crossrefUnknownDois,
-              notFoundDois: result.notFoundDois,
-            } as unknown as Prisma.InputJsonValue,
-            requestedById: run.requestedById,
-            startedAt: run.startedAt,
-          },
-          select: { id: true },
-        });
+        const created = { id: runId };
         const summary = emptySummary();
-        summary.runId = created.id;
+        summary.runId = runId;
+        const checkedAt = new Date();
         for (const candidate of result.candidates) {
           if (!isStorable(candidate, checked)) {
             summary.unchecked += 1;
             continue;
           }
+          // a work with a DOI is storable only checked (isStorable); one without is never checked
+          const retractionCheckedAt = candidate.doi ? checkedAt : null;
           const rows = await matchExisting(tx, candidate);
           if (
             rows.length > 1 ||
@@ -218,6 +351,7 @@ export class PrismaDiscoveryStore implements DiscoveryStore {
                   ? { oaUrl: candidate.oaUrl }
                   : {}),
               ...(licence !== row.license ? { license: licence } : {}),
+              ...(retractionCheckedAt ? { retractionCheckedAt } : {}),
             };
             if (Object.keys(fill).length)
               await tx.knowledgeSource.update({
@@ -241,6 +375,7 @@ export class PrismaDiscoveryStore implements DiscoveryStore {
                 oaUrl: candidate.oaUrl,
                 discoveredVia: candidate.discoveredVia,
                 discoveryRunId: created.id,
+                retractionCheckedAt,
                 versions: {
                   create: {
                     versionKind: "ORIGINAL",
@@ -253,6 +388,7 @@ export class PrismaDiscoveryStore implements DiscoveryStore {
             sourceId = source.id;
             summary.created += 1;
           }
+          if (!retractionCheckedAt) summary.retractionUnchecked += 1;
           for (const version of versionsFor(candidate, result.notices)) {
             const exists = await tx.knowledgeSourceVersion.findFirst({
               where: {
@@ -289,14 +425,8 @@ export class PrismaDiscoveryStore implements DiscoveryStore {
           }
         }
         await tx.knowledgeDiscoveryRun.update({
-          where: { id: created.id },
-          data: {
-            sourcesCreated: summary.created,
-            sourcesMatched: summary.matched,
-            versionsCreated: summary.versionsCreated,
-            claimsDisputed: summary.claimsDisputed,
-            finishedAt: new Date(),
-          },
+          where: { id: runId },
+          data: record(summary),
         });
         return summary;
       },
@@ -314,5 +444,6 @@ function emptySummary(): StoreSummary {
     claimsDisputed: 0,
     ambiguous: [],
     unchecked: 0,
+    retractionUnchecked: 0,
   };
 }

@@ -101,7 +101,16 @@ function mergeGroup(group: readonly SourceCandidate[]): SourceCandidate {
     // Europe PMC's open copy is the JATS full text the reader (S3) uses
     oaUrl: europePmcOa ?? firstOf("oaUrl"),
     discoveredVia: first.discoveredVia,
-    retractedFlag: group.some((c) => c.retractedFlag),
+    versionSignals: group
+      .flatMap((c) => c.versionSignals)
+      .filter(
+        (v, i, all) =>
+          all.findIndex(
+            (w) =>
+              w.versionKind === v.versionKind &&
+              w.detectedVia === v.detectedVia,
+          ) === i,
+      ),
     referencedWorks: [...new Set(group.flatMap((c) => c.referencedWorks))],
   };
 }

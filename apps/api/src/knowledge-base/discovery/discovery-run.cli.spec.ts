@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { runDiscoveryCli, type DiscoveryCliDeps } from "./discovery-run.cli.js";
+import {
+  runDiscoveryCli,
+  shown,
+  storeReport,
+  type DiscoveryCliDeps,
+} from "./discovery-run.cli.js";
 import { CROSSREF_BASE, EUROPE_PMC_BASE } from "./discovery-run.js";
 import type { StoreSummary } from "./discovery-run.store.js";
 import {
@@ -26,6 +31,7 @@ const SUMMARY: StoreSummary = {
   claimsDisputed: 0,
   ambiguous: [],
   unchecked: 0,
+  retractionUnchecked: 0,
 };
 
 function deps(
@@ -58,9 +64,18 @@ function deps(
         calls.push("preview");
         return { ...SUMMARY, runId: null };
       },
-      save: async (run) => {
-        calls.push(`save:${run.requestedById}:${run.result.candidates.length}`);
+      startRun: async (start) => {
+        calls.push(`start:${start.requestedById}`);
+        return "run-1";
+      },
+      finishRun: async (runId, result) => {
+        calls.push(
+          `finish:${runId}:${result.status}:${result.candidates.length}`,
+        );
         return SUMMARY;
+      },
+      failRun: async (runId, reason) => {
+        calls.push(`fail:${runId}:${reason}`);
       },
     },
     actorExists: async (id) => id === "u-1",
@@ -110,7 +125,7 @@ describe("knowledge:discover", () => {
       d.value,
     );
     assert.equal(code, 0);
-    assert.deepEqual(d.calls, ["save:u-1:1"]);
+    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:FINISHED:1"]);
     assert.match(o.out.stdout, /Futás run-1: új forrás: 1/);
   });
 
@@ -144,7 +159,7 @@ describe("knowledge:discover", () => {
     }
   });
 
-  it("a run that could not check every DOI stores nothing: exit 3", async () => {
+  it("a run that could not check every DOI stores no source, only its record: exit 3", async () => {
     const d = deps({}, { status: 503, body: {} });
     const o = output();
     const code = await runDiscoveryCli(
@@ -153,12 +168,13 @@ describe("knowledge:discover", () => {
       d.value,
     );
     assert.equal(code, 3);
-    assert.deepEqual(d.calls, []);
+    // the run is in the log with its status; no source is stored
+    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:INCOMPLETE:1"]);
     assert.match(o.out.stdout, /NEM TELJES/);
     assert.match(o.out.stdout, /NEM ELÉRHETŐ: CROSSREF \(HTTP_503\)/);
   });
 
-  it("the request limit stops it, nothing stored: exit 3", async () => {
+  it("the request limit stops it, no source stored: exit 3", async () => {
     const d = deps();
     const o = output();
     const code = await runDiscoveryCli(
@@ -167,7 +183,7 @@ describe("knowledge:discover", () => {
       d.value,
     );
     assert.equal(code, 3);
-    assert.deepEqual(d.calls, []);
+    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:LIMIT_REACHED:1"]);
     assert.match(o.out.stdout, /KORLÁT ELÉRVE \(1 lekérés\)/);
   });
 
@@ -175,7 +191,9 @@ describe("knowledge:discover", () => {
     const d = deps({
       store: {
         preview: async () => SUMMARY,
-        save: async () => ({
+        startRun: async () => "run-1",
+        failRun: async () => undefined,
+        finishRun: async () => ({
           ...SUMMARY,
           ambiguous: [
             { identifiers: "doi:10.5555/coral.1 pmid:111", rowIds: ["a", "b"] },
@@ -211,5 +229,38 @@ describe("knowledge:discover", () => {
       );
       assert.equal(d.network.asked.length, 0);
     }
+  });
+
+  it("a run that throws is recorded FAILED, by the error's name only", async () => {
+    const d = deps();
+    d.value.store.finishRun = async () => {
+      throw new SyntaxError("a text that must not be stored");
+    };
+    await assert.rejects(
+      runDiscoveryCli(
+        ["--input", "x.json", "--apply", "--actor", "u-1"],
+        output().sink,
+        d.value,
+      ),
+      SyntaxError,
+    );
+    assert.deepEqual(d.calls, ["start:u-1", "fail:run-1:SyntaxError"]);
+  });
+
+  it("identifiers from an API are shown short and printable only", () => {
+    assert.equal(shown("10.5555/abc"), "10.5555/abc");
+    assert.equal(shown("10.5555/a b\u0007c"), "10.5555/a b?c");
+    assert.equal(
+      shown("10.5555/ignore previous instructions", 20),
+      "10.5555/ignore previ...",
+    );
+  });
+
+  it("works stored without the retraction check are counted on their own line", () => {
+    assert.match(
+      storeReport({ ...SUMMARY, retractionUnchecked: 3 }, true),
+      /Visszavonás-ellenőrzés NÉLKÜL \(nincs DOI, a Crossref nem nézhette meg\): 3/,
+    );
+    assert.doesNotMatch(storeReport(SUMMARY, true), /Visszavonás-ellenőrzés/);
   });
 });

@@ -66,6 +66,7 @@ import { MissingInvoicesModule } from "./missing-invoices/missing-invoices.modul
 import { MaintenanceInvoiceModule } from "./maintenance-invoice/maintenance-invoice.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { SearchModule } from "./search/search.module.js";
+import { KnowledgeBaseModule } from "./knowledge-base/knowledge-base.module.js";
 
 import { ServiceDraftsModule } from "./service-drafts/service-drafts.module.js";
 import { MortalityModule } from "./mortality/mortality.module.js";
@@ -123,6 +124,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     MaintenanceInvoiceModule,
     DashboardModule,
     SearchModule,
+    KnowledgeBaseModule,
     WorksheetsModule,
     MaterialRequestsModule,
     MessagesModule,
