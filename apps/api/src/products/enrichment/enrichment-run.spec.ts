@@ -370,6 +370,61 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(field("dosingGuidance").value, guidance);
   });
 
+  // second test round, 2026-10-23: the given URL and the UNAS link lead to one page
+  it("ugyanaz a végső lap kétszer: egy olvasás, egy AI-hívás, a második megnevezve", async () => {
+    const asked: unknown[] = [];
+    const guidance = "Az adagolás a heti magnézium-mérés alapján történik";
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [{ kind: "MANUFACTURER", url: `${MAKER}/p/1` }],
+        },
+      ],
+      {
+        [`${MAKER}/p/1`]: {
+          status: 200,
+          body: `<html><body><p>${guidance}</p></body></html>`,
+        },
+        // the UNAS link redirects to the very same page
+        [`${MAKER}/regi/1`]: {
+          status: 301,
+          headers: { location: `${MAKER}/p/1` },
+        },
+      },
+      {
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/regi/1` }) },
+        dosingExtractor: {
+          extract: async (input) => {
+            asked.push(input);
+            return {
+              kind: "ANSWER",
+              mode: "TEST_DEPENDENT",
+              dose: null,
+              tests: ["MAGNEZIUM"],
+              guidance,
+              excerpt: guidance,
+              reason: "",
+            };
+          },
+        },
+      },
+    );
+    assert.equal(asked.length, 1);
+    assert.deepEqual(
+      checks[0]!.fetches.map((f) => [f.outcome, f.reason, f.url]),
+      [
+        ["FETCHED", "NO_STRUCTURED_DATA", `${MAKER}/p/1`],
+        ["REFUSED", "SAME_PAGE_ALREADY_READ", `${MAKER}/p/1`],
+      ],
+    );
+    assert.equal(checks[0]!.sourceCount, 1);
+    const guidanceField = checks[0]!.fields.find(
+      (f) => f.field === "dosingGuidance",
+    )!;
+    assert.equal(guidanceField.status, "VERIFIED");
+  });
+
   // barracuda, #1805: the description's dose (#1800) and an AI "no data" contradict
   it("a leírás adagja mellett az AI nincs-adata nem lesz állapot", async () => {
     const { checks } = await run(

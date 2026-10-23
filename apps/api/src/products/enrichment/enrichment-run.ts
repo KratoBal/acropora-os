@@ -360,6 +360,11 @@ async function checkProduct(
     kind: EnrichmentSourceKind;
   }[] = [];
 
+  // THE SAME PAGE ONCE (second test round, 2026-10-23): a given URL and the
+  // UNAS link can lead to one final page (a redirect). Read twice, it was two
+  // AI calls and two sources, and the two answers' guidance "conflicted" with
+  // itself. A product reads a final page once; the second is named, not used.
+  const readPages = new Set<string>();
   for (const source of sourcesFor(input, facts)) {
     const supplier =
       source.kind === "SUPPLIER" && source.supplierId
@@ -395,6 +400,20 @@ async function checkProduct(
       });
       continue;
     }
+    const pageKey = page.url.split("#")[0]!.replace(/\/+$/, "");
+    if (readPages.has(pageKey)) {
+      fetches.push({
+        sourceKind: source.kind,
+        url: page.url,
+        outcome: "REFUSED",
+        reason: "SAME_PAGE_ALREADY_READ",
+        httpStatus: page.httpStatus,
+        fetchedAt: page.fetchedAt,
+        fieldCount: 0,
+      });
+      continue;
+    }
+    readPages.add(pageKey);
     const structured = extractPageStatement(page.html);
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
     // bulkreefsupply.com states its barcode only in a labelled table.
