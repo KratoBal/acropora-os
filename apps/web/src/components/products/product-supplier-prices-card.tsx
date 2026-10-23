@@ -24,14 +24,22 @@ import { priceListsApi } from "@/lib/api/price-lists";
  * tartozhat.
  */
 
-/** A nettó eladási ár hiányának okai magyarul; ismeretlen kód nyersen jelenik meg. */
+/**
+ * A nettó eladási ár hiányának okai magyarul. A kódok a szerver `resolvePriceSource`
+ * (`PriceSourceRefusal`) és `listPriceFromDecision` függvényéből jönnek; a teszt
+ * minden ismert kódra megköveteli a magyar szöveget, ismeretlen kód nyersen jelenik meg.
+ */
 const SELLING_REASON_LABELS: Record<string, string> = {
+  "authority-unknown": "nincs eldöntve, melyik rendszer a termék gazdája",
+  "mirror-row-missing": "a UNAS-tükörben nincs a termékről sor",
+  "mirror-price-missing": "a UNAS-tükörben nincs a termékhez ár",
+  "own-price-missing": "a saját árunk nincs kitöltve",
   "price-missing": "nincs eladási ár a törzsben",
   "vat-rate-missing": "nincs áfakulcs a változaton",
-  "authority-unknown": "nincs eldöntve, melyik rendszer a termék gazdája",
 };
+export const KNOWN_SELLING_REASONS = Object.keys(SELLING_REASON_LABELS);
 
-function sellingReasonText(reason: string | null): string {
+export function sellingReasonText(reason: string | null): string {
   if (!reason) return "ismeretlen ok";
   if (reason.startsWith("currency-"))
     return `az eladási ár pénzneme nem forint (${reason.slice("currency-".length)})`;

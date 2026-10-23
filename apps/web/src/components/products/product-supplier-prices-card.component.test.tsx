@@ -3,8 +3,10 @@ import type { SupplierPriceRow, VariantSupplierPrices } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  KNOWN_SELLING_REASONS,
   ProductSupplierPricesCard,
   SupplierPricesTable,
+  sellingReasonText,
 } from "./product-supplier-prices-card";
 
 const api = vi.hoisted(() => ({ variantPrices: vi.fn() }));
@@ -123,6 +125,21 @@ describe("a változat beszállítói beszerzési árai", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText("0 Ft")).toBeNull();
+  });
+
+  it("has Hungarian text for every reason code the server can give, never the raw code", () => {
+    // the codes of resolvePriceSource (PriceSourceRefusal) and listPriceFromDecision
+    expect([...KNOWN_SELLING_REASONS].sort()).toEqual([
+      "authority-unknown",
+      "mirror-price-missing",
+      "mirror-row-missing",
+      "own-price-missing",
+      "price-missing",
+      "vat-rate-missing",
+    ]);
+    for (const code of KNOWN_SELLING_REASONS)
+      expect(sellingReasonText(code)).not.toBe(code);
+    expect(sellingReasonText("something-new")).toBe("something-new");
   });
 
   it("names a non-forint selling currency from the reason code", () => {
