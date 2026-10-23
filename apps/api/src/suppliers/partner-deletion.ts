@@ -30,8 +30,8 @@ export interface PartnerReferenceKind {
 }
 
 /**
- * Mind a tizenöt hivatkozás, amit a séma ma megenged: hat a partner sorára, és
- * kilenc a tükör vevő-sorára. (A tizenhatodik reláció maga a tükör-kapcsolat,
+ * Mind a tizenhét hivatkozás, amit a séma ma megenged: nyolc a partner sorára,
+ * és kilenc a tükör vevő-sorára. (A tizenhatodik reláció maga a tükör-kapcsolat,
  * az nem hivatkozás, hanem a partner belső részlete.)
  */
 export const PARTNER_REFERENCE_KINDS: readonly PartnerReferenceKind[] = [
@@ -39,6 +39,16 @@ export const PARTNER_REFERENCE_KINDS: readonly PartnerReferenceKind[] = [
   {
     key: "supplierProducts",
     label: "beszállítói termékkapcsolat",
+    effect: "cascades",
+  },
+  {
+    key: "priceLists",
+    label: "beszállítói árlista",
+    effect: "cascades",
+  },
+  {
+    key: "priceMatches",
+    label: "árlista-párosítás",
     effect: "cascades",
   },
   {

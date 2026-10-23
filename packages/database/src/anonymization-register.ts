@@ -413,6 +413,20 @@ export const ANONYMIZATION_REGISTER: Readonly<
     supplierName: "business",
     currency: "business",
   },
+  SupplierPriceList: {
+    currency: "business",
+    sourceFileName: "business",
+    sourceSha256: "identifier",
+  },
+  SupplierPriceListEntry: {
+    supplierSku: "business",
+    supplierName: "business",
+    brand: "business",
+    gtin: "identifier",
+  },
+  SupplierPriceMatch: {
+    supplierSku: "business",
+  },
   Warehouse: {
     code: "ownCompany",
     name: "ownCompany",
