@@ -17,6 +17,7 @@ import {
 import { pdfTextLines } from "../../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { SupplierInvoiceImportService } from "../../purchasing/supplier-invoice-import/supplier-invoice-import.service.js";
 import { normalizeName } from "../missing-invoice-matching.js";
+import { corroboratedBy } from "./invoice-corroboration.js";
 import { payeeFromText } from "../payee-check.js";
 import {
   invoiceCollectionDays,
@@ -612,6 +613,37 @@ export class InvoiceCollectionService {
           await this.knownNumbers(),
           hints,
         );
+      }
+      /*
+        A SZÁM EGYEDÜL NEM KÖT (kártya 285d8ffc, barracuda 35534): az ismert szám
+        nyilvános, ezért a NAV-számmal kötött olvasathoz egy második jel is kell a
+        számlasorból (az összeg, a szállító neve a szövegben, vagy a feladó
+        tartománya). Ha nincs, a szám elesik: a fájl nem köt, de a többi út (banki
+        hivatkozás, kártyás fizetés) még próbálkozhat, végül emberre vár.
+      */
+      if (
+        textReading.numberFrom === "NAV" &&
+        textReading.invoiceNumber &&
+        textReading.supplierTaxNumber
+      ) {
+        const facts = await this.repository.knownInvoiceFacts(
+          textReading.invoiceNumber,
+          textReading.supplierTaxNumber
+            .replace(/^HU/, "")
+            .replace(/\D/g, "")
+            .slice(0, 8),
+        );
+        if (
+          !corroboratedBy(lines, facts, found.sender, {
+            normalizeName,
+            distinctiveWord,
+          })
+        )
+          textReading = {
+            ...textReading,
+            invoiceNumber: null,
+            numberFrom: null,
+          };
       }
       if (textReading.numberFrom !== "NAV") {
         const reference = bankReference(
