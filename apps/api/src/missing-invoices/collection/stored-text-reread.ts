@@ -217,7 +217,7 @@ export async function rereadStoredText(
       fresh =
         read.supplierTaxNumber || !deps.knownNumbers
           ? read
-          : withKnownNumber(read, lines, await knownOnce());
+          : withKnownNumber(read, lines, await knownOnce(), hints);
     }
     const oldNumber = old?.invoiceNumber ?? null;
     const keepOld =
