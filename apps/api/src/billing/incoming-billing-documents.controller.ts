@@ -30,10 +30,15 @@ import {
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
+import { IncomingAssignDocumentDto } from "./dto/incoming-assign-document.dto.js";
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
-import { attachedPdfIds, attachIncomingPdf } from "./incoming-pdf-attach.js";
+import {
+  assignDocumentToIncomingRow,
+  attachedPdfIds,
+  attachIncomingPdf,
+} from "./incoming-pdf-attach.js";
 import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
@@ -268,6 +273,46 @@ export class IncomingBillingDocumentsController {
     await attachIncomingPdf(this.database, {
       rowId: row.id,
       file,
+      userId: user.id,
+      hasPdf:
+        row.hasPdf ||
+        attached.has(row.id) ||
+        collectedPdfIds(row, collected).length > 0,
+    });
+    return this.detail(row.id);
+  }
+
+  /**
+   * EGY NEM PÁROSODOTT, TÁROLT LEVÉL-PDF HOZZÁRENDELÉSE A SORHOZ (acrobot
+   * 35522/35529; `assignDocumentToIncomingRow`). Ugyanaz a jog és ugyanaz a
+   * feltétel, mint a csatolásnál: ahol a sornak már van PDF-je, 409.
+   */
+  @Post("incoming-documents/:id/assign-document")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async assignDocument(
+    @Param("id") id: string,
+    @Body() input: IncomingAssignDocumentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentDetail> {
+    const row = await this.database.incomingBillingDocument.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        hasPdf: true,
+        documentNumber: true,
+        supplierTaxNumber: true,
+        sourceDocumentId: true,
+      },
+    });
+    if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
+    const [collected, attached] = await Promise.all([
+      this.collectedIndex(),
+      attachedPdfIds(this.database, [row.id]),
+    ]);
+    await assignDocumentToIncomingRow(this.database, {
+      rowId: row.id,
+      documentId: input.documentId,
       userId: user.id,
       hasPdf:
         row.hasPdf ||

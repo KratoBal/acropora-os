@@ -19,6 +19,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
 import { missingInvoicesApi } from "@/lib/api/missing-invoices";
+import { AssignToIncomingPanel } from "./missing-invoices-assign-incoming";
 import { CollectionItemsSection } from "./missing-invoices-collection-items";
 import { formatAmount, formatDay } from "./missing-invoices-model";
 
@@ -44,6 +45,7 @@ export function MissingInvoicesSuggestionsPage() {
     null,
   );
   const [staleAfterDays, setStaleAfterDays] = useState(60);
+  const [assigning, setAssigning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -186,7 +188,7 @@ export function MissingInvoicesSuggestionsPage() {
     {
       id: "actions",
       header: <span className="sr-only">Döntés</span>,
-      width: "300px",
+      width: "420px",
       align: "right",
       cell: (item) => (
         <span className="flex justify-end gap-2">
@@ -199,6 +201,21 @@ export function MissingInvoicesSuggestionsPage() {
           </PilotButton>
           {canManage ? (
             <>
+              {item.state === "UNASSIGNED" ? (
+                <PilotButton
+                  variant="secondary"
+                  size="action"
+                  disabled={busy !== null}
+                  aria-label={`${item.fileName} bejövő számlához`}
+                  onClick={() =>
+                    setAssigning((current) =>
+                      current === item.documentId ? null : item.documentId,
+                    )
+                  }
+                >
+                  Bejövő számlához
+                </PilotButton>
+              ) : null}
               <PilotButton
                 variant="secondary"
                 size="action"
@@ -287,9 +304,23 @@ export function MissingInvoicesSuggestionsPage() {
           columns={columns}
           rows={items}
           rowKey={(item) => item.documentId}
-          minWidth={960}
+          minWidth={1080}
         />
       )}
+      {assigning ? (
+        <AssignToIncomingPanel
+          token={token}
+          documentId={assigning}
+          onClose={() => setAssigning(null)}
+          onAssigned={() => {
+            setItems(
+              (current) =>
+                current?.filter((row) => row.documentId !== assigning) ?? null,
+            );
+            setAssigning(null);
+          }}
+        />
+      ) : null}
       <CollectionItemsSection token={token} />
     </PilotThemeRoot>
   );

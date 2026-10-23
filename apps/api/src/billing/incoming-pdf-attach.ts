@@ -130,3 +130,96 @@ export async function attachIncomingPdf(
     return { documentId: document.id };
   });
 }
+
+/**
+ * EGY NEM PÁROSODOTT, TÁROLT LEVÉL-PDF HOZZÁRENDELÉSE EGY BEJÖVŐ SZÁMLÁHOZ
+ * (acrobot 35522/35529: egy lépésben kézzel hozzárendelhető). A begyűjtés az
+ * `UNASSIGNED` dokumentumot megőrzi, mert semmi nem kötötte; itt egy ember kötött.
+ *
+ * A dokumentum UGYANAZT kapja, mint a `attachIncomingPdf` fájlja: a kulcsa a
+ * sor azonosítóját hordozza (`attach:incoming:<sor>:<lenyomat>`, adószámtól
+ * függetlenül, külföldi szállítónál is), az olvasata a sor számát, adószámát és
+ * bruttóját. Nem másolat: a MEGLÉVŐ dokumentum kulcsa és olvasata változik, a
+ * tartalma nem, tehát nem keletkezik második példány.
+ *
+ * Csak `UNASSIGNED`-et köt (a Jev javaslatának külön elfogadása van), és csak
+ * ott, ahol a sornak még nincs PDF-je.
+ */
+export async function assignDocumentToIncomingRow(
+  database: Pick<
+    PrismaClient,
+    | "incomingBillingDocument"
+    | "incomingSupplierDocument"
+    | "invoiceCollectionItem"
+    | "auditLog"
+    | "$transaction"
+  >,
+  input: {
+    rowId: string;
+    documentId: string;
+    userId: string;
+    /** a sornak van-e már PDF-je bármelyik úton (a hívó tudja: feed, begyűjtött, csatolt) */
+    hasPdf: boolean;
+  },
+): Promise<{ documentId: string }> {
+  const row = await database.incomingBillingDocument.findUnique({
+    where: { id: input.rowId },
+    select: {
+      id: true,
+      documentNumber: true,
+      supplierTaxNumber: true,
+      supplierName: true,
+      grossAmount: true,
+      currency: true,
+      kindCode: true,
+    },
+  });
+  if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
+  if (input.hasPdf)
+    throw new ConflictException("Ennek a számlának már van PDF-je.");
+  const document = await database.incomingSupplierDocument.findFirst({
+    where: { id: input.documentId, reviewState: "UNASSIGNED" },
+    select: { id: true, fileName: true, sha256: true },
+  });
+  if (!document)
+    throw new NotFoundException(
+      "Nincs ilyen, hozzárendelésre váró (nem párosodott) fájl.",
+    );
+  return database.$transaction(async (tx) => {
+    const { count } = await tx.incomingSupplierDocument.updateMany({
+      where: { id: document.id, reviewState: "UNASSIGNED" },
+      data: {
+        gmailMessageId: `${ATTACH_PREFIX}${row.id}:${document.sha256}`,
+        reviewState: null,
+        reviewedAt: new Date(),
+        reviewedByUserId: input.userId,
+        kind: row.kindCode.toUpperCase() === "D" ? "PROFORMA" : "INVOICE",
+        textReading: {
+          invoiceNumber: row.documentNumber,
+          numberFrom: null,
+          supplierTaxNumber: row.supplierTaxNumber,
+          supplierName: row.supplierName,
+          gross: row.grossAmount.toFixed(2),
+          currency: row.currency,
+        },
+      },
+    });
+    // közben döntöttek róla (elfogadták, elvetették, másik sorhoz kötötték)
+    if (count === 0)
+      throw new ConflictException("Erről a fájlról közben már döntöttek.");
+    await tx.invoiceCollectionItem.updateMany({
+      where: { documentId: document.id, verdict: "UNMATCHED" },
+      data: { verdict: "STORED" },
+    });
+    await tx.auditLog.create({
+      data: {
+        userId: input.userId,
+        action: "billing.incoming-pdf.assigned",
+        entityType: "IncomingBillingDocument",
+        entityId: row.id,
+        metadata: { documentId: document.id, fileName: document.fileName },
+      },
+    });
+    return { documentId: document.id };
+  });
+}

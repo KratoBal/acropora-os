@@ -27,6 +27,14 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+const billingApi = vi.hoisted(() => ({
+  incomingList: vi.fn(),
+  assignIncomingDocument: vi.fn(),
+}));
+vi.mock("@/lib/api/billing-documents", () => ({
+  billingDocumentsApi: billingApi,
+}));
+
 const api = vi.hoisted(() => ({
   suggestions: vi.fn(),
   collectionItems: vi.fn(),
@@ -75,8 +83,19 @@ const suggestion = (
   createdAt: "2026-10-01T08:00:00.000Z",
 });
 
+const incomingRow = (id: string, documentNumber: string, hasPdf: boolean) => ({
+  id,
+  documentNumber,
+  hasPdf,
+  supplierName: "Kitalált Gumi Kft.",
+  issueDate: "2026-10-22",
+  currency: "HUF",
+  grossAmount: "119800",
+});
+
 beforeEach(() => {
   auth.role = "OWNER";
+  for (const fn of Object.values(billingApi)) fn.mockReset();
   for (const fn of Object.values(api)) fn.mockReset();
   api.suggestions.mockResolvedValue({
     items: [
@@ -201,6 +220,109 @@ describe("MissingInvoicesSuggestionsPage", () => {
     render(<MissingInvoicesSuggestionsPage />);
     await rowOf("WR26-0220.pdf");
     expect(screen.queryByText("Régóta döntésre váró fájlok")).toBeNull();
+  });
+
+  /**
+   * acrobot 35522/35529: egy nem párosodott fájl egy lépésben hozzárendelhető egy
+   * bejövő számlához. MI PIROSÍT: ha a Jev javaslatán is megjelenne a gomb; ha a
+   * PDF-es sor is választható lenne; ha a hozzárendelés nem a kiválasztott sorra és
+   * fájlra hívna; ha a fájl a listán maradna; ha a hiba elnyelődne.
+   */
+  it("assigns an untied file to a chosen invoice without a PDF, and the file leaves the list", async () => {
+    api.suggestions.mockResolvedValue({
+      items: [
+        {
+          ...suggestion("doc-u", "RE67456.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+        },
+        suggestion("doc-jev", "JEV.pdf"),
+      ],
+      staleAfterDays: 60,
+      staleCount: 0,
+    });
+    billingApi.incomingList.mockResolvedValue({
+      items: [
+        incomingRow("in-1", "J55388", false),
+        incomingRow("in-2", "J55000", true),
+        incomingRow("mailbox:x", "MB-1", false),
+      ],
+      pagination: { page: 1, pageSize: 50, totalItems: 3, totalPages: 1 },
+    });
+    billingApi.assignIncomingDocument.mockResolvedValue({});
+    render(<MissingInvoicesSuggestionsPage />);
+    const untied = await rowOf("RE67456.pdf");
+    expect(
+      within(await rowOf("JEV.pdf")).queryByRole("button", {
+        name: /bejövő számlához/,
+      }),
+    ).toBeNull();
+    fireEvent.click(
+      within(untied).getByRole("button", {
+        name: "RE67456.pdf bejövő számlához",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Szállító neve vagy adószáma"), {
+      target: { value: "Gumi" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Keresés" }));
+    const list = await screen.findByRole("list", {
+      name: "PDF nélküli bejövő számlák",
+    });
+    expect(billingApi.incomingList.mock.calls[0]![1].get("q")).toBe("Gumi");
+    // only the row with no PDF and with a feed record can be chosen
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(list).getByText("J55388")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "J55388 számlához rendel" }),
+    );
+    await waitFor(() =>
+      expect(billingApi.assignIncomingDocument).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        "doc-u",
+      ),
+    );
+    await waitFor(() => expect(screen.queryByText("RE67456.pdf")).toBeNull());
+    expect(
+      screen.queryByLabelText("Hozzárendelés bejövő számlához"),
+    ).toBeNull();
+    expect(screen.getByText("JEV.pdf")).toBeInTheDocument();
+  });
+
+  it("keeps the file and shows the server's refusal when the assignment fails", async () => {
+    api.suggestions.mockResolvedValue({
+      items: [
+        {
+          ...suggestion("doc-u", "RE67456.pdf"),
+          state: "UNASSIGNED",
+          confidence: null,
+        },
+      ],
+      staleAfterDays: 60,
+      staleCount: 0,
+    });
+    billingApi.incomingList.mockResolvedValue({
+      items: [incomingRow("in-1", "J55388", false)],
+      pagination: { page: 1, pageSize: 50, totalItems: 1, totalPages: 1 },
+    });
+    billingApi.assignIncomingDocument.mockRejectedValue(
+      new Error("Ennek a számlának már van PDF-je."),
+    );
+    render(<MissingInvoicesSuggestionsPage />);
+    fireEvent.click(
+      within(await rowOf("RE67456.pdf")).getByRole("button", {
+        name: "RE67456.pdf bejövő számlához",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Keresés" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "J55388 számlához rendel" }),
+    );
+    expect(
+      await screen.findByText("Ennek a számlának már van PDF-je."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("RE67456.pdf")).toBeInTheDocument();
   });
 
   /** A KONTROLL A JOGRA: olvasó joggal a lista látszik, döntés-gomb nincs. */
