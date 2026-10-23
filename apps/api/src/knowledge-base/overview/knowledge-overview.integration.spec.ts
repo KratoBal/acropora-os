@@ -14,6 +14,7 @@ import { KnowledgeOverviewRepository } from "./knowledge-overview.repository.js"
 const gate = integrationDatabaseGate(process.env);
 const DOI_PREFIX = "10.5555/kb-ovw-int-";
 const SUBJECT = "KB_INT_OVERVIEW";
+const EMAIL_DOMAIN = "knowledge-overview-integration.invalid";
 
 describe(
   "knowledge overview counts, on a database",
@@ -21,10 +22,21 @@ describe(
   () => {
     const repo = new KnowledgeOverviewRepository();
     const suffix = Date.now() % 1_000_000;
+    let userId = "";
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       await removeLeftovers();
+      userId = (
+        await prisma.user.create({
+          data: {
+            email: `szerkeszto-${suffix}@${EMAIL_DOMAIN}`,
+            displayName: "Kitalált Szerkesztő",
+            role: "OWNER",
+            isActive: true,
+          },
+        })
+      ).id;
     });
     after(removeLeftovers);
 
@@ -44,6 +56,9 @@ describe(
       await prisma.knowledgeSource.deleteMany({
         where: { doi: { startsWith: DOI_PREFIX } },
       });
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: `@${EMAIL_DOMAIN}` } },
+      });
       nincsMaradek([
         {
           nev: "KnowledgeSource (doi elotag)",
@@ -60,7 +75,7 @@ describe(
       ]);
     }
 
-    it("a pending source, a retracted one with a candidate claim and an open question move their counts", async () => {
+    it("a pending source, a retracted one with a candidate claim and an open question move their counts, the claim's only once its source is included", async () => {
       const before = await repo.counts();
       await prisma.knowledgeSource.create({
         data: {
@@ -117,6 +132,31 @@ describe(
           proposedValue: "Porites lutea",
         },
       });
+      // the source is not included yet: its claim is nobody's work
+      const pending = await repo.counts();
+      assert.deepEqual(
+        {
+          claimsCandidate: pending.claimsCandidate - before.claimsCandidate,
+          anchorsPending: pending.anchorsPending - before.anchorsPending,
+          questionsOpen: pending.questionsOpen - before.questionsOpen,
+          claimsOnRetracted:
+            pending.claimsOnRetracted - before.claimsOnRetracted,
+        },
+        {
+          claimsCandidate: 0,
+          anchorsPending: 0,
+          questionsOpen: 0,
+          claimsOnRetracted: 0,
+        },
+      );
+      await prisma.knowledgeSource.update({
+        where: { id: retracted.id },
+        data: {
+          screeningStatus: "INCLUDED",
+          screenedById: userId,
+          screenedAt: new Date(),
+        },
+      });
       const after = await repo.counts();
       assert.deepEqual(
         {
@@ -130,12 +170,13 @@ describe(
         },
         {
           sources: 2,
-          sourcesPending: 2,
+          sourcesPending: 1,
           claimsCandidate: 1,
           anchorsPending: 1,
           questionsOpen: 1,
           claimsOnRetracted: 1,
-          sourcesExtracted: 0,
+          // included now, with its full-text hash: an extracted source
+          sourcesExtracted: 1,
         },
       );
     });

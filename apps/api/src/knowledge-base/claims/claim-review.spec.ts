@@ -257,6 +257,32 @@ describe("claim review: the plan", () => {
     );
   });
 
+  it("two anchors on one field: accepting the one the claim does not hold is named as such, not as stale", () => {
+    const { anchors, columns } = fixture();
+    const d = anchorOf(anchors, "direction");
+    const second: ReviewAnchor = {
+      ...d,
+      id: "dup",
+      normalizedValue: "INCREASE",
+    };
+    const both = [...anchors, second];
+    assert.match(
+      refusal(() =>
+        planReview(both, columns, NO_SOURCE, decide(both), vocabulary),
+      ),
+      /^DUPLICATE_FIELD_ANCHOR: direction/,
+    );
+    // rejecting the second one lets the claim through with the held value
+    const plan = planReview(
+      both,
+      columns,
+      NO_SOURCE,
+      decide(both, { dup: { decision: "REJECT" } }),
+      vocabulary,
+    );
+    assert.equal(plan.claim.direction, "DECREASE");
+  });
+
   it("a source field decided earlier is not decided again, and still counts", () => {
     const { anchors, columns } = fixture();
     const st = anchorOf(anchors, "studyType");

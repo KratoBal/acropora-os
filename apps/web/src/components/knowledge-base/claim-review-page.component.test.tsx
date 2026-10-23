@@ -367,6 +367,16 @@ describe("Állítás ellenőrzése", () => {
         "the effect and the direction must stay; otherwise discard the claim",
       ),
     ).toMatch(/^A hatás és az irány/);
+    expect(
+      reviewErrorText(
+        "direction: two anchors propose this field and the claim holds the other's value; correct or reject this one",
+      ),
+    ).toBe(
+      "Irány: két horgony javasol értéket erre a mezőre, és az állítás a másikét tartja. Ezt javítsd vagy vesd el.",
+    );
+    expect(
+      reviewErrorText("quantity: the claim no longer holds this value"),
+    ).toBe("Mennyiség: az állítás közben megváltozott. Töltsd be újra.");
   });
 
   it("visszavont forrás: az állítás nem menthető, csak elvethető", async () => {
