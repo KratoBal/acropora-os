@@ -34,6 +34,23 @@ export interface NewListInput {
  * a `(supplierId, supplierSku)` kulcson él, nem a listán: egy lista törlése a
  * sorait viszi, a párosításokat megtartja.
  */
+/** A `coverage` lekérdezés egy sora (a számlálók egész számok). */
+export interface CoverageRaw {
+  listId: string;
+  rows: number;
+  eanAuto: number;
+  eanApproved: number;
+  codeAuto: number;
+  codeApproved: number;
+  nameAuto: number;
+  nameApproved: number;
+  rejected: number;
+  unmatchedWithBarcode: number;
+  unmatchedWithoutBarcode: number;
+  unmatchedBarcodeKnownToUs: number;
+}
+export type CoverageRow = CoverageRaw;
+
 @Injectable()
 export class PriceListRepository {
   private readonly database = prisma;
@@ -199,6 +216,59 @@ export class PriceListRepository {
         supplier: { select: { name: true } },
       },
     });
+  }
+
+  /**
+   * A LISTÁK PÁROSÍTÁSI LEFEDETTSÉGE (task arlista-parositas-meres): listánként egy
+   * összesítő sor, az adatbázisban számolva (egy lekérdezés, a sorok nem jönnek
+   * át). A lista sorához a (beszállító, cikkszám) kötés tartozik, a csoportok nem
+   * átfedők: párosított (módszer és állapot szerint), elutasított, párosítatlan.
+   * A mi vonalkódjainkat egyszer normalizáljuk (csak számjegyek, 14 jegyre
+   * töltve), és a párosítatlan, vonalkódos sorok közül azt számoljuk, amelyiknek
+   * a kódja benne van: ennek nullának kell lennie.
+   */
+  async coverage(
+    listIds: readonly string[],
+  ): Promise<Map<string, CoverageRow>> {
+    if (listIds.length === 0) return new Map();
+    const rows = await this.database.$queryRaw<CoverageRaw[]>`
+      WITH ours AS (
+        SELECT DISTINCT lpad(regexp_replace(code, '[^0-9]', '', 'g'), 14, '0') AS gtin
+        FROM "ProductBarcode"
+      )
+      SELECT e."listId" AS "listId",
+        count(*)::int AS "rows",
+        count(*) FILTER (WHERE m.method = 'EAN' AND m.status = 'AUTO')::int AS "eanAuto",
+        count(*) FILTER (WHERE m.method = 'EAN' AND m.status = 'APPROVED')::int AS "eanApproved",
+        count(*) FILTER (WHERE m.method = 'SUPPLIER_CODE' AND m.status = 'AUTO')::int AS "codeAuto",
+        count(*) FILTER (WHERE m.method = 'SUPPLIER_CODE' AND m.status = 'APPROVED')::int AS "codeApproved",
+        count(*) FILTER (WHERE m.method = 'NAME' AND m.status = 'AUTO')::int AS "nameAuto",
+        count(*) FILTER (WHERE m.method = 'NAME' AND m.status = 'APPROVED')::int AS "nameApproved",
+        count(*) FILTER (WHERE m.status = 'REJECTED')::int AS "rejected",
+        count(*) FILTER (WHERE m.id IS NULL AND e.gtin IS NOT NULL)::int AS "unmatchedWithBarcode",
+        count(*) FILTER (WHERE m.id IS NULL AND e.gtin IS NULL)::int AS "unmatchedWithoutBarcode",
+        count(*) FILTER (WHERE m.id IS NULL AND e.gtin IN (SELECT gtin FROM ours))::int AS "unmatchedBarcodeKnownToUs"
+      FROM "SupplierPriceListEntry" e
+      JOIN "SupplierPriceList" l ON l.id = e."listId"
+      LEFT JOIN "SupplierPriceMatch" m
+        ON m."supplierId" = l."supplierId" AND m."supplierSku" = e."supplierSku"
+      WHERE e."listId" = ANY(${[...listIds]})
+      GROUP BY e."listId"`;
+    return new Map(rows.map((row) => [row.listId, row]));
+  }
+
+  /** A mi aktív változataink és a vonalkód nélküliek száma. */
+  async variantBarcodeCounts(): Promise<{
+    active: number;
+    withoutBarcode: number;
+  }> {
+    const [active, withoutBarcode] = await Promise.all([
+      this.database.productVariant.count({ where: { isActive: true } }),
+      this.database.productVariant.count({
+        where: { isActive: true, barcodes: { none: {} } },
+      }),
+    ]);
+    return { active, withoutBarcode };
   }
 
   /** A termékek vonalkódjai a megadott kódokra (a tárolt alakok: EAN-13, UPC-A, EAN-8, GTIN-14). */

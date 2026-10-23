@@ -13,6 +13,7 @@ import type { MatchDecision } from "./price-list-matching.js";
 import type {
   NewListInput,
   PriceListRepository,
+  CoverageRaw,
 } from "./price-list.repository.js";
 import { PriceListService, parseListDate } from "./price-list.service.js";
 import type { ParsedPriceEntry } from "./price-list.types.js";
@@ -314,6 +315,86 @@ describe("PriceListService.remove", () => {
     await rejects(
       new PriceListService(repository).remove("nope", "u"),
       NotFoundException,
+    );
+  });
+});
+
+/**
+ * A LISTÁK PÁROSÍTÁSI LEFEDETTSÉGE (task arlista-parositas-meres, acrobot 35824).
+ * MI PIROSÍT: ha egy lista számai egy másik listáéra kerülnének; ha a lekérdezés
+ * nélküli lista (nincs sora) nem nullát kapna; ha a mezők felcserélődnének
+ * (auto/jóváhagyott, EAN/cikkszám/név); ha a mi változataink száma kimaradna.
+ */
+describe("PriceListService.lists coverage", () => {
+  const listRow = (id: string) => ({
+    id,
+    supplierId: "sup-1",
+    format: "HERTLEIN_ARTIKEL",
+    listDate: new Date("2026-10-23T00:00:00Z"),
+    currency: "EUR",
+    sourceFileName: `${id}.csv`,
+    rowCount: 10,
+    rejectedRowCount: 0,
+    createdAt: new Date("2026-10-23T09:00:00Z"),
+    supplier: { name: "Hertlein" },
+  });
+  const raw = (listId: string): CoverageRaw => ({
+    listId,
+    rows: 100,
+    eanAuto: 40,
+    eanApproved: 1,
+    codeAuto: 20,
+    codeApproved: 2,
+    nameAuto: 0,
+    nameApproved: 3,
+    rejected: 4,
+    unmatchedWithBarcode: 6,
+    unmatchedWithoutBarcode: 24,
+    unmatchedBarcodeKnownToUs: 5,
+  });
+  const service = (coverage: Map<string, CoverageRaw>) =>
+    new PriceListService({
+      lists: async () => [listRow("a"), listRow("b")],
+      coverage: async (ids: string[]) => {
+        assert.deepEqual(ids, ["a", "b"]);
+        return coverage;
+      },
+      variantBarcodeCounts: async () => ({
+        active: 1900,
+        withoutBarcode: 1100,
+      }),
+    } as unknown as PriceListRepository);
+
+  it("gives each list its own counts, in the right fields, and the variant counts once", async () => {
+    const result = await service(new Map([["a", raw("a")]])).lists();
+    assert.deepEqual(result.variants, { active: 1900, withoutBarcode: 1100 });
+    assert.deepEqual(result.items[0]!.coverage, {
+      rows: 100,
+      matched: {
+        ean: { auto: 40, approved: 1 },
+        supplierCode: { auto: 20, approved: 2 },
+        name: { auto: 0, approved: 3 },
+      },
+      rejected: 4,
+      unmatchedWithBarcode: 6,
+      unmatchedWithoutBarcode: 24,
+      unmatchedBarcodeKnownToUs: 5,
+    });
+  });
+
+  it("gives a list with no rows all zeros, not another list's numbers", async () => {
+    const result = await service(new Map([["a", raw("a")]])).lists();
+    const empty = result.items[1]!.coverage;
+    assert.equal(empty.rows, 0);
+    assert.deepEqual(empty.matched.ean, { auto: 0, approved: 0 });
+    assert.deepEqual(
+      [
+        empty.rejected,
+        empty.unmatchedWithBarcode,
+        empty.unmatchedWithoutBarcode,
+        empty.unmatchedBarcodeKnownToUs,
+      ],
+      [0, 0, 0, 0],
     );
   });
 });

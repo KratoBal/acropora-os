@@ -1581,6 +1581,8 @@ export type {
   SupplierPriceListFormat,
   SupplierPriceListMatching,
   SupplierPriceListSummary,
+  SupplierPriceListCoverage,
+  SupplierPriceMatchCounts,
   SupplierPriceListUploadResult,
   SupplierPriceListsResponse,
   SupplierPriceRow,

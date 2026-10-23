@@ -14,7 +14,9 @@ import {
   SUPPLIER_PRICE_LIST_FORMATS,
   SUPPLIER_PRICE_LIST_FORMAT_LABELS,
   type SupplierPriceListFormat,
+  type SupplierPriceListCoverage,
   type SupplierPriceListSummary,
+  type SupplierPriceListsResponse,
   type SupplierPriceListUploadResult,
   type SupplierSummary,
 } from "@acropora/types";
@@ -51,6 +53,53 @@ export function todayText(now: Date = new Date()): string {
 function formatListDate(day: string): string {
   const [year, month, date] = day.split("-");
   return year && month && date ? `${year}. ${month}. ${date}.` : day;
+}
+
+/**
+ * A LISTA PÁROSÍTÁSI ÁLLAPOTA EGY CELLÁBAN (task arlista-parositas-meres): a
+ * csoportok nem átfedők, az összegük a sorok száma. A "nálunk megvan" szám
+ * annak ellenőrzése, hogy a párosító működik-e: a párosítatlan, vonalkódos
+ * sorok közül ennyinek a vonalkódja SZEREPEL a mi tábláinkban, és ennek nullának
+ * kell lennie; ami nem nulla, azt kimondjuk.
+ */
+export function CoverageCell({
+  coverage,
+}: {
+  coverage: SupplierPriceListCoverage;
+}) {
+  const m = coverage.matched;
+  const count = (c: { auto: number; approved: number }) => c.auto + c.approved;
+  const paired = count(m.ean) + count(m.supplierCode) + count(m.name);
+  const parts = [
+    count(m.ean) ? `vonalkód ${count(m.ean)}` : null,
+    count(m.supplierCode) ? `cikkszám ${count(m.supplierCode)}` : null,
+    count(m.name) ? `név ${count(m.name)}` : null,
+  ].filter(Boolean);
+  const approved = m.ean.approved + m.supplierCode.approved + m.name.approved;
+  return (
+    <span className="flex flex-col gap-0.5 text-sm" data-testid="coverage">
+      <span>
+        <strong>{paired}</strong> párosítva
+        {parts.length
+          ? ` (${parts.join(", ")}; ebből jóváhagyott ${approved})`
+          : ""}
+      </span>
+      <span className="text-pilot-grey-600">
+        {coverage.rejected} elutasítva ·{" "}
+        {coverage.unmatchedWithBarcode + coverage.unmatchedWithoutBarcode}{" "}
+        párosítatlan ({coverage.unmatchedWithBarcode} vonalkóddal,{" "}
+        {coverage.unmatchedWithoutBarcode} vonalkód nélkül)
+      </span>
+      {coverage.unmatchedBarcodeKnownToUs > 0 ? (
+        <span className="text-pilot-amber-700">
+          Figyelem: a párosítatlan, vonalkódos sorok közül{" "}
+          {coverage.unmatchedBarcodeKnownToUs} vonalkódja szerepel a mi
+          vonalkód-táblánkban, és mégsem párosodott (nálunk eltérő alakban
+          tárolt vonalkód).
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /** Az összesítő, amit a feltöltés után a szerver ad; a számok a lista sorairól szólnak. */
@@ -110,6 +159,9 @@ export function PriceListsPage() {
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [suppliersNote, setSuppliersNote] = useState<string | null>(null);
   const [lists, setLists] = useState<SupplierPriceListSummary[] | null>(null);
+  const [variants, setVariants] = useState<
+    SupplierPriceListsResponse["variants"] | null
+  >(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [supplierId, setSupplierId] = useState("");
@@ -131,7 +183,9 @@ export function PriceListsPage() {
       if (!canView) return;
       setLoadError(null);
       try {
-        setLists((await priceListsApi.list(token, "", signal)).items);
+        const response = await priceListsApi.list(token, "", signal);
+        setLists(response.items);
+        setVariants(response.variants);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setLoadError(
@@ -271,6 +325,11 @@ export function PriceListsPage() {
         list.rejectedRowCount
           ? `${list.rowCount} (+${list.rejectedRowCount} kimaradt)`
           : String(list.rowCount),
+    },
+    {
+      id: "coverage",
+      header: "Párosítás",
+      cell: (list) => <CoverageCell coverage={list.coverage} />,
     },
     ...(canManage
       ? [
@@ -466,12 +525,22 @@ export function PriceListsPage() {
           description="Tölts fel egy beszállítói árlistát a fenti űrlappal."
         />
       ) : (
-        <PilotDataTable
-          columns={columns}
-          rows={lists}
-          rowKey={(list) => list.id}
-          minWidth={900}
-        />
+        <>
+          {variants ? (
+            <p className="text-sm text-pilot-grey-700">
+              A mi aktív változataink közül{" "}
+              <strong>{variants.withoutBarcode}</strong> áll vonalkód nélkül (
+              {variants.active} aktív változatból): ezekre vonalkóddal nem lehet
+              párosítani.
+            </p>
+          ) : null}
+          <PilotDataTable
+            columns={columns}
+            rows={lists}
+            rowKey={(list) => list.id}
+            minWidth={1100}
+          />
+        </>
       )}
     </PilotThemeRoot>
   );

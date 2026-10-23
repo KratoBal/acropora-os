@@ -305,5 +305,42 @@ describe(
         decidedById: userId,
       });
     });
+
+    it("counts a list's coverage in the database: matched by method, rejected, unmatched with and without a barcode, and our own barcode the matcher missed", async () => {
+      // our own table holds a barcode written in groups: the matcher looks for the
+      // exact forms and does not find it, the diagnostic count does
+      await prisma.productBarcode.create({
+        data: { variantId: variants.B!, code: "999 000 000 0024" },
+      });
+      const result = await upload(
+        hertlein([
+          { code: "P1", ean: EAN_A, price: "12,10" },
+          { code: "P2", ean: "9990000000024", price: "4,10" },
+          { code: "P3", ean: "", price: "7,00" },
+          { code: "P4", ean: "", price: "3,00" },
+        ]),
+        `${PREFIX}v4.csv`,
+      );
+      const coverage = (
+        await new PriceListRepository().coverage([result.listId])
+      ).get(result.listId)!;
+      assert.deepEqual(
+        { ...coverage, listId: undefined },
+        {
+          listId: undefined,
+          rows: 4,
+          eanAuto: 0,
+          eanApproved: 0,
+          codeAuto: 1,
+          codeApproved: 0,
+          nameAuto: 0,
+          nameApproved: 0,
+          rejected: 1,
+          unmatchedWithBarcode: 1,
+          unmatchedWithoutBarcode: 1,
+          unmatchedBarcodeKnownToUs: 1,
+        },
+      );
+    });
   },
 );

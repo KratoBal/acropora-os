@@ -13,7 +13,7 @@ import type {
 } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PriceListsPage, todayText } from "./price-lists-page";
+import { CoverageCell, PriceListsPage, todayText } from "./price-lists-page";
 
 /**
  * BESZÁLLÍTÓI ÁRLISTÁK (task beszallitoi-arlistak): a feltöltő oldal. A
@@ -70,6 +70,18 @@ const summary = (
   rowCount: 7075,
   rejectedRowCount: 0,
   createdAt: "2026-10-23T10:00:00.000Z",
+  coverage: {
+    rows: 7075,
+    matched: {
+      ean: { auto: 3900, approved: 12 },
+      supplierCode: { auto: 200, approved: 0 },
+      name: { auto: 0, approved: 8 },
+    },
+    rejected: 5,
+    unmatchedWithBarcode: 1100,
+    unmatchedWithoutBarcode: 1850,
+    unmatchedBarcodeKnownToUs: 0,
+  },
   ...overrides,
 });
 
@@ -102,7 +114,10 @@ beforeEach(() => {
   auth.role = "OWNER";
   for (const fn of [...Object.values(api), ...Object.values(suppliersApi)])
     fn.mockReset();
-  api.list.mockResolvedValue({ items: [summary()] });
+  api.list.mockResolvedValue({
+    items: [summary()],
+    variants: { active: 1900, withoutBarcode: 1100 },
+  });
   api.upload.mockResolvedValue(uploaded());
   api.remove.mockResolvedValue({ removedRows: 7075 });
   suppliersApi.list.mockResolvedValue({
@@ -261,7 +276,10 @@ describe("PriceListsPage", () => {
   });
 
   it("says so when nothing was uploaded yet", async () => {
-    api.list.mockResolvedValue({ items: [] });
+    api.list.mockResolvedValue({
+      items: [],
+      variants: { active: 1900, withoutBarcode: 1100 },
+    });
     render(<PriceListsPage />);
     expect(
       await screen.findByText("Még nincs feltöltött árlista"),
@@ -303,5 +321,54 @@ describe("PriceListsPage", () => {
         "A választóban csak az első 1 beszállító látszik (összesen 140).",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("shows each list's pairing state: by method, rejected, and unmatched with and without a barcode", async () => {
+    render(<PriceListsPage />);
+    const cell = await screen.findByTestId("coverage");
+    expect(cell).toHaveTextContent(
+      "4120 párosítva (vonalkód 3912, cikkszám 200, név 8; ebből jóváhagyott 20)",
+    );
+    expect(cell).toHaveTextContent(
+      "5 elutasítva · 2950 párosítatlan (1100 vonalkóddal, 1850 vonalkód nélkül)",
+    );
+    expect(cell).not.toHaveTextContent("Figyelem");
+  });
+
+  it("says how many of our active variants have no barcode, above the table", async () => {
+    render(<PriceListsPage />);
+    await screen.findByTestId("coverage");
+    expect(
+      screen.getByText(/ áll vonalkód nélkül \(1900 aktív változatból\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("1100")).toBeInTheDocument();
+  });
+
+  it("warns when an unmatched row's barcode is in our own table: the matcher should have caught it", () => {
+    const base = summary().coverage;
+    const { rerender } = render(<CoverageCell coverage={base} />);
+    expect(screen.queryByText(/Figyelem/)).toBeNull();
+    rerender(
+      <CoverageCell coverage={{ ...base, unmatchedBarcodeKnownToUs: 7 }} />,
+    );
+    expect(
+      screen.getByText(
+        /7 vonalkódja szerepel a mi vonalkód-táblánkban, és mégsem párosodott/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a list with no pairing at all without a method breakdown", () => {
+    const empty = {
+      ...summary().coverage,
+      matched: {
+        ean: { auto: 0, approved: 0 },
+        supplierCode: { auto: 0, approved: 0 },
+        name: { auto: 0, approved: 0 },
+      },
+    };
+    render(<CoverageCell coverage={empty} />);
+    expect(screen.getByTestId("coverage")).toHaveTextContent("0 párosítva");
+    expect(screen.getByTestId("coverage")).not.toHaveTextContent("vonalkód 0");
   });
 });

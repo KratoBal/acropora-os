@@ -12,6 +12,7 @@ import type {
   SupplierPriceListSummary,
   SupplierPriceListsResponse,
   SupplierPriceListUploadResult,
+  SupplierPriceListCoverage,
 } from "@acropora/types";
 
 import {
@@ -21,7 +22,10 @@ import {
   tallyDecisions,
 } from "./price-list-matching.js";
 import { parsePriceList } from "./parse-price-list.js";
-import { PriceListRepository } from "./price-list.repository.js";
+import {
+  PriceListRepository,
+  type CoverageRaw,
+} from "./price-list.repository.js";
 import {
   PriceListParseError,
   type PriceListParseErrorCode,
@@ -49,6 +53,27 @@ export function parseListDate(text: string, now: Date): Date {
   if (date.getTime() > now.getTime() + DAY_MS)
     throw new BadRequestException("A lista dátuma nem lehet a jövőben.");
   return date;
+}
+
+/** A lekérdezés sora -> a válasz; ha a listának nincs sora, minden szám nulla. */
+export function toCoverage(
+  row: CoverageRaw | undefined,
+): SupplierPriceListCoverage {
+  return {
+    rows: row?.rows ?? 0,
+    matched: {
+      ean: { auto: row?.eanAuto ?? 0, approved: row?.eanApproved ?? 0 },
+      supplierCode: {
+        auto: row?.codeAuto ?? 0,
+        approved: row?.codeApproved ?? 0,
+      },
+      name: { auto: row?.nameAuto ?? 0, approved: row?.nameApproved ?? 0 },
+    },
+    rejected: row?.rejected ?? 0,
+    unmatchedWithBarcode: row?.unmatchedWithBarcode ?? 0,
+    unmatchedWithoutBarcode: row?.unmatchedWithoutBarcode ?? 0,
+    unmatchedBarcodeKnownToUs: row?.unmatchedBarcodeKnownToUs ?? 0,
+  };
 }
 
 export interface UploadInput {
@@ -187,7 +212,12 @@ export class PriceListService {
 
   async lists(supplierId?: string): Promise<SupplierPriceListsResponse> {
     const rows = await this.repository.lists(supplierId);
+    const [coverage, variants] = await Promise.all([
+      this.repository.coverage(rows.map((row) => row.id)),
+      this.repository.variantBarcodeCounts(),
+    ]);
     return {
+      variants,
       items: rows.map((row): SupplierPriceListSummary => ({
         id: row.id,
         supplierId: row.supplierId,
@@ -199,6 +229,7 @@ export class PriceListService {
         rowCount: row.rowCount,
         rejectedRowCount: row.rejectedRowCount,
         createdAt: row.createdAt.toISOString(),
+        coverage: toCoverage(coverage.get(row.id)),
       })),
     };
   }

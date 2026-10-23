@@ -22,6 +22,34 @@ export const SUPPLIER_PRICE_LIST_FORMAT_LABELS: Record<
   CORALSANDS_PREISLISTE: "Coralsands Preisliste (CSV)",
 };
 
+/** Automatikus és jóváhagyott kötések egy módszerre. */
+export interface SupplierPriceMatchCounts {
+  auto: number;
+  approved: number;
+}
+
+/**
+ * MIÉRT PÁROSÍTATLAN A LISTA SORAI KÖZÜL SOK (task arlista-parositas-meres): a
+ * lista soraira (cikkszámonként egy) a párosítás mai állapota, a listán belül
+ * nem átfedő csoportokban: a párosítottak módszerenként, az elutasított, és a
+ * párosítatlanok, vonalkóddal és anélkül. Az `unmatchedBarcodeKnownToUs` annak
+ * ellenőrzése, hogy a párosító működik-e: a párosítatlan, vonalkódos sorok közül
+ * ennyinek a vonalkódja SZEREPEL a mi vonalkód-táblánkban; ennek nullának kell
+ * lennie, minden más szám hiba (például nálunk csoportosítva tárolt vonalkód).
+ */
+export interface SupplierPriceListCoverage {
+  rows: number;
+  matched: {
+    ean: SupplierPriceMatchCounts;
+    supplierCode: SupplierPriceMatchCounts;
+    name: SupplierPriceMatchCounts;
+  };
+  rejected: number;
+  unmatchedWithBarcode: number;
+  unmatchedWithoutBarcode: number;
+  unmatchedBarcodeKnownToUs: number;
+}
+
 export interface SupplierPriceListSummary {
   id: string;
   supplierId: string;
@@ -34,10 +62,13 @@ export interface SupplierPriceListSummary {
   rowCount: number;
   rejectedRowCount: number;
   createdAt: string;
+  coverage: SupplierPriceListCoverage;
 }
 
 export interface SupplierPriceListsResponse {
   items: SupplierPriceListSummary[];
+  /** A mi aktív változataink és közülük a vonalkód nélküliek: a párosítás felső korlátja vonalkóddal. */
+  variants: { active: number; withoutBarcode: number };
 }
 
 /** Mi lett a feltöltött lista soraiból a termékpárosításnál. */
