@@ -81,7 +81,7 @@ export function UploadSummary({
         result.skippedRows
           ? `${result.skippedRows} nem adat sor átugorva`
           : null,
-        `Termékpárosítás: ${matching.alreadyMatched} már kötött, ${matching.autoByEan} új vonalkód szerint, ${matching.autoByCode} új ismert cikkszám szerint, ${matching.conflicts} ütközés (ember dönt), ${matching.unmatched} párosítatlan.`,
+        `Termékpárosítás: ${matching.alreadyMatched} már kötött, ${matching.autoByEan} új vonalkód szerint, ${matching.autoByCode} új ismert cikkszám szerint, ${matching.conflicts} ütközés (ember dönt), ${matching.previouslyRejected} korábban elutasított (nem javasoljuk újra), ${matching.unmatched} párosítatlan.`,
       ]
         .filter(Boolean)
         .join(". ")}

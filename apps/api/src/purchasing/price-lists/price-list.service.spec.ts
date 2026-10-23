@@ -154,12 +154,33 @@ describe("PriceListService.upload", () => {
       autoByEan: 0,
       autoByCode: 1,
       conflicts: 0,
+      previouslyRejected: 0,
       unmatched: 1,
     });
     assert.equal(saved.length, 1);
     assert.deepEqual(
       saved[0]!.map((d) => d.kind),
       ["NEW_AUTO", "UNMATCHED"],
+    );
+  });
+
+  it("counts a code a person rejected on its own: not among the unmatched, and nothing is saved for it", async () => {
+    const { service, saved } = setup({
+      existing: { "AAA-001": { variantId: "v1", status: "REJECTED" } },
+      known: { "AAA-001": "v1" },
+    });
+    const result = await service.upload(input(), NOW);
+    assert.deepEqual(result.matching, {
+      alreadyMatched: 0,
+      autoByEan: 0,
+      autoByCode: 0,
+      conflicts: 0,
+      previouslyRejected: 1,
+      unmatched: 1,
+    });
+    assert.deepEqual(
+      saved.flat().filter((d) => d.kind === "NEW_AUTO"),
+      [],
     );
   });
 

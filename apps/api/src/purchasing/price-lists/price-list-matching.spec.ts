@@ -126,7 +126,7 @@ describe("decideMatches", () => {
         variants: { [GTIN]: ["v1"] },
         existing: { A1: rejected },
       }),
-      [{ kind: "UNMATCHED", supplierSku: "A1" }],
+      [{ kind: "REJECTED", supplierSku: "A1" }],
     );
     // a different product (the data turned): still a person's call
     assert.deepEqual(
@@ -134,7 +134,7 @@ describe("decideMatches", () => {
         variants: { [GTIN]: ["v2"] },
         existing: { A1: rejected },
       }),
-      [{ kind: "UNMATCHED", supplierSku: "A1" }],
+      [{ kind: "REJECTED", supplierSku: "A1" }],
     );
     // and a code the SupplierProduct knows
     assert.deepEqual(
@@ -142,7 +142,7 @@ describe("decideMatches", () => {
         existing: { A1: rejected },
         known: { A1: "v3" },
       }),
-      [{ kind: "UNMATCHED", supplierSku: "A1" }],
+      [{ kind: "REJECTED", supplierSku: "A1" }],
     );
   });
 
@@ -204,6 +204,7 @@ describe("tallyDecisions", () => {
           method: "SUPPLIER_CODE",
         },
         { kind: "CONFLICT", supplierSku: "d", reason: "EAN_MANY" },
+        { kind: "REJECTED", supplierSku: "g" },
         { kind: "UNMATCHED", supplierSku: "e" },
         { kind: "UNMATCHED", supplierSku: "f" },
       ]),
@@ -212,6 +213,7 @@ describe("tallyDecisions", () => {
         autoByEan: 1,
         autoByCode: 1,
         conflicts: 1,
+        previouslyRejected: 1,
         unmatched: 2,
       },
     );
