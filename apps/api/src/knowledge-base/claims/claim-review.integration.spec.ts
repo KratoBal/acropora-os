@@ -40,8 +40,12 @@ describe(
     let claimId = "";
     let otherClaimId = "";
     let retractedClaimId = "";
+    let pendingClaimId = "";
 
-    async function extractedClaim(tag: string): Promise<string> {
+    async function extractedClaim(
+      tag: string,
+      included = true,
+    ): Promise<string> {
       const sourceId = (
         await prisma.knowledgeSource.create({
           data: {
@@ -49,6 +53,13 @@ describe(
             doi: `${DOI_PREFIX}${suffix}-${tag}`,
             title: `Kitalált cikk ${tag}`,
             discoveredVia: "MANUAL",
+            ...(included
+              ? {
+                  screeningStatus: "INCLUDED" as const,
+                  screenedById: userId,
+                  screenedAt: new Date(),
+                }
+              : {}),
             versions: {
               create: { versionKind: "ORIGINAL", detectedVia: "MANUAL" },
             },
@@ -90,6 +101,7 @@ describe(
       claimId = await extractedClaim("a");
       otherClaimId = await extractedClaim("b");
       retractedClaimId = await extractedClaim("c");
+      pendingClaimId = await extractedClaim("d", false);
     });
 
     after(removeLeftovers);
@@ -173,6 +185,8 @@ describe(
       assert.ok(
         queue.ids.includes(claimId) && queue.ids.includes(otherClaimId),
       );
+      // a claim on a source not (yet) included is not the editor's work
+      assert.equal(queue.ids.includes(pendingClaimId), false);
       const review = await repository.detail(claimId);
       assert.equal(review.status, "CANDIDATE");
       assert.equal(review.passage.locator, "Results");

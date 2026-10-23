@@ -1,5 +1,9 @@
 import { prisma } from "@acropora/database";
 
+import {
+  ANCHOR_ON_INCLUDED_SOURCE,
+  CLAIM_ON_INCLUDED_SOURCE,
+} from "../included-source.js";
 import type { OverviewCounts } from "./knowledge-overview.js";
 
 /** The overview's counts, read in one round (S4 Áttekintő). Writes nothing. */
@@ -27,24 +31,43 @@ export class KnowledgeOverviewRepository {
           },
         },
       }),
-      prisma.knowledgeClaim.count({ where: { status: "CANDIDATE" } }),
-      prisma.knowledgeClaim.count({ where: { status: "VERIFIED" } }),
-      prisma.knowledgeFieldAnchor.count({ where: { decision: "PENDING" } }),
+      prisma.knowledgeClaim.count({
+        where: { status: "CANDIDATE", ...CLAIM_ON_INCLUDED_SOURCE },
+      }),
+      prisma.knowledgeClaim.count({
+        where: { status: "VERIFIED", ...CLAIM_ON_INCLUDED_SOURCE },
+      }),
       prisma.knowledgeFieldAnchor.count({
-        where: { decision: "PENDING", proposedValue: { not: null } },
+        where: { decision: "PENDING", ...ANCHOR_ON_INCLUDED_SOURCE },
+      }),
+      prisma.knowledgeFieldAnchor.count({
+        where: {
+          decision: "PENDING",
+          proposedValue: { not: null },
+          ...ANCHOR_ON_INCLUDED_SOURCE,
+        },
       }),
       prisma.knowledgeClaim.count({
         where: {
           status: { in: ["CANDIDATE", "VERIFIED"] },
-          evidence: {
-            some: {
-              passage: {
-                sourceVersion: {
-                  source: { versions: { some: { versionKind: "RETRACTION" } } },
+          // AND, not a spread: both conditions sit on `evidence`, and a second
+          // key would silently replace the first
+          AND: [
+            CLAIM_ON_INCLUDED_SOURCE,
+            {
+              evidence: {
+                some: {
+                  passage: {
+                    sourceVersion: {
+                      source: {
+                        versions: { some: { versionKind: "RETRACTION" } },
+                      },
+                    },
+                  },
                 },
               },
             },
-          },
+          ],
         },
       }),
     ]);

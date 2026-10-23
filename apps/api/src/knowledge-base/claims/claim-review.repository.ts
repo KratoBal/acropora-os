@@ -6,6 +6,7 @@ import {
 } from "@acropora/knowledge-base";
 
 import type { FieldName } from "../extraction/claim-check.js";
+import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import {
   ReviewInputError,
   planReview,
@@ -241,16 +242,22 @@ export function reviewOptions(): ClaimReview["options"] {
 }
 
 export class ClaimReviewRepository {
-  /** The candidate claims in a stable order: the screen's Előző / Következő. */
+  /**
+   * The candidate claims on INCLUDED sources, in a stable order: the screen's
+   * Előző / Következő. A pending or excluded source's claims are not the
+   * editor's work (barracuda, #1848 note b); the overview counts the same set.
+   */
   async queue(): Promise<{ ids: string[]; total: number }> {
     const [rows, total] = await prisma.$transaction([
       prisma.knowledgeClaim.findMany({
-        where: { status: "CANDIDATE" },
+        where: { status: "CANDIDATE", ...CLAIM_ON_INCLUDED_SOURCE },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true },
         take: QUEUE_LIMIT,
       }),
-      prisma.knowledgeClaim.count({ where: { status: "CANDIDATE" } }),
+      prisma.knowledgeClaim.count({
+        where: { status: "CANDIDATE", ...CLAIM_ON_INCLUDED_SOURCE },
+      }),
     ]);
     return { ids: rows.map((r) => r.id), total };
   }

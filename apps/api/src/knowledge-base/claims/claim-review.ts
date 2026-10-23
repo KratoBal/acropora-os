@@ -352,11 +352,26 @@ export function planReview(
         keep(field, a.normalizedValue, a.normalizedValue);
       } else {
         // the column is the machine's value from this very anchor
-        if (columnText(field, current) !== a.normalizedValue)
-          throw new ReviewInputError(
-            "STALE_FIELD",
-            `${a.field}: the claim no longer holds this value`,
-          );
+        const held = columnText(field, current);
+        if (held !== a.normalizedValue)
+          // the extractor allows two anchors on one field, and the column
+          // holds the last one's value: name that, it is not a stale claim
+          // (barracuda, #1848 note c)
+          throw anchors.some(
+            (other) =>
+              other.id !== a.id &&
+              other.owner === "CLAIM" &&
+              other.field === a.field &&
+              other.normalizedValue === held,
+          )
+            ? new ReviewInputError(
+                "DUPLICATE_FIELD_ANCHOR",
+                `${a.field}: two anchors propose this field and the claim holds the other's value; correct or reject this one`,
+              )
+            : new ReviewInputError(
+                "STALE_FIELD",
+                `${a.field}: the claim no longer holds this value`,
+              );
         keep(
           field,
           a.normalizedValue,

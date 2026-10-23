@@ -100,6 +100,13 @@ export function reviewErrorText(message: string): string {
     return `${FIELD_LABELS[coded[1]!] ?? coded[1]}: ${
       REFUSAL_TEXT[coded[2]!] ?? coded[2]
     }.`;
+  const named = /^(\w+): (two anchors propose|the claim no longer holds)/.exec(
+    message.trim(),
+  );
+  if (named)
+    return named[2] === "two anchors propose"
+      ? `${FIELD_LABELS[named[1]!] ?? named[1]}: két horgony javasol értéket erre a mezőre, és az állítás a másikét tartja. Ezt javítsd vagy vesd el.`
+      : `${FIELD_LABELS[named[1]!] ?? named[1]}: az állítás közben megváltozott. Töltsd be újra.`;
   if (/source was retracted/.test(message))
     return "A forrást visszavonták: erre az állításra nem épülhet semmi, csak elvethető.";
   if (/effect and the direction/.test(message))
