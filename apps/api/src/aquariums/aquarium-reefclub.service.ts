@@ -34,6 +34,7 @@ import {
   linkNoticeMail,
   releaseMail,
 } from "./reefclub-shop-mail.js";
+import { REEFCLUB_SHOP_MAIL_SENDER } from "./reefclub-shop-mail-sender.js";
 
 /**
  * THE OS SIDE OF THE REEFCLUB SHOP LINK (ReefClub plan v6.1, 3.3 and 3.5;
@@ -112,13 +113,26 @@ export interface CustomerReefClubLink {
 export class AquariumReefClubService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AquariumReefClubService.name);
   private timer: NodeJS.Timeout | null = null;
+  /** The ReefClub's own sender when the internal API has one, else the shared one (`reefclub-shop-mail-sender.ts`). */
+  private readonly sender: MailSender | null;
 
   constructor(
     private readonly log: NotificationLogRepository,
     @Optional()
     @Inject(MAIL_SENDER)
-    private readonly sender: MailSender | null = null,
-  ) {}
+    sharedSender: MailSender | null = null,
+    @Optional()
+    @Inject(REEFCLUB_SHOP_MAIL_SENDER)
+    reefClubSender: MailSender | null = null,
+  ) {
+    this.sender = reefClubSender ?? sharedSender;
+    // Said once at the start, so "which road did the letter take" is answered by the log, not by a guess.
+    this.logger.log(
+      reefClubSender
+        ? "A ReefClub bolti levelei (kód, összekapcsolás, mérés-értesítő) a ReefClub SMTP-küldőjén mennek (REEFCLUB_SMTP_*)."
+        : "A ReefClub bolti levelei a közös levélküldőn mennek (a belső API-n nincs REEFCLUB_SMTP_* beállítva).",
+    );
+  }
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
