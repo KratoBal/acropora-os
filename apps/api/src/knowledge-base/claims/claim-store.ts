@@ -123,23 +123,29 @@ export interface LevelRow {
   studyType: StudyType | null;
   controlled: boolean | null;
   sampleSize: number | null;
+  /** The source was retracted: nothing is built on it (plan v4). */
+  retracted: boolean;
 }
 
 /**
  * The claim's evidence level: its supporting rows through the rule table,
  * contradiction counted from its own CONTRADICTS rows and from the supporting
- * sources of a claim linked to it by a CONTRADICTS relation (either side).
+ * sources of a VERIFIED claim linked to it by a CONTRADICTS relation (either
+ * side; the caller passes only those). A retracted source's row counts on
+ * neither side: a claim verified before the retraction must not keep the
+ * level it gave (barracuda, #1867 note 1).
  */
 export function claimEvidenceLevel(
   rows: readonly LevelRow[],
   contradictingClaimSources: readonly string[],
 ): { level: EvidenceLevel | null; reasons: string[]; rulesVersion: string } {
+  const live = rows.filter((r) => !r.retracted);
   const { contradictingSources } = computeAgreement(
-    rows,
+    live,
     contradictingClaimSources,
   );
-  return deriveEvidenceLevel({
-    supporting: rows
+  const result = deriveEvidenceLevel({
+    supporting: live
       .filter((r) => r.stance === "SUPPORTS")
       .map((r) => ({
         sourceId: r.sourceId,
@@ -149,4 +155,16 @@ export function claimEvidenceLevel(
       })),
     contradictingSources,
   });
+  const dropped = [
+    ...new Set(rows.filter((r) => r.retracted).map((r) => r.sourceId)),
+  ];
+  return dropped.length === 0
+    ? result
+    : {
+        ...result,
+        reasons: [
+          ...dropped.map((id) => `retracted source ${id} ignored`),
+          ...result.reasons,
+        ],
+      };
 }

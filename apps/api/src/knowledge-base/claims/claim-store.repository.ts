@@ -158,7 +158,18 @@ const CONTRA_SELECT = {
   evidence: {
     where: { stance: "SUPPORTS" as const },
     select: {
-      passage: { select: { sourceVersion: { select: { sourceId: true } } } },
+      passage: {
+        select: {
+          sourceVersion: {
+            select: {
+              sourceId: true,
+              source: {
+                select: { versions: { select: { versionKind: true } } },
+              },
+            },
+          },
+        },
+      },
     },
   },
 } satisfies Prisma.KnowledgeClaimSelect;
@@ -265,14 +276,24 @@ function levelOf(c: ListClaim): Level {
     studyType: sourceOf(e).studyType as StudyType | null,
     controlled: sourceOf(e).controlled,
     sampleSize: e.sampleSize,
+    retracted: sourceRef(sourceOf(e)).retracted,
   }));
+  // only a VERIFIED claim contradicts, and only through a source not retracted
+  // (barracuda, #1867 notes 1 and 2)
   const contra = [
     ...c.relationsFrom.map((r) => ({ kind: r.kind, other: r.toClaim })),
     ...c.relationsTo.map((r) => ({ kind: r.kind, other: r.fromClaim })),
   ]
-    .filter((r) => r.kind === "CONTRADICTS")
+    .filter((r) => r.kind === "CONTRADICTS" && r.other.status === "VERIFIED")
     .flatMap(({ other }) =>
-      other.evidence.map((e) => e.passage.sourceVersion.sourceId),
+      other.evidence
+        .filter(
+          (e) =>
+            !e.passage.sourceVersion.source.versions.some(
+              (v) => v.versionKind === "RETRACTION",
+            ),
+        )
+        .map((e) => e.passage.sourceVersion.sourceId),
     );
   return claimEvidenceLevel(rows, contra);
 }

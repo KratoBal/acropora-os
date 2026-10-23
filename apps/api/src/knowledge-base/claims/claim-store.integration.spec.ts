@@ -231,6 +231,25 @@ describe(
       assert.equal(scientific.total, scientific.layers.SCIENTIFIC);
     });
 
+    it("a claim not verified contradicts nothing (barracuda, #1867 note 2)", async () => {
+      await prisma.knowledgeClaimRelation.create({
+        data: { fromClaimId: candidateId, toClaimId: aId, kind: "CONTRADICTS" },
+      });
+      const a = (await store.list(null)).claims.find((c) => c.id === aId)!;
+      assert.equal(a.evidenceLevel.level, "SINGLE_EXPERIMENT");
+      // the detail still shows the relation: only the level ignores it
+      assert.deepEqual(
+        (await store.detail(aId)).relationsTo.map((r) => [
+          r.claim.id,
+          r.claim.status,
+        ]),
+        [[candidateId, "CANDIDATE"]],
+      );
+      await prisma.knowledgeClaimRelation.deleteMany({
+        where: { fromClaimId: candidateId },
+      });
+    });
+
     it("a CONTRADICTS relation caps the level, and the detail shows both sides", async () => {
       await prisma.knowledgeClaimRelation.create({
         data: { fromClaimId: bId, toClaimId: aId, kind: "CONTRADICTS" },

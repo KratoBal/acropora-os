@@ -119,6 +119,7 @@ describe("claim store: evidence level", () => {
     studyType: "CONTROLLED_LAB",
     controlled: true,
     sampleSize: 6,
+    retracted: false,
     ...over,
   });
   it("two controlled experiments agree", () => {
@@ -138,6 +139,26 @@ describe("claim store: evidence level", () => {
       claimEvidenceLevel([exp("a"), exp("c", { stance: "CONTRADICTS" })], [])
         .level,
       "OBSERVATIONAL",
+    );
+  });
+  it("a retracted source supports nothing and contradicts nothing (barracuda, #1867 note 1)", () => {
+    const r = claimEvidenceLevel([exp("a"), exp("b", { retracted: true })], []);
+    assert.equal(r.level, "SINGLE_EXPERIMENT");
+    assert.equal(r.reasons[0], "retracted source b ignored");
+    assert.equal(
+      claimEvidenceLevel([exp("a", { retracted: true })], []).level,
+      null,
+    );
+    assert.equal(
+      claimEvidenceLevel(
+        [
+          exp("a"),
+          exp("b"),
+          exp("c", { stance: "CONTRADICTS", retracted: true }),
+        ],
+        [],
+      ).level,
+      "CONSISTENT_EXPERIMENTS",
     );
   });
   it("a modelling source is a single report; no study type is no level", () => {
