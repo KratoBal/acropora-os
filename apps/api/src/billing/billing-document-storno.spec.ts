@@ -447,6 +447,7 @@ describe("a Számlázz.hu felületén sztornózott saját számla a részleteken
           asked.push(number);
           return twinCancelled;
         },
+        related: async () => [],
       } as unknown as BillingDocumentsRepository);
       return [
         (await service.detail("doc-1")).cancellation ?? null,

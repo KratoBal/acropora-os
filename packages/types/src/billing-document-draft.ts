@@ -182,6 +182,29 @@ export interface BillingDocumentFinalInvoiceLink {
   status: BillingDocumentStatus;
 }
 
+/**
+ * A KIMENŐ BIZONYLATOK LÁNCA EGY HELYEN (task kimeno-kapcsolodo-bizonylatok):
+ * díjbekérő, előlegszámla, végszámla (vagy sima számla) és sztornó, MINDEN
+ * tagján ugyanaz a lista. A kapcsok (`proforma`, `advance`, `deductedAdvance`,
+ * `finalInvoice`, `cancellation`) csak egy lépést látnak; ez az egész láncot.
+ */
+export interface BillingRelatedDocument {
+  id: string;
+  /** A sztornó és a helyesbítő nem kiállítható típus (`BillingDocumentType`), de a lánc tagja. */
+  documentType: BillingDocumentType | "STORNO" | "CORRECTION";
+  /** Kiállítás előtt `null`. */
+  number: string | null;
+  status: BillingDocumentStatus;
+  /** `YYYY-MM-DD` (budapesti nap); kiállítás előtt `null`. */
+  issueDate: string | null;
+  grossAmount: DecimalText | null;
+  currency: string;
+  /** Az a bizonylat, amelynek az oldala ez. */
+  current: boolean;
+  /** Sztornón és helyesbítőn az a bizonylat, amelyet érvénytelenít; máshol `null`. */
+  cancelsId: string | null;
+}
+
 export interface BillingDocumentDetail {
   id: string;
   status: BillingDocumentStatus;
@@ -232,4 +255,6 @@ export interface BillingDocumentDetail {
   deductedAdvance?: BillingDocumentDeductedAdvance | null;
   /** Előlegszámlán a belőle készült végszámla; máshol `null`. */
   finalInvoice?: BillingDocumentFinalInvoiceLink | null;
+  /** A teljes lánc, ha a bizonylatnak van kapcsolódója; egyébként üres. */
+  relatedDocuments?: BillingRelatedDocument[];
 }

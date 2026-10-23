@@ -542,5 +542,32 @@ describe(
       });
       assert.equal(old.status, "FAILED");
     });
+
+    it("a DOI stored with a URL path before the rule existed is matched and corrected (acrobot 35681)", async () => {
+      const clean = `${DOI_PREFIX}${suffix}-pdfcase`;
+      await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${clean}/pdf`,
+          openalexId: `W${suffix}77`,
+          title: "Kitalált régi",
+          discoveredVia: "OPENALEX",
+          versions: {
+            create: { versionKind: "ORIGINAL", detectedVia: "OPENALEX" },
+          },
+        },
+      });
+      const summary = await save(
+        result([candidate({ doi: clean, openalexId: `W${suffix}77` })]),
+      );
+      assert.deepEqual(
+        [summary.created, summary.matched, summary.ambiguous.length],
+        [0, 1, 0],
+      );
+      const row = await prisma.knowledgeSource.findUniqueOrThrow({
+        where: { openalexId: `W${suffix}77` },
+      });
+      assert.equal(row.doi, clean);
+    });
   },
 );

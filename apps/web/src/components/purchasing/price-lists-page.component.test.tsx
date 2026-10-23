@@ -92,6 +92,7 @@ const uploaded = (
     autoByEan: 256,
     autoByCode: 3,
     conflicts: 4,
+    previouslyRejected: 12,
     unmatched: 6991,
   },
   ...overrides,
@@ -189,6 +190,11 @@ describe("PriceListsPage", () => {
     );
     expect(summaryText).toHaveTextContent("256 új vonalkód szerint");
     expect(summaryText).toHaveTextContent("4 ütközés (ember dönt)");
+    // a rejected match is counted on its own, not hidden among the unmatched
+    expect(summaryText).toHaveTextContent(
+      "12 korábban elutasított (nem javasoljuk újra)",
+    );
+    expect(summaryText).toHaveTextContent("6991 párosítatlan");
     // the list reloads after the upload
     await waitFor(() =>
       expect(api.list.mock.calls.length).toBeGreaterThanOrEqual(2),

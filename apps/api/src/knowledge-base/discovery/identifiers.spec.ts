@@ -36,6 +36,20 @@ describe("identifiers: one spelling per identifier", () => {
       assert.equal(normaliseDoi(s), null, String(s));
   });
 
+  it("the stage run's two broken DOIs: a URL path cut, a template refused (acrobot 35681)", () => {
+    assert.equal(
+      normaliseDoi("https://doi.org/10.1051/bioconf/202624502002/pdf"),
+      "10.1051/bioconf/202624502002",
+    );
+    assert.equal(normaliseDoi("10.1000/xyz/full"), "10.1000/xyz");
+    assert.equal(normaliseDoi("10.15578/jppi.27.2.2021.%p"), null);
+    assert.equal(normaliseDoi("10.1000/a%"), null);
+    // a real percent-encoding is decoded, not refused
+    assert.equal(normaliseDoi("10.1000/a%2Fb"), "10.1000/a/b");
+    // a word inside the suffix stays: only a trailing path segment is cut
+    assert.equal(normaliseDoi("10.1000/pdf.2020.1"), "10.1000/pdf.2020.1");
+  });
+
   it("PMID, PMCID and OpenAlex id in every spelling the APIs use", () => {
     assert.equal(
       normalisePmid("https://pubmed.ncbi.nlm.nih.gov/42467015"),

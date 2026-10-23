@@ -1,7 +1,12 @@
 import { Prisma, prisma } from "@acropora/database";
 
 import type { DiscoveryInput, DiscoveryResult } from "./discovery-run.js";
-import { stricterLicence, type Licence, LICENCES } from "./identifiers.js";
+import {
+  normaliseDoi,
+  stricterLicence,
+  type Licence,
+  LICENCES,
+} from "./identifiers.js";
 import type { SourceCandidate } from "./records.js";
 import { isStorable, versionsFor } from "./store-plan.js";
 
@@ -112,7 +117,22 @@ type MatchRow = Awaited<ReturnType<typeof matchExisting>>[number];
 function contradicts(row: MatchRow, candidate: SourceCandidate): boolean {
   return (["doi", "openalexId", "pmid", "pmcid"] as const).some(
     (field) =>
-      row[field] && candidate[field] && row[field] !== candidate[field],
+      row[field] &&
+      candidate[field] &&
+      // a DOI stored before a normalising rule existed ("…/pdf") is read by
+      // today's rule: the same work, not a second DOI (acrobot 35681)
+      (field === "doi" ? normaliseDoi(row.doi) : row[field]) !==
+        candidate[field],
+  );
+}
+
+/** A stored DOI today's rule writes differently: the row takes today's form. */
+function staleDoi(row: MatchRow, candidate: SourceCandidate): boolean {
+  return (
+    !!row.doi &&
+    !!candidate.doi &&
+    row.doi !== candidate.doi &&
+    normaliseDoi(row.doi) === candidate.doi
   );
 }
 
@@ -376,7 +396,11 @@ export class PrismaDiscoveryStore
               candidate.licence,
             );
             const fill: Prisma.KnowledgeSourceUpdateInput = {
-              ...(row.doi ? {} : candidate.doi ? { doi: candidate.doi } : {}),
+              ...(row.doi && !staleDoi(row, candidate)
+                ? {}
+                : candidate.doi
+                  ? { doi: candidate.doi }
+                  : {}),
               ...(row.openalexId
                 ? {}
                 : candidate.openalexId

@@ -43,6 +43,8 @@ export type MatchDecision =
       supplierSku: string;
       reason: "EAN_MANY" | "EAN_VS_CODE";
     }
+  /** Egy ember elutasította: az automatika erre a cikkszámra semmit nem javasol. */
+  | { kind: "REJECTED"; supplierSku: string }
   | { kind: "UNMATCHED"; supplierSku: string };
 
 export interface MatchingInput {
@@ -62,7 +64,7 @@ export function decideMatches(input: MatchingInput): MatchDecision[] {
     if (existing && existing.status !== "REJECTED")
       return { kind: "KEEP", supplierSku: sku, variantId: existing.variantId };
     // egy ember által elutasított cikkszámra az automatika semmit nem javasol
-    if (existing) return { kind: "UNMATCHED", supplierSku: sku };
+    if (existing) return { kind: "REJECTED", supplierSku: sku };
 
     const byEan = entry.gtin
       ? (input.variantsByGtin.get(entry.gtin) ?? new Set<string>())
@@ -119,6 +121,8 @@ export interface MatchingTally {
   autoByEan: number;
   autoByCode: number;
   conflicts: number;
+  /** Ember által korábban elutasított kötések: nem javasoljuk újra, és nem párosítatlanok. */
+  previouslyRejected: number;
   unmatched: number;
 }
 
@@ -130,6 +134,7 @@ export function tallyDecisions(
     autoByEan: 0,
     autoByCode: 0,
     conflicts: 0,
+    previouslyRejected: 0,
     unmatched: 0,
   };
   for (const decision of decisions) {
@@ -139,6 +144,7 @@ export function tallyDecisions(
         ? (tally.autoByEan += 1)
         : (tally.autoByCode += 1);
     else if (decision.kind === "CONFLICT") tally.conflicts += 1;
+    else if (decision.kind === "REJECTED") tally.previouslyRejected += 1;
     else tally.unmatched += 1;
   }
   return tally;

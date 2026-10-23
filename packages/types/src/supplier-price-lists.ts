@@ -50,6 +50,8 @@ export interface SupplierPriceListMatching {
   autoByCode: number;
   /** Több termékre mutat, vagy a vonalkód és a cikkszám két terméket mond: ember dönt. */
   conflicts: number;
+  /** Ember által korábban elutasított kötés: az automatika nem javasolja újra, és nem is párosítatlan. */
+  previouslyRejected: number;
   /** Nincs kötés (név alapján jön a javaslat, külön lépésben). */
   unmatched: number;
 }
