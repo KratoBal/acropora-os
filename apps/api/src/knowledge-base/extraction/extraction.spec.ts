@@ -36,6 +36,21 @@ describe("the JATS text, by section", () => {
     assert.match(sections[2]!.text, /0\.5 µM \| 1\.42 \|/);
   });
 
+  it("a numbered citation keeps its mark, so the own-findings rule sees it (barracuda 35831)", () => {
+    const xml = `<article><body><sec><title>Discussion</title>
+<p>Enrichment decreased growth<sup><xref ref-type="bibr" rid="b12">12</xref></sup>. It fell further<xref ref-type="bibr" rid="b3">3–5</xref>.</p>
+<p>As <xref ref-type="bibr" rid="b7">Neil et al., 2025</xref> showed. See <xref ref-type="fig" rid="f1">Fig. 1</xref> and <italic>Acropora</italic>.</p>
+</sec></body></article>`;
+    const text = jatsSections(xml)[0]!.text;
+    assert.match(text, /decreased growth \[12\]\. It fell further \[3–5\]\./);
+    // an author-year citation and a figure reference are left as written
+    assert.match(
+      text,
+      /As Neil et al\., 2025 showed\. See Fig\. 1 and Acropora\./,
+    );
+    // the "[12]" shape is what #1854's CITED_RESULT reads
+  });
+
   it("chunks pack whole sections, and split a long one at line breaks", () => {
     const sections = jatsSections(JATS);
     assert.equal(chunkSections(sections).length, 1);
