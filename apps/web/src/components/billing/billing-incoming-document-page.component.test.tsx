@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { IncomingDocumentDetail, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -114,6 +120,7 @@ const detail = (
   referencedProformaNumber: null,
   versionCount: 2,
   receivedAt: "2026-10-01T08:00:00.000Z",
+  relatedDocuments: [],
   ...overrides,
 });
 
@@ -230,5 +237,55 @@ describe("BillingIncomingDocumentPage", () => {
       await screen.findByText("Ehhez a számlához nem érkezett"),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("PDF csatolása")).toBeNull();
+  });
+
+  /**
+   * acrobot 35579: a díjbekérő és a számla egy várható beérkezésen áll (Várható
+   * beérkezések, rendelésszám). MI PIROSÍT: ha a kapcsolódó díjbekérő nem látszik
+   * az adatlapon; ha a fajtája, a rendelésszáma vagy az állapota nem magyarul
+   * látszik; ha kapcsolat nélkül is megjelenne egy üres szakasz.
+   */
+  it("lists the documents on the same expected arrival: the pro forma next to the invoice", async () => {
+    api.incomingDetail.mockResolvedValue(
+      detail({
+        relatedDocuments: [
+          {
+            id: "doc-proforma",
+            kind: "PROFORMA",
+            fileName: "Commande CM9876.pdf",
+            invoiceNumber: null,
+            orderReference: "13858",
+            receivedAt: "2026-09-02T09:00:00.000Z",
+            status: "READ",
+          },
+          {
+            id: "doc-old",
+            kind: "INVOICE",
+            fileName: "RE67900-v1.pdf",
+            invoiceNumber: "RE67900",
+            orderReference: "13858",
+            receivedAt: "2026-09-20T09:00:00.000Z",
+            status: "SUPERSEDED",
+          },
+        ],
+      }),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    const list = await screen.findByRole("list", {
+      name: "Kapcsolódó bizonylatok",
+    });
+    const [proforma, old] = within(list).getAllByRole("listitem");
+    expect(proforma).toHaveTextContent("Díjbekérő");
+    expect(proforma).toHaveTextContent("Commande CM9876.pdf");
+    expect(proforma).toHaveTextContent("rendelés 13858");
+    expect(proforma).toHaveTextContent("Beolvasva");
+    expect(old).toHaveTextContent("Számla · RE67900");
+    expect(old).toHaveTextContent("Javított változat váltotta");
+  });
+
+  it("shows no related-documents section when there is none", async () => {
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    await screen.findByRole("heading", { name: "E-KBOSS-2026-1234" });
+    expect(screen.queryByText("Kapcsolódó bizonylatok")).toBeNull();
   });
 });

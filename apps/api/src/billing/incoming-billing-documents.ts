@@ -9,6 +9,7 @@ import type {
   IncomingDocumentListResponse,
   IncomingPaymentState,
   IncomingReadingValues,
+  IncomingRelatedDocument,
 } from "@acropora/types";
 import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
@@ -493,10 +494,12 @@ export function toIncomingDetail(
   pairings: ReadonlyMap<string, DocumentPairing>,
   collectedPdf = false,
   manualPaid: ManualPurchasePayment | null = null,
+  relatedDocuments: IncomingRelatedDocument[] = [],
 ): IncomingDocumentDetail {
   const payments = row.payments as unknown as IncomingPayment[];
   return {
     ...toIncomingListItem(row, pairings, collectedPdf, manualPaid),
+    relatedDocuments,
     exchangeBank: row.exchangeBank,
     supplier: {
       name: row.supplierName,
