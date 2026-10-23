@@ -39,7 +39,7 @@
 #    to start the API if it fails — see that file and the "runner" stage
 #    below), and runs as a non-root user.
 
-ARG NODE_VERSION=22.23.1
+ARG NODE_VERSION=22.23.4
 ARG PNPM_VERSION=10.34.5
 # Keep in sync with the "turbo" devDependency version in the root package.json.
 ARG TURBO_VERSION=2.10.5
