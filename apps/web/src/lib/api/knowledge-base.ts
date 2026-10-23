@@ -57,9 +57,34 @@ export type ScreeningDecisionInput =
   | { decision: "EXCLUDE"; reason: ExclusionReason; note?: string }
   | { decision: "RESET" };
 
+export type OverviewStage =
+  | "DISCOVERY"
+  | "SCREENING"
+  | "EXTRACTION"
+  | "CHECKING"
+  | "CONCLUSION"
+  | "ARTICLE";
+
+export interface KnowledgeOverview {
+  question: string;
+  waiting: { sourcesToScreen: number; claimsToCheck: number; problems: number };
+  project: {
+    sources: number;
+    included: number;
+    acceptedClaims: number;
+    openChecks: number;
+    stage: OverviewStage;
+  };
+  stages: { key: OverviewStage; state: "DONE" | "ACTIVE" | "TODO" }[];
+}
+
 const base = "/knowledge-base/sources";
+const overviewPath = "/knowledge-base/overview";
 
 export const knowledgeBaseApi = {
+  overview(token: string, signal?: AbortSignal) {
+    return apiRequest<KnowledgeOverview>(overviewPath, token, { signal });
+  },
   sources(token: string, params: URLSearchParams, signal?: AbortSignal) {
     // the screen always sends at least `status`, so the query is never empty
     return apiRequest<KnowledgeSourceList>(

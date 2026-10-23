@@ -59,6 +59,8 @@ const CONTROLLERS = [
   "src/knowledge-base/extraction/extraction.controller.ts",
   // Research knowledge base, source screening (S4): knowledge.view / knowledge.manage.
   "src/knowledge-base/sources/source-screening.controller.ts",
+  // Research knowledge base, overview (S4): knowledge.view.
+  "src/knowledge-base/overview/knowledge-overview.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 
