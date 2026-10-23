@@ -13,12 +13,35 @@
 
 const DOI_PREFIXES = [/^https?:\/\/(dx\.)?doi\.org\//i, /^doi:\s*/i];
 
-/** A DOI as stored: lower case, no resolver prefix; null when it is not one. */
+/**
+ * Publisher URL paths an API sometimes leaves on a DOI: measured on the stage
+ * run of 2026-10-23 (acrobot 35681), "10.1051/bioconf/202624502002/pdf". One
+ * trailing segment is cut. A real DOI ending in one of these words would be
+ * cut too; the Crossref check after it then reports the DOI as unknown, it is
+ * not silently merged.
+ */
+const URL_ARTEFACT = /\/(?:pdf|epdf|full|fulltext|abstract|html|full\.pdf)$/;
+
+/**
+ * A DOI as stored: lower case, no resolver prefix, no publisher URL path;
+ * null when it is not one. Percent-encoding is decoded ("%2F" is "/"); a "%"
+ * that is not an encoding (an unexpanded template,
+ * "10.15578/jppi.27.2.2021.%p", the same stage run) makes the value no DOI:
+ * the work stays by its other identifiers.
+ */
 export function normaliseDoi(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   let value = raw.trim();
   for (const prefix of DOI_PREFIXES) value = value.replace(prefix, "");
-  value = value.toLowerCase();
+  // a "%" that is not a valid encoding ("%p") makes decoding throw: no DOI
+  if (value.includes("%")) {
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      return null;
+    }
+  }
+  value = value.toLowerCase().replace(URL_ARTEFACT, "");
   // registrant "10." + digits, a slash, and a non-empty suffix without spaces
   return /^10\.\d{4,9}\/\S+$/.test(value) && value.length <= 255 ? value : null;
 }
