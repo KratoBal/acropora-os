@@ -910,6 +910,7 @@ model User {
   decidedFieldAnchors    KnowledgeFieldAnchor[]        @relation("KnowledgeFieldAnchorDecidedBy")
   approvedVocabulary     KnowledgeVocabularyEntry[]    @relation("KnowledgeVocabularyApprovedBy")
   researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
+  knowledgeDiscoveryRuns KnowledgeDiscoveryRun[]       @relation("KnowledgeDiscoveryRunRequestedBy")
   email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
@@ -10617,6 +10618,9 @@ model KnowledgeSource {
   measurementMethodDetail String?
   /// A forrás saját korlátai; a horgony (kivonat) a `KnowledgeFieldAnchor`-ban.
   limitations             String?
+  /// Az a felderítő futás (S2), amelyik először hozta; NULL: kézzel rögzítve.
+  discoveryRunId          String?
+  discoveryRun            KnowledgeDiscoveryRun?      @relation(fields: [discoveryRunId], references: [id], onDelete: Restrict)
   createdAt               DateTime                    @default(now())
   updatedAt               DateTime                    @updatedAt
 
@@ -10624,6 +10628,7 @@ model KnowledgeSource {
   anchors  KnowledgeFieldAnchor[]
 
   @@index([kind])
+  @@index([discoveryRunId])
 }
 
 /// A mű egy változata: eredeti, javítás, visszavonás. Egy visszavonás a ráépülő
@@ -10808,6 +10813,40 @@ model KnowledgeVocabularyEntry {
   updatedAt    DateTime                  @updatedAt
 
   @@unique([kind, key, version])
+}
+
+enum KnowledgeDiscoveryRunStatus {
+  FINISHED
+  LIMIT_REACHED
+  INCOMPLETE
+}
+
+/// Egy forrás-felderítő futás (S2, `knowledge:discover --apply`): a pontos
+/// lekérdezések, a dátum és a találatszámok, hogy a keresés reprodukálható
+/// legyen. Csak a tárolt futás kerül ide; a próbafutás (`--apply` nélkül) nem ír.
+model KnowledgeDiscoveryRun {
+  id              String                      @id @default(cuid())
+  label           String                      @db.VarChar(120)
+  status          KnowledgeDiscoveryRunStatus
+  /// A bemeneti fájl, ahogy a futás olvasta.
+  input           Json
+  /// Lekérdezésenként: API, fajta, szöveg, pontos URL, időpont, találatszám, letöltött darab, megállás oka.
+  queries         Json
+  requestCount    Int
+  sourcesCreated  Int                         @default(0)
+  sourcesMatched  Int                         @default(0)
+  versionsCreated Int                         @default(0)
+  claimsDisputed  Int                         @default(0)
+  /// A kihagyott művek okonként, a konfliktusok és a nem elérhető API-k.
+  report          Json                        @default("{}")
+  requestedById   String
+  requestedBy     User                        @relation("KnowledgeDiscoveryRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  startedAt       DateTime
+  finishedAt      DateTime                    @default(now())
+
+  sources KnowledgeSource[]
+
+  @@index([requestedById])
 }
 
 /// Mélykutatás ideiglenes eredménye (7. pont, B mód). SOHA nem `KnowledgeClaim`:

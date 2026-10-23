@@ -1,0 +1,28 @@
+{
+  "label": "foszfat-sps-pilot-2026-10",
+  "openalex": [
+    { "search": "phosphate Acropora", "maxResults": 100 },
+    { "search": "phosphate enrichment coral calcification", "maxResults": 50 },
+    { "search": "phosphate limitation coral bleaching", "maxResults": 50 }
+  ],
+  "europePmc": [
+    { "query": "phosphate AND Acropora", "maxResults": 200 },
+    {
+      "query": "phosphate enrichment coral calcification AND OPEN_ACCESS:y",
+      "maxResults": 100
+    }
+  ],
+  "dois": [
+    "10.1016/S0025-326X(00)00181-8",
+    "10.1038/nclimate1661",
+    "10.1016/j.marpolbul.2017.02.044",
+    "10.1016/j.cosust.2013.11.029"
+  ],
+  "citations": [
+    {
+      "doi": "10.1016/j.cosust.2013.11.029",
+      "direction": "references",
+      "maxResults": 100
+    }
+  ]
+}

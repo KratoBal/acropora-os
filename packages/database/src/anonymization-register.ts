@@ -1674,4 +1674,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     summary: "business",
     summaryModel: "business",
   },
+  // Source discovery runs (S2): the queries, URLs and counts of a literature
+  // search, no customer data.
+  KnowledgeDiscoveryRun: {
+    label: "business",
+    input: "business",
+    queries: "business",
+    report: "business",
+  },
 };
