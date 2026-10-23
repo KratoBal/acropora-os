@@ -444,4 +444,58 @@ describe("a hiányzó számlák hónapja", { skip: gate.mode === "skip" }, () =>
       [SUPPLIER, "-76096", "HUF"],
     );
   });
+
+  /*
+    A PDF-E, A TARTALOM DÖNTI, NEM A FÁJLNÉV (task pdf-tartalom-felismeres). MI
+    PIROSÍT: ha a `.xml` nevű, de PDF tartalmú fájl nem PDF; ha a `.pdf` nevű XML
+    PDF-nek számít; ha a kiterjesztés nélküli PDF nem PDF; ha a tartalom nélküli
+    (üres) fájl PDF.
+  */
+  it("takes a file for a PDF by its %PDF- header, not by its name", async () => {
+    const make = async (
+      key: string,
+      fileName: string,
+      content: string,
+    ): Promise<string> =>
+      (
+        await prisma.incomingSupplierDocument.create({
+          data: {
+            gmailMessageId: `collect:INFO_MAIL:hianyzo-it-pdf-${key}`,
+            fileName,
+            sizeBytes: content.length,
+            sha256: `hianyzo-it-pdf-${key}`,
+            content: new Uint8Array(Buffer.from(content)),
+            status: "FAILED",
+            kind: "INVOICE",
+            origin: "COLLECTED_MAIL",
+            receivedAt: new Date("2026-08-10T09:00:00Z"),
+            payeeCheck: "COMPANY",
+            textReading: {
+              invoiceNumber: `HIANYZOTESZT-PDF-${key}`,
+              numberFrom: "LABEL",
+              supplierTaxNumber: "99999999-2-42",
+              gross: "1000",
+              currency: "HUF",
+            },
+          },
+          select: { id: true },
+        })
+      ).id;
+    const xmlNamedPdf = await make("a", "szamla.xml", "%PDF-1.4 teszt");
+    const pdfNamedXml = await make("b", "szamla.pdf", "<xml>nem pdf</xml>");
+    const noExtension = await make("c", "szamla", "%PDF-1.7 teszt");
+    const empty = await make("d", "ures.pdf", "");
+    const candidates = await new MissingInvoicesRepository().candidates(
+      "2026-08-01",
+      "2026-08-31",
+    );
+    const flag = (id: string) =>
+      candidates.find((d) => d.id === id)?.originalIsPdf;
+    assert.deepEqual([xmlNamedPdf, pdfNamedXml, noExtension, empty].map(flag), [
+      true,
+      false,
+      true,
+      false,
+    ]);
+  });
 });
