@@ -410,6 +410,7 @@ export const KNOWLEDGE_BASE_PATH = "/tudasbazis";
 export const KNOWLEDGE_SOURCES_PATH = "/tudasbazis/forrasok";
 export const KNOWLEDGE_CLAIMS_PATH = "/tudasbazis/kiolvasas";
 export const KNOWLEDGE_VOCABULARY_PATH = "/tudasbazis/szotar";
+export const KNOWLEDGE_STORE_PATH = "/tudasbazis/allitasok";
 
 export const secondaryNavigation: AppNavigationItem[] = [
   {

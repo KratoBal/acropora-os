@@ -202,6 +202,97 @@ export interface ClaimReviewInput {
   applicability: { value: Applicability; reason: string } | null;
 }
 
+export type ClaimLayer =
+  "SCIENTIFIC" | "HOBBY_EXPERIENCE" | "MANUFACTURER" | "OWN_CONCLUSION";
+
+export type EvidenceLevel =
+  | "SINGLE_REPORT"
+  | "OBSERVATIONAL"
+  | "SINGLE_EXPERIMENT"
+  | "CONSISTENT_EXPERIMENTS";
+
+export interface LabelledKey {
+  key: string;
+  label: string;
+}
+
+export interface ClaimSourceRef {
+  id: string;
+  title: string;
+  year: number | null;
+  retracted: boolean;
+}
+
+export interface ClaimEvidenceLevel {
+  level: EvidenceLevel | null;
+  reasons: string[];
+  rulesVersion: string;
+}
+
+/** Állítás-tár sor (S5): a cím a normalizált mezőkből képzett, nincs szöveg-oszlop. */
+export interface ClaimStoreItem {
+  id: string;
+  layer: ClaimLayer;
+  status: string;
+  title: string;
+  effect: LabelledKey | null;
+  direction: string | null;
+  quantity: string | null;
+  species: LabelledKey[];
+  sources: ClaimSourceRef[];
+  evidenceLevel: ClaimEvidenceLevel;
+  controlled: boolean | null;
+  sampleSize: { value: number; unit: string | null } | null;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface ClaimStoreList {
+  claims: ClaimStoreItem[];
+  total: number;
+  layers: Record<ClaimLayer, number>;
+}
+
+export interface ClaimRelation {
+  kind: string;
+  note: string | null;
+  claim: { id: string; title: string; status: string; layer: ClaimLayer };
+}
+
+export interface ClaimStoreDetail extends Omit<
+  ClaimStoreItem,
+  "sources" | "controlled" | "sampleSize"
+> {
+  evidence: {
+    id: string;
+    stance: string;
+    source: ClaimSourceRef & {
+      doi: string | null;
+      url: string | null;
+      studyType: string | null;
+      controlled: boolean | null;
+    };
+    passage: { text: string; locator: string; verifiedVerbatim: boolean };
+    species: LabelledKey[];
+    environment: LabelledKey | null;
+    sampleSize: { value: number; unit: string | null } | null;
+    uncertainty: string | null;
+    conditions: string | null;
+    applicability: { value: Applicability; reason: string | null } | null;
+    anchors: {
+      field: string;
+      value: string | null;
+      decision: string;
+      passage: { text: string; locator: string };
+    }[];
+  }[];
+  relationsFrom: ClaimRelation[];
+  relationsTo: ClaimRelation[];
+  validFrom: string | null;
+  validUntil: string | null;
+  createdAt: string;
+}
+
 const base = "/knowledge-base/sources";
 const claimsBase = "/knowledge-base/claims";
 const overviewPath = "/knowledge-base/overview";
@@ -219,6 +310,22 @@ export const knowledgeBaseApi = {
       {
         signal,
       },
+    );
+  },
+  claimStore(token: string, layer: ClaimLayer | null, signal?: AbortSignal) {
+    // an empty query is all four layers
+    const params = new URLSearchParams(layer ? { layer } : {});
+    return apiRequest<ClaimStoreList>(
+      `${claimsBase}?${params.toString()}`,
+      token,
+      { signal },
+    );
+  },
+  claimDetail(token: string, claimId: string, signal?: AbortSignal) {
+    return apiRequest<ClaimStoreDetail>(
+      `${claimsBase}/${encodeURIComponent(claimId)}/detail`,
+      token,
+      { signal },
     );
   },
   reviewQueue(token: string, signal?: AbortSignal) {
