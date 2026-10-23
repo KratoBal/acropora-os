@@ -16,9 +16,10 @@
  *               units, is an observation)
  *        FIELD_OBSERVATIONAL, AQUARIUM_SURVEY, OWN_MEASUREMENT
  *            -> OBSERVATIONAL
- *        AQUARIUM_CASE, MANUFACTURER, REVIEW
+ *        AQUARIUM_CASE, MANUFACTURER, REVIEW, MODELLING
  *            -> SINGLE_REPORT (a narrative review restates others' results;
- *               it is not new evidence)
+ *               it is not new evidence; a model or simulation computes an
+ *               outcome from assumptions, it observes none: acrobot 35808)
  *      A source without a study type is unclassified and counts for nothing.
  *   2. The claim takes the best tier among its supporting sources.
  *   3. Two or more DISTINCT sources at SINGLE_EXPERIMENT, with no
@@ -66,6 +67,7 @@ export const STUDY_TYPES = [
   "META_ANALYSIS",
   "MANUFACTURER",
   "OWN_MEASUREMENT",
+  "MODELLING",
 ] as const;
 export type StudyType = (typeof STUDY_TYPES)[number];
 

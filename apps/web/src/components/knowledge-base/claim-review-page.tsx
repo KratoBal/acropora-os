@@ -97,6 +97,8 @@ const REFUSAL_TEXT: Record<string, string> = {
   UNKNOWN_VALUE: "érvénytelen érték",
   NO_VALUE: "hiányzó érték",
   ANCHOR_TOO_SHORT: "a horgony túl rövid ehhez a mezőhöz",
+  QUANTITY_NOT_PHOSPHATE:
+    "a horgony nem foszfát-értékről szól (nitrát, ammónium): ez nem a foszfát mennyisége, vesd el",
 };
 
 export function reviewErrorText(message: string): string {
@@ -829,17 +831,20 @@ function FieldRow(props: {
         ) : null}
       </div>
       {f.field === "quantity" &&
-      review.quantity?.normalizedMinMgL !== null &&
       review.quantity &&
       local?.decision !== "CORRECT" ? (
         <p className="text-sm text-pilot-grey-600">
-          ≈{" "}
-          {quantityLabel(
-            review.quantity.normalizedMinMgL,
-            review.quantity.normalizedMaxMgL,
-            "mg/l",
-            "PO4",
-          )}
+          {/* only a phosphate value is converted (acrobot 35808): a nitrate
+              shown as mg/l PO4 was a false number on the editor's screen */}
+          {review.quantity.normalizedMinMgL !== null ||
+          review.quantity.normalizedMaxMgL !== null
+            ? `≈ ${quantityLabel(
+                review.quantity.normalizedMinMgL,
+                review.quantity.normalizedMaxMgL,
+                "mg/l",
+                "PO4",
+              )}`
+            : "Nincs átváltva mg/l PO₄-re: a horgony nem foszfát-értékről szól, ez a mennyiség nem fogadható el."}
         </p>
       ) : null}
       {props.addingVocab ? (

@@ -1,4 +1,4 @@
-import type { Vocabulary } from "@acropora/knowledge-base";
+import { phosphateNamed, type Vocabulary } from "@acropora/knowledge-base";
 
 import {
   FIELD_NAMES,
@@ -364,6 +364,12 @@ export function planReview(
       continue;
     }
     if (d.decision === "ACCEPT") {
+      // a row stored before the rule: its nitrate is no phosphate quantity
+      if (field === "quantity" && !phosphateNamed(a.text))
+        throw new ReviewInputError(
+          "QUANTITY_NOT_PHOSPHATE",
+          `${a.field}: QUANTITY_NOT_PHOSPHATE`,
+        );
       if (a.normalizedValue === null)
         throw new ReviewInputError(
           "QUESTION_NOT_ACCEPTABLE",

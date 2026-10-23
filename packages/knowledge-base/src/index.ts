@@ -58,6 +58,8 @@ export {
   basisWritten,
   numbersAtUnit,
   numbersOf,
+  oneSidedBound,
+  phosphateNamed,
   squash,
   taxonInText,
   unitWritten,

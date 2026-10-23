@@ -10493,6 +10493,8 @@ enum KnowledgeStudyType {
   META_ANALYSIS
   MANUFACTURER
   OWN_MEASUREMENT
+  /// Modell vagy szimuláció: feltevésekből számol, nem figyel meg hatást (acrobot 35808).
+  MODELLING
 }
 
 /// A mérési módszer, zárt lista; a pontosítás a `measurementMethodDetail`-ben.
