@@ -4,8 +4,8 @@ import { describe, it } from "node:test";
 import { checkSentence, type ClaimScope } from "./compare.js";
 import {
   buildVocabulary,
-  DRAFT_VOCABULARY_ROWS,
-  draftVocabulary,
+  VOCABULARY_V1_ROWS,
+  vocabularyV1,
 } from "./vocabulary.js";
 
 /**
@@ -17,7 +17,7 @@ import {
  * The fixture claim: a controlled field experiment on Acropora, phosphate
  * 0.3-1 µmol/l (0.0285-0.095 mg/l PO4) decreasing calcification.
  */
-const vocabulary = draftVocabulary();
+const vocabulary = vocabularyV1();
 const opts = { allowDraftVocabulary: true };
 
 const ACROPORA_FIELD: ClaimScope = {
@@ -380,15 +380,18 @@ describe("guards the table relies on", () => {
   });
 
   it("a DRAFT vocabulary gates nothing unless the caller opts in", () => {
-    const got = checkSentence(BASE, ACROPORA_FIELD, vocabulary).failures.map(
+    const draft = buildVocabulary(
+      VOCABULARY_V1_ROWS.map((r) => ({ ...r, status: "DRAFT" as const })),
+    );
+    const got = checkSentence(BASE, ACROPORA_FIELD, draft).failures.map(
       (f) => f.code,
     );
     assert.deepEqual(got, ["VOCABULARY_NOT_APPROVED"]);
-    const approved = buildVocabulary(
-      DRAFT_VOCABULARY_ROWS.map((r) => ({ ...r, status: "APPROVED" as const })),
-    );
+    // version 1 is approved: the same sentence passes with no opt-in
     assert.deepEqual(
-      checkSentence(BASE, ACROPORA_FIELD, approved).failures.map((f) => f.code),
+      checkSentence(BASE, ACROPORA_FIELD, vocabulary).failures.map(
+        (f) => f.code,
+      ),
       [],
     );
   });

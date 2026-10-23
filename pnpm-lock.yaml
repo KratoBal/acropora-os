@@ -42,6 +42,9 @@ importers:
       '@acropora/jev':
         specifier: workspace:*
         version: link:../../packages/jev
+      '@acropora/knowledge-base':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-base
       '@acropora/rich-text':
         specifier: workspace:*
         version: link:../../packages/rich-text

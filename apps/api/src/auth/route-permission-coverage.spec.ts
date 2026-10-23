@@ -55,6 +55,8 @@ const CONTROLLERS = [
   "src/products/product-enrichment-queue.controller.ts",
   // Research knowledge base, source discovery (S2): knowledge.research.run.
   "src/knowledge-base/discovery/discovery-run.controller.ts",
+  // Research knowledge base, claim extraction (S3): knowledge.research.run.
+  "src/knowledge-base/extraction/extraction.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 
