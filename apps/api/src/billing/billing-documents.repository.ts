@@ -2,10 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { contractBilledLines } from "../contracts/contract-billed-lines.js";
 import { prisma, Prisma } from "@acropora/database";
 
-import type { BillingRelatedDocument } from "@acropora/types";
-
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
-import { loadRelatedBillingDocuments } from "./billing-document-related.js";
+import {
+  loadRelatedBillingDocuments,
+  type RelatedBillingDocuments,
+} from "./billing-document-related.js";
 
 /**
  * A SZÁMLÁZÁS MODUL SAJÁT SORAI: kimenő, Számlázz.hu-forrású bizonylat,
@@ -296,7 +297,7 @@ export class BillingDocumentsRepository {
   }
 
   /** A bizonylat teljes lánca (díjbekérő, előleg, végszámla, sztornó); üres, ha nincs kapcsolódója. */
-  related(id: string): Promise<BillingRelatedDocument[]> {
+  related(id: string): Promise<RelatedBillingDocuments> {
     return loadRelatedBillingDocuments(this.database, id);
   }
 

@@ -123,7 +123,7 @@ function setup(
       return "ok";
     },
     feedPaid: async () => null,
-    related: async () => [],
+    related: async () => ({ documents: [], truncated: false }),
     feedTwinCancelled: async () => options.feedCancelled ?? false,
     finalInvoiceOf: async (advanceId: string) => {
       const final = rows[finalIdFor(advanceId)];
