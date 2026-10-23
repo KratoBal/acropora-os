@@ -53,6 +53,8 @@ const CONTROLLERS = [
   "src/products/product-enrichment-review.controller.ts",
   // JEV catalogue queue (PD-013): read only, products.view.
   "src/products/product-enrichment-queue.controller.ts",
+  // Research knowledge base, source discovery (S2): knowledge.research.run.
+  "src/knowledge-base/discovery/discovery-run.controller.ts",
   /*
     A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
 

@@ -37,6 +37,7 @@
     "brands:merge": "tsc -p tsconfig.json && node --env-file=../../.env dist/brands/brand-merge.cli.js",
     "unas:brand-master": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-master.cli.js",
     "jev:enrich": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/enrichment/enrichment-run.cli.js",
+    "knowledge:discover": "tsc -p tsconfig.json && node --env-file=../../.env dist/knowledge-base/discovery/discovery-run.cli.js",
     "knowledge:auto-accept": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/knowledge/knowledge-auto-accept.cli.js",
     "unas:brand-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-brand-backfill.cli.js",
     "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",

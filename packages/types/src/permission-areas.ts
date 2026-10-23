@@ -195,6 +195,12 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
   },
   { key: "ai-test", label: "AI teszt", view: P.AI_TEST_VIEW, extras: [] },
   {
+    key: "knowledge-research",
+    label: "Kutatási tudástár",
+    manage: P.KNOWLEDGE_RESEARCH_RUN,
+    extras: [],
+  },
+  {
     key: "settings",
     label: "Beállítások",
     manage: P.SETTINGS_MANAGE,
