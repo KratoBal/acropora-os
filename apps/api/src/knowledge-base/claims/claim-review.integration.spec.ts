@@ -236,17 +236,44 @@ describe(
       assert.equal(review.quantity?.unit, "µmol/l");
       assert.equal(review.quantity?.normalizedMinMgL, null);
       assert.equal(review.quantity?.normalizedMaxMgL, null);
+      // accepted as it is, the nitrate would stay in a phosphate claim: refused
+      // (barracuda 35814 a), and nothing is written
+      await assert.rejects(
+        repository.save(
+          nitrateClaimId,
+          { decisions: decisions(review), applicability: null },
+          userId,
+        ),
+        (e: unknown) =>
+          e instanceof ReviewInputError && e.code === "QUANTITY_NOT_PHOSPHATE",
+      );
+      assert.equal(
+        (await repository.detail(nitrateClaimId)).status,
+        "CANDIDATE",
+      );
+      // rejected, the claim is saved without a quantity
+      const quantity = review.fields.find((f) => f.field === "quantity")!;
       const saved = await repository.save(
         nitrateClaimId,
-        { decisions: decisions(review), applicability: null },
+        {
+          decisions: decisions(review, {
+            [quantity.anchorId]: { decision: "REJECT" },
+          }),
+          applicability: null,
+        },
         userId,
       );
       assert.equal(saved.status, "VERIFIED");
       const after = await prisma.knowledgeClaim.findUniqueOrThrow({
         where: { id: nitrateClaimId },
-        select: { normalizedMinMgL: true, normalizedMaxMgL: true },
+        select: {
+          originalUnit: true,
+          normalizedMinMgL: true,
+          normalizedMaxMgL: true,
+        },
       });
       assert.deepEqual(after, {
+        originalUnit: null,
         normalizedMinMgL: null,
         normalizedMaxMgL: null,
       });

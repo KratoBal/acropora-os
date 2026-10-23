@@ -3,7 +3,11 @@ import { describe, it } from "node:test";
 
 import { vocabularyV1 } from "@acropora/knowledge-base";
 
-import { checkClaims } from "./claim-check.js";
+import {
+  checkClaims,
+  keepOwnFindings,
+  type CheckedClaim,
+} from "./claim-check.js";
 import { claimAnswerOf } from "./claim-extractor.js";
 import { extractSource, type ExtractionDeps } from "./extraction-run.js";
 import { JATS, PASSAGE, aiClaim } from "./extraction-test-fixtures.js";
@@ -198,16 +202,18 @@ describe("the OS's own check of the AI's claims", () => {
     );
   });
 
-  it("only a phosphate value is converted, and a '<' number is an upper bound alone (acrobot 35808)", () => {
+  it("only a phosphate value is a quantity, and a '<' number is an upper bound alone (acrobot 35808, barracuda 35814)", () => {
     const text = [
       PASSAGE,
       "Bleaching was aggravated when nitrate exceeded 9 µmol/l, and mitigated below 9 µM ammonium.",
       "Under heat stress, colonies kept at nitrate < 9 µmol L−1 bleached less.",
       "Inflowing water held 0.58 ± 0.20 µM phosphate.",
       "Growth was highest at < 0.1 mg/L PO4.",
+      "Colonies kept at phosphate < 2 µmol L−1 grew more; when phosphate exceeded 1 µM they bleached.",
+      "Tanks not exceeding 3 µM phosphate kept their colour.",
     ].join("\n");
-    const quantityOf = (quantity: Record<string, unknown>) => {
-      const claim = checkClaims(
+    const checked = (quantity: Record<string, unknown>) =>
+      checkClaims(
         [
           aiClaim({
             fields: [{ field: "quantity", ...quantity }],
@@ -217,54 +223,28 @@ describe("the OS's own check of the AI's claims", () => {
         [{ locator: "Results", text }],
         vocabulary,
       ).claims[0]!;
+    const quantityOf = (quantity: Record<string, unknown>) => {
+      const claim = checked(quantity);
       assert.deepEqual(claim.refused, []);
       return claim.quantity;
     };
-    // the case on stage: a nitrate of 9 µmol/l, given as 9-9, shown as 0.85 mg/l PO4
-    assert.deepEqual(
-      quantityOf({
-        min: 9,
-        max: 9,
-        unit: "µmol/l",
-        basis: null,
-        anchor: "colonies kept at nitrate < 9 µmol L−1",
-      }),
-      {
-        min: null,
-        max: 9,
-        unit: "µmol/l",
-        basis: null,
-        normalizedMinMgL: null,
-        normalizedMaxMgL: null,
-      },
-    );
-    // a lower bound, written in words; still nitrate, still unconverted
-    assert.deepEqual(
-      quantityOf({
-        min: 9,
-        max: null,
-        unit: "µmol/l",
-        anchor: "when nitrate exceeded 9 µmol/l",
-      }),
-      {
-        min: 9,
-        max: null,
-        unit: "µmol/l",
-        basis: null,
-        normalizedMinMgL: null,
-        normalizedMaxMgL: null,
-      },
-    );
-    // phosphate named next to ammonium: not decided by a rule, not converted
-    assert.equal(
-      quantityOf({
-        min: 9,
-        max: 9,
-        unit: "µmol/l",
-        anchor: "and mitigated below 9 µM ammonium",
-      })?.normalizedMaxMgL,
-      null,
-    );
+    const unconverted = { normalizedMinMgL: null, normalizedMaxMgL: null };
+    // the case on stage: a nitrate of 9 µmol/l in a phosphate claim is no
+    // quantity of it at all (a later gate would read it as PO4: barracuda 35814 a)
+    for (const anchor of [
+      "colonies kept at nitrate < 9 µmol L−1",
+      "when nitrate exceeded 9 µmol/l",
+      // phosphate named next to ammonium: not decided by a rule
+      "and mitigated below 9 µM ammonium",
+    ]) {
+      const claim = checked({ min: 9, max: 9, unit: "µmol/l", anchor });
+      assert.deepEqual(
+        claim.refused,
+        [{ field: "quantity", refusal: "QUANTITY_NOT_PHOSPHATE" }],
+        anchor,
+      );
+      assert.equal(claim.quantity, null);
+    }
     // a phosphate value converts as before; a plain value keeps both ends
     assert.deepEqual(
       quantityOf({
@@ -298,6 +278,57 @@ describe("the OS's own check of the AI's claims", () => {
         basis: "PO4",
         normalizedMinMgL: null,
         normalizedMaxMgL: 0.1,
+      },
+    );
+    // the stage shape on phosphate: 2-2 given, "< 2" written
+    assert.deepEqual(
+      quantityOf({
+        min: 2,
+        max: 2,
+        unit: "µmol/l",
+        anchor: "kept at phosphate < 2 µmol L−1",
+      }),
+      {
+        min: null,
+        max: 2,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMaxMgL: 0.18994,
+      },
+    );
+    // a lower bound, written in words
+    assert.deepEqual(
+      quantityOf({
+        min: 1,
+        max: null,
+        unit: "µmol/l",
+        anchor: "when phosphate exceeded 1 µM",
+      }),
+      {
+        min: 1,
+        max: null,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMinMgL: 0.09497,
+      },
+    );
+    // "not exceeding" is an upper bound, not both (barracuda 35814 b)
+    assert.deepEqual(
+      quantityOf({
+        min: 3,
+        max: 3,
+        unit: "µmol/l",
+        anchor: "Tanks not exceeding 3 µM phosphate",
+      }),
+      {
+        min: null,
+        max: 3,
+        unit: "µmol/l",
+        basis: null,
+        ...unconverted,
+        normalizedMaxMgL: 0.28491,
       },
     );
   });
@@ -433,6 +464,31 @@ describe("extracting one source", () => {
     ]);
   });
 
+  it("only own findings reach the store, and the study's fields once (acrobot 35808)", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({
+          kind: "ANSWER",
+          claims: [
+            aiClaim(),
+            aiClaim(),
+            aiClaim({
+              passage: { text: "Treatments were 0.5 and 2 µM phosphate." },
+            }),
+          ],
+          refusedClaims: [],
+          extractedBy: "m claim-extraction/v1",
+        }),
+      },
+    });
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.refusedClaims.METHODS_PASSAGE, 1);
+    assert.equal(outcome.claims, 2);
+    // the second claim's study type and method are the first one's: not stored again
+    assert.ok(outcome.fields < 18, String(outcome.fields));
+    assert.ok(d.calls.includes("save:2:m claim-extraction/v1:64"));
+  });
+
   it("a stored run's id reaches the store, so a stale-failed run cannot write", async () => {
     const d = deps({ runId: "run-9" });
     await extractSource("src1", true, d.value);
@@ -530,5 +586,197 @@ describe("extracting one source", () => {
       ["SKIPPED", "AI_UNAVAILABLE", { timeout: 1 }],
     );
     assert.ok(!silent.calls.some((c) => c.startsWith("save:")));
+  });
+});
+
+describe("only this source's own findings (acrobot 35808, the first eleven on stage)", () => {
+  const base = (over: Partial<CheckedClaim>): CheckedClaim => ({
+    passage: {
+      text: "Calcification decreased by 18 % at 2 µM phosphate.",
+      locator: "Results",
+    },
+    species: null,
+    environment: null,
+    effect: "CALCIFICATION",
+    direction: "DECREASE",
+    quantity: null,
+    studyType: "CONTROLLED_LAB",
+    measurementMethod: null,
+    sampleSize: null,
+    uncertainty: null,
+    conditions: null,
+    anchors: [
+      {
+        field: "effect",
+        text: "Calcification decreased",
+        locator: "Results",
+        normalizedValue: "CALCIFICATION",
+      },
+      {
+        field: "studyType",
+        text: "compared with the control",
+        locator: "Methods",
+        normalizedValue: "CONTROLLED_LAB",
+      },
+    ],
+    refused: [],
+    ...over,
+  });
+
+  it("a cited result, a methods sentence and a background value are no claims", () => {
+    const cases: [Partial<CheckedClaim>, string | null][] = [
+      [{}, null],
+      [
+        {
+          passage: {
+            text: "As Neil et al. (2025) showed, growth fell.",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Reef waters hold < 0.1 µM phosphate (Tanaka et al., 2007).",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Enrichment causes bleaching (Wiedenmann, 2013; Vega Thurber 2014).",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Wiedenmann (2013) found the same.",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Phosphate limitation was reported [12, 14].",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Tissue was homogenised in PBS.",
+            locator: "Materials and methods",
+          },
+        },
+        "METHODS_PASSAGE",
+      ],
+      [
+        {
+          passage: {
+            text: "Nutrients were measured by autoanalyzer.",
+            locator: "2. Methods (2/3)",
+          },
+        },
+        "METHODS_PASSAGE",
+      ],
+      [{ effect: null, direction: null, anchors: [] }, "NO_FINDING"],
+      // an effect question still makes it a finding
+      [
+        {
+          effect: null,
+          direction: null,
+          anchors: [
+            {
+              field: "effect",
+              text: "microbiome composition shifted",
+              locator: "Results",
+              normalizedValue: null,
+              proposed: "MICROBIOMECOMPOSITION",
+            },
+          ],
+        },
+        null,
+      ],
+      // the year of a temperature or a range is no citation
+      [
+        {
+          passage: {
+            text: "In 2019 growth fell at 2 µM phosphate (n = 12).",
+            locator: "Results",
+          },
+        },
+        null,
+      ],
+    ];
+    for (const [over, refusal] of cases) {
+      const r = keepOwnFindings([base(over)]);
+      assert.deepEqual(
+        r.refusedClaims,
+        refusal ? [refusal] : [],
+        JSON.stringify(over.passage ?? over),
+      );
+      assert.equal(r.claims.length, refusal ? 0 : 1);
+    }
+  });
+
+  it("the study's own fields once per source; two different values keep neither", () => {
+    const same = keepOwnFindings([base({}), base({}), base({})]);
+    assert.deepEqual(
+      same.claims.map(
+        (c) => c.anchors.filter((a) => a.field === "studyType").length,
+      ),
+      [1, 0, 0],
+    );
+    assert.deepEqual(same.refusedFields, []);
+    const differ = keepOwnFindings([
+      base({}),
+      base({
+        studyType: "MODELLING",
+        anchors: [
+          {
+            field: "effect",
+            text: "Calcification decreased",
+            locator: "Results",
+            normalizedValue: "CALCIFICATION",
+          },
+          {
+            field: "measurementMethod",
+            text: "measured by autoanalyzer",
+            locator: "Methods",
+            normalizedValue: "AUTOANALYZER",
+          },
+          {
+            field: "studyType",
+            text: "a photophysiological model",
+            locator: "Abstract",
+            normalizedValue: "MODELLING",
+          },
+        ],
+      }),
+    ]);
+    assert.deepEqual(differ.refusedFields, ["SOURCE_FIELD_CONFLICT"]);
+    assert.ok(
+      differ.claims.every(
+        (c) =>
+          c.studyType === null &&
+          !c.anchors.some((a) => a.field === "studyType"),
+      ),
+    );
+    // the other source field is untouched
+    assert.equal(
+      differ.claims[1]!.anchors.filter((a) => a.field === "measurementMethod")
+        .length,
+      1,
+    );
   });
 });

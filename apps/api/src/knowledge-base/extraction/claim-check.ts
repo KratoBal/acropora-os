@@ -30,9 +30,9 @@ import type { TextSection } from "./jats-text.js";
  *   a species shows in its anchor by its Latin name: otherwise the value is
  *   an editor's QUESTION, never a field;
  * - a quantity's numbers stand directly before their unit, a mass unit names
- *   its basis, a "<" or ">" before its one number makes it a one-sided bound,
- *   and the value is normalised to mg/l PO4 by code, only when the anchor is
- *   about phosphate (a nitrate stays unconverted);
+ *   its basis, the anchor names phosphate and no nitrogen compound (else
+ *   QUANTITY_NOT_PHOSPHATE), a "<" or ">" before its one number makes it a
+ *   one-sided bound, and the value is normalised to mg/l PO4 by code;
  * - a sample size is a number of its anchor; an uncertainty or conditions
  *   value is inside its anchor; the closed values are of their lists.
  * Anything that fails is a refusal with its code, counted, never stored.
@@ -69,6 +69,7 @@ const STUDY_TYPES = [
   "META_ANALYSIS",
   "MANUFACTURER",
   "OWN_MEASUREMENT",
+  "MODELLING",
 ] as const;
 const MEASUREMENT_METHODS = [
   "COLORIMETRIC_KIT",
@@ -403,6 +404,11 @@ export function checkClaims(
             !basisWritten(basis, anchor)
           )
             refuse(field, "BASIS_NOT_IN_ANCHOR");
+          // a nitrate or ammonium number in a phosphate claim is no quantity of
+          // it: stored unconverted, a later gate would still read it as PO4
+          // (barracuda 35814 a, acrobot 35816)
+          else if (!phosphateNamed(anchor))
+            refuse(field, "QUANTITY_NOT_PHOSPHATE");
           else {
             // "< 9 µM" is an upper bound with no lower one: the model gave it
             // as 9-9 (acrobot 35808); one number, read by its own comparator
@@ -412,11 +418,9 @@ export function checkClaims(
               single === null ? null : oneSidedBound(unit, anchor, single);
             if (bound === "UPPER") [min, max] = [null, single];
             if (bound === "LOWER") [min, max] = [single, null];
-            // the conversion is code, never the model (plan 6, Mértékegység),
-            // and only of a phosphate value: a nitrate is no mg/l PO4
-            const phosphate = phosphateNamed(anchor);
+            // the conversion is code, never the model (plan 6, Mértékegység)
             const norm = (n: number | null) =>
-              n === null || !phosphate
+              n === null
                 ? null
                 : nine(
                     toMgPerLitrePo4({ value: n, unit, basis: basis ?? "PO4" }),
@@ -438,4 +442,92 @@ export function checkClaims(
     result.claims.push(claim);
   }
   return result;
+}
+
+/**
+ * A CLAIM IS THIS SOURCE'S OWN FINDING (acrobot's review of the first eleven
+ * stage claims, 35808: nine of eleven were not findings). Applied to an
+ * extraction's checked claims, never to an editor's correction (that one is
+ * checked on its single anchor, whose section may well be Methods):
+ * - a passage in the methods section describes how, not what was found
+ *   (METHODS_PASSAGE); its fields (species, sample size) may still anchor there;
+ * - a passage that cites another work ("Neil et al. (2025)", "(Tanaka et al.,
+ *   2007)", "[12]") reports someone else's result: this source is not its
+ *   evidence (CITED_RESULT). Over-caution by design: an own result stated
+ *   together with a citation is dropped too, and the editor can add it by hand;
+ * - a claim with neither an effect (a field or a question) nor a direction is
+ *   a background value, not a finding (NO_FINDING);
+ * - the study's own fields (study type, method) are stored once per source:
+ *   a repeated value keeps its first anchor, and two different values for one
+ *   field keep neither (SOURCE_FIELD_CONFLICT), since a source has one design.
+ */
+const METHODS_SECTION =
+  /(?<![a-z])(?:methods?|methodology|materials)(?![a-z])/i;
+const CITATION = new RegExp(
+  [
+    // "et al", the commonest form
+    "(?<![\\p{L}])et al(?![\\p{L}])",
+    // "(Tanaka, 2007)", "(Vega Thurber 2014; ...)", "(Smith and Jones, 2019a)"
+    "\\(\\s*\\p{Lu}[\\p{L}'’-]+(?:\\s+(?:\\p{Lu}[\\p{L}'’-]+|and|&))*,?\\s+(?:19|20)\\d{2}[a-z]?\\s*[;,)]",
+    // "Wiedenmann (2013)", "Neil et al. (2025)" already caught above
+    "\\p{Lu}[\\p{L}'’-]+\\s+\\((?:19|20)\\d{2}[a-z]?\\)",
+    // numeric references "[12]", "[3, 4]", "[5–7]"
+    "\\[\\s*\\d{1,3}(?:\\s*[,–-]\\s*\\d{1,3})*\\s*\\]",
+  ].join("|"),
+  "u",
+);
+
+export function citesAnotherWork(passage: string): boolean {
+  return CITATION.test(passage);
+}
+
+export function isMethodsSection(locator: string): boolean {
+  return METHODS_SECTION.test(locator);
+}
+
+export function keepOwnFindings(claims: readonly CheckedClaim[]): {
+  claims: CheckedClaim[];
+  refusedClaims: string[];
+  refusedFields: string[];
+} {
+  const refusedClaims: string[] = [];
+  const refusedFields: string[] = [];
+  const kept: CheckedClaim[] = [];
+  for (const c of claims) {
+    if (isMethodsSection(c.passage.locator))
+      refusedClaims.push("METHODS_PASSAGE");
+    else if (citesAnotherWork(c.passage.text))
+      refusedClaims.push("CITED_RESULT");
+    else if (
+      c.effect === null &&
+      c.direction === null &&
+      !c.anchors.some((a) => a.field === "effect")
+    )
+      refusedClaims.push("NO_FINDING");
+    else kept.push({ ...c, anchors: [...c.anchors] });
+  }
+
+  for (const field of SOURCE_FIELDS) {
+    const values = new Set(
+      kept.flatMap((c) =>
+        c.anchors
+          .filter((a) => a.field === field)
+          .map((a) => a.normalizedValue),
+      ),
+    );
+    let first = true;
+    for (const c of kept) {
+      c.anchors = c.anchors.filter((a) => {
+        if (a.field !== field) return true;
+        if (values.size > 1) return false;
+        const keep = first;
+        first = false;
+        return keep;
+      });
+      if (values.size > 1 || !c.anchors.some((a) => a.field === field))
+        (c as unknown as Record<string, unknown>)[field] = null;
+    }
+    if (values.size > 1) refusedFields.push("SOURCE_FIELD_CONFLICT");
+  }
+  return { claims: kept, refusedClaims, refusedFields };
 }
