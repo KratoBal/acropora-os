@@ -45,6 +45,8 @@ export interface SavedSource {
   claimsCreated: number;
   anchorsCreated: number;
   questions: number;
+  /** Re-extraction: the earlier CANDIDATE claims withdrawn. */
+  claimsWithdrawn?: number;
 }
 
 export interface ExtractionRunRow {
@@ -72,6 +74,8 @@ export interface ExtractionStore {
     verifiedAt: Date;
     /** The run storing it: only while its row is RUNNING (a stale-failed run writes nothing). */
     runId?: string;
+    /** Re-extraction: withdraw the source's CANDIDATE claims first, in this user's name. */
+    replaceCandidatesBy?: string;
   }): Promise<SavedSource>;
   startRun(input: {
     sourceIds: string[];
@@ -139,6 +143,7 @@ export class PrismaExtractionStore implements ExtractionStore {
     claims: readonly CheckedClaim[];
     verifiedAt: Date;
     runId?: string;
+    replaceCandidatesBy?: string;
   }): Promise<SavedSource> {
     return prisma.$transaction(
       async (tx) => {
@@ -169,6 +174,14 @@ export class PrismaExtractionStore implements ExtractionStore {
             where: { id: original.id },
             data: { contentHash: input.contentHash },
           });
+        const withdrawn = input.replaceCandidatesBy
+          ? await this.withdrawCandidates(
+              tx,
+              input.sourceId,
+              input.replaceCandidatesBy,
+              input.runId ?? null,
+            )
+          : 0;
 
         const passageIds = new Map<string, string>();
         const passageFor = async (text: string, locator: string) => {
@@ -209,6 +222,7 @@ export class PrismaExtractionStore implements ExtractionStore {
           claimsCreated: 0,
           anchorsCreated: 0,
           questions: 0,
+          claimsWithdrawn: withdrawn,
         };
         for (const c of input.claims) {
           const passageId = await passageFor(c.passage.text, c.passage.locator);
@@ -264,6 +278,58 @@ export class PrismaExtractionStore implements ExtractionStore {
       },
       { timeout: 120_000, maxWait: 10_000 },
     );
+  }
+
+  /**
+   * Re-extraction: the source's still CANDIDATE claims are WITHDRAWN and their
+   * pending fields REJECTED, as a discard would (the claim review's
+   * `discard`), and the source's pending study fields with them; a claim the
+   * editor already reviewed stays. One AuditLog row names the counts.
+   */
+  private async withdrawCandidates(
+    tx: Prisma.TransactionClient,
+    sourceId: string,
+    actorUserId: string,
+    runId: string | null,
+  ): Promise<number> {
+    const onSource = { passage: { sourceVersion: { sourceId } } };
+    const claimIds = [
+      ...new Set(
+        (
+          await tx.knowledgeClaimEvidence.findMany({
+            where: { ...onSource, claim: { status: "CANDIDATE" } },
+            select: { claimId: true },
+          })
+        ).map((e) => e.claimId),
+      ),
+    ];
+    const now = new Date();
+    const fields = await tx.knowledgeFieldAnchor.updateMany({
+      where: {
+        decision: "PENDING",
+        OR: [{ claimEvidence: { claimId: { in: claimIds } } }, { sourceId }],
+      },
+      data: { decision: "REJECTED", decidedById: actorUserId, decidedAt: now },
+    });
+    const { count } = await tx.knowledgeClaim.updateMany({
+      where: { id: { in: claimIds }, status: "CANDIDATE" },
+      data: { status: "WITHDRAWN" },
+    });
+    if (count > 0 || fields.count > 0)
+      await tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: "KNOWLEDGE_CLAIMS_REEXTRACTED",
+          entityType: "KnowledgeSource",
+          entityId: sourceId,
+          metadata: {
+            claimsWithdrawn: count,
+            fieldsRejected: fields.count,
+            runId,
+          },
+        },
+      });
+    return count;
   }
 
   async startRun(input: {

@@ -5,6 +5,7 @@ import { vocabularyV1 } from "@acropora/knowledge-base";
 
 import {
   checkClaims,
+  citesAnotherWork,
   keepOwnFindings,
   type CheckedClaim,
 } from "./claim-check.js";
@@ -38,6 +39,24 @@ describe("the JATS text, by section", () => {
     assert.match(methods, /Treatments were 0\.5 and 2 µM phosphate\./);
     assert.match(sections[2]!.text, /\(± 3\.1 SE\)/);
     assert.match(sections[2]!.text, /0\.5 µM \| 1\.42 \|/);
+  });
+
+  it("a numbered citation keeps its mark, so the own-findings rule sees it (barracuda 35831)", () => {
+    const xml = `<article><body><sec><title>Discussion</title>
+<p>Enrichment decreased growth<sup><xref ref-type="bibr" rid="b12">12</xref></sup>. It fell further<xref ref-type="bibr" rid="b3">3–5</xref>.</p>
+<p>As <xref ref-type="bibr" rid="b7">Neil et al., 2025</xref> showed. See <xref ref-type="fig" rid="f1">Fig. 1</xref> and <italic>Acropora</italic>.</p>
+</sec></body></article>`;
+    const text = jatsSections(xml)[0]!.text;
+    assert.match(text, /decreased growth \[12\]\. It fell further \[3–5\]\./);
+    // an author-year citation and a figure reference are left as written
+    assert.match(
+      text,
+      /As Neil et al\., 2025 showed\. See Fig\. 1 and Acropora\./,
+    );
+    // the "[12]" shape is what CITED_RESULT reads
+    const cited = text.split("\n").find((l) => l.includes("growth [12]"))!;
+    assert.doesNotMatch(cited, /et al/);
+    assert.equal(citesAnotherWork(cited), true);
   });
 
   it("chunks pack whole sections, and split a long one at line breaks", () => {
@@ -409,9 +428,10 @@ describe("extracting one source", () => {
           extractedBy: string;
           contentHash: string;
           runId?: string;
+          replaceCandidatesBy?: string;
         }) => {
           calls.push(
-            `save:${input.claims.length}:${input.extractedBy}:${input.contentHash.length}${input.runId ? `:${input.runId}` : ""}`,
+            `save:${input.claims.length}:${input.extractedBy}:${input.contentHash.length}${input.runId ? `:${input.runId}` : ""}${input.replaceCandidatesBy ? `:replace=${input.replaceCandidatesBy}` : ""}`,
           );
           return {
             claimsCreated: input.claims.length,
@@ -520,6 +540,48 @@ describe("extracting one source", () => {
     assert.equal(
       (await extractSource("x", true, missing.value)).reason,
       "NOT_FOUND",
+    );
+  });
+
+  it("re-extraction: an extracted source is read again and stored in the actor's name; a retracted one still is not (acrobot 35808)", async () => {
+    const d = deps(
+      { reextract: { actorUserId: "u1" } },
+      { alreadyExtracted: true },
+    );
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.status, "EXTRACTED");
+    assert.ok(
+      d.calls.includes("save:1:m claim-extraction/v1:64:replace=u1"),
+      d.calls.join(" "),
+    );
+    // a preview names no actor and stores nothing
+    const preview = deps(
+      { reextract: { actorUserId: null } },
+      { alreadyExtracted: true },
+    );
+    assert.equal(
+      (await extractSource("src1", false, preview.value)).status,
+      "PREVIEWED",
+    );
+    assert.ok(!preview.calls.some((c) => c.startsWith("save:")));
+    const retracted = deps(
+      { reextract: { actorUserId: "u1" } },
+      { alreadyExtracted: true, retracted: true },
+    );
+    assert.equal(
+      (await extractSource("src1", true, retracted.value)).reason,
+      "RETRACTED",
+    );
+    // without the flag the second read is still skipped
+    assert.equal(
+      (
+        await extractSource(
+          "src1",
+          true,
+          deps({}, { alreadyExtracted: true }).value,
+        )
+      ).reason,
+      "ALREADY_EXTRACTED",
     );
   });
 

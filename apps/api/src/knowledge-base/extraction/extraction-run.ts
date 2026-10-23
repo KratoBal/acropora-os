@@ -102,6 +102,8 @@ export interface SourceOutcome {
   /** Fields dropped, by code. */
   refusedFields: Record<string, number>;
   claimsCreated: number;
+  /** Re-extraction: the source's earlier, still unreviewed claims withdrawn. */
+  claimsWithdrawn: number;
   /** Chunks past `MAX_CHUNKS_PER_SOURCE`, not read (barracuda, #1838). */
   chunksDropped: number;
   /** The Crossref retraction check never ran on this source (no DOI). */
@@ -116,6 +118,13 @@ export interface ExtractionDeps {
   now: () => Date;
   /** The stored run, when there is one: its row must still be RUNNING to store. */
   runId?: string;
+  /**
+   * RE-EXTRACTION (acrobot 35808: the fixed extraction run again on the same
+   * five stage sources, to measure it). An already extracted source is read
+   * again; storing it withdraws the source's still CANDIDATE claims, in the
+   * same transaction, in this actor's name. A reviewed (VERIFIED) claim stays.
+   */
+  reextract?: { actorUserId: string | null };
 }
 
 const count = (into: Record<string, number>, code: string) => {
@@ -140,6 +149,7 @@ export async function extractSource(
     refusedClaims: {},
     refusedFields: {},
     claimsCreated: 0,
+    claimsWithdrawn: 0,
     chunksDropped: 0,
     retractionUnchecked: false,
   };
@@ -148,7 +158,8 @@ export async function extractSource(
   if (!source) return skip("NOT_FOUND");
   if (!source.included) return skip("NOT_INCLUDED");
   if (source.retracted) return skip("RETRACTED");
-  if (source.alreadyExtracted) return skip("ALREADY_EXTRACTED");
+  if (source.alreadyExtracted && !deps.reextract)
+    return skip("ALREADY_EXTRACTED");
   outcome.retractionUnchecked = source.retractionUnchecked;
   if (!source.pmcid) return skip("NO_OPEN_FULL_TEXT");
   const text = await fetchFullText(source.pmcid, deps.fetch);
@@ -230,10 +241,14 @@ export async function extractSource(
     claims: checked,
     verifiedAt: deps.now(),
     ...(deps.runId ? { runId: deps.runId } : {}),
+    ...(deps.reextract?.actorUserId
+      ? { replaceCandidatesBy: deps.reextract.actorUserId }
+      : {}),
   });
   return {
     ...outcome,
     status: "EXTRACTED",
     claimsCreated: saved.claimsCreated,
+    claimsWithdrawn: saved.claimsWithdrawn ?? 0,
   };
 }
