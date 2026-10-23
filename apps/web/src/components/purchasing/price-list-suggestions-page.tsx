@@ -141,6 +141,8 @@ export function PriceListSuggestionsPage() {
       return next;
     });
 
+  // the server pages by sku and sends each sku's candidates best first, so the first
+  // candidate of a group is the best one on every page
   const pickBest = () =>
     setPicked(new Map(groups.map((group) => [group.key, group.items[0]!.id])));
 
@@ -273,8 +275,8 @@ export function PriceListSuggestionsPage() {
       ) : (
         <>
           <p className="text-sm text-pilot-grey-700">
-            {total} függő javaslat; a lapon {offset + 1}-{offset + items.length}
-            .
+            {total} függő cikkszám; a lapon {offset + 1}-
+            {offset + groups.length}.
           </p>
           <ul className="space-y-3" aria-label="Függő javaslatok">
             {groups.map((group) => {

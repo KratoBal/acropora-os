@@ -82,7 +82,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   auth.role = "OWNER";
   api.suggestions.mockResolvedValue({
-    total: 3,
+    total: 2,
     items: [
       item({ id: "sg-1" }),
       item({
@@ -132,7 +132,9 @@ describe("PriceListSuggestionsPage", () => {
         /közös szavak: reef, salt · kiszerelés: 2000g · márka: exbrand/,
       ).length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/3 függő javaslat/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 függő cikkszám; a lapon 1-2/),
+    ).toBeInTheDocument();
   });
 
   it("lets one candidate per sku be picked: picking the other replaces it", async () => {
