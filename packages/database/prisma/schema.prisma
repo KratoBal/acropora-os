@@ -911,6 +911,7 @@ model User {
   approvedVocabulary     KnowledgeVocabularyEntry[]    @relation("KnowledgeVocabularyApprovedBy")
   researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
   knowledgeDiscoveryRuns KnowledgeDiscoveryRun[]       @relation("KnowledgeDiscoveryRunRequestedBy")
+  knowledgeExtractRuns   KnowledgeExtractionRun[]      @relation("KnowledgeExtractionRunRequestedBy")
   email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
@@ -10781,6 +10782,10 @@ model KnowledgeFieldAnchor {
   passage         KnowledgePassage        @relation(fields: [passageId], references: [id], onDelete: Restrict)
   /// A szótárra normalizált érték, ahogy a mezőbe került.
   normalizedValue String?
+  /// SZERKESZTŐI KÉRDÉS (S3): a modell szava egy értékre, amit a szótár nem ismer
+  /// (vagy a latin neve nincs a horgonyban). Ilyenkor `normalizedValue` NULL: ez
+  /// nem mező, a szerkesztő dönt róla. Modell-szöveg, 64 nyomtatható jelre vágva.
+  proposedValue   String?                 @db.VarChar(64)
   decision        KnowledgeAnchorDecision @default(PENDING)
   decidedById     String?
   decidedBy       User?                   @relation("KnowledgeFieldAnchorDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
@@ -10857,6 +10862,33 @@ model KnowledgeDiscoveryRun {
   heartbeatAt     DateTime?
 
   sources KnowledgeSource[]
+
+  @@index([requestedById])
+  @@index([status])
+}
+
+enum KnowledgeExtractionRunStatus {
+  RUNNING
+  FINISHED
+  FAILED
+}
+
+/// Egy kiolvasó futás (S3: `knowledge:extract --apply` vagy a
+/// `POST /knowledge-base/extraction-runs` végpont): mely forrásokból, mi lett
+/// forrásonként (kiolvasva, kihagyva okkal, AI-hívások, mezők, kérdések, a
+/// visszautasítások kódonként). Szöveg nincs benne. Egyszerre egy RUNNING sor
+/// (részleges egyedi index a migrációban), szívveréssel, mint a felderítésnél.
+model KnowledgeExtractionRun {
+  id            String                       @id @default(cuid())
+  status        KnowledgeExtractionRunStatus @default(RUNNING)
+  sourceIds     String[]
+  report        Json                         @default("{}")
+  claimsCreated Int                          @default(0)
+  requestedById String
+  requestedBy   User                         @relation("KnowledgeExtractionRunRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  startedAt     DateTime
+  finishedAt    DateTime?
+  heartbeatAt   DateTime?
 
   @@index([requestedById])
   @@index([status])

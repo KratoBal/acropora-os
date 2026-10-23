@@ -50,3 +50,14 @@ export type {
   ClaimScope,
   Direction,
 } from "./compare.js";
+export {
+  MASS_UNITS,
+  PHOSPHATE_UNITS,
+  basisWritten,
+  numbersAtUnit,
+  numbersOf,
+  squash,
+  taxonInText,
+  unitWritten,
+} from "./anchor-check.js";
+export type { AnchorUnit } from "./anchor-check.js";

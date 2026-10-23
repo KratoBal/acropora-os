@@ -389,7 +389,9 @@ describe("guards the table relies on", () => {
     assert.deepEqual(got, ["VOCABULARY_NOT_APPROVED"]);
     // version 1 is approved: the same sentence passes with no opt-in
     assert.deepEqual(
-      checkSentence(BASE, ACROPORA_FIELD, vocabulary).failures.map((f) => f.code),
+      checkSentence(BASE, ACROPORA_FIELD, vocabulary).failures.map(
+        (f) => f.code,
+      ),
       [],
     );
   });

@@ -1659,6 +1659,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
   KnowledgeFieldAnchor: {
     field: "business",
     normalizedValue: "business",
+    proposedValue: "business",
   },
   KnowledgeVocabularyEntry: {
     key: "business",
@@ -1676,6 +1677,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   },
   // Source discovery runs (S2): the queries, URLs and counts of a literature
   // search, no customer data.
+  // Extraction runs (S3): source ids and counts by code, no text.
+  KnowledgeExtractionRun: {
+    sourceIds: "identifier",
+    report: "business",
+  },
   KnowledgeDiscoveryRun: {
     label: "business",
     input: "business",

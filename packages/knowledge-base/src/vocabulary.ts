@@ -341,10 +341,7 @@ export const VOCABULARY_V1_ROWS: readonly VocabularyRow[] = [
     "tengeri akvárium",
     "sps-akvárium",
   ]),
-  row("ENVIRONMENT", "PUBLIC_AQUARIUM", [
-    "közakvárium",
-    "nyilvános akvárium",
-  ]),
+  row("ENVIRONMENT", "PUBLIC_AQUARIUM", ["közakvárium", "nyilvános akvárium"]),
 
   row("EFFECT", "CALCIFICATION", [
     "kalcifikáció",
