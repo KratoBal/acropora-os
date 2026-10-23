@@ -6,6 +6,8 @@ import {
   basisWritten,
   numbersAtUnit,
   numbersOf,
+  oneSidedBound,
+  phosphateNamed,
   squash,
   taxonInText,
   unitWritten,
@@ -28,7 +30,9 @@ import type { TextSection } from "./jats-text.js";
  *   a species shows in its anchor by its Latin name: otherwise the value is
  *   an editor's QUESTION, never a field;
  * - a quantity's numbers stand directly before their unit, a mass unit names
- *   its basis, and the value is normalised to mg/l PO4 by code;
+ *   its basis, a "<" or ">" before its one number makes it a one-sided bound,
+ *   and the value is normalised to mg/l PO4 by code, only when the anchor is
+ *   about phosphate (a nitrate stays unconverted);
  * - a sample size is a number of its anchor; an uncertainty or conditions
  *   value is inside its anchor; the closed values are of their lists.
  * Anything that fails is a refusal with its code, counted, never stored.
@@ -369,8 +373,8 @@ export function checkClaims(
               : typeof v === "number" && Number.isFinite(v) && v >= 0
                 ? v
                 : Number.NaN;
-          const min = num(f.min);
-          const max = num(f.max);
+          let min = num(f.min);
+          let max = num(f.max);
           const unit = f.unit as AnchorUnit;
           const basis = f.basis === "PO4" || f.basis === "P" ? f.basis : null;
           if (
@@ -400,9 +404,19 @@ export function checkClaims(
           )
             refuse(field, "BASIS_NOT_IN_ANCHOR");
           else {
-            // the conversion is code, never the model (plan 6, Mértékegység)
+            // "< 9 µM" is an upper bound with no lower one: the model gave it
+            // as 9-9 (acrobot 35808); one number, read by its own comparator
+            const single =
+              min === null ? max : max === null || max === min ? min : null;
+            const bound =
+              single === null ? null : oneSidedBound(unit, anchor, single);
+            if (bound === "UPPER") [min, max] = [null, single];
+            if (bound === "LOWER") [min, max] = [single, null];
+            // the conversion is code, never the model (plan 6, Mértékegység),
+            // and only of a phosphate value: a nitrate is no mg/l PO4
+            const phosphate = phosphateNamed(anchor);
             const norm = (n: number | null) =>
-              n === null
+              n === null || !phosphate
                 ? null
                 : nine(
                     toMgPerLitrePo4({ value: n, unit, basis: basis ?? "PO4" }),
