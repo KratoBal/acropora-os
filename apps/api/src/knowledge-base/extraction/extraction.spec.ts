@@ -3,7 +3,11 @@ import { describe, it } from "node:test";
 
 import { vocabularyV1 } from "@acropora/knowledge-base";
 
-import { checkClaims } from "./claim-check.js";
+import {
+  checkClaims,
+  keepOwnFindings,
+  type CheckedClaim,
+} from "./claim-check.js";
 import { claimAnswerOf } from "./claim-extractor.js";
 import { extractSource, type ExtractionDeps } from "./extraction-run.js";
 import { JATS, PASSAGE, aiClaim } from "./extraction-test-fixtures.js";
@@ -329,6 +333,31 @@ describe("extracting one source", () => {
     ]);
   });
 
+  it("only own findings reach the store, and the study's fields once (acrobot 35808)", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({
+          kind: "ANSWER",
+          claims: [
+            aiClaim(),
+            aiClaim(),
+            aiClaim({
+              passage: { text: "Treatments were 0.5 and 2 µM phosphate." },
+            }),
+          ],
+          refusedClaims: [],
+          extractedBy: "m claim-extraction/v1",
+        }),
+      },
+    });
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.refusedClaims.METHODS_PASSAGE, 1);
+    assert.equal(outcome.claims, 2);
+    // the second claim's study type and method are the first one's: not stored again
+    assert.ok(outcome.fields < 18, String(outcome.fields));
+    assert.ok(d.calls.includes("save:2:m claim-extraction/v1:64"));
+  });
+
   it("a stored run's id reaches the store, so a stale-failed run cannot write", async () => {
     const d = deps({ runId: "run-9" });
     await extractSource("src1", true, d.value);
@@ -426,5 +455,197 @@ describe("extracting one source", () => {
       ["SKIPPED", "AI_UNAVAILABLE", { timeout: 1 }],
     );
     assert.ok(!silent.calls.some((c) => c.startsWith("save:")));
+  });
+});
+
+describe("only this source's own findings (acrobot 35808, the first eleven on stage)", () => {
+  const base = (over: Partial<CheckedClaim>): CheckedClaim => ({
+    passage: {
+      text: "Calcification decreased by 18 % at 2 µM phosphate.",
+      locator: "Results",
+    },
+    species: null,
+    environment: null,
+    effect: "CALCIFICATION",
+    direction: "DECREASE",
+    quantity: null,
+    studyType: "CONTROLLED_LAB",
+    measurementMethod: null,
+    sampleSize: null,
+    uncertainty: null,
+    conditions: null,
+    anchors: [
+      {
+        field: "effect",
+        text: "Calcification decreased",
+        locator: "Results",
+        normalizedValue: "CALCIFICATION",
+      },
+      {
+        field: "studyType",
+        text: "compared with the control",
+        locator: "Methods",
+        normalizedValue: "CONTROLLED_LAB",
+      },
+    ],
+    refused: [],
+    ...over,
+  });
+
+  it("a cited result, a methods sentence and a background value are no claims", () => {
+    const cases: [Partial<CheckedClaim>, string | null][] = [
+      [{}, null],
+      [
+        {
+          passage: {
+            text: "As Neil et al. (2025) showed, growth fell.",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Reef waters hold < 0.1 µM phosphate (Tanaka et al., 2007).",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Enrichment causes bleaching (Wiedenmann, 2013; Vega Thurber 2014).",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Wiedenmann (2013) found the same.",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Phosphate limitation was reported [12, 14].",
+            locator: "Discussion",
+          },
+        },
+        "CITED_RESULT",
+      ],
+      [
+        {
+          passage: {
+            text: "Tissue was homogenised in PBS.",
+            locator: "Materials and methods",
+          },
+        },
+        "METHODS_PASSAGE",
+      ],
+      [
+        {
+          passage: {
+            text: "Nutrients were measured by autoanalyzer.",
+            locator: "2. Methods (2/3)",
+          },
+        },
+        "METHODS_PASSAGE",
+      ],
+      [{ effect: null, direction: null, anchors: [] }, "NO_FINDING"],
+      // an effect question still makes it a finding
+      [
+        {
+          effect: null,
+          direction: null,
+          anchors: [
+            {
+              field: "effect",
+              text: "microbiome composition shifted",
+              locator: "Results",
+              normalizedValue: null,
+              proposed: "MICROBIOMECOMPOSITION",
+            },
+          ],
+        },
+        null,
+      ],
+      // the year of a temperature or a range is no citation
+      [
+        {
+          passage: {
+            text: "In 2019 growth fell at 2 µM phosphate (n = 12).",
+            locator: "Results",
+          },
+        },
+        null,
+      ],
+    ];
+    for (const [over, refusal] of cases) {
+      const r = keepOwnFindings([base(over)]);
+      assert.deepEqual(
+        r.refusedClaims,
+        refusal ? [refusal] : [],
+        JSON.stringify(over.passage ?? over),
+      );
+      assert.equal(r.claims.length, refusal ? 0 : 1);
+    }
+  });
+
+  it("the study's own fields once per source; two different values keep neither", () => {
+    const same = keepOwnFindings([base({}), base({}), base({})]);
+    assert.deepEqual(
+      same.claims.map(
+        (c) => c.anchors.filter((a) => a.field === "studyType").length,
+      ),
+      [1, 0, 0],
+    );
+    assert.deepEqual(same.refusedFields, []);
+    const differ = keepOwnFindings([
+      base({}),
+      base({
+        studyType: "MODELLING",
+        anchors: [
+          {
+            field: "effect",
+            text: "Calcification decreased",
+            locator: "Results",
+            normalizedValue: "CALCIFICATION",
+          },
+          {
+            field: "measurementMethod",
+            text: "measured by autoanalyzer",
+            locator: "Methods",
+            normalizedValue: "AUTOANALYZER",
+          },
+          {
+            field: "studyType",
+            text: "a photophysiological model",
+            locator: "Abstract",
+            normalizedValue: "MODELLING",
+          },
+        ],
+      }),
+    ]);
+    assert.deepEqual(differ.refusedFields, ["SOURCE_FIELD_CONFLICT"]);
+    assert.ok(
+      differ.claims.every(
+        (c) =>
+          c.studyType === null &&
+          !c.anchors.some((a) => a.field === "studyType"),
+      ),
+    );
+    // the other source field is untouched
+    assert.equal(
+      differ.claims[1]!.anchors.filter((a) => a.field === "measurementMethod")
+        .length,
+      1,
+    );
   });
 });

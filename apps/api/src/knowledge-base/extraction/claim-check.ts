@@ -65,6 +65,7 @@ const STUDY_TYPES = [
   "META_ANALYSIS",
   "MANUFACTURER",
   "OWN_MEASUREMENT",
+  "MODELLING",
 ] as const;
 const MEASUREMENT_METHODS = [
   "COLORIMETRIC_KIT",
@@ -424,4 +425,92 @@ export function checkClaims(
     result.claims.push(claim);
   }
   return result;
+}
+
+/**
+ * A CLAIM IS THIS SOURCE'S OWN FINDING (acrobot's review of the first eleven
+ * stage claims, 35808: nine of eleven were not findings). Applied to an
+ * extraction's checked claims, never to an editor's correction (that one is
+ * checked on its single anchor, whose section may well be Methods):
+ * - a passage in the methods section describes how, not what was found
+ *   (METHODS_PASSAGE); its fields (species, sample size) may still anchor there;
+ * - a passage that cites another work ("Neil et al. (2025)", "(Tanaka et al.,
+ *   2007)", "[12]") reports someone else's result: this source is not its
+ *   evidence (CITED_RESULT). Over-caution by design: an own result stated
+ *   together with a citation is dropped too, and the editor can add it by hand;
+ * - a claim with neither an effect (a field or a question) nor a direction is
+ *   a background value, not a finding (NO_FINDING);
+ * - the study's own fields (study type, method) are stored once per source:
+ *   a repeated value keeps its first anchor, and two different values for one
+ *   field keep neither (SOURCE_FIELD_CONFLICT), since a source has one design.
+ */
+const METHODS_SECTION =
+  /(?<![a-z])(?:methods?|methodology|materials)(?![a-z])/i;
+const CITATION = new RegExp(
+  [
+    // "et al", the commonest form
+    "(?<![\\p{L}])et al(?![\\p{L}])",
+    // "(Tanaka, 2007)", "(Vega Thurber 2014; ...)", "(Smith and Jones, 2019a)"
+    "\\(\\s*\\p{Lu}[\\p{L}'’-]+(?:\\s+(?:\\p{Lu}[\\p{L}'’-]+|and|&))*,?\\s+(?:19|20)\\d{2}[a-z]?\\s*[;,)]",
+    // "Wiedenmann (2013)", "Neil et al. (2025)" already caught above
+    "\\p{Lu}[\\p{L}'’-]+\\s+\\((?:19|20)\\d{2}[a-z]?\\)",
+    // numeric references "[12]", "[3, 4]", "[5–7]"
+    "\\[\\s*\\d{1,3}(?:\\s*[,–-]\\s*\\d{1,3})*\\s*\\]",
+  ].join("|"),
+  "u",
+);
+
+export function citesAnotherWork(passage: string): boolean {
+  return CITATION.test(passage);
+}
+
+export function isMethodsSection(locator: string): boolean {
+  return METHODS_SECTION.test(locator);
+}
+
+export function keepOwnFindings(claims: readonly CheckedClaim[]): {
+  claims: CheckedClaim[];
+  refusedClaims: string[];
+  refusedFields: string[];
+} {
+  const refusedClaims: string[] = [];
+  const refusedFields: string[] = [];
+  const kept: CheckedClaim[] = [];
+  for (const c of claims) {
+    if (isMethodsSection(c.passage.locator))
+      refusedClaims.push("METHODS_PASSAGE");
+    else if (citesAnotherWork(c.passage.text))
+      refusedClaims.push("CITED_RESULT");
+    else if (
+      c.effect === null &&
+      c.direction === null &&
+      !c.anchors.some((a) => a.field === "effect")
+    )
+      refusedClaims.push("NO_FINDING");
+    else kept.push({ ...c, anchors: [...c.anchors] });
+  }
+
+  for (const field of SOURCE_FIELDS) {
+    const values = new Set(
+      kept.flatMap((c) =>
+        c.anchors
+          .filter((a) => a.field === field)
+          .map((a) => a.normalizedValue),
+      ),
+    );
+    let first = true;
+    for (const c of kept) {
+      c.anchors = c.anchors.filter((a) => {
+        if (a.field !== field) return true;
+        if (values.size > 1) return false;
+        const keep = first;
+        first = false;
+        return keep;
+      });
+      if (values.size > 1 || !c.anchors.some((a) => a.field === field))
+        (c as unknown as Record<string, unknown>)[field] = null;
+    }
+    if (values.size > 1) refusedFields.push("SOURCE_FIELD_CONFLICT");
+  }
+  return { claims: kept, refusedClaims, refusedFields };
 }
