@@ -30,12 +30,14 @@ const DOCUMENT = {
   id: "doc-9",
   fileName: "Számla J55388.pdf",
   sha256: "a".repeat(64),
+  gmailMessageId: "gmail-msg-7",
 };
 
 function database(options: {
   row?: typeof ROW | null;
   document?: typeof DOCUMENT | null;
   updated?: number;
+  attachedAlready?: number;
 }) {
   const updates: {
     where: Record<string, unknown>;
@@ -60,6 +62,7 @@ function database(options: {
         updates.push(args);
         return { count: options.updated ?? 1 };
       },
+      count: async () => options.attachedAlready ?? 0,
       create: async () =>
         assert.fail("a hozzárendelés nem hozhat létre másolatot"),
     },
@@ -118,6 +121,12 @@ describe("assigning a stored unassigned PDF to an incoming invoice", () => {
       [logs[0]!.action, logs[0]!.entityId, logs[0]!.userId],
       ["billing.incoming-pdf.assigned", "in-1", "u-1"],
     );
+    // the rewritten key loses the mail id; the log keeps it
+    assert.deepEqual(logs[0]!.metadata, {
+      documentId: "doc-9",
+      fileName: "Számla J55388.pdf",
+      oldGmailMessageId: "gmail-msg-7",
+    });
   });
 
   it("makes the document a pro forma when the row is a pro forma (kind D)", async () => {
@@ -145,6 +154,15 @@ describe("assigning a stored unassigned PDF to an incoming invoice", () => {
       );
       assert.deepEqual([updates, logs], [[], []]);
     }
+  });
+
+  it("refuses when a PDF was attached to the row after the first check, writing nothing", async () => {
+    const { db, updates, itemUpdates, logs } = database({ attachedAlready: 1 });
+    await assert.rejects(
+      assignDocumentToIncomingRow(db, input()),
+      ConflictException,
+    );
+    assert.deepEqual([updates, itemUpdates, logs], [[], [], []]);
   });
 
   it("does not overwrite a file somebody decided between the lookup and the write", async () => {

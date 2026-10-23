@@ -179,13 +179,20 @@ export async function assignDocumentToIncomingRow(
     throw new ConflictException("Ennek a számlának már van PDF-je.");
   const document = await database.incomingSupplierDocument.findFirst({
     where: { id: input.documentId, reviewState: "UNASSIGNED" },
-    select: { id: true, fileName: true, sha256: true },
+    select: { id: true, fileName: true, sha256: true, gmailMessageId: true },
   });
   if (!document)
     throw new NotFoundException(
       "Nincs ilyen, hozzárendelésre váró (nem párosodott) fájl.",
     );
   return database.$transaction(async (tx) => {
+    // `hasPdf` a tranzakció előtt dőlt el: két egyidejű hozzárendelés ugyanarra a
+    // sorra mindkettő átmehetne. A csatolt fájl újraellenőrzése itt szűkíti a rést.
+    const alreadyAttached = await tx.incomingSupplierDocument.count({
+      where: { gmailMessageId: { startsWith: `${ATTACH_PREFIX}${row.id}:` } },
+    });
+    if (alreadyAttached > 0)
+      throw new ConflictException("Ennek a számlának már van PDF-je.");
     const { count } = await tx.incomingSupplierDocument.updateMany({
       where: { id: document.id, reviewState: "UNASSIGNED" },
       data: {
@@ -217,7 +224,12 @@ export async function assignDocumentToIncomingRow(
         action: "billing.incoming-pdf.assigned",
         entityType: "IncomingBillingDocument",
         entityId: row.id,
-        metadata: { documentId: document.id, fileName: document.fileName },
+        metadata: {
+          documentId: document.id,
+          fileName: document.fileName,
+          // az átírt kulcs elveszi a levél azonosítóját: innen visszakereshető
+          oldGmailMessageId: document.gmailMessageId,
+        },
       },
     });
     return { documentId: document.id };
