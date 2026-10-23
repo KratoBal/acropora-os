@@ -119,6 +119,8 @@ export interface SupplierPriceSuggestionsResponse {
 export interface SupplierPriceSuggestionDecision {
   decided: number;
   skipped: number;
+  /** Jóváhagyásnál: hány változatunk kapta meg a beszállító vonalkódját (csak ha addig egy vonalkódja sem volt). */
+  barcodesAdded?: number;
 }
 
 export interface SupplierPriceListUploadResult {

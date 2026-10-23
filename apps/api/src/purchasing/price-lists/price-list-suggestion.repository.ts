@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
 import type { NameCandidate, NameSuggestion } from "./name-suggestions.js";
+import { fillBarcodeFromPair } from "./price-list-barcode-fill.js";
 
 const CHUNK = 5000;
 
@@ -199,10 +200,11 @@ export class PriceListSuggestionRepository {
   async approve(
     ids: readonly string[],
     userId: string,
-  ): Promise<{ decided: number; skipped: number }> {
+  ): Promise<{ decided: number; skipped: number; barcodesAdded: number }> {
     return this.database.$transaction(async (transaction) => {
       let decided = 0;
       let skipped = 0;
+      let barcodesAdded = 0;
       const approved: { id: string; supplierSku: string; variantId: string }[] =
         [];
       for (const id of ids) {
@@ -248,6 +250,17 @@ export class PriceListSuggestionRepository {
               ...data,
             },
           });
+        // the approved pair may fill the variant's missing barcode (never overwrite one)
+        if (
+          (await fillBarcodeFromPair(transaction, {
+            userId,
+            suggestionId: id,
+            supplierId: suggestion.supplierId,
+            supplierSku: suggestion.supplierSku,
+            variantId: suggestion.variantId,
+          })) === "ADDED"
+        )
+          barcodesAdded += 1;
         await transaction.supplierPriceSuggestion.deleteMany({
           where: {
             supplierId: suggestion.supplierId,
@@ -269,10 +282,10 @@ export class PriceListSuggestionRepository {
             action: "supplier-price-suggestion.approved",
             entityType: "SupplierPriceSuggestion",
             entityId: approved[0]!.id,
-            metadata: { approved, skipped },
+            metadata: { approved, skipped, barcodesAdded },
           },
         });
-      return { decided, skipped };
+      return { decided, skipped, barcodesAdded };
     });
   }
 
