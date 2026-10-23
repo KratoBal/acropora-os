@@ -43,6 +43,7 @@ function fakes() {
       pmcid: "PMC1",
       retracted: false,
       alreadyExtracted: false,
+      retractionUnchecked: false,
     }),
     saveSource: async (input: { claims: unknown[] }) => {
       calls.push(`save:${input.claims.length}`);
@@ -251,6 +252,20 @@ describe("knowledge:extract", () => {
       6,
     );
     assert.match(o.out.stderr, /elhagyottnak jelölte/);
+  });
+
+  it("a preview needs the switch too: it is a paid model call (barracuda, #1838)", async () => {
+    const t = cli({ env: {} });
+    let fetched = 0;
+    t.deps.fetch = async () => {
+      fetched += 1;
+      return new Response(JATS, { status: 200 });
+    };
+    assert.equal(
+      await runExtractionCli(["--source", SRC], output().sink, t.deps),
+      1,
+    );
+    assert.equal(fetched, 0);
   });
 
   it("source ids: a comma list, at most five, cuid-shaped", () => {

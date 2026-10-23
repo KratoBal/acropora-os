@@ -78,6 +78,15 @@ const MEASUREMENT_METHODS = [
   "NOT_REPORTED",
 ] as const;
 
+/** The fields whose value is a closed key: their anchor must say more than one word. */
+const MIN_TWO_WORDS: readonly FieldName[] = [
+  "environment",
+  "effect",
+  "direction",
+  "studyType",
+  "measurementMethod",
+];
+
 export const MAX_ANCHOR = 400;
 export const MAX_PASSAGE = 1_000;
 export const MAX_FREE_VALUE = 300;
@@ -234,6 +243,15 @@ export function checkClaims(
         refuse(field, "ANCHOR_NOT_IN_TEXT");
         continue;
       }
+      // a one-word anchor ("the", "decreased") is in the text and proves
+      // nothing: a closed-value field's anchor is at least two words (barracuda, #1838)
+      if (
+        MIN_TWO_WORDS.includes(field) &&
+        anchor.split(" ").filter(Boolean).length < 2
+      ) {
+        refuse(field, "ANCHOR_TOO_SHORT");
+        continue;
+      }
       const accept = (normalizedValue: string) =>
         claim.anchors.push({ field, text: anchor, locator, normalizedValue });
       const question = (proposed: string) =>
@@ -323,7 +341,8 @@ export function checkClaims(
           else if (!numbersOf(anchor).has(n))
             refuse(field, "NUMBER_NOT_IN_ANCHOR");
           else {
-            const unit = str(f.unit)?.slice(0, 32) ?? null;
+            // the model's word, as for a question: printable and short
+            const unit = proposedOf(str(f.unit) ?? "").slice(0, 32) || null;
             claim.sampleSize = { value: n, unit };
             accept(unit ? `${n} ${unit}` : `${n}`);
           }

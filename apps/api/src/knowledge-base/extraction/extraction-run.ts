@@ -16,9 +16,14 @@ import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
  *
  * A source is skipped, with its reason, when: it is not found; it has a
  * RETRACTION version (nothing is built on a retracted work); it was already
- * extracted; it has no PMCID or Europe PMC holds no open full text for it
+ * extracted (its full-text hash is set, claims or not: the store writes it
+ * even when nothing was found, so the AI is not paid twice for one text); it has no PMCID or Europe PMC holds no open full text for it
  * (NO_OPEN_FULL_TEXT: a closed work needs the editor's manual PDF, which is
  * the S4 editor screen's job, not this slice's).
+ *
+ * A source the Crossref retraction check never covered (no DOI) is read, and
+ * the outcome says so (`retractionUnchecked`); chunks past the limit are
+ * counted (`chunksDropped`), not silently lost.
  *
  * The report carries counts and codes, never the text: the text is a third
  * party's, and the report lands in a terminal or a run record.
@@ -92,6 +97,10 @@ export interface SourceOutcome {
   /** Fields dropped, by code. */
   refusedFields: Record<string, number>;
   claimsCreated: number;
+  /** Chunks past `MAX_CHUNKS_PER_SOURCE`, not read (barracuda, #1838). */
+  chunksDropped: number;
+  /** The Crossref retraction check never ran on this source (no DOI). */
+  retractionUnchecked: boolean;
 }
 
 export interface ExtractionDeps {
@@ -126,12 +135,15 @@ export async function extractSource(
     refusedClaims: {},
     refusedFields: {},
     claimsCreated: 0,
+    chunksDropped: 0,
+    retractionUnchecked: false,
   };
   const skip = (reason: string) => ({ ...outcome, reason });
   const source = await deps.store.source(sourceId);
   if (!source) return skip("NOT_FOUND");
   if (source.retracted) return skip("RETRACTED");
   if (source.alreadyExtracted) return skip("ALREADY_EXTRACTED");
+  outcome.retractionUnchecked = source.retractionUnchecked;
   if (!source.pmcid) return skip("NO_OPEN_FULL_TEXT");
   const text = await fetchFullText(source.pmcid, deps.fetch);
   if (!text.ok) return skip(text.reason);
@@ -146,7 +158,10 @@ export async function extractSource(
   };
   const checked = [];
   let extractedBy = "unknown";
-  for (const chunk of chunkSections(sections).slice(0, MAX_CHUNKS_PER_SOURCE)) {
+  let answered = 0;
+  const chunks = chunkSections(sections);
+  outcome.chunksDropped = Math.max(0, chunks.length - MAX_CHUNKS_PER_SOURCE);
+  for (const chunk of chunks.slice(0, MAX_CHUNKS_PER_SOURCE)) {
     outcome.calls += 1;
     const answer = await deps.extractor.extract({
       sourceText: chunkText(chunk),
@@ -161,6 +176,7 @@ export async function extractSource(
       count(outcome.refusedClaims, `AI_${answer.refusal}`);
       continue;
     }
+    answered += 1;
     extractedBy = answer.extractedBy;
     for (const code of answer.refusedClaims)
       count(outcome.refusedClaims, `AI_${code}`);
@@ -178,11 +194,14 @@ export async function extractSource(
       checked.push(claim);
     }
   }
-  if (
-    outcome.calls ===
-    Object.values(outcome.unavailable).reduce((a, b) => a + b, 0)
-  )
-    return skip("AI_UNAVAILABLE");
+  // a text no call answered is not "extracted": its hash is not written, it can be read again
+  if (answered === 0)
+    return skip(
+      outcome.calls ===
+        Object.values(outcome.unavailable).reduce((a, b) => a + b, 0)
+        ? "AI_UNAVAILABLE"
+        : "AI_REFUSED",
+    );
   outcome.claims = checked.length;
   if (!apply) return { ...outcome, status: "PREVIEWED" };
   const saved = await deps.store.saveSource({

@@ -125,6 +125,8 @@ describe(
         pmcid: `PMC${suffix}`,
         retracted: false,
         alreadyExtracted: false,
+        // made here with a DOI but never through Crossref: the check did not run
+        retractionUnchecked: true,
       });
       const { claims } = checkClaims(
         [aiClaim()],
@@ -328,6 +330,41 @@ describe(
         [row.status, row.report],
         ["FAILED", { error: "STALE_RUNNING" }],
       );
+    });
+
+    it("a text that gave no claim is still extracted once: its hash marks it", async () => {
+      const other = await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${DOI_PREFIX}${suffix}-empty`,
+          title: "Kitalált üres",
+          discoveredVia: "MANUAL",
+          retractionCheckedAt: new Date(),
+          versions: {
+            create: { versionKind: "ORIGINAL", detectedVia: "MANUAL" },
+          },
+        },
+      });
+      assert.deepEqual(
+        [
+          (await store.source(other.id))?.alreadyExtracted,
+          (await store.source(other.id))?.retractionUnchecked,
+        ],
+        [false, false],
+      );
+      const saved = await store.saveSource({
+        sourceId: other.id,
+        contentHash: sha256("<article/>"),
+        extractedBy: "m",
+        claims: [],
+        verifiedAt: new Date(),
+      });
+      assert.deepEqual(saved, {
+        claimsCreated: 0,
+        anchorsCreated: 0,
+        questions: 0,
+      });
+      assert.equal((await store.source(other.id))?.alreadyExtracted, true);
     });
   },
 );

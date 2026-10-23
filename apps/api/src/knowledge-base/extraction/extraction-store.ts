@@ -25,7 +25,14 @@ export interface SourceForExtraction {
   id: string;
   pmcid: string | null;
   retracted: boolean;
+  /**
+   * Its ORIGINAL version carries a full-text hash: an extraction ran on it,
+   * whether it found claims or not (barracuda, #1838: a source with no claim
+   * left no passage and was read, and paid for, again on every run).
+   */
   alreadyExtracted: boolean;
+  /** The Crossref retraction check never ran on it (no DOI): reported, not hidden. */
+  retractionUnchecked: boolean;
 }
 
 export interface SavedSource {
@@ -101,16 +108,8 @@ export class PrismaExtractionStore implements ExtractionStore {
       select: {
         id: true,
         pmcid: true,
-        versions: {
-          select: {
-            versionKind: true,
-            passages: {
-              where: { extractedBy: { not: null } },
-              select: { id: true },
-              take: 1,
-            },
-          },
-        },
+        retractionCheckedAt: true,
+        versions: { select: { versionKind: true, contentHash: true } },
       },
     });
     if (!row) return null;
@@ -118,7 +117,10 @@ export class PrismaExtractionStore implements ExtractionStore {
       id: row.id,
       pmcid: row.pmcid,
       retracted: row.versions.some((v) => v.versionKind === "RETRACTION"),
-      alreadyExtracted: row.versions.some((v) => v.passages.length > 0),
+      alreadyExtracted: row.versions.some(
+        (v) => v.versionKind === "ORIGINAL" && v.contentHash !== null,
+      ),
+      retractionUnchecked: row.retractionCheckedAt === null,
     };
   }
 

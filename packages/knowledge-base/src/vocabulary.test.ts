@@ -21,7 +21,7 @@ const row = (over: Partial<VocabularyRow>): VocabularyRow => ({
 });
 
 describe("the K4 vocabulary, version 1", () => {
-  it("builds, and is APPROVED (Balázs, 2026-10-23, Discord 1563178794708115548)", () => {
+  it("builds, and is APPROVED as the test-system base (acrobot's undisputed reading: Discord 1563178794708115548, 1563179163895070740, 1563181209628967012; the final approval is S4)", () => {
     const v = vocabularyV1();
     assert.equal(v.status, "APPROVED");
     assert.equal(v.version, 1);

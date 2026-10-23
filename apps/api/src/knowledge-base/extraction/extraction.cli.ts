@@ -19,6 +19,7 @@ import {
   type ClaimExtractor,
 } from "./claim-extractor.js";
 import {
+  MAX_CHUNKS_PER_SOURCE,
   MAX_SOURCES_PER_RUN,
   extractSource,
   type SourceOutcome,
@@ -39,9 +40,9 @@ import {
  * and checks every claim, and stores nothing: the output says what WOULD be
  * stored, as counts and codes.
  *
- * WITH `--apply` it stores CANDIDATE claims with PENDING field anchors. It
- * needs `KNOWLEDGE_DISCOVERY=on` (the research knowledge base's stage switch)
- * and an existing actor. Without `ACROPORA_AI_CLAIM_EXTRACTION_PATH` and the
+ * WITH `--apply` it stores CANDIDATE claims with PENDING field anchors, and
+ * needs an existing actor. BOTH need `KNOWLEDGE_DISCOVERY=on` (the research
+ * knowledge base's stage switch): a preview calls the paid model too. Without `ACROPORA_AI_CLAIM_EXTRACTION_PATH` and the
  * AI configuration there is no call at all.
  *
  * Exit: 0 finished; 1 the switch is off or no AI; 2 bad input or unknown
@@ -96,6 +97,16 @@ export function outcomeReport(outcomes: readonly SourceOutcome[]): string {
         `- ${o.sourceId}: ${o.status}${o.reason ? ` (${o.reason})` : ""}, ${o.sections} szakasz, ${o.calls} AI-hívás`,
         `    állítás ${o.claims}, mező ${o.fields}, szerkesztői kérdés ${o.questions}, tárolt állítás ${o.claimsCreated}`,
         `    elvetett állítás: ${codes(o.refusedClaims)}; elvetett mező: ${codes(o.refusedFields)}; AI nem válaszolt: ${codes(o.unavailable)}`,
+        ...(o.chunksDropped
+          ? [
+              `    KIMARADT DARAB (a ${MAX_CHUNKS_PER_SOURCE}-os korlát fölött): ${o.chunksDropped}`,
+            ]
+          : []),
+        ...(o.retractionUnchecked
+          ? [
+              "    A VISSZAVONÁS-ELLENŐRZÉS NEM FUTOTT RAJTA (nincs DOI): a szerkesztő nézze meg",
+            ]
+          : []),
       ].join("\n"),
     )
     .join("\n")}\n`;
@@ -119,15 +130,17 @@ export async function runExtractionCli(
     );
     return 1;
   }
+  // the switch guards the AI call too, not only the store: a preview is a
+  // paid model call on a third party's text (barracuda, #1838)
+  if (deps.env[DISCOVERY_SWITCH_ENV] !== "on") {
+    out.stderr(
+      `A kiolvasáshoz ${DISCOVERY_SWITCH_ENV}=on kell (csak a teszt környezetben), próbafutáshoz is.\n`,
+    );
+    return 1;
+  }
   const apply = argv.includes("--apply");
   let runId: string | null = null;
   if (apply) {
-    if (deps.env[DISCOVERY_SWITCH_ENV] !== "on") {
-      out.stderr(
-        `A tároláshoz ${DISCOVERY_SWITCH_ENV}=on kell (csak a teszt környezetben).\n`,
-      );
-      return 1;
-    }
     const actor = option(argv, "--actor");
     if (!actor || !(await deps.actorExists(actor))) {
       out.stderr("Az --apply-hoz létező felhasználó kell: --actor <userId>\n");

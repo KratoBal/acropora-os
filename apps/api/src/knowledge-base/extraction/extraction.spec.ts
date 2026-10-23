@@ -198,6 +198,36 @@ describe("the OS's own check of the AI's claims", () => {
     );
   });
 
+  it("a closed value's one-word anchor proves nothing; a sample size's unit is cleaned (barracuda, #1838)", () => {
+    const { claims } = checkClaims(
+      [
+        aiClaim({
+          fields: [
+            {
+              field: "effect",
+              value: "CALCIFICATION",
+              anchor: "Calcification",
+            },
+            {
+              field: "sampleSize",
+              value: 12,
+              unit: "<b>colonies</b>",
+              anchor: "(n = 12)",
+            },
+          ],
+          questions: [],
+        }),
+      ],
+      sections,
+      vocabulary,
+    );
+    const c = claims[0]!;
+    assert.deepEqual(c.refused, [
+      { field: "effect", refusal: "ANCHOR_TOO_SHORT" },
+    ]);
+    assert.deepEqual(c.sampleSize, { value: 12, unit: "bcoloniesb" });
+  });
+
   it("the AI answer's shape: a refusal, or a claim list; anything else unavailable", () => {
     assert.deepEqual(claimAnswerOf({ refusal: "NOT_JSON", extractedBy: "x" }), {
       kind: "REFUSED",
@@ -235,6 +265,7 @@ describe("extracting one source", () => {
           pmcid: "PMC1",
           retracted: false,
           alreadyExtracted: false,
+          retractionUnchecked: false,
           ...source,
         }),
         saveSource: async (input: {
@@ -328,6 +359,50 @@ describe("extracting one source", () => {
       (await extractSource("x", true, missing.value)).reason,
       "NOT_FOUND",
     );
+  });
+
+  it("an AI that only refuses: AI_REFUSED, nothing stored, so the text can be read again", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({ kind: "REFUSED", refusal: "NOT_JSON" }),
+      },
+    });
+    const outcome = await extractSource("src1", true, d.value);
+    assert.deepEqual(
+      [outcome.status, outcome.reason],
+      ["SKIPPED", "AI_REFUSED"],
+    );
+    assert.ok(!d.calls.some((c) => c.startsWith("save:")));
+  });
+
+  it("an answer with no claim still stores (the text's hash), so the AI is not paid twice", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({
+          kind: "ANSWER",
+          claims: [],
+          refusedClaims: [],
+          extractedBy: "m",
+        }),
+      },
+    });
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.status, "EXTRACTED");
+    assert.ok(d.calls.includes("save:0:m:64"));
+  });
+
+  it("the outcome says when the retraction check never ran, and how many chunks were left out", async () => {
+    const unchecked = deps({}, { retractionUnchecked: true });
+    assert.equal(
+      (await extractSource("src1", false, unchecked.value)).retractionUnchecked,
+      true,
+    );
+    const big = `<article><body>${Array.from({ length: 8 }, (_, i) => `<sec><title>Results ${i}</title><p>${"x".repeat(29_000)}</p></sec>`).join("")}</body></article>`;
+    const many = deps({
+      fetch: async () => new Response(big, { status: 200 }),
+    });
+    const outcome = await extractSource("src1", false, many.value);
+    assert.deepEqual([outcome.calls, outcome.chunksDropped], [6, 2]);
   });
 
   it("Europe PMC with no open text, and an AI that never answers: skipped with the reason", async () => {

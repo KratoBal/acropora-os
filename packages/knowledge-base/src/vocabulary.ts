@@ -265,12 +265,23 @@ export function isAncestor(
 }
 
 // ---------------------------------------------------------------------------
-// THE K4 VOCABULARY, VERSION 1, APPROVED. Written by the developers for the
-// editor; Balázs accepted it as the base on the test system, 2026-10-23
-// 13:14 UTC (Discord 1563178794708115548), and asked for an editor's screen
-// to extend it (S4). The document he approved lists the same rows:
+// THE K4 VOCABULARY, VERSION 1: APPROVED AS THE TEST-SYSTEM BASE, NOT THE
+// EDITOR'S FINAL APPROVAL. Written by the developers for the editor; the
+// document lists the same rows:
 // exchange/acroveliq/research-engine-k4-szotar-tervezet-2026-10-23.md.
-// A change to a row is a new version, approved again; never an edit here.
+//
+// WHO DECIDED WHAT, WORD FOR WORD (barracuda, #1838 review):
+// - Balázs, 2026-10-23 13:14 UTC (Discord 1563178794708115548): "jo lesz de
+//   ez igy nehezkes. van benne javitani valo", and he asked for a screen.
+// - acrobot, 13:16 UTC (Discord 1563179163895070740), told him its reading:
+//   version 1 goes in as the base on the test system, the fixes come on the
+//   screen.
+// - Balázs did not object; his next message, 13:24 UTC (Discord
+//   1563181209628967012), was that the Figma was ready and development may go.
+// So APPROVED here is acrobot's stated and undisputed reading, for the stage
+// pilot. The editor's final approval of the vocabulary comes on the
+// vocabulary screen (S4). A change to a row is a new version, approved
+// again; never an edit here.
 
 const row = (
   kind: VocabularyKind,
