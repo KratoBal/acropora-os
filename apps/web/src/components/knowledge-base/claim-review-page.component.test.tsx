@@ -88,6 +88,7 @@ const REVIEW: ClaimReview = {
     url: null,
     retracted: false,
     corrected: false,
+    retractionUnchecked: false,
   },
   passage: { text: PASSAGE, locator: "Results" },
   fields: [
@@ -366,5 +367,46 @@ describe("Állítás ellenőrzése", () => {
         "the effect and the direction must stay; otherwise discard the claim",
       ),
     ).toMatch(/^A hatás és az irány/);
+  });
+
+  it("visszavont forrás: az állítás nem menthető, csak elvethető", async () => {
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      source: { ...REVIEW.source, retracted: true },
+    });
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    await decideAll();
+    expect(screen.getByText("Visszavont forrás")).toBeTruthy();
+    expect(saveButton().disabled).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Állítás elvetése" }),
+    ).toBeTruthy();
+    expect(
+      reviewErrorText(
+        "the source was retracted: a claim on it can only be discarded",
+      ),
+    ).toMatch(/^A forrást visszavonták/);
+  });
+
+  it("nem ellenőrzött visszavonás: figyelmeztet az elfogadásnál, de menthető", async () => {
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      source: { ...REVIEW.source, retractionUnchecked: true },
+    });
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    expect(screen.getByRole("note").textContent).toMatch(
+      /A visszavonás ennél a forrásnál nincs ellenőrizve/,
+    );
+    await decideAll();
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it("ellenőrzött, nem visszavont forrásnál nincs figyelmeztetés", async () => {
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText("Visszavont forrás")).toBeNull();
   });
 });

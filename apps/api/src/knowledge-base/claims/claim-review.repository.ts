@@ -7,6 +7,7 @@ import {
 
 import type { FieldName } from "../extraction/claim-check.js";
 import {
+  ReviewInputError,
   planReview,
   type Applicability,
   type ClaimColumns,
@@ -52,6 +53,8 @@ export interface ClaimReview {
     url: string | null;
     retracted: boolean;
     corrected: boolean;
+    /** The Crossref retraction check never ran on it (no DOI): accept with care. */
+    retractionUnchecked: boolean;
   };
   passage: { text: string; locator: string };
   fields: ReviewField[];
@@ -147,6 +150,7 @@ const CLAIM_SELECT = {
                   url: true,
                   studyType: true,
                   measurementMethod: true,
+                  retractionCheckedAt: true,
                   versions: { select: { versionKind: true } },
                 },
               },
@@ -309,6 +313,7 @@ export class ClaimReviewRepository {
               v.versionKind,
             ),
           ),
+          retractionUnchecked: source.retractionCheckedAt === null,
         },
         passage: {
           text: evidence.passage.text,
@@ -351,6 +356,13 @@ export class ClaimReviewRepository {
       if (claim.status !== "CANDIDATE")
         throw new ClaimReviewConflict(
           "the claim is no longer waiting for review",
+        );
+      // nothing is built on a retracted work (plan v4): such a claim is
+      // discarded, never verified (barracuda, #1848 note a; acrobot 35765)
+      if (source.versions.some((v) => v.versionKind === "RETRACTION"))
+        throw new ReviewInputError(
+          "RETRACTED_SOURCE",
+          "the source was retracted: a claim on it can only be discarded",
         );
       const before = columnsOf(claim);
       const plan = planReview(

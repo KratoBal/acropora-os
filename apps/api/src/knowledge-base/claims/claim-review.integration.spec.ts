@@ -39,6 +39,7 @@ describe(
     let userId = "";
     let claimId = "";
     let otherClaimId = "";
+    let retractedClaimId = "";
 
     async function extractedClaim(tag: string): Promise<string> {
       const sourceId = (
@@ -88,6 +89,7 @@ describe(
       ).id;
       claimId = await extractedClaim("a");
       otherClaimId = await extractedClaim("b");
+      retractedClaimId = await extractedClaim("c");
     });
 
     after(removeLeftovers);
@@ -372,6 +374,44 @@ describe(
         { decision: "ACCEPTED", decidedById: userId, decidedAt: new Date() },
         question.anchorId,
       );
+    });
+
+    it("a claim on a retracted source cannot be verified, only discarded; an unchecked source says so", async () => {
+      const before = await repository.detail(retractedClaimId);
+      // made with a DOI but never through Crossref: the check did not run
+      assert.equal(before.source.retractionUnchecked, true);
+      assert.equal(before.source.retracted, false);
+      await prisma.knowledgeSourceVersion.create({
+        data: {
+          sourceId: before.source.id,
+          versionKind: "RETRACTION",
+          detectedVia: "MANUAL",
+        },
+      });
+      const review = await repository.detail(retractedClaimId);
+      assert.equal(review.source.retracted, true);
+      await assert.rejects(
+        repository.save(
+          retractedClaimId,
+          { decisions: decisions(review), applicability: null },
+          userId,
+        ),
+        (e: unknown) =>
+          e instanceof ReviewInputError && e.code === "RETRACTED_SOURCE",
+      );
+      const after = await repository.detail(retractedClaimId);
+      assert.equal(after.status, "CANDIDATE");
+      assert.ok(after.fields.every((f) => f.decision === "PENDING"));
+      assert.equal(
+        await prisma.auditLog.count({ where: { entityId: retractedClaimId } }),
+        0,
+      );
+      const discarded = await repository.discard(
+        retractedClaimId,
+        "visszavont cikk",
+        userId,
+      );
+      assert.equal(discarded.status, "WITHDRAWN");
     });
   },
 );

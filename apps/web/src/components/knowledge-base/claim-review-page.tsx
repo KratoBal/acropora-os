@@ -100,6 +100,8 @@ export function reviewErrorText(message: string): string {
     return `${FIELD_LABELS[coded[1]!] ?? coded[1]}: ${
       REFUSAL_TEXT[coded[2]!] ?? coded[2]
     }.`;
+  if (/source was retracted/.test(message))
+    return "A forrást visszavonták: erre az állításra nem épülhet semmi, csak elvethető.";
   if (/effect and the direction/.test(message))
     return "A hatás és az irány nem maradhat el. Ha valamelyik hibás, az állítást vesd el.";
   return message;
@@ -253,6 +255,7 @@ export function ClaimReviewPage() {
   const canSave =
     canDecide &&
     review !== null &&
+    !review.source.retracted &&
     pendingCount === 0 &&
     !applicabilityIncomplete &&
     !busy;
@@ -462,6 +465,23 @@ export function ClaimReviewPage() {
                   title="Nem menthető"
                   description={saveError}
                 />
+              ) : null}
+
+              {canDecide && review.source.retracted ? (
+                <Alert
+                  variant="danger"
+                  title="Visszavont forrás"
+                  description="Erre az állításra nem épülhet semmi: nem fogadható el, csak elvethető."
+                />
+              ) : canDecide && review.source.retractionUnchecked ? (
+                <p
+                  role="note"
+                  className="rounded-md bg-pilot-accent-warm-soft p-3 text-sm text-pilot-grey-900"
+                >
+                  A visszavonás ennél a forrásnál nincs ellenőrizve (a Crossref-
+                  ellenőrzés nem futott rá, jellemzően mert nincs DOI-ja).
+                  Elfogadás előtt nézd meg a forrás oldalát.
+                </p>
               ) : null}
 
               {canDecide ? (

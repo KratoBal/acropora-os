@@ -108,6 +108,8 @@ export interface ClaimReview {
     url: string | null;
     retracted: boolean;
     corrected: boolean;
+    /** The Crossref retraction check never ran on it (no DOI). */
+    retractionUnchecked: boolean;
   };
   passage: { text: string; locator: string };
   fields: ClaimReviewField[];
