@@ -427,6 +427,11 @@ export const ANONYMIZATION_REGISTER: Readonly<
   SupplierPriceMatch: {
     supplierSku: "business",
   },
+  SupplierPriceSuggestion: {
+    supplierSku: "business",
+    // the common words of two product names, nothing personal
+    basis: "business",
+  },
   Warehouse: {
     code: "ownCompany",
     name: "ownCompany",

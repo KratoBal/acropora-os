@@ -87,6 +87,38 @@ export interface SupplierPriceListMatching {
   unmatched: number;
 }
 
+/** Egy névből javasolt párosítás, amire ember jóváhagyása vár (task arlista-nev-javaslat). */
+export interface SupplierPriceSuggestionItem {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  supplierSku: string;
+  /** A lista sora, ahogy a beszállító írja (a legfrissebb listán). */
+  listedName: string | null;
+  listedBrand: string | null;
+  gtin: string | null;
+  unitPrice: string | null;
+  currency: string | null;
+  variantId: string;
+  variantName: string;
+  variantSku: string;
+  /** A szavak egyezésének mértéke, 0..1. */
+  score: number;
+  basis: { commonWords: string[]; sizes: string[]; brand: string | null };
+}
+
+export interface SupplierPriceSuggestionsResponse {
+  items: SupplierPriceSuggestionItem[];
+  /** Az összes függő javaslat a szűrésre (az oldal csak egy részét hozza). */
+  total: number;
+}
+
+/** A jóváhagyás vagy az elutasítás eredménye: hányat döntöttünk el, és hányat hagytunk ki (közben már döntöttek, vagy a cikkszámnak lett kötése). */
+export interface SupplierPriceSuggestionDecision {
+  decided: number;
+  skipped: number;
+}
+
 export interface SupplierPriceListUploadResult {
   listId: string;
   supplierId: string;
@@ -102,6 +134,8 @@ export interface SupplierPriceListUploadResult {
   duplicateRows: number;
   rejectedByReason: Record<string, number>;
   matching: SupplierPriceListMatching;
+  /** Hány sorhoz készült név alapú javaslat (jóváhagyásra vár). */
+  nameSuggestions: number;
 }
 
 /**

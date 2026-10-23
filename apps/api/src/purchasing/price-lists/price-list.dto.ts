@@ -1,5 +1,12 @@
 import { SUPPLIER_PRICE_LIST_FORMATS } from "@acropora/types";
-import { IsIn, IsString, Matches } from "class-validator";
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsIn,
+  IsString,
+  Matches,
+} from "class-validator";
 
 /** A feltöltés űrlap-mezői (a fájl külön, `file`). A formátumot a feltöltő választja. */
 export class UploadPriceListDto {
@@ -16,4 +23,13 @@ export class UploadPriceListDto {
   /** ISO 4217 hárombetűs kód (kis- vagy nagybetűvel). */
   @Matches(/^[A-Za-z]{3}$/)
   currency!: string;
+}
+
+/** Javaslatok jóváhagyása vagy elutasítása: egy lista azonosítókkal, legfeljebb 200. */
+export class DecideSuggestionsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  ids!: string[];
 }

@@ -7,6 +7,8 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { PriceListRepository } from "./price-list.repository.js";
 import { PriceListService } from "./price-list.service.js";
+import { PriceListSuggestionRepository } from "./price-list-suggestion.repository.js";
+import { PriceListSuggestionService } from "./price-list-suggestion.service.js";
 
 /**
  * AZ ÁRLISTA FELTÖLTÉSE A VALÓDI ADATBÁZISON (task beszallitoi-arlistak-2): a
@@ -66,7 +68,10 @@ describe(
   { skip: gate.mode === "skip" },
   () => {
     const suffix = Date.now() % 1_000_000;
-    const service = new PriceListService(new PriceListRepository());
+    const service = new PriceListService(
+      new PriceListRepository(),
+      new PriceListSuggestionService(new PriceListSuggestionRepository()),
+    );
     let supplierId = "";
     let userId = "";
     const variants: Record<string, string> = {};

@@ -12,6 +12,8 @@ import { PriceListController } from "./price-lists/price-list.controller.js";
 import { PriceListDisplayService } from "./price-lists/price-list-display.service.js";
 import { PriceListRepository } from "./price-lists/price-list.repository.js";
 import { PriceListService } from "./price-lists/price-list.service.js";
+import { PriceListSuggestionRepository } from "./price-lists/price-list-suggestion.repository.js";
+import { PriceListSuggestionService } from "./price-lists/price-list-suggestion.service.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
@@ -62,6 +64,8 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     PriceListRepository,
     PriceListService,
     PriceListDisplayService,
+    PriceListSuggestionRepository,
+    PriceListSuggestionService,
   ],
   // the dashboard's "Várható beérkezések" widget reads the same list
   exports: [ExpectedArrivalService],

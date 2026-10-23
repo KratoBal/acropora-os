@@ -26,6 +26,7 @@ import {
   PriceListRepository,
   type CoverageRaw,
 } from "./price-list.repository.js";
+import { PriceListSuggestionService } from "./price-list-suggestion.service.js";
 import {
   PriceListParseError,
   type PriceListParseErrorCode,
@@ -97,7 +98,10 @@ export interface UploadInput {
  */
 @Injectable()
 export class PriceListService {
-  constructor(private readonly repository: PriceListRepository) {}
+  constructor(
+    private readonly repository: PriceListRepository,
+    private readonly suggestions: PriceListSuggestionService,
+  ) {}
 
   async upload(
     input: UploadInput,
@@ -168,6 +172,12 @@ export class PriceListService {
       });
 
     const matching = await this.match(input.supplierId, parsed.entries);
+    // name-based suggestions for the rows nothing else tied; a failure here must not
+    // undo an upload that is already saved and matched
+    const nameSuggestions = await this.suggestions
+      .generateForList(listId)
+      .then((result) => result.withSuggestion)
+      .catch(() => 0);
     const rejectedByReason: Record<string, number> = {};
     for (const row of parsed.rejected)
       rejectedByReason[row.reason] = (rejectedByReason[row.reason] ?? 0) + 1;
@@ -184,6 +194,7 @@ export class PriceListService {
       duplicateRows: parsed.duplicateRows,
       rejectedByReason,
       matching,
+      nameSuggestions,
     };
   }
 

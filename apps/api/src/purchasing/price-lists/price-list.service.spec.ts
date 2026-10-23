@@ -16,6 +16,7 @@ import type {
   CoverageRaw,
 } from "./price-list.repository.js";
 import { PriceListService, parseListDate } from "./price-list.service.js";
+import type { PriceListSuggestionService } from "./price-list-suggestion.service.js";
 import type { ParsedPriceEntry } from "./price-list.types.js";
 
 const NOW = new Date("2026-10-23T12:00:00.000Z");
@@ -31,6 +32,14 @@ const DEJONG = Buffer.from(
   ].join("\r\n"),
   "utf8",
 );
+
+const noSuggestions = {
+  generateForList: async () => ({
+    considered: 0,
+    withSuggestion: 0,
+    stored: 0,
+  }),
+} as unknown as PriceListSuggestionService;
 
 function setup(
   options: {
@@ -80,7 +89,12 @@ function setup(
       saved.push(decisions);
     },
   } as unknown as PriceListRepository;
-  return { service: new PriceListService(repository), created, saved, queried };
+  return {
+    service: new PriceListService(repository, noSuggestions),
+    created,
+    saved,
+    queried,
+  };
 }
 
 const input = (overrides: Record<string, unknown> = {}) => ({
@@ -300,7 +314,7 @@ describe("PriceListService.remove", () => {
         return { rowCount: 7, sourceFileName: "x.csv" };
       },
     } as unknown as PriceListRepository;
-    const result = await new PriceListService(repository).remove(
+    const result = await new PriceListService(repository, noSuggestions).remove(
       "list-1",
       "user-1",
     );
@@ -313,7 +327,7 @@ describe("PriceListService.remove", () => {
       remove: async () => null,
     } as unknown as PriceListRepository;
     await rejects(
-      new PriceListService(repository).remove("nope", "u"),
+      new PriceListService(repository, noSuggestions).remove("nope", "u"),
       NotFoundException,
     );
   });
@@ -353,17 +367,20 @@ describe("PriceListService.lists coverage", () => {
     unmatchedBarcodeKnownToUs: 5,
   });
   const service = (coverage: Map<string, CoverageRaw>) =>
-    new PriceListService({
-      lists: async () => [listRow("a"), listRow("b")],
-      coverage: async (ids: string[]) => {
-        assert.deepEqual(ids, ["a", "b"]);
-        return coverage;
-      },
-      variantBarcodeCounts: async () => ({
-        active: 1900,
-        withoutBarcode: 1100,
-      }),
-    } as unknown as PriceListRepository);
+    new PriceListService(
+      {
+        lists: async () => [listRow("a"), listRow("b")],
+        coverage: async (ids: string[]) => {
+          assert.deepEqual(ids, ["a", "b"]);
+          return coverage;
+        },
+        variantBarcodeCounts: async () => ({
+          active: 1900,
+          withoutBarcode: 1100,
+        }),
+      } as unknown as PriceListRepository,
+      noSuggestions,
+    );
 
   it("gives each list its own counts, in the right fields, and the variant counts once", async () => {
     const result = await service(new Map([["a", raw("a")]])).lists();
