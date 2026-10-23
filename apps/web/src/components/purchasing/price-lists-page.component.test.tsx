@@ -332,7 +332,7 @@ describe("PriceListsPage", () => {
     expect(cell).toHaveTextContent(
       "5 elutasítva · 2950 párosítatlan (1100 vonalkóddal, 1850 vonalkód nélkül)",
     );
-    expect(cell).not.toHaveTextContent("Figyelem");
+    expect(cell).not.toHaveTextContent("Ellenőrizendő");
   });
 
   it("says how many of our active variants have no barcode, above the table", async () => {
@@ -347,13 +347,13 @@ describe("PriceListsPage", () => {
   it("warns when an unmatched row's barcode is in our own table: the matcher should have caught it", () => {
     const base = summary().coverage;
     const { rerender } = render(<CoverageCell coverage={base} />);
-    expect(screen.queryByText(/Figyelem/)).toBeNull();
+    expect(screen.queryByText(/Ellenőrizendő/)).toBeNull();
     rerender(
       <CoverageCell coverage={{ ...base, unmatchedBarcodeKnownToUs: 7 }} />,
     );
     expect(
       screen.getByText(
-        /7 vonalkódja szerepel a mi vonalkód-táblánkban, és mégsem párosodott/,
+        /7 vonalkódja szerepel a mi vonalkód-táblánkban, és mégsem párosodott: vagy a cikkszám ellentmond a vonalkódnak, vagy a vonalkód nálunk másképp van tárolva/,
       ),
     ).toBeInTheDocument();
   });
