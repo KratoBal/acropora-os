@@ -54,6 +54,8 @@ describe("a kimenő bizonylatok lánca", { skip: gate.mode === "skip" }, () => {
           invoiceNumber: `${PREFIX}-${key}-${suffix}`,
           status: "ISSUED",
           partnerName: `${PREFIX} Vevő`,
+          // the Számlázás module's own rows carry a source reference; the storno does not
+          sourceType: documentType === "STORNO" ? null : "PROJECT",
           issueDate: new Date("2026-10-10T10:00:00Z"),
           proformaInvoiceId: links.proforma ? ids[links.proforma] : null,
           referencedInvoiceId: links.referenced ? ids[links.referenced] : null,
@@ -93,7 +95,7 @@ describe("a kimenő bizonylatok lánca", { skip: gate.mode === "skip" }, () => {
 
   it("lists the whole chain, in order, from any of its members, and the storno behind the final invoice", async () => {
     for (const start of ["p1", "a1", "f1", "s1"]) {
-      const result = await repository.related(ids[start]!);
+      const result = (await repository.related(ids[start]!)).documents;
       assert.deepEqual(
         result.map((d) => d.id),
         [ids.p1, ids.a1, ids.f1, ids.s1],
@@ -101,17 +103,22 @@ describe("a kimenő bizonylatok lánca", { skip: gate.mode === "skip" }, () => {
       );
       assert.deepEqual(result.find((d) => d.current)?.id, ids[start]);
     }
-    const storno = (await repository.related(ids.p1!)).find(
-      (d) => d.documentType === "STORNO",
-    );
+    const chain = (await repository.related(ids.p1!)).documents;
+    const storno = chain.find((d) => d.documentType === "STORNO");
     assert.equal(storno?.cancelsId, ids.f1);
+    // the storno row has no source reference: no details page to open
+    assert.equal(storno?.openable, false);
+    assert.deepEqual(
+      chain.filter((d) => d.documentType !== "STORNO").map((d) => d.openable),
+      [true, true, true],
+    );
   });
 
   it("keeps the second chain apart and gives a lone document nothing", async () => {
     assert.deepEqual(
-      (await repository.related(ids.a2!)).map((d) => d.id),
+      (await repository.related(ids.a2!)).documents.map((d) => d.id),
       [ids.p2, ids.a2],
     );
-    assert.deepEqual(await repository.related(ids.lone!), []);
+    assert.deepEqual((await repository.related(ids.lone!)).documents, []);
   });
 });

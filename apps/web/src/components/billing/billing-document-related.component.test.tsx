@@ -26,6 +26,7 @@ const doc = (
   grossAmount: "127000.0000",
   currency: "HUF",
   current: false,
+  openable: true,
   cancelsId: null,
   ...overrides,
 });
@@ -45,6 +46,8 @@ const CHAIN: BillingRelatedDocument[] = [
     number: "S-1",
     cancelsId: "f1",
     grossAmount: "-127000.0000",
+    // the storno row has no details page
+    openable: false,
   }),
   doc({
     id: "d1",
@@ -79,6 +82,23 @@ describe("a kapcsolódó kimenő bizonylatok", () => {
     ).toHaveAttribute("href", "/penzugy/szamlazas/p1");
     expect(screen.queryByRole("link", { name: /Végszámla · V-1/ })).toBeNull();
     expect(screen.getByText("Ez a bizonylat")).toBeInTheDocument();
+  });
+
+  it("does not link a member without a details page: the storno stays plain text", () => {
+    render(<BillingDocumentRelated documents={CHAIN} />);
+    expect(screen.getByText(/Sztornó · S-1/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Sztornó/ })).toBeNull();
+  });
+
+  it("says when the chain is longer than the list shows", () => {
+    const { rerender } = render(
+      <BillingDocumentRelated documents={CHAIN} truncated />,
+    );
+    expect(
+      screen.getByText("A lánc hosszabb, mint amit itt mutatunk."),
+    ).toBeInTheDocument();
+    rerender(<BillingDocumentRelated documents={CHAIN} />);
+    expect(screen.queryByText(/hosszabb, mint amit/)).toBeNull();
   });
 
   it("names what the storno cancels", () => {

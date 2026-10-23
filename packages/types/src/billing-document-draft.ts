@@ -201,6 +201,13 @@ export interface BillingRelatedDocument {
   currency: string;
   /** Az a bizonylat, amelynek az oldala ez. */
   current: boolean;
+  /**
+   * Megnyitható-e a részletek oldala. A részletek csak a Számlázás modul saját
+   * soraira válaszolnak (forrás-hivatkozás van, nem karbantartási piszkozat); a
+   * sztornó sor és a más modulból kiállított számla is a lánc tagja, de a
+   * hivatkozása 404 lenne.
+   */
+  openable: boolean;
   /** Sztornón és helyesbítőn az a bizonylat, amelyet érvénytelenít; máshol `null`. */
   cancelsId: string | null;
 }
@@ -257,4 +264,6 @@ export interface BillingDocumentDetail {
   finalInvoice?: BillingDocumentFinalInvoiceLink | null;
   /** A teljes lánc, ha a bizonylatnak van kapcsolódója; egyébként üres. */
   relatedDocuments?: BillingRelatedDocument[];
+  /** Igaz, ha a lánc hosszabb, mint amit a lista mutat (a felső határnál megáll). */
+  relatedDocumentsTruncated?: boolean;
 }
