@@ -1039,3 +1039,145 @@ describe("withLabelledTotal", () => {
     assert.deepEqual(withLabelledTotal(feed, lines), feed);
   });
 });
+
+/*
+  A RÖVID ISMERT SZÁM, HA A FÁJLNÉV VAGY A TÁRGY IS KIMONDJA (acrobot 35521,
+  J55388, 2026-10-22). A sorok szintetikusak, a mért alakot követik: egy
+  oldalnyi szöveg, a szám tömörítve áll egy értéksorban, a szállító adószáma
+  nincs benne. MI PIROSÍT: ha a szám a fájlnév/tárgy nélkül mégis kötődik; ha a
+  fájlnév egy MÁSIK számot mond; ha öt jelnél rövidebb szám kötődik; ha két
+  szállító azonos rövid száma dönt; ha a hat jegyű szám a nyolc jegyű
+  szabályon túl mást is átenged.
+*/
+describe("a short known number the file name or subject names too (J55388)", () => {
+  const GUMI = [
+    "Számla",
+    "Példa Gumi Kft. | 1111 Budapest, Minta utca 1.",
+    "Sorszám: | Kelt: | Teljesítés: | Fizetési határidő:",
+    "J55388 | 2026.10.22 | 2026.10.22 | 2026.10.30",
+    "Fizetendő összesen: | 119 800 Ft",
+  ];
+  const KNOWN: KnownInvoiceNumber[] = [
+    { number: "J55388", supplierTaxNumber: "10735442-2-13" },
+    { number: "U26/01266-SZ", supplierTaxNumber: "14880568-2-43" },
+  ];
+  const BOTH = {
+    fileName: "Számla J55388 - 2026-10-22.pdf",
+    subject: "Számla J55388 - 22.10.2026",
+  };
+
+  it("takes the six-sign number when the file name and the subject say it too", () => {
+    assert.deepEqual(knownNumberInText(GUMI, KNOWN, BOTH), KNOWN[0]);
+  });
+
+  it("takes it on the file name alone, and on the subject alone", () => {
+    assert.deepEqual(
+      knownNumberInText(GUMI, KNOWN, { fileName: BOTH.fileName }),
+      KNOWN[0],
+    );
+    assert.deepEqual(
+      knownNumberInText(GUMI, KNOWN, { subject: BOTH.subject }),
+      KNOWN[0],
+    );
+  });
+
+  it("does NOT take it without the hints: the eight-sign floor still holds", () => {
+    assert.equal(knownNumberInText(GUMI, KNOWN), null);
+    assert.equal(knownNumberInText(GUMI, KNOWN, {}), null);
+    assert.equal(
+      knownNumberInText(GUMI, KNOWN, {
+        fileName: "Szamla.pdf",
+        subject: "Számla",
+      }),
+      null,
+    );
+  });
+
+  it("does not take it when the file name names ANOTHER number", () => {
+    assert.equal(
+      knownNumberInText(GUMI, KNOWN, { fileName: "Számla J55389.pdf" }),
+      null,
+    );
+  });
+
+  it("does not take it when the hint only contains the number inside a longer word", () => {
+    assert.equal(
+      knownNumberInText(GUMI, KNOWN, { fileName: "Számla XJ55388Y.pdf" }),
+      null,
+    );
+  });
+
+  it("keeps a five-sign floor: five signs pass, four do not, even with the hint", () => {
+    const five = ["Számla", "A5538 | 2026.10.22"];
+    assert.deepEqual(
+      knownNumberInText(
+        five,
+        [{ number: "A5538", supplierTaxNumber: "10735442-2-13" }],
+        {
+          fileName: "Számla A5538.pdf",
+        },
+      ),
+      { number: "A5538", supplierTaxNumber: "10735442-2-13" },
+    );
+    const four = ["Számla", "A538 | 2026.10.22"];
+    assert.equal(
+      knownNumberInText(
+        four,
+        [{ number: "A538", supplierTaxNumber: "10735442-2-13" }],
+        {
+          fileName: "Számla A538.pdf",
+        },
+      ),
+      null,
+    );
+  });
+
+  it("a date-shaped word of the file name does not count as a hint word", () => {
+    // "2026-10-2" is a date in the name; as a known number it compacts to 2026102 (seven signs)
+    const text = ["Számla", "2026102 | 2026.10.22"];
+    const known = [{ number: "2026-10-2", supplierTaxNumber: "10735442-2-13" }];
+    assert.equal(
+      knownNumberInText(text, known, { fileName: "Számla 2026-10-2.pdf" }),
+      null,
+    );
+    // the same seven signs written as a number do count
+    assert.deepEqual(
+      knownNumberInText(text, known, { fileName: "Számla 2026102.pdf" }),
+      known[0],
+    );
+  });
+
+  it("the same short number from two suppliers decides nothing, hint or not", () => {
+    const twice = [
+      ...KNOWN,
+      { number: "J55388", supplierTaxNumber: "22222222-2-22" },
+    ];
+    assert.equal(knownNumberInText(GUMI, twice, BOTH), null);
+  });
+
+  it("two different known numbers in the text decide nothing", () => {
+    const two = [...GUMI, "Hivatkozás: U26/01266-SZ"];
+    assert.equal(
+      knownNumberInText(two, KNOWN, {
+        fileName: "Számla J55388 U26/01266-SZ.pdf",
+      }),
+      null,
+    );
+  });
+
+  it("completes the reading into a NAV reading with the supplier's tax number", () => {
+    assert.deepEqual(
+      withKnownNumber(
+        { invoiceNumber: null, numberFrom: null, supplierTaxNumber: null },
+        GUMI,
+        KNOWN,
+        BOTH,
+      ),
+      {
+        invoiceNumber: "J55388",
+        numberFrom: "NAV",
+        supplierTaxNumber: "10735442-2-13",
+      },
+    );
+  });
+});

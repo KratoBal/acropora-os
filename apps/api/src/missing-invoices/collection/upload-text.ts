@@ -47,7 +47,7 @@ export async function readUploadText(
     navNumbers: () => navNumbers,
   });
   if (reading.numberFrom !== "NAV")
-    reading = withKnownNumber(reading, lines, await deps.knownNumbers());
+    reading = withKnownNumber(reading, lines, await deps.knownNumbers(), hints);
   if (reading.numberFrom !== "NAV") {
     const reference = bankReference(lines, reading, hints, narratives);
     if (reference) reading = withBankReference(reading, lines, reference);

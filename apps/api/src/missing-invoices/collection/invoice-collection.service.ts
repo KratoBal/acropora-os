@@ -540,6 +540,7 @@ export class InvoiceCollectionService {
           textReading,
           lines,
           await this.knownNumbers(),
+          hints,
         );
       }
       if (textReading.numberFrom !== "NAV") {

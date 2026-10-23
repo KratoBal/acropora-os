@@ -666,6 +666,45 @@ export interface KnownInvoiceNumber {
 const KNOWN_NUMBER_MIN = 8;
 
 /**
+ * A RÖVID ISMERT SZÁM, HA A FÁJLNÉV VAGY A TÁRGY IS KIMONDJA (acrobot 35521,
+ * J55388, Gumi-Profi Team Kft, 2026-10-22). Mérve élesen: a PDF szövegében a
+ * szám ott áll (tömörített alakban), a szállító adószáma NINCS benne, a szám
+ * hat jegyű: a NAV-ág adószám nélkül nem indul, a nyolc jegyű alsó határ pedig
+ * kizárta. A levél fájlneve (`Számla J55388 - 2026-10-22.pdf`) és tárgya
+ * (`Számla J55388 - 22.10.2026`) viszont ugyanazt a számot mondja.
+ *
+ * Három egyező jel kell, nem egy: a szám az ismert számok között van, a
+ * szövegben önálló szó, ÉS a fájlnév vagy a tárgy önálló szava is. Az alsó
+ * határ öt jel: ennél rövidebb szám egy összeg, egy irányítószám vagy egy
+ * sorszám is lehet, és ott a fájlnév sem bizonyít semmit. A többi védelem
+ * változatlan: csak egyetlen találat számít, és két szállító azonos száma nem
+ * dönt.
+ */
+const KNOWN_NUMBER_SHORT_MIN = 5;
+
+/** A levél fájlneve és tárgya: a rövid ismert számot ezek erősítik meg. */
+export interface KnownNumberHints {
+  fileName?: string | null;
+  subject?: string | null;
+}
+
+/** A fájlnév és a tárgy önálló szavai, tömörítve (a `.pdf` vég és a dátum-alakú szó nélkül). */
+function hintWords(hints: KnownNumberHints | undefined): Set<string> {
+  const text = `${hints?.fileName ?? ""} ${hints?.subject ?? ""}`.replace(
+    /\.pdf\b/gi,
+    " ",
+  );
+  return new Set(
+    text
+      .split(/[\s|_,;()]+/)
+      .map((word) => word.replace(/\.$/, ""))
+      .filter((word) => !DATE_SHAPE.test(word))
+      .map(compactNumber)
+      .filter(Boolean),
+  );
+}
+
+/**
  * AZ ISMERT SZÁM A SZÖVEGBEN, HA A SZÁLLÍTÓ ADÓSZÁMA NEM ÁLL BENNE (acrobot
  * 26885, Tisza 97 U26/03861-SZ). Mérve 2026-10-06, éles: a PDF szövegében a
  * számla száma ott áll (egy táblázat fejléce alatti sorban), a szállító
@@ -683,8 +722,10 @@ const KNOWN_NUMBER_MIN = 8;
 export function knownNumberInText(
   lines: readonly string[],
   known: readonly KnownInvoiceNumber[],
+  hints?: KnownNumberHints,
 ): KnownInvoiceNumber | null {
   const ours = ACROPORA_COMPANY.taxNumberBase;
+  const named = hintWords(hints);
   // a dátum nem szám: egy 8 jegyű számlaszám a kelte számjegyeivel is egyezhet
   const words = lines.flatMap((line) =>
     line
@@ -699,7 +740,10 @@ export function knownNumberInText(
   const hits = new Map<string, KnownInvoiceNumber>();
   for (const candidate of known) {
     const compact = compactNumber(candidate.number);
-    if (compact.length < KNOWN_NUMBER_MIN || !/\d/.test(compact)) continue;
+    if (compact.length < KNOWN_NUMBER_SHORT_MIN || !/\d/.test(compact))
+      continue;
+    // a rövid számot a fájlnév vagy a tárgy is ki kell mondja
+    if (compact.length < KNOWN_NUMBER_MIN && !named.has(compact)) continue;
     if (taxBase(candidate.supplierTaxNumber) === ours) continue;
     if (!present.has(compact)) continue;
     const seen = hits.get(compact);
@@ -724,9 +768,10 @@ export function withKnownNumber(
   reading: InvoiceTextReading,
   lines: readonly string[],
   known: readonly KnownInvoiceNumber[],
+  hints?: KnownNumberHints,
 ): InvoiceTextReading {
   if (reading.supplierTaxNumber) return reading;
-  const hit = knownNumberInText(lines, known);
+  const hit = knownNumberInText(lines, known, hints);
   if (!hit) return reading;
   if (
     reading.numberFrom === "LABEL" &&
