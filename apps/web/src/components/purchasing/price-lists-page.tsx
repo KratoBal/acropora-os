@@ -20,6 +20,7 @@ import {
   type SupplierPriceListUploadResult,
   type SupplierSummary,
 } from "@acropora/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -375,6 +376,11 @@ export function PriceListsPage() {
         description="A beszállító árlistája (CSV): a lista sorai a beszerzési árat adják termékenként. A formátumot te választod; ami nem illik rá, azt a rendszer egészben elutasítja. A fájl nem tárolódik, csak a feldolgozott sorai. Az ár a lista ára: hogy nettó-e, azt egy számlasor igazolja."
       />
       <PurchasingTabs active="/beszerzes/arlistak" />
+      <p className="text-sm">
+        <Link href="/beszerzes/arlistak/javaslatok" className="underline">
+          Párosítási javaslatok (név alapján, jóváhagyásra)
+        </Link>
+      </p>
 
       {canManage ? (
         <section

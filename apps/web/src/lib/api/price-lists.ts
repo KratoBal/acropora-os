@@ -2,6 +2,8 @@ import type {
   SupplierPriceListFormat,
   SupplierPriceListUploadResult,
   SupplierPriceListsResponse,
+  SupplierPriceSuggestionDecision,
+  SupplierPriceSuggestionsResponse,
   VariantSupplierPrices,
 } from "@acropora/types";
 
@@ -13,6 +15,13 @@ const base = "/purchasing/price-lists";
 function listQueryString(supplierId: string): string {
   const params = new URLSearchParams();
   if (supplierId) params.set("supplierId", supplierId);
+  return params.toString();
+}
+
+function suggestionQueryString(supplierId: string, offset: number): string {
+  const params = new URLSearchParams();
+  if (supplierId) params.set("supplierId", supplierId);
+  if (offset > 0) params.set("offset", String(offset));
   return params.toString();
 }
 
@@ -43,6 +52,32 @@ export const priceListsApi = {
       method: "POST",
       body,
     });
+  },
+  suggestions(
+    token: string,
+    supplierId: string,
+    offset: number,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<SupplierPriceSuggestionsResponse>(
+      `${base}/suggestions?${suggestionQueryString(supplierId, offset)}`,
+      token,
+      { signal },
+    );
+  },
+  approveSuggestions(token: string, ids: string[]) {
+    return apiRequest<SupplierPriceSuggestionDecision>(
+      `${base}/suggestions/approve`,
+      token,
+      { method: "POST", body: JSON.stringify({ ids }) },
+    );
+  },
+  rejectSuggestions(token: string, ids: string[]) {
+    return apiRequest<SupplierPriceSuggestionDecision>(
+      `${base}/suggestions/reject`,
+      token,
+      { method: "POST", body: JSON.stringify({ ids }) },
+    );
   },
   variantPrices(token: string, variantId: string, signal?: AbortSignal) {
     return apiRequest<VariantSupplierPrices>(
