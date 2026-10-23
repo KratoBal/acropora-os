@@ -30,6 +30,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 const api = vi.hoisted(() => ({
+  vocabulary: vi.fn(),
   reviewQueue: vi.fn(),
   claimReview: vi.fn(),
   saveClaimReview: vi.fn(),
@@ -237,6 +238,70 @@ describe("Állítás ellenőrzése", () => {
       decision: "CORRECT",
       value: { min: 2, max: null, unit: "µmol/l", basis: null },
     });
+  });
+
+  it("felveszem a szótárba: a hiányzó faj a nemzetségével megy el, és a mező döntöttnek számít (S5)", async () => {
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    await decideAll();
+    // only the question field offers it
+    expect(
+      within(row("species", 0)).queryByRole("button", {
+        name: /felveszem a szótárba/,
+      }),
+    ).toBeNull();
+    click("species", "felveszem a szótárba", 1);
+    const editor = screen.getByLabelText("Felvétel a szótárba");
+    expect(
+      (within(editor).getByLabelText("Szótár-alakok") as HTMLInputElement)
+        .value,
+    ).toBe("porites lutea");
+    expect(
+      (within(editor).getByLabelText("Szülő") as HTMLSelectElement).value,
+    ).toBe("PORITES");
+    fireEvent.click(
+      within(editor).getByRole("button", { name: "Felveszem és elfogadom" }),
+    );
+    expect(row("species", 1).textContent).toContain(
+      "szótárba felvéve (tervezet)",
+    );
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(api.saveClaimReview).toHaveBeenCalled());
+    expect(api.saveClaimReview.mock.calls[0]?.[2].decisions[1]).toEqual({
+      anchorId: "a2",
+      decision: "ADD_TO_VOCABULARY",
+      entry: {
+        forms: ["porites lutea"],
+        rank: "SPECIES",
+        parentKey: "PORITES",
+      },
+    });
+  });
+
+  it("felveszem a szótárba, hatás: magyar nevet kér, a gép szava a kulcs", async () => {
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      fields: [
+        ...REVIEW.fields.filter((f) => f.field !== "effect"),
+        field("a7", "effect", null, "microbiome composition shifted", {
+          question: "MICROBIOMECOMPOSITION",
+        }),
+      ],
+    });
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    click("effect", "felveszem a szótárba");
+    const editor = screen.getByLabelText("Felvétel a szótárba");
+    const submit = within(editor).getByRole("button", {
+      name: "Felveszem és elfogadom",
+    }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(within(editor).getByLabelText("Szótár-alakok"), {
+      target: { value: "mikrobiom-összetétel; mikrobiom összetétele" },
+    });
+    fireEvent.click(submit);
+    expect(row("effect").textContent).toContain("Mikrobiom-összetétel");
+    expect(row("effect").textContent).not.toContain("MICROBIOMECOMPOSITION");
   });
 
   it("a szerver elutasítása a szerkesztő szavaival jelenik meg", async () => {

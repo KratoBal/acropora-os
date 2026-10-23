@@ -130,8 +130,66 @@ export interface ClaimReview {
 
 export interface ClaimFieldDecision {
   anchorId: string;
-  decision: "ACCEPT" | "CORRECT" | "REJECT";
+  decision: "ACCEPT" | "CORRECT" | "REJECT" | "ADD_TO_VOCABULARY";
   value?: unknown;
+  /** ADD_TO_VOCABULARY: the new key's entry (S5; the kind follows the field). */
+  entry?: VocabularyEntryInput;
+}
+
+/** A new species or effect for the vocabulary draft (S5, Figma 3:425). */
+export interface VocabularyEntryInput {
+  kind?: "TAXON" | "EFFECT";
+  key?: string;
+  forms: string[];
+  rank?: "GROUP" | "GENUS" | "SPECIES";
+  parentKey?: string;
+  note?: string;
+}
+
+export interface VocabularyEntry {
+  kind: string;
+  key: string;
+  label: string;
+  forms: string[];
+  exactMatch: boolean;
+  parentKey: string | null;
+  rank: string | null;
+  note: string | null;
+}
+
+export interface VocabularyChange {
+  kind: string;
+  key: string;
+  change: "ADDED" | "CHANGED" | "REMOVED";
+  fields: string[];
+}
+
+export interface VocabularyState {
+  approved: {
+    version: number;
+    origin: "CODE" | "DATABASE";
+    approvedAt: string | null;
+    approvedBy: string | null;
+  };
+  draft: { version: number; changes: VocabularyChange[] } | null;
+  entries: VocabularyEntry[];
+}
+
+export interface VocabularyProbe {
+  version: number;
+  parts: {
+    taxa: string[];
+    environments: string[];
+    effects: string[];
+    verbDirections: string[];
+    negation: "AFFIRMATIVE" | "NEGATED" | "UNDECIDABLE";
+    negationReason: string | null;
+    certainty: string[];
+    scopePhrases: string[];
+    unsupported: string[];
+    quantities: { text: string; unit: string; basis: string | null }[];
+    unrecognisedNumbers: string[];
+  };
 }
 
 export interface ClaimReviewInput {
@@ -142,6 +200,7 @@ export interface ClaimReviewInput {
 const base = "/knowledge-base/sources";
 const claimsBase = "/knowledge-base/claims";
 const overviewPath = "/knowledge-base/overview";
+const vocabularyBase = "/knowledge-base/vocabulary";
 
 export const knowledgeBaseApi = {
   overview(token: string, signal?: AbortSignal) {
@@ -183,6 +242,49 @@ export const knowledgeBaseApi = {
       `${claimsBase}/${encodeURIComponent(claimId)}/discard`,
       token,
       { method: "POST", body: JSON.stringify({ reason }) },
+    );
+  },
+  vocabulary(token: string, signal?: AbortSignal) {
+    return apiRequest<VocabularyState>(vocabularyBase, token, { signal });
+  },
+  probeVocabulary(
+    token: string,
+    sentence: string,
+    use: "APPROVED" | "DRAFT",
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<VocabularyProbe>(`${vocabularyBase}/probe`, token, {
+      method: "POST",
+      body: JSON.stringify({ sentence, use }),
+      signal,
+    });
+  },
+  addVocabularyEntry(token: string, entry: VocabularyEntryInput) {
+    return apiRequest<VocabularyState>(`${vocabularyBase}/entries`, token, {
+      method: "POST",
+      body: JSON.stringify(entry),
+    });
+  },
+  editVocabularyEntry(
+    token: string,
+    kind: string,
+    key: string,
+    edit: { forms?: string[]; parentKey?: string | null; note?: string | null },
+  ) {
+    return apiRequest<VocabularyState>(
+      `${vocabularyBase}/entries/${encodeURIComponent(kind)}/${encodeURIComponent(key)}`,
+      token,
+      { method: "PATCH", body: JSON.stringify(edit) },
+    );
+  },
+  approveVocabulary(token: string, version: number) {
+    return apiRequest<VocabularyState>(
+      `${vocabularyBase}/draft/approve`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ version }),
+      },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {

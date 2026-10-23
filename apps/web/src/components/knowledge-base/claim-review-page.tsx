@@ -21,6 +21,7 @@ import {
   type Applicability,
   type ClaimReview,
   type ClaimReviewField,
+  type VocabularyEntryInput,
 } from "@/lib/api/knowledge-base";
 import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
 import { STUDY_LABELS } from "./source-screening-page";
@@ -35,7 +36,11 @@ import { STUDY_LABELS } from "./source-screening-page";
  * A javítást a szerver ugyanazon a horgony-ellenőrzésen viszi át, mint a gép
  * értékét: ami nem horgonyozható, az nem mező. Egy szótáron kívüli érték
  * (szerkesztői kérdés) változatlanul nem fogadható el: javítani kell egy
- * ismert értékre, vagy elvetni. Új szótár-sor felvétele nem itt történik.
+ * ismert értékre, elvetni, vagy (S5, acrobot 35807) FELVENNI A SZÓTÁRBA:
+ * egy hiányzó, de helyes faj vagy hatás a szótár tervezetébe kerül, és a mező
+ * erre a kulcsra javítva mentődik, ugyanazon a horgony-ellenőrzésen. A
+ * tervezet jóváhagyása Balázsé (Szótár fül); addig a gép a jóváhagyott
+ * változatot használja.
  */
 export const FIELD_LABELS: Record<string, string> = {
   species: "Faj",
@@ -138,7 +143,15 @@ export function quantityLabel(
 type LocalDecision =
   | { decision: "ACCEPT" }
   | { decision: "REJECT" }
-  | { decision: "CORRECT"; value: unknown; text: string };
+  | { decision: "CORRECT"; value: unknown; text: string }
+  | {
+      decision: "ADD_TO_VOCABULARY";
+      entry: VocabularyEntryInput;
+      text: string;
+    };
+
+/** The question fields a new vocabulary key may answer (the API's ADDABLE_FIELDS). */
+const ADDABLE = new Set(["species", "effect"]);
 
 /** The field's value as the editor reads it. */
 function valueText(
@@ -194,6 +207,7 @@ export function ClaimReviewPage() {
   const [busy, setBusy] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, LocalDecision>>({});
   const [editing, setEditing] = useState<string | null>(null);
+  const [addingVocab, setAddingVocab] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [applicability, setApplicability] = useState<Applicability | "">("");
   const [applicabilityReason, setApplicabilityReason] = useState("");
@@ -270,6 +284,7 @@ export function ClaimReviewPage() {
   const decide = (anchorId: string, d: LocalDecision) => {
     setDecisions((all) => ({ ...all, [anchorId]: d }));
     setEditing(null);
+    setAddingVocab(null);
     setSaveError(null);
   };
 
@@ -288,7 +303,13 @@ export function ClaimReviewPage() {
           const d = decisions[f.anchorId]!;
           return d.decision === "CORRECT"
             ? { anchorId: f.anchorId, decision: "CORRECT", value: d.value }
-            : { anchorId: f.anchorId, decision: d.decision };
+            : d.decision === "ADD_TO_VOCABULARY"
+              ? {
+                  anchorId: f.anchorId,
+                  decision: "ADD_TO_VOCABULARY",
+                  entry: d.entry,
+                }
+              : { anchorId: f.anchorId, decision: d.decision };
         }),
         applicability:
           applicability === ""
@@ -428,6 +449,20 @@ export function ClaimReviewPage() {
                     onCancelEdit={() => setEditing(null)}
                     onCorrect={(value, text) =>
                       decide(f.anchorId, { decision: "CORRECT", value, text })
+                    }
+                    addingVocab={addingVocab === f.anchorId}
+                    onStartAdd={() => {
+                      setSelected(f.anchorId);
+                      setEditing(null);
+                      setAddingVocab(f.anchorId);
+                    }}
+                    onCancelAdd={() => setAddingVocab(null)}
+                    onAdd={(entry, text) =>
+                      decide(f.anchorId, {
+                        decision: "ADD_TO_VOCABULARY",
+                        entry,
+                        text,
+                      })
                     }
                   />
                 ))}
@@ -685,12 +720,17 @@ function FieldRow(props: {
   onEdit: () => void;
   onCancelEdit: () => void;
   onCorrect: (value: unknown, text: string) => void;
+  addingVocab: boolean;
+  onStartAdd: () => void;
+  onCancelAdd: () => void;
+  onAdd: (entry: VocabularyEntryInput, text: string) => void;
 }) {
   const { field: f, review, local } = props;
   const label = FIELD_LABELS[f.field] ?? f.field;
   const decidedEarlier = !required(f);
+  const added = local?.decision === "ADD_TO_VOCABULARY";
   const shown =
-    local?.decision === "CORRECT"
+    local?.decision === "CORRECT" || local?.decision === "ADD_TO_VOCABULARY"
       ? local.text
       : f.decision === "CORRECTED" && f.correctedValue
         ? valueText(f.field, f.correctedValue, review)
@@ -718,14 +758,14 @@ function FieldRow(props: {
           aria-pressed={props.selected}
           aria-label={`${label}: horgony mutatása`}
           className={`min-h-10 flex-1 rounded-md px-3 py-2 text-left font-semibold ${
-            f.question !== null && local?.decision !== "CORRECT"
+            f.question !== null && local?.decision !== "CORRECT" && !added
               ? "bg-pilot-accent-warm-soft text-pilot-grey-900"
               : "bg-pilot-grey-50 text-pilot-grey-900"
           } ${local?.decision === "REJECT" || state === "REJECTED" ? "line-through opacity-60" : ""} ${
             props.selected ? "ring-2 ring-pilot-accent-warm" : ""
           }`}
         >
-          {f.question !== null && local?.decision !== "CORRECT" ? (
+          {f.question !== null && local?.decision !== "CORRECT" && !added ? (
             <>Ismeretlen érték: „{f.question}”</>
           ) : (
             shown
@@ -733,6 +773,10 @@ function FieldRow(props: {
           {local?.decision === "CORRECT" ? (
             <span className="ml-2 text-xs font-normal text-pilot-grey-600">
               javítva
+            </span>
+          ) : added ? (
+            <span className="ml-2 text-xs font-normal text-pilot-grey-600">
+              szótárba felvéve (tervezet)
             </span>
           ) : null}
         </button>
@@ -760,6 +804,17 @@ function FieldRow(props: {
             >
               Javít
             </button>
+            {f.question !== null && ADDABLE.has(f.field) ? (
+              <button
+                type="button"
+                aria-label={`${label}: felveszem a szótárba`}
+                title="Helyes, csak hiányzik a szótárból: felveszem a szótár tervezetébe, és elfogadom."
+                onClick={props.onStartAdd}
+                className={`h-10 rounded-md px-3 text-sm ring-1 ${pressed("ADD_TO_VOCABULARY")}`}
+              >
+                Szótárba
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label={`${label}: elvet`}
@@ -786,6 +841,14 @@ function FieldRow(props: {
             "PO4",
           )}
         </p>
+      ) : null}
+      {props.addingVocab ? (
+        <AddToVocabularyEditor
+          field={f}
+          review={review}
+          onCancel={props.onCancelAdd}
+          onSave={props.onAdd}
+        />
       ) : null}
       {props.editing ? (
         <CorrectionEditor
@@ -961,4 +1024,125 @@ function CorrectionEditor({
       </PilotButton>
     </div>
   );
+}
+
+/**
+ * FELVESZEM A SZÓTÁRBA ÉS ELFOGADOM (S5). Fajnál a gép szava a felismert
+ * alak (latinul, ahogy a forrás írja), a nemzetség a szülő; hatásnál a
+ * magyar név kell, mert a cikk mondatai azon ismerik fel, és az lesz a
+ * felirata mindenhol (nem a gép kulcsa).
+ */
+function AddToVocabularyEditor({
+  field,
+  review,
+  onSave,
+  onCancel,
+}: {
+  field: ClaimReviewField;
+  review: ClaimReview;
+  onSave: (entry: VocabularyEntryInput, text: string) => void;
+  onCancel: () => void;
+}) {
+  const taxon = field.field === "species";
+  const proposal = (field.question ?? "").trim();
+  const words = proposal.toLocaleLowerCase("hu-HU").split(/\s+/);
+  const genus = taxon
+    ? (review.options.species.find(
+        (o) => o.label.toLocaleLowerCase("hu-HU") === words[0],
+      )?.key ?? "")
+    : "";
+  const [forms, setForms] = useState(
+    taxon ? proposal.toLocaleLowerCase("hu-HU") : "",
+  );
+  const [rank, setRank] = useState(words.length > 1 ? "SPECIES" : "GENUS");
+  const [parent, setParent] = useState(genus);
+  const list = forms
+    .split(/[;\n]/)
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const missingParent = taxon && rank !== "GROUP" && !parent;
+  const submit = () => {
+    const name = list[0]!;
+    const label = name.charAt(0).toLocaleUpperCase("hu-HU") + name.slice(1);
+    onSave(
+      taxon
+        ? {
+            forms: list,
+            rank: rank as "GROUP" | "GENUS" | "SPECIES",
+            ...(parent ? { parentKey: parent } : {}),
+          }
+        : {
+            forms: list,
+            ...(proposal ? { key: keyOfProposal(proposal) } : {}),
+          },
+      label,
+    );
+  };
+  return (
+    <div
+      aria-label="Felvétel a szótárba"
+      className="flex flex-wrap items-end gap-3 rounded-md bg-pilot-grey-50 p-3"
+    >
+      <label className="min-w-64 flex-1 space-y-1 text-sm text-pilot-grey-700">
+        <span>
+          {taxon
+            ? "Felismert alakok (pontosvesszővel)"
+            : "Magyar név és alakjai (pontosvesszővel)"}
+        </span>
+        <PilotInput
+          aria-label="Szótár-alakok"
+          value={forms}
+          onChange={setForms}
+          placeholder={taxon ? "" : "mikrobiom-összetétel"}
+        />
+      </label>
+      {taxon ? (
+        <>
+          <label className="space-y-1 text-sm text-pilot-grey-700">
+            <span>Szint</span>
+            <PilotSelect aria-label="Szint" value={rank} onChange={setRank}>
+              <option value="SPECIES">Faj</option>
+              <option value="GENUS">Nemzetség</option>
+              <option value="GROUP">Csoport</option>
+            </PilotSelect>
+          </label>
+          <label className="min-w-48 space-y-1 text-sm text-pilot-grey-700">
+            <span>Szülő</span>
+            <PilotSelect aria-label="Szülő" value={parent} onChange={setParent}>
+              <option value="">Válassz…</option>
+              {review.options.species.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </PilotSelect>
+          </label>
+        </>
+      ) : null}
+      <PilotButton
+        size="action"
+        disabled={!list.length || missingParent}
+        onClick={submit}
+      >
+        Felveszem és elfogadom
+      </PilotButton>
+      <PilotButton variant="ghost" size="action" onClick={onCancel}>
+        Mégse
+      </PilotButton>
+      <p className="w-full text-xs text-pilot-grey-600">
+        A szótár tervezetébe kerül; a változat jóváhagyása Balázsé (Szótár fül).
+      </p>
+    </div>
+  );
+}
+
+/** The machine's word as a key: "MICROBIOMECOMPOSITION" stays, "Porites lutea" -> PORITES_LUTEA. */
+function keyOfProposal(proposal: string): string {
+  return proposal
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 64);
 }

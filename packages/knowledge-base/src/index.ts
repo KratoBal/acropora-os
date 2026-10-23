@@ -27,6 +27,8 @@ export {
   buildVocabulary,
   vocabularyV1,
   isAncestor,
+  normaliseText,
+  splitWords,
 } from "./vocabulary.js";
 export type {
   Environment,
