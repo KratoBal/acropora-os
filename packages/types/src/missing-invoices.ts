@@ -381,3 +381,59 @@ export interface InvoiceCollectionSuggestionsResponse {
 
 /** A javaslat sorsa: elfogadva jelölt lesz, elvetve a dokumentum törlődik. */
 export type InvoiceCollectionSuggestionDecision = "ACCEPT" | "REJECT";
+
+/**
+ * A GYŰJTŐ ÍTÉLETEI (acrobot 35522, J55388): amit a levélgyűjtő egy fájlra
+ * döntött. A tartalom nem szerepel benne, és a nem tárolt fájloké (UNMATCHED,
+ * NOT_INVOICE, ...) nincs is meg az adatbázisban: csak az ítélet marad.
+ *
+ *   STORED       tárolva, jelölt a párosításhoz
+ *   SUGGESTED    tárolva, a Jev bejövő számlának látta, döntésre vár
+ *   UNMATCHED    számlának látszik, de semmi nem kötötte; újraolvasódik
+ *   NOT_INVOICE  nem számla (nincs számla-szó, emlékeztető, szerződés, ajánlat)
+ *   OWN_INVOICE  a saját kimenő számlánk
+ *   DUPLICATE    azonos tartalom már tárolva van
+ *   TOO_LARGE    a melléklet a méretkorlát felett van
+ *   UNREADABLE   nem PDF, vagy a szövege nem olvasható ki
+ */
+export const INVOICE_COLLECTION_ITEM_VERDICTS = [
+  "STORED",
+  "SUGGESTED",
+  "UNMATCHED",
+  "NOT_INVOICE",
+  "OWN_INVOICE",
+  "DUPLICATE",
+  "TOO_LARGE",
+  "UNREADABLE",
+] as const;
+export type InvoiceCollectionItemVerdict =
+  (typeof INVOICE_COLLECTION_ITEM_VERDICTS)[number];
+
+export const INVOICE_COLLECTION_ITEM_SOURCES = [
+  "INFO_MAIL",
+  "BALAZS_MAIL",
+  "DRIVE",
+] as const;
+export type InvoiceCollectionItemSource =
+  (typeof INVOICE_COLLECTION_ITEM_SOURCES)[number];
+
+export interface InvoiceCollectionItemRow {
+  id: string;
+  source: InvoiceCollectionItemSource;
+  /** A Gmail-levél vagy a Drive-fájl azonosítója. */
+  externalId: string;
+  fileName: string;
+  verdict: InvoiceCollectionItemVerdict;
+  /** Csak tárolt fájlnál (STORED, SUGGESTED). */
+  documentId: string | null;
+  createdAt: string;
+}
+
+export interface InvoiceCollectionItemsResponse {
+  items: InvoiceCollectionItemRow[];
+  /** Ítéletenként a darabszám a kért forrásra, a verdikt-szűrőtől FÜGGETLENÜL. */
+  counts: Record<InvoiceCollectionItemVerdict, number>;
+  limit: number;
+  /** Igaz, ha több sor van, mint amennyit a `limit` enged. */
+  truncated: boolean;
+}

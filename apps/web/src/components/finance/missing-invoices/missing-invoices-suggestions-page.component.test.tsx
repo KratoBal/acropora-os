@@ -29,6 +29,7 @@ vi.mock("next/navigation", () => ({
 
 const api = vi.hoisted(() => ({
   suggestions: vi.fn(),
+  collectionItems: vi.fn(),
   suggestionFile: vi.fn(),
   acceptSuggestion: vi.fn(),
   rejectSuggestion: vi.fn(),
@@ -80,6 +81,12 @@ beforeEach(() => {
       suggestion("doc-a", "WR26-0220.pdf"),
       suggestion("doc-b", "inv-67.pdf"),
     ],
+  });
+  api.collectionItems.mockResolvedValue({
+    items: [],
+    counts: {},
+    limit: 200,
+    truncated: false,
   });
   api.acceptSuggestion.mockResolvedValue(undefined);
   api.rejectSuggestion.mockResolvedValue(undefined);
