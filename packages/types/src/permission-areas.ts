@@ -204,6 +204,10 @@ export const PERMISSION_AREAS: readonly PermissionArea[] = [
         permission: P.KNOWLEDGE_RESEARCH_RUN,
         label: "Felderítés és kiolvasás indítása",
       },
+      {
+        permission: P.KNOWLEDGE_APPROVE,
+        label: "Szótár-változat jóváhagyása",
+      },
     ],
   },
   {

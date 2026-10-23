@@ -22,10 +22,19 @@ import {
  * - the saved claim is rebuilt from the kept anchors only: a rejected field is
  *   cleared, never left standing with its machine value;
  * - an editor's question (a value the vocabulary does not hold) cannot be
- *   accepted as it is: it is corrected to a known key, or rejected.
+ *   accepted as it is: it is corrected to a known key, rejected, or (S5,
+ *   acrobot 35807) ADDED TO THE VOCABULARY: a species or an effect the draft
+ *   vocabulary gets as a new key, and the field corrected to it, through the
+ *   same anchor check. The repository writes the draft row; here it is a
+ *   correction to that key.
  * Pure: no database, no clock.
  */
-export const REVIEW_DECISIONS = ["ACCEPT", "CORRECT", "REJECT"] as const;
+export const REVIEW_DECISIONS = [
+  "ACCEPT",
+  "CORRECT",
+  "REJECT",
+  "ADD_TO_VOCABULARY",
+] as const;
 export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
 
 export const APPLICABILITIES = [
@@ -44,7 +53,15 @@ export interface FieldDecision {
   decision: ReviewDecision;
   /** CORRECT only: the field's new value, in the shape the extractor reads. */
   value?: unknown;
+  /** ADD_TO_VOCABULARY only: the new entry (forms, key, parent, rank). */
+  entry?: Record<string, unknown>;
 }
+
+/** The question fields a new vocabulary key may answer, and the kind it joins. */
+export const ADDABLE_FIELDS: Record<string, "TAXON" | "EFFECT"> = {
+  species: "TAXON",
+  effect: "EFFECT",
+};
 
 export interface ReviewInput {
   decisions: FieldDecision[];
@@ -87,6 +104,14 @@ export function parseReviewInput(body: unknown): ReviewInput {
       if (d.value === undefined || d.value === null || d.value === "")
         throw new ReviewInputError("NO_VALUE", "a correction needs a value");
       return { anchorId: d.anchorId, decision, value: d.value };
+    }
+    if (decision === "ADD_TO_VOCABULARY") {
+      if (!isRecord(d.entry))
+        throw new ReviewInputError(
+          "NO_ENTRY",
+          "adding to the vocabulary needs the entry",
+        );
+      return { anchorId: d.anchorId, decision, entry: d.entry };
     }
     return { anchorId: d.anchorId, decision };
   });
@@ -169,6 +194,8 @@ export interface ReviewPlan {
   claim: ClaimColumns;
   /** Only the source fields a kept anchor decides; the rest stay as they are. */
   source: Partial<SourceColumns>;
+  /** The fields decided by a key added to the vocabulary draft. */
+  added: { anchorId: string }[];
 }
 
 const CLAIM_FIELDS = FIELD_NAMES.filter((f) => !SOURCE_FIELDS.includes(f));
@@ -310,6 +337,7 @@ export function planReview(
       conditions: null,
     },
     source: {},
+    added: [],
   };
   /** Kept values per field: the stored text and the typed column value. */
   const kept = new Map<string, { text: string; column: unknown }[]>();
@@ -395,6 +423,14 @@ export function planReview(
       });
       continue;
     }
+    if (
+      d.decision === "ADD_TO_VOCABULARY" &&
+      (a.normalizedValue !== null || !(a.field in ADDABLE_FIELDS))
+    )
+      throw new ReviewInputError(
+        "ADD_NOT_A_QUESTION",
+        `${a.field}: only a species or an effect the vocabulary does not hold is added to it`,
+      );
     const checked = checkCorrection(a, d.value, vocabulary);
     if ("refusal" in checked)
       throw new ReviewInputError(
@@ -402,6 +438,9 @@ export function planReview(
         `${a.field}: ${checked.refusal}`,
       );
     keep(field, checked.text, correctedColumn(field, checked.checked));
+    plan.added.push(
+      ...(d.decision === "ADD_TO_VOCABULARY" ? [{ anchorId: a.id }] : []),
+    );
     plan.anchors.push({
       id: a.id,
       decision: "CORRECTED",

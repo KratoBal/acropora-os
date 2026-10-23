@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { vocabularyV1 } from "@acropora/knowledge-base";
+import { VOCABULARY_V1_ROWS, vocabularyV1 } from "@acropora/knowledge-base";
 
 import { SOURCE_FIELDS, checkClaims } from "../extraction/claim-check.js";
 import { JATS, aiClaim } from "../extraction/extraction-test-fixtures.js";
 import { jatsSections } from "../extraction/jats-text.js";
+import {
+  draftCopy,
+  editorsWorkingCopy,
+} from "../vocabulary/vocabulary-versions.js";
 import {
   ReviewInputError,
   parseDiscardReason,
@@ -406,6 +410,116 @@ describe("claim review: the request", () => {
     assert.match(
       refusal(() => parseDiscardReason({ reason: "x".repeat(501) })),
       /^DISCARD_REASON/,
+    );
+  });
+});
+
+describe("claim review: a question added to the vocabulary (S5, acrobot 35807)", () => {
+  const withLutea = editorsWorkingCopy([
+    ...draftCopy(VOCABULARY_V1_ROWS, 2),
+    {
+      kind: "TAXON",
+      key: "PORITES_LUTEA",
+      forms: ["porites lutea"],
+      parentKey: "PORITES",
+      rank: "SPECIES",
+      status: "DRAFT",
+      version: 2,
+    },
+  ]);
+
+  it("the field is corrected to the new key through the same anchor check, and named as added", () => {
+    const { anchors, columns } = fixture();
+    const question = anchorOf(anchors, "species", true);
+    const plan = planReview(
+      anchors,
+      columns,
+      NO_SOURCE,
+      decide(anchors, {
+        [question.id]: {
+          decision: "ADD_TO_VOCABULARY",
+          value: "PORITES_LUTEA",
+        },
+      }),
+      withLutea,
+    );
+    assert.deepEqual(
+      plan.anchors.find((a) => a.id === question.id),
+      {
+        id: question.id,
+        decision: "CORRECTED",
+        correctedValue: "PORITES_LUTEA",
+      },
+    );
+    assert.deepEqual(plan.added, [{ anchorId: question.id }]);
+    assert.ok(plan.claim.species.includes("PORITES_LUTEA"));
+  });
+
+  it("without the new row the key is no field; a known field is no question to add", () => {
+    const { anchors, columns } = fixture();
+    const question = anchorOf(anchors, "species", true);
+    assert.match(
+      refusal(() =>
+        planReview(
+          anchors,
+          columns,
+          NO_SOURCE,
+          decide(anchors, {
+            [question.id]: {
+              decision: "ADD_TO_VOCABULARY",
+              value: "PORITES_LUTEA",
+            },
+          }),
+          vocabulary,
+        ),
+      ),
+      /^CORRECTION_REFUSED/,
+    );
+    const known = anchorOf(anchors, "species");
+    assert.match(
+      refusal(() =>
+        planReview(
+          anchors,
+          columns,
+          NO_SOURCE,
+          decide(anchors, {
+            [known.id]: {
+              decision: "ADD_TO_VOCABULARY",
+              value: "PORITES_LUTEA",
+            },
+          }),
+          withLutea,
+        ),
+      ),
+      /^ADD_NOT_A_QUESTION/,
+    );
+  });
+
+  it("the input: an added field needs its entry", () => {
+    assert.throws(
+      () =>
+        parseReviewInput({
+          decisions: [{ anchorId: "a1", decision: "ADD_TO_VOCABULARY" }],
+        }),
+      (e: unknown) => e instanceof ReviewInputError && e.code === "NO_ENTRY",
+    );
+    assert.deepEqual(
+      parseReviewInput({
+        decisions: [
+          {
+            anchorId: "a1",
+            decision: "ADD_TO_VOCABULARY",
+            entry: { forms: ["porites lutea"] },
+          },
+        ],
+      }).decisions,
+      [
+        {
+          anchorId: "a1",
+          decision: "ADD_TO_VOCABULARY",
+          entry: { forms: ["porites lutea"] },
+        },
+      ],
     );
   });
 });

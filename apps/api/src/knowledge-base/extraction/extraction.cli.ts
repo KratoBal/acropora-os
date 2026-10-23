@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
-import { vocabularyV1, type Vocabulary } from "@acropora/knowledge-base";
+import type { Vocabulary } from "@acropora/knowledge-base";
 
 import {
   DISCOVERY_SWITCH_ENV,
@@ -13,6 +13,7 @@ import {
   RunAbandoned,
   RunAlreadyRunning,
 } from "../discovery/discovery-run.store.js";
+import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
   AI_CLAIM_EXTRACTION_PATH_ENV,
   claimExtractorFromEnv,
@@ -231,7 +232,8 @@ async function main(): Promise<void> {
       store: new PrismaExtractionStore(),
       extractor: claimExtractorFromEnv(process.env),
       fetch: (url, init) => fetch(url, init),
-      vocabulary: vocabularyV1(),
+      // the approved version (S5: version 2 onwards lives in the database)
+      vocabulary: await new VocabularyRepository().approvedVocabulary(),
       actorExists: async (id) =>
         (await prisma.user.findUnique({
           where: { id },

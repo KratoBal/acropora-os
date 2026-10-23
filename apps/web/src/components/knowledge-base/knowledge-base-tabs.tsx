@@ -8,6 +8,7 @@ import {
   KNOWLEDGE_BASE_PATH,
   KNOWLEDGE_CLAIMS_PATH,
   KNOWLEDGE_SOURCES_PATH,
+  KNOWLEDGE_VOCABULARY_PATH,
 } from "@/components/navigation";
 
 /**
@@ -20,6 +21,7 @@ const KNOWLEDGE_TABS: ReadonlyArray<{ href: string; label: string }> = [
   { href: KNOWLEDGE_BASE_PATH, label: "Áttekintő" },
   { href: KNOWLEDGE_SOURCES_PATH, label: "Források" },
   { href: KNOWLEDGE_CLAIMS_PATH, label: "Kiolvasás" },
+  { href: KNOWLEDGE_VOCABULARY_PATH, label: "Szótár" },
 ];
 
 export function KnowledgeBaseTabs({ active }: { active: string }) {

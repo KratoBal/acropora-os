@@ -315,6 +315,12 @@ export const PERMISSIONS = {
   /// egyénileg adható. A végleges jóváhagyás (szótár, következtetés, cikk) külön
   /// jog lesz, amikor az első ilyen képernyő elkészül.
   KNOWLEDGE_MANAGE: "knowledge.manage",
+  /// A KUTATÁSI TUDÁSTÁR VÉGLEGES JÓVÁHAGYÁSA (S5, a „jóváhagy” szint): ma a
+  /// szótár-változat jóváhagyása (K4), később a következtetés és a cikk. Balázs
+  /// szabálya (acrobot 35807, 35810): a szótár-változat jóváhagyása az övé. A
+  /// MANAGER nem kapja (lásd lent), és a `knowledge.manage` sem hozza magával: aki
+  /// szerkeszt, a saját szerkesztését e jog nélkül nem hagyhatja jóvá.
+  KNOWLEDGE_APPROVE: "knowledge.approve",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -370,6 +376,8 @@ const BASE_ROLE_PERMISSIONS: Readonly<Record<UserRole, readonly Permission[]>> =
         permission !== PERMISSIONS.KNOWLEDGE_RESEARCH_RUN &&
         // A SZAKMAI DÖNTÉS (befogad, kizár, elfogad) A SZERKESZTŐÉ (S4).
         permission !== PERMISSIONS.KNOWLEDGE_MANAGE &&
+        // A VÉGLEGES JÓVÁHAGYÁS (szótár-változat, K4) A SZERKESZTŐÉ, BALÁZSÉ (S5).
+        permission !== PERMISSIONS.KNOWLEDGE_APPROVE &&
         // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
         // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
         // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --

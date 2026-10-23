@@ -2,13 +2,22 @@ import { Prisma, prisma } from "@acropora/database";
 import {
   VOCABULARY_V1_ROWS,
   phosphateNamed,
-  vocabularyV1,
   type VocabularyKind,
+  type VocabularyRow,
 } from "@acropora/knowledge-base";
 
 import type { FieldName } from "../extraction/claim-check.js";
 import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import {
+  editorsWorkingCopy,
+  labelOf,
+  parseNewEntry,
+  workingRows,
+  type NewEntry,
+} from "../vocabulary/vocabulary-versions.js";
+import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
+import {
+  ADDABLE_FIELDS,
   ReviewInputError,
   planReview,
   type Applicability,
@@ -234,23 +243,18 @@ function columnsOf(
   };
 }
 
-const capitalised = (s: string) =>
-  s.charAt(0).toLocaleUpperCase("hu-HU") + s.slice(1);
-
-/** The approved vocabulary keys a correction may choose from, with a label. */
-export function reviewOptions(): ClaimReview["options"] {
+/**
+ * The vocabulary keys a correction may choose from, with their label: the
+ * editor's working rows (the draft when there is one), so a key added from
+ * one claim answers the same question on the next (acrobot 35807).
+ */
+export function reviewOptions(
+  rows: readonly VocabularyRow[] = VOCABULARY_V1_ROWS,
+): ClaimReview["options"] {
   const of = (kind: VocabularyKind) =>
-    VOCABULARY_V1_ROWS.filter(
-      (r) => r.kind === kind && r.status === "APPROVED",
-    ).map((r) => ({
-      key: r.key,
-      label:
-        r.forms[0] === undefined
-          ? r.key
-          : kind === "TAXON" && r.forms[0].length <= 3
-            ? r.forms[0].toUpperCase()
-            : capitalised(r.forms[0]),
-    }));
+    rows
+      .filter((r) => r.kind === kind && r.status !== "RETIRED")
+      .map((r) => ({ key: r.key, label: labelOf(r) }));
   return {
     species: of("TAXON"),
     environment: of("ENVIRONMENT"),
@@ -259,6 +263,8 @@ export function reviewOptions(): ClaimReview["options"] {
 }
 
 export class ClaimReviewRepository {
+  private readonly vocabulary = new VocabularyRepository();
+
   /**
    * The candidate claims on INCLUDED sources, in a stable order: the screen's
    * Előző / Következő. A pending or excluded source's claims are not the
@@ -364,7 +370,7 @@ export class ClaimReviewRepository {
               reason: evidence.applicabilityReason,
             }
           : null,
-        options: reviewOptions(),
+        options: reviewOptions(workingRows(await this.vocabulary.versions(tx))),
       };
     });
   }
@@ -393,6 +399,38 @@ export class ClaimReviewRepository {
           "the source was retracted: a claim on it can only be discarded",
         );
       const before = columnsOf(claim, anchors);
+      // a question answered with a new key: the draft vocabulary gets it, and
+      // the field is a correction to it, through the same anchor check (S5)
+      let rows: VocabularyRow[] = workingRows(
+        await this.vocabulary.versions(tx),
+      );
+      const additions: { anchorId: string; entry: NewEntry }[] = [];
+      const decisions = input.decisions.map((d) => {
+        if (d.decision !== "ADD_TO_VOCABULARY") return d;
+        const a = anchors.find((x) => x.id === d.anchorId);
+        const kind = a ? ADDABLE_FIELDS[a.field] : undefined;
+        if (!a || !kind || a.normalizedValue !== null || a.owner !== "CLAIM")
+          throw new ReviewInputError(
+            "ADD_NOT_A_QUESTION",
+            "only a species or an effect the vocabulary does not hold is added to it",
+          );
+        const entry = parseNewEntry({ ...d.entry, kind }, rows);
+        rows = [
+          ...rows,
+          {
+            kind: entry.kind,
+            key: entry.key,
+            forms: entry.forms,
+            parentKey: entry.parentKey,
+            rank: entry.rank,
+            note: entry.note,
+            status: "DRAFT",
+            version: rows[0]?.version ?? 1,
+          },
+        ];
+        additions.push({ anchorId: a.id, entry });
+        return { ...d, value: entry.key };
+      });
       const plan = planReview(
         anchors,
         before,
@@ -400,9 +438,14 @@ export class ClaimReviewRepository {
           studyType: source.studyType,
           measurementMethod: source.measurementMethod,
         },
-        input,
-        vocabularyV1(),
+        { ...input, decisions },
+        editorsWorkingCopy(rows),
       );
+      for (const { anchorId, entry } of additions)
+        await this.vocabulary.addEntryIn(tx, entry, actorUserId, {
+          claimId: claim.id,
+          anchorId,
+        });
       const now = new Date();
       for (const a of plan.anchors) {
         const { count } = await tx.knowledgeFieldAnchor.updateMany({

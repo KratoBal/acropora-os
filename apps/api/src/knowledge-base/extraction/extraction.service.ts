@@ -9,7 +9,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { vocabularyV1 } from "@acropora/knowledge-base";
+import { vocabularyV1, type Vocabulary } from "@acropora/knowledge-base";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import {
@@ -19,6 +19,7 @@ import {
   everyInterval,
 } from "../discovery/discovery-run.js";
 import { RunAlreadyRunning } from "../discovery/discovery-run.store.js";
+import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import { claimExtractorFromEnv } from "./claim-extractor.js";
 import { parseSourceIds } from "./extraction.cli.js";
 import { extractSource, type SourceOutcome } from "./extraction-run.js";
@@ -38,7 +39,10 @@ import type { ExtractionCliDeps } from "./extraction.cli.js";
 export const EXTRACTION_DEPS = Symbol("KNOWLEDGE_EXTRACTION_DEPS");
 export const LIST_LIMIT = 20;
 
-export type ExtractionServiceDeps = Omit<ExtractionCliDeps, "actorExists">;
+export type ExtractionServiceDeps = Omit<ExtractionCliDeps, "actorExists"> & {
+  /** The approved vocabulary at the run's start (S5: it lives in the database). */
+  approvedVocabulary?: () => Promise<Vocabulary>;
+};
 
 @Injectable()
 export class KnowledgeExtractionService {
@@ -57,6 +61,7 @@ export class KnowledgeExtractionService {
       extractor: claimExtractorFromEnv(process.env),
       fetch: (url, init) => fetch(url, init),
       vocabulary: vocabularyV1(),
+      approvedVocabulary: () => new VocabularyRepository().approvedVocabulary(),
       now: () => new Date(),
     };
   }
@@ -107,6 +112,10 @@ export class KnowledgeExtractionService {
       void store.heartbeat(runId).catch(() => undefined);
     }, HEARTBEAT_MS);
     const work = (async () => {
+      // the version approved when the run starts: an approval mid-run does not split it
+      const vocabulary = this.deps.approvedVocabulary
+        ? await this.deps.approvedVocabulary()
+        : this.deps.vocabulary;
       const outcomes: SourceOutcome[] = [];
       for (const id of ids)
         outcomes.push(
@@ -114,7 +123,7 @@ export class KnowledgeExtractionService {
             store,
             extractor,
             fetch: this.deps.fetch,
-            vocabulary: this.deps.vocabulary,
+            vocabulary,
             now: this.deps.now,
             runId,
             ...(reextract ? { reextract: { actorUserId: user.id } } : {}),

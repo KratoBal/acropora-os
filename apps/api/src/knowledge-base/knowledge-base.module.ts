@@ -12,6 +12,10 @@ import {
 } from "./overview/knowledge-overview.controller.js";
 import { SourceScreeningController } from "./sources/source-screening.controller.js";
 import { SourceScreeningService } from "./sources/source-screening.service.js";
+import {
+  VocabularyController,
+  VocabularyService,
+} from "./vocabulary/vocabulary.controller.js";
 
 /** The research knowledge base (Research & Knowledge Engine, stage pilot). */
 @Module({
@@ -21,6 +25,7 @@ import { SourceScreeningService } from "./sources/source-screening.service.js";
     SourceScreeningController,
     KnowledgeOverviewController,
     ClaimReviewController,
+    VocabularyController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -28,6 +33,7 @@ import { SourceScreeningService } from "./sources/source-screening.service.js";
     SourceScreeningService,
     KnowledgeOverviewService,
     ClaimReviewService,
+    VocabularyService,
   ],
 })
 export class KnowledgeBaseModule {}
