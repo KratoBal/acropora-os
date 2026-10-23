@@ -12,6 +12,7 @@ import {
   checkedRows,
   diffRows,
   draftCopy,
+  draftFingerprint,
   editorsWorkingCopy,
   keyOf,
   labelOf,
@@ -130,6 +131,36 @@ describe("what the draft changes", () => {
     );
     // a copy changes nothing: the status and the version are no change
     assert.deepEqual(diffRows(v1, draftCopy(v1, 2)), []);
+  });
+});
+
+describe("the draft's fingerprint (barracuda 35845)", () => {
+  it("the same rows in another order, or another status, give the same; a changed form, a new row give another", () => {
+    const rows = draftCopy(v1, 2);
+    const fp = draftFingerprint(rows);
+    assert.match(fp, /^[0-9a-f]{64}$/);
+    assert.equal(draftFingerprint([...rows].reverse()), fp);
+    assert.equal(
+      draftFingerprint(
+        rows.map((r) => ({ ...r, status: "APPROVED" as const })),
+      ),
+      fp,
+    );
+    assert.notEqual(
+      draftFingerprint(
+        rows.map((r) =>
+          r.key === "GROWTH" ? { ...r, forms: [...r.forms, "gyarapodás"] } : r,
+        ),
+      ),
+      fp,
+    );
+    assert.notEqual(
+      draftFingerprint([
+        ...rows,
+        species("PORITES_LUTEA", "porites lutea", "PORITES"),
+      ]),
+      fp,
+    );
   });
 });
 

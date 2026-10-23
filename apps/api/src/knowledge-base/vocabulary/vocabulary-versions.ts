@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   VOCABULARY_V1_ROWS,
   buildVocabulary,
@@ -121,6 +123,35 @@ export function draftCopy(rows: readonly VocabularyRow[], version: number) {
     status: "DRAFT",
     version,
   }));
+}
+
+/**
+ * The draft's fingerprint: sha256 of its live rows, sorted and in the
+ * compared columns only. The draft's version number does not change while it
+ * is edited, so the approver names this too: a row added or changed after
+ * the approver opened the screen changes it, and the approval is refused
+ * (barracuda, #1855 review 35845).
+ */
+export function draftFingerprint(rows: readonly VocabularyRow[]): string {
+  const canonical = rows
+    .filter(live)
+    .map((r) => [
+      r.kind,
+      r.key,
+      [...r.forms],
+      r.exactMatch === true,
+      r.parentKey ?? null,
+      r.rank ?? null,
+      r.note ?? null,
+    ])
+    .sort((a, b) =>
+      `${a[0]}/${a[1]}` < `${b[0]}/${b[1]}`
+        ? -1
+        : `${a[0]}/${a[1]}` > `${b[0]}/${b[1]}`
+          ? 1
+          : 0,
+    );
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 export interface RowChange {

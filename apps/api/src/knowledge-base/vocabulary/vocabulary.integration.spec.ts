@@ -202,12 +202,21 @@ describe(
       // the draft: version 2, the copy of version 1 plus the new row
       const state = await vocabulary.state();
       assert.equal(state.approved.version, 1);
-      assert.deepEqual(state.draft, {
-        version: 2,
-        changes: [
-          { kind: "TAXON", key: "PORITES_LUTEA", change: "ADDED", fields: [] },
-        ],
-      });
+      assert.deepEqual(
+        { version: state.draft?.version, changes: state.draft?.changes },
+        {
+          version: 2,
+          changes: [
+            {
+              kind: "TAXON",
+              key: "PORITES_LUTEA",
+              change: "ADDED",
+              fields: [],
+            },
+          ],
+        },
+      );
+      assert.match(state.draft?.fingerprint ?? "", /^[0-9a-f]{64}$/);
       assert.equal(
         await prisma.knowledgeVocabularyEntry.count({ where: { version: 2 } }),
         VOCABULARY_V1_ROWS.length + 1,
@@ -279,15 +288,39 @@ describe(
       assert.equal(await prisma.knowledgeVocabularyEntry.count(), count);
     });
 
-    it("approval: only of the version seen; then the draft is the approved version, and the gate reads it", async () => {
+    it("approval: only of the version and the draft seen; then the draft is the approved version, and the gate reads it", async () => {
+      const seen = (await vocabulary.state()).draft!;
       // the version check names the draft; the row count would stop it too
       await assert.rejects(
-        vocabulary.approve(3, userId),
+        vocabulary.approve(3, seen.fingerprint, userId),
         (e: unknown) =>
           e instanceof VocabularyConflict &&
           /the draft is version 2, not 3/.test(e.message),
       );
-      const state = await vocabulary.approve(2, userId);
+      // a row added after the approver opened the screen: the version is the
+      // same, the fingerprint is not, and nothing is approved blind (barracuda 35845)
+      const rows = (await vocabulary.versions()).draft!.rows;
+      await vocabulary.addEntry(
+        parseNewEntry(
+          {
+            kind: "EFFECT",
+            key: "INTERNAL_RESERVES",
+            forms: ["belső tápanyag-tartalék"],
+          },
+          rows,
+        ),
+        userId,
+      );
+      await assert.rejects(
+        vocabulary.approve(2, seen.fingerprint, userId),
+        (e: unknown) =>
+          e instanceof VocabularyConflict &&
+          /changed since it was opened/.test(e.message),
+      );
+      assert.equal((await vocabulary.state()).approved.version, 1);
+      const fresh = (await vocabulary.state()).draft!;
+      assert.notEqual(fresh.fingerprint, seen.fingerprint);
+      const state = await vocabulary.approve(2, fresh.fingerprint, userId);
       assert.equal(state.approved.version, 2);
       assert.equal(state.approved.origin, "DATABASE");
       assert.equal(state.approved.approvedBy, "Kitalált Szerkesztő");
@@ -303,11 +336,11 @@ describe(
       assert.equal(log.entityId, "2");
       assert.equal(
         ((log.metadata as Record<string, unknown>).changes as unknown[]).length,
-        3,
+        4,
       );
       // nothing to approve now; the next edit opens version 3 from version 2
       await assert.rejects(
-        vocabulary.approve(2, userId),
+        vocabulary.approve(2, fresh.fingerprint, userId),
         (e: unknown) => e instanceof VocabularyConflict,
       );
       const next = await vocabulary.editEntry(

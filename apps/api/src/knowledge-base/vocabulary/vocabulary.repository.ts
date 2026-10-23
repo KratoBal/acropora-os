@@ -13,6 +13,7 @@ import {
   checkedRows,
   diffRows,
   draftCopy,
+  draftFingerprint,
   editorsWorkingCopy,
   labelOf,
   parseEntryEdit,
@@ -59,7 +60,12 @@ export interface VocabularyState {
     approvedBy: string | null;
   };
   /** The version being edited, with what it changes; null when nothing is being edited. */
-  draft: { version: number; changes: RowChange[] } | null;
+  draft: {
+    version: number;
+    changes: RowChange[];
+    /** What the approver sends back: the draft exactly as they saw it. */
+    fingerprint: string;
+  } | null;
   /** The rows the editor works on: the draft's, or the approved ones. */
   entries: VocabularyEntryView[];
 }
@@ -130,6 +136,7 @@ export class VocabularyRepository {
         ? {
             version: v.draft.version,
             changes: diffRows(v.approved.rows, v.draft.rows),
+            fingerprint: draftFingerprint(v.draft.rows),
           }
         : null,
       entries: workingRows(v).map(view),
@@ -305,10 +312,14 @@ export class VocabularyRepository {
 
   /**
    * The draft becomes the approved version, whole. The approver names the
-   * version they saw: a draft changed after that is not approved blind.
+   * version AND the fingerprint they saw: the version number stays while the
+   * draft is edited, so a row added after the screen was opened (on the
+   * vocabulary screen, or from the review's add path) changes only the
+   * fingerprint, and the approval is refused instead of approving it blind.
    */
   async approve(
     version: number,
+    fingerprint: string,
     actorUserId: string,
   ): Promise<VocabularyState> {
     await prisma.$transaction(async (tx) => {
@@ -318,6 +329,10 @@ export class VocabularyRepository {
       if (v.draft.version !== version)
         throw new VocabularyConflict(
           `the draft is version ${v.draft.version}, not ${version}`,
+        );
+      if (draftFingerprint(v.draft.rows) !== fingerprint)
+        throw new VocabularyConflict(
+          "the draft changed since it was opened: review it again",
         );
       const changes = diffRows(v.approved.rows, v.draft.rows);
       if (changes.length === 0)

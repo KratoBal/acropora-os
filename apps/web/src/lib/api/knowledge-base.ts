@@ -171,7 +171,12 @@ export interface VocabularyState {
     approvedAt: string | null;
     approvedBy: string | null;
   };
-  draft: { version: number; changes: VocabularyChange[] } | null;
+  draft: {
+    version: number;
+    changes: VocabularyChange[];
+    /** Sent back on approval: the draft exactly as the approver saw it. */
+    fingerprint: string;
+  } | null;
   entries: VocabularyEntry[];
 }
 
@@ -277,13 +282,13 @@ export const knowledgeBaseApi = {
       { method: "PATCH", body: JSON.stringify(edit) },
     );
   },
-  approveVocabulary(token: string, version: number) {
+  approveVocabulary(token: string, version: number, fingerprint: string) {
     return apiRequest<VocabularyState>(
       `${vocabularyBase}/draft/approve`,
       token,
       {
         method: "POST",
-        body: JSON.stringify({ version }),
+        body: JSON.stringify({ version, fingerprint }),
       },
     );
   },

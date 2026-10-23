@@ -91,13 +91,21 @@ export class VocabularyService {
 
   approve(body: unknown, user: AuthenticatedUser) {
     return this.mapped(async () => {
-      const version = (body as Record<string, unknown> | null)?.version;
-      if (typeof version !== "number" || !Number.isInteger(version))
+      const b = (body ?? {}) as Record<string, unknown>;
+      if (typeof b.version !== "number" || !Number.isInteger(b.version))
         throw new VocabularyInputError(
           "BAD_VERSION",
           "version: the draft version you approve",
         );
-      return this.repository.approve(version, user.id);
+      if (
+        typeof b.fingerprint !== "string" ||
+        !/^[0-9a-f]{64}$/.test(b.fingerprint)
+      )
+        throw new VocabularyInputError(
+          "BAD_FINGERPRINT",
+          "fingerprint: the draft's fingerprint as you saw it",
+        );
+      return this.repository.approve(b.version, b.fingerprint, user.id);
     });
   }
 

@@ -80,6 +80,7 @@ const STATE: VocabularyState = {
   approved: { version: 1, origin: "CODE", approvedAt: null, approvedBy: null },
   draft: {
     version: 2,
+    fingerprint: "f".repeat(64),
     changes: [
       {
         kind: "TAXON",
@@ -214,7 +215,11 @@ describe("Szakmai szótárak", () => {
       screen.getByRole("button", { name: "Szótárváltozat jóváhagyása" }),
     );
     await waitFor(() =>
-      expect(api.approveVocabulary).toHaveBeenCalledWith("token-1", 2),
+      expect(api.approveVocabulary).toHaveBeenCalledWith(
+        "token-1",
+        2,
+        "f".repeat(64),
+      ),
     );
   });
 

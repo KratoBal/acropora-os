@@ -630,6 +630,7 @@ export function VocabularyPage() {
                               knowledgeBaseApi.approveVocabulary(
                                 token,
                                 state.draft!.version,
+                                state.draft!.fingerprint,
                               ),
                             )
                           }
