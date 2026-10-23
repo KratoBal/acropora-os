@@ -8,6 +8,9 @@ import { ExpectedArrivalScheduler } from "./expected-arrivals/expected-arrival.s
 import { ExpectedArrivalService } from "./expected-arrivals/expected-arrival.service.js";
 import { SupplierInvoiceMailClient } from "./expected-arrivals/supplier-invoice-mail.client.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
+import { PriceListController } from "./price-lists/price-list.controller.js";
+import { PriceListRepository } from "./price-lists/price-list.repository.js";
+import { PriceListService } from "./price-lists/price-list.service.js";
 import { PurchaseInvoicePdfLookup } from "./purchase-invoice-pdf.js";
 import { PurchaseInvoiceScanService } from "./purchase-invoice-scan.service.js";
 import { PurchaseInvoiceEditService } from "./purchase-invoice-edit.service.js";
@@ -31,7 +34,11 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
 // UnasApiClient/UnasAuthService.
 @Module({
   imports: [MnbModule, SuppliersModule, NavIncomingInvoiceModule],
-  controllers: [PurchasingController, ExpectedArrivalController],
+  controllers: [
+    PurchasingController,
+    ExpectedArrivalController,
+    PriceListController,
+  ],
   providers: [
     PurchaseInvoiceRepository,
     PurchaseInvoicePdfLookup,
@@ -51,6 +58,8 @@ import { SupplierCodeLearningRepository } from "./supplier-code-learning.reposit
     ExpectedArrivalIntakeService,
     ExpectedArrivalScheduler,
     ExpectedArrivalService,
+    PriceListRepository,
+    PriceListService,
   ],
   // the dashboard's "Várható beérkezések" widget reads the same list
   exports: [ExpectedArrivalService],
