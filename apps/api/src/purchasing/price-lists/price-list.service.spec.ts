@@ -367,17 +367,20 @@ describe("PriceListService.lists coverage", () => {
     unmatchedBarcodeKnownToUs: 5,
   });
   const service = (coverage: Map<string, CoverageRaw>) =>
-    new PriceListService({
-      lists: async () => [listRow("a"), listRow("b")],
-      coverage: async (ids: string[]) => {
-        assert.deepEqual(ids, ["a", "b"]);
-        return coverage;
-      },
-      variantBarcodeCounts: async () => ({
-        active: 1900,
-        withoutBarcode: 1100,
-      }),
-    } as unknown as PriceListRepository);
+    new PriceListService(
+      {
+        lists: async () => [listRow("a"), listRow("b")],
+        coverage: async (ids: string[]) => {
+          assert.deepEqual(ids, ["a", "b"]);
+          return coverage;
+        },
+        variantBarcodeCounts: async () => ({
+          active: 1900,
+          withoutBarcode: 1100,
+        }),
+      } as unknown as PriceListRepository,
+      noSuggestions,
+    );
 
   it("gives each list its own counts, in the right fields, and the variant counts once", async () => {
     const result = await service(new Map([["a", raw("a")]])).lists();
