@@ -16,6 +16,7 @@ import {
   looksLikeReminder,
   otherDocumentFileName,
   readInvoiceText,
+  hasNoTextLayer,
   knownNumberInText,
   labelledTotal,
   withKnownNumber,
@@ -1179,5 +1180,40 @@ describe("a short known number the file name or subject names too (J55388)", () 
         supplierTaxNumber: "10735442-2-13",
       },
     );
+  });
+});
+
+/*
+  A SZÖVEGRÉTEG NÉLKÜLI (BESZKENNELT) PDF (acrobot 35529): a tartalom nem mondja
+  meg, hogy számla, ezért a gyűjtő a fájlnévre és a tárgyra hagyatkozik. MI
+  PIROSÍT: ha egy üres vagy szinte üres olvasat szöveges rétegnek számít; ha egy
+  rövid, de valódi számla (néhány sor) szövegréteg nélkülinek számít.
+*/
+describe("hasNoTextLayer", () => {
+  it("is true for an empty reading, whitespace and a stray page number", () => {
+    assert.equal(hasNoTextLayer([]), true);
+    assert.equal(hasNoTextLayer(["", "   ", "\t"]), true);
+    assert.equal(hasNoTextLayer(["1 / 2"]), true);
+  });
+
+  it("is false for a short but real invoice and for any page of prose", () => {
+    assert.equal(
+      hasNoTextLayer([
+        "Számla",
+        "J55388 | 2026.10.22",
+        "Fizetendő: 119 800 Ft",
+      ]),
+      false,
+    );
+    assert.equal(
+      hasNoTextLayer([
+        "Ez egy oldal szöveg, amiből látszik, hogy van szövegréteg.",
+      ]),
+      false,
+    );
+  });
+
+  it("counts signs, not lines: many blank-ish lines stay textless", () => {
+    assert.equal(hasNoTextLayer(Array(50).fill(" ")), true);
   });
 });

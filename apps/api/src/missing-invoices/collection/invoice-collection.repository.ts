@@ -71,7 +71,18 @@ export interface CollectedDocumentInput {
    * tárolódik (nem jelölt), és a begyűjtés sora is SUGGESTED.
    */
   suggestion?: { confidence: number; decisionRunId: string };
+  /**
+   * NEM PÁROSODOTT, DE TÁROLJUK (acrobot 35522, 35522/35529, Balázs 12:53 UTC: a
+   * PDF a könyvelői csomagba kell): a számlának ítélt levél-PDF, amit semmi nem
+   * kötött. `reviewState = UNASSIGNED`: nem jelölt, a tartalma megmarad, emberi
+   * döntésre vár. A begyűjtés sora UNMATCHED marad (a dokumentumra mutat), tehát
+   * az újraolvasás később még összekötheti.
+   */
+  unassigned?: boolean;
 }
+
+/** A dokumentum állapota, amíg a gyűjtő egy ember döntésére hagyja (`IncomingSupplierDocument.reviewState`). */
+export const UNASSIGNED = "UNASSIGNED";
 
 /**
  * A SZÁMLA-BEGYŰJTÉS ADATBÁZIS-OLDALA.
@@ -355,15 +366,6 @@ export class InvoiceCollectionRepository {
     });
   }
 
-  /** Van-e már ilyen tartalmú dokumentum, bármilyen úton érkezett. */
-  async hasContent(sha256: string): Promise<boolean> {
-    return (
-      (await this.database.incomingSupplierDocument.count({
-        where: { sha256 },
-      })) > 0
-    );
-  }
-
   /**
    * Egy fájl ítélete. Egy újraolvasott levélben (lásd `seen`) a már TÁROLT
    * társ-melléklet DUPLICATE-nek olvasódik (a tartalma megvan); a STORED sort
@@ -433,11 +435,18 @@ export class InvoiceCollectionRepository {
                 suggestionConfidence: input.suggestion.confidence,
                 suggestionDecisionRunId: input.suggestion.decisionRunId,
               }
-            : {}),
+            : input.unassigned
+              ? { reviewState: UNASSIGNED }
+              : {}),
         },
         select: { id: true },
       });
-      const verdict = input.suggestion ? "SUGGESTED" : "STORED";
+      // a nem párosodott, de tárolt fájl sora UNMATCHED marad: az újraolvasás még köthet
+      const verdict = input.suggestion
+        ? "SUGGESTED"
+        : input.unassigned
+          ? "UNMATCHED"
+          : "STORED";
       // a javaslatként megmutatott futás SHOWN: a mérleg ebből tudja, mit látott
       // ember (a besoroló HIDDEN-ként írta, nautilus #1356)
       if (input.suggestion)
@@ -471,6 +480,73 @@ export class InvoiceCollectionRepository {
         },
       });
       return document.id;
+    });
+  }
+
+  /**
+   * A tárolt dokumentum ezzel a tartalommal, ha van: a gyűjtő ebből tudja, hogy
+   * egy DUPLICATE (tárolt, döntött) vagy egy még nem párosodott (`UNASSIGNED`)
+   * fájlt lát újra.
+   */
+  async documentByContent(
+    sha256: string,
+  ): Promise<{ id: string; reviewState: string | null } | null> {
+    return this.database.incomingSupplierDocument.findFirst({
+      where: { sha256 },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, reviewState: true },
+    });
+  }
+
+  /**
+   * A MÉG NEM PÁROSODOTT DOKUMENTUM ELŐLÉPTETÉSE (újraolvasás): amit az első
+   * olvasás nem tudott kötni, az most köthető (új feed-sor, NAV-sor, terhelés,
+   * javított szabály). A dokumentum rendes begyűjtött dokumentum lesz (vagy a Jev
+   * javaslata), a begyűjtés sora a dokumentumra mutató STORED (SUGGESTED).
+   * FELTÉTELES ÍRÁS: csak `UNASSIGNED` dokumentumon hat, tehát egy közben meghozott
+   * emberi döntést nem ír felül. `null`: közben döntöttek róla.
+   */
+  async promote(
+    id: string,
+    input: CollectedDocumentInput,
+  ): Promise<string | null> {
+    return this.database.$transaction(async (transaction) => {
+      const purchaseInvoiceId = await postedPurchaseForArrival(transaction, {
+        importResult: input.importResult,
+        textReading: input.textReading,
+        kind: input.kind,
+      });
+      const { count } = await transaction.incomingSupplierDocument.updateMany({
+        where: { id, reviewState: UNASSIGNED },
+        data: {
+          purchaseInvoiceId,
+          status: input.read ? "READ" : "FAILED",
+          kind: input.kind,
+          importResult:
+            input.importResult === null
+              ? Prisma.DbNull
+              : (input.importResult as Prisma.InputJsonValue),
+          textReading:
+            input.textReading === null
+              ? Prisma.DbNull
+              : (input.textReading as Prisma.InputJsonValue),
+          payeeCheck: input.payee,
+          reviewState: input.suggestion ? "SUGGESTED" : null,
+          suggestionConfidence: input.suggestion?.confidence ?? null,
+          suggestionDecisionRunId: input.suggestion?.decisionRunId ?? null,
+        },
+      });
+      if (count === 0) return null;
+      if (input.suggestion)
+        await transaction.decisionRun.updateMany({
+          where: { id: input.suggestion.decisionRunId },
+          data: { exposure: "SHOWN" },
+        });
+      await transaction.invoiceCollectionItem.updateMany({
+        where: { documentId: id },
+        data: { verdict: input.suggestion ? "SUGGESTED" : "STORED" },
+      });
+      return id;
     });
   }
 

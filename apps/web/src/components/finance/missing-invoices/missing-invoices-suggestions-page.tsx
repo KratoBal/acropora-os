@@ -43,6 +43,7 @@ export function MissingInvoicesSuggestionsPage() {
   const [items, setItems] = useState<InvoiceCollectionSuggestion[] | null>(
     null,
   );
+  const [staleAfterDays, setStaleAfterDays] = useState(60);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -52,7 +53,9 @@ export function MissingInvoicesSuggestionsPage() {
       if (!canView) return;
       setError(null);
       try {
-        setItems((await missingInvoicesApi.suggestions(token, signal)).items);
+        const response = await missingInvoicesApi.suggestions(token, signal);
+        setItems(response.items);
+        setStaleAfterDays(response.staleAfterDays);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -153,6 +156,24 @@ export function MissingInvoicesSuggestionsPage() {
         item.receivedAt ? formatDay(item.receivedAt.slice(0, 10)) : "—",
     },
     {
+      id: "state",
+      header: "Állapot",
+      width: "150px",
+      cell: (item) =>
+        item.state === "UNASSIGNED" ? (
+          <span className="flex flex-col">
+            <span>Nem párosodott</span>
+            {item.stale ? (
+              <span className="text-xs font-medium text-pilot-amber-700">
+                {staleAfterDays} napnál régebben vár
+              </span>
+            ) : null}
+          </span>
+        ) : (
+          "A Jev javasolta"
+        ),
+    },
+    {
       id: "confidence",
       header: "Bizonyosság",
       width: "110px",
@@ -223,12 +244,23 @@ export function MissingInvoicesSuggestionsPage() {
           Javasolt számlák
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-pilot-grey-600">
-          A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához,
-          de a Jev bejövő számlának látta. Amíg nem döntesz róluk, nem kerülnek
-          a párosítás jelöltjei közé. Elfogadva jelöltek lesznek, elvetve
-          törlődnek.
+          A begyűjtés olyan PDF-jei, amelyeket semmi nem kötött egy számlához
+          vagy terheléshez, de számlának látszanak: vagy a Jev látta bejövő
+          számlának (van bizonyossága), vagy nem párosodtak (a fájlnév, a tárgy
+          vagy a szöveg szerint számla, de a szám, a szállító vagy a fizetés nem
+          egyezik semmivel). Amíg nem döntesz róluk, nem kerülnek a párosítás
+          jelöltjei közé, de a PDF megvan. Elfogadva jelöltek lesznek, elvetve
+          törlődnek. Ha később összekötheti őket egy új adat, a begyűjtés maga
+          köti.
         </p>
       </header>
+      {items && items.some((item) => item.stale) ? (
+        <Alert
+          variant="info"
+          title="Régóta döntésre váró fájlok"
+          description={`${items.filter((item) => item.stale).length} nem párosodott fájl ${staleAfterDays} napnál régebben vár döntésre. Automatikusan nem törlődnek: elfogadva jelöltek lesznek, elvetve törlődik a tartalmuk.`}
+        />
+      ) : null}
       {actionError ? (
         <Alert
           variant="danger"

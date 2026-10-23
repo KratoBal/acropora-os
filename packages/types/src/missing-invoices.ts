@@ -360,10 +360,20 @@ export interface MissingInvoiceJevSuggestion {
  */
 export interface InvoiceCollectionSuggestion {
   documentId: string;
+  /**
+   * SUGGESTED: a Jev bejövő számlának látta (van bizonyossága). UNASSIGNED: számlának
+   * ítélt fájl, amit semmi nem kötött (nincs bizonyosság). Mindkettő döntésre vár.
+   */
+  state: "SUGGESTED" | "UNASSIGNED";
   fileName: string;
   sender: string | null;
   subject: string | null;
   receivedAt: string | null;
+  /**
+   * Igaz, ha a `UNASSIGNED` fájl a figyelmeztetési határnál régebben vár
+   * döntésre (acrobot 35565). A Jev javaslata nem lehet régi ebben az értelemben.
+   */
+  stale: boolean;
   /** A Jev bizonyossága, 0..1, két tizedesre kerekítve. */
   confidence: number | null;
   decisionRunId: string | null;
@@ -377,6 +387,10 @@ export interface InvoiceCollectionSuggestion {
 
 export interface InvoiceCollectionSuggestionsResponse {
   items: InvoiceCollectionSuggestion[];
+  /** Ennyi napja vár döntésre egy `UNASSIGNED` fájl, mire a lista figyelmeztet. */
+  staleAfterDays: number;
+  /** Hány `UNASSIGNED` fájl vár a határnál régebben döntésre (a napi számla-ellenőrzés ezt olvassa). */
+  staleCount: number;
 }
 
 /** A javaslat sorsa: elfogadva jelölt lesz, elvetve a dokumentum törlődik. */

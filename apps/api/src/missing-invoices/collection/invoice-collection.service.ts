@@ -31,14 +31,19 @@ import { suggestionOf } from "./invoice-collection-letter-classifier.js";
 import { LetterClassJevService } from "./letter-class-jev.service.js";
 import {
   InvoiceCollectionRepository,
+  UNASSIGNED,
+  type CollectedDocumentInput,
   type InvoiceCollectionCounts,
   type InvoiceCollectionVerdict,
 } from "./invoice-collection.repository.js";
 import {
+  hasNoTextLayer,
   looksLikeInvoice,
   looksLikeProforma,
   looksLikeOtherDocument,
   looksLikeReminder,
+  otherDocumentFileName,
+  reminderFileName,
   bankReference,
   cardPaymentMatch,
   isOwnInvoiceText,
@@ -497,7 +502,55 @@ export class InvoiceCollectionService {
       await this.record(source, externalId, found.fileName, verdict, sha256);
       return verdict;
     };
-    if (await this.repository.hasContent(sha256)) return skip("DUPLICATE");
+    const earlier = await this.repository.documentByContent(sha256);
+    if (earlier && earlier.reviewState !== UNASSIGNED) return skip("DUPLICATE");
+    // a copy that is stored but not yet tied: the file is read again to see
+    // whether it ties NOW (a new feed row, a corrected rule); if it does, the
+    // stored document is promoted instead of a second one being created
+    const reassess = earlier?.id ?? null;
+    const persist = async (
+      input: CollectedDocumentInput,
+    ): Promise<string | null> =>
+      reassess
+        ? this.repository.promote(reassess, input)
+        : this.repository.store(input);
+    /*
+      NEM PÁROSODOTT, DE TÁROLJUK (acrobot 35522/35529; Balázs 12:53 UTC: a PDF a
+      könyvelői csomagba kell). A számlának ítélt PDF, amit semmi nem kötött,
+      `UNASSIGNED` dokumentumként megmarad, nem jelölt, emberi döntésre vár (a
+      Javasolt számlák lapon). A begyűjtés sora UNMATCHED marad, tehát az
+      újraolvasás még összekötheti.
+        - a balazs@ postafiók (Balázs saját levelezése) kimarad: ott a nem
+          párosodott fájl továbbra sem tárolódik;
+        - a száraz futás nem ír semmit;
+        - egy már tárolt, még nem párosodott példány marad, ahogy van.
+    */
+    const keepUnassigned = async (
+      reading: InvoiceTextReading | null,
+      kind: "INVOICE" | "PROFORMA",
+      payee: string,
+    ): Promise<InvoiceCollectionVerdict> => {
+      if (reassess || this.dry || source === "BALAZS_MAIL")
+        return skip("UNMATCHED");
+      await this.repository.store({
+        source,
+        externalId,
+        fileName: found.fileName,
+        sender: found.sender,
+        subject: found.subject,
+        receivedAt: found.receivedAt,
+        content: found.content,
+        sha256,
+        read: false,
+        kind,
+        importResult: null,
+        textReading: reading,
+        payee,
+        unassigned: true,
+      });
+      counts.unmatchedCount++;
+      return "UNMATCHED";
+    };
     if (!found.content.subarray(0, 5).equals(Buffer.from("%PDF-")))
       return skip("UNREADABLE");
     let lines: string[];
@@ -507,7 +560,24 @@ export class InvoiceCollectionService {
       return skip("UNREADABLE");
     }
     const text = lines.join("\n");
-    if (!looksLikeInvoice(text)) return skip("NOT_INVOICE");
+    if (!looksLikeInvoice(text)) {
+      /*
+        EGY BESZKENNELT SZÁMLÁNAK NINCS SZÖVEGRÉTEGE, ezért a tartalma nem mondja
+        meg, hogy számla. Ha a FÁJLNÉV vagy a TÁRGY mondja (számla-szó), és nem
+        emlékeztető, szerződés vagy ajánlat, akkor sem dobjuk el: a könyvelői
+        csomagból hiányozna. Szöveges PDF, amiben nincs számla-szó, marad
+        NOT_INVOICE (végleges).
+      */
+      const named = `${found.fileName} ${found.subject ?? ""}`;
+      if (
+        hasNoTextLayer(lines) &&
+        looksLikeInvoice(named) &&
+        !reminderFileName(named) &&
+        !otherDocumentFileName(named)
+      )
+        return keepUnassigned(null, "INVOICE", payeeFromText(text));
+      return skip("NOT_INVOICE");
+    }
     // a fizetési emlékeztető idézi a számlát, de nem az; a mellette álló
     // számla-melléklet külön fájlként megy tovább
     if (looksLikeReminder(lines, found.fileName)) return skip("NOT_INVOICE");
@@ -574,23 +644,32 @@ export class InvoiceCollectionService {
             const suggestion = this.dry
               ? null
               : await this.suggestionFor(source, externalId, lines, found);
-            if (!suggestion) return skip("UNMATCHED");
-            await this.repository.store({
-              source,
-              externalId,
-              fileName: found.fileName,
-              sender: found.sender,
-              subject: found.subject,
-              receivedAt: found.receivedAt,
-              content: found.content,
-              sha256,
-              read: false,
-              kind: looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
-              importResult: null,
-              textReading: withLabelledTotal(textReading, lines),
-              payee: payeeFromText(text),
-              suggestion,
-            });
+            if (!suggestion)
+              return keepUnassigned(
+                withLabelledTotal(textReading, lines),
+                looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
+                payeeFromText(text),
+              );
+            // egy közben meghozott emberi döntés nem íródik felül (promote: null)
+            if (
+              !(await persist({
+                source,
+                externalId,
+                fileName: found.fileName,
+                sender: found.sender,
+                subject: found.subject,
+                receivedAt: found.receivedAt,
+                content: found.content,
+                sha256,
+                read: false,
+                kind: looksLikeProforma(text) ? "PROFORMA" : "INVOICE",
+                importResult: null,
+                textReading: withLabelledTotal(textReading, lines),
+                payee: payeeFromText(text),
+                suggestion,
+              }))
+            )
+              return skip("DUPLICATE");
             counts.suggestedCount++;
             return "SUGGESTED";
           }
@@ -640,21 +719,24 @@ export class InvoiceCollectionService {
       counts.storedCount++;
       return "STORED";
     }
-    await this.repository.store({
-      source,
-      externalId,
-      fileName: found.fileName,
-      sender: found.sender,
-      subject: found.subject,
-      receivedAt: found.receivedAt,
-      content: found.content,
-      sha256,
-      read: importResult !== null,
-      kind: proforma ? "PROFORMA" : "INVOICE",
-      importResult,
-      textReading,
-      payee: payeeFromText(text),
-    });
+    if (
+      !(await persist({
+        source,
+        externalId,
+        fileName: found.fileName,
+        sender: found.sender,
+        subject: found.subject,
+        receivedAt: found.receivedAt,
+        content: found.content,
+        sha256,
+        read: importResult !== null,
+        kind: proforma ? "PROFORMA" : "INVOICE",
+        importResult,
+        textReading,
+        payee: payeeFromText(text),
+      }))
+    )
+      return skip("DUPLICATE");
     counts.storedCount++;
     return "STORED";
   }

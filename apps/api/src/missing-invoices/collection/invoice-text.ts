@@ -405,6 +405,21 @@ export function looksLikeInvoice(text: string): boolean {
   return INVOICE_WORD.test(text);
 }
 
+/** Ennél kevesebb szöveges jel alatt a PDF-nek nincs szövegrétege (beszkennelt kép). */
+const TEXT_LAYER_MIN_SIGNS = 30;
+
+/**
+ * A PDF-NEK NINCS SZÖVEGRÉTEGE (beszkennelt számla): a szöveg szinte üres. Ilyen
+ * fájlról a tartalom nem mondja meg, hogy számla-e, ezért a gyűjtő a fájlnévre és
+ * a levél tárgyára hagyatkozik (`looksLikeInvoice` ezekre). Mérve nincs: a
+ * 30 jeles küszöb egy tipikus egyoldalas számla (több száz jel) és egy üres
+ * oldal (0 jel) közé esik, a valódi beszkennelt mintán a következő mérés adja a
+ * pontos értéket.
+ */
+export function hasNoTextLayer(lines: readonly string[]): boolean {
+  return lines.join("").replace(/\s/g, "").length < TEXT_LAYER_MIN_SIGNS;
+}
+
 /**
  * DÍJBEKÉRŐ-E. A könyvelőnek nem számla (a Hiányzó számlák „Csak díjbekérő”
  * állapota), ezért a kind ennek alapján PROFORMA, ha illesztő nem olvasta.
