@@ -355,6 +355,12 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.PURCHASING_VIEW),
   },
   {
+    /** Beszállítói árlisták: a feltöltött CSV-k, a termékpárosítás alapja (task beszallitoi-arlistak). */
+    id: "price-lists",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PURCHASING_VIEW),
+  },
+  {
     /**
      * SZÁMLÁZÁS (Balázs briefje, 2026-09-30): a bizonylatok listája, a négy
      * típussal. A menüpont annak látszik, aki a listát láthatja (`billing.view`);

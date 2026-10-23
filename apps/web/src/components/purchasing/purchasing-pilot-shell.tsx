@@ -16,6 +16,7 @@ const PURCHASING_TABS: ReadonlyArray<{ href: string; label: string }> = [
   { href: "/beszerzes", label: "Beszerzések" },
   { href: "/beszerzes/varhato", label: "Várható beérkezések" },
   { href: "/beszerzes/nav-szamlak", label: "NAV számla lekérés" },
+  { href: "/beszerzes/arlistak", label: "Beszállítói árlisták" },
 ];
 
 /** A fülsor; egy látható fülnél nincs mit váltani, ezért nem rajzolódik. */
