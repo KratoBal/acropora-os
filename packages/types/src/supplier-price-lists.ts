@@ -34,8 +34,10 @@ export interface SupplierPriceMatchCounts {
  * nem átfedő csoportokban: a párosítottak módszerenként, az elutasított, és a
  * párosítatlanok, vonalkóddal és anélkül. Az `unmatchedBarcodeKnownToUs` annak
  * ellenőrzése, hogy a párosító működik-e: a párosítatlan, vonalkódos sorok közül
- * ennyinek a vonalkódja SZEREPEL a mi vonalkód-táblánkban; ennek nullának kell
- * lennie, minden más szám hiba (például nálunk csoportosítva tárolt vonalkód).
+ * ennyinek a vonalkódja SZEREPEL a mi vonalkód-táblánkban EGY változaton (a több
+ * változaton álló vonalkód ütközés, azt nem számoljuk). Nulla a jó; ha nem
+ * nulla, vagy a cikkszám ellentmond a vonalkódnak (ütközés), vagy a vonalkód
+ * nálunk másképp tárolt, és meg kell nézni.
  */
 export interface SupplierPriceListCoverage {
   rows: number;

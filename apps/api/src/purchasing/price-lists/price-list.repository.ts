@@ -224,8 +224,11 @@ export class PriceListRepository {
    * át). A lista sorához a (beszállító, cikkszám) kötés tartozik, a csoportok nem
    * átfedők: párosított (módszer és állapot szerint), elutasított, párosítatlan.
    * A mi vonalkódjainkat egyszer normalizáljuk (csak számjegyek, 14 jegyre
-   * töltve), és a párosítatlan, vonalkódos sorok közül azt számoljuk, amelyiknek
-   * a kódja benne van: ennek nullának kell lennie.
+   * töltve; csak a GS1 hosszúságúak, 8 és 14 jegy között, mint a `normalizeGtin`;
+   * és csak az, amelyik EGY változaton áll: a több változaton álló vonalkód
+   * ütközés, nem hiba), és a párosítatlan, vonalkódos sorok közül azt számoljuk,
+   * amelyiknek a kódja benne van. Nem nulla: vagy a cikkszám ellentmond a
+   * vonalkódnak, vagy a vonalkód nálunk másképp tárolt: ellenőrizendő.
    */
   async coverage(
     listIds: readonly string[],
@@ -233,8 +236,11 @@ export class PriceListRepository {
     if (listIds.length === 0) return new Map();
     const rows = await this.database.$queryRaw<CoverageRaw[]>`
       WITH ours AS (
-        SELECT DISTINCT lpad(regexp_replace(code, '[^0-9]', '', 'g'), 14, '0') AS gtin
+        SELECT lpad(regexp_replace(code, '[^0-9]', '', 'g'), 14, '0') AS gtin
         FROM "ProductBarcode"
+        WHERE length(regexp_replace(code, '[^0-9]', '', 'g')) BETWEEN 8 AND 14
+        GROUP BY 1
+        HAVING count(DISTINCT "variantId") = 1
       )
       SELECT e."listId" AS "listId",
         count(*)::int AS "rows",
