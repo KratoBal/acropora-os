@@ -6,7 +6,10 @@ import { prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
 import type { DiscoveryInput, DiscoveryResult } from "./discovery-run.js";
-import { PrismaDiscoveryStore } from "./discovery-run.store.js";
+import {
+  PrismaDiscoveryStore,
+  RunAlreadyRunning,
+} from "./discovery-run.store.js";
 import type { SourceCandidate, VersionCandidate } from "./records.js";
 
 /**
@@ -406,26 +409,52 @@ describe(
       assert.ok(done.finishedAt);
     });
 
-    it("the ledger: a stale RUNNING run is failed, the list and the detail read back", async () => {
-      const stale = await store.startRun({
+    it("the ledger: one RUNNING row at a time, a silent one is failed, a beating one is not", async () => {
+      const longAgo = new Date(Date.now() - 60 * 60_000);
+      const old = await store.startRun({
         input: INPUT,
         requestedById: userId,
-        startedAt: new Date(Date.now() - 60 * 60_000),
+        startedAt: longAgo,
       });
-      assert.equal((await store.running())?.id, stale);
+      // the database refuses a second RUNNING row (two api instances)
+      await assert.rejects(
+        store.startRun({
+          input: INPUT,
+          requestedById: userId,
+          startedAt: new Date(),
+        }),
+        RunAlreadyRunning,
+      );
+      // started an hour ago, but beating: a long run is not cut by its length
+      await store.heartbeat(old);
       assert.equal(
-        await store.abandonStale(new Date(Date.now() - 30 * 60_000)),
+        await store.abandonStale(new Date(Date.now() - 5 * 60_000)),
+        0,
+      );
+      assert.equal((await store.running())?.id, old);
+      // silent for an hour: the process died under it
+      await prisma.knowledgeDiscoveryRun.update({
+        where: { id: old },
+        data: { heartbeatAt: longAgo },
+      });
+      assert.equal(
+        await store.abandonStale(new Date(Date.now() - 5 * 60_000)),
         1,
       );
       assert.equal(await store.running(), null);
-      const detail = await store.getRun(stale);
+      const detail = await store.getRun(old);
       assert.equal(detail?.status, "FAILED");
       assert.deepEqual(detail?.report, { error: "STALE_RUNNING" });
       const list = await store.listRuns(50);
-      assert.ok(
-        list.some((r) => r.id === stale && r.requestedBy.id === userId),
-      );
+      assert.ok(list.some((r) => r.id === old && r.requestedBy.id === userId));
       assert.equal(await store.getRun("nincs-ilyen"), null);
+      // and the slot is free again
+      const next = await store.startRun({
+        input: INPUT,
+        requestedById: userId,
+        startedAt: new Date(),
+      });
+      await store.failRun(next, "TestDone");
     });
   },
 );

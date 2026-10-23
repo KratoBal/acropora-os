@@ -14,7 +14,7 @@ import {
   STALE_AFTER_MS,
   type DiscoveryServiceDeps,
 } from "./discovery-run.service.js";
-import type { StoreSummary } from "./discovery-run.store.js";
+import { RunAlreadyRunning, type StoreSummary } from "./discovery-run.store.js";
 import {
   crossrefList,
   europePmcList,
@@ -71,6 +71,9 @@ function service(
       failRun: async (runId, reason) => {
         calls.push(`fail:${runId}:${reason}`);
       },
+      heartbeat: async (runId) => {
+        calls.push(`beat:${runId}`);
+      },
       abandonStale: async (before) => {
         calls.push(`stale:${before.toISOString()}`);
         return 0;
@@ -88,6 +91,10 @@ function service(
     fetch: network.fetch,
     sleep: clock.sleep,
     now: clock.now,
+    every: (beat) => {
+      beat();
+      return () => calls.push("stop");
+    },
     ...over,
   };
   return { svc: new KnowledgeDiscoveryService(deps), calls, network };
@@ -108,7 +115,9 @@ describe("starting a discovery over HTTP", () => {
     assert.deepEqual(t.calls, [
       `stale:${new Date(Date.parse("2026-10-23T14:00:00Z") - STALE_AFTER_MS).toISOString()}`,
       "start:u-1:vegpont-teszt",
+      "beat:run-1",
       "finish:run-1:FINISHED",
+      "stop",
     ]);
     assert.equal(t.svc.inFlight.size, 0);
   });
@@ -150,6 +159,18 @@ describe("starting a discovery over HTTP", () => {
     await u.svc.inFlight.get("run-1");
   });
 
+  it("the database's one-RUNNING index refusing the insert is a 409 too (two api instances)", async () => {
+    const t = service();
+    const store = (t.svc as unknown as { deps: DiscoveryServiceDeps }).deps
+      .store;
+    store.startRun = async () => {
+      throw new RunAlreadyRunning();
+    };
+    assert.equal(await status(t.svc.start(BODY, USER)), HttpStatus.CONFLICT);
+    assert.equal(t.network.asked.length, 0);
+    assert.equal(t.svc.inFlight.size, 0);
+  });
+
   it("a run that throws is FAILED by name, and the process goes on", async () => {
     const t = service();
     const store = (t.svc as unknown as { deps: DiscoveryServiceDeps }).deps
@@ -159,7 +180,7 @@ describe("starting a discovery over HTTP", () => {
     };
     await t.svc.start(BODY, USER);
     await t.svc.inFlight.get("run-1");
-    assert.deepEqual(t.calls.slice(-1), ["fail:run-1:SyntaxError"]);
+    assert.deepEqual(t.calls.slice(-2), ["fail:run-1:SyntaxError", "stop"]);
   });
 
   it("reads: the list is the latest 20, a missing run is a 404", async () => {

@@ -61,6 +61,15 @@ export const DEFAULT_REQUEST_LIMIT = 150;
 export const MAX_REQUEST_LIMIT = 1_000;
 /** `on`: a run may store (CLI `--apply`, the start endpoint). Stage only. */
 export const DISCOVERY_SWITCH_ENV = "KNOWLEDGE_DISCOVERY";
+/** How often a stored run says it is alive (`KnowledgeDiscoveryRun.heartbeatAt`). */
+export const HEARTBEAT_MS = 60_000;
+
+/** The default heartbeat timer: it never keeps the process alive by itself. */
+export function everyInterval(beat: () => void, ms: number): () => void {
+  const timer = setInterval(beat, ms);
+  timer.unref();
+  return () => clearInterval(timer);
+}
 
 export interface DiscoveryInput {
   /** A name for the run; the report and the run record carry it. */

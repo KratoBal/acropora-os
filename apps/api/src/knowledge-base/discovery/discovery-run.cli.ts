@@ -6,7 +6,9 @@ import { prisma } from "@acropora/database";
 import {
   DEFAULT_REQUEST_LIMIT,
   DISCOVERY_SWITCH_ENV,
+  HEARTBEAT_MS,
   MAX_REQUEST_LIMIT,
+  everyInterval,
   parseDiscoveryInput,
   runDiscovery,
   type DiscoveryInput,
@@ -15,6 +17,7 @@ import {
 import {
   PrismaDiscoveryStore,
   type DiscoveryStore,
+  RunAlreadyRunning,
   type StoreSummary,
 } from "./discovery-run.store.js";
 import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
@@ -46,7 +49,8 @@ import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
  *
  * Exit: 0 finished; 1 the switch is off; 2 bad input or unknown actor; 3 the
  * run stopped (request limit, or Crossref refused) and nothing was stored;
- * 4 stored, but some works matched more than one row (each one reported).
+ * 4 stored, but some works matched more than one row (each one reported);
+ * 5 another run is RUNNING (one at a time, the database holds the rule).
  */
 
 export interface DiscoveryCliDeps {
@@ -57,6 +61,8 @@ export interface DiscoveryCliDeps {
   fetch: ApiFetch;
   sleep: (ms: number) => Promise<void>;
   now: () => Date;
+  /** The heartbeat timer; absent: `everyInterval`. */
+  every?: (beat: () => void, ms: number) => () => void;
 }
 
 type Output = {
@@ -122,13 +128,25 @@ export async function runDiscoveryCli(
     requestLimit,
   });
   // stored runs are recorded from their start, so a stopped one is in the log too
-  const runId = apply
-    ? await deps.store.startRun({
+  let runId: string | null = null;
+  if (apply)
+    try {
+      runId = await deps.store.startRun({
         input: parsed.input,
         requestedById: actor!,
         startedAt: deps.now(),
-      })
-    : null;
+      });
+    } catch (error) {
+      if (!(error instanceof RunAlreadyRunning)) throw error;
+      out.stderr("Már fut egy felderítés; egyszerre egy futhat.\n");
+      return 5;
+    }
+  const beating = runId;
+  const stopBeating = beating
+    ? (deps.every ?? everyInterval)(() => {
+        void deps.store.heartbeat(beating).catch(() => undefined);
+      }, HEARTBEAT_MS)
+    : () => undefined;
   try {
     return await discoverAndStore(
       parsed.input,
@@ -143,6 +161,8 @@ export async function runDiscoveryCli(
     if (runId)
       await deps.store.failRun(runId, (error as Error)?.name ?? "Error");
     throw error;
+  } finally {
+    stopBeating();
   }
 }
 

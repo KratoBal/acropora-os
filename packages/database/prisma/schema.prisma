@@ -10851,6 +10851,10 @@ model KnowledgeDiscoveryRun {
   startedAt       DateTime
   /// NULL: még fut (vagy a folyamat a futás közben leállt).
   finishedAt      DateTime?
+  /// A futó folyamat percenként frissíti. Ami RUNNING, és a szívverése régi, az
+  /// alatt a folyamat leállt: a következő indítás FAILED-re teszi (barracuda,
+  /// #1834). Egyszerre egy RUNNING sor lehet: részleges egyedi index a migrációban.
+  heartbeatAt     DateTime?
 
   sources KnowledgeSource[]
 

@@ -56,6 +56,8 @@ export interface DiscoveryStore {
   finishRun(runId: string, result: DiscoveryResult): Promise<StoreSummary>;
   /** A run that threw: FAILED, with the error's name only (never its text). */
   failRun(runId: string, reason: string): Promise<void>;
+  /** The running process's sign of life, every `HEARTBEAT_MS`. */
+  heartbeat(runId: string): Promise<void>;
 }
 
 function identifierFilter(
@@ -140,8 +142,19 @@ export interface DiscoveryRunDetail extends DiscoveryRunRow {
   report: unknown;
 }
 
+/** Another run is RUNNING: the database's partial unique index said so. */
+export class RunAlreadyRunning extends Error {
+  constructor() {
+    super("a knowledge discovery run is already RUNNING");
+    this.name = "RunAlreadyRunning";
+  }
+}
+
 export interface DiscoveryRunLedger {
-  /** RUNNING runs started before `before` (the process died under them): FAILED. */
+  /**
+   * RUNNING runs whose last heartbeat is before `before` (the process died
+   * under them): FAILED. A long run that still beats is not touched.
+   */
   abandonStale(before: Date): Promise<number>;
   /** A run still RUNNING, if any. */
   running(): Promise<{ id: string; startedAt: Date } | null>;
@@ -168,7 +181,13 @@ export class PrismaDiscoveryStore
 {
   async abandonStale(before: Date): Promise<number> {
     const stale = await prisma.knowledgeDiscoveryRun.updateMany({
-      where: { status: "RUNNING", startedAt: { lt: before } },
+      where: {
+        status: "RUNNING",
+        OR: [
+          { heartbeatAt: { lt: before } },
+          { heartbeatAt: null, startedAt: { lt: before } },
+        ],
+      },
       data: {
         status: "FAILED",
         report: { error: "STALE_RUNNING" },
@@ -176,6 +195,13 @@ export class PrismaDiscoveryStore
       },
     });
     return stale.count;
+  }
+
+  async heartbeat(runId: string): Promise<void> {
+    await prisma.knowledgeDiscoveryRun.updateMany({
+      where: { id: runId, status: "RUNNING" },
+      data: { heartbeatAt: new Date() },
+    });
   }
 
   async running(): Promise<{ id: string; startedAt: Date } | null> {
@@ -228,17 +254,28 @@ export class PrismaDiscoveryStore
   }
 
   async startRun(start: DiscoveryRunStart): Promise<string> {
-    const run = await prisma.knowledgeDiscoveryRun.create({
-      data: {
-        label: start.input.label,
-        status: "RUNNING",
-        input: start.input as unknown as Prisma.InputJsonValue,
-        requestedById: start.requestedById,
-        startedAt: start.startedAt,
-      },
-      select: { id: true },
-    });
-    return run.id;
+    try {
+      const run = await prisma.knowledgeDiscoveryRun.create({
+        data: {
+          label: start.input.label,
+          status: "RUNNING",
+          input: start.input as unknown as Prisma.InputJsonValue,
+          requestedById: start.requestedById,
+          startedAt: start.startedAt,
+          heartbeatAt: start.startedAt,
+        },
+        select: { id: true },
+      });
+      return run.id;
+    } catch (error) {
+      // the one-RUNNING-row index: two api instances cannot both start
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      )
+        throw new RunAlreadyRunning();
+      throw error;
+    }
   }
 
   async failRun(runId: string, reason: string): Promise<void> {

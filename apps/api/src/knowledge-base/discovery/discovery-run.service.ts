@@ -12,6 +12,8 @@ import type { AuthenticatedUser } from "@acropora/types";
 
 import {
   DEFAULT_REQUEST_LIMIT,
+  HEARTBEAT_MS,
+  everyInterval,
   DISCOVERY_SWITCH_ENV,
   MAX_REQUEST_LIMIT,
   parseDiscoveryInput,
@@ -23,6 +25,7 @@ import {
   type DiscoveryRunLedger,
   type DiscoveryRunRow,
   type DiscoveryStore,
+  RunAlreadyRunning,
 } from "./discovery-run.store.js";
 import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
 
@@ -38,12 +41,15 @@ import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
  * with GET while it is RUNNING and after.
  *
  * One run at a time: the keyless OpenAlex budget and Crossref's public pool
- * are shared by everything behind the server's address. A RUNNING record
- * older than `STALE_AFTER_MS` belongs to a process that died under it: it is
- * marked FAILED before the next start, so it cannot block forever.
+ * are shared by everything behind the server's address. The database holds
+ * the rule (a partial unique index on the RUNNING row), so two api instances
+ * cannot both start (barracuda, #1834). A running process beats every
+ * `HEARTBEAT_MS`; a RUNNING record silent for `STALE_AFTER_MS` belongs to a
+ * process that died under it, and is marked FAILED before the next start. A
+ * long run is not cut by its length, only by its silence.
  */
 export const DISCOVERY_DEPS = Symbol("KNOWLEDGE_DISCOVERY_DEPS");
-export const STALE_AFTER_MS = 30 * 60_000;
+export const STALE_AFTER_MS = 5 * HEARTBEAT_MS;
 export const LIST_LIMIT = 20;
 
 export interface DiscoveryServiceDeps {
@@ -52,6 +58,8 @@ export interface DiscoveryServiceDeps {
   fetch: ApiFetch;
   sleep: (ms: number) => Promise<void>;
   now: () => Date;
+  /** Runs `beat` every `ms` until the returned stop is called. */
+  every?: (beat: () => void, ms: number) => () => void;
 }
 
 @Injectable()
@@ -109,11 +117,23 @@ export class KnowledgeDiscoveryService {
         `Már fut egy felderítés${running ? ` (${running.id})` : ""}; egyszerre egy futhat.`,
       );
 
-    const runId = await store.startRun({
-      input: parsed.input,
-      requestedById: user.id,
-      startedAt: this.deps.now(),
-    });
+    let runId: string;
+    try {
+      runId = await store.startRun({
+        input: parsed.input,
+        requestedById: user.id,
+        startedAt: this.deps.now(),
+      });
+    } catch (error) {
+      if (error instanceof RunAlreadyRunning)
+        throw new ConflictException(
+          "Már fut egy felderítés; egyszerre egy futhat.",
+        );
+      throw error;
+    }
+    const stopBeating = (this.deps.every ?? everyInterval)(() => {
+      void store.heartbeat(runId).catch(() => undefined);
+    }, HEARTBEAT_MS);
     const client = new ScholarlyClient({
       fetch: this.deps.fetch,
       sleep: this.deps.sleep,
@@ -131,7 +151,10 @@ export class KnowledgeDiscoveryService {
           await store.failRun(runId, name).catch(() => undefined);
         },
       )
-      .finally(() => this.inFlight.delete(runId));
+      .finally(() => {
+        stopBeating();
+        this.inFlight.delete(runId);
+      });
     this.inFlight.set(runId, work);
     return { id: runId, status: "RUNNING" };
   }

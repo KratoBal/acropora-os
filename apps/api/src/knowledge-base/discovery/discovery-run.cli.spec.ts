@@ -8,7 +8,7 @@ import {
   type DiscoveryCliDeps,
 } from "./discovery-run.cli.js";
 import { CROSSREF_BASE, EUROPE_PMC_BASE } from "./discovery-run.js";
-import type { StoreSummary } from "./discovery-run.store.js";
+import { RunAlreadyRunning, type StoreSummary } from "./discovery-run.store.js";
 import {
   crossrefList,
   europePmcList,
@@ -77,6 +77,14 @@ function deps(
       failRun: async (runId, reason) => {
         calls.push(`fail:${runId}:${reason}`);
       },
+      heartbeat: async (runId) => {
+        calls.push(`beat:${runId}`);
+      },
+    },
+    // the heartbeat beats once at once, so the test sees it, and stops after
+    every: (beat) => {
+      beat();
+      return () => calls.push("stop");
     },
     actorExists: async (id) => id === "u-1",
     fetch: network.fetch,
@@ -125,7 +133,12 @@ describe("knowledge:discover", () => {
       d.value,
     );
     assert.equal(code, 0);
-    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:FINISHED:1"]);
+    assert.deepEqual(d.calls, [
+      "start:u-1",
+      "beat:run-1",
+      "finish:run-1:FINISHED:1",
+      "stop",
+    ]);
     assert.match(o.out.stdout, /Futás run-1: új forrás: 1/);
   });
 
@@ -169,7 +182,12 @@ describe("knowledge:discover", () => {
     );
     assert.equal(code, 3);
     // the run is in the log with its status; no source is stored
-    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:INCOMPLETE:1"]);
+    assert.deepEqual(d.calls, [
+      "start:u-1",
+      "beat:run-1",
+      "finish:run-1:INCOMPLETE:1",
+      "stop",
+    ]);
     assert.match(o.out.stdout, /NEM TELJES/);
     assert.match(o.out.stdout, /NEM ELÉRHETŐ: CROSSREF \(HTTP_503\)/);
   });
@@ -183,7 +201,12 @@ describe("knowledge:discover", () => {
       d.value,
     );
     assert.equal(code, 3);
-    assert.deepEqual(d.calls, ["start:u-1", "finish:run-1:LIMIT_REACHED:1"]);
+    assert.deepEqual(d.calls, [
+      "start:u-1",
+      "beat:run-1",
+      "finish:run-1:LIMIT_REACHED:1",
+      "stop",
+    ]);
     assert.match(o.out.stdout, /KORLÁT ELÉRVE \(1 lekérés\)/);
   });
 
@@ -193,6 +216,7 @@ describe("knowledge:discover", () => {
         preview: async () => SUMMARY,
         startRun: async () => "run-1",
         failRun: async () => undefined,
+        heartbeat: async () => undefined,
         finishRun: async () => ({
           ...SUMMARY,
           ambiguous: [
@@ -244,7 +268,12 @@ describe("knowledge:discover", () => {
       ),
       SyntaxError,
     );
-    assert.deepEqual(d.calls, ["start:u-1", "fail:run-1:SyntaxError"]);
+    assert.deepEqual(d.calls, [
+      "start:u-1",
+      "beat:run-1",
+      "fail:run-1:SyntaxError",
+      "stop",
+    ]);
   });
 
   it("identifiers from an API are shown short and printable only", () => {
@@ -262,5 +291,21 @@ describe("knowledge:discover", () => {
       /Visszavonás-ellenőrzés NÉLKÜL \(nincs DOI, a Crossref nem nézhette meg\): 3/,
     );
     assert.doesNotMatch(storeReport(SUMMARY, true), /Visszavonás-ellenőrzés/);
+  });
+
+  it("another run RUNNING (the database's index): exit 5, no request goes out", async () => {
+    const d = deps();
+    d.value.store.startRun = async () => {
+      throw new RunAlreadyRunning();
+    };
+    const o = output();
+    const code = await runDiscoveryCli(
+      ["--input", "x.json", "--apply", "--actor", "u-1"],
+      o.sink,
+      d.value,
+    );
+    assert.equal(code, 5);
+    assert.equal(d.network.asked.length, 0);
+    assert.match(o.out.stderr, /Már fut egy felderítés/);
   });
 });

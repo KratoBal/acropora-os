@@ -6,6 +6,9 @@
 -- indexszel es idegen kulccsal. Meglevo sor nem valtozik, backfill nincs: visszafele
 -- kompatibilis. A User csak Prisma-oldali visszahivatkozast kap.
 --
+-- Egyszerre egy RUNNING futas lehet: ezt a vegen allo reszleges egyedi index tartja
+-- (barracuda, #1834: ket api-peldany kozott a kodbeli ellenorzes nem eleg).
+--
 -- Visszaallitas: ALTER TABLE "KnowledgeSource" DROP COLUMN "discoveryRunId",
 -- DROP COLUMN "retractionCheckedAt"; DROP TABLE "KnowledgeDiscoveryRun";
 -- DROP TYPE "KnowledgeDiscoveryRunStatus";
@@ -33,6 +36,7 @@ CREATE TABLE "KnowledgeDiscoveryRun" (
     "requestedById" TEXT NOT NULL,
     "startedAt" TIMESTAMP(3) NOT NULL,
     "finishedAt" TIMESTAMP(3),
+    "heartbeatAt" TIMESTAMP(3),
 
     CONSTRAINT "KnowledgeDiscoveryRun_pkey" PRIMARY KEY ("id")
 );
@@ -52,3 +56,5 @@ ALTER TABLE "KnowledgeSource" ADD CONSTRAINT "KnowledgeSource_discoveryRunId_fke
 -- AddForeignKey
 ALTER TABLE "KnowledgeDiscoveryRun" ADD CONSTRAINT "KnowledgeDiscoveryRun_requestedById_fkey" FOREIGN KEY ("requestedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- Egyszerre egy futas: legfeljebb egy RUNNING sor (a Prisma semaban nem fejezheto ki).
+CREATE UNIQUE INDEX "KnowledgeDiscoveryRun_one_running_key" ON "KnowledgeDiscoveryRun" ((true)) WHERE "status" = 'RUNNING';
