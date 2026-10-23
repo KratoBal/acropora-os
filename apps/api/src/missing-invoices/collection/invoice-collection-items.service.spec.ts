@@ -84,6 +84,67 @@ describe("InvoiceCollectionItemsService", () => {
     });
   });
 
+  /**
+   * barracuda #1827: a balazs@ postafiók Balázs saját levelezése. MI PIROSÍT: ha
+   * egy NEM tárolt ítéletnél a fájlnév vagy a levélazonosító kimegy; ha a tárolt
+   * sor is elveszti őket; ha az info@ és a Drive sora is csonka lesz; ha egy
+   * ismeretlen ítélet a teljes oldalra kerül.
+   */
+  it("withholds the file name and the letter id of a balazs@ file that was NOT stored, and keeps the verdict and the time", async () => {
+    const { service } = setup([
+      row(1, { source: "BALAZS_MAIL", verdict: "NOT_INVOICE" }),
+      row(2, { source: "BALAZS_MAIL", verdict: "UNMATCHED" }),
+      row(3, { source: "BALAZS_MAIL", verdict: "OWN_INVOICE" }),
+      row(4, { source: "BALAZS_MAIL", verdict: "DUPLICATE" }),
+      row(5, { source: "BALAZS_MAIL", verdict: "TOO_LARGE" }),
+      row(6, { source: "BALAZS_MAIL", verdict: "UNREADABLE" }),
+      row(7, { source: "BALAZS_MAIL", verdict: "SOMETHING_NEW" }),
+    ]);
+    const { items } = await service.list({});
+    assert.equal(items.length, 7);
+    for (const item of items) {
+      assert.equal(item.fileName, null, item.verdict);
+      assert.equal(item.externalId, null, item.verdict);
+      assert.equal(item.source, "BALAZS_MAIL");
+      assert.ok(item.createdAt.startsWith("2026-10-22T14:"));
+    }
+    assert.deepEqual(
+      items.map((item) => item.verdict),
+      [
+        "NOT_INVOICE",
+        "UNMATCHED",
+        "OWN_INVOICE",
+        "DUPLICATE",
+        "TOO_LARGE",
+        "UNREADABLE",
+        "SOMETHING_NEW",
+      ],
+    );
+  });
+
+  it("shows a stored or suggested balazs@ file in full, and every info@ and Drive row in full whatever the verdict", async () => {
+    const { service } = setup([
+      row(1, { source: "BALAZS_MAIL", verdict: "STORED", documentId: "doc-1" }),
+      row(2, {
+        source: "BALAZS_MAIL",
+        verdict: "SUGGESTED",
+        documentId: "doc-2",
+      }),
+      row(3, { source: "INFO_MAIL", verdict: "NOT_INVOICE" }),
+      row(4, { source: "DRIVE", verdict: "UNMATCHED" }),
+    ]);
+    const { items } = await service.list({});
+    assert.deepEqual(
+      items.map((item) => [item.fileName, item.externalId]),
+      [
+        ["file-1.pdf", "msg-1"],
+        ["file-2.pdf", "msg-2"],
+        ["file-3.pdf", "msg-3"],
+        ["file-4.pdf", "msg-4"],
+      ],
+    );
+  });
+
   it("marks the list truncated when there is more than the limit, and returns only the limit", async () => {
     const { service } = setup([row(1), row(2), row(3)]);
     const result = await service.list({ limit: "2" });

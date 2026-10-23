@@ -103,11 +103,16 @@ export function CollectionItemsSection({ token }: { token: string }) {
     {
       id: "file",
       header: "Fájl",
-      cell: (item) => (
-        <span className="truncate font-semibold text-pilot-grey-900">
-          {item.fileName}
-        </span>
-      ),
+      cell: (item) =>
+        item.fileName === null ? (
+          <span className="text-sm italic text-pilot-grey-500">
+            A fájlnév nem látszik (a balazs@ postafiók magánlevelezés)
+          </span>
+        ) : (
+          <span className="truncate font-semibold text-pilot-grey-900">
+            {item.fileName}
+          </span>
+        ),
     },
     {
       id: "source",
