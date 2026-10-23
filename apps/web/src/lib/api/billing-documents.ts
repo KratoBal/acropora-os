@@ -98,6 +98,21 @@ export const billingDocumentsApi = {
       { signal },
     );
   },
+  /**
+   * EGY NEM PÁROSODOTT, TÁROLT LEVÉL-PDF HOZZÁRENDELÉSE A BEJÖVŐ SZÁMLÁHOZ
+   * (acrobot 35522/35529). A sornak még nem lehet PDF-je (409).
+   */
+  assignIncomingDocument(token: string, rowId: string, documentId: string) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(rowId)}/assign-document`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId }),
+      },
+    );
+  },
   incomingDetail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<IncomingDocumentDetail>(
       `/billing/incoming-documents/${encodeURIComponent(id)}`,
