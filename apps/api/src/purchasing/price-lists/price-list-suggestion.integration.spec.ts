@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
@@ -336,17 +337,18 @@ describe(
         code: "4006381333931",
         isPrimary: true,
         type: "EAN13",
-        source: "IMPORT",
+        source: "SUPPLIER_PRICE_LIST",
       });
-      assert.equal(
-        await prisma.auditLog.count({
-          where: {
-            userId,
-            action: "product-barcode.added-from-price-list",
-          },
-        }),
-        1,
-      );
+      const audit = await prisma.auditLog.findMany({
+        where: { userId, action: "product-barcode.added-from-price-list" },
+        select: { entityId: true },
+      });
+      const stored = await prisma.productBarcode.findFirstOrThrow({
+        where: { variantId: variant500g },
+        select: { id: true },
+      });
+      // the backfill migration finds the filled rows through this link
+      assert.deepEqual(audit, [{ entityId: stored.id }]);
     });
 
     it("does not overwrite or add beside a variant that already has a barcode", async () => {
@@ -407,6 +409,64 @@ describe(
         rest.map((row) => row.supplierSku),
         ["P-C", "P-C"],
       );
+    });
+
+    it("backfills rows filled before the source value existed, by the audit trail and nothing else", async () => {
+      const make = async (key: string) => {
+        const product = await prisma.product.create({
+          data: { name: `Plsugbrand Backfill ${key}` },
+        });
+        return (
+          await prisma.productVariant.create({
+            data: {
+              productId: product.id,
+              sku: `${PREFIX}bf-${key}-${suffix}`,
+            },
+          })
+        ).id;
+      };
+      const [filledVariant, otherVariant] = [await make("a"), await make("b")];
+      const filled = await prisma.productBarcode.create({
+        data: {
+          variantId: filledVariant,
+          code: "4006381333948",
+          type: "EAN13",
+          source: "IMPORT",
+        },
+      });
+      const other = await prisma.productBarcode.create({
+        data: {
+          variantId: otherVariant,
+          code: "4006381333955",
+          type: "EAN13",
+          source: "IMPORT",
+        },
+      });
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          action: "product-barcode.added-from-price-list",
+          entityType: "ProductBarcode",
+          entityId: filled.id,
+        },
+      });
+      const sql = readFileSync(
+        new URL(
+          "../../../../../packages/database/prisma/migrations/20261024010100_barcode_source_backfill_price_list/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await prisma.$executeRawUnsafe(sql);
+      const sources = await prisma.productBarcode.findMany({
+        where: { id: { in: [filled.id, other.id] } },
+        orderBy: { code: "asc" },
+        select: { code: true, source: true },
+      });
+      assert.deepEqual(sources, [
+        { code: "4006381333948", source: "SUPPLIER_PRICE_LIST" },
+        { code: "4006381333955", source: "IMPORT" },
+      ]);
     });
   },
 );

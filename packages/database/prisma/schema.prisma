@@ -1927,6 +1927,9 @@ enum ProductBarcodeSource {
   MANUAL
   JEV
   POS
+  /// Ember által jóváhagyott névpár beszállítói árlista-sorából pótolt vonalkód
+  /// (task vonalkod-forras-ertek): a commerce újraindítása előtt külön kezelendő.
+  SUPPLIER_PRICE_LIST
 }
 
 model CatalogImportBatch {

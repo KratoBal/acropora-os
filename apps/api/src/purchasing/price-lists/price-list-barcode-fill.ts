@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { Prisma } from "@acropora/database";
 import { validateGtin } from "@acropora/jev/product-enrichment";
 
@@ -64,23 +66,31 @@ export async function fillBarcodeFromPair(
   });
   if (owned) return "OWNED_BY_OTHER";
 
-  const created = await transaction.productBarcode.create({
-    data: {
-      variantId: input.variantId,
-      code,
-      // the variant's first barcode is its primary one
-      isPrimary: true,
-      type: barcodeType(code),
-      source: "IMPORT",
-    },
-    select: { id: true },
+  // createMany with skipDuplicates, not create: a concurrent approval that took the
+  // same code must end as OWNED_BY_OTHER, not as a unique-violation error that
+  // would roll back the whole approval
+  const id = randomUUID();
+  const { count } = await transaction.productBarcode.createMany({
+    data: [
+      {
+        id,
+        variantId: input.variantId,
+        code,
+        // the variant's first barcode is its primary one
+        isPrimary: true,
+        type: barcodeType(code),
+        source: "SUPPLIER_PRICE_LIST",
+      },
+    ],
+    skipDuplicates: true,
   });
+  if (count === 0) return "OWNED_BY_OTHER";
   await transaction.auditLog.create({
     data: {
       userId: input.userId,
       action: "product-barcode.added-from-price-list",
       entityType: "ProductBarcode",
-      entityId: created.id,
+      entityId: id,
       metadata: {
         variantId: input.variantId,
         code,
