@@ -45,12 +45,20 @@ interface ChainRow {
   proformaInvoiceId: string | null;
   referencedInvoiceId: string | null;
   createdAt: Date;
+  sourceType: string | null;
+  completionCertificateId: string | null;
+}
+
+export interface RelatedBillingDocuments {
+  documents: BillingRelatedDocument[];
+  /** A lánc hosszabb, mint `MAX_DOCUMENTS`: a lista csonka. */
+  truncated: boolean;
 }
 
 export async function loadRelatedBillingDocuments(
   database: Pick<PrismaClient, "invoice">,
   startId: string,
-): Promise<BillingRelatedDocument[]> {
+): Promise<RelatedBillingDocuments> {
   const known = new Map<string, ChainRow>();
   let wanted = new Set([startId]);
   for (let round = 0; round < MAX_ROUNDS && wanted.size > 0; round += 1) {
@@ -76,7 +84,10 @@ export async function loadRelatedBillingDocuments(
         proformaInvoiceId: true,
         referencedInvoiceId: true,
         createdAt: true,
+        sourceType: true,
+        completionCertificateId: true,
       },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: MAX_DOCUMENTS + 1,
     })) as ChainRow[];
     const next = new Set<string>();
@@ -94,7 +105,8 @@ export async function loadRelatedBillingDocuments(
     }
     if (known.size > MAX_DOCUMENTS) break;
   }
-  if (!known.has(startId) || known.size === 1) return [];
+  if (!known.has(startId) || known.size === 1)
+    return { documents: [], truncated: false };
 
   const rows = [...known.values()];
   const when = (row: ChainRow) => (row.issueDate ?? row.createdAt).getTime();
@@ -119,7 +131,11 @@ export async function loadRelatedBillingDocuments(
   for (const canceller of cancellers)
     if (!ordered.includes(canceller)) ordered.push(canceller);
 
-  return ordered.slice(0, MAX_DOCUMENTS).map((row) => ({
+  // the document the page is about always stays in the list, even when the chain is cut
+  const shown = ordered.slice(0, MAX_DOCUMENTS);
+  const start = ordered.find((row) => row.id === startId)!;
+  if (!shown.includes(start)) shown[shown.length - 1] = start;
+  const documents = shown.map((row) => ({
     id: row.id,
     documentType: row.documentType as BillingRelatedDocument["documentType"],
     number: row.invoiceNumber,
@@ -128,8 +144,11 @@ export async function loadRelatedBillingDocuments(
     grossAmount: row.grossAmount ? row.grossAmount.toFixed(4) : null,
     currency: row.currency,
     current: row.id === startId,
+    // the same test as OWN_ROWS: only those rows have a details page
+    openable: row.sourceType !== null && row.completionCertificateId === null,
     cancelsId: CANCELLING.includes(row.documentType)
       ? row.referencedInvoiceId
       : null,
   }));
+  return { documents, truncated: known.size > MAX_DOCUMENTS };
 }

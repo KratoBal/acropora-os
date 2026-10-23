@@ -1014,6 +1014,7 @@ describe("the advance from a proforma", () => {
             grossAmount: "355600.0000",
             currency: "HUF",
             current: false,
+            openable: true,
             cancelsId: null,
           },
           {
@@ -1025,6 +1026,7 @@ describe("the advance from a proforma", () => {
             grossAmount: "355600.0000",
             currency: "HUF",
             current: true,
+            openable: true,
             cancelsId: null,
           },
         ],

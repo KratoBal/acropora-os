@@ -27,8 +27,11 @@ const TYPE_LABELS: Record<BillingRelatedDocument["documentType"], string> = {
  */
 export function BillingDocumentRelated({
   documents,
+  truncated = false,
 }: {
   documents: BillingRelatedDocument[];
+  /** A lánc hosszabb, mint amit a lista mutat. */
+  truncated?: boolean;
 }) {
   if (documents.length === 0) return null;
   const byId = new Map(documents.map((document) => [document.id, document]));
@@ -62,13 +65,16 @@ export function BillingDocumentRelated({
                       {label}{" "}
                       <PilotBadge variant="teal">Ez a bizonylat</PilotBadge>
                     </>
-                  ) : (
+                  ) : document.openable ? (
                     <Link
                       href={`${BILLING_LIST_PATH}/${document.id}`}
                       className="underline"
                     >
                       {label}
                     </Link>
+                  ) : (
+                    // a sztornónak és a más modulból kiállított számlának nincs ilyen oldala
+                    label
                   )}
                 </p>
                 <p className="text-xs text-pilot-grey-500">
@@ -95,6 +101,11 @@ export function BillingDocumentRelated({
           );
         })}
       </ul>
+      {truncated ? (
+        <p className="pt-2 text-xs text-pilot-grey-500">
+          A lánc hosszabb, mint amit itt mutatunk.
+        </p>
+      ) : null}
     </PilotSection>
   );
 }

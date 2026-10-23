@@ -67,10 +67,11 @@ export class BillingDocumentsService {
       row.documentType === "ADVANCE_INVOICE"
         ? await this.repository.finalInvoiceOf(id)
         : null;
-    const relatedDocuments = await this.repository.related(id);
+    const related = await this.repository.related(id);
     return {
       ...detail,
-      relatedDocuments,
+      relatedDocuments: related.documents,
+      relatedDocumentsTruncated: related.truncated,
       ...(row.documentType === "ADVANCE_INVOICE"
         ? {
             finalInvoice: final

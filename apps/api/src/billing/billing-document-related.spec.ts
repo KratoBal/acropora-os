@@ -24,6 +24,8 @@ interface Row {
   proformaInvoiceId: string | null;
   referencedInvoiceId: string | null;
   createdAt: Date;
+  sourceType: string | null;
+  completionCertificateId: string | null;
 }
 
 const row = (
@@ -39,6 +41,9 @@ const row = (
   proformaInvoiceId: null,
   referencedInvoiceId: null,
   createdAt: new Date("2026-10-01T09:00:00Z"),
+  // an own row of the Számlázás module: it has a source reference
+  sourceType: "PROJECT",
+  completionCertificateId: null,
   ...overrides,
 });
 
@@ -48,6 +53,7 @@ function fakeDatabase(rows: Row[]) {
   const database = {
     invoice: {
       findMany: async (args: {
+        take?: number;
         where: {
           direction?: string;
           source?: string;
@@ -55,18 +61,20 @@ function fakeDatabase(rows: Row[]) {
         };
       }) => {
         queries.push(args.where);
-        return rows.filter(
-          (r) =>
-            (args.where.direction === undefined ||
-              r.direction === args.where.direction) &&
-            (args.where.source === undefined ||
-              r.source === args.where.source) &&
-            args.where.OR.some((clause) =>
-              Object.entries(clause).some(([field, cond]) =>
-                cond.in.includes(String(r[field as keyof Row])),
+        return rows
+          .filter(
+            (r) =>
+              (args.where.direction === undefined ||
+                r.direction === args.where.direction) &&
+              (args.where.source === undefined ||
+                r.source === args.where.source) &&
+              args.where.OR.some((clause) =>
+                Object.entries(clause).some(([field, cond]) =>
+                  cond.in.includes(String(r[field as keyof Row])),
+                ),
               ),
-            ),
-        );
+          )
+          .slice(0, args.take);
       },
     },
   };
@@ -96,6 +104,7 @@ const CHAIN = [
     invoiceNumber: "S-1",
     referencedInvoiceId: "f1",
     issueDate: new Date("2026-10-12T10:00:00Z"),
+    sourceType: null,
   }),
 ];
 const OTHER = row({ id: "x1", documentType: "INVOICE", invoiceNumber: "X-1" });
@@ -104,7 +113,8 @@ describe("a kimenő bizonylatok lánca", () => {
   for (const start of ["p1", "a1", "f1", "s1"]) {
     it(`the same chain, in the same order, from ${start}`, async () => {
       const { database } = fakeDatabase([...CHAIN, OTHER]);
-      const result = await loadRelatedBillingDocuments(database, start);
+      const result = (await loadRelatedBillingDocuments(database, start))
+        .documents;
       assert.deepEqual(
         result.map((d) => d.id),
         ["p1", "a1", "f1", "s1"],
@@ -127,7 +137,7 @@ describe("a kimenő bizonylatok lánca", () => {
         issueDate: new Date("2026-10-06T10:00:00Z"),
       }),
     ];
-    const result = await loadRelatedBillingDocuments(
+    const { documents: result } = await loadRelatedBillingDocuments(
       fakeDatabase(rows).database,
       "p1",
     );
@@ -146,7 +156,10 @@ describe("a kimenő bizonylatok lánca", () => {
 
   it("gives a document with nothing attached an empty list, not a list of itself", async () => {
     const { database } = fakeDatabase([...CHAIN, OTHER]);
-    assert.deepEqual(await loadRelatedBillingDocuments(database, "x1"), []);
+    assert.deepEqual(await loadRelatedBillingDocuments(database, "x1"), {
+      documents: [],
+      truncated: false,
+    });
   });
 
   it("does not mix a second chain in, nor an inbound or non-Számlázz.hu row", async () => {
@@ -171,7 +184,7 @@ describe("a kimenő bizonylatok lánca", () => {
         proformaInvoiceId: "p1",
       }),
     ];
-    const result = await loadRelatedBillingDocuments(
+    const { documents: result } = await loadRelatedBillingDocuments(
       fakeDatabase(rows).database,
       "a1",
     );
@@ -190,7 +203,7 @@ describe("a kimenő bizonylatok lánca", () => {
       grossAmount: null,
       proformaInvoiceId: "p1",
     });
-    const result = await loadRelatedBillingDocuments(
+    const { documents: result } = await loadRelatedBillingDocuments(
       fakeDatabase([CHAIN[0]!, draft]).database,
       "p1",
     );
@@ -203,6 +216,7 @@ describe("a kimenő bizonylatok lánca", () => {
       grossAmount: "127000.0000",
       currency: "HUF",
       current: true,
+      openable: true,
       cancelsId: null,
     });
     assert.deepEqual(
@@ -211,12 +225,69 @@ describe("a kimenő bizonylatok lánca", () => {
     );
   });
 
+  it("marks what has no details page as not openable: the storno and a document another module issued", async () => {
+    const rows = [
+      ...CHAIN,
+      row({
+        id: "m1",
+        documentType: "INVOICE",
+        invoiceNumber: "M-1",
+        proformaInvoiceId: "p1",
+        // issued by the maintenance flow: no source reference, a certificate instead
+        sourceType: null,
+        completionCertificateId: "cc-1",
+      }),
+    ];
+    const { documents } = await loadRelatedBillingDocuments(
+      fakeDatabase(rows).database,
+      "p1",
+    );
+    assert.deepEqual(
+      documents.map((d) => [d.id, d.openable]),
+      [
+        ["p1", true],
+        ["a1", true],
+        ["m1", false],
+        ["f1", true],
+        ["s1", false],
+      ],
+    );
+  });
+
+  it("says when the chain is longer than the list shows, and keeps the starting document in it", async () => {
+    const many = Array.from({ length: 30 }, (_, i) =>
+      row({
+        id: `k${i}`,
+        documentType: "ADVANCE_INVOICE",
+        proformaInvoiceId: "p1",
+        invoiceNumber: `K-${i}`,
+        issueDate: new Date(Date.UTC(2026, 9, 1 + (i % 28))),
+      }),
+    );
+    const result = await loadRelatedBillingDocuments(
+      fakeDatabase([CHAIN[0]!, ...many]).database,
+      "p1",
+    );
+    assert.equal(result.truncated, true);
+    assert.equal(result.documents.length, 25);
+    assert.ok(result.documents.some((d) => d.current));
+    assert.equal(
+      (
+        await loadRelatedBillingDocuments(
+          fakeDatabase([...CHAIN]).database,
+          "p1",
+        )
+      ).truncated,
+      false,
+    );
+  });
+
   it("stops on a cycle instead of looping", async () => {
     const rows = [
       row({ id: "c1", documentType: "INVOICE", referencedInvoiceId: "c2" }),
       row({ id: "c2", documentType: "INVOICE", referencedInvoiceId: "c1" }),
     ];
-    const result = await loadRelatedBillingDocuments(
+    const { documents: result } = await loadRelatedBillingDocuments(
       fakeDatabase(rows).database,
       "c1",
     );

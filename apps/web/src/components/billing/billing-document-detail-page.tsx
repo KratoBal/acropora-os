@@ -525,7 +525,10 @@ export function BillingDocumentDetailPage({
             </PilotDataGrid>
           </PilotSection>
 
-          <BillingDocumentRelated documents={detail.relatedDocuments ?? []} />
+          <BillingDocumentRelated
+            documents={detail.relatedDocuments ?? []}
+            truncated={detail.relatedDocumentsTruncated ?? false}
+          />
 
           <PilotSection
             title="Tételek"
