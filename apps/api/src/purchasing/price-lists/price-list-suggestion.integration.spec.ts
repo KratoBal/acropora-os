@@ -19,7 +19,9 @@ import { PriceListSuggestionService } from "./price-list-suggestion.service.js";
 const gate = integrationDatabaseGate(process.env);
 const PREFIX = "PLSUG-";
 
-function hertlein(rows: { code: string; name: string }[]): Buffer {
+function hertlein(
+  rows: { code: string; name: string; ean?: string }[],
+): Buffer {
   const header = [
     "Artikelnummer",
     "Artikelhersteller",
@@ -45,7 +47,7 @@ function hertlein(rows: { code: string; name: string }[]): Buffer {
           row.name,
           "",
           "",
-          "",
+          row.ean ?? "",
           "",
           "11,20",
           "",
@@ -106,7 +108,10 @@ describe(
       });
     }
 
-    const upload = (rows: { code: string; name: string }[], fileName: string) =>
+    const upload = (
+      rows: { code: string; name: string; ean?: string }[],
+      fileName: string,
+    ) =>
       service.upload({
         supplierId,
         format: "HERTLEIN_ARTIKEL",
@@ -201,7 +206,7 @@ describe(
         (item) => item.variantId === variant2kg,
       );
       const decision = await suggestions.approve([first!.id], userId);
-      assert.deepEqual(decision, { decided: 1, skipped: 0 });
+      assert.deepEqual(decision, { decided: 1, skipped: 0, barcodesAdded: 0 });
       const match = await prisma.supplierPriceMatch.findUniqueOrThrow({
         where: { supplierId_supplierSku: { supplierId, supplierSku: "N1" } },
         select: {
@@ -281,6 +286,7 @@ describe(
       assert.deepEqual(await suggestions.approve([stale.id], userId), {
         decided: 0,
         skipped: 1,
+        barcodesAdded: 0,
       });
       const match = await prisma.supplierPriceMatch.findUniqueOrThrow({
         where: { supplierId_supplierSku: { supplierId, supplierSku: "N3" } },
@@ -293,6 +299,81 @@ describe(
       });
       // a tied sku is not offered for approval either
       assert.equal((await suggestions.pending(supplierId, 0)).total, 0);
+    });
+
+    it("gives an approved pair's variant the supplier's barcode when it has none, typed, sourced, primary and logged", async () => {
+      const uploaded = await upload(
+        [
+          {
+            code: "N6",
+            name: "Plsugbrand Reef Salt tengeri só 500 g",
+            ean: "4006381333931",
+          },
+        ],
+        `${PREFIX}v6.csv`,
+      );
+      assert.equal(uploaded.nameSuggestions, 1);
+      const [pending] = (await suggestions.pending(supplierId, 0)).items.filter(
+        (item) => item.supplierSku === "N6",
+      );
+      assert.equal(pending!.variantId, variant500g);
+      assert.equal(
+        await prisma.productBarcode.count({
+          where: { variantId: variant500g },
+        }),
+        0,
+      );
+      assert.deepEqual(await suggestions.approve([pending!.id], userId), {
+        decided: 1,
+        skipped: 0,
+        barcodesAdded: 1,
+      });
+      const barcode = await prisma.productBarcode.findFirstOrThrow({
+        where: { variantId: variant500g },
+        select: { code: true, isPrimary: true, type: true, source: true },
+      });
+      assert.deepEqual(barcode, {
+        code: "4006381333931",
+        isPrimary: true,
+        type: "EAN13",
+        source: "IMPORT",
+      });
+      assert.equal(
+        await prisma.auditLog.count({
+          where: {
+            userId,
+            action: "product-barcode.added-from-price-list",
+          },
+        }),
+        1,
+      );
+    });
+
+    it("does not overwrite or add beside a variant that already has a barcode", async () => {
+      await upload(
+        [
+          {
+            code: "N7",
+            name: "Plsugbrand Reef Salt tengeri só 500 g Beutel",
+            ean: "5901234123457",
+          },
+        ],
+        `${PREFIX}v7.csv`,
+      );
+      const [pending] = (await suggestions.pending(supplierId, 0)).items.filter(
+        (item) => item.supplierSku === "N7",
+      );
+      assert.equal(pending!.variantId, variant500g);
+      assert.deepEqual(await suggestions.approve([pending!.id], userId), {
+        decided: 1,
+        skipped: 0,
+        barcodesAdded: 0,
+      });
+      const codes = await prisma.productBarcode.findMany({
+        where: { variantId: variant500g },
+        select: { code: true },
+      });
+      assert.deepEqual(codes, [{ code: "4006381333931" }]);
     });
   },
 );
