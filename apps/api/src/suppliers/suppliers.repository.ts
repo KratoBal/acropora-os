@@ -467,6 +467,8 @@ export class SuppliersRepository extends Repository {
 
     const [
       supplierProducts,
+      priceLists,
+      priceMatches,
       preferredByExtensions,
       purchaseOrders,
       purchaseInvoices,
@@ -483,6 +485,8 @@ export class SuppliersRepository extends Repository {
       worksheets,
     ] = await Promise.all([
       this.database.supplierProduct.count({ where: forSupplier }),
+      this.database.supplierPriceList.count({ where: forSupplier }),
+      this.database.supplierPriceMatch.count({ where: forSupplier }),
       this.database.productExtension.count({
         where: { preferredSupplierId: id },
       }),
@@ -507,6 +511,8 @@ export class SuppliersRepository extends Repository {
 
     return {
       supplierProducts,
+      priceLists,
+      priceMatches,
       preferredByExtensions,
       purchaseOrders,
       purchaseInvoices,

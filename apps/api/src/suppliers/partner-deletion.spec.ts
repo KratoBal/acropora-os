@@ -78,15 +78,15 @@ describe("partner deletion plan", () => {
 
   /**
    * The list is the whole point of this module: a kind left out of it would
-   * be a physical delete on a partner something still points at. Fifteen is
-   * what the schema allows today - six on the partner row, nine through the
+   * be a physical delete on a partner something still points at. Seventeen is
+   * what the schema allows today - eight on the partner row, nine through the
    * mirror customer row.
    */
   it("covers every reference the schema allows", () => {
-    assert.equal(PARTNER_REFERENCE_KINDS.length, 15);
+    assert.equal(PARTNER_REFERENCE_KINDS.length, 17);
     assert.equal(
       new Set(PARTNER_REFERENCE_KINDS.map((kind) => kind.key)).size,
-      15,
+      17,
     );
     for (const kind of PARTNER_REFERENCE_KINDS) {
       assert.ok(kind.label.length > 0, `${kind.key} has no label`);
