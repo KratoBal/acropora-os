@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   basisWritten,
   numbersAtUnit,
+  oneSidedBound,
+  phosphateNamed,
   taxonInText,
   unitWritten,
 } from "./anchor-check.js";
@@ -87,5 +89,32 @@ describe("a taxon in its anchor", () => {
   it("a group named in English does not meet its Hungarian form: a question, not a field", () => {
     assert.equal(taxonInText(v, "STONY_CORAL", "scleractinian corals"), false);
     assert.equal(taxonInText(v, "NOT_A_KEY", "Acropora"), false);
+  });
+});
+
+describe("a quantity's substance and its one-sided bound (acrobot 35808)", () => {
+  it("phosphate or phosphorus named, and no nitrogen compound beside it", () => {
+    assert.equal(phosphateNamed("at 2 µM phosphate"), true);
+    assert.equal(phosphateNamed("0.4 µM SRP"), true);
+    assert.equal(phosphateNamed("DIP of 0.19 µmol/l as PO4"), true);
+    assert.equal(phosphateNamed("nitrate < 9 µmol/l"), false);
+    assert.equal(phosphateNamed("9 µM NO3"), false);
+    assert.equal(phosphateNamed("2 µM phosphate and 9 µM nitrate"), false);
+    assert.equal(phosphateNamed("DIN of 9 µM with 0.5 µM phosphate"), false);
+    assert.equal(phosphateNamed("9 µmol/l"), false);
+  });
+
+  it("a comparator before the number makes it an upper or a lower bound", () => {
+    assert.equal(oneSidedBound("µmol/l", "nitrate < 9 µmol L−1", 9), "UPPER");
+    assert.equal(oneSidedBound("µmol/l", "nitrate <9 µM", 9), "UPPER");
+    assert.equal(oneSidedBound("µmol/l", "below 9 µM", 9), "UPPER");
+    assert.equal(oneSidedBound("mg/l", "≤ 0.1 mg/L PO4", 0.1), "UPPER");
+    assert.equal(oneSidedBound("µmol/l", "> 2 µM phosphate", 2), "LOWER");
+    assert.equal(oneSidedBound("µmol/l", "at least 2 µM", 2), "LOWER");
+    assert.equal(oneSidedBound("µmol/l", "at 2 µM phosphate", 2), null);
+    assert.equal(oneSidedBound("µmol/l", "0.5–2 µM", 2), null);
+    // the comparator belongs to another number
+    assert.equal(oneSidedBound("µmol/l", "< 9 µM and 2 µM", 2), null);
+    assert.equal(oneSidedBound("µmol/l", "under 9 µM, over 9 µM", 9), null);
   });
 });

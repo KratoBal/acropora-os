@@ -202,6 +202,110 @@ describe("the OS's own check of the AI's claims", () => {
     );
   });
 
+  it("only a phosphate value is converted, and a '<' number is an upper bound alone (acrobot 35808)", () => {
+    const text = [
+      PASSAGE,
+      "Bleaching was aggravated when nitrate exceeded 9 µmol/l, and mitigated below 9 µM ammonium.",
+      "Under heat stress, colonies kept at nitrate < 9 µmol L−1 bleached less.",
+      "Inflowing water held 0.58 ± 0.20 µM phosphate.",
+      "Growth was highest at < 0.1 mg/L PO4.",
+    ].join("\n");
+    const quantityOf = (quantity: Record<string, unknown>) => {
+      const claim = checkClaims(
+        [
+          aiClaim({
+            fields: [{ field: "quantity", ...quantity }],
+            questions: [],
+          }),
+        ],
+        [{ locator: "Results", text }],
+        vocabulary,
+      ).claims[0]!;
+      assert.deepEqual(claim.refused, []);
+      return claim.quantity;
+    };
+    // the case on stage: a nitrate of 9 µmol/l, given as 9-9, shown as 0.85 mg/l PO4
+    assert.deepEqual(
+      quantityOf({
+        min: 9,
+        max: 9,
+        unit: "µmol/l",
+        basis: null,
+        anchor: "colonies kept at nitrate < 9 µmol L−1",
+      }),
+      {
+        min: null,
+        max: 9,
+        unit: "µmol/l",
+        basis: null,
+        normalizedMinMgL: null,
+        normalizedMaxMgL: null,
+      },
+    );
+    // a lower bound, written in words; still nitrate, still unconverted
+    assert.deepEqual(
+      quantityOf({
+        min: 9,
+        max: null,
+        unit: "µmol/l",
+        anchor: "when nitrate exceeded 9 µmol/l",
+      }),
+      {
+        min: 9,
+        max: null,
+        unit: "µmol/l",
+        basis: null,
+        normalizedMinMgL: null,
+        normalizedMaxMgL: null,
+      },
+    );
+    // phosphate named next to ammonium: not decided by a rule, not converted
+    assert.equal(
+      quantityOf({
+        min: 9,
+        max: 9,
+        unit: "µmol/l",
+        anchor: "and mitigated below 9 µM ammonium",
+      })?.normalizedMaxMgL,
+      null,
+    );
+    // a phosphate value converts as before; a plain value keeps both ends
+    assert.deepEqual(
+      quantityOf({
+        min: 0.58,
+        max: 0.58,
+        unit: "µmol/l",
+        anchor: "held 0.58 ± 0.20 µM phosphate",
+      }),
+      {
+        min: 0.58,
+        max: 0.58,
+        unit: "µmol/l",
+        basis: null,
+        normalizedMinMgL: 0.0550826,
+        normalizedMaxMgL: 0.0550826,
+      },
+    );
+    // a mass value below a bound: upper only, converted
+    assert.deepEqual(
+      quantityOf({
+        min: 0.1,
+        max: 0.1,
+        unit: "mg/l",
+        basis: "PO4",
+        anchor: "highest at < 0.1 mg/L PO4",
+      }),
+      {
+        min: null,
+        max: 0.1,
+        unit: "mg/l",
+        basis: "PO4",
+        normalizedMinMgL: null,
+        normalizedMaxMgL: 0.1,
+      },
+    );
+  });
+
   it("a closed value's one-word anchor proves nothing; a sample size's unit is cleaned (barracuda, #1838)", () => {
     const { claims } = checkClaims(
       [

@@ -1,6 +1,7 @@
 import { Prisma, prisma } from "@acropora/database";
 import {
   VOCABULARY_V1_ROWS,
+  phosphateNamed,
   vocabularyV1,
   type VocabularyKind,
 } from "@acropora/knowledge-base";
@@ -191,8 +192,24 @@ function anchorOf(a: LoadedAnchor, owner: "CLAIM" | "SOURCE"): ReviewAnchor {
   };
 }
 
-function columnsOf(claim: LoadedClaim): ClaimColumns {
+/**
+ * Whether the claim's stored mg/l PO4 values may be shown and kept: only when
+ * its quantity anchor is about phosphate. Rows extracted before that rule
+ * (a nitrate of 9 µmol/l stored as 0.85 mg/l PO4, acrobot 35808) are read by
+ * it too, so the false number is neither shown nor verified.
+ */
+function phosphateQuantity(
+  anchors: readonly Pick<ReviewAnchor, "field" | "text">[],
+): boolean {
+  return anchors.some((a) => a.field === "quantity" && phosphateNamed(a.text));
+}
+
+function columnsOf(
+  claim: LoadedClaim,
+  anchors: readonly Pick<ReviewAnchor, "field" | "text">[],
+): ClaimColumns {
   const e = claim.evidence[0]!;
+  const phosphate = phosphateQuantity(anchors);
   return {
     species: e.species,
     environment: e.environment,
@@ -204,8 +221,8 @@ function columnsOf(claim: LoadedClaim): ClaimColumns {
           max: num(claim.originalMax),
           unit: claim.originalUnit,
           basis: claim.chemicalBasis,
-          normalizedMinMgL: num(claim.normalizedMinMgL),
-          normalizedMaxMgL: num(claim.normalizedMaxMgL),
+          normalizedMinMgL: phosphate ? num(claim.normalizedMinMgL) : null,
+          normalizedMaxMgL: phosphate ? num(claim.normalizedMaxMgL) : null,
         }
       : null,
     sampleSize:
@@ -333,8 +350,12 @@ export class ClaimReviewRepository {
               max: claim.originalMax?.toString() ?? null,
               unit: claim.originalUnit,
               basis: claim.chemicalBasis,
-              normalizedMinMgL: claim.normalizedMinMgL?.toString() ?? null,
-              normalizedMaxMgL: claim.normalizedMaxMgL?.toString() ?? null,
+              normalizedMinMgL: phosphateQuantity(anchors)
+                ? (claim.normalizedMinMgL?.toString() ?? null)
+                : null,
+              normalizedMaxMgL: phosphateQuantity(anchors)
+                ? (claim.normalizedMaxMgL?.toString() ?? null)
+                : null,
             }
           : null,
         applicability: evidence.homeReefApplicability
@@ -371,7 +392,7 @@ export class ClaimReviewRepository {
           "RETRACTED_SOURCE",
           "the source was retracted: a claim on it can only be discarded",
         );
-      const before = columnsOf(claim);
+      const before = columnsOf(claim, anchors);
       const plan = planReview(
         anchors,
         before,

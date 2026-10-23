@@ -115,6 +115,50 @@ export function basisWritten(basis: "PO4" | "P", anchor: string): boolean {
     : PO4_BASIS.test(text) && !P_BASIS.test(text);
 }
 
+const NITROGEN =
+  /nitrate|nitrite|ammoni|nitrogen|(?<![a-z])(?:din|tan|no ?[23x]|nh ?[34])(?![a-z])/;
+
+/**
+ * Whether the anchor's quantity is a phosphate value: it names phosphate or
+ * phosphorus, and no nitrogen compound beside it. Only then may a value be
+ * converted to mg/l PO4: a micromolar nitrate converted as phosphate is a
+ * false number on the editor's screen (acrobot 35808, a nitrate of 9 µmol/l
+ * shown as 0.85 mg/l PO4). An anchor naming both is not decided by a rule.
+ */
+export function phosphateNamed(anchor: string): boolean {
+  const text = folded(anchor);
+  return (PO4_BASIS.test(text) || P_BASIS.test(text)) && !NITROGEN.test(text);
+}
+
+const UPPER_WORDS =
+  "<|≤|=<|less than|lower than|below|under|up to|at most|not exceeding|max(?:imum)?\\.?";
+const LOWER_WORDS =
+  ">|≥|>=|more than|greater than|higher than|above|over|at least|exceeding|min(?:imum)?\\.?";
+
+/**
+ * A one-sided bound: whether the number `n`, standing at its unit, is written
+ * as an upper ("< 9 µM", "below 9 µM") or a lower bound ("> 9 µM"). Null when
+ * it is a plain value, or written both ways in the anchor.
+ */
+export function oneSidedBound(
+  unit: AnchorUnit,
+  anchor: string,
+  n: number,
+): "UPPER" | "LOWER" | null {
+  const sides = new Set<"UPPER" | "LOWER">();
+  for (const t of UNIT_TOKENS[unit]) {
+    const re = new RegExp(
+      `(?:(?<![a-z])(${UPPER_WORDS})|(?<![a-z])(${LOWER_WORDS}))\\s*(?<![\\d.,])${NUMBER}${ERROR}\\s*(?:${t.pattern})`,
+      "g",
+    );
+    for (const m of (t.cased ? cased(anchor) : folded(anchor)).matchAll(re)) {
+      if (Number(m[3]!.replace(",", ".")) !== n) continue;
+      sides.add(m[1] !== undefined ? "UPPER" : "LOWER");
+    }
+  }
+  return sides.size === 1 ? [...sides][0]! : null;
+}
+
 /**
  * Whether the anchor names the taxon: one of its forms as consecutive words,
  * or a species as "<genus initial>. <epithet>". The vocabulary's forms are
