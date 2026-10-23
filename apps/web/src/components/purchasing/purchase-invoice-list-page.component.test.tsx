@@ -200,6 +200,7 @@ describe("PurchaseInvoiceListPage Direction F", () => {
       ["Beszerzések", "/beszerzes", "page"],
       ["Várható beérkezések", "/beszerzes/varhato", null],
       ["NAV számla lekérés", "/beszerzes/nav-szamlak", null],
+      ["Beszállítói árlisták", "/beszerzes/arlistak", null],
     ]);
   });
 

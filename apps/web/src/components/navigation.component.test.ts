@@ -120,6 +120,8 @@ describe("navigation", () => {
       // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt"
       "/beszerzes/varhato",
       "/beszerzes/nav-szamlak",
+      // Beszállítói árlisták (task beszallitoi-arlistak): a Beszerzés oldalai közt
+      "/beszerzes/arlistak",
       // Számlázás (Balázs, 2026-09-30): a bizonylatok listája
       "/penzugy/szamlazas",
       // Árajánlatok (#1582 P1): a Figma 35 szerint a Pénzügy alatt
@@ -438,6 +440,9 @@ describe("navigation", () => {
     "/beszerzes": "purchasing.view",
     "/beszerzes/varhato": "purchasing.view",
     "/beszerzes/nav-szamlak": "purchasing.view",
+    // A Beszállítói árlisták a bevezetés UTÁN jöttek; a jog a forrásé
+    // (`price-lists`, purchasing.view)
+    "/beszerzes/arlistak": "purchasing.view",
     // Az Elszámolások menüpont 2026-09-30-án váltotta a három külön tételt;
     // a jog ugyanaz, mint a három fülé volt.
     // A Számlázás menüpontja 2026-09-30-án jött, a bevezetés UTÁN; a jog az,

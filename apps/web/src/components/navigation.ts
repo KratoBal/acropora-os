@@ -289,6 +289,12 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "nav-invoices",
       },
       {
+        href: "/beszerzes/arlistak",
+        label: "Beszállítói árlisták",
+        icon: "file-text",
+        entryId: "price-lists",
+      },
+      {
         // Számlázás (Balázs, 2026-09-30): "a Számlázás menüpont a Pénzügy
         // alá kerül", a lista a /penzugy/szamlazas-on, a bizonylat a
         // /penzugy/szamlazas/:id-n, a vázlat a .../szerkesztes-en.
