@@ -2,6 +2,10 @@ import { Module } from "@nestjs/common";
 
 import { ClaimReviewController } from "./claims/claim-review.controller.js";
 import { ClaimReviewService } from "./claims/claim-review.service.js";
+import {
+  ClaimStoreController,
+  ClaimStoreService,
+} from "./claims/claim-store.controller.js";
 import { KnowledgeDiscoveryController } from "./discovery/discovery-run.controller.js";
 import { KnowledgeDiscoveryService } from "./discovery/discovery-run.service.js";
 import { KnowledgeExtractionController } from "./extraction/extraction.controller.js";
@@ -25,6 +29,7 @@ import {
     SourceScreeningController,
     KnowledgeOverviewController,
     ClaimReviewController,
+    ClaimStoreController,
     VocabularyController,
   ],
   providers: [
@@ -33,6 +38,7 @@ import {
     SourceScreeningService,
     KnowledgeOverviewService,
     ClaimReviewService,
+    ClaimStoreService,
     VocabularyService,
   ],
 })
