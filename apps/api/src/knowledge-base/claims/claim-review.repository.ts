@@ -534,6 +534,49 @@ export class ClaimReviewRepository {
   }
 
   /**
+   * A VERIFIED claim the editor accepted by mistake (acrobot 35960: a light
+   * effect accepted as a phosphate one): it is WITHDRAWN, so the claim store
+   * and everything built on VERIFIED claims drop it, with the editor's reason
+   * in the log. Its field decisions stay as they were: they are the history
+   * of the mistake, and a withdrawn claim is never reviewed again.
+   */
+  async withdraw(
+    claimId: string,
+    reason: string,
+    actorUserId: string,
+  ): Promise<{ id: string; status: "WITHDRAWN" }> {
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.knowledgeClaim.findUnique({
+        where: { id: claimId },
+        select: { id: true, status: true },
+      });
+      if (!claim) throw new ClaimNotFound(claimId);
+      const { count } = await tx.knowledgeClaim.updateMany({
+        where: { id: claim.id, status: "VERIFIED" },
+        data: { status: "WITHDRAWN" },
+      });
+      if (count !== 1)
+        throw new ClaimReviewConflict(
+          "only a verified claim is withdrawn; a candidate is discarded",
+        );
+      await tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: "KNOWLEDGE_CLAIM_WITHDRAWN",
+          entityType: "KnowledgeClaim",
+          entityId: claim.id,
+          metadata: {
+            before: { status: "VERIFIED" },
+            after: { status: "WITHDRAWN" },
+            reason,
+          },
+        },
+      });
+    });
+    return { id: claimId, status: "WITHDRAWN" };
+  }
+
+  /**
    * The whole claim is wrong (the effect or the direction cannot stand): it is
    * WITHDRAWN, its pending fields rejected, with the editor's reason in the log.
    */
