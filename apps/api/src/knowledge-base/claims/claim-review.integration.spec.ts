@@ -497,5 +497,34 @@ describe(
       );
       assert.equal(discarded.status, "WITHDRAWN");
     });
+
+    it("a source field a re-extraction rejected is not shown again (acrobot 35941)", async () => {
+      const evidence = await prisma.knowledgeClaimEvidence.findFirstOrThrow({
+        where: { claimId: nitrateClaimId },
+        select: {
+          passageId: true,
+          passage: {
+            select: { sourceVersion: { select: { sourceId: true } } },
+          },
+        },
+      });
+      const old = await prisma.knowledgeFieldAnchor.create({
+        data: {
+          sourceId: evidence.passage.sourceVersion.sourceId,
+          passageId: evidence.passageId,
+          field: "studyType",
+          normalizedValue: "CONTROLLED_LAB",
+          decision: "REJECTED",
+          decidedById: userId,
+          decidedAt: new Date(),
+        },
+      });
+      const review = await repository.detail(nitrateClaimId);
+      assert.ok(review.fields.length > 0);
+      assert.equal(
+        review.fields.some((f) => f.anchorId === old.id),
+        false,
+      );
+    });
   },
 );
