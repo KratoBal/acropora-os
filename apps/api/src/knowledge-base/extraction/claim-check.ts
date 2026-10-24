@@ -8,6 +8,8 @@ import {
   numbersOf,
   oneSidedBound,
   phosphateNamed,
+  normaliseText,
+  splitWords,
   squash,
   taxonInText,
   unitWritten,
@@ -563,8 +565,28 @@ const CHANGE_WORD = new RegExp(
 const ORGANISM_WORD =
   /(?<![\p{L}])(?:coral|scleractin|acropor|pocillopor|montipor|porites|stylophor|symbio|zooxanth|alga|macroalga|seaweed|aquari)/iu;
 
-export function namesAnOrganism(passage: string): boolean {
-  return ORGANISM_WORD.test(passage);
+/**
+ * The hand-written stems, and the approved vocabulary's own taxa (barracuda,
+ * #1871; acrobot 35969): a genus or species the vocabulary holds names an
+ * organism by its genus word ("Seriatopora", which the stems do not know) or
+ * by its written forms ("A. cervicornis"), so a key the editor adds signals
+ * on its own, with no second list to keep.
+ */
+export function namesAnOrganism(
+  passage: string,
+  vocabulary?: Vocabulary,
+): boolean {
+  if (ORGANISM_WORD.test(passage)) return true;
+  if (!vocabulary) return false;
+  const words = new Set(splitWords(normaliseText(passage)));
+  return vocabulary.taxa.some(
+    (t) =>
+      ((t.extra.rank === "GENUS" || t.extra.rank === "SPECIES") &&
+        t.forms.some(
+          (f) => f[0] !== undefined && f[0].length >= 4 && words.has(f[0]),
+        )) ||
+      taxonInText(vocabulary, t.key, passage),
+  );
 }
 
 export function namesAChange(passage: string): boolean {
@@ -616,7 +638,10 @@ function effectAsQuestion(c: CheckedClaim): CheckedClaim {
   return unnamed ? { ...c, effect: null, anchors } : { ...c, anchors };
 }
 
-export function keepOwnFindings(claims: readonly CheckedClaim[]): {
+export function keepOwnFindings(
+  claims: readonly CheckedClaim[],
+  vocabulary?: Vocabulary,
+): {
   claims: CheckedClaim[];
   refusedClaims: string[];
   refusedFields: string[];
@@ -639,7 +664,7 @@ export function keepOwnFindings(claims: readonly CheckedClaim[]): {
       refusedClaims.push("NO_CHANGE_WORD");
     else if (
       !c.anchors.some((a) => a.field === "species") &&
-      !namesAnOrganism(c.passage.text)
+      !namesAnOrganism(c.passage.text, vocabulary)
     )
       refusedClaims.push("NO_ORGANISM");
     else kept.push(effectAsQuestion(c));
