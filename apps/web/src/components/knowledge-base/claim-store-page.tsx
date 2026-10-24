@@ -524,7 +524,7 @@ function WithdrawPanel({
     setFailure(null);
     try {
       await knowledgeBaseApi.withdrawClaim(
-        session.token,
+        session.token ?? "",
         claimId,
         reason.trim(),
       );
