@@ -457,6 +457,15 @@ export function checkClaims(
  *   together with a citation is dropped too, and the editor can add it by hand;
  * - a claim with neither an effect (a field or a question) nor a direction is
  *   a background value, not a finding (NO_FINDING);
+ * - a passage with no word of change or effect ("increased", "reduced",
+ *   "correlated", "did not change"...) is a background value even when the
+ *   model gave it an effect and a direction (NO_CHANGE_WORD; acrobot 35941,
+ *   the inflow concentrations of the first re-extraction). It is the editor's
+ *   to attach as another claim's condition: no rule can tell which claim;
+ * - an effect key whose words are not in its anchor is the model mapping an
+ *   unlisted effect to the nearest key (an internal nutrient reserve given as
+ *   SYMBIONT_DENSITY, acrobot 35941): it becomes a question, as an unknown
+ *   word does. A key this table does not know (one an editor added) is left;
  * - the study's own fields (study type, method) are stored once per source:
  *   a repeated value keeps its first anchor, and two different values for one
  *   field keep neither (SOURCE_FIELD_CONFLICT), since a source has one design.
@@ -477,12 +486,120 @@ const CITATION = new RegExp(
   "u",
 );
 
+/**
+ * The words a finding states its change with, in the papers' English. A
+ * deliberately broad list: a missed background value is the editor's one
+ * click, a dropped finding is lost (the asymmetry of the CITED_RESULT rule
+ * runs the other way, because a cited result is never this source's).
+ */
+const CHANGE_WORD = new RegExp(
+  "(?<![\\p{L}])(?:" +
+    [
+      "increas",
+      "decreas",
+      "reduc",
+      "enhanc",
+      "elevat",
+      "inhibit",
+      "suppress",
+      "promot",
+      "stimulat",
+      "impair",
+      "declin",
+      "improv",
+      "accelerat",
+      "slow",
+      "rose",
+      "rise",
+      "rising",
+      "fell",
+      "fall",
+      "drop",
+      "lower",
+      "higher",
+      "greater",
+      "affect",
+      "impact",
+      "effect",
+      "influenc",
+      "alter",
+      "chang",
+      "correlat",
+      "associat",
+      "linked",
+      "depend",
+      "limit",
+      "stabili",
+      "unchanged",
+      "differ",
+      "significant",
+      "respon",
+      "caus",
+      "led to",
+      "result(?:s|ed)? in",
+      "mitigat",
+      "aggravat",
+      "exacerbat",
+      "worsen",
+      "attenuat",
+      "boost",
+      "loss",
+      "lost",
+      "gain",
+      "doubl",
+      "halv",
+    ].join("|") +
+    ")",
+  "iu",
+);
+
+export function namesAChange(passage: string): boolean {
+  return CHANGE_WORD.test(passage);
+}
+
+/** The English words an effect key's anchor names it with. */
+export const EFFECT_WORDS: Readonly<Record<string, RegExp>> = {
+  CALCIFICATION: /calcif/i,
+  SKELETAL_DENSITY: /(?:skelet\w*|bulk)\s+densit/i,
+  GROWTH: /grow|(?:linear|skeletal)\s+extension|weight gain/i,
+  BLEACHING: /bleach/i,
+  BLEACHING_SUSCEPTIBILITY:
+    /bleach\w*\s+(?:susceptib|sensitiv|toleran|resist)|thermal\s+(?:toleran|sensitiv)/i,
+  COLORATION: /colou?r|pigment/i,
+  SYMBIONT_DENSITY:
+    /(?:symbiont|zooxanthella\w*|symbiodini\w*|algal)\s+(?:cell\s+)?(?:densit|abundance|number|count)|cell\s+densit/i,
+  PHOTOSYNTHESIS: /photosynth|fv\s*\/\s*fm|quantum\s+yield|photochemi/i,
+};
+
+/** Whether an effect key's anchor names that effect; true for a key the table does not know. */
+export function effectNamed(key: string, anchor: string): boolean {
+  const words = EFFECT_WORDS[key];
+  return words === undefined || words.test(anchor);
+}
+
 export function citesAnotherWork(passage: string): boolean {
   return CITATION.test(passage);
 }
 
 export function isMethodsSection(locator: string): boolean {
   return METHODS_SECTION.test(locator);
+}
+
+/** An effect key its anchor does not name: a question, worded by its anchor. */
+function effectAsQuestion(c: CheckedClaim): CheckedClaim {
+  let unnamed = false;
+  const anchors = c.anchors.map((a) => {
+    if (
+      a.field !== "effect" ||
+      a.normalizedValue === null ||
+      effectNamed(a.normalizedValue, a.text)
+    )
+      return a;
+    unnamed = true;
+    // the sentence's own words, never the raw key the model chose
+    return { ...a, normalizedValue: null, proposed: proposedOf(a.text) };
+  });
+  return unnamed ? { ...c, effect: null, anchors } : { ...c, anchors };
 }
 
 export function keepOwnFindings(claims: readonly CheckedClaim[]): {
@@ -504,7 +621,9 @@ export function keepOwnFindings(claims: readonly CheckedClaim[]): {
       !c.anchors.some((a) => a.field === "effect")
     )
       refusedClaims.push("NO_FINDING");
-    else kept.push({ ...c, anchors: [...c.anchors] });
+    else if (!namesAChange(c.passage.text))
+      refusedClaims.push("NO_CHANGE_WORD");
+    else kept.push(effectAsQuestion(c));
   }
 
   for (const field of SOURCE_FIELDS) {

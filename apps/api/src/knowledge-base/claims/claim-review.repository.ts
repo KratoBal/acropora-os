@@ -294,8 +294,11 @@ export class ClaimReviewRepository {
     if (claim.evidence.length > 1) throw new ClaimShapeUnsupported(claimId);
     const evidence = claim.evidence[0]!;
     const source = evidence.passage.sourceVersion.source;
+    // a rejected source field decides nothing (planReview skips it), and the
+    // ones a re-extraction rejected crowd out the live ones (acrobot 35941:
+    // nine rows per claim, seven of them the old run's)
     const sourceAnchors = await tx.knowledgeFieldAnchor.findMany({
-      where: { sourceId: source.id },
+      where: { sourceId: source.id, decision: { not: "REJECTED" } },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: ANCHOR_SELECT,
     });

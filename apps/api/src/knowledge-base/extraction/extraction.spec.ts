@@ -791,6 +791,63 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
     }
   });
 
+  it("a passage with no word of change is a background value, even with an effect and a direction (acrobot 35941)", () => {
+    const inflow = keepOwnFindings([
+      base({
+        passage: {
+          text: "Water was sourced locally from Charlesworth Bay (DIN: 3.35 ± 1.14 µmol/l, DIP: 0.58 ± 0.20 µmol/l; Fig. 2d).",
+          locator: "Results",
+        },
+      }),
+    ]);
+    assert.deepEqual(inflow.refusedClaims, ["NO_CHANGE_WORD"]);
+    assert.equal(inflow.claims.length, 0);
+    for (const text of [
+      "Shading did not change the internal reserves.",
+      "Lobophora cover correlated negatively with total phosphorus.",
+      "Reserves stabilised after 12.5 days of heat stress.",
+    ])
+      assert.deepEqual(
+        keepOwnFindings([base({ passage: { text, locator: "Results" } })])
+          .refusedClaims,
+        [],
+        text,
+      );
+  });
+
+  it("an effect key its anchor does not name becomes a question in the anchor's words; a named or an editor's key stays (acrobot 35941)", () => {
+    const effect = (text: string, key: string) =>
+      keepOwnFindings([
+        base({
+          effect: key,
+          anchors: [
+            { field: "effect", text, locator: "Results", normalizedValue: key },
+          ],
+        }),
+      ]).claims[0]!;
+    const reserve = effect(
+      "internal nitrogen reserves increased to 96–97 % of the maximum",
+      "SYMBIONT_DENSITY",
+    );
+    assert.equal(reserve.effect, null);
+    assert.equal(reserve.anchors[0]!.normalizedValue, null);
+    assert.match(
+      reserve.anchors[0]!.proposed ?? "",
+      /^internal nitrogen reserves increased to 96/,
+    );
+    for (const [text, key] of [
+      ["symbiont cell density increased", "SYMBIONT_DENSITY"],
+      ["zooxanthellae density fell", "SYMBIONT_DENSITY"],
+      ["Calcification decreased", "CALCIFICATION"],
+      ["Fv/Fm declined", "PHOTOSYNTHESIS"],
+      ["microbiome composition shifted", "MICROBIOMECOMPOSITION"],
+    ] as const) {
+      const kept = effect(text, key);
+      assert.equal(kept.effect, key, text);
+      assert.equal(kept.anchors[0]!.normalizedValue, key, text);
+    }
+  });
+
   it("the study's own fields once per source; two different values keep neither", () => {
     const same = keepOwnFindings([base({}), base({}), base({})]);
     assert.deepEqual(
