@@ -356,6 +356,14 @@ export const knowledgeBaseApi = {
       { method: "POST", body: JSON.stringify({ reason }) },
     );
   },
+  /** A VERIFIED claim accepted by mistake: withdrawn, with a reason (S5). */
+  withdrawClaim(token: string, claimId: string, reason: string) {
+    return apiRequest<{ id: string; status: "WITHDRAWN" }>(
+      `${claimsBase}/${encodeURIComponent(claimId)}/withdraw`,
+      token,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    );
+  },
   vocabulary(token: string, signal?: AbortSignal) {
     return apiRequest<VocabularyState>(vocabularyBase, token, { signal });
   },

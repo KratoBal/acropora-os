@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { BadRequestException, ConflictException } from "@nestjs/common";
+import type { AuthenticatedUser } from "@acropora/types";
 import { VOCABULARY_V1_ROWS, vocabularyV1 } from "@acropora/knowledge-base";
 
 import { SOURCE_FIELDS, checkClaims } from "../extraction/claim-check.js";
@@ -20,6 +22,8 @@ import {
   type ReviewAnchor,
   type ReviewInput,
 } from "./claim-review.js";
+import { ClaimReviewConflict } from "./claim-review.repository.js";
+import { ClaimReviewService } from "./claim-review.service.js";
 
 /**
  * THE EDITOR'S FIELD-BY-FIELD REVIEW (S4, Figma 3:137). The anchors and the
@@ -520,6 +524,51 @@ describe("claim review: a question added to the vocabulary (S5, acrobot 35807)",
           entry: { forms: ["porites lutea"] },
         },
       ],
+    );
+  });
+});
+
+describe("withdrawing a verified claim (acrobot 35960)", () => {
+  const user = { id: "u1" } as AuthenticatedUser;
+  const calls: string[] = [];
+  const service = new ClaimReviewService({
+    queue: async () => ({ ids: [], total: 0 }),
+    detail: async () => {
+      throw new Error("not used");
+    },
+    save: async () => {
+      throw new Error("not used");
+    },
+    discard: async () => {
+      throw new Error("not used");
+    },
+    withdraw: async (id: string, reason: string) => {
+      calls.push(`${id}:${reason}`);
+      if (id === "candidate")
+        throw new ClaimReviewConflict("only a verified claim is withdrawn");
+      return { id, status: "WITHDRAWN" as const };
+    },
+  });
+
+  it("needs a reason, and passes it on trimmed", async () => {
+    await assert.rejects(
+      service.withdraw("c1", { reason: "  " }, user),
+      (e: unknown) =>
+        e instanceof BadRequestException &&
+        (e.getResponse() as { code: string }).code === "DISCARD_REASON",
+    );
+    assert.deepEqual(calls, []);
+    assert.deepEqual(
+      await service.withdraw("c1", { reason: " fényhatás " }, user),
+      { id: "c1", status: "WITHDRAWN" },
+    );
+    assert.deepEqual(calls, ["c1:fényhatás"]);
+  });
+
+  it("a claim not verified is a 409", async () => {
+    await assert.rejects(
+      service.withdraw("candidate", { reason: "x" }, user),
+      ConflictException,
     );
   });
 });

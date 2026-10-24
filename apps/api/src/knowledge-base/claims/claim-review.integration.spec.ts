@@ -19,6 +19,7 @@ import {
   ClaimReviewRepository,
   type ClaimReview,
 } from "./claim-review.repository.js";
+import { ClaimStoreRepository } from "./claim-store.repository.js";
 
 /**
  * THE CLAIM REVIEW ON A DATABASE (S4, Figma 3:137): the claim the S3 store
@@ -524,6 +525,71 @@ describe(
       assert.equal(
         review.fields.some((f) => f.anchorId === old.id),
         false,
+      );
+    });
+
+    it("a verified claim accepted by mistake is withdrawn with its reason, and leaves the claim store (acrobot 35960)", async () => {
+      const before = await prisma.knowledgeClaim.findUniqueOrThrow({
+        where: { id: claimId },
+        select: { status: true },
+      });
+      assert.equal(before.status, "VERIFIED");
+      assert.ok(
+        (await new ClaimStoreRepository().list(null)).claims.some(
+          (c) => c.id === claimId,
+        ),
+      );
+      assert.deepEqual(
+        await repository.withdraw(claimId, "fényhatás, nem foszfát", userId),
+        { id: claimId, status: "WITHDRAWN" },
+      );
+      const after = await prisma.knowledgeClaim.findUniqueOrThrow({
+        where: { id: claimId },
+        select: { status: true },
+      });
+      assert.equal(after.status, "WITHDRAWN");
+      const log = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: claimId, action: "KNOWLEDGE_CLAIM_WITHDRAWN" },
+        select: { userId: true, metadata: true },
+      });
+      assert.equal(log.userId, userId);
+      assert.deepEqual(log.metadata, {
+        before: { status: "VERIFIED" },
+        after: { status: "WITHDRAWN" },
+        reason: "fényhatás, nem foszfát",
+      });
+      assert.equal(
+        (await new ClaimStoreRepository().list(null)).claims.some(
+          (c) => c.id === claimId,
+        ),
+        false,
+      );
+      // once more, or on a candidate: refused, nothing written
+      await assert.rejects(
+        repository.withdraw(claimId, "még egyszer", userId),
+        ClaimReviewConflict,
+      );
+      assert.equal(
+        (
+          await prisma.knowledgeClaim.findUniqueOrThrow({
+            where: { id: pendingClaimId },
+            select: { status: true },
+          })
+        ).status,
+        "CANDIDATE",
+      );
+      await assert.rejects(
+        repository.withdraw(pendingClaimId, "jelölt", userId),
+        ClaimReviewConflict,
+      );
+      assert.equal(
+        await prisma.auditLog.count({
+          where: {
+            action: "KNOWLEDGE_CLAIM_WITHDRAWN",
+            entityId: { in: [claimId, pendingClaimId] },
+          },
+        }),
+        1,
       );
     });
   },
