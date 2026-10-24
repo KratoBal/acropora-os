@@ -36,6 +36,17 @@ export class ClaimReviewController {
     return this.review.save(id, body, user);
   }
 
+  /** A VERIFIED claim accepted by mistake: withdrawn, with a reason (S5). */
+  @Post(":id/withdraw")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
+  withdraw(
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.review.withdraw(id, body, user);
+  }
+
   @Post(":id/discard")
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
   discard(

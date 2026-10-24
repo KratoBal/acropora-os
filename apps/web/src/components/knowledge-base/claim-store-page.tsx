@@ -5,6 +5,7 @@ import {
   PilotBadge,
   PilotButton,
   PilotCard,
+  PilotInput,
   PilotPageHeader,
   Skeleton,
 } from "@acropora/ui";
@@ -46,6 +47,13 @@ export const EVIDENCE_LEVEL_LABELS: Record<EvidenceLevel, string> = {
   OBSERVATIONAL: "Megfigyelés",
   SINGLE_EXPERIMENT: "Kontrollált kísérlet",
   CONSISTENT_EXPERIMENTS: "Egybehangzó kísérletek",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  CANDIDATE: "Ellenőrzésre vár",
+  WITHDRAWN: "Visszavonva",
+  DISPUTED: "Vitatott",
+  SUPERSEDED: "Felülírva",
 };
 
 const STANCE_LABELS: Record<string, string> = {
@@ -341,7 +349,9 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
             <div className="flex flex-wrap gap-2">
               <LayerBadge layer={data.layer} />
               {data.status !== "VERIFIED" ? (
-                <PilotBadge variant="amber">Nem ellenőrzött</PilotBadge>
+                <PilotBadge variant="amber">
+                  {STATUS_LABELS[data.status] ?? "Nem ellenőrzött"}
+                </PilotBadge>
               ) : null}
               <PilotBadge variant="grey">{data.revision}. változat</PilotBadge>
             </div>
@@ -362,6 +372,10 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               szabálytáblából levezetett ({data.evidenceLevel.rulesVersion}).
             </p>
           </PilotCard>
+
+          {data.status === "VERIFIED" ? (
+            <WithdrawPanel claimId={data.id} onDone={reload} />
+          ) : null}
 
           <section className="space-y-3" aria-labelledby="bizonyitekok">
             <h2
@@ -478,6 +492,94 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
         </>
       )}
     </Shell>
+  );
+}
+
+/**
+ * ÁLLÍTÁS VISSZAVONÁSA (acrobot 35960): egy tévedésből elfogadott, ellenőrzött
+ * állítás visszavonható, kötelező indokkal. Az állítás a tárból és minden
+ * ellenőrzött állításra épülő következtetésből kiesik; a mezők döntései
+ * megmaradnak, mint a tévedés története. Csak knowledge.manage joggal.
+ */
+function WithdrawPanel({
+  claimId,
+  onDone,
+}: {
+  claimId: string;
+  onDone: () => void;
+}) {
+  const { session } = useAuth();
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_MANAGE),
+  );
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  if (!canManage || !session) return null;
+
+  const withdraw = async () => {
+    if (!reason.trim()) return;
+    setBusy(true);
+    setFailure(null);
+    try {
+      await knowledgeBaseApi.withdrawClaim(
+        session.token,
+        claimId,
+        reason.trim(),
+      );
+      onDone();
+    } catch (caught) {
+      setFailure((caught as Error)?.message ?? "Ismeretlen hiba.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PilotCard className="space-y-3 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-pilot-grey-600">
+          Tévedésből elfogadott állítás? A visszavont állítás kikerül a tárból
+          és a következtetésekből.
+        </p>
+        <PilotButton
+          variant="ghost"
+          size="action"
+          disabled={busy}
+          onClick={() => setOpen((o) => !o)}
+        >
+          Állítás visszavonása
+        </PilotButton>
+      </div>
+      {open ? (
+        <div className="flex flex-wrap items-end gap-3 rounded-md bg-pilot-grey-50 p-3">
+          <label className="min-w-64 flex-1 space-y-1 text-sm text-pilot-grey-700">
+            <span>Miért hibás az állítás? (kötelező)</span>
+            <PilotInput
+              aria-label="Visszavonás oka"
+              value={reason}
+              onChange={setReason}
+            />
+          </label>
+          <PilotButton
+            variant="danger"
+            size="action"
+            disabled={busy || !reason.trim()}
+            onClick={() => void withdraw()}
+          >
+            Visszavonás mentése
+          </PilotButton>
+        </div>
+      ) : null}
+      {failure ? (
+        <Alert
+          variant="danger"
+          title="A visszavonás nem sikerült"
+          description={failure}
+        />
+      ) : null}
+    </PilotCard>
   );
 }
 

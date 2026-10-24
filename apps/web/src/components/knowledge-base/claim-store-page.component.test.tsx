@@ -24,7 +24,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const api = vi.hoisted(() => ({ claimStore: vi.fn(), claimDetail: vi.fn() }));
+const api = vi.hoisted(() => ({
+  claimStore: vi.fn(),
+  claimDetail: vi.fn(),
+  withdrawClaim: vi.fn(),
+}));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
@@ -247,5 +251,39 @@ describe("Állítás részletei", () => {
     expect(
       within(link.closest("li") as HTMLElement).getByText("Ellentmond neki"),
     ).toBeTruthy();
+  });
+
+  it("visszavonás: knowledge.manage joggal, kötelező indokkal, utána újratölt és Visszavonva (acrobot 35960)", async () => {
+    api.withdrawClaim.mockResolvedValue({ id: "c1", status: "WITHDRAWN" });
+    render(<ClaimDetailPage claimId="c1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Állítás visszavonása" }),
+    );
+    const save = screen.getByRole("button", { name: "Visszavonás mentése" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    api.claimDetail.mockResolvedValueOnce({ ...DETAIL, status: "WITHDRAWN" });
+    fireEvent.change(screen.getByLabelText("Visszavonás oka"), {
+      target: { value: " fényhatás, nem foszfát " },
+    });
+    fireEvent.click(save);
+    expect(await screen.findByText("Visszavonva")).toBeTruthy();
+    expect(api.withdrawClaim).toHaveBeenCalledWith(
+      "token-1",
+      "c1",
+      "fényhatás, nem foszfát",
+    );
+    // a withdrawn claim offers no second withdrawal
+    expect(
+      screen.queryByRole("button", { name: "Állítás visszavonása" }),
+    ).toBeNull();
+  });
+
+  it("visszavonás: knowledge.manage nélkül nincs gomb", async () => {
+    auth.role = "MANAGER";
+    render(<ClaimDetailPage claimId="c1" />);
+    await screen.findByText(DETAIL.evidence[0]!.passage.text, { exact: false });
+    expect(
+      screen.queryByRole("button", { name: "Állítás visszavonása" }),
+    ).toBeNull();
   });
 });

@@ -28,7 +28,7 @@ export const CLAIM_REVIEW_REPOSITORY = Symbol("CLAIM_REVIEW_REPOSITORY");
 
 export type ClaimReviewStore = Pick<
   ClaimReviewRepository,
-  "queue" | "detail" | "save" | "discard"
+  "queue" | "detail" | "save" | "discard" | "withdraw"
 >;
 
 @Injectable()
@@ -68,6 +68,16 @@ export class ClaimReviewService {
   ): Promise<ClaimReview> {
     return this.mapped(async () =>
       this.repository.discard(claimId, parseDiscardReason(body), user.id),
+    );
+  }
+
+  async withdraw(
+    claimId: string,
+    body: unknown,
+    user: AuthenticatedUser,
+  ): Promise<{ id: string; status: "WITHDRAWN" }> {
+    return this.mapped(async () =>
+      this.repository.withdraw(claimId, parseDiscardReason(body), user.id),
     );
   }
 
