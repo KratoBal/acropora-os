@@ -462,6 +462,12 @@ export function checkClaims(
  *   model gave it an effect and a direction (NO_CHANGE_WORD; acrobot 35941,
  *   the inflow concentrations of the first re-extraction). It is the editor's
  *   to attach as another claim's condition: no rule can tell which claim;
+ * - a claim with no species (neither a value nor a question) whose passage
+ *   names no coral, symbiont, alga or aquarium is about something else that
+ *   holds phosphorus, not a response of an organism to it (NO_ORGANISM;
+ *   acrobot 35963: fish-derived phosphorus supply came through as twelve
+ *   claims). An ecosystem-level finding written without an organism falls
+ *   out too: it stays in the source text for the editor;
  * - an effect key whose words are not in its anchor is the model mapping an
  *   unlisted effect to the nearest key (an internal nutrient reserve given as
  *   SYMBIONT_DENSITY, acrobot 35941): it becomes a question, as an unknown
@@ -553,6 +559,14 @@ const CHANGE_WORD = new RegExp(
   "iu",
 );
 
+/** The organisms a phosphate finding is about, by their English word stems. */
+const ORGANISM_WORD =
+  /(?<![\p{L}])(?:coral|scleractin|acropor|pocillopor|montipor|porites|stylophor|symbio|zooxanth|alga|macroalga|seaweed|aquari)/iu;
+
+export function namesAnOrganism(passage: string): boolean {
+  return ORGANISM_WORD.test(passage);
+}
+
 export function namesAChange(passage: string): boolean {
   return CHANGE_WORD.test(passage);
 }
@@ -623,6 +637,11 @@ export function keepOwnFindings(claims: readonly CheckedClaim[]): {
       refusedClaims.push("NO_FINDING");
     else if (!namesAChange(c.passage.text))
       refusedClaims.push("NO_CHANGE_WORD");
+    else if (
+      !c.anchors.some((a) => a.field === "species") &&
+      !namesAnOrganism(c.passage.text)
+    )
+      refusedClaims.push("NO_ORGANISM");
     else kept.push(effectAsQuestion(c));
   }
 
