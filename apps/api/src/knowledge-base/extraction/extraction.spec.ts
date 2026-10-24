@@ -815,6 +815,39 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
       );
   });
 
+  it("a change word ends where the word ends: a longer word or an 'effects of' heading is no change (barracuda #1868, acrobot 35987)", () => {
+    const refused = (text: string) =>
+      keepOwnFindings([base({ passage: { text, locator: "Results" } })])
+        .refusedClaims;
+    for (const text of [
+      "Coral droplets were sampled at the reef.",
+      "Coral cover on the fallow reef flat.",
+      "Coral samples from the lowermost reef zone.",
+      "An alternative coral sampling design.",
+      "Effects of phosphate on coral: the study sites.",
+    ])
+      assert.deepEqual(refused(text), ["NO_CHANGE_WORD"], text);
+    for (const text of [
+      "Coral reserves stabilised after twelve days.",
+      "Coral growth responded to phosphate.",
+      "Coral calcification showed a reduction at 2 µM.",
+      "Coral growth increasingly slowed with phosphate.",
+      "Coral density dropped at 2 µM phosphate.",
+      "Phosphate had no significant effect on coral growth.",
+      "Phosphate effects on coral calcification were strong.",
+      "Coral growth was significantly different between tanks.",
+      // barracuda, #1873: the old pattern caught these, so they must stay
+      "Coral growth was responding to phosphate.",
+      "Coral calcification had fallen by day 30.",
+      "Symbiont density had risen at 2 µM.",
+      "Coral growth showed a differential response to phosphate.",
+      "Coral reserves were stabilizing after heat stress.",
+      "Coral growth was highest at 2 µM phosphate.",
+      "Coral growth was slowest at 2 µM phosphate.",
+    ])
+      assert.deepEqual(refused(text), [], text);
+  });
+
   it("a claim with no species and no organism in its passage is no claim (acrobot 35963)", () => {
     const fish = {
       text: "Fish-derived phosphorus supply rates increased at nutrient hotspots.",
