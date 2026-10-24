@@ -836,6 +836,14 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
       "Phosphate had no significant effect on coral growth.",
       "Phosphate effects on coral calcification were strong.",
       "Coral growth was significantly different between tanks.",
+      // barracuda, #1873: the old pattern caught these, so they must stay
+      "Coral growth was responding to phosphate.",
+      "Coral calcification had fallen by day 30.",
+      "Symbiont density had risen at 2 µM.",
+      "Coral growth showed a differential response to phosphate.",
+      "Coral reserves were stabilizing after heat stress.",
+      "Coral growth was highest at 2 µM phosphate.",
+      "Coral growth was slowest at 2 µM phosphate.",
     ])
       assert.deepEqual(refused(text), [], text);
   });

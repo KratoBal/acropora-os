@@ -530,6 +530,9 @@ const CHANGE_STEMS = [
   "lower",
   "higher",
   "greater",
+  "highest",
+  "lowest",
+  "greatest",
   "affect",
   "impact",
   "effects? on",
@@ -605,6 +608,17 @@ const CHANGE_SUFFIX = [
   "sation",
   "ty",
   "ity",
+  // barracuda, #1873: the old front-bounded pattern caught these, so leaving
+  // them out dropped a finding (fallen, risen, responding, differential);
+  // stabilizing and slowest from the same sweep over every old stem
+  "en",
+  "n",
+  "ding",
+  "ential",
+  "entially",
+  "zing",
+  "sing",
+  "est",
 ];
 const CHANGE_WORD = new RegExp(
   `(?<![\\p{L}])(?:${CHANGE_STEMS.join("|")})(?:${CHANGE_SUFFIX.join("|")})?(?![\\p{L}])`,
