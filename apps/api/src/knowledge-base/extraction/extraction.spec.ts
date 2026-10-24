@@ -654,7 +654,7 @@ describe("extracting one source", () => {
 describe("only this source's own findings (acrobot 35808, the first eleven on stage)", () => {
   const base = (over: Partial<CheckedClaim>): CheckedClaim => ({
     passage: {
-      text: "Calcification decreased by 18 % at 2 µM phosphate.",
+      text: "Coral calcification decreased by 18 % at 2 µM phosphate.",
       locator: "Results",
     },
     species: null,
@@ -773,7 +773,7 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
       [
         {
           passage: {
-            text: "In 2019 growth fell at 2 µM phosphate (n = 12).",
+            text: "In 2019 coral growth fell at 2 µM phosphate (n = 12).",
             locator: "Results",
           },
         },
@@ -803,9 +803,47 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
     assert.deepEqual(inflow.refusedClaims, ["NO_CHANGE_WORD"]);
     assert.equal(inflow.claims.length, 0);
     for (const text of [
-      "Shading did not change the internal reserves.",
-      "Lobophora cover correlated negatively with total phosphorus.",
-      "Reserves stabilised after 12.5 days of heat stress.",
+      "Shading did not change the internal reserves of the coral.",
+      "Lobophora algal cover correlated negatively with total phosphorus.",
+      "Symbiont reserves stabilised after 12.5 days of heat stress.",
+    ])
+      assert.deepEqual(
+        keepOwnFindings([base({ passage: { text, locator: "Results" } })])
+          .refusedClaims,
+        [],
+        text,
+      );
+  });
+
+  it("a claim with no species and no organism in its passage is no claim (acrobot 35963)", () => {
+    const fish = {
+      text: "Fish-derived phosphorus supply rates increased at nutrient hotspots.",
+      locator: "Results",
+    };
+    const without = keepOwnFindings([base({ passage: fish })]);
+    assert.deepEqual(without.refusedClaims, ["NO_ORGANISM"]);
+    assert.equal(without.claims.length, 0);
+    // a species field, even a question, names the organism
+    const withSpecies = keepOwnFindings([
+      base({
+        passage: fish,
+        anchors: [
+          {
+            field: "species",
+            text: "A. cervicornis",
+            locator: "Results",
+            normalizedValue: null,
+            proposed: "A. cervicornis",
+          },
+        ],
+      }),
+    ]);
+    assert.deepEqual(withSpecies.refusedClaims, []);
+    for (const text of [
+      "Macroalgal tissue phosphorus increased near fish hotspots.",
+      "Zooxanthellae density increased under phosphate enrichment.",
+      "Calcification decreased in aquarium-reared Acropora at 2 µM phosphate.",
+      "Scleractinian growth declined with phosphate.",
     ])
       assert.deepEqual(
         keepOwnFindings([base({ passage: { text, locator: "Results" } })])
