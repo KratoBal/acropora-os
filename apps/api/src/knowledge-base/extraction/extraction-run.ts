@@ -220,7 +220,7 @@ export async function extractSource(
         : "AI_REFUSED",
     );
   // only this source's own findings, its study fields once (acrobot 35808)
-  const own = keepOwnFindings(checked);
+  const own = keepOwnFindings(checked, deps.vocabulary);
   for (const code of own.refusedClaims) count(outcome.refusedClaims, code);
   for (const code of own.refusedFields) count(outcome.refusedFields, code);
   checked = own.claims;

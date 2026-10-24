@@ -853,6 +853,34 @@ describe("only this source's own findings (acrobot 35808, the first eleven on st
       );
   });
 
+  it("a genus or species the approved vocabulary holds names the organism too (barracuda #1871, acrobot 35969)", () => {
+    const vocabulary = vocabularyV1();
+    const refused = (text: string, v?: ReturnType<typeof vocabularyV1>) =>
+      keepOwnFindings([base({ passage: { text, locator: "Results" } })], v)
+        .refusedClaims;
+    // a genus the hand-written stems do not know
+    const seriatopora = "Seriatopora calcification decreased under phosphate.";
+    assert.deepEqual(refused(seriatopora), ["NO_ORGANISM"]);
+    assert.deepEqual(refused(seriatopora, vocabulary), []);
+    // a species name the vocabulary writes in full
+    assert.deepEqual(
+      refused("Seriatopora hystrix growth declined at 2 µM.", vocabulary),
+      [],
+    );
+    // what the vocabulary does not hold stays refused
+    assert.deepEqual(
+      refused("Lobophora cover correlated with total phosphorus.", vocabulary),
+      ["NO_ORGANISM"],
+    );
+    assert.deepEqual(
+      refused(
+        "Fish-derived phosphorus supply increased at hotspots.",
+        vocabulary,
+      ),
+      ["NO_ORGANISM"],
+    );
+  });
+
   it("an effect key its anchor does not name becomes a question in the anchor's words; a named or an editor's key stays (acrobot 35941)", () => {
     const effect = (text: string, key: string) =>
       keepOwnFindings([
