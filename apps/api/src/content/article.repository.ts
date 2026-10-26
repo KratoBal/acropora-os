@@ -1,0 +1,297 @@
+import { createHash } from "node:crypto";
+import { Injectable } from "@nestjs/common";
+import { prisma, type Prisma } from "@acropora/database";
+import type {
+  ArticleBodyInput,
+  ArticleDetail,
+  ArticleRevisionSummary,
+} from "@acropora/types";
+
+import type { ContentState } from "./content-state.js";
+
+/**
+ * THE STATES IN WHICH AN ARTICLE BODY MAY CHANGE: the author's and the
+ * reviewer's. From `AWAITING_APPROVAL` on the text is under (or past) the
+ * approver's eye, and a change there would reach the public unapproved; to
+ * change it, the item goes back to `AWAITING_REVISION` first (an existing move).
+ */
+export const ARTICLE_EDITABLE_STATES: readonly ContentState[] = [
+  "IDEA",
+  "DRAFTING",
+  "AWAITING_REVIEW",
+  "AWAITING_REVISION",
+];
+
+/** Why a move on an article cannot happen; the service answers 409 with it. */
+export class ArticleStepError extends Error {}
+
+type Tx = Prisma.TransactionClient;
+
+const revisionSummary = (revision: {
+  id: string;
+  approvedAt: Date;
+  approvedById: string;
+  contentHash: string;
+}): ArticleRevisionSummary => ({
+  id: revision.id,
+  approvedAt: revision.approvedAt.toISOString(),
+  approvedById: revision.approvedById,
+  contentHash: revision.contentHash,
+});
+
+/** The sha256 of a snapshot's public fields, in a fixed order. */
+export function articleContentHash(snapshot: {
+  title: string;
+  excerpt: string;
+  bodyHtml: string;
+  coverImageUrl: string | null;
+  coverImageAlt: string | null;
+  channels: readonly string[];
+  byline: string | null;
+  seoTitle: string | null;
+  metaDescription: string | null;
+  ogImageUrl: string | null;
+  noindex: boolean;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        snapshot.title,
+        snapshot.excerpt,
+        snapshot.bodyHtml,
+        snapshot.coverImageUrl,
+        snapshot.coverImageAlt,
+        [...snapshot.channels].sort(),
+        snapshot.byline,
+        snapshot.seoTitle,
+        snapshot.metaDescription,
+        snapshot.ogImageUrl,
+        snapshot.noindex,
+      ]),
+    )
+    .digest("hex");
+}
+
+/**
+ * THE ARTICLE'S PART OF A STATE MOVE, inside the move's own transaction (called
+ * from `ContentRepository.moveState`), so a state and its revision can never
+ * part. Nothing happens for another channel.
+ *
+ *   AWAITING_APPROVAL -> READY_TO_SEND   the approval: an unchangeable snapshot
+ *   READY_TO_SEND | SCHEDULED -> SENT    publishing: the APPROVED snapshot goes
+ *                                        public, never the body being edited
+ *   READY_TO_SEND -> AWAITING_REVISION   the approval is withdrawn (the public
+ *   READY_TO_SEND -> DISCARDED           revision, if any, stays)
+ */
+export async function applyArticleStep(
+  tx: Tx,
+  input: {
+    contentId: string;
+    from: ContentState;
+    to: ContentState;
+    actorUserId: string;
+  },
+): Promise<void> {
+  const item = await tx.contentItem.findUnique({
+    where: { id: input.contentId },
+    select: { channel: true, title: true },
+  });
+  if (!item || item.channel !== "ARTICLE") return;
+  const body = await tx.articleBody.findUnique({
+    where: { contentId: input.contentId },
+  });
+
+  if (input.from === "AWAITING_APPROVAL" && input.to === "READY_TO_SEND") {
+    if (!body)
+      throw new ArticleStepError(
+        "A cikknek még nincs törzse: jóváhagyás előtt írd meg a cikket.",
+      );
+    const snapshot = {
+      title: item.title,
+      excerpt: body.excerpt,
+      bodyHtml: body.bodyHtml,
+      coverImageUrl: body.coverImageUrl,
+      coverImageAlt: body.coverImageAlt,
+      channels: body.channels,
+      byline: body.byline,
+      seoTitle: body.seoTitle,
+      metaDescription: body.metaDescription,
+      ogImageUrl: body.ogImageUrl,
+      noindex: body.noindex,
+    };
+    const revision = await tx.articleRevision.create({
+      data: {
+        contentId: input.contentId,
+        ...snapshot,
+        contentHash: articleContentHash(snapshot),
+        approvedById: input.actorUserId,
+      },
+      select: { id: true },
+    });
+    await tx.articleBody.update({
+      where: { contentId: input.contentId },
+      data: { approvedRevisionId: revision.id },
+    });
+    return;
+  }
+
+  if (input.to === "SENT") {
+    if (!body?.approvedRevisionId)
+      throw new ArticleStepError(
+        "A cikknek nincs jóváhagyott változata, ezért nem publikálható.",
+      );
+    await tx.articleBody.update({
+      where: { contentId: input.contentId },
+      data: {
+        publishedRevisionId: body.approvedRevisionId,
+        publishedAt: body.publishedAt ?? new Date(),
+      },
+    });
+    return;
+  }
+
+  if (
+    input.from === "READY_TO_SEND" &&
+    (input.to === "AWAITING_REVISION" || input.to === "DISCARDED") &&
+    body?.approvedRevisionId
+  )
+    await tx.articleBody.update({
+      where: { contentId: input.contentId },
+      data: { approvedRevisionId: null },
+    });
+}
+
+export type ArticleSaveOutcome =
+  "ok" | "missing" | "not-article" | "not-editable" | "slug-taken";
+
+@Injectable()
+export class ArticleRepository {
+  async detail(contentId: string): Promise<ArticleDetail | null> {
+    const body = await prisma.articleBody.findUnique({
+      where: { contentId },
+      include: {
+        products: {
+          orderBy: { sortOrder: "asc" },
+          include: { product: { select: { name: true } } },
+        },
+        taxa: { orderBy: { taxonKey: "asc" } },
+        approvedRevision: true,
+        publishedRevision: true,
+        revisions: { orderBy: { approvedAt: "desc" } },
+      },
+    });
+    if (!body) return null;
+    return {
+      contentId: body.contentId,
+      slug: body.slug,
+      excerpt: body.excerpt,
+      bodyHtml: body.bodyHtml,
+      coverImageUrl: body.coverImageUrl,
+      coverImageAlt: body.coverImageAlt,
+      channels: body.channels,
+      byline: body.byline,
+      seoTitle: body.seoTitle,
+      metaDescription: body.metaDescription,
+      ogImageUrl: body.ogImageUrl,
+      noindex: body.noindex,
+      taxonKeys: body.taxa.map((taxon) => taxon.taxonKey),
+      products: body.products.map((link) => ({
+        productId: link.productId,
+        name: link.product.name,
+        sortOrder: link.sortOrder,
+      })),
+      approvedRevision: body.approvedRevision
+        ? revisionSummary(body.approvedRevision)
+        : null,
+      publishedRevision: body.publishedRevision
+        ? revisionSummary(body.publishedRevision)
+        : null,
+      publishedAt: body.publishedAt?.toISOString() ?? null,
+      revisions: body.revisions.map(revisionSummary),
+      updatedAt: body.updatedAt.toISOString(),
+    };
+  }
+
+  /** How many of these product ids exist. */
+  async countProducts(ids: readonly string[]): Promise<number> {
+    if (!ids.length) return 0;
+    return prisma.product.count({ where: { id: { in: [...ids] } } });
+  }
+
+  /** Which of these keys are TAXON keys of the knowledge base vocabulary. */
+  async knownTaxonKeys(keys: readonly string[]): Promise<Set<string>> {
+    if (!keys.length) return new Set();
+    const rows = await prisma.knowledgeVocabularyEntry.findMany({
+      where: { kind: "TAXON", key: { in: [...keys] } },
+      select: { key: true },
+      distinct: ["key"],
+    });
+    return new Set(rows.map((row) => row.key));
+  }
+
+  /**
+   * THE BODY, ITS PRODUCTS AND TAXA, in one transaction, and only while the
+   * item is an article in an editable state: the state is read inside the
+   * transaction, so an approval that ran meanwhile wins over the edit.
+   */
+  async save(
+    contentId: string,
+    input: ArticleBodyInput,
+    userId: string,
+  ): Promise<ArticleSaveOutcome> {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const item = await tx.contentItem.findUnique({
+          where: { id: contentId },
+          select: { channel: true, state: true },
+        });
+        if (!item) return "missing" as const;
+        if (item.channel !== "ARTICLE") return "not-article" as const;
+        if (!ARTICLE_EDITABLE_STATES.includes(item.state as ContentState))
+          return "not-editable" as const;
+        const data = {
+          slug: input.slug,
+          excerpt: input.excerpt,
+          bodyHtml: input.bodyHtml,
+          coverImageUrl: input.coverImageUrl,
+          coverImageAlt: input.coverImageAlt,
+          channels: input.channels,
+          byline: input.byline,
+          seoTitle: input.seoTitle,
+          metaDescription: input.metaDescription,
+          ogImageUrl: input.ogImageUrl,
+          noindex: input.noindex,
+          updatedById: userId,
+        };
+        await tx.articleBody.upsert({
+          where: { contentId },
+          create: { contentId, ...data },
+          update: data,
+        });
+        await tx.articleProduct.deleteMany({ where: { contentId } });
+        if (input.productIds.length)
+          await tx.articleProduct.createMany({
+            data: input.productIds.map((productId, sortOrder) => ({
+              contentId,
+              productId,
+              sortOrder,
+            })),
+          });
+        await tx.articleTaxon.deleteMany({ where: { contentId } });
+        if (input.taxonKeys.length)
+          await tx.articleTaxon.createMany({
+            data: input.taxonKeys.map((taxonKey) => ({ contentId, taxonKey })),
+          });
+        return "ok" as const;
+      });
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        (error as { code?: string }).code === "P2002"
+      )
+        return "slug-taken";
+      throw error;
+    }
+  }
+}

@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 
 import { AuthUserResolver } from "../auth/auth-user-resolver.js";
 import { ServiceTokenRepository } from "../tasks/service-token.repository.js";
+import { ArticleRepository } from "./article.repository.js";
+import { ARTICLE_ENVIRONMENT, ArticleService } from "./article.service.js";
 import { ContentAgentController } from "./content-agent.controller.js";
 import { ContentAgentGuard } from "./content-agent.guard.js";
 import { ContentController } from "./content.controller.js";
@@ -20,6 +22,9 @@ import { ContentService } from "./content.service.js";
 @Module({
   controllers: [ContentController, ContentAgentController],
   providers: [
+    ArticleRepository,
+    ArticleService,
+    { provide: ARTICLE_ENVIRONMENT, useValue: process.env },
     AuthUserResolver,
     ContentAgentGuard,
     ContentRepository,

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
 import {
   hasPermission,
   PERMISSIONS,
@@ -7,6 +7,7 @@ import {
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
 import {
   ContentCalendarQueryDto,
@@ -33,7 +34,31 @@ import {
  */
 @Controller("content")
 export class ContentController {
-  constructor(private readonly service: ContentService) {}
+  constructor(
+    private readonly service: ContentService,
+    private readonly articles: ArticleService,
+  ) {}
+
+  /**
+   * A CIKK TÖRZSE (csak `ARTICLE` csatornán). Olvasás `content.view`, írás
+   * `content.manage`; a jóváhagyás NEM itt van, hanem a meglévő `approve-move`
+   * lépésben, ugyanazzal a `content.approve` joggal (Balázs vagy Luca).
+   */
+  @Get(":id/article")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  article(@Param("id") id: string) {
+    return this.articles.get(id);
+  }
+
+  @Put(":id/article")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  saveArticle(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.articles.save(id, body, user.id);
+  }
 
   /**
    * A LISTA ALAPÉRTELMEZETT NÉZETE: ami RÁM vár. Balázs kérése szó szerint:
