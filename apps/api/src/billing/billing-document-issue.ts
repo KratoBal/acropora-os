@@ -60,6 +60,7 @@ export type IssueInput =
 export type IssueInputError =
   | "BILLING_ISSUE_NO_CUSTOMER"
   | "BILLING_ISSUE_NO_ADDRESS"
+  | "BILLING_ISSUE_ADDRESS_INCOMPLETE"
   | "BILLING_ISSUE_NO_LINES"
   | "BILLING_ISSUE_LINE_INVALID"
   | "BILLING_ISSUE_NO_FULFILLMENT_DATE";
@@ -156,6 +157,23 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
       code: "BILLING_ISSUE_NO_ADDRESS",
       message:
         "A partnernek nincs számlázási címe; a Számlázz.hu cím nélkül nem állít ki bizonylatot.",
+    };
+  // HIANYOS CIM (os-ugyfel-akvarium-hianyos): az akvariumhoz felvitt ugyfelnek
+  // csak a neve kotelezo, a cim reszei (iranyitoszam, varos, utca) uresen is
+  // tarolodhatnak. A szamla kiallitasakor jelezzuk, MELYIK resz hianyzik, ne a
+  // Szamlazz.hu elutasitasa utan, es ne az akvarium felvitelekor.
+  const missingAddressParts = [
+    ["irányítószám", address.postalCode],
+    ["város", address.city],
+    ["utca, házszám", address.line1],
+  ]
+    .filter(([, value]) => !value?.trim())
+    .map(([label]) => label);
+  if (missingAddressParts.length > 0)
+    return {
+      ok: false,
+      code: "BILLING_ISSUE_ADDRESS_INCOMPLETE",
+      message: `A partner számlázási címe hiányos (hiányzik: ${missingAddressParts.join(", ")}); egészítsd ki a partnernél, a Számlázz.hu hiányos cím nélkül nem állít ki bizonylatot.`,
     };
   if (row.lines.length === 0)
     return {
