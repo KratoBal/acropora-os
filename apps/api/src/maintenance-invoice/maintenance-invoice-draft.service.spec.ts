@@ -196,6 +196,34 @@ describe("MaintenanceInvoiceDraftService.draftFor", () => {
     await assert.rejects(() => subject.draftFor("cert-1"), BadRequestException);
   });
 
+  it("names the blank address part and never calls Számlázz.hu when the billing address is incomplete", async () => {
+    const { service: subject, clientCalls } = service({
+      certificate: {
+        ...baseCertificate,
+        serviceJob: {
+          customer: {
+            ...baseCertificate.serviceJob.customer,
+            addresses: [
+              {
+                line1: "Fő utca 1.",
+                line2: null,
+                postalCode: "",
+                city: "Budapest",
+              },
+            ],
+          },
+        },
+      },
+    });
+    await assert.rejects(
+      () => subject.draftFor("cert-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.includes("hiányzik: irányítószám"),
+    );
+    assert.equal(clientCalls(), 0);
+  });
+
   it("throws ServiceUnavailableException when the credential isn't configured", async () => {
     const { service: subject } = service({
       credentialsError: new SzamlazzConnectionError(

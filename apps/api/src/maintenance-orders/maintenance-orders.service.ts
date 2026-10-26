@@ -9,6 +9,7 @@ import {
 import type { AuthenticatedUser } from "@acropora/types";
 import { Prisma } from "@acropora/database";
 
+import { missingAddressParts } from "../customers/address-parts.js";
 import { renderMaintenanceOrderFormDocx } from "../maintenance-contracts/maintenance-order-form-docx.js";
 import type { MaintenanceOrderFormInput } from "../maintenance-contracts/maintenance-order-form.types.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
@@ -110,6 +111,13 @@ export class MaintenanceOrdersService {
     const occasionYear = maintenanceOrderOccasionYear(now);
 
     const address = await this.repository.defaultAddress(contract.customer.id);
+    // A customer created at an aquarium may hold an address with blank parts (os-ugyfel-akvarium-hianyos):
+    // the printed order form would show a hole where the zip, city or street belongs.
+    const missingAddress = address ? missingAddressParts(address) : [];
+    if (missingAddress.length > 0)
+      throw new BadRequestException(
+        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}) -- egészítsd ki a partnernél, megrendelőlap enélkül nem állítható ki.`,
+      );
     const orderFormInput: MaintenanceOrderFormInput = {
       customer: {
         name: contract.customer.displayName,

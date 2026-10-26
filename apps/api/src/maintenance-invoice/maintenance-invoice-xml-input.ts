@@ -5,6 +5,7 @@ import {
   wholeForintCertificateAmounts,
   type CertificateAmounts,
 } from "../completion-certificates/completion-certificate-amounts.js";
+import { missingAddressParts } from "../customers/address-parts.js";
 import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 
 /**
@@ -38,7 +39,12 @@ export interface MaintenanceInvoiceCertificateSource {
 }
 
 export class MaintenanceInvoiceInputError extends Error {
-  constructor(readonly code: "NO_BILLING_ADDRESS" | "NO_ITEMS") {
+  constructor(
+    readonly code:
+      "NO_BILLING_ADDRESS" | "BILLING_ADDRESS_INCOMPLETE" | "NO_ITEMS",
+    /** Only for BILLING_ADDRESS_INCOMPLETE: the Hungarian names of the blank parts. */
+    readonly missing: readonly string[] = [],
+  ) {
     super(code);
     this.name = "MaintenanceInvoiceInputError";
   }
@@ -125,6 +131,14 @@ export function maintenanceInvoiceXmlInputFrom(
 
   const address = certificate.serviceJob.customer.addresses[0];
   if (!address) throw new MaintenanceInvoiceInputError("NO_BILLING_ADDRESS");
+  // A customer created at an aquarium may hold an address with blank parts (os-ugyfel-akvarium-hianyos); the
+  // draft would otherwise go to Számlázz.hu with an empty zip, city or street.
+  const missing = missingAddressParts(address);
+  if (missing.length > 0)
+    throw new MaintenanceInvoiceInputError(
+      "BILLING_ADDRESS_INCOMPLETE",
+      missing,
+    );
 
   const mapped = certificate.items.map(mapItem);
   const fulfillmentDate = certificate.issuedAt;
