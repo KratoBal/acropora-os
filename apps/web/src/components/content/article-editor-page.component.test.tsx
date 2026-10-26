@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   article: vi.fn(),
   saveArticle: vi.fn(),
+  uploadArticleImage: vi.fn(),
 }));
 const products = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
 let role: UserRole = "OWNER";
@@ -112,6 +113,10 @@ beforeEach(() => {
   api.detail.mockReset().mockResolvedValue(contentDetail());
   api.article.mockReset().mockResolvedValue(editorData());
   api.saveArticle.mockReset().mockResolvedValue({ article: stored });
+  api.uploadArticleImage.mockReset().mockResolvedValue({
+    id: "cimg",
+    url: "https://static.acropora.hu/public/article-images/cimg",
+  });
   products.list.mockReset().mockResolvedValue({ items: [] });
   products.detail.mockReset();
 });
@@ -266,5 +271,59 @@ describe("ArticleEditorPage", () => {
     api.detail.mockResolvedValue(contentDetail({ channel: "FACEBOOK_POST" }));
     render(<ArticleEditorPage contentId="c1" />);
     expect(await screen.findByText("Ez a tétel nem cikk")).toBeInTheDocument();
+  });
+
+  /*
+    THE UPLOAD (acrobot, msg 36320): the file goes to the OS's store and its
+    public address lands where it was asked for; a refusal is said, not lost.
+  */
+  it("uploads a body image and puts its address in the image panel", async () => {
+    await loaded();
+    fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
+    const file = new File(["x"], "a.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Kép feltöltése"), {
+      target: { files: [file] },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Kép címe")).toHaveValue(
+        "https://static.acropora.hu/public/article-images/cimg",
+      ),
+    );
+    expect(api.uploadArticleImage).toHaveBeenCalledWith("token-1", "c1", file);
+    expect(screen.getByRole("button", { name: "Beszúrás" })).toBeEnabled();
+  });
+
+  it("uploads the cover and fills its field", async () => {
+    await loaded();
+    fireEvent.change(screen.getByLabelText("Borítókép feltöltése"), {
+      target: { files: [new File(["x"], "b.jpg", { type: "image/jpeg" })] },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Borítókép címe")).toHaveValue(
+        "https://static.acropora.hu/public/article-images/cimg",
+      ),
+    );
+  });
+
+  it("says why an upload was refused", async () => {
+    api.uploadArticleImage.mockRejectedValue(
+      new Error(
+        "A cikk-képek publikus címe ebben a környezetben nincs beállítva",
+      ),
+    );
+    await loaded();
+    fireEvent.change(screen.getByLabelText("Borítókép feltöltése"), {
+      target: { files: [new File(["x"], "b.jpg", { type: "image/jpeg" })] },
+    });
+    expect(
+      await screen.findByText(/publikus címe ebben a környezetben/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Borítókép címe")).toHaveValue("");
+  });
+
+  it("offers no upload on a locked article", async () => {
+    api.article.mockResolvedValue(editorData({ editable: false }));
+    await loaded();
+    expect(screen.queryByLabelText("Borítókép feltöltése")).toBeNull();
   });
 });

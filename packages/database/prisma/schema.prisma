@@ -8050,6 +8050,28 @@ model ArticleTaxon {
   @@id([contentId, taxonKey])
 }
 
+/// Egy cikk-kép az OS saját tárolójában (acrobot döntése, 2026-10-26, msg
+/// 36320): a cikk az OS-ben él, és a ReefClubon és a webshopban is megjelenik,
+/// ezért a kép publikus útvonalon érhető el (`GET /public/article-images/:id`),
+/// csak egyenként, azonosító szerint; lista nincs.
+model ArticleImage {
+  id           String   @id @default(cuid())
+  /// A tétel, amelyikhez feltöltötték (nyom, nem tulajdon: a kép a tétel
+  /// törlése után is kiszolgálható, ha egy közzétett szöveg hivatkozik rá).
+  contentId    String?
+  contentType  String
+  sizeBytes    Int
+  width        Int
+  height       Int
+  sha256       String   @db.VarChar(64)
+  content      Bytes
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([contentId])
+  @@index([sha256])
+}
+
 /// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne
 /// egy külön csatornán. Balázs kérése szó szerint: "Valaszolni lehet a
 /// felvetesekre."

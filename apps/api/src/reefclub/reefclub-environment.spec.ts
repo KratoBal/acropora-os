@@ -53,6 +53,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "APP_URL",
   "AQUARIUM_MEASUREMENT_MAIL_FROM",
   "AQUARIUM_MEASUREMENT_MAIL_FROM_NAME",
+  // the article images' public address base (2026-10-26): an origin, not a secret
+  "ARTICLE_IMAGE_PUBLIC_BASE_URL",
   "ASSET_QR_BASE_URL",
   "BILLING_ISSUE_ENABLED",
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)

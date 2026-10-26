@@ -2,6 +2,9 @@ import { Module } from "@nestjs/common";
 
 import { AuthUserResolver } from "../auth/auth-user-resolver.js";
 import { ServiceTokenRepository } from "../tasks/service-token.repository.js";
+import { ArticleImagePublicController } from "./article-image-public.controller.js";
+import { ArticleImageRepository } from "./article-image.repository.js";
+import { ArticleImageService } from "./article-image.service.js";
 import { ArticleRepository } from "./article.repository.js";
 import { ARTICLE_ENVIRONMENT, ArticleService } from "./article.service.js";
 import { ContentAgentController } from "./content-agent.controller.js";
@@ -20,8 +23,14 @@ import { ContentService } from "./content.service.js";
  * ugyanazt az őrzőt kapja, pont az a szélesítés lenne, amit a háziredünk tilt.
  */
 @Module({
-  controllers: [ContentController, ContentAgentController],
+  controllers: [
+    ContentController,
+    ContentAgentController,
+    ArticleImagePublicController,
+  ],
   providers: [
+    ArticleImageRepository,
+    ArticleImageService,
     ArticleRepository,
     ArticleService,
     { provide: ARTICLE_ENVIRONMENT, useValue: process.env },

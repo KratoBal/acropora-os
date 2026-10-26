@@ -190,4 +190,18 @@ export const contentApi = {
       { method: "PUT", body: JSON.stringify(input) },
     );
   },
+
+  /**
+   * One image for an article, into the OS's own store (acrobot, msg 36320);
+   * the answer is its public address, which the save keeps.
+   */
+  uploadArticleImage(token: string, id: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<{ id: string; url: string }>(
+      `/content/${encodeURIComponent(id)}/article/images`,
+      token,
+      { method: "POST", body: form },
+    );
+  },
 };
