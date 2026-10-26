@@ -165,7 +165,19 @@ export class CreateWorksheetLineDto extends WorksheetLineDto {
 export class UpdateWorksheetLineDto extends WorksheetLineDto {}
 
 export class WorksheetContentDto {
-  @IsString() @MinLength(1) @MaxLength(500) subject!: string;
+  /*
+    A TÁRGY A VÁGOTT ÉRTÉKEN MÉR (barracuda, #1892 review): a `MinLength(1)`
+    eddig a vágás ELŐTT nézett, tehát egy csak szóközös tárgy átment, és üresen
+    mentődött (`worksheet-content.ts` vág). Így minden olvasó (lista, export,
+    PDF, levél) kap tárgyat, nem csak a lista, ami üresre kerülőutat tud.
+  */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim() : value,
+  )
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  subject!: string;
   // Az alegység NEM része a beküldött tartalomnak: a munkalap alegységéből
   // másolódik a verzióra. Egy külön szerkeszthető szövegmező mellett a szám
   // első tagja és a lapon látható egység elcsúszhatna egymástól, pedig
