@@ -9,6 +9,7 @@ import { BillingDocumentEmailDraftService } from "./billing-document-email-draft
 import { BillingDocumentEmailService } from "./billing-document-email.service.js";
 import { BillingDocumentAdvanceController } from "./billing-document-advance.controller.js";
 import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
+import { BillingDocumentCopyController } from "./billing-document-copy.controller.js";
 import { BillingDocumentIssueController } from "./billing-document-issue.controller.js";
 import { BillingDocumentStornoController } from "./billing-document-storno.controller.js";
 import { BillingDocumentStornoPdfService } from "./billing-document-storno-pdf.service.js";
@@ -45,6 +46,7 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     BillingDocumentIssueController,
     BillingDocumentStornoController,
     BillingDocumentAdvanceController,
+    BillingDocumentCopyController,
     BillingDocumentFinalController,
     BillingDocumentReadController,
     BillingDocumentEmailController,

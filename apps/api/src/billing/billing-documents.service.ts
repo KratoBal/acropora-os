@@ -33,6 +33,7 @@ import {
   BillingDocumentsRepository,
   type BillingDocumentRow,
 } from "./billing-documents.repository.js";
+import { budapestDayKey } from "../dashboard/budapest-day.js";
 import type { BillingDocumentDraftDto } from "./dto/billing-document-draft.dto.js";
 
 /**
@@ -184,6 +185,86 @@ export class BillingDocumentsService {
       partnerTaxNumber: partner.taxNumber,
       createdByUserId: user.id,
       proformaInvoiceId: proformaId,
+    });
+    return this.detail(id);
+  }
+
+  /**
+   * KIÁLLÍTOTT BIZONYLAT MÁSOLÁSA ÚJ VÁZLATBA (os-szamla-masolas; Luca kérése:
+   * ugyanazokkal a beállításokkal szerkeszthesse, és új bizonylatként
+   * állíthassa ki). A másolat a vázlat SAJÁT útján jön létre (`prepare`,
+   * `create`), tehát az összegeket és a normalizálást ugyanaz a modul végzi,
+   * mint a kézi létrehozásnál.
+   *
+   * AMIT VISZ: típus, formátum, partner, fizetési mód, pénznem, nyelv, hivatkozás,
+   * megjegyzés és a tételek; a dátumok a MAI nappal indulnak (nem az eredetiéi:
+   * egy régi dátum csendben nem utazik tovább). AMIT NEM: a számot, a forrást (a másolat KÉZI, `MANUAL`: egy szerződés- vagy webshop-rendeléshez
+   * kötött másolat a forrás maradékát fogyasztaná, vagy a rendelést ismét
+   * számlázottnak mutatná), a szerződés-tételre mutatást, a díjbekérőhöz és az
+   * előleghez kötést, és a kiállítás eredményét (PDF, e-mail, készletmozgás).
+   *
+   * CSAK AMI ÜRES LAPRÓL IS KÉSZÍTHETŐ (`BILLING_NEW_DOCUMENT_TYPES`): a
+   * végszámla az előlegéhez kötött, a sztornó (`STORNO`) negatív és az
+   * eredetijéhez kötött, ezeket a másolat elveszítené, amihez tartoznak.
+   * Másolatonként új azonosító: ugyanabból kettő is lehet, ez szándékos.
+   */
+  async copyFromIssued(
+    sourceId: string,
+    user: AuthenticatedUser,
+    now: Date = new Date(),
+  ): Promise<BillingDocumentDetail> {
+    const source = await this.repository.find(sourceId);
+    if (!source) throw new NotFoundException("A bizonylat nem található.");
+    if (source.status !== "ISSUED")
+      throw new ConflictException(
+        "Csak kiállított bizonylat másolható; a vázlatot szerkeszd közvetlenül.",
+      );
+    if (
+      !(BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
+        source.documentType,
+      )
+    )
+      throw new ConflictException(
+        "Ez a bizonylattípus nem másolható: a végszámla az előlegszámlájához, a sztornó az eredetijéhez kötött.",
+      );
+    if (!source.customerId)
+      throw new ConflictException(
+        "A bizonylatnak nincs partnere, ezért nem másolható.",
+      );
+    const today = budapestDayKey(now);
+    const { draft, partner } = await this.prepare({
+      documentType: source.documentType as BillingDocumentType,
+      invoiceFormat: source.invoiceFormat,
+      customerId: source.customerId,
+      // A DÁTUMOK A MAI NAPPAL INDULNAK, mint egy új számlánál (acrobot,
+      // 2026-10-26, Luca kérése: kevesebb kattintás): a teljesítés ma, a
+      // határidő a vevő fizetési napjaival, nyolc nap nélkülük. A kelte a
+      // kiállítás pillanata, nem vázlat-mező.
+      fulfillmentDate: today,
+      dueDate: addDaysTo(
+        today,
+        (await this.repository.customerPaymentDueDays(source.customerId)) ??
+          DEFAULT_PAYMENT_DAYS,
+      ),
+      paymentMethod: source.paymentMethod,
+      currency: source.currency,
+      language: source.language ?? "hu",
+      reference: source.reference,
+      note: source.note,
+      sourceType: "MANUAL",
+      sourceId: null,
+      lines: draftLinesOf(source).map((line) => ({
+        ...line,
+        contractItemId: null,
+      })),
+    });
+    const id = randomUUID();
+    await this.repository.create({
+      id,
+      draft,
+      partnerName: partner.name,
+      partnerTaxNumber: partner.taxNumber,
+      createdByUserId: user.id,
     });
     return this.detail(id);
   }
@@ -459,6 +540,16 @@ export const advanceIdFor = (proformaId: string) => `${proformaId}-eloleg`;
 
 /** Az előlegszámla végszámlájának azonosítója: előlegenként egy. */
 export const finalIdFor = (advanceId: string) => `${advanceId}-vegszamla`;
+
+/** A fizetési határidő alapértéke: a teljesítés után nyolc nappal (mint a szerkesztőben). */
+const DEFAULT_PAYMENT_DAYS = 8;
+
+/** `yyyy-MM-dd` + napok, naptári számolással (nincs időzóna-eltolás). */
+function addDaysTo(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 const FINAL_ONLY_FROM_ADVANCE =
   "Végszámla csak kiállított előlegszámláról készíthető (Végszámla készítése).";

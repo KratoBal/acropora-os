@@ -1145,6 +1145,21 @@ describe("BillingDocumentEditor", () => {
       );
     };
 
+    it("the issued bar leads back to the outgoing invoices list", async () => {
+      issuedPaper(true);
+      await issuePaper();
+      expect(
+        await screen.findByRole("link", { name: "Vissza a számlákhoz" }),
+      ).toHaveAttribute("href", "/penzugy/szamlazas");
+    });
+
+    it("a draft offers no such link (it is the issued bar's)", () => {
+      render(<BillingDocumentEditor />);
+      expect(
+        screen.queryByRole("link", { name: "Vissza a számlákhoz" }),
+      ).toBeNull();
+    });
+
     it("the issued bar opens the invoice image and downloads the official PDF", async () => {
       issuedPaper(true);
       api.pdf.mockResolvedValue(

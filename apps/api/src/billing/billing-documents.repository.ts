@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { contractBilledLines } from "../contracts/contract-billed-lines.js";
+import { partnerTermsFor } from "../customers/partner-payment-terms.js";
 import { prisma, Prisma } from "@acropora/database";
 
 import type { NormalizedBillingDraft } from "./billing-document-draft.js";
@@ -219,6 +220,39 @@ export class BillingDocumentsRepository {
         taxNumber: true,
       },
     });
+  }
+
+  /**
+   * A VEVŐ FIZETÉSI NAPJAI, ahogy a szerkesztő is számolja új számlánál: a
+   * vevő-sor saját napjai, és ha az üres, a Partnerek oldalon beállított (a
+   * `partnerTermsFor` párosításával, mint a vevő részletei). `null`: nincs.
+   */
+  async customerPaymentDueDays(id: string): Promise<number | null> {
+    const customer = await this.database.customer.findUnique({
+      where: { id },
+      select: {
+        displayName: true,
+        companyName: true,
+        taxNumber: true,
+        paymentDueDays: true,
+      },
+    });
+    if (!customer) return null;
+    if (customer.paymentDueDays !== null) return customer.paymentDueDays;
+    const partners = await this.database.supplier.findMany({
+      where: { paymentDueDays: { not: null } },
+      select: { name: true, taxNumber: true, paymentDueDays: true },
+    });
+    return (
+      partnerTermsFor(
+        customer,
+        partners.map((partner) => ({
+          name: partner.name,
+          taxNumber: partner.taxNumber,
+          paymentDueDays: partner.paymentDueDays!,
+        })),
+      )?.paymentDueDays ?? null
+    );
   }
 
   /** A saját számla Számlázz.hu-ikrét sztornózták-e (a feed `cancelled` jele). */
