@@ -39,6 +39,7 @@ export function BillingDocumentSummary({
   saving,
   saveDisabledReason,
   savedLabel,
+  invoicePreview,
   issue,
 }: {
   documentType: BillingDocumentType;
@@ -53,6 +54,15 @@ export function BillingDocumentSummary({
   saveDisabledReason: string | null;
   /** "Mentve 16:42" vagy `null`, ha még nincs mentve. */
   savedLabel: string | null;
+  /**
+   * Az Előnézet gombja (a Számlázz.hu számlaképe, szám nélkül); `undefined`:
+   * a gomb nem látszik. Ugyanaz a feltétel-szerkezet, mint a kiállításé.
+   */
+  invoicePreview?: {
+    onClick: () => void;
+    disabledReason: string | null;
+    busy: boolean;
+  };
   /** A kiállítás gombja: mikor nyomható, mit csinál, és ha nem, miért nem. */
   issue: { onClick: () => void; disabledReason: string | null; busy: boolean };
 }) {
@@ -123,6 +133,30 @@ export function BillingDocumentSummary({
         >
           {saving ? "Mentés…" : "Vázlat mentése"}
         </PilotButton>
+        {invoicePreview ? (
+          <PilotButton
+            variant="secondary"
+            size="regular"
+            onClick={invoicePreview.onClick}
+            disabled={
+              invoicePreview.busy ||
+              issue.busy ||
+              invoicePreview.disabledReason !== null
+            }
+            title={
+              invoicePreview.disabledReason ??
+              "Mentés után megnyitja a Számlázz.hu előnézeti PDF-jét; nem állít ki számlát."
+            }
+          >
+            {invoicePreview.busy ? "Előnézet készül…" : "Előnézet"}
+          </PilotButton>
+        ) : null}
+        {invoicePreview ? (
+          <p className="text-xs text-pilot-grey-500">
+            Az előnézet csak megnézésre való: nem számla, számot nem kap, és nem
+            tárolódik.
+          </p>
+        ) : null}
         <PilotButton
           variant="primary"
           size="regular"

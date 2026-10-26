@@ -344,3 +344,79 @@ describe("a tisztito: a teljes profil", () => {
     assert.equal(teljes(teljes(html)), teljes(html));
   });
 });
+
+/**
+ * A #1875 REVIEW KET MEGJEGYZESE (barracuda): a kep hosztja es a termekkartya
+ * belseje. Mindkettot a teljes profilban meri.
+ */
+describe("a tisztito: a teljes profil kep-hosztja es a kartya belseje", () => {
+  const kep = (src: string) => `<p><img src="${src}" alt="a"></p>`;
+
+  it("megadott hoszt-listaval csak a pontos hosztnev kepe marad", () => {
+    const hosztok = ["static.acropora.hu"];
+    const teljes = (html: string) =>
+      sanitizeRichHtml(html, { profile: "full", allowedImageHosts: hosztok });
+    assert.equal(
+      teljes(kep("https://static.acropora.hu/a.jpg")),
+      kep("https://static.acropora.hu/a.jpg"),
+    );
+    assert.equal(
+      teljes(kep("https://STATIC.acropora.hu/a.jpg")),
+      kep("https://STATIC.acropora.hu/a.jpg"),
+    );
+    for (const idegen of [
+      "https://tracker.example/p.gif",
+      "https://static.acropora.hu.evil.example/a.jpg",
+      "https://evil.example/static.acropora.hu/a.jpg",
+      "https://static.acropora.hu@evil.example/a.jpg",
+    ])
+      assert.equal(teljes(kep(idegen)), "<p></p>", idegen);
+  });
+
+  it("az ures hoszt-lista minden kepet elutasit, a galeriaban is", () => {
+    assert.equal(
+      sanitizeRichHtml(
+        kep("https://static.acropora.hu/a.jpg") +
+          '<div data-gallery=""><img src="https://static.acropora.hu/b.jpg"></div>',
+        { profile: "full", allowedImageHosts: [] },
+      ),
+      '<p></p><div data-gallery=""></div>',
+    );
+  });
+
+  it("hoszt-lista nelkul a mai viselkedes marad: barmely https", () => {
+    assert.equal(
+      sanitizeRichHtml(kep("https://cdn.example.hu/a.jpg"), {
+        profile: "full",
+      }),
+      kep("https://cdn.example.hu/a.jpg"),
+    );
+  });
+
+  it("a termekkartya belsejebol minden tag kiesik, a szoveg es a kartya zarasa marad", () => {
+    const { html, removed } = sanitizeRichHtmlReport(
+      '<div data-product-card="clx0abc123"><strong>Korall</strong><div data-gallery=""><img src="https://cdn.example.hu/a.jpg"></div> kaja</div><p>utana</p>',
+      { profile: "full" },
+    );
+    assert.equal(
+      html,
+      '<div data-product-card="clx0abc123">Korall kaja</div><p>utana</p>',
+    );
+    assert.ok(removed.includes("div data-product-card strong"));
+    assert.ok(removed.includes("div data-product-card div"));
+  });
+
+  it("a kartyan kivuli div es a level profilja erintetlen", () => {
+    assert.equal(
+      sanitizeRichHtml(
+        '<div data-gallery=""><img src="https://cdn.example.hu/a.jpg"></div><div><strong>a</strong></div>',
+        { profile: "full" },
+      ),
+      '<div data-gallery=""><img src="https://cdn.example.hu/a.jpg"></div><div><strong>a</strong></div>',
+    );
+    assert.equal(
+      sanitizeRichHtml('<div data-product-card="x"><strong>a</strong></div>'),
+      "<strong>a</strong>",
+    );
+  });
+});
