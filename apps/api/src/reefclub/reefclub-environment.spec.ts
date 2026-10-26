@@ -87,6 +87,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "RELEASE_COMMIT_SHA",
   "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
   "RELEASE_IMAGE_COMMIT_SHA",
+  // the full-profile rich text's image host allowlist (#1877, #1878): host names, not a secret
+  "RICH_TEXT_IMAGE_HOSTS",
   "RUN_BRAND_INTEGRATION",
   "RUN_DB_INTEGRATION",
   "VIES_API_URL",
