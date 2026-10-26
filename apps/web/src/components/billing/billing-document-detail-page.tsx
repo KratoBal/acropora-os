@@ -14,6 +14,7 @@ import {
 } from "@acropora/ui";
 import {
   BILLING_DOCUMENT_STATUS_LABELS,
+  BILLING_NEW_DOCUMENT_TYPES,
   BILLING_EMAIL_STATUS_LABELS,
   billingEmailDelivery,
   getDocumentCapabilities,
@@ -107,6 +108,8 @@ export function BillingDocumentDetailPage({
   );
   const [finalBusy, setFinalBusy] = useState(false);
   const [finalError, setFinalError] = useState<string | null>(null);
+  const [copyBusy, setCopyBusy] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<BillingDocumentDetail | null>(null);
   useAssistantEntity("Számla", detail?.id, detail?.documentNumber);
@@ -345,6 +348,36 @@ export function BillingDocumentDetailPage({
                   }
             }
           />
+          {canCreate &&
+          detail.status === "ISSUED" &&
+          (BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
+            detail.documentType,
+          ) ? (
+            <PilotButton
+              variant="secondary"
+              size="action"
+              disabled={copyBusy}
+              title="Új vázlat ugyanezekkel a beállításokkal és tételekkel; a dátumokat te adod meg, számot nem kap."
+              onClick={async () => {
+                setCopyBusy(true);
+                setCopyError(null);
+                try {
+                  const copy = await billingDocumentsApi.copy(token, detail.id);
+                  router.push(`${BILLING_LIST_PATH}/${copy.id}/szerkesztes`);
+                } catch (cause) {
+                  setCopyError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "A bizonylat nem másolható.",
+                  );
+                } finally {
+                  setCopyBusy(false);
+                }
+              }}
+            >
+              {copyBusy ? "Másolás…" : "Másolás új vázlatba"}
+            </PilotButton>
+          ) : null}
           {canIssue && stornoOffered(detail) ? (
             <BillingStornoButton
               disabled={storno.busy}
@@ -362,6 +395,13 @@ export function BillingDocumentDetailPage({
           cancellation={detail.cancellation}
           documentId={detail.id}
           token={token}
+        />
+      ) : null}
+      {copyError ? (
+        <Alert
+          variant="danger"
+          title="A másolás nem sikerült"
+          description={copyError}
         />
       ) : null}
       {storno.error ? (

@@ -279,6 +279,18 @@ export const billingDocumentsApi = {
     );
   },
   /**
+   * KIÁLLÍTOTT BIZONYLAT MÁSOLÁSA ÚJ VÁZLATBA (os-szamla-masolas): minden
+   * hívás egy ÚJ vázlatot ad (a dátumok üresek, a forrás kézi); számot nem
+   * foglal és nem állít ki.
+   */
+  copy(token: string, sourceId: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(sourceId)}/copy`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
    * ELŐLEGSZÁMLÁBÓL VÉGSZÁMLA (számlázási brief, 3. pont, #1672): kitöltött
    * végszámla-vázlat, előlegenként egy; a második hívás ugyanazt adja.
    */

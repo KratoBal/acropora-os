@@ -189,6 +189,77 @@ export class BillingDocumentsService {
   }
 
   /**
+   * KIÁLLÍTOTT BIZONYLAT MÁSOLÁSA ÚJ VÁZLATBA (os-szamla-masolas; Luca kérése:
+   * ugyanazokkal a beállításokkal szerkeszthesse, és új bizonylatként
+   * állíthassa ki). A másolat a vázlat SAJÁT útján jön létre (`prepare`,
+   * `create`), tehát az összegeket és a normalizálást ugyanaz a modul végzi,
+   * mint a kézi létrehozásnál.
+   *
+   * AMIT VISZ: típus, formátum, partner, fizetési mód, pénznem, nyelv, hivatkozás,
+   * megjegyzés és a tételek. AMIT NEM: a számot, a dátumokat (a teljesítést és
+   * a határidőt a kezelő írja be, egy régi dátum csendben nem utazik tovább),
+   * a forrást (a másolat KÉZI, `MANUAL`: egy szerződés- vagy webshop-rendeléshez
+   * kötött másolat a forrás maradékát fogyasztaná, vagy a rendelést ismét
+   * számlázottnak mutatná), a szerződés-tételre mutatást, a díjbekérőhöz és az
+   * előleghez kötést, és a kiállítás eredményét (PDF, e-mail, készletmozgás).
+   *
+   * CSAK AMI ÜRES LAPRÓL IS KÉSZÍTHETŐ (`BILLING_NEW_DOCUMENT_TYPES`): a
+   * végszámla az előlegéhez kötött, a sztornó (`STORNO`) negatív és az
+   * eredetijéhez kötött, ezeket a másolat elveszítené, amihez tartoznak.
+   * Másolatonként új azonosító: ugyanabból kettő is lehet, ez szándékos.
+   */
+  async copyFromIssued(
+    sourceId: string,
+    user: AuthenticatedUser,
+  ): Promise<BillingDocumentDetail> {
+    const source = await this.repository.find(sourceId);
+    if (!source) throw new NotFoundException("A bizonylat nem található.");
+    if (source.status !== "ISSUED")
+      throw new ConflictException(
+        "Csak kiállított bizonylat másolható; a vázlatot szerkeszd közvetlenül.",
+      );
+    if (
+      !(BILLING_NEW_DOCUMENT_TYPES as readonly string[]).includes(
+        source.documentType,
+      )
+    )
+      throw new ConflictException(
+        "Ez a bizonylattípus nem másolható: a végszámla az előlegszámlájához, a sztornó az eredetijéhez kötött.",
+      );
+    if (!source.customerId)
+      throw new ConflictException(
+        "A bizonylatnak nincs partnere, ezért nem másolható.",
+      );
+    const { draft, partner } = await this.prepare({
+      documentType: source.documentType as BillingDocumentType,
+      invoiceFormat: source.invoiceFormat,
+      customerId: source.customerId,
+      fulfillmentDate: null,
+      dueDate: null,
+      paymentMethod: source.paymentMethod,
+      currency: source.currency,
+      language: source.language ?? "hu",
+      reference: source.reference,
+      note: source.note,
+      sourceType: "MANUAL",
+      sourceId: null,
+      lines: draftLinesOf(source).map((line) => ({
+        ...line,
+        contractItemId: null,
+      })),
+    });
+    const id = randomUUID();
+    await this.repository.create({
+      id,
+      draft,
+      partnerName: partner.name,
+      partnerTaxNumber: partner.taxNumber,
+      createdByUserId: user.id,
+    });
+    return this.detail(id);
+  }
+
+  /**
    * ELŐLEGSZÁMLÁBÓL VÉGSZÁMLA (számlázási brief, 3. pont; Balázs 2026-10-12
    * 09:44 UTC „Mehet”). Egy KIÁLLÍTOTT előlegszámlából kitöltött végszámla-
    * vázlat, az előleghez kötve (`referencedInvoiceId`). A kiállítás ebből
