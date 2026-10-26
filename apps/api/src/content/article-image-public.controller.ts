@@ -42,8 +42,9 @@ export function etagMatches(
  * list, no name, no metadata; an unknown or malformed id is the same 404.
  *
  * THE LOAD IT CAN CAUSE IS BOUNDED (barracuda, #1897 CHANGES): a request
- * never means more than the memory or one row. The caller is limited per
- * address (a page loads a few images, so a generous window disturbs nobody);
+ * never means more than the memory or one row. A request that reaches the
+ * database is limited per address and in all (a page loads a few images, so a
+ * generous window disturbs nobody); one the memory serves is not counted;
  * a conditional request whose ETag (the stored sha256) still holds gets a 304
  * without the bytes; and the bytes come from the service's memory, keyed by
  * id, so a varying query string does not reach Postgres again.
@@ -72,10 +73,24 @@ export class ArticleImagePublicController {
     @Req() request: ImageRequest,
     @Res({ passthrough: true }) response: ImageResponse,
   ): Promise<StreamableFile | undefined> {
-    ArticleImagePublicController.reads.check(callerAddress(request));
+    /*
+      ONLY A REQUEST THAT REACHES THE DATABASE IS COUNTED (barracuda, #1897):
+      the caller's address is the first X-Forwarded-For hop, which a caller can
+      forge, so a forged series can spend the shared ceiling. Counting only the
+      database reads keeps that from turning every image into a 429: an image
+      the memory holds is served without the limiter, and costs no Postgres.
+    */
+    let counted = false;
+    const limit = () => {
+      if (counted) return;
+      counted = true;
+      ArticleImagePublicController.reads.check(callerAddress(request));
+    };
     const conditional = request.headers["if-none-match"];
+    const cached = this.images.cached(id);
     if (conditional) {
-      const meta = await this.images.meta(id);
+      if (!cached) limit();
+      const meta = cached ?? (await this.images.meta(id));
       const etag = `"${meta.sha256}"`;
       if (etagMatches(conditional, etag)) {
         response.setHeader("ETag", etag);
@@ -83,7 +98,8 @@ export class ArticleImagePublicController {
         return undefined;
       }
     }
-    const image = await this.images.content(id);
+    if (!cached) limit();
+    const image = cached ?? (await this.images.content(id));
     response.setHeader("ETag", `"${image.sha256}"`);
     return new StreamableFile(Buffer.from(image.bytes), {
       type: image.contentType,
