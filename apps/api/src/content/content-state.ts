@@ -1,3 +1,5 @@
+import type { ContentChannel } from "@acropora/types";
+
 /**
  * A TARTALOM ÚTJA: kilenc állapot, és mindegyik mellett az, hogy KIRE VÁR.
  *
@@ -142,8 +144,38 @@ const TRANSITIONS: Record<ContentState, readonly ContentState[]> = {
   DISCARDED: ["DRAFTING"],
 };
 
-export function canMove(from: ContentState, to: ContentState): boolean {
-  return TRANSITIONS[from].includes(to);
+/**
+ * A KÖZZÉTETT CIKK JAVÍTHATÓ (acrobot döntése, 2026-10-26, msg 36474, az A
+ * változat; a javaslat: `agents/nautilus/atadas/kezdolap-2026-10-26/
+ * cikk-javitas-kozzetetel-utan-javaslat-2026-10-26.md`). CSAK A CIKK
+ * csatornán: egy elküldött poszt vagy levél továbbra sem vonható vissza, a
+ * fenti szabály ott változatlan. A cikknél a kiküldés nem egyszeri esemény,
+ * hanem egy lap, és a lap közben a KÖZZÉTETT változatot mutatja
+ * (`publishedRevisionId`): a javítás a meglévő úton megy (lektor, jóváhagyás
+ * `content.approve`-val, új pillanatkép), és csak az újabb `SENT` teszi
+ * nyilvánossá. Az elvetés a közzétett cikkre ezért is tiltott (a cikk
+ * lépésében, `applyArticleStep`).
+ */
+const ARTICLE_EXTRA: Partial<Record<ContentState, readonly ContentState[]>> = {
+  SENT: ["AWAITING_REVISION"],
+};
+
+/** The moves from a state; an article has the correction move on top. */
+export function allowedMoves(
+  from: ContentState,
+  channel?: ContentChannel,
+): readonly ContentState[] {
+  return channel === "ARTICLE"
+    ? [...TRANSITIONS[from], ...(ARTICLE_EXTRA[from] ?? [])]
+    : TRANSITIONS[from];
+}
+
+export function canMove(
+  from: ContentState,
+  to: ContentState,
+  channel?: ContentChannel,
+): boolean {
+  return allowedMoves(from, channel).includes(to);
 }
 
 /**
@@ -189,8 +221,9 @@ export type PlannedTransition =
 export function planTransition(
   from: ContentState,
   to: ContentState,
+  channel?: ContentChannel,
 ): PlannedTransition {
-  if (!canMove(from, to)) return { kind: "refused", from, to };
+  if (!canMove(from, to, channel)) return { kind: "refused", from, to };
 
   if (from === "SCHEDULED" && to !== "SENT") {
     return {
@@ -205,10 +238,6 @@ export function planTransition(
   }
 
   return { kind: "internal", to };
-}
-
-export function allowedMoves(from: ContentState): readonly ContentState[] {
-  return TRANSITIONS[from];
 }
 
 /**
@@ -376,10 +405,13 @@ const NOTE_REQUIRED_FOR: Partial<
   },
 };
 
-export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
+export function moveOptions(
+  from: ContentState,
+  channel?: ContentChannel,
+): readonly ContentMoveOption[] {
   const approvalNeeded = requiresApproval(from);
-  const steps = allowedMoves(from).map((to) => {
-    const planned = planTransition(from, to);
+  const steps = allowedMoves(from, channel).map((to) => {
+    const planned = planTransition(from, to, channel);
     return {
       to,
       requiresApproval: approvalNeeded,

@@ -144,6 +144,63 @@ describe(
       assert.equal(revision.approvedById, actor);
     });
 
+    it("ARTICLE-INT-CORRECT: a published article goes back to revision while the page keeps the published text; the next approval and SENT publish the correction", async () => {
+      const id = await item("ARTICLE");
+      assert.equal(
+        await articles.save(id, body({ slug: `${prefix}javitas` }), actor),
+        "ok",
+      );
+      for (const [from, to] of [
+        ["DRAFTING", "AWAITING_REVIEW"],
+        ["AWAITING_REVIEW", "AWAITING_APPROVAL"],
+        ["AWAITING_APPROVAL", "READY_TO_SEND"],
+        ["READY_TO_SEND", "SENT"],
+      ])
+        assert.equal(await move(id, from!, to!), true, `${from} -> ${to}`);
+      const first = await articles.detail(id);
+      const firstPublished = first?.publishedRevision?.id;
+      assert.ok(firstPublished && first?.publishedAt);
+
+      // the correction: back to revision, the page still shows the first text
+      assert.equal(await move(id, "SENT", "AWAITING_REVISION"), true);
+      const correcting = await articles.detail(id);
+      assert.equal(correcting?.publishedRevision?.id, firstPublished);
+      assert.equal(correcting?.approvedRevision, null);
+      assert.equal(
+        await articles.save(
+          id,
+          body({
+            slug: `${prefix}javitas`,
+            bodyHtml: "<p>Javított szöveg</p>",
+          }),
+          actor,
+        ),
+        "ok",
+      );
+      // a published article is not discarded, not even from its correction
+      await assert.rejects(
+        move(id, "AWAITING_REVISION", "DISCARDED"),
+        ArticleStepError,
+      );
+
+      for (const [from, to] of [
+        ["AWAITING_REVISION", "AWAITING_REVIEW"],
+        ["AWAITING_REVIEW", "AWAITING_APPROVAL"],
+        ["AWAITING_APPROVAL", "READY_TO_SEND"],
+        ["READY_TO_SEND", "SENT"],
+      ])
+        assert.equal(await move(id, from!, to!), true, `${from} -> ${to}`);
+      const corrected = await articles.detail(id);
+      assert.notEqual(corrected?.publishedRevision?.id, firstPublished);
+      assert.equal(corrected?.revisions.length, 2);
+      // the article's date stays the first publication
+      assert.equal(corrected?.publishedAt, first?.publishedAt);
+      const shown = await prisma.articleRevision.findUniqueOrThrow({
+        where: { id: corrected!.publishedRevision!.id },
+      });
+      assert.equal(shown.bodyHtml, "<p>Javított szöveg</p>");
+    });
+
     it("ARTICLE-INT-NOBODY: an approval without a body moves nothing", async () => {
       const id = await item("ARTICLE", "AWAITING_APPROVAL");
       await assert.rejects(

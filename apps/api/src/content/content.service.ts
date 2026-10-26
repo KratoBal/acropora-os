@@ -6,6 +6,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import type { ContentChannel } from "@acropora/types";
+
 import { ArticleStepError } from "./article.repository.js";
 import { ContentRepository } from "./content.repository.js";
 import {
@@ -49,8 +51,13 @@ export class ContentService {
    * A SORRENDET NEM ÍRJA ÁT: a lista rendezése a lekérdezésé marad, ez csak
    * hozzátesz egy mezőt.
    */
-  private withMoves<T extends { state: ContentState }>(items: T[]) {
-    return items.map((item) => ({ ...item, moves: moveOptions(item.state) }));
+  private withMoves<T extends { state: ContentState; channel: ContentChannel }>(
+    items: T[],
+  ) {
+    return items.map((item) => ({
+      ...item,
+      moves: moveOptions(item.state, item.channel),
+    }));
   }
 
   /**
@@ -185,7 +192,12 @@ export class ContentService {
     // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
     // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
     // felület találgatásán állna.
-    return { ...item, blockers, schedule, moves: moveOptions(item.state) };
+    return {
+      ...item,
+      blockers,
+      schedule,
+      moves: moveOptions(item.state, item.channel),
+    };
   }
 
   /**
@@ -226,7 +238,9 @@ export class ContentService {
     actorCanApprove: boolean;
     actorUserId: string;
   }) {
-    const planned = planTransition(input.from, input.to);
+    // the channel decides one move (a published article's correction), so it is read first
+    const channel = await this.repository.channelOf(input.id);
+    const planned = planTransition(input.from, input.to, channel ?? undefined);
 
     if (planned.kind === "refused") {
       throw new BadRequestException(
