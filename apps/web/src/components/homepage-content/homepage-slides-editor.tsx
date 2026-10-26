@@ -8,6 +8,7 @@ import {
   SHOP_HREF_RULE,
   type HomepageSlide,
 } from "@acropora/types";
+import { RichTextEditor, SHORT_TOOLBAR } from "@acropora/ui/rich-text-editor";
 import { useState } from "react";
 
 import {
@@ -263,13 +264,18 @@ function SlideFields({
         {label.charAt(0).toUpperCase() + label.slice(1)}
       </span>
       {options.long ? (
-        <textarea
+        /*
+          A DIA SZÖVEGE FORMÁZOTT (2b-3; commerce #571): a rövid profil, amit a
+          kirakat a dián kirajzol. Üres szerkesztő üres szöveget ment.
+        */
+        <RichTextEditor
+          profile="short"
+          toolbar={SHORT_TOOLBAR}
           aria-label={`${n}. dia: ${label}`}
-          value={(slide[key] as string | null) ?? ""}
-          maxLength={max}
-          rows={3}
-          onChange={(event) => onChange({ [key]: event.target.value })}
-          className={HOMEPAGE_INPUT_CLASS}
+          value={((slide[key] as string | null) ?? "") || "<p></p>"}
+          onChange={(html) =>
+            onChange({ [key]: html === "<p></p>" ? "" : html })
+          }
         />
       ) : (
         <input

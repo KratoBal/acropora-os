@@ -6,6 +6,8 @@ import {
   HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
   isShopHref,
+  isShortTextKey,
+  looksLikeShortHtml,
   normalizeShopHref,
   parseHomepageContentInput,
 } from "./homepage-content.js";
@@ -350,5 +352,40 @@ describe("a slide button's target", () => {
       (parsed as { message: string }).message,
       /^2\. dia, második gomb célja: csak a webshop egy oldala lehet/,
     );
+  });
+});
+
+/*
+  THE FORMATTED SHORT TEXTS (2b-3; commerce #571). What turns these red: a
+  formatted value refused as "not an address", a key the storefront draws as
+  HTML not marked short (or a plain one marked), or the HTML test differing
+  from the storefront's.
+*/
+describe("the formatted short texts", () => {
+  it("marks exactly the four places the storefront draws as HTML", () => {
+    assert.deepEqual(
+      HOMEPAGE_TEXT_FIELDS.filter((f) => f.type === "short").map((f) => f.key),
+      ["kezdo.szoveg", "kezdo.1.szoveg", "kezdo.2.szoveg", "kezdo.3.szoveg"],
+    );
+    assert.ok(isShortTextKey("kezdo.szoveg"));
+    assert.ok(!isShortTextKey("kezdo.cim"));
+  });
+
+  it("takes a formatted value at a short place, and is not checked as an address", () => {
+    assert.ok(
+      ok(
+        input({
+          texts: { "kezdo.szoveg": "<p>Egy <strong>lépés</strong></p>" },
+        }),
+      ),
+    );
+  });
+
+  it("tells short-profile HTML from plain text as the storefront does", () => {
+    assert.ok(looksLikeShortHtml("<p>x</p>"));
+    assert.ok(looksLikeShortHtml("a<br>b"));
+    assert.ok(looksLikeShortHtml('<a href="/hu/store">x</a>'));
+    assert.ok(!looksLikeShortHtml("a < b és c > d"));
+    assert.ok(!looksLikeShortHtml("<script>x</script>"));
   });
 });

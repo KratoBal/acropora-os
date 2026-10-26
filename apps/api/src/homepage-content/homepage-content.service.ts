@@ -17,6 +17,8 @@ import {
   type HomepageContentInput,
   type HomepageFooter,
   type HomepageSlide,
+  isShortTextKey,
+  looksLikeShortHtml,
 } from "@acropora/types";
 
 import { detectImageContentType } from "../integrations/medusa/image-content-type.js";
@@ -253,6 +255,40 @@ function withSanitizedFooter(
   };
 }
 
+/**
+ * THE FORMATTED SHORT TEXTS (2b-3; commerce #571): the catalogue's `short`
+ * fields and every slide's text, in the shared sanitizer's SHORT profile. The
+ * storefront draws them as HTML, so the stored form is the security boundary,
+ * like the footer intro. Only a value that is short-profile HTML is cleaned:
+ * a plain text stays plain, because cleaning would escape it and the
+ * storefront shows a non-HTML value as text (`looksLikeShortHtml`).
+ */
+const cleanShort = (value: string) =>
+  looksLikeShortHtml(value)
+    ? sanitizeRichHtml(value, { profile: "short" })
+    : value;
+
+function withSanitizedShortTexts<
+  T extends Pick<HomepageContentInput, "texts" | "slides">,
+>(input: T): T {
+  return {
+    ...input,
+    texts: Object.fromEntries(
+      Object.entries(input.texts).map(([key, value]) => [
+        key,
+        isShortTextKey(key) ? cleanShort(value) : value,
+      ]),
+    ),
+    slides:
+      input.slides === null
+        ? null
+        : input.slides.map((slide) => ({
+            ...slide,
+            text: cleanShort(slide.text),
+          })),
+  };
+}
+
 /** The stored record, read defensively: a hand-edited row cannot break a read. */
 export function toHomepageContent(
   row: HomepageContentRow | null,
@@ -276,9 +312,14 @@ export function toHomepageContent(
   if (typeof row.texts === "object" && row.texts !== null)
     for (const [key, value] of Object.entries(row.texts))
       if (typeof value === "string") texts[key] = value;
-  return {
+  // the read cleans again, like the footer intro: a hand-written row is never handed on raw
+  const short = withSanitizedShortTexts({
     texts,
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
+  });
+  return {
+    texts: short.texts,
+    slides: short.slides,
     blocks: storedBlocks(row.blocks),
     footer: storedFooter(row.footer),
     imageHosts: [...imageHosts],
@@ -476,7 +517,7 @@ export class HomepageContentService {
   }> {
     const parsed = parseHomepageContentInput(body);
     if (!parsed.ok) throw new BadRequestException(parsed.message);
-    const clean = withSanitizedFooter(parsed.value);
+    const clean = withSanitizedShortTexts(withSanitizedFooter(parsed.value));
     /*
       THE LIMIT HOLDS FOR WHAT IS STORED, NOT ONLY FOR WHAT ARRIVED (barracuda,
       #1878): the sanitizer can lengthen a text (a bare "<" becomes "&lt;"), and
@@ -486,6 +527,17 @@ export class HomepageContentService {
       throw new BadRequestException(
         `footer.intro: at most ${HOMEPAGE_LIMITS.footerIntro} characters after cleaning`,
       );
+    // the same for the formatted texts: the shop refuses the whole record over its caps
+    for (const [key, value] of Object.entries(clean.texts))
+      if (value.length > HOMEPAGE_LIMITS.textValue)
+        throw new BadRequestException(
+          `${key}: a formázott szöveg a tisztítás után legfeljebb ${HOMEPAGE_LIMITS.textValue} karakter lehet.`,
+        );
+    for (const [index, slide] of (clean.slides ?? []).entries())
+      if (slide.text.length > HOMEPAGE_LIMITS.slideText)
+        throw new BadRequestException(
+          `${index + 1}. dia, szöveg: a tisztítás után legfeljebb ${HOMEPAGE_LIMITS.slideText} karakter lehet.`,
+        );
     const row = await this.store.save(MAIN_HOMEPAGE_KEY, clean, userId);
     let projection: HomepageProjectionResult;
     if (!homepageProjectionOn(this.environment, row)) projection = "off";

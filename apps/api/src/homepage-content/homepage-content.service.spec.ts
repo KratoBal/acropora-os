@@ -707,3 +707,70 @@ describe("HomepageContentService.orderFeatured", () => {
     );
   });
 });
+
+/*
+  THE FORMATTED SHORT TEXTS (2b-3; commerce #571): the storefront draws them as
+  HTML, so the stored form is the boundary. What turns these red: script or a
+  table stored at a short place or in a slide's text; a plain text escaped
+  (the storefront would show "&lt;"); a place that is not short cleaned; a
+  value over the shop's cap after cleaning stored (the shop would refuse the
+  whole record).
+*/
+describe("HomepageContentService: the formatted short texts", () => {
+  const slide = {
+    eyebrow: "",
+    title: "t",
+    text: '<p onclick="x()">Akció <strong>most</strong><script>alert(1)</script></p><table><tbody><tr><td>x</td></tr></tbody></table>',
+    cta: "",
+    ctaHref: null,
+    cta2: "",
+    cta2Href: null,
+    caption: "",
+    caption2: "",
+    imageUrl: null,
+    imageAlt: "",
+  };
+
+  it("cleans a short place and a slide's text in the short profile, and leaves the rest", async () => {
+    const { service, saved } = setup(async () => "sent");
+    const out = await service.save(
+      {
+        texts: {
+          "kezdo.szoveg":
+            '<p>Első <em>lépés</em><img src="https://x.hu/a.png"></p>',
+          "kezdo.1.szoveg": "a < b és c > d",
+          "kezdo.cim": "<b>nem formázott hely</b>",
+        },
+        slides: [slide],
+      },
+      "u-1",
+    );
+    const texts = saved[0]?.input.texts ?? {};
+    assert.equal(texts["kezdo.szoveg"], "<p>Első <em>lépés</em></p>");
+    // plain text stays plain: cleaning would escape it
+    assert.equal(texts["kezdo.1.szoveg"], "a < b és c > d");
+    // a plain-text place is not a formatted one: the storefront shows it as text
+    assert.equal(texts["kezdo.cim"], "<b>nem formázott hely</b>");
+    assert.equal(
+      saved[0]?.input.slides?.[0]?.text,
+      // the removed table's cell text stays, as text
+      "<p>Akció <strong>most</strong></p>x",
+    );
+    assert.equal(
+      out.content.texts["kezdo.szoveg"],
+      "<p>Első <em>lépés</em></p>",
+    );
+  });
+
+  it("refuses a formatted text over the shop's cap after cleaning", async () => {
+    const { service, saved } = setup(async () => "sent");
+    // under 2000 characters arrive; each lone "<" grows to "&lt;" in the cleaning
+    const long = `<p>${"x <".repeat(660)}</p>`;
+    await assert.rejects(
+      () =>
+        service.save({ texts: { "kezdo.szoveg": long }, slides: null }, "u-1"),
+      /kezdo\.szoveg: a formázott szöveg a tisztítás után legfeljebb 2000/,
+    );
+    assert.equal(saved.length, 0);
+  });
+});
