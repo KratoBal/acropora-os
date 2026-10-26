@@ -22,19 +22,27 @@ export const PRODUCT_ENVIRONMENT = Symbol("PRODUCT_ENVIRONMENT");
  * 2026-10-25 22:30 UTC, msg 1564043552525389924: a termekleiras a teljes
  * szerkesztot kapja).
  *
- * A leirast a bolt es az OS is HTML-kent rajzolja ki, tehat a tarolt alak a
- * vedelmi hatar: ugyanaz a tisztito fut itt, mint a szerkeszto elonezeteben, es
- * amit a szerkeszto eloallit, azt valtozatlanul engedi at (allitas a web
- * tesztjei kozott). A `null` es a hianyzo mezo erintetlen marad.
+ * AZ OS SAJAT IROI (letrehozas es modositas) ezen at tarolnak: ugyanaz a
+ * tisztito fut itt, mint a szerkeszto elonezeteben, es amit a szerkeszto
+ * eloallit, azt valtozatlanul engedi at (allitas a web tesztjei kozott). A
+ * `null` es a hianyzo mezo erintetlen marad.
+ *
+ * NEM EZ AZ EGYETLEN VEDELMI HATAR, es ezt ki kell mondani (barracuda, #1893
+ * review): a UNAS-import a UNAS HTML-jet valtozatlanul tarolja
+ * (`unas-product-sync.repository`, `unas-apply.repository`), mert a kirakat
+ * tisztitoja (acropora-commerce `sanitize-description.ts`) epp arra a HTML-re
+ * van hangolva (stilusok, tablazatok). Ezert MINDEN kirajzolas is tisztit: az OS
+ * termeklapja es a JEV-attekintes `sanitizeDescriptionHtml`-lel, a kirakat
+ * `sanitizeDescription`-nel. Mert 2026-10-26.
  *
  * A KEP CSAK A `RICH_TEXT_IMAGE_HOSTS` HOSZTJAIROL jon, mint a kezdolapon es a
  * cikkben (barracuda, #1875/#1877): egy idegen hoszt kepe a boltban harmadik
  * feles betoltes. Az ures lista egy kepet sem enged at.
  */
-function withSanitizedDescription(
-  input: UpdateProductDto,
+function withSanitizedDescription<T extends { description?: string | null }>(
+  input: T,
   imageHosts: readonly string[],
-): UpdateProductDto {
+): T {
   if (typeof input.description !== "string") return input;
   return {
     ...input,
@@ -55,7 +63,10 @@ export class ProductService {
   ) {}
 
   createProduct(input: CreateProductDto, actorUserId?: string) {
-    return this.products.create(input, actorUserId);
+    return this.products.create(
+      withSanitizedDescription(input, richTextImageHosts(this.environment)),
+      actorUserId,
+    );
   }
 
   async updateProduct(id: string, input: UpdateProductDto) {

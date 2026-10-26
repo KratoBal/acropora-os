@@ -19,7 +19,11 @@ function repositoryWith(
     calls,
     inputs,
     repository: {
-      create: async () => ({ id: "created" }),
+      create: async (input: unknown) => {
+        calls.push("create");
+        inputs.push(input);
+        return { id: "created" };
+      },
       findById: async () => product,
       list: async () => ({ items: [], pagination: {} }),
       update: async (_id: string, input: unknown) => {
@@ -127,6 +131,33 @@ describe("ProductService", () => {
     assert.match(listed!.description, /static\.acropora\.hu\/a\.webp/);
     assert.doesNotMatch(listed!.description, /cdn\.unas\.hu/);
     assert.doesNotMatch(none!.description, /<img/);
+  });
+
+  /*
+    A NEW PRODUCT'S DESCRIPTION goes through the same cleaning (barracuda,
+    #1893 review): before, createProduct passed it on as it came. What turns
+    this red: create storing raw HTML again, or touching an absent field.
+  */
+  it("cleans a new product's description the same way", async () => {
+    const { repository, inputs } = repositoryWith(null);
+    const service = new ProductService(repository, {
+      RICH_TEXT_IMAGE_HOSTS: "static.acropora.hu",
+    });
+    await service.createProduct({
+      name: "Új",
+      description:
+        '<p onclick="x()">a</p><script>alert(1)</script><p><img src="https://static.acropora.hu/a.webp" alt="a"><img src="https://cdn.unas.hu/b.jpg" alt="b"></p>',
+    } as never);
+    await service.createProduct({ name: "Leírás nélkül" } as never);
+    const [cleaned, without] = inputs as {
+      name: string;
+      description?: string;
+    }[];
+    assert.equal(
+      cleaned!.description,
+      '<p>a</p><p><img src="https://static.acropora.hu/a.webp" alt="a"></p>',
+    );
+    assert.deepEqual(without, { name: "Leírás nélkül" });
   });
 
   it("blocks generic writes to an UNAS managed product", async () => {
