@@ -112,8 +112,14 @@ export class ArticleImageService {
     private readonly articles: ArticleRepository,
     @Inject(ARTICLE_ENVIRONMENT)
     private readonly environment: NodeJS.ProcessEnv,
-    private readonly memory: ArticleImageMemory = new ArticleImageMemory(),
   ) {}
+
+  /*
+    A FIELD, NOT A CONSTRUCTOR PARAMETER: Nest resolves every constructor
+    parameter as a provider, a default value does not stop it (the bootstrap
+    failed on exactly that, #1897 v2 CI).
+  */
+  private readonly memory = new ArticleImageMemory();
 
   async upload(
     contentId: string,
