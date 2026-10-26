@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
   ServiceUnavailableException,
@@ -18,6 +19,7 @@ import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-
 import { SzamlazzConnectionError } from "../integrations/szamlazz/szamlazz-connection.types.js";
 import { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
 import { buildIssueInput } from "./billing-document-issue.js";
+import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import {
   BILLING_ISSUE_ENV,
   BILLING_SZAMLAZZ_CLIENT,
@@ -29,6 +31,11 @@ import {
 import { BillingDocumentsRepository } from "./billing-documents.repository.js";
 import { billingIssueMode } from "./billing-issue.config.js";
 
+/** Injectable for tests: the request builder (a test drops the preview marker with it). */
+export const BILLING_PREVIEW_XML_BUILDER = Symbol(
+  "BILLING_PREVIEW_XML_BUILDER",
+);
+
 /**
  * A SZÁMLA ELŐNÉZETE KIÁLLÍTÁS ELŐTT (os-szamla-elonezet; Luca kérése: a
  * kiállítás előtt lássa a számlaképet). A Számlázz.hu SAJÁT előnézeti PDF-jét
@@ -39,27 +46,41 @@ import { billingIssueMode } from "./billing-issue.config.js";
  * szám nélkül) élesben már mért.
  *
  * AMIT AZ ELŐNÉZET NEM TEHET, és ezért ez NEM a kiállító szolgáltatás
- * kiterjesztése, hanem külön osztály, amelyben a kiállító repó (`claim`,
- * `markIssued`, `setPdf`) és a dokumentumtár NINCS BEINJEKTÁLVA:
- *   - nem foglal állapotot (DRAFT marad), nem ír a bizonylatra;
- *   - nem tárol PDF-et, a bájtok csak a válaszba mennek;
+ * kiterjesztése, hanem külön osztály:
+ *   - nem foglal állapotot (DRAFT marad), nem ír a bizonylatra, nem tárol PDF-et;
+ *     a kiállító repóból EGYETLEN, a vészágon használt írás van beinjektálva
+ *     (`markStrayIssue`, lásd lent), a normál úton semmi;
  *   - nincs `szamlaKulsoAzon`: a Számlázz.hu a külső azonosítót duplikáció-
  *     védelemre használhatja, és egy előnézet nem foglalhatja le a későbbi
  *     valódi kiállításét. (A karbantartási előnézet sem küldi.)
+ *
+ * Az ELŐNÉZETNEK KÉT ŐRE VAN (barracuda, #1874): a kérés elindulása előtt a
+ * jelölés megléte, és a válaszban szám hiánya (ha mégis szám jön, a
+ * Számlázz.hu kiállított: hangos hiba, a szám a bizonylat mellé kerül).
  * A kapcsolója ugyanaz, mint a kiállításé: a hívás a tárolt Agent-kulccsal
  * megy, ezért ahol a kiállítás ki van kapcsolva, ott előnézet sincs.
  */
 @Injectable()
 export class BillingDocumentPreviewService {
+  private readonly logger = new Logger(BillingDocumentPreviewService.name);
+
   constructor(
     private readonly documents: BillingDocumentsRepository,
     private readonly credentials: SzamlazzCredentialProvider,
+    /**
+     * CSAK A VÉSZÁGON használt: ha egy előnézet-kérés mégis valódi számlát
+     * hozott (`markStrayIssue`). A normál úton ebből SEMMI nem hívódik.
+     */
+    private readonly issueRepository: BillingDocumentIssueRepository,
     @Optional()
     @Inject(BILLING_SZAMLAZZ_CLIENT)
     private readonly client: SzamlazzAgentClient = new HttpSzamlazzAgentClient(),
     @Optional()
     @Inject(BILLING_ISSUE_ENV)
     private readonly environment: NodeJS.ProcessEnv = process.env,
+    @Optional()
+    @Inject(BILLING_PREVIEW_XML_BUILDER)
+    private readonly buildXml: typeof buildSzamlazzAgentInvoiceXml = buildSzamlazzAgentInvoiceXml,
   ) {}
 
   async preview(id: string): Promise<Buffer> {
@@ -104,13 +125,27 @@ export class BillingDocumentPreviewService {
         input.document,
         { agentKey, previewOnly: true },
       );
-      xml = buildSzamlazzAgentInvoiceXml(agentInput);
+      xml = this.buildXml(agentInput);
     } catch (error) {
       if (error instanceof BillingDocumentAdapterError)
         throw new BadRequestException(
           `Az előnézet nem kérhető a Számlázz.hu-tól (${error.code}).`,
         );
       throw error;
+    }
+
+    // FUTÁSIDEJŰ ŐR A KÜLDÉS ELŐTT (barracuda, #1874): az előnézet azon áll,
+    // hogy a kérésben ott a `elonezetpdf`. Ha egy későbbi átírás elvesztené a
+    // jelölést, az éles kliens VALÓDI számlát állítana ki (szám, NAV-jelentés),
+    // ezért a hívás el sem indul. A teszt ezt is fogja, de az ŐR a teszttől
+    // függetlenül zár.
+    if (!xml.includes("<elonezetpdf>true</elonezetpdf>")) {
+      this.logger.error(
+        `Az előnézet-kérésből hiányzik az elonezetpdf jelölés (bizonylat ${id}): a hívás NEM indult el.`,
+      );
+      throw new ServiceUnavailableException(
+        "Az előnézet most nem kérhető (belső hiba): a kérés nem előnézetként készült, ezért nem küldtük el. Szólj a fejlesztőknek.",
+      );
     }
 
     let response;
@@ -126,6 +161,30 @@ export class BillingDocumentPreviewService {
       );
     }
 
+    // HA AZ ELŐNÉZET MÉGIS SZÁMOT HOZ, A SZÁMLÁZZ.HU KIÁLLÍTOTT (barracuda,
+    // #1874): hangos hiba, hogy egy elveszett valódi számla ne maradjon
+    // csendben. A számot a bizonylat mellé írjuk (ISSUING + hibajel), hogy a
+    // kiállítás gombja ne állítson ki másodikat, és a szám megtalálható legyen.
+    if (response.invoiceNumber) {
+      this.logger.error(
+        `Az ELŐNÉZET-kérés VALÓDI bizonylatot hozott létre a Számlázz.hu-n: ${response.invoiceNumber} (bizonylat ${id}). Ellenőrizd a Számlázz.hu-n.`,
+      );
+      await this.issueRepository
+        .markStrayIssue(
+          id,
+          `Egy előnézet-kérés valódi bizonylatot hozott létre a Számlázz.hu-n: ${response.invoiceNumber}. Ellenőrizd a Számlázz.hu-n, mielőtt bármit újra próbálsz.`,
+        )
+        .catch((error: unknown) =>
+          this.logger.error(
+            `A(z) ${response.invoiceNumber} számot nem sikerült a(z) ${id} bizonylat mellé írni: ${
+              error instanceof Error ? error.name : "ismeretlen hiba"
+            }`,
+          ),
+        );
+      throw new ServiceUnavailableException(
+        `Az előnézet helyett a Számlázz.hu valódi bizonylatot állított ki (${response.invoiceNumber}). Ne állítsd ki újra: nézd meg a Számlázz.hu-n, és szólj a fejlesztőknek.`,
+      );
+    }
     if (!response.successful && response.errorCode)
       throw new BadRequestException(
         `A Számlázz.hu elutasította az előnézetet (${response.errorCode}): ${

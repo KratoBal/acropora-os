@@ -110,6 +110,23 @@ export class BillingDocumentIssueRepository {
     });
   }
 
+  /**
+   * A KIÁLLÍTÁS, AMIT NEM KÉRTÜNK: egy ELŐNÉZET-kérés mégis számot hozott, tehát
+   * a Számlázz.hu valódi bizonylatot állított ki. A vázlat ISSUING-ba lép,
+   * hibajelzéssel és a számmal, hogy a kiállítás gombja ne állítson ki másodikat,
+   * és a szám ne vesszen el (a részletek "ellenőrzésre vár" állapota).
+   */
+  markStrayIssue(id: string, note: string) {
+    return this.database.invoice.updateMany({
+      where: { id, status: "DRAFT" },
+      data: {
+        status: "ISSUING",
+        syncStatus: "ERROR",
+        syncError: note.slice(0, 500),
+      },
+    });
+  }
+
   /** Ismeretlen kimenet: a sor ISSUING-ben marad, az ok a syncError-ban. */
   markOutcomeUnknown(id: string, note: string) {
     return this.database.invoice.updateMany({

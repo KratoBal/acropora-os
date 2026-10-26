@@ -15,6 +15,8 @@ import type { SzamlazzAgentClient } from "../integrations/szamlazz/szamlazz-agen
 import { SzamlazzAgentHttpError } from "../integrations/szamlazz/szamlazz-agent.client.js";
 import type { SzamlazzAgentResponse } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
+import { buildSzamlazzAgentInvoiceXml } from "../integrations/szamlazz/szamlazz-agent-xml.js";
+import type { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentPreviewService } from "./billing-document-preview.service.js";
 import type {
   BillingDocumentRow,
@@ -99,9 +101,17 @@ function setup(
     found?: BillingDocumentRow | null;
     env?: NodeJS.ProcessEnv;
     respond?: () => Promise<SzamlazzAgentResponse>;
+    /** Replaces the request builder (a test drops the preview marker with it). */
+    buildXml?: typeof buildSzamlazzAgentInvoiceXml;
+    strayFails?: boolean;
   } = {},
 ) {
-  const calls = { generate: 0, resolve: 0, xml: [] as string[] };
+  const calls = {
+    generate: 0,
+    resolve: 0,
+    xml: [] as string[],
+    stray: [] as Array<[string, string]>,
+  };
   const documents = {
     find: async () => (options.found === undefined ? row() : options.found),
   } as unknown as BillingDocumentsRepository;
@@ -111,6 +121,13 @@ function setup(
       return { agentKey: "test-key", source: "database", revision: "db:1" };
     },
   } as unknown as SzamlazzCredentialProvider;
+  const issueRepository = {
+    markStrayIssue: async (id: string, note: string) => {
+      calls.stray.push([id, note]);
+      if (options.strayFails) throw new Error("adatbázis nem elérhető");
+      return { count: 1 };
+    },
+  } as unknown as BillingDocumentIssueRepository;
   const client: SzamlazzAgentClient = {
     generateInvoice: async (xml: string) => {
       calls.generate++;
@@ -124,8 +141,10 @@ function setup(
   const service = new BillingDocumentPreviewService(
     documents,
     credentials,
+    issueRepository,
     client,
     options.env ?? ON,
+    options.buildXml,
   );
   return { service, calls };
 }
@@ -142,6 +161,68 @@ describe("BillingDocumentPreviewService", () => {
     assert.match(xml, /<szamlaagentkulcs>test-key<\/szamlaagentkulcs>/);
     // a külső azonosító nélkül nem foglalhatja le a későbbi kiállításét
     assert.doesNotMatch(xml, /szamlaKulsoAzon/);
+    // a normál úton a vészág írása nem fut
+    assert.equal(calls.stray.length, 0);
+  });
+
+  /*
+    A FUTÁSIDEJŰ ŐR (barracuda, #1874): ha egy átírás elveszítené az
+    `elonezetpdf` jelölést, az éles kliens VALÓDI számlát állítana ki. MI
+    PIROSÍT: ha a kérés jelölés nélkül is elmegy.
+  */
+  it("does not send a request that lost the preview marker", async () => {
+    const { service, calls } = setup({
+      buildXml: (input) =>
+        buildSzamlazzAgentInvoiceXml(input).replace(
+          "<elonezetpdf>true</elonezetpdf>",
+          "",
+        ),
+    });
+    await assert.rejects(service.preview("doc-1"), ServiceUnavailableException);
+    assert.equal(calls.generate, 0);
+    assert.equal(calls.stray.length, 0);
+  });
+
+  /*
+    HA AZ ELŐNÉZET MÉGIS SZÁMOT HOZ, A SZÁMLÁZZ.HU KIÁLLÍTOTT. MI PIROSÍT: ha a
+    PDF-et szó nélkül visszaadja; ha a szám nem kerül a bizonylat mellé; ha a
+    szám a hibaüzenetből hiányzik; ha a bizonylat-írás hibája elnyelné a hibát.
+  */
+  it("fails loudly when the preview answer carries an invoice number, and records it", async () => {
+    const { service, calls } = setup({
+      respond: async () => ({
+        successful: true,
+        invoiceNumber: "E-2026-77",
+        pdf: PDF,
+      }),
+    });
+    await assert.rejects(
+      service.preview("doc-1"),
+      (error: unknown) =>
+        error instanceof ServiceUnavailableException &&
+        /E-2026-77/.test(error.message),
+    );
+    assert.equal(calls.stray.length, 1);
+    assert.equal(calls.stray[0]![0], "doc-1");
+    assert.match(calls.stray[0]![1], /E-2026-77/);
+  });
+
+  it("still fails loudly when recording the stray number fails", async () => {
+    const { service, calls } = setup({
+      strayFails: true,
+      respond: async () => ({
+        successful: true,
+        invoiceNumber: "E-2026-78",
+        pdf: PDF,
+      }),
+    });
+    await assert.rejects(
+      service.preview("doc-1"),
+      (error: unknown) =>
+        error instanceof ServiceUnavailableException &&
+        /E-2026-78/.test(error.message),
+    );
+    assert.equal(calls.stray.length, 1);
   });
 
   it("refuses when issuing is switched off or contradictory, before any call", async () => {
