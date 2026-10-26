@@ -80,8 +80,11 @@ export function articleContentHash(snapshot: {
  *   AWAITING_APPROVAL -> READY_TO_SEND   the approval: an unchangeable snapshot
  *   READY_TO_SEND | SCHEDULED -> SENT    publishing: the APPROVED snapshot goes
  *                                        public, never the body being edited
- *   READY_TO_SEND -> AWAITING_REVISION   the approval is withdrawn (the public
- *   READY_TO_SEND -> DISCARDED           revision, if any, stays)
+ *   any -> AWAITING_REVISION | DISCARDED the approval is withdrawn, from every
+ *                                        state that may hold one (READY_TO_SEND
+ *                                        and SCHEDULED today); the public
+ *                                        revision, if any, stays (barracuda,
+ *                                        #1887 b)
  */
 export async function applyArticleStep(
   tx: Tx,
@@ -151,7 +154,6 @@ export async function applyArticleStep(
   }
 
   if (
-    input.from === "READY_TO_SEND" &&
     (input.to === "AWAITING_REVISION" || input.to === "DISCARDED") &&
     body?.approvedRevisionId
   )
@@ -241,10 +243,17 @@ export class ArticleRepository {
   ): Promise<ArticleSaveOutcome> {
     try {
       return await prisma.$transaction(async (tx) => {
-        const item = await tx.contentItem.findUnique({
-          where: { id: contentId },
-          select: { channel: true, state: true },
-        });
+        /*
+          THE ITEM ROW IS LOCKED FOR THE WHOLE SAVE (barracuda, #1887 a). Under
+          READ COMMITTED a submission and an approval could otherwise run
+          between this read and the write: the snapshot would hold the old body
+          and the body the new one, in an approved state. With the lock the
+          approval's conditional update waits for this save, and its snapshot
+          reads the body this save wrote.
+        */
+        const [item] = await tx.$queryRaw<
+          { channel: string; state: string }[]
+        >`SELECT "channel"::text AS channel, "state"::text AS state FROM "ContentItem" WHERE "id" = ${contentId} FOR UPDATE`;
         if (!item) return "missing" as const;
         if (item.channel !== "ARTICLE") return "not-article" as const;
         if (!ARTICLE_EDITABLE_STATES.includes(item.state as ContentState))

@@ -156,6 +156,47 @@ describe(
       );
     });
 
+    it("ARTICLE-INT-SCHEDULED: discarding a scheduled article withdraws its approval", async () => {
+      const id = await item("ARTICLE");
+      await articles.save(id, body({ slug: `${prefix}utemezett` }), actor);
+      await move(id, "DRAFTING", "AWAITING_REVIEW");
+      await move(id, "AWAITING_REVIEW", "AWAITING_APPROVAL");
+      await move(id, "AWAITING_APPROVAL", "READY_TO_SEND");
+      await move(id, "READY_TO_SEND", "SCHEDULED");
+      assert.ok((await articles.detail(id))?.approvedRevision);
+      await move(id, "SCHEDULED", "DISCARDED");
+      assert.equal((await articles.detail(id))?.approvedRevision, null);
+    });
+
+    it("ARTICLE-INT-LOCK: an approval that starts during a save waits for it, and snapshots the saved body", async () => {
+      const id = await item("ARTICLE", "AWAITING_APPROVAL");
+      await prisma.articleBody.create({
+        data: {
+          contentId: id,
+          slug: `${prefix}zar`,
+          bodyHtml: "<p>Régi</p>",
+          channels: ["WEBSHOP_BLOG"],
+        },
+      });
+      // hold the row as the save does, then let an approval try meanwhile
+      let approval: Promise<boolean> | undefined;
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM "ContentItem" WHERE "id" = ${id} FOR UPDATE`;
+        approval = move(id, "AWAITING_APPROVAL", "READY_TO_SEND");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await tx.articleBody.update({
+          where: { contentId: id },
+          data: { bodyHtml: "<p>Új</p>" },
+        });
+      });
+      assert.equal(await approval, true);
+      const detail = await articles.detail(id);
+      const revision = await prisma.articleRevision.findUniqueOrThrow({
+        where: { id: detail!.approvedRevision!.id },
+      });
+      assert.equal(revision.bodyHtml, "<p>Új</p>");
+    });
+
     it("ARTICLE-INT-OTHER: another channel is untouched by the article steps, and takes no body", async () => {
       const id = await item("FACEBOOK_POST", "AWAITING_APPROVAL");
       assert.equal(await move(id, "AWAITING_APPROVAL", "READY_TO_SEND"), true);
