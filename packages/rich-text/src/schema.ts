@@ -134,11 +134,26 @@ export const RICH_TEXT_PRODUCT_ID = /^[a-z0-9]{1,64}$/;
  * lapjan vegyes tartalom-figyelmeztetest ad, a `data:` es a relativ cim nem
  * ellenorizheto, a sajat `acropora-image:` pedig a boltban nem oldhato fel.
  */
-export function isAllowedFullImageSrc(src: string): boolean {
+export function isAllowedFullImageSrc(
+  src: string,
+  allowedHosts?: readonly string[],
+): boolean {
   const cim = src.trim();
   if (!/^https:\/\//i.test(cim)) return false;
   try {
-    return new URL(cim).protocol === "https:";
+    const url = new URL(cim);
+    if (url.protocol !== "https:") return false;
+    /*
+      A HOSZT-ENGEDELYLISTA (barracuda, #1875 review): egy idegen hoszt kepe a
+      weboldalon harmadik feles betoltes (a latogato IP-je es Referere a
+      hoszthoz megy, lehet nyomkoveto pixel, kesobb lecserelheto). Ahol a hivo
+      megadja a listat, csak a pontos hosztnev megy at; az ures lista minden
+      kepet elutasit.
+    */
+    return (
+      allowedHosts === undefined ||
+      allowedHosts.some((host) => host.toLowerCase() === url.hostname)
+    );
   } catch {
     return false;
   }
