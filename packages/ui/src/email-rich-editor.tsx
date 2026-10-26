@@ -113,6 +113,9 @@ export function EmailRichEditor({
         const width = image.width ? ` width="${Math.round(image.width)}"` : "";
         beirNyersbe(`<img src="${escapeAttr(image.src)}"${alt}${width}>`);
       },
+      /* A level profiljaban nincs galeria es termekkartya: a tisztito kidobna. */
+      insertGallery() {},
+      insertProductCard() {},
       focus() {
         if (mod === "visual") szerkesztoRef.current?.focus();
         else dobozRef.current?.focus();

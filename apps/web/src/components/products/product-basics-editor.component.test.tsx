@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ProductDetail } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,8 +90,17 @@ describe("ProductBasicsEditor", () => {
     fireEvent.change(screen.getByLabelText("Név"), {
       target: { value: "Új név" },
     });
-    fireEvent.change(screen.getByLabelText("Leírás"), {
-      target: { value: "Új leírás" },
+    /*
+      A leiras a kozos szerkesztoben all (contenteditable), a parancs a TipTap
+      API-jan megy: a billentyu-szimulacio a happy-dom alatt nem hu.
+    */
+    const leiras = await screen.findByLabelText("Leírás");
+    act(() => {
+      (
+        leiras as HTMLElement & {
+          editor: { commands: { setContent(html: string): boolean } };
+        }
+      ).editor.commands.setContent("<p>Új <strong>leírás</strong></p>");
     });
     /**
      * AZ OPCIÓRA VÁRUNK, NEM A MEZŐRE, és ez a különbség tette billegővé ezt a
@@ -111,7 +126,7 @@ describe("ProductBasicsEditor", () => {
     await waitFor(() =>
       expect(api.update).toHaveBeenCalledWith("token-1", "product-1", {
         name: "Új név",
-        description: "Új leírás",
+        description: "<p>Új <strong>leírás</strong></p>",
         primaryCategoryId: "cat-2",
         webshopSellable: false,
       }),
@@ -175,6 +190,62 @@ describe("ProductBasicsEditor", () => {
       (screen.getByLabelText("Vásárolható a webshopban") as HTMLInputElement)
         .checked,
     ).toBe(true);
+  });
+
+  /**
+   * A LEIRAS CSAK SZERKESZTES UTAN MEGY EL. Egy UNAS-bol atvett leirasban
+   * `style` es `div` all; ha a nev mentese a leirast is kuldene, a szerver
+   * teljes profilu tisztitoja azt csendben atirna.
+   */
+  it("leaves the description out of a save that did not touch it", async () => {
+    api.update.mockResolvedValue(product());
+    api.detail.mockResolvedValue(product());
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          description: '<div style="color:red">UNAS leírás</div>',
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Név"), {
+      target: { value: "Csak a név" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]?.[2]).not.toHaveProperty("description");
+  });
+
+  it("names what the editor cannot keep, and shows the live preview", () => {
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          description:
+            '<div style="color:red"><p>UNAS <span class="x">leírás</span></p></div><table><tbody><tr><td>Méret</td><td>20 cm</td></tr></tbody></table>',
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("A mostani leírás egy része nem marad meg"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/\(div style, span class\)/)).toBeInTheDocument();
+    const elonezet = screen.getByTestId("web-content-preview");
+    expect(elonezet).toHaveTextContent("Régi név");
+    expect(
+      screen.getByRole("tab", { name: "Műszaki adatok" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Leírás" })).toBeInTheDocument();
+    expect(screen.getByTestId("web-content-preview-body").innerHTML).toBe(
+      "<table><tbody><tr><td>Méret</td><td>20 cm</td></tr></tbody></table>",
+    );
   });
 
   it("shows what the server gives back, not what was typed", async () => {

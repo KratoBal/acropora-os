@@ -3,12 +3,31 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { sanitizeRichHtml } from "@acropora/rich-text";
 import type { ProductCatalogAuthority } from "@acropora/types";
 
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
 import { ProductRepository } from "./product.repository.js";
+
+/**
+ * A LEIRAS A TELJES PROFIL TISZTITOJAN AT TAROLODIK (Balazs dontese,
+ * 2026-10-25 22:30 UTC, msg 1564043552525389924: a termekleiras a teljes
+ * szerkesztot kapja).
+ *
+ * A leirast a bolt es az OS is HTML-kent rajzolja ki, tehat a tarolt alak a
+ * vedelmi hatar: ugyanaz a tisztito fut itt, mint a szerkeszto elonezeteben, es
+ * amit a szerkeszto eloallit, azt valtozatlanul engedi at (allitas a web
+ * tesztjei kozott). A `null` es a hianyzo mezo erintetlen marad.
+ */
+function withSanitizedDescription(input: UpdateProductDto): UpdateProductDto {
+  if (typeof input.description !== "string") return input;
+  return {
+    ...input,
+    description: sanitizeRichHtml(input.description, { profile: "full" }),
+  };
+}
 
 @Injectable()
 export class ProductService {
@@ -21,7 +40,7 @@ export class ProductService {
   async updateProduct(id: string, input: UpdateProductDto) {
     const product = await this.requireProduct(id);
     this.assertLocallyManaged(product);
-    return this.products.update(id, input);
+    return this.products.update(id, withSanitizedDescription(input));
   }
 
   async archiveProduct(id: string) {
