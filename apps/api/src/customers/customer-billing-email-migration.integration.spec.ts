@@ -94,7 +94,7 @@ describe(
       await prisma.$executeRawUnsafe(
         `CREATE TABLE "${schema}"."Supplier" (
            "id" TEXT PRIMARY KEY, "customerId" TEXT, "taxNumber" TEXT,
-           "email" TEXT, "deletedAt" TIMESTAMP)`,
+           "email" TEXT, "deletedAt" TIMESTAMP, "isService" BOOLEAN NOT NULL)`,
       );
       await prisma.$executeRawUnsafe(
         `INSERT INTO "${schema}"."Customer" VALUES
@@ -108,21 +108,28 @@ describe(
            ('b-ugyanaz',     '34567890-2-42',  'Egyezo@x.hu'),
            ('b-rovid',       '123',            'rovid@x.hu'),
            ('b-nincs-ado',   NULL,             'nincsado@x.hu'),
-           ('b-masik-ceg',   '99999999-2-42',  'masik@x.hu')`,
+           ('b-masik-ceg',   '99999999-2-42',  'masik@x.hu'),
+           ('b-beszallito',  '56789012-2-42',  'vevo@x.hu'),
+           ('m-nem-szerviz', NULL,             'regi-szerviz@x.hu'),
+           ('b-vegyes',      '45678901-2-42',  'vegyes@x.hu')`,
       );
       await prisma.$executeRawUnsafe(
         `INSERT INTO "${schema}"."Supplier" VALUES
-           ('s-m-elter',        'm-elter',        NULL,            ' penzugy@x.hu ', NULL),
-           ('s-m-ugyanaz',      'm-ugyanaz',      NULL,            ' penzugy@x.hu',  NULL),
-           ('s-m-nincs-email',  'm-nincs-email',  NULL,            'uj@x.hu',        NULL),
-           ('s-m-ures',         'm-ures-partner', NULL,            '   ',            NULL),
-           ('s-m-torolt',       'm-torolt',       NULL,            'torolt@x.hu',    now()),
-           ('s-b-elter',        NULL,             '12345678-2-41', 'partner1@x.hu',  NULL),
-           ('s-b-ketto-b',      NULL,             '23456789-2-41', 'b@x.hu',         NULL),
-           ('s-b-ketto-a',      NULL,             '23456789-2-41', 'a@x.hu',         NULL),
-           ('s-b-ugyanaz',      NULL,             '34567890-2-41', 'egyezo@x.hu',    NULL),
-           ('s-b-rovid',        NULL,             '123',           'rovid-p@x.hu',   NULL),
-           ('s-b-torolt-masik', NULL,             '99999999-2-41', 'torolt2@x.hu',   now())`,
+           ('s-m-elter',        'm-elter',        NULL,            ' penzugy@x.hu ', NULL, true),
+           ('s-m-ugyanaz',      'm-ugyanaz',      NULL,            ' penzugy@x.hu',  NULL, true),
+           ('s-m-nincs-email',  'm-nincs-email',  NULL,            'uj@x.hu',        NULL, true),
+           ('s-m-ures',         'm-ures-partner', NULL,            '   ',            NULL, true),
+           ('s-m-torolt',       'm-torolt',       NULL,            'torolt@x.hu',    now(), true),
+           ('s-b-elter',        NULL,             '12345678-2-41', 'partner1@x.hu',  NULL, true),
+           ('s-b-ketto-b',      NULL,             '23456789-2-41', 'b@x.hu',         NULL, true),
+           ('s-b-ketto-a',      NULL,             '23456789-2-41', 'a@x.hu',         NULL, true),
+           ('s-b-ugyanaz',      NULL,             '34567890-2-41', 'egyezo@x.hu',    NULL, true),
+           ('s-b-rovid',        NULL,             '123',           'rovid-p@x.hu',   NULL, true),
+           ('s-b-torolt-masik', NULL,             '99999999-2-41', 'torolt2@x.hu',   now(), true),
+           ('s-b-beszallito',   NULL,             '56789012-2-41', 'rendeles@x.hu',  NULL, false),
+           ('s-m-nem-szerviz',  'm-nem-szerviz',  NULL,            'masik-p@x.hu',   NULL, false),
+           ('s-b-vegyes-a',     NULL,             '45678901-2-41', 'besz@x.hu',      NULL, false),
+           ('s-b-vegyes-b',     NULL,             '45678901-2-41', 'szerv@x.hu',     NULL, true)`,
       );
       await runMigration();
     });
@@ -162,6 +169,19 @@ describe(
       assert.equal(c["b-ketto"]!.billingEmail, "a@x.hu");
     });
 
+    // barracuda, #1885: a beszállító e-mailje az értékesítési vagy rendelési kapcsolata, nem az a cím,
+    // ahova a NEKI kiállított számlát kell küldeni; a folyamatos szinkron is csak a szerviz partnert viszi át
+    it("csak a SZERVIZ partner e-mailje megy át: a beszállító azonos adószámú vevője és a nem szerviz tükör-sor nem kap számlázási címet", async () => {
+      const c = await customers();
+      assert.equal(c["b-beszallito"]!.billingEmail, null);
+      assert.equal(c["m-nem-szerviz"]!.billingEmail, null);
+    });
+
+    it("ha egy cégnek szerviz és nem szerviz partner-sora is van, a szerviz partner címe nyer, a kisebb azonosítójú nem szerviz sor ellenére", async () => {
+      const c = await customers();
+      assert.equal(c["b-vegyes"]!.billingEmail, "szerv@x.hu");
+    });
+
     it("a rövid vagy hiányzó adószám nem párosít", async () => {
       const c = await customers();
       assert.equal(c["b-rovid"]!.billingEmail, null);
@@ -182,6 +202,9 @@ describe(
         "b-rovid": "rovid@x.hu",
         "b-nincs-ado": "nincsado@x.hu",
         "b-masik-ceg": "masik@x.hu",
+        "b-beszallito": "vevo@x.hu",
+        "m-nem-szerviz": "regi-szerviz@x.hu",
+        "b-vegyes": "vegyes@x.hu",
       };
       assert.equal(Object.keys(c).length, Object.keys(expected).length);
       for (const [id, email] of Object.entries(expected))

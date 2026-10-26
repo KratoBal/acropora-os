@@ -3,7 +3,10 @@
 -- "billingEmail" a számlázási; a kézi számla a számlázásira megy, ha az üres, az "email"-re.
 --
 -- A partner e-mailje beleolvad (Állatkert: a számla a vevő beszerzes@ címére ment, a partneren pénzügy@
--- állt). ÁLTALÁNOS ÉS IDEMPOTENS: ahol a (nem törölt) partner e-mailje nem üres és ELTÉR az ügyfélétől
+-- állt). CSAK A SZERVIZ PARTNEREKRE (barracuda, #1885): a beszállító e-mailje az értékesítési vagy
+-- rendelési kapcsolata, nem az a cím, ahova a NEKI kiállított számlát kell küldeni; és a folyamatos
+-- szinkron (syncWorksheetMirror) is csak a szerviz partnert viszi át, a két szabály így egy.
+-- ÁLTALÁNOS ÉS IDEMPOTENS: ahol a (nem törölt, szerviz) partner e-mailje nem üres és ELTÉR az ügyfélétől
 -- (kis-nagybetű és körülvágás nélkül mérve), a partner címe a "billingEmail"-be kerül; a meglévő ügyfél
 -- "email" SOHA nem változik; amelyik ügyfélnek már van "billingEmail"-je, azt nem írja felül (újrafutás: 0 sor).
 -- Két ügyfélsor érintett: (1) a szerviz partner tükör-vevője (Supplier.customerId), (2) az ugyanazon céghez
@@ -25,6 +28,7 @@ BEGIN
     SET "billingEmail" = btrim(s."email")
     FROM "Supplier" s
     WHERE s."customerId" = c."id"
+      AND s."isService"
       AND s."deletedAt" IS NULL
       AND btrim(coalesce(s."email", '')) <> ''
       AND lower(btrim(s."email")) <> lower(btrim(coalesce(c."email", '')))
@@ -41,6 +45,7 @@ BEGIN
      AND left(regexp_replace(coalesce(c."taxNumber", ''), '[^0-9]', '', 'g'), 8)
        = left(regexp_replace(coalesce(s."taxNumber", ''), '[^0-9]', '', 'g'), 8)
     WHERE s."deletedAt" IS NULL
+      AND s."isService"
       AND NOT EXISTS (SELECT 1 FROM "Supplier" m WHERE m."customerId" = c."id")
       AND btrim(coalesce(s."email", '')) <> ''
       AND lower(btrim(s."email")) <> lower(btrim(coalesce(c."email", '')))
