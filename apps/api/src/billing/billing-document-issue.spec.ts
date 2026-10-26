@@ -167,6 +167,39 @@ describe("buildIssueInput", () => {
     assert.equal(input.document.buyer.zip, "1146");
   });
 
+  // Balázs, 2026-10-26: one record, two addresses. MI PIROSÍT: ha a számla a rendelési
+  // címre menne, amikor van számlázási; ha a szóközös számlázási cím elnyomná a rendelésit.
+  it("the invoice goes to the billing e-mail, the ordering one only when there is no usable billing one", () => {
+    const withCustomer = (extra: Record<string, unknown>) => {
+      const base = row();
+      const built = buildIssueInput({
+        ...base,
+        customer: { ...base.customer!, ...extra },
+      } as never);
+      assert.ok(built.ok);
+      return built.buyer.email;
+    };
+    assert.equal(
+      withCustomer({
+        email: "beszerzes@example.com",
+        billingEmail: "penzugy@example.com",
+      }),
+      "penzugy@example.com",
+    );
+    assert.equal(
+      withCustomer({ email: "beszerzes@example.com", billingEmail: null }),
+      "beszerzes@example.com",
+    );
+    assert.equal(
+      withCustomer({ email: "beszerzes@example.com", billingEmail: "   " }),
+      "beszerzes@example.com",
+    );
+    assert.equal(
+      withCustomer({ email: null, billingEmail: " penzugy@example.com " }),
+      "penzugy@example.com",
+    );
+  });
+
   it("an EU buyer goes with its community tax number, adoalany 6 and its country's name; a Hungarian one as before", () => {
     const base = row();
     const eu = buildIssueInput({
