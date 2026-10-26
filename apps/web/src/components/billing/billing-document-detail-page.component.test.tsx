@@ -1058,6 +1058,14 @@ describe("the advance from a proforma", () => {
   vázlatának szerkesztőjére visz (hanem az eredetire); ha a hiba elnyelődik.
 */
 describe("copying an issued document into a new draft", () => {
+  it("the page leads back to the outgoing invoices list (Luca)", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("link", { name: "Vissza a számlákhoz" }),
+    ).toHaveAttribute("href", "/penzugy/szamlazas");
+  });
+
   it("an issued invoice offers it, and the new draft opens in the editor", async () => {
     api.detail.mockResolvedValue(detail());
     api.copy.mockResolvedValue(detail({ id: "doc-copy", status: "DRAFT" }));

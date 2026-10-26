@@ -646,6 +646,12 @@ export function BillingDocumentEditor({
                   PDF letöltése
                 </PilotButton>
               </div>
+              <Link
+                href={BILLING_LIST_PATH}
+                className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+              >
+                Vissza a számlákhoz
+              </Link>
               {canIssue &&
               stornoOffered({
                 status,
