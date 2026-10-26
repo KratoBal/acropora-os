@@ -33,6 +33,7 @@ const api = vi.hoisted(() => ({
   emailDraft: vi.fn(),
   final: vi.fn(),
   advance: vi.fn(),
+  copy: vi.fn(),
   storno: vi.fn(),
   stornoPdf: vi.fn(),
 }));
@@ -211,6 +212,7 @@ beforeEach(() => {
   api.detail.mockReset().mockResolvedValue(detail());
   api.final.mockReset();
   api.advance.mockReset();
+  api.copy.mockReset();
   api.storno.mockReset();
   api.stornoPdf
     .mockReset()
@@ -1047,5 +1049,67 @@ describe("the advance from a proforma", () => {
     expect(
       screen.queryByRole("list", { name: "Kapcsolódó bizonylatok" }),
     ).toBeNull();
+  });
+});
+
+/*
+  A MÁSOLÁS ÚJ VÁZLATBA (os-szamla-masolas). MI PIROSÍT: ha a gomb vázlaton,
+  végszámlán vagy a másolhatatlan típuson is megjelenik; ha nem a MÁSOLAT
+  vázlatának szerkesztőjére visz (hanem az eredetire); ha a hiba elnyelődik.
+*/
+describe("copying an issued document into a new draft", () => {
+  it("the page leads back to the outgoing invoices list (Luca)", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByRole("link", { name: "Vissza a számlákhoz" }),
+    ).toHaveAttribute("href", "/penzugy/szamlazas");
+  });
+
+  it("an issued invoice offers it, and the new draft opens in the editor", async () => {
+    api.detail.mockResolvedValue(detail());
+    api.copy.mockResolvedValue(detail({ id: "doc-copy", status: "DRAFT" }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Másolás új vázlatba" }),
+    );
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/penzugy/szamlazas/doc-copy/szerkesztes",
+      ),
+    );
+    expect(api.copy).toHaveBeenCalledWith("token-1", "doc-1");
+  });
+
+  it("is not offered on a draft or on a final invoice", async () => {
+    api.detail.mockResolvedValue(
+      detail({ status: "DRAFT", documentNumber: null }),
+    );
+    const first = render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByText(/még nincs hivatalos száma/);
+    expect(
+      screen.queryByRole("button", { name: "Másolás új vázlatba" }),
+    ).toBeNull();
+    first.unmount();
+
+    api.detail.mockResolvedValue(detail({ documentType: "FINAL_INVOICE" }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("button", { name: "PDF letöltése" });
+    expect(
+      screen.queryByRole("button", { name: "Másolás új vázlatba" }),
+    ).toBeNull();
+  });
+
+  it("says why when the copy fails, and stays on the page", async () => {
+    api.detail.mockResolvedValue(detail());
+    api.copy.mockRejectedValue(new Error("A bizonylatnak nincs partnere."));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Másolás új vázlatba" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A bizonylatnak nincs partnere.",
+    );
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 });

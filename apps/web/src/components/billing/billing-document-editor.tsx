@@ -191,6 +191,7 @@ export function BillingDocumentEditor({
   });
   const [confirmIssue, setConfirmIssue] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   /*
     A KIÁLLÍTOTT BIZONYLAT, A SÁVHOZ (hétfői lista M2, Luca kérése): a szám és
     hogy a hivatalos PDF megvan-e. Betöltéskor is kitöltődik, mert egy új
@@ -388,8 +389,8 @@ export function BillingDocumentEditor({
     return { detail, created };
   };
 
-  const save = async () => {
-    if (missing.length > 0) return;
+  const save = async (): Promise<string | null> => {
+    if (missing.length > 0) return null;
     setSaving(true);
     setSaveError(null);
     try {
@@ -413,14 +414,48 @@ export function BillingDocumentEditor({
       );
       if (created)
         router.replace(`${BILLING_EDITOR_PATH}/${detail.id}/szerkesztes`);
+      return detail.id;
     } catch (cause) {
       setSaveError(
         cause instanceof Error
           ? cause.message
           : "A vázlat mentése nem sikerült.",
       );
+      return null;
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * AZ ELŐNÉZET KIÁLLÍTÁS ELŐTT (Luca kérése): a Számlázz.hu előnézeti PDF-je
+   * új lapon. A szerver a TÁROLT vázlatból kéri, ezért előbb mentünk (ugyanúgy,
+   * mint a kiállítás); a bizonylat DRAFT marad, számot nem kap, és a PDF-et
+   * nem tároljuk. A lapot a kattintáskor, szinkron nyitjuk meg: a mentés és a
+   * letöltés után nyitott lapot a böngésző felugró ablaknak vehetné.
+   */
+  const showPreview = async () => {
+    const tab = window.open("", "_blank");
+    setPreviewing(true);
+    try {
+      const savedId = await save();
+      if (!savedId) {
+        tab?.close();
+        return;
+      }
+      const blob = await billingDocumentsApi.preview(token, savedId);
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+      else window.open(url, "_blank");
+    } catch (cause) {
+      tab?.close();
+      setSaveError(
+        cause instanceof Error
+          ? cause.message
+          : "Az előnézet nem készíthető el.",
+      );
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -545,6 +580,15 @@ export function BillingDocumentEditor({
       .catch(() => undefined);
   };
 
+  // az előnézethez nem kell a kiküldés feltétele (jog, címzett): csak a vázlat
+  const previewDisabledReason = !canIssue
+    ? "Az előnézethez billing.issue jog kell."
+    : !editable
+      ? "Csak vázlatról kérhető előnézet."
+      : missing.length > 0
+        ? "Előnézet előtt töltsd ki a hiányzó adatokat."
+        : null;
+
   const issueDisabledReason = !canIssue
     ? "A kiállításhoz billing.issue jog kell."
     : !editable
@@ -646,6 +690,12 @@ export function BillingDocumentEditor({
                   PDF letöltése
                 </PilotButton>
               </div>
+              <Link
+                href={BILLING_LIST_PATH}
+                className="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-medium text-pilot-grey-800 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+              >
+                Vissza a számlákhoz
+              </Link>
               {canIssue &&
               stornoOffered({
                 status,
@@ -791,6 +841,11 @@ export function BillingDocumentEditor({
                   : null
             }
             savedLabel={savedAt ? `Mentve ${savedAt}.` : null}
+            invoicePreview={{
+              onClick: () => void showPreview(),
+              disabledReason: previewDisabledReason,
+              busy: previewing,
+            }}
             issue={{
               onClick: () => setConfirmIssue(true),
               disabledReason: issueDisabledReason,

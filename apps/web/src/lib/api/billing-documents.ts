@@ -279,6 +279,18 @@ export const billingDocumentsApi = {
     );
   },
   /**
+   * KIÁLLÍTOTT BIZONYLAT MÁSOLÁSA ÚJ VÁZLATBA (os-szamla-masolas): minden
+   * hívás egy ÚJ vázlatot ad (a dátumok üresek, a forrás kézi); számot nem
+   * foglal és nem állít ki.
+   */
+  copy(token: string, sourceId: string) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(sourceId)}/copy`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
    * ELŐLEGSZÁMLÁBÓL VÉGSZÁMLA (számlázási brief, 3. pont, #1672): kitöltött
    * végszámla-vázlat, előlegenként egy; a második hívás ugyanazt adja.
    */
@@ -329,6 +341,22 @@ export const billingDocumentsApi = {
         body: JSON.stringify({ expectedUpdatedAt }),
       },
     );
+  },
+  /**
+   * AZ ELŐNÉZET KIÁLLÍTÁS ELŐTT: a Számlázz.hu előnézeti PDF-je a TÁROLT
+   * vázlatból. Nem állít ki, nem foglal számot, nem tárol PDF-et. Az útvonal
+   * literálként áll a `fetch` hívásban (útvonal-őr).
+   */
+  async preview(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/documents/${encodeURIComponent(id)}/preview`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: apiAuthHeaders(token, "POST"),
+      },
+    );
+    return pdfBlob(response, "Az előnézet nem készíthető el.");
   },
   update(token: string, id: string, input: BillingDocumentDraftInput) {
     return apiRequest<BillingDocumentDetail>(
