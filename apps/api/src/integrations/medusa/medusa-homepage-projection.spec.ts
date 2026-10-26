@@ -143,6 +143,55 @@ describe("homepageRecordDiffers", () => {
     assert.equal(homepageRecordDiffers(null, a), true);
   });
 
+  /*
+    THE SHOP'S OWN KEY ORDER (barracuda, #1900): the shop answers from jsonb,
+    which reorders an object's keys (shorter first). The same record must not
+    look different then, or every round writes again. Measured on the test
+    shop's answer, 2026-10-26: a slide came back as cta, cta2, text, title, ...
+  */
+  it("takes the shop's reordered keys as the same record, and still sees a real change", () => {
+    const wanted = homepageRecord(
+      content({
+        slides: [slide],
+        footer: {
+          intro: "<p>x</p>",
+          columns: [
+            { title: "Bolt", links: [{ label: "A", href: "/hu/store" }] },
+          ],
+          social: { facebook: null, instagram: null, youtube: null },
+          bottomText: "©",
+        },
+      }),
+    );
+    const reorder = (o: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(o).sort(
+          ([a], [b]) => a.length - b.length || (a < b ? -1 : 1),
+        ),
+      );
+    const asJsonb = {
+      ...wanted,
+      slides: wanted.slides!.map((s) => reorder(s as never)),
+      footer: reorder({
+        ...wanted.footer!,
+        social: reorder(wanted.footer!.social as never),
+      } as never),
+    } as unknown as MedusaHomepageContentRecord;
+    assert.notEqual(JSON.stringify(asJsonb), JSON.stringify(wanted));
+    assert.equal(homepageRecordDiffers(asJsonb, wanted), false);
+    const changed = {
+      ...asJsonb,
+      footer: { ...wanted.footer!, bottom_text: "más" },
+    };
+    assert.equal(homepageRecordDiffers(changed, wanted), true);
+    // an array's order is content: a swapped column list differs
+    const twoSlides = homepageRecord(
+      content({ slides: [slide, { ...slide, title: "2" }] }),
+    );
+    const swapped = { ...twoSlides, slides: [...twoSlides.slides!].reverse() };
+    assert.equal(homepageRecordDiffers(swapped, twoSlides), true);
+  });
+
   it("sees a changed block order or footer, and takes a never-sent one as not set", () => {
     const withBlocks = homepageRecord(
       content({ blocks: [{ key: "hero", visible: true }] as never }),
