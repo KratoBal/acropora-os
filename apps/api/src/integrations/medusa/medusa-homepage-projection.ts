@@ -195,6 +195,13 @@ export const prismaHomepageSource: HomepageSource = {
       where: { key: MAIN_HOMEPAGE_KEY },
     });
     if (!row) return null;
+    /*
+      THE BLOCKS AND THE FOOTER ARE NOT SENT (2026-10-26). The commerce
+      validator (#555) refuses the WHOLE record on an unknown key, so sending
+      them before the storefront accepts them would stop the texts and the
+      slides too. The next OS change turns them on once the commerce side
+      (murena, test storefront only) is in.
+    */
     const { texts, slides } = toHomepageContent(row);
     return { texts, slides };
   },

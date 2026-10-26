@@ -1714,6 +1714,13 @@ model HomepageContent {
   key               String   @unique
   texts             Json
   slides            Json?
+  /// A kezdolap blokkjainak sorrendje es lathatosaga (Balazs, 2026-10-26):
+  /// `[{ key, visible }]`, minden blokk pontosan egyszer. NULL: a kirakat sajat
+  /// sorrendje, minden blokk latszik.
+  blocks            Json?
+  /// A lablec (Balazs, 2026-10-26): bemutatkozas (teljes profilu HTML),
+  /// link-oszlopok, kozossegi linkek, also sor. NULL: a kirakat sajat lablece.
+  footer            Json?
   /// Az adminisztrator kapcsoloja: kuldjuk-e a tartalmat a webshopba (es
   /// toltheto-e fel kep). Alapbol ki; a kornyezeti valtozo hianya nem tiltja.
   projectionEnabled Boolean  @default(false)

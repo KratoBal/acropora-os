@@ -37,6 +37,8 @@ function setup(
           key: "main",
           texts: {},
           slides: null,
+          blocks: null,
+          footer: null,
           projectionEnabled: true,
           updatedAt: new Date("2026-10-20T11:00:00Z"),
         };
@@ -50,6 +52,11 @@ function setup(
         key,
         texts: input.texts,
         slides: input.slides,
+        // like the repository: an absent field is not written
+        blocks:
+          input.blocks !== undefined ? input.blocks : (row?.blocks ?? null),
+        footer:
+          input.footer !== undefined ? input.footer : (row?.footer ?? null),
         projectionEnabled: row?.projectionEnabled ?? false,
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
@@ -76,6 +83,8 @@ function setup(
         key,
         texts: row?.texts ?? {},
         slides: row?.slides ?? null,
+        blocks: row?.blocks ?? null,
+        footer: row?.footer ?? null,
         projectionEnabled: enabled,
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
@@ -104,6 +113,9 @@ describe("HomepageContentService", () => {
     assert.deepEqual(await service.get(), {
       texts: {},
       slides: null,
+      blocks: null,
+      footer: null,
+      imageHosts: [],
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed: true,
@@ -234,6 +246,167 @@ describe("HomepageContentService", () => {
       service.setProjection("igen", "admin"),
       BadRequestException,
     );
+  });
+});
+
+/*
+  THE BLOCKS AND THE FOOTER (2026-10-26). What turns these red: a save without
+  the field wiping a stored list (today's editor does not send it); a footer
+  intro stored with script or an event attribute (the storefront draws it as
+  HTML on every page); a hand-edited row that lost a block hiding it.
+*/
+describe("HomepageContentService: blocks and footer", () => {
+  const blocks = [
+    { key: "boltunk", visible: true },
+    { key: "hero", visible: true },
+    { key: "mit-keresel", visible: false },
+    { key: "kezdo-es-halado", visible: true },
+    { key: "egyedi-korallok", visible: true },
+    { key: "szolgaltatasok", visible: true },
+    { key: "markak", visible: true },
+    { key: "velemenyek", visible: true },
+  ];
+  const footer = (intro: string) => ({
+    intro,
+    columns: [
+      { title: "Oldaltérkép", links: [{ label: "Termékek", href: "/store" }] },
+    ],
+    social: {
+      facebook: "https://facebook.com/acropora",
+      instagram: null,
+      youtube: null,
+    },
+    bottomText: "© Acropora Kft.",
+  });
+
+  it("stores the blocks, and a later save without them keeps them", async () => {
+    const { service } = setup(async () => "sent");
+    await service.save({ texts: {}, slides: null, blocks }, "u-1");
+    const out = await service.save(
+      { texts: { "mit.cim": "Új" }, slides: null },
+      "u-1",
+    );
+    assert.deepEqual(out.content.blocks, blocks);
+    const reset = await service.save(
+      { texts: {}, slides: null, blocks: null },
+      "u-1",
+    );
+    assert.equal(reset.content.blocks, null);
+  });
+
+  it("stores the footer intro through the full-profile sanitizer", async () => {
+    const { service, saved } = setup(async () => "sent");
+    const out = await service.save(
+      {
+        texts: {},
+        slides: null,
+        footer: footer(
+          '<p onclick="x()">Zátony<script>alert(1)</script></p><iframe srcdoc="x"></iframe><table><tbody><tr><td><p>H-P</p></td></tr></tbody></table>',
+        ),
+      },
+      "u-1",
+    );
+    const clean =
+      "<p>Zátony</p><table><tbody><tr><td><p>H-P</p></td></tr></tbody></table>";
+    assert.equal(saved[0]?.input.footer?.intro, clean);
+    assert.equal(out.content.footer?.intro, clean);
+    assert.equal(out.content.footer?.columns[0]?.links[0]?.href, "/store");
+  });
+
+  it("keeps only the environment's image hosts in the footer intro, and tells the editor the list", async () => {
+    const { service } = setup(async () => "sent", {
+      env: {
+        ...ALLOWED,
+        RICH_TEXT_IMAGE_HOSTS:
+          " Static.Acropora.hu, nem host, static.acropora.hu ",
+      },
+    });
+    const out = await service.save(
+      {
+        texts: {},
+        slides: null,
+        footer: footer(
+          '<p><img src="https://static.acropora.hu/a.jpg"><img src="https://tracker.example/p.gif"></p>',
+        ),
+      },
+      "u-1",
+    );
+    assert.equal(
+      out.content.footer?.intro,
+      '<p><img src="https://static.acropora.hu/a.jpg"></p>',
+    );
+    assert.deepEqual(out.content.imageHosts, ["static.acropora.hu"]);
+  });
+
+  it("without the variable no footer image is stored", async () => {
+    const { service } = setup(async () => "sent");
+    const out = await service.save(
+      {
+        texts: {},
+        slides: null,
+        footer: footer('<p>a<img src="https://static.acropora.hu/a.jpg"></p>'),
+      },
+      "u-1",
+    );
+    assert.equal(out.content.footer?.intro, "<p>a</p>");
+    assert.deepEqual(out.content.imageHosts, []);
+  });
+
+  it("measures the intro limit after cleaning, so a stored footer always reads back", async () => {
+    const { service, saved } = setup(async () => "sent");
+    await assert.rejects(
+      service.save(
+        {
+          texts: {},
+          slides: null,
+          footer: footer(`<p>${"<".repeat(3990)}</p>`),
+        },
+        "u-1",
+      ),
+      BadRequestException,
+    );
+    assert.equal(saved.length, 0);
+  });
+
+  it("sanitizes a hand-written stored intro again on read", () => {
+    const content = toHomepageContent(
+      {
+        key: "main",
+        texts: {},
+        slides: null,
+        blocks: null,
+        footer: footer('<p onclick="x()">a<script>1</script></p>'),
+        projectionEnabled: false,
+        updatedAt: new Date("2026-10-26T09:00:00Z"),
+      },
+      false,
+      [],
+    );
+    assert.equal(content.footer?.intro, "<p>a</p>");
+  });
+
+  it("refuses an incomplete block list before the store", async () => {
+    const { service, saved } = setup(async () => "sent");
+    await assert.rejects(
+      service.save({ texts: {}, slides: null, blocks: blocks.slice(1) }, "u-1"),
+      BadRequestException,
+    );
+    assert.equal(saved.length, 0);
+  });
+
+  it("reads a hand-edited row that lost a block, or a broken footer, as not set", () => {
+    const row = {
+      key: "main",
+      texts: {},
+      slides: null,
+      blocks: blocks.slice(1),
+      footer: { intro: 5 },
+      projectionEnabled: false,
+      updatedAt: new Date("2026-10-26T09:00:00Z"),
+    } as unknown as HomepageContentRow;
+    const content = toHomepageContent(row);
+    assert.equal(content.blocks, null);
+    assert.equal(content.footer, null);
   });
 });
 

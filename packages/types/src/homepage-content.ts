@@ -1037,12 +1037,88 @@ export interface HomepageSlide {
   imageAlt: string;
 }
 
+/**
+ * THE HOME PAGE BLOCKS, in the order the storefront draws them today
+ * (acropora-commerce 913e882, `app/[countryCode]/(kezdolap)/page.tsx`).
+ * Balázs, 2026-10-26 07:50 UTC (msg 1564184455143235585): the admin decides
+ * which blocks show and in what order. "kezdo-es-halado" is ONE block because
+ * the storefront draws the beginner and the advanced band in one component.
+ */
+export const HOMEPAGE_BLOCK_KEYS = [
+  "hero",
+  "mit-keresel",
+  "kezdo-es-halado",
+  "egyedi-korallok",
+  "szolgaltatasok",
+  "markak",
+  "velemenyek",
+  "boltunk",
+] as const;
+export type HomepageBlockKey = (typeof HOMEPAGE_BLOCK_KEYS)[number];
+
+/** One block of the page: shown or hidden. The list order is the page order. */
+export interface HomepageBlock {
+  key: HomepageBlockKey;
+  visible: boolean;
+}
+
+export interface HomepageFooterLink {
+  label: string;
+  href: string;
+}
+
+export interface HomepageFooterColumn {
+  title: string;
+  links: HomepageFooterLink[];
+}
+
+/**
+ * THE FOOTER (Balázs, 2026-10-26 07:52 UTC, msg 1564184987555729468): edited
+ * in the home page admin, shown on every storefront page (murena,
+ * `commerce-fejlec-lablec-aloldalak`).
+ *
+ * WHAT IS NOT HERE, ON PURPOSE:
+ *   contact, opening hours   they come from the "A boltunk" texts, so the page
+ *                            never shows two different addresses
+ *   legal documents          the storefront always adds them (a legal duty,
+ *                            not an editorial choice)
+ *
+ * `intro` is rich text in the shared sanitizer's `full` profile; the API
+ * sanitizes it on save (this package does not depend on the sanitizer).
+ */
+export interface HomepageFooter {
+  intro: string;
+  columns: HomepageFooterColumn[];
+  social: {
+    facebook: string | null;
+    instagram: string | null;
+    youtube: string | null;
+  };
+  bottomText: string;
+}
+
 export interface HomepageContentInput {
   texts: Record<string, string>;
   slides: HomepageSlide[] | null;
+  /**
+   * `null`: not set, the storefront's own order with every block shown. A list
+   * names EVERY block exactly once. ABSENT in a save means "leave it as it is",
+   * so an editor that does not know the field cannot wipe it.
+   */
+  blocks?: HomepageBlock[] | null;
+  /** `null`: the storefront's own footer. Absent in a save: unchanged. */
+  footer?: HomepageFooter | null;
 }
 
 export interface HomepageContent extends HomepageContentInput {
+  blocks: HomepageBlock[] | null;
+  footer: HomepageFooter | null;
+  /**
+   * The image hosts a full-profile text may show (`RICH_TEXT_IMAGE_HOSTS`):
+   * the editor and the preview get the SAME list the save uses, so the preview
+   * never shows an image the save would drop (barracuda, #1877).
+   */
+  imageHosts: string[];
   updatedAt: string | null;
   /**
    * The administrator's switch in the editor: send the content to the web shop
@@ -1071,6 +1147,11 @@ export const HOMEPAGE_LIMITS = {
   address: 1000,
   href: 300,
   imageAlt: 300,
+  footerIntro: 4000,
+  footerColumns: 4,
+  footerLinks: 12,
+  footerLabel: 100,
+  footerBottomText: 300,
 } as const;
 
 /**
@@ -1193,6 +1274,164 @@ function parseSlide(
   };
 }
 
+/** Every block exactly once, nothing else; the list order is the page order. */
+function parseBlocks(
+  value: unknown,
+):
+  { ok: true; value: HomepageBlock[] | null } | { ok: false; message: string } {
+  if (value === null) return { ok: true, value: null };
+  if (!Array.isArray(value))
+    return { ok: false, message: "blocks: null or a list" };
+  const blocks: HomepageBlock[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of value.entries()) {
+    const where = `blocks[${index}]`;
+    if (!isRecord(raw)) return { ok: false, message: `${where}: an object` };
+    const stray = Object.keys(raw).find(
+      (key) => key !== "key" && key !== "visible",
+    );
+    if (stray)
+      return { ok: false, message: `${where}: unknown field ${stray}` };
+    const key = raw.key;
+    if (
+      typeof key !== "string" ||
+      !(HOMEPAGE_BLOCK_KEYS as readonly string[]).includes(key)
+    )
+      return { ok: false, message: `${where}: unknown block` };
+    if (seen.has(key))
+      return { ok: false, message: `${where}: ${key} is listed twice` };
+    if (typeof raw.visible !== "boolean")
+      return { ok: false, message: `${where}: visible is true or false` };
+    seen.add(key);
+    blocks.push({ key: key as HomepageBlockKey, visible: raw.visible });
+  }
+  const missing = HOMEPAGE_BLOCK_KEYS.find((key) => !seen.has(key));
+  if (missing) return { ok: false, message: `blocks: ${missing} is missing` };
+  return { ok: true, value: blocks };
+}
+
+const optionalExternal = (v: unknown): string | null | false => {
+  if (v === null || v === undefined || v === "") return null;
+  return typeof v === "string" &&
+    v.length <= HOMEPAGE_LIMITS.href &&
+    EXTERNAL.test(v)
+    ? v
+    : false;
+};
+
+function parseFooter(
+  value: unknown,
+): { ok: true; value: HomepageFooter | null } | { ok: false; message: string } {
+  if (value === null) return { ok: true, value: null };
+  if (!isRecord(value))
+    return { ok: false, message: "footer: null or an object" };
+  const stray = Object.keys(value).find(
+    (key) => !["intro", "columns", "social", "bottomText"].includes(key),
+  );
+  if (stray) return { ok: false, message: `footer: unknown field ${stray}` };
+  const { intro, columns, social, bottomText } = value;
+  if (typeof intro !== "string" || intro.length > HOMEPAGE_LIMITS.footerIntro)
+    return {
+      ok: false,
+      message: `footer.intro: a string, at most ${HOMEPAGE_LIMITS.footerIntro} characters`,
+    };
+  if (
+    typeof bottomText !== "string" ||
+    bottomText.length > HOMEPAGE_LIMITS.footerBottomText
+  )
+    return {
+      ok: false,
+      message: `footer.bottomText: a string, at most ${HOMEPAGE_LIMITS.footerBottomText} characters`,
+    };
+  if (!Array.isArray(columns) || columns.length > HOMEPAGE_LIMITS.footerColumns)
+    return {
+      ok: false,
+      message: `footer.columns: a list, at most ${HOMEPAGE_LIMITS.footerColumns}`,
+    };
+  const parsedColumns: HomepageFooterColumn[] = [];
+  for (const [index, column] of columns.entries()) {
+    const where = `footer.columns[${index}]`;
+    if (!isRecord(column)) return { ok: false, message: `${where}: an object` };
+    const strayColumn = Object.keys(column).find(
+      (key) => key !== "title" && key !== "links",
+    );
+    if (strayColumn)
+      return { ok: false, message: `${where}: unknown field ${strayColumn}` };
+    if (
+      typeof column.title !== "string" ||
+      !column.title.trim() ||
+      column.title.length > HOMEPAGE_LIMITS.footerLabel
+    )
+      // non-empty, like the commerce validator (#564, barracuda 36073)
+      return {
+        ok: false,
+        message: `${where}.title: a short, non-empty string`,
+      };
+    if (
+      !Array.isArray(column.links) ||
+      column.links.length > HOMEPAGE_LIMITS.footerLinks
+    )
+      return {
+        ok: false,
+        message: `${where}.links: a list, at most ${HOMEPAGE_LIMITS.footerLinks}`,
+      };
+    const links: HomepageFooterLink[] = [];
+    for (const [linkIndex, link] of column.links.entries()) {
+      const at = `${where}.links[${linkIndex}]`;
+      if (
+        !isRecord(link) ||
+        Object.keys(link).some((key) => key !== "label" && key !== "href")
+      )
+        return { ok: false, message: `${at}: { label, href }` };
+      if (
+        typeof link.label !== "string" ||
+        !link.label.trim() ||
+        link.label.length > HOMEPAGE_LIMITS.footerLabel
+      )
+        return { ok: false, message: `${at}.label: a short, non-empty string` };
+      if (
+        typeof link.href !== "string" ||
+        !link.href ||
+        link.href.length > HOMEPAGE_LIMITS.href ||
+        !isSafeHomepageAddress(link.href)
+      )
+        return {
+          ok: false,
+          message: `${at}.href: a shop path (/store) or an http(s) address`,
+        };
+      links.push({ label: link.label, href: link.href });
+    }
+    parsedColumns.push({ title: column.title, links });
+  }
+  if (!isRecord(social))
+    return { ok: false, message: "footer.social: an object" };
+  const straySocial = Object.keys(social).find(
+    (key) => !["facebook", "instagram", "youtube"].includes(key),
+  );
+  if (straySocial)
+    return {
+      ok: false,
+      message: `footer.social: unknown field ${straySocial}`,
+    };
+  const facebook = optionalExternal(social.facebook);
+  const instagram = optionalExternal(social.instagram);
+  const youtube = optionalExternal(social.youtube);
+  if (facebook === false || instagram === false || youtube === false)
+    return {
+      ok: false,
+      message: "footer.social: every link is an http(s) address or empty",
+    };
+  return {
+    ok: true,
+    value: {
+      intro,
+      columns: parsedColumns,
+      social: { facebook, instagram, youtube },
+      bottomText,
+    },
+  };
+}
+
 /**
  * The editor's save. Strict, like the shop's validator: a key that is not in
  * the catalogue, a link or image that is not a shop path or http(s), a sixth
@@ -1203,7 +1442,7 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
   if (!isRecord(body))
     return { ok: false, message: "the content is an object" };
   const stray = Object.keys(body).find(
-    (key) => key !== "texts" && key !== "slides",
+    (key) => !["texts", "slides", "blocks", "footer"].includes(key),
   );
   if (stray) return { ok: false, message: `unknown field ${stray}` };
   if (!isRecord(body.texts)) return { ok: false, message: "texts: an object" };
@@ -1230,7 +1469,20 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
       };
     texts[key] = value;
   }
-  if (body.slides === null) return { ok: true, value: { texts, slides: null } };
+  /* ABSENT blocks / footer: the save leaves the stored value as it is. */
+  const extra: Pick<HomepageContentInput, "blocks" | "footer"> = {};
+  if ("blocks" in body) {
+    const blocks = parseBlocks(body.blocks);
+    if (!blocks.ok) return blocks;
+    extra.blocks = blocks.value;
+  }
+  if ("footer" in body) {
+    const footer = parseFooter(body.footer);
+    if (!footer.ok) return footer;
+    extra.footer = footer.value;
+  }
+  if (body.slides === null)
+    return { ok: true, value: { texts, slides: null, ...extra } };
   if (!Array.isArray(body.slides))
     return { ok: false, message: "slides: null or a list" };
   if (body.slides.length > HOMEPAGE_LIMITS.slides)
@@ -1244,5 +1496,5 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
     if (!parsed.ok) return parsed;
     slides.push(parsed.value);
   }
-  return { ok: true, value: { texts, slides } };
+  return { ok: true, value: { texts, slides, ...extra } };
 }
