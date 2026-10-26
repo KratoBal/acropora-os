@@ -169,7 +169,8 @@ describe("the classifier markers still stand in the services", () => {
       "válasza nem érkezett meg (",
       "nem mondta meg egyértelműen",
       "a rögzítése nálunk nem sikerült",
-      "A Számlázz.hu kiállította a(z)",
+      // the number is read out of these two whole sentences (numberInNote): the part after it is pinned too
+      "A Számlázz.hu kiállította a(z) ${response.invoiceNumber} bizonylatot, de a rögzítése nálunk nem sikerült",
     ])
       assert.ok(issue.includes(marker), marker);
   });
@@ -177,7 +178,7 @@ describe("the classifier markers still stand in the services", () => {
   it("the preview service writes the stray note", () => {
     assert.ok(
       preview.includes(
-        "Egy előnézet-kérés valódi bizonylatot hozott létre a Számlázz.hu-n:",
+        "Egy előnézet-kérés valódi bizonylatot hozott létre a Számlázz.hu-n: ${response.invoiceNumber}. Ellenőrizd",
       ),
     );
   });
