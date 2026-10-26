@@ -96,6 +96,21 @@ export class HomepageContentController {
     return this.content.setFeatured(productId, body?.featured, user.id);
   }
 
+  /**
+   * The band's new order: exactly the marked products, the first is the large
+   * card. Its own path, not `featured/order`, which `featured/:productId`
+   * would read as a product id.
+   */
+  @Put("featured-order")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
+  orderFeatured(
+    @Body() body: { productIds?: unknown },
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    this.requireHomepage();
+    return this.content.orderFeatured(body?.productIds, user.id);
+  }
+
   /** One image for an image field or a slide; the answer is its public address. */
   @Post("images")
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)

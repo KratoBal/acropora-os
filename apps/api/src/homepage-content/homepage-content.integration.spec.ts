@@ -126,6 +126,27 @@ describe(
       );
     });
 
+    it("HOMEPAGE-INT-REORDER: the band takes the new order, and a list that is not the marked set changes nothing", async () => {
+      const before = (await repo.featuredList()).map((row) => row.productId);
+      assert.ok(before.length >= 2);
+      const reversed = [...before].reverse();
+      assert.equal(await repo.orderFeatured(reversed, userId), "ok");
+      assert.deepEqual(
+        (await repo.featuredList()).map((row) => row.productId),
+        reversed,
+      );
+      assert.equal(
+        await repo.orderFeatured(reversed.slice(1), userId),
+        "mismatch",
+      );
+      assert.deepEqual(
+        (await repo.featuredList()).map((row) => row.productId),
+        reversed,
+      );
+      const first = (await repo.featuredList())[0];
+      assert.ok(first && "imageUrl" in first && "grossPrice" in first);
+    });
+
     it("HOMEPAGE-INT-UNKNOWN: an unknown product is refused, and deleting a product removes its marker", async () => {
       assert.equal(
         await repo.setFeatured(

@@ -6,6 +6,9 @@ export interface HomepageFeaturedProduct {
   productId: string;
   name: string;
   sortOrder: number;
+  /** The product's first image and its list price (UNAS mirror), from the product itself. */
+  imageUrl: string | null;
+  grossPrice: string | null;
 }
 
 /** What a save answers: the stored content, and what happened to the shop projection. */
@@ -37,6 +40,17 @@ export const homepageContentApi = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ featured }),
+    });
+  },
+  /** The band's new order: exactly the marked products, the first is the large card. */
+  orderFeatured(token: string, productIds: readonly string[]) {
+    return apiRequest<{
+      list: HomepageFeaturedProduct[];
+      projection: HomepageContentSaved["projection"];
+    }>("/homepage-content/featured-order", token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productIds }),
     });
   },
   /** The administrator's switch: send the content to the shop and allow uploads. */
