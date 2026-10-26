@@ -11,7 +11,7 @@ import {
   type BillingDocumentDetail,
   type Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BillingDocumentEditor } from "./billing-document-editor";
 import {
@@ -45,6 +45,7 @@ const api = vi.hoisted(() => ({
   update: vi.fn(),
   detail: vi.fn(),
   issue: vi.fn(),
+  preview: vi.fn(),
   email: vi.fn(),
   pdf: vi.fn(),
   emailDraft: vi.fn(),
@@ -143,6 +144,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(async (_token, id, body) => detailFrom(body, id));
   api.issue.mockReset();
+  api.preview.mockReset();
   api.email.mockReset();
   api.pdf.mockReset();
   api.storno.mockReset();
@@ -626,6 +628,89 @@ describe("BillingDocumentEditor", () => {
     expect(
       within(reopened).getByTitle("Levél előnézete").getAttribute("srcdoc"),
     ).toMatch(/<p>Szia,<span[^>]*>Fővárosi Állat- és Növénykert<\/span><\/p>/);
+  });
+
+  /*
+    AZ ELŐNÉZET KIÁLLÍTÁS ELŐTT (os-szamla-elonezet). MI PIROSÍT: ha a gomb
+    kiállítást indítana vagy megerősítést kérne; ha a mentés nélkül (a régi
+    vázlatból) kérne előnézetet; ha a PDF nem a megnyitott lapra kerülne; ha
+    egy hiba után nyitva maradna az üres lap, vagy a hiba nem látszana; ha
+    hiányos adattal nyomható lenne.
+  */
+  describe("invoice preview", () => {
+    const tab = { location: { href: "" }, close: vi.fn() };
+    beforeEach(() => {
+      tab.location.href = "";
+      tab.close.mockReset();
+      vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+      URL.createObjectURL = vi.fn(() => "blob:elonezet");
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    async function readyDraft() {
+      render(<BillingDocumentEditor />);
+      fireEvent.click(radio("Papír alapú"));
+      await pickPartner();
+      addLine("Munkadíj", "1", "280000");
+    }
+
+    it("is disabled until the data is complete, and says why", () => {
+      render(<BillingDocumentEditor />);
+      // az élő előnézetnek nem biztos, hogy van MINTA felirata: a gomb mellett áll, hogy nem számla
+      expect(
+        screen.getByText(/nem számla, számot nem kap, és nem tárolódik/),
+      ).toBeInTheDocument();
+      const button = screen.getByRole("button", { name: "Előnézet" });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute(
+        "title",
+        "Előnézet előtt töltsd ki a hiányzó adatokat.",
+      );
+    });
+
+    it("saves the draft, asks the server for the preview of the saved id and opens it in the tab, without issuing", async () => {
+      api.preview.mockResolvedValue(new Blob(["%PDF"]));
+      await readyDraft();
+      fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
+      await waitFor(() => expect(api.preview).toHaveBeenCalledTimes(1));
+      const [, created] = api.create.mock.calls[0]!;
+      expect(api.preview).toHaveBeenCalledWith("token-1", created.id);
+      expect(api.create.mock.invocationCallOrder[0]!).toBeLessThan(
+        api.preview.mock.invocationCallOrder[0]!,
+      );
+      await waitFor(() => expect(tab.location.href).toBe("blob:elonezet"));
+      // nem kiállítás: se megerősítés, se hívás, a bizonylat vázlat marad
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(api.issue).not.toHaveBeenCalled();
+      expect(screen.queryByText(/^Kiállítva:/)).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Számla kiállítása" }),
+      ).toBeEnabled();
+    });
+
+    it("shows the server's sentence and closes the empty tab when the preview fails", async () => {
+      api.preview.mockRejectedValue(
+        new Error("Az előnézet ezen a szerveren nincs bekapcsolva."),
+      );
+      await readyDraft();
+      fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Az előnézet ezen a szerveren nincs bekapcsolva.",
+      );
+      expect(tab.close).toHaveBeenCalledTimes(1);
+      expect(tab.location.href).toBe("");
+    });
+
+    it("asks for no preview when the save fails", async () => {
+      api.create.mockRejectedValue(new Error("A mentés nem sikerült."));
+      await readyDraft();
+      fireEvent.click(screen.getByRole("button", { name: "Előnézet" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "A mentés nem sikerült.",
+      );
+      expect(api.preview).not.toHaveBeenCalled();
+      expect(tab.close).toHaveBeenCalledTimes(1);
+    });
   });
 
   /*
