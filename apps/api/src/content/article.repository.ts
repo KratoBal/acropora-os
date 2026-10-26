@@ -234,12 +234,17 @@ export class ArticleRepository {
   }
 
   /**
-   * The TAXON entries an article can link to, one per key: the latest version
-   * of each (a key's forms can change between versions), ordered by key.
+   * The TAXON entries an article can link to, one per key: the latest APPROVED
+   * version of each (a key's forms can change between versions), ordered by key.
+   *
+   * ONLY APPROVED (barracuda, #1896 review; acrobot 36330): the vocabulary's
+   * versions are approved by Balázs, so a draft key is not yet a word of the
+   * vocabulary, and an article linked to it would point at nothing once the
+   * draft is dropped (ArticleTaxon is deliberately no foreign key).
    */
   async taxonOptions(): Promise<ArticleTaxonOption[]> {
     const rows = await prisma.knowledgeVocabularyEntry.findMany({
-      where: { kind: "TAXON" },
+      where: { kind: "TAXON", status: "APPROVED" },
       select: { key: true, rank: true, forms: true, version: true },
       orderBy: [{ key: "asc" }, { version: "desc" }],
     });
@@ -257,11 +262,11 @@ export class ArticleRepository {
     return options;
   }
 
-  /** Which of these keys are TAXON keys of the knowledge base vocabulary. */
+  /** Which of these keys are APPROVED TAXON keys of the knowledge base vocabulary. */
   async knownTaxonKeys(keys: readonly string[]): Promise<Set<string>> {
     if (!keys.length) return new Set();
     const rows = await prisma.knowledgeVocabularyEntry.findMany({
-      where: { kind: "TAXON", key: { in: [...keys] } },
+      where: { kind: "TAXON", status: "APPROVED", key: { in: [...keys] } },
       select: { key: true },
       distinct: ["key"],
     });

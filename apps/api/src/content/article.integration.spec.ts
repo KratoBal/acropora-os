@@ -248,7 +248,7 @@ describe(
       );
     });
 
-    it("ARTICLE-INT-TAXA: the editor's taxon options are one per key, from its latest version", async () => {
+    it("ARTICLE-INT-TAXA: the editor's taxon options are the approved keys, one per key, from the latest approved version", async () => {
       await prisma.knowledgeVocabularyEntry.createMany({
         data: [
           {
@@ -257,6 +257,7 @@ describe(
             forms: ["régi"],
             version: 1,
             rank: "GENUS",
+            status: "APPROVED",
           },
           {
             kind: "TAXON",
@@ -264,13 +265,45 @@ describe(
             forms: ["", "Új alak"],
             version: 2,
             rank: "GENUS",
+            status: "APPROVED",
           },
-          { kind: "TAXON", key: `${taxonKey}_B`, forms: [], version: 1 },
+          // a newer draft does not replace the approved form
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_A`,
+            forms: ["vázlat"],
+            version: 3,
+            rank: "GENUS",
+            status: "DRAFT",
+          },
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_B`,
+            forms: [],
+            version: 1,
+            status: "APPROVED",
+          },
+          // a key that exists only as a draft is not offered
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_D`,
+            forms: ["csak vázlat"],
+            version: 1,
+            status: "DRAFT",
+          },
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_R`,
+            forms: ["kivont"],
+            version: 1,
+            status: "RETIRED",
+          },
           {
             kind: "EFFECT",
             key: `${taxonKey}_C`,
             forms: ["hatás"],
             version: 1,
+            status: "APPROVED",
           },
         ] as never,
       });
@@ -281,6 +314,18 @@ describe(
         { key: `${taxonKey}_A`, rank: "GENUS", label: "Új alak" },
         { key: `${taxonKey}_B`, rank: null, label: `${taxonKey}_B` },
       ]);
+      // and the save's check takes the same set
+      assert.deepEqual(
+        [
+          ...(await articles.knownTaxonKeys([
+            `${taxonKey}_A`,
+            `${taxonKey}_D`,
+            `${taxonKey}_R`,
+            `${taxonKey}_C`,
+          ])),
+        ],
+        [`${taxonKey}_A`],
+      );
     });
   },
 );
