@@ -31,6 +31,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { IncomingAssignDocumentDto } from "./dto/incoming-assign-document.dto.js";
+import { IncomingNotBookableDto } from "./dto/incoming-not-bookable.dto.js";
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
@@ -39,6 +40,10 @@ import {
   attachedPdfIds,
   attachIncomingPdf,
 } from "./incoming-pdf-attach.js";
+import {
+  IncomingRowNotFoundError,
+  setIncomingNotBookable,
+} from "./incoming-not-bookable.js";
 import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
@@ -319,6 +324,44 @@ export class IncomingBillingDocumentsController {
         attached.has(row.id) ||
         collectedPdfIds(row, collected).length > 0,
     });
+    return this.detail(row.id);
+  }
+
+  /**
+   * „NEM KÖNYVELENDŐ” be- vagy kikapcsolása (Balázs, 2026-10-26): kézi,
+   * egyenkénti jelölés, a `finance.manage` jogával (mint a többi bejövő
+   * írás). Csak a táblába írt soron lehet; a `mailbox:` és `purchase:`
+   * előtagú, még jóvá nem hagyott sor 404. Lásd `setIncomingNotBookable`.
+   */
+  @Post("incoming-documents/:id/not-bookable")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async setNotBookable(
+    @Param("id") id: string,
+    @Body() input: IncomingNotBookableDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentDetail> {
+    const row = await this.database.incomingBillingDocument.findUnique({
+      where: { id },
+      select: { id: true, sourceDocumentId: true },
+    });
+    if (!row) throw new NotFoundException("Nincs ilyen bejövő számla.");
+    const pairings = await this.missing.documentPairings();
+    const pairedDebits = row.sourceDocumentId
+      ? (pairings.get(row.sourceDocumentId)?.debits.length ?? 0)
+      : 0;
+    try {
+      await setIncomingNotBookable(this.database, {
+        rowId: row.id,
+        notBookable: input.notBookable,
+        userId: user.id,
+        pairedDebits,
+      });
+    } catch (error) {
+      if (error instanceof IncomingRowNotFoundError)
+        throw new NotFoundException(error.message);
+      throw error;
+    }
     return this.detail(row.id);
   }
 

@@ -2,7 +2,6 @@
 import {
   Alert,
   PilotButton,
-  PilotCallout,
   PilotCard,
   PilotDialog,
   PilotThemeRoot,
@@ -26,7 +25,6 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   homepageContentApi,
   type HomepageContentSaved,
-  type HomepageFeaturedProduct,
 } from "@/lib/api/homepage-content";
 
 import {
@@ -44,6 +42,7 @@ import {
   TextField,
   type ImageUploadControl,
 } from "./homepage-fields";
+import { HomepageFeaturedEditor } from "./homepage-featured-editor";
 import { HomepageFooterEditor } from "./homepage-footer-editor";
 import { HomepagePreview } from "./homepage-preview";
 import { previewRecord } from "./homepage-preview-protocol";
@@ -444,7 +443,10 @@ export function HomepageContentEditorPage() {
               render={fieldsOf}
             />
           ) : selected === "egyedi-korallok" ? (
-            <FeaturedList token={token} />
+            <HomepageFeaturedEditor
+              token={token}
+              onProjection={(projection) => setStatus(SAVE_TEXT[projection])}
+            />
           ) : (
             blockMeta(selected).groups.map(fieldsOf)
           )}
@@ -527,56 +529,6 @@ function TabbedGroups({
         ))}
       </div>
       {render(active)}
-    </div>
-  );
-}
-
-/**
- * "Egyedi korallok": the products marked for the band, in their order. The
- * marking itself is on the product page today; search, order and removal come
- * here in the next change (2b-2).
- */
-function FeaturedList({ token }: { token: string }) {
-  const [list, setList] = useState<HomepageFeaturedProduct[] | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    homepageContentApi
-      .featured(token, controller.signal)
-      .then(setList)
-      .catch(() => setList([]));
-    return () => controller.abort();
-  }, [token]);
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-pilot-grey-600">
-        Legfeljebb 12 termék; az első a „Nagy kártya”.
-      </p>
-      {list === null ? (
-        <Skeleton className="h-20" />
-      ) : list.length === 0 ? (
-        <PilotCallout
-          tone="aqua"
-          title="Nincs kijelölt termék."
-          description="A termékeket ma a termék lapján jelölöd a kezdőlapra."
-        />
-      ) : (
-        <ol className="space-y-2">
-          {list.map((product, index) => (
-            <li
-              key={product.productId}
-              className="flex items-center gap-3 rounded-lg bg-pilot-grey-50 p-3 text-sm ring-1 ring-pilot-grey-200"
-            >
-              <span className="font-semibold text-pilot-aqua-700">
-                {index + 1}.
-              </span>
-              <span className="flex-1 text-pilot-grey-900">{product.name}</span>
-              {index === 0 ? (
-                <span className="text-xs text-pilot-grey-500">Nagy kártya</span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      )}
     </div>
   );
 }

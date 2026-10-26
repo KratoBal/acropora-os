@@ -61,6 +61,14 @@ export interface HomepageFeaturedRow {
   productId: string;
   name: string;
   sortOrder: number;
+  /**
+   * The product's first image and its list price, from the product itself
+   * (the same fields the product list shows), never a copy kept by hand
+   * (Balázs's brief, 2026-10-26, 4. pont). `grossPrice`: the UNAS mirror's
+   * gross price, `null` without one.
+   */
+  imageUrl: string | null;
+  grossPrice: string | null;
 }
 
 /** The only record today; another key would be another home page variant. */
@@ -96,6 +104,15 @@ export interface HomepageContentStore {
     userId: string,
     max: number,
   ): Promise<"ok" | "unknown-product" | "full">;
+  /**
+   * The band's new order. `mismatch`: the list is not exactly the marked
+   * products (a product marked or unmarked meanwhile, a duplicate): nothing is
+   * written, the editor reloads the list.
+   */
+  orderFeatured(
+    productIds: readonly string[],
+    userId: string,
+  ): Promise<"ok" | "mismatch">;
   /** The whole record, one transaction. */
   save(
     key: string,
@@ -135,12 +152,15 @@ const HOST_NAME =
  */
 /**
  * THE TEST STOREFRONT'S ORIGIN (`HOMEPAGE_STOREFRONT_URL`), https only, and
- * only where writing to the shop is allowed: the production OS has no test
- * storefront to point at, and a preview of an unsaved page must never open
- * against the live shop.
+ * only where BOTH writing to the shop is allowed AND the preview is switched
+ * on by its own variable (`HOMEPAGE_PREVIEW_ALLOWED=true`, the test system
+ * only). The second switch is what keeps the admin from framing the live shop
+ * once the production OS projects to the live Medusa too (barracuda, #1881):
+ * a comment on an env template is not a guard.
  */
 export function homepageStorefrontUrl(env: NodeJS.ProcessEnv): string | null {
   if (!homepageProjectionAllowed(env)) return null;
+  if (env.HOMEPAGE_PREVIEW_ALLOWED !== "true") return null;
   try {
     const url = new URL((env.HOMEPAGE_STOREFRONT_URL ?? "").trim());
     return url.protocol === "https:" ? url.origin : null;
@@ -395,6 +415,47 @@ export class HomepageContentService {
         projection = "failed";
       }
     return { featured, list: await this.store.featuredList(), projection };
+  }
+
+  /**
+   * THE BAND'S ORDER (2b-2): the first product is the large card. Like the
+   * marker, a change asks for one projection round where it is on, and its
+   * failure never fails the order.
+   */
+  async orderFeatured(
+    productIds: unknown,
+    userId: string,
+  ): Promise<{
+    list: HomepageFeaturedRow[];
+    projection: HomepageProjectionResult;
+  }> {
+    if (
+      !Array.isArray(productIds) ||
+      productIds.length > HOMEPAGE_FEATURED_MAX ||
+      productIds.some((id) => typeof id !== "string" || !id) ||
+      new Set(productIds).size !== productIds.length
+    )
+      throw new BadRequestException(
+        `productIds: legfeljebb ${HOMEPAGE_FEATURED_MAX} különböző termékazonosító`,
+      );
+    const outcome = await this.store.orderFeatured(
+      productIds as string[],
+      userId,
+    );
+    if (outcome === "mismatch")
+      throw new ConflictException(
+        "A kijelölt termékek közben változtak; töltsd újra a listát.",
+      );
+    const row = await this.store.find(MAIN_HOMEPAGE_KEY);
+    let projection: HomepageProjectionResult;
+    if (!homepageProjectionOn(this.environment, row)) projection = "off";
+    else
+      try {
+        projection = await this.project();
+      } catch {
+        projection = "failed";
+      }
+    return { list: await this.store.featuredList(), projection };
   }
 
   async get(): Promise<HomepageContent> {

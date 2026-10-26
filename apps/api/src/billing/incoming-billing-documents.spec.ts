@@ -61,6 +61,8 @@ const row = (
   cancelled: false,
   sourceDocumentId: "doc-1",
   hasPdf: false,
+  notBookable: false,
+  notBookableAt: null,
   createdAt: new Date("2026-10-01T08:00:00Z"),
   updatedAt: new Date("2026-10-01T08:00:00Z"),
   ...over,
@@ -155,6 +157,55 @@ describe("bankMatchOf", () => {
         { state: "NOT_TO_PAIR", reason: "PROFORMA", debits: [] },
       ],
     );
+  });
+
+  // „Nem könyvelendő” (Balázs, 2026-10-26): kézi jelölés, nyer minden más ok előtt,
+  // a párosított terhelés sem látszik rajta
+  it("a hand-marked not-bookable invoice is not to pair, before any other reason, even with a pairing", () => {
+    const marked = (
+      found?: DocumentPairing,
+      kindCode = "SZ",
+      grossAmount = D(12700),
+    ) =>
+      bankMatchOf(
+        { sourceDocumentId: "doc-1", kindCode, grossAmount, notBookable: true },
+        new Map(found ? [["doc-1", found]] : []),
+      );
+    const expected = {
+      state: "NOT_TO_PAIR",
+      reason: "NOT_BOOKABLE",
+      debits: [],
+    };
+    assert.deepEqual(
+      [
+        marked(),
+        marked(pairing({ debits: [debit] })),
+        marked(pairing({ payee: "NOT_COMPANY" })),
+        marked(undefined, "D"),
+        marked(undefined, "SZ", D(0)),
+      ],
+      [expected, expected, expected, expected, expected],
+    );
+    // the same invoice without the mark is paired again
+    assert.equal(
+      bankMatchOf(
+        { sourceDocumentId: "doc-1", kindCode: "SZ", grossAmount: D(12700) },
+        new Map([["doc-1", pairing({ debits: [debit] })]]),
+      ).state,
+      "PAIRED",
+    );
+  });
+
+  it("the list item carries the mark, and a row never marked says false", () => {
+    const marked = toIncomingListItem(
+      row({ notBookable: true }),
+      new Map([["doc-1", pairing({ debits: [debit] })]]),
+    );
+    assert.deepEqual(
+      [marked.notBookable, marked.bankMatch.reason],
+      [true, "NOT_BOOKABLE"],
+    );
+    assert.equal(toIncomingListItem(row(), new Map()).notBookable, false);
   });
 
   it("paired with the debits, otherwise unpaired", () => {

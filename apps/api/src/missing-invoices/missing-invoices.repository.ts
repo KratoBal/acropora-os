@@ -122,6 +122,50 @@ export function alignVatGroupKeys(
 }
 
 /**
+ * A „NEM KÖNYVELENDŐ” SZÁMLA KIESIK A JELÖLTEK KÖZÜL (Balázs, 2026-10-26). A számla a
+ * számítás szempontjából megszűnik: nem párosul terheléshez, nem kerül a
+ * könyvelői csomagba, a kimutatások nem számolják. A számla MINDEN forrásból
+ * kiesik, amelyik ugyanazt a számlát hozza (a NAV-sor, a postafiók PDF-je, a
+ * feed), mert egy megmaradt társ újra jelölt lenne, és a terhelés vele
+ * párosodna. A kulcs az összevonás kulcsa (az ÁFA-csoport igazítása után), az
+ * azonosító a feed sorának forrás-dokumentuma. A szám nélküli dokumentum csak
+ * azonosítóval esik ki, kulccsal nem (nincs mi alapján).
+ */
+export function withoutNotBookable(
+  documents: readonly CandidateDocument[],
+  given: ReadonlyMap<string, string>,
+  marked: {
+    sourceDocumentIds: ReadonlySet<string>;
+    keys: ReadonlySet<string>;
+  },
+): CandidateDocument[] {
+  if (marked.sourceDocumentIds.size === 0 && marked.keys.size === 0)
+    return [...documents];
+  const keys = alignVatGroupKeys(documents, given);
+  const usable = (key: string | undefined): key is string =>
+    !!key && !key.startsWith("|");
+  const hit = (document: CandidateDocument) =>
+    marked.sourceDocumentIds.has(document.id) ||
+    [given.get(document.id), keys.get(document.id)].some(
+      (key) => usable(key) && marked.keys.has(key),
+    );
+  const excludedKeys = new Set(
+    documents
+      .filter(hit)
+      .map((document) => keys.get(document.id))
+      .filter(usable),
+  );
+  return documents.filter(
+    (document) =>
+      !hit(document) &&
+      !(
+        usable(keys.get(document.id)) &&
+        excludedKeys.has(keys.get(document.id)!)
+      ),
+  );
+}
+
+/**
  * UGYANAZ A SZÁMLA TÖBB FORRÁSBÓL EGY JELÖLT (acrobot 25322). A NAV-sor az
  * azonosság és az összeg, a postafiók PDF-je az eredeti. Összevonás nélkül egy
  * számla két terhelést is vihetne: egyszer NAV-sorként, egyszer PDF-ként.
@@ -826,7 +870,33 @@ export class MissingInvoicesRepository {
         invoice.id,
         invoiceKey(invoice.invoiceNumber, GLS_TAX_BASE, "GLS"),
       );
-    return mergeSameInvoice(documents, keys);
+    // a kézzel „Nem könyvelendő”-nek jelölt számlák (Balázs, 2026-10-26)
+    const notBookable = await this.database.incomingBillingDocument.findMany({
+      where: { notBookable: true },
+      select: {
+        sourceDocumentId: true,
+        documentNumber: true,
+        supplierTaxNumber: true,
+        supplierName: true,
+      },
+    });
+    return mergeSameInvoice(
+      withoutNotBookable(documents, keys, {
+        sourceDocumentIds: new Set(
+          notBookable.flatMap((row) => row.sourceDocumentId ?? []),
+        ),
+        keys: new Set(
+          notBookable.map((row) =>
+            invoiceKey(
+              row.documentNumber,
+              row.supplierTaxNumber,
+              row.supplierName,
+            ),
+          ),
+        ),
+      }),
+      keys,
+    );
   }
 
   /**

@@ -7,6 +7,7 @@ import type { CandidateDocument } from "./missing-invoice-matching.js";
 import {
   mergeSameInvoice,
   normalizeAccount,
+  withoutNotBookable,
 } from "./missing-invoices.repository.js";
 
 const doc = (overrides: Partial<CandidateDocument>): CandidateDocument => ({
@@ -383,5 +384,96 @@ describe("mergeSameInvoice prefers a PDF original over an XML one", () => {
       ]),
     );
     assert.equal(merged[0]!.originalId, "mb-unknown");
+  });
+});
+
+// „Nem könyvelendő” (Balázs, 2026-10-26): a jelölt számla MINDEN forrásból kiesik,
+// különben egy megmaradt társ (NAV-sor, postafiók PDF-je) újra jelölt lenne.
+describe("withoutNotBookable", () => {
+  const nav = doc({ id: "nav-1" });
+  const pdf = doc({ id: "mb-1", source: "MAILBOX", hasOriginal: true });
+  const feed = doc({ id: "feed-1", source: "SZAMLAZZ", hasOriginal: true });
+  const other = doc({ id: "nav-2", number: "SZ-2" });
+  const keys = new Map([
+    ["nav-1", "sz-1|12345678"],
+    ["mb-1", "sz-1|12345678"],
+    ["feed-1", "sz-1|12345678"],
+    ["nav-2", "sz-2|12345678"],
+  ]);
+  const none = {
+    sourceDocumentIds: new Set<string>(),
+    keys: new Set<string>(),
+  };
+
+  it("with nothing marked it returns every document", () => {
+    assert.deepEqual(
+      withoutNotBookable([nav, pdf, other], keys, none).map((d) => d.id),
+      ["nav-1", "mb-1", "nav-2"],
+    );
+  });
+
+  it("drops the invoice from every source that brings it, by its key, and keeps the others", () => {
+    const left = withoutNotBookable([nav, pdf, feed, other], keys, {
+      ...none,
+      keys: new Set(["sz-1|12345678"]),
+    });
+    assert.deepEqual(
+      left.map((d) => d.id),
+      ["nav-2"],
+    );
+  });
+
+  it("drops by the feed row's source document too, and with it the same invoice from the other sources", () => {
+    const left = withoutNotBookable([nav, pdf, feed, other], keys, {
+      ...none,
+      sourceDocumentIds: new Set(["feed-1"]),
+    });
+    assert.deepEqual(
+      left.map((d) => d.id),
+      ["nav-2"],
+    );
+  });
+
+  it("drops a numberless document only by its identifier, never by an empty key", () => {
+    const loose = doc({ id: "loose-1", number: "", source: "UPLOAD" });
+    const looseKeys = new Map([...keys, ["loose-1", "|szállító kft."]]);
+    assert.deepEqual(
+      withoutNotBookable([loose, other], looseKeys, {
+        ...none,
+        keys: new Set(["|szállító kft."]),
+      }).map((d) => d.id),
+      ["loose-1", "nav-2"],
+    );
+    assert.deepEqual(
+      withoutNotBookable([loose, other], looseKeys, {
+        ...none,
+        sourceDocumentIds: new Set(["loose-1"]),
+      }).map((d) => d.id),
+      ["nav-2"],
+    );
+  });
+
+  it("drops the NAV row of a VAT group member whose key differs until aligned", () => {
+    // NAV: the group id; feed: the member's own number; same number, gross and day
+    const group = doc({ id: "nav-g", number: "SZ-9" });
+    const member = doc({
+      id: "feed-g",
+      source: "SZAMLAZZ",
+      number: "SZ-9",
+      hasOriginal: true,
+    });
+    const left = withoutNotBookable(
+      [group, member, other],
+      new Map([
+        ["nav-g", "sz-9|17123456"],
+        ["feed-g", "sz-9|12345678"],
+        ["nav-2", "sz-2|12345678"],
+      ]),
+      { ...none, keys: new Set(["sz-9|12345678"]) },
+    );
+    assert.deepEqual(
+      left.map((d) => d.id),
+      ["nav-2"],
+    );
   });
 });
