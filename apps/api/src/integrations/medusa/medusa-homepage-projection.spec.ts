@@ -78,26 +78,52 @@ describe("homepageRecord", () => {
   });
 
   /*
-    The commerce validator (#555) refuses the whole record on an unknown key:
-    the blocks and the footer stay in the OS until the storefront accepts them.
+    THE BLOCKS AND THE FOOTER (2026-10-26, acrobot 36394/36397: the test
+    backend runs commerce #564/#567). What turns this red: the footer sent
+    camel-cased (the shop's validator is strict), or a missing field sent as
+    absent instead of null (the shop would keep its old value).
   */
-  it("does not send the blocks and the footer yet", () => {
+  it("sends the blocks and the footer, snake-cased, and null where the OS has none", () => {
+    const blocks = [
+      { key: "hero", visible: false },
+      { key: "mit-keresel", visible: true },
+    ] as HomepageContentInput["blocks"];
     const rec = homepageRecord(
       content({
-        blocks: [{ key: "hero", visible: false }],
+        blocks,
         footer: {
           intro: "<p>x</p>",
-          columns: [],
-          social: { facebook: null, instagram: null, youtube: null },
-          bottomText: "",
+          columns: [
+            {
+              title: "Bolt",
+              links: [{ label: "Korallok", href: "/hu/store" }],
+            },
+          ],
+          social: {
+            facebook: "https://fb.example/a",
+            instagram: null,
+            youtube: null,
+          },
+          bottomText: "© Acropora",
         },
       }),
     );
-    assert.deepEqual(Object.keys(rec).sort(), [
-      "featured_handles",
-      "slides",
-      "texts",
-    ]);
+    assert.deepEqual(rec.blocks, blocks);
+    assert.deepEqual(rec.footer, {
+      intro: "<p>x</p>",
+      columns: [
+        { title: "Bolt", links: [{ label: "Korallok", href: "/hu/store" }] },
+      ],
+      social: {
+        facebook: "https://fb.example/a",
+        instagram: null,
+        youtube: null,
+      },
+      bottom_text: "© Acropora",
+    });
+    const none = homepageRecord(content());
+    assert.ok("blocks" in none && none.blocks === null);
+    assert.ok("footer" in none && none.footer === null);
   });
 });
 
@@ -115,6 +141,17 @@ describe("homepageRecordDiffers", () => {
       true,
     );
     assert.equal(homepageRecordDiffers(null, a), true);
+  });
+
+  it("sees a changed block order or footer, and takes a never-sent one as not set", () => {
+    const withBlocks = homepageRecord(
+      content({ blocks: [{ key: "hero", visible: true }] as never }),
+    );
+    const plain = homepageRecord(content());
+    assert.equal(homepageRecordDiffers(plain, withBlocks), true);
+    // the shop's answer before #564 had no such keys: the same as null
+    const { blocks: _b, footer: _f, ...older } = plain;
+    assert.equal(homepageRecordDiffers(older, plain), false);
   });
 });
 
@@ -263,6 +300,8 @@ describe("the featured band", () => {
       texts: {},
       slides: null,
       featured_handles: ["k-1"],
+      blocks: null,
+      footer: null,
     });
   });
 

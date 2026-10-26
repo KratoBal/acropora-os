@@ -1,5 +1,10 @@
 import { prisma } from "@acropora/database";
-import type { HomepageContentInput, HomepageSlide } from "@acropora/types";
+import type {
+  HomepageBlock,
+  HomepageContentInput,
+  HomepageFooter,
+  HomepageSlide,
+} from "@acropora/types";
 
 import {
   MAIN_HOMEPAGE_KEY,
@@ -23,6 +28,18 @@ export interface MedusaHomepageSlide {
   image_alt: string;
 }
 
+/** The footer as the commerce validator wants it (#564, #567; snake case). */
+export interface MedusaHomepageFooter {
+  intro: string;
+  columns: { title: string; links: { label: string; href: string }[] }[];
+  social: {
+    facebook: string | null;
+    instagram: string | null;
+    youtube: string | null;
+  };
+  bottom_text: string;
+}
+
 /**
  * THE COMMERCE HOMEPAGE CONTENT RECORD (the commerce `PUT /admin/homepage-content`
  * contract, #551 and #553): the text overrides, and the slides (`null` is "not
@@ -33,6 +50,13 @@ export interface MedusaHomepageContentRecord {
   slides: MedusaHomepageSlide[] | null;
   /** The "Egyedi korallok" band's product handles, in order (commerce #555). */
   featured_handles?: string[] | null;
+  /**
+   * The eight fixed blocks in order, each shown or hidden (commerce #564);
+   * `null` is "not set", the storefront's own order with all shown.
+   */
+  blocks?: HomepageBlock[] | null;
+  /** The footer (commerce #564, #567); `null` is the storefront's own. */
+  footer?: MedusaHomepageFooter | null;
 }
 
 export type HomepageProjectionOutcome =
@@ -96,6 +120,27 @@ export function shopFeaturedHandles(raw: readonly string[]): {
   return { handles, skipped };
 }
 
+const footerRecord = (footer: HomepageFooter): MedusaHomepageFooter => ({
+  intro: footer.intro,
+  columns: footer.columns.map((column) => ({
+    title: column.title,
+    links: column.links.map((link) => ({ label: link.label, href: link.href })),
+  })),
+  social: {
+    facebook: footer.social.facebook,
+    instagram: footer.social.instagram,
+    youtube: footer.social.youtube,
+  },
+  bottom_text: footer.bottomText,
+});
+
+/*
+  THE BLOCKS AND THE FOOTER ARE SENT (2026-10-26, acrobot 36394 and 36397):
+  the test backend runs commerce #564 and #567, which take them (measured:
+  the store answer carries both keys). Always sent, `null` where the OS has
+  none: with an absent key the shop would keep what it stored before, and a
+  cleared footer would stay on the page.
+*/
 export function homepageRecord(
   content: HomepageContentInput,
   featuredHandles: readonly string[] = [],
@@ -104,6 +149,13 @@ export function homepageRecord(
     texts: { ...content.texts },
     slides: content.slides === null ? null : content.slides.map(slideRecord),
     featured_handles: [...featuredHandles],
+    blocks: content.blocks
+      ? content.blocks.map((block) => ({
+          key: block.key,
+          visible: block.visible,
+        }))
+      : null,
+    footer: content.footer ? footerRecord(content.footer) : null,
   };
 }
 
@@ -119,6 +171,9 @@ export function homepageRecordDiffers(
       r.slides === undefined ? null : r.slides,
       // null and "never sent" are the same as an empty band
       r.featured_handles ?? [],
+      // null and "never sent" are both "not set"
+      r.blocks ?? null,
+      r.footer ?? null,
     ]);
   return pick(current) !== pick(wanted);
 }
@@ -195,15 +250,9 @@ export const prismaHomepageSource: HomepageSource = {
       where: { key: MAIN_HOMEPAGE_KEY },
     });
     if (!row) return null;
-    /*
-      THE BLOCKS AND THE FOOTER ARE NOT SENT (2026-10-26). The commerce
-      validator (#555) refuses the WHOLE record on an unknown key, so sending
-      them before the storefront accepts them would stop the texts and the
-      slides too. The next OS change turns them on once the commerce side
-      (murena, test storefront only) is in.
-    */
-    const { texts, slides } = toHomepageContent(row);
-    return { texts, slides };
+    // the blocks and the footer too, since commerce #564/#567 (see homepageRecord)
+    const { texts, slides, blocks, footer } = toHomepageContent(row);
+    return { texts, slides, blocks, footer };
   },
   featured: async () => {
     const rows = await prisma.homepageFeaturedProduct.findMany({
