@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -450,6 +456,42 @@ describe("HomepageContentEditorPage", () => {
     expect(screen.queryByLabelText("Tapasztaltaknak: Címsor")).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Tapasztaltaknak" }));
     expect(await field("Tapasztaltaknak: Címsor")).toBeTruthy();
+  });
+
+  /*
+    THE FORMATTED SHORT TEXTS (2b-3; commerce #571): a short place is the short
+    editor, and what it holds is saved as its HTML; an untouched one is not
+    saved at all (the starting value is not claimed). What turns this red: a
+    plain textarea at a short place, or the editor marking a field edited by
+    itself.
+  */
+  it("HP-ED-SHORT: a short place is the short editor, its HTML is saved, an untouched one is not", async () => {
+    render(<HomepageContentEditorPage />);
+    await open("Kezdőknek és tapasztaltaknak");
+    const editor = (await field("Kezdőknek: Bevezető")) as HTMLElement & {
+      editor: {
+        commands: {
+          setContent(html: string, options?: { emitUpdate?: boolean }): boolean;
+        };
+      };
+    };
+    expect(editor.tagName).not.toBe("TEXTAREA");
+    expect(editor.editor).toBeTruthy();
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent().texts).toEqual({});
+
+    api.save.mockClear();
+    act(() => {
+      editor.editor.commands.setContent("<p>Első <strong>lépés</strong></p>", {
+        emitUpdate: true,
+      });
+    });
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent().texts["kezdo.szoveg"]).toBe(
+      "<p>Első <strong>lépés</strong></p>",
+    );
   });
 
   it("HP-ED-FOOTER: an own footer is saved; the legal documents and the address are not edited here", async () => {

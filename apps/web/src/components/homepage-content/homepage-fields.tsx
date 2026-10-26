@@ -1,6 +1,7 @@
 "use client";
 
 import { PilotBadge } from "@acropora/ui";
+import { RichTextEditor, SHORT_TOOLBAR } from "@acropora/ui/rich-text-editor";
 import { HOMEPAGE_LIMITS, type HomepageTextField } from "@acropora/types";
 import { useState } from "react";
 
@@ -46,6 +47,8 @@ export function Kapcsolo({
 
 const TYPE_HINT: Record<HomepageTextField["type"], string> = {
   text: "",
+  short:
+    "Bekezdés, félkövér, dőlt, link és felsorolás: a webshop pontosan ezt mutatja.",
   link: "Webshop-cím (/store) vagy https:// cím; üresen a gomb nem jelenik meg.",
   image: "Kép címe (https://…); üresen szürke hely áll.",
 };
@@ -76,8 +79,9 @@ export function TextField({
   const shown = edited ? value : field.default;
   const label = `${field.group}: ${field.label}`;
   const long =
-    field.type === "text" &&
-    (field.default.length > 70 || field.default.includes("\n"));
+    field.type === "short" ||
+    (field.type === "text" &&
+      (field.default.length > 70 || field.default.includes("\n")));
   return (
     <div className={long ? "sm:col-span-2" : undefined}>
       <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -101,7 +105,19 @@ export function TextField({
           </>
         )}
       </div>
-      {long ? (
+      {field.type === "short" ? (
+        /*
+          A RÖVID PROFIL (2b-3; commerce #571): a kirakat ezen a helyen pontosan
+          ennyit rajzol ki. Üres szerkesztő üres értéket ment, nem "<p></p>"-t.
+        */
+        <RichTextEditor
+          profile="short"
+          toolbar={SHORT_TOOLBAR}
+          aria-label={label}
+          value={shown || "<p></p>"}
+          onChange={(html) => onChange(html === "<p></p>" ? "" : html)}
+        />
+      ) : long ? (
         <textarea
           aria-label={label}
           value={shown}

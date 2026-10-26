@@ -26,7 +26,12 @@
  * `slides` is `null` (not set, the starting slides show) or the list, at most
  * five; an empty list is a decision (no hero).
  */
-export type HomepageFieldType = "text" | "link" | "image";
+/**
+ * `short` (2b-3, Balázs's brief point 4; commerce #571): formatted text in the
+ * shared sanitizer's SHORT profile (paragraph, bold, italic, link, lists), at
+ * the places the storefront draws as HTML (`ROVID_KULCSOK` there).
+ */
+export type HomepageFieldType = "text" | "short" | "link" | "image";
 
 export interface HomepageTextField {
   key: string;
@@ -453,7 +458,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     key: "kezdo.szoveg",
     group: "Kezdőknek",
     label: "Bevezető",
-    type: "text",
+    type: "short",
     default:
       "Végigmegyünk veled az egészen: melyik medence, milyen technika, mennyi idő a beüzemelés, és mikor jöhetnek az első lakók.",
   },
@@ -475,7 +480,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     key: "kezdo.1.szoveg",
     group: "Kezdőknek",
     label: "1. lépés: szöveg",
-    type: "text",
+    type: "short",
     default: "Méret, hely, költségkeret",
   },
   {
@@ -496,7 +501,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     key: "kezdo.2.szoveg",
     group: "Kezdőknek",
     label: "2. lépés: szöveg",
-    type: "text",
+    type: "short",
     default: "4–6 hét türelem",
   },
   {
@@ -517,7 +522,7 @@ export const HOMEPAGE_TEXT_FIELDS: readonly HomepageTextField[] = [
     key: "kezdo.3.szoveg",
     group: "Kezdőknek",
     label: "3. lépés: szöveg",
-    type: "text",
+    type: "short",
     default: "Halak és könnyű korallok",
   },
   {
@@ -1178,6 +1183,24 @@ export type HomepageContentParse =
 
 const FIELD = new Map(HOMEPAGE_TEXT_FIELDS.map((field) => [field.key, field]));
 
+/**
+ * WHETHER A VALUE IS SHORT-PROFILE HTML, by the storefront's own test (commerce
+ * #571, `htmlAlaku`): a tag of the short profile anywhere. Only such a value is
+ * cleaned as HTML; plain text stays plain, because cleaning would escape it
+ * (`a < b` -> `a &lt; b`) and the storefront shows a non-HTML value as text.
+ */
+export const SHORT_HTML_TAG =
+  /<\/?(p|br|strong|b|em|i|ul|ol|li|a)(\s[^>]*)?\/?>/i;
+
+export function looksLikeShortHtml(value: string): boolean {
+  return SHORT_HTML_TAG.test(value);
+}
+
+/** The catalogue keys whose value is short-profile formatted text. */
+export function isShortTextKey(key: string): boolean {
+  return FIELD.get(key)?.type === "short";
+}
+
 /** Whether a button target passes: empty ("no button") or a shop path. */
 export function isShopHref(value: string): boolean {
   return value === "" || SHOP_PATH.test(value);
@@ -1517,7 +1540,10 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
         ok: false,
         message: `texts.${key}: a string, at most ${HOMEPAGE_LIMITS.textValue} characters`,
       };
-    if (field.type !== "text" && !isSafeHomepageAddress(value))
+    if (
+      (field.type === "link" || field.type === "image") &&
+      !isSafeHomepageAddress(value)
+    )
       return {
         ok: false,
         message: `texts.${key}: a shop path (/store) or an http(s) address`,
