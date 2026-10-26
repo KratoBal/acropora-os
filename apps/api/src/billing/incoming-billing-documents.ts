@@ -82,9 +82,13 @@ export function bankMatchOf(
     sourceDocumentId: string | null;
     kindCode: string;
     grossAmount: Prisma.Decimal;
+    /** „Nem könyvelendő” (Balázs, 2026-10-26): ez nyer minden más ok előtt. */
+    notBookable?: boolean;
   },
   pairings: ReadonlyMap<string, DocumentPairing>,
 ): IncomingBankMatch {
+  if (row.notBookable)
+    return { state: "NOT_TO_PAIR", reason: "NOT_BOOKABLE", debits: [] };
   const pairing = row.sourceDocumentId
     ? pairings.get(row.sourceDocumentId)
     : undefined;
@@ -245,6 +249,7 @@ export function toIncomingListItem(
       row.source === "PURCHASE" ? manualPaid : null,
     ),
     bankMatch,
+    notBookable: row.notBookable,
     hasPdf: row.hasPdf || collectedPdf,
   };
 }
@@ -461,6 +466,7 @@ function mailboxListItem(
     paymentSource: "BANK_PAIRING",
     paymentConflict: false,
     bankMatch: { state: "PAIRED", reason: null, debits },
+    notBookable: false,
     hasPdf: false,
   };
   if (!reading) return item;

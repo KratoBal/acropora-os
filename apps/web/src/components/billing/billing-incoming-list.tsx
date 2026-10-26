@@ -152,15 +152,25 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
           <span className="text-pilot-grey-900">
             {item.paymentMethod ?? "—"}
           </span>
-          {/* a kimenő listával azonos jelzés és dátumírás (#1368) */}
-          <PaymentBadge
-            paymentState={item.paymentState}
-            paidAmount={item.paidAmount}
-            lastPaymentDate={item.lastPaymentDate}
-            paymentSource={item.paymentSource}
-            paymentConflict={item.paymentConflict}
-            currency={item.currency}
-          />
+          {/* „Nem könyvelendő” (Balázs, 2026-10-26): a fizetés jelzése helyett */}
+          {item.notBookable ? (
+            <span
+              className="text-xs font-semibold text-pilot-grey-500"
+              data-testid="not-bookable-badge"
+            >
+              Nem könyv.
+            </span>
+          ) : (
+            /* a kimenő listával azonos jelzés és dátumírás (#1368) */
+            <PaymentBadge
+              paymentState={item.paymentState}
+              paidAmount={item.paidAmount}
+              lastPaymentDate={item.lastPaymentDate}
+              paymentSource={item.paymentSource}
+              paymentConflict={item.paymentConflict}
+              currency={item.currency}
+            />
+          )}
         </span>
       ),
     },

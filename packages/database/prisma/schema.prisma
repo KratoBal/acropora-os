@@ -8668,6 +8668,11 @@ model IncomingBillingDocument {
   /// A PDF-et (vagy az XML-t) hordozó forrás-dokumentum, ha van.
   sourceDocumentId         String?
   hasPdf                   Boolean   @default(false)
+  /// „NEM KÖNYVELENDŐ” (Balázs, Acropora OS szál, 2026-10-26): kézzel, egyenként jelölt
+  /// számla, ami nem kerül a könyvelői anyagba, a hiányzó számlák számításába és a
+  /// kimutatásokba. A jelölés visszavonható; ki és mikor: az auditnaplóban.
+  notBookable              Boolean   @default(false)
+  notBookableAt            DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 

@@ -11,6 +11,7 @@ import {
   purchaseListItem,
   purchaseReading,
   type PurchaseSubject,
+  supersedePurchaseRows,
 } from "./purchase-incoming.js";
 
 const D = (value: string | number) => new Prisma.Decimal(value);
@@ -361,5 +362,77 @@ describe("a kézi „Fizetve” jóváhagyás előtt és után", () => {
       [purchaseRow({ source: "SZAMLAZZ", externalId: "5150" })],
     );
     assert.deepEqual([calls, map.size], [0, 0]);
+  });
+});
+
+// „Nem könyvelendő” (Balázs, 2026-10-26): a jelölés a számláról szól, ezért ha a
+// feed sora leváltja a jelölt beszerzési sort, a jelölés átmegy a feed sorára.
+describe("supersedePurchaseRows carries the not-bookable mark over", () => {
+  const feed = {
+    externalId: "feed-1",
+    documentNumber: "KI-2026/77",
+    supplierTaxNumber: "12345678-2-41",
+    supplierEuTaxNumber: null,
+    supplierName: "Korall Import Kft.",
+  };
+  const purchase = (over: Record<string, unknown> = {}) => ({
+    id: "p-1",
+    externalId: "inv-1",
+    documentNumber: "KI-2026/77",
+    supplierTaxNumber: "12345678-2-41",
+    supplierEuTaxNumber: null,
+    supplierName: "Korall Import Kft.",
+    notBookable: false,
+    notBookableAt: null,
+    ...over,
+  });
+  const fake = (rows: unknown[]) => {
+    const calls = { updateMany: [] as unknown[], deleted: [] as unknown[] };
+    const transaction = {
+      incomingBillingDocument: {
+        findMany: async () => rows,
+        updateMany: async (args: unknown) => {
+          calls.updateMany.push(args);
+          return { count: 1 };
+        },
+        delete: async (args: unknown) => {
+          calls.deleted.push(args);
+          return {};
+        },
+      },
+      incomingDocumentReading: { updateMany: async () => ({ count: 0 }) },
+      auditLog: { create: async () => ({}) },
+    };
+    return { transaction: transaction as never, calls };
+  };
+
+  it("a marked purchase row marks the feed row that replaces it, with the earlier time", async () => {
+    const at = new Date("2026-10-26T09:00:00Z");
+    const { transaction, calls } = fake([
+      purchase({ notBookable: true, notBookableAt: at }),
+    ]);
+    const result = await supersedePurchaseRows(transaction, feed);
+    assert.deepEqual(result, ["p-1"]);
+    assert.equal(calls.deleted.length, 1);
+    assert.deepEqual(calls.updateMany, [
+      {
+        where: { source: "SZAMLAZZ", externalId: "feed-1" },
+        data: { notBookable: true, notBookableAt: at },
+      },
+    ]);
+  });
+
+  it("an unmarked purchase row, or one of another invoice, leaves the feed row alone", async () => {
+    const { transaction, calls } = fake([
+      purchase(),
+      purchase({
+        id: "p-2",
+        documentNumber: "MAS-1",
+        notBookable: true,
+        notBookableAt: new Date(),
+      }),
+    ]);
+    assert.deepEqual(await supersedePurchaseRows(transaction, feed), ["p-1"]);
+    assert.equal(calls.updateMany.length, 0);
   });
 });

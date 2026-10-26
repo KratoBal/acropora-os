@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   incomingDetail: vi.fn(),
   incomingPdf: vi.fn(),
   attachIncomingPdf: vi.fn(),
+  setIncomingNotBookable: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -80,6 +81,7 @@ const detail = (
     reason: null,
     debits: [{ bookingDate: "2026-09-30", amount: "12700", currency: "HUF" }],
   },
+  notBookable: false,
   hasPdf: true,
   exchangeBank: null,
   supplier: {
@@ -127,6 +129,7 @@ const detail = (
 beforeEach(() => {
   api.incomingDetail.mockReset().mockResolvedValue(detail());
   api.incomingPdf.mockReset().mockResolvedValue(new Blob(["%PDF-1.4"]));
+  api.setIncomingNotBookable.mockReset();
 });
 
 // MI PIROSÍT: ha a PDF-gomb ott is megjelenne, ahol nem jött PDF; ha a
@@ -228,6 +231,96 @@ describe("BillingIncomingDocumentPage", () => {
       await screen.findByRole("button", { name: "PDF megnyitása" }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("PDF csatolása")).toBeNull();
+  });
+
+  // „Nem könyvelendő” (Balázs, 2026-10-26)
+  it("Nem könyvelendő asks first (naming the paired debits), sends nothing until confirmed, then shows the pill instead of the payment", async () => {
+    api.setIncomingNotBookable.mockResolvedValue(
+      detail({
+        notBookable: true,
+        bankMatch: { state: "NOT_TO_PAIR", reason: "NOT_BOOKABLE", debits: [] },
+      }),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Nem könyvelendő" }),
+    );
+    const group = screen.getByRole("group", {
+      name: "Nem könyvelendő megerősítése",
+    });
+    expect(group).toHaveTextContent(/1 banki terhelés újra hiányzóként/);
+    expect(api.setIncomingNotBookable).not.toHaveBeenCalled();
+    fireEvent.click(within(group).getByRole("button", { name: "Megerősítem" }));
+    await waitFor(() =>
+      expect(api.setIncomingNotBookable).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        true,
+      ),
+    );
+    expect(await screen.findByTestId("not-bookable-pill")).toHaveTextContent(
+      "Nem könyvelendő",
+    );
+    expect(
+      screen.getByRole("button", { name: "Mégis könyvelendő" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Fizetve")).toBeNull();
+    expect(
+      screen.queryByRole("group", { name: "Nem könyvelendő megerősítése" }),
+    ).toBeNull();
+  });
+
+  it("Mégsem sends nothing, and an error from the server is shown", async () => {
+    api.setIncomingNotBookable.mockRejectedValue(
+      new Error("Nincs jogosultság."),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Nem könyvelendő" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem" }));
+    expect(api.setIncomingNotBookable).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("group", { name: "Nem könyvelendő megerősítése" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Nem könyvelendő" }));
+    fireEvent.click(screen.getByRole("button", { name: "Megerősítem" }));
+    expect(await screen.findByText("Nincs jogosultság.")).toBeInTheDocument();
+    expect(screen.queryByTestId("not-bookable-pill")).toBeNull();
+  });
+
+  it("a marked invoice can be taken back with one click", async () => {
+    api.incomingDetail.mockResolvedValue(
+      detail({
+        notBookable: true,
+        bankMatch: { state: "NOT_TO_PAIR", reason: "NOT_BOOKABLE", debits: [] },
+      }),
+    );
+    api.setIncomingNotBookable.mockResolvedValue(detail());
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    expect(
+      await screen.findByText(/Nem könyvelendő: kézzel jelölt/),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mégis könyvelendő" }));
+    await waitFor(() =>
+      expect(api.setIncomingNotBookable).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        false,
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Nem könyvelendő" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("not-bookable-pill")).toBeNull();
+  });
+
+  it("a mailbox-only row has no table row to mark: no button", async () => {
+    render(<BillingIncomingDocumentPage documentId="mailbox:doc-1" />);
+    await screen.findByText("E-KBOSS-2026-1234");
+    expect(
+      screen.queryByRole("button", { name: "Nem könyvelendő" }),
+    ).toBeNull();
   });
 
   it("a mailbox-only row has no feed row to attach to: no attach input", async () => {
