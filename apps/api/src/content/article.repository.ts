@@ -8,6 +8,8 @@ import type {
   ArticleTaxonOption,
 } from "@acropora/types";
 
+import { VocabularyRepository } from "../knowledge-base/vocabulary/vocabulary.repository.js";
+import { labelOf } from "../knowledge-base/vocabulary/vocabulary-versions.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -234,43 +236,38 @@ export class ArticleRepository {
   }
 
   /**
-   * The TAXON entries an article can link to, one per key: the latest APPROVED
-   * version of each (a key's forms can change between versions), ordered by key.
+   * THE TAXA AN ARTICLE CAN LINK TO: the TAXON rows of the APPROVED VOCABULARY,
+   * as the vocabulary's own gate reads it (`versionsOf(...).approved`).
    *
-   * ONLY APPROVED (barracuda, #1896 review; acrobot 36330): the vocabulary's
-   * versions are approved by Balázs, so a draft key is not yet a word of the
-   * vocabulary, and an article linked to it would point at nothing once the
-   * draft is dropped (ArticleTaxon is deliberately no foreign key).
+   * A version is the WHOLE word list, not one row's state: version 1 lives in
+   * code (`VOCABULARY_V1_ROWS`), the database holds version 2 onwards, and the
+   * approved one is the latest whose rows are all approved, else the code's
+   * version 1 (`vocabulary-versions.ts`). Reading database rows one by one (as
+   * #1887 and #1898 did) offered nothing where no database version exists yet,
+   * and could take a key a later approved version had dropped. A draft key is
+   * not offered: ArticleTaxon is no foreign key, and an article linked to a
+   * dropped draft would point at nothing (barracuda, #1896; acrobot 36330).
    */
-  async taxonOptions(): Promise<ArticleTaxonOption[]> {
-    const rows = await prisma.knowledgeVocabularyEntry.findMany({
-      where: { kind: "TAXON", status: "APPROVED" },
-      select: { key: true, rank: true, forms: true, version: true },
-      orderBy: [{ key: "asc" }, { version: "desc" }],
-    });
-    const seen = new Set<string>();
-    const options: ArticleTaxonOption[] = [];
-    for (const row of rows) {
-      if (seen.has(row.key)) continue;
-      seen.add(row.key);
-      options.push({
-        key: row.key,
-        rank: row.rank,
-        label: row.forms.find((form) => form.trim())?.trim() ?? row.key,
-      });
-    }
-    return options;
+  private async approvedTaxa() {
+    const versions = await new VocabularyRepository().versions();
+    return versions.approved.rows
+      .filter((row) => row.kind === "TAXON" && row.status !== "RETIRED")
+      .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
 
-  /** Which of these keys are APPROVED TAXON keys of the knowledge base vocabulary. */
+  async taxonOptions(): Promise<ArticleTaxonOption[]> {
+    return (await this.approvedTaxa()).map((row) => ({
+      key: row.key,
+      rank: row.rank ?? null,
+      label: labelOf(row),
+    }));
+  }
+
+  /** Which of these keys are TAXON keys of the approved vocabulary (the same set). */
   async knownTaxonKeys(keys: readonly string[]): Promise<Set<string>> {
     if (!keys.length) return new Set();
-    const rows = await prisma.knowledgeVocabularyEntry.findMany({
-      where: { kind: "TAXON", status: "APPROVED", key: { in: [...keys] } },
-      select: { key: true },
-      distinct: ["key"],
-    });
-    return new Set(rows.map((row) => row.key));
+    const approved = new Set((await this.approvedTaxa()).map((row) => row.key));
+    return new Set(keys.filter((key) => approved.has(key)));
   }
 
   /**
