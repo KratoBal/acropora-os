@@ -586,3 +586,33 @@ describe("what happens to an open detail panel when the piece moves", () => {
     expect(screen.getByRole("button", { name: "Bezárom" })).toBeTruthy();
   });
 });
+
+/*
+  THE ARTICLE EDITOR'S DOOR (2026-10-26): an article row links to its editor
+  page, any other channel does not. What turns this red: the link missing on
+  an article, or offered on a post that has no article body.
+*/
+describe("ContentRowActions -- the article editor link", () => {
+  beforeEach(() => {
+    role = "OWNER";
+  });
+
+  it("links an article to its editor page", () => {
+    render(
+      <ContentRowActions
+        item={item({ channel: "ARTICLE" })}
+        onDone={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Cikk szerkesztése" }),
+    ).toHaveAttribute("href", "/tartalom/c1/cikk");
+  });
+
+  it("offers no editor link on a post", () => {
+    render(<ContentRowActions item={item()} onDone={() => {}} />);
+    expect(
+      screen.queryByRole("link", { name: "Cikk szerkesztése" }),
+    ).toBeNull();
+  });
+});

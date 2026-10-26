@@ -7,6 +7,7 @@ import {
   type ContentListItem,
   type ContentMoveOption,
 } from "@acropora/types";
+import Link from "next/link";
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -187,6 +188,20 @@ export function ContentRowActions({
         >
           {reading ? "Bezárom" : "Elolvasom"}
         </Button>
+
+        {/*
+          A CIKK TÖRZSE SAJÁT LAPON SZERKESZTHETŐ (a teljes szerkesztő), mert a
+          sor alatti szakasz egy blogcikk szövegének és előnézetének szűk. A
+          lépések (jóváhagyás, közzététel) továbbra is itt, a soron vannak.
+        */}
+        {item.channel === "ARTICLE" ? (
+          <Link
+            href={`/tartalom/${encodeURIComponent(item.id)}/cikk`}
+            className={`${QUIET_CONTROL} text-sm`}
+          >
+            Cikk szerkesztése
+          </Link>
+        ) : null}
 
         <Button
           variant="ghost"

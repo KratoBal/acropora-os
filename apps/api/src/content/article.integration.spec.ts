@@ -31,6 +31,7 @@ describe(
     const content = new ContentRepository();
     const actor = randomUUID();
     const ids: string[] = [];
+    const taxonKey = `ARTINT${Date.now() % 1_000_000}`;
 
     const body = (over: Partial<ArticleBodyInput> = {}): ArticleBodyInput => ({
       slug: `${prefix}cikk`,
@@ -73,10 +74,19 @@ describe(
 
     after(async () => {
       await prisma.contentItem.deleteMany({ where: { id: { in: ids } } });
+      await prisma.knowledgeVocabularyEntry.deleteMany({
+        where: { key: { startsWith: taxonKey } },
+      });
       nincsMaradek([
         {
           nev: "ContentItem (article test)",
           darab: await prisma.contentItem.count({ where: { id: { in: ids } } }),
+        },
+        {
+          nev: "KnowledgeVocabularyEntry (article test)",
+          darab: await prisma.knowledgeVocabularyEntry.count({
+            where: { key: { startsWith: taxonKey } },
+          }),
         },
         {
           nev: "ArticleBody (article test)",
@@ -221,6 +231,56 @@ describe(
         await articles.save(second, body({ slug: `${prefix}egy` }), actor),
         "slug-taken",
       );
+    });
+
+    it("ARTICLE-INT-EDITABLE: the body is editable in the author's and reviewer's states only, and only on an article", async () => {
+      const drafting = await item("ARTICLE", "DRAFTING");
+      const awaiting = await item("ARTICLE", "AWAITING_APPROVAL");
+      const post = await item("FACEBOOK_POST", "DRAFTING");
+      assert.deepEqual(
+        [
+          await articles.editable(drafting),
+          await articles.editable(awaiting),
+          await articles.editable(post),
+          await articles.editable("nincs-ilyen"),
+        ],
+        [true, false, false, false],
+      );
+    });
+
+    it("ARTICLE-INT-TAXA: the editor's taxon options are one per key, from its latest version", async () => {
+      await prisma.knowledgeVocabularyEntry.createMany({
+        data: [
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_A`,
+            forms: ["régi"],
+            version: 1,
+            rank: "GENUS",
+          },
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_A`,
+            forms: ["", "Új alak"],
+            version: 2,
+            rank: "GENUS",
+          },
+          { kind: "TAXON", key: `${taxonKey}_B`, forms: [], version: 1 },
+          {
+            kind: "EFFECT",
+            key: `${taxonKey}_C`,
+            forms: ["hatás"],
+            version: 1,
+          },
+        ] as never,
+      });
+      const mine = (await articles.taxonOptions()).filter((option) =>
+        option.key.startsWith(taxonKey),
+      );
+      assert.deepEqual(mine, [
+        { key: `${taxonKey}_A`, rank: "GENUS", label: "Új alak" },
+        { key: `${taxonKey}_B`, rank: null, label: `${taxonKey}_B` },
+      ]);
     });
   },
 );
