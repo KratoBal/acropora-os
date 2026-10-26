@@ -606,7 +606,14 @@ export function PilotSupplierEditorPage({
                     }}
                   />
                 </PilotFormField>
-                <PilotFormField label="E-mail cím">
+                <PilotFormField
+                  label="E-mail cím"
+                  help={
+                    isService
+                      ? "Szerviz partnernél ez a számlázási e-mail: a számla erre megy."
+                      : undefined
+                  }
+                >
                   <PilotInput
                     type="email"
                     aria-label="E-mail cím"

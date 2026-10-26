@@ -72,10 +72,50 @@ describe("the service partner's mirror customer", () => {
             // The invoice is written to the mirror, so the partner's payment
             // term has to arrive here too.
             paymentDueDays: 30,
+            // no e-mail given: the mirror's billing address is cleared, not left stale
+            billingEmail: null,
           },
         },
       },
     ]);
+  });
+
+  /**
+   * Balázs, 2026-10-26: one record, two addresses. The partner screen has ONE
+   * e-mail field; it is the partner's billing address and travels to the record
+   * the invoice is written to. The failure guarded against is the Állatkert one:
+   * the invoice went to an old address while the partner screen showed the new.
+   */
+  it("carries the partner's e-mail to the mirror as its billing e-mail, trimmed, on update and on create", async () => {
+    const dataOf = (calls: Call[]) =>
+      (calls[0]?.args.data as { billingEmail?: string | null }).billingEmail;
+    const updated: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(updated), {
+      id: "supplier-1",
+      name: "Állatkert",
+      isService: true,
+      customerId: "customer-7",
+      email: "  penzugy@example.com ",
+    });
+    assert.equal(dataOf(updated), "penzugy@example.com");
+    const created: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(created), {
+      id: "supplier-2",
+      name: "Új Partner",
+      isService: true,
+      customerId: null,
+      email: "szamla@example.com",
+    });
+    assert.equal(dataOf(created), "szamla@example.com");
+    const cleared: Call[] = [];
+    await syncWorksheetMirror(stubTransaction(cleared), {
+      id: "supplier-1",
+      name: "Állatkert",
+      isService: true,
+      customerId: "customer-7",
+      email: "   ",
+    });
+    assert.equal(dataOf(cleared), null);
   });
 
   /** A partner is recorded once, by hand. The row that carries its worksheets

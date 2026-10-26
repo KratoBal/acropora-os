@@ -168,6 +168,7 @@ export async function syncWorksheetMirror(
     customerId: string | null;
     worksheetPartnerCode?: string | null;
     paymentDueDays?: number | null;
+    email?: string | null;
   },
 ) {
   if (!supplier.isService) {
@@ -186,6 +187,9 @@ export async function syncWorksheetMirror(
     // The invoice is written to this row, so the term set on the partner
     // screen has to reach it.
     paymentDueDays: supplier.paymentDueDays ?? null,
+    // Balázs, 2026-10-26: one record, two addresses. The partner screen has ONE e-mail field and it is the
+    // partner's billing address, so it travels to the record the invoice is written to, on every save.
+    billingEmail: supplier.email?.trim() || null,
   };
   if (supplier.customerId) {
     await tx.customer.update({
@@ -660,6 +664,7 @@ export class SuppliersRepository extends Repository {
               customerId: supplier.customerId,
               worksheetPartnerCode: supplier.worksheetPartnerCode,
               paymentDueDays: supplier.paymentDueDays,
+              email: supplier.email,
             });
             await tx.domainEvent.create({
               data: {
@@ -787,6 +792,7 @@ export class SuppliersRepository extends Repository {
               customerId: true,
               worksheetPartnerCode: true,
               paymentDueDays: true,
+              email: true,
             },
           });
           await syncWorksheetMirror(tx, saved);

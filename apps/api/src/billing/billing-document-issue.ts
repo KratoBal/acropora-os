@@ -9,6 +9,7 @@ import {
 
 import { Prisma } from "@acropora/database";
 
+import { missingAddressParts } from "../customers/address-parts.js";
 import type { BillingDocumentForIssue } from "./billing-document-szamlazz.adapter.js";
 import type { BillingDocumentRow } from "./billing-documents.repository.js";
 
@@ -162,18 +163,12 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
   // csak a neve kotelezo, a cim reszei (iranyitoszam, varos, utca) uresen is
   // tarolodhatnak. A szamla kiallitasakor jelezzuk, MELYIK resz hianyzik, ne a
   // Szamlazz.hu elutasitasa utan, es ne az akvarium felvitelekor.
-  const missingAddressParts = [
-    ["irányítószám", address.postalCode],
-    ["város", address.city],
-    ["utca, házszám", address.line1],
-  ]
-    .filter(([, value]) => !value?.trim())
-    .map(([label]) => label);
-  if (missingAddressParts.length > 0)
+  const missingParts = missingAddressParts(address);
+  if (missingParts.length > 0)
     return {
       ok: false,
       code: "BILLING_ISSUE_ADDRESS_INCOMPLETE",
-      message: `A partner számlázási címe hiányos (hiányzik: ${missingAddressParts.join(", ")}); egészítsd ki a partnernél, a Számlázz.hu hiányos cím nélkül nem állít ki bizonylatot.`,
+      message: `A partner számlázási címe hiányos (hiányzik: ${missingParts.join(", ")}); egészítsd ki a partnernél, a Számlázz.hu hiányos cím nélkül nem állít ki bizonylatot.`,
     };
   if (row.lines.length === 0)
     return {
@@ -243,7 +238,8 @@ export function buildIssueInput(row: BillingDocumentRow): IssueInput {
     taxNumber: customer.taxNumber,
     // the community tax number goes in <adoszamEU>, never in <adoszam>
     euTaxNumber: euBuyer ? customer.euTaxNumber : null,
-    email: customer.email,
+    // the invoice goes to the billing address, the ordering one only when there is none (Balázs, 2026-10-26)
+    email: customer.billingEmail?.trim() || customer.email,
   };
   const countryCode = EU_COUNTRY_NAMES_HU[address.country]
     ? address.country

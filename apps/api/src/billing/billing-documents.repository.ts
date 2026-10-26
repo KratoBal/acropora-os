@@ -68,6 +68,7 @@ const DETAIL_INCLUDE = {
       taxNumber: true,
       euTaxNumber: true,
       email: true,
+      billingEmail: true,
       addresses: {
         select: {
           type: true,

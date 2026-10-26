@@ -34,6 +34,7 @@ export class CreateCustomerDto {
   @IsString() @IsOptional() taxNumber?: string;
   @IsString() @IsOptional() euTaxNumber?: string;
   @IsEmail() @IsOptional() email?: string;
+  @IsEmail() @IsOptional() billingEmail?: string;
   @IsString() @IsOptional() phone?: string;
   @IsBoolean() @IsOptional() marketingEmailConsent = false;
   @IsBoolean() @IsOptional() marketingSmsConsent = false;
@@ -50,6 +51,7 @@ export class UpdateCustomerDto {
   @IsString() @IsOptional() taxNumber?: string | null;
   @IsString() @IsOptional() euTaxNumber?: string | null;
   @IsEmail() @IsOptional() email?: string | null;
+  @IsEmail() @IsOptional() billingEmail?: string | null;
   @IsString() @IsOptional() phone?: string | null;
   @IsBoolean() @IsOptional() marketingEmailConsent?: boolean;
   @IsBoolean() @IsOptional() marketingSmsConsent?: boolean;
