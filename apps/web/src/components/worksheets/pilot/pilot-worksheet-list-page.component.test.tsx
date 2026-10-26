@@ -169,6 +169,18 @@ describe("PilotWorksheetListPage -- redesign", () => {
     ).toContain("Még nincs száma");
   });
 
+  // AN EMPTY SUBJECT (barracuda, #1891 review): the number takes the main
+  // line, and it does not stand a second time under it.
+  it("puts the number first for an empty subject, once", async () => {
+    api.list.mockResolvedValue(response([row({ subject: "  " })]));
+    render(<PilotWorksheetListPage />);
+    const number = await screen.findByText("ML-2026-00814");
+    const cell = number.closest("td") as HTMLElement;
+    expect(
+      Array.from(cell.querySelectorAll("p")).map((p) => p.textContent),
+    ).toEqual(["ML-2026-00814"]);
+  });
+
   it("filters by a tile's status", async () => {
     api.list.mockResolvedValue(response([row()]));
     render(<PilotWorksheetListPage />);

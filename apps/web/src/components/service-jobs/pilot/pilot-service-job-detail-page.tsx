@@ -11,6 +11,7 @@ import {
   type ServiceJobStatusValue,
   type ServiceJobTimelineEntry,
   type WorksheetAttachableItem,
+  worksheetListLines,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -883,14 +884,15 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                         href={`/szerviz/munkalapok/${worksheet.id}`}
                         className="break-words text-sm font-semibold text-pilot-grey-900 hover:text-pilot-aqua-700"
                       >
-                        {worksheet.subject.trim() ||
-                          (worksheet.number ?? "Még nincs száma")}
+                        {worksheetListLines(worksheet).main}
                       </Link>
-                      <p
-                        className={`text-xs ${worksheet.number ? "font-mono text-pilot-grey-600" : "text-pilot-grey-500"}`}
-                      >
-                        {worksheet.number ?? "Még nincs száma"}
-                      </p>
+                      {worksheetListLines(worksheet).detail ? (
+                        <p
+                          className={`text-xs ${worksheet.number ? "font-mono text-pilot-grey-600" : "text-pilot-grey-500"}`}
+                        >
+                          {worksheetListLines(worksheet).detail}
+                        </p>
+                      ) : null}
                     </div>
                     {/*
                       THE SHEET'S STATE AND HOURS (redesign E3): the same

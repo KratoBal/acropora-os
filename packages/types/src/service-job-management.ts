@@ -652,6 +652,25 @@ export function serviceJobWorksheetLabel(worksheet: {
 }
 
 /**
+ * A MUNKALAP KÉT SORA A LISTÁKBAN (Balázs, 2026-10-26 12:48 UTC, OS szál, msg
+ * 1564259312728150148): a fő sor a tárgy, alatta a szám vagy a „Még nincs
+ * száma", mindenhol egyformán.
+ *
+ * ÜRES TÁRGYNÁL a szám lép a fő sorba, és a második sor elmarad: a fő sor
+ * sosem üres, és a szám nem áll kétszer. Üres tárgy előfordulhat: a DTO
+ * `MinLength(1)`-e a vágás ELŐTT mér, tehát egy szóközökből álló tárgy üresként
+ * mentődik (barracuda, #1891 review).
+ */
+export function worksheetListLines(worksheet: {
+  number: string | null;
+  subject: string;
+}): { main: string; detail: string | null } {
+  const szam = worksheet.number ?? "Még nincs száma";
+  const nev = worksheet.subject.trim();
+  return nev ? { main: nev, detail: szam } : { main: szam, detail: null };
+}
+
+/**
  * A NÉGY LÁTSZÓ ÁLLAPOT FELIRATA, A PARTNER NYELVÉN.
  *
  * NÉGY ÁLLAPOT KIFELÉ, NYOLC BELÜL (Balázs döntése, 2026-09-02: „Legyen a

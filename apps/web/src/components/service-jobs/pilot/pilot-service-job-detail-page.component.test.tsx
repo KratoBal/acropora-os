@@ -545,6 +545,22 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     expect(draft.nextElementSibling?.textContent).toBe("Még nincs száma");
   });
 
+  // AN EMPTY SUBJECT (barracuda, #1891 review): the number is the link, and
+  // it does not stand a second time under it.
+  it("links an empty-subject sheet by its number, once", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        timeline: [
+          { ...sheet, worksheet: { ...sheet.worksheet, subject: "  " } },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const link = await screen.findByRole("link", { name: "ML-2026-00814" });
+    expect(link.nextElementSibling).toBeNull();
+    expect(screen.getAllByText("ML-2026-00814")).toHaveLength(1);
+  });
+
   it("names the assignees in the case data, or says nobody is assigned", async () => {
     api.detail.mockResolvedValue(
       detail({

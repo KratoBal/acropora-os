@@ -26,6 +26,7 @@ import { timelineRows } from "@/lib/service-jobs/timeline-rows";
 import {
   formatWorksheetQuantity,
   worksheetDisplayLabel,
+  worksheetListLines,
 } from "@/lib/worksheets/worksheet-presentation";
 import { toPickedImages } from "@/lib/api/picked-image";
 import {
@@ -579,8 +580,7 @@ export default function ServiceJobDetailScreen() {
                 */}
                 <View style={styles.sheetTop}>
                   <Text style={styles.sheetNumber}>
-                    {sheet.subject.trim() ||
-                      (sheet.number ?? "Még nincs száma")}
+                    {worksheetListLines(sheet).main}
                   </Text>
                   {/*
                     THE SHEET'S STATE AND HOURS (redesign E3), only when the
@@ -594,10 +594,14 @@ export default function ServiceJobDetailScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.meta}>
-                  {sheet.number ?? "Még nincs száma"}
-                  {sheet.laborHours !== undefined
-                    ? ` · ${formatWorksheetQuantity(sheet.laborHours)} munkaóra`
-                    : ""}
+                  {[
+                    worksheetListLines(sheet).detail,
+                    sheet.laborHours !== undefined
+                      ? `${formatWorksheetQuantity(sheet.laborHours)} munkaóra`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </Text>
               </Pressable>
             ))
