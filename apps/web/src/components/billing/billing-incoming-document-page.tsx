@@ -85,6 +85,10 @@ export function BillingIncomingDocumentPage({
   );
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  // „Nem könyvelendő” (Balázs, 2026-10-26): ugyanaz a jog és ugyanaz a feltétel, mint a PDF csatolásnál
+  const [confirmingMark, setConfirmingMark] = useState(false);
+  const [markBusy, setMarkBusy] = useState(false);
+  const [markError, setMarkError] = useState<string | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -124,6 +128,27 @@ export function BillingIncomingDocumentPage({
       );
     } finally {
       setPdfBusy(false);
+    }
+  };
+
+  const setNotBookable = async (notBookable: boolean) => {
+    setMarkBusy(true);
+    setMarkError(null);
+    try {
+      setDetail(
+        await billingDocumentsApi.setIncomingNotBookable(
+          token,
+          documentId,
+          notBookable,
+        ),
+      );
+      setConfirmingMark(false);
+    } catch (cause) {
+      setMarkError(
+        cause instanceof Error ? cause.message : "A jelölés nem menthető.",
+      );
+    } finally {
+      setMarkBusy(false);
     }
   };
 
@@ -208,14 +233,23 @@ export function BillingIncomingDocumentPage({
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2 lg:justify-end">
-          <PaymentBadge
-            paymentState={detail.paymentState}
-            paidAmount={detail.paidAmount}
-            lastPaymentDate={detail.lastPaymentDate}
-            paymentSource={detail.paymentSource}
-            paymentConflict={detail.paymentConflict}
-            currency={detail.currency}
-          />
+          {detail.notBookable ? (
+            <span
+              data-testid="not-bookable-pill"
+              className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
+            >
+              Nem könyvelendő
+            </span>
+          ) : (
+            <PaymentBadge
+              paymentState={detail.paymentState}
+              paidAmount={detail.paidAmount}
+              lastPaymentDate={detail.lastPaymentDate}
+              paymentSource={detail.paymentSource}
+              paymentConflict={detail.paymentConflict}
+              currency={detail.currency}
+            />
+          )}
           <span
             className={`rounded-full px-2.5 py-1 text-xs font-semibold ${bankPillTone(bank.state)}`}
           >
@@ -226,8 +260,63 @@ export function BillingIncomingDocumentPage({
               Sztornózott
             </span>
           ) : null}
+          {canAttach ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={markBusy}
+              onClick={() =>
+                detail.notBookable
+                  ? void setNotBookable(false)
+                  : setConfirmingMark(true)
+              }
+            >
+              {detail.notBookable ? "Mégis könyvelendő" : "Nem könyvelendő"}
+            </PilotButton>
+          ) : null}
         </div>
       </header>
+
+      {confirmingMark && !detail.notBookable ? (
+        <div
+          role="group"
+          aria-label="Nem könyvelendő megerősítése"
+          className="space-y-3 rounded-lg bg-white p-4 text-sm ring-1 ring-pilot-grey-200"
+        >
+          <p className="text-pilot-grey-800">
+            A számla nem kerül a könyvelői anyagba, a hiányzó számlák
+            számításába és a kimutatásokba. A jelölés bármikor visszavonható.
+            {bank.state === "PAIRED" && bank.debits.length > 0
+              ? ` A hozzá párosított ${bank.debits.length} banki terhelés újra hiányzóként jelenik meg a Hiányzó számlák között.`
+              : ""}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={markBusy}
+              onClick={() => void setNotBookable(true)}
+            >
+              Megerősítem
+            </PilotButton>
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={markBusy}
+              onClick={() => setConfirmingMark(false)}
+            >
+              Mégsem
+            </PilotButton>
+          </div>
+        </div>
+      ) : null}
+      {markError ? (
+        <Alert
+          variant="danger"
+          title="A jelölés nem sikerült"
+          description={markError}
+        />
+      ) : null}
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-6">

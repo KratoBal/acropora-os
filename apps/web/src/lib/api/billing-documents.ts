@@ -113,6 +113,22 @@ export const billingDocumentsApi = {
       },
     );
   },
+  /**
+   * „NEM KÖNYVELENDŐ” be- vagy kikapcsolása (Balázs, 2026-10-26). Csak a
+   * táblába írt soron (nem a `mailbox:` és `purchase:` előtagún); a válasz a
+   * frissített adatlap.
+   */
+  setIncomingNotBookable(token: string, id: string, notBookable: boolean) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/not-bookable`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notBookable }),
+      },
+    );
+  },
   incomingDetail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<IncomingDocumentDetail>(
       `/billing/incoming-documents/${encodeURIComponent(id)}`,

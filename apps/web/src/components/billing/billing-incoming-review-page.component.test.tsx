@@ -85,6 +85,7 @@ const review = (
       reason: null,
       debits: [{ bookingDate: "2026-10-05", amount: "81.30", currency: "EUR" }],
     },
+    notBookable: false,
     hasPdf: false,
   },
   state: "TO_REVIEW",

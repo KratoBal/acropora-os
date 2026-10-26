@@ -447,6 +447,7 @@ export function purchaseListItem(
     bankMatch: debits.length
       ? { state: "PAIRED", reason: null, debits }
       : { state: "UNPAIRED", reason: null, debits: [] },
+    notBookable: false,
     hasPdf: subject.scanIds.length > 0,
   };
 }
@@ -489,6 +490,8 @@ export async function supersedePurchaseRows(
       supplierTaxNumber: true,
       supplierEuTaxNumber: true,
       supplierName: true,
+      notBookable: true,
+      notBookableAt: true,
     },
   });
   const superseded = rows.filter(
@@ -499,6 +502,23 @@ export async function supersedePurchaseRows(
         row.supplierName,
       ) === key,
   );
+  /*
+    A „NEM KÖNYVELENDŐ” JELÖLÉS ÁTMEGY A FEED SORÁRA (Balázs, 2026-10-26): a
+    jelölés a számláról szól, nem arról a sorról, amelyik épp hordozza. Ha a
+    leváltott beszerzési sor jelölt volt, a feed sora is az lesz, különben a
+    számla csendben visszakerülne a könyvelői anyagba.
+  */
+  const marked = superseded.filter((row) => row.notBookable);
+  if (marked.length > 0) {
+    const first = marked
+      .map((row) => row.notBookableAt)
+      .filter((at): at is Date => at !== null)
+      .sort((a, b) => a.getTime() - b.getTime())[0];
+    await transaction.incomingBillingDocument.updateMany({
+      where: { source: "SZAMLAZZ", externalId: feed.externalId },
+      data: { notBookable: true, notBookableAt: first ?? new Date() },
+    });
+  }
   for (const row of superseded) {
     await transaction.incomingDocumentReading.updateMany({
       where: { incomingBillingDocumentId: row.id },
@@ -513,6 +533,7 @@ export async function supersedePurchaseRows(
         metadata: {
           purchaseInvoiceId: row.externalId,
           feedExternalId: feed.externalId,
+          ...(row.notBookable ? { notBookableCarriedOver: true } : {}),
         },
       },
     });

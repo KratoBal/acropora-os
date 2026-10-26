@@ -100,6 +100,7 @@ function incoming(
         { bookingDate: "2026-09-30", amount: "639720", currency: "HUF" },
       ],
     },
+    notBookable: false,
     hasPdf: false,
     ...overrides,
   };
@@ -245,6 +246,38 @@ describe("the incoming list", () => {
     expect(urlNavigation.push).toHaveBeenLastCalledWith(
       "/penzugy/szamlazas/bejovo/in-2",
     );
+  });
+
+  // „Nem könyvelendő” (Balázs, 2026-10-26). MI PIROSÍT: ha a Fizetés oszlop a
+  // fizetési jelvényt mutatná a „Nem könyv.” helyett; ha a jelölés nélküli sor is
+  // megkapná a feliratot; ha a jelölt sor nem „Nem párosítandó”.
+  it("a not-bookable invoice says Nem könyv. in the payment column instead of the payment badge; an unmarked one does not", async () => {
+    api.incomingList.mockResolvedValue(
+      page([
+        incoming({
+          id: "in-marked",
+          documentNumber: "NK-2026/1",
+          notBookable: true,
+          bankMatch: {
+            state: "NOT_TO_PAIR",
+            reason: "NOT_BOOKABLE",
+            debits: [],
+          },
+        }),
+        incoming({ id: "in-plain", documentNumber: "NK-2026/2" }),
+      ]),
+    );
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    const [marked, plain] = rows.map((row) => within(row));
+    expect(marked!.getByTestId("not-bookable-badge")).toHaveTextContent(
+      "Nem könyv.",
+    );
+    expect(marked!.queryByText("2026. 09. 30.")).toBeNull();
+    expect(marked!.getByText("Nem párosítandó")).toBeInTheDocument();
+    expect(plain!.queryByTestId("not-bookable-badge")).toBeNull();
+    expect(plain!.getByText("2026. 09. 30.")).toBeInTheDocument();
   });
 
   /*

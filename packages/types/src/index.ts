@@ -1109,6 +1109,7 @@ export type {
   IncomingBankMatch,
   IncomingBankMatchState,
   IncomingDateBasis,
+  IncomingNotToPairReason,
   IncomingDocumentDetail,
   IncomingRelatedDocument,
   IncomingDocumentLine,
