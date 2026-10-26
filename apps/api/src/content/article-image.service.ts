@@ -11,7 +11,11 @@ import {
 import { inspectImageBytes } from "../common/image-inspect.js";
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
 import { ArticleRepository } from "./article.repository.js";
-import { ArticleImageRepository } from "./article-image.repository.js";
+import {
+  ArticleImageRepository,
+  type ArticleImageContent,
+  type ArticleImageMeta,
+} from "./article-image.repository.js";
 import { ARTICLE_ENVIRONMENT } from "./article.service.js";
 
 /** The upload's limits: a web image, not a print master. */
@@ -19,12 +23,58 @@ export const ARTICLE_IMAGE_LIMITS = {
   maxBytes: 8 * 1024 * 1024,
   maxEdge: 6000,
   formats: ["png", "jpeg", "webp"],
+  // public and cached for a year: no metadata may survive (barracuda, #1897)
+  reencodeAll: true,
 } as const;
 
 /** A cuid, as the store gives it: the public route answers nothing else. */
 export const ARTICLE_IMAGE_ID = /^c[a-z0-9]{24}$/;
 
 export const ARTICLE_IMAGE_PUBLIC_PATH = "/public/article-images";
+
+/**
+ * THE PUBLIC ROUTE'S MEMORY (barracuda, #1897 CHANGES): the route is open and
+ * an image can be 8 MB, so a request must not mean a row pulled from
+ * Postgres. Keyed by id, so a varying query string (which slips past any
+ * browser or CDN cache) still finds it here. Least recently used goes first
+ * once the bytes exceed the ceiling; per API process.
+ */
+export class ArticleImageMemory {
+  private readonly entries = new Map<string, ArticleImageContent>();
+  private bytes = 0;
+
+  constructor(private readonly maxBytes = 64 * 1024 * 1024) {}
+
+  get(id: string): ArticleImageContent | undefined {
+    const entry = this.entries.get(id);
+    if (entry) {
+      // to the young end
+      this.entries.delete(id);
+      this.entries.set(id, entry);
+    }
+    return entry;
+  }
+
+  set(id: string, entry: ArticleImageContent): void {
+    if (entry.bytes.byteLength > this.maxBytes) return;
+    const old = this.entries.get(id);
+    if (old) {
+      this.bytes -= old.bytes.byteLength;
+      this.entries.delete(id);
+    }
+    this.entries.set(id, entry);
+    this.bytes += entry.bytes.byteLength;
+    for (const [key, value] of this.entries) {
+      if (this.bytes <= this.maxBytes) break;
+      this.entries.delete(key);
+      this.bytes -= value.bytes.byteLength;
+    }
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
+}
 
 /**
  * THE PUBLIC BASE OF THE IMAGE ADDRESSES (`ARTICLE_IMAGE_PUBLIC_BASE_URL`): the
@@ -62,6 +112,7 @@ export class ArticleImageService {
     private readonly articles: ArticleRepository,
     @Inject(ARTICLE_ENVIRONMENT)
     private readonly environment: NodeJS.ProcessEnv,
+    private readonly memory: ArticleImageMemory = new ArticleImageMemory(),
   ) {}
 
   async upload(
@@ -98,12 +149,27 @@ export class ArticleImageService {
     return { id: row.id, url: `${base}${ARTICLE_IMAGE_PUBLIC_PATH}/${row.id}` };
   }
 
-  /** One image by its id; anything else is a plain 404, the same for every miss. */
-  async content(id: string) {
-    const image = ARTICLE_IMAGE_ID.test(id)
-      ? await this.images.content(id)
-      : null;
+  /**
+   * The type and the hash, for a conditional request: from the memory, or a
+   * query without the bytes. The same 404 for every miss.
+   */
+  async meta(id: string): Promise<ArticleImageMeta> {
+    const cached = ARTICLE_IMAGE_ID.test(id) ? this.memory.get(id) : undefined;
+    const meta =
+      cached ?? (ARTICLE_IMAGE_ID.test(id) ? await this.images.meta(id) : null);
+    if (!meta) throw new NotFoundException("Nincs ilyen kép.");
+    return { contentType: meta.contentType, sha256: meta.sha256 };
+  }
+
+  /** One image by its id, from the memory when it is there; the same 404 for every miss. */
+  async content(id: string): Promise<ArticleImageContent> {
+    if (!ARTICLE_IMAGE_ID.test(id))
+      throw new NotFoundException("Nincs ilyen kép.");
+    const cached = this.memory.get(id);
+    if (cached) return cached;
+    const image = await this.images.content(id);
     if (!image) throw new NotFoundException("Nincs ilyen kép.");
+    this.memory.set(id, image);
     return image;
   }
 }

@@ -11,8 +11,11 @@ import { BadRequestException } from "@nestjs/common";
  *   deliberately not offered: it is text that can carry script.
  * - A JPEG IS RE-ENCODED. A phone photo can carry the place it was taken (GPS)
  *   in its EXIF; the re-encoding drops the metadata and applies the rotation.
- *   PNG, GIF and WebP stay as they are: re-encoding without resizing would only
- *   risk the animation or the transparency.
+ *   For the mail, PNG, GIF and WebP stay as they are: re-encoding without
+ *   resizing would only risk the animation or the transparency.
+ * - `reencodeAll` RE-ENCODES THE OTHERS TOO, without loss (barracuda, #1897):
+ *   a PNG's eXIf chunk and a WebP's EXIF block can carry GPS as well, and a
+ *   public, year-cached image must not. `sharp` writes no metadata unless asked.
  */
 export type ImageFormat = "png" | "jpeg" | "gif" | "webp";
 
@@ -35,6 +38,8 @@ export interface ImageInspectLimits {
   /** The largest edge in pixels: a small file can still unpack to a huge canvas. */
   readonly maxEdge: number;
   readonly formats: readonly ImageFormat[];
+  /** Re-encode every format, not only JPEG, so no metadata survives. */
+  readonly reencodeAll?: boolean;
 }
 
 export interface InspectedImage {
@@ -95,8 +100,26 @@ export async function inspectImageBytes(
       `A kép legfeljebb ${limits.maxEdge}×${limits.maxEdge} képpont lehet.`,
     );
 
-  if (format !== "jpeg")
+  if (format !== "jpeg" && !limits.reencodeAll)
     return { contentType: CONTENT_TYPES[format], width, height, bytes };
+
+  if (format === "png" || format === "webp" || format === "gif") {
+    const animated = format !== "png";
+    const source = sharp(Buffer.from(bytes), { animated });
+    const out = await (
+      format === "png"
+        ? source.png()
+        : format === "webp"
+          ? source.webp({ lossless: true })
+          : source.gif()
+    ).toBuffer();
+    return {
+      contentType: CONTENT_TYPES[format],
+      width,
+      height,
+      bytes: new Uint8Array(out),
+    };
+  }
 
   const ujra = await sharp(Buffer.from(bytes))
     .rotate()

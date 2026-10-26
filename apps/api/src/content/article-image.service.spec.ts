@@ -12,10 +12,14 @@ import sharp from "sharp";
 import type { ArticleRepository } from "./article.repository.js";
 import type { ArticleImageRepository } from "./article-image.repository.js";
 import {
+  ArticleImageMemory,
   articleImagePublicBase,
   ArticleImageService,
 } from "./article-image.service.js";
-import { ArticleImagePublicController } from "./article-image-public.controller.js";
+import {
+  ArticleImagePublicController,
+  etagMatches,
+} from "./article-image-public.controller.js";
 
 /*
   THE ARTICLE IMAGES (acrobot, 2026-10-26, msg 36320). What turns these red:
@@ -56,16 +60,27 @@ function setup(
   } = {},
 ) {
   const created: Record<string, unknown>[] = [];
+  const reads = { content: 0, meta: 0 };
   const images = {
     findBySha256: async () => existing,
     create: async (input: Record<string, unknown>) => {
       created.push(input);
       return { id: ID, contentType: String(input.contentType) };
     },
-    content: async (id: string) =>
-      id === ID
-        ? { contentType: "image/png", bytes: new Uint8Array([1, 2, 3]) }
-        : null,
+    content: async (id: string) => {
+      reads.content += 1;
+      return id === ID
+        ? {
+            contentType: "image/png",
+            sha256: "abc",
+            bytes: new Uint8Array([1, 2, 3]),
+          }
+        : null;
+    },
+    meta: async (id: string) => {
+      reads.meta += 1;
+      return id === ID ? { contentType: "image/png", sha256: "abc" } : null;
+    },
   } as unknown as ArticleImageRepository;
   const articles = {
     editable: async () => editable,
@@ -73,6 +88,7 @@ function setup(
   return {
     service: new ArticleImageService(images, articles, env),
     created,
+    reads,
   };
 }
 
@@ -109,6 +125,37 @@ describe("articleImagePublicBase", () => {
       }),
       null,
     );
+  });
+});
+
+describe("ArticleImageService.upload -- metadata", () => {
+  it("re-encodes a PNG and a WebP too, so no EXIF reaches the public", async () => {
+    for (const format of ["png", "webp"] as const) {
+      const { service, created } = setup();
+      const withExif = await sharp({
+        create: {
+          width: 4,
+          height: 3,
+          channels: 3,
+          background: { r: 1, g: 2, b: 3 },
+        },
+      })
+        .withMetadata({ exif: { IFD0: { Copyright: "hely" } } })
+        [format]()
+        .toBuffer();
+      assert.ok(
+        (await sharp(withExif).metadata()).exif,
+        `${format} fixture has EXIF`,
+      );
+      await service.upload("c1", { buffer: withExif }, null);
+      const stored = created[0]?.bytes as Uint8Array;
+      assert.equal(
+        (await sharp(Buffer.from(stored)).metadata()).exif,
+        undefined,
+        format,
+      );
+      assert.equal(created[0]?.contentType, `image/${format}`);
+    }
   });
 });
 
@@ -199,24 +246,119 @@ describe("ArticleImageService.upload", () => {
   });
 });
 
+let callers = 0;
+/** a fresh caller address for each request series, so the shared limiter does not carry over */
+const request = (headers: Record<string, string> = {}) => ({
+  headers: {
+    "x-forwarded-for": `10.0.${Math.floor(callers / 250)}.${callers++ % 250}`,
+    ...headers,
+  },
+});
+const response = () => {
+  const out = { status: 200, headers: {} as Record<string, string> };
+  return {
+    out,
+    res: {
+      status(code: number) {
+        out.status = code;
+      },
+      setHeader(name: string, value: string) {
+        out.headers[name] = value;
+      },
+    },
+  };
+};
+
 describe("ArticleImagePublicController", () => {
-  it("serves one image by a well-formed id", async () => {
+  it("serves one image by a well-formed id, with its ETag", async () => {
     const { service } = setup();
-    const file = await new ArticleImagePublicController(service).image(ID);
-    const headers = file.getHeaders();
+    const { out, res } = response();
+    const file = await new ArticleImagePublicController(service).image(
+      ID,
+      request(),
+      res,
+    );
+    const headers = file!.getHeaders();
     assert.equal(headers.type, "image/png");
     assert.equal(headers.length, 3);
     assert.equal(headers.disposition, "inline");
+    assert.equal(out.headers.ETag, '"abc"');
   });
 
   it("answers the same 404 for an unknown and a malformed id", async () => {
     const { service } = setup();
     const controller = new ArticleImagePublicController(service);
-    for (const id of ["c" + "b".repeat(24), "../etc/passwd", "", ID + "x"])
-      await assert.rejects(() => controller.image(id), NotFoundException);
+    for (const id of ["c" + "b".repeat(24), "../etc/passwd", "", ID + "x"]) {
+      await assert.rejects(
+        () => controller.image(id, request(), response().res),
+        NotFoundException,
+      );
+      await assert.rejects(
+        () =>
+          controller.image(
+            id,
+            request({ "if-none-match": '"abc"' }),
+            response().res,
+          ),
+        NotFoundException,
+      );
+    }
   });
 
-  it("sets the headers that keep the file an image", () => {
+  /*
+    THE LOAD IS BOUNDED (barracuda, #1897 CHANGES): a request never means more
+    than one row, and usually none.
+  */
+  it("reads the bytes once, then from memory, whatever the query string", async () => {
+    const { service, reads } = setup();
+    const controller = new ArticleImagePublicController(service);
+    for (let i = 0; i < 5; i += 1)
+      await controller.image(ID, request(), response().res);
+    assert.equal(reads.content, 1);
+  });
+
+  it("answers a still valid ETag with 304, without reading the bytes", async () => {
+    const { service, reads } = setup();
+    const { out, res } = response();
+    const answer = await new ArticleImagePublicController(service).image(
+      ID,
+      request({ "if-none-match": 'W/"x", "abc"' }),
+      res,
+    );
+    assert.equal(answer, undefined);
+    assert.equal(out.status, 304);
+    assert.equal(out.headers.ETag, '"abc"');
+    assert.equal(reads.content, 0);
+    assert.equal(reads.meta, 1);
+  });
+
+  it("sends the bytes again when the ETag is an old one", async () => {
+    const { service } = setup();
+    const { out, res } = response();
+    const answer = await new ArticleImagePublicController(service).image(
+      ID,
+      request({ "if-none-match": '"regi"' }),
+      res,
+    );
+    assert.ok(answer);
+    assert.equal(out.status, 200);
+  });
+
+  it("refuses a caller past its limit with 429, and only that caller", async () => {
+    const { service } = setup();
+    const controller = new ArticleImagePublicController(service);
+    const one = request();
+    for (let i = 0; i < 300; i += 1)
+      await controller.image(ID, one, response().res);
+    await assert.rejects(
+      () => controller.image(ID, one, response().res),
+      (error: unknown) =>
+        (error as { getStatus?: () => number }).getStatus?.() === 429,
+    );
+    assert.ok(await controller.image(ID, request(), response().res));
+  });
+
+  it("sets the headers that keep the file an image any origin may show", () => {
     const keys = Reflect.getMetadataKeys(
       ArticleImagePublicController.prototype.image,
     );
@@ -228,5 +370,41 @@ describe("ArticleImagePublicController", () => {
     assert.equal(byName["X-Content-Type-Options"], "nosniff");
     assert.match(byName["Cache-Control"] ?? "", /public/);
     assert.match(byName["Content-Security-Policy"] ?? "", /default-src 'none'/);
+    assert.equal(byName["Cross-Origin-Resource-Policy"], "cross-origin");
+  });
+});
+
+describe("etagMatches", () => {
+  it("finds the tag in a list, weak or strong, or a star", () => {
+    assert.equal(etagMatches('"a", "b"', '"b"'), true);
+    assert.equal(etagMatches('W/"b"', '"b"'), true);
+    assert.equal(etagMatches("*", '"b"'), true);
+    assert.equal(etagMatches('"a"', '"b"'), false);
+    assert.equal(etagMatches(undefined, '"b"'), false);
+  });
+});
+
+describe("ArticleImageMemory", () => {
+  const entry = (n: number) => ({
+    contentType: "image/png",
+    sha256: String(n),
+    bytes: new Uint8Array(n),
+  });
+
+  it("drops the least recently used once the bytes pass the ceiling", () => {
+    const memory = new ArticleImageMemory(10);
+    memory.set("a", entry(4));
+    memory.set("b", entry(4));
+    memory.get("a");
+    memory.set("c", entry(4));
+    assert.ok(memory.get("a"));
+    assert.equal(memory.get("b"), undefined);
+    assert.ok(memory.get("c"));
+  });
+
+  it("does not keep an entry larger than the whole ceiling", () => {
+    const memory = new ArticleImageMemory(10);
+    memory.set("big", entry(11));
+    assert.equal(memory.size, 0);
   });
 });

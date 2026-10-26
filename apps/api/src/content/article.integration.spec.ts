@@ -312,6 +312,12 @@ describe(
       assert.equal(back?.contentType, "image/png");
       assert.deepEqual([...(back?.bytes ?? [])], [...bytes]);
       assert.equal((await articleImages.findBySha256(sha256))?.id, row.id);
+      assert.equal(back?.sha256, sha256);
+      // the 304's lookup: the type and the hash, without the bytes
+      assert.deepEqual(await articleImages.meta(row.id), {
+        contentType: "image/png",
+        sha256,
+      });
       assert.equal(await articleImages.content("c" + "z".repeat(24)), null);
     });
   },

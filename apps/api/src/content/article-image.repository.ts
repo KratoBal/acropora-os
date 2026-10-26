@@ -6,8 +6,12 @@ export interface ArticleImageRow {
   contentType: string;
 }
 
-export interface ArticleImageContent {
+export interface ArticleImageMeta {
   contentType: string;
+  sha256: string;
+}
+
+export interface ArticleImageContent extends ArticleImageMeta {
   bytes: Uint8Array;
 }
 
@@ -47,13 +51,25 @@ export class ArticleImageRepository {
     });
   }
 
+  /** The type and the hash only: enough for a 304, without the bytes. */
+  meta(id: string): Promise<ArticleImageMeta | null> {
+    return prisma.articleImage.findUnique({
+      where: { id },
+      select: { contentType: true, sha256: true },
+    });
+  }
+
   async content(id: string): Promise<ArticleImageContent | null> {
     const row = await prisma.articleImage.findUnique({
       where: { id },
-      select: { contentType: true, content: true },
+      select: { contentType: true, sha256: true, content: true },
     });
     return row
-      ? { contentType: row.contentType, bytes: new Uint8Array(row.content) }
+      ? {
+          contentType: row.contentType,
+          sha256: row.sha256,
+          bytes: new Uint8Array(row.content),
+        }
       : null;
   }
 }
