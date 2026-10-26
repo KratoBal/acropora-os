@@ -51,10 +51,19 @@ export const INCOMING_BANK_MATCH_LABELS: Readonly<
   NOT_TO_PAIR: "Nem párosítandó",
 };
 
+/**
+ * A „nem párosítandó” okai. NOT_BOOKABLE: a számlát kézzel „Nem könyvelendő”-nek
+ * jelölték (Balázs, 2026-10-26); ez nyer minden más ok előtt.
+ */
+export type IncomingNotToPairReason =
+  "NOT_BOOKABLE" | "NOT_COMPANY" | "PROFORMA" | "ZERO_TOTAL";
+
 /** A „nem párosítandó” oka, a felületen kiírva. */
 export const INCOMING_NOT_TO_PAIR_REASON_LABELS: Readonly<
-  Record<"NOT_COMPANY" | "PROFORMA" | "ZERO_TOTAL", string>
+  Record<IncomingNotToPairReason, string>
 > = {
+  NOT_BOOKABLE:
+    "Nem könyvelendő: kézzel jelölt, nem kerül a könyvelői anyagba.",
   NOT_COMPANY: "A számla nem a cégre szól.",
   PROFORMA: "Díjbekérő, nem számla: nem kerül banki párosításra.",
   ZERO_TOTAL: "Nulla végösszegű számla, nincs fizetés.",
@@ -63,7 +72,7 @@ export const INCOMING_NOT_TO_PAIR_REASON_LABELS: Readonly<
 export interface IncomingBankMatch {
   state: IncomingBankMatchState;
   /** NOT_TO_PAIR oka. */
-  reason: "NOT_COMPANY" | "PROFORMA" | "ZERO_TOTAL" | null;
+  reason: IncomingNotToPairReason | null;
   /** A párosított terhelések (egy számlát több terhelés is fizethet). */
   debits: { bookingDate: string; amount: DecimalText; currency: string }[];
 }
@@ -271,6 +280,13 @@ export interface IncomingDocumentListItem {
    * utána. A Számlázz.hu-ból jött sornál `null`.
    */
   review: IncomingReviewState | null;
+  /**
+   * „NEM KÖNYVELENDŐ” (Balázs, 2026-10-26): kézzel jelölt számla; nem kerül a
+   * könyvelői anyagba, a hiányzó számlák számításába és a kimutatásokba. Csak a
+   * táblába írt soron lehet (a `mailbox:` és `purchase:` előtagú, még
+   * jóvá nem hagyott soron nem), ott mindig `false`.
+   */
+  notBookable: boolean;
   /**
    * Letölthető-e a számla PDF-je: a Számlázz.hu küldte, vagy a begyűjtés hozta
    * (számlaszám és szállítói adószám-törzs szerint párosítva).

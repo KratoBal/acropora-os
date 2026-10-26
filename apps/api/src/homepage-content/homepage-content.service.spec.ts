@@ -10,6 +10,7 @@ import type { HomepageContentInput } from "@acropora/types";
 
 import {
   HOMEPAGE_FEATURED_MAX,
+  homepageStorefrontUrl,
   HomepageContentService,
   toHomepageContent,
   type HomepageContentRow,
@@ -67,7 +68,19 @@ function setup(
         productId,
         name: `Termék ${productId}`,
         sortOrder: i,
+        imageUrl: null,
+        grossPrice: null,
       })),
+    orderFeatured: async (productIds) => {
+      if (
+        productIds.length !== marked.size ||
+        productIds.some((id) => !marked.has(id))
+      )
+        return "mismatch";
+      marked.clear();
+      for (const id of productIds) marked.add(id);
+      return "ok";
+    },
     setFeatured: async (productId, featured, _userId, max) => {
       if (productId === "nincs") return "unknown-product";
       if (!featured) {
@@ -116,6 +129,7 @@ describe("HomepageContentService", () => {
       blocks: null,
       footer: null,
       imageHosts: [],
+      storefrontUrl: null,
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed: true,
@@ -294,7 +308,7 @@ describe("HomepageContentService: blocks and footer", () => {
     assert.equal(reset.content.blocks, null);
   });
 
-  it("stores the footer intro through the full-profile sanitizer", async () => {
+  it("stores the footer intro through the sanitizer: script, iframe and on* go", async () => {
     const { service, saved } = setup(async () => "sent");
     const out = await service.save(
       {
@@ -306,14 +320,14 @@ describe("HomepageContentService: blocks and footer", () => {
       },
       "u-1",
     );
-    const clean =
-      "<p>Zátony</p><table><tbody><tr><td><p>H-P</p></td></tr></tbody></table>";
+    // the short profile: the table goes, its paragraph stays
+    const clean = "<p>Zátony</p><p>H-P</p>";
     assert.equal(saved[0]?.input.footer?.intro, clean);
     assert.equal(out.content.footer?.intro, clean);
     assert.equal(out.content.footer?.columns[0]?.links[0]?.href, "/store");
   });
 
-  it("keeps only the environment's image hosts in the footer intro, and tells the editor the list", async () => {
+  it("stores the footer intro in the short profile: no image, no table; the editor still gets the host list", async () => {
     const { service } = setup(async () => "sent", {
       env: {
         ...ALLOWED,
@@ -326,30 +340,16 @@ describe("HomepageContentService: blocks and footer", () => {
         texts: {},
         slides: null,
         footer: footer(
-          '<p><img src="https://static.acropora.hu/a.jpg"><img src="https://tracker.example/p.gif"></p>',
+          '<p><strong>a</strong> <a href="/store">bolt</a><img src="https://static.acropora.hu/a.jpg"></p><table><tbody><tr><td>t</td></tr></tbody></table><h2>c</h2>',
         ),
       },
       "u-1",
     );
     assert.equal(
       out.content.footer?.intro,
-      '<p><img src="https://static.acropora.hu/a.jpg"></p>',
+      '<p><strong>a</strong> <a href="/store">bolt</a></p>tc',
     );
     assert.deepEqual(out.content.imageHosts, ["static.acropora.hu"]);
-  });
-
-  it("without the variable no footer image is stored", async () => {
-    const { service } = setup(async () => "sent");
-    const out = await service.save(
-      {
-        texts: {},
-        slides: null,
-        footer: footer('<p>a<img src="https://static.acropora.hu/a.jpg"></p>'),
-      },
-      "u-1",
-    );
-    assert.equal(out.content.footer?.intro, "<p>a</p>");
-    assert.deepEqual(out.content.imageHosts, []);
   });
 
   it("measures the intro limit after cleaning, so a stored footer always reads back", async () => {
@@ -575,5 +575,135 @@ describe("HomepageContentService featured marker", () => {
     await service.setFeatured("m12", true, "u");
     assert.equal((await service.featured()).length, 12);
     assert.equal(HOMEPAGE_FEATURED_MAX, 12);
+  });
+});
+
+/*
+  THE TEST STOREFRONT'S ADDRESS. What turns these red: the address handed to
+  the editor where the environment does not allow writing to the shop (the
+  production OS would preview against the live shop), an http or malformed
+  address passed on, a path kept (the preview needs the origin only).
+*/
+describe("homepageStorefrontUrl", () => {
+  it("is the https origin, only where writing to the shop is allowed", () => {
+    assert.equal(
+      homepageStorefrontUrl({
+        ...ALLOWED,
+        HOMEPAGE_PREVIEW_ALLOWED: "true",
+        HOMEPAGE_STOREFRONT_URL: " https://teszt.acropora.hu/hu/store ",
+      }),
+      "https://teszt.acropora.hu",
+    );
+    assert.equal(
+      homepageStorefrontUrl({
+        HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu",
+      }),
+      null,
+    );
+    for (const bad of [
+      "http://teszt.acropora.hu",
+      "teszt.acropora.hu",
+      "",
+      "javascript:alert(1)",
+    ])
+      assert.equal(
+        homepageStorefrontUrl({
+          ...ALLOWED,
+          HOMEPAGE_PREVIEW_ALLOWED: "true",
+          HOMEPAGE_STOREFRONT_URL: bad,
+        }),
+        null,
+        bad,
+      );
+  });
+
+  it("needs its own switch: projection allowed and an address are not enough", () => {
+    for (const allowed of [undefined, "false", "1", "TRUE"])
+      assert.equal(
+        homepageStorefrontUrl({
+          ...ALLOWED,
+          HOMEPAGE_PREVIEW_ALLOWED: allowed,
+          HOMEPAGE_STOREFRONT_URL: "https://shop.acropora.hu",
+        }),
+        null,
+        String(allowed),
+      );
+  });
+
+  it("reaches the editor with the content", async () => {
+    const { service } = setup(async () => "sent", {
+      env: {
+        ...ALLOWED,
+        HOMEPAGE_PREVIEW_ALLOWED: "true",
+        HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu",
+      },
+    });
+    assert.equal(
+      (await service.get()).storefrontUrl,
+      "https://teszt.acropora.hu",
+    );
+  });
+});
+
+/*
+  THE BAND'S ORDER (2b-2). What turns these red: a reorder that drops or adds
+  a product (the list must be exactly the marked ones), a duplicate or a
+  thirteenth id accepted, a reorder that does not ask for the projection where
+  it is on, or one whose projection failure fails the order.
+*/
+describe("HomepageContentService.orderFeatured", () => {
+  it("puts the band in the given order and asks for one projection where it is on", async () => {
+    let asked = 0;
+    const { service } = setup(async () => {
+      asked++;
+      return "sent";
+    });
+    for (const id of ["a", "b", "c"])
+      await service.setFeatured(id, true, "u-1");
+    asked = 0;
+    const out = await service.orderFeatured(["c", "a", "b"], "u-1");
+    assert.deepEqual(
+      out.list.map((row) => row.productId),
+      ["c", "a", "b"],
+    );
+    assert.equal(out.projection, "sent");
+    assert.equal(asked, 1);
+  });
+
+  it("refuses a list that is not exactly the marked products, a duplicate, too many or no list", async () => {
+    const { service } = setup(async () => "sent");
+    for (const id of ["a", "b"]) await service.setFeatured(id, true, "u-1");
+    await assert.rejects(
+      service.orderFeatured(["a"], "u-1"),
+      ConflictException,
+    );
+    await assert.rejects(
+      service.orderFeatured(["a", "b", "x"], "u-1"),
+      ConflictException,
+    );
+    for (const bad of [
+      ["a", "a"],
+      "a,b",
+      [1, 2],
+      Array.from({ length: 13 }, (_, i) => `p${i}`),
+    ])
+      await assert.rejects(
+        service.orderFeatured(bad, "u-1"),
+        BadRequestException,
+        JSON.stringify(bad),
+      );
+  });
+
+  it("keeps the order when the projection fails", async () => {
+    const { service } = setup(async () => {
+      throw new Error("a bolt nem válaszol");
+    });
+    for (const id of ["a", "b"]) await service.setFeatured(id, true, "u-1");
+    const out = await service.orderFeatured(["b", "a"], "u-1");
+    assert.equal(out.projection, "failed");
+    assert.deepEqual(
+      out.list.map((row) => row.productId),
+      ["b", "a"],
+    );
   });
 });

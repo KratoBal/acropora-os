@@ -61,6 +61,14 @@ export interface HomepageFeaturedRow {
   productId: string;
   name: string;
   sortOrder: number;
+  /**
+   * The product's first image and its list price, from the product itself
+   * (the same fields the product list shows), never a copy kept by hand
+   * (Balázs's brief, 2026-10-26, 4. pont). `grossPrice`: the UNAS mirror's
+   * gross price, `null` without one.
+   */
+  imageUrl: string | null;
+  grossPrice: string | null;
 }
 
 /** The only record today; another key would be another home page variant. */
@@ -96,6 +104,15 @@ export interface HomepageContentStore {
     userId: string,
     max: number,
   ): Promise<"ok" | "unknown-product" | "full">;
+  /**
+   * The band's new order. `mismatch`: the list is not exactly the marked
+   * products (a product marked or unmarked meanwhile, a duplicate): nothing is
+   * written, the editor reloads the list.
+   */
+  orderFeatured(
+    productIds: readonly string[],
+    userId: string,
+  ): Promise<"ok" | "mismatch">;
   /** The whole record, one transaction. */
   save(
     key: string,
@@ -133,6 +150,25 @@ const HOST_NAME =
  * empty or missing variable is an empty list, which passes NO image: the safe
  * direction (barracuda, #1877).
  */
+/**
+ * THE TEST STOREFRONT'S ORIGIN (`HOMEPAGE_STOREFRONT_URL`), https only, and
+ * only where BOTH writing to the shop is allowed AND the preview is switched
+ * on by its own variable (`HOMEPAGE_PREVIEW_ALLOWED=true`, the test system
+ * only). The second switch is what keeps the admin from framing the live shop
+ * once the production OS projects to the live Medusa too (barracuda, #1881):
+ * a comment on an env template is not a guard.
+ */
+export function homepageStorefrontUrl(env: NodeJS.ProcessEnv): string | null {
+  if (!homepageProjectionAllowed(env)) return null;
+  if (env.HOMEPAGE_PREVIEW_ALLOWED !== "true") return null;
+  try {
+    const url = new URL((env.HOMEPAGE_STOREFRONT_URL ?? "").trim());
+    return url.protocol === "https:" ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
 export function richTextImageHosts(env: NodeJS.ProcessEnv): string[] {
   return [
     ...new Set(
@@ -179,10 +215,7 @@ function storedBlocks(value: unknown): HomepageBlock[] | null {
 }
 
 /** The stored footer through the same strict parse as a save, or `null`. */
-function storedFooter(
-  value: unknown,
-  imageHosts: readonly string[],
-): HomepageFooter | null {
+function storedFooter(value: unknown): HomepageFooter | null {
   if (value === null || value === undefined) return null;
   const parsed = parseHomepageContentInput({
     texts: {},
@@ -192,35 +225,30 @@ function storedFooter(
   if (!parsed.ok || !parsed.value.footer) return null;
   /*
     THE READ SANITIZES AGAIN (barracuda, #1878): a hand-written row is never
-    handed on raw, and a host taken off the list stops showing at once.
+    handed on raw.
   */
   return {
     ...parsed.value.footer,
-    intro: sanitizeRichHtml(parsed.value.footer.intro, {
-      profile: "full",
-      allowedImageHosts: imageHosts,
-    }),
+    intro: sanitizeRichHtml(parsed.value.footer.intro, { profile: "short" }),
   };
 }
 
 /**
- * THE FOOTER INTRO IS RICH TEXT, stored through the shared sanitizer's `full`
- * profile (#1875): the storefront draws it as HTML on every page, so the stored
- * form is the security boundary, exactly like the mail body.
+ * THE FOOTER INTRO IS RICH TEXT in the shared sanitizer's SHORT profile
+ * (#1879): paragraph, bold, italic, link, lists. The storefront footer draws
+ * exactly these (murena 36080, barracuda #1878 b), so what the editor shows is
+ * what every page shows. The storefront draws it as HTML on every page, so the
+ * stored form is the security boundary, exactly like the mail body.
  */
 function withSanitizedFooter(
   input: HomepageContentInput,
-  imageHosts: readonly string[],
 ): HomepageContentInput {
   if (!input.footer) return input;
   return {
     ...input,
     footer: {
       ...input.footer,
-      intro: sanitizeRichHtml(input.footer.intro, {
-        profile: "full",
-        allowedImageHosts: imageHosts,
-      }),
+      intro: sanitizeRichHtml(input.footer.intro, { profile: "short" }),
     },
   };
 }
@@ -230,6 +258,7 @@ export function toHomepageContent(
   row: HomepageContentRow | null,
   projectionAllowed = false,
   imageHosts: readonly string[] = [],
+  storefrontUrl: string | null = null,
 ): HomepageContent {
   if (!row)
     return {
@@ -238,6 +267,7 @@ export function toHomepageContent(
       blocks: null,
       footer: null,
       imageHosts: [...imageHosts],
+      storefrontUrl,
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed,
@@ -250,8 +280,9 @@ export function toHomepageContent(
     texts,
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
     blocks: storedBlocks(row.blocks),
-    footer: storedFooter(row.footer, imageHosts),
+    footer: storedFooter(row.footer),
     imageHosts: [...imageHosts],
+    storefrontUrl,
     updatedAt: row.updatedAt.toISOString(),
     projectionEnabled: row.projectionEnabled === true,
     projectionAllowed,
@@ -386,11 +417,53 @@ export class HomepageContentService {
     return { featured, list: await this.store.featuredList(), projection };
   }
 
+  /**
+   * THE BAND'S ORDER (2b-2): the first product is the large card. Like the
+   * marker, a change asks for one projection round where it is on, and its
+   * failure never fails the order.
+   */
+  async orderFeatured(
+    productIds: unknown,
+    userId: string,
+  ): Promise<{
+    list: HomepageFeaturedRow[];
+    projection: HomepageProjectionResult;
+  }> {
+    if (
+      !Array.isArray(productIds) ||
+      productIds.length > HOMEPAGE_FEATURED_MAX ||
+      productIds.some((id) => typeof id !== "string" || !id) ||
+      new Set(productIds).size !== productIds.length
+    )
+      throw new BadRequestException(
+        `productIds: legfeljebb ${HOMEPAGE_FEATURED_MAX} különböző termékazonosító`,
+      );
+    const outcome = await this.store.orderFeatured(
+      productIds as string[],
+      userId,
+    );
+    if (outcome === "mismatch")
+      throw new ConflictException(
+        "A kijelölt termékek közben változtak; töltsd újra a listát.",
+      );
+    const row = await this.store.find(MAIN_HOMEPAGE_KEY);
+    let projection: HomepageProjectionResult;
+    if (!homepageProjectionOn(this.environment, row)) projection = "off";
+    else
+      try {
+        projection = await this.project();
+      } catch {
+        projection = "failed";
+      }
+    return { list: await this.store.featuredList(), projection };
+  }
+
   async get(): Promise<HomepageContent> {
     return toHomepageContent(
       await this.store.find(MAIN_HOMEPAGE_KEY),
       homepageProjectionAllowed(this.environment),
       richTextImageHosts(this.environment),
+      homepageStorefrontUrl(this.environment),
     );
   }
 
@@ -403,10 +476,7 @@ export class HomepageContentService {
   }> {
     const parsed = parseHomepageContentInput(body);
     if (!parsed.ok) throw new BadRequestException(parsed.message);
-    const clean = withSanitizedFooter(
-      parsed.value,
-      richTextImageHosts(this.environment),
-    );
+    const clean = withSanitizedFooter(parsed.value);
     /*
       THE LIMIT HOLDS FOR WHAT IS STORED, NOT ONLY FOR WHAT ARRIVED (barracuda,
       #1878): the sanitizer can lengthen a text (a bare "<" becomes "&lt;"), and
@@ -430,6 +500,7 @@ export class HomepageContentService {
         row,
         homepageProjectionAllowed(this.environment),
         richTextImageHosts(this.environment),
+        homepageStorefrontUrl(this.environment),
       ),
       projection,
     };

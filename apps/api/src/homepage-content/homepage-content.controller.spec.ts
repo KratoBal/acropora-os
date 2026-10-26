@@ -29,6 +29,7 @@ function controller(env: NodeJS.ProcessEnv) {
     setProjection: record("setProjection"),
     featured: record("featured"),
     setFeatured: record("setFeatured"),
+    orderFeatured: record("orderFeatured"),
     uploadImage: record("uploadImage"),
   } as unknown as HomepageContentService;
   return { calls, c: new HomepageContentController(service, env) };
@@ -40,6 +41,7 @@ const all = (c: HomepageContentController) => [
   () => c.setProjection({ enabled: true }, user),
   () => c.featured(),
   () => c.setFeatured("p1", { featured: true }, user),
+  () => c.orderFeatured({ productIds: ["p1"] }, user),
   () => c.uploadImage(file),
 ];
 
@@ -49,7 +51,7 @@ describe("the home page content endpoints follow MEDUSA_PROJECT_HOMEPAGE_CONTENT
     ["false", { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "false" }],
     ["a value other than true", { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "1" }],
   ] as const) {
-    it(`off, ${label}: all six endpoints are 404 and the service is not called`, () => {
+    it(`off, ${label}: all seven endpoints are 404 and the service is not called`, () => {
       const { calls, c } = controller(env);
       for (const call of all(c)) assert.throws(call, NotFoundException);
       assert.deepEqual(calls, []);
@@ -74,6 +76,7 @@ describe("the home page content endpoints follow MEDUSA_PROJECT_HOMEPAGE_CONTENT
       "setProjection",
       "featured",
       "setFeatured",
+      "orderFeatured",
       "uploadImage",
     ]);
   });
