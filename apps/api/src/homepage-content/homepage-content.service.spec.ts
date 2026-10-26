@@ -115,6 +115,7 @@ describe("HomepageContentService", () => {
       slides: null,
       blocks: null,
       footer: null,
+      imageHosts: [],
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed: true,
@@ -310,6 +311,78 @@ describe("HomepageContentService: blocks and footer", () => {
     assert.equal(saved[0]?.input.footer?.intro, clean);
     assert.equal(out.content.footer?.intro, clean);
     assert.equal(out.content.footer?.columns[0]?.links[0]?.href, "/store");
+  });
+
+  it("keeps only the environment's image hosts in the footer intro, and tells the editor the list", async () => {
+    const { service } = setup(async () => "sent", {
+      env: {
+        ...ALLOWED,
+        RICH_TEXT_IMAGE_HOSTS:
+          " Static.Acropora.hu, nem host, static.acropora.hu ",
+      },
+    });
+    const out = await service.save(
+      {
+        texts: {},
+        slides: null,
+        footer: footer(
+          '<p><img src="https://static.acropora.hu/a.jpg"><img src="https://tracker.example/p.gif"></p>',
+        ),
+      },
+      "u-1",
+    );
+    assert.equal(
+      out.content.footer?.intro,
+      '<p><img src="https://static.acropora.hu/a.jpg"></p>',
+    );
+    assert.deepEqual(out.content.imageHosts, ["static.acropora.hu"]);
+  });
+
+  it("without the variable no footer image is stored", async () => {
+    const { service } = setup(async () => "sent");
+    const out = await service.save(
+      {
+        texts: {},
+        slides: null,
+        footer: footer('<p>a<img src="https://static.acropora.hu/a.jpg"></p>'),
+      },
+      "u-1",
+    );
+    assert.equal(out.content.footer?.intro, "<p>a</p>");
+    assert.deepEqual(out.content.imageHosts, []);
+  });
+
+  it("measures the intro limit after cleaning, so a stored footer always reads back", async () => {
+    const { service, saved } = setup(async () => "sent");
+    await assert.rejects(
+      service.save(
+        {
+          texts: {},
+          slides: null,
+          footer: footer(`<p>${"<".repeat(3990)}</p>`),
+        },
+        "u-1",
+      ),
+      BadRequestException,
+    );
+    assert.equal(saved.length, 0);
+  });
+
+  it("sanitizes a hand-written stored intro again on read", () => {
+    const content = toHomepageContent(
+      {
+        key: "main",
+        texts: {},
+        slides: null,
+        blocks: null,
+        footer: footer('<p onclick="x()">a<script>1</script></p>'),
+        projectionEnabled: false,
+        updatedAt: new Date("2026-10-26T09:00:00Z"),
+      },
+      false,
+      [],
+    );
+    assert.equal(content.footer?.intro, "<p>a</p>");
   });
 
   it("refuses an incomplete block list before the store", async () => {

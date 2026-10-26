@@ -10,6 +10,7 @@ import {
 import { sanitizeRichHtml } from "@acropora/rich-text";
 import {
   HOMEPAGE_BLOCK_KEYS,
+  HOMEPAGE_LIMITS,
   parseHomepageContentInput,
   type HomepageBlock,
   type HomepageContent,
@@ -123,6 +124,26 @@ export function homepageProjectionAllowed(env: NodeJS.ProcessEnv): boolean {
   return env.MEDUSA_PROJECT_HOMEPAGE_CONTENT === "true";
 }
 
+const HOST_NAME =
+  /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+/**
+ * THE IMAGE HOSTS OF A FULL-PROFILE TEXT (`RICH_TEXT_IMAGE_HOSTS`, comma
+ * separated host names). A malformed entry is dropped, not guessed at; an
+ * empty or missing variable is an empty list, which passes NO image: the safe
+ * direction (barracuda, #1877).
+ */
+export function richTextImageHosts(env: NodeJS.ProcessEnv): string[] {
+  return [
+    ...new Set(
+      (env.RICH_TEXT_IMAGE_HOSTS ?? "")
+        .split(",")
+        .map((host) => host.trim().toLowerCase())
+        .filter((host) => HOST_NAME.test(host)),
+    ),
+  ];
+}
+
 /**
  * IS THE PROJECTION ON HERE: the environment allows it AND the administrator's
  * switch is on (an AND, not an OR: a missing variable makes the switch inert).
@@ -158,14 +179,28 @@ function storedBlocks(value: unknown): HomepageBlock[] | null {
 }
 
 /** The stored footer through the same strict parse as a save, or `null`. */
-function storedFooter(value: unknown): HomepageFooter | null {
+function storedFooter(
+  value: unknown,
+  imageHosts: readonly string[],
+): HomepageFooter | null {
   if (value === null || value === undefined) return null;
   const parsed = parseHomepageContentInput({
     texts: {},
     slides: null,
     footer: value,
   });
-  return parsed.ok ? (parsed.value.footer ?? null) : null;
+  if (!parsed.ok || !parsed.value.footer) return null;
+  /*
+    THE READ SANITIZES AGAIN (barracuda, #1878): a hand-written row is never
+    handed on raw, and a host taken off the list stops showing at once.
+  */
+  return {
+    ...parsed.value.footer,
+    intro: sanitizeRichHtml(parsed.value.footer.intro, {
+      profile: "full",
+      allowedImageHosts: imageHosts,
+    }),
+  };
 }
 
 /**
@@ -175,13 +210,17 @@ function storedFooter(value: unknown): HomepageFooter | null {
  */
 function withSanitizedFooter(
   input: HomepageContentInput,
+  imageHosts: readonly string[],
 ): HomepageContentInput {
   if (!input.footer) return input;
   return {
     ...input,
     footer: {
       ...input.footer,
-      intro: sanitizeRichHtml(input.footer.intro, { profile: "full" }),
+      intro: sanitizeRichHtml(input.footer.intro, {
+        profile: "full",
+        allowedImageHosts: imageHosts,
+      }),
     },
   };
 }
@@ -190,6 +229,7 @@ function withSanitizedFooter(
 export function toHomepageContent(
   row: HomepageContentRow | null,
   projectionAllowed = false,
+  imageHosts: readonly string[] = [],
 ): HomepageContent {
   if (!row)
     return {
@@ -197,6 +237,7 @@ export function toHomepageContent(
       slides: null,
       blocks: null,
       footer: null,
+      imageHosts: [...imageHosts],
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed,
@@ -209,7 +250,8 @@ export function toHomepageContent(
     texts,
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
     blocks: storedBlocks(row.blocks),
-    footer: storedFooter(row.footer),
+    footer: storedFooter(row.footer, imageHosts),
+    imageHosts: [...imageHosts],
     updatedAt: row.updatedAt.toISOString(),
     projectionEnabled: row.projectionEnabled === true,
     projectionAllowed,
@@ -348,6 +390,7 @@ export class HomepageContentService {
     return toHomepageContent(
       await this.store.find(MAIN_HOMEPAGE_KEY),
       homepageProjectionAllowed(this.environment),
+      richTextImageHosts(this.environment),
     );
   }
 
@@ -360,11 +403,20 @@ export class HomepageContentService {
   }> {
     const parsed = parseHomepageContentInput(body);
     if (!parsed.ok) throw new BadRequestException(parsed.message);
-    const row = await this.store.save(
-      MAIN_HOMEPAGE_KEY,
-      withSanitizedFooter(parsed.value),
-      userId,
+    const clean = withSanitizedFooter(
+      parsed.value,
+      richTextImageHosts(this.environment),
     );
+    /*
+      THE LIMIT HOLDS FOR WHAT IS STORED, NOT ONLY FOR WHAT ARRIVED (barracuda,
+      #1878): the sanitizer can lengthen a text (a bare "<" becomes "&lt;"), and
+      a stored intro over the limit would read back as no footer at all.
+    */
+    if (clean.footer && clean.footer.intro.length > HOMEPAGE_LIMITS.footerIntro)
+      throw new BadRequestException(
+        `footer.intro: at most ${HOMEPAGE_LIMITS.footerIntro} characters after cleaning`,
+      );
+    const row = await this.store.save(MAIN_HOMEPAGE_KEY, clean, userId);
     let projection: HomepageProjectionResult;
     if (!homepageProjectionOn(this.environment, row)) projection = "off";
     else
@@ -377,6 +429,7 @@ export class HomepageContentService {
       content: toHomepageContent(
         row,
         homepageProjectionAllowed(this.environment),
+        richTextImageHosts(this.environment),
       ),
       projection,
     };

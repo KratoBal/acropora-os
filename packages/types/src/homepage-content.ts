@@ -1113,6 +1113,12 @@ export interface HomepageContentInput {
 export interface HomepageContent extends HomepageContentInput {
   blocks: HomepageBlock[] | null;
   footer: HomepageFooter | null;
+  /**
+   * The image hosts a full-profile text may show (`RICH_TEXT_IMAGE_HOSTS`):
+   * the editor and the preview get the SAME list the save uses, so the preview
+   * never shows an image the save would drop (barracuda, #1877).
+   */
+  imageHosts: string[];
   updatedAt: string | null;
   /**
    * The administrator's switch in the editor: send the content to the web shop
