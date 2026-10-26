@@ -88,6 +88,45 @@ describe("maintenanceInvoiceXmlInputFrom", () => {
     );
   });
 
+  it("throws BILLING_ADDRESS_INCOMPLETE naming each blank part, whitespace counted as blank", () => {
+    const withAddress = (address: {
+      line1: string;
+      postalCode: string;
+      city: string;
+    }) => ({
+      ...baseCertificate,
+      serviceJob: {
+        customer: {
+          ...baseCertificate.serviceJob.customer,
+          addresses: [{ line2: null, ...address }],
+        },
+      },
+    });
+    const missingOf = (address: {
+      line1: string;
+      postalCode: string;
+      city: string;
+    }) => {
+      try {
+        maintenanceInvoiceXmlInputFrom(withAddress(address));
+      } catch (error) {
+        assert.ok(error instanceof MaintenanceInvoiceInputError);
+        assert.equal(error.code, "BILLING_ADDRESS_INCOMPLETE");
+        return error.missing;
+      }
+      assert.fail("expected BILLING_ADDRESS_INCOMPLETE");
+    };
+    const full = { line1: "Fő utca 1.", postalCode: "1146", city: "Budapest" };
+    assert.deepEqual(missingOf({ ...full, postalCode: "" }), ["irányítószám"]);
+    assert.deepEqual(missingOf({ ...full, city: "  " }), ["város"]);
+    assert.deepEqual(missingOf({ ...full, line1: "" }), ["utca, házszám"]);
+    assert.deepEqual(missingOf({ line1: "", postalCode: "", city: "" }), [
+      "irányítószám",
+      "város",
+      "utca, házszám",
+    ]);
+  });
+
   it("throws NO_ITEMS when the certificate has no line items", () => {
     assert.throws(
       () => maintenanceInvoiceXmlInputFrom({ ...baseCertificate, items: [] }),

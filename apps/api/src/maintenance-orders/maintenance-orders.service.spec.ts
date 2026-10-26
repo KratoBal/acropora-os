@@ -143,6 +143,40 @@ describe("MaintenanceOrdersService.issue", () => {
     );
   });
 
+  it("hiányos című vevőnek nem állít ki megrendelőlapot, megnevezi a hiányzó részt, és nem ír semmit", async () => {
+    let issued = 0;
+    for (const [blank, label] of [
+      [{ postalCode: "" }, "irányítószám"],
+      [{ city: "  " }, "város"],
+      [{ line1: "" }, "utca, házszám"],
+    ] as const) {
+      const { service } = makeService({
+        defaultAddress: async () => ({
+          line1: "Állatkerti krt. 6-12.",
+          line2: null,
+          postalCode: "1146",
+          city: "Budapest",
+          ...blank,
+        }),
+        issue: async () => {
+          issued += 1;
+          return { id: "order-1" };
+        },
+      });
+      await assert.rejects(
+        () =>
+          service.issue(
+            { contractId: "contract-1", itemIds: ["item-1"] },
+            ACTOR,
+          ),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes(`hiányzik: ${label})`),
+      );
+    }
+    assert.equal(issued, 0);
+  });
+
   // hétfői lista M4: a beszerzési szerződésből számla készül, nem megrendelőlap
   it("MAINTENANCE-ORDER-PURCHASE: beszerzési szerződésre nem állít ki megrendelőlapot", async () => {
     const { service } = makeService({

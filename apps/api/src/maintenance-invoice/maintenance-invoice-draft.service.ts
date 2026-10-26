@@ -250,7 +250,9 @@ export class MaintenanceInvoiceDraftService {
         throw new BadRequestException(
           error.code === "NO_BILLING_ADDRESS"
             ? "A vevőnek nincs alapértelmezett számlázási címe -- piszkozat-számla enélkül nem készíthető."
-            : "A teljesítési igazolásnak nincs tétele -- piszkozat-számla enélkül nem készíthető.",
+            : error.code === "BILLING_ADDRESS_INCOMPLETE"
+              ? `A vevő számlázási címe hiányos (hiányzik: ${error.missing.join(", ")}) -- egészítsd ki a partnernél, piszkozat-számla enélkül nem készíthető.`
+              : "A teljesítési igazolásnak nincs tétele -- piszkozat-számla enélkül nem készíthető.",
         );
       throw error;
     }

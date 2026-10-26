@@ -1119,6 +1119,12 @@ export interface HomepageContent extends HomepageContentInput {
    * never shows an image the save would drop (barracuda, #1877).
    */
   imageHosts: string[];
+  /**
+   * The test storefront's origin (`HOMEPAGE_STOREFRONT_URL`), only where the
+   * environment allows writing to the shop; `null` elsewhere. The admin's
+   * "Előnézet új lapon" and its live preview frame point here.
+   */
+  storefrontUrl: string | null;
   updatedAt: string | null;
   /**
    * The administrator's switch in the editor: send the content to the web shop
