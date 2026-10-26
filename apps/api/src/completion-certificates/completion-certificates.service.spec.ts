@@ -111,6 +111,32 @@ function makeService(
 }
 
 describe("CompletionCertificatesService.issue", () => {
+  it("hiányos című vevőnek nem állít ki igazolást, megnevezi a hiányzó részt, és nem ír semmit", async () => {
+    let issued = 0;
+    for (const [blank, label] of [
+      [{ postalCode: "" }, "irányítószám"],
+      [{ city: "  " }, "város"],
+      [{ line1: "" }, "utca, házszám"],
+    ] as const) {
+      const job = jobRow();
+      job.customer.addresses = [{ ...job.customer.addresses[0]!, ...blank }];
+      const { service } = makeService({
+        serviceJobForIssuance: async () => job,
+        issue: async () => {
+          issued += 1;
+          return { id: "certificate-1" };
+        },
+      });
+      await assert.rejects(
+        () => service.issue({ serviceJobId: "job-1" }, ACTOR),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes(`hiányzik: ${label})`),
+      );
+    }
+    assert.equal(issued, 0);
+  });
+
   it("csak MAINTENANCE fajtájú lapra állít ki igazolást", async () => {
     const { service } = makeService({
       serviceJobForIssuance: async () => jobRow({ kind: "REPAIR" }),

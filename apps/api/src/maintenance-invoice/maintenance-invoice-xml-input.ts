@@ -5,6 +5,7 @@ import {
   wholeForintCertificateAmounts,
   type CertificateAmounts,
 } from "../completion-certificates/completion-certificate-amounts.js";
+import { missingAddressParts } from "../customers/address-parts.js";
 import type { SzamlazzAgentInvoiceInput } from "../integrations/szamlazz/szamlazz-agent-xml.js";
 
 /**
@@ -132,13 +133,7 @@ export function maintenanceInvoiceXmlInputFrom(
   if (!address) throw new MaintenanceInvoiceInputError("NO_BILLING_ADDRESS");
   // A customer created at an aquarium may hold an address with blank parts (os-ugyfel-akvarium-hianyos); the
   // draft would otherwise go to Számlázz.hu with an empty zip, city or street.
-  const missing = [
-    ["irányítószám", address.postalCode],
-    ["város", address.city],
-    ["utca, házszám", address.line1],
-  ]
-    .filter(([, value]) => !value?.trim())
-    .map(([label]) => label!);
+  const missing = missingAddressParts(address);
   if (missing.length > 0)
     throw new MaintenanceInvoiceInputError(
       "BILLING_ADDRESS_INCOMPLETE",

@@ -8,6 +8,7 @@ import { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
+import { missingAddressParts } from "../customers/address-parts.js";
 import { decideQuota } from "../service-assets/document-store/document-quota.js";
 import {
   canonicalMimetypeFor,
@@ -119,6 +120,13 @@ export class CompletionCertificatesService {
 
     const now = new Date();
     const address = job.customer?.addresses[0] ?? null;
+    // A customer created at an aquarium may hold an address with blank parts (os-ugyfel-akvarium-hianyos):
+    // the printed certificate would show a hole where the zip, city or street belongs.
+    const missingAddress = address ? missingAddressParts(address) : [];
+    if (missingAddress.length > 0)
+      throw new BadRequestException(
+        `A vevő címe hiányos (hiányzik: ${missingAddress.join(", ")}) -- egészítsd ki a partnernél, teljesítési igazolás enélkül nem állítható ki.`,
+      );
     const firstWorksheet = job.worksheets[0] ?? null;
 
     const input: CompletionCertificateInput = {
