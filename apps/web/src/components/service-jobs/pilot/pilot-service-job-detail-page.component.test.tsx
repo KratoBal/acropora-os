@@ -515,6 +515,36 @@ describe("PilotServiceJobDetailPage -- redesign", () => {
     expect(screen.getByText("2,5 munkaóra")).toBeInTheDocument();
   });
 
+  /*
+    THE SUBJECT IS THE MAIN LINE (the link), THE NUMBER UNDER IT (Balázs,
+    2026-10-26, msg 1564259312728150148), as on the worksheet list.
+  */
+  it("names a linked sheet by its subject, with the number under it", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        timeline: [
+          sheet,
+          {
+            ...sheet,
+            sortKey: "ws-2",
+            worksheet: {
+              ...sheet.worksheet,
+              id: "ws-2",
+              number: null,
+              subject: "Szűrőcsere",
+            },
+          },
+        ],
+      }),
+    );
+    render(<PilotServiceJobDetailPage jobId="job-1" />);
+    const link = await screen.findByRole("link", { name: "Tömítéscsere" });
+    expect(link.getAttribute("href")).toBe("/szerviz/munkalapok/ws-1");
+    expect(link.nextElementSibling?.textContent).toBe("ML-2026-00814");
+    const draft = screen.getByRole("link", { name: "Szűrőcsere" });
+    expect(draft.nextElementSibling?.textContent).toBe("Még nincs száma");
+  });
+
   it("names the assignees in the case data, or says nobody is assigned", async () => {
     api.detail.mockResolvedValue(
       detail({

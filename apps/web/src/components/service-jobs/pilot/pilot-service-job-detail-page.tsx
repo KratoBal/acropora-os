@@ -874,14 +874,22 @@ export function PilotServiceJobDetailPage({ jobId }: { jobId: string }) {
                     className="flex flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3"
                   >
                     <div className="min-w-0 flex-1">
+                      {/*
+                        A FŐ SOR A MUNKALAP TÁRGYA, ALATTA A SZÁM (Balázs,
+                        2026-10-26 12:48 UTC, msg 1564259312728150148), mint
+                        a munkalap-listában. Üres tárgynál a szám áll elöl.
+                      */}
                       <Link
                         href={`/szerviz/munkalapok/${worksheet.id}`}
-                        className="font-mono text-sm font-semibold text-pilot-grey-900 hover:text-pilot-aqua-700"
+                        className="break-words text-sm font-semibold text-pilot-grey-900 hover:text-pilot-aqua-700"
+                      >
+                        {worksheet.subject.trim() ||
+                          (worksheet.number ?? "Még nincs száma")}
+                      </Link>
+                      <p
+                        className={`text-xs ${worksheet.number ? "font-mono text-pilot-grey-600" : "text-pilot-grey-500"}`}
                       >
                         {worksheet.number ?? "Még nincs száma"}
-                      </Link>
-                      <p className="break-words text-xs text-pilot-grey-500">
-                        {serviceJobWorksheetLabel(worksheet)}
                       </p>
                     </div>
                     {/*

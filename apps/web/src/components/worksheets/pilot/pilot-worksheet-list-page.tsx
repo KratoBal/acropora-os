@@ -464,17 +464,23 @@ export function PilotWorksheetListPage() {
                     }`}
                   >
                     <td className="max-w-[280px] px-4 py-5">
+                      {/*
+                        A FŐ SOR A MUNKALAP TÁRGYA, ALATTA A SZÁM (Balázs,
+                        2026-10-26 12:48 UTC, OS szál, msg 1564259312728150148):
+                        mindenhol egyformán, a hibajegy munkalap-listájában,
+                        a mobilon és a partnerportálon is.
+                      */}
+                      <p className="break-words text-sm font-semibold text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
+                        {worksheet.subject}
+                      </p>
                       <p
-                        className={`text-sm font-semibold transition-colors group-hover:text-pilot-aqua-700 ${
+                        className={`mt-1 text-xs ${
                           worksheet.number
-                            ? "font-mono text-pilot-grey-900"
+                            ? "font-mono text-pilot-grey-600"
                             : "text-pilot-grey-500"
                         }`}
                       >
                         {worksheet.number ?? "Még nincs száma"}
-                      </p>
-                      <p className="mt-1 break-words text-xs text-pilot-grey-600">
-                        {worksheet.subject}
                         {worksheet.versionCount > 1
                           ? ` · ${worksheet.versionCount} verzió`
                           : ""}
