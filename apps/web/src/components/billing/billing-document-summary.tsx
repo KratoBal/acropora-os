@@ -151,6 +151,12 @@ export function BillingDocumentSummary({
             {invoicePreview.busy ? "Előnézet készül…" : "Előnézet"}
           </PilotButton>
         ) : null}
+        {invoicePreview ? (
+          <p className="text-xs text-pilot-grey-500">
+            Az előnézet csak megnézésre való: nem számla, számot nem kap, és nem
+            tárolódik.
+          </p>
+        ) : null}
         <PilotButton
           variant="primary"
           size="regular"

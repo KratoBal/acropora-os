@@ -656,6 +656,10 @@ describe("BillingDocumentEditor", () => {
 
     it("is disabled until the data is complete, and says why", () => {
       render(<BillingDocumentEditor />);
+      // az élő előnézetnek nem biztos, hogy van MINTA felirata: a gomb mellett áll, hogy nem számla
+      expect(
+        screen.getByText(/nem számla, számot nem kap, és nem tárolódik/),
+      ).toBeInTheDocument();
       const button = screen.getByRole("button", { name: "Előnézet" });
       expect(button).toBeDisabled();
       expect(button).toHaveAttribute(
