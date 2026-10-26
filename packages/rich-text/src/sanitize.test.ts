@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { RICH_TEXT_ALLOWED_TAGS } from "./schema.js";
-import { isAllowedRichHref, sanitizeRichHtml } from "./sanitize.js";
+import {
+  isAllowedRichHref,
+  sanitizeRichHtml,
+  sanitizeRichHtmlReport,
+} from "./sanitize.js";
 import { richImageIds } from "./schema.js";
 
 describe("a tisztito: ami kiesik", () => {
@@ -219,5 +223,124 @@ describe("a tisztito: a kep", () => {
       ["b2", "a1"],
     );
     assert.deepEqual(richImageIds("<p>nincs kep</p>"), []);
+  });
+});
+
+/**
+ * A TELJES PROFIL (termekleiras, blogcikk, ReefClub cikk, kezdolap blokk).
+ * Ket iranyban mer: ami a weboldali blokkokbol atmegy, es hogy a levelsablon
+ * (alapertelmezett profil) ugyanazokat a blokkokat tovabbra is eldobja.
+ */
+describe("a tisztito: a teljes profil", () => {
+  const teljes = (html: string) => sanitizeRichHtml(html, { profile: "full" });
+
+  it("a tablazat, a galeria es a termekkartya atmegy", () => {
+    const html =
+      '<table><tbody><tr><th colspan="2">Fej</th></tr><tr><td><p>a</p></td><td rowspan="3"><p>b</p></td></tr></tbody></table>' +
+      '<div data-gallery=""><img src="https://cdn.example.hu/a.jpg" alt="A"><img src="https://cdn.example.hu/b.jpg" alt="B"></div>' +
+      '<div data-product-card="clx0abc123">Korallkaja</div>' +
+      '<blockquote><p>idezet</p></blockquote><h2 data-align="center">Cim</h2>' +
+      '<p data-cta="" data-align="center"><a href="https://x.hu">Gomb</a></p>';
+    assert.equal(teljes(html), html);
+  });
+
+  it("a levelsablon profilja ugyanezt a blokkot tovabbra is eldobja", () => {
+    assert.equal(
+      sanitizeRichHtml(
+        '<table><tbody><tr><td>a</td></tr></tbody></table><div data-gallery="">b</div><img src="https://cdn.example.hu/a.jpg">',
+      ),
+      "ab",
+    );
+  });
+
+  it("csak https: kep megy at; a sajat hivatkozas, a http, a data: es a relativ nem", () => {
+    for (const src of [
+      "acropora-image:abc123",
+      "http://cdn.example.hu/a.jpg",
+      "data:image/png;base64,AAAA",
+      "/kep.png",
+      "javascript:alert(1)",
+      "https:alert(1)",
+    ])
+      assert.equal(
+        teljes(`<p>x<img src="${src}" alt="a"></p>`),
+        "<p>x</p>",
+        src,
+      );
+  });
+
+  it("a script, az iframe, az svg tartalmaval egyutt kiesik", () => {
+    assert.equal(
+      teljes(
+        '<p>a<script>alert(1)</script><iframe src="https://x.hu">i</iframe><svg><text>s</text></svg>b</p>',
+      ),
+      "<p>ab</p>",
+    );
+  });
+
+  /*
+    A JS-XSS KORLATA, MERVE: egymasba agyazott tartalommal-egyutt tageknel
+    (`<svg><script>..</script>..</svg>`) a belso zaras utani szoveg szovegkent
+    megmarad. Ez nem kod: tag nem marad, a szoveg escape-elve all. Az allitas
+    ezert a tag hianyat meri, nem a pontos kimenetet.
+  */
+  it("egymasba agyazott svg es script utan sem marad tag", () => {
+    const kimenet = teljes(
+      '<p>a<svg><script>x</script><text onload="y()">s</text></svg>b</p>',
+    );
+    assert.equal(kimenet.replace(/<\/?p>/g, "").includes("<"), false, kimenet);
+  });
+
+  it("az on* es a style a weboldali blokkokrol is kiesik", () => {
+    assert.equal(
+      teljes(
+        '<div data-gallery="" onclick="x()" style="position:fixed"><img src="https://cdn.example.hu/a.jpg" onerror="x()"></div><table style="width:9px"><tbody><tr><td onmouseover="x()" class="c">a</td></tr></tbody></table>',
+      ),
+      '<div data-gallery=""><img src="https://cdn.example.hu/a.jpg"></div><table><tbody><tr><td>a</td></tr></tbody></table>',
+    );
+  });
+
+  it("a rossz termek-azonosito es a rossz osszevonas kiesik, a tartalom marad", () => {
+    assert.equal(
+      teljes('<div data-product-card="x&quot; onclick=&quot;y">N</div>'),
+      "<div>N</div>",
+    );
+    assert.equal(
+      teljes(
+        '<table><tbody><tr><td colspan="99">a</td><td rowspan="x">b</td><td colspan="1">c</td></tr></tbody></table>',
+      ),
+      "<table><tbody><tr><td>a</td><td>b</td><td>c</td></tr></tbody></table>",
+    );
+  });
+
+  it("a kep szelessegenek felso hatara a teljes profilban 1600", () => {
+    assert.equal(
+      teljes('<img src="https://cdn.example.hu/a.jpg" width="1600">'),
+      '<img src="https://cdn.example.hu/a.jpg" width="1600">',
+    );
+    assert.equal(
+      teljes('<img src="https://cdn.example.hu/a.jpg" width="1601">'),
+      '<img src="https://cdn.example.hu/a.jpg">',
+    );
+  });
+
+  it("a jelentes megnevezi, amit a teljes profil eldobott", () => {
+    const { removed } = sanitizeRichHtmlReport(
+      '<div class="x"><iframe></iframe><span style="a">s</span><img src="http://x/a.png"></div>',
+      { profile: "full" },
+    );
+    assert.deepEqual([...removed].sort(), [
+      "div class",
+      "iframe",
+      "img",
+      "img src",
+      "span style",
+    ]);
+  });
+
+  it("idempotens a teljes profilban is", () => {
+    const html =
+      '<div data-gallery=""><img src="https://cdn.example.hu/a.jpg" alt="&quot;a&quot;"></div><table><tbody><tr><td colspan="2">x &lt; y</td></tr></tbody></table>';
+    assert.equal(teljes(teljes(html)), teljes(html));
   });
 });
