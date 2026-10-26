@@ -160,14 +160,35 @@ export function homepageRecord(
 }
 
 /** The fields the shop keeps, compared as the shop answers them (key order does not matter). */
+/**
+ * JSON WITH EVERY OBJECT'S KEYS IN ONE ORDER (barracuda, #1900): the shop
+ * keeps the record in jsonb, and jsonb answers an object's keys in its own
+ * order (shorter keys first), not in the order they were sent. Compared as
+ * plain JSON, the slides and the footer never matched, and every round wrote
+ * again. Arrays keep their order: there the order is the content.
+ */
+export function canonicalJson(value: unknown): string {
+  const sort = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(sort)
+      : v !== null && typeof v === "object"
+        ? Object.fromEntries(
+            Object.keys(v as Record<string, unknown>)
+              .sort()
+              .map((key) => [key, sort((v as Record<string, unknown>)[key])]),
+          )
+        : v;
+  return JSON.stringify(sort(value));
+}
+
 export function homepageRecordDiffers(
   current: Partial<MedusaHomepageContentRecord> | null,
   wanted: MedusaHomepageContentRecord,
 ): boolean {
   if (!current) return true;
   const pick = (r: Partial<MedusaHomepageContentRecord>) =>
-    JSON.stringify([
-      Object.entries(r.texts ?? {}).sort(([a], [b]) => (a < b ? -1 : 1)),
+    canonicalJson([
+      r.texts ?? {},
       r.slides === undefined ? null : r.slides,
       // null and "never sent" are the same as an empty band
       r.featured_handles ?? [],
