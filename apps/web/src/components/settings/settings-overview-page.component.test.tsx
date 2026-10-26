@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { settingsNavigation } from "../navigation";
+import { mainNavigation, navigationItems } from "../navigation";
 import { SETTINGS_AREAS, SettingsOverviewPage } from "./settings-overview-page";
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as "OWNER" | "SALES" }));
@@ -73,7 +73,7 @@ describe("beállítások gyűjtőoldal", () => {
    * atirja a menupontot egy masik utra, ez az allitas vele mozdul.
    */
   it("a Beállítások menüpont célja is létezik", () => {
-    const belepes = settingsNavigation.find(
+    const belepes = navigationItems(mainNavigation).find(
       (item) => item.entryId === "settings-general",
     );
     expect(belepes).toBeDefined();

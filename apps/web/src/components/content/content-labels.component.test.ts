@@ -11,7 +11,7 @@ import {
   oldestAge,
   oldestFirst,
 } from "./content-labels";
-import { contentNavigation } from "../navigation";
+import { mainNavigation, navigationItems } from "../navigation";
 
 describe("what the content list says about an image", () => {
   /**
@@ -78,9 +78,10 @@ describe("where the content list lives in the menu", () => {
     // A kezdolap 2026-10-26-an rovid ideig ebben a szakaszban allt, aztan a
     // Webshop ala kerult (#1888). Ezert nem a szakasz hossza, hanem a Tartalom
     // sajat tetele a kerdes: pontosan egy, elso helyen, sajat joggal.
-    const tetelek = contentNavigation.filter(
+    const contentNavigation = navigationItems(mainNavigation).filter(
       (item) => item.href === "/tartalom",
     );
+    const tetelek = contentNavigation;
     expect(tetelek).toHaveLength(1);
     expect(contentNavigation[0]?.href).toBe("/tartalom");
     // A JOG MOSTANTOL A KOZOS FORRASBAN all, nem a menusorban. Az allitas

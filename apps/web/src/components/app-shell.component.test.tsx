@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import {
   isNavigationEntryVisible,
   PERMISSIONS,
@@ -150,15 +156,18 @@ describe("AppShell business navigation groups", () => {
     );
   });
 
-  it("gathers purchasing, the NAV invoices and the settlements under Pénzügy", () => {
+  it("gathers the NAV invoices and the settlements under Pénzügy, and purchasing under Raktár és beszerzés", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Pénzügy" }));
-
+    fireEvent.click(
+      screen.getByRole("button", { name: "Raktár és beszerzés" }),
+    );
     expect(screen.getByRole("link", { name: "Beszerzés" })).toHaveAttribute(
       "href",
       "/beszerzes",
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Pénzügy" }));
     expect(
       screen.getByRole("link", { name: "NAV számla lekérés" }),
     ).toHaveAttribute("href", "/beszerzes/nav-szamlak");
@@ -227,6 +236,10 @@ describe("AppShell business navigation groups", () => {
     expect(
       screen.getByRole("link", { name: "NAV számla lekérés" }),
     ).toHaveAttribute("aria-current", "page");
+    // Beszerzés now lives in another main menu (Raktár és beszerzés), closed here
+    fireEvent.click(
+      screen.getByRole("button", { name: "Raktár és beszerzés" }),
+    );
     expect(screen.getByRole("link", { name: "Beszerzés" })).not.toHaveAttribute(
       "aria-current",
     );
@@ -383,12 +396,15 @@ describe("AppShell navigation source", () => {
     });
 
     [
-      "Webshop",
-      "Partnerek",
-      "Pénzügy",
+      "Áttekintés",
       "Szerviz",
-      "Beállítások",
+      "Értékesítés",
+      "Webshop",
+      "Raktár és beszerzés",
+      "Pénzügy",
       "Akvarisztika",
+      "Tartalom és tudás",
+      "Beállítások",
     ].forEach((label) => {
       const group = within(sidebarNavigation).queryByRole("button", {
         name: label,
@@ -462,6 +478,142 @@ describe("AppShell navigation source", () => {
   });
 });
 
+/*
+  A KILENC FŐMENÜ A KERETBEN (Balázs, 2026-10-26 16:48 UTC; feladat
+  os-menu-kilenc-fomenu). MI PIROSÍT: ha a fejlécek sorrendje vagy száma
+  elmozdul, ha az Áttekintés alapból zárva áll (a számlálói ott élnek), ha a
+  Beállítások alcsoport-címsorai kimaradnak, vagy ha a QR-kód nyomtatás nem a
+  Szervizben áll / a szervizes szerepnek megjelenik.
+*/
+describe("AppShell the nine main menus", () => {
+  beforeEach(() => {
+    auth.session = ownerSession;
+    navigation.pathname = "/akvariumok";
+  });
+
+  const headings = () =>
+    within(screen.getByRole("navigation", { name: "Fő navigáció" }))
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+
+  it("draws the nine headings in the listed order", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(headings()).toEqual([
+      "Áttekintés",
+      "Szerviz",
+      "Értékesítés",
+      "Webshop",
+      "Raktár és beszerzés",
+      "Pénzügy",
+      "Akvarisztika",
+      "Tartalom és tudás",
+      "Beállítások",
+    ]);
+  });
+
+  it("keeps Áttekintés open from the start, away from its own pages", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.getByRole("button", { name: "Áttekintés" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // the pages themselves follow the shared visibility rules (the session here
+    // is the owner without any served switch); Dashboard is always among them
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    // every other heading starts closed on a page that is not under it
+    expect(screen.getByRole("button", { name: "Szerviz" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("puts the QR-kód nyomtatás under Szerviz for the owner, and not at all for the service role", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Szerviz" }));
+    expect(
+      screen.getByRole("link", { name: "QR-kód nyomtatás" }),
+    ).toHaveAttribute("href", "/beallitasok/matricak");
+    cleanup();
+
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "SERVICE" },
+    };
+    render(<AppShell>Oldaltartalom</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Szerviz" }));
+    expect(
+      screen.queryByRole("link", { name: "QR-kód nyomtatás" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Hibajegyek" }),
+    ).toBeInTheDocument();
+  });
+
+  it("draws the Árajánlat title once, over its two pages, when the switch is served", () => {
+    auth.session = {
+      ...ownerSession,
+      navigation: [
+        { id: "quote-snippets", surfaces: ["web"] as const },
+        { id: "quote-templates", surfaces: ["web"] as const },
+      ],
+    };
+    render(<AppShell>Oldaltartalom</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Beállítások" }));
+
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    expect(within(nav).getAllByText("Árajánlat")).toHaveLength(1);
+    expect(
+      within(nav).getByRole("link", { name: "Ajánlat szövegrészletek" }),
+    ).toHaveAttribute("href", "/beallitasok/ajanlat-szovegreszletek");
+    expect(
+      within(nav).getByRole("link", { name: "Ajánlatsablonok" }),
+    ).toHaveAttribute("href", "/beallitasok/ajanlat-sablonok");
+  });
+
+  it("shows the settings subgroup titles once each, above their pages", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+    fireEvent.click(screen.getByRole("button", { name: "Beállítások" }));
+
+    const nav = screen.getByRole("navigation", { name: "Fő navigáció" });
+    for (const title of ["Kapcsolatok", "Törzsadatok"])
+      expect(within(nav).getAllByText(title)).toHaveLength(1);
+    // the quote pages sit behind the `quotes` switch, which this session was not
+    // served: their title is not drawn over nothing
+    expect(within(nav).queryByText("Árajánlat")).not.toBeInTheDocument();
+    // a title is not a menu entry: no link, no button of that name
+    expect(
+      within(nav).queryByRole("link", { name: "Kapcsolatok" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(nav).queryByRole("button", { name: "Kapcsolatok" }),
+    ).not.toBeInTheDocument();
+    // the page order inside Beállítások is the listed one
+    const hrefs = within(nav)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href"))
+      .filter(
+        (href) =>
+          href?.startsWith("/beallitasok") ||
+          href?.startsWith("/admin/integrations") ||
+          href === "/admin/users",
+      );
+    expect(hrefs).toEqual([
+      "/beallitasok",
+      "/admin/users",
+      "/admin/integrations/nav",
+      "/admin/integrations/szamlazz/connection",
+      "/beallitasok/mertekegysegek",
+      "/beallitasok/eszkoz-kategoriak",
+      "/beallitasok/eszkoz-funkciok",
+    ]);
+  });
+});
+
 // THE SEARCH ON A COOKIE SESSION (stage and production, measured 2026-09-30):
 // the session carries no client-readable token, and the search box was not
 // drawn at all. What must fail: gating the box on the token again; passing
@@ -500,7 +652,8 @@ describe("AppShell global search", () => {
 // JEV 5. fázis: a katalógus adatminőség menüpontja a szerver kapcsolóját
 // követi (a munkamenettel kiadott menü), és a szerepjogot is. MI PIROSÍT: ha a
 // pont a kapcsoló nélkül is látszana; ha kapcsolóval sem; ha a kiadott menü a
-// jogot felülírná; ha kikapcsolva a Termékek csoporttá válna.
+// jogot felülírná. A Termékek a Raktár és beszerzés főmenü tétele (2026-10-26),
+// nem külön csoport: kikapcsolva az Adatminőség tétel hiányzik, a Termékek marad.
 describe("AppShell catalogue data-quality entry", () => {
   beforeEach(() => {
     navigation.pathname = "/";
@@ -511,17 +664,17 @@ describe("AppShell catalogue data-quality entry", () => {
     { id: "product-data-quality", surfaces: ["web"] as const },
   ];
 
-  it("switch off: Termékek stays a plain link, the page is not in the menu", () => {
+  it("switch off: Termékek stays a link, the page is not in the menu", () => {
     auth.session = ownerSession;
     render(<AppShell>Oldaltartalom</AppShell>);
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "Raktár és beszerzés" }),
+    );
     expect(screen.getByRole("link", { name: "Termékek" })).toHaveAttribute(
       "href",
       "/products",
     );
-    expect(
-      screen.queryByRole("button", { name: "Termékek" }),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Adatminőség" }),
     ).not.toBeInTheDocument();
@@ -531,7 +684,9 @@ describe("AppShell catalogue data-quality entry", () => {
     auth.session = { ...ownerSession, navigation: served };
     render(<AppShell>Oldaltartalom</AppShell>);
 
-    fireEvent.click(screen.getByRole("button", { name: "Termékek" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Raktár és beszerzés" }),
+    );
     expect(screen.getByRole("link", { name: "Termékek" })).toHaveAttribute(
       "href",
       "/products",
@@ -553,8 +708,9 @@ describe("AppShell catalogue data-quality entry", () => {
     expect(
       screen.queryByRole("link", { name: "Adatminőség" }),
     ).not.toBeInTheDocument();
+    // the service role has no right under Raktár és beszerzés at all
     expect(
-      screen.queryByRole("button", { name: "Termékek" }),
+      screen.queryByRole("button", { name: "Raktár és beszerzés" }),
     ).not.toBeInTheDocument();
   });
 

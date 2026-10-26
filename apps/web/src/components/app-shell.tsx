@@ -12,18 +12,13 @@ import {
 } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import {
   allNavigationPages,
-  businessNavigation,
-  contentNavigation,
-  isNavigationGroup,
   isNavigationItemActive,
-  primaryNavigation,
-  secondaryNavigation,
-  settingsNavigation,
-  type AppNavigationEntry,
+  mainNavigation,
+  type AppNavigationGroup,
   type AppNavigationItem,
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
@@ -54,6 +49,8 @@ interface NavigationGroupProps {
   icon: ReactNode;
   label: string;
   level?: 0 | 1;
+  /** Open from the start even when no page of it is current. */
+  defaultOpen?: boolean;
 }
 
 function NavigationGroup({
@@ -62,8 +59,9 @@ function NavigationGroup({
   icon,
   label,
   level = 0,
+  defaultOpen = false,
 }: NavigationGroupProps) {
-  const [open, setOpen] = useState(active);
+  const [open, setOpen] = useState(active || defaultOpen);
 
   useEffect(() => {
     if (active) setOpen(true);
@@ -202,10 +200,6 @@ export function AppShell({
     );
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
-  const visibleSettingsNavigation = settingsNavigation.filter(canAccess);
-  const settingsActive = visibleSettingsNavigation.some((item) =>
-    isActive(item),
-  );
   const closeMobileNavigation = () => setMobileNavigationOpen(false);
 
   const renderItem = (item: AppNavigationItem, nested = false) => {
@@ -229,33 +223,65 @@ export function AppShell({
             >
               {label}
             </Badge>
+          ) : item.href === "/feladataim" ? (
+            <Badge className="px-1.5" variant="neutral">
+              {myTaskCount ?? "–"}
+            </Badge>
+          ) : item.href === "/uzenetek" && messagesUnread > 0 ? (
+            <Badge
+              className="px-1.5"
+              variant="warning"
+              aria-label={`${messagesUnread} olvasatlan üzenet`}
+            >
+              {messagesUnread}
+            </Badge>
           ) : undefined
         }
       />
     );
   };
 
-  const renderEntry = (entry: AppNavigationEntry) => {
-    if (!isNavigationGroup(entry)) {
-      return canAccess(entry) ? renderItem(entry) : null;
-    }
-
+  const renderGroup = (entry: AppNavigationGroup) => {
     const visibleChildren = entry.children.filter(canAccess);
     if (visibleChildren.length === 0) return null;
     if (entry.flattenWhenAlone && visibleChildren.length === 1)
       return renderItem(visibleChildren[0]!);
 
     return (
-      <NavigationGroup
+      <div
         key={entry.label}
-        label={entry.label}
-        icon={<Icon name={entry.icon} size={18} />}
-        active={visibleChildren.some((item) => isActive(item))}
+        className={
+          entry.separated
+            ? "mt-7 border-t border-pilot-grey-200 pt-4"
+            : undefined
+        }
       >
-        <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
-          {visibleChildren.map((item) => renderItem(item, true))}
-        </div>
-      </NavigationGroup>
+        <NavigationGroup
+          label={entry.label}
+          icon={<Icon name={entry.icon} size={18} />}
+          active={visibleChildren.some((item) => isActive(item))}
+          defaultOpen={entry.defaultOpen}
+        >
+          <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
+            {visibleChildren.map((item, index) => (
+              <Fragment key={item.href}>
+                {/*
+                  Az alcsoport kis címsora (a Beállításoknál): ahol a sorban
+                  az előző LÁTHATÓ tétel más alcsoportban áll, mint ez. Csak
+                  megjelenés, nem menüpont.
+                */}
+                {item.subgroup &&
+                item.subgroup !== visibleChildren[index - 1]?.subgroup ? (
+                  <p className="px-2 pb-0.5 pt-2 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500">
+                    {item.subgroup}
+                  </p>
+                ) : null}
+                {renderItem(item, true)}
+              </Fragment>
+            ))}
+          </div>
+        </NavigationGroup>
+      </div>
     );
   };
 
@@ -264,75 +290,7 @@ export function AppShell({
       aria-label="Fő navigáció"
       className="flex min-h-0 flex-1 flex-col overflow-y-auto"
     >
-      <div className="space-y-1">
-        {primaryNavigation.filter(canAccess).map((item) => (
-          <NavigationItem
-            key={item.href}
-            item={item}
-            active={isActive(item)}
-            onChoose={closeMobileNavigation}
-            badge={
-              item.href === "/feladataim" ? (
-                <Badge className="px-1.5" variant="neutral">
-                  {myTaskCount ?? "–"}
-                </Badge>
-              ) : item.href === "/uzenetek" && messagesUnread > 0 ? (
-                <Badge
-                  className="px-1.5"
-                  variant="warning"
-                  aria-label={`${messagesUnread} olvasatlan üzenet`}
-                >
-                  {messagesUnread}
-                </Badge>
-              ) : undefined
-            }
-          />
-        ))}
-      </div>
-
-      <p className="mb-2 mt-7 px-3 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500">
-        Működés
-      </p>
-      <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
-
-      {contentNavigation.filter(canAccess).length > 0 ? (
-        <>
-          <p className="mb-2 mt-7 px-3 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500">
-            Tartalom
-          </p>
-          <div className="space-y-1">
-            {contentNavigation
-              .filter(canAccess)
-              .map((item) => renderItem(item))}
-          </div>
-        </>
-      ) : null}
-
-      <div className="mt-7 space-y-1 border-t border-pilot-grey-200 pt-4">
-        {secondaryNavigation.filter(canAccess).map((item) => renderItem(item))}
-        {visibleSettingsNavigation.length > 0 ? (
-          <NavigationGroup
-            label="Beállítások"
-            icon={<Icon name="settings" size={18} />}
-            active={settingsActive}
-          >
-            <div className="ml-5 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
-              {visibleSettingsNavigation
-                .filter((item) => item.href === "/beallitasok")
-                .map((item) => renderItem(item, true))}
-
-              {/*
-                AZ UNAS ÉS A MEDUSA BEÁLLÍTÁSAI A WEBSHOP ALATT ÁLLNAK
-                (Balázs, 2026-10-26 13:05 UTC): a Webshop beállítások
-                gyűjtőoldalon, itt nem duplázódnak.
-              */}
-              {visibleSettingsNavigation
-                .filter((item) => item.href !== "/beallitasok")
-                .map((item) => renderItem(item, true))}
-            </div>
-          </NavigationGroup>
-        ) : null}
-      </div>
+      <div className="space-y-1">{mainNavigation.map(renderGroup)}</div>
     </nav>
   );
 

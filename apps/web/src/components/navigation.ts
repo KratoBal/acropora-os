@@ -25,6 +25,13 @@ export interface AppNavigationItem {
    * jelenlegi menüpont.
    */
   alsoActiveOn?: string[];
+  /**
+   * AZ ALCSOPORT FELIRATA a menücsoporton belül (csak a Beállításoknál): az
+   * egymás utáni, azonos feliratú tételek egy kis címsor alá kerülnek. Csak
+   * megjelenés: a jogosultság, az útvonal és a láthatóság nem függ tőle, és a
+   * lista lapos marad (`navigationItems` ugyanúgy nyitja ki).
+   */
+  subgroup?: string;
 }
 
 /**
@@ -48,6 +55,10 @@ export interface AppNavigationGroup {
    * switch-gated page: while the switch is off, the menu looks as before.
    */
   flattenWhenAlone?: boolean;
+  /** Alapból nyitva áll (az Áttekintés: a számlálói ott élnek). */
+  defaultOpen?: boolean;
+  /** Elválasztó vonal a csoport fölött (a Beállítások, a lista végén). */
+  separated?: boolean;
 }
 
 export type AppNavigationEntry = AppNavigationItem | AppNavigationGroup;
@@ -103,90 +114,149 @@ export const SETTLEMENT_TABS: ReadonlyArray<{
   },
 ];
 
-export const primaryNavigation: AppNavigationItem[] = [
-  {
-    href: "/",
-    label: "Dashboard",
-    icon: "dashboard",
-    entryId: "dashboard",
-  },
-  {
-    href: "/feladataim",
-    label: "Feladataim",
-    icon: "clipboard",
-    entryId: "my-tasks",
-  },
-  {
-    href: "/uzenetek",
-    label: "Üzenetek",
-    icon: "message",
-    entryId: "messages",
-  },
-];
-
-export const serviceNavigation: AppNavigationItem[] = [
-  {
-    href: "/szerviz/piszkozatok",
-    label: "Piszkozatok",
-    icon: "clipboard",
-    entryId: "service-drafts",
-  },
-  {
-    // A LANC SORRENDJE, nem a felvetel sorrendje: hibajegy, munkalap,
-    // teljesitesi igazolas, szamla (Balazs, 2026-09-02 08:08).
-    href: "/szerviz/hibajegyek",
-    label: "Hibajegyek",
-    icon: "clipboard",
-    entryId: "service-jobs",
-  },
-  {
-    href: "/szerviz/karbantartas",
-    label: "Karbantartás",
-    icon: "clipboard",
-    entryId: "maintenance",
-  },
-  {
-    href: "/szerviz/munkalapok",
-    label: "Munkalapok",
-    icon: "clipboard",
-    entryId: "worksheets",
-  },
-  {
-    href: "/szerviz/eszkozok",
-    label: "Eszköznyilvántartás",
-    icon: "box",
-    entryId: "service-assets",
-  },
-  {
-    href: "/szerviz/anyagigenyek",
-    label: "Anyagigények",
-    icon: "clipboard",
-    entryId: "material-requests-pending",
-  },
-];
-
 /**
- * A TARTALOM SAJÁT MENÜPONT, NEM EGY MEGLÉVŐ ALATT.
- *
- * A panasz, amiből készült, épp az volt, hogy a dolgok sok felületen
- * keletkeznek, és nem látszik, mi vár kire. Egy almenü egy másik szakasz alatt
- * ugyanazt csinálná: aki nem keresi, nem találja meg.
+ * A KUTATÁSI TUDÁSTÁR (S4). A menüpont a modul kezdőlapjára, az Áttekintőre
+ * (Figma 3:2) visz; az alatta álló oldalakon is aktív. A modul fülei a
+ * `knowledge-base/knowledge-base-tabs.tsx` sorában állnak, csak a kész
+ * képernyők (holt link nincs).
  */
-export const contentNavigation: AppNavigationItem[] = [
-  {
-    href: "/tartalom",
-    label: "Tartalom",
-    icon: "clipboard",
-    entryId: "content",
-  },
-];
+export const KNOWLEDGE_BASE_PATH = "/tudasbazis";
+export const KNOWLEDGE_SOURCES_PATH = "/tudasbazis/forrasok";
+export const KNOWLEDGE_CLAIMS_PATH = "/tudasbazis/kiolvasas";
+export const KNOWLEDGE_VOCABULARY_PATH = "/tudasbazis/szotar";
+export const KNOWLEDGE_STORE_PATH = "/tudasbazis/allitasok";
 
-export const businessNavigation: AppNavigationEntry[] = [
+/*
+  A KILENC FŐMENÜ (Balázs, 2026-10-26 16:48 UTC, "mehet", Acropora OS szál, msg
+  1564319716133314735; feladat os-menu-kilenc-fomenu). EGY LISTA, EGY HELYEN:
+  eddig a menü öt külön tömbből állt össze (primary, business, content,
+  secondary, settings), és a keret kézzel fűzte őket össze.
+
+  A JOGOSULTSÁG NEM VÁLTOZIK, csak a hely és a sorrend: minden menüpont a saját
+  `entryId`-ját és útvonalát viszi, és a láthatóságát a közös forrás
+  (`NAVIGATION_ENTRIES`) adja. Egy oldal pontosan egy helyen áll. Amit ez a
+  lista tart, azt a `navigation.component.test.ts` rögzíti: a halmaz
+  (útvonal, azonosító, felirat) a költözés előttivel megegyezik, a csoportok
+  és a sorrend pedig Balázs listája.
+*/
+export const mainNavigation: AppNavigationGroup[] = [
   {
-    href: "/pos",
-    label: "POS",
+    // Az első menü alapból nyitva: a feladatok és az olvasatlan üzenetek
+    // számlálója itt él, és egy összecsukott fejléc elrejtené.
+    label: "Áttekintés",
+    icon: "dashboard",
+    defaultOpen: true,
+    children: [
+      {
+        href: "/",
+        label: "Dashboard",
+        icon: "dashboard",
+        entryId: "dashboard",
+      },
+      {
+        href: "/feladataim",
+        label: "Feladataim",
+        icon: "clipboard",
+        entryId: "my-tasks",
+      },
+      {
+        href: "/uzenetek",
+        label: "Üzenetek",
+        icon: "message",
+        entryId: "messages",
+      },
+    ],
+  },
+  {
+    // Service was already a group on screen, wired by hand in the shell. The
+    // QR-code printing page moved here from Beállítások (Balázs's list); its
+    // entry, path and visibility (`settings.manage`: the service role does not
+    // see it, "Nem kell hogy lássa", 2026-09-02 21:00:53) did not change.
+    label: "Szerviz",
+    icon: "service",
+    children: [
+      {
+        // A LANC SORRENDJE, nem a felvetel sorrendje: hibajegy, munkalap,
+        // teljesitesi igazolas, szamla (Balazs, 2026-09-02 08:08).
+        href: "/szerviz/hibajegyek",
+        label: "Hibajegyek",
+        icon: "clipboard",
+        entryId: "service-jobs",
+      },
+      {
+        href: "/szerviz/munkalapok",
+        label: "Munkalapok",
+        icon: "clipboard",
+        entryId: "worksheets",
+      },
+      {
+        href: "/szerviz/karbantartas",
+        label: "Karbantartás",
+        icon: "clipboard",
+        entryId: "maintenance",
+      },
+      {
+        href: "/szerviz/piszkozatok",
+        label: "Piszkozatok",
+        icon: "clipboard",
+        entryId: "service-drafts",
+      },
+      {
+        href: "/szerviz/anyagigenyek",
+        label: "Anyagigények",
+        icon: "clipboard",
+        entryId: "material-requests-pending",
+      },
+      {
+        href: "/szerviz/eszkozok",
+        label: "Eszköznyilvántartás",
+        icon: "box",
+        entryId: "service-assets",
+      },
+      {
+        /**
+         * A SOR VEGEN, mint a Beallitasokban volt: nem kulso rendszer kulcsa es
+         * nem jogosultsag-kezeles, hanem sajat, uzemeltetesi tetel. A lathatosag
+         * a kozos forrasban all (`asset-labels`), `SETTINGS_MANAGE` alatt.
+         */
+        href: "/beallitasok/matricak",
+        label: "QR-kód nyomtatás",
+        icon: "settings",
+        entryId: "asset-labels",
+      },
+    ],
+  },
+  {
+    label: "Értékesítés",
     icon: "credit-card",
-    entryId: "pos",
+    children: [
+      {
+        href: "/pos",
+        label: "POS",
+        icon: "credit-card",
+        entryId: "pos",
+      },
+      {
+        // Árajánlatok (#1582 P1): a Pénzügyből költözött ide (Balázs, 2026-10-26);
+        // a `quotes` kapcsoló mögött, alapból rejtve.
+        href: "/ajanlatok",
+        label: "Árajánlatok",
+        icon: "file-text",
+        entryId: "quotes",
+      },
+      {
+        href: "/partnerek",
+        label: "Partnerek",
+        icon: "truck",
+        entryId: "partners",
+      },
+      {
+        href: "/partnerek/szerzodesek",
+        label: "Szerződések",
+        icon: "clipboard",
+        entryId: "contracts",
+      },
+    ],
   },
   {
     label: "Webshop",
@@ -263,9 +333,8 @@ export const businessNavigation: AppNavigationEntry[] = [
     ],
   },
   {
-    label: "Termékek",
-    icon: "package",
-    flattenWhenAlone: true,
+    label: "Raktár és beszerzés",
+    icon: "warehouse",
     children: [
       {
         href: "/products",
@@ -281,30 +350,6 @@ export const businessNavigation: AppNavigationEntry[] = [
         icon: "shield",
         entryId: "product-data-quality",
       },
-    ],
-  },
-  {
-    label: "Partnerek",
-    icon: "truck",
-    children: [
-      {
-        href: "/partnerek",
-        label: "Partnerek",
-        icon: "truck",
-        entryId: "partners",
-      },
-      {
-        href: "/partnerek/szerzodesek",
-        label: "Szerződések",
-        icon: "clipboard",
-        entryId: "contracts",
-      },
-    ],
-  },
-  {
-    label: "Pénzügy",
-    icon: "finance",
-    children: [
       {
         href: "/beszerzes",
         label: "Beszerzés",
@@ -319,52 +364,10 @@ export const businessNavigation: AppNavigationEntry[] = [
         entryId: "expected-arrivals",
       },
       {
-        href: "/beszerzes/nav-szamlak",
-        label: "NAV számla lekérés",
-        icon: "download",
-        entryId: "nav-invoices",
-      },
-      {
         href: "/beszerzes/arlistak",
         label: "Beszállítói árlisták",
         icon: "file-text",
         entryId: "price-lists",
-      },
-      {
-        // Számlázás (Balázs, 2026-09-30): "a Számlázás menüpont a Pénzügy
-        // alá kerül", a lista a /penzugy/szamlazas-on, a bizonylat a
-        // /penzugy/szamlazas/:id-n, a vázlat a .../szerkesztes-en.
-        href: "/penzugy/szamlazas",
-        label: "Számlázás",
-        icon: "file-text",
-        entryId: "billing",
-      },
-      {
-        // Árajánlatok (#1582 P1): a Figma 35 szerint a Pénzügy alatt; a
-        // `quotes` kapcsoló mögött, alapból rejtve.
-        href: "/ajanlatok",
-        label: "Árajánlatok",
-        icon: "file-text",
-        entryId: "quotes",
-      },
-      {
-        // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön
-        // egy Elszámolások menüpont. Ez alá kerüljön be a Foxpost a GLS és a
-        // Simple Pay elszámolás." A menü két szintű, ezért a három fül a
-        // gyűjtő oldalon áll (`SETTLEMENT_TABS`), nem harmadik menüszinten.
-        href: SETTLEMENTS_PATH,
-        label: "Elszámolások",
-        icon: "download",
-        entryId: "settlements",
-        alsoActiveOn: SETTLEMENT_TABS.map((tab) => tab.href),
-      },
-      {
-        // Hiányzó számlák (Balázs briefje, 2026-09-30): az Elszámolások
-        // mellett. Egy hónap a /penzugy/hianyzo-szamlak/2026-08 alatt.
-        href: MISSING_INVOICES_PATH,
-        label: "Hiányzó számlák",
-        icon: "alert",
-        entryId: "missing-invoices",
       },
       {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
@@ -386,6 +389,46 @@ export const businessNavigation: AppNavigationEntry[] = [
         label: "Készlet-kimenősor",
         icon: "box",
         entryId: "stock-sync-outbox",
+      },
+    ],
+  },
+  {
+    label: "Pénzügy",
+    icon: "finance",
+    children: [
+      {
+        // Számlázás (Balázs, 2026-09-30): "a Számlázás menüpont a Pénzügy
+        // alá kerül", a lista a /penzugy/szamlazas-on, a bizonylat a
+        // /penzugy/szamlazas/:id-n, a vázlat a .../szerkesztes-en.
+        href: "/penzugy/szamlazas",
+        label: "Számlázás",
+        icon: "file-text",
+        entryId: "billing",
+      },
+      {
+        href: "/beszerzes/nav-szamlak",
+        label: "NAV számla lekérés",
+        icon: "download",
+        entryId: "nav-invoices",
+      },
+      {
+        // Hiányzó számlák (Balázs briefje, 2026-09-30): az Elszámolások
+        // mellett. Egy hónap a /penzugy/hianyzo-szamlak/2026-08 alatt.
+        href: MISSING_INVOICES_PATH,
+        label: "Hiányzó számlák",
+        icon: "alert",
+        entryId: "missing-invoices",
+      },
+      {
+        // Balázs, 2026-09-30 15:06 UTC: "Szintén a Pénzügyek alá készüljön
+        // egy Elszámolások menüpont. Ez alá kerüljön be a Foxpost a GLS és a
+        // Simple Pay elszámolás." A menü két szintű, ezért a három fül a
+        // gyűjtő oldalon áll (`SETTLEMENT_TABS`), nem harmadik menüszinten.
+        href: SETTLEMENTS_PATH,
+        label: "Elszámolások",
+        icon: "download",
+        entryId: "settlements",
+        alsoActiveOn: SETTLEMENT_TABS.map((tab) => tab.href),
       },
     ],
   },
@@ -424,136 +467,122 @@ export const businessNavigation: AppNavigationEntry[] = [
       },
     ],
   },
-  // Service was already a group on screen, wired by hand in the shell. It is
-  // listed here now so every group in this menu comes from one place; the
-  // rendering does not care which of them is which.
-  { label: "Szerviz", icon: "service", children: serviceNavigation },
-];
-
-/**
- * A KUTATÁSI TUDÁSTÁR (S4). A menüpont a modul kezdőlapjára, az Áttekintőre
- * (Figma 3:2) visz; az alatta álló oldalakon is aktív. A modul fülei a
- * `knowledge-base/knowledge-base-tabs.tsx` sorában állnak, csak a kész
- * képernyők (holt link nincs).
- */
-export const KNOWLEDGE_BASE_PATH = "/tudasbazis";
-export const KNOWLEDGE_SOURCES_PATH = "/tudasbazis/forrasok";
-export const KNOWLEDGE_CLAIMS_PATH = "/tudasbazis/kiolvasas";
-export const KNOWLEDGE_VOCABULARY_PATH = "/tudasbazis/szotar";
-export const KNOWLEDGE_STORE_PATH = "/tudasbazis/allitasok";
-
-export const secondaryNavigation: AppNavigationItem[] = [
   {
-    // Belső próbafelület, nem üzemi oldal: ezért NEM az operatív blokkban van,
-    // hanem itt. A jogosultságot minden szerepkör megkapja (Balázs döntése,
-    // 2026-08-26), a szűkítés a felhasználói jogosultságok rendezésekor jön.
-    href: "/ai-teszt",
-    label: "AI teszt",
-    icon: "activity",
-    entryId: "ai-test",
-  },
-  {
-    // belső szerkesztői modul a teszten (S4): a többi belső próbafelület mellett
-    href: KNOWLEDGE_BASE_PATH,
-    label: "Tudásbázis",
+    /**
+     * A TARTALOM A SAJÁT FŐMENÜBEN ÁLL, a tudással együtt. A panasz, amiből a
+     * Tartalom készült, épp az volt, hogy a dolgok sok felületen keletkeznek, és
+     * nem látszik, mi vár kire. A két belső próbafelület (AI teszt, Tudásbázis)
+     * ide költözött a korábbi külön blokkból; a jogosultságot ugyanúgy a közös
+     * forrás adja (az AI teszt minden szerepkörnek, Balázs döntése, 2026-08-26).
+     */
+    label: "Tartalom és tudás",
     icon: "file-text",
-    entryId: "knowledge-base",
+    children: [
+      {
+        href: "/tartalom",
+        label: "Tartalom",
+        icon: "clipboard",
+        entryId: "content",
+      },
+      {
+        // belső szerkesztői modul a teszten (S4): a többi belső próbafelület mellett
+        href: KNOWLEDGE_BASE_PATH,
+        label: "Tudásbázis",
+        icon: "file-text",
+        entryId: "knowledge-base",
+      },
+      {
+        // Belső próbafelület, nem üzemi oldal. A szűkítés a felhasználói
+        // jogosultságok rendezésekor jön.
+        href: "/ai-teszt",
+        label: "AI teszt",
+        icon: "activity",
+        entryId: "ai-test",
+      },
+    ],
   },
-];
-
-export const settingsNavigation: AppNavigationItem[] = [
   {
-    href: "/beallitasok",
-    label: "Általános",
+    // A Beállítások alcsoportokkal: az `subgroup` felirat a keretben egy kis
+    // címsor a tételek fölött; az Általános és a Felhasználók nem tartozik
+    // alcsoportba. Az UNAS és a Medusa beállításai a Webshop alatt állnak
+    // (Balázs, 2026-10-26 13:05 UTC), itt nem duplázódnak.
+    label: "Beállítások",
     icon: "settings",
-    entryId: "settings-general",
-  },
-  {
-    href: "/admin/integrations/nav",
-    label: "NAV",
-    icon: "finance",
-    entryId: "nav-integration",
-  },
-  {
-    // A karbantartási piszkozat-számla Agent Key-je (ADR-014, 4. szelet).
-    href: "/admin/integrations/szamlazz/connection",
-    label: "Számlázz.hu kapcsolat",
-    icon: "finance",
-    entryId: "szamlazz-connection",
-  },
-  {
-    href: "/admin/users",
-    label: "Felhasználók",
-    icon: "shield",
-    entryId: "users",
-  },
-  {
-    /**
-     * A SOR VEGEN, ES NEM A KET KULSO KOZE. A mai sorrend logikat kovet:
-     * altalanos, aztan a ket KULSO RENDSZER hitelesito adata (NAV, Medusa),
-     * vegul a felhasznalok. A matricakiadas egyik csoportba sem tartozik --
-     * nem kulso rendszer kulcsa es nem jogosultsag-kezeles, hanem sajat,
-     * uzemeltetesi tetel.
-     *
-     * A lathatosag a kozos forrasban all (`asset-labels`), `SETTINGS_MANAGE`
-     * alatt: a szervizes NEM latja. Balazs, 2026-09-02 21:00:53: "Nem kell
-     * hogy lassa".
-     */
-    href: "/beallitasok/matricak",
-    label: "QR-kód nyomtatás",
-    icon: "settings",
-    entryId: "asset-labels",
-  },
-  {
-    /**
-     * SAJAT MENUPONT, ES EZ BALAZS KERESE VOLT: a mertekegysegek torzsadatkent
-     * allnak a Beallitasok alatt, nem egy masik lap belsejeben elrejtve.
-     *
-     * A MATRICAK UTAN AlL, mert a ketto ugyanaz a fajta tetel: nem kulso
-     * rendszer kulcsa es nem jogosultsag-kezeles, hanem sajat, uzemeltetesi
-     * torzsadat.
-     */
-    href: "/beallitasok/mertekegysegek",
-    label: "Mértékegységek",
-    icon: "settings",
-    entryId: "units-of-measure",
-  },
-  {
-    /*
-      A MERTEKEGYSEGEK MELLETT ALL, mert ugyanaz a fajta tetel: sajat,
-      uzemeltetesi torzsadat, amit ember tart karban.
-    */
-    href: "/beallitasok/eszkoz-kategoriak",
-    label: "Eszköz-kategóriák",
-    icon: "settings",
-    entryId: "asset-categories",
-  },
-  {
-    /*
-      UGYANAZ A FAJTA TETEL, MINT AZ ESZKOZ-KATEGORIAK: sajat, uzemeltetesi
-      torzsadat. Balazs kerese, 2026-09-22 (kanban 68add892).
-    */
-    href: "/beallitasok/eszkoz-funkciok",
-    label: "Eszköz-funkciók",
-    icon: "settings",
-    entryId: "asset-functions",
-  },
-  {
-    /*
-      AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat
-      kerete, ezert a Beallitasok tobbi listalapjanak mintajat koveti.
-    */
-    href: "/beallitasok/ajanlat-szovegreszletek",
-    label: "Ajánlat szövegrészletek",
-    icon: "settings",
-    entryId: "quote-snippets",
-  },
-  {
-    // AZ AJANLATSABLONOK (#1582; Figma 35 · Offers / Templates, 579:2243)
-    href: "/beallitasok/ajanlat-sablonok",
-    label: "Ajánlatsablonok",
-    icon: "settings",
-    entryId: "quote-templates",
+    separated: true,
+    children: [
+      {
+        href: "/beallitasok",
+        label: "Általános",
+        icon: "settings",
+        entryId: "settings-general",
+      },
+      {
+        href: "/admin/users",
+        label: "Felhasználók",
+        icon: "shield",
+        entryId: "users",
+      },
+      {
+        subgroup: "Kapcsolatok",
+        href: "/admin/integrations/nav",
+        label: "NAV",
+        icon: "finance",
+        entryId: "nav-integration",
+      },
+      {
+        // A karbantartási piszkozat-számla Agent Key-je (ADR-014, 4. szelet).
+        subgroup: "Kapcsolatok",
+        href: "/admin/integrations/szamlazz/connection",
+        label: "Számlázz.hu kapcsolat",
+        icon: "finance",
+        entryId: "szamlazz-connection",
+      },
+      {
+        /**
+         * SAJAT MENUPONT, ES EZ BALAZS KERESE VOLT: a mertekegysegek torzsadatkent
+         * allnak a Beallitasok alatt, nem egy masik lap belsejeben elrejtve.
+         * A mertekegyseg, az eszkoz-kategoria es az eszkoz-funkcio ugyanaz a
+         * fajta tetel: sajat, uzemeltetesi torzsadat, amit ember tart karban.
+         */
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/mertekegysegek",
+        label: "Mértékegységek",
+        icon: "settings",
+        entryId: "units-of-measure",
+      },
+      {
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/eszkoz-kategoriak",
+        label: "Eszköz-kategóriák",
+        icon: "settings",
+        entryId: "asset-categories",
+      },
+      {
+        // Balazs kerese, 2026-09-22 (kanban 68add892).
+        subgroup: "Törzsadatok",
+        href: "/beallitasok/eszkoz-funkciok",
+        label: "Eszköz-funkciók",
+        icon: "settings",
+        entryId: "asset-functions",
+      },
+      {
+        // AZ AJANLATI SZOVEGRESZLETEK (#1582 P1): a Figma 35-ben nincs sajat
+        // kerete, ezert a Beallitasok tobbi listalapjanak mintajat koveti.
+        subgroup: "Árajánlat",
+        href: "/beallitasok/ajanlat-szovegreszletek",
+        label: "Ajánlat szövegrészletek",
+        icon: "settings",
+        entryId: "quote-snippets",
+      },
+      {
+        // AZ AJANLATSABLONOK (#1582; Figma 35 · Offers / Templates, 579:2243)
+        subgroup: "Árajánlat",
+        href: "/beallitasok/ajanlat-sablonok",
+        label: "Ajánlatsablonok",
+        icon: "settings",
+        entryId: "quote-templates",
+      },
+    ],
   },
 ];
 
@@ -606,10 +635,5 @@ export function isNavigationItemActive(
  * A sorrend a menu sorrendje, es ez nem mindegy: a keret ebben a sorrendben
  * rajzol, tehat aki ezt a listat olvassa, ugyanazt a sorrendet latja.
  */
-export const allNavigationPages: AppNavigationItem[] = navigationItems([
-  ...primaryNavigation,
-  ...businessNavigation,
-  ...contentNavigation,
-  ...secondaryNavigation,
-  ...settingsNavigation,
-]);
+export const allNavigationPages: AppNavigationItem[] =
+  navigationItems(mainNavigation);
