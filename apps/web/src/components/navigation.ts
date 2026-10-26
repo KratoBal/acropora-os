@@ -212,7 +212,7 @@ export const businessNavigation: AppNavigationEntry[] = [
       },
       {
         href: "/vevok",
-        label: "Webshop vásárlók",
+        label: "Vevők",
         icon: "users",
         entryId: "webshop-customers",
       },
@@ -220,9 +220,45 @@ export const businessNavigation: AppNavigationEntry[] = [
         // The shop's own view of the catalogue. The full internal catalogue,
         // with the barcode editor, stays at /products under "Termékek".
         href: "/webshop/termekek",
-        label: "Webshop termékek",
+        label: "Termékek a webshopban",
         icon: "package",
         entryId: "webshop-products",
+      },
+      /*
+        MINDEN WEBSHOP-MENÜ EGY HELYEN (Balázs, 2026-10-26 13:05 UTC, msg
+        1564263673932026020; acrobot döntése): a kezdőlap, a válogatások és a
+        márkák is ide kerültek, a láthatóságuk a mai bejegyzéseké maradt.
+      */
+      {
+        href: "/admin/kezdolap",
+        label: "Kezdőlap",
+        icon: "store",
+        entryId: "homepage-content",
+      },
+      {
+        href: "/admin/valogatasok",
+        label: "Válogatások",
+        icon: "package",
+        entryId: "brands",
+      },
+      {
+        href: "/admin/brands",
+        label: "Márkák",
+        icon: "package",
+        entryId: "brands",
+      },
+      {
+        // a gyűjtőoldal: UNAS és Medusa kapcsolat, szinkron, rendelés-
+        // elavulás, webshop levélsablonok, kezdőlap
+        href: "/webshop/beallitasok",
+        label: "Webshop beállítások",
+        icon: "settings",
+        entryId: "webshop-settings",
+        alsoActiveOn: [
+          "/admin/integrations/unas",
+          "/admin/integrations/medusa/connection",
+          "/beallitasok/rendeles-elavulas",
+        ],
       },
     ],
   },
@@ -353,51 +389,45 @@ export const businessNavigation: AppNavigationEntry[] = [
       },
     ],
   },
+  /*
+    AZ AKVARISZTIKA EGY FŐ MENÜ ALATT (Balázs, 2026-10-26 13:09 UTC, msg
+    1564264593444839436; a név acrobot munkaneve, ha Balázs mást mond, csak a
+    felirat változik): akváriumok, kalkulátorok, ICP, elhullási napló.
+  */
   {
-    href: "/akvariumok",
-    label: "Akváriumok",
+    label: "Akvarisztika",
     icon: "aquarium",
-    entryId: "aquariums",
-  },
-  {
-    href: "/kalkulatorok",
-    label: "Kalkulátorok",
-    icon: "droplet",
-    entryId: "calculators",
-  },
-  {
-    href: "/icp",
-    label: "ICP",
-    icon: "briefcase",
-    entryId: "icp",
+    children: [
+      {
+        href: "/akvariumok",
+        label: "Akváriumok",
+        icon: "aquarium",
+        entryId: "aquariums",
+      },
+      {
+        href: "/kalkulatorok",
+        label: "Kalkulátorok",
+        icon: "droplet",
+        entryId: "calculators",
+      },
+      {
+        href: "/icp",
+        label: "ICP",
+        icon: "briefcase",
+        entryId: "icp",
+      },
+      {
+        href: "/elhullasi-naplo",
+        label: "Elhullási napló",
+        icon: "fish",
+        entryId: "mortality",
+      },
+    ],
   },
   // Service was already a group on screen, wired by hand in the shell. It is
   // listed here now so every group in this menu comes from one place; the
   // rendering does not care which of them is which.
   { label: "Szerviz", icon: "service", children: serviceNavigation },
-  // a Figma (OS / Elhullási napló) a Szerviz alá, önálló menüpontként teszi
-  {
-    href: "/elhullasi-naplo",
-    label: "Elhullási napló",
-    icon: "fish",
-    entryId: "mortality",
-  },
-];
-
-export const unasSettingsNavigation: AppNavigationItem[] = [
-  {
-    href: "/admin/integrations/unas/connection",
-    label: "Kapcsolat",
-    icon: "key",
-    entryId: "unas-connection",
-  },
-  {
-    href: "/admin/integrations/unas",
-    label: "Szinkron",
-    icon: "activity",
-    entryId: "unas-sync",
-    exact: true,
-  },
 ];
 
 /**
@@ -429,12 +459,6 @@ export const secondaryNavigation: AppNavigationItem[] = [
     icon: "file-text",
     entryId: "knowledge-base",
   },
-  {
-    href: "/admin/brands",
-    label: "Márkák",
-    icon: "package",
-    entryId: "brands",
-  },
 ];
 
 export const settingsNavigation: AppNavigationItem[] = [
@@ -449,14 +473,6 @@ export const settingsNavigation: AppNavigationItem[] = [
     label: "NAV",
     icon: "finance",
     entryId: "nav-integration",
-  },
-  {
-    // A webshop-motor admin kulcsa. A NAV mellett a helye, mert mind a kettő
-    // külső rendszer hitelesítő adata, és ugyanaz a jog kezeli.
-    href: "/admin/integrations/medusa/connection",
-    label: "Medusa kapcsolat",
-    icon: "store",
-    entryId: "medusa-connection",
   },
   {
     // A karbantartási piszkozat-számla Agent Key-je (ADR-014, 4. szelet).
@@ -541,11 +557,6 @@ export const settingsNavigation: AppNavigationItem[] = [
   },
 ];
 
-export const allSettingsNavigation: AppNavigationItem[] = [
-  ...unasSettingsNavigation,
-  ...settingsNavigation,
-];
-
 /**
  * Whether this entry is the one the reader is on.
  *
@@ -600,6 +611,5 @@ export const allNavigationPages: AppNavigationItem[] = navigationItems([
   ...businessNavigation,
   ...contentNavigation,
   ...secondaryNavigation,
-  ...unasSettingsNavigation,
   ...settingsNavigation,
 ]);

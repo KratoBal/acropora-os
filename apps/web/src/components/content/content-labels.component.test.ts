@@ -75,7 +75,13 @@ describe("where the content list lives in the menu", () => {
    * alatt ugyanezt csinálná.
    */
   it("is a single entry gated on content.view", () => {
-    expect(contentNavigation).toHaveLength(1);
+    // A kezdolap 2026-10-26-an rovid ideig ebben a szakaszban allt, aztan a
+    // Webshop ala kerult (#1888). Ezert nem a szakasz hossza, hanem a Tartalom
+    // sajat tetele a kerdes: pontosan egy, elso helyen, sajat joggal.
+    const tetelek = contentNavigation.filter(
+      (item) => item.href === "/tartalom",
+    );
+    expect(tetelek).toHaveLength(1);
     expect(contentNavigation[0]?.href).toBe("/tartalom");
     // A JOG MOSTANTOL A KOZOS FORRASBAN all, nem a menusorban. Az allitas
     // celja valtozatlan (sajat menupont, sajat joggal), csak a helye mas.

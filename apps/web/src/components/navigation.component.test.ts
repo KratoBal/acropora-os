@@ -12,6 +12,7 @@ import {
 import {
   allNavigationPages,
   businessNavigation,
+  contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
@@ -19,7 +20,6 @@ import {
   secondaryNavigation,
   settingsNavigation,
   SETTLEMENT_TABS,
-  unasSettingsNavigation,
   type AppNavigationGroup,
   type AppNavigationItem,
 } from "./navigation";
@@ -60,33 +60,91 @@ describe("navigation", () => {
    * live under /partnerek. The menu is where that distinction is first made,
    * so it has to name them apart.
    *
-   * Asserted here rather than only on the page, because the two are separate
-   * strings in separate files: renaming the page heading and leaving the menu
-   * saying "Vevők" is the half-finished state, and nothing else would report
-   * it. The page's own heading is asserted in its own spec.
+   * Since 2026-10-26 (Balázs, msg 1564263673932026020; acrobot's list) the
+   * label is "Vevők" again, and the distinction is made by the Webshop heading
+   * above it rather than by the label. What turns this red: the buyers leave
+   * the Webshop group, or the partners join it.
    */
   it("calls the webshop buyers what they are, apart from the partners", () => {
+    const webshop = group("Webshop").children;
+    expect(webshop.find((item) => item.href === "/vevok")?.label).toBe("Vevők");
+    expect(webshop.map((item) => item.href)).not.toContain("/partnerek");
+
     const labels = new Map(
       navigationItems(businessNavigation).map((item) => [
         item.href,
         item.label,
       ]),
     );
-
-    expect(labels.get("/vevok")).toBe("Webshop vásárlók");
     expect(labels.get("/partnerek")).toBe("Partnerek");
   });
 
-  it("puts the orders, the buyers and the shop's products under one Webshop heading", () => {
+  /*
+    EVERY WEBSHOP MENU IN ONE PLACE (Balázs, 2026-10-26 13:05 UTC, msg
+    1564263673932026020): the home page, the collections, the brands and the
+    collecting settings page joined the orders, the buyers and the products.
+  */
+  it("puts every webshop page under one Webshop heading", () => {
     expect(
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
       ["/webshop", "UNAS Megrendelések"],
       // 2026-10-05: az új webshop rendelései, a UNAS lista mellett
       ["/webshop/rendelesek", "Rendelések"],
-      ["/vevok", "Webshop vásárlók"],
-      ["/webshop/termekek", "Webshop termékek"],
+      ["/vevok", "Vevők"],
+      ["/webshop/termekek", "Termékek a webshopban"],
+      ["/admin/kezdolap", "Kezdőlap"],
+      ["/admin/valogatasok", "Válogatások"],
+      ["/admin/brands", "Márkák"],
+      ["/webshop/beallitasok", "Webshop beállítások"],
     ]);
+  });
+
+  /*
+    THE AQUARISTICS GROUP (Balázs, 2026-10-26 13:09 UTC, msg
+    1564264593444839436; "Akvarisztika" is acrobot's working name). The four
+    pages keep their own entries, so their visibility does not change.
+  */
+  it("puts the aquariums, the calculators, the ICP and the mortality log under Akvarisztika", () => {
+    expect(
+      group("Akvarisztika").children.map((item) => [item.href, item.entryId]),
+    ).toEqual([
+      ["/akvariumok", "aquariums"],
+      ["/kalkulatorok", "calculators"],
+      ["/icp", "icp"],
+      ["/elhullasi-naplo", "mortality"],
+    ]);
+  });
+
+  /*
+    THE SETTINGS PAGES THAT MOVED TO THE WEBSHOP SETTINGS PAGE are not in the
+    sidebar twice: the UNAS group and the Medusa connection left Beállítások,
+    and their paths light up the collecting entry instead.
+  */
+  it("keeps the UNAS and Medusa settings off the sidebar and lights the webshop settings entry on them", () => {
+    const hrefs = allNavigationPages.map((item) => item.href);
+    for (const href of [
+      "/admin/integrations/unas",
+      "/admin/integrations/unas/connection",
+      "/admin/integrations/medusa/connection",
+    ])
+      expect(hrefs).not.toContain(href);
+
+    const entry = group("Webshop").children.find(
+      (item) => item.href === "/webshop/beallitasok",
+    )!;
+    for (const pathname of [
+      "/webshop/beallitasok",
+      "/admin/integrations/unas",
+      "/admin/integrations/unas/connection",
+      "/admin/integrations/medusa/connection",
+      "/beallitasok/rendeles-elavulas",
+    ])
+      expect([pathname, isNavigationItemActive(pathname, entry)]).toEqual([
+        pathname,
+        true,
+      ]);
+    expect(isNavigationItemActive("/beallitasok", entry)).toBe(false);
   });
 
   /**
@@ -103,7 +161,7 @@ describe("navigation", () => {
     );
 
     expect(labels.get("/products")).toBe("Termékek");
-    expect(labels.get("/webshop/termekek")).toBe("Webshop termékek");
+    expect(labels.get("/webshop/termekek")).toBe("Termékek a webshopban");
   });
 
   /**
@@ -157,12 +215,10 @@ describe("navigation", () => {
       "Termékek",
       "Partnerek",
       "Pénzügy",
-      "Akváriumok",
-      "Kalkulátorok",
-      "ICP",
+      // 2026-10-26: az akváriumok, a kalkulátorok, az ICP és az elhullási
+      // napló egy csoportban (msg 1564264593444839436)
+      "Akvarisztika",
       "Szerviz",
-      // az elhullási napló (kártya 115c9740): a Figma a Szerviz alá teszi
-      "Elhullási napló",
     ]);
   });
 
@@ -181,7 +237,7 @@ describe("navigation", () => {
       ...navigationItems(businessNavigation),
       ...secondaryNavigation,
       ...settingsNavigation,
-      ...unasSettingsNavigation,
+      ...contentNavigation,
     ].map((item) => item.href);
 
     const seen = new Set<string>();
@@ -350,11 +406,13 @@ describe("navigation", () => {
     const visible = visibleLabelsFor("SERVICE");
 
     for (const label of [
-      "Webshop vásárlók",
-      "Webshop termékek",
+      "Vevők",
+      "Termékek a webshopban",
       "Termékek",
       "Márkák",
-      "Szinkron",
+      // a Szinkron 2026-10-26 óta a Webshop beállítások oldalon áll, ugyanazzal
+      // a joggal (products.view), mint ez a menüpont
+      "Webshop beállítások",
       "AI teszt",
     ])
       expect(visible).not.toContain(label);
@@ -370,11 +428,13 @@ describe("navigation", () => {
     const owner = visibleLabelsFor("OWNER");
 
     for (const label of [
-      "Webshop vásárlók",
-      "Webshop termékek",
+      "Vevők",
+      "Termékek a webshopban",
       "Termékek",
       "Márkák",
-      "Szinkron",
+      // a Szinkron 2026-10-26 óta a Webshop beállítások oldalon áll, ugyanazzal
+      // a joggal (products.view), mint ez a menüpont
+      "Webshop beállítások",
       "AI teszt",
     ])
       expect(owner).toContain(label);
@@ -424,6 +484,14 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
+    // a webshop kezdolapja a Webshop csoportban (2026-10-26): ugyanaz a jog,
+    // mint a Beallitasok kartyajae es az API vegpontjaie
+    "/admin/kezdolap": "products.view",
+    // a valogatasok a Webshop csoportban (2026-10-26), a markak bejegyzesevel
+    "/admin/valogatasok": "products.view",
+    // a Webshop beallitasok gyujtooldala (2026-10-26): a jog a kartyai mai
+    // jogainak unioja, ami minden szerepre a products.view
+    "/webshop/beallitasok": "products.view",
     "/pos": "orders.view",
     "/webshop": "orders.view",
     // Az új webshop rendelései (2026-10-05), a bevezetés UTÁN; a jog a UNAS
@@ -465,15 +533,12 @@ describe("navigation", () => {
     "/kalkulatorok": "aquariums.view",
     "/icp": "icp.view",
     "/elhullasi-naplo": "mortality.view",
-    "/admin/integrations/unas/connection": "settings.manage",
-    "/admin/integrations/unas": "products.view",
     "/ai-teszt": "ai-test.view",
     // a kutatási tudástár (S4): a bevezetés után felvett sor, a menü joga az olvasásé
     "/tudasbazis": "knowledge.view",
     "/admin/brands": "products.view",
     "/beallitasok": "settings.manage",
     "/admin/integrations/nav": "settings.manage",
-    "/admin/integrations/medusa/connection": "settings.manage",
     "/admin/integrations/szamlazz/connection": "settings.manage",
     "/admin/users": "users.manage",
     // A matricakiadas ugyanazt a jogot kapja, mint a tobbi Beallitasok-tetel,
@@ -539,6 +604,45 @@ describe("navigation", () => {
 
     expect(hrefs).toEqual([...new Set(hrefs)]);
     expect(hrefs).toContain("/tartalom");
+  });
+
+  /*
+    THE HOME PAGE ADMIN IN THE SIDEBAR (acrobot, 2026-10-26): Balázs did not
+    find it on the settings card alone; since 13:05 UTC (msg
+    1564263673932026020) it sits under Webshop, not under Tartalom. What turns
+    this red: the entry moved out of the group, or shown without the
+    environment's switch (the production OS has no editable home page).
+  */
+  it("lists the home page admin under Webshop, behind the products right and the environment switch", () => {
+    expect(contentNavigation.map((item) => item.href)).toEqual(["/tartalom"]);
+    const entry = group("Webshop").children.find(
+      (item) => item.href === "/admin/kezdolap",
+    );
+    expect(entry).toMatchObject({
+      label: "Kezdőlap",
+      entryId: "homepage-content",
+    });
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "OWNER" },
+        new Set(),
+      ),
+    ).toBe(false);
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "OWNER" },
+        new Set(["homepage-content"]),
+      ),
+    ).toBe(true);
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "SERVICE" },
+        new Set(["homepage-content"]),
+      ),
+    ).toBe(false);
   });
 });
 

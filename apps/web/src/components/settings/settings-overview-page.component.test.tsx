@@ -113,7 +113,13 @@ describe("beállítások gyűjtőoldal", () => {
     auth.role = "OWNER";
     render(<SettingsOverviewPage />);
     expect(screen.getAllByText("Felhasználók")).toHaveLength(1);
-    expect(screen.getAllByText("Márkák")).toHaveLength(1);
+    // 2026-10-26: a Márkák a Webshop menübe költözött; a Webshop kártya egyetlen
+    // linkje a gyűjtőoldal, a neve a kártya címe mellett nem ismétlődik
+    expect(screen.getAllByText("Webshop")).toHaveLength(1);
+    expect(screen.queryByText("Webshop beállítások")).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link").map((elem) => elem.getAttribute("href")),
+    ).toContain("/webshop/beallitasok");
   });
 
   /**
@@ -122,17 +128,38 @@ describe("beállítások gyűjtőoldal", () => {
    * lathatatlan maradna -- pontosan az a hiba, amit ez a lap javit, csak
    * eggyel beljebb.
    */
-  it("a több oldalas területnél mind a négy hivatkozás ott áll", () => {
+  // 2026-10-26: az UNAS és a Medusa a Webshop beállítások oldalra költözött,
+  // az Integrációk kártyán a NAV és a Számlázz.hu maradt
+  it("a több oldalas területnél minden hivatkozás ott áll", () => {
     auth.role = "OWNER";
     render(<SettingsOverviewPage />);
-    for (const nev of [
-      "UNAS kapcsolat",
-      "UNAS szinkron",
-      "NAV",
-      "Medusa kapcsolat",
-    ]) {
-      expect(screen.getByRole("link", { name: new RegExp(nev) })).toBeTruthy();
+    const tobbLinkes = SETTINGS_AREAS.filter((area) => area.links.length > 1);
+    expect(tobbLinkes.map((area) => area.title)).toContain("Integrációk");
+    for (const link of tobbLinkes.flatMap((area) => area.links)) {
+      expect(
+        screen.getByRole("link", { name: new RegExp(link.label) }),
+      ).toHaveAttribute("href", link.href);
     }
+  });
+
+  // NEM DUPLÁZÓDIK (acrobot, 2026-10-26): ami a Webshop beállítások oldalon
+  // áll, az itt nem áll még egyszer, csak a gyűjtőoldalra mutató link
+  it("nem sorolja fel újra a webshop beállításait", () => {
+    auth.role = "OWNER";
+    render(<SettingsOverviewPage />);
+    const hrefs = screen
+      .getAllByRole("link")
+      .map((elem) => elem.getAttribute("href"));
+    for (const href of [
+      "/admin/integrations/unas/connection",
+      "/admin/integrations/unas",
+      "/admin/integrations/medusa/connection",
+      "/beallitasok/rendeles-elavulas",
+      "/admin/kezdolap",
+      "/admin/brands",
+      "/admin/valogatasok",
+    ])
+      expect(hrefs).not.toContain(href);
   });
 
   /**
