@@ -30,6 +30,7 @@ import {
   RICH_TEXT_HREF_SCHEMES,
   RICH_TEXT_IMAGE_MAX_WIDTH,
   RICH_TEXT_PRODUCT_ID,
+  RICH_TEXT_SHOP_PATH,
   RICH_TEXT_TABLE_SPAN_MAX,
   RICH_TEXT_VARIABLE_NAME,
   richImageId,
@@ -94,21 +95,25 @@ function engedettKep(
  * listaja (`script`, `style`) szandekosan nem valtozik: a levelsablon tesztjei
  * es a mai kuldesek ugyanazt a kimenetet kapjak, mint eddig.
  */
+const WEBOLDALI_KOD_TAGEK = [
+  "script",
+  "style",
+  "iframe",
+  "object",
+  "embed",
+  "noscript",
+  "svg",
+  "math",
+  "template",
+  "textarea",
+] as const;
+
 const TARTALOMMAL_EGYUTT: Readonly<Record<RichTextProfile, readonly string[]>> =
   {
     email: ["script", "style"],
-    full: [
-      "script",
-      "style",
-      "iframe",
-      "object",
-      "embed",
-      "noscript",
-      "svg",
-      "math",
-      "template",
-      "textarea",
-    ],
+    full: WEBOLDALI_KOD_TAGEK,
+    // a rovid profil is weboldalra megy: ugyanaz a lista, mint a teljese
+    short: WEBOLDALI_KOD_TAGEK,
   };
 
 const HELYORZO_HREF = /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/;
@@ -116,10 +121,13 @@ const HELYORZO_HREF = /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/;
 function engedettHref(
   ertek: string,
   helyorzok: ReadonlySet<string>,
+  profil: RichTextProfile = "email",
 ): string | null {
   const cim = ertek.trim();
   const helyorzo = HELYORZO_HREF.exec(cim);
   if (helyorzo) return helyorzok.has(helyorzo[1] as string) ? cim : null;
+  // a rovid profilban a bolt sajat utvonala is cel lehet (`/store`)
+  if (profil === "short" && RICH_TEXT_SHOP_PATH.test(cim)) return cim;
   /*
     A SEMAT A VEZERLOKARAKTEREK ELTAVOLITASA UTAN NEZZUK. A bongeszo a
     `java\tscript:` alakot `javascript:`-kent olvassa; ha itt a nyers szovegen
@@ -144,7 +152,13 @@ export function isAllowedRichHref(
   href: string,
   options: SanitizeRichHtmlOptions = {},
 ): boolean {
-  return engedettHref(href, new Set(options.hrefPlaceholders ?? [])) !== null;
+  return (
+    engedettHref(
+      href,
+      new Set(options.hrefPlaceholders ?? []),
+      options.profile ?? "email",
+    ) !== null
+  );
 }
 
 function attrEscape(ertek: string): string {
@@ -261,7 +275,7 @@ export function sanitizeRichHtmlReport(
         egy tiltott vagy ures cimre, nem egy halott link.
       */
       if (tag === "a" && name === "href") {
-        const cim = engedettHref(value, helyorzok);
+        const cim = engedettHref(value, helyorzok, profil);
         return cim ? `href="${attrEscape(cim)}"` : elutasitott(tag, name);
       }
       if (name === "data-align") {
