@@ -14,14 +14,17 @@ function repositoryWith(
   } | null,
 ) {
   const calls: string[] = [];
+  const inputs: unknown[] = [];
   return {
     calls,
+    inputs,
     repository: {
       create: async () => ({ id: "created" }),
       findById: async () => product,
       list: async () => ({ items: [], pagination: {} }),
-      update: async () => {
+      update: async (_id: string, input: unknown) => {
         calls.push("update");
+        inputs.push(input);
         return { id: "updated" };
       },
       archive: async () => {
@@ -45,10 +48,14 @@ describe("ProductService", () => {
       id: "product-1",
       catalogAuthority: "ACROPORA",
     });
-    const service = new ProductService(repository);
+    const service = new ProductService(repository, {
+      RICH_TEXT_IMAGE_HOSTS: "static.acropora.hu, nem hoszt",
+    });
     assert.deepEqual(await service.getProduct("product-1"), {
       id: "product-1",
       catalogAuthority: "ACROPORA",
+      // the same list the save cleans with; a malformed entry is dropped
+      descriptionImageHosts: ["static.acropora.hu"],
     });
   });
 
@@ -71,6 +78,55 @@ describe("ProductService", () => {
     await service.updateProduct("product-1", { name: "Updated" });
     await service.archiveProduct("product-1");
     assert.deepEqual(calls, ["update", "archive"]);
+  });
+
+  /**
+   * The description is stored through the full-profile sanitizer: what the
+   * editor produces passes unchanged, script, iframe and on* do not.
+   */
+  it("stores the description through the full-profile sanitizer", async () => {
+    const { repository, inputs } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    const service = new ProductService(repository, {});
+    const clean =
+      '<table><tbody><tr><td><p>a</p></td></tr></tbody></table><div data-product-card="clx0abc123">Kaja</div>';
+
+    await service.updateProduct("product-1", {
+      description: `${clean}<script>alert(1)</script><iframe src="https://x.hu"></iframe><p onclick="x()">b</p>`,
+    });
+    await service.updateProduct("product-1", { description: null });
+    await service.updateProduct("product-1", { name: "Only the name" });
+
+    assert.deepEqual(inputs, [
+      { description: `${clean}<p>b</p>` },
+      { description: null },
+      { name: "Only the name" },
+    ]);
+  });
+
+  /**
+   * The image hosts (barracuda, #1875/#1877): an image from a listed host
+   * stays, a foreign one is dropped, and without the variable no image passes.
+   */
+  it("keeps only description images from RICH_TEXT_IMAGE_HOSTS", async () => {
+    const own = '<p><img src="https://static.acropora.hu/a.webp" alt="a"></p>';
+    const foreign = '<p><img src="https://cdn.unas.hu/b.jpg" alt="b"></p>';
+    const { repository, inputs } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
+    await new ProductService(repository, {
+      RICH_TEXT_IMAGE_HOSTS: "static.acropora.hu",
+    }).updateProduct("product-1", { description: own + foreign });
+    await new ProductService(repository, {}).updateProduct("product-1", {
+      description: own,
+    });
+    const [listed, none] = inputs as { description: string }[];
+    assert.match(listed!.description, /static\.acropora\.hu\/a\.webp/);
+    assert.doesNotMatch(listed!.description, /cdn\.unas\.hu/);
+    assert.doesNotMatch(none!.description, /<img/);
   });
 
   it("blocks generic writes to an UNAS managed product", async () => {

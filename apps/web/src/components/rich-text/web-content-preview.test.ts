@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   WebContentPreview,
   renderWebContentHtml,
+  splitStorefrontTabs,
   type PreviewProductCard,
 } from "./web-content-preview";
 
@@ -77,5 +78,30 @@ describe("WebContentPreview", () => {
     expect(screen.getByTestId("web-content-preview-body").innerHTML).toBe(
       "<h2>Cím</h2><p>szöveg</p>",
     );
+  });
+});
+
+describe("splitStorefrontTabs", () => {
+  it("a táblázatok külön fülre kerülnek, mint a kirakatban", () => {
+    expect(
+      splitStorefrontTabs(
+        "<p>a</p><table><tbody><tr><td>1</td></tr></tbody></table><p>b</p>",
+      ),
+    ).toEqual({
+      tables: "<table><tbody><tr><td>1</td></tr></tbody></table>",
+      prose: "<p>a</p><p>b</p>",
+    });
+  });
+});
+
+describe("renderWebContentHtml a mentés hoszt-listájával", () => {
+  // ugyanaz a lista, amivel a mentés tisztít: az előnézet sem mutat mást
+  it("csak a listán álló hoszt képét tartja meg", () => {
+    const html =
+      '<p><img src="https://static.acropora.hu/a.webp" alt="a"><img src="https://cdn.unas.hu/b.jpg" alt="b"></p>';
+    const kesz = renderWebContentHtml(html, new Map(), ["static.acropora.hu"]);
+    expect(kesz).toContain("static.acropora.hu/a.webp");
+    expect(kesz).not.toContain("cdn.unas.hu");
+    expect(renderWebContentHtml(html, new Map(), [])).not.toContain("<img");
   });
 });
