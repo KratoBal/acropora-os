@@ -18,12 +18,18 @@ import { BillingDocumentsService } from "./billing-documents.service.js";
  * vázlatból, kiállítás alattiból vagy elutasítottból, végszámlából, sztornóból
  * vagy partner nélkülből is készül másolat; a másolat viszi az eredeti dátumait,
  * számát, forrását (szerződés, rendelés), szerződés-tétel hivatkozását vagy a
- * díjbekérőhöz kötését; nem az eredeti beállításait és tételeit viszi; egy
+ * díjbekérőhöz kötését; nem a MAI napot (Budapest) adja teljesítésnek, vagy a
+ * határidő nem a vevő fizetési napjaiból (nyolc nap nélkülük) jön; nem az
+ * eredeti beállításait és tételeit viszi; egy
  * második másolás ugyanazt a vázlatot adja vissza (a másolatonkénti új
  * azonosító a szándék); a másolat nem kiállításhoz vagy kiküldéshez nyúl.
  */
 const USER = { id: "user-1" } as AuthenticatedUser;
 const d = (value: string) => new Prisma.Decimal(value);
+/** Budapesten 2026-10-26 este: a UTC-nap még ugyanaz, de a mérés a Budapest-napot nézi. */
+const NOW = new Date("2026-10-26T10:00:00Z");
+const day = (value: unknown) =>
+  value instanceof Date ? value.toISOString().slice(0, 10) : value;
 
 function issued(over: Record<string, unknown> = {}) {
   return {
@@ -93,7 +99,10 @@ function issued(over: Record<string, unknown> = {}) {
   } as unknown as BillingDocumentRow;
 }
 
-function setup(start: Record<string, BillingDocumentRow>) {
+function setup(
+  start: Record<string, BillingDocumentRow>,
+  dueDays: number | null = null,
+) {
   const rows = { ...start };
   const created: Array<Record<string, unknown> & { id: string }> = [];
   const repository = {
@@ -112,6 +121,7 @@ function setup(start: Record<string, BillingDocumentRow>) {
       });
       return { created: true };
     },
+    customerPaymentDueDays: async () => dueDays,
     feedPaid: async () => null,
     feedTwinCancelled: async () => false,
     related: async () => ({ documents: [], truncated: false }),
@@ -153,7 +163,7 @@ describe("copying an issued document into a new draft", () => {
 
   it("carries the settings and items, and nothing that ties it to the original", async () => {
     const s = setup({ "inv-1": issued() });
-    const copy = await s.service.copyFromIssued("inv-1", USER);
+    const copy = await s.service.copyFromIssued("inv-1", USER, NOW);
     assert.equal(s.created.length, 1);
     const sent = s.created[0]!;
     assert.notEqual(sent.id, "inv-1");
@@ -174,9 +184,9 @@ describe("copying an issued document into a new draft", () => {
     assert.equal(draft.language, "de");
     assert.equal(draft.reference, "PROJ-7");
     assert.equal(draft.note, "megjegyzés");
-    // a dátumokat a kezelő írja be; a forrás kézi
-    assert.equal(draft.fulfillmentDate, null);
-    assert.equal(draft.dueDate, null);
+    // a dátumok a MAI nappal indulnak (nem az eredetiéivel); a forrás kézi
+    assert.equal(day(draft.fulfillmentDate), "2026-10-26");
+    assert.equal(day(draft.dueDate), "2026-11-03"); // nincs vevő-nap: nyolc nap
     assert.equal(draft.sourceType, "MANUAL");
     assert.equal(draft.sourceId, null);
 
@@ -189,10 +199,23 @@ describe("copying an issued document into a new draft", () => {
     for (const line of draft.lines) assert.equal(line.contractItemId, null);
   });
 
+  it("the due date follows the customer's payment days, and the Budapest day decides 'today'", async () => {
+    const s = setup({ "inv-1": issued() }, 30);
+    // 23:30 UTC: Budapesten már a következő nap
+    await s.service.copyFromIssued(
+      "inv-1",
+      USER,
+      new Date("2026-10-26T23:30:00Z"),
+    );
+    const draft = s.created[0]!.draft as Record<string, unknown>;
+    assert.equal(day(draft.fulfillmentDate), "2026-10-27");
+    assert.equal(day(draft.dueDate), "2026-11-26");
+  });
+
   it("every copy is a new draft", async () => {
     const s = setup({ "inv-1": issued() });
-    const first = await s.service.copyFromIssued("inv-1", USER);
-    const second = await s.service.copyFromIssued("inv-1", USER);
+    const first = await s.service.copyFromIssued("inv-1", USER, NOW);
+    const second = await s.service.copyFromIssued("inv-1", USER, NOW);
     assert.notEqual(first.id, second.id);
     assert.equal(s.created.length, 2);
   });
