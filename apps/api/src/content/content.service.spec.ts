@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { ConflictException } from "@nestjs/common";
+
+import { ArticleStepError } from "./article.repository.js";
 import { ContentService } from "./content.service.js";
 import type { ContentRepository } from "./content.repository.js";
 
@@ -169,6 +172,32 @@ describe("moving a piece of content", () => {
    * ugyanazt, és a második döntés nem írhatja felül az elsőt úgy, hogy az első
    * ember továbbra is azt hiszi, az övé áll.
    */
+  /*
+    AN ARTICLE'S STEP THAT CANNOT HAPPEN (no body to approve, no approved
+    snapshot to publish) is a 409 with the store's own words, and the state did
+    not move: the step runs in the move's transaction (article.integration.spec).
+  */
+  it("an article step that cannot happen is a conflict, in the store's words", async () => {
+    const { service } = serviceWith({
+      moveState: (async () => {
+        throw new ArticleStepError("A cikknek még nincs törzse.");
+      }) as ContentRepository["moveState"],
+    });
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_APPROVAL",
+          to: "READY_TO_SEND",
+          actorCanApprove: true,
+          actorUserId: "user-1",
+        }),
+      (error) =>
+        error instanceof ConflictException &&
+        error.message === "A cikknek még nincs törzse.",
+    );
+  });
+
   it("tells the caller when the piece moved underneath them", async () => {
     const { service } = serviceWith({
       moveState: (async () => false) as ContentRepository["moveState"],

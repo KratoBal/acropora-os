@@ -1452,6 +1452,7 @@ model Product {
   /// Az ajanlasok es a rogzitett adagok, amelyek ezt a termeket nevezik meg (ReefClub 8. szelet).
   reefClubRecommendations    ReefClubRecommendation[]
   reefClubDoses              ReefClubAdministeredDose[]
+  articleLinks               ArticleProduct[]
 
   @@index([brandId])
   @@index([categoryId])
@@ -7943,11 +7944,110 @@ model ContentItem {
   discardReason String?
 
   comments  ContentComment[]
+  /// A cikk törzse (csak `ARTICLE` csatornán): lásd `ArticleBody`.
+  article   ArticleBody?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   @@index([state, plannedFor])
   @@index([channel, state])
+}
+
+/// Hol jelenik meg egy cikk. A megjelenítés maga a kirakat dolga (később); itt
+/// csak a szándék áll.
+enum ArticleChannel {
+  WEBSHOP_BLOG
+  REEFCLUB
+}
+
+/// A CIKK TÖRZSE, 1:1 egy `ARTICLE` csatornájú `ContentItem`-mel (acrobot
+/// döntése, 2026-10-26, msg 36158, A változat). A jóváhagyási út, a
+/// hozzászólások és a "kire vár" listák a `ContentItem`-é maradnak; ez a tábla
+/// csak azt tartja, ami a cikkhez kell: a kivonat, a teljes profilú törzs, a
+/// borítókép, a SEO-mezők, a megjelenési csatornák és a revíziók.
+///
+/// A JÓVÁHAGYÁS EGY REVÍZIÓT RÖGZÍT, a publikálás AZT teszi nyilvánossá: az
+/// `AWAITING_APPROVAL -> READY_TO_SEND` lépés (content.approve, Balázs vagy
+/// Luca) pillanatképet készít (`approvedRevisionId`), a `READY_TO_SEND ->
+/// SENT` pedig ezt a revíziót publikálja (`publishedRevisionId`). Ami a
+/// nyilvánosság elé kerül, az tehát mindig egy jóváhagyott szöveg, akkor is,
+/// ha valaki a jóváhagyás után a törzsön javít.
+model ArticleBody {
+  contentId           String            @id
+  content             ContentItem       @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  slug                String            @unique
+  excerpt             String            @default("")
+  /// A közös tisztító `full` profilján átment HTML.
+  bodyHtml            String            @default("")
+  coverImageUrl       String?
+  coverImageAlt       String?
+  channels            ArticleChannel[]
+  byline              String?
+  seoTitle            String?
+  metaDescription     String?
+  ogImageUrl          String?
+  noindex             Boolean           @default(false)
+  approvedRevisionId  String?           @unique
+  approvedRevision    ArticleRevision?  @relation("ArticleApproved", fields: [approvedRevisionId], references: [id], onDelete: SetNull)
+  publishedRevisionId String?           @unique
+  publishedRevision   ArticleRevision?  @relation("ArticlePublished", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
+  /// Az első publikálás ideje (a cikk dátuma).
+  publishedAt         DateTime?
+  updatedById         String?
+  revisions           ArticleRevision[] @relation("ArticleRevisions")
+  products            ArticleProduct[]
+  taxa                ArticleTaxon[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+}
+
+/// Egy jóváhagyott, megváltoztathatatlan pillanatkép a cikkről.
+model ArticleRevision {
+  id              String           @id @default(cuid())
+  contentId       String
+  article         ArticleBody      @relation("ArticleRevisions", fields: [contentId], references: [contentId], onDelete: Cascade)
+  title           String
+  excerpt         String
+  bodyHtml        String
+  coverImageUrl   String?
+  coverImageAlt   String?
+  channels        ArticleChannel[]
+  byline          String?
+  seoTitle        String?
+  metaDescription String?
+  ogImageUrl      String?
+  noindex         Boolean
+  /// sha256 a fenti mezőkön, hogy két revízió azonossága mérhető legyen.
+  contentHash     String
+  approvedById    String
+  approvedAt      DateTime         @default(now())
+  approvedOf      ArticleBody?     @relation("ArticleApproved")
+  publishedOf     ArticleBody?     @relation("ArticlePublished")
+
+  @@index([contentId, approvedAt])
+}
+
+/// A cikkhez kapcsolt termék (kapcsolódó termékek), sorrenddel.
+model ArticleProduct {
+  contentId String
+  article   ArticleBody @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  productId String
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder Int         @default(0)
+
+  @@id([contentId, productId])
+  @@index([productId])
+}
+
+/// A cikkhez kapcsolt faj vagy nemzetség, a tudásbázis szótárának TAXON
+/// kulcsával. SZÁNDÉKOSAN NEM idegen kulcs: a szótár verziózott és a K4 még
+/// nem végleges; mentéskor ellenőrizzük, hogy a kulcs létezik-e.
+model ArticleTaxon {
+  contentId String
+  article   ArticleBody @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  taxonKey  String      @db.VarChar(64)
+
+  @@id([contentId, taxonKey])
 }
 
 /// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne
