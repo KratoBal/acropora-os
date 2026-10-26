@@ -61,6 +61,7 @@
     "invoice-text:lines": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/stored-text-lines.cli.js",
     "invoice-text:reread": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/stored-text-reread.cli.js",
     "invoice-collection:own-invoices": "tsc -p tsconfig.json && node --env-file=../../.env dist/missing-invoices/collection/own-invoice-mark.cli.js",
+    "billing:issuing-diagnose": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/billing-issuing-diagnose.cli.js",
     "billing:incoming-bank-diagnose": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/incoming-bank-diagnose.cli.js",
     "billing:incoming-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/incoming-billing-backfill.cli.js",
     "billing:incoming-auto-approve": "tsc -p tsconfig.json && node --env-file=../../.env dist/billing/foreign-invoice/incoming-auto-approve.cli.js",
