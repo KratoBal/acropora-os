@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  HOMEPAGE_BLOCK_KEYS,
   HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
   parseHomepageContentInput,
@@ -151,5 +152,139 @@ describe("parseHomepageContentInput", () => {
 
   it("a plain text key takes any text, even one that looks like an address", () => {
     assert.ok(ok(input({ texts: { "mit.cim": "javascript:alert(1)" } })));
+  });
+});
+
+/*
+  THE BLOCKS AND THE FOOTER (Balázs, 2026-10-26 07:50 and 07:52 UTC). What turns
+  these red: an editor that does not send the field wiping it (absent must stay
+  absent); a block listed twice or left out (the storefront would draw it twice
+  or lose it); an unknown block; a footer link that leaves the shop through a
+  backslash or runs script; a social link that is a shop path.
+*/
+describe("parseHomepageContentInput: blocks and footer", () => {
+  const blocks = (over: Record<number, unknown> = {}) =>
+    HOMEPAGE_BLOCK_KEYS.map((key, i) =>
+      i in over ? over[i] : { key, visible: i !== 2 },
+    );
+  const footer = (over: Record<string, unknown> = {}) => ({
+    intro: "<p>Tengeri akvarisztika <strong>2004</strong> óta.</p>",
+    columns: [
+      {
+        title: "Oldaltérkép",
+        links: [
+          { label: "Termékek", href: "/store" },
+          { label: "Blog", href: "https://acropora.hu/blog" },
+        ],
+      },
+    ],
+    social: {
+      facebook: "https://facebook.com/acropora",
+      instagram: null,
+      youtube: "",
+    },
+    bottomText: "© Acropora Kft.",
+    ...over,
+  });
+  const parse = (extra: Record<string, unknown>) =>
+    parseHomepageContentInput({ texts: {}, slides: null, ...extra });
+
+  it("an absent field stays absent, null and a full list are kept", () => {
+    const absent = parse({});
+    assert.ok(absent.ok);
+    assert.equal("blocks" in absent.value, false);
+    assert.equal("footer" in absent.value, false);
+    const nulls = parse({ blocks: null, footer: null });
+    assert.ok(nulls.ok);
+    assert.equal(nulls.value.blocks, null);
+    assert.equal(nulls.value.footer, null);
+    const full = parse({ blocks: [...blocks()].reverse(), footer: footer() });
+    assert.ok(full.ok);
+    assert.deepEqual(
+      full.value.blocks?.map((b) => b.key),
+      [...HOMEPAGE_BLOCK_KEYS].reverse(),
+    );
+    assert.equal(
+      full.value.blocks?.find((b) => b.key === "kezdo-es-halado")?.visible,
+      false,
+    );
+    assert.deepEqual(full.value.footer?.social, {
+      facebook: "https://facebook.com/acropora",
+      instagram: null,
+      youtube: null,
+    });
+  });
+
+  it("refuses a missing, a doubled, an unknown block and a bad field", () => {
+    for (const bad of [
+      blocks().slice(1),
+      [...blocks(), { key: "hero", visible: true }],
+      blocks({ 0: { key: "sajat-1", visible: true } }),
+      blocks({ 0: { key: "hero", visible: "igen" } }),
+      blocks({ 0: { key: "hero", visible: true, body: "<p>x</p>" } }),
+      "hero",
+    ])
+      assert.equal(parse({ blocks: bad }).ok, false, JSON.stringify(bad));
+  });
+
+  it("refuses a footer link or social link that leaves the shop or runs script", () => {
+    for (const href of [
+      "javascript:alert(1)",
+      "/\\evil.example",
+      "//evil.example",
+      "",
+      "data:text/html,x",
+    ])
+      assert.equal(
+        parse({
+          footer: footer({
+            columns: [{ title: "A", links: [{ label: "x", href }] }],
+          }),
+        }).ok,
+        false,
+        href,
+      );
+    for (const facebook of ["/store", "javascript:alert(1)", 7])
+      assert.equal(
+        parse({
+          footer: footer({
+            social: { facebook, instagram: null, youtube: null },
+          }),
+        }).ok,
+        false,
+        String(facebook),
+      );
+  });
+
+  it("refuses a footer over its limits or with an unknown field", () => {
+    const column = { title: "A", links: [] };
+    for (const bad of [
+      footer({ intro: "x".repeat(HOMEPAGE_LIMITS.footerIntro + 1) }),
+      footer({
+        columns: Array.from(
+          { length: HOMEPAGE_LIMITS.footerColumns + 1 },
+          () => column,
+        ),
+      }),
+      footer({
+        columns: [
+          {
+            title: "A",
+            links: Array.from(
+              { length: HOMEPAGE_LIMITS.footerLinks + 1 },
+              () => ({
+                label: "x",
+                href: "/store",
+              }),
+            ),
+          },
+        ],
+      }),
+      footer({ contact: { address: "x" } }),
+      footer({
+        columns: [{ title: "A", links: [{ label: " ", href: "/store" }] }],
+      }),
+    ])
+      assert.equal(parse({ footer: bad }).ok, false);
   });
 });

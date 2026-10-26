@@ -7,10 +7,14 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { sanitizeRichHtml } from "@acropora/rich-text";
 import {
+  HOMEPAGE_BLOCK_KEYS,
   parseHomepageContentInput,
+  type HomepageBlock,
   type HomepageContent,
   type HomepageContentInput,
+  type HomepageFooter,
   type HomepageSlide,
 } from "@acropora/types";
 
@@ -65,6 +69,8 @@ export interface HomepageContentRow {
   key: string;
   texts: unknown;
   slides: unknown;
+  blocks: unknown;
+  footer: unknown;
   projectionEnabled: boolean;
   updatedAt: Date;
 }
@@ -128,6 +134,58 @@ export function homepageProjectionOn(
   return homepageProjectionAllowed(env) && row?.projectionEnabled === true;
 }
 
+/**
+ * The stored block list, or `null` when it is not a complete one: a hand-edited
+ * row that lost a block must not hide it on the page, so the page falls back
+ * to the storefront's own order.
+ */
+function storedBlocks(value: unknown): HomepageBlock[] | null {
+  if (!Array.isArray(value)) return null;
+  const blocks = value.filter(
+    (b): b is HomepageBlock =>
+      typeof b === "object" &&
+      b !== null &&
+      (HOMEPAGE_BLOCK_KEYS as readonly string[]).includes(
+        (b as { key?: unknown }).key as string,
+      ) &&
+      typeof (b as { visible?: unknown }).visible === "boolean",
+  );
+  const keys = new Set(blocks.map((b) => b.key));
+  return keys.size === HOMEPAGE_BLOCK_KEYS.length &&
+    blocks.length === HOMEPAGE_BLOCK_KEYS.length
+    ? blocks.map(({ key, visible }) => ({ key, visible }))
+    : null;
+}
+
+/** The stored footer through the same strict parse as a save, or `null`. */
+function storedFooter(value: unknown): HomepageFooter | null {
+  if (value === null || value === undefined) return null;
+  const parsed = parseHomepageContentInput({
+    texts: {},
+    slides: null,
+    footer: value,
+  });
+  return parsed.ok ? (parsed.value.footer ?? null) : null;
+}
+
+/**
+ * THE FOOTER INTRO IS RICH TEXT, stored through the shared sanitizer's `full`
+ * profile (#1875): the storefront draws it as HTML on every page, so the stored
+ * form is the security boundary, exactly like the mail body.
+ */
+function withSanitizedFooter(
+  input: HomepageContentInput,
+): HomepageContentInput {
+  if (!input.footer) return input;
+  return {
+    ...input,
+    footer: {
+      ...input.footer,
+      intro: sanitizeRichHtml(input.footer.intro, { profile: "full" }),
+    },
+  };
+}
+
 /** The stored record, read defensively: a hand-edited row cannot break a read. */
 export function toHomepageContent(
   row: HomepageContentRow | null,
@@ -137,6 +195,8 @@ export function toHomepageContent(
     return {
       texts: {},
       slides: null,
+      blocks: null,
+      footer: null,
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed,
@@ -148,6 +208,8 @@ export function toHomepageContent(
   return {
     texts,
     slides: Array.isArray(row.slides) ? (row.slides as HomepageSlide[]) : null,
+    blocks: storedBlocks(row.blocks),
+    footer: storedFooter(row.footer),
     updatedAt: row.updatedAt.toISOString(),
     projectionEnabled: row.projectionEnabled === true,
     projectionAllowed,
@@ -298,7 +360,11 @@ export class HomepageContentService {
   }> {
     const parsed = parseHomepageContentInput(body);
     if (!parsed.ok) throw new BadRequestException(parsed.message);
-    const row = await this.store.save(MAIN_HOMEPAGE_KEY, parsed.value, userId);
+    const row = await this.store.save(
+      MAIN_HOMEPAGE_KEY,
+      withSanitizedFooter(parsed.value),
+      userId,
+    );
     let projection: HomepageProjectionResult;
     if (!homepageProjectionOn(this.environment, row)) projection = "off";
     else
