@@ -261,7 +261,8 @@ export function billingCustomerFromDetail(detail: CustomerDetail): {
       taxNumber: detail.taxNumber ?? null,
       euTaxNumber: detail.euTaxNumber ?? null,
       contactName: null,
-      email: detail.email ?? null,
+      // the invoice goes to the billing address, the ordering one only when there is none (Balázs, 2026-10-26)
+      email: detail.billingEmail?.trim() || detail.email || null,
       internalCode: detail.customerNumber,
     },
     terms: {

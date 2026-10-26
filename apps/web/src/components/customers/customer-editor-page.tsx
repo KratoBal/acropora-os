@@ -149,6 +149,8 @@ export function CustomerEditorPage() {
   // the community (EU) tax number, apart from the Hungarian one (<adoszamEU>)
   const [euTaxNumber, setEuTaxNumber] = useState("");
   const [email, setEmail] = useState("");
+  // Balázs, 2026-10-26: one record, two addresses; the manual invoice goes to the billing one
+  const [billingEmail, setBillingEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [marketingEmailConsent, setMarketingEmailConsent] = useState(false);
   const [marketingSmsConsent, setMarketingSmsConsent] = useState(false);
@@ -255,6 +257,7 @@ export function CustomerEditorPage() {
             ? euTaxNumber.trim()
             : undefined,
         email: email.trim() || undefined,
+        billingEmail: billingEmail.trim() || undefined,
         phone: phone.trim() || undefined,
         marketingEmailConsent,
         marketingSmsConsent,
@@ -392,12 +395,20 @@ export function CustomerEditorPage() {
                 />
               </FormField>
             ) : null}
-            <FormField label="E-mail cím">
+            <FormField label="Rendelési e-mail">
               <Input
                 type="email"
-                aria-label="E-mail cím"
+                aria-label="Rendelési e-mail"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Számlázási e-mail">
+              <Input
+                type="email"
+                aria-label="Számlázási e-mail"
+                value={billingEmail}
+                onChange={(event) => setBillingEmail(event.target.value)}
               />
             </FormField>
             <FormField label="Telefonszám">

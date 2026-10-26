@@ -2987,7 +2987,12 @@ model Customer {
   taxNumber             String?
   /// the community (EU) tax number, sent as `<adoszamEU>` (Számlázz.hu Agent)
   euTaxNumber           String?
+  /// A rendelési (általános) e-mail cím. Balázs, Acropora OS szál, 2026-10-26: EGY rekord, KÉT cím; a
+  /// kézi számla a számlázásira megy (`billingEmail`), ha az üres, ez marad a címzett.
   email                 String?
+  /// A számlázási e-mail cím (os-ugyfel-szamlazasi-email). A szerviz partner tükör-vevőjén a partner
+  /// képernyő egyetlen e-mail mezőjéből másolódik minden mentésnél, tehát ott ez a partner e-mailje.
+  billingEmail          String?
   phone                 String?
   marketingEmailConsent Boolean      @default(false)
   marketingSmsConsent   Boolean      @default(false)

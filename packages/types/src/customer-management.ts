@@ -28,7 +28,10 @@ export interface CustomerSummary {
   type: CustomerType;
   displayName: string;
   companyName?: string;
+  /** A rendelési (általános) e-mail cím. */
   email?: string;
+  /** A számlázási e-mail cím; a kézi számla erre megy, ha üres, az `email`-re. */
+  billingEmail?: string;
   phone?: string;
   isActive: boolean;
   archivedAt?: string;
@@ -99,6 +102,7 @@ export interface CreateCustomerInput {
   taxNumber?: string;
   euTaxNumber?: string;
   email?: string;
+  billingEmail?: string;
   phone?: string;
   marketingEmailConsent?: boolean;
   marketingSmsConsent?: boolean;
@@ -111,6 +115,7 @@ export interface UpdateCustomerInput {
   taxNumber?: string | null;
   euTaxNumber?: string | null;
   email?: string | null;
+  billingEmail?: string | null;
   phone?: string | null;
   marketingEmailConsent?: boolean;
   marketingSmsConsent?: boolean;

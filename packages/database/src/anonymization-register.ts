@@ -532,6 +532,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     taxNumber: "partyTaxNumber",
     euTaxNumber: "partyTaxNumber",
     email: "email",
+    billingEmail: "email",
     phone: "phone",
   },
   CustomerAddress: {
