@@ -258,73 +258,81 @@ describe(
       );
     });
 
-    it("ARTICLE-INT-TAXA: the editor's taxon options are the approved keys, one per key, from the latest approved version", async () => {
+    it("ARTICLE-INT-TAXA: the editor's taxa are the approved vocabulary version's: the code's version 1 without a database version, then the latest wholly approved one", async () => {
+      // with no database version, the approved vocabulary is the code's version 1
+      if ((await prisma.knowledgeVocabularyEntry.count()) === 0) {
+        const fromCode = await articles.taxonOptions();
+        assert.ok(
+          fromCode.some((o) => o.key === "SPS" && o.label === "SPS"),
+          "the code's version 1 is offered",
+        );
+        assert.deepEqual(
+          [...(await articles.knownTaxonKeys(["SPS"]))],
+          ["SPS"],
+        );
+      }
+      const top =
+        (
+          await prisma.knowledgeVocabularyEntry.aggregate({
+            _max: { version: true },
+          })
+        )._max.version ?? 1;
+      const approved = Math.max(top, 1) + 1;
       await prisma.knowledgeVocabularyEntry.createMany({
         data: [
+          // a wholly approved version: it replaces version 1 entirely
           {
             kind: "TAXON",
             key: `${taxonKey}_A`,
-            forms: ["régi"],
-            version: 1,
+            forms: ["új alak"],
+            version: approved,
             rank: "GENUS",
             status: "APPROVED",
-          },
-          {
-            kind: "TAXON",
-            key: `${taxonKey}_A`,
-            forms: ["", "Új alak"],
-            version: 2,
-            rank: "GENUS",
-            status: "APPROVED",
-          },
-          // a newer draft does not replace the approved form
-          {
-            kind: "TAXON",
-            key: `${taxonKey}_A`,
-            forms: ["vázlat"],
-            version: 3,
-            rank: "GENUS",
-            status: "DRAFT",
           },
           {
             kind: "TAXON",
             key: `${taxonKey}_B`,
             forms: [],
-            version: 1,
+            version: approved,
             status: "APPROVED",
-          },
-          // a key that exists only as a draft is not offered
-          {
-            kind: "TAXON",
-            key: `${taxonKey}_D`,
-            forms: ["csak vázlat"],
-            version: 1,
-            status: "DRAFT",
           },
           {
             kind: "TAXON",
             key: `${taxonKey}_R`,
             forms: ["kivont"],
-            version: 1,
+            version: approved,
             status: "RETIRED",
           },
           {
             kind: "EFFECT",
             key: `${taxonKey}_C`,
             forms: ["hatás"],
-            version: 1,
+            version: approved,
             status: "APPROVED",
+          },
+          // a newer draft does not change what is approved
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_A`,
+            forms: ["vázlat"],
+            version: approved + 1,
+            rank: "GENUS",
+            status: "DRAFT",
+          },
+          {
+            kind: "TAXON",
+            key: `${taxonKey}_D`,
+            forms: ["csak vázlat"],
+            version: approved + 1,
+            status: "DRAFT",
           },
         ] as never,
       });
-      const mine = (await articles.taxonOptions()).filter((option) =>
-        option.key.startsWith(taxonKey),
-      );
-      assert.deepEqual(mine, [
+      assert.deepEqual(await articles.taxonOptions(), [
         { key: `${taxonKey}_A`, rank: "GENUS", label: "Új alak" },
         { key: `${taxonKey}_B`, rank: null, label: `${taxonKey}_B` },
       ]);
-      // and the save's check takes the same set
+      // the save's check takes the same set: version 1's SPS is no longer in it
       assert.deepEqual(
         [
           ...(await articles.knownTaxonKeys([
@@ -332,6 +340,7 @@ describe(
             `${taxonKey}_D`,
             `${taxonKey}_R`,
             `${taxonKey}_C`,
+            "SPS",
           ])),
         ],
         [`${taxonKey}_A`],
