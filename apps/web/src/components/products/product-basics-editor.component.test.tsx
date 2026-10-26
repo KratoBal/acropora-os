@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ProductDetail } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,8 +90,17 @@ describe("ProductBasicsEditor", () => {
     fireEvent.change(screen.getByLabelText("Név"), {
       target: { value: "Új név" },
     });
-    fireEvent.change(screen.getByLabelText("Leírás"), {
-      target: { value: "Új leírás" },
+    /*
+      A leiras a kozos szerkesztoben all (contenteditable), a parancs a TipTap
+      API-jan megy: a billentyu-szimulacio a happy-dom alatt nem hu.
+    */
+    const leiras = await screen.findByLabelText("Leírás");
+    act(() => {
+      (
+        leiras as HTMLElement & {
+          editor: { commands: { setContent(html: string): boolean } };
+        }
+      ).editor.commands.setContent("<p>Új <strong>leírás</strong></p>");
     });
     /**
      * AZ OPCIÓRA VÁRUNK, NEM A MEZŐRE, és ez a különbség tette billegővé ezt a
@@ -111,7 +126,7 @@ describe("ProductBasicsEditor", () => {
     await waitFor(() =>
       expect(api.update).toHaveBeenCalledWith("token-1", "product-1", {
         name: "Új név",
-        description: "Új leírás",
+        description: "<p>Új <strong>leírás</strong></p>",
         primaryCategoryId: "cat-2",
         webshopSellable: false,
       }),
@@ -175,6 +190,132 @@ describe("ProductBasicsEditor", () => {
       (screen.getByLabelText("Vásárolható a webshopban") as HTMLInputElement)
         .checked,
     ).toBe(true);
+  });
+
+  /**
+   * A LEIRAS CSAK SZERKESZTES UTAN MEGY EL. Egy UNAS-bol atvett leirasban
+   * `style` es `div` all; ha a nev mentese a leirast is kuldene, a szerver
+   * teljes profilu tisztitoja azt csendben atirna.
+   */
+  it("leaves the description out of a save that did not touch it", async () => {
+    api.update.mockResolvedValue(product());
+    api.detail.mockResolvedValue(product());
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          description: '<div style="color:red">UNAS leírás</div>',
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Név"), {
+      target: { value: "Csak a név" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    expect(api.update.mock.calls[0]?.[2]).not.toHaveProperty("description");
+  });
+
+  it("names what the editor cannot keep, and shows the live preview", () => {
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          description:
+            '<div style="color:red"><p>UNAS <span class="x">leírás</span></p></div><table><tbody><tr><td>Méret</td><td>20 cm</td></tr></tbody></table>',
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("A mostani leírás egy része nem marad meg"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/\(div style, span class\)/)).toBeInTheDocument();
+    const elonezet = screen.getByTestId("web-content-preview");
+    expect(elonezet).toHaveTextContent("Régi név");
+    expect(
+      screen.getByRole("tab", { name: "Műszaki adatok" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Leírás" })).toBeInTheDocument();
+    expect(screen.getByTestId("web-content-preview-body").innerHTML).toBe(
+      "<table><tbody><tr><td>Méret</td><td>20 cm</td></tr></tbody></table>",
+    );
+  });
+
+  /*
+    THE IMAGE HOSTS (RICH_TEXT_IMAGE_HOSTS, sent with the detail): the picker
+    offers only the product images the save keeps, the preview shows no other,
+    and an image in the stored text from another host is named before an edit
+    drops it. What turns this red: a foreign image offered or previewed, or
+    lost without a word.
+  */
+  it("offers and previews only images from the save's hosts, and names a foreign one", () => {
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          description:
+            '<p>a</p><p><img src="https://cdn.unas.hu/regi.jpg" alt="régi"></p>',
+          descriptionImageHosts: ["static.acropora.hu"],
+          images: [
+            {
+              id: "img-1",
+              url: "https://static.acropora.hu/sajat.webp",
+              altText: "saját",
+              sortOrder: 0,
+            },
+            {
+              id: "img-2",
+              url: "https://cdn.unas.hu/idegen.jpg",
+              altText: "idegen",
+              sortOrder: 1,
+            },
+          ] as ProductDetail["images"],
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/img src/)).toBeInTheDocument();
+    expect(
+      screen.getByTestId("web-content-preview-body").querySelector("img"),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
+    const valaszto = screen.getByRole("group", { name: "Kép választása" });
+    expect(valaszto.querySelector('[aria-label="saját"]')).not.toBeNull();
+    expect(valaszto.querySelector('[aria-label="idegen"]')).toBeNull();
+    // one image in reach: no gallery
+    expect(
+      screen.queryByRole("button", { name: "Galéria beszúrása" }),
+    ).toBeNull();
+  });
+
+  it("offers no image at all without a host list", () => {
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({
+          images: [
+            {
+              id: "img-1",
+              url: "https://static.acropora.hu/sajat.webp",
+              altText: "saját",
+              sortOrder: 0,
+            },
+          ] as ProductDetail["images"],
+        })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Kép beszúrása" })).toBeNull();
   });
 
   it("shows what the server gives back, not what was typed", async () => {

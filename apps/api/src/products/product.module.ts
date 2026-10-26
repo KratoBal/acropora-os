@@ -26,7 +26,7 @@ import { AttributeController } from "./attributes/attribute.controller.js";
 import { ProductKnowledgeService } from "./knowledge/knowledge.service.js";
 import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
-import { ProductService } from "./product.service.js";
+import { PRODUCT_ENVIRONMENT, ProductService } from "./product.service.js";
 
 import { UrlRedirectController } from "./redirect/url-redirect.controller.js";
 import {
@@ -63,6 +63,7 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     DoseProjectionService,
     ProductRepository,
     ProductService,
+    { provide: PRODUCT_ENVIRONMENT, useValue: process.env },
     ProductBarcodeRepository,
     ProductBarcodeService,
     ProductExtensionRepository,

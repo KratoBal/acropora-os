@@ -226,6 +226,14 @@ export interface ProductDetail extends ProductListItem {
   images: ProductImageSummary[];
   channelListings: ProductChannelListingSummary[];
   unasMirror: UnasProductMirrorDetail | null;
+  /**
+   * The image hosts the description may show (`RICH_TEXT_IMAGE_HOSTS`), the
+   * SAME list the save cleans with, so the editor never offers and the preview
+   * never shows an image the save would drop (as on the home page, #1877).
+   * Only the detail endpoint sets it; absent reads as an empty list, which
+   * passes no image: the safe direction.
+   */
+  descriptionImageHosts?: string[];
 }
 
 export interface CatalogOption {

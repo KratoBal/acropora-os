@@ -1,17 +1,10 @@
 "use client";
 
-import {
-  Alert,
-  Button,
-  Card,
-  FormField,
-  Input,
-  Select,
-  Textarea,
-} from "@acropora/ui";
+import { Alert, Button, Card, FormField, Input, Select } from "@acropora/ui";
 import type { CatalogOption, ProductDetail } from "@acropora/types";
 import { type FormEvent, useEffect, useState } from "react";
 
+import { ProductDescriptionEditor } from "@/components/products/product-description-editor";
 import { productApi } from "@/lib/api/products";
 
 /**
@@ -28,6 +21,9 @@ import { productApi } from "@/lib/api/products";
  * tiltás attól még a szolgáltatásban áll, nem itt. Egy felület, ami maga őrzi a
  * szabályt, pontosan addig őrzi, amíg valaki meg nem kerüli.
  */
+/** Az ures szerkeszto kimenete (`<p></p>`) nem leiras. */
+const leirasUres = (html: string) => !html.replace(/<p><\/p>/g, "").trim();
+
 export function ProductBasicsEditor({
   token,
   product,
@@ -41,6 +37,13 @@ export function ProductBasicsEditor({
 }) {
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description ?? "");
+  /*
+    A LEIRAS CSAK AKKOR MEGY A MENTESBE, HA A SZERKESZTOBEN VALTOZOTT. A
+    szerkeszto a betoltott HTML-t a teljes profilra normalizalja (a UNAS-bol
+    atvett `style`, `div` es tarsai eltunnek), es a szerver is igy tisztit; egy
+    csak a nevet modosito mentes ezert nem nyulhat a leirashoz.
+  */
+  const [descriptionEdited, setDescriptionEdited] = useState(false);
   const [primaryCategoryId, setPrimaryCategoryId] = useState(
     product.primaryCategory?.id ?? "",
   );
@@ -76,10 +79,13 @@ export function ProductBasicsEditor({
     try {
       await productApi.update(token, product.id, {
         name,
-        description: description.trim() ? description : null,
+        ...(descriptionEdited
+          ? { description: leirasUres(description) ? null : description }
+          : {}),
         primaryCategoryId: primaryCategoryId || null,
         webshopSellable,
       });
+      setDescriptionEdited(false);
 
       /**
        * A mentés után VISSZAOLVASSUK a terméket, és azt tesszük ki a
@@ -140,25 +146,33 @@ export function ProductBasicsEditor({
           />
         </FormField>
         {/*
-          A szöveg nem azt mondja meg, hogy HTML van benne, hanem hogy MI TÖRTÉNIK,
-          ha a jelölőket kitörli valaki. A különbség itt nagyobb, mint máshol: ezt a
-          terméket a webshop szinkronja kihagyja, tehát az eredeti szöveget SEMMI
-          nem hozza vissza. Egy UNAS-gazdájú terméknél a következő szinkron
-          helyrerakná; itt nincs ilyen háló.
+          A szöveg azt mondja meg, MI TÖRTÉNIK egy törléssel. A különbség itt
+          nagyobb, mint máshol: ezt a terméket a webshop szinkronja kihagyja,
+          tehát az eredeti szöveget SEMMI nem hozza vissza. Egy UNAS-gazdájú
+          terméknél a következő szinkron helyrerakná; itt nincs ilyen háló.
         */}
-        <FormField
-          label="Leírás"
-          htmlFor="product-description"
-          description="A leírás formázást tartalmazhat. Ha a jelölőket kitörli, a formázás elveszik, és a szinkron nem hozza vissza: ezt a terméket már mi gondozzuk."
-        >
-          <Textarea
-            id="product-description"
-            rows={6}
+        {/*
+          NEM `FormField`: annak `<label>`-je egy urlapmezot keres, a
+          szerkeszto pedig `contenteditable`. A szerkeszto akadalymentes neve
+          a sajat `aria-label`-je ("Leírás"), a felirat itt csak szoveg.
+        */}
+        <div className="space-y-1.5">
+          <p className="block text-sm font-semibold text-dusk-800">Leírás</p>
+          <p className="text-xs text-dusk-500">
+            A törölt szöveget és formázást a szinkron nem hozza vissza: ezt a
+            terméket már mi gondozzuk. Az előnézet azt mutatja, ami a mentés
+            után tárolódik.
+          </p>
+          <ProductDescriptionEditor
+            token={token}
+            product={product}
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            disabled={busy}
+            onChange={(html) => {
+              setDescription(html);
+              setDescriptionEdited(true);
+            }}
           />
-        </FormField>
+        </div>
         {/*
           A felirat szándékosan "elsődleges", nem "kategória": egy termék TÖBB
           kategóriához is tartozhat, és a lista szűrője MINDEGYIK alatt megtalálja

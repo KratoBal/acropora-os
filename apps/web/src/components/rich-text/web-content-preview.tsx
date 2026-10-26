@@ -3,7 +3,7 @@ import {
   isAllowedFullImageSrc,
   sanitizeRichHtml,
 } from "@acropora/rich-text";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 /**
  * AZ ELO ELONEZET ALAPJA A TELJES PROFILU TARTALOMHOZ (Balazs kerese,
@@ -15,6 +15,13 @@ import { useMemo } from "react";
  * szerkesztoben all. A negy hely (kezdolap blokk, termekleiras, blogcikk,
  * ReefClub cikk) a sajat keretet (oldal-fej, blokk-sor) ez kore rajzolja; ez a
  * fajl csak a tartalom kirajzolasat adja.
+ *
+ * A TERMEKOLDAL ELONEZETE A KIRAKATOT UTANOZZA, A KIRAKAT KODJAHOZ NEM NYUL. A
+ * kirakat termekoldala (acropora-commerce, `product-description-tabs`) a
+ * leirasbol kiemeli a tablazatokat egy elso, "Műszaki adatok" fulre, a tobbi
+ * szoveg a "Leírás" fulon all. A galeria es a termekkartya kirakatbeli
+ * megjelenitese a kirakat kesobbi szelete (a commerce befagyasztasa miatt
+ * kulon szora var); addig a kirakat a tartalek-alakot mutatja.
  */
 
 /** Egy termekkartya megjelenitesehez kello adat. */
@@ -25,17 +32,21 @@ export interface PreviewProductCard {
   readonly imageUrl: string | null;
 }
 
+/** A kirakat ugyanigy emeli ki a tablazatokat (`TABLE_PATTERN`). */
+const TABLAZAT = /<table[\s\S]*?<\/table>/gi;
+
 const TERMEKKARTYA = /<div data-product-card="([a-z0-9]+)">([\s\S]*?)<\/div>/g;
 
 function kartyaHtml(
   azonosito: string,
   tartalekNev: string,
   kartya: PreviewProductCard | undefined,
+  imageHosts: readonly string[] | undefined,
 ): string {
   if (!kartya)
     return `<div data-preview-card="${azonosito}" data-preview-missing=""><strong>${tartalekNev}</strong><span>A termék adatai betöltés alatt vagy nem elérhetők.</span></div>`;
   const kep =
-    kartya.imageUrl && isAllowedFullImageSrc(kartya.imageUrl)
+    kartya.imageUrl && isAllowedFullImageSrc(kartya.imageUrl, imageHosts)
       ? `<img src="${escapeHtml(kartya.imageUrl)}" alt="">`
       : "";
   const ar = kartya.priceLabel
@@ -50,16 +61,34 @@ function kartyaHtml(
  * Elobb a szerver tisztitoja fut, utana csak a TISZTITOTT kimenet alakul: a
  * termekkartya a feloldott adatbol (minden mezo escape-elve), a link uj lapon
  * nyilik, hogy az elonezetre kattintas ne vigye el a szerkesztot.
+ *
+ * Az `imageHosts` a mentes hoszt-listaja (`RICH_TEXT_IMAGE_HOSTS`): ha a hivo
+ * megadja, az elonezet sem mutat olyan kepet, amit a mentes eldobna.
  */
 export function renderWebContentHtml(
   html: string,
   kartyak: ReadonlyMap<string, PreviewProductCard>,
+  imageHosts?: readonly string[],
 ): string {
-  return sanitizeRichHtml(html, { profile: "full" })
+  return sanitizeRichHtml(html, {
+    profile: "full",
+    ...(imageHosts ? { allowedImageHosts: imageHosts } : {}),
+  })
     .replace(TERMEKKARTYA, (_minta, azonosito: string, nev: string) =>
-      kartyaHtml(azonosito, nev, kartyak.get(azonosito)),
+      kartyaHtml(azonosito, nev, kartyak.get(azonosito), imageHosts),
     )
     .replace(/<a(?=[\s>])/g, '<a target="_blank" rel="noopener noreferrer"');
+}
+
+/** A kirakat felosztasa: a tablazatok es a tobbi szoveg kulon fulon. */
+export function splitStorefrontTabs(html: string): {
+  readonly tables: string;
+  readonly prose: string;
+} {
+  return {
+    tables: (html.match(TABLAZAT) ?? []).join(""),
+    prose: html.replace(TABLAZAT, ""),
+  };
 }
 
 /** A szoveg tipografiaja; a kirakat `prose prose-sm` + tablazat-savozas kozelitese. */
@@ -93,5 +122,105 @@ export function WebContentPreview(props: {
       className={`${WEB_CONTENT_HTML_CLASS} ${props.className ?? ""}`}
       dangerouslySetInnerHTML={{ __html: kesz }}
     />
+  );
+}
+
+/**
+ * A TERMEKOLDAL ELONEZETE: kep, nev, ar, alatta a kirakat ful-felosztasa. Az
+ * aktiv ful a kirakat sorrendjet koveti: ha van tablazat, az adat-ful all elol.
+ */
+export function ProductPagePreview(props: {
+  readonly name: string;
+  readonly priceLabel: string | null;
+  readonly imageUrl: string | null;
+  readonly html: string;
+  readonly cards: ReadonlyMap<string, PreviewProductCard>;
+  readonly imageHosts: readonly string[];
+}) {
+  const kesz = useMemo(
+    () =>
+      splitStorefrontTabs(
+        renderWebContentHtml(props.html, props.cards, props.imageHosts),
+      ),
+    [props.html, props.cards, props.imageHosts],
+  );
+  const fulek = [
+    ...(kesz.tables ? [{ cimke: "Műszaki adatok", html: kesz.tables }] : []),
+    ...(kesz.prose.replace(/<[^>]*>/g, "").trim() ||
+    /<img|data-preview-card/.test(kesz.prose)
+      ? [{ cimke: "Leírás", html: kesz.prose }]
+      : []),
+  ];
+  const [aktiv, setAktiv] = useState(0);
+  const mutatott = fulek[Math.min(aktiv, fulek.length - 1)];
+  const kep =
+    props.imageUrl && isAllowedFullImageSrc(props.imageUrl, props.imageHosts)
+      ? props.imageUrl
+      : null;
+  return (
+    <section
+      aria-label="Élő előnézet"
+      data-testid="web-content-preview"
+      className="rounded-lg border border-pilot-grey-200 bg-white p-4"
+    >
+      <p className="mb-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-500">
+        Élő előnézet: így látszik a termékoldalon
+      </p>
+      <div className="flex gap-4">
+        {kep ? (
+          <img
+            src={kep}
+            alt=""
+            className="size-24 shrink-0 rounded object-cover"
+          />
+        ) : null}
+        <div>
+          <h3 className="text-xl font-semibold text-pilot-grey-900">
+            {props.name}
+          </h3>
+          {props.priceLabel ? (
+            <p className="mt-1 text-base text-pilot-grey-700">
+              {props.priceLabel}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      {mutatott ? (
+        <div className="mt-4">
+          <div
+            role="tablist"
+            aria-label="Termékleírás fülei"
+            className="flex gap-4 border-b border-pilot-grey-200"
+          >
+            {fulek.map((ful, index) => (
+              <button
+                key={ful.cimke}
+                type="button"
+                role="tab"
+                aria-selected={ful === mutatott}
+                onClick={() => setAktiv(index)}
+                className={
+                  ful === mutatott
+                    ? "-mb-px border-b-2 border-pilot-grey-900 pb-2 text-sm font-medium text-pilot-grey-900"
+                    : "pb-2 text-sm text-pilot-grey-500 hover:text-pilot-grey-700"
+                }
+              >
+                {ful.cimke}
+              </button>
+            ))}
+          </div>
+          <div
+            role="tabpanel"
+            data-testid="web-content-preview-body"
+            className={`pt-4 ${WEB_CONTENT_HTML_CLASS}`}
+            dangerouslySetInnerHTML={{ __html: mutatott.html }}
+          />
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-pilot-grey-500">
+          A leírás üres: a termékoldalon nem jelenik meg leírás-fül.
+        </p>
+      )}
+    </section>
   );
 }

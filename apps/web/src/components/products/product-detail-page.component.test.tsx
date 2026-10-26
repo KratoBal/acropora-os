@@ -493,7 +493,11 @@ describe("ProductDetailPage mirror ownership", () => {
       await screen.findByText("Alapadatok szerkesztése"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Név")).toBeInTheDocument();
-    expect(screen.getByLabelText("Leírás")).toBeInTheDocument();
+    /*
+      A LEIRAS A KOZOS SZERKESZTO: a TipTap egy effektben jon letre
+      (`immediatelyRender: false`), tehat a neve egy korrel kesobb all ott.
+    */
+    expect(await screen.findByLabelText("Leírás")).toBeInTheDocument();
     expect(screen.getByLabelText("Elsődleges kategória")).toBeInTheDocument();
   });
 
