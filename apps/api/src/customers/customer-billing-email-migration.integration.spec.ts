@@ -10,9 +10,9 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 
 /**
  * THE DATA STEP OF `20261026140000_customer_billing_email`, RUN AGAINST A REAL
- * PostgreSQL (Balázs, 2026-10-26; acrobot 36173: "a migráció legyen általános és
- * idempotens, ahol a partner e-mailje nem üres és eltér az ügyfélétől, az a
- * billingEmail-be kerül, a meglévő ügyfél-email nem változik").
+ * PostgreSQL (Balázs, 2026-10-26; acrobot 36173 és 36203: általános és idempotens, CSAK a
+ * szerviz partner közvetlen tükör-kapcsolatán át; az azonos adószám szerinti
+ * párosítás kimarad; a meglévő ügyfél-email nem változik).
  *
  * WHY THIS FILE EXISTS: the CI step that applies the migrations runs on an EMPTY
  * database, so it proves the SQL parses, not that it moves the right rows. This
@@ -159,33 +159,26 @@ describe(
       assert.equal(c["b-masik-ceg"]!.billingEmail, null);
     });
 
-    it("az ugyanazon céghez tartozó vevő (adószám első 8 számjegye) megkapja a partner e-mailjét", async () => {
+    // acrobot 36203: az azonos adószám szerinti párosítás KIMARAD, mert a beszállító (és a partner) e-mailje az
+    // értékesítési vagy rendelési kapcsolata, nem az a cím, ahova a NEKI kiállított számlát kell küldeni
+    it("az azonos adószámú vevő SEMMILYEN partnernél nem kap számlázási címet, csak a közvetlen tükör-kapcsolat számít", async () => {
       const c = await customers();
-      assert.equal(c["b-elter"]!.billingEmail, "partner1@x.hu");
+      for (const id of [
+        "b-elter",
+        "b-ketto",
+        "b-ugyanaz",
+        "b-rovid",
+        "b-nincs-ado",
+        "b-masik-ceg",
+        "b-beszallito",
+        "b-vegyes",
+      ])
+        assert.equal(c[id]!.billingEmail, null, id);
     });
 
-    it("több partnernél a legkisebb azonosítójú partner címe nyer", async () => {
+    it("a nem szerviz partner (korábban szerviz volt) tükör-sora nem kap számlázási címet", async () => {
       const c = await customers();
-      assert.equal(c["b-ketto"]!.billingEmail, "a@x.hu");
-    });
-
-    // barracuda, #1885: a beszállító e-mailje az értékesítési vagy rendelési kapcsolata, nem az a cím,
-    // ahova a NEKI kiállított számlát kell küldeni; a folyamatos szinkron is csak a szerviz partnert viszi át
-    it("csak a SZERVIZ partner e-mailje megy át: a beszállító azonos adószámú vevője és a nem szerviz tükör-sor nem kap számlázási címet", async () => {
-      const c = await customers();
-      assert.equal(c["b-beszallito"]!.billingEmail, null);
       assert.equal(c["m-nem-szerviz"]!.billingEmail, null);
-    });
-
-    it("ha egy cégnek szerviz és nem szerviz partner-sora is van, a szerviz partner címe nyer, a kisebb azonosítójú nem szerviz sor ellenére", async () => {
-      const c = await customers();
-      assert.equal(c["b-vegyes"]!.billingEmail, "szerv@x.hu");
-    });
-
-    it("a rövid vagy hiányzó adószám nem párosít", async () => {
-      const c = await customers();
-      assert.equal(c["b-rovid"]!.billingEmail, null);
-      assert.equal(c["b-nincs-ado"]!.billingEmail, null);
     });
 
     it("a meglévő ügyfél-email SOHA nem változik, egyetlen soron sem", async () => {
