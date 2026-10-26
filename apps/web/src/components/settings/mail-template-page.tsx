@@ -177,9 +177,18 @@ export function MailTemplatePage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
 
-  const [group, setGroup] = useState<MailTemplateGroup>("SERVICE");
+  /*
+    A WEBSHOP BEÁLLÍTÁSOK GYŰJTŐOLDALÁRÓL (`?csoport=webshop`) a Webshop fül
+    nyílik; minden más úton a Szerviz, mint eddig.
+  */
+  const [group, setGroup] = useState<MailTemplateGroup>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("csoport") === "webshop"
+      ? "WEBSHOP"
+      : "SERVICE",
+  );
   const [esemenyId, setEsemenyId] = useState<string>(
-    esemenyekCsoportban("SERVICE")[0]?.id ?? "",
+    () => esemenyekCsoportban(group)[0]?.id ?? "",
   );
   const [allapotok, setAllapotok] = useState<
     readonly MailTemplateState[] | null

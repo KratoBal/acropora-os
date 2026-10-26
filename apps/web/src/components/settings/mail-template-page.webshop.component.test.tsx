@@ -315,6 +315,35 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     );
   });
 
+  /*
+    FROM THE WEBSHOP SETTINGS PAGE (2026-10-26): its card links here with
+    ?csoport=webshop, and the Webshop tab opens straight away. Without the
+    parameter the Szerviz tab stays the default (the first test above).
+  */
+  it("?csoport=webshop opens the Webshop tab and loads its first template", async () => {
+    window.history.replaceState(null, "", "/beallitasok/levelsablonok?csoport=webshop");
+    try {
+      await megjelenit();
+      expect(
+        screen
+          .getByRole("tab", { name: "Webshop" })
+          .getAttribute("aria-selected"),
+      ).toBe("true");
+      expect(api.read).toHaveBeenCalledWith(
+        "token-1",
+        "WEBSHOP_ORDER_PLACED",
+        expect.anything(),
+      );
+      expect(api.read).not.toHaveBeenCalledWith(
+        "token-1",
+        "WORKSHEET_SIGNED",
+        expect.anything(),
+      );
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
   it("a saved template says when it was saved", async () => {
     api.read.mockImplementation(async (_t: string, id: string) =>
       webshopValasz(id, { source: "stored" }),

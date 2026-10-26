@@ -515,6 +515,19 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
   },
   {
     /**
+     * A WEBSHOP BEÁLLÍTÁSOK GYŰJTŐOLDALA (/webshop/beallitasok; Balázs, 2026-10-26 13:05 UTC, msg
+     * 1564263673932026020, acrobot döntése): UNAS kapcsolat és szinkron, Medusa kapcsolat,
+     * rendelés-elavulás, webshop levélsablonok, kezdőlap. Minden kártya a saját jogát kéri; a
+     * menüpont annak jár, aki legalább egyet lát. Ma ez pontosan a `products.view` köre (mérve: a
+     * `settings.manage` és az `orders.view` minden viselője `products.view`-t is visel); egy teszt
+     * rögzíti, és pirosodik, ha valaha elválnak.
+     */
+    id: "webshop-settings",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.PRODUCTS_VIEW),
+  },
+  {
+    /**
      * A „ReefClub-kód kiadása” panel a vevő akváriumán (nem menüpont: a panelt ez a bejegyzés
      * kapcsolja). Ugyanaz a jog, mint a végpontoké (`aquariums.manage`), és csak ahol a ReefClub fut.
      */

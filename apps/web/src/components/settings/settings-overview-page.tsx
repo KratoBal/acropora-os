@@ -11,6 +11,7 @@ import {
   hasPermission,
   isNavigationEntryVisible,
   PERMISSIONS,
+  servedNavigationFeatures,
   type Permission,
 } from "@acropora/types";
 import Link from "next/link";
@@ -50,7 +51,7 @@ import { AppearanceSettingsCard } from "./appearance-settings-card";
  * vegpontja `PRODUCTS_MANAGE`-et ker (`unas-import.controller.ts`), tehat a
  * link is azt kapja. Ha kesobb menupont lesz belole, ez `entryId`-re valt.
  */
-type SettingsLink =
+export type SettingsLink =
   | { label: string; description: string; href: string; entryId: string }
   | {
       label: string;
@@ -59,7 +60,7 @@ type SettingsLink =
       permission: Permission;
     };
 
-interface SettingsArea {
+export interface SettingsArea {
   title: string;
   icon: IconName;
   links: SettingsLink[];
@@ -84,35 +85,22 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     ],
   },
   {
-    title: "Márkák",
-    icon: "package",
+    /*
+      MINDEN WEBSHOP-BEÁLLÍTÁS EGY HELYEN (Balázs, 2026-10-26 13:05 UTC, msg
+      1564263673932026020): a UNAS és a Medusa kapcsolat, a szinkron, a
+      rendelés-elavulás, a webshop levélsablonok és a kezdőlap a Webshop
+      beállítások gyűjtőoldalon állnak; itt csak a hivatkozás, hogy ne
+      duplázódjanak. A márkák és a válogatások a Webshop menüben.
+    */
+    title: "Webshop",
+    icon: "store",
     links: [
       {
-        label: "Márkák",
-        description: "A katalógusban használt márkanevek.",
-        href: "/admin/brands",
-        entryId: "brands",
-      },
-    ],
-  },
-  {
-    title: "Webshop válogatások",
-    icon: "package",
-    links: [
-      {
-        label: "Webshop válogatások",
-        description: "Kiemelt termékválogatások saját címmel: /hu/valogatas/…",
-        href: "/admin/valogatasok",
-        // a márkák jogával (products.view), mint az API végpontja
-        entryId: "brands",
-      },
-      {
-        label: "Webshop kezdőlap",
+        label: "Webshop beállítások",
         description:
-          "A kezdőlap szövegei, hivatkozásai, képei és a nyitó csúszka diái.",
-        href: "/admin/kezdolap",
-        // a saját bejegyzése: a márkák joga ÉS a környezet kapcsolója (élesen nem látszik)
-        entryId: "homepage-content",
+          "UNAS és Medusa kapcsolat, szinkron, rendelés-elavulás, webshop levélsablonok, kezdőlap.",
+        href: "/webshop/beallitasok",
+        entryId: "webshop-settings",
       },
     ],
   },
@@ -121,28 +109,10 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     icon: "key",
     links: [
       {
-        label: "UNAS kapcsolat",
-        description: "A webshop hozzáférési adatai.",
-        href: "/admin/integrations/unas/connection",
-        entryId: "unas-connection",
-      },
-      {
-        label: "UNAS szinkron",
-        description: "A termékszinkron állapota és futásai.",
-        href: "/admin/integrations/unas",
-        entryId: "unas-sync",
-      },
-      {
         label: "NAV",
         description: "A számlaadat-szolgáltatás kapcsolata.",
         href: "/admin/integrations/nav",
         entryId: "nav-integration",
-      },
-      {
-        label: "Medusa kapcsolat",
-        description: "A webshop-motor admin kulcsa.",
-        href: "/admin/integrations/medusa/connection",
-        entryId: "medusa-connection",
       },
       {
         label: "Számlázz.hu kapcsolat",
@@ -230,6 +200,44 @@ export const SETTINGS_AREAS: SettingsArea[] = [
       },
     ],
   },
+];
+
+/**
+ * A WEBSHOP BEÁLLÍTÁSOK GYŰJTŐOLDALÁNAK KÁRTYÁI (/webshop/beallitasok; Balázs,
+ * 2026-10-26 13:05 UTC, acrobot döntése). Ugyanaz a forma és ugyanaz a
+ * láthatósági szabály, mint a Beállítások áttekintőjén.
+ */
+export const WEBSHOP_SETTINGS_AREAS: SettingsArea[] = [
+  {
+    title: "UNAS",
+    icon: "store",
+    links: [
+      {
+        label: "UNAS kapcsolat",
+        description: "A webshop hozzáférési adatai.",
+        href: "/admin/integrations/unas/connection",
+        entryId: "unas-connection",
+      },
+      {
+        label: "UNAS szinkron",
+        description: "A termékszinkron állapota és futásai.",
+        href: "/admin/integrations/unas",
+        entryId: "unas-sync",
+      },
+    ],
+  },
+  {
+    title: "Medusa",
+    icon: "store",
+    links: [
+      {
+        label: "Medusa kapcsolat",
+        description: "A webshop-motor admin kulcsa.",
+        href: "/admin/integrations/medusa/connection",
+        entryId: "medusa-connection",
+      },
+    ],
+  },
   {
     title: "Rendelések",
     icon: "cart",
@@ -243,31 +251,61 @@ export const SETTINGS_AREAS: SettingsArea[] = [
       },
     ],
   },
+  {
+    title: "Webshop levélsablonok",
+    icon: "mail",
+    links: [
+      {
+        label: "Webshop levélsablonok",
+        description:
+          "A vevőknek menő webshop-levelek tárgya és szövege, a Levélsablonok Webshop fülén.",
+        href: "/beallitasok/levelsablonok?csoport=webshop",
+        permission: PERMISSIONS.SETTINGS_MANAGE,
+      },
+    ],
+  },
+  {
+    title: "Kezdőlap",
+    icon: "store",
+    links: [
+      {
+        label: "Webshop kezdőlap",
+        description:
+          "A kezdőlap blokkjai, sorrendje, szövegei, képei és lábléce, élő előnézettel.",
+        href: "/admin/kezdolap",
+        entryId: "homepage-content",
+      },
+    ],
+  },
 ];
 
-export function SettingsOverviewPage() {
+/**
+ * A KÁRTYARÁCS: a néző által elérhető linkek, területenként. A menüpont-
+ * azonosítós link ugyanazzal a szabállyal kapuzott, mint a menüben, a
+ * környezeti kapcsolókkal együtt (a kapcsolóhoz kötött tétel enélkül sehol nem
+ * jelenne meg).
+ */
+export function SettingsAreaGrid({
+  areas,
+}: {
+  areas: readonly SettingsArea[];
+}) {
   const { session } = useAuth();
   const viewer = session?.user;
-
-  /**
-   * AMIT A NEZO NEM ER EL, AZT NEM IS MUTATJUK. Ma ez a szures a gyakorlatban
-   * keveset szur -- a lapra `SETTINGS_MANAGE` kell, es azt csak az OWNER es az
-   * ADMIN kapja, akik amugy is mindent latnak. De ez egy MAI allapot, nem
-   * szabaly: ha valaki holnap `SETTINGS_MANAGE`-et kap `USERS_MANAGE` nelkul,
-   * szures nelkul egy olyan linket latna, amire 403-at kap.
-   */
+  const features = servedNavigationFeatures(session?.navigation);
   const visible = (link: SettingsLink) => {
     if (!viewer) return false;
     return "entryId" in link
-      ? isNavigationEntryVisible(link.entryId, viewer)
+      ? isNavigationEntryVisible(link.entryId, viewer, features)
       : hasPermission(viewer, link.permission);
   };
+  const shown = areas
+    .map((area) => ({ ...area, links: area.links.filter(visible) }))
+    .filter((area) => area.links.length > 0);
+  return <AreaCards areas={shown} />;
+}
 
-  const areas = SETTINGS_AREAS.map((area) => ({
-    ...area,
-    links: area.links.filter(visible),
-  })).filter((area) => area.links.length > 0);
-
+export function SettingsOverviewPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -295,57 +333,63 @@ export function SettingsOverviewPage() {
         valasztani onkenyes lenne (miert epp az UNAS kapcsolat?), a masik harom
         pedig lathatatlan maradna.
       */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {areas.map((area) => {
-          const cim = (
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-dusk-900">
-              <Icon name={area.icon} className="size-4 text-dusk-400" />
-              {area.title}
-            </h2>
-          );
-          const egyetlen = area.links.length === 1 ? area.links[0] : null;
-          return (
-            <Card key={area.title}>
-              {egyetlen ? (
-                <Link
-                  href={egyetlen.href}
-                  className="block rounded-lg transition hover:bg-dusk-50"
-                >
-                  <CardHeader>{cim}</CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-dusk-500">
-                      {egyetlen.description}
-                    </p>
-                  </CardContent>
-                </Link>
-              ) : (
-                <>
-                  <CardHeader>{cim}</CardHeader>
-                  <CardContent>
-                    <ul className="space-y-2">
-                      {area.links.map((link) => (
-                        <li key={link.href}>
-                          <Link
-                            href={link.href}
-                            className="block rounded-md border border-dusk-200 px-3 py-2 transition hover:border-brand-500 hover:bg-dusk-50"
-                          >
-                            <span className="block text-sm font-medium text-dusk-900">
-                              {link.label}
-                            </span>
-                            <span className="block text-xs text-dusk-500">
-                              {link.description}
-                            </span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+      <SettingsAreaGrid areas={SETTINGS_AREAS} />
+    </div>
+  );
+}
+
+function AreaCards({ areas }: { areas: readonly SettingsArea[] }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {areas.map((area) => {
+        const cim = (
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-dusk-900">
+            <Icon name={area.icon} className="size-4 text-dusk-400" />
+            {area.title}
+          </h2>
+        );
+        const egyetlen = area.links.length === 1 ? area.links[0] : null;
+        return (
+          <Card key={area.title}>
+            {egyetlen ? (
+              <Link
+                href={egyetlen.href}
+                className="block rounded-lg transition hover:bg-dusk-50"
+              >
+                <CardHeader>{cim}</CardHeader>
+                <CardContent>
+                  <p className="text-xs text-dusk-500">
+                    {egyetlen.description}
+                  </p>
+                </CardContent>
+              </Link>
+            ) : (
+              <>
+                <CardHeader>{cim}</CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {area.links.map((link) => (
+                      <li key={link.href}>
+                        <Link
+                          href={link.href}
+                          className="block rounded-md border border-dusk-200 px-3 py-2 transition hover:border-brand-500 hover:bg-dusk-50"
+                        >
+                          <span className="block text-sm font-medium text-dusk-900">
+                            {link.label}
+                          </span>
+                          <span className="block text-xs text-dusk-500">
+                            {link.description}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }

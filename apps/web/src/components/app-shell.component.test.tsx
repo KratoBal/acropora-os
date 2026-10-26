@@ -72,12 +72,8 @@ describe("AppShell settings navigation", () => {
     navigation.pathname = "/";
   });
 
-  it("nests UNAS, NAV and users below settings", () => {
+  it("nests NAV and users below settings, and no longer UNAS or Medusa", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
-
-    expect(
-      screen.queryByRole("link", { name: "Kapcsolat" }),
-    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Beállítások" }));
 
@@ -89,38 +85,29 @@ describe("AppShell settings navigation", () => {
       "href",
       "/admin/users",
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "UNAS" }));
-
-    expect(screen.getByRole("link", { name: "Kapcsolat" })).toHaveAttribute(
-      "href",
-      "/admin/integrations/unas/connection",
-    );
-    expect(screen.getByRole("link", { name: "Szinkron" })).toHaveAttribute(
-      "href",
-      "/admin/integrations/unas",
-    );
+    // 2026-10-26 (msg 1564263673932026020): the UNAS and Medusa settings live
+    // on the Webshop beállítások page, not twice
+    expect(screen.queryByRole("button", { name: "UNAS" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Medusa kapcsolat" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("automatically expands the active settings hierarchy", () => {
+  it("opens Webshop and marks the webshop settings on a UNAS settings page", () => {
     navigation.pathname = "/admin/integrations/unas/connection";
 
     render(<AppShell>Oldaltartalom</AppShell>);
 
+    expect(screen.getByRole("button", { name: "Webshop" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(
+      screen.getByRole("link", { name: "Webshop beállítások" }),
+    ).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("button", { name: "Beállítások" })).toHaveAttribute(
       "aria-expanded",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "UNAS" })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    expect(screen.getByRole("link", { name: "Kapcsolat" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(screen.getByRole("link", { name: "Szinkron" })).not.toHaveAttribute(
-      "aria-current",
+      "false",
     );
   });
 });
@@ -151,9 +138,16 @@ describe("AppShell business navigation groups", () => {
     expect(
       screen.getByRole("link", { name: "UNAS Megrendelések" }),
     ).toHaveAttribute("href", "/webshop");
-    expect(
-      screen.getByRole("link", { name: "Webshop vásárlók" }),
-    ).toHaveAttribute("href", "/vevok");
+    expect(screen.getByRole("link", { name: "Vevők" })).toHaveAttribute(
+      "href",
+      "/vevok",
+    );
+    // a Márkák 2026-10-26 óta itt áll (a Kezdőlapot a szerver kapcsolója is
+    // rejti, és ez a munkamenet nem hoz kiadott listát)
+    expect(screen.getByRole("link", { name: "Márkák" })).toHaveAttribute(
+      "href",
+      "/admin/brands",
+    );
   });
 
   it("gathers purchasing, the NAV invoices and the settlements under Pénzügy", () => {
@@ -289,10 +283,10 @@ describe("AppShell business navigation groups", () => {
       screen.getByRole("link", { name: "UNAS Megrendelések" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Webshop termékek" }),
+      screen.getByRole("link", { name: "Termékek a webshopban" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Webshop vásárlók" }),
+      screen.queryByRole("link", { name: "Vevők" }),
     ).not.toBeInTheDocument();
   });
 });
@@ -394,7 +388,7 @@ describe("AppShell navigation source", () => {
       "Pénzügy",
       "Szerviz",
       "Beállítások",
-      "UNAS",
+      "Akvarisztika",
     ].forEach((label) => {
       const group = within(sidebarNavigation).queryByRole("button", {
         name: label,

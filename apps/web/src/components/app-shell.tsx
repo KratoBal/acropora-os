@@ -23,7 +23,6 @@ import {
   primaryNavigation,
   secondaryNavigation,
   settingsNavigation,
-  unasSettingsNavigation,
   type AppNavigationEntry,
   type AppNavigationItem,
 } from "./navigation";
@@ -203,13 +202,10 @@ export function AppShell({
     );
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
-  const visibleUnasNavigation = unasSettingsNavigation.filter(canAccess);
   const visibleSettingsNavigation = settingsNavigation.filter(canAccess);
-  const settingsActive = [
-    ...visibleUnasNavigation,
-    ...visibleSettingsNavigation,
-  ].some((item) => isActive(item));
-  const unasActive = visibleUnasNavigation.some((item) => isActive(item));
+  const settingsActive = visibleSettingsNavigation.some((item) =>
+    isActive(item),
+  );
   const closeMobileNavigation = () => setMobileNavigationOpen(false);
 
   const renderItem = (item: AppNavigationItem, nested = false) => {
@@ -314,8 +310,7 @@ export function AppShell({
 
       <div className="mt-7 space-y-1 border-t border-pilot-grey-200 pt-4">
         {secondaryNavigation.filter(canAccess).map((item) => renderItem(item))}
-        {visibleUnasNavigation.length > 0 ||
-        visibleSettingsNavigation.length > 0 ? (
+        {visibleSettingsNavigation.length > 0 ? (
           <NavigationGroup
             label="Beállítások"
             icon={<Icon name="settings" size={18} />}
@@ -326,21 +321,11 @@ export function AppShell({
                 .filter((item) => item.href === "/beallitasok")
                 .map((item) => renderItem(item, true))}
 
-              {visibleUnasNavigation.length > 0 ? (
-                <NavigationGroup
-                  label="UNAS"
-                  icon={<Icon name="store" size={16} />}
-                  active={unasActive}
-                  level={1}
-                >
-                  <div className="ml-4 mt-1 space-y-1 border-l border-pilot-grey-200 pl-2">
-                    {visibleUnasNavigation.map((item) =>
-                      renderItem(item, true),
-                    )}
-                  </div>
-                </NavigationGroup>
-              ) : null}
-
+              {/*
+                AZ UNAS ÉS A MEDUSA BEÁLLÍTÁSAI A WEBSHOP ALATT ÁLLNAK
+                (Balázs, 2026-10-26 13:05 UTC): a Webshop beállítások
+                gyűjtőoldalon, itt nem duplázódnak.
+              */}
               {visibleSettingsNavigation
                 .filter((item) => item.href !== "/beallitasok")
                 .map((item) => renderItem(item, true))}

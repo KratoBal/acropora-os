@@ -75,9 +75,9 @@ describe("where the content list lives in the menu", () => {
    * alatt ugyanezt csinálná.
    */
   it("is a single entry gated on content.view", () => {
-    // A SZAKASZBAN 2026-10-26 ota a webshop kezdolapja is all (#1888), ezert
-    // nem a szakasz hossza, hanem a Tartalom sajat tetele a kerdes: pontosan
-    // egy, elso helyen, sajat joggal.
+    // A kezdolap 2026-10-26-an rovid ideig ebben a szakaszban allt, aztan a
+    // Webshop ala kerult (#1888). Ezert nem a szakasz hossza, hanem a Tartalom
+    // sajat tetele a kerdes: pontosan egy, elso helyen, sajat joggal.
     const tetelek = contentNavigation.filter(
       (item) => item.href === "/tartalom",
     );
