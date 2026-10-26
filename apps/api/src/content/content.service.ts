@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import { ArticleStepError } from "./article.repository.js";
 import { ContentRepository } from "./content.repository.js";
 import {
   ROLES_THIS_VIEW_CANNOT_COVER,
@@ -274,31 +275,41 @@ export class ContentService {
       );
     }
 
-    const moved = await this.repository.moveState({
-      id: input.id,
-      from: input.from,
-      to: input.to,
-      ...(input.to === "DISCARDED"
-        ? { discardReason: input.discardReason?.trim() ?? null }
-        : {}),
-      ...(input.to === "SCHEDULED"
-        ? {
-            scheduleAnchoredAt: new Date(),
-            scheduledFor: scheduleTargetFor(new Date()),
-          }
-        : {}),
-      // A FELVETÉS A LÉPÉSSEL EGYÜTT SZÜLETIK MEG, egy tranzakcióban. Külön
-      // hívásként mindkét sorrend hagyna egy rossz állapotot: vagy árva
-      // hozzászólás egy elmozdult tételen, vagy indok nélküli visszaküldés.
-      ...(input.to === "AWAITING_REVISION" && input.revisionNote?.trim()
-        ? {
-            note: {
-              authorId: input.actorUserId,
-              body: input.revisionNote.trim(),
-            },
-          }
-        : {}),
-    });
+    let moved: boolean;
+    try {
+      moved = await this.repository.moveState({
+        id: input.id,
+        from: input.from,
+        to: input.to,
+        actorUserId: input.actorUserId,
+        ...(input.to === "DISCARDED"
+          ? { discardReason: input.discardReason?.trim() ?? null }
+          : {}),
+        ...(input.to === "SCHEDULED"
+          ? {
+              scheduleAnchoredAt: new Date(),
+              scheduledFor: scheduleTargetFor(new Date()),
+            }
+          : {}),
+        // A FELVETÉS A LÉPÉSSEL EGYÜTT SZÜLETIK MEG, egy tranzakcióban. Külön
+        // hívásként mindkét sorrend hagyna egy rossz állapotot: vagy árva
+        // hozzászólás egy elmozdult tételen, vagy indok nélküli visszaküldés.
+        ...(input.to === "AWAITING_REVISION" && input.revisionNote?.trim()
+          ? {
+              note: {
+                authorId: input.actorUserId,
+                body: input.revisionNote.trim(),
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      // A CIKK LÉPÉSE NEM LEHETETT (nincs törzs, nincs jóváhagyott változat):
+      // az állapot sem mozdult, mert ugyanaz a tranzakció.
+      if (error instanceof ArticleStepError)
+        throw new ConflictException(error.message);
+      throw error;
+    }
 
     if (!moved) {
       throw new ConflictException(

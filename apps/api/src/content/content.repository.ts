@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma } from "@acropora/database";
 
+import { applyArticleStep } from "./article.repository.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -99,6 +100,8 @@ export class ContentRepository {
     scheduledFor?: Date | null;
     /** A lépéshez tartozó felvetés, hozzászólásként. Csak együtt születik meg. */
     note?: { authorId: string; body: string };
+    /** Aki lép: a cikk jóváhagyási pillanatképe az ő nevén születik. */
+    actorUserId: string;
   }): Promise<boolean> {
     return prisma.$transaction(async (tx) => {
       const result = await tx.contentItem.updateMany({
@@ -118,6 +121,16 @@ export class ContentRepository {
       });
 
       if (result.count !== 1) return false;
+
+      // A CIKK RÉSZE UGYANEBBEN A TRANZAKCIÓBAN: jóváhagyáskor pillanatkép,
+      // publikáláskor a jóváhagyott változat; ha nem lehet, az egész lépés
+      // visszagördül (`ArticleStepError`).
+      await applyArticleStep(tx, {
+        contentId: input.id,
+        from: input.from,
+        to: input.to,
+        actorUserId: input.actorUserId,
+      });
 
       if (input.note)
         await tx.contentComment.create({

@@ -1571,6 +1571,20 @@ export type {
   HomepageSlide,
   HomepageTextField,
 } from "./homepage-content.js";
+export {
+  ARTICLE_CHANNELS,
+  ARTICLE_LIMITS,
+  ARTICLE_SLUG,
+  ARTICLE_TAXON_KEY,
+  parseArticleBodyInput,
+} from "./article.js";
+export type {
+  ArticleBodyInput,
+  ArticleBodyParse,
+  ArticleChannel,
+  ArticleDetail,
+  ArticleRevisionSummary,
+} from "./article.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {
   SeoLandingAttributeFilter,

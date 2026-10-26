@@ -465,3 +465,28 @@ describe("a tisztito: a rovid profil", () => {
     assert.equal(rovid(rovid(html)), rovid(html));
   });
 });
+
+describe("a tisztito: a rovid profil mailto celja", () => {
+  it("cim kell a mailto: utan, szokoz nelkul; a targy maradhat", () => {
+    const rovid = (href: string) =>
+      sanitizeRichHtml(`<a href="${href}">x</a>`, { profile: "short" });
+    assert.equal(
+      rovid("mailto:info@acropora.hu"),
+      '<a href="mailto:info@acropora.hu">x</a>',
+    );
+    assert.equal(
+      rovid("mailto:info@acropora.hu?subject=Kérdés"),
+      '<a href="mailto:info@acropora.hu?subject=Kérdés">x</a>',
+    );
+    for (const rossz of ["mailto:", "mailto:?subject=x", "mailto:a b@c.hu"])
+      assert.equal(rovid(rossz), "<a>x</a>", rossz);
+    assert.equal(isAllowedRichHref("mailto:", { profile: "short" }), false);
+  });
+
+  it("a level profilja valtozatlan: ott a cim nelkuli mailto: is atmegy", () => {
+    assert.equal(
+      sanitizeRichHtml('<a href="mailto:">x</a>'),
+      '<a href="mailto:">x</a>',
+    );
+  });
+});
