@@ -62,6 +62,88 @@ export const RICH_TEXT_ALLOWED_TAGS = {
 
 export type RichTextTag = keyof typeof RICH_TEXT_ALLOWED_TAGS;
 
+/**
+ * A KET PROFIL (Balazs dontese, 2026-10-25 22:30 UTC, Discord fo csatorna,
+ * msg 1564043552525389924).
+ *
+ *   email   a levelsablon mai, szukitett reszhalmaza, VALTOZATLANUL. Ez az
+ *           alapertelmezes minden fogyasztonal, aki nem kerdezi.
+ *   full    a weben megjeleno tartalom: termekleiras, blogcikk, ReefClub cikk,
+ *           kezdolap blokk. Mashova (hibajegy, munkalap) nem kerul.
+ *
+ * A `full` nem a levelet bovitti, hanem kulon lista: a level egy masik
+ * kozegbe megy (levelezo), ahol a tablazat, a galeria es a kulso kep mast
+ * jelent. Ha a ketto egy listan allna, az elso weboldali bovites a levelekbe is
+ * atjutna.
+ */
+export const RICH_TEXT_PROFILES = ["email", "full"] as const;
+export type RichTextProfile = (typeof RICH_TEXT_PROFILES)[number];
+
+/**
+ * A TELJES PROFIL RESZHALMAZA: a level minden jelolese, plusz a weboldali
+ * blokkok.
+ *
+ * A KEP ITT MAS SZABALLYAL MEGY AT, nem mas attributummal: a `src` csak
+ * `https:` cim lehet (a weben a kep a sajat cimerol toltodik, nincs mellekelt
+ * kep), a sajat `acropora-image:` hivatkozas viszont NEM, mert azt a bolt nem
+ * tudja feloldani.
+ *
+ *   div data-gallery        a galeria: egy blokk, benne csak kepek
+ *   div data-product-card   a termekkartya: a termek azonositoja, a szovege a
+ *                           termek neve a beszuras pillanataban (tartalek,
+ *                           ha a megjelenito nem tudja feloldani)
+ *   table ... td            tablazat; a cellak osszevonasa szammal, stilus nelkul
+ */
+export const RICH_TEXT_FULL_ALLOWED_TAGS = {
+  ...RICH_TEXT_ALLOWED_TAGS,
+  div: ["data-gallery", "data-product-card"],
+  table: [],
+  thead: [],
+  tbody: [],
+  tr: [],
+  th: ["colspan", "rowspan"],
+  td: ["colspan", "rowspan"],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
+export type RichTextFullTag = keyof typeof RICH_TEXT_FULL_ALLOWED_TAGS;
+
+/** A profil engedett tagjei es attributumai. */
+export function richTextAllowedTags(
+  profile: RichTextProfile,
+): Readonly<Record<string, readonly string[]>> {
+  return profile === "full"
+    ? RICH_TEXT_FULL_ALLOWED_TAGS
+    : RICH_TEXT_ALLOWED_TAGS;
+}
+
+/** A teljes profil kepenek legnagyobb szelessege, pixelben. */
+export const RICH_TEXT_FULL_IMAGE_MAX_WIDTH = 1600;
+
+/** Egy tablazat-cella osszevonasanak felso hatara (colspan, rowspan). */
+export const RICH_TEXT_TABLE_SPAN_MAX = 20;
+
+/**
+ * A TERMEKKARTYA AZONOSITOJA: a `Product.id` alakja (cuid, kisbetu es szam).
+ * Ugyanaz a karakterkeszlet, mint a kep-azonositoe, de kulon nev, mert kulon
+ * dolgot jelol.
+ */
+export const RICH_TEXT_PRODUCT_ID = /^[a-z0-9]{1,64}$/;
+
+/**
+ * A TELJES PROFIL KEPCIME: `https:`, es semmi mas. A `http:` a bolt `https`
+ * lapjan vegyes tartalom-figyelmeztetest ad, a `data:` es a relativ cim nem
+ * ellenorizheto, a sajat `acropora-image:` pedig a boltban nem oldhato fel.
+ */
+export function isAllowedFullImageSrc(src: string): boolean {
+  const cim = src.trim();
+  if (!/^https:\/\//i.test(cim)) return false;
+  try {
+    return new URL(cim).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Az igazitas jelolt ertekei. A `left` nincs koztuk: az a jeloletlen alap. */
 export const RICH_TEXT_ALIGNMENTS = ["center", "right"] as const;
 export type RichTextAlignment = (typeof RICH_TEXT_ALIGNMENTS)[number];

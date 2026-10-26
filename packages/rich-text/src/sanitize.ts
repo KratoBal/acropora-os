@@ -24,15 +24,26 @@
 import { FilterXSS } from "xss";
 
 import {
+  isAllowedFullImageSrc,
   RICH_TEXT_ALIGNMENTS,
-  RICH_TEXT_ALLOWED_TAGS,
+  RICH_TEXT_FULL_IMAGE_MAX_WIDTH,
   RICH_TEXT_HREF_SCHEMES,
   RICH_TEXT_IMAGE_MAX_WIDTH,
+  RICH_TEXT_PRODUCT_ID,
+  RICH_TEXT_TABLE_SPAN_MAX,
   RICH_TEXT_VARIABLE_NAME,
   richImageId,
+  richTextAllowedTags,
+  type RichTextProfile,
 } from "./schema.js";
 
 export interface SanitizeRichHtmlOptions {
+  /**
+   * A PROFIL: `email` (alapertelmezes, a levelsablon mai reszhalmaza
+   * valtozatlanul) vagy `full` (weboldali tartalom: tablazat, galeria,
+   * termekkartya, `https:` kep). A ket profil a `schema.ts`-ben all.
+   */
+  readonly profile?: RichTextProfile;
   /**
    * A `href`-ben megengedett HELYORZOK neve, pl. `["jegy_linkje"]`.
    *
@@ -54,12 +65,42 @@ export interface SanitizeRichHtmlOptions {
   readonly allowCidImages?: boolean;
 }
 
-/** A sajat kep-hivatkozas, vagy -- csak kuldeskor -- egy `cid:` hivatkozas. */
-function engedettKep(ertek: string, cidEngedett: boolean): string | null {
+/**
+ * A sajat kep-hivatkozas, vagy -- csak kuldeskor -- egy `cid:` hivatkozas. A
+ * teljes profilban egyik sem: ott csak `https:` cim.
+ */
+function engedettKep(
+  ertek: string,
+  cidEngedett: boolean,
+  profil: RichTextProfile,
+): string | null {
   const src = ertek.trim();
+  if (profil === "full") return isAllowedFullImageSrc(src) ? src : null;
   if (richImageId(src)) return src;
   return cidEngedett && /^cid:[A-Za-z0-9._@-]{1,128}$/.test(src) ? src : null;
 }
+
+/**
+ * A TELJES PROFILBAN A KOD-HORDOZO TAGEK TARTALMUKKAL EGYUTT MENNEK. A level
+ * listaja (`script`, `style`) szandekosan nem valtozik: a levelsablon tesztjei
+ * es a mai kuldesek ugyanazt a kimenetet kapjak, mint eddig.
+ */
+const TARTALOMMAL_EGYUTT: Readonly<Record<RichTextProfile, readonly string[]>> =
+  {
+    email: ["script", "style"],
+    full: [
+      "script",
+      "style",
+      "iframe",
+      "object",
+      "embed",
+      "noscript",
+      "svg",
+      "math",
+      "template",
+      "textarea",
+    ],
+  };
 
 const HELYORZO_HREF = /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/;
 
@@ -131,13 +172,25 @@ export function sanitizeRichHtmlReport(
   html: string,
   options: SanitizeRichHtmlOptions = {},
 ): SanitizeRichHtmlReport {
+  const profil: RichTextProfile = options.profile ?? "email";
+  const engedettTagek = richTextAllowedTags(profil);
+  const tartalommal = TARTALOMMAL_EGYUTT[profil];
+  const kepMaxSzelesseg =
+    profil === "full"
+      ? RICH_TEXT_FULL_IMAGE_MAX_WIDTH
+      : RICH_TEXT_IMAGE_MAX_WIDTH;
   const helyorzok = new Set(options.hrefPlaceholders ?? []);
   const eldobott = new Set<string>();
   /*
-    A `script` es a `style` TARTALMAVAL EGYUTT megy, es azt a js-xss sajat
-    agon kezeli: a lenti `onIgnoreTag` nem hallja. Ezert itt all kulon.
+    A TARTALMAVAL EGYUTT ELDOBOTT TAGET (`script`, `style`, a teljes profilban
+    tobb is) a js-xss sajat agon kezeli: a lenti `onIgnoreTag` nem hallja.
+    Ezert itt all kulon.
   */
-  for (const m of html.matchAll(/<(script|style)[\s>/]/gi))
+  const tartalommalMinta = new RegExp(
+    `<(${tartalommal.join("|")})[\\s>/]`,
+    "gi",
+  );
+  for (const m of html.matchAll(tartalommalMinta))
     eldobott.add((m[1] as string).toLowerCase());
   const elutasitott = (tag: string, name: string) => {
     eldobott.add(`${tag} ${name}`);
@@ -145,16 +198,13 @@ export function sanitizeRichHtmlReport(
   };
   const szuro = new FilterXSS({
     whiteList: Object.fromEntries(
-      Object.entries(RICH_TEXT_ALLOWED_TAGS).map(([tag, attrs]) => [
-        tag,
-        [...attrs],
-      ]),
+      Object.entries(engedettTagek).map(([tag, attrs]) => [tag, [...attrs]]),
     ),
     /*
       AZ ISMERETLEN TAG ELTUNIK, A SZOVEGE MARAD. Kiveve a `script` es a
       `style`: azok TARTALMA sem szoveg, hanem kod, tehat egyutt mennek.
     */
-    stripIgnoreTagBody: ["script", "style"],
+    stripIgnoreTagBody: [...tartalommal],
     onIgnoreTag(tag, _html, { isClosing }) {
       if (!isClosing) eldobott.add(tag.toLowerCase());
       return "";
@@ -171,8 +221,7 @@ export function sanitizeRichHtmlReport(
         listaja: ami nincs rajta, az a `undefined`-dal a kovetkezo lepesre
         (`onIgnoreTagAttr`) megy, es ott esik ki.
       */
-      const engedett: readonly string[] | undefined =
-        RICH_TEXT_ALLOWED_TAGS[tag as keyof typeof RICH_TEXT_ALLOWED_TAGS];
+      const engedett: readonly string[] | undefined = engedettTagek[tag];
       if (!engedett?.includes(name)) return undefined;
       /*
         AZ URES VISSZATERESI ERTEK AZ ATTRIBUTUMOT TELJESEN KIVESZI (mert). Egy
@@ -197,7 +246,7 @@ export function sanitizeRichHtmlReport(
           ? `data-variable="${value}"`
           : elutasitott(tag, name);
       if (tag === "img" && name === "src") {
-        const src = engedettKep(value, options.allowCidImages === true);
+        const src = engedettKep(value, options.allowCidImages === true, profil);
         return src ? `src="${attrEscape(src)}"` : elutasitott(tag, name);
       }
       if (tag === "img" && name === "width") {
@@ -209,11 +258,35 @@ export function sanitizeRichHtmlReport(
         const szelesseg = /^\d{1,4}$/.test(value.trim())
           ? Number(value.trim())
           : NaN;
-        return szelesseg >= 1 && szelesseg <= RICH_TEXT_IMAGE_MAX_WIDTH
+        return szelesseg >= 1 && szelesseg <= kepMaxSzelesseg
           ? `width="${szelesseg}"`
           : elutasitott(tag, name);
       }
       if (tag === "img" && name === "alt") return `alt="${attrEscape(value)}"`;
+      /*
+        A TELJES PROFIL BLOKKJAI. A galeria jelolese ertek nelkuli, mint a
+        gombe; a termekkartya erteke a termek azonositoja, es csak a pontos
+        alak megy at: egy rossz azonosito a megjelenitesnel semmire nem mutatna.
+      */
+      if (tag === "div" && name === "data-gallery") return 'data-gallery=""';
+      if (tag === "div" && name === "data-product-card") {
+        const azonosito = value.trim();
+        return RICH_TEXT_PRODUCT_ID.test(azonosito)
+          ? `data-product-card="${azonosito}"`
+          : elutasitott(tag, name);
+      }
+      if (
+        (tag === "td" || tag === "th") &&
+        (name === "colspan" || name === "rowspan")
+      ) {
+        const szam = /^\d{1,2}$/.test(value.trim())
+          ? Number(value.trim())
+          : NaN;
+        if (szam === 1) return ""; // az alapertelmezes: a jelolese folosleges
+        return szam >= 2 && szam <= RICH_TEXT_TABLE_SPAN_MAX
+          ? `${name}="${szam}"`
+          : elutasitott(tag, name);
+      }
       return undefined;
     },
   });
