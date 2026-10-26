@@ -11,14 +11,9 @@ import {
 
 import {
   allNavigationPages,
-  businessNavigation,
-  contentNavigation,
-  isNavigationGroup,
   isNavigationItemActive,
+  mainNavigation,
   navigationItems,
-  primaryNavigation,
-  secondaryNavigation,
-  settingsNavigation,
   SETTLEMENT_TABS,
   type AppNavigationGroup,
   type AppNavigationItem,
@@ -46,11 +41,8 @@ function visibleLabelsFor(role: UserRole): string[] {
 }
 
 function group(label: string): AppNavigationGroup {
-  const found = businessNavigation.find(
-    (entry) => isNavigationGroup(entry) && entry.label === label,
-  );
-  if (!found || !isNavigationGroup(found))
-    throw new Error(`nincs "${label}" nevű menücsoport`);
+  const found = mainNavigation.find((entry) => entry.label === label);
+  if (!found) throw new Error(`nincs "${label}" nevű menücsoport`);
   return found;
 }
 
@@ -71,10 +63,7 @@ describe("navigation", () => {
     expect(webshop.map((item) => item.href)).not.toContain("/partnerek");
 
     const labels = new Map(
-      navigationItems(businessNavigation).map((item) => [
-        item.href,
-        item.label,
-      ]),
+      navigationItems(mainNavigation).map((item) => [item.href, item.label]),
     );
     expect(labels.get("/partnerek")).toBe("Partnerek");
   });
@@ -154,72 +143,199 @@ describe("navigation", () => {
    */
   it("keeps the full catalogue where it was", () => {
     const labels = new Map(
-      navigationItems(businessNavigation).map((item) => [
-        item.href,
-        item.label,
-      ]),
+      navigationItems(mainNavigation).map((item) => [item.href, item.label]),
     );
 
     expect(labels.get("/products")).toBe("Termékek");
     expect(labels.get("/webshop/termekek")).toBe("Termékek a webshopban");
   });
 
-  /**
-   * A Pénzügy csoport tartalma SZÁNDÉKOSAN változott: a leltár és a
-   * készlet-egyeztetés a felső szintről KÖLTÖZÖTT ide.
-   *
-   * A régi állítás három gyereket rögzített (beszerzés, NAV számlák, Foxpost),
-   * és a költözéskor jogosan bukott el. Az új ötöt rögzít, a beköltözőkkel a
-   * végén, tehát a meglévő három sorrendje nem mozdult.
-   */
-  it("gathers purchasing, the expected arrivals, the NAV invoices, the Foxpost and GLS settlements and the stock pages under Pénzügy", () => {
-    expect(group("Pénzügy").children.map((item) => item.href)).toEqual([
-      "/beszerzes",
-      // Várható beérkezések (Balázs, 2026-09-30): "a Beszerzés alatt"
-      "/beszerzes/varhato",
-      "/beszerzes/nav-szamlak",
-      // Beszállítói árlisták (task beszallitoi-arlistak): a Beszerzés oldalai közt
-      "/beszerzes/arlistak",
-      // Számlázás (Balázs, 2026-09-30): a bizonylatok listája
-      "/penzugy/szamlazas",
-      // Árajánlatok (#1582 P1): a Figma 35 szerint a Pénzügy alatt
-      "/ajanlatok",
-      // Elszámolások (Balázs, 2026-09-30): a Foxpost, a GLS és a SimplePay
-      // egy menüpont alatt, fülekkel
-      "/penzugy/elszamolasok",
-      // Hiányzó számlák (Balázs briefje, 2026-09-30): az Elszámolások mellett
-      "/penzugy/hianyzo-szamlak",
-      "/raktar",
-      "/keszlet-egyeztetes",
-      "/keszlet-kimenosor",
+  /*
+    A KILENC FŐMENÜ (Balázs, 2026-10-26 16:48 UTC, "mehet", msg
+    1564319716133314735; feladat os-menu-kilenc-fomenu): a csoportok, a tagjaik
+    és a sorrend pontosan az ő listája. Egy sor egy csoport: a csoport neve, utána
+    a tételek feliratai sorrendben. MI PIROSÍT: bármelyik tétel más csoportba
+    kerül, kimarad, vagy a sorrendje elmozdul. A jogosultság más állításokban áll
+    (a halmaz-változatlanság, a szerepenkénti összevetés).
+  */
+  it("has the nine main menus, with their pages in the order Balázs listed", () => {
+    expect(
+      mainNavigation.map((entry) => [
+        entry.label,
+        entry.children.map((item) => item.label),
+      ]),
+    ).toEqual([
+      ["Áttekintés", ["Dashboard", "Feladataim", "Üzenetek"]],
+      [
+        "Szerviz",
+        [
+          "Hibajegyek",
+          "Munkalapok",
+          "Karbantartás",
+          "Piszkozatok",
+          "Anyagigények",
+          "Eszköznyilvántartás",
+          "QR-kód nyomtatás",
+        ],
+      ],
+      ["Értékesítés", ["POS", "Árajánlatok", "Partnerek", "Szerződések"]],
+      [
+        "Webshop",
+        [
+          "UNAS Megrendelések",
+          "Rendelések",
+          "Vevők",
+          "Termékek a webshopban",
+          "Kezdőlap",
+          "Válogatások",
+          "Márkák",
+          "Webshop beállítások",
+        ],
+      ],
+      [
+        "Raktár és beszerzés",
+        [
+          "Termékek",
+          "Adatminőség",
+          "Beszerzés",
+          "Várható beérkezések",
+          "Beszállítói árlisták",
+          "Leltár",
+          "Készlet-egyeztetés",
+          "Készlet-kimenősor",
+        ],
+      ],
+      [
+        "Pénzügy",
+        ["Számlázás", "NAV számla lekérés", "Hiányzó számlák", "Elszámolások"],
+      ],
+      [
+        "Akvarisztika",
+        ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
+      ],
+      ["Tartalom és tudás", ["Tartalom", "Tudásbázis", "AI teszt"]],
+      [
+        "Beállítások",
+        [
+          "Általános",
+          "Felhasználók",
+          "NAV",
+          "Számlázz.hu kapcsolat",
+          "Mértékegységek",
+          "Eszköz-kategóriák",
+          "Eszköz-funkciók",
+          "Ajánlat szövegrészletek",
+          "Ajánlatsablonok",
+        ],
+      ],
     ]);
   });
 
-  /**
-   * A Működés blokk FELSŐ SZINTŰ sorrendjét eddig semmi nem állította.
-   *
-   * Ez nem elméleti hiány volt: a POS és a Webshop helycseréje enélkül
-   * méretlen maradt volna, és a változás után sem lett volna semmi, ami az új
-   * sorrendet tartja - bármelyik későbbi szerkesztés csendben visszafordíthatta
-   * volna. A csoportok a fejlécük nevén szerepelnek, mert a menüben is az
-   * látszik.
-   */
-  it("keeps the operations block in the order it is meant to be read", () => {
+  /*
+    A BEÁLLÍTÁSOK ALCSOPORTJAI (Balázs listája): az Általános és a Felhasználók
+    alcsoport nélkül áll elöl, utána Kapcsolatok, Törzsadatok és Árajánlat. Az
+    alcsoport csak megjelenés: egy tételnek sincs más jogosultsága miatta.
+  */
+  it("keeps the settings subgroups together and in the listed order", () => {
     expect(
-      businessNavigation.map((entry) =>
-        isNavigationGroup(entry) ? entry.label : entry.label,
-      ),
+      group("Beállítások").children.map((item) => [
+        item.subgroup ?? null,
+        item.entryId,
+      ]),
     ).toEqual([
-      "POS",
-      "Webshop",
-      "Termékek",
-      "Partnerek",
-      "Pénzügy",
-      // 2026-10-26: az akváriumok, a kalkulátorok, az ICP és az elhullási
-      // napló egy csoportban (msg 1564264593444839436)
-      "Akvarisztika",
-      "Szerviz",
+      [null, "settings-general"],
+      [null, "users"],
+      ["Kapcsolatok", "nav-integration"],
+      ["Kapcsolatok", "szamlazz-connection"],
+      ["Törzsadatok", "units-of-measure"],
+      ["Törzsadatok", "asset-categories"],
+      ["Törzsadatok", "asset-functions"],
+      ["Árajánlat", "quote-snippets"],
+      ["Árajánlat", "quote-templates"],
     ]);
+    // egy alcsoport csak a Beállításokban él
+    for (const entry of mainNavigation.filter(
+      (candidate) => candidate.label !== "Beállítások",
+    ))
+      expect(entry.children.filter((item) => item.subgroup)).toEqual([]);
+  });
+
+  /*
+    A MOZGÁS NEM VÁLTOZTAT SEMMIN, AMI NEM A HELY (Balázs: "Jogosultság nem
+    változik, csak a hely"). Ez a lista a költözés ELŐTTI menü (a főág 862f2c7
+    állapota): minden oldal útvonala, közös forrásbeli azonosítója és felirata.
+    Az új menüből ugyanennek a halmaznak kell kijönnie, sorrendtől függetlenül:
+    egy elveszett vagy kitalált oldal, egy átírt azonosító vagy felirat pirosít.
+    A jog az azonosítón át jön a közös forrásból, tehát az azonos azonosító azonos
+    jogot jelent; a szerepenkénti összevetés lejjebb külön áll.
+  */
+  const A_KOLTOZES_ELOTTI_HALMAZ: Array<[string, string, string]> = [
+    ["/", "dashboard", "Dashboard"],
+    ["/feladataim", "my-tasks", "Feladataim"],
+    ["/uzenetek", "messages", "Üzenetek"],
+    ["/pos", "pos", "POS"],
+    ["/webshop", "webshop-orders", "UNAS Megrendelések"],
+    ["/webshop/rendelesek", "webshop-medusa-orders", "Rendelések"],
+    ["/vevok", "webshop-customers", "Vevők"],
+    ["/webshop/termekek", "webshop-products", "Termékek a webshopban"],
+    ["/admin/kezdolap", "homepage-content", "Kezdőlap"],
+    ["/admin/valogatasok", "brands", "Válogatások"],
+    ["/admin/brands", "brands", "Márkák"],
+    ["/webshop/beallitasok", "webshop-settings", "Webshop beállítások"],
+    ["/products", "products", "Termékek"],
+    ["/products/adatminoseg", "product-data-quality", "Adatminőség"],
+    ["/partnerek", "partners", "Partnerek"],
+    ["/partnerek/szerzodesek", "contracts", "Szerződések"],
+    ["/beszerzes", "purchasing", "Beszerzés"],
+    ["/beszerzes/varhato", "expected-arrivals", "Várható beérkezések"],
+    ["/beszerzes/nav-szamlak", "nav-invoices", "NAV számla lekérés"],
+    ["/beszerzes/arlistak", "price-lists", "Beszállítói árlisták"],
+    ["/penzugy/szamlazas", "billing", "Számlázás"],
+    ["/ajanlatok", "quotes", "Árajánlatok"],
+    ["/penzugy/elszamolasok", "settlements", "Elszámolások"],
+    ["/penzugy/hianyzo-szamlak", "missing-invoices", "Hiányzó számlák"],
+    ["/raktar", "inventory", "Leltár"],
+    ["/keszlet-egyeztetes", "inventory-reconciliation", "Készlet-egyeztetés"],
+    ["/keszlet-kimenosor", "stock-sync-outbox", "Készlet-kimenősor"],
+    ["/akvariumok", "aquariums", "Akváriumok"],
+    ["/kalkulatorok", "calculators", "Kalkulátorok"],
+    ["/icp", "icp", "ICP"],
+    ["/elhullasi-naplo", "mortality", "Elhullási napló"],
+    ["/szerviz/piszkozatok", "service-drafts", "Piszkozatok"],
+    ["/szerviz/hibajegyek", "service-jobs", "Hibajegyek"],
+    ["/szerviz/karbantartas", "maintenance", "Karbantartás"],
+    ["/szerviz/munkalapok", "worksheets", "Munkalapok"],
+    ["/szerviz/eszkozok", "service-assets", "Eszköznyilvántartás"],
+    ["/szerviz/anyagigenyek", "material-requests-pending", "Anyagigények"],
+    ["/tartalom", "content", "Tartalom"],
+    ["/ai-teszt", "ai-test", "AI teszt"],
+    ["/tudasbazis", "knowledge-base", "Tudásbázis"],
+    ["/beallitasok", "settings-general", "Általános"],
+    ["/admin/integrations/nav", "nav-integration", "NAV"],
+    [
+      "/admin/integrations/szamlazz/connection",
+      "szamlazz-connection",
+      "Számlázz.hu kapcsolat",
+    ],
+    ["/admin/users", "users", "Felhasználók"],
+    ["/beallitasok/matricak", "asset-labels", "QR-kód nyomtatás"],
+    ["/beallitasok/mertekegysegek", "units-of-measure", "Mértékegységek"],
+    ["/beallitasok/eszkoz-kategoriak", "asset-categories", "Eszköz-kategóriák"],
+    ["/beallitasok/eszkoz-funkciok", "asset-functions", "Eszköz-funkciók"],
+    [
+      "/beallitasok/ajanlat-szovegreszletek",
+      "quote-snippets",
+      "Ajánlat szövegrészletek",
+    ],
+    ["/beallitasok/ajanlat-sablonok", "quote-templates", "Ajánlatsablonok"],
+  ];
+
+  it("keeps exactly the same pages, entries and labels as before the move", () => {
+    const key = (triple: readonly string[]) => triple.join(" | ");
+    const mostani = navigationItems(mainNavigation)
+      .map((item) => key([item.href, item.entryId, item.label]))
+      .sort();
+    expect(mostani).toEqual(A_KOLTOZES_ELOTTI_HALMAZ.map(key).sort());
   });
 
   /**
@@ -232,13 +348,7 @@ describe("navigation", () => {
    * NEVÉT írjuk ki, mert egy szám önmagában nem mondja meg, melyik.
    */
   it("shows every page in exactly one place", () => {
-    const hrefs = [
-      ...primaryNavigation,
-      ...navigationItems(businessNavigation),
-      ...secondaryNavigation,
-      ...settingsNavigation,
-      ...contentNavigation,
-    ].map((item) => item.href);
+    const hrefs = navigationItems(mainNavigation).map((item) => item.href);
 
     const seen = new Set<string>();
     const duplicates = hrefs.filter((href) => {
@@ -258,7 +368,7 @@ describe("navigation", () => {
    */
   it("no longer offers the placeholder route as a destination", () => {
     expect(
-      navigationItems(businessNavigation).map((item) => item.href),
+      navigationItems(mainNavigation).map((item) => item.href),
     ).not.toContain("/penzugy");
   });
 
@@ -280,7 +390,7 @@ describe("navigation", () => {
    * entry `exact` - would silently break it.
    */
   describe("active entry", () => {
-    const items = navigationItems(businessNavigation);
+    const items = navigationItems(mainNavigation);
     const item = (href: string): AppNavigationItem => {
       const found = items.find((entry) => entry.href === href);
       if (!found) throw new Error(`nincs "${href}" menüpont`);
@@ -322,7 +432,7 @@ describe("navigation", () => {
   });
 
   it("opens groups out into their pages, each resolving in the shared source", () => {
-    const items = navigationItems(businessNavigation);
+    const items = navigationItems(mainNavigation);
 
     expect(items.map((item) => item.href)).toContain("/szerviz/munkalapok");
     for (const item of items) {
@@ -614,7 +724,7 @@ describe("navigation", () => {
     environment's switch (the production OS has no editable home page).
   */
   it("lists the home page admin under Webshop, behind the products right and the environment switch", () => {
-    expect(contentNavigation.map((item) => item.href)).toEqual(["/tartalom"]);
+    expect(group("Tartalom és tudás").children[0]?.href).toBe("/tartalom");
     const entry = group("Webshop").children.find(
       (item) => item.href === "/admin/kezdolap",
     );
@@ -667,7 +777,7 @@ describe("Elszámolások", () => {
   });
 
   it("is active on the collecting path and on each tab's own path, and nowhere else", () => {
-    const entry = navigationItems(businessNavigation).find(
+    const entry = navigationItems(mainNavigation).find(
       (item) => item.entryId === "settlements",
     )!;
     for (const pathname of [
