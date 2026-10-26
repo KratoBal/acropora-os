@@ -1167,12 +1167,58 @@ export const HOMEPAGE_LIMITS = {
  * the shop.
  */
 const SHOP_PATH = /^\/(?![/\\])[^\s\\]*$/;
+
+/** The rule as the user reads it, under the field and in the save's alert. */
+export const SHOP_HREF_RULE =
+  "csak a webshop egy oldala lehet, perjellel kezdve (pl. /hu/categories/korallok), vagy üresen hagyva; más webhelyre mutató link nem.";
 const EXTERNAL = /^https?:\/\/[^\s\\]+$/;
 
 export type HomepageContentParse =
   { ok: true; value: HomepageContentInput } | { ok: false; message: string };
 
 const FIELD = new Map(HOMEPAGE_TEXT_FIELDS.map((field) => [field.key, field]));
+
+/** Whether a button target passes: empty ("no button") or a shop path. */
+export function isShopHref(value: string): boolean {
+  return value === "" || SHOP_PATH.test(value);
+}
+
+/**
+ * A BUTTON TARGET AS THE EDITOR ACCEPTS IT, IN THE SHOP'S OWN FORM (Balázs,
+ * 2026-10-26, Commerce thread, msg 1564310966211055778; acrobot 36371). The
+ * stored and sent form stays the shop's rule (commerce `cta_href`, the same
+ * `SHOP_PATH` on both sides); this only brings what people type to it:
+ *
+ * - a full address on the shop's own host (`shopHosts`, e.g. the test shop)
+ *   becomes its path: `https://shop/hu/categories/x?y#z` -> `/hu/categories/x?y#z`;
+ * - a path typed without its first slash gets one: `hu/categories/x`;
+ * - anything else stays as it is, so the check refuses it by name: another
+ *   site's address, `//host`, `javascript:`, a backslash or whitespace.
+ *
+ * Empty stays empty ("no button").
+ */
+export function normalizeShopHref(
+  value: string,
+  shopHosts: readonly string[],
+): string {
+  const v = value.trim();
+  if (v === "" || v.startsWith("/")) return v;
+  if (/^https?:\/\//i.test(v)) {
+    try {
+      const url = new URL(v);
+      const host = url.hostname.toLowerCase();
+      if (shopHosts.some((own) => own.toLowerCase() === host))
+        return `${url.pathname}${url.search}${url.hash}` || "/";
+    } catch {
+      return v;
+    }
+    return v;
+  }
+  // a scheme or a host-looking first segment is not a path
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v) || /^[^/]+\.[a-z]{2,}(\/|$)/i.test(v))
+    return v;
+  return `/${v}`;
+}
 
 /** A link or image address the shop accepts: a shop path, or http(s). Empty is "none". */
 export function isSafeHomepageAddress(value: string): boolean {
@@ -1252,15 +1298,18 @@ function parseSlide(
   const ctaHref = shopPath("ctaHref");
   const cta2Href = shopPath("cta2Href");
   const imageUrl = image();
+  // the user reads these (the save's alert), so they name the slide and the
+  // field in Hungarian (acrobot 36371)
+  const slideNo = `${index + 1}. dia`;
   if (ctaHref === false || cta2Href === false)
     return {
       ok: false,
-      message: `${where}: a button target is a shop path (/store), nothing else`,
+      message: `${slideNo}, ${ctaHref === false ? "első" : "második"} gomb célja: ${SHOP_HREF_RULE}`,
     };
   if (imageUrl === false)
     return {
       ok: false,
-      message: `${where}: the image is an http(s) address or a shop path`,
+      message: `${slideNo}, kép címe: http(s) cím vagy a webshop egy útvonala lehet.`,
     };
   return {
     ok: true,

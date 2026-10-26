@@ -1,7 +1,8 @@
-import type {
-  HomepageBlock,
-  HomepageFooter,
-  HomepageSlide,
+import {
+  isShopHref,
+  type HomepageBlock,
+  type HomepageFooter,
+  type HomepageSlide,
 } from "@acropora/types";
 
 /**
@@ -37,14 +38,22 @@ export interface PreviewRecord {
   } | null;
 }
 
+/*
+  A button target the shop would refuse goes to the preview as "no button":
+  the field already says what is wrong, and the preview keeps showing the rest
+  (acrobot 36371). The save still refuses it, by name.
+*/
+const previewHref = (href: string | null) =>
+  href && isShopHref(href) ? href : null;
+
 const slideRecord = (slide: HomepageSlide) => ({
   eyebrow: slide.eyebrow,
   title: slide.title,
   text: slide.text,
   cta: slide.cta,
-  cta_href: slide.ctaHref,
+  cta_href: previewHref(slide.ctaHref),
   cta2: slide.cta2,
-  cta2_href: slide.cta2Href,
+  cta2_href: previewHref(slide.cta2Href),
   caption: slide.caption,
   caption2: slide.caption2,
   image_url: slide.imageUrl,

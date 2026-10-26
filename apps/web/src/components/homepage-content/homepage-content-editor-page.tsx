@@ -94,6 +94,16 @@ const snapshot = (draft: Draft) =>
     footer: draft.footer,
   });
 
+/** The test shop's host, when the preview knows it: its full addresses become paths. */
+function storefrontHosts(storefrontUrl: string | null): string[] {
+  if (!storefrontUrl) return [];
+  try {
+    return [new URL(storefrontUrl).hostname];
+  } catch {
+    return [];
+  }
+}
+
 export function HomepageContentEditorPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -430,6 +440,7 @@ export function HomepageContentEditorPage() {
                 own={draft.ownSlides}
                 slides={draft.slides}
                 upload={upload}
+                shopHosts={storefrontHosts(storefrontUrl)}
                 onOwnChange={(ownSlides) =>
                   setDraft((d) => ({ ...d, ownSlides }))
                 }

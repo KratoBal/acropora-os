@@ -1,7 +1,13 @@
 "use client";
 
 import { PilotBadge, PilotButton, PilotCallout } from "@acropora/ui";
-import { HOMEPAGE_LIMITS, type HomepageSlide } from "@acropora/types";
+import {
+  HOMEPAGE_LIMITS,
+  isShopHref,
+  normalizeShopHref,
+  SHOP_HREF_RULE,
+  type HomepageSlide,
+} from "@acropora/types";
 import { useState } from "react";
 
 import {
@@ -51,12 +57,15 @@ export function HomepageSlidesEditor({
   onOwnChange,
   onSlidesChange,
   upload,
+  shopHosts = [],
 }: {
   own: boolean;
   slides: readonly HomepageSlide[];
   onOwnChange: (own: boolean) => void;
   onSlidesChange: (slides: HomepageSlide[]) => void;
   upload: ImageUploadControl;
+  /** The shop's own hosts: a full address on them becomes its path. */
+  shopHosts?: readonly string[];
 }) {
   const [open, setOpen] = useState<number | null>(0);
   const [dragged, setDragged] = useState<number | null>(null);
@@ -182,6 +191,7 @@ export function HomepageSlidesEditor({
                     index={index}
                     slide={slide}
                     upload={upload}
+                    shopHosts={shopHosts}
                     onChange={(patch) =>
                       onSlidesChange(
                         slides.map((s, i) =>
@@ -233,18 +243,20 @@ function SlideFields({
   slide,
   onChange,
   upload,
+  shopHosts,
 }: {
   index: number;
   slide: HomepageSlide;
   onChange: (patch: Partial<HomepageSlide>) => void;
   upload: ImageUploadControl;
+  shopHosts: readonly string[];
 }) {
   const n = index + 1;
   const field = (
     label: string,
     key: keyof HomepageSlide,
     max: number,
-    options: { long?: boolean; address?: boolean } = {},
+    options: { long?: boolean; address?: boolean; button?: boolean } = {},
   ) => (
     <label className={`block ${options.long ? "sm:col-span-2" : ""}`}>
       <span className="mb-1 block text-xs font-medium text-pilot-grey-700">
@@ -264,6 +276,11 @@ function SlideFields({
           aria-label={`${n}. dia: ${label}`}
           value={(slide[key] as string | null) ?? ""}
           maxLength={max}
+          aria-invalid={
+            options.button && !isShopHref((slide[key] as string | null) ?? "")
+              ? true
+              : undefined
+          }
           onChange={(event) =>
             onChange({
               [key]: options.address
@@ -271,9 +288,28 @@ function SlideFields({
                 : event.target.value,
             })
           }
+          /*
+            A GOMB CÉLJA A MEZŐ ELHAGYÁSAKOR áll a bolt alakjára (acrobot
+            36371): a bolt saját címe az útvonalára, a perjel nélküli útvonal
+            perjelet kap. Gépelés közben nem nyúl hozzá.
+          */
+          onBlur={
+            options.button
+              ? (event) => {
+                  const next = normalizeShopHref(event.target.value, shopHosts);
+                  if (next !== event.target.value)
+                    onChange({ [key]: next || null });
+                }
+              : undefined
+          }
           className={HOMEPAGE_INPUT_CLASS}
         />
       )}
+      {options.button && !isShopHref((slide[key] as string | null) ?? "") ? (
+        <span role="alert" className="mt-1 block text-xs text-red-700">
+          {`${n}. dia, ${label}: ${SHOP_HREF_RULE}`}
+        </span>
+      ) : null}
     </label>
   );
   return (
@@ -303,10 +339,12 @@ function SlideFields({
         {field("első gomb felirata", "cta", HOMEPAGE_LIMITS.button)}
         {field("első gomb célja", "ctaHref", HOMEPAGE_LIMITS.href, {
           address: true,
+          button: true,
         })}
         {field("második gomb felirata", "cta2", HOMEPAGE_LIMITS.button)}
         {field("második gomb célja", "cta2Href", HOMEPAGE_LIMITS.href, {
           address: true,
+          button: true,
         })}
         {field("képaláírás", "caption", HOMEPAGE_LIMITS.caption)}
         {field("képaláírás, második sor", "caption2", HOMEPAGE_LIMITS.caption)}

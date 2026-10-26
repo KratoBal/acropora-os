@@ -512,6 +512,37 @@ describe("HomepageContentEditorPage", () => {
     ).toBeGreaterThan(0);
   });
 
+  /*
+    A SLIDE BUTTON'S TARGET (acrobot 36371): the test shop's full address
+    becomes its path when the field is left, another site is named under the
+    field, in Hungarian.
+  */
+  it("HP-ED-SLIDE-HREF: the shop's full address becomes its path, another site is named", async () => {
+    api.get.mockResolvedValue(
+      stored({ storefrontUrl: "https://teszt.invalid" }),
+    );
+    render(<HomepageContentEditorPage />);
+    await field("Hero: Első tény: címsor");
+    fireEvent.click(screen.getByRole("tab", { name: "Saját diák" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dia hozzáadása" }));
+    const target = screen.getByLabelText("1. dia: első gomb célja");
+    fireEvent.change(target, {
+      target: { value: "https://teszt.invalid/hu/categories/sps" },
+    });
+    fireEvent.blur(target);
+    expect(target).toHaveValue("/hu/categories/sps");
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.change(target, { target: { value: "https://maps.example/x" } });
+    fireEvent.blur(target);
+    expect(target).toHaveValue("https://maps.example/x");
+    expect(
+      screen.getByText(
+        /1\. dia, első gomb célja: csak a webshop egy oldala lehet/,
+      ),
+    ).toBeTruthy();
+  });
+
   it("HP-ED-PREVIEW: without the storefront's address the preview says so, with it the frame points at the preview route", async () => {
     const { unmount } = render(<HomepageContentEditorPage />);
     expect(
