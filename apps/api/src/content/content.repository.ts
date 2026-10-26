@@ -45,6 +45,18 @@ export class ContentRepository {
     });
   }
 
+  /** The item's channel, or `null` when there is no such item. */
+  async channelOf(id: string) {
+    return (
+      (
+        await prisma.contentItem.findUnique({
+          where: { id },
+          select: { channel: true },
+        })
+      )?.channel ?? null
+    );
+  }
+
   detail(id: string) {
     return prisma.contentItem.findUnique({
       where: { id },

@@ -88,6 +88,13 @@ export function articleContentHash(snapshot: {
  *                                        and SCHEDULED today); the public
  *                                        revision, if any, stays (barracuda,
  *                                        #1887 b)
+ *   SENT -> AWAITING_REVISION            the correction of a published article
+ *                                        (acrobot 36474): the same withdrawal;
+ *                                        the page keeps the published revision
+ *   any -> DISCARDED, once published     refused: a discarded item whose page
+ *                                        stays public would be a lie, and there
+ *                                        is no unpublishing; a correction ends
+ *                                        with an approval and a new SENT
  */
 export async function applyArticleStep(
   tx: Tx,
@@ -155,6 +162,11 @@ export async function applyArticleStep(
     });
     return;
   }
+
+  if (input.to === "DISCARDED" && body?.publishedRevisionId)
+    throw new ArticleStepError(
+      "A közzétett cikk nem vethető el: a javítás új jóváhagyással és közzététellel zárul.",
+    );
 
   if (
     (input.to === "AWAITING_REVISION" || input.to === "DISCARDED") &&

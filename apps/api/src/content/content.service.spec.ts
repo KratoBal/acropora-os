@@ -19,6 +19,7 @@ function serviceWith(
     list: ContentRepository["list"];
     create: ContentRepository["create"];
     reviseText: ContentRepository["reviseText"];
+    channelOf: ContentRepository["channelOf"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -41,10 +42,51 @@ function serviceWith(
       calls.push(input);
       return true;
     }) as ContentRepository["reviseText"],
+    channelOf: (async () => "FACEBOOK_POST") as ContentRepository["channelOf"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
 }
+
+/*
+  A PUBLISHED ARTICLE IS CORRECTABLE (acrobot 36474, variant A): an article
+  goes back from SENT to revision, with the reason; a sent post does not.
+  What turns this red: the move offered or allowed on another channel, or
+  refused on an article.
+*/
+describe("correcting a published article", () => {
+  it("sends a published article back to revision, with the reason", async () => {
+    const { service, calls } = serviceWith({
+      channelOf: (async () => "ARTICLE") as ContentRepository["channelOf"],
+    });
+    await service.move({
+      id: "c1",
+      from: "SENT",
+      to: "AWAITING_REVISION",
+      revisionNote: "Elírás a második bekezdésben.",
+      actorCanApprove: false,
+      actorUserId: "user-1",
+    });
+    assert.equal(calls.length, 1);
+  });
+
+  it("refuses the same move on a sent post", async () => {
+    const { service, calls } = serviceWith();
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "SENT",
+          to: "AWAITING_REVISION",
+          revisionNote: "x",
+          actorCanApprove: true,
+          actorUserId: "user-1",
+        }),
+      /nem megengedett/,
+    );
+    assert.equal(calls.length, 0);
+  });
+});
 
 describe("moving a piece of content", () => {
   it("moves it when the step is allowed", async () => {

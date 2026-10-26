@@ -472,3 +472,30 @@ describe("where an item may be born", () => {
     assert.equal(canMove("AWAITING_REVIEW", "AWAITING_REVISION"), true);
   });
 });
+
+/*
+  THE ARTICLE'S CORRECTION MOVE (acrobot 36474): SENT -> AWAITING_REVISION on
+  the ARTICLE channel only, offered with its reason field, and needing no
+  approver's right (the approval comes later, on the existing path).
+*/
+describe("a published article's correction", () => {
+  it("is a move on an article and on nothing else", () => {
+    assert.equal(canMove("SENT", "AWAITING_REVISION", "ARTICLE"), true);
+    assert.equal(canMove("SENT", "AWAITING_REVISION", "FACEBOOK_POST"), false);
+    assert.equal(canMove("SENT", "AWAITING_REVISION"), false);
+    assert.equal(canMove("SENT", "DISCARDED", "ARTICLE"), false);
+    assert.deepEqual(allowedMoves("SENT", "ARTICLE"), ["AWAITING_REVISION"]);
+    assert.equal(
+      planTransition("SENT", "AWAITING_REVISION", "ARTICLE").kind,
+      "internal",
+    );
+  });
+
+  it("is offered on an article, with the reason it needs, and no approver's right", () => {
+    const [move] = moveOptions("SENT", "ARTICLE");
+    assert.equal(move?.to, "AWAITING_REVISION");
+    assert.equal(move?.requiresApproval, false);
+    assert.equal(move?.note?.field, "revisionNote");
+    assert.deepEqual(moveOptions("SENT", "FACEBOOK_POST"), []);
+  });
+});
