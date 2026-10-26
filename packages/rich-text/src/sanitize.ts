@@ -136,15 +136,15 @@ function engedettHref(
   // eslint-disable-next-line no-control-regex
   const tomor = cim.replace(/[\s\u0000-\u001f]/g, "").toLowerCase();
   /*
-    A ROVID PROFILBAN A `mailto:` UTAN CIM KELL, szokoz nelkul (a `?subject=`
-    resz maradhat): a kirakat tisztitoja (commerce #568) a cim nelkuli alakot
+    A ROVID PROFILBAN A `mailto:` UTAN CIM KELL, szokoz es `#` nelkul (a
+    `?subject=` resz maradhat, szinten `#` nelkul); a minta betura a kirakate: a kirakat tisztitoja (commerce #568) a cim nelkuli alakot
     szovegge teszi, es a ket oldalnak ugyanazt kell megtartania (barracuda,
     #1879). A level profilja valtozatlan.
   */
   if (
     profil === "short" &&
     tomor.startsWith("mailto:") &&
-    !/^mailto:[^\s?]+(\?\S*)?$/i.test(cim)
+    !/^mailto:[^\s?#]+(\?[^\s#]*)?$/i.test(cim)
   )
     return null;
   return RICH_TEXT_HREF_SCHEMES.some((sema) => tomor.startsWith(sema))
