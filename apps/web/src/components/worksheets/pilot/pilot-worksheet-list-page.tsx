@@ -7,6 +7,7 @@ import {
   type WorksheetListResponse,
   type WorksheetSelectablePartner,
   type WorksheetVersionStatus,
+  worksheetListLines,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -148,6 +149,23 @@ export function worksheetHoursCell(item: {
   laborHours: string;
 }): string {
   return item.lineCount > 0 ? `${formatLaborHours(item.laborHours)} óra` : "—";
+}
+
+/**
+ * A sor második sora: a szám (ha a tárgy áll a fő sorban) és a verziók száma,
+ * ha több van. Üres, ha egyik sincs: akkor a sor el is marad.
+ */
+function worksheetRowDetail(worksheet: {
+  number: string | null;
+  subject: string;
+  versionCount: number;
+}): string {
+  return [
+    worksheetListLines(worksheet).detail,
+    worksheet.versionCount > 1 ? `${worksheet.versionCount} verzió` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function PilotWorksheetListPage() {
@@ -471,20 +489,20 @@ export function PilotWorksheetListPage() {
                         a mobilon és a partnerportálon is.
                       */}
                       <p className="break-words text-sm font-semibold text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                        {worksheet.subject}
+                        {worksheetListLines(worksheet).main}
                       </p>
-                      <p
-                        className={`mt-1 text-xs ${
-                          worksheet.number
-                            ? "font-mono text-pilot-grey-600"
-                            : "text-pilot-grey-500"
-                        }`}
-                      >
-                        {worksheet.number ?? "Még nincs száma"}
-                        {worksheet.versionCount > 1
-                          ? ` · ${worksheet.versionCount} verzió`
-                          : ""}
-                      </p>
+                      {worksheetRowDetail(worksheet) ? (
+                        <p
+                          className={`mt-1 text-xs ${
+                            worksheet.number &&
+                            worksheetListLines(worksheet).detail
+                              ? "font-mono text-pilot-grey-600"
+                              : "text-pilot-grey-500"
+                          }`}
+                        >
+                          {worksheetRowDetail(worksheet)}
+                        </p>
+                      ) : null}
                       {worksheet.hidden ? (
                         <span className="mt-1 inline-block">
                           <PilotBadge variant="amber">Rejtett</PilotBadge>

@@ -34,6 +34,7 @@ import {
   DEFAULT_WORKSHEET_STATUS_FILTER,
   worksheetFilterSummary,
   worksheetListStartsMineOnly,
+  worksheetListLines,
   worksheetListSubtitle,
   worksheetDisplayLabel,
   worksheetStatusTone,
@@ -493,7 +494,9 @@ export default function WorksheetsScreen() {
                 száma", aztán a partner és a hely, a felelős és a jegy.
               */}
               <View style={styles.rowHeader}>
-                <Text style={styles.rowTitle}>{item.subject}</Text>
+                <Text style={styles.rowTitle}>
+                  {worksheetListLines(item).main}
+                </Text>
                 <View
                   style={[
                     styles.statusChip,
@@ -505,9 +508,11 @@ export default function WorksheetsScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.rowNumberLine}>
-                {item.number ?? "Még nincs száma"}
-              </Text>
+              {worksheetListLines(item).detail ? (
+                <Text style={styles.rowNumberLine}>
+                  {worksheetListLines(item).detail}
+                </Text>
+              ) : null}
               <View style={styles.rowFooter}>
                 <Text style={styles.rowMeta} numberOfLines={2}>
                   {worksheetListSubtitle(item)}
@@ -669,6 +674,10 @@ function createStyles(t: ThemeTokens) {
       gap: 10,
       justifyContent: "space-between",
     },
+    /**
+     * `flex: 1` (grow, shrink, zero basis): a long subject wraps, and the
+     * status chip beside it is never pushed out.
+     */
     rowTitle: {
       color: t.textPrimary,
       flex: 1,
@@ -687,7 +696,6 @@ function createStyles(t: ThemeTokens) {
      * A SZÁM MOST A MÁSODLAGOS SOR (acrobot döntése, 2026-09-25): monospace,
      * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
      */
-    /** `flex: 1`: the status chip beside it must never be pushed out. */
     rowNumberLine: {
       color: t.textSecondary,
       fontFamily: "monospace",

@@ -7,6 +7,7 @@ import {
   partnerStatusLabel,
   partnerVisibleStatus,
   serviceJobTimeline,
+  worksheetListLines,
   type ServiceJobAssetLink,
   type ServiceJobStatusEvent,
   type ServiceJobWorksheetLink,
@@ -251,6 +252,39 @@ describe("a partneri állapot-leképezés", () => {
       IN_PROGRESS: "Feldolgozás alatt",
       COMPLETED: "Elkészült",
       CLOSED: "Lezárva",
+    });
+  });
+});
+
+describe("worksheetListLines", () => {
+  // A FŐ SOR SOSEM ÜRES, ÉS A SZÁM NEM ÁLL KÉTSZER (barracuda, #1891 review).
+  // Mi pirosít: üres vagy csak szóközös tárgynál üres fő sor, vagy a szám a
+  // fő sorban ÉS alatta is.
+  it("puts the subject first and the number (or Még nincs száma) under it", () => {
+    assert.deepEqual(
+      worksheetListLines({ number: "ML-2026-00814", subject: " Szűrőcsere " }),
+      { main: "Szűrőcsere", detail: "ML-2026-00814" },
+    );
+    assert.deepEqual(
+      worksheetListLines({ number: null, subject: "Szűrőcsere" }),
+      {
+        main: "Szűrőcsere",
+        detail: "Még nincs száma",
+      },
+    );
+  });
+
+  it("moves the number up for an empty subject, and drops the second line", () => {
+    assert.deepEqual(
+      worksheetListLines({ number: "ML-2026-00814", subject: "   " }),
+      {
+        main: "ML-2026-00814",
+        detail: null,
+      },
+    );
+    assert.deepEqual(worksheetListLines({ number: null, subject: "" }), {
+      main: "Még nincs száma",
+      detail: null,
     });
   });
 });
