@@ -142,6 +142,33 @@ describe("PilotWorksheetListPage -- redesign", () => {
     );
   });
 
+  /*
+    THE SUBJECT IS THE MAIN LINE, THE NUMBER UNDER IT (Balázs, 2026-10-26 12:48
+    UTC, msg 1564259312728150148). What turns this red: the two swapped back.
+  */
+  it("shows the subject first and the number (or Még nincs száma) under it", async () => {
+    api.list.mockResolvedValue(
+      response([
+        row(),
+        row({ id: "ws-2", number: null, subject: "Szűrőcsere" }),
+      ]),
+    );
+    render(<PilotWorksheetListPage />);
+    const subject = await screen.findByText("Tömítéscsere és ellenőrzés");
+    const cell = subject.closest("td") as HTMLElement;
+    const lines = Array.from(cell.querySelectorAll("p")).map(
+      (p) => p.textContent,
+    );
+    expect(lines[0]).toBe("Tömítéscsere és ellenőrzés");
+    expect(lines[1]).toContain("ML-2026-00814");
+    const draft = (await screen.findByText("Szűrőcsere")).closest(
+      "td",
+    ) as HTMLElement;
+    expect(
+      Array.from(draft.querySelectorAll("p")).map((p) => p.textContent)[1],
+    ).toContain("Még nincs száma");
+  });
+
   it("filters by a tile's status", async () => {
     api.list.mockResolvedValue(response([row()]));
     render(<PilotWorksheetListPage />);

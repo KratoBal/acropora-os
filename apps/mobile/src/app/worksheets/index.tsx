@@ -487,14 +487,13 @@ export default function WorksheetsScreen() {
                 a jelvény EGY sorban áll -- Figma 8. kör, telefonos átültetés.
               */}
               {/*
-                THE CARD OF THE SERVICE REDESIGN (Figma 423:904): the number
-                and the status in the first row, the subject as the title,
-                partner and place, then "Felelős: … · 4 óra" and the job.
+                A FŐ SOR A TÁRGY, A MÁSODIK A SZÁM (Balázs, 2026-10-26 12:48
+                UTC, msg 1564259312728150148; mindenhol egyformán): a tárgy és
+                az állapot-jelvény egy sorban, alatta a szám vagy a „Még nincs
+                száma", aztán a partner és a hely, a felelős és a jegy.
               */}
               <View style={styles.rowHeader}>
-                <Text style={styles.rowNumber}>
-                  {item.number ?? "Még nincs száma"}
-                </Text>
+                <Text style={styles.rowTitle}>{item.subject}</Text>
                 <View
                   style={[
                     styles.statusChip,
@@ -506,7 +505,9 @@ export default function WorksheetsScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.rowTitle}>{item.subject}</Text>
+              <Text style={styles.rowNumberLine}>
+                {item.number ?? "Még nincs száma"}
+              </Text>
               <View style={styles.rowFooter}>
                 <Text style={styles.rowMeta} numberOfLines={2}>
                   {worksheetListSubtitle(item)}
@@ -687,12 +688,11 @@ function createStyles(t: ThemeTokens) {
      * hogy egy szám-szerű azonosító megkülönböztesse magát a tárgy szövegétől.
      */
     /** `flex: 1`: the status chip beside it must never be pushed out. */
-    rowNumber: {
-      color: t.textPrimary,
-      flex: 1,
+    rowNumberLine: {
+      color: t.textSecondary,
       fontFamily: "monospace",
-      fontSize: 14,
-      fontWeight: "700",
+      fontSize: 13,
+      fontWeight: "600",
     },
     rowFooter: { gap: 4, marginTop: 2 },
     rowAssignee: { color: t.textSecondary, fontSize: 13 },

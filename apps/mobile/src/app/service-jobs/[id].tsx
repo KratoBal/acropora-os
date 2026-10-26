@@ -573,9 +573,14 @@ export default function ServiceJobDetailScreen() {
                   pressed && styles.pressed,
                 ]}
               >
+                {/*
+                  A FŐ SOR A TÁRGY, A MÁSODIK A SZÁM (Balázs, 2026-10-26 12:48
+                  UTC, msg 1564259312728150148), mint a munkalap-listában.
+                */}
                 <View style={styles.sheetTop}>
                   <Text style={styles.sheetNumber}>
-                    {sheet.number ?? "Még nincs száma"}
+                    {sheet.subject.trim() ||
+                      (sheet.number ?? "Még nincs száma")}
                   </Text>
                   {/*
                     THE SHEET'S STATE AND HOURS (redesign E3), only when the
@@ -589,7 +594,7 @@ export default function ServiceJobDetailScreen() {
                   ) : null}
                 </View>
                 <Text style={styles.meta}>
-                  {sheet.subject}
+                  {sheet.number ?? "Még nincs száma"}
                   {sheet.laborHours !== undefined
                     ? ` · ${formatWorksheetQuantity(sheet.laborHours)} munkaóra`
                     : ""}
