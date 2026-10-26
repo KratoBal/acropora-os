@@ -155,6 +155,11 @@ export class ArticleImageService {
     return { id: row.id, url: `${base}${ARTICLE_IMAGE_PUBLIC_PATH}/${row.id}` };
   }
 
+  /** The image when the memory already holds it: no database, nothing to limit. */
+  cached(id: string): ArticleImageContent | undefined {
+    return ARTICLE_IMAGE_ID.test(id) ? this.memory.get(id) : undefined;
+  }
+
   /**
    * The type and the hash, for a conditional request: from the memory, or a
    * query without the bytes. The same 404 for every miss.

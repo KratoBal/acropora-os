@@ -344,18 +344,70 @@ describe("ArticleImagePublicController", () => {
     assert.equal(out.status, 200);
   });
 
-  it("refuses a caller past its limit with 429, and only that caller", async () => {
+  /*
+    ONLY A DATABASE READ IS COUNTED (barracuda, #1897 APPROVE note): the first
+    X-Forwarded-For hop can be forged, so the shared ceiling must not be able
+    to turn an image the memory holds into a 429.
+  */
+  it("refuses a caller past its limit with 429 on database reads, and only that caller", async () => {
     const { service } = setup();
     const controller = new ArticleImagePublicController(service);
     const one = request();
+    const unknown = "c" + "d".repeat(24);
     for (let i = 0; i < 300; i += 1)
-      await controller.image(ID, one, response().res);
+      await assert.rejects(
+        () => controller.image(unknown, one, response().res),
+        NotFoundException,
+      );
+    await assert.rejects(
+      () => controller.image(unknown, one, response().res),
+      (error: unknown) =>
+        (error as { getStatus?: () => number }).getStatus?.() === 429,
+    );
+    await assert.rejects(
+      () => controller.image(unknown, request(), response().res),
+      NotFoundException,
+    );
+  });
+
+  it("serves an image the memory holds even to a caller past its limit", async () => {
+    const { service, reads } = setup();
+    const controller = new ArticleImagePublicController(service);
+    const one = request();
+    await controller.image(ID, one, response().res); // the one database read
+    const unknown = "c" + "e".repeat(24);
+    for (let i = 0; i < 299; i += 1)
+      await assert.rejects(
+        () => controller.image(unknown, one, response().res),
+        NotFoundException,
+      );
+    // the caller's limit is spent, the cached image still comes, from memory
+    const before = { ...reads };
+    assert.ok(await controller.image(ID, one, response().res));
+    const conditional = response();
+    await controller.image(
+      ID,
+      { ...one, headers: { ...one.headers, "if-none-match": '"abc"' } },
+      conditional.res,
+    );
+    assert.equal(conditional.out.status, 304);
+    assert.deepEqual(reads, before);
+  });
+
+  it("counts a conditional miss once, not twice", async () => {
+    const { service } = setup();
+    const controller = new ArticleImagePublicController(service);
+    const one = request({ "if-none-match": '"regi"' });
+    // 300 uncached conditional misses: each one database lookup, one count
+    for (let i = 0; i < 300; i += 1) {
+      const fresh = new ArticleImagePublicController(setup().service);
+      assert.ok(await fresh.image(ID, one, response().res));
+    }
     await assert.rejects(
       () => controller.image(ID, one, response().res),
       (error: unknown) =>
         (error as { getStatus?: () => number }).getStatus?.() === 429,
     );
-    assert.ok(await controller.image(ID, request(), response().res));
   });
 
   it("sets the headers that keep the file an image any origin may show", () => {
