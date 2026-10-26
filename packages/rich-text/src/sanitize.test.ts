@@ -478,7 +478,13 @@ describe("a tisztito: a rovid profil mailto celja", () => {
       rovid("mailto:info@acropora.hu?subject=Kérdés"),
       '<a href="mailto:info@acropora.hu?subject=Kérdés">x</a>',
     );
-    for (const rossz of ["mailto:", "mailto:?subject=x", "mailto:a b@c.hu"])
+    for (const rossz of [
+      "mailto:",
+      "mailto:?subject=x",
+      "mailto:a b@c.hu",
+      "mailto:a@b.hu#x",
+      "mailto:a@b.hu?subject=a#b",
+    ])
       assert.equal(rovid(rossz), "<a>x</a>", rossz);
     assert.equal(isAllowedRichHref("mailto:", { profile: "short" }), false);
   });
