@@ -63,6 +63,13 @@ export interface SanitizeRichHtmlOptions {
    * semmire nem mutatna.
    */
   readonly allowCidImages?: boolean;
+  /**
+   * A TELJES PROFIL KEPEINEK ENGEDETT HOSZTJAI (pontos hosztnev, pl. a bolt
+   * fajltarolojae). Megadva csak ezekrol a hosztokrol megy at kep, az ures lista
+   * semmilyen kepet nem enged; hianyaban barmely `https:` cim. A szerver a
+   * mentesnel mindig megadja (a kornyezet listajat).
+   */
+  readonly allowedImageHosts?: readonly string[];
 }
 
 /**
@@ -73,9 +80,11 @@ function engedettKep(
   ertek: string,
   cidEngedett: boolean,
   profil: RichTextProfile,
+  hosztok: readonly string[] | undefined,
 ): string | null {
   const src = ertek.trim();
-  if (profil === "full") return isAllowedFullImageSrc(src) ? src : null;
+  if (profil === "full")
+    return isAllowedFullImageSrc(src, hosztok) ? src : null;
   if (richImageId(src)) return src;
   return cidEngedett && /^cid:[A-Za-z0-9._@-]{1,128}$/.test(src) ? src : null;
 }
@@ -196,6 +205,7 @@ export function sanitizeRichHtmlReport(
     eldobott.add(`${tag} ${name}`);
     return "";
   };
+  let kartyaMelyseg = 0;
   const szuro = new FilterXSS({
     whiteList: Object.fromEntries(
       Object.entries(engedettTagek).map(([tag, attrs]) => [tag, [...attrs]]),
@@ -205,6 +215,28 @@ export function sanitizeRichHtmlReport(
       `style`: azok TARTALMA sem szoveg, hanem kod, tehat egyutt mennek.
     */
     stripIgnoreTagBody: [...tartalommal],
+    /*
+      A TERMEKKARTYA BELSEJE EGYETLEN SZOVEG (barracuda, #1875 review). A
+      kartya a termek nevet viszi tartaleknak; egy beagyazott `div` (pl. egy
+      galeria) az elonezet `</div>`-ig olvaso mintajat rossz helyen zarna. A
+      kartyan belul ezert minden tag kiesik, a szovege marad; a kartya sajat
+      zaro `div`-je a melyseg-szamlalobol all elo.
+    */
+    onTag(tag, html, { isClosing }) {
+      if (profil !== "full") return undefined;
+      if (kartyaMelyseg > 0) {
+        if (tag === "div" && isClosing) {
+          kartyaMelyseg--;
+          return kartyaMelyseg === 0 ? undefined : "";
+        }
+        if (tag === "div") kartyaMelyseg++;
+        if (!isClosing) eldobott.add(`div data-product-card ${tag}`);
+        return "";
+      }
+      if (tag === "div" && !isClosing && /\sdata-product-card\s*=/i.test(html))
+        kartyaMelyseg = 1;
+      return undefined;
+    },
     onIgnoreTag(tag, _html, { isClosing }) {
       if (!isClosing) eldobott.add(tag.toLowerCase());
       return "";
@@ -246,7 +278,12 @@ export function sanitizeRichHtmlReport(
           ? `data-variable="${value}"`
           : elutasitott(tag, name);
       if (tag === "img" && name === "src") {
-        const src = engedettKep(value, options.allowCidImages === true, profil);
+        const src = engedettKep(
+          value,
+          options.allowCidImages === true,
+          profil,
+          options.allowedImageHosts,
+        );
         return src ? `src="${attrEscape(src)}"` : elutasitott(tag, name);
       }
       if (tag === "img" && name === "width") {
