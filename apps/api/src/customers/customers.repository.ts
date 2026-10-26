@@ -86,7 +86,11 @@ function formatAddress(
     addresses.find((address) => address.type === "BILLING") ??
     addresses[0];
   if (!primary) return null;
-  return `${primary.postalCode} ${primary.city}, ${primary.line1}`.trim();
+  // hiányos cím (az akváriumhoz felvitt ügyfélnél csak a név kötelező): a
+  // hiányzó rész nem hagy üres helyet vagy árva vesszőt
+  return [`${primary.postalCode} ${primary.city}`.trim(), primary.line1.trim()]
+    .filter(Boolean)
+    .join(", ");
 }
 
 @Injectable()
