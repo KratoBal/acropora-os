@@ -68,7 +68,19 @@ function setup(
         productId,
         name: `Termék ${productId}`,
         sortOrder: i,
+        imageUrl: null,
+        grossPrice: null,
       })),
+    orderFeatured: async (productIds) => {
+      if (
+        productIds.length !== marked.size ||
+        productIds.some((id) => !marked.has(id))
+      )
+        return "mismatch";
+      marked.clear();
+      for (const id of productIds) marked.add(id);
+      return "ok";
+    },
     setFeatured: async (productId, featured, _userId, max) => {
       if (productId === "nincs") return "unknown-product";
       if (!featured) {
@@ -577,6 +589,7 @@ describe("homepageStorefrontUrl", () => {
     assert.equal(
       homepageStorefrontUrl({
         ...ALLOWED,
+        HOMEPAGE_PREVIEW_ALLOWED: "true",
         HOMEPAGE_STOREFRONT_URL: " https://teszt.acropora.hu/hu/store ",
       }),
       "https://teszt.acropora.hu",
@@ -594,19 +607,103 @@ describe("homepageStorefrontUrl", () => {
       "javascript:alert(1)",
     ])
       assert.equal(
-        homepageStorefrontUrl({ ...ALLOWED, HOMEPAGE_STOREFRONT_URL: bad }),
+        homepageStorefrontUrl({
+          ...ALLOWED,
+          HOMEPAGE_PREVIEW_ALLOWED: "true",
+          HOMEPAGE_STOREFRONT_URL: bad,
+        }),
         null,
         bad,
       );
   });
 
+  it("needs its own switch: projection allowed and an address are not enough", () => {
+    for (const allowed of [undefined, "false", "1", "TRUE"])
+      assert.equal(
+        homepageStorefrontUrl({
+          ...ALLOWED,
+          HOMEPAGE_PREVIEW_ALLOWED: allowed,
+          HOMEPAGE_STOREFRONT_URL: "https://shop.acropora.hu",
+        }),
+        null,
+        String(allowed),
+      );
+  });
+
   it("reaches the editor with the content", async () => {
     const { service } = setup(async () => "sent", {
-      env: { ...ALLOWED, HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu" },
+      env: {
+        ...ALLOWED,
+        HOMEPAGE_PREVIEW_ALLOWED: "true",
+        HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu",
+      },
     });
     assert.equal(
       (await service.get()).storefrontUrl,
       "https://teszt.acropora.hu",
+    );
+  });
+});
+
+/*
+  THE BAND'S ORDER (2b-2). What turns these red: a reorder that drops or adds
+  a product (the list must be exactly the marked ones), a duplicate or a
+  thirteenth id accepted, a reorder that does not ask for the projection where
+  it is on, or one whose projection failure fails the order.
+*/
+describe("HomepageContentService.orderFeatured", () => {
+  it("puts the band in the given order and asks for one projection where it is on", async () => {
+    let asked = 0;
+    const { service } = setup(async () => {
+      asked++;
+      return "sent";
+    });
+    for (const id of ["a", "b", "c"])
+      await service.setFeatured(id, true, "u-1");
+    asked = 0;
+    const out = await service.orderFeatured(["c", "a", "b"], "u-1");
+    assert.deepEqual(
+      out.list.map((row) => row.productId),
+      ["c", "a", "b"],
+    );
+    assert.equal(out.projection, "sent");
+    assert.equal(asked, 1);
+  });
+
+  it("refuses a list that is not exactly the marked products, a duplicate, too many or no list", async () => {
+    const { service } = setup(async () => "sent");
+    for (const id of ["a", "b"]) await service.setFeatured(id, true, "u-1");
+    await assert.rejects(
+      service.orderFeatured(["a"], "u-1"),
+      ConflictException,
+    );
+    await assert.rejects(
+      service.orderFeatured(["a", "b", "x"], "u-1"),
+      ConflictException,
+    );
+    for (const bad of [
+      ["a", "a"],
+      "a,b",
+      [1, 2],
+      Array.from({ length: 13 }, (_, i) => `p${i}`),
+    ])
+      await assert.rejects(
+        service.orderFeatured(bad, "u-1"),
+        BadRequestException,
+        JSON.stringify(bad),
+      );
+  });
+
+  it("keeps the order when the projection fails", async () => {
+    const { service } = setup(async () => {
+      throw new Error("a bolt nem válaszol");
+    });
+    for (const id of ["a", "b"]) await service.setFeatured(id, true, "u-1");
+    const out = await service.orderFeatured(["b", "a"], "u-1");
+    assert.equal(out.projection, "failed");
+    assert.deepEqual(
+      out.list.map((row) => row.productId),
+      ["b", "a"],
     );
   });
 });

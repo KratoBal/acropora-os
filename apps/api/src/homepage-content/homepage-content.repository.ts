@@ -24,14 +24,55 @@ export class HomepageContentRepository implements HomepageContentStore {
       select: {
         productId: true,
         sortOrder: true,
-        product: { select: { name: true } },
+        product: {
+          select: {
+            name: true,
+            images: {
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+              take: 1,
+              select: { url: true },
+            },
+            unasSnapshot: { select: { grossPrice: true } },
+          },
+        },
       },
     });
     return rows.map((row) => ({
       productId: row.productId,
       name: row.product.name,
       sortOrder: row.sortOrder,
+      imageUrl: row.product.images[0]?.url ?? null,
+      grossPrice: row.product.unasSnapshot?.grossPrice?.toString() ?? null,
     }));
+  }
+
+  /**
+   * THE NEW ORDER, under the band's lock: the list must be exactly the marked
+   * products, or nothing is written (a mark or an unmark that ran meanwhile
+   * would otherwise be lost or doubled).
+   */
+  async orderFeatured(
+    productIds: readonly string[],
+    userId: string,
+  ): Promise<"ok" | "mismatch"> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(${FEATURED_LOCK_KEY}::bigint)) AS held`;
+      const marked = await tx.homepageFeaturedProduct.findMany({
+        select: { productId: true },
+      });
+      const now = new Set(marked.map((row) => row.productId));
+      if (
+        now.size !== productIds.length ||
+        productIds.some((id) => !now.has(id))
+      )
+        return "mismatch" as const;
+      for (const [sortOrder, productId] of productIds.entries())
+        await tx.homepageFeaturedProduct.update({
+          where: { productId },
+          data: { sortOrder, updatedById: userId },
+        });
+      return "ok" as const;
+    });
   }
 
   async setFeatured(
