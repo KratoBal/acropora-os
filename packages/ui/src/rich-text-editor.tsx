@@ -158,6 +158,47 @@ export const EMAIL_TOOLBAR: readonly RichTextToolbarItem[] = [
 ];
 
 /**
+ * A ROVID PROFIL ESZKOZTARA (Balazs megbizasa, 2026-10-26, 4. pont: "Rövid:
+ * bekezdés, félkövér, dőlt, link, felsorolás"). A bekezdes nem gomb: a rovid
+ * profilban mas blokk-tipus nincs.
+ */
+export const SHORT_TOOLBAR: readonly RichTextToolbarItem[] = [
+  "bold",
+  "italic",
+  "link",
+  "bulletList",
+  "orderedList",
+];
+
+/**
+ * A ROVID PROFIL BOVITMENYEI. A StarterKit minden olyan reszet kikapcsoljuk,
+ * ami a `RICH_TEXT_SHORT_ALLOWED_TAGS`-ban nem all: a beillesztett cimsor
+ * bekezdes lesz, az alahuzas es az athuzas elmarad, kep, tablazat, igazitas
+ * es gomb nincs. A link-cel ugyanazon a szabalyon dol el, mint a tisztitoban.
+ */
+function rovidBovitmenyek() {
+  return [
+    StarterKit.configure({
+      code: false,
+      codeBlock: false,
+      trailingNode: false,
+      heading: false,
+      blockquote: false,
+      horizontalRule: false,
+      strike: false,
+      underline: false,
+      link: {
+        openOnClick: false,
+        autolink: false,
+        linkOnPaste: false,
+        HTMLAttributes: { target: null, rel: null },
+        isAllowedUri: (href) => isAllowedRichHref(href, { profile: "short" }),
+      },
+    }),
+  ];
+}
+
+/**
  * A TELJES PROFIL ESZKOZTARA: a level elemei, plusz idezet, galeria, tablazat
  * es termekkartya. A kep, a galeria es a termekkartya gombja csak akkor
  * latszik, ha a hivo ad hozza valasztot.
@@ -754,6 +795,7 @@ function EszkozGomb(props: {
 function LinkSzerkeszto(props: {
   editor: Editor;
   linkValtozok: readonly RichTextVariable[];
+  profile: RichTextProfile;
   onClose: () => void;
 }) {
   const { editor, linkValtozok, onClose } = props;
@@ -762,6 +804,7 @@ function LinkSzerkeszto(props: {
   );
   const ervenyes = isAllowedRichHref(cim, {
     hrefPlaceholders: linkValtozok.map((v) => v.name),
+    profile: props.profile,
   });
   const alkalmaz = () => {
     if (!ervenyes) return;
@@ -827,7 +870,9 @@ function LinkSzerkeszto(props: {
       </button>
       {!ervenyes && cim ? (
         <p className="w-full text-xs text-rose-600">
-          Csak http(s), mailto vagy link-változó lehet a cél.
+          {props.profile === "short"
+            ? "Csak bolti útvonal (/store), http(s) vagy mailto lehet a cél."
+            : "Csak http(s), mailto vagy link-változó lehet a cél."}
         </p>
       ) : null}
     </div>
@@ -1155,6 +1200,7 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const ajanlat = mode === "quote";
   const teljes = !ajanlat && profile === "full";
+  const rovid = !ajanlat && profile === "short";
   /*
     Ajanlati modban CSAK a semaban allo gombok maradhatnak; a levelsablon
     profiljaban a teljes profil elemei nem (a semajuk hianyzik, a gomb semmit
@@ -1164,11 +1210,15 @@ export function RichTextEditor({
     ? (toolbar ?? AJANLAT_ESZKOZTAR).filter((elem) =>
         AJANLAT_ESZKOZTAR.includes(elem),
       )
-    : teljes
-      ? (toolbar ?? FULL_TOOLBAR)
-      : (toolbar ?? ALAP_ESZKOZTAR).filter(
-          (elem) => !TELJES_PROFIL_ELEMEI.has(elem),
-        );
+    : rovid
+      ? (toolbar ?? SHORT_TOOLBAR).filter((elem) =>
+          SHORT_TOOLBAR.includes(elem),
+        )
+      : teljes
+        ? (toolbar ?? FULL_TOOLBAR)
+        : (toolbar ?? ALAP_ESZKOZTAR).filter(
+            (elem) => !TELJES_PROFIL_ELEMEI.has(elem),
+          );
   /*
     A KEP-FELOLDO REF-BEN, mint az `onChange`: a csomopont-nezet a
     szerkesztovel egyutt jon letre, es a kesobb erkezo cimeket csak igy latja.
@@ -1188,13 +1238,15 @@ export function RichTextEditor({
     () =>
       ajanlat
         ? ajanlatBovitmenyek()
-        : bovitmenyek(
-            variables,
-            linkValtozok.map((v) => v.name),
-            feloldRef,
-            teljes ? "full" : "email",
-          ),
-    [kulcs, ajanlat, teljes],
+        : rovid
+          ? rovidBovitmenyek()
+          : bovitmenyek(
+              variables,
+              linkValtozok.map((v) => v.name),
+              feloldRef,
+              teljes ? "full" : "email",
+            ),
+    [kulcs, ajanlat, teljes, rovid],
   );
 
   /*
@@ -1502,6 +1554,7 @@ export function RichTextEditor({
         <LinkSzerkeszto
           editor={editor}
           linkValtozok={linkValtozok}
+          profile={rovid ? "short" : teljes ? "full" : "email"}
           onClose={() => setPanel(null)}
         />
       ) : null}

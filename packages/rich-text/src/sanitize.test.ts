@@ -420,3 +420,48 @@ describe("a tisztito: a teljes profil kep-hosztja es a kartya belseje", () => {
     );
   });
 });
+
+/**
+ * A ROVID PROFIL (Balazs megbizasa, 2026-10-26, 4. pont): bekezdes, felkover,
+ * dolt, link, felsorolas. A kirakat kotott helyeire es a lablec bemutatkozasara.
+ */
+describe("a tisztito: a rovid profil", () => {
+  const rovid = (html: string) => sanitizeRichHtml(html, { profile: "short" });
+
+  it("a bekezdes, a felkover, a dolt, a link es a listak atmennek", () => {
+    const html =
+      '<p><strong>a</strong> <em>b</em><br><a href="https://x.hu">c</a> <a href="/store">bolt</a> <a href="mailto:a@b.hu">m</a></p><ul><li>d</li></ul><ol><li>e</li></ol>';
+    assert.equal(rovid(html), html);
+  });
+
+  it("minden mas kiesik, a szovege marad: cimsor, idezet, kep, tablazat, alahuzas, igazitas, gomb", () => {
+    assert.equal(
+      rovid(
+        '<h2>c</h2><blockquote>i</blockquote><p data-align="center" data-cta="">x<img src="https://x.hu/a.jpg"><u>u</u></p><table><tbody><tr><td>t</td></tr></tbody></table><div data-gallery="">g</div>',
+      ),
+      "c" + "i" + "<p>xu</p>" + "t" + "g",
+    );
+  });
+
+  it("a bolti utvonal csak a rovid profilban, es csak a biztonsagos alakban megy at", () => {
+    for (const rossz of [
+      "//evil.example",
+      "/\\evil.example",
+      "/a b",
+      "javascript:alert(1)",
+    ])
+      assert.equal(rovid(`<a href="${rossz}">x</a>`), "<a>x</a>", rossz);
+    assert.equal(sanitizeRichHtml('<a href="/store">x</a>'), "<a>x</a>");
+    assert.equal(
+      sanitizeRichHtml('<a href="/store">x</a>', { profile: "full" }),
+      "<a>x</a>",
+    );
+    assert.equal(isAllowedRichHref("/store", { profile: "short" }), true);
+    assert.equal(isAllowedRichHref("/store"), false);
+  });
+
+  it("idempotens", () => {
+    const html = '<p>a &lt; b <a href="/store?x=1&amp;y=2">x</a></p>';
+    assert.equal(rovid(rovid(html)), rovid(html));
+  });
+});

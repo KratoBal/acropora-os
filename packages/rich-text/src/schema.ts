@@ -76,7 +76,7 @@ export type RichTextTag = keyof typeof RICH_TEXT_ALLOWED_TAGS;
  * jelent. Ha a ketto egy listan allna, az elso weboldali bovites a levelekbe is
  * atjutna.
  */
-export const RICH_TEXT_PROFILES = ["email", "full"] as const;
+export const RICH_TEXT_PROFILES = ["email", "full", "short"] as const;
 export type RichTextProfile = (typeof RICH_TEXT_PROFILES)[number];
 
 /**
@@ -107,14 +107,41 @@ export const RICH_TEXT_FULL_ALLOWED_TAGS = {
 
 export type RichTextFullTag = keyof typeof RICH_TEXT_FULL_ALLOWED_TAGS;
 
+/**
+ * A ROVID PROFIL (Balazs megbizasa, 2026-10-26 08:28 UTC, 4. pont,
+ * "Formázott szövegek": "Rövid: bekezdés, félkövér, dőlt, link, felsorolás").
+ * A kirakat kotott helyeire (a kezdolap dia- es lepes-szovegei) es a lablec
+ * bemutatkozasara: annyi, amennyit a kirakat ott ki is rajzol (murena 36080),
+ * tehat amit a szerkeszto mutat, az meg is jelenik.
+ *
+ * A link itt a bolti utvonalat is elfogadja (`/store`), mert a kezdolap
+ * szovegei a bolt sajat lapjaira mutatnak; a szabaly ugyanaz, mint a kezdolap
+ * cim-mezoie: egy perjel, utana se perjel, se backslash.
+ */
+export const RICH_TEXT_SHORT_ALLOWED_TAGS = {
+  p: [],
+  br: [],
+  strong: [],
+  em: [],
+  a: ["href"],
+  ul: [],
+  ol: [],
+  li: [],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
 /** A profil engedett tagjei es attributumai. */
 export function richTextAllowedTags(
   profile: RichTextProfile,
 ): Readonly<Record<string, readonly string[]>> {
   return profile === "full"
     ? RICH_TEXT_FULL_ALLOWED_TAGS
-    : RICH_TEXT_ALLOWED_TAGS;
+    : profile === "short"
+      ? RICH_TEXT_SHORT_ALLOWED_TAGS
+      : RICH_TEXT_ALLOWED_TAGS;
 }
+
+/** A bolt sajat utvonala: egy perjel, utana se perjel, se backslash, szokoz sehol. */
+export const RICH_TEXT_SHOP_PATH = /^\/(?![/\\])[^\s\\]*$/;
 
 /** A teljes profil kepenek legnagyobb szelessege, pixelben. */
 export const RICH_TEXT_FULL_IMAGE_MAX_WIDTH = 1600;
