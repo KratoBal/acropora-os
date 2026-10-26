@@ -199,20 +199,25 @@ describe("buildAquariumCreatePayload", () => {
   });
 
   /**
-   * A RÉSZLEGES CÍM NÉMA HIBÁT OKOZNA A SZERVEREN (a `CreateCustomerAddressDto`
-   * a postalCode/city/line1 mindegyikét kéri, ha az objektum egyáltalán
-   * elküldve). Ez az állítás azt méri, hogy a telefon EZT ELŐBB veszi észre.
+   * A RÉSZLEGES CÍM MEGY A SZERVERNEK (Luca, task os-ugyfel-akvarium-hianyos):
+   * a helyszínen nincs mindig irányítószám, a mérés rögzítése nem állhat meg
+   * miatta. MI PIROSÍT: ha a telefon a részleges címet elutasítja, vagy
+   * elveszíti a beírt részeket.
    */
-  it("elkezdett, de befejezetlen cím elutasít", () => {
+  it("részleges cím (irányítószám nélkül) bekerül a törzsbe, nem utasít el", () => {
     const result = buildAquariumCreatePayload(
       form({
         ownershipType: "CUSTOMER",
         customerName: "Kovács Béla",
         customerCity: "Budapest",
+        customerAddressLine1: "Fő utca 1.",
       }),
     );
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.field, "customerAddress");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.deepEqual(result.payload.newCustomer?.addresses, [
+      { type: "OTHER", postalCode: "", city: "Budapest", line1: "Fő utca 1." },
+    ]);
   });
 
   it("teljes cím bekerül a törzsbe", () => {

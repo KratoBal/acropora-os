@@ -263,6 +263,22 @@ describe("buildIssueInput", () => {
       ),
       "BILLING_ISSUE_NO_ADDRESS",
     );
+    // hiányos cím: a megnevezett rész hiányzik (os-ugyfel-akvarium-hianyos)
+    for (const missing of ["postalCode", "city", "line1"] as const) {
+      const base = row().customer!;
+      assert.equal(
+        code(
+          row({
+            customer: {
+              ...base,
+              addresses: base.addresses.map((a) => ({ ...a, [missing]: " " })),
+            },
+          }),
+        ),
+        "BILLING_ISSUE_ADDRESS_INCOMPLETE",
+        missing,
+      );
+    }
     assert.equal(code(row({ lines: [] })), "BILLING_ISSUE_NO_LINES");
     assert.equal(
       code(row({ fulfillmentDate: null })),

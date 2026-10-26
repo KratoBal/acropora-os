@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from "class-validator";
 
-import { CreateCustomerDto } from "../../customers/dto/customer.dto.js";
+import { CreateAquariumCustomerDto } from "./aquarium-customer.dto.js";
 import { AquariumMeasurementTargetDto } from "./aquarium-measurement.dto.js";
 
 const OWNERSHIP_TYPES = ["OWN", "CUSTOMER"] as const;
@@ -47,8 +47,9 @@ export class CreateAquariumEquipmentDto {
  *
  * Balázs döntése szerint (acrobot brief-je, 2026-09-24): a lapon kereshető,
  * meglévő ügyfél, VAGY ugyanitt felvehető új -- ez utóbbi a MEGLÉVŐ
- * `CreateCustomerDto`-t veszi át, változatlanul, hogy a két felvitel ne
- * eshessen szét két külön validációra.
+ * `Customer`/`CustomerAddress` táblába kerül. A VALIDÁCIÓ viszont enyhébb,
+ * mint az Ügyfelek lap felviteléé: itt csak a név kötelező (Luca kérése, a
+ * helyszínen nincs mindig minden adat), lásd `aquarium-customer.dto.ts`.
  */
 export class CreateAquariumDto {
   /**
@@ -71,9 +72,9 @@ export class CreateAquariumDto {
   @IsIn(OWNERSHIP_TYPES) ownershipType!: (typeof OWNERSHIP_TYPES)[number];
   @IsString() @IsOptional() customerId?: string;
   @ValidateNested()
-  @Type(() => CreateCustomerDto)
+  @Type(() => CreateAquariumCustomerDto)
   @IsOptional()
-  newCustomer?: CreateCustomerDto;
+  newCustomer?: CreateAquariumCustomerDto;
   /** Lásd `packages/types` `CreateAquariumInput.departmentId` fejlécét. */
   @IsString() @IsOptional() departmentId?: string;
 
@@ -113,9 +114,9 @@ export class UpdateAquariumDto {
   ownershipType?: (typeof OWNERSHIP_TYPES)[number];
   @IsString() @IsOptional() customerId?: string | null;
   @ValidateNested()
-  @Type(() => CreateCustomerDto)
+  @Type(() => CreateAquariumCustomerDto)
   @IsOptional()
-  newCustomer?: CreateCustomerDto;
+  newCustomer?: CreateAquariumCustomerDto;
   /** Lásd `packages/types` `UpdateAquariumInput.departmentId` fejlécét. */
   @IsString() @IsOptional() departmentId?: string | null;
 
