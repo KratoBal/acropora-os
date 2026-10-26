@@ -43,19 +43,42 @@
  * (`{{jegy<strong>szam</strong>}}`), es akkor a level a nevet nyersen kuldi.
  * Atomkent a valtozo egy egyseg: egyben jelolheto ki, egyben torolheto, a
  * formazas az egeszre kerul.
+ *
+ * === KET PROFIL: `email` ES `full` ===
+ *
+ * Balazs dontese, 2026-10-25 22:30 UTC (Discord fo csatorna, msg
+ * 1564043552525389924): a teljes szerkeszto CSAK negy helyre kerul
+ * (termekleiras, blogcikk, ReefClub cikk, kezdolap blokk), a levelsablon a mai
+ * szukitett valtozaton marad. Az `email` az alapertelmezes, es a bovitmeny-
+ * listaja bajtra ugyanaz, mint eddig. A `full` a tisztito teljes profiljanak
+ * (`RICH_TEXT_FULL_ALLOWED_TAGS`) reszhalmazat allitja elo: tablazat, galeria,
+ * termekkartya, idezet, `https:` kep. A konzisztencia-allitas mindket profilra
+ * all a web tesztjei kozott.
  */
 import {
+  isAllowedFullImageSrc,
   isAllowedRichHref,
   RICH_TEXT_ALIGNMENTS,
+  RICH_TEXT_FULL_IMAGE_MAX_WIDTH,
   RICH_TEXT_IMAGE_MAX_WIDTH,
+  RICH_TEXT_PRODUCT_ID,
+  RICH_TEXT_TABLE_SPAN_MAX,
   RICH_TEXT_VARIABLE_NAME,
   richImageId,
   type RichTextAlignment,
+  type RichTextProfile,
 } from "@acropora/rich-text";
 import {
   EMPTY_QUOTE_RICH_TEXT,
   quoteRichTextFromEditor,
 } from "@acropora/types";
+import {
+  Table,
+  TableCell,
+  TableHeader,
+  TableRow,
+} from "@tiptap/extension-table";
+import type { DOMOutputSpec } from "@tiptap/pm/model";
 import {
   EditorContent,
   Extension,
@@ -100,7 +123,20 @@ export type RichTextToolbarItem =
   | "bulletList"
   | "orderedList"
   | "image"
-  | "cta";
+  | "cta"
+  /* A teljes profil elemei; a levelsablon profiljaban nem jelennek meg. */
+  | "blockquote"
+  | "table"
+  | "gallery"
+  | "productCard";
+
+/** Az eszkoztar elemei, amelyekhez a teljes profil sémája kell. */
+const TELJES_PROFIL_ELEMEI: ReadonlySet<RichTextToolbarItem> = new Set([
+  "blockquote",
+  "table",
+  "gallery",
+  "productCard",
+]);
 
 /**
  * A LEVELEK ESZKOZTARA (Figma 358:829, 358:1143): a sorrend a tervé. A kep gomb
@@ -121,11 +157,48 @@ export const EMAIL_TOOLBAR: readonly RichTextToolbarItem[] = [
   "cta",
 ];
 
-/** A beszurando kep. A `src` a sajat hivatkozas: `acropora-image:<id>`. */
+/**
+ * A TELJES PROFIL ESZKOZTARA: a level elemei, plusz idezet, galeria, tablazat
+ * es termekkartya. A kep, a galeria es a termekkartya gombja csak akkor
+ * latszik, ha a hivo ad hozza valasztot.
+ */
+export const FULL_TOOLBAR: readonly RichTextToolbarItem[] = [
+  "blockType",
+  "bold",
+  "italic",
+  "underline",
+  "undo",
+  "redo",
+  "link",
+  "align",
+  "bulletList",
+  "orderedList",
+  "blockquote",
+  "image",
+  "gallery",
+  "table",
+  "productCard",
+  "cta",
+];
+
+/**
+ * A beszurando kep. Az `email` profilban a `src` a sajat hivatkozas
+ * (`acropora-image:<id>`), a `full` profilban egy `https:` cim.
+ */
 export interface RichTextImage {
   readonly src: string;
   readonly alt?: string;
   readonly width?: number;
+}
+
+/**
+ * A TERMEKKARTYA: a termek azonositoja es a neve a beszuras pillanataban. A
+ * nev csak tartalek-szoveg (ha a megjelenito nem tudja feloldani az
+ * azonositot); az elonezet es a bolt az azonosito alapjan mutatja a termeket.
+ */
+export interface RichTextProductCard {
+  readonly id: string;
+  readonly name: string;
 }
 
 export interface RichTextEditorHandle {
@@ -137,6 +210,13 @@ export interface RichTextEditorHandle {
    * nem marad meg.
    */
   insertImage(image: RichTextImage): void;
+  /**
+   * Galeriat tesz a kurzor helyere (csak `full` profilban). A profil szabalyan
+   * at nem meno kepeket kihagyja; ha egy sem marad, nem tesz semmit.
+   */
+  insertGallery(images: readonly RichTextImage[]): void;
+  /** Termekkartyat tesz a kurzor helyere (csak `full` profilban). */
+  insertProductCard(card: RichTextProductCard): void;
   focus(): void;
 }
 
@@ -173,6 +253,16 @@ export interface RichTextEditorProps {
    * eloallitani. Valtozo es kep ebben a modban nincs.
    */
   readonly mode?: "html" | "quote";
+  /**
+   * `email` (alapertelmezes): a levelsablon reszhalmaza, valtozatlanul.
+   * `full`: a weboldali tartalom (termekleiras, blogcikk, ReefClub cikk,
+   * kezdolap blokk). Csak `html` modban szamit.
+   */
+  readonly profile?: RichTextProfile;
+  /** A galeria gombjanak esemenye; hianyaban a gomb nem jelenik meg. */
+  readonly onGalleryRequest?: () => void;
+  /** A termekkartya gombjanak esemenye; hianyaban a gomb nem jelenik meg. */
+  readonly onProductCardRequest?: () => void;
 }
 
 const ALAP_ESZKOZTAR: readonly RichTextToolbarItem[] = [
@@ -331,9 +421,18 @@ function valtozoCsomopont(ismert: ReadonlySet<string>) {
  * (`renderHTML`) pedig a hivatkozast. A ketto soha nem keveredik: a
  * megjelenitett cim nem kerulhet a mentett HTML-be.
  */
-function kepCsomopont(felold: {
-  current: ((src: string) => string | undefined) | undefined;
-}) {
+function kepCsomopont(
+  felold: {
+    current: ((src: string) => string | undefined) | undefined;
+  },
+  profil: RichTextProfile,
+) {
+  const teljes = profil === "full";
+  const elfogad = (src: string) =>
+    teljes ? isAllowedFullImageSrc(src) : richImageId(src) !== null;
+  const maxSzelesseg = teljes
+    ? RICH_TEXT_FULL_IMAGE_MAX_WIDTH
+    : RICH_TEXT_IMAGE_MAX_WIDTH;
   return Node.create({
     name: "templateImage",
     group: "inline",
@@ -349,9 +448,7 @@ function kepCsomopont(felold: {
           default: null,
           parseHTML: (elem) => {
             const w = Number(elem.getAttribute("width"));
-            return Number.isInteger(w) &&
-              w >= 1 &&
-              w <= RICH_TEXT_IMAGE_MAX_WIDTH
+            return Number.isInteger(w) && w >= 1 && w <= maxSzelesseg
               ? w
               : null;
           },
@@ -363,7 +460,7 @@ function kepCsomopont(felold: {
         {
           tag: "img[src]",
           getAttrs: (elem) =>
-            richImageId(elem.getAttribute("src") ?? "") ? null : false,
+            elfogad(elem.getAttribute("src") ?? "") ? null : false,
         },
       ];
     },
@@ -375,7 +472,8 @@ function kepCsomopont(felold: {
         const img = document.createElement("img");
         const src = node.attrs.src as string;
         img.dataset.src = src;
-        const cim = felold.current?.(src);
+        /* A teljes profil kepe a sajat `https:` cimerol latszik. */
+        const cim = felold.current?.(src) ?? (teljes ? src : undefined);
         if (cim) img.src = cim;
         if (node.attrs.alt) img.alt = node.attrs.alt as string;
         if (node.attrs.width) img.width = node.attrs.width as number;
@@ -385,6 +483,168 @@ function kepCsomopont(felold: {
       };
     },
   });
+}
+
+interface GaleriaKep {
+  readonly src: string;
+  readonly alt: string | null;
+}
+
+/**
+ * A GALERIA (teljes profil). HTML-alakja `<div data-gallery=""><img src
+ * alt>...</div>`: egy blokk-atom, a kepek a csomopont attributumaban allnak,
+ * nem kulon csomopontkent. Igy a galeriaba nem kerulhet szoveg, es egyben
+ * mozgathato, torolheto.
+ *
+ * A beolvasas csak a profil szabalyan atmeno kepeket veszi at; ha egy sem
+ * marad, a blokk nem lesz galeria.
+ */
+function galeriaKepei(elem: HTMLElement): GaleriaKep[] {
+  return [...elem.querySelectorAll("img")]
+    .map((img) => ({
+      src: (img.getAttribute("src") ?? "").trim(),
+      alt: img.getAttribute("alt") || null,
+    }))
+    .filter((kep) => isAllowedFullImageSrc(kep.src));
+}
+
+const galeriaCsomopont = Node.create({
+  name: "richGallery",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      images: {
+        default: [],
+        rendered: false,
+        parseHTML: (elem) => galeriaKepei(elem),
+      },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: "div[data-gallery]",
+        getAttrs: (elem) => (galeriaKepei(elem).length ? null : false),
+      },
+    ];
+  },
+  renderHTML({ node }) {
+    const kepek = node.attrs.images as readonly GaleriaKep[];
+    const gyerekek: DOMOutputSpec[] = kepek.map((kep) => [
+      "img",
+      kep.alt ? { src: kep.src, alt: kep.alt } : { src: kep.src },
+    ]);
+    return ["div", { "data-gallery": "" }, ...gyerekek];
+  },
+});
+
+/**
+ * A TERMEKKARTYA (teljes profil). HTML-alakja `<div data-product-card="<id>">
+ * nev</div>`. A nev a beszuras pillanatanak tartalek-szovege; az elonezet es a
+ * bolt az azonositobol mutatja a termeket.
+ */
+const termekKartyaCsomopont = Node.create({
+  name: "productCard",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        rendered: false,
+        parseHTML: (elem) => elem.getAttribute("data-product-card")?.trim(),
+      },
+      name: {
+        default: "",
+        rendered: false,
+        parseHTML: (elem) => (elem.textContent ?? "").trim(),
+      },
+    };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: "div[data-product-card]",
+        getAttrs: (elem) =>
+          RICH_TEXT_PRODUCT_ID.test(
+            elem.getAttribute("data-product-card")?.trim() ?? "",
+          )
+            ? null
+            : false,
+      },
+    ];
+  },
+  renderHTML({ node }) {
+    return [
+      "div",
+      { "data-product-card": node.attrs.id as string },
+      node.attrs.name as string,
+    ];
+  },
+});
+
+/**
+ * A TABLAZAT A TISZTITO ALAKJABAN. A TipTap alapbol `style` (min-width),
+ * `colgroup` es `colwidth` jelolest ir, a cellak igazitasat pedig `style`-ba
+ * teszi: a tisztito ezeket kidobna, es a kovetkezo betolteskor mas allna a
+ * szerkesztoben, mint amit a felhasznalo mentett. Ezert itt a tablazat
+ * `<table><tbody>`, a cella `<td>` vagy `<th>`, az osszevonas szamkent, a
+ * `1` jeloles nelkul (a tisztito is igy normalizal).
+ */
+const tablaCellaAttributumok = {
+  colspan: {
+    default: 1,
+    renderHTML: (attrs: Record<string, unknown>) =>
+      Number(attrs.colspan) > 1
+        ? {
+            colspan: String(
+              Math.min(Number(attrs.colspan), RICH_TEXT_TABLE_SPAN_MAX),
+            ),
+          }
+        : {},
+  },
+  rowspan: {
+    default: 1,
+    renderHTML: (attrs: Record<string, unknown>) =>
+      Number(attrs.rowspan) > 1
+        ? {
+            rowspan: String(
+              Math.min(Number(attrs.rowspan), RICH_TEXT_TABLE_SPAN_MAX),
+            ),
+          }
+        : {},
+  },
+  colwidth: { default: null, rendered: false },
+  align: { default: null, rendered: false },
+};
+
+function tablaBovitmenyek() {
+  return [
+    Table.extend({
+      addAttributes() {
+        return {};
+      },
+      renderHTML() {
+        return ["table", {}, ["tbody", 0]];
+      },
+    }).configure({ resizable: false }),
+    TableRow,
+    TableHeader.extend({
+      addAttributes() {
+        return tablaCellaAttributumok;
+      },
+    }),
+    TableCell.extend({
+      addAttributes() {
+        return tablaCellaAttributumok;
+      },
+    }),
+  ];
 }
 
 const IGAZITASOK: ReadonlySet<string> = new Set(RICH_TEXT_ALIGNMENTS);
@@ -437,6 +697,7 @@ function bovitmenyek(
   variables: readonly RichTextVariable[],
   linkValtozok: readonly string[],
   felold: { current: ((src: string) => string | undefined) | undefined },
+  profil: RichTextProfile,
 ) {
   return [
     StarterKit.configure({
@@ -456,8 +717,11 @@ function bovitmenyek(
     ...(variables.length
       ? [valtozoCsomopont(new Set(variables.map((v) => v.name)))]
       : []),
-    kepCsomopont(felold),
+    kepCsomopont(felold, profil),
     blokkJelolesek,
+    ...(profil === "full"
+      ? [galeriaCsomopont, termekKartyaCsomopont, ...tablaBovitmenyek()]
+      : []),
   ];
 }
 
@@ -774,6 +1038,75 @@ function CtaPanel(props: {
   );
 }
 
+/**
+ * A TABLAZAT PANELJE (teljes profil). Tablazaton kivul egy 3x3-as, fejlec-
+ * soros tablazatot szur be; tablazaton belul sort, oszlopot ad hozza vagy
+ * torol. Cellak osszevonasa szandekosan nincs a panelen: a kirakat telefonos
+ * nezeteben az osszevont cella a leggyakoribb tores oka.
+ */
+function TablaPanel(props: { editor: Editor; onClose: () => void }) {
+  const { editor, onClose } = props;
+  const benne = editor.isActive("table");
+  const gomb = (cimke: string, futtat: () => boolean, zar = false) => (
+    <button
+      key={cimke}
+      type="button"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        futtat();
+        if (zar) onClose();
+      }}
+      className="rounded-md px-2 py-1 text-xs text-dusk-700 hover:bg-dusk-100"
+    >
+      {cimke}
+    </button>
+  );
+  return (
+    <div
+      role="group"
+      aria-label="Táblázat"
+      className="flex flex-wrap items-center gap-1 border-b border-dusk-100 px-2 py-2"
+    >
+      {benne
+        ? [
+            gomb("Sor alá", () => editor.chain().focus().addRowAfter().run()),
+            gomb("Oszlop jobbra", () =>
+              editor.chain().focus().addColumnAfter().run(),
+            ),
+            gomb("Sor törlése", () => editor.chain().focus().deleteRow().run()),
+            gomb("Oszlop törlése", () =>
+              editor.chain().focus().deleteColumn().run(),
+            ),
+            gomb("Fejlécsor be/ki", () =>
+              editor.chain().focus().toggleHeaderRow().run(),
+            ),
+            gomb(
+              "Táblázat törlése",
+              () => editor.chain().focus().deleteTable().run(),
+              true,
+            ),
+          ]
+        : gomb(
+            "3×3-as táblázat beszúrása",
+            () =>
+              editor
+                .chain()
+                .focus()
+                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                .run(),
+            true,
+          )}
+      <button
+        type="button"
+        onClick={onClose}
+        className="rounded-md px-2 py-1 text-xs text-dusk-600 hover:bg-dusk-100"
+      >
+        Bezárás
+      </button>
+    </div>
+  );
+}
+
 type BlokkTipus = "p" | "h2" | "h3";
 
 function BlokkValaszto(props: { editor: Editor; ertek: BlokkTipus }) {
@@ -815,15 +1148,27 @@ export function RichTextEditor({
   onImageRequest,
   resolveImageSrc,
   mode = "html",
+  profile = "email",
+  onGalleryRequest,
+  onProductCardRequest,
   ...props
 }: RichTextEditorProps) {
   const ajanlat = mode === "quote";
-  /* Ajanlati modban CSAK a semaban allo gombok maradhatnak. */
+  const teljes = !ajanlat && profile === "full";
+  /*
+    Ajanlati modban CSAK a semaban allo gombok maradhatnak; a levelsablon
+    profiljaban a teljes profil elemei nem (a semajuk hianyzik, a gomb semmit
+    nem csinalna).
+  */
   const eszkoztar = ajanlat
     ? (toolbar ?? AJANLAT_ESZKOZTAR).filter((elem) =>
         AJANLAT_ESZKOZTAR.includes(elem),
       )
-    : (toolbar ?? ALAP_ESZKOZTAR);
+    : teljes
+      ? (toolbar ?? FULL_TOOLBAR)
+      : (toolbar ?? ALAP_ESZKOZTAR).filter(
+          (elem) => !TELJES_PROFIL_ELEMEI.has(elem),
+        );
   /*
     A KEP-FELOLDO REF-BEN, mint az `onChange`: a csomopont-nezet a
     szerkesztovel egyutt jon letre, es a kesobb erkezo cimeket csak igy latja.
@@ -847,8 +1192,9 @@ export function RichTextEditor({
             variables,
             linkValtozok.map((v) => v.name),
             feloldRef,
+            teljes ? "full" : "email",
           ),
-    [kulcs, ajanlat],
+    [kulcs, ajanlat, teljes],
   );
 
   /*
@@ -876,7 +1222,7 @@ export function RichTextEditor({
           role: "textbox",
           "aria-multiline": "true",
           class:
-            "min-h-48 px-3 py-2 text-sm text-dusk-900 outline-none [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-brand-700 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-dusk-200 [&_blockquote]:pl-3 [&_[data-variable]]:rounded [&_[data-variable]]:bg-brand-50 [&_[data-variable]]:px-1 [&_[data-variable]]:font-mono [&_[data-variable]]:text-xs [&_[data-variable]]:text-brand-700 [&_[data-align=center]]:text-center [&_[data-align=right]]:text-right [&_p[data-cta]]:my-4 [&_p[data-cta]_a]:inline-block [&_p[data-cta]_a]:rounded-[7px] [&_p[data-cta]_a]:bg-[#0b7a6e] [&_p[data-cta]_a]:px-6 [&_p[data-cta]_a]:py-3 [&_p[data-cta]_a]:font-semibold [&_p[data-cta]_a]:text-white [&_p[data-cta]_a]:no-underline",
+            "min-h-48 px-3 py-2 text-sm text-dusk-900 outline-none [&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_a]:text-brand-700 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-dusk-200 [&_blockquote]:pl-3 [&_[data-variable]]:rounded [&_[data-variable]]:bg-brand-50 [&_[data-variable]]:px-1 [&_[data-variable]]:font-mono [&_[data-variable]]:text-xs [&_[data-variable]]:text-brand-700 [&_[data-align=center]]:text-center [&_[data-align=right]]:text-right [&_p[data-cta]]:my-4 [&_p[data-cta]_a]:inline-block [&_p[data-cta]_a]:rounded-[7px] [&_p[data-cta]_a]:bg-[#0b7a6e] [&_p[data-cta]_a]:px-6 [&_p[data-cta]_a]:py-3 [&_p[data-cta]_a]:font-semibold [&_p[data-cta]_a]:text-white [&_p[data-cta]_a]:no-underline [&_table]:my-3 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-dusk-200 [&_td]:p-2 [&_th]:border [&_th]:border-dusk-200 [&_th]:bg-dusk-50 [&_th]:p-2 [&_th]:text-left [&_td_p]:my-0 [&_th_p]:my-0 [&_[data-gallery]]:my-3 [&_[data-gallery]]:grid [&_[data-gallery]]:grid-cols-3 [&_[data-gallery]]:gap-2 [&_[data-gallery]_img]:aspect-square [&_[data-gallery]_img]:w-full [&_[data-gallery]_img]:rounded [&_[data-gallery]_img]:object-cover [&_[data-product-card]]:my-3 [&_[data-product-card]]:rounded-lg [&_[data-product-card]]:border [&_[data-product-card]]:border-dashed [&_[data-product-card]]:border-brand-500 [&_[data-product-card]]:bg-brand-50 [&_[data-product-card]]:px-3 [&_[data-product-card]]:py-2 [&_[data-product-card]]:text-brand-700 [&_[data-product-card]]:before:content-['Termékkártya:_'] [&_.selectedCell]:bg-brand-50",
         },
       },
       onUpdate: ({ editor: e }) =>
@@ -930,10 +1276,18 @@ export function RichTextEditor({
           .run();
       },
       insertImage(image: RichTextImage) {
-        if (!editor || !richImageId(image.src)) return;
+        const elfogad = teljes
+          ? isAllowedFullImageSrc(image.src)
+          : richImageId(image.src) !== null;
+        if (!editor || !elfogad) return;
         const width =
           image.width && image.width >= 1
-            ? Math.min(Math.round(image.width), RICH_TEXT_IMAGE_MAX_WIDTH)
+            ? Math.min(
+                Math.round(image.width),
+                teljes
+                  ? RICH_TEXT_FULL_IMAGE_MAX_WIDTH
+                  : RICH_TEXT_IMAGE_MAX_WIDTH,
+              )
             : null;
         editor
           .chain()
@@ -944,11 +1298,37 @@ export function RichTextEditor({
           })
           .run();
       },
+      insertGallery(images: readonly RichTextImage[]) {
+        if (!editor || !teljes) return;
+        const kepek = images
+          .filter((kep) => isAllowedFullImageSrc(kep.src))
+          .map((kep) => ({
+            src: kep.src.trim(),
+            alt: kep.alt?.trim() || null,
+          }));
+        if (!kepek.length) return;
+        editor
+          .chain()
+          .focus()
+          .insertContent({ type: "richGallery", attrs: { images: kepek } })
+          .run();
+      },
+      insertProductCard(card: RichTextProductCard) {
+        if (!editor || !teljes || !RICH_TEXT_PRODUCT_ID.test(card.id)) return;
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: "productCard",
+            attrs: { id: card.id, name: card.name.trim() },
+          })
+          .run();
+      },
       focus() {
         editor?.commands.focus();
       },
     }),
-    [editor, variables],
+    [editor, variables, teljes],
   );
 
   const allapot = useEditorState({
@@ -963,6 +1343,10 @@ export function RichTextEditor({
       image: e?.isActive("templateImage") ?? false,
       align: e ? blokkIgazitas(e) !== null : false,
       cta: e?.isActive("paragraph", { cta: true }) ?? false,
+      blockquote: e?.isActive("blockquote") ?? false,
+      table: e?.isActive("table") ?? false,
+      gallery: e?.isActive("richGallery") ?? false,
+      productCard: e?.isActive("productCard") ?? false,
       undo: false,
       redo: false,
       blockType: false,
@@ -975,9 +1359,11 @@ export function RichTextEditor({
           : "p") as BlokkTipus,
     }),
   });
-  /* EGYSZERRE EGY PANEL: a link, az igazitas vagy a gomb. */
-  const [panel, setPanel] = useState<"link" | "align" | "cta" | null>(null);
-  const valt = (nev: "link" | "align" | "cta") =>
+  /* EGYSZERRE EGY PANEL: a link, az igazitas, a gomb vagy a tablazat. */
+  const [panel, setPanel] = useState<"link" | "align" | "cta" | "table" | null>(
+    null,
+  );
+  const valt = (nev: "link" | "align" | "cta" | "table") =>
     setPanel((nyitva) => (nyitva === nev ? null : nev));
 
   const gombok: Record<
@@ -1046,10 +1432,36 @@ export function RichTextEditor({
       jel: "🖼",
       futtat: () => onImageRequest?.(),
     },
+    blockquote: {
+      cimke: "Idézet",
+      jel: "❝",
+      futtat: (e) => e.chain().focus().toggleBlockquote().run(),
+    },
+    table: {
+      cimke: "Táblázat",
+      jel: "▦",
+      futtat: () => valt("table"),
+    },
+    gallery: {
+      cimke: "Galéria beszúrása",
+      jel: "▤",
+      futtat: () => onGalleryRequest?.(),
+    },
+    productCard: {
+      cimke: "Termékkártya beszúrása",
+      jel: "🛍",
+      futtat: () => onProductCardRequest?.(),
+    },
   };
-  /* A KEP GOMB CSAK AKKOR ALL OTT, HA VAN, AKI KEPET AD. */
+  /*
+    A KEP, A GALERIA ES A TERMEKKARTYA GOMBJA CSAK AKKOR ALL OTT, HA VAN, AKI
+    KIVALASZTJA, AMIT BE KELL SZURNI.
+  */
   const lathato = eszkoztar.filter(
-    (elem) => elem !== "image" || onImageRequest !== undefined,
+    (elem) =>
+      (elem !== "image" || onImageRequest !== undefined) &&
+      (elem !== "gallery" || onGalleryRequest !== undefined) &&
+      (elem !== "productCard" || onProductCardRequest !== undefined),
   );
 
   return (
@@ -1095,6 +1507,9 @@ export function RichTextEditor({
       ) : null}
       {panel === "align" && editor ? (
         <IgazitasPanel editor={editor} onClose={() => setPanel(null)} />
+      ) : null}
+      {panel === "table" && editor && teljes ? (
+        <TablaPanel editor={editor} onClose={() => setPanel(null)} />
       ) : null}
       {panel === "cta" && editor ? (
         <CtaPanel
