@@ -1,80 +1,99 @@
 "use client";
 import {
   Alert,
-  Button,
-  Card,
-  FormField,
-  Input,
-  PageHeader,
+  PilotButton,
+  PilotCallout,
+  PilotCard,
+  PilotDialog,
+  PilotThemeRoot,
   Skeleton,
-  Textarea,
 } from "@acropora/ui";
 import {
-  HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
   hasPermission,
   parseHomepageContentInput,
   PERMISSIONS,
+  servedNavigationFeatures,
+  type HomepageBlock,
+  type HomepageBlockKey,
+  type HomepageFooter,
   type HomepageSlide,
   type HomepageTextField,
-  servedNavigationFeatures,
 } from "@acropora/types";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   homepageContentApi,
   type HomepageContentSaved,
+  type HomepageFeaturedProduct,
 } from "@/lib/api/homepage-content";
 
+import {
+  HomepageBlockList,
+  type HomepageSelection,
+} from "./homepage-block-list";
+import {
+  allBlocksHidden,
+  blockMeta,
+  blocksForSave,
+  effectiveBlocks,
+} from "./homepage-blocks";
+import {
+  Kapcsolo,
+  TextField,
+  type ImageUploadControl,
+} from "./homepage-fields";
+import { HomepageFooterEditor } from "./homepage-footer-editor";
+import { HomepagePreview } from "./homepage-preview";
+import { previewRecord } from "./homepage-preview-protocol";
+import { HomepageSlidesEditor } from "./homepage-slides-editor";
+
 /**
- * THE WEB SHOP'S HOME PAGE (Balázs, 2026-10-20): every title, subtitle, button,
- * block text, link and image of the home page, and the hero slides.
+ * THE WEB SHOP'S HOME PAGE ADMIN, "Beállítások / Kezdőlap" (Balázs, 2026-10-20;
+ * the block editor: his brief of 2026-10-26 08:28 UTC,
+ * `exchange/kezdolap-admin-megbizas-balazs-2026-10-26.txt`; Figma 685:535).
+ *
+ * Three columns: the blocks (order and visibility), the editor of the selected
+ * block, and the live preview of the REAL test storefront.
  *
  * === WHAT A FIELD SHOWS ===
  *
- * A field has two states. NOT EDITED (the grey "Alapérték" tag): the page shows
- * the starting value from the design, which is also what the field shows here.
- * EDITED: the value is yours, even an empty one (an empty text hides its line
- * on the page). "Alapérték" puts a field back to not edited.
+ * NOT EDITED (the grey "Alapérték" tag): the page shows the design's starting
+ * value, which is also what the field shows here. EDITED: the value is yours,
+ * even an empty one. "Visszaállítás" puts a field back to not edited. "Minta
+ * adat" marks a starting value that is an INVENTED FACT (a review, an address):
+ * saving the page without touching it does NOT make the sample yours.
  *
- * The "Minta adat" tag marks a starting value that is an INVENTED FACT (a
- * review, an address, opening hours): the shop labels it as a sample until you
- * write your own value. Saving the page without touching a field does NOT
- * make the sample yours; only editing it does.
+ * === SAVE AND SHOP ARE TWO THINGS ===
  *
- * === THE SLIDES ===
- *
- * "Alap diák" leaves the slides to the page's starting slides (also labelled as
- * a sample). "Saját diák" is your list, at most five; an empty list means no
- * hero at all.
+ * "Mentés" stores here; whether the content also reaches the shop is the
+ * projection's answer, said in one of four exact sentences. A failed send never
+ * fails the save: the scheduled round tries again.
  */
-const emptySlide = (): HomepageSlide => ({
-  eyebrow: "",
-  title: "",
-  text: "",
-  cta: "",
-  ctaHref: null,
-  cta2: "",
-  cta2Href: null,
-  caption: "",
-  caption2: "",
-  imageUrl: null,
-  imageAlt: "",
-});
-
-const PROJECTION_TEXT: Record<HomepageContentSaved["projection"], string> = {
-  off: "Mentve. A webshopba küldés ebben a környezetben ki van kapcsolva.",
-  sent: "Mentve, és elküldve a webshopnak.",
-  unchanged: "Mentve. A webshop már ezt az állapotot mutatta.",
+const SAVE_TEXT: Record<HomepageContentSaved["projection"], string> = {
+  off: "Mentve (a webshopba küldés ki van kapcsolva)",
+  sent: "Mentve, és elküldve a webshopnak",
+  unchanged: "Mentve, a webshopban nem változott semmi",
   failed:
-    "Mentve, de a webshopnak küldés nem sikerült. A következő ütemezett körben újra megpróbáljuk.",
+    "Mentve, de a webshopba küldés nem sikerült: a következő ütemezett kör újrapróbálja",
 };
 
-const TYPE_HINT: Record<HomepageTextField["type"], string> = {
-  text: "",
-  link: "Webshop-cím (/store) vagy https:// cím; üresen a gomb nem jelenik meg.",
-  image: "Kép címe (https://…); üresen szürke hely áll.",
-};
+interface Draft {
+  texts: Record<string, string>;
+  ownSlides: boolean;
+  slides: HomepageSlide[];
+  blocks: HomepageBlock[];
+  footer: HomepageFooter | null;
+}
+
+const snapshot = (draft: Draft) =>
+  JSON.stringify({
+    texts: draft.texts,
+    slides: draft.ownSlides ? draft.slides : null,
+    blocks: blocksForSave(draft.blocks),
+    footer: draft.footer,
+  });
 
 export function HomepageContentEditorPage() {
   const { session } = useAuth();
@@ -82,23 +101,49 @@ export function HomepageContentEditorPage() {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
-  // a szerkesztő csak ott él, ahol a környezet a teszt-webshopba írhat (a szerver kapcsolója;
-  // élesen KI, a végpontok is 404-et adnak): a commerce-kivétel csak a tesztre szól
+  const canSwitch = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
+  );
+  // the editor lives only where the environment serves it (the server's switch;
+  // production has it OFF and the endpoints answer 404): the commerce exception
+  // is for the test shop only
   const available = servedNavigationFeatures(session?.navigation).has(
     "homepage-content",
   );
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [texts, setTexts] = useState<Record<string, string>>({});
-  const [ownSlides, setOwnSlides] = useState(false);
-  const [slides, setSlides] = useState<HomepageSlide[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [draft, setDraft] = useState<Draft>({
+    texts: {},
+    ownSlides: false,
+    slides: [],
+    blocks: effectiveBlocks(null),
+    footer: null,
+  });
+  const [savedSnapshot, setSavedSnapshot] = useState<string>("");
+  const [selected, setSelected] = useState<HomepageSelection>("hero");
   const [projectionEnabled, setProjectionEnabled] = useState(false);
   const [projectionAllowed, setProjectionAllowed] = useState(true);
-  const canSwitch = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
-  );
+  const [storefrontUrl, setStorefrontUrl] = useState<string | null>(null);
+  const [confirmHidden, setConfirmHidden] = useState(false);
+
+  const apply = (content: {
+    texts: Record<string, string>;
+    slides: HomepageSlide[] | null;
+    blocks: HomepageBlock[] | null;
+    footer: HomepageFooter | null;
+  }) => {
+    const next: Draft = {
+      texts: content.texts,
+      ownSlides: content.slides !== null,
+      slides: content.slides ?? [],
+      blocks: effectiveBlocks(content.blocks ?? null),
+      footer: content.footer ?? null,
+    };
+    setDraft(next);
+    setSavedSnapshot(snapshot(next));
+  };
 
   useEffect(() => {
     if (!canManage || !available) return;
@@ -106,11 +151,10 @@ export function HomepageContentEditorPage() {
     homepageContentApi
       .get(token, controller.signal)
       .then((content) => {
-        setTexts(content.texts);
-        setOwnSlides(content.slides !== null);
-        setSlides(content.slides ?? []);
+        apply(content);
         setProjectionEnabled(content.projectionEnabled);
         setProjectionAllowed(content.projectionAllowed);
+        setStorefrontUrl(content.storefrontUrl ?? null);
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
@@ -125,14 +169,15 @@ export function HomepageContentEditorPage() {
     return () => controller.abort();
   }, [available, canManage, token]);
 
+  const dirty = !loading && snapshot(draft) !== savedSnapshot;
+
   /** The administrator's switch: takes effect at once, it is not part of the save. */
   const switchProjection = async (enabled: boolean) => {
     setError(null);
-    setSaved(null);
     try {
       const result = await homepageContentApi.setProjection(token, enabled);
       setProjectionEnabled(result.projectionEnabled);
-      setSaved(
+      setStatus(
         result.projectionEnabled
           ? "A küldés a webshopba be van kapcsolva. A következő mentéstől (és az ütemezett körtől) a tartalom megy a boltba."
           : "A küldés a webshopba ki van kapcsolva.",
@@ -144,33 +189,49 @@ export function HomepageContentEditorPage() {
     }
   };
 
-  /** One image to the shop; the address that comes back goes into the field. */
-  const uploadImage = async (file: File): Promise<string | null> => {
-    setError(null);
-    try {
-      return (await homepageContentApi.uploadImage(token, file)).url;
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A kép feltöltése sikertelen.",
-      );
-      return null;
-    }
+  const upload: ImageUploadControl = {
+    allowed: projectionAllowed && projectionEnabled,
+    upload: async (file) => {
+      setError(null);
+      try {
+        return (await homepageContentApi.uploadImage(token, file)).url;
+      } catch (cause) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "A kép feltöltése sikertelen.",
+        );
+        return null;
+      }
+    },
   };
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, HomepageTextField[]>();
     for (const field of HOMEPAGE_TEXT_FIELDS)
       byGroup.set(field.group, [...(byGroup.get(field.group) ?? []), field]);
-    return [...byGroup.entries()];
+    return byGroup;
   }, []);
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const record = useMemo(
+    () =>
+      previewRecord({
+        texts: draft.texts,
+        slides: draft.ownSlides ? draft.slides : null,
+        blocks: blocksForSave(draft.blocks),
+        footer: draft.footer,
+      }),
+    [draft],
+  );
+
+  const save = async () => {
     setError(null);
-    setSaved(null);
+    setStatus(null);
     const parsed = parseHomepageContentInput({
-      texts,
-      slides: ownSlides ? slides : null,
+      texts: draft.texts,
+      slides: draft.ownSlides ? draft.slides : null,
+      blocks: blocksForSave(draft.blocks),
+      footer: draft.footer,
     });
     if (!parsed.ok) {
       setError(parsed.message);
@@ -179,17 +240,20 @@ export function HomepageContentEditorPage() {
     setBusy(true);
     try {
       const result = await homepageContentApi.save(token, parsed.value);
-      setTexts(result.content.texts);
-      setOwnSlides(result.content.slides !== null);
-      setSlides(result.content.slides ?? []);
+      apply(result.content);
       setProjectionEnabled(result.content.projectionEnabled);
       setProjectionAllowed(result.content.projectionAllowed);
-      setSaved(PROJECTION_TEXT[result.projection]);
+      setStatus(SAVE_TEXT[result.projection]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "A mentés sikertelen.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const requestSave = () => {
+    if (allBlocksHidden(draft.blocks)) setConfirmHidden(true);
+    else void save();
   };
 
   if (!available)
@@ -215,17 +279,113 @@ export function HomepageContentEditorPage() {
       </div>
     );
 
-  const setSlide = (index: number, patch: Partial<HomepageSlide>) =>
-    setSlides((list) =>
-      list.map((slide, i) => (i === index ? { ...slide, ...patch } : slide)),
-    );
+  const setTexts = (
+    update: (texts: Record<string, string>) => Record<string, string>,
+  ) => setDraft((d) => ({ ...d, texts: update(d.texts) }));
+  const fieldsOf = (group: string) => (
+    <div key={group} className="space-y-3">
+      <h3 className="text-sm font-semibold text-pilot-grey-900">{group}</h3>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(groups.get(group) ?? []).map((field) => (
+          <TextField
+            key={field.key}
+            field={field}
+            value={draft.texts[field.key] ?? null}
+            upload={upload}
+            onChange={(value) =>
+              setTexts((texts) => ({ ...texts, [field.key]: value }))
+            }
+            onReset={() =>
+              setTexts((texts) => {
+                const { [field.key]: _gone, ...rest } = texts;
+                return rest;
+              })
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+  const selectedBlock =
+    selected === "footer"
+      ? null
+      : (draft.blocks.find((block) => block.key === selected) ?? null);
+  const setVisible = (key: HomepageBlockKey, visible: boolean) =>
+    setDraft((d) => ({
+      ...d,
+      blocks: d.blocks.map((b) => (b.key === key ? { ...b, visible } : b)),
+    }));
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Webshop kezdőlap"
-        description="A kezdőlap szövegei, hivatkozásai, képei és a nyitó csúszka diái. A nem módosított mező a terv szövegét mutatja."
-      />
+    <PilotThemeRoot className="space-y-6">
+      <header>
+        <p className="text-xs text-pilot-grey-500">Beállítások / Kezdőlap</p>
+        <h1 className="mt-1 text-[28px] font-semibold leading-9 text-pilot-grey-900">
+          Kezdőlap
+        </h1>
+        <p className="mt-1 text-sm text-pilot-grey-600">
+          A webshop kezdőlapjának tartalma és megjelenése.
+        </p>
+      </header>
+
+      <PilotCard className="flex flex-wrap items-center gap-4 p-4">
+        <div className="min-w-60 flex-1">
+          <div className="flex items-center gap-3">
+            <Kapcsolo
+              label="Küldés a webshopba: a kezdőlap tartalma menjen a webshopba (és a képek is feltölthetők legyenek)"
+              checked={projectionEnabled}
+              disabled={!canSwitch || !projectionAllowed}
+              onChange={(enabled) => void switchProjection(enabled)}
+            />
+            <span className="text-sm font-semibold text-pilot-grey-900">
+              Küldés a webshopba
+            </span>
+          </div>
+          {!projectionAllowed ? (
+            <p className="mt-2 text-xs text-pilot-aqua-700">
+              Ebben a környezetben a webshopba küldés nincs engedélyezve.
+            </p>
+          ) : !canSwitch ? (
+            <p className="mt-2 text-xs text-pilot-grey-500">
+              A kapcsolót az adminisztrátor váltja.
+            </p>
+          ) : null}
+        </div>
+        <p
+          role="status"
+          className={`text-sm ${dirty ? "text-pilot-amber-700" : "text-pilot-grey-600"}`}
+        >
+          {dirty ? (
+            <>
+              <span aria-hidden="true">● </span>Nem mentett változás
+            </>
+          ) : (
+            (status ?? "Nincs mentett változás")
+          )}
+        </p>
+        {storefrontUrl ? (
+          <a
+            href={`${storefrontUrl}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md px-4 py-2 text-sm font-semibold text-pilot-grey-900 ring-1 ring-pilot-grey-200 hover:bg-pilot-grey-50"
+          >
+            Előnézet új lapon
+          </a>
+        ) : (
+          <PilotButton
+            variant="secondary"
+            disabled
+            title="A teszt kirakat címe ebben a környezetben nincs beállítva."
+          >
+            Előnézet új lapon
+          </PilotButton>
+        )}
+        <PilotButton disabled={busy} onClick={requestSave}>
+          Mentés
+        </PilotButton>
+      </PilotCard>
+
       {error ? (
         <Alert
           variant="danger"
@@ -233,310 +393,190 @@ export function HomepageContentEditorPage() {
           description={error}
         />
       ) : null}
-      {saved ? <Alert variant="info" title={saved} /> : null}
-      <Card className="space-y-2 p-6">
-        <h2 className="font-semibold">Küldés a webshopba</h2>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={projectionEnabled}
-            disabled={!canSwitch || !projectionAllowed}
-            onChange={(event) => void switchProjection(event.target.checked)}
-          />
-          A kezdőlap tartalma menjen a webshopba (és a képek is feltölthetők
-          legyenek)
-        </label>
-        <p className="text-xs text-dusk-600">
-          Kikapcsolva a mentés csak itt tárolódik, a webshop a terv szövegeit
-          mutatja. {canSwitch ? "" : "A kapcsolót az adminisztrátor váltja."}
-        </p>
-        {!projectionAllowed ? (
-          <Alert
-            variant="info"
-            title="Ebben a környezetben a webshopba küldés nincs engedélyezve"
-            description="A kapcsoló itt hatástalan: a küldéshez a környezet engedélye is kell (MEDUSA_PROJECT_HOMEPAGE_CONTENT). A tartalom mentése így is működik."
-          />
-        ) : null}
-      </Card>
-      <form className="space-y-6" onSubmit={submit}>
-        <Card className="space-y-4 p-6">
-          <h2 className="font-semibold">Nyitó csúszka</h2>
-          <fieldset className="space-y-2 text-sm">
-            <legend className="sr-only">Csúszka diái</legend>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="slides-mode"
-                checked={!ownSlides}
-                onChange={() => setOwnSlides(false)}
-              />
-              Alap diák (a terv három diája, minta adatként jelölve)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="radio"
-                name="slides-mode"
-                checked={ownSlides}
-                onChange={() => setOwnSlides(true)}
-              />
-              Saját diák (legfeljebb {HOMEPAGE_LIMITS.slides}; üres lista =
-              nincs csúszka)
-            </label>
-          </fieldset>
-          {ownSlides ? (
-            <div className="space-y-4">
-              {slides.map((slide, index) => (
-                <SlideFields
-                  key={index}
-                  index={index}
-                  slide={slide}
-                  onUpload={uploadImage}
-                  onChange={(patch) => setSlide(index, patch)}
-                  onRemove={() =>
-                    setSlides((list) => list.filter((_, i) => i !== index))
-                  }
-                />
-              ))}
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={slides.length >= HOMEPAGE_LIMITS.slides}
-                onClick={() => setSlides((list) => [...list, emptySlide()])}
-              >
-                Dia hozzáadása
-              </Button>
-            </div>
-          ) : null}
-        </Card>
-        {groups.map(([group, fields]) => (
-          <Card key={group} className="space-y-4 p-6">
-            <h2 className="font-semibold">{group}</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {fields.map((field) => (
-                <TextField
-                  key={field.key}
-                  field={field}
-                  value={texts[field.key] ?? null}
-                  onChange={(value) =>
-                    setTexts((current) => ({ ...current, [field.key]: value }))
-                  }
-                  onUpload={uploadImage}
-                  onReset={() =>
-                    setTexts((current) => {
-                      const { [field.key]: _gone, ...rest } = current;
-                      return rest;
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </Card>
-        ))}
-        <Card className="flex justify-end p-6">
-          <Button type="submit" disabled={busy}>
-            Mentés
-          </Button>
-        </Card>
-      </form>
-    </div>
-  );
-}
+      {!dirty && status ? <Alert variant="info" title={status} /> : null}
 
-function TextField({
-  field,
-  value,
-  onChange,
-  onReset,
-  onUpload,
-}: {
-  field: HomepageTextField;
-  /** `null`: not edited, the starting value shows. */
-  value: string | null;
-  onChange: (value: string) => void;
-  onReset: () => void;
-  onUpload: (file: File) => Promise<string | null>;
-}) {
-  const edited = value !== null;
-  const shown = edited ? value : field.default;
-  const long =
-    field.type === "text" &&
-    (field.default.length > 70 || field.default.includes("\n"));
-  const control = long ? (
-    <Textarea
-      aria-label={`${field.group}: ${field.label}`}
-      value={shown}
-      maxLength={HOMEPAGE_LIMITS.textValue}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  ) : (
-    <Input
-      aria-label={`${field.group}: ${field.label}`}
-      value={shown}
-      maxLength={HOMEPAGE_LIMITS.textValue}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={field.type === "image" ? "https://…" : undefined}
-    />
-  );
-  return (
-    <div className={long ? "sm:col-span-2" : undefined}>
-      <FormField
-        label={field.label}
-        description={TYPE_HINT[field.type] || undefined}
-      >
-        {control}
-      </FormField>
-      {field.type === "image" ? (
-        <ImageUpload
-          label={`${field.group}: ${field.label}: feltöltés`}
-          onUpload={onUpload}
-          onUploaded={onChange}
+      <div className="grid items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)_minmax(0,380px)]">
+        <HomepageBlockList
+          blocks={draft.blocks}
+          selected={selected}
+          onSelect={setSelected}
+          onChange={(blocks) => setDraft((d) => ({ ...d, blocks }))}
         />
-      ) : null}
-      <div className="mt-1 flex items-center gap-3 text-xs text-dusk-600">
-        {edited ? (
-          <>
-            <span>Módosítva</span>
-            <button type="button" className="underline" onClick={onReset}>
-              Alapérték
-            </button>
-          </>
-        ) : (
-          <>
-            <span>Alapérték</span>
-            {field.sample ? (
-              <span className="rounded border px-1 font-semibold">
-                Minta adat
+
+        <PilotCard className="space-y-6 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-pilot-grey-900">
+              {selected === "footer" ? "Lábléc" : blockMeta(selected).label}
+            </h2>
+            {selectedBlock ? (
+              <span className="flex items-center gap-2 text-xs text-pilot-grey-600">
+                Látszik
+                <Kapcsolo
+                  label={`${blockMeta(selectedBlock.key).label}: látszik (szerkesztő)`}
+                  checked={selectedBlock.visible}
+                  onChange={(visible) => setVisible(selectedBlock.key, visible)}
+                />
               </span>
             ) : null}
-          </>
-        )}
+          </div>
+          {selected === "footer" ? (
+            <HomepageFooterEditor
+              footer={draft.footer}
+              onChange={(footer) => setDraft((d) => ({ ...d, footer }))}
+              onOpenBoltunk={() => setSelected("boltunk")}
+            />
+          ) : selected === "hero" ? (
+            <>
+              <HomepageSlidesEditor
+                own={draft.ownSlides}
+                slides={draft.slides}
+                upload={upload}
+                onOwnChange={(ownSlides) =>
+                  setDraft((d) => ({ ...d, ownSlides }))
+                }
+                onSlidesChange={(slides) => setDraft((d) => ({ ...d, slides }))}
+              />
+              {fieldsOf("Hero")}
+            </>
+          ) : selected === "kezdo-es-halado" ? (
+            <TabbedGroups
+              groups={blockMeta(selected).groups}
+              render={fieldsOf}
+            />
+          ) : selected === "egyedi-korallok" ? (
+            <FeaturedList token={token} />
+          ) : (
+            blockMeta(selected).groups.map(fieldsOf)
+          )}
+        </PilotCard>
+
+        <HomepagePreview
+          storefrontUrl={storefrontUrl}
+          record={record}
+          selected={selected === "footer" ? null : selected}
+          onSelect={setSelected}
+        />
       </div>
-    </div>
+
+      {confirmHidden ? (
+        <PilotDialog open onClose={() => setConfirmHidden(false)}>
+          <div
+            role="alertdialog"
+            aria-labelledby="minden-rejtve"
+            className="p-5"
+          >
+            <h2
+              id="minden-rejtve"
+              className="text-sm font-semibold text-pilot-amber-700"
+            >
+              Minden blokk rejtve van. Biztosan így mented?
+            </h2>
+            <p className="mt-2 text-sm text-pilot-grey-600">
+              A kirakat kezdőlapján csak a fejléc és a lábléc marad.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <PilotButton
+                variant="secondary"
+                onClick={() => setConfirmHidden(false)}
+              >
+                Mégse
+              </PilotButton>
+              <PilotButton
+                onClick={() => {
+                  setConfirmHidden(false);
+                  void save();
+                }}
+              >
+                Mentés így
+              </PilotButton>
+            </div>
+          </div>
+        </PilotDialog>
+      ) : null}
+    </PilotThemeRoot>
   );
 }
 
-function SlideFields({
-  index,
-  slide,
-  onChange,
-  onRemove,
-  onUpload,
+/** "Kezdőknek és tapasztaltaknak": ONE storefront block, one tab per group. */
+function TabbedGroups({
+  groups,
+  render,
 }: {
-  index: number;
-  slide: HomepageSlide;
-  onChange: (patch: Partial<HomepageSlide>) => void;
-  onRemove: () => void;
-  onUpload: (file: File) => Promise<string | null>;
+  groups: readonly string[];
+  render: (group: string) => ReactNode;
 }) {
-  const n = index + 1;
-  const text = (
-    label: string,
-    key: keyof HomepageSlide,
-    max: number,
-    long = false,
-  ) => (
-    <FormField
-      label={`${n}. dia: ${label}`}
-      className={long ? "sm:col-span-2" : undefined}
-    >
-      {long ? (
-        <Textarea
-          aria-label={`${n}. dia: ${label}`}
-          value={(slide[key] as string | null) ?? ""}
-          maxLength={max}
-          onChange={(event) => onChange({ [key]: event.target.value })}
-        />
-      ) : (
-        <Input
-          aria-label={`${n}. dia: ${label}`}
-          value={(slide[key] as string | null) ?? ""}
-          maxLength={max}
-          onChange={(event) => onChange({ [key]: event.target.value })}
-        />
-      )}
-    </FormField>
-  );
-  const address = (
-    label: string,
-    key: "ctaHref" | "cta2Href" | "imageUrl",
-    max: number,
-  ) => (
-    <FormField label={`${n}. dia: ${label}`}>
-      <Input
-        aria-label={`${n}. dia: ${label}`}
-        value={slide[key] ?? ""}
-        maxLength={max}
-        onChange={(event) => onChange({ [key]: event.target.value || null })}
-      />
-    </FormField>
-  );
+  const [active, setActive] = useState(groups[0] ?? "");
   return (
-    <div className="space-y-3 rounded border p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{n}. dia</h3>
-        <Button type="button" variant="secondary" onClick={onRemove}>
-          Dia törlése
-        </Button>
+    <div className="space-y-4">
+      <div role="tablist" aria-label="Szerkesztőfülek" className="flex gap-2">
+        {groups.map((group) => (
+          <button
+            key={group}
+            type="button"
+            role="tab"
+            aria-selected={active === group}
+            onClick={() => setActive(group)}
+            className={`rounded-md px-4 py-2 text-sm font-semibold ${
+              active === group
+                ? "bg-pilot-aqua-50 text-pilot-aqua-700"
+                : "bg-pilot-grey-100 text-pilot-grey-600"
+            }`}
+          >
+            {group}
+          </button>
+        ))}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {text("felirat", "eyebrow", HOMEPAGE_LIMITS.eyebrow)}
-        {text("főcím", "title", HOMEPAGE_LIMITS.title)}
-        {text("szöveg", "text", HOMEPAGE_LIMITS.slideText, true)}
-        {text("első gomb felirata", "cta", HOMEPAGE_LIMITS.button)}
-        {address("első gomb célja", "ctaHref", HOMEPAGE_LIMITS.href)}
-        {text("második gomb felirata", "cta2", HOMEPAGE_LIMITS.button)}
-        {address("második gomb célja", "cta2Href", HOMEPAGE_LIMITS.href)}
-        {text("képaláírás", "caption", HOMEPAGE_LIMITS.caption)}
-        {text("képaláírás, második sor", "caption2", HOMEPAGE_LIMITS.caption)}
-        {address("kép címe", "imageUrl", HOMEPAGE_LIMITS.address)}
-        <ImageUpload
-          label={`${n}. dia: kép feltöltése`}
-          onUpload={onUpload}
-          onUploaded={(url) => onChange({ imageUrl: url })}
-        />
-        {text("kép leírása", "imageAlt", HOMEPAGE_LIMITS.imageAlt)}
-      </div>
+      {render(active)}
     </div>
   );
 }
 
 /**
- * A FILE PICKER FOR AN IMAGE: JPEG, PNG or WebP, which the server also checks
- * from the bytes. The uploaded image's address goes into the field; a failed
- * upload says so in the page's error and leaves the field as it was.
+ * "Egyedi korallok": the products marked for the band, in their order. The
+ * marking itself is on the product page today; search, order and removal come
+ * here in the next change (2b-2).
  */
-function ImageUpload({
-  label,
-  onUpload,
-  onUploaded,
-}: {
-  label: string;
-  onUpload: (file: File) => Promise<string | null>;
-  onUploaded: (url: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
+function FeaturedList({ token }: { token: string }) {
+  const [list, setList] = useState<HomepageFeaturedProduct[] | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    homepageContentApi
+      .featured(token, controller.signal)
+      .then(setList)
+      .catch(() => setList([]));
+    return () => controller.abort();
+  }, [token]);
   return (
-    <label className="mt-1 block text-xs text-dusk-600">
-      {busy ? "Feltöltés..." : "Kép feltöltése"}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        aria-label={label}
-        disabled={busy}
-        className="ml-2"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          setBusy(true);
-          try {
-            const url = await onUpload(file);
-            if (url) onUploaded(url);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      />
-    </label>
+    <div className="space-y-3">
+      <p className="text-sm text-pilot-grey-600">
+        Legfeljebb 12 termék; az első a „Nagy kártya”.
+      </p>
+      {list === null ? (
+        <Skeleton className="h-20" />
+      ) : list.length === 0 ? (
+        <PilotCallout
+          tone="aqua"
+          title="Nincs kijelölt termék."
+          description="A termékeket ma a termék lapján jelölöd a kezdőlapra."
+        />
+      ) : (
+        <ol className="space-y-2">
+          {list.map((product, index) => (
+            <li
+              key={product.productId}
+              className="flex items-center gap-3 rounded-lg bg-pilot-grey-50 p-3 text-sm ring-1 ring-pilot-grey-200"
+            >
+              <span className="font-semibold text-pilot-aqua-700">
+                {index + 1}.
+              </span>
+              <span className="flex-1 text-pilot-grey-900">{product.name}</span>
+              {index === 0 ? (
+                <span className="text-xs text-pilot-grey-500">Nagy kártya</span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

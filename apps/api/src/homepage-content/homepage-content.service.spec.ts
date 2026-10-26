@@ -10,6 +10,7 @@ import type { HomepageContentInput } from "@acropora/types";
 
 import {
   HOMEPAGE_FEATURED_MAX,
+  homepageStorefrontUrl,
   HomepageContentService,
   toHomepageContent,
   type HomepageContentRow,
@@ -116,6 +117,7 @@ describe("HomepageContentService", () => {
       blocks: null,
       footer: null,
       imageHosts: [],
+      storefrontUrl: null,
       updatedAt: null,
       projectionEnabled: false,
       projectionAllowed: true,
@@ -294,7 +296,7 @@ describe("HomepageContentService: blocks and footer", () => {
     assert.equal(reset.content.blocks, null);
   });
 
-  it("stores the footer intro through the full-profile sanitizer", async () => {
+  it("stores the footer intro through the sanitizer: script, iframe and on* go", async () => {
     const { service, saved } = setup(async () => "sent");
     const out = await service.save(
       {
@@ -306,14 +308,14 @@ describe("HomepageContentService: blocks and footer", () => {
       },
       "u-1",
     );
-    const clean =
-      "<p>Zátony</p><table><tbody><tr><td><p>H-P</p></td></tr></tbody></table>";
+    // the short profile: the table goes, its paragraph stays
+    const clean = "<p>Zátony</p><p>H-P</p>";
     assert.equal(saved[0]?.input.footer?.intro, clean);
     assert.equal(out.content.footer?.intro, clean);
     assert.equal(out.content.footer?.columns[0]?.links[0]?.href, "/store");
   });
 
-  it("keeps only the environment's image hosts in the footer intro, and tells the editor the list", async () => {
+  it("stores the footer intro in the short profile: no image, no table; the editor still gets the host list", async () => {
     const { service } = setup(async () => "sent", {
       env: {
         ...ALLOWED,
@@ -326,30 +328,16 @@ describe("HomepageContentService: blocks and footer", () => {
         texts: {},
         slides: null,
         footer: footer(
-          '<p><img src="https://static.acropora.hu/a.jpg"><img src="https://tracker.example/p.gif"></p>',
+          '<p><strong>a</strong> <a href="/store">bolt</a><img src="https://static.acropora.hu/a.jpg"></p><table><tbody><tr><td>t</td></tr></tbody></table><h2>c</h2>',
         ),
       },
       "u-1",
     );
     assert.equal(
       out.content.footer?.intro,
-      '<p><img src="https://static.acropora.hu/a.jpg"></p>',
+      '<p><strong>a</strong> <a href="/store">bolt</a></p>tc',
     );
     assert.deepEqual(out.content.imageHosts, ["static.acropora.hu"]);
-  });
-
-  it("without the variable no footer image is stored", async () => {
-    const { service } = setup(async () => "sent");
-    const out = await service.save(
-      {
-        texts: {},
-        slides: null,
-        footer: footer('<p>a<img src="https://static.acropora.hu/a.jpg"></p>'),
-      },
-      "u-1",
-    );
-    assert.equal(out.content.footer?.intro, "<p>a</p>");
-    assert.deepEqual(out.content.imageHosts, []);
   });
 
   it("measures the intro limit after cleaning, so a stored footer always reads back", async () => {
@@ -575,5 +563,50 @@ describe("HomepageContentService featured marker", () => {
     await service.setFeatured("m12", true, "u");
     assert.equal((await service.featured()).length, 12);
     assert.equal(HOMEPAGE_FEATURED_MAX, 12);
+  });
+});
+
+/*
+  THE TEST STOREFRONT'S ADDRESS. What turns these red: the address handed to
+  the editor where the environment does not allow writing to the shop (the
+  production OS would preview against the live shop), an http or malformed
+  address passed on, a path kept (the preview needs the origin only).
+*/
+describe("homepageStorefrontUrl", () => {
+  it("is the https origin, only where writing to the shop is allowed", () => {
+    assert.equal(
+      homepageStorefrontUrl({
+        ...ALLOWED,
+        HOMEPAGE_STOREFRONT_URL: " https://teszt.acropora.hu/hu/store ",
+      }),
+      "https://teszt.acropora.hu",
+    );
+    assert.equal(
+      homepageStorefrontUrl({
+        HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu",
+      }),
+      null,
+    );
+    for (const bad of [
+      "http://teszt.acropora.hu",
+      "teszt.acropora.hu",
+      "",
+      "javascript:alert(1)",
+    ])
+      assert.equal(
+        homepageStorefrontUrl({ ...ALLOWED, HOMEPAGE_STOREFRONT_URL: bad }),
+        null,
+        bad,
+      );
+  });
+
+  it("reaches the editor with the content", async () => {
+    const { service } = setup(async () => "sent", {
+      env: { ...ALLOWED, HOMEPAGE_STOREFRONT_URL: "https://teszt.acropora.hu" },
+    });
+    assert.equal(
+      (await service.get()).storefrontUrl,
+      "https://teszt.acropora.hu",
+    );
   });
 });
