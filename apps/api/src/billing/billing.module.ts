@@ -15,6 +15,7 @@ import { BillingDocumentStornoPdfService } from "./billing-document-storno-pdf.s
 import { BillingDocumentStornoService } from "./billing-document-storno.service.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
+import { BillingDocumentPreviewService } from "./billing-document-preview.service.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
 import { BillingDocumentPdfService } from "./billing-document-pdf.service.js";
 import { BillingDocumentReadController } from "./billing-document-read.controller.js";
@@ -54,6 +55,7 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     BillingDocumentsService,
     BillingDocumentIssueRepository,
     BillingDocumentIssueService,
+    BillingDocumentPreviewService,
     BillingDocumentStornoService,
     BillingDocumentStornoPdfService,
     BillingDocumentStockRepository,

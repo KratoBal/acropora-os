@@ -330,6 +330,22 @@ export const billingDocumentsApi = {
       },
     );
   },
+  /**
+   * AZ ELŐNÉZET KIÁLLÍTÁS ELŐTT: a Számlázz.hu előnézeti PDF-je a TÁROLT
+   * vázlatból. Nem állít ki, nem foglal számot, nem tárol PDF-et. Az útvonal
+   * literálként áll a `fetch` hívásban (útvonal-őr).
+   */
+  async preview(token: string, id: string): Promise<Blob> {
+    const response = await fetch(
+      `${API_PREFIX}/billing/documents/${encodeURIComponent(id)}/preview`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: apiAuthHeaders(token, "POST"),
+      },
+    );
+    return pdfBlob(response, "Az előnézet nem készíthető el.");
+  },
   update(token: string, id: string, input: BillingDocumentDraftInput) {
     return apiRequest<BillingDocumentDetail>(
       `/billing/documents/${encodeURIComponent(id)}`,

@@ -57,7 +57,13 @@ export class StubSzamlazzAgentClient
 {
   constructor(private readonly now: () => Date = () => new Date()) {}
 
-  async generateInvoice(): Promise<SzamlazzAgentResponse> {
+  async generateInvoice(xml?: string): Promise<SzamlazzAgentResponse> {
+    // az előnézet-kérés (`elonezetpdf`) számot nem kap, és a lapja MINTA
+    if (xml?.includes("<elonezetpdf>true</elonezetpdf>"))
+      return {
+        successful: true,
+        pdf: stubPdf("MINTA, NEM VALODI SZAMLA (elonezet, teszt-szerver)"),
+      };
     const number = `TESZT-${this.now().getFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
     return {
       successful: true,
