@@ -5,6 +5,7 @@ import type {
   ArticleBodyInput,
   ArticleDetail,
   ArticleRevisionSummary,
+  ArticleTaxonOption,
 } from "@acropora/types";
 
 import type { ContentState } from "./content-state.js";
@@ -218,6 +219,42 @@ export class ArticleRepository {
   async countProducts(ids: readonly string[]): Promise<number> {
     if (!ids.length) return 0;
     return prisma.product.count({ where: { id: { in: [...ids] } } });
+  }
+
+  /** Whether this item is an article whose body may change now. */
+  async editable(contentId: string): Promise<boolean> {
+    const item = await prisma.contentItem.findUnique({
+      where: { id: contentId },
+      select: { channel: true, state: true },
+    });
+    return (
+      item?.channel === "ARTICLE" &&
+      ARTICLE_EDITABLE_STATES.includes(item.state as ContentState)
+    );
+  }
+
+  /**
+   * The TAXON entries an article can link to, one per key: the latest version
+   * of each (a key's forms can change between versions), ordered by key.
+   */
+  async taxonOptions(): Promise<ArticleTaxonOption[]> {
+    const rows = await prisma.knowledgeVocabularyEntry.findMany({
+      where: { kind: "TAXON" },
+      select: { key: true, rank: true, forms: true, version: true },
+      orderBy: [{ key: "asc" }, { version: "desc" }],
+    });
+    const seen = new Set<string>();
+    const options: ArticleTaxonOption[] = [];
+    for (const row of rows) {
+      if (seen.has(row.key)) continue;
+      seen.add(row.key);
+      options.push({
+        key: row.key,
+        rank: row.rank,
+        label: row.forms.find((form) => form.trim())?.trim() ?? row.key,
+      });
+    }
+    return options;
   }
 
   /** Which of these keys are TAXON keys of the knowledge base vocabulary. */

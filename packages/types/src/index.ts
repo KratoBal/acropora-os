@@ -1584,7 +1584,9 @@ export type {
   ArticleBodyParse,
   ArticleChannel,
   ArticleDetail,
+  ArticleEditorData,
   ArticleRevisionSummary,
+  ArticleTaxonOption,
 } from "./article.js";
 export { parseSeoLandingInput, SEO_LANDING_LIMITS } from "./seo-landing.js";
 export type {

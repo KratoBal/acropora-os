@@ -104,10 +104,17 @@ export function WebContentPreview(props: {
   readonly cards?: ReadonlyMap<string, PreviewProductCard>;
   readonly emptyText?: string;
   readonly className?: string;
+  /** The save's image hosts; given, the preview shows no other image. */
+  readonly imageHosts?: readonly string[];
 }) {
   const kesz = useMemo(
-    () => renderWebContentHtml(props.html, props.cards ?? new Map()),
-    [props.html, props.cards],
+    () =>
+      renderWebContentHtml(
+        props.html,
+        props.cards ?? new Map(),
+        props.imageHosts,
+      ),
+    [props.html, props.cards, props.imageHosts],
   );
   const ures =
     !kesz.replace(/<[^>]*>/g, "").trim() &&

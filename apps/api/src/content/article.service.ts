@@ -10,6 +10,7 @@ import {
   ARTICLE_LIMITS,
   parseArticleBodyInput,
   type ArticleDetail,
+  type ArticleEditorData,
 } from "@acropora/types";
 
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
@@ -32,8 +33,19 @@ export class ArticleService {
     private readonly environment: NodeJS.ProcessEnv,
   ) {}
 
-  async get(contentId: string): Promise<{ article: ArticleDetail | null }> {
-    return { article: await this.articles.detail(contentId) };
+  /** The body, with the image hosts and the taxa its editor may use. */
+  async get(contentId: string): Promise<ArticleEditorData> {
+    const [article, editable, taxonOptions] = await Promise.all([
+      this.articles.detail(contentId),
+      this.articles.editable(contentId),
+      this.articles.taxonOptions(),
+    ]);
+    return {
+      article,
+      editable,
+      imageHosts: richTextImageHosts(this.environment),
+      taxonOptions,
+    };
   }
 
   async save(

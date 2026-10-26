@@ -29,6 +29,10 @@ function setup(
   const saved: ArticleBodyInput[] = [];
   const repository = {
     detail: async () => null,
+    editable: async () => true,
+    taxonOptions: async () => [
+      { key: "ACROPORA", rank: "GENUS", label: "Acropora" },
+    ],
     countProducts: async (ids: readonly string[]) =>
       known.products ?? ids.length,
     knownTaxonKeys: async (keys: readonly string[]) =>
@@ -56,6 +60,33 @@ const body = (over: Record<string, unknown> = {}) => ({
   productIds: ["clx0abc123"],
   taxonKeys: ["ACROPORA"],
   ...over,
+});
+
+/*
+  WHAT THE EDITOR LOADS: the same image host list the save cleans with (a
+  malformed entry dropped), and the taxon options, so the editor needs no
+  knowledge.view. What turns this red: the editor offered a different list
+  than the save uses, or the taxa missing from the answer.
+*/
+describe("ArticleService.get", () => {
+  it("returns the body with the save's image hosts and the taxon options", async () => {
+    const repository = {
+      detail: async () => null,
+      editable: async () => true,
+      taxonOptions: async () => [
+        { key: "ACROPORA", rank: "GENUS", label: "Acropora" },
+      ],
+    } as unknown as ArticleRepository;
+    const service = new ArticleService(repository, {
+      RICH_TEXT_IMAGE_HOSTS: "static.acropora.hu, nem hoszt",
+    });
+    assert.deepEqual(await service.get("c1"), {
+      article: null,
+      editable: true,
+      imageHosts: ["static.acropora.hu"],
+      taxonOptions: [{ key: "ACROPORA", rank: "GENUS", label: "Acropora" }],
+    });
+  });
 });
 
 describe("ArticleService.save", () => {

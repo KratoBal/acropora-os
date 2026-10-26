@@ -1,4 +1,7 @@
 import type {
+  ArticleBodyInput,
+  ArticleDetail,
+  ArticleEditorData,
   ContentChannel,
   ContentDetail,
   ContentListResponse,
@@ -164,6 +167,27 @@ export const contentApi = {
       `/content/${encodeURIComponent(id)}/comments`,
       token,
       { method: "POST", body: JSON.stringify({ body }) },
+    );
+  },
+
+  /**
+   * THE ARTICLE BODY with what its editor may use: the image hosts the save
+   * cleans with, the taxa, and whether the body may change now.
+   */
+  article(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<ArticleEditorData>(
+      `/content/${encodeURIComponent(id)}/article`,
+      token,
+      { signal },
+    );
+  },
+
+  /** Saving the body: the server cleans it, checks the links and the state. */
+  saveArticle(token: string, id: string, input: ArticleBodyInput) {
+    return apiRequest<{ article: ArticleDetail | null }>(
+      `/content/${encodeURIComponent(id)}/article`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
     );
   },
 };

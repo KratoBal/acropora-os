@@ -71,6 +71,33 @@ export interface ArticleDetail extends Omit<ArticleBodyInput, "productIds"> {
   updatedAt: string;
 }
 
+/** A taxon the article can be linked to, from the knowledge base vocabulary. */
+export interface ArticleTaxonOption {
+  key: string;
+  /** GROUP | GENUS | SPECIES, or `null` where the vocabulary does not say. */
+  rank: string | null;
+  /** The first recognised form, or the key where there is none. */
+  label: string;
+}
+
+/**
+ * WHAT THE ARTICLE EDITOR LOADS (GET /content/:id/article). The image hosts
+ * are the list the save cleans with (`RICH_TEXT_IMAGE_HOSTS`), so the editor
+ * offers and the preview shows only images the save keeps. The taxon options
+ * come with it, because the vocabulary's own endpoint needs `knowledge.view`,
+ * which a content editor need not hold.
+ */
+export interface ArticleEditorData {
+  article: ArticleDetail | null;
+  /**
+   * Whether the body may change now: the item is an article in the author's or
+   * the reviewer's state. The server's own rule, so the editor keeps no list.
+   */
+  editable: boolean;
+  imageHosts: string[];
+  taxonOptions: ArticleTaxonOption[];
+}
+
 export type ArticleBodyParse =
   { ok: true; value: ArticleBodyInput } | { ok: false; message: string };
 
