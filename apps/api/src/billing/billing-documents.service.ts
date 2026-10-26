@@ -450,7 +450,12 @@ function addressOf(row: BillingDocumentRow): string | null {
     addresses[0];
   if (!chosen) return null;
   const street = [chosen.line1, chosen.line2].filter(Boolean).join(" ");
-  return `${chosen.postalCode} ${chosen.city}, ${street}`;
+  // hiányos cím (lásd az akvárium-ügyfél felvitelét): nincs árva szóköz vagy vessző
+  return (
+    [`${chosen.postalCode} ${chosen.city}`.trim(), street]
+      .filter(Boolean)
+      .join(", ") || null
+  );
 }
 
 /** A tárolt sor a drótra. A pénz tizedes szöveg, a séma skáláján. */

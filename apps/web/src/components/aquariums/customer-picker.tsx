@@ -148,8 +148,18 @@ export function CustomerPicker({
         )
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          <FormField label="Név">
+          {/* Luca (os-ugyfel-akvarium-hianyos): a helyszínen nincs mindig minden adat */}
+          <p
+            className="text-xs text-dusk-500 sm:col-span-2"
+            data-testid="uj-ugyfel-suggo"
+          >
+            Csak a név kötelező. A telefonszámot, az e-mail címet és a címet (az
+            irányítószámot is) később is pótolhatod; a számla kiállításakor a
+            hiányos cím jelezve lesz.
+          </p>
+          <FormField label="Név" htmlFor="uj-ugyfel-nev">
             <Input
+              id="uj-ugyfel-nev"
               value={selection.newCustomer?.displayName ?? ""}
               onChange={(event) =>
                 onChange({
@@ -161,8 +171,9 @@ export function CustomerPicker({
               }
             />
           </FormField>
-          <FormField label="Telefonszám">
+          <FormField label="Telefonszám" htmlFor="uj-ugyfel-telefon">
             <Input
+              id="uj-ugyfel-telefon"
               value={selection.newCustomer?.phone ?? ""}
               onChange={(event) =>
                 onChange({
@@ -174,8 +185,9 @@ export function CustomerPicker({
               }
             />
           </FormField>
-          <FormField label="E-mail cím">
+          <FormField label="E-mail cím" htmlFor="uj-ugyfel-email">
             <Input
+              id="uj-ugyfel-email"
               type="email"
               value={selection.newCustomer?.email ?? ""}
               onChange={(event) =>
@@ -188,8 +200,9 @@ export function CustomerPicker({
               }
             />
           </FormField>
-          <FormField label="Irányítószám">
+          <FormField label="Irányítószám" htmlFor="uj-ugyfel-iranyitoszam">
             <Input
+              id="uj-ugyfel-iranyitoszam"
               value={selection.newCustomer?.addresses?.[0]?.postalCode ?? ""}
               onChange={(event) =>
                 onChange({
@@ -207,8 +220,9 @@ export function CustomerPicker({
               }
             />
           </FormField>
-          <FormField label="Város">
+          <FormField label="Város" htmlFor="uj-ugyfel-varos">
             <Input
+              id="uj-ugyfel-varos"
               value={selection.newCustomer?.addresses?.[0]?.city ?? ""}
               onChange={(event) =>
                 onChange({
@@ -226,8 +240,13 @@ export function CustomerPicker({
               }
             />
           </FormField>
-          <FormField label="Cím" className="sm:col-span-2">
+          <FormField
+            label="Cím"
+            htmlFor="uj-ugyfel-utca"
+            className="sm:col-span-2"
+          >
             <Input
+              id="uj-ugyfel-utca"
               value={selection.newCustomer?.addresses?.[0]?.line1 ?? ""}
               onChange={(event) =>
                 onChange({

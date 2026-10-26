@@ -291,14 +291,13 @@ export function buildAquariumCreatePayload(
     const postalCode = form.customerPostalCode.trim();
     const city = form.customerCity.trim();
     const line1 = form.customerAddressLine1.trim();
+    // A CIM NEM MINDEN-VAGY-SEMMI TÖBBÉ (Luca, task os-ugyfel-akvarium-hianyos):
+    // a helyszínen nincs mindig irányítószám, a mérés rögzítése nem állhat meg
+    // miatta. Ami be van írva, megy (a hiányzó rész üres szöveg); a szerver
+    // eldönti, hogy a cím teljes-e, és a számla kiállításakor jelzi a hiányt.
+    // FIGYELEM, TELEPÍTÉSI SORREND: ehhez a szerver (aquarium-customer.dto.ts)
+    // kell előbb, a régi szerver a részleges címet elutasítaná.
     const anyAddressPart = postalCode !== "" || city !== "" || line1 !== "";
-    if (anyAddressPart && (!postalCode || !city || !line1))
-      return {
-        ok: false,
-        field: "customerAddress",
-        message:
-          "Ha a címet elkezdted, az irányítószám, a város és az utca is kötelező.",
-      };
 
     newCustomer = {
       type: "PERSON",
