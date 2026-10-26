@@ -179,6 +179,18 @@ export const contentNavigation: AppNavigationItem[] = [
     icon: "clipboard",
     entryId: "content",
   },
+  {
+    /*
+      A WEBSHOP KEZDŐLAPJA (acrobot, 2026-10-26 13:20 UTC: Balázs nem találta,
+      mert csak a Beállítások / Általános kártyáján volt). Ugyanaz a bejegyzés
+      és láthatóság, mint a kártyáé: `products.view` ÉS a `homepage-content`
+      kapcsoló, tehát élesen nem látszik. A kártya marad.
+    */
+    href: "/admin/kezdolap",
+    label: "Kezdőlap",
+    icon: "store",
+    entryId: "homepage-content",
+  },
 ];
 
 export const businessNavigation: AppNavigationEntry[] = [

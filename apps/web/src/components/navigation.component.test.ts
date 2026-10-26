@@ -12,6 +12,7 @@ import {
 import {
   allNavigationPages,
   businessNavigation,
+  contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
@@ -424,6 +425,9 @@ describe("navigation", () => {
     // `settings.manage` adja pontosan ezt a ket szerepet.
     "/szerviz/piszkozatok": "settings.manage",
     "/tartalom": "content.view",
+    // a webshop kezdolapja a Tartalom szakaszban (2026-10-26): ugyanaz a jog,
+    // mint a Beallitasok kartyajae es az API vegpontjaie
+    "/admin/kezdolap": "products.view",
     "/pos": "orders.view",
     "/webshop": "orders.view",
     // Az új webshop rendelései (2026-10-05), a bevezetés UTÁN; a jog a UNAS
@@ -539,6 +543,43 @@ describe("navigation", () => {
 
     expect(hrefs).toEqual([...new Set(hrefs)]);
     expect(hrefs).toContain("/tartalom");
+  });
+
+  /*
+    THE HOME PAGE ADMIN IN THE TARTALOM SECTION (acrobot, 2026-10-26): Balázs
+    did not find it on the settings card alone. What turns this red: the entry
+    moved out of the section, or shown without the environment's switch (the
+    production OS has no editable home page).
+  */
+  it("lists the home page admin under Tartalom, behind the products right and the environment switch", () => {
+    const entry = contentNavigation.find(
+      (item) => item.href === "/admin/kezdolap",
+    );
+    expect(entry).toMatchObject({
+      label: "Kezdőlap",
+      entryId: "homepage-content",
+    });
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "OWNER" },
+        new Set(),
+      ),
+    ).toBe(false);
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "OWNER" },
+        new Set(["homepage-content"]),
+      ),
+    ).toBe(true);
+    expect(
+      isNavigationEntryVisible(
+        "homepage-content",
+        { role: "SERVICE" },
+        new Set(["homepage-content"]),
+      ),
+    ).toBe(false);
   });
 });
 
