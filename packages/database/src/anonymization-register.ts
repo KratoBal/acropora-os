@@ -1209,6 +1209,13 @@ export const ANONYMIZATION_REGISTER: Readonly<
   ArticleTaxon: {
     taxonKey: "business",
   },
+  ArticleImage: {
+    contentId: "identifier",
+    contentType: "business",
+    sha256: "identifier",
+    content: "ownCompany",
+    uploadedById: "identifier",
+  },
   TicketMailDelivery: {
     serviceJobId: "identifier",
     jobNumber: "identifier",

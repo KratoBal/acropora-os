@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 
+import {
+  inspectImageBytes,
+  type InspectedImage,
+} from "../../common/image-inspect.js";
 import {
   MailImageRepository,
   type MailImageSummary,
@@ -35,80 +39,25 @@ export const MAIL_IMAGE_MAX_BYTES = 1024 * 1024;
  */
 export const MAIL_IMAGE_MAX_EDGE = 5000;
 
-const FORMATUMOK = {
-  png: "image/png",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-} as const;
-
-type Formatum = keyof typeof FORMATUMOK;
-
-export interface InspectedMailImage {
-  readonly contentType: string;
-  readonly width: number;
-  readonly height: number;
-  readonly bytes: Uint8Array;
-}
+/** The mail's image check: the shared one, with the mail's own limits. */
+export type InspectedMailImage = InspectedImage;
 
 /**
  * A FELTOLTOTT BAJTOK VIZSGALATA ES A TAROLANDO ALAK. Tiszta fuggveny a
- * halozat es az adatbazis nelkul, hogy egyseg-szinten merheto legyen.
+ * halozat es az adatbazis nelkul, hogy egyseg-szinten merheto legyen. A
+ * vizsgalat maga 2026-10-26 ota kozos (`common/image-inspect.ts`), a cikk-kepek
+ * is azt hasznaljak; itt a level hatarai allnak.
  *
  * Megnevezett okkal dob, es az ok a felhasznalonak szol.
  */
-export async function inspectMailImage(
+export function inspectMailImage(
   bytes: Uint8Array,
 ): Promise<InspectedMailImage> {
-  if (bytes.byteLength === 0)
-    throw new BadRequestException("A feltöltött fájl üres.");
-  if (bytes.byteLength > MAIL_IMAGE_MAX_BYTES)
-    throw new BadRequestException(
-      `A kép legfeljebb ${MAIL_IMAGE_MAX_BYTES / 1024 / 1024} MB lehet.`,
-    );
-
-  const { default: sharp } = await import("sharp");
-  let meta: {
-    format?: string;
-    width?: number;
-    height?: number;
-    pageHeight?: number;
-  };
-  try {
-    meta = await sharp(Buffer.from(bytes), { animated: true }).metadata();
-  } catch {
-    throw new BadRequestException(
-      "A fájl nem olvasható képként. PNG, JPG, GIF vagy WebP kép tölthető fel.",
-    );
-  }
-  const formatum = meta.format as Formatum | undefined;
-  if (!formatum || !(formatum in FORMATUMOK))
-    throw new BadRequestException(
-      "Csak PNG, JPG, GIF vagy WebP kép tölthető fel.",
-    );
-  const width = meta.width ?? 0;
-  /* ANIMALT KEPNEL a `height` az osszes kocka egymas alatt; egy kocka a `pageHeight`. */
-  const height = meta.pageHeight ?? meta.height ?? 0;
-  if (width < 1 || height < 1)
-    throw new BadRequestException("A kép mérete nem olvasható ki.");
-  if (width > MAIL_IMAGE_MAX_EDGE || height > MAIL_IMAGE_MAX_EDGE)
-    throw new BadRequestException(
-      `A kép legfeljebb ${MAIL_IMAGE_MAX_EDGE}×${MAIL_IMAGE_MAX_EDGE} képpont lehet.`,
-    );
-
-  if (formatum !== "jpeg")
-    return { contentType: FORMATUMOK[formatum], width, height, bytes };
-
-  const ujra = await sharp(Buffer.from(bytes))
-    .rotate()
-    .jpeg({ quality: 90, mozjpeg: true })
-    .toBuffer({ resolveWithObject: true });
-  return {
-    contentType: FORMATUMOK.jpeg,
-    width: ujra.info.width,
-    height: ujra.info.height,
-    bytes: new Uint8Array(ujra.data),
-  };
+  return inspectImageBytes(bytes, {
+    maxBytes: MAIL_IMAGE_MAX_BYTES,
+    maxEdge: MAIL_IMAGE_MAX_EDGE,
+    formats: ["png", "jpeg", "gif", "webp"],
+  });
 }
 
 /**

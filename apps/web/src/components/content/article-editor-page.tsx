@@ -50,9 +50,9 @@ import { CONTENT_STATE_LABELS } from "./content-labels";
  * Ez a lap csak a törzset írja, és csak amíg a szerver szerint szerkeszthető
  * (`editable`): a jóváhagyásra küldött szöveg nem változhat észrevétlenül.
  *
- * KÉP CSAK CÍMMEL, a mentés hoszt-listájáról (`RICH_TEXT_IMAGE_HOSTS`, a
- * szerver adja): feltöltés ma nincs, mert a kezdőlap feltöltője a bolt
- * tárhelyére ír, és csak bekapcsolt vetítésnél.
+ * KÉP FELTÖLTÉSSEL VAGY CÍMMEL. A feltöltött kép az OS saját tárolójába kerül,
+ * publikus címmel (acrobot döntése, msg 36320); címmel csak a mentés
+ * hoszt-listájáról (`RICH_TEXT_IMAGE_HOSTS`, a szerver adja) jöhet kép.
  */
 
 const CHANNEL_LABELS: Record<ArticleChannel, string> = {
@@ -261,6 +261,8 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
   const [kepCim, setKepCim] = useState("");
   const [kepAlt, setKepAlt] = useState("");
   const [taxonSzuro, setTaxonSzuro] = useState("");
+  const [uploading, setUploading] = useState<"body" | "cover" | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [kartyak, setKartyak] = useState<
     ReadonlyMap<string, PreviewProductCard>
   >(() => new Map());
@@ -366,6 +368,31 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
       ? "Kép csak https címről, a saját képtárhelyről jöhet."
       : undefined;
 
+  /** One image to the OS's store; the answer is an address the save keeps. */
+  const upload = async (
+    target: "body" | "cover",
+    file: File | undefined,
+  ): Promise<string | null> => {
+    if (!file) return null;
+    setUploadError(null);
+    setUploading(target);
+    try {
+      const { url } = await contentApi.uploadArticleImage(
+        token,
+        contentId,
+        file,
+      );
+      return url;
+    } catch (cause) {
+      setUploadError(
+        cause instanceof Error ? cause.message : "A kép nem tölthető fel.",
+      );
+      return null;
+    } finally {
+      setUploading(null);
+    }
+  };
+
   const save = async () => {
     setSaveError(null);
     setSaved(false);
@@ -439,6 +466,14 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
           variant="info"
           title="Csak olvasható"
           description="A cikk szerkesztéséhez tartalomkezelési jog kell."
+        />
+      ) : null}
+
+      {uploadError ? (
+        <Alert
+          variant="danger"
+          title="A kép nem tölthető fel"
+          description={uploadError}
         />
       ) : null}
 
@@ -516,6 +551,23 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
                 aria-label="Kép beszúrása címmel"
                 className="space-y-2 rounded-lg border border-pilot-grey-200 p-2"
               >
+                <label className="block text-sm">
+                  <span className="text-pilot-grey-700">Kép feltöltése</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-label="Kép feltöltése"
+                    disabled={uploading !== null}
+                    className="mt-1 block text-sm"
+                    onChange={async (event) => {
+                      const url = await upload("body", event.target.files?.[0]);
+                      if (url) setKepCim(url);
+                    }}
+                  />
+                </label>
+                {uploading === "body" ? (
+                  <p className="text-xs text-pilot-grey-600">Feltöltés…</p>
+                ) : null}
                 <Input
                   aria-label="Kép címe"
                   placeholder="https://…"
@@ -615,6 +667,25 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               }
             />
           </FormField>
+          {readOnly ? null : (
+            <label className="block text-sm">
+              <span className="text-pilot-grey-700">Borítókép feltöltése</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                aria-label="Borítókép feltöltése"
+                disabled={uploading !== null}
+                className="mt-1 block text-sm"
+                onChange={async (event) => {
+                  const url = await upload("cover", event.target.files?.[0]);
+                  if (url) update({ coverImageUrl: url });
+                }}
+              />
+              {uploading === "cover" ? (
+                <span className="text-xs text-pilot-grey-600">Feltöltés…</span>
+              ) : null}
+            </label>
+          )}
           <FormField label="Borítókép leírása" htmlFor="article-cover-alt">
             <Input
               id="article-cover-alt"

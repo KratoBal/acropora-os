@@ -97,6 +97,8 @@ const CONTROLLERS = [
     widgetenkenti jogot a szolgaltatas ellenorzi ujra.
   */
   "src/dashboard/dashboard.controller.ts",
+  // The article images' public route (2026-10-26): one image by id, @Public.
+  "src/content/article-image-public.controller.ts",
 ];
 
 const ROUTE = new RegExp(

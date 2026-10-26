@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import {
   hasPermission,
   PERMISSIONS,
@@ -7,6 +20,10 @@ import {
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import {
+  ARTICLE_IMAGE_LIMITS,
+  ArticleImageService,
+} from "./article-image.service.js";
 import { ArticleService } from "./article.service.js";
 import { ContentService } from "./content.service.js";
 import {
@@ -37,6 +54,7 @@ export class ContentController {
   constructor(
     private readonly service: ContentService,
     private readonly articles: ArticleService,
+    private readonly articleImages: ArticleImageService,
   ) {}
 
   /**
@@ -58,6 +76,29 @@ export class ContentController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.articles.save(id, body, user.id);
+  }
+
+  /**
+   * EGY KÉP A CIKKHEZ (acrobot döntése, msg 36320): az OS saját tárolójába, a
+   * válasz a publikus címe. Ugyanaz a jog, mint a törzs írásáé, és csak
+   * szerkeszthető cikkhez.
+   */
+  @Post(":id/article/images")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      // the limit also stands at the upload, so an oversized file never fills the memory
+      limits: { fileSize: ARTICLE_IMAGE_LIMITS.maxBytes, files: 1 },
+    }),
+  )
+  uploadArticleImage(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!file) throw new BadRequestException("A feltöltendő kép kötelező.");
+    return this.articleImages.upload(id, file, user.id);
   }
 
   /**

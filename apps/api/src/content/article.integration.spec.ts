@@ -7,6 +7,7 @@ import type { ArticleBodyInput } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
+import { ArticleImageRepository } from "./article-image.repository.js";
 import { ArticleRepository, ArticleStepError } from "./article.repository.js";
 import { ContentRepository } from "./content.repository.js";
 
@@ -28,6 +29,8 @@ describe(
   () => {
     const prefix = `art-int-${Date.now() % 1_000_000}-`;
     const articles = new ArticleRepository();
+    const articleImages = new ArticleImageRepository();
+    const imageIds: string[] = [];
     const content = new ContentRepository();
     const actor = randomUUID();
     const ids: string[] = [];
@@ -74,6 +77,7 @@ describe(
 
     after(async () => {
       await prisma.contentItem.deleteMany({ where: { id: { in: ids } } });
+      await prisma.articleImage.deleteMany({ where: { id: { in: imageIds } } });
       await prisma.knowledgeVocabularyEntry.deleteMany({
         where: { key: { startsWith: taxonKey } },
       });
@@ -81,6 +85,12 @@ describe(
         {
           nev: "ContentItem (article test)",
           darab: await prisma.contentItem.count({ where: { id: { in: ids } } }),
+        },
+        {
+          nev: "ArticleImage (article test)",
+          darab: await prisma.articleImage.count({
+            where: { id: { in: imageIds } },
+          }),
         },
         {
           nev: "KnowledgeVocabularyEntry (article test)",
@@ -281,6 +291,28 @@ describe(
         { key: `${taxonKey}_A`, rank: "GENUS", label: "Új alak" },
         { key: `${taxonKey}_B`, rank: null, label: `${taxonKey}_B` },
       ]);
+    });
+
+    it("ARTICLE-INT-IMAGE: an image's bytes come back unchanged by id, and the same file is found by its hash", async () => {
+      const contentId = await item("ARTICLE");
+      const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255, 7]);
+      const sha256 = randomUUID().replace(/-/g, "").padEnd(64, "0");
+      const row = await articleImages.create({
+        contentId,
+        contentType: "image/png",
+        width: 1,
+        height: 1,
+        sha256,
+        bytes,
+        uploadedById: null,
+      });
+      imageIds.push(row.id);
+      assert.match(row.id, /^c[a-z0-9]{24}$/);
+      const back = await articleImages.content(row.id);
+      assert.equal(back?.contentType, "image/png");
+      assert.deepEqual([...(back?.bytes ?? [])], [...bytes]);
+      assert.equal((await articleImages.findBySha256(sha256))?.id, row.id);
+      assert.equal(await articleImages.content("c" + "z".repeat(24)), null);
     });
   },
 );
