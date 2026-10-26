@@ -109,13 +109,20 @@ export class HomepageContentRepository implements HomepageContentStore {
     input: HomepageContentInput,
     userId: string,
   ): Promise<HomepageContentRow> {
+    // null in a nullable Json column is the database NULL (not set)
+    const json = (value: unknown) =>
+      value === null
+        ? Prisma.DbNull
+        : (value as unknown as Prisma.InputJsonValue);
     const data = {
       texts: input.texts as unknown as Prisma.InputJsonValue,
-      // null in a nullable Json column is the database NULL (not set)
-      slides:
-        input.slides === null
-          ? Prisma.DbNull
-          : (input.slides as unknown as Prisma.InputJsonValue),
+      slides: json(input.slides),
+      /*
+        ABSENT blocks / footer: the column is not written, so an editor that
+        does not send them (today's form) cannot wipe what another one saved.
+      */
+      ...(input.blocks !== undefined ? { blocks: json(input.blocks) } : {}),
+      ...(input.footer !== undefined ? { footer: json(input.footer) } : {}),
       updatedById: userId,
     };
     return prisma.homepageContent.upsert({

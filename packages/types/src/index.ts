@@ -1551,14 +1551,20 @@ export {
 } from "./contract.js";
 export type { ContractKind } from "./contract.js";
 export {
+  HOMEPAGE_BLOCK_KEYS,
   HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
   isSafeHomepageAddress,
   parseHomepageContentInput,
 } from "./homepage-content.js";
 export type {
+  HomepageBlock,
+  HomepageBlockKey,
   HomepageContent,
   HomepageContentInput,
+  HomepageFooter,
+  HomepageFooterColumn,
+  HomepageFooterLink,
   HomepageContentParse,
   HomepageFieldType,
   HomepageSlide,

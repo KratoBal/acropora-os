@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
+import type { HomepageBlock } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { nincsMaradek } from "../common/takaritas-leltar.js";
@@ -147,6 +148,86 @@ describe(
         }),
         0,
       );
+    });
+  },
+);
+
+/**
+ * THE BLOCKS AND THE FOOTER ON THE REAL DATABASE (2026-10-26). The rule "a
+ * save without the field leaves the column alone" lives in the repository's
+ * Prisma call, so only the real database can show it. Its own record key, so
+ * the main home page is never touched.
+ *
+ * WHAT TURNS IT RED: today's editor (which sends no blocks) wiping a stored
+ * list; `null` stored as JSON null instead of the database NULL.
+ */
+describe(
+  "Homepage blocks and footer, on the database",
+  { skip: gate.mode === "skip" },
+  () => {
+    const key = `hp-int-blocks-${Date.now() % 1_000_000}`;
+    const repo = new HomepageContentRepository();
+    let userId = "";
+    const blocks: HomepageBlock[] = [
+      { key: "hero", visible: false },
+      { key: "mit-keresel", visible: true },
+    ];
+    const footer = {
+      intro: "<p>Zátony</p>",
+      columns: [],
+      social: { facebook: null, instagram: null, youtube: null },
+      bottomText: "© Acropora",
+    };
+
+    before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
+      userId = (
+        await prisma.user.create({
+          data: {
+            email: `homepage-blocks-${randomUUID()}@example.invalid`,
+            displayName: "Homepage blocks test",
+            role: "ADMIN",
+          },
+        })
+      ).id;
+    });
+
+    after(async () => {
+      await prisma.homepageContent.deleteMany({ where: { key } });
+      nincsMaradek([
+        {
+          nev: "HomepageContent (test key)",
+          darab: await prisma.homepageContent.count({ where: { key } }),
+        },
+      ]);
+      if (userId) await prisma.user.delete({ where: { id: userId } });
+    });
+
+    it("HOMEPAGE-INT-BLOCKS: a save without blocks and footer keeps them, null clears them", async () => {
+      await repo.save(key, { texts: {}, slides: null, blocks, footer }, userId);
+      await repo.save(
+        key,
+        { texts: { "mit.cim": "Új" }, slides: null },
+        userId,
+      );
+      const kept = await repo.find(key);
+      assert.deepEqual(kept?.blocks, blocks);
+      assert.deepEqual(kept?.footer, footer);
+      assert.deepEqual(kept?.texts, { "mit.cim": "Új" });
+
+      await repo.save(
+        key,
+        { texts: {}, slides: null, blocks: null, footer: null },
+        userId,
+      );
+      const cleared = await prisma.homepageContent.count({
+        where: {
+          key,
+          blocks: { equals: Prisma.DbNull },
+          footer: { equals: Prisma.DbNull },
+        },
+      });
+      assert.equal(cleared, 1);
     });
   },
 );

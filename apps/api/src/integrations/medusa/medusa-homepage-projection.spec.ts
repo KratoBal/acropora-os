@@ -76,6 +76,29 @@ describe("homepageRecord", () => {
     assert.equal(homepageRecord(content()).slides, null);
     assert.deepEqual(homepageRecord(content({ slides: [] })).slides, []);
   });
+
+  /*
+    The commerce validator (#555) refuses the whole record on an unknown key:
+    the blocks and the footer stay in the OS until the storefront accepts them.
+  */
+  it("does not send the blocks and the footer yet", () => {
+    const rec = homepageRecord(
+      content({
+        blocks: [{ key: "hero", visible: false }],
+        footer: {
+          intro: "<p>x</p>",
+          columns: [],
+          social: { facebook: null, instagram: null, youtube: null },
+          bottomText: "",
+        },
+      }),
+    );
+    assert.deepEqual(Object.keys(rec).sort(), [
+      "featured_handles",
+      "slides",
+      "texts",
+    ]);
+  });
 });
 
 describe("homepageRecordDiffers", () => {
