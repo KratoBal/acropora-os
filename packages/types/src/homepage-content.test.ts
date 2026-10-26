@@ -284,6 +284,9 @@ describe("parseHomepageContentInput: blocks and footer", () => {
       footer({
         columns: [{ title: "A", links: [{ label: " ", href: "/store" }] }],
       }),
+      // the commerce validator asks for a title (#564): an empty one is refused here first
+      footer({ columns: [{ title: "", links: [] }] }),
+      footer({ columns: [{ title: "  ", links: [] }] }),
     ])
       assert.equal(parse({ footer: bad }).ok, false);
   });

@@ -1359,9 +1359,14 @@ function parseFooter(
       return { ok: false, message: `${where}: unknown field ${strayColumn}` };
     if (
       typeof column.title !== "string" ||
+      !column.title.trim() ||
       column.title.length > HOMEPAGE_LIMITS.footerLabel
     )
-      return { ok: false, message: `${where}.title: a short string` };
+      // non-empty, like the commerce validator (#564, barracuda 36073)
+      return {
+        ok: false,
+        message: `${where}.title: a short, non-empty string`,
+      };
     if (
       !Array.isArray(column.links) ||
       column.links.length > HOMEPAGE_LIMITS.footerLinks
