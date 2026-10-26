@@ -5,6 +5,8 @@ import {
   HOMEPAGE_BLOCK_KEYS,
   HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
+  isShopHref,
+  normalizeShopHref,
   parseHomepageContentInput,
 } from "./homepage-content.js";
 
@@ -289,5 +291,64 @@ describe("parseHomepageContentInput: blocks and footer", () => {
       footer({ columns: [{ title: "  ", links: [] }] }),
     ])
       assert.equal(parse({ footer: bad }).ok, false);
+  });
+});
+
+/*
+  A SLIDE BUTTON'S TARGET (Balázs, 2026-10-26, msg 1564310966211055778;
+  acrobot 36371). The stored form stays the shop's rule (a shop path, the same
+  on both sides); the editor brings what people type to it, and the save names
+  the slide and the field in Hungarian. What turns these red: a full address
+  on the shop's own host refused, another site's address let through, or an
+  English, field-less message in the save's alert.
+*/
+describe("a slide button's target", () => {
+  const SHOP = ["teszt.acropora.hu"];
+
+  it("turns the shop's own full address into its path", () => {
+    assert.equal(
+      normalizeShopHref(
+        "https://teszt.acropora.hu/hu/categories/sps?x=1#a",
+        SHOP,
+      ),
+      "/hu/categories/sps?x=1#a",
+    );
+    assert.equal(normalizeShopHref(" https://TESZT.acropora.hu ", SHOP), "/");
+  });
+
+  it("gives a path typed without its slash one", () => {
+    assert.equal(
+      normalizeShopHref("hu/categories/sps", SHOP),
+      "/hu/categories/sps",
+    );
+    assert.equal(normalizeShopHref("/hu/store", SHOP), "/hu/store");
+    assert.equal(normalizeShopHref("", SHOP), "");
+  });
+
+  it("leaves another site, a scheme or a host-like text alone, so the check refuses it", () => {
+    for (const other of [
+      "https://maps.example/x",
+      "javascript:alert(1)",
+      "www.acropora.hu/hu/store",
+      "//evil.example",
+    ]) {
+      const kept = normalizeShopHref(other, SHOP);
+      assert.ok(!isShopHref(kept), `${other} -> ${kept}`);
+    }
+    assert.ok(isShopHref(""));
+    assert.ok(isShopHref("/hu/categories/sps"));
+  });
+
+  it("names the slide and the field in Hungarian when the save refuses", () => {
+    const parsed = parseHomepageContentInput(
+      input({
+        slides: [slide(), slide({ cta2Href: "https://maps.example/x" })],
+      }),
+    );
+    assert.equal(parsed.ok, false);
+    assert.match(
+      (parsed as { message: string }).message,
+      /^2\. dia, második gomb célja: csak a webshop egy oldala lehet/,
+    );
   });
 });

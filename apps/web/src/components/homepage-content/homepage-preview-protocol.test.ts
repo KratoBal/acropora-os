@@ -91,3 +91,33 @@ describe("readPreviewMessage", () => {
     ).toBeNull();
   });
 });
+
+// A target the shop would refuse goes to the preview as "no button" (acrobot 36371)
+describe("previewRecord -- a refused button target", () => {
+  it("sends null instead of a target the shop would refuse", () => {
+    const record = previewRecord({
+      texts: {},
+      slides: [
+        {
+          eyebrow: "",
+          title: "t",
+          text: "",
+          cta: "c",
+          ctaHref: "https://maps.example/x",
+          cta2: "d",
+          cta2Href: "/hu/store",
+          caption: "",
+          caption2: "",
+          imageUrl: null,
+          imageAlt: "",
+        },
+      ],
+      blocks: null,
+      footer: null,
+    });
+    expect(record.slides?.[0]).toMatchObject({
+      cta_href: null,
+      cta2_href: "/hu/store",
+    });
+  });
+});

@@ -1557,6 +1557,9 @@ export {
   HOMEPAGE_LIMITS,
   HOMEPAGE_TEXT_FIELDS,
   isSafeHomepageAddress,
+  isShopHref,
+  normalizeShopHref,
+  SHOP_HREF_RULE,
   parseHomepageContentInput,
 } from "./homepage-content.js";
 export type {
