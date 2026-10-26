@@ -321,7 +321,11 @@ describe("Levélsablonok: Szerviz és Webshop", () => {
     parameter the Szerviz tab stays the default (the first test above).
   */
   it("?csoport=webshop opens the Webshop tab and loads its first template", async () => {
-    window.history.replaceState(null, "", "/beallitasok/levelsablonok?csoport=webshop");
+    window.history.replaceState(
+      null,
+      "",
+      "/beallitasok/levelsablonok?csoport=webshop",
+    );
     try {
       await megjelenit();
       expect(

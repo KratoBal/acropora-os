@@ -137,7 +137,11 @@ describe("Webshop beállítások", () => {
       ]).toEqual([role, links.some((link) => linkVisible(link, role))]);
     }
     // control: the loop sees both outcomes
-    expect(USER_ROLES.some((role) => links.some((l) => linkVisible(l, role)))).toBe(true);
-    expect(USER_ROLES.some((role) => !links.some((l) => linkVisible(l, role)))).toBe(true);
+    expect(
+      USER_ROLES.some((role) => links.some((l) => linkVisible(l, role))),
+    ).toBe(true);
+    expect(
+      USER_ROLES.some((role) => !links.some((l) => linkVisible(l, role))),
+    ).toBe(true);
   });
 });

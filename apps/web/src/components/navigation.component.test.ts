@@ -67,9 +67,7 @@ describe("navigation", () => {
    */
   it("calls the webshop buyers what they are, apart from the partners", () => {
     const webshop = group("Webshop").children;
-    expect(webshop.find((item) => item.href === "/vevok")?.label).toBe(
-      "Vevők",
-    );
+    expect(webshop.find((item) => item.href === "/vevok")?.label).toBe("Vevők");
     expect(webshop.map((item) => item.href)).not.toContain("/partnerek");
 
     const labels = new Map(

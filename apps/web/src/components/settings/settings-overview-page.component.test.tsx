@@ -118,9 +118,7 @@ describe("beállítások gyűjtőoldal", () => {
     expect(screen.getAllByText("Webshop")).toHaveLength(1);
     expect(screen.queryByText("Webshop beállítások")).not.toBeInTheDocument();
     expect(
-      screen
-        .getAllByRole("link")
-        .map((elem) => elem.getAttribute("href")),
+      screen.getAllByRole("link").map((elem) => elem.getAttribute("href")),
     ).toContain("/webshop/beallitasok");
   });
 
