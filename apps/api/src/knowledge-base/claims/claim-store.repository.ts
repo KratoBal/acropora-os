@@ -29,7 +29,7 @@ interface Level {
   rulesVersion: string;
 }
 
-interface SourceRef {
+export interface SourceRef {
   id: string;
   title: string;
   year: number | null;
@@ -206,7 +206,7 @@ function relationsSelect(contradictsOnly: boolean) {
   } satisfies Prisma.KnowledgeClaimSelect;
 }
 
-const LIST_SELECT = {
+export const LIST_SELECT = {
   ...CORE_SELECT,
   evidence: {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -241,7 +241,7 @@ const DETAIL_SELECT = {
 } satisfies Prisma.KnowledgeClaimSelect;
 
 type Core = Prisma.KnowledgeClaimGetPayload<{ select: typeof CORE_SELECT }>;
-type ListClaim = Prisma.KnowledgeClaimGetPayload<{
+export type ListClaim = Prisma.KnowledgeClaimGetPayload<{
   select: typeof LIST_SELECT;
 }>;
 type Evidence = ListClaim["evidence"][number];
@@ -265,11 +265,11 @@ function titleOf(c: Core, labels: Labels) {
   return claimTitle(c.effect, c.direction, quantityOf(c), labels);
 }
 
-function sourceOf(e: Evidence) {
+export function sourceOf(e: Evidence) {
   return e.passage.sourceVersion.source;
 }
 
-function sourceRef(s: ReturnType<typeof sourceOf>): SourceRef {
+export function sourceRef(s: ReturnType<typeof sourceOf>): SourceRef {
   return {
     id: s.id,
     title: s.title,
@@ -278,7 +278,7 @@ function sourceRef(s: ReturnType<typeof sourceOf>): SourceRef {
   };
 }
 
-function levelOf(c: ListClaim): Level {
+export function levelOf(c: ListClaim): Level {
   const rows: LevelRow[] = c.evidence.map((e) => ({
     sourceId: sourceOf(e).id,
     stance: e.stance,

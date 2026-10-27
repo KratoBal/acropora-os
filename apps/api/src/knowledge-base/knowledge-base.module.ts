@@ -1,6 +1,10 @@
 import { Module } from "@nestjs/common";
 
 import {
+  KnowledgeAnswerController,
+  KnowledgeAnswerService,
+} from "./answers/knowledge-answer.controller.js";
+import {
   ArticleCitationController,
   ArticleCitationService,
 } from "./articles/article-citation.controller.js";
@@ -42,6 +46,7 @@ import {
     VocabularyController,
     ConclusionController,
     ArticleCitationController,
+    KnowledgeAnswerController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -53,6 +58,7 @@ import {
     VocabularyService,
     ConclusionService,
     ArticleCitationService,
+    KnowledgeAnswerService,
   ],
 })
 export class KnowledgeBaseModule {}

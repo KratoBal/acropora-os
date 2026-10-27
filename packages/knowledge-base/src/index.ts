@@ -107,3 +107,9 @@ export type {
   PackageClaim,
   PackageExclusion,
 } from "./answer-gate.js";
+export { claimStatement, writtenNumber } from "./claim-statement.js";
+export type {
+  OriginalQuantity,
+  StatementFailure,
+  StatementResult,
+} from "./claim-statement.js";
