@@ -90,6 +90,7 @@ const stored = (over: Record<string, unknown> = {}) => ({
   slides: null,
   blocks: null,
   footer: null,
+  newsletter: null,
   imageHosts: [],
   storefrontUrl: null,
   updatedAt: null,
@@ -132,7 +133,13 @@ const open = async (label: string) =>
   fireEvent.click(
     await screen.findByRole("button", { name: `${label} szerkesztése` }),
   );
-const UNTOUCHED = { texts: {}, slides: null, blocks: null, footer: null };
+const UNTOUCHED = {
+  texts: {},
+  slides: null,
+  blocks: null,
+  footer: null,
+  newsletter: null,
+};
 
 describe("HomepageContentEditorPage", () => {
   it("HP-ED-DEFAULT: shows the starting value and the sample tag, nothing edited", async () => {
@@ -494,7 +501,7 @@ describe("HomepageContentEditorPage", () => {
     );
   });
 
-  it("HP-ED-FOOTER: an own footer is saved; the legal documents and the address are not edited here", async () => {
+  it("HP-ED-FOOTER: an own footer starts from the old shop's menu; the legal documents and the company column are not edited here", async () => {
     render(<HomepageContentEditorPage />);
     await open("Lábléc");
     expect(
@@ -503,16 +510,20 @@ describe("HomepageContentEditorPage", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Saját lábléc szerkesztése" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Oszlop hozzáadása" }));
-    fireEvent.change(screen.getByLabelText("1. oszlop címe"), {
-      target: { value: "Oldaltérkép" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Sor hozzáadása" }));
-    fireEvent.change(screen.getByLabelText("1. oszlop, 1. sor: felirat"), {
-      target: { value: "Termékek" },
-    });
-    fireEvent.change(screen.getByLabelText("1. oszlop, 1. sor: cél"), {
-      target: { value: "/store" },
+    // the three columns of the reference image, the new brand list link included
+    expect(screen.getByLabelText("1. oszlop címe")).toHaveValue("Oldaltérkép");
+    expect(screen.getByLabelText("2. oszlop címe")).toHaveValue(
+      "Vásárlói fiók",
+    );
+    expect(screen.getByLabelText("3. oszlop címe")).toHaveValue("Információk");
+    expect(screen.getByLabelText("1. oszlop, 3. sor: felirat")).toHaveValue(
+      "Forgalmazott márkák",
+    );
+    expect(screen.getByLabelText("1. oszlop, 3. sor: cél")).toHaveValue(
+      "/marka",
+    );
+    fireEvent.change(screen.getByLabelText("1. oszlop, 2. sor: felirat"), {
+      target: { value: "Minden termék" },
     });
     fireEvent.change(screen.getByLabelText("Lábléc: Facebook"), {
       target: { value: "https://facebook.com/acropora" },
@@ -521,23 +532,59 @@ describe("HomepageContentEditorPage", () => {
       target: { value: "© Acropora Kft." },
     });
     expect(screen.getByText(/Jogi dokumentumok/)).toBeTruthy();
-    expect(screen.getByText(/„A boltunk” blokkból jön/)).toBeTruthy();
+    expect(screen.getByText(/A cégadatok .* rögzítettek/)).toBeTruthy();
+    expect(screen.queryByText(/„A boltunk” blokkból jön/)).toBeNull();
     save();
     await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
-    expect(sent().footer).toEqual({
-      intro: "",
-      columns: [
-        {
-          title: "Oldaltérkép",
-          links: [{ label: "Termékek", href: "/store" }],
-        },
-      ],
-      social: {
-        facebook: "https://facebook.com/acropora",
-        instagram: null,
-        youtube: null,
-      },
-      bottomText: "© Acropora Kft.",
+    const footer = sent().footer;
+    expect(footer.columns.map((c: { title: string }) => c.title)).toEqual([
+      "Oldaltérkép",
+      "Vásárlói fiók",
+      "Információk",
+    ]);
+    expect(footer.columns[0].links).toEqual([
+      { label: "Nyitóoldal", href: "/" },
+      { label: "Minden termék", href: "/store" },
+      { label: "Forgalmazott márkák", href: "/marka" },
+    ]);
+    // the legal documents are the storefront's: not in the OS's columns
+    expect(JSON.stringify(footer)).not.toMatch(/ÁSZF|Adatkezelési/);
+    expect(footer.social.facebook).toBe("https://facebook.com/acropora");
+    expect(footer.bottomText).toBe("© Acropora Kft.");
+  });
+
+  /*
+    THE NEWSLETTER ROW (kirakat-lablec-kep). What turns this red: an untouched
+    row saved as the OS's own (the projection would then send a key an older
+    shop refuses); the list's switch and the editor's switch disagreeing; the
+    texts not reaching the save.
+  */
+  it("HP-ED-NEWSLETTER: the row stays unset until edited; the switch and the texts are saved", async () => {
+    render(<HomepageContentEditorPage />);
+    await open("Hírlevél");
+    expect(await screen.findByLabelText("Hírlevél: Cím")).toHaveValue(
+      "Hírlevél",
+    );
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent().newsletter).toBeNull();
+
+    api.save.mockClear();
+    fireEvent.change(screen.getByLabelText("Hírlevél: Hozzájárulás szövege"), {
+      target: { value: "Hozzájárulok a hírlevélhez." },
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "Hírlevél: látszik" }));
+    expect(
+      screen.getByRole("switch", { name: "Hírlevél: látszik (szerkesztő)" }),
+    ).toHaveAttribute("aria-checked", "false");
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    expect(sent().newsletter).toEqual({
+      enabled: false,
+      title: "Hírlevél",
+      text: "Iratkozz fel a hírlevelünkre és értesülj elsőként az újdonságokról, akciókról, ajánlatokról!",
+      consentText: "Hozzájárulok a hírlevélhez.",
+      button: "Feliratkozás",
     });
   });
 

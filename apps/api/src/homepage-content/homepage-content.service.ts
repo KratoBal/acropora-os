@@ -16,6 +16,7 @@ import {
   type HomepageContent,
   type HomepageContentInput,
   type HomepageFooter,
+  type HomepageNewsletter,
   type HomepageSlide,
   isShortTextKey,
   looksLikeShortHtml,
@@ -82,6 +83,7 @@ export interface HomepageContentRow {
   slides: unknown;
   blocks: unknown;
   footer: unknown;
+  newsletter: unknown;
   projectionEnabled: boolean;
   updatedAt: Date;
 }
@@ -235,6 +237,17 @@ function storedFooter(value: unknown): HomepageFooter | null {
   };
 }
 
+/** The stored newsletter row through the same strict parse as a save, or `null`. */
+function storedNewsletter(value: unknown): HomepageNewsletter | null {
+  if (value === null || value === undefined) return null;
+  const parsed = parseHomepageContentInput({
+    texts: {},
+    slides: null,
+    newsletter: value,
+  });
+  return parsed.ok ? (parsed.value.newsletter ?? null) : null;
+}
+
 /**
  * THE FOOTER INTRO IS RICH TEXT in the shared sanitizer's SHORT profile
  * (#1879): paragraph, bold, italic, link, lists. The storefront footer draws
@@ -302,6 +315,7 @@ export function toHomepageContent(
       slides: null,
       blocks: null,
       footer: null,
+      newsletter: null,
       imageHosts: [...imageHosts],
       storefrontUrl,
       updatedAt: null,
@@ -322,6 +336,7 @@ export function toHomepageContent(
     slides: short.slides,
     blocks: storedBlocks(row.blocks),
     footer: storedFooter(row.footer),
+    newsletter: storedNewsletter(row.newsletter),
     imageHosts: [...imageHosts],
     storefrontUrl,
     updatedAt: row.updatedAt.toISOString(),

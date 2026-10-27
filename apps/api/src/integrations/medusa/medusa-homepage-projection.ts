@@ -3,6 +3,7 @@ import type {
   HomepageBlock,
   HomepageContentInput,
   HomepageFooter,
+  HomepageNewsletter,
   HomepageSlide,
 } from "@acropora/types";
 
@@ -40,6 +41,15 @@ export interface MedusaHomepageFooter {
   bottom_text: string;
 }
 
+/** The newsletter row as the commerce validator wants it (#577; snake case). */
+export interface MedusaHomepageNewsletter {
+  enabled: boolean;
+  title: string;
+  text: string;
+  consent_text: string;
+  button: string;
+}
+
 /**
  * THE COMMERCE HOMEPAGE CONTENT RECORD (the commerce `PUT /admin/homepage-content`
  * contract, #551 and #553): the text overrides, and the slides (`null` is "not
@@ -57,6 +67,8 @@ export interface MedusaHomepageContentRecord {
   blocks?: HomepageBlock[] | null;
   /** The footer (commerce #564, #567); `null` is the storefront's own. */
   footer?: MedusaHomepageFooter | null;
+  /** The newsletter row (commerce #577); sent only when the OS has one. */
+  newsletter?: MedusaHomepageNewsletter;
 }
 
 export type HomepageProjectionOutcome =
@@ -134,6 +146,16 @@ const footerRecord = (footer: HomepageFooter): MedusaHomepageFooter => ({
   bottom_text: footer.bottomText,
 });
 
+const newsletterRecord = (
+  row: HomepageNewsletter,
+): MedusaHomepageNewsletter => ({
+  enabled: row.enabled,
+  title: row.title,
+  text: row.text,
+  consent_text: row.consentText,
+  button: row.button,
+});
+
 /*
   THE BLOCKS AND THE FOOTER ARE SENT (2026-10-26, acrobot 36394 and 36397):
   the test backend runs commerce #564 and #567, which take them (measured:
@@ -156,6 +178,17 @@ export function homepageRecord(
         }))
       : null,
     footer: content.footer ? footerRecord(content.footer) : null,
+    /*
+      THE NEWSLETTER ROW ONLY WHEN SET (kirakat-lablec-kep): the shop's
+      validator is strict, and a shop without commerce #577 would refuse the
+      WHOLE record for the unknown key. Unset is the OS's normal state until
+      someone edits the row (the editor keeps `null` until then), so the
+      record stays what it was. Once set, the OS editor has no way back to
+      `null`, so "absent keeps" on the shop is never a stale row.
+    */
+    ...(content.newsletter
+      ? { newsletter: newsletterRecord(content.newsletter) }
+      : {}),
   };
 }
 
@@ -195,6 +228,8 @@ export function homepageRecordDiffers(
       // null and "never sent" are both "not set"
       r.blocks ?? null,
       r.footer ?? null,
+      // absent and null are both "not set"; the OS sends it only when set
+      r.newsletter ?? null,
     ]);
   return pick(current) !== pick(wanted);
 }
@@ -272,8 +307,9 @@ export const prismaHomepageSource: HomepageSource = {
     });
     if (!row) return null;
     // the blocks and the footer too, since commerce #564/#567 (see homepageRecord)
-    const { texts, slides, blocks, footer } = toHomepageContent(row);
-    return { texts, slides, blocks, footer };
+    const { texts, slides, blocks, footer, newsletter } =
+      toHomepageContent(row);
+    return { texts, slides, blocks, footer, newsletter };
   },
   featured: async () => {
     const rows = await prisma.homepageFeaturedProduct.findMany({

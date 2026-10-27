@@ -127,6 +127,52 @@ describe("homepageRecord", () => {
   });
 });
 
+/*
+  THE NEWSLETTER ROW (kirakat-lablec-kep). What turns this red: the key sent
+  while the OS has no row (a shop without commerce #577 refuses the whole
+  record for an unknown key); the row not snake-cased; the shop's `null`
+  answer for an unset row taken as a difference (every round would write).
+*/
+describe("homepageRecord: the newsletter row", () => {
+  const row = {
+    enabled: false,
+    title: "Hírlevél",
+    text: "Iratkozz fel!",
+    consentText: "Hozzájárulok.",
+    button: "Feliratkozás",
+  };
+
+  it("sends the row only when the OS has one, snake-cased", () => {
+    assert.equal("newsletter" in homepageRecord(content()), false);
+    assert.equal(
+      "newsletter" in homepageRecord(content({ newsletter: null })),
+      false,
+    );
+    assert.deepEqual(homepageRecord(content({ newsletter: row })).newsletter, {
+      enabled: false,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consent_text: "Hozzájárulok.",
+      button: "Feliratkozás",
+    });
+  });
+
+  it("takes the shop's null for an unset row as the same, and sees a changed row", () => {
+    const plain = homepageRecord(content());
+    assert.equal(
+      homepageRecordDiffers({ ...plain, newsletter: null } as never, plain),
+      false,
+    );
+    const withRow = homepageRecord(content({ newsletter: row }));
+    assert.equal(homepageRecordDiffers(plain, withRow), true);
+    const changed = homepageRecord(
+      content({ newsletter: { ...row, enabled: true } }),
+    );
+    assert.equal(homepageRecordDiffers(withRow, changed), true);
+    assert.equal(homepageRecordDiffers(withRow, withRow), false);
+  });
+});
+
 describe("homepageRecordDiffers", () => {
   it("ignores key order, sees a changed text, null versus an empty list, and no record", () => {
     const a = homepageRecord(content({ texts: { a: "1", b: "2" } }));

@@ -7,13 +7,14 @@ import { useState } from "react";
 import { blockMeta, moveBlock } from "./homepage-blocks";
 import { Kapcsolo } from "./homepage-fields";
 
-export type HomepageSelection = HomepageBlockKey | "footer";
+export type HomepageSelection = HomepageBlockKey | "newsletter" | "footer";
 
 /**
  * THE LEFT COLUMN, "Blokkok" (Figma 685:535; Balázs's brief, 4. pont): the
  * blocks in page order, each with a drag handle, its note (or "Rejtve") and
- * the "Látszik" switch; under a separator the footer, which is always last,
- * cannot be moved and cannot be hidden.
+ * the "Látszik" switch; under a separator the newsletter row (on every page,
+ * above the footer: it has its own switch, but no place in the order) and the
+ * footer, which is always last, cannot be moved and cannot be hidden.
  *
  * THE ORDER CHANGES TWO WAYS: by dragging a row, and from the keyboard on the
  * handle (up and down arrows), so it is not a mouse-only control.
@@ -23,11 +24,15 @@ export function HomepageBlockList({
   selected,
   onSelect,
   onChange,
+  newsletterOn,
+  onNewsletterOn,
 }: {
   blocks: readonly HomepageBlock[];
   selected: HomepageSelection;
   onSelect: (selection: HomepageSelection) => void;
   onChange: (blocks: HomepageBlock[]) => void;
+  newsletterOn: boolean;
+  onNewsletterOn: (on: boolean) => void;
 }) {
   const [dragged, setDragged] = useState<number | null>(null);
   return (
@@ -115,6 +120,33 @@ export function HomepageBlockList({
         })}
       </ol>
       <hr className="my-4 border-pilot-grey-200" />
+      <div
+        className={`mb-2 flex items-center gap-2 rounded-lg p-3 ring-1 ${
+          selected === "newsletter"
+            ? "bg-pilot-aqua-50 ring-pilot-aqua-500"
+            : "bg-pilot-grey-50 ring-pilot-grey-200"
+        }`}
+      >
+        <button
+          type="button"
+          aria-label="Hírlevél szerkesztése"
+          aria-current={selected === "newsletter" ? "true" : undefined}
+          onClick={() => onSelect("newsletter")}
+          className="min-w-0 flex-1 text-left"
+        >
+          <span className="block text-[13px] font-semibold text-pilot-grey-900">
+            Hírlevél
+          </span>
+          <span className="mt-1 block text-xs text-pilot-grey-500">
+            {newsletterOn ? "minden oldalon, a lábléc fölött" : "Rejtve"}
+          </span>
+        </button>
+        <Kapcsolo
+          label="Hírlevél: látszik"
+          checked={newsletterOn}
+          onChange={onNewsletterOn}
+        />
+      </div>
       <button
         type="button"
         aria-label="Lábléc szerkesztése"
