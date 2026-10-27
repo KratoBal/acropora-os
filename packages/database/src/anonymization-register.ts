@@ -1195,6 +1195,16 @@ export const ANONYMIZATION_REGISTER: Readonly<
     ogImageUrl: "business",
     updatedById: "identifier",
   },
+  // An article sentence and what it stands on (research S5): the sentence is the
+  // article's own text, the reasons are the editor's.
+  ArticleCitation: {
+    sentence: "freeText",
+    sentenceHash: "business",
+    targetKey: "identifier",
+    reason: "freeText",
+    answeredCodes: "business",
+    answerReason: "freeText",
+  },
   ArticleRevision: {
     title: "freeText",
     excerpt: "freeText",
@@ -1717,6 +1727,12 @@ export const ANONYMIZATION_REGISTER: Readonly<
     parentKey: "business",
     rank: "business",
     note: "business",
+  },
+  // Own conclusions (research S5): the editor's text and reasoning.
+  KnowledgeConclusion: {
+    text: "freeText",
+    reasoning: "freeText",
+    withdrawnReason: "freeText",
   },
   KnowledgeResearchDraft: {
     question: "freeText",

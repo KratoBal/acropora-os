@@ -1,6 +1,10 @@
 import {
   computeAgreement,
   deriveEvidenceLevel,
+  type Applicability,
+  type ClaimScope,
+  type Direction,
+  type Environment,
   type EvidenceLevel,
   type StudyType,
   type VocabularyKind,
@@ -167,4 +171,64 @@ export function claimEvidenceLevel(
           ...result.reasons,
         ],
       };
+}
+
+/** One evidence row as the sentence check's scope reads it. */
+export interface ScopeRow {
+  stance: "SUPPORTS" | "CONTRADICTS" | "QUALIFIES";
+  species: readonly string[];
+  environment: Environment | null;
+  applicability: Applicability | null;
+  retracted: boolean;
+}
+
+// The most restrictive decision wins: a sentence may not reach further than
+// the weakest supporting row allows.
+const APPLICABILITY_ORDER: readonly Applicability[] = [
+  "NOT_APPLICABLE",
+  "LIMITED",
+  "ANALOGOUS",
+  "DIRECT",
+];
+
+/**
+ * WHAT A VERIFIED CLAIM'S EVIDENCE COVERS, for `checkSentence` (7a): the
+ * species and environments of its supporting rows on sources not retracted,
+ * its normalised range (an open side is unbounded) and the derived level.
+ * The applicability is the most restrictive editor's decision, and null when
+ * any supporting row is undecided: no transfer to an aquarium on a row nobody
+ * judged.
+ */
+export function claimScope(input: {
+  rows: readonly ScopeRow[];
+  normalizedMinMgL: number | null;
+  normalizedMaxMgL: number | null;
+  effect: string | null;
+  direction: Direction | null;
+  evidenceLevel: EvidenceLevel | null;
+}): ClaimScope {
+  const live = input.rows.filter(
+    (r) => r.stance === "SUPPORTS" && !r.retracted,
+  );
+  const decided = live.map((r) => r.applicability);
+  const applicability = decided.some((a) => a === null)
+    ? null
+    : (APPLICABILITY_ORDER.find((a) => decided.includes(a)) ?? null);
+  const { normalizedMinMgL: min, normalizedMaxMgL: max } = input;
+  return {
+    taxa: [...new Set(live.flatMap((r) => r.species))],
+    environments: [
+      ...new Set(
+        live.flatMap((r) => (r.environment === null ? [] : [r.environment])),
+      ),
+    ],
+    homeReefApplicability: applicability,
+    quantity:
+      min === null && max === null
+        ? null
+        : { minMgL: min ?? 0, maxMgL: max ?? Number.POSITIVE_INFINITY },
+    effect: input.effect,
+    direction: input.direction,
+    evidenceLevel: input.evidenceLevel,
+  };
 }

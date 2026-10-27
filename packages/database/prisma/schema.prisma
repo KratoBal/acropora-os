@@ -914,6 +914,11 @@ model User {
   researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
   knowledgeDiscoveryRuns KnowledgeDiscoveryRun[]       @relation("KnowledgeDiscoveryRunRequestedBy")
   knowledgeExtractRuns   KnowledgeExtractionRun[]      @relation("KnowledgeExtractionRunRequestedBy")
+  /// Kutatási tudástár (S5): saját következtetések és a cikk hivatkozásai.
+  createdConclusions     KnowledgeConclusion[]         @relation("KnowledgeConclusionCreatedBy")
+  approvedConclusions    KnowledgeConclusion[]         @relation("KnowledgeConclusionApprovedBy")
+  createdCitations       ArticleCitation[]             @relation("ArticleCitationCreatedBy")
+  answeredCitations      ArticleCitation[]             @relation("ArticleCitationAnsweredBy")
   email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
@@ -8005,6 +8010,8 @@ model ArticleBody {
   revisions           ArticleRevision[] @relation("ArticleRevisions")
   products            ArticleProduct[]
   taxa                ArticleTaxon[]
+  /// A kutatási tudástárra mutató hivatkozások (S5); ha van, a cikk tudásbázis-cikk.
+  citations           ArticleCitation[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 }
@@ -10927,8 +10934,10 @@ model KnowledgeClaim {
   updatedAt        DateTime                  @updatedAt
 
   evidence      KnowledgeClaimEvidence[]
-  relationsFrom KnowledgeClaimRelation[] @relation("KnowledgeClaimRelationFrom")
-  relationsTo   KnowledgeClaimRelation[] @relation("KnowledgeClaimRelationTo")
+  relationsFrom KnowledgeClaimRelation[]   @relation("KnowledgeClaimRelationFrom")
+  relationsTo   KnowledgeClaimRelation[]   @relation("KnowledgeClaimRelationTo")
+  conclusions   KnowledgeConclusionClaim[]
+  citations     ArticleCitation[]
 
   @@index([subject, status])
 }
@@ -11133,4 +11142,92 @@ model KnowledgeResearchDraft {
   createdAt       DateTime                     @default(now())
 
   @@index([createdById])
+}
+
+enum KnowledgeConclusionStatus {
+  DRAFT
+  APPROVED
+  WITHDRAWN
+}
+
+/// SAJÁT KÖVETKEZTETÉS (S5, az OWN_CONCLUSION réteg): mindig VERIFIED állításokra
+/// épül, és csak a `knowledge.approve` joggal hagyható jóvá. Az ellentmondó
+/// állítások egyesítése csak itt történhet, és az alapjuk látható marad. Jóváhagyott
+/// következtetés szövege nem változik: a javítás új következtetés.
+model KnowledgeConclusion {
+  id              String                    @id @default(cuid())
+  text            String
+  reasoning       String
+  status          KnowledgeConclusionStatus @default(DRAFT)
+  revision        Int                       @default(1)
+  createdById     String
+  createdBy       User                      @relation("KnowledgeConclusionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedById    String?
+  approvedBy      User?                     @relation("KnowledgeConclusionApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt      DateTime?
+  withdrawnReason String?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  claims    KnowledgeConclusionClaim[]
+  citations ArticleCitation[]
+
+  @@index([status])
+}
+
+/// A következtetés alapjául szolgáló állítások.
+model KnowledgeConclusionClaim {
+  conclusionId String
+  conclusion   KnowledgeConclusion @relation(fields: [conclusionId], references: [id], onDelete: Cascade)
+  claimId      String
+  claim        KnowledgeClaim      @relation(fields: [claimId], references: [id], onDelete: Restrict)
+
+  @@id([conclusionId, claimId])
+  @@index([claimId])
+}
+
+enum ArticleCitationKind {
+  CLAIM
+  CONCLUSION
+  /// A mondat nem szakmai állítás (bevezető, átvezetés), a szerkesztő okkal jelöli.
+  NOT_TECHNICAL
+}
+
+/// A CIKK EGY MONDATA ÉS AMIRE ÉPÜL (S5): VERIFIED állítás, jóváhagyott
+/// következtetés, vagy a szerkesztő okkal jelölt nem szakmai mondata. A mondatot
+/// SZÓ SZERINT tárolja (normalizált szóközzel): ha a szöveg megváltozik, a
+/// hivatkozás árva lesz, és a mondat hivatkozás nélkülinek látszik, tehát egy
+/// átírt mondat soha nem viszi magával a régi alátámasztást. Pontosan egy cél
+/// tartozik hozzá a fajtája szerint (a CHECK köti).
+model ArticleCitation {
+  id            String               @id @default(cuid())
+  contentId     String
+  article       ArticleBody          @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  sentence      String
+  /// sha256 a normalizált mondaton: az egyezés kulcsa.
+  sentenceHash  String               @db.VarChar(64)
+  kind          ArticleCitationKind
+  claimId       String?
+  claim         KnowledgeClaim?      @relation(fields: [claimId], references: [id], onDelete: Restrict)
+  conclusionId  String?
+  conclusion    KnowledgeConclusion? @relation(fields: [conclusionId], references: [id], onDelete: Restrict)
+  /// A cél kulcsa az egyediséghez: az állítás vagy a következtetés id-je, vagy
+  /// NOT_TECHNICAL (a CHECK köti; egy NULL az egyedi indexben nem ütközne).
+  targetKey     String
+  /// NOT_TECHNICAL: miért nem szakmai a mondat.
+  reason        String?
+  /// A 7a figyelmeztetések, amiket a szerkesztő okkal elfogadott. Egy új kód
+  /// (a szótár vagy az állítás változása után) újra megválaszolandó.
+  answeredCodes String[]             @default([])
+  answerReason  String?
+  answeredById  String?
+  answeredBy    User?                @relation("ArticleCitationAnsweredBy", fields: [answeredById], references: [id], onDelete: Restrict)
+  answeredAt    DateTime?
+  createdById   String
+  createdBy     User                 @relation("ArticleCitationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime             @default(now())
+
+  @@unique([contentId, sentenceHash, targetKey])
+  @@index([claimId])
+  @@index([conclusionId])
 }

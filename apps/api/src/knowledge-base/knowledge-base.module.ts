@@ -1,5 +1,10 @@
 import { Module } from "@nestjs/common";
 
+import {
+  ArticleCitationController,
+  ArticleCitationService,
+} from "./articles/article-citation.controller.js";
+
 import { ClaimReviewController } from "./claims/claim-review.controller.js";
 import { ClaimReviewService } from "./claims/claim-review.service.js";
 import {
@@ -10,6 +15,10 @@ import { KnowledgeDiscoveryController } from "./discovery/discovery-run.controll
 import { KnowledgeDiscoveryService } from "./discovery/discovery-run.service.js";
 import { KnowledgeExtractionController } from "./extraction/extraction.controller.js";
 import { KnowledgeExtractionService } from "./extraction/extraction.service.js";
+import {
+  ConclusionController,
+  ConclusionService,
+} from "./conclusions/conclusion.controller.js";
 import {
   KnowledgeOverviewController,
   KnowledgeOverviewService,
@@ -31,6 +40,8 @@ import {
     ClaimReviewController,
     ClaimStoreController,
     VocabularyController,
+    ConclusionController,
+    ArticleCitationController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -40,6 +51,8 @@ import {
     ClaimReviewService,
     ClaimStoreService,
     VocabularyService,
+    ConclusionService,
+    ArticleCitationService,
   ],
 })
 export class KnowledgeBaseModule {}
