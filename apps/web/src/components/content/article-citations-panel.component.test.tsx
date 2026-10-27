@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ArticleCitationReport } from "@/lib/api/knowledge-base";
@@ -155,6 +161,24 @@ describe("ArticleCitationsPanel", () => {
         kind: "NOT_TECHNICAL",
         reason: "bevezető",
       }),
+    );
+  });
+
+  it("asks before it removes a citation, and removes only after the answer", async () => {
+    api.removeCitation.mockResolvedValue(report());
+    renderIt();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Hivatkozás törlése" }),
+    );
+    expect(api.removeCitation).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Törlöd ezt a hivatkozást?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Hivatkozás törlése" }),
+    );
+    await waitFor(() =>
+      expect(api.removeCitation).toHaveBeenCalledWith("t", "a1", "cit1"),
     );
   });
 

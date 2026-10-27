@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Button, Input, Skeleton } from "@acropora/ui";
+import { Alert, Button, ConfirmDialog, Input, Skeleton } from "@acropora/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -95,6 +95,10 @@ export function ArticleCitationsPanel({
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [removing, setRemoving] = useState<{
+    id: string;
+    sentence: string;
+  } | null>(null);
   const latest = useRef(0);
 
   useEffect(() => {
@@ -277,13 +281,7 @@ export function ArticleCitationsPanel({
                       variant="ghost"
                       disabled={busy}
                       onClick={() =>
-                        write(() =>
-                          knowledgeBaseApi.removeCitation(
-                            token,
-                            contentId,
-                            c.id,
-                          ),
-                        )
+                        setRemoving({ id: c.id, sentence: s.sentence })
                       }
                     >
                       Hivatkozás törlése
@@ -459,9 +457,7 @@ export function ArticleCitationsPanel({
                     variant="ghost"
                     disabled={busy}
                     onClick={() =>
-                      write(() =>
-                        knowledgeBaseApi.removeCitation(token, contentId, o.id),
-                      )
+                      setRemoving({ id: o.id, sentence: o.sentence })
                     }
                   >
                     Törlés
@@ -472,6 +468,24 @@ export function ArticleCitationsPanel({
           </ul>
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={removing !== null}
+        title="Törlöd ezt a hivatkozást?"
+        consequence={`A mondat („${removing?.sentence ?? ""}”) e nélkül a hivatkozás nélkül marad, és a hivatkozás figyelmeztetéseire adott válaszok is elvesznek.`}
+        recovery="A hivatkozás újra felvehető ugyanerre a mondatra; a törlés az auditnaplóban megmarad."
+        confirmLabel="Hivatkozás törlése"
+        busy={busy}
+        onConfirm={() => {
+          const target = removing;
+          if (!target) return;
+          write(
+            () => knowledgeBaseApi.removeCitation(token, contentId, target.id),
+            () => setRemoving(null),
+          );
+        }}
+        onCancel={() => setRemoving(null)}
+      />
     </section>
   );
 }
