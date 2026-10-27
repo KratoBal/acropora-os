@@ -57,6 +57,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "ARTICLE_IMAGE_PUBLIC_BASE_URL",
   "ASSET_QR_BASE_URL",
   "BILLING_ISSUE_ENABLED",
+  // the test-only switch for the Brands page catalog buttons: a boolean, not a secret
+  "CATALOG_ADMIN_ACTIONS_ENABLED",
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
   "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
   "EXTERNAL_INVOICE_PDF_SCHEDULE",

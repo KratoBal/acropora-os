@@ -14,6 +14,7 @@ import { AssistantAuditMiddleware } from "./auth/assistant-audit.middleware.js";
 import { AppService } from "./app.service.js";
 import { AquariumsModule } from "./aquariums/aquariums.module.js";
 import { AuthModule } from "./auth/auth.module.js";
+import { CatalogActionsModule } from "./catalog-actions/catalog-actions.module.js";
 import { BrandsModule } from "./brands/brands.module.js";
 import { HomepageContentModule } from "./homepage-content/homepage-content.module.js";
 import { SeoLandingModule } from "./seo-landing/seo-landing.module.js";
@@ -82,6 +83,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     MortalityModule,
     AuthModule,
     BrandsModule,
+    CatalogActionsModule,
     SeoLandingModule,
     HomepageContentModule,
     ProductModule,

@@ -38,6 +38,12 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/brands", () => ({ brandsApi: api }));
+// the catalog operations panel asks the server whether it exists; production says no
+vi.mock("@/lib/api/catalog-actions", () => ({
+  catalogActionsApi: {
+    overview: vi.fn(async () => ({ enabled: false, actions: [] })),
+  },
+}));
 
 const session: Session = {
   id: "session-1",
