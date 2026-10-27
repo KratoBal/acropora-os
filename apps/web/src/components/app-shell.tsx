@@ -16,6 +16,7 @@ import { Fragment, useEffect, useState } from "react";
 
 import {
   allNavigationPages,
+  favoritesGroup,
   isNavigationItemActive,
   mainNavigation,
   type AppNavigationGroup,
@@ -34,6 +35,7 @@ import {
   type HeaderMessagesProps,
 } from "./shell-profile";
 import { dashboardApi } from "@/lib/api/dashboard";
+import { useFavorites } from "./use-favorites";
 import { useNavigationCounters } from "./use-navigation-counters";
 
 /** What the menu number counts, for a screen reader (card 4a6813db). */
@@ -138,6 +140,51 @@ function NavigationItem({
   );
 }
 
+/**
+ * A CSILLAG GOMB "Kedvencekbe" FELIRATTAL (Balázs, 2026-10-27). A keret
+ * fejlécében áll, így minden menüpont képernyőjén ott van, oldalankénti
+ * bekötés nélkül. A felirat nem változik (a megjelölt állapotot a kitöltött
+ * csillag és az `aria-pressed` mondja); keskeny képernyőn csak az ikon látszik,
+ * a felirat a képernyőolvasónak megmarad.
+ */
+function FavoriteButton({
+  marked,
+  ready,
+  failed,
+  onToggle,
+}: {
+  marked: boolean;
+  ready: boolean;
+  failed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      {failed ? (
+        <span role="alert" className="text-xs text-pilot-red-700">
+          Nem sikerült menteni.
+        </span>
+      ) : null}
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-pressed={marked}
+        disabled={!ready}
+        title={marked ? "Kivétel a kedvencek közül" : "Kedvencekbe"}
+        onClick={onToggle}
+      >
+        <Icon
+          name="star"
+          size={16}
+          fill={marked ? "currentColor" : "none"}
+          className={marked ? "text-pilot-aqua-700" : undefined}
+        />
+        <span className="sr-only sm:not-sr-only">Kedvencekbe</span>
+      </Button>
+    </>
+  );
+}
+
 /** All destinations are needed to resolve overlapping active paths. */
 const ALL_NAVIGATION_ITEMS = allNavigationPages;
 
@@ -173,6 +220,7 @@ export function AppShell({
     session?.token ?? "",
     Boolean(session),
   );
+  const favorites = useFavorites(session?.token ?? "", Boolean(session));
   const { effectiveTheme, preference, setPreference } = useThemePreference();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [myTaskCount, setMyTaskCount] = useState<number | null>(null);
@@ -201,6 +249,11 @@ export function AppShell({
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
   const closeMobileNavigation = () => setMobileNavigationOpen(false);
+  // a csillag arra a menüpontra szól, amelyiken a néző áll (és amit láthat)
+  const currentItem = ALL_NAVIGATION_ITEMS.find(
+    (item) => canAccess(item) && isActive(item),
+  );
+  const favoriteMenu = favoritesGroup(favorites.hrefs, canAccess);
 
   const renderItem = (item: AppNavigationItem, nested = false) => {
     const count = isNavigationCounterId(item.entryId)
@@ -248,14 +301,7 @@ export function AppShell({
       return renderItem(visibleChildren[0]!);
 
     return (
-      <div
-        key={entry.label}
-        className={
-          entry.separated
-            ? "mt-7 border-t border-pilot-grey-200 pt-4"
-            : undefined
-        }
-      >
+      <div key={entry.label}>
         <NavigationGroup
           label={entry.label}
           icon={<Icon name={entry.icon} size={18} />}
@@ -290,7 +336,15 @@ export function AppShell({
       aria-label="Fő navigáció"
       className="flex min-h-0 flex-1 flex-col overflow-y-auto"
     >
-      <div className="space-y-1">{mainNavigation.map(renderGroup)}</div>
+      <div className="space-y-1">
+        {/*
+          A KEDVENCEK AZ ÁTTEKINTÉS FÖLÖTT áll (Balázs, 2026-10-27), és csak
+          akkor látszik, ha van benne elem. Az Áttekintés utána a rögzített
+          első főmenü, a többi ABC sorrendben (`mainNavigation`).
+        */}
+        {favoriteMenu ? renderGroup(favoriteMenu) : null}
+        {mainNavigation.map(renderGroup)}
+      </div>
     </nav>
   );
 
@@ -403,6 +457,14 @@ export function AppShell({
             </div>
 
             <div className="ml-auto flex items-center gap-2">
+              {currentItem ? (
+                <FavoriteButton
+                  marked={favorites.isFavorite(currentItem.href)}
+                  ready={favorites.ready}
+                  failed={favorites.failed}
+                  onToggle={() => favorites.toggle(currentItem.href)}
+                />
+              ) : null}
               {headerMessages ? <HeaderMessages {...headerMessages} /> : null}
               <UserMenu
                 preference={preference}

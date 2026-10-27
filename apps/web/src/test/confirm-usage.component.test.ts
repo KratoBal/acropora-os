@@ -90,7 +90,15 @@ const CONFIRM_COMPONENT = /ConfirmDialog/;
  * adata elavulhat, amig a kerdes kint van. A kozos komponens ezt a kettot ma
  * nem tudja; egy "egysegesites" tehat nem javitas lenne, hanem vesztes.
  */
+/**
+ * A KEDVENC KIVETELE NEM TORLES A SZO ERTELMEBEN: a csillag kikapcsolasa egy
+ * jelolest vesz el, semmi mast, es egy ujabb nyomas visszahozza. Egy kerdes
+ * minden csillagnyomasnal a gombot hasznalhatatlanna tenne. A szerver nem
+ * a menupont adatat torli, csak a felhasznalo sajat jelolesenek sorat.
+ */
 const OWN_QUESTION: Record<string, string> = {
+  "src/components/use-favorites.ts":
+    "Visszaallithato jeloles: ujabb nyomas visszahozza, a kerdes hasznalhatatlanna tenne a gombot.",
   "src/components/suppliers/pilot/pilot-partner-delete-button.tsx":
     "Sajat, ketagú kerdes, a szervertol lekert tervvel.",
 };

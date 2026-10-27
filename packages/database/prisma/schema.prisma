@@ -893,6 +893,8 @@ model User {
   /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
   serviceTokens          ServiceToken[]                @relation("ServiceTokenUser")
   assistantThreads       AssistantConversationThread[]
+  /// A menüből kedvencnek jelölt oldalai (csillag gomb, "Kedvencekbe").
+  favorites              UserFavorite[]
   /// Az általa kézzel indított JEV termékellenőrzések (PD-013).
   productEnrichmentRuns  ProductEnrichmentRun[]
   /// A termékismeret-tények, amiket ő fogadott el (#1431).
@@ -11233,4 +11235,25 @@ model ArticleCitation {
   @@unique([contentId, sentenceHash, targetKey])
   @@index([claimId])
   @@index([conclusionId])
+}
+
+/// EGY FELHASZNÁLÓ KEDVENC OLDALA az OS menüjéből (Balázs, 2026-10-27, "Kedvencekbe"
+/// csillag gomb). SZERVEROLDALON áll, nem a böngészőben, hogy minden eszközön
+/// ugyanaz látszódjon.
+///
+/// AZ OLDAL AZ ÚTVONALA (`href`), nem a jogosultsági azonosító: két menüpont is
+/// állhat ugyanazon a `entryId`-n (Válogatások és Márkák), és az útvonal az, ami
+/// a felületen egy menüpontot megkülönböztet. Hogy az útvonal ma menüpont-e, és
+/// hogy a felhasználó láthatja-e, a WEB dönti el kirajzoláskor: ami már nem
+/// menüpont vagy nem látható, az nem jelenik meg, de a sor megmarad.
+model UserFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  href      String   @db.VarChar(200)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, href])
+  @@index([userId, createdAt])
 }

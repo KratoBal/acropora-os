@@ -11,6 +11,8 @@ import {
 
 import {
   allNavigationPages,
+  favoritesGroup,
+  inMainMenuOrder,
   isNavigationItemActive,
   mainNavigation,
   navigationItems,
@@ -158,7 +160,7 @@ describe("navigation", () => {
     kerül, kimarad, vagy a sorrendje elmozdul. A jogosultság más állításokban áll
     (a halmaz-változatlanság, a szerepenkénti összevetés).
   */
-  it("has the nine main menus, with their pages in the order Balázs listed", () => {
+  it("has the nine main menus in alphabetical order, Áttekintés first, with their pages in the order Balázs listed", () => {
     expect(
       mainNavigation.map((entry) => [
         entry.label,
@@ -167,30 +169,27 @@ describe("navigation", () => {
     ).toEqual([
       ["Áttekintés", ["Dashboard", "Feladataim", "Üzenetek"]],
       [
-        "Szerviz",
+        "Akvarisztika",
+        ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
+      ],
+      [
+        "Beállítások",
         [
-          "Hibajegyek",
-          "Munkalapok",
-          "Karbantartás",
-          "Piszkozatok",
-          "Anyagigények",
-          "Eszköznyilvántartás",
-          "QR-kód nyomtatás",
+          "Általános",
+          "Felhasználók",
+          "NAV",
+          "Számlázz.hu kapcsolat",
+          "Mértékegységek",
+          "Eszköz-kategóriák",
+          "Eszköz-funkciók",
+          "Ajánlat szövegrészletek",
+          "Ajánlatsablonok",
         ],
       ],
       ["Értékesítés", ["POS", "Árajánlatok", "Partnerek", "Szerződések"]],
       [
-        "Webshop",
-        [
-          "UNAS Megrendelések",
-          "Rendelések",
-          "Vevők",
-          "Termékek a webshopban",
-          "Kezdőlap",
-          "Válogatások",
-          "Márkák",
-          "Webshop beállítások",
-        ],
+        "Pénzügy",
+        ["Számlázás", "NAV számla lekérés", "Hiányzó számlák", "Elszámolások"],
       ],
       [
         "Raktár és beszerzés",
@@ -206,29 +205,130 @@ describe("navigation", () => {
         ],
       ],
       [
-        "Pénzügy",
-        ["Számlázás", "NAV számla lekérés", "Hiányzó számlák", "Elszámolások"],
-      ],
-      [
-        "Akvarisztika",
-        ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
+        "Szerviz",
+        [
+          "Hibajegyek",
+          "Munkalapok",
+          "Karbantartás",
+          "Piszkozatok",
+          "Anyagigények",
+          "Eszköznyilvántartás",
+          "QR-kód nyomtatás",
+        ],
       ],
       ["Tartalom és tudás", ["Tartalom", "Tudásbázis", "AI teszt"]],
       [
-        "Beállítások",
+        "Webshop",
         [
-          "Általános",
-          "Felhasználók",
-          "NAV",
-          "Számlázz.hu kapcsolat",
-          "Mértékegységek",
-          "Eszköz-kategóriák",
-          "Eszköz-funkciók",
-          "Ajánlat szövegrészletek",
-          "Ajánlatsablonok",
+          "UNAS Megrendelések",
+          "Rendelések",
+          "Vevők",
+          "Termékek a webshopban",
+          "Kezdőlap",
+          "Válogatások",
+          "Márkák",
+          "Webshop beállítások",
         ],
       ],
     ]);
+  });
+
+  /*
+    A FŐMENÜK ABC SORRENDBEN (Balázs, 2026-10-27, msg 1564543075383115838): az
+    Áttekintés felül, a többi a magyar ábécé szerint. A sorrendet a függvény adja,
+    nem a tömb sora, ezért a másik két állítás kell: egy rossz sorrendben felvett
+    új főmenü is a helyére kerül, és az ékezetes kezdőbetű (É, Á) nem a lista
+    végére. MI PIROSÍT: a rendezés elmarad vagy nem magyar; az Áttekintés nem
+    elöl áll; az almenük sorrendje is rendeződik (az a munka menete).
+  */
+  describe("main menu order", () => {
+    const entry = (
+      label: string,
+      ...children: string[]
+    ): AppNavigationGroup => ({
+      label,
+      icon: "box",
+      children: children.map((child) => ({
+        href: `/${child}`,
+        label: child,
+        icon: "box",
+        entryId: child,
+      })),
+    });
+
+    it("sorts by the Hungarian alphabet and keeps Áttekintés first", () => {
+      const ordered = inMainMenuOrder([
+        entry("Zeta"),
+        entry("Értékesítés"),
+        entry("Áttekintés"),
+        entry("Eper"),
+        entry("Alma"),
+        entry("Ősz"),
+        entry("Olaj"),
+      ]);
+      expect(ordered.map((group) => group.label)).toEqual([
+        "Áttekintés",
+        "Alma",
+        "Eper",
+        "Értékesítés",
+        "Olaj",
+        "Ősz",
+        "Zeta",
+      ]);
+    });
+
+    it("does not touch the order of the pages inside a menu", () => {
+      const [only] = inMainMenuOrder([
+        entry("Szerviz", "munka", "anyag", "hiba"),
+      ]);
+      expect(only?.children.map((item) => item.label)).toEqual([
+        "munka",
+        "anyag",
+        "hiba",
+      ]);
+    });
+
+    it("the real menu is already in that order (Áttekintés pinned)", () => {
+      const rest = mainNavigation.slice(1).map((group) => group.label);
+      expect(mainNavigation[0]?.label).toBe("Áttekintés");
+      expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b, "hu")));
+    });
+  });
+
+  /*
+    A KEDVENCEK MENÜ (Balázs, 2026-10-27): a megjelölt útvonalak a megjelölés
+    sorrendjében, csak ami ma menüpont és látható. MI PIROSÍT: a sorrend a
+    főmenüé lesz; egy ismeretlen vagy láthatatlan útvonal megjelenik; üres
+    listánál is áll egy Kedvencek fejléc; kétszer szereplő útvonal duplán.
+  */
+  describe("favorites group", () => {
+    const all = () => true;
+
+    it("lists the marked pages in marking order, as the menu's own items", () => {
+      const menu = favoritesGroup(["/uzenetek", "/pos", "/feladataim"], all);
+      expect(menu?.label).toBe("Kedvencek");
+      expect(menu?.children.map((item) => item.href)).toEqual([
+        "/uzenetek",
+        "/pos",
+        "/feladataim",
+      ]);
+      const pos = allNavigationPages.find((item) => item.href === "/pos");
+      expect(menu?.children[1]).toBe(pos);
+    });
+
+    it("leaves out what is no longer a menu page or is not in reach, and a repeat", () => {
+      const menu = favoritesGroup(
+        ["/nincs-ilyen", "/pos", "/pos", "/penzugy/szamlazas"],
+        (item) => item.href !== "/penzugy/szamlazas",
+      );
+      expect(menu?.children.map((item) => item.href)).toEqual(["/pos"]);
+    });
+
+    it("is not there at all without an item", () => {
+      expect(favoritesGroup([], all)).toBeNull();
+      expect(favoritesGroup(["/nincs-ilyen"], all)).toBeNull();
+      expect(favoritesGroup(["/pos"], () => false)).toBeNull();
+    });
   });
 
   /*
