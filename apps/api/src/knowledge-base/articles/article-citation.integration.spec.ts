@@ -161,6 +161,19 @@ describe(
       const approved = await conclusions.approve(draft.id, userId);
       assert.equal(approved.status, "APPROVED");
       assert.equal(approved.approvedById, userId);
+      assert.equal(approved.citationCount, 0);
+      // one article sentence on it: the count the withdrawal's question names
+      const cited = await article("DRAFTING", "<p>K2 szerint így van.</p>");
+      await citations.add(
+        cited,
+        {
+          sentence: "K2 szerint így van.",
+          kind: "CONCLUSION",
+          targetId: draft.id,
+        },
+        userId,
+      );
+      assert.equal((await conclusions.detail(draft.id)).citationCount, 1);
       await assert.rejects(
         conclusions.update(
           draft.id,

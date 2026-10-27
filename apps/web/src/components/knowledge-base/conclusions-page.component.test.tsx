@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Session, UserRole } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -59,6 +65,7 @@ const conclusion = (
   status: "DRAFT",
   revision: 1,
   claims: [{ id: "c1", status: "VERIFIED" }],
+  citationCount: 0,
   approvedAt: null,
   withdrawnReason: null,
   updatedAt: "2026-10-27T18:00:00.000Z",
@@ -121,7 +128,8 @@ describe("ConclusionsPage", () => {
     expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
   });
 
-  it("withdraws only with a reason", async () => {
+  it("withdraws only with a reason, and only after the question that names the citations it breaks", async () => {
+    api.conclusions.mockResolvedValue([conclusion({ citationCount: 2 })]);
     api.withdrawConclusion.mockResolvedValue(
       conclusion({ status: "WITHDRAWN", withdrawnReason: "elavult" }),
     );
@@ -133,6 +141,14 @@ describe("ConclusionsPage", () => {
       target: { value: "elavult" },
     });
     fireEvent.click(withdraw);
+    expect(api.withdrawConclusion).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", {
+      name: "Visszavonod ezt a következtetést?",
+    });
+    expect(dialog).toHaveTextContent("2 cikk-mondat hivatkozik rá");
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Visszavonás" }),
+    );
     await waitFor(() =>
       expect(api.withdrawConclusion).toHaveBeenCalledWith(
         "token-1",
