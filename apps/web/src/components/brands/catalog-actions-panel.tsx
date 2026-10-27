@@ -10,6 +10,12 @@ import { catalogActionsApi } from "@/lib/api/catalog-actions";
 
 /** How often a running run is asked about again. */
 export const CATALOG_ACTION_POLL_MS = 2000;
+/**
+ * WHAT THE CONFIRMATION MAY PROMISE: the apply plans again when it writes, so
+ * it is the plan's summary that is shown, not a set the apply is bound to.
+ */
+export const APPLY_RECOMPUTES =
+  "A végrehajtás indításkor újra kiszámolja, mit ír. Ha az adat a próba óta változott, a végrehajtás összesítője eltér a próbáétól; a kettő egymás mellett látszik.";
 /** The lines of a run's output shown without opening the full text. */
 const SUMMARY_LINES = 14;
 
@@ -23,7 +29,7 @@ const APPLY_TEXT: Partial<
 > = {
   "brand-backfill": {
     consequence:
-      "Az OS adatbázisába márka-rekordok kerülnek, és a próba szerinti termékek márkát kapnak. A napló téged nevez meg felelősként.",
+      "Az OS adatbázisába márka-rekordok kerülnek, és a termékek a tárolt UNAS-adatuk szerinti márkát kapják. A napló téged nevez meg felelősként.",
     recovery:
       "Nincs egy gombos visszavonás: egy márka a Márkák oldalon archiválható, a termék márkája a termék lapján törölhető. Az újrafuttatás a már márkás termékeket kihagyja.",
   },
@@ -35,7 +41,7 @@ const APPLY_TEXT: Partial<
   },
 };
 const GENERIC_APPLY_TEXT = {
-  consequence: "A művelet a próba szerint ír.",
+  consequence: "A művelet ír.",
   recovery: "A visszaállítás módja ennél a műveletnél nincs megadva.",
 };
 
@@ -72,6 +78,10 @@ export function CatalogActionsPanel({ token }: { token: string }) {
   const [runs, setRuns] = useState<
     Partial<Record<CatalogActionKind, CatalogActionRun>>
   >({});
+  // the plan an apply was confirmed from, shown next to the apply's summary
+  const [plans, setPlans] = useState<
+    Partial<Record<CatalogActionKind, CatalogActionRun>>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<CatalogActionKind | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +97,16 @@ export function CatalogActionsPanel({ token }: { token: string }) {
         for (const action of view.actions)
           if (action.lastRun) latest[action.kind] = action.lastRun;
         setRuns(latest);
+        for (const run of Object.values(latest))
+          if (run?.mode === "apply" && run.planRunId)
+            catalogActionsApi
+              .run(token, run.planRunId, controller.signal)
+              .then((plan) =>
+                setPlans((current) => ({ ...current, [plan.kind]: plan })),
+              )
+              // the plan may be gone (the API keeps the last runs only): the
+              // apply's own summary still shows
+              .catch(() => undefined);
       })
       .catch((cause) => {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
@@ -201,9 +221,25 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                     description={run.error}
                   />
                 ) : null}
+                {run.mode === "apply" &&
+                plans[action.kind]?.id === run.planRunId ? (
+                  <pre
+                    aria-label="A próba összesítője"
+                    className="max-h-48 overflow-auto whitespace-pre-wrap rounded bg-dusk-50 p-2 text-xs text-dusk-500"
+                  >
+                    {runSummary(plans[action.kind]!.output)}
+                  </pre>
+                ) : null}
                 {run.output ? (
                   <>
-                    <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-dusk-50 p-2 text-xs">
+                    <pre
+                      aria-label={
+                        run.mode === "apply"
+                          ? "A végrehajtás összesítője"
+                          : "A próba összesítője"
+                      }
+                      className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-dusk-50 p-2 text-xs"
+                    >
                       {runSummary(run.output)}
                     </pre>
                     <details>
@@ -226,15 +262,16 @@ export function CatalogActionsPanel({ token }: { token: string }) {
         title={`Végrehajtod? ${
           actions?.find((a) => a.kind === confirming)?.title ?? ""
         }`}
-        consequence={confirmText.consequence}
+        consequence={`${confirmText.consequence} ${APPLY_RECOMPUTES}`}
         recovery={confirmText.recovery}
-        confirmLabel="Végrehajtás a próba szerint"
+        confirmLabel="Végrehajtás"
         busy={busy}
         onCancel={() => setConfirming(null)}
         onConfirm={() => {
           const kind = confirming;
           const plan = kind ? runs[kind] : undefined;
           if (!kind || !plan) return;
+          setPlans((current) => ({ ...current, [kind]: plan }));
           void start(() => catalogActionsApi.apply(token, kind, plan.id));
         }}
       >
