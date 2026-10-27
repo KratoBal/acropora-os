@@ -38,6 +38,7 @@ import {
 } from "@/components/pilot/pilot-ui";
 import { formatStatusAge } from "@/components/webshop/webshop-orders-page";
 import { webshopOrdersApi } from "@/lib/api/webshop-orders";
+import { WebshopOrderAttention } from "./webshop-order-attention";
 
 /**
  * WEBSHOP / RENDELÉSEK (Balázs, 2026-10-05; Figma 493:3, 493:232, 493:337,
@@ -582,6 +583,8 @@ export function WebshopOrdersListPage() {
         title="Rendelések"
         description="Új webshop rendelések feldolgozása, számlázása és feladása egy helyen."
       />
+
+      <WebshopOrderAttention token={token} />
 
       <div
         role="group"

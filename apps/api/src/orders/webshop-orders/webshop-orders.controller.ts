@@ -215,6 +215,17 @@ export class WebshopOrdersController {
     return this.lines.variants(query);
   }
 
+  /**
+   * A FIGYELMET KÉRŐ RENDELÉSEK (commerce-audit-p1, P1/6): a hiányzó bolti
+   * rendelés. Csak olvasás. A
+   * `:id` útvonalak ELŐTT áll, hogy ne rendelés-azonosítónak olvassa a nevét.
+   */
+  @Get("attention")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  attention() {
+    return this.orders.attention();
+  }
+
   @Get()
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   list(@Query() query: WebshopOrderListQueryDto) {

@@ -20,6 +20,8 @@ import {
   type WebshopStaleThreshold,
 } from "@acropora/types";
 import type {
+  WebshopOrderAttentionItem,
+  WebshopOrderAttentionResponse,
   WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
@@ -98,6 +100,38 @@ export class WebshopOrdersService {
       apiKey: string,
     ) => MedusaAdminClient = medusaClientFromEnvironment,
   ) {}
+
+  /**
+   * A FIGYELMET KÉRŐ RENDELÉSEK (commerce-audit-p1, P1/6): a webshop
+   * `GET /admin/order-attention` válasza, az OS nevein. Csak jelzés: nem zár,
+   * nem módosít. A lista oldala ettől nem törhet el: ha a webshop nem válaszol
+   * vagy még nem ismeri a végpontot (a webshop az OS előtt telepíthető, de
+   * fordítva is előfordul), `available: false` a válasz, és egy figyelmeztető
+   * naplósor — ez NEM azt jelenti, hogy nincs teendő.
+   */
+  async attention(): Promise<WebshopOrderAttentionResponse> {
+    try {
+      const client = await this.client();
+      const body = await client.orderAttention();
+      const items: WebshopOrderAttentionItem[] = (body.items ?? []).map(
+        (item) => ({
+          kind: item.kind,
+          orderId: item.order_id ?? null,
+          displayId: item.display_id ?? null,
+          since: item.since,
+          waiting: item.minutes,
+        }),
+      );
+      return { available: true, count: items.length, items };
+    } catch (error) {
+      this.logger.warn(
+        `A figyelmet kérő rendelések nem olvashatók a webshopból: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { available: false, count: 0, items: [] };
+    }
+  }
 
   /** Az elavulási küszöbök (Beállítások). */
   staleThresholds(): Promise<WebshopStaleThreshold[]> {
