@@ -32,17 +32,33 @@ export interface ArticleSnapshot {
 
 type Op<T> = { kind: "same" | "added" | "removed"; value: T };
 
-// Above this many cells the table would not fit a request's memory; the
-// comparison then says "everything changed", which is true if not precise.
-const MAX_CELLS = 4_000_000;
+/**
+ * THE CELLS ONE COMPARISON MAY SPEND, all its tables together (barracuda on
+ * #1920, note 1): a limit per table alone let many long changed paragraphs
+ * cost that limit many times over in one request. Past it, a table is not
+ * built and its part reads "everything changed", which is true if not
+ * precise.
+ */
+export const MAX_DIFF_CELLS = 4_000_000;
+
+/** What is left of a comparison's cells; shared by every table it builds. */
+export interface DiffBudget {
+  cells: number;
+}
 
 /** A longest-common-subsequence diff, in order: removed before added at each step. */
-export function sequenceDiff<T>(a: readonly T[], b: readonly T[]): Op<T>[] {
-  if (a.length * b.length > MAX_CELLS)
+export function sequenceDiff<T>(
+  a: readonly T[],
+  b: readonly T[],
+  budget: DiffBudget = { cells: MAX_DIFF_CELLS },
+): Op<T>[] {
+  const cost = a.length * b.length;
+  if (cost > budget.cells)
     return [
       ...a.map((value) => ({ kind: "removed" as const, value })),
       ...b.map((value) => ({ kind: "added" as const, value })),
     ];
+  budget.cells -= cost;
   // lcs[i][j]: the common length of a[i..] and b[j..]
   const lcs = Array.from({ length: a.length + 1 }, () =>
     new Array<number>(b.length + 1).fill(0),
@@ -106,8 +122,9 @@ export function bodyBlocks(bodyHtml: string): string[] {
 export function blockDiff(
   before: readonly string[],
   after: readonly string[],
+  budget: DiffBudget = { cells: MAX_DIFF_CELLS },
 ): ArticleDiffBlock[] {
-  const ops = sequenceDiff(before, after);
+  const ops = sequenceDiff(before, after, budget);
   const out: ArticleDiffBlock[] = [];
   let k = 0;
   while (k < ops.length) {
@@ -128,7 +145,7 @@ export function blockDiff(
       out.push({
         kind: "changed",
         segments: segmentsOf(
-          sequenceDiff(words(removed[p]!), words(added[p]!)),
+          sequenceDiff(words(removed[p]!), words(added[p]!), budget),
         ),
       });
     for (const text of removed.slice(pairs))

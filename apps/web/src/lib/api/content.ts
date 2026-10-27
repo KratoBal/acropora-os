@@ -187,11 +187,18 @@ export const contentApi = {
    * Two versions of the article compared: `from` and `to` are an approved
    * revision's id or "current" (the saved body being edited).
    */
-  articleDiff(token: string, id: string, from: string, to: string) {
+  articleDiff(
+    token: string,
+    id: string,
+    from: string,
+    to: string,
+    signal?: AbortSignal,
+  ) {
     const query = new URLSearchParams({ from, to });
     return apiRequest<ArticleRevisionDiff>(
       `/content/${encodeURIComponent(id)}/article/diff?${query.toString()}`,
       token,
+      { signal },
     );
   },
 

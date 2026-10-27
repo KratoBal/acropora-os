@@ -83,6 +83,32 @@ describe("blockDiff", () => {
   });
 });
 
+describe("the comparison's cell budget", () => {
+  it("is shared by every table of one comparison: past it, a changed paragraph reads as replaced whole", () => {
+    // 2x2 paragraph cells, then 5x5 word cells per pair: room for the first pair only
+    const budget = { cells: 4 + 25 };
+    const blocks = blockDiff(["a b c", "d e f"], ["a x c", "d y f"], budget);
+    assert.deepEqual(
+      blocks.map((b) =>
+        b.kind === "changed"
+          ? b.segments.map((s) => `${s.kind}:${s.text}`).join("|")
+          : b.kind,
+      ),
+      ["same:a |removed:b|added:x|same: c", "removed:d e f|added:d y f"],
+    );
+    assert.equal(budget.cells, 0);
+  });
+
+  it("spends nothing on a table it refuses", () => {
+    const budget = { cells: 3 };
+    assert.deepEqual(
+      sequenceDiff(["a", "b"], ["a", "b"], budget).map((o) => o.kind),
+      ["removed", "removed", "added", "added"],
+    );
+    assert.equal(budget.cells, 3);
+  });
+});
+
 describe("articleDiff", () => {
   it("is identical for the same snapshot, and markup alone is no change", () => {
     assert.equal(articleDiff(snapshot(), snapshot()).identical, true);

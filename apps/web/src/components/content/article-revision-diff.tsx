@@ -7,7 +7,7 @@ import type {
   ArticleRevisionSummary,
 } from "@acropora/types";
 import { Alert, Button, Skeleton } from "@acropora/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { contentApi } from "@/lib/api/content";
 
@@ -150,21 +150,34 @@ export function ArticleRevisions({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // the request in flight: a newer click cancels it, so a slower, older
+  // answer never overwrites the newer one (barracuda on #1920, note 2)
+  const inFlight = useRef<AbortController | null>(null);
+  useEffect(() => () => inFlight.current?.abort(), []);
+
   const compare = (from: string, to: string) => {
+    inFlight.current?.abort();
+    const controller = new AbortController();
+    inFlight.current = controller;
     setLoading(true);
     setError(null);
     setDiff(null);
     contentApi
-      .articleDiff(token, contentId, from, to)
-      .then(setDiff)
-      .catch((cause: unknown) =>
+      .articleDiff(token, contentId, from, to, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setDiff(result);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
         setError(
           cause instanceof Error
             ? cause.message
             : "Az összevetés nem sikerült.",
-        ),
-      )
-      .finally(() => setLoading(false));
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   };
 
   if (!revisions.length) return null;
