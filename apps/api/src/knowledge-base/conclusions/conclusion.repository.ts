@@ -194,6 +194,12 @@ export class ConclusionRepository {
     return this.detail(id);
   }
 
+  /**
+   * The approval. The creator may approve their own draft: in the pilot the
+   * editor and the approver are the same person, Balázs (plan v4, 13., 2.;
+   * barracuda on #1919, note 2). A four-eyes rule belongs here when the
+   * editor's role is delegated.
+   */
   async approve(id: string, userId: string): Promise<ConclusionView> {
     await prisma.$transaction(async (tx) => {
       const before = await tx.knowledgeConclusion.findUnique({

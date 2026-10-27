@@ -70,6 +70,7 @@ export {
   citationReport,
   normaliseSentence,
   splitSentences,
+  warningKey,
 } from "./article-citations.js";
 export type {
   CitationCheck,

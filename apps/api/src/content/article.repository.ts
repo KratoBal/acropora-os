@@ -153,16 +153,17 @@ export async function applyArticleStep(
       throw new ArticleStepError(
         "A cikknek nincs jóváhagyott változata, ezért nem publikálható.",
       );
-    // THE RESEARCH PILOT PUBLISHES NOTHING (plan v4, 9.2 S5): an article that
-    // cites the knowledge base is a knowledge article, and its first public
-    // release is Balázs's own decision after the copyright check (13., 6.).
+    // THE RESEARCH PILOT PUBLISHES NOTHING (plan v4, 9.2 S5): an article with
+    // any citation row, a not-technical mark included, is under the knowledge
+    // base's check, and its first public release is Balázs's own decision
+    // after the copyright check (13., 6.).
     if (
       (await tx.articleCitation.count({
         where: { contentId: input.contentId },
       })) > 0
     )
       throw new ArticleStepError(
-        "A kutatási tudástárra hivatkozó cikk a pilotban nem publikálható: az első közzététel Balázs külön döntése, a szerzői jogi ellenőrzés után.",
+        "Ez a cikk a kutatási tudástár hivatkozás-ellenőrzése alatt áll (hivatkozás vagy nem szakmai jelölés van rajta), ezért a pilotban nem publikálható: az első közzététel Balázs külön döntése, a szerzői jogi ellenőrzés után.",
       );
     await tx.articleBody.update({
       where: { contentId: input.contentId },

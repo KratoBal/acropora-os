@@ -30,10 +30,17 @@ const api = vi.hoisted(() => ({
   uploadArticleImage: vi.fn(),
 }));
 const products = vi.hoisted(() => ({ list: vi.fn(), detail: vi.fn() }));
+// the citation panel (S5) reads the knowledge base: never the network here
+const knowledge = vi.hoisted(() => ({
+  citations: vi.fn(),
+  claimStore: vi.fn(),
+  conclusions: vi.fn(),
+}));
 let role: UserRole = "OWNER";
 
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
 vi.mock("@/lib/api/products", () => ({ productApi: products }));
+vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: knowledge }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
@@ -119,6 +126,29 @@ beforeEach(() => {
   });
   products.list.mockReset().mockResolvedValue({ items: [] });
   products.detail.mockReset();
+  knowledge.citations.mockReset().mockResolvedValue({
+    contentId: "c1",
+    editable: true,
+    vocabulary: { version: 1, status: "APPROVED" },
+    sentences: [],
+    orphaned: [],
+    blockers: [],
+    counts: {
+      sentences: 0,
+      uncited: 0,
+      invalid: 0,
+      unansweredWarnings: 0,
+      orphaned: 0,
+    },
+    clean: false,
+    targets: [],
+  });
+  knowledge.claimStore.mockReset().mockResolvedValue({
+    claims: [],
+    total: 0,
+    layers: {},
+  });
+  knowledge.conclusions.mockReset().mockResolvedValue([]);
 });
 
 const loaded = async () => {

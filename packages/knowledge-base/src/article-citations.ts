@@ -6,8 +6,10 @@
  *
  * In an article the check WARNS, it does not delete (plan 7a, "Ahol
  * szakmailag mást javaslok"): the text is the editor's, and each warning is
- * answered, accepted with a reason or fixed. An answer covers the codes it
- * named: a new code (after the claim or the vocabulary changed) is open again.
+ * answered, accepted with a reason or fixed. An answer covers the warning it
+ * was given for, code AND detail (`warningKey`): a new code, or the same code
+ * with another detail after the claim or the vocabulary changed, is open
+ * again (barracuda on #1919, note 1).
  *
  * A citation holds its sentence VERBATIM (whitespace normalised). A sentence
  * that was rewritten no longer matches, so its old citation is ORPHANED and
@@ -99,7 +101,13 @@ export interface CitationRow {
   kind: CitationKind;
   claimId: string | null;
   conclusionId: string | null;
-  answeredCodes: readonly string[];
+  /** The answered warnings' keys (`warningKey`). */
+  answered: readonly string[];
+}
+
+/** What an answer is stored under: the code and the detail the editor saw. */
+export function warningKey(warning: { code: string; detail: string }): string {
+  return `${warning.code}\u001f${warning.detail}`;
 }
 
 /** A cited claim as the caller loaded it. `scope` is read only for a VERIFIED claim. */
@@ -132,7 +140,7 @@ export interface CitationCheck {
   problems: CitationProblem[];
   /** The sentence check's findings (and the not-technical mark's), answerable. */
   warnings: CheckFailure[];
-  /** Warning codes not yet answered. */
+  /** The codes of the warnings not yet answered. */
   unanswered: string[];
 }
 
@@ -234,14 +242,18 @@ export function citationReport(input: {
           },
         ];
     }
-    const answered = new Set(row.answeredCodes);
+    const answered = new Set(row.answered);
     return {
       id: row.id,
       kind: row.kind,
       problems,
       warnings,
       unanswered: [
-        ...new Set(warnings.map((w) => w.code).filter((c) => !answered.has(c))),
+        ...new Set(
+          warnings
+            .filter((w) => !answered.has(warningKey(w)))
+            .map((w) => w.code),
+        ),
       ],
     };
   };

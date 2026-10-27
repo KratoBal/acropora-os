@@ -2,6 +2,7 @@ import { Prisma, prisma } from "@acropora/database";
 import {
   citationReport,
   splitSentences,
+  warningKey,
   type CitationReport,
   type CitationRow,
   type CitedConclusion,
@@ -24,6 +25,14 @@ export interface ArticleCitationReport extends CitationReport {
   /** Whether citations may change now: the article body's own editable states. */
   editable: boolean;
   vocabulary: { version: number; status: string };
+  /** What each citation points at, by its id: the report itself names only the kind. */
+  targets: {
+    id: string;
+    kind: string;
+    claimId: string | null;
+    conclusionId: string | null;
+    reason: string | null;
+  }[];
 }
 
 export class ArticleCitationNotFound extends Error {
@@ -55,7 +64,8 @@ const CITATION_SELECT = {
   kind: true,
   claimId: true,
   conclusionId: true,
-  answeredCodes: true,
+  answeredWarnings: true,
+  reason: true,
 } satisfies Prisma.ArticleCitationSelect;
 
 async function loadArticle(tx: Tx | typeof prisma, contentId: string) {
@@ -121,11 +131,19 @@ export class ArticleCitationRepository {
     contentId: string,
   ): Promise<{ report: ArticleCitationReport; rows: CitationRow[] }> {
     const article = await loadArticle(tx, contentId);
-    const rows: CitationRow[] = await tx.articleCitation.findMany({
+    const stored = await tx.articleCitation.findMany({
       where: { contentId },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: CITATION_SELECT,
     });
+    const rows: CitationRow[] = stored.map((r) => ({
+      id: r.id,
+      sentence: r.sentence,
+      kind: r.kind,
+      claimId: r.claimId,
+      conclusionId: r.conclusionId,
+      answered: r.answeredWarnings,
+    }));
     const [claims, conclusions, vocabulary] = await Promise.all([
       citedClaims(
         rows.flatMap((r) => (r.claimId ? [r.claimId] : [])),
@@ -152,6 +170,13 @@ export class ArticleCitationRepository {
           article.state,
         ),
         vocabulary: { version: vocabulary.version, status: vocabulary.status },
+        targets: stored.map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          claimId: r.claimId,
+          conclusionId: r.conclusionId,
+          reason: r.reason,
+        })),
       },
       rows,
     };
@@ -256,7 +281,7 @@ export class ArticleCitationRepository {
       requireEditable(article.state);
       const before = await tx.articleCitation.findFirst({
         where: { id: citationId, contentId },
-        select: { ...CITATION_SELECT, reason: true },
+        select: CITATION_SELECT,
       });
       if (!before) throw new ArticleCitationNotFound("Nincs ilyen hivatkozás.");
       await tx.articleCitation.delete({ where: { id: citationId } });
@@ -275,7 +300,8 @@ export class ArticleCitationRepository {
 
   /**
    * Accepts named warnings of one citation, with a reason. Only a code the
-   * check shows for that citation NOW can be answered: an answer is a
+   * check shows for that citation NOW can be answered, and the answer is
+   * stored for the warnings it covered, code and detail (`warningKey`): a
    * judgement on a finding the editor saw, not a standing exemption.
    */
   async answer(
@@ -302,16 +328,19 @@ export class ArticleCitationRepository {
         throw new ArticleCitationInvalid(
           `codes: ezt az ellenőrzés most nem jelzi ennél a hivatkozásnál: ${unknown.join(", ")}.`,
         );
-      const answeredCodes = [
-        ...new Set([...row.answeredCodes, ...input.codes]),
+      const covered = check.warnings.filter((w) =>
+        input.codes.includes(w.code),
+      );
+      const answeredWarnings = [
+        ...new Set([...row.answered, ...covered.map(warningKey)]),
       ];
       const { count } = await tx.articleCitation.updateMany({
         where: {
           id: citationId,
-          answeredCodes: { equals: [...row.answeredCodes] },
+          answeredWarnings: { equals: [...row.answered] },
         },
         data: {
-          answeredCodes,
+          answeredWarnings,
           answerReason: input.reason,
           answeredById: userId,
           answeredAt: new Date(),
@@ -329,11 +358,13 @@ export class ArticleCitationRepository {
           entityId: citationId,
           metadata: {
             contentId,
-            before: { answeredCodes: [...row.answeredCodes] },
-            after: { answeredCodes },
-            warnings: check.warnings
-              .filter((w) => input.codes.includes(w.code))
-              .map((w) => ({ row: w.row, code: w.code, detail: w.detail })),
+            before: { answeredWarnings: [...row.answered] },
+            after: { answeredWarnings },
+            warnings: covered.map((w) => ({
+              row: w.row,
+              code: w.code,
+              detail: w.detail,
+            })),
             reason: input.reason,
           },
         },

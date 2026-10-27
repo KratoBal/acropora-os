@@ -5,6 +5,7 @@ import {
   citationReport,
   normaliseSentence,
   splitSentences,
+  warningKey,
   type CitationRow,
   type CitedClaim,
   type CitedConclusion,
@@ -57,7 +58,7 @@ function row(
     sentence: normaliseSentence(sentence),
     claimId: null,
     conclusionId: null,
-    answeredCodes: [],
+    answered: [],
     ...target,
   };
 }
@@ -162,16 +163,18 @@ describe("citationReport", () => {
     );
   });
 
-  it("warns on the sentence check's findings, and an answer covers only the codes it named", () => {
+  it("warns on the sentence check's findings, and an answer covers only the warnings it was given for", () => {
     const wider = SUPPORTED.replace("0,05", "0,5");
     const open = report(wider, [row(wider, { kind: "CLAIM", claimId: "c1" })]);
-    const codes = open.sentences[0]!.citations[0]!.unanswered;
+    const check = open.sentences[0]!.citations[0]!;
+    const codes = check.unanswered;
     assert.ok(codes.includes("QUANTITY_OUT_OF_RANGE"), codes.join(", "));
     assert.equal(open.sentences[0]?.status, "WARNING");
     assert.equal(open.clean, false);
+    const keys = check.warnings.map(warningKey);
 
     const answered = report(wider, [
-      row(wider, { kind: "CLAIM", claimId: "c1", answeredCodes: codes }),
+      row(wider, { kind: "CLAIM", claimId: "c1", answered: keys }),
     ]);
     assert.equal(answered.sentences[0]?.status, "OK");
     assert.equal(answered.clean, true);
@@ -180,10 +183,36 @@ describe("citationReport", () => {
       row(wider, {
         kind: "CLAIM",
         claimId: "c1",
-        answeredCodes: codes.slice(1),
+        answered: check.warnings
+          .filter((w) => w.code !== codes[0])
+          .map(warningKey),
       }),
     ]);
     assert.deepEqual(partly.sentences[0]?.citations[0]?.unanswered, [codes[0]]);
+  });
+
+  it("opens an answered code again when its detail changes, and a code-only answer covers nothing", () => {
+    const wider = SUPPORTED.replace("0,05", "0,5");
+    const first = report(wider, [row(wider, { kind: "CLAIM", claimId: "c1" })]);
+    const keys = first.sentences[0]!.citations[0]!.warnings.map(warningKey);
+    // the same sentence a little further out: QUANTITY_OUT_OF_RANGE again, another detail
+    const further = wider.replace("0,5", "0,6");
+    const again = report(further, [
+      row(further, { kind: "CLAIM", claimId: "c1", answered: keys }),
+    ]);
+    assert.ok(
+      again.sentences[0]!.citations[0]!.unanswered.includes(
+        "QUANTITY_OUT_OF_RANGE",
+      ),
+    );
+    const codeOnly = report(wider, [
+      row(wider, {
+        kind: "CLAIM",
+        claimId: "c1",
+        answered: first.sentences[0]!.citations[0]!.unanswered,
+      }),
+    ]);
+    assert.equal(codeOnly.sentences[0]?.status, "WARNING");
   });
 
   it("orphans the citation of a rewritten sentence, and the new wording is uncited", () => {

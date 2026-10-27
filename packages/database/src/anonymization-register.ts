@@ -1202,7 +1202,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     sentenceHash: "business",
     targetKey: "identifier",
     reason: "freeText",
-    answeredCodes: "business",
+    answeredWarnings: "business",
     answerReason: "freeText",
   },
   ArticleRevision: {
