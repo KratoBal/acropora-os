@@ -1,11 +1,18 @@
 import { Prisma, prisma } from "@acropora/database";
-import type { EvidenceLevel, StudyType } from "@acropora/knowledge-base";
+import type {
+  Applicability,
+  CitedClaim,
+  Environment,
+  EvidenceLevel,
+  StudyType,
+} from "@acropora/knowledge-base";
 
 import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import { workingRows } from "../vocabulary/vocabulary-versions.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
   claimEvidenceLevel,
+  claimScope,
   claimTitle,
   labelsFrom,
   quantityLabel,
@@ -149,6 +156,8 @@ const CORE_SELECT = {
   originalMax: true,
   originalUnit: true,
   chemicalBasis: true,
+  normalizedMinMgL: true,
+  normalizedMaxMgL: true,
   revision: true,
   updatedAt: true,
 } satisfies Prisma.KnowledgeClaimSelect;
@@ -340,6 +349,46 @@ export function storeItem(c: ListClaim, labels: Labels): ClaimStoreItem {
       ? { value: sample.sampleSize!, unit: sample.sampleUnit }
       : null,
   };
+}
+
+const decimal = (d: Prisma.Decimal | null) => (d === null ? null : Number(d));
+
+/**
+ * The claims an article cites, by id, with the scope the sentence check
+ * reads (`claimScope`). A claim that is not VERIFIED comes back with its
+ * status, and the report refuses it before the scope is read.
+ */
+export async function citedClaims(
+  ids: readonly string[],
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<Map<string, CitedClaim>> {
+  if (ids.length === 0) return new Map();
+  const rows = await client.knowledgeClaim.findMany({
+    where: { id: { in: [...new Set(ids)] } },
+    select: LIST_SELECT,
+  });
+  return new Map(
+    rows.map((c) => [
+      c.id,
+      {
+        status: c.status,
+        scope: claimScope({
+          rows: c.evidence.map((e) => ({
+            stance: e.stance,
+            species: e.species,
+            environment: e.environment as Environment | null,
+            applicability: e.homeReefApplicability as Applicability | null,
+            retracted: sourceRef(sourceOf(e)).retracted,
+          })),
+          normalizedMinMgL: decimal(c.normalizedMinMgL),
+          normalizedMaxMgL: decimal(c.normalizedMaxMgL),
+          effect: c.effect,
+          direction: c.direction,
+          evidenceLevel: levelOf(c).level,
+        }),
+      },
+    ]),
+  );
 }
 
 export class ClaimStoreRepository {
