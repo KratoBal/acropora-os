@@ -852,8 +852,18 @@ export interface WebshopOrderAttentionItem {
 }
 
 export interface WebshopOrderAttentionResponse {
-  /** Hamis, ha a webshop nem válaszolt vagy még nem ismeri a végpontot: a lista ilyenkor üres, de nem "nincs teendő". */
+  /**
+   * Hamis, ha a lista nem olvasható: ilyenkor üres, de NEM "nincs teendő".
+   * Az `reason` mondja meg, miért.
+   */
   available: boolean;
+  /**
+   * - `not_found`: a webshop még nem ismeri a végpontot (404): a webshop éles
+   *   telepítése befagyasztva áll, ez várt állapot, a panel nem mutat semmit;
+   * - `error`: a webshop hibát adott (5xx), nem érhető el, vagy nincs
+   *   kapcsolat: a lista nem olvasható, a panel kimondja.
+   */
+  reason?: "not_found" | "error";
   count: number;
   items: WebshopOrderAttentionItem[];
 }

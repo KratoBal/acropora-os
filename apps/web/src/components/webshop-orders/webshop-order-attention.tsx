@@ -17,9 +17,10 @@ import { webshopOrdersApi } from "@/lib/api/webshop-orders";
  * díjbekérő") látszik. A lezárás emberi döntés: a rendszer semmit nem zár.
  *
  * KÜLÖN KÉRÉS, ÉS EZ SZÁNDÉK: a rendelés-lista ettől nem függ. Ha a webshop
- * nem válaszol (`available: false`), a panel ezt kimondja, és NEM úgy tesz,
- * mintha nem lenne teendő: egy néma panel rosszabb, mint egy, ami azt mondja,
- * hogy most nem tudja.
+ * még nem ismeri a végpontot (404), a panel semmit nem mutat (acrobot,
+ * 2026-10-27 17:02: a webshop éles telepítése befagyasztva áll, a szürke sor
+ * zaj lenne). Ha hibát ad vagy nincs kapcsolat, kimondja, hogy a lista nem
+ * olvasható, és ez nem azt jelenti, hogy nincs teendő.
  */
 const KIND_TEXT: Record<WebshopOrderAttentionItem["kind"], string> = {
   pickup_missing: "hiányzik a bolti (élő állatos) rendelés",
@@ -45,7 +46,7 @@ export function WebshopOrderAttention({ token }: { token: string }) {
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError")
           return;
-        setData({ available: false, count: 0, items: [] });
+        setData({ available: false, reason: "error", count: 0, items: [] });
       });
     return () => controller.abort();
   }, [token]);
@@ -53,6 +54,12 @@ export function WebshopOrderAttention({ token }: { token: string }) {
   if (!data) return null;
 
   if (!data.available) {
+    // 404: a webshop még nem ismeri a végpontot. A webshop éles telepítése
+    // befagyasztva áll, ez várt állapot, és egy szürke sor minden megnyitáskor
+    // zaj lenne (acrobot, 2026-10-27 17:02): semmit nem mutatunk.
+    if (data.reason === "not_found") return null;
+    // Hiba vagy nincs kapcsolat: a lista nem olvasható. Ezt kimondjuk, mert egy
+    // néma panel "nincs teendő"-nek látszana.
     return (
       <p
         role="status"

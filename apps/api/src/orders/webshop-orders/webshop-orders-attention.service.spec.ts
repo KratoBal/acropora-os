@@ -108,10 +108,24 @@ describe("WebshopOrdersService.attention", () => {
     assert.deepEqual(result, { available: true, count: 0, items: [] });
   });
 
-  it("a webshop that does not know the endpoint yet, fails, or has no connection: unavailable, not 'nothing to do', and not an error", async () => {
-    for (const fail of ["http404", "http502", "credential"] as const) {
+  it("a webshop that does not know the endpoint yet (404) is unavailable with the reason not_found: expected, the live webshop deploy is frozen", async () => {
+    const result = await service({ fail: "http404" }).attention();
+    assert.deepEqual(result, {
+      available: false,
+      reason: "not_found",
+      count: 0,
+      items: [],
+    });
+  });
+
+  it("an error from the webshop or a missing connection is unavailable with the reason error: not 'nothing to do', and not an error of the OS", async () => {
+    for (const fail of ["http502", "credential"] as const) {
       const result = await service({ fail }).attention();
-      assert.deepEqual(result, { available: false, count: 0, items: [] }, fail);
+      assert.deepEqual(
+        result,
+        { available: false, reason: "error", count: 0, items: [] },
+        fail,
+      );
     }
   });
 });

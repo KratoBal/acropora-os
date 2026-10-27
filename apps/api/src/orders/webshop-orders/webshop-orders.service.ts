@@ -129,7 +129,16 @@ export class WebshopOrdersService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return { available: false, count: 0, items: [] };
+      return {
+        available: false,
+        // a 404 várt: a webshop éles telepítése befagyasztva áll (acrobot, 2026-10-27)
+        reason:
+          error instanceof MedusaAdminHttpError && error.status === 404
+            ? "not_found"
+            : "error",
+        count: 0,
+        items: [],
+      };
     }
   }
 

@@ -6,11 +6,10 @@ import { WebshopOrderAttention, waitingText } from "./webshop-order-attention";
 
 /*
   A FIGYELMET KÉRŐ RENDELÉSEK PANELJE (commerce-audit-p1, P1/6). MI PIROSÍT: ha
-  a hiányzó bolti rendelés vagy a kifizetetlen előre utalás nem jelenik meg a
-  sorok között; ha a sor nem a rendelésre mutat; ha a "nem olvasható" állapot
-  eltűnik (egy néma panel "nincs teendő"-nek látszik); ha nincs teendő, és mégis
-  panel áll a lapon; ha a hiba (a webshop nem válaszol) elviszi a panelt vagy a
-  listát; ha a perc/nap felirat felcserélődik.
+  a hiányzó bolti rendelés nem jelenik meg a sorok között; ha a sor nem a
+  rendelésre mutat; ha a webshop 404-et ad (a végpont még nincs), és mégis megjelenik valami; ha hibát
+  ad, és a panel hallgat (egy néma panel "nincs teendő"-nek látszik); ha nincs teendő, és mégis panel áll a lapon; ha a hiba
+  elviszi a panelt vagy a listát; ha a perc/óra/nap felirat felcserélődik.
 */
 const api = vi.hoisted(() => ({ attention: vi.fn() }));
 vi.mock("@/lib/api/webshop-orders", () => ({ webshopOrdersApi: api }));
@@ -67,15 +66,34 @@ describe("WebshopOrderAttention", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("says it cannot read, and does not pretend there is nothing to do", async () => {
-    api.attention.mockResolvedValue({ available: false, count: 0, items: [] });
+  it("shows nothing at all, not even a grey line, when the webshop does not know the endpoint yet (404)", async () => {
+    api.attention.mockResolvedValue({
+      available: false,
+      reason: "not_found",
+      count: 0,
+      items: [],
+    });
+    const { container } = render(<WebshopOrderAttention token="t" />);
+    await waitFor(() => expect(api.attention).toHaveBeenCalled());
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("figyelem-nem-elerheto")).toBeNull();
+    expect(screen.queryByTestId("figyelem-panel")).toBeNull();
+  });
+
+  it("says it cannot read the list when the webshop errors or has no connection, and does not pretend there is nothing to do", async () => {
+    api.attention.mockResolvedValue({
+      available: false,
+      reason: "error",
+      count: 0,
+      items: [],
+    });
     render(<WebshopOrderAttention token="t" />);
     const note = await screen.findByTestId("figyelem-nem-elerheto");
     expect(note.textContent).toContain("Ez nem azt jelenti, hogy nincs teendő");
     expect(screen.queryByTestId("figyelem-panel")).toBeNull();
   });
 
-  it("a failing request becomes the same note, not an error that breaks the page", async () => {
+  it("a failing request to the OS itself becomes the same note, not an error that breaks the page", async () => {
     api.attention.mockRejectedValue(new Error("502"));
     render(<WebshopOrderAttention token="t" />);
     expect(await screen.findByTestId("figyelem-nem-elerheto")).toBeTruthy();
