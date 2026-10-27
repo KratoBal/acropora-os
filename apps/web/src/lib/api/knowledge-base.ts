@@ -346,6 +346,13 @@ export type CitationInput =
   | { sentence: string; kind: "CONCLUSION"; conclusionId: string }
   | { sentence: string; kind: "NOT_TECHNICAL"; reason: string };
 
+/** A conclusion's editable part: always on claims (S5). */
+export interface ConclusionInput {
+  text: string;
+  reasoning: string;
+  claimIds: string[];
+}
+
 /** An own conclusion (S5) as the API lists it. */
 export interface KnowledgeConclusion {
   id: string;
@@ -355,6 +362,8 @@ export interface KnowledgeConclusion {
   revision: number;
   claims: { id: string; status: string }[];
   approvedAt: string | null;
+  withdrawnReason: string | null;
+  updatedAt: string;
 }
 
 const base = "/knowledge-base/sources";
@@ -510,6 +519,37 @@ export const knowledgeBaseApi = {
       "/knowledge-base/conclusions",
       token,
       { signal },
+    );
+  },
+  createConclusion(token: string, input: ConclusionInput) {
+    return apiRequest<KnowledgeConclusion>(
+      "/knowledge-base/conclusions",
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  updateConclusion(token: string, id: string, input: ConclusionInput) {
+    return apiRequest<KnowledgeConclusion>(
+      `/knowledge-base/conclusions/${encodeURIComponent(id)}`,
+      token,
+      { method: "PATCH", body: JSON.stringify(input) },
+    );
+  },
+  approveConclusion(token: string, id: string) {
+    return apiRequest<KnowledgeConclusion>(
+      `/knowledge-base/conclusions/${encodeURIComponent(id)}/approve`,
+      token,
+      { method: "POST" },
+    );
+  },
+  withdrawConclusion(token: string, id: string, reason: string) {
+    return apiRequest<KnowledgeConclusion>(
+      `/knowledge-base/conclusions/${encodeURIComponent(id)}/withdraw`,
+      token,
+      { method: "POST", body: JSON.stringify({ reason }) },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {
