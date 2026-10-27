@@ -361,6 +361,8 @@ export interface KnowledgeConclusion {
   status: "DRAFT" | "APPROVED" | "WITHDRAWN";
   revision: number;
   claims: { id: string; status: string }[];
+  /** How many article sentences cite it: a withdrawal makes each invalid. */
+  citationCount: number;
   approvedAt: string | null;
   withdrawnReason: string | null;
   updatedAt: string;

@@ -11,6 +11,8 @@ export interface ConclusionView {
   status: "DRAFT" | "APPROVED" | "WITHDRAWN";
   revision: number;
   claims: { id: string; status: string }[];
+  /** How many article sentences cite it: a withdrawal makes each invalid. */
+  citationCount: number;
   createdById: string;
   approvedById: string | null;
   approvedAt: string | null;
@@ -44,6 +46,7 @@ const SELECT = {
   approvedById: true,
   approvedAt: true,
   withdrawnReason: true,
+  _count: { select: { citations: true } },
   createdAt: true,
   updatedAt: true,
   claims: {
@@ -62,6 +65,7 @@ function view(c: Row): ConclusionView {
     status: c.status,
     revision: c.revision,
     claims: c.claims.map((k) => k.claim),
+    citationCount: c._count.citations,
     createdById: c.createdById,
     approvedById: c.approvedById,
     approvedAt: c.approvedAt?.toISOString() ?? null,
