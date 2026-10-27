@@ -3,6 +3,7 @@ import type {
   HomepageBlock,
   HomepageContentInput,
   HomepageFooter,
+  HomepageNewsletter,
   HomepageSlide,
 } from "@acropora/types";
 
@@ -41,6 +42,15 @@ export interface MedusaHomepageFooter {
   bottom_text: string;
 }
 
+/** The newsletter row as the commerce validator wants it (#577; snake case). */
+export interface MedusaHomepageNewsletter {
+  enabled: boolean;
+  title: string;
+  text: string;
+  consent_text: string;
+  button: string;
+}
+
 /**
  * THE COMMERCE HOMEPAGE CONTENT RECORD (the commerce `PUT /admin/homepage-content`
  * contract, #551 and #553): the text overrides, and the slides (`null` is "not
@@ -65,6 +75,11 @@ export interface MedusaHomepageContentRecord {
    * record stays what it was.
    */
   featured_brand_handles?: string[];
+  /**
+   * The newsletter row (commerce #577); sent when the OS has one, and `null`
+   * only to clear a row the shop still holds (see projectHomepageContent).
+   */
+  newsletter?: MedusaHomepageNewsletter | null;
 }
 
 export type HomepageProjectionOutcome =
@@ -148,6 +163,16 @@ const footerRecord = (footer: HomepageFooter): MedusaHomepageFooter => ({
   bottom_text: footer.bottomText,
 });
 
+const newsletterRecord = (
+  row: HomepageNewsletter,
+): MedusaHomepageNewsletter => ({
+  enabled: row.enabled,
+  title: row.title,
+  text: row.text,
+  consent_text: row.consentText,
+  button: row.button,
+});
+
 /*
   THE BLOCKS AND THE FOOTER ARE SENT (2026-10-26, acrobot 36394 and 36397):
   the test backend runs commerce #564 and #567, which take them (measured:
@@ -174,6 +199,19 @@ export function homepageRecord(
         }))
       : null,
     footer: content.footer ? footerRecord(content.footer) : null,
+    /*
+      THE NEWSLETTER ROW ONLY WHEN SET (kirakat-lablec-kep): the shop's
+      validator is strict, and a shop without commerce #577 would refuse the
+      WHOLE record for the unknown key. Unset is the OS's normal state until
+      someone edits the row (the editor keeps `null` until then), so the
+      record stays what it was. Once set, the OS editor has no way back to
+      `null`; a `null` saved through the API is cleared by the round itself
+      (projectHomepageContent), not here, because only the round sees the
+      shop's answer.
+    */
+    ...(content.newsletter
+      ? { newsletter: newsletterRecord(content.newsletter) }
+      : {}),
   };
 }
 
@@ -215,6 +253,8 @@ export function homepageRecordDiffers(
       r.footer ?? null,
       // compared only when we send it: a list never set leaves the shop's as it is
       "featured_brand_handles" in wanted ? (r.featured_brand_handles ?? []) : 0,
+      // absent and null are both "not set"; the OS sends it only when set
+      r.newsletter ?? null,
     ]);
   return pick(current) !== pick(wanted);
 }
@@ -257,9 +297,20 @@ export async function projectHomepageContent(
   );
   const skippedHandles = fit.skipped.length ? fit.skipped : undefined;
   const current = await client.fetchHomepageContent();
-  if (!homepageRecordDiffers(current, wanted))
+  /*
+    A ROW CLEARED THROUGH THE API (barracuda, #1913): the OS holds `null`, the
+    shop still holds a row. Absent would keep the shop's row, and every round
+    would see the difference and write again, forever. The shop answering a
+    row proves it knows the key (#577), so `null` is safe to send, and the
+    next round finds both sides `null`.
+  */
+  const toSend =
+    !("newsletter" in wanted) && current?.newsletter
+      ? { ...wanted, newsletter: null }
+      : wanted;
+  if (!homepageRecordDiffers(current, toSend))
     return { status: "unchanged", skippedHandles };
-  if (apply) await client.setHomepageContent(wanted);
+  if (apply) await client.setHomepageContent(toSend);
   return { status: apply ? "sent" : "would-send", skippedHandles };
 }
 
@@ -294,8 +345,9 @@ export const prismaHomepageSource: HomepageSource = {
     });
     if (!row) return null;
     // the blocks and the footer too, since commerce #564/#567 (see homepageRecord)
-    const { texts, slides, blocks, footer } = toHomepageContent(row);
-    return { texts, slides, blocks, footer };
+    const { texts, slides, blocks, footer, newsletter } =
+      toHomepageContent(row);
+    return { texts, slides, blocks, footer, newsletter };
   },
   featured: async () => {
     const rows = await prisma.homepageFeaturedProduct.findMany({

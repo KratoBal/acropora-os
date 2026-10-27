@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   HOMEPAGE_BLOCK_KEYS,
   HOMEPAGE_LIMITS,
+  HOMEPAGE_NEWSLETTER_DEFAULT,
   HOMEPAGE_TEXT_FIELDS,
   isShopHref,
   isShortTextKey,
@@ -304,6 +305,61 @@ describe("parseHomepageContentInput: blocks and footer", () => {
   on the shop's own host refused, another site's address let through, or an
   English, field-less message in the save's alert.
 */
+/*
+  THE NEWSLETTER ROW (kirakat-lablec-kep). What turns these red: an absent row
+  read as a decision; a row without its switch or with an unknown field; an
+  empty consent text or button (the shop refuses both, commerce #577); the
+  consent text stored with the spaces the shop would trim away.
+*/
+describe("parseHomepageContentInput: the newsletter row", () => {
+  const parse = (extra: Record<string, unknown>) =>
+    parseHomepageContentInput({ texts: {}, slides: null, ...extra });
+
+  it("absent stays absent, null and a whole row are kept", () => {
+    const absent = parse({});
+    assert.ok(absent.ok);
+    assert.equal("newsletter" in absent.value, false);
+    const cleared = parse({ newsletter: null });
+    assert.ok(cleared.ok);
+    assert.equal(cleared.value.newsletter, null);
+    const off = parse({
+      newsletter: { ...HOMEPAGE_NEWSLETTER_DEFAULT, enabled: false },
+    });
+    assert.ok(off.ok);
+    assert.deepEqual(off.value.newsletter, {
+      ...HOMEPAGE_NEWSLETTER_DEFAULT,
+      enabled: false,
+    });
+  });
+
+  it("the consent text and the button are required and stored trimmed", () => {
+    for (const bad of [
+      { consentText: "  " },
+      { button: "" },
+      { enabled: "igen" },
+      { extra: 1 },
+      { title: "x".repeat(HOMEPAGE_LIMITS.newsletterTitle + 1) },
+    ]) {
+      const parsed = parse({
+        newsletter: { ...HOMEPAGE_NEWSLETTER_DEFAULT, ...bad },
+      });
+      assert.equal(parsed.ok, false, JSON.stringify(bad));
+    }
+    const trimmed = parse({
+      newsletter: {
+        ...HOMEPAGE_NEWSLETTER_DEFAULT,
+        consentText: "  Hozzájárulok.  ",
+        button: " Kérem ",
+        title: "",
+      },
+    });
+    assert.ok(trimmed.ok);
+    assert.equal(trimmed.value.newsletter?.consentText, "Hozzájárulok.");
+    assert.equal(trimmed.value.newsletter?.button, "Kérem");
+    assert.equal(trimmed.value.newsletter?.title, "");
+  });
+});
+
 describe("a slide button's target", () => {
   const SHOP = ["teszt.acropora.hu"];
 

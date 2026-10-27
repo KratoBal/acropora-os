@@ -181,13 +181,16 @@ export class HomepageContentRepository implements HomepageContentStore {
       texts: input.texts as unknown as Prisma.InputJsonValue,
       slides: json(input.slides),
       /*
-        ABSENT blocks / footer: the column is not written, so an editor that
-        does not send them (today's form) cannot wipe what another one saved.
+        ABSENT blocks / footer / newsletter: the column is not written, so an
+        editor that does not send them cannot wipe what another one saved.
       */
       ...(input.blocks !== undefined ? { blocks: json(input.blocks) } : {}),
       ...(input.footer !== undefined ? { footer: json(input.footer) } : {}),
       ...(input.brandIds !== undefined
         ? { featuredBrandIds: json(input.brandIds) }
+        : {}),
+      ...(input.newsletter !== undefined
+        ? { newsletter: json(input.newsletter) }
         : {}),
       updatedById: userId,
     };

@@ -1726,6 +1726,10 @@ model HomepageContent {
   /// tetszoleges hosszal. NULL: nincs beallitva, a kirakat a nevek sorat mutatja.
   /// A vetites a lathato (aktiv, nem archivalt) markak slug-jait kuldi.
   featuredBrandIds  Json?
+  /// A hirlevel-sor a lablec folott (Balazs, 2026-10-27, kirakat-lablec-kep):
+  /// `{ enabled, title, text, consentText, button }`. NULL: a kirakat sajat
+  /// sora (bekapcsolva, a regi bolt szovegeivel).
+  newsletter        Json?
   /// Az adminisztrator kapcsoloja: kuldjuk-e a tartalmat a webshopba (es
   /// toltheto-e fel kep). Alapbol ki; a kornyezeti valtozo hianya nem tiltja.
   projectionEnabled Boolean  @default(false)

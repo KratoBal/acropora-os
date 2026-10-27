@@ -127,6 +127,52 @@ describe("homepageRecord", () => {
   });
 });
 
+/*
+  THE NEWSLETTER ROW (kirakat-lablec-kep). What turns this red: the key sent
+  while the OS has no row (a shop without commerce #577 refuses the whole
+  record for an unknown key); the row not snake-cased; the shop's `null`
+  answer for an unset row taken as a difference (every round would write).
+*/
+describe("homepageRecord: the newsletter row", () => {
+  const row = {
+    enabled: false,
+    title: "Hírlevél",
+    text: "Iratkozz fel!",
+    consentText: "Hozzájárulok.",
+    button: "Feliratkozás",
+  };
+
+  it("sends the row only when the OS has one, snake-cased", () => {
+    assert.equal("newsletter" in homepageRecord(content()), false);
+    assert.equal(
+      "newsletter" in homepageRecord(content({ newsletter: null })),
+      false,
+    );
+    assert.deepEqual(homepageRecord(content({ newsletter: row })).newsletter, {
+      enabled: false,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consent_text: "Hozzájárulok.",
+      button: "Feliratkozás",
+    });
+  });
+
+  it("takes the shop's null for an unset row as the same, and sees a changed row", () => {
+    const plain = homepageRecord(content());
+    assert.equal(
+      homepageRecordDiffers({ ...plain, newsletter: null } as never, plain),
+      false,
+    );
+    const withRow = homepageRecord(content({ newsletter: row }));
+    assert.equal(homepageRecordDiffers(plain, withRow), true);
+    const changed = homepageRecord(
+      content({ newsletter: { ...row, enabled: true } }),
+    );
+    assert.equal(homepageRecordDiffers(withRow, changed), true);
+    assert.equal(homepageRecordDiffers(withRow, withRow), false);
+  });
+});
+
 describe("homepageRecordDiffers", () => {
   it("ignores key order, sees a changed text, null versus an empty list, and no record", () => {
     const a = homepageRecord(content({ texts: { a: "1", b: "2" } }));
@@ -256,6 +302,46 @@ describe("projectHomepageContent", () => {
       "would-send",
     );
     assert.equal(dry.writes.length, 0);
+  });
+
+  /*
+    A ROW CLEARED THROUGH THE API (barracuda, #1913). What turns this red: the
+    shop's row never cleared (absent keeps it) and every round writing again;
+    a `null` sent to a shop that never answered the key (one without #577).
+  */
+  it("clears the shop's newsletter row when the OS holds null, once, and never sends the key to a shop without it", async () => {
+    const source = {
+      content: async () => content({ newsletter: null }),
+      switchedOn: async () => true,
+      featured: async () => [],
+      brands: async () => null,
+    };
+    const shopRow = {
+      enabled: true,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consent_text: "Hozzájárulok.",
+      button: "Feliratkozás",
+    };
+    const held = fakeClient({
+      ...homepageRecord(content()),
+      newsletter: shopRow,
+    });
+    assert.equal(
+      (await projectHomepageContent(held.client, source, true)).status,
+      "sent",
+    );
+    assert.equal(held.writes[0]?.newsletter, null);
+    // the next round: the shop answers null, nothing to write
+    const cleared = fakeClient(held.writes[0]!);
+    assert.equal(
+      (await projectHomepageContent(cleared.client, source, true)).status,
+      "unchanged",
+    );
+    // a shop that never answered the key gets no key
+    const older = fakeClient(null);
+    await projectHomepageContent(older.client, source, true);
+    assert.equal("newsletter" in older.writes[0]!, false);
   });
 
   it("sends nothing when nothing is stored", async () => {

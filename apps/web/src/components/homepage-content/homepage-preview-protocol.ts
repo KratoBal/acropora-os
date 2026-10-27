@@ -3,6 +3,7 @@ import {
   type HomepageBlock,
   type HomepageBrand,
   type HomepageFooter,
+  type HomepageNewsletter,
   type HomepageSlide,
 } from "@acropora/types";
 
@@ -41,6 +42,18 @@ export interface PreviewRecord {
     bottom_text: string;
   } | null;
   featured_brand_handles?: string[];
+  /**
+   * The newsletter row, ONLY when set: the storefront refuses a record with a
+   * key it does not know, and one that predates the row (commerce #577) would
+   * otherwise refuse every preview (same rule as the projection).
+   */
+  newsletter?: {
+    enabled: boolean;
+    title: string;
+    text: string;
+    consent_text: string;
+    button: string;
+  };
 }
 
 /*
@@ -71,6 +84,7 @@ export function previewRecord(content: {
   blocks: HomepageBlock[] | null;
   footer: HomepageFooter | null;
   brands?: readonly HomepageBrand[] | null;
+  newsletter?: HomepageNewsletter | null;
 }): PreviewRecord {
   return {
     texts: { ...content.texts },
@@ -90,6 +104,17 @@ export function previewRecord(content: {
           featured_brand_handles: content.brands
             .filter((brand) => brand.shown)
             .map((brand) => brand.slug),
+        }
+      : {}),
+    ...(content.newsletter
+      ? {
+          newsletter: {
+            enabled: content.newsletter.enabled,
+            title: content.newsletter.title,
+            text: content.newsletter.text,
+            consent_text: content.newsletter.consentText,
+            button: content.newsletter.button,
+          },
         }
       : {}),
   };

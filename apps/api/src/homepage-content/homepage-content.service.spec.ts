@@ -53,6 +53,7 @@ function setup(
           slides: null,
           blocks: null,
           footer: null,
+          newsletter: null,
           projectionEnabled: true,
           updatedAt: new Date("2026-10-20T11:00:00Z"),
         };
@@ -75,6 +76,10 @@ function setup(
           input.brandIds !== undefined
             ? input.brandIds
             : (row?.featuredBrandIds ?? null),
+        newsletter:
+          input.newsletter !== undefined
+            ? input.newsletter
+            : (row?.newsletter ?? null),
         projectionEnabled: row?.projectionEnabled ?? false,
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
@@ -117,6 +122,7 @@ function setup(
         slides: row?.slides ?? null,
         blocks: row?.blocks ?? null,
         footer: row?.footer ?? null,
+        newsletter: row?.newsletter ?? null,
         projectionEnabled: enabled,
         updatedAt: new Date("2026-10-20T12:00:00Z"),
       };
@@ -149,6 +155,7 @@ describe("HomepageContentService", () => {
       footer: null,
       brandIds: null,
       brands: [],
+      newsletter: null,
       imageHosts: [],
       storefrontUrl: null,
       updatedAt: null,
@@ -446,6 +453,7 @@ describe("HomepageContentService: blocks and footer", () => {
         slides: null,
         blocks: null,
         footer: footer('<p onclick="x()">a<script>1</script></p>'),
+        newsletter: null,
         projectionEnabled: false,
         updatedAt: new Date("2026-10-26T09:00:00Z"),
       },
@@ -471,12 +479,28 @@ describe("HomepageContentService: blocks and footer", () => {
       slides: null,
       blocks: blocks.slice(1),
       footer: { intro: 5 },
+      newsletter: { enabled: "igen" },
       projectionEnabled: false,
       updatedAt: new Date("2026-10-26T09:00:00Z"),
     } as unknown as HomepageContentRow;
     const content = toHomepageContent(row);
     assert.equal(content.blocks, null);
     assert.equal(content.footer, null);
+    assert.equal(content.newsletter, null);
+  });
+
+  it("reads a stored newsletter row back, and keeps it on a save that does not carry it", async () => {
+    const { service } = setup(async () => "sent");
+    const row = {
+      enabled: false,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consentText: "Hozzájárulok.",
+      button: "Feliratkozás",
+    };
+    await service.save({ texts: {}, slides: null, newsletter: row }, "u-1");
+    const out = await service.save({ texts: {}, slides: null }, "u-1");
+    assert.deepEqual(out.content.newsletter, row);
   });
 });
 

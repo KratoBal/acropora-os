@@ -13,6 +13,57 @@ export const emptyFooter = (): HomepageFooter => ({
   bottomText: "",
 });
 
+const OLD_SHOP = "https://shop.acropora.hu";
+
+/**
+ * THE OWN FOOTER STARTS FROM THE OLD SHOP'S MENU (Balázs, 2026-10-27,
+ * kirakat-lablec-kep; exchange/marka-sav-2026-10-27/referencia-lablec.png),
+ * plus the new "Forgalmazott márkák". The ÁSZF and the privacy notice are not
+ * here: the storefront always adds them to "Információk". The pages the new
+ * storefront does not have yet point to the old shop, as its own footer does.
+ */
+export const startFooter = (): HomepageFooter => ({
+  ...emptyFooter(),
+  columns: [
+    {
+      title: "Oldaltérkép",
+      links: [
+        { label: "Nyitóoldal", href: "/" },
+        { label: "Termékek", href: "/store" },
+        { label: "Forgalmazott márkák", href: "/marka" },
+      ],
+    },
+    {
+      title: "Vásárlói fiók",
+      links: [
+        { label: "Belépés", href: "/account" },
+        { label: "Regisztráció", href: "/account" },
+        { label: "Profilom", href: "/account" },
+        { label: "Kosár", href: "/cart" },
+        {
+          label: "Kedvenceim",
+          href: `${OLD_SHOP}/shop_order_track.php?tab=favourite`,
+        },
+      ],
+    },
+    {
+      title: "Információk",
+      links: [
+        { label: "Fizetés", href: `${OLD_SHOP}/shop_contact.php?tab=payment` },
+        {
+          label: "Szállítás",
+          href: `${OLD_SHOP}/shop_contact.php?tab=shipping`,
+        },
+        { label: "Elérhetőségek", href: `${OLD_SHOP}/shop_contact.php` },
+        {
+          label: "Képes vásárlói tájékoztató",
+          href: `${OLD_SHOP}/fogyaszto-barat`,
+        },
+      ],
+    },
+  ],
+});
+
 const SOCIAL = [
   ["facebook", "Facebook"],
   ["instagram", "Instagram"],
@@ -24,19 +75,18 @@ const SOCIAL = [
  * (the short rich-text profile, #1879), link columns, social links, the legal line.
  *
  * NOT EDITED HERE, on purpose and said on the screen: the legal documents (the
- * storefront always adds them) and the address, opening hours and contact
- * (they come from the "A boltunk" block, so the page never shows two).
+ * storefront always adds them), the company column and the bottom logo row
+ * (fixed in the storefront, Balázs 2026-10-27: "ha változik, mi írjuk át").
  *
- * `null`: the storefront's own footer shows. "Saját lábléc" starts an own one.
+ * `null`: the storefront's own footer shows. "Saját lábléc" starts an own one
+ * from the old shop's menu (`startFooter`).
  */
 export function HomepageFooterEditor({
   footer,
   onChange,
-  onOpenBoltunk,
 }: {
   footer: HomepageFooter | null;
   onChange: (footer: HomepageFooter | null) => void;
-  onOpenBoltunk: () => void;
 }) {
   if (!footer)
     return (
@@ -44,11 +94,11 @@ export function HomepageFooterEditor({
         <PilotCallout
           tone="aqua"
           title="A kirakat saját lábléce látszik."
-          description="Saját bemutatkozást, link-oszlopokat és közösségi linkeket a saját lábléccel adhatsz meg."
+          description="A régi bolt menüje: Oldaltérkép, Vásárlói fiók, Információk. A saját lábléc ebből indul, és átírható."
         />
         <PilotButton
           variant="secondary"
-          onClick={() => onChange(emptyFooter())}
+          onClick={() => onChange(startFooter())}
         >
           Saját lábléc szerkesztése
         </PilotButton>
@@ -197,15 +247,13 @@ export function HomepageFooterEditor({
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-pilot-grey-900">
-          Elérhetőség és nyitvatartás
+          Céges oszlop és logósor
         </h3>
         <p className="text-sm text-pilot-grey-600">
-          A cím, a nyitvatartás és az elérhetőség az „A boltunk” blokkból jön,
-          egy helyen szerkeszthető.
+          A cégadatok (cím, telefon, e-mail, nyitvatartás) és az alsó logósor
+          (Foxpost, GLS, Stripe, fizetési módok) rögzítettek, itt nem
+          szerkeszthetők. Ha változnak, a kirakatban írjuk át.
         </p>
-        <PilotButton variant="secondary" onClick={onOpenBoltunk}>
-          Az „A boltunk” blokk megnyitása
-        </PilotButton>
       </section>
 
       <section className="space-y-2">

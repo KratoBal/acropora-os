@@ -93,6 +93,38 @@ describe("readPreviewMessage", () => {
 });
 
 // A target the shop would refuse goes to the preview as "no button" (acrobot 36371)
+/*
+  THE NEWSLETTER ROW (kirakat-lablec-kep): a storefront without the row
+  refuses a record with an unknown key, so an unset row sends no key at all.
+*/
+describe("previewRecord -- the newsletter row", () => {
+  it("leaves the key out when unset, and snake-cases a set row", () => {
+    const base = { texts: {}, slides: null, blocks: null, footer: null };
+    expect("newsletter" in previewRecord(base)).toBe(false);
+    expect("newsletter" in previewRecord({ ...base, newsletter: null })).toBe(
+      false,
+    );
+    expect(
+      previewRecord({
+        ...base,
+        newsletter: {
+          enabled: true,
+          title: "Hírlevél",
+          text: "Iratkozz fel!",
+          consentText: "Hozzájárulok.",
+          button: "Feliratkozás",
+        },
+      }).newsletter,
+    ).toEqual({
+      enabled: true,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consent_text: "Hozzájárulok.",
+      button: "Feliratkozás",
+    });
+  });
+});
+
 describe("previewRecord -- a refused button target", () => {
   it("sends null instead of a target the shop would refuse", () => {
     const record = previewRecord({

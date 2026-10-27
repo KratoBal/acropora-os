@@ -8,6 +8,7 @@ import {
   Skeleton,
 } from "@acropora/ui";
 import {
+  HOMEPAGE_NEWSLETTER_DEFAULT,
   HOMEPAGE_TEXT_FIELDS,
   hasPermission,
   parseHomepageContentInput,
@@ -17,6 +18,7 @@ import {
   type HomepageBlockKey,
   type HomepageBrand,
   type HomepageFooter,
+  type HomepageNewsletter,
   type HomepageSlide,
   type HomepageTextField,
 } from "@acropora/types";
@@ -46,6 +48,7 @@ import {
 import { HomepageBrandsEditor } from "./homepage-brands-editor";
 import { HomepageFeaturedEditor } from "./homepage-featured-editor";
 import { HomepageFooterEditor } from "./homepage-footer-editor";
+import { HomepageNewsletterEditor } from "./homepage-newsletter-editor";
 import { HomepagePreview } from "./homepage-preview";
 import { previewRecord } from "./homepage-preview-protocol";
 import { HomepageSlidesEditor } from "./homepage-slides-editor";
@@ -88,6 +91,8 @@ interface Draft {
   footer: HomepageFooter | null;
   /** The logo strip; `null`: never set, and not sent until a brand is added. */
   brands: HomepageBrand[] | null;
+  /** `null` until someone edits the row: the projection then sends nothing for it. */
+  newsletter: HomepageNewsletter | null;
 }
 
 /** The strip's part of a save: absent while never set, so the shop's record stays as it was. */
@@ -101,6 +106,7 @@ const snapshot = (draft: Draft) =>
     blocks: blocksForSave(draft.blocks),
     footer: draft.footer,
     ...brandsForSave(draft.brands),
+    newsletter: draft.newsletter,
   });
 
 /** The test shop's host, when the preview knows it: its full addresses become paths. */
@@ -139,6 +145,7 @@ export function HomepageContentEditorPage() {
     blocks: effectiveBlocks(null),
     footer: null,
     brands: null,
+    newsletter: null,
   });
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const [selected, setSelected] = useState<HomepageSelection>("hero");
@@ -154,6 +161,7 @@ export function HomepageContentEditorPage() {
     footer: HomepageFooter | null;
     brandIds: string[] | null;
     brands: HomepageBrand[];
+    newsletter?: HomepageNewsletter | null;
   }) => {
     const next: Draft = {
       texts: content.texts,
@@ -163,6 +171,7 @@ export function HomepageContentEditorPage() {
       footer: content.footer ?? null,
       // a brand deleted since the save is not in `brands`: the next save drops its id
       brands: content.brandIds ? (content.brands ?? []) : null,
+      newsletter: content.newsletter ?? null,
     };
     setDraft(next);
     setSavedSnapshot(snapshot(next));
@@ -244,6 +253,7 @@ export function HomepageContentEditorPage() {
         blocks: blocksForSave(draft.blocks),
         footer: draft.footer,
         brands: draft.brands,
+        newsletter: draft.newsletter,
       }),
     [draft],
   );
@@ -257,6 +267,7 @@ export function HomepageContentEditorPage() {
       blocks: blocksForSave(draft.blocks),
       footer: draft.footer,
       ...brandsForSave(draft.brands),
+      newsletter: draft.newsletter,
     });
     if (!parsed.ok) {
       setError(parsed.message);
@@ -332,7 +343,7 @@ export function HomepageContentEditorPage() {
     </div>
   );
   const selectedBlock =
-    selected === "footer"
+    selected === "footer" || selected === "newsletter"
       ? null
       : (draft.blocks.find((block) => block.key === selected) ?? null);
   const setVisible = (key: HomepageBlockKey, visible: boolean) =>
@@ -426,12 +437,28 @@ export function HomepageContentEditorPage() {
           selected={selected}
           onSelect={setSelected}
           onChange={(blocks) => setDraft((d) => ({ ...d, blocks }))}
+          newsletterOn={
+            (draft.newsletter ?? HOMEPAGE_NEWSLETTER_DEFAULT).enabled
+          }
+          onNewsletterOn={(enabled) =>
+            setDraft((d) => ({
+              ...d,
+              newsletter: {
+                ...(d.newsletter ?? HOMEPAGE_NEWSLETTER_DEFAULT),
+                enabled,
+              },
+            }))
+          }
         />
 
         <PilotCard className="space-y-6 p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-pilot-grey-900">
-              {selected === "footer" ? "Lábléc" : blockMeta(selected).label}
+              {selected === "footer"
+                ? "Lábléc"
+                : selected === "newsletter"
+                  ? "Hírlevél"
+                  : blockMeta(selected).label}
             </h2>
             {selectedBlock ? (
               <span className="flex items-center gap-2 text-xs text-pilot-grey-600">
@@ -448,7 +475,11 @@ export function HomepageContentEditorPage() {
             <HomepageFooterEditor
               footer={draft.footer}
               onChange={(footer) => setDraft((d) => ({ ...d, footer }))}
-              onOpenBoltunk={() => setSelected("boltunk")}
+            />
+          ) : selected === "newsletter" ? (
+            <HomepageNewsletterEditor
+              newsletter={draft.newsletter}
+              onChange={(newsletter) => setDraft((d) => ({ ...d, newsletter }))}
             />
           ) : selected === "hero" ? (
             <>
@@ -491,7 +522,9 @@ export function HomepageContentEditorPage() {
         <HomepagePreview
           storefrontUrl={storefrontUrl}
           record={record}
-          selected={selected === "footer" ? null : selected}
+          selected={
+            selected === "footer" || selected === "newsletter" ? null : selected
+          }
           onSelect={setSelected}
         />
       </div>

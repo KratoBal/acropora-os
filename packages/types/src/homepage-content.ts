@@ -1083,8 +1083,10 @@ export interface HomepageFooterColumn {
  * `commerce-fejlec-lablec-aloldalak`).
  *
  * WHAT IS NOT HERE, ON PURPOSE:
- *   contact, opening hours   they come from the "A boltunk" texts, so the page
- *                            never shows two different addresses
+ *   the company column       fixed in the storefront (Balázs, 2026-10-27,
+ *                            kirakat-lablec-kep: "ha változik, mi írjuk át");
+ *                            the "A boltunk" texts no longer reach the footer
+ *   the bottom logo row      fixed too (Foxpost, GLS, Stripe, the card marks)
  *   legal documents          the storefront always adds them (a legal duty,
  *                            not an editorial choice)
  *
@@ -1101,6 +1103,35 @@ export interface HomepageFooter {
   };
   bottomText: string;
 }
+
+/**
+ * THE NEWSLETTER ROW above the footer (Balázs, 2026-10-27, msg
+ * 1564546550871490642; kirakat-lablec-kep): a block of its own that can be
+ * switched off, with editable texts. The consent text is what a sign-up
+ * records as given, so it cannot be empty; the storefront puts the privacy
+ * notice's link next to it.
+ */
+export interface HomepageNewsletter {
+  enabled: boolean;
+  title: string;
+  text: string;
+  consentText: string;
+  button: string;
+}
+
+/**
+ * The row before anyone sets one, word for word the old shop's footer (the
+ * shop's `DEFAULT_NEWSLETTER` holds the same texts, commerce #577). The editor
+ * starts from it; a stored `null` means the shop shows its own, equal row.
+ */
+export const HOMEPAGE_NEWSLETTER_DEFAULT: HomepageNewsletter = {
+  enabled: true,
+  title: "Hírlevél",
+  text: "Iratkozz fel a hírlevelünkre és értesülj elsőként az újdonságokról, akciókról, ajánlatokról!",
+  consentText:
+    "Hozzájárulok az adataim kezeléséhez és elfogadom az Adatkezelési tájékoztatót.",
+  button: "Feliratkozás",
+};
 
 export interface HomepageContentInput {
   texts: Record<string, string>;
@@ -1119,6 +1150,8 @@ export interface HomepageContentInput {
    * brand names. Absent in a save: unchanged.
    */
   brandIds?: string[] | null;
+  /** `null`: the storefront's own newsletter row. Absent in a save: unchanged. */
+  newsletter?: HomepageNewsletter | null;
 }
 
 /** A brand of the logo strip, as the editor shows it. */
@@ -1144,6 +1177,7 @@ export interface HomepageContent extends HomepageContentInput {
    * since the save is missing here (and from the strip).
    */
   brands: HomepageBrand[];
+  newsletter: HomepageNewsletter | null;
   /**
    * The image hosts a full-profile text may show (`RICH_TEXT_IMAGE_HOSTS`):
    * the editor and the preview get the SAME list the save uses, so the preview
@@ -1191,6 +1225,10 @@ export const HOMEPAGE_LIMITS = {
   footerLinks: 12,
   footerLabel: 100,
   footerBottomText: 300,
+  newsletterTitle: 100,
+  newsletterText: 500,
+  newsletterConsent: 500,
+  newsletterButton: 40,
 } as const;
 
 /**
@@ -1561,6 +1599,56 @@ function parseFooter(
   };
 }
 
+function parseNewsletter(
+  value: unknown,
+):
+  | { ok: true; value: HomepageNewsletter | null }
+  | { ok: false; message: string } {
+  if (value === null) return { ok: true, value: null };
+  if (!isRecord(value))
+    return { ok: false, message: "newsletter: null or an object" };
+  const fields = ["enabled", "title", "text", "consentText", "button"];
+  const stray = Object.keys(value).find((key) => !fields.includes(key));
+  if (stray)
+    return { ok: false, message: `newsletter: unknown field ${stray}` };
+  const { enabled, title, text, consentText, button } = value;
+  if (typeof enabled !== "boolean")
+    return { ok: false, message: "newsletter.enabled: true or false" };
+  const text_ = (
+    name: string,
+    v: unknown,
+    max: number,
+    required: boolean,
+  ): string | { ok: false; message: string } =>
+    typeof v !== "string" || v.length > max || (required && !v.trim())
+      ? {
+          ok: false,
+          message: `newsletter.${name}: ${required ? "a non-empty" : "a"} string, at most ${max} characters`,
+        }
+      : v;
+  const parsed = [
+    text_("title", title, HOMEPAGE_LIMITS.newsletterTitle, false),
+    text_("text", text, HOMEPAGE_LIMITS.newsletterText, false),
+    text_("consentText", consentText, HOMEPAGE_LIMITS.newsletterConsent, true),
+    text_("button", button, HOMEPAGE_LIMITS.newsletterButton, true),
+  ];
+  const failed = parsed.find((p) => typeof p !== "string");
+  if (failed) return failed as { ok: false; message: string };
+  const [t, x, c, b] = parsed as string[];
+  // the shop trims the consent text and the button (commerce #577); the OS
+  // stores them trimmed, so what is recorded is what was stored
+  return {
+    ok: true,
+    value: {
+      enabled,
+      title: t!,
+      text: x!,
+      consentText: c!.trim(),
+      button: b!.trim(),
+    },
+  };
+}
+
 /**
  * The editor's save. Strict, like the shop's validator: a key that is not in
  * the catalogue, a link or image that is not a shop path or http(s), a sixth
@@ -1571,7 +1659,15 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
   if (!isRecord(body))
     return { ok: false, message: "the content is an object" };
   const stray = Object.keys(body).find(
-    (key) => !["texts", "slides", "blocks", "footer", "brandIds"].includes(key),
+    (key) =>
+      ![
+        "texts",
+        "slides",
+        "blocks",
+        "footer",
+        "brandIds",
+        "newsletter",
+      ].includes(key),
   );
   if (stray) return { ok: false, message: `unknown field ${stray}` };
   if (!isRecord(body.texts)) return { ok: false, message: "texts: an object" };
@@ -1601,9 +1697,11 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
       };
     texts[key] = value;
   }
-  /* ABSENT blocks / footer / brandIds: the save leaves the stored value as it is. */
-  const extra: Pick<HomepageContentInput, "blocks" | "footer" | "brandIds"> =
-    {};
+  /* ABSENT blocks / footer / brandIds / newsletter: the save leaves the stored value as it is. */
+  const extra: Pick<
+    HomepageContentInput,
+    "blocks" | "footer" | "brandIds" | "newsletter"
+  > = {};
   if ("brandIds" in body) {
     const brandIds = parseBrandIds(body.brandIds);
     if (!brandIds.ok) return brandIds;
@@ -1618,6 +1716,11 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
     const footer = parseFooter(body.footer);
     if (!footer.ok) return footer;
     extra.footer = footer.value;
+  }
+  if ("newsletter" in body) {
+    const newsletter = parseNewsletter(body.newsletter);
+    if (!newsletter.ok) return newsletter;
+    extra.newsletter = newsletter.value;
   }
   if (body.slides === null)
     return { ok: true, value: { texts, slides: null, ...extra } };

@@ -1555,6 +1555,7 @@ export type { ContractKind } from "./contract.js";
 export {
   HOMEPAGE_BLOCK_KEYS,
   HOMEPAGE_LIMITS,
+  HOMEPAGE_NEWSLETTER_DEFAULT,
   HOMEPAGE_TEXT_FIELDS,
   isSafeHomepageAddress,
   isShopHref,
@@ -1574,6 +1575,7 @@ export type {
   HomepageFooter,
   HomepageFooterColumn,
   HomepageFooterLink,
+  HomepageNewsletter,
   HomepageContentParse,
   HomepageFieldType,
   HomepageSlide,
