@@ -15,6 +15,7 @@ import {
   servedNavigationFeatures,
   type HomepageBlock,
   type HomepageBlockKey,
+  type HomepageBrand,
   type HomepageFooter,
   type HomepageSlide,
   type HomepageTextField,
@@ -42,6 +43,7 @@ import {
   TextField,
   type ImageUploadControl,
 } from "./homepage-fields";
+import { HomepageBrandsEditor } from "./homepage-brands-editor";
 import { HomepageFeaturedEditor } from "./homepage-featured-editor";
 import { HomepageFooterEditor } from "./homepage-footer-editor";
 import { HomepagePreview } from "./homepage-preview";
@@ -84,7 +86,13 @@ interface Draft {
   slides: HomepageSlide[];
   blocks: HomepageBlock[];
   footer: HomepageFooter | null;
+  /** The logo strip; `null`: never set, and not sent until a brand is added. */
+  brands: HomepageBrand[] | null;
 }
+
+/** The strip's part of a save: absent while never set, so the shop's record stays as it was. */
+const brandsForSave = (brands: HomepageBrand[] | null) =>
+  brands ? { brandIds: brands.map((brand) => brand.id) } : {};
 
 const snapshot = (draft: Draft) =>
   JSON.stringify({
@@ -92,6 +100,7 @@ const snapshot = (draft: Draft) =>
     slides: draft.ownSlides ? draft.slides : null,
     blocks: blocksForSave(draft.blocks),
     footer: draft.footer,
+    ...brandsForSave(draft.brands),
   });
 
 /** The test shop's host, when the preview knows it: its full addresses become paths. */
@@ -129,6 +138,7 @@ export function HomepageContentEditorPage() {
     slides: [],
     blocks: effectiveBlocks(null),
     footer: null,
+    brands: null,
   });
   const [savedSnapshot, setSavedSnapshot] = useState<string>("");
   const [selected, setSelected] = useState<HomepageSelection>("hero");
@@ -142,6 +152,8 @@ export function HomepageContentEditorPage() {
     slides: HomepageSlide[] | null;
     blocks: HomepageBlock[] | null;
     footer: HomepageFooter | null;
+    brandIds: string[] | null;
+    brands: HomepageBrand[];
   }) => {
     const next: Draft = {
       texts: content.texts,
@@ -149,6 +161,8 @@ export function HomepageContentEditorPage() {
       slides: content.slides ?? [],
       blocks: effectiveBlocks(content.blocks ?? null),
       footer: content.footer ?? null,
+      // a brand deleted since the save is not in `brands`: the next save drops its id
+      brands: content.brandIds ? (content.brands ?? []) : null,
     };
     setDraft(next);
     setSavedSnapshot(snapshot(next));
@@ -229,6 +243,7 @@ export function HomepageContentEditorPage() {
         slides: draft.ownSlides ? draft.slides : null,
         blocks: blocksForSave(draft.blocks),
         footer: draft.footer,
+        brands: draft.brands,
       }),
     [draft],
   );
@@ -241,6 +256,7 @@ export function HomepageContentEditorPage() {
       slides: draft.ownSlides ? draft.slides : null,
       blocks: blocksForSave(draft.blocks),
       footer: draft.footer,
+      ...brandsForSave(draft.brands),
     });
     if (!parsed.ok) {
       setError(parsed.message);
@@ -453,6 +469,15 @@ export function HomepageContentEditorPage() {
               groups={blockMeta(selected).groups}
               render={fieldsOf}
             />
+          ) : selected === "markak" ? (
+            <>
+              <HomepageBrandsEditor
+                token={token}
+                brands={draft.brands}
+                onChange={(brands) => setDraft((d) => ({ ...d, brands }))}
+              />
+              {blockMeta(selected).groups.map(fieldsOf)}
+            </>
           ) : selected === "egyedi-korallok" ? (
             <HomepageFeaturedEditor
               token={token}
