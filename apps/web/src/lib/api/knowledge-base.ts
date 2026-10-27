@@ -293,6 +293,70 @@ export interface ClaimStoreDetail extends Omit<
   createdAt: string;
 }
 
+/** One sentence's citation (S5): what it points at is in `targets`. */
+export type CitationKind = "CLAIM" | "CONCLUSION" | "NOT_TECHNICAL";
+export type SentenceStatus = "OK" | "UNCITED" | "INVALID" | "WARNING";
+
+export interface CitationWarning {
+  row: string;
+  code: string;
+  detail: string;
+}
+
+export interface CitationCheck {
+  id: string;
+  kind: CitationKind;
+  problems: string[];
+  warnings: CitationWarning[];
+  /** The codes of the warnings not yet answered. */
+  unanswered: string[];
+}
+
+/** The citation check over an article's current text (S5). */
+export interface ArticleCitationReport {
+  contentId: string;
+  editable: boolean;
+  vocabulary: { version: number; status: string };
+  sentences: {
+    sentence: string;
+    status: SentenceStatus;
+    citations: CitationCheck[];
+  }[];
+  orphaned: { id: string; sentence: string; kind: CitationKind }[];
+  blockers: string[];
+  counts: {
+    sentences: number;
+    uncited: number;
+    invalid: number;
+    unansweredWarnings: number;
+    orphaned: number;
+  };
+  clean: boolean;
+  targets: {
+    id: string;
+    kind: CitationKind;
+    claimId: string | null;
+    conclusionId: string | null;
+    reason: string | null;
+  }[];
+}
+
+export type CitationInput =
+  | { sentence: string; kind: "CLAIM"; claimId: string }
+  | { sentence: string; kind: "CONCLUSION"; conclusionId: string }
+  | { sentence: string; kind: "NOT_TECHNICAL"; reason: string };
+
+/** An own conclusion (S5) as the API lists it. */
+export interface KnowledgeConclusion {
+  id: string;
+  text: string;
+  reasoning: string;
+  status: "DRAFT" | "APPROVED" | "WITHDRAWN";
+  revision: number;
+  claims: { id: string; status: string }[];
+  approvedAt: string | null;
+}
+
 const base = "/knowledge-base/sources";
 const claimsBase = "/knowledge-base/claims";
 const overviewPath = "/knowledge-base/overview";
@@ -405,6 +469,47 @@ export const knowledgeBaseApi = {
         method: "POST",
         body: JSON.stringify({ version, fingerprint }),
       },
+    );
+  },
+  citations(token: string, contentId: string, signal?: AbortSignal) {
+    return apiRequest<ArticleCitationReport>(
+      `/knowledge-base/articles/${encodeURIComponent(contentId)}/citations`,
+      token,
+      { signal },
+    );
+  },
+  addCitation(token: string, contentId: string, input: CitationInput) {
+    return apiRequest<ArticleCitationReport>(
+      `/knowledge-base/articles/${encodeURIComponent(contentId)}/citations`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  removeCitation(token: string, contentId: string, citationId: string) {
+    return apiRequest<ArticleCitationReport>(
+      `/knowledge-base/articles/${encodeURIComponent(contentId)}/citations/${encodeURIComponent(citationId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  answerCitation(
+    token: string,
+    contentId: string,
+    citationId: string,
+    codes: string[],
+    reason: string,
+  ) {
+    return apiRequest<ArticleCitationReport>(
+      `/knowledge-base/articles/${encodeURIComponent(contentId)}/citations/${encodeURIComponent(citationId)}/answer`,
+      token,
+      { method: "POST", body: JSON.stringify({ codes, reason }) },
+    );
+  },
+  conclusions(token: string, signal?: AbortSignal) {
+    return apiRequest<KnowledgeConclusion[]>(
+      "/knowledge-base/conclusions",
+      token,
+      { signal },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
+import { warningKey } from "@acropora/knowledge-base";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 import { nincsMaradek } from "../../common/takaritas-leltar.js";
@@ -228,6 +229,16 @@ describe(
       const check = cited.citations[0]!;
       assert.ok(check.unanswered.length > 0);
       assert.deepEqual(
+        report.targets.find((t) => t.id === check.id),
+        {
+          id: check.id,
+          kind: "CLAIM",
+          claimId: verifiedId,
+          conclusionId: null,
+          reason: null,
+        },
+      );
+      assert.deepEqual(
         report.sentences.map((s) => s.status),
         ["UNCITED", "WARNING", "UNCITED"],
       );
@@ -250,6 +261,15 @@ describe(
       assert.equal(
         report.sentences.find((s) => s.sentence === first)?.status,
         "OK",
+      );
+      // the answer is stored per warning, code and detail, in the #1919 column
+      const stored = await prisma.articleCitation.findUniqueOrThrow({
+        where: { id: check.id },
+        select: { answeredWarnings: true },
+      });
+      assert.deepEqual(
+        [...stored.answeredWarnings].sort(),
+        check.warnings.map(warningKey).sort(),
       );
 
       report = await citations.add(

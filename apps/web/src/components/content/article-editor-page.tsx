@@ -37,6 +37,7 @@ import {
 import { contentApi } from "@/lib/api/content";
 import { productApi } from "@/lib/api/products";
 
+import { ArticleCitationsPanel } from "./article-citations-panel";
 import { ArticleRevisions } from "./article-revision-diff";
 import { CONTENT_STATE_LABELS } from "./content-labels";
 
@@ -241,6 +242,14 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
   );
+  // the research knowledge base's citation check (S5): its own permissions
+  const canSeeCitations = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_VIEW),
+  );
+  const canCite = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_MANAGE),
+  );
+  const [citationReload, setCitationReload] = useState(0);
 
   const [item, setItem] = useState<ContentDetail | null>(null);
   const [editable, setEditable] = useState(false);
@@ -416,6 +425,7 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
       if (fresh) setForm(formFrom(fresh, item.title));
       setDirty(false);
       setSaved(true);
+      setCitationReload((n) => n + 1);
     } catch (cause) {
       setSaveError(
         cause instanceof Error ? cause.message : "A mentés nem sikerült.",
@@ -941,6 +951,16 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
               revisions={article.revisions}
               approvedRevisionId={article.approvedRevision?.id ?? null}
               publishedRevisionId={article.publishedRevision?.id ?? null}
+              dirty={dirty}
+            />
+          ) : null}
+
+          {article && canSeeCitations ? (
+            <ArticleCitationsPanel
+              token={token}
+              contentId={contentId}
+              canEdit={canCite}
+              reloadKey={citationReload}
               dirty={dirty}
             />
           ) : null}
