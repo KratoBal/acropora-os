@@ -190,7 +190,7 @@ describe("mode A: the answer", () => {
     ]);
   });
 
-  it("a sentence naming a claim must be its statement; an own sentence and an outside claim are the gate's", async () => {
+  it("the OS's own check: a changed statement, an own sentence and a claim not sent never reach the gate", async () => {
     const ai = fakeAi(() => ({
       kind: "ANSWER",
       sentences: [
@@ -204,15 +204,76 @@ describe("mode A: the answer", () => {
     const r = await run([C1], ai);
     assert.equal(r.answered, false);
     assert.equal(r.answer, ANSWER_NO_KNOWLEDGE_SENTENCE);
-    assert.deepEqual(r.notVerbatim, ["c1"]);
-    assert.deepEqual(
-      r.sentences.map((s) => [s.status, s.reasons.map((x) => x.code)]),
-      [
-        ["DROPPED", ["UNMARKED"]],
-        // no cited claim is left, so its scientific phrase is another layer's too
-        ["DROPPED", ["MARKER_OUTSIDE_PACKAGE", "LAYER_PHRASE_OF_OTHER_LAYER"]],
-      ],
+    assert.deepEqual(r.aiDropped, [
+      { claimId: "c1", reason: "NOT_VERBATIM" },
+      { claimId: null, reason: "NOT_FIXED" },
+      { claimId: "c9", reason: "NOT_SENT" },
+    ]);
+    assert.deepEqual(r.sentences, []);
+  });
+
+  // barracuda on #1929, the two ways around the statement check
+  const ADVICE = ", ezért kerüld a foszfátmegkötőt [[claim:c1]].";
+  it("A) no claim id, but a marker in the text: not a fixed sentence, dropped", async () => {
+    const text = statementOf(C1).replace(/\.$/, ADVICE);
+    const r = await run(
+      [C1],
+      fakeAi(() => ({
+        kind: "ANSWER",
+        sentences: [{ claimId: null, text }],
+        refused: [],
+        answeredBy: "fake",
+      })),
     );
+    assert.deepEqual(r.aiDropped, [{ claimId: null, reason: "NOT_FIXED" }]);
+    assert.equal(r.answer.includes("kerüld"), false);
+    assert.equal(r.answered, false);
+  });
+
+  it("B) the id of a claim in the package but not sent (not stated): dropped, never judged field by field", async () => {
+    const unwritable = candidate({
+      id: "c5",
+      quantity: { min: "0.3", max: "1", unit: "mg/l", basis: null },
+    });
+    const r = await run(
+      [C1, unwritable],
+      fakeAi(() => ({
+        kind: "ANSWER",
+        sentences: [
+          {
+            claimId: "c5",
+            text: statementOf(C1).replace(
+              /\.$/,
+              ADVICE.replace(" [[claim:c1]]", ""),
+            ),
+          },
+        ],
+        refused: [],
+        answeredBy: "fake",
+      })),
+    );
+    assert.deepEqual(r.package.notStated, [
+      { id: "c5", failure: "QUANTITY_NOT_WRITABLE" },
+    ]);
+    // first the outcome (the gate, judging against the SENT claims only, is the
+    // second line here), then the reason (the OS's own check, the first line)
+    assert.equal(r.answer.includes("kerüld"), false);
+    assert.deepEqual(r.aiDropped, [{ claimId: "c5", reason: "NOT_SENT" }]);
+  });
+
+  it("one side of a contradiction alone is not sent: a claim whose partner cannot be stated stays out", async () => {
+    const unwritablePartner = {
+      ...C2,
+      quantity: { min: "0.03", max: "0.1", unit: "mg/l", basis: null },
+    };
+    const ai = select();
+    const r = await run([C1, unwritablePartner], ai);
+    assert.deepEqual(r.package.notStated, [
+      { id: "c2", failure: "QUANTITY_NOT_WRITABLE" },
+    ]);
+    assert.deepEqual(r.package.unpaired, ["c1"]);
+    // nothing left to send: no model call
+    assert.equal(ai.calls.length, 0);
   });
 
   it("an advice appended without numbers or vocabulary words: the gate alone lets it out, the statement check does not", async () => {
@@ -238,7 +299,7 @@ describe("mode A: the answer", () => {
         answeredBy: "fake",
       })),
     );
-    assert.deepEqual(r.notVerbatim, ["c1"]);
+    assert.deepEqual(r.aiDropped, [{ claimId: "c1", reason: "NOT_VERBATIM" }]);
     assert.equal(r.answered, false);
     assert.equal(r.answer.includes("kerüld"), false);
   });
@@ -256,7 +317,7 @@ describe("mode A: the answer", () => {
         answeredBy: "fake",
       })),
     );
-    assert.deepEqual(r.notVerbatim, ["c1"]);
+    assert.deepEqual(r.aiDropped, [{ claimId: "c1", reason: "NOT_VERBATIM" }]);
     assert.deepEqual(r.completed, ["c1"]);
     assert.deepEqual(
       r.sentences.map((s) => [s.status, s.claimIds]),

@@ -23,21 +23,25 @@ import {
  *      evidence on a live source (`buildAnswerPackage`). Until a usage policy
  *      exists every claim is released for AI_INTERNAL only, never AI_PUBLIC;
  *   2. each claim as one sentence the gate accepts (`claimStatement`); a claim
- *      that cannot be stated stays out, with its reason;
+ *      that cannot be stated stays out, with its reason, and so does every
+ *      claim whose CONTRADICTS partner among the candidates cannot be stated:
+ *      one side alone is not sent (barracuda on #1929);
  *   3. the Acropora AI selects and orders those sentences
  *      (`/v1/knowledge-answers`, ai-agent #52);
- *   4. a sentence naming a claim must be that claim's statement, letter for
- *      letter (whitespace aside): the OS sent the text, so it checks it itself
- *      and does not rely on the AI service's own check (barracuda on #1928:
- *      an appended advice without numbers or vocabulary words would pass the
- *      per-field gate);
+ *   4. the OS checks the AI's sentences itself, not relying on the AI
+ *      service's own check (barracuda on #1928 and #1929): a sentence naming a
+ *      claim stays only if that claim was SENT and the text is its statement,
+ *      letter for letter (whitespace aside); a sentence naming none stays only
+ *      if it is one of the fixed sentences. An appended advice without numbers
+ *      or vocabulary words would pass the per-field gate, so this is where it
+ *      stops;
  *   5. a cited claim whose CONTRADICTS partner is in the package but was not
  *      chosen gets the partner next to it: both sides stay visible (plan 6,
  *      T6; barracuda on ai-agent #52). Deterministic, not left to the prompt.
  *      The package keeps partners together at its limit: a pair is in or out
  *      as a whole (barracuda on #1928);
- *   6. the answer gate runs on the result (`gateAnswer`): the authority, even
- *      though every sentence came from step 2.
+ *   6. the answer gate runs on the result (`gateAnswer`) against the SENT
+ *      claims only: the authority, even though every sentence came from step 2.
  *
  * Pure apart from the two injected calls. Nothing is stored.
  */
@@ -107,11 +111,13 @@ export interface KnowledgeAnswer {
     truncated: number;
     /** Claims in the package that could not be stated as a sentence. */
     notStated: { id: string; failure: StatementFailure }[];
+    /** Stated claims not sent because a CONTRADICTS partner could not be stated. */
+    unpaired: string[];
   };
   /** Partners added for T6. */
   completed: string[];
-  /** Claims whose sentence from the AI was not their statement, dropped before the gate. */
-  notVerbatim: string[];
+  /** The AI's sentences dropped before the gate, by the OS's own check (step 4). */
+  aiDropped: { claimId: string | null; reason: AiDrop }[];
   ai:
     | { kind: "ANSWER"; refused: string[]; answeredBy: string }
     | { kind: "REFUSED"; refusal: string }
@@ -120,6 +126,9 @@ export interface KnowledgeAnswer {
   gateVersion: string;
 }
 
+export type AiDrop = "NOT_FIXED" | "NOT_SENT" | "NOT_VERBATIM";
+
+const FIXED = new Set(ANSWER_FIXED_SENTENCES.map(normaliseSentence));
 const SENTENCE_END = /([.!?…]+["”»)]?)?$/u;
 const marked = (statement: string, id: string) =>
   statement.replace(SENTENCE_END, (end) => ` [[claim:${id}]]${end || "."}`);
@@ -153,6 +162,23 @@ export async function answerQuestion(input: {
     if (r.ok) statements.set(claim.id, r.statement);
     else notStated.push({ id: claim.id, failure: r.failure });
   }
+  // one side of a contradiction alone is not sent: a claim goes only with
+  // every partner among the candidates stated (to a fixed point, since
+  // dropping one may unpair another)
+  const unpaired: string[] = [];
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const id of [...statements.keys()])
+      if (
+        (byId.get(id)?.contradicts ?? []).some(
+          (p) => p !== id && byId.has(p) && !statements.has(p),
+        )
+      ) {
+        statements.delete(id);
+        unpaired.push(id);
+        changed = true;
+      }
+  }
   const stated = pkg.claims.filter((c) => statements.has(c.id));
   const partners = (id: string) =>
     (byId.get(id)?.contradicts ?? []).filter(
@@ -164,6 +190,7 @@ export async function answerQuestion(input: {
       excluded: pkg.excluded,
       truncated: pkg.truncated,
       notStated,
+      unpaired,
     },
     gateVersion: ANSWER_GATE_VERSION,
   };
@@ -172,7 +199,7 @@ export async function answerQuestion(input: {
     answered: false,
     sentences: [],
     completed: [],
-    notVerbatim: [],
+    aiDropped: [],
     ai,
     ...base,
   });
@@ -191,15 +218,24 @@ export async function answerQuestion(input: {
   });
   if (ai.kind !== "ANSWER") return empty(ai);
 
-  // the statement check first, so a dropped sentence's claim can still come back as a partner
-  const notVerbatim: string[] = [];
+  // the OS's own check first, so a dropped sentence's claim can still come
+  // back as a partner
+  const aiDropped: KnowledgeAnswer["aiDropped"] = [];
   const sentences = ai.sentences.filter((s) => {
-    if (s.claimId === null) return true;
-    // a claim outside the package is left to the gate, which names it
-    const own = statements.get(s.claimId);
-    if (own === undefined || normaliseSentence(s.text) === own) return true;
-    notVerbatim.push(s.claimId);
-    return false;
+    const text = normaliseSentence(s.text);
+    const own = s.claimId === null ? undefined : statements.get(s.claimId);
+    const reason: AiDrop | null =
+      s.claimId === null
+        ? FIXED.has(text)
+          ? null
+          : "NOT_FIXED"
+        : own === undefined
+          ? "NOT_SENT"
+          : text === normaliseSentence(own)
+            ? null
+            : "NOT_VERBATIM";
+    if (reason !== null) aiDropped.push({ claimId: s.claimId, reason });
+    return reason === null;
   });
 
   // T6: the missing side of a contradiction goes right after the cited one
@@ -209,11 +245,12 @@ export async function answerQuestion(input: {
   const completed: string[] = [];
   const parts: string[] = [];
   for (const s of sentences) {
+    // what goes on is the OS's own text, which the AI's was just checked against
     if (s.claimId === null) {
-      parts.push(s.text);
+      parts.push(normaliseSentence(s.text));
       continue;
     }
-    parts.push(marked(s.text, s.claimId));
+    parts.push(marked(statements.get(s.claimId)!, s.claimId));
     for (const p of partners(s.claimId))
       if (!cited.has(p)) {
         cited.add(p);
@@ -224,7 +261,7 @@ export async function answerQuestion(input: {
 
   const gate = gateAnswer({
     text: parts.join(" "),
-    package: pkg.claims,
+    package: stated,
     vocabulary: input.vocabulary,
   });
   return {
@@ -232,7 +269,7 @@ export async function answerQuestion(input: {
     answered: gate.answered,
     sentences: gate.sentences,
     completed,
-    notVerbatim,
+    aiDropped,
     ai: { kind: "ANSWER", refused: ai.refused, answeredBy: ai.answeredBy },
     ...base,
   };
