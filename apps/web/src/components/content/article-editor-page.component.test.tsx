@@ -159,6 +159,21 @@ const loaded = async () => {
   });
 };
 
+/**
+ * THE EDITOR EXISTS, not only its toolbar. The rich-text editor is created in
+ * an effect (`immediatelyRender: false`), and until then a toolbar click does
+ * nothing: under CI load the "Kép beszúrása" click landed in that gap, the
+ * image panel never opened, and its label was not found (card c25e6465, #1920
+ * and #1917). The editable area carries the editor's name only once the
+ * editor is there, so waiting for it waits for the editor, not for a time.
+ */
+const editorReady = () =>
+  waitFor(() =>
+    expect(
+      document.querySelector('[contenteditable][aria-label="Cikk szövege"]'),
+    ).not.toBeNull(),
+  );
+
 describe("suggestArticleSlug", () => {
   it("turns a Hungarian title into the URL part", () => {
     expect(suggestArticleSlug("Zöld Acropora: gondozás & etetés!")).toBe(
@@ -258,6 +273,7 @@ describe("ArticleEditorPage", () => {
 
   it("takes an image only from the save's hosts, in the body and as the cover", async () => {
     await loaded();
+    await editorReady();
     fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
     const cim = screen.getByLabelText("Kép címe");
     fireEvent.change(cim, { target: { value: "https://cdn.unas.hu/a.jpg" } });
@@ -309,6 +325,7 @@ describe("ArticleEditorPage", () => {
   */
   it("uploads a body image and puts its address in the image panel", async () => {
     await loaded();
+    await editorReady();
     fireEvent.click(screen.getByRole("button", { name: "Kép beszúrása" }));
     const file = new File(["x"], "a.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Kép feltöltése"), {
