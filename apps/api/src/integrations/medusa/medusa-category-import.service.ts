@@ -275,10 +275,13 @@ export class MedusaCategoryImportService {
      * van, csak mashol, es senki nem keresi ott. Ezert a feloldatlan szulo
      * MEGALLITJA az agat, es a jelentes megnevezi.
      */
-    const blokkolt = new Set([
-      ...terv.conflict.map((c) => c.ourId),
-      ...terv.adoptAmbiguous,
-    ]);
+    /*
+     * A KETTOS TALALATU (`adoptAmbiguous`) SOR GYEREKEIT NEM ITT ALLITJUK MEG:
+     * a sor nem oldodott fel (nincs Medusa-azonositoja), tehat a gyerekeinel a
+     * "feloldatlan szulo" ag fogja meg, lejjebb. Ezt rontassal mertem
+     * (2026-10-27): a halmazba vett valtozat ugyanazt a kimenetet adta.
+     */
+    const blokkolt = new Set(terv.conflict.map((c) => c.ourId));
     for (const teendo of terv.create) {
       if (teendo.parentOurId && blokkolt.has(teendo.parentOurId)) {
         blokkolt.add(teendo.ourId);
