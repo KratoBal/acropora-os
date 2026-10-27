@@ -321,6 +321,14 @@ export type MedusaCategoryPatch =
   | { name: string; handle?: string }
   | { name?: string; handle: string }
   /**
+   * ADOPTION: an existing category gets OUR id as its `external_id`, in the
+   * same request as the name and handle the current rule gives it (see
+   * `CategoryAdopt`). The installed Medusa 2.20.1 admin schema accepts
+   * `external_id` on update (`UpdateProductCategory`, strict); the deployed
+   * test instance's version is measured by the first adopted category.
+   */
+  | { external_id: string; name?: string; handle?: string }
+  /**
    * The Acropora tree's update (SEO P0 PR 10b): all four fields at once, so
    * one shape covers every change and no field is left to a default.
    */

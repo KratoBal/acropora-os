@@ -54,6 +54,13 @@ export function describePlan(plan: {
     handle: { from: string; to: string } | null;
     name: { from: string; to: string } | null;
   }[];
+  adopt: {
+    ourId: string;
+    externalId: { from: string; to: string };
+    handle: { from: string; to: string } | null;
+    name: { from: string; to: string } | null;
+  }[];
+  adoptAmbiguous: string[];
 }): string {
   const sorok = [
     `Létrehozandó: ${plan.create.length}`,
@@ -64,6 +71,10 @@ export function describePlan(plan: {
     `Frissítendő (a tárolt eltér a szabálytól): ${plan.update.length}`,
     `  ebből név: ${plan.update.filter((u) => u.name).length}`,
     `  ebből webcím: ${plan.update.filter((u) => u.handle).length}`,
+    `Örökbefogadandó (idegen azonosítóval már áll): ${plan.adopt.length}`,
+    `  ebből név: ${plan.adopt.filter((a) => a.name).length}`,
+    `  ebből webcím: ${plan.adopt.filter((a) => a.handle).length}`,
+    `Több jelölt, nem nyúlunk hozzá: ${plan.adoptAmbiguous.length}`,
   ];
   /**
    * A REGI ES AZ UJ ERTEK EGYMAS MELLETT, TETELESEN -- nem darabszamkent.
@@ -83,6 +94,21 @@ export function describePlan(plan: {
     if (u.handle)
       sorok.push(`  ${u.ourId} webcím: ${u.handle.from}  ->  ${u.handle.to}`);
   }
+  /**
+   * AZ ORKOBEFOGADAS TETELESEN, A REGI AZONOSITOVAL: az `external_id` atirasa
+   * egyiranyu, es a regi ertek az egyetlen nyom arrol, honnan jott a kategoria.
+   */
+  for (const a of plan.adopt) {
+    sorok.push(
+      `  ${a.ourId} azonosító: ${a.externalId.from}  ->  ${a.externalId.to}`,
+    );
+    if (a.name)
+      sorok.push(`  ${a.ourId} név:    ${a.name.from}  ->  ${a.name.to}`);
+    if (a.handle)
+      sorok.push(`  ${a.ourId} webcím: ${a.handle.from}  ->  ${a.handle.to}`);
+  }
+  if (plan.adoptAmbiguous.length)
+    sorok.push(`A több jelöltes sorok: ${plan.adoptAmbiguous.join(", ")}`);
   if (plan.conflict.length)
     sorok.push(
       `Az ütköző kategóriák: ${plan.conflict.map((c) => c.ourId).join(", ")}`,
@@ -186,6 +212,8 @@ export async function runCategoryCli(
         `Változatlan: ${report.skipped}`,
         `Ütközés, érintetlen: ${report.conflicts.length}`,
         `A szülőjük miatt kimaradt: ${report.blockedByConflict.length}`,
+        `Örökbefogadva: ${report.adopted.length}`,
+        `Több jelölt, érintetlen: ${report.adoptAmbiguous.length}`,
       ].join("\n") + "\n",
     );
     out.stdout(describeVerification(report.verification));
@@ -195,7 +223,11 @@ export async function runCategoryCli(
      * dontese, tehat nem szabad elrejteni sem. Ezert a kilepesi kod 2: nem
      * hiba, hanem "megnezendo".
      */
-    return report.conflicts.length || report.blockedByConflict.length ? 2 : 0;
+    return report.conflicts.length ||
+      report.blockedByConflict.length ||
+      report.adoptAmbiguous.length
+      ? 2
+      : 0;
   } catch (error) {
     if (error instanceof MedusaCategoryImportRefusedError) {
       out.stderr(`A betöltés megállt: ${error.reason}\n`);

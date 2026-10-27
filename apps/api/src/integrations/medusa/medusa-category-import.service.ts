@@ -22,6 +22,7 @@ import {
   type CategoryMapping,
   type ExistingCategory,
   type OurCategoryNode,
+  type CategoryAdopt,
   type CategoryUpdate,
 } from "./medusa-category-tree.js";
 
@@ -52,6 +53,7 @@ function tervAlak(row: MedusaCategoryRow): ExistingCategory {
     externalId: row.external_id,
     handle: row.handle,
     name: row.name,
+    parentId: row.parent_category_id,
   };
 }
 
@@ -107,6 +109,14 @@ export interface CategoryImportReport {
    * az EGYETLEN, amibol atiranyitas keszitheto. Ezert TETELES, nem darabszam.
    */
   updates: CategoryUpdate[];
+  /**
+   * AZ ORKOBEFOGADOTT KATEGORIAK, TETELESEN: melyik, es MIROL MIRE kapott
+   * azonositot, nevet, webcimet. A regi `external_id` az egyetlen nyoma annak,
+   * honnan jott a kategoria.
+   */
+  adopted: CategoryAdopt[];
+  /** Egynel tobb idegen kategoria felelt meg: nem hoztuk letre, nem fogadtuk orokbe. */
+  adoptAmbiguous: string[];
   /**
    * AZ ELLENORZES, AMIT KULONBEN EMLEKEZETBOL KELLENE ELVEGEZNI.
    *
@@ -205,6 +215,8 @@ export class MedusaCategoryImportService {
       blockedByConflict: [],
       lostWords: [],
       updates: [],
+      adopted: [],
+      adoptAmbiguous: terv.adoptAmbiguous,
       verification: {
         carryingOurId: 0,
         activeAmongThem: 0,
@@ -218,6 +230,30 @@ export class MedusaCategoryImportService {
       await this.links.link(par.ourId, par.medusaId, now);
       medusaAzonosito.set(par.ourId, par.medusaId);
       report.linkedOnly += 1;
+    }
+
+    /**
+     * AZ ORKOBEFOGADAS A LETREHOZAS ELOTT FUT: a gyerek letrehozasakor a
+     * szulo Medusa-azonositoja mar kell, es egy orokbefogadott szulo
+     * azonositoja a `medusaAzonosito` terkepben van.
+     *
+     * EGY KERES KATEGORIANKENT (azonosito + nev + webcim egyutt), mert ket
+     * keres kozott lenne egy allapot, amiben a webcim mar az uj, a nev a
+     * regi. A LEKEPEZES-SOR A KERES UTAN KERUL, nem elotte: ha a sor irasa
+     * elbukik, a kategoria mar hordozza a mi azonositonkat, tehat a kovetkezo
+     * futas `mapOnly` allapotban megtalalja es csak a sort irja meg. Forditva
+     * (sor elobb) egy felbeszakadt futas olyan sort hagyna, ami nem letezo
+     * azonositot hordoz.
+     */
+    for (const orokbe of terv.adopt) {
+      await client.updateProductCategory(orokbe.medusaId, {
+        external_id: orokbe.externalId.to,
+        ...(orokbe.name ? { name: orokbe.name.to } : {}),
+        ...(orokbe.handle ? { handle: orokbe.handle.to } : {}),
+      });
+      await this.links.link(orokbe.ourId, orokbe.medusaId, now);
+      medusaAzonosito.set(orokbe.ourId, orokbe.medusaId);
+      report.adopted.push(orokbe);
     }
 
     const elavult = new Set(terv.staleMapping);
@@ -239,7 +275,10 @@ export class MedusaCategoryImportService {
      * van, csak mashol, es senki nem keresi ott. Ezert a feloldatlan szulo
      * MEGALLITJA az agat, es a jelentes megnevezi.
      */
-    const blokkolt = new Set(terv.conflict.map((c) => c.ourId));
+    const blokkolt = new Set([
+      ...terv.conflict.map((c) => c.ourId),
+      ...terv.adoptAmbiguous,
+    ]);
     for (const teendo of terv.create) {
       if (teendo.parentOurId && blokkolt.has(teendo.parentOurId)) {
         blokkolt.add(teendo.ourId);

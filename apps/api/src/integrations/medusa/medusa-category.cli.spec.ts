@@ -41,6 +41,9 @@ const URES_TERV = {
    * fixtura nem adja, es a hiba csak FUTASKOR jott elo.
    */
   update: [],
+  /** A HETEDIK ALLAPOT IS: ugyanaz a laza varrat (`unknown`), ugyanaz a hiba. */
+  adopt: [],
+  adoptAmbiguous: [],
 };
 
 function szolgaltatasDupla(
@@ -64,6 +67,8 @@ function szolgaltatasDupla(
         skipped: 0,
         conflicts: [],
         blockedByConflict: [],
+        adopted: [],
+        adoptAmbiguous: [],
         verification: {
           carryingOurId: 1,
           activeAmongThem: 1,
@@ -180,5 +185,42 @@ describe("a kategória-parancs", () => {
     const { out, hiba } = kimenet();
     assert.equal(await runCategoryCli(["--apply"], out, deps(service)), 1);
     assert.match(hiba.join(""), /a lista csonkolt/);
+  });
+
+  it("a tervben az orokbefogadast a REGI azonositoval egyutt, tetelesen kiirja", async () => {
+    const { service } = szolgaltatasDupla({
+      ...URES_TERV,
+      adopt: [
+        {
+          ourId: "cat_hal",
+          medusaId: "pcat_regi",
+          externalId: { from: "regi_2", to: "cat_hal" },
+          handle: { from: "halak---termékek", to: "halak" },
+          name: { from: "Halak - Termékek", to: "Halak" },
+        },
+      ],
+    });
+    const { out, ki } = kimenet();
+    assert.equal(await runCategoryCli([], out, deps(service)), 0);
+    const szoveg = ki.join("");
+    assert.match(szoveg, /Örökbefogadandó \(idegen azonosítóval már áll\): 1/);
+    assert.match(szoveg, /cat_hal azonosító: regi_2 {2}-> {2}cat_hal/);
+    assert.match(szoveg, /halak---termékek {2}-> {2}halak/);
+  });
+
+  it("kettos talalatnal a kilepesi kod 2, a tervben pedig megnevezi a sort", async () => {
+    const { service } = szolgaltatasDupla(URES_TERV, {
+      adoptAmbiguous: ["cat_hal"],
+    });
+    const { out } = kimenet();
+    assert.equal(await runCategoryCli(["--apply"], out, deps(service)), 2);
+
+    const terv = szolgaltatasDupla({
+      ...URES_TERV,
+      adoptAmbiguous: ["cat_hal"],
+    });
+    const { out: out2, ki } = kimenet();
+    await runCategoryCli([], out2, deps(terv.service));
+    assert.match(ki.join(""), /A több jelöltes sorok: cat_hal/);
   });
 });
