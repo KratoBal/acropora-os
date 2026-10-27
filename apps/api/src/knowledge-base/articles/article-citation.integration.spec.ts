@@ -330,6 +330,81 @@ describe(
       );
     });
 
+    it("KB-CIT-GATE: a knowledge article is approved only with a clean report, and a refused approval moves nothing", async () => {
+      const id = await article("DRAFTING", "<p>Ez egy átvezető mondat.</p>");
+      await citations.add(
+        id,
+        {
+          sentence: "Ez egy átvezető mondat.",
+          kind: "NOT_TECHNICAL",
+          reason: "átvezetés",
+        },
+        userId,
+      );
+      await prisma.contentItem.update({
+        where: { id },
+        data: { state: "AWAITING_APPROVAL" },
+      });
+      // the title is still uncited
+      await assert.rejects(
+        content.moveState({
+          id,
+          from: "AWAITING_APPROVAL" as never,
+          to: "READY_TO_SEND" as never,
+          actorUserId: userId,
+        }),
+        (error: unknown) =>
+          error instanceof ArticleStepError &&
+          /1 hivatkozás nélküli mondat/.test(error.message),
+      );
+      const refused = await prisma.contentItem.findUniqueOrThrow({
+        where: { id },
+        select: {
+          state: true,
+          article: { select: { approvedRevisionId: true } },
+        },
+      });
+      assert.equal(refused.state, "AWAITING_APPROVAL");
+      assert.equal(refused.article?.approvedRevisionId, null);
+      assert.equal(
+        await prisma.articleRevision.count({ where: { contentId: id } }),
+        0,
+      );
+
+      // the title marked too (written as the editor could, in the state where it may)
+      await prisma.contentItem.update({
+        where: { id },
+        data: { state: "AWAITING_REVISION" },
+      });
+      await citations.add(
+        id,
+        {
+          sentence: "Mennyi foszfát ideális?",
+          kind: "NOT_TECHNICAL",
+          reason: "cím, kérdés",
+        },
+        userId,
+      );
+      await prisma.contentItem.update({
+        where: { id },
+        data: { state: "AWAITING_APPROVAL" },
+      });
+      assert.equal((await citations.report(id)).clean, true);
+      assert.equal(
+        await content.moveState({
+          id,
+          from: "AWAITING_APPROVAL" as never,
+          to: "READY_TO_SEND" as never,
+          actorUserId: userId,
+        }),
+        true,
+      );
+      assert.equal(
+        await prisma.articleRevision.count({ where: { contentId: id } }),
+        1,
+      );
+    });
+
     it("KB-CIT-PILOT: an article that cites the knowledge base is not published in the pilot", async () => {
       const id = await article("DRAFTING", "<p>Mondat.</p>");
       await citations.add(
