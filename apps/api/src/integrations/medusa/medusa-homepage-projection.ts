@@ -8,6 +8,7 @@ import type {
 
 import {
   MAIN_HOMEPAGE_KEY,
+  storedBrandIds,
   toHomepageContent,
 } from "../../homepage-content/homepage-content.service.js";
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
@@ -57,6 +58,13 @@ export interface MedusaHomepageContentRecord {
   blocks?: HomepageBlock[] | null;
   /** The footer (commerce #564, #567); `null` is the storefront's own. */
   footer?: MedusaHomepageFooter | null;
+  /**
+   * The logo strip's brand handles, in order (commerce #575). Sent ONLY when
+   * the OS has a list: a shop that predates the field refuses an unknown key
+   * and would refuse the whole record, so until somebody sets the strip, the
+   * record stays what it was.
+   */
+  featured_brand_handles?: string[];
 }
 
 export type HomepageProjectionOutcome =
@@ -74,6 +82,12 @@ export interface HomepageSource {
   switchedOn(): Promise<boolean>;
   /** The Medusa product ids of the products marked for the band, in order. */
   featured(): Promise<string[]>;
+  /**
+   * The logo strip's brand handles (the brands' slugs, the shop's brand
+   * handles), in order, only the shown brands; `null` when the list was never
+   * set.
+   */
+  brands(): Promise<string[] | null>;
 }
 
 const slideRecord = (slide: HomepageSlide): MedusaHomepageSlide => ({
@@ -144,8 +158,12 @@ const footerRecord = (footer: HomepageFooter): MedusaHomepageFooter => ({
 export function homepageRecord(
   content: HomepageContentInput,
   featuredHandles: readonly string[] = [],
+  brandHandles: readonly string[] | null = null,
 ): MedusaHomepageContentRecord {
   return {
+    ...(brandHandles !== null
+      ? { featured_brand_handles: [...brandHandles] }
+      : {}),
     texts: { ...content.texts },
     slides: content.slides === null ? null : content.slides.map(slideRecord),
     featured_handles: [...featuredHandles],
@@ -195,6 +213,8 @@ export function homepageRecordDiffers(
       // null and "never sent" are both "not set"
       r.blocks ?? null,
       r.footer ?? null,
+      // compared only when we send it: a list never set leaves the shop's as it is
+      "featured_brand_handles" in wanted ? (r.featured_brand_handles ?? []) : 0,
     ]);
   return pick(current) !== pick(wanted);
 }
@@ -212,11 +232,12 @@ export async function projectHomepageContent(
   source: HomepageSource,
   apply: boolean,
 ): Promise<HomepageProjectionOutcome> {
-  const [content, featuredIds] = await Promise.all([
+  const [content, featuredIds, brandHandles] = await Promise.all([
     source.content(),
     source.featured(),
+    source.brands(),
   ]);
-  // nothing stored and nothing marked: nothing to send
+  // nothing stored and nothing marked: nothing to send (the brand list lives in the stored row)
   if (!content && !featuredIds.length) return { status: "nothing" };
   /*
     THE BAND'S HANDLES come from the shop itself (the product's own handle),
@@ -232,6 +253,7 @@ export async function projectHomepageContent(
   const wanted = homepageRecord(
     content ?? { texts: {}, slides: null },
     fit.handles,
+    brandHandles,
   );
   const skippedHandles = fit.skipped.length ? fit.skipped : undefined;
   const current = await client.fetchHomepageContent();
@@ -293,6 +315,29 @@ export const prismaHomepageSource: HomepageSource = {
     return rows.flatMap((r) => {
       const id = byProduct.get(r.productId);
       return id ? [id] : [];
+    });
+  },
+  brands: async () => {
+    const row = await prisma.homepageContent.findUnique({
+      where: { key: MAIN_HOMEPAGE_KEY },
+      select: { featuredBrandIds: true },
+    });
+    const ids = storedBrandIds(row?.featuredBrandIds);
+    if (ids === null) return null;
+    if (!ids.length) return [];
+    const brands = await prisma.brand.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, slug: true, isActive: true, archivedAt: true },
+    });
+    // the brand projection's rule (`brandIsShown`): a switched-off or archived brand has no shop page
+    const slugOf = new Map(
+      brands
+        .filter((b) => b.isActive && !b.archivedAt)
+        .map((b) => [b.id, b.slug]),
+    );
+    return ids.flatMap((id) => {
+      const slug = slugOf.get(id);
+      return slug ? [slug] : [];
     });
   },
   switchedOn: async () =>

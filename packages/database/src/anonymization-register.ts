@@ -327,6 +327,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     slides: "business",
     blocks: "business",
     footer: "business",
+    featuredBrandIds: "business",
     updatedById: "identifier",
   },
   HomepageFeaturedProduct: {

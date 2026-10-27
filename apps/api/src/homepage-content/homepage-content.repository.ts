@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
-import type { HomepageContentInput } from "@acropora/types";
+import type { HomepageBrand, HomepageContentInput } from "@acropora/types";
 
 import type {
   HomepageContentRow,
@@ -145,6 +145,28 @@ export class HomepageContentRepository implements HomepageContentStore {
     });
   }
 
+  async brandsByIds(ids: readonly string[]): Promise<HomepageBrand[]> {
+    if (!ids.length) return [];
+    const rows = await prisma.brand.findMany({
+      where: { id: { in: [...ids] } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        logoUrl: true,
+        isActive: true,
+        archivedAt: true,
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      logoUrl: row.logoUrl,
+      shown: row.isActive && !row.archivedAt,
+    }));
+  }
+
   save(
     key: string,
     input: HomepageContentInput,
@@ -164,6 +186,9 @@ export class HomepageContentRepository implements HomepageContentStore {
       */
       ...(input.blocks !== undefined ? { blocks: json(input.blocks) } : {}),
       ...(input.footer !== undefined ? { footer: json(input.footer) } : {}),
+      ...(input.brandIds !== undefined
+        ? { featuredBrandIds: json(input.brandIds) }
+        : {}),
       updatedById: userId,
     };
     return prisma.homepageContent.upsert({

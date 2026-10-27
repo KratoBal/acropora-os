@@ -13,6 +13,7 @@ import {
   HOMEPAGE_LIMITS,
   parseHomepageContentInput,
   type HomepageBlock,
+  type HomepageBrand,
   type HomepageContent,
   type HomepageContentInput,
   type HomepageFooter,
@@ -82,6 +83,8 @@ export interface HomepageContentRow {
   slides: unknown;
   blocks: unknown;
   footer: unknown;
+  /** The logo strip's brand ids (a column added after the others: optional here). */
+  featuredBrandIds?: unknown;
   projectionEnabled: boolean;
   updatedAt: Date;
 }
@@ -115,6 +118,8 @@ export interface HomepageContentStore {
     productIds: readonly string[],
     userId: string,
   ): Promise<"ok" | "mismatch">;
+  /** The brands with these ids that exist, in any order. */
+  brandsByIds(ids: readonly string[]): Promise<HomepageBrand[]>;
   /** The whole record, one transaction. */
   save(
     key: string,
@@ -216,6 +221,17 @@ function storedBlocks(value: unknown): HomepageBlock[] | null {
     : null;
 }
 
+/** The stored brand ids through the same strict parse as a save, or `null`. */
+export function storedBrandIds(value: unknown): string[] | null {
+  if (value === null || value === undefined) return null;
+  const parsed = parseHomepageContentInput({
+    texts: {},
+    slides: null,
+    brandIds: value,
+  });
+  return parsed.ok ? (parsed.value.brandIds ?? null) : null;
+}
+
 /** The stored footer through the same strict parse as a save, or `null`. */
 function storedFooter(value: unknown): HomepageFooter | null {
   if (value === null || value === undefined) return null;
@@ -302,6 +318,8 @@ export function toHomepageContent(
       slides: null,
       blocks: null,
       footer: null,
+      brandIds: null,
+      brands: [],
       imageHosts: [...imageHosts],
       storefrontUrl,
       updatedAt: null,
@@ -322,6 +340,9 @@ export function toHomepageContent(
     slides: short.slides,
     blocks: storedBlocks(row.blocks),
     footer: storedFooter(row.footer),
+    brandIds: storedBrandIds(row.featuredBrandIds),
+    // the details come from the Brand table: the service fills them in (`withBrands`)
+    brands: [],
     imageHosts: [...imageHosts],
     storefrontUrl,
     updatedAt: row.updatedAt.toISOString(),
@@ -499,12 +520,33 @@ export class HomepageContentService {
     return { list: await this.store.featuredList(), projection };
   }
 
+  /**
+   * THE LISTED BRANDS' DETAILS, in the list's order. A brand deleted since the
+   * save is left out here; its id stays in the stored list until the next save
+   * (the projection skips it too).
+   */
+  private async withBrands(content: HomepageContent): Promise<HomepageContent> {
+    if (!content.brandIds?.length) return content;
+    const byId = new Map(
+      (await this.store.brandsByIds(content.brandIds)).map((b) => [b.id, b]),
+    );
+    return {
+      ...content,
+      brands: content.brandIds.flatMap((id) => {
+        const brand = byId.get(id);
+        return brand ? [brand] : [];
+      }),
+    };
+  }
+
   async get(): Promise<HomepageContent> {
-    return toHomepageContent(
-      await this.store.find(MAIN_HOMEPAGE_KEY),
-      homepageProjectionAllowed(this.environment),
-      richTextImageHosts(this.environment),
-      homepageStorefrontUrl(this.environment),
+    return this.withBrands(
+      toHomepageContent(
+        await this.store.find(MAIN_HOMEPAGE_KEY),
+        homepageProjectionAllowed(this.environment),
+        richTextImageHosts(this.environment),
+        homepageStorefrontUrl(this.environment),
+      ),
     );
   }
 
@@ -538,6 +580,17 @@ export class HomepageContentService {
         throw new BadRequestException(
           `${index + 1}. dia, szöveg: a tisztítás után legfeljebb ${HOMEPAGE_LIMITS.slideText} karakter lehet.`,
         );
+    // every listed brand must exist: an unknown id would be a hole nobody can see in the editor
+    if (clean.brandIds?.length) {
+      const known = new Set(
+        (await this.store.brandsByIds(clean.brandIds)).map((b) => b.id),
+      );
+      const unknown = clean.brandIds.find((id) => !known.has(id));
+      if (unknown)
+        throw new BadRequestException(
+          `brandIds: ismeretlen márka (${unknown})`,
+        );
+    }
     const row = await this.store.save(MAIN_HOMEPAGE_KEY, clean, userId);
     let projection: HomepageProjectionResult;
     if (!homepageProjectionOn(this.environment, row)) projection = "off";
@@ -548,11 +601,13 @@ export class HomepageContentService {
         projection = "failed";
       }
     return {
-      content: toHomepageContent(
-        row,
-        homepageProjectionAllowed(this.environment),
-        richTextImageHosts(this.environment),
-        homepageStorefrontUrl(this.environment),
+      content: await this.withBrands(
+        toHomepageContent(
+          row,
+          homepageProjectionAllowed(this.environment),
+          richTextImageHosts(this.environment),
+          homepageStorefrontUrl(this.environment),
+        ),
       ),
       projection,
     };
