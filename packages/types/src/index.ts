@@ -201,6 +201,19 @@ export {
   renderWebshopMail,
   webshopMailDocument,
 } from "./webshop-mail-render.js";
+export {
+  WEBSHOP_LEGAL_BLOCK_IDS,
+  WEBSHOP_LEGAL_PLACEHOLDER_MARK,
+  WEBSHOP_LEGAL_VERSIONS,
+  webshopLegalIsComplete,
+  webshopLegalPart,
+} from "./webshop-legal.js";
+export type {
+  WebshopLegalBlock,
+  WebshopLegalBlockId,
+  WebshopLegalPart,
+  WebshopLegalVersion,
+} from "./webshop-legal.js";
 export type {
   WebshopMailRender,
   WebshopRenderSteps,

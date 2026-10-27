@@ -171,3 +171,76 @@ describe("renderWebshopMail", () => {
     );
   });
 });
+
+/*
+  THE LEGAL PART (P0 #2): the renderer appends it, so a template an editor has
+  changed cannot drop it. MI PIROSIT: ha a jogi resz csak az alapertelmezett
+  sablonban lenne (egy szerkesztett sablon elvesztene); ha a verzio nelkuli
+  rendeles kapna jogi reszt; ha ismeretlen verzioval a level kimenne.
+*/
+describe("the order confirmation's legal part", () => {
+  const placed = (legal_version?: string | null): WebshopMailFacts => {
+    const sample = WEBSHOP_MAIL_SAMPLE_FACTS["order-placed"];
+    assert.equal(sample.template, "order-placed");
+    return { ...sample, legal_version } as WebshopMailFacts;
+  };
+
+  it("the accepted version's part follows the body, in html and text, before the shop's name", () => {
+    const mail = renderWebshopMail(
+      template(WEBSHOP_MAIL_KEYS["order-placed"]),
+      placed("unas-shop-2026-09-29"),
+    );
+    assert.equal(mail.ok, true);
+    if (!mail.ok) return;
+    assert.match(mail.html, /Jogi tájékoztatók/);
+    assert.match(mail.html, /Elállási nyilatkozat \(minta\)/);
+    assert.match(mail.html, /\[HELYŐRZŐ\]/);
+    assert.match(mail.text, /AZ ELADÓ ADATAI/);
+    assert.ok(
+      mail.text.indexOf("JOGI TÁJÉKOZTATÓK") <
+        mail.text.lastIndexOf("Acropora tengeri akvarisztika"),
+    );
+    assert.doesNotMatch(mail.html, /<script/);
+  });
+
+  it("an edited template cannot drop it", () => {
+    const edited = {
+      subject: "Rendelés {{rendeles_szam}}",
+      body: "Szia {{ugyfel_neve}}, köszönjük.",
+      bodyHtml: null,
+    };
+    const mail = renderWebshopMail(edited, placed("fogyasztobarat-JPNFMVH0"));
+    assert.equal(mail.ok, true);
+    if (mail.ok) assert.match(mail.html, /Tájékoztató az elállási jogról/);
+  });
+
+  it("no version, no legal part (as before the change)", () => {
+    for (const version of [null, undefined]) {
+      const mail = renderWebshopMail(
+        template(WEBSHOP_MAIL_KEYS["order-placed"]),
+        placed(version),
+      );
+      assert.equal(mail.ok, true);
+      if (mail.ok) assert.doesNotMatch(mail.html, /Jogi tájékoztatók/);
+    }
+  });
+
+  it("an unknown version holds the mail, with a reason that names it", () => {
+    const mail = renderWebshopMail(
+      template(WEBSHOP_MAIL_KEYS["order-placed"]),
+      placed("regi-bolt-2020"),
+    );
+    assert.equal(mail.ok, false);
+    if (!mail.ok) assert.match(mail.reason, /regi-bolt-2020/);
+  });
+
+  it("the other templates never get one", () => {
+    const facts = WEBSHOP_MAIL_SAMPLE_FACTS["order-status-confirmed"];
+    const mail = renderWebshopMail(
+      template(WEBSHOP_MAIL_KEYS[facts.template]),
+      facts,
+    );
+    assert.equal(mail.ok, true);
+    if (mail.ok) assert.doesNotMatch(mail.html, /Jogi tájékoztatók/);
+  });
+});
