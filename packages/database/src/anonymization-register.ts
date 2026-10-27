@@ -1402,6 +1402,10 @@ export const ANONYMIZATION_REGISTER: Readonly<
   UserDashboardLayout: {
     widgets: "business",
   },
+  // A user's favourite menu page: the route of an OS menu item, not personal data.
+  UserFavorite: {
+    href: "business",
+  },
   ProductEnrichmentRun: {
     errorCode: "business",
   },
