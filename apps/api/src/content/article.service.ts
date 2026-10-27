@@ -11,9 +11,11 @@ import {
   parseArticleBodyInput,
   type ArticleDetail,
   type ArticleEditorData,
+  type ArticleRevisionDiff,
 } from "@acropora/types";
 
 import { richTextImageHosts } from "../homepage-content/homepage-content.service.js";
+import { articleDiff } from "./article-diff.js";
 import { ArticleRepository } from "./article.repository.js";
 
 export const ARTICLE_ENVIRONMENT = Symbol("ARTICLE_ENVIRONMENT");
@@ -45,6 +47,41 @@ export class ArticleService {
       editable,
       imageHosts: richTextImageHosts(this.environment),
       taxonOptions,
+    };
+  }
+
+  /**
+   * Two versions compared: `from` and `to` are each an approved revision's id
+   * or "current" (the body being edited); `to` defaults to "current".
+   */
+  async diff(
+    contentId: string,
+    from: unknown,
+    to: unknown = "current",
+  ): Promise<ArticleRevisionDiff> {
+    const ref = (v: unknown, name: string) => {
+      if (typeof v !== "string" || !v.trim())
+        throw new BadRequestException(
+          `${name}: egy jóváhagyott változat azonosítója vagy "current".`,
+        );
+      return v.trim();
+    };
+    const a = ref(from, "from");
+    const b = ref(to ?? "current", "to");
+    if (a === b)
+      throw new BadRequestException("from és to: két különböző változat kell.");
+    const [before, after] = await Promise.all([
+      this.articles.snapshot(contentId, a),
+      this.articles.snapshot(contentId, b),
+    ]);
+    if (!before || !after)
+      throw new NotFoundException(
+        "Nincs ilyen változata ennek a cikknek (vagy a cikknek még nincs törzse).",
+      );
+    return {
+      from: before.side,
+      to: after.side,
+      ...articleDiff(before.snapshot, after.snapshot),
     };
   }
 

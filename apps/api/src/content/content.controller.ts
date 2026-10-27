@@ -68,6 +68,17 @@ export class ContentController {
     return this.articles.get(id);
   }
 
+  /** Two versions of the article compared (research plan v4, 9.2 S5). */
+  @Get(":id/article/diff")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  articleDiff(
+    @Param("id") id: string,
+    @Query("from") from: unknown,
+    @Query("to") to: unknown,
+  ) {
+    return this.articles.diff(id, from, to);
+  }
+
   @Put(":id/article")
   @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
   saveArticle(
