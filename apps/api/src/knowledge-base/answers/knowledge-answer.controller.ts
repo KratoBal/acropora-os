@@ -93,7 +93,9 @@ export class KnowledgeAnswerService {
     this.logger.log({
       msg: "knowledge answer gated",
       answered: result.answered,
+      notAnswered: result.notAnswered,
       package: result.package.claims,
+      sent: result.package.sent.length,
       notStated: result.package.notStated.map((n) => n.failure),
       unpaired: result.package.unpaired.length,
       aiDropped: result.aiDropped.map((d) => d.reason),

@@ -125,6 +125,8 @@ describe("mode A: the answer", () => {
     const ai = select("c1", "c2");
     const r = await run([C1, C2], ai);
     assert.equal(r.answered, true);
+    assert.equal(r.notAnswered, null);
+    assert.deepEqual(r.package.sent, ["c1", "c2"]);
     assert.equal(
       r.answer,
       `${statementOf(C1).replace(/\.$/, " (Koop és mtsai, 2001).")} ${statementOf(C2).replace(/\.$/, " (Holmes-Farley, 2002).")}`,
@@ -334,6 +336,43 @@ describe("mode A: the answer", () => {
     assert.equal(ai.calls.length, 0);
     assert.equal(r.answer, ANSWER_NO_KNOWLEDGE_SENTENCE);
     assert.deepEqual(r.ai, { kind: "NOT_CALLED" });
+    assert.deepEqual([r.notAnswered, r.package.sent], ["NOTHING_TO_SEND", []]);
+  });
+
+  it("the AI chose none of the claims sent: said so, with what it could choose from (acrobot 37096)", async () => {
+    // the stage call: claims sent, the AI answered with fixed sentences only, nothing dropped anywhere
+    const r = await run(
+      [C1, C2],
+      fakeAi(() => ({
+        kind: "ANSWER",
+        sentences: ANSWER_FIXED_SENTENCES.slice(0, 3).map((text) => ({
+          claimId: null,
+          text,
+        })),
+        refused: [],
+        answeredBy: "fake knowledge-answer/v1",
+      })),
+    );
+    assert.equal(r.answered, false);
+    assert.equal(r.notAnswered, "AI_CHOSE_NONE");
+    assert.deepEqual(r.package.sent, ["c1", "c2"]);
+    assert.deepEqual(r.aiDropped, []);
+    // it named a claim, and the OS dropped it: another reason
+    const dropped = await run(
+      [C1, C2],
+      fakeAi(() => ({
+        kind: "ANSWER",
+        sentences: [
+          { claimId: "c1", text: "Egy átírt mondat 5 µmol/l foszfátról." },
+        ],
+        refused: [],
+        answeredBy: "fake knowledge-answer/v1",
+      })),
+    );
+    assert.deepEqual(
+      [dropped.answered, dropped.notAnswered, dropped.aiDropped],
+      [false, "DROPPED", [{ claimId: "c1", reason: "NOT_VERBATIM" }]],
+    );
   });
 
   it("a refused or unavailable AI is no answer, with its reason", async () => {
@@ -347,6 +386,10 @@ describe("mode A: the answer", () => {
       );
       assert.equal(r.answered, false);
       assert.deepEqual(r.ai, ai);
+      assert.equal(
+        r.notAnswered,
+        ai.kind === "REFUSED" ? "AI_REFUSED" : "AI_UNAVAILABLE",
+      );
     }
   });
 });
