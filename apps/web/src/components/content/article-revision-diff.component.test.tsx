@@ -73,7 +73,13 @@ describe("ArticleRevisions", () => {
     const older = screen.getAllByRole("button", { name: "Az előzőhöz képest" });
     expect(older).toHaveLength(1);
     fireEvent.click(older[0]!);
-    expect(api.articleDiff).toHaveBeenCalledWith("token-1", "c1", "r1", "r2");
+    expect(api.articleDiff).toHaveBeenCalledWith(
+      "token-1",
+      "c1",
+      "r1",
+      "r2",
+      expect.any(AbortSignal),
+    );
     const current = screen.getAllByRole("button", {
       name: "A mostani szöveghez képest",
     });
@@ -84,6 +90,7 @@ describe("ArticleRevisions", () => {
       "c1",
       "r2",
       "current",
+      expect.any(AbortSignal),
     );
   });
 
@@ -101,6 +108,28 @@ describe("ArticleRevisions", () => {
     expect(
       screen.getByText(/A még nem mentett módosítások nincsenek benne/),
     ).toBeInTheDocument();
+  });
+
+  it("draws the newest comparison when an older answer arrives later", async () => {
+    let finishOld: (value: ArticleRevisionDiff) => void = () => {};
+    api.articleDiff
+      .mockImplementationOnce(
+        () =>
+          new Promise<ArticleRevisionDiff>((resolve) => (finishOld = resolve)),
+      )
+      .mockResolvedValueOnce(diff);
+    renderIt();
+    fireEvent.click(screen.getByRole("button", { name: "Az előzőhöz képest" }));
+    const first = api.articleDiff.mock.calls[0]![4] as AbortSignal;
+    fireEvent.click(
+      screen.getByRole("button", { name: "A mostani szöveghez képest" }),
+    );
+    expect(first.aborted).toBe(true);
+    await screen.findByText("Új zárás.");
+    finishOld({ ...diff, body: [{ kind: "added", text: "Régi válasz." }] });
+    await Promise.resolve();
+    expect(screen.queryByText("Régi válasz.")).toBeNull();
+    expect(screen.getByText("Új zárás.")).toBeInTheDocument();
   });
 
   it("names the error the server gave", async () => {
