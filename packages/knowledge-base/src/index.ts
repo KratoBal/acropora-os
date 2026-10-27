@@ -83,3 +83,27 @@ export type {
   SentenceReport,
   SentenceStatus,
 } from "./article-citations.js";
+export {
+  ANSWER_FALLBACK_SENTENCE,
+  ANSWER_FIXED_SENTENCES,
+  ANSWER_GATE_VERSION,
+  ANSWER_NO_KNOWLEDGE_SENTENCE,
+  CLAIM_LAYERS,
+  LAYER_PHRASES,
+  buildAnswerPackage,
+  gateAnswer,
+  layersNamed,
+  namedClaimParts,
+} from "./answer-gate.js";
+export type {
+  AnswerAudience,
+  AnswerGateResult,
+  AnswerPackage,
+  ClaimLayer,
+  GateReason,
+  GateSentence,
+  GateStatus,
+  PackageCandidate,
+  PackageClaim,
+  PackageExclusion,
+} from "./answer-gate.js";
