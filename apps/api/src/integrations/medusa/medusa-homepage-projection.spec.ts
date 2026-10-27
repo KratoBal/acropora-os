@@ -304,6 +304,46 @@ describe("projectHomepageContent", () => {
     assert.equal(dry.writes.length, 0);
   });
 
+  /*
+    A ROW CLEARED THROUGH THE API (barracuda, #1913). What turns this red: the
+    shop's row never cleared (absent keeps it) and every round writing again;
+    a `null` sent to a shop that never answered the key (one without #577).
+  */
+  it("clears the shop's newsletter row when the OS holds null, once, and never sends the key to a shop without it", async () => {
+    const source = {
+      content: async () => content({ newsletter: null }),
+      switchedOn: async () => true,
+      featured: async () => [],
+      brands: async () => null,
+    };
+    const shopRow = {
+      enabled: true,
+      title: "Hírlevél",
+      text: "Iratkozz fel!",
+      consent_text: "Hozzájárulok.",
+      button: "Feliratkozás",
+    };
+    const held = fakeClient({
+      ...homepageRecord(content()),
+      newsletter: shopRow,
+    });
+    assert.equal(
+      (await projectHomepageContent(held.client, source, true)).status,
+      "sent",
+    );
+    assert.equal(held.writes[0]?.newsletter, null);
+    // the next round: the shop answers null, nothing to write
+    const cleared = fakeClient(held.writes[0]!);
+    assert.equal(
+      (await projectHomepageContent(cleared.client, source, true)).status,
+      "unchanged",
+    );
+    // a shop that never answered the key gets no key
+    const older = fakeClient(null);
+    await projectHomepageContent(older.client, source, true);
+    assert.equal("newsletter" in older.writes[0]!, false);
+  });
+
   it("sends nothing when nothing is stored", async () => {
     const { client, writes } = fakeClient(null);
     const out = await projectHomepageContent(

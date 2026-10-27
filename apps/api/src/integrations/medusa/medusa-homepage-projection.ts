@@ -75,8 +75,11 @@ export interface MedusaHomepageContentRecord {
    * record stays what it was.
    */
   featured_brand_handles?: string[];
-  /** The newsletter row (commerce #577); sent only when the OS has one. */
-  newsletter?: MedusaHomepageNewsletter;
+  /**
+   * The newsletter row (commerce #577); sent when the OS has one, and `null`
+   * only to clear a row the shop still holds (see projectHomepageContent).
+   */
+  newsletter?: MedusaHomepageNewsletter | null;
 }
 
 export type HomepageProjectionOutcome =
@@ -202,7 +205,9 @@ export function homepageRecord(
       WHOLE record for the unknown key. Unset is the OS's normal state until
       someone edits the row (the editor keeps `null` until then), so the
       record stays what it was. Once set, the OS editor has no way back to
-      `null`, so "absent keeps" on the shop is never a stale row.
+      `null`; a `null` saved through the API is cleared by the round itself
+      (projectHomepageContent), not here, because only the round sees the
+      shop's answer.
     */
     ...(content.newsletter
       ? { newsletter: newsletterRecord(content.newsletter) }
@@ -292,9 +297,20 @@ export async function projectHomepageContent(
   );
   const skippedHandles = fit.skipped.length ? fit.skipped : undefined;
   const current = await client.fetchHomepageContent();
-  if (!homepageRecordDiffers(current, wanted))
+  /*
+    A ROW CLEARED THROUGH THE API (barracuda, #1913): the OS holds `null`, the
+    shop still holds a row. Absent would keep the shop's row, and every round
+    would see the difference and write again, forever. The shop answering a
+    row proves it knows the key (#577), so `null` is safe to send, and the
+    next round finds both sides `null`.
+  */
+  const toSend =
+    !("newsletter" in wanted) && current?.newsletter
+      ? { ...wanted, newsletter: null }
+      : wanted;
+  if (!homepageRecordDiffers(current, toSend))
     return { status: "unchanged", skippedHandles };
-  if (apply) await client.setHomepageContent(wanted);
+  if (apply) await client.setHomepageContent(toSend);
   return { status: apply ? "sent" : "would-send", skippedHandles };
 }
 
