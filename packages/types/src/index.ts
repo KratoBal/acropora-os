@@ -1334,6 +1334,9 @@ export {
 } from "./webshop-orders.js";
 export type {
   WebshopOrderAddress,
+  WebshopOrderAttentionItem,
+  WebshopOrderAttentionKind,
+  WebshopOrderAttentionResponse,
   WebshopOrderDetail,
   WebshopOrderProforma,
   WebshopTransferReceipt,

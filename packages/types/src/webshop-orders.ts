@@ -826,3 +826,44 @@ export interface WebshopOrderNotesInput {
   customerNote?: string;
   carrierNote?: string;
 }
+
+/**
+ * A FIGYELMET KÉRŐ RENDELÉSEK (commerce-audit-p1, P1/6; acrobot 2026-10-27):
+ * a webshop `GET /admin/order-attention` válaszából. Ma egy fajta, csak jelzés
+ * (az OS nem zár és nem módosít semmit):
+ * - `pickup_missing`: egy vegyes kosár kiszállított rendelése megvan, a bolti
+ *   (élő állatos) rendelése nincs meg, a webshop újrapróbálása után sem.
+ *
+ * Az előre utalás lejárata NINCS itt: azt az OS a díjbekérő saját határidejéből
+ * tudja (`WEBSHOP_PROFORMA_DUE_DAYS`, `webshopProformaExpired`), a webshop a
+ * díjbekérő kiküldésének napját nem ismeri.
+ */
+export type WebshopOrderAttentionKind = "pickup_missing";
+
+export interface WebshopOrderAttentionItem {
+  kind: WebshopOrderAttentionKind;
+  /** A kiszállított rendelés azonosítója a webshopban; `null`, ha nem található. */
+  orderId: string | null;
+  displayId: number | null;
+  /** Mióta vár (ISO). */
+  since: string;
+  /** Mennyi ideje vár, percben. */
+  waiting: number;
+}
+
+export interface WebshopOrderAttentionResponse {
+  /**
+   * Hamis, ha a lista nem olvasható: ilyenkor üres, de NEM "nincs teendő".
+   * Az `reason` mondja meg, miért.
+   */
+  available: boolean;
+  /**
+   * - `not_found`: a webshop még nem ismeri a végpontot (404): a webshop éles
+   *   telepítése befagyasztva áll, ez várt állapot, a panel nem mutat semmit;
+   * - `error`: a webshop hibát adott (5xx), nem érhető el, vagy nincs
+   *   kapcsolat: a lista nem olvasható, a panel kimondja.
+   */
+  reason?: "not_found" | "error";
+  count: number;
+  items: WebshopOrderAttentionItem[];
+}

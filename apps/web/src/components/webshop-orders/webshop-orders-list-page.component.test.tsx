@@ -17,7 +17,10 @@ import { WebshopOrdersListPage } from "./webshop-orders-list-page";
   irányt; hibánál nincs „Újra”, üres szűrésnél nincs „Szűrés törlése”; jog
   nélkül betölt.
 */
-const api = vi.hoisted(() => ({ list: vi.fn() }));
+const api = vi.hoisted(() => ({
+  list: vi.fn(),
+  attention: vi.fn(),
+}));
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
@@ -136,6 +139,9 @@ beforeEach(() => {
   nav.push.mockReset();
   nav.replace.mockReset();
   api.list.mockReset();
+  // nincs figyelmet kérő rendelés: a panel nem jelenik meg
+  api.attention.mockReset();
+  api.attention.mockResolvedValue({ available: true, count: 0, items: [] });
 });
 
 const row = async (name: RegExp) => screen.findByRole("row", { name });

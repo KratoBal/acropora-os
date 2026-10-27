@@ -1,4 +1,5 @@
 import type {
+  WebshopOrderAttentionResponse,
   WebshopOrderDetail,
   WebshopOrderListQuery,
   WebshopOrderListResponse,
@@ -198,6 +199,14 @@ export const webshopOrdersApi = {
       `/webshop-orders/${encodeURIComponent(id)}/internal-note`,
       token,
       { method: "PUT", body: JSON.stringify({ text }) },
+    );
+  },
+  /** A figyelmet kérő rendelések: hiányzó bolti rendelés, lejárt előre utalás. */
+  attention(token: string, signal?: AbortSignal) {
+    return apiRequest<WebshopOrderAttentionResponse>(
+      "/webshop-orders/attention",
+      token,
+      { signal },
     );
   },
   /** Az elavulási küszöbök (Beállítások). */

@@ -596,6 +596,23 @@ export interface MedusaOrderOverviewRow {
   };
 }
 
+/** Egy figyelmet kérő rendelés (`GET /admin/order-attention`, commerce-audit-p1). */
+export interface MedusaOrderAttentionItem {
+  kind: "pickup_missing";
+  order_id: string | null;
+  display_id: number | null;
+  parent_cart_id: string;
+  pickup_cart_id: string;
+  since: string;
+  minutes: number;
+}
+
+export interface MedusaOrderAttention {
+  generated_at: string;
+  count: number;
+  items: MedusaOrderAttentionItem[];
+}
+
 export interface MedusaOrderOverviewPage {
   orders: MedusaOrderOverviewRow[];
   count: number;
@@ -938,6 +955,11 @@ export interface MedusaAdminClient {
     limit: number;
     offset: number;
   }): Promise<MedusaOrderOverviewPage>;
+  /**
+   * A FIGYELMET KÉRŐ RENDELÉSEK: a hiányzó bolti rendelés (`GET
+   * /admin/order-attention`). Csak olvasás.
+   */
+  orderAttention(): Promise<MedusaOrderAttention>;
   /** Egy rendelés részlete; nem létező azonosítóra `null`. */
   order(id: string): Promise<MedusaOrderDetailRow | null>;
   /** A rendelés üzleti státusza a történettel; ha nincs, `null`. */
@@ -1903,6 +1925,10 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return this.request<MedusaOrderOverviewPage>(
       `/admin/order-overview?${params.toString()}`,
     );
+  }
+
+  async orderAttention(): Promise<MedusaOrderAttention> {
+    return this.request<MedusaOrderAttention>("/admin/order-attention");
   }
 
   async order(id: string): Promise<MedusaOrderDetailRow | null> {
