@@ -65,3 +65,20 @@ export {
   unitWritten,
 } from "./anchor-check.js";
 export type { AnchorUnit } from "./anchor-check.js";
+export {
+  NOT_TECHNICAL_HAS_CLAIM_PARTS,
+  citationReport,
+  normaliseSentence,
+  splitSentences,
+} from "./article-citations.js";
+export type {
+  CitationCheck,
+  CitationKind,
+  CitationProblem,
+  CitationReport,
+  CitationRow,
+  CitedClaim,
+  CitedConclusion,
+  SentenceReport,
+  SentenceStatus,
+} from "./article-citations.js";

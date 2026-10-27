@@ -4,6 +4,7 @@ import {
   WEBSHOP_ORDER_STALE_DEFAULTS,
   WEBSHOP_ORDER_STATUSES,
   WEBSHOP_ORDER_STATUS_LABELS,
+  WEBSHOP_PROFORMA_MISSING_AFTER_DAYS,
   pointKindOf,
   type WebshopOrderDetail,
   type WebshopOrderListItem,
@@ -127,6 +128,8 @@ export interface WebshopOrderFacts {
   proformaExpired: boolean;
   /** Az előre utalás pénze megjött (bb3a6bd5). */
   transferReceived: boolean;
+  /** Előre utalásos rendelés, két napja áll, díjbekérő nincs kiállítva (P1/6). */
+  proformaMissing: boolean;
 }
 export const NO_FACTS: WebshopOrderFacts = {
   invoiceNumber: null,
@@ -135,6 +138,7 @@ export const NO_FACTS: WebshopOrderFacts = {
   parcel: null,
   proformaExpired: false,
   transferReceived: false,
+  proformaMissing: false,
 };
 
 /** A tények a rendelés számlájából és aktív csomagjából. */
@@ -145,6 +149,8 @@ export function factsOf(
   transferReceived = false,
   /** A Számlázz.hu által kiállított, a rendeléshez kötött számla száma (bb3a6bd5). */
   externalInvoiceNumber: string | null = null,
+  /** Lásd `proformaMissingOf`. */
+  proformaMissing = false,
 ): WebshopOrderFacts {
   const issuedNumber =
     invoice?.status === "ISSUED" ? (invoice.number ?? null) : null;
@@ -156,7 +162,47 @@ export function factsOf(
     // a kifizetett díjbekérő nem jár le
     proformaExpired: proformaExpired && !transferReceived,
     transferReceived,
+    // a kifizetett rendelésnek nincs mit kiállítani
+    proformaMissing: proformaMissing && !transferReceived,
   };
+}
+
+/**
+ * „NINCS DÍJBEKÉRŐ” (commerce-audit-p1, P1/6; acrobot 2026-10-27, az F3 maradék
+ * rése): az OS a díjbekérő SAJÁT határidejét már követi (`proformaExpired`,
+ * „Lejárt díjbekérő”), de ha díjbekérőt SOHA nem állítottak ki (senki nem
+ * nyomta meg a gombot), nincs mit lejárttá jelölni, és a rendelés néma marad.
+ * Ez az a rés. IGAZ, ha: előre utalásos a rendelés, a pénz nem jött meg, nincs
+ * KIÁLLÍTOTT díjbekérő (vázlat, kiállítás alatt, sikertelen kiállítás: még
+ * nincs), a rendelés nem végállapotú, és a rendelés ideje óta elmúlt
+ * `WEBSHOP_PROFORMA_MISSING_AFTER_DAYS` (két) nap. NEM a díjbekérő 8 napja:
+ * díjbekérő nélkül az a határidő el sem indult (acrobot, 2026-10-27 17:01).
+ * Csak jelzés: a rendszer semmit nem zár (acrobot, (b) döntés).
+ */
+export function proformaMissingOf(input: {
+  providerId: string | null;
+  statusCode: string | null;
+  createdAt: string;
+  proformaStatus: string | null | undefined;
+  transferReceived: boolean;
+  now: Date;
+}): boolean {
+  if (input.providerId !== BANK_TRANSFER_PROVIDER_ID) return false;
+  if (input.transferReceived) return false;
+  if (input.proformaStatus === "ISSUED") return false;
+  if (
+    input.statusCode &&
+    (WEBSHOP_ORDER_CLOSED_STATUSES as readonly string[]).includes(
+      input.statusCode,
+    )
+  )
+    return false;
+  const created = Date.parse(input.createdAt);
+  if (!Number.isFinite(created)) return false;
+  return (
+    input.now.getTime() - created >=
+    WEBSHOP_PROFORMA_MISSING_AFTER_DAYS * 24 * 3_600_000
+  );
 }
 
 /**
@@ -220,6 +266,7 @@ export function toListItem(
     invoiceNumber: facts.invoiceNumber,
     parcelNumber: facts.parcel?.parcelNumber ?? null,
     proformaExpired: facts.proformaExpired,
+    proformaMissing: facts.proformaMissing,
     transferReceived: facts.transferReceived,
     status: {
       code,

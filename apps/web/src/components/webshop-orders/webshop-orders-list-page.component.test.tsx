@@ -84,6 +84,7 @@ const order = (
   invoiceNumber: null,
   parcelNumber: null,
   proformaExpired: false,
+  proformaMissing: false,
   transferReceived: false,
   status: {
     code: "confirmed",
@@ -205,6 +206,36 @@ describe("WebshopOrdersListPage", () => {
     );
     render(createElement(WebshopOrdersListPage));
     expect(await screen.findAllByText("Lejárt díjbekérő")).toHaveLength(1);
+  });
+
+  it("a transfer order whose proforma was never issued is named in the payment column, and only there (P1/6)", async () => {
+    api.list.mockResolvedValue(
+      response([
+        order({ proformaMissing: true }),
+        order({ id: "order_39", displayId: 39 }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    expect(await screen.findAllByText("Nincs díjbekérő")).toHaveLength(1);
+    // a lejárt díjbekérő jelzése nem keveredik vele
+    expect(screen.queryByText("Lejárt díjbekérő")).toBeNull();
+  });
+
+  it("a paid or expired order does not also say the proforma is missing", async () => {
+    api.list.mockResolvedValue(
+      response([
+        order({ transferReceived: true, proformaMissing: true }),
+        order({
+          id: "order_39",
+          displayId: 39,
+          proformaExpired: true,
+          proformaMissing: true,
+        }),
+      ]),
+    );
+    render(createElement(WebshopOrdersListPage));
+    await screen.findAllByRole("row");
+    expect(screen.queryByText("Nincs díjbekérő")).toBeNull();
   });
 
   it("an expiring card hold is named in the payment column (lejáró zárolás)", async () => {

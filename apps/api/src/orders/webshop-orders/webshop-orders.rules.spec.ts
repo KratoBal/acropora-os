@@ -13,6 +13,7 @@ import {
   orderPaymentProviderId,
   paymentMethodLabel,
   paymentStateOf,
+  proformaMissingOf,
   sortItems,
   stageOf,
   toListItem,
@@ -216,6 +217,79 @@ describe("stale", () => {
   });
 });
 
+describe("the proforma that was never issued (P1/6)", () => {
+  const DAY = 24 * 3_600_000;
+  const base = {
+    providerId: "pp_acropora_transfer",
+    statusCode: "confirmed",
+    createdAt: new Date(NOW.getTime() - 3 * DAY).toISOString(),
+    proformaStatus: undefined as string | null | undefined,
+    transferReceived: false,
+    now: NOW,
+  };
+
+  it("is true for a transfer order two days old with no issued proforma", () => {
+    assert.equal(proformaMissingOf(base), true);
+    // a draft, one being issued and a failed issue are not an issued proforma
+    for (const proformaStatus of ["DRAFT", "ISSUING", "ISSUE_FAILED", null])
+      assert.equal(
+        proformaMissingOf({ ...base, proformaStatus }),
+        true,
+        String(proformaStatus),
+      );
+  });
+
+  it("is false while the order is younger than two days, true at exactly two (not the proforma's eight: with no proforma that deadline never started)", () => {
+    const young = new Date(NOW.getTime() - 1 * DAY).toISOString();
+    assert.equal(proformaMissingOf({ ...base, createdAt: young }), false);
+    const justUnder = new Date(NOW.getTime() - 2 * DAY + 60_000).toISOString();
+    assert.equal(proformaMissingOf({ ...base, createdAt: justUnder }), false);
+    const exactly = new Date(NOW.getTime() - 2 * DAY).toISOString();
+    assert.equal(proformaMissingOf({ ...base, createdAt: exactly }), true);
+    // eight days is long past the new threshold
+    const eight = new Date(NOW.getTime() - 8 * DAY).toISOString();
+    assert.equal(proformaMissingOf({ ...base, createdAt: eight }), true);
+  });
+
+  it("is false when a proforma was issued (the expiry flag handles it), the money came, or the order is closed", () => {
+    assert.equal(
+      proformaMissingOf({ ...base, proformaStatus: "ISSUED" }),
+      false,
+    );
+    assert.equal(proformaMissingOf({ ...base, transferReceived: true }), false);
+    for (const statusCode of ["closed", "closed_unsuccessfully"])
+      assert.equal(
+        proformaMissingOf({ ...base, statusCode }),
+        false,
+        statusCode,
+      );
+  });
+
+  it("is false for any other payment method, or an unreadable date", () => {
+    for (const providerId of [
+      "pp_stripe_stripe",
+      "pp_acropora_cod",
+      "pp_system_default",
+      null,
+    ])
+      assert.equal(
+        proformaMissingOf({ ...base, providerId }),
+        false,
+        String(providerId),
+      );
+    assert.equal(proformaMissingOf({ ...base, createdAt: "nem dátum" }), false);
+  });
+
+  it("the paid fact wins in factsOf: a received transfer is never 'missing'", () => {
+    const facts = factsOf(undefined, null, false, true, null, true);
+    assert.equal(facts.proformaMissing, false);
+    assert.equal(
+      factsOf(undefined, null, false, false, null, true).proformaMissing,
+      true,
+    );
+  });
+});
+
 describe("stage", () => {
   it("invoice before parcel; a shop pickup waits for no parcel", () => {
     const noInvoice = NO_FACTS;
@@ -226,6 +300,7 @@ describe("stage", () => {
       parcel: null,
       proformaExpired: false,
       transferReceived: false,
+      proformaMissing: false,
     };
     const shipped = {
       invoiceNumber: "ACR-2026-1",
@@ -234,6 +309,7 @@ describe("stage", () => {
       parcel: null,
       proformaExpired: false,
       transferReceived: false,
+      proformaMissing: false,
     };
     assert.deepEqual(
       [
