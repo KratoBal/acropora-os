@@ -102,6 +102,33 @@ export interface CategoryUpdate {
   name: { from: string; to: string } | null;
 }
 
+/**
+ * ORKOBEFOGADAS: a Medusaban mar all a kategoria, de IDEGEN `external_id`-val,
+ * a mi azonositonk nelkul. Egyetlen kereessel kap meg mindent, amit a mai
+ * szabaly ad: a mi azonositonkat, a nevet es a webcimet.
+ *
+ * MIERT KELL: a teszt peldany 219 kategoriaja egy REGI importbol szarmazik
+ * (`cmtmixz9...` azonositok, masik adatbazisbol), a mi fank azonositoi mas
+ * alakuak. Az `external_id` alapu parositas igy 0 talalatot ad, a terv 219
+ * letrehozast mutatna, es az `--apply` megduplazna a fat -- a termekek
+ * kategoria-hozzarendelesei a regi peldanyokon maradnanak. A torles es ujra
+ * letrehozas viszont a hozzarendeleseket vinne el. Az orokbefogadas a
+ * Medusa-azonositot NEM valtoztatja, tehat a hozzarendelesek maradnak.
+ *
+ * A `from` MEZOK NEM DISZEK: az `external_id` atirasa egyiranyu, es a regi
+ * ertek utana sehol nem all.
+ */
+export interface CategoryAdopt {
+  ourId: string;
+  medusaId: string;
+  /** Amit a kategoria eddig hordozott, es amit a mi azonositonk felulir. */
+  externalId: { from: string; to: string };
+  /** null, ha a tarolt webcim mar azt adja, amit a mai szabaly. */
+  handle: { from: string; to: string } | null;
+  /** null, ha a tarolt nev mar azt adja, amit a mai szabaly. */
+  name: { from: string; to: string } | null;
+}
+
 export interface ExistingCategory {
   id: string;
   externalId: string | null;
@@ -113,6 +140,14 @@ export interface ExistingCategory {
    * minden nev "helyesnek" latszana.
    */
   name: string;
+  /**
+   * A Medusaban MA tarolt SZULO (Medusa-azonosito, nem a miénk). Az
+   * orokbefogadas (`adopt`) a nev MELLETT ezzel parosit: ket kulonbozo agon
+   * allhat ugyanolyan nevu kategoria, es a nev egyedul a rosszat fogna meg.
+   * KOTELEZO, nem elhagyhato: egy hianyzo szulo "gyokeret" jelentene, es
+   * egy gyoker-nevu kategoria csendben a helytelen agra parosodna.
+   */
+  parentId: string | null;
 }
 
 /** Egy mar meglevo lekepezes-sor nalunk (`ExternalReference`, MEDUSA/Category). */
@@ -190,6 +225,20 @@ export interface CategoryImportPlan {
    * hibas; kulon frissitve SZETCSUSZTAK volna. (nautilus merese, 15a3141d)
    */
   update: CategoryUpdate[];
+  /**
+   * A HETEDIK ALLAPOT: a Medusaban all egy kategoria IDEGEN `external_id`-val,
+   * amelyik a regi nev-keplet (`legacyCategoryTitle`) ES a szulo-utvonal
+   * szerint EGYERTELMUEN ennek a sornak felel meg. Nem letrehozni kell,
+   * hanem orokbe fogadni -- lasd `CategoryAdopt`.
+   */
+  adopt: CategoryAdopt[];
+  /**
+   * Egynel TOBB idegen kategoria felel meg ugyanannak a sornak. Nem
+   * hozunk letre es nem fogadunk orokbe: az egyik valasztas duplikatum, a
+   * masik rossz agra parositas, es mindketto NEMA. A sor es a gyerekei
+   * kimaradnak, a jelentes megnevezi.
+   */
+  adoptAmbiguous: string[];
 }
 
 /** A fejlec utan minden sor egy kategoria. Tab-elvalasztott. */
@@ -345,6 +394,24 @@ export function categoryTitle(
 }
 
 /**
+ * A REGI IMPORT CIME: `{nev} - {szulo rovid neve}` MINDEN nem gyoker
+ * kategorian, a nev ismetlodesetol fuggetlenul. Ez volt a keplet a 2026-09-04-i
+ * donteseig (lasd `categoryTitle`), es a teszt peldany mai 219 kategoriaja
+ * ezzel keszult.
+ *
+ * MERVE 2026-10-27 az eles fan (219 sor) es a teszt Medusa 219 kategoriajan: a
+ * nev ES a szulo-utvonal egyutt mind a 219-et egyertelmuen parositja, 0 hiany,
+ * 0 kettos talalat. EZ A FUGGVENY CSAK AZ ORKOBEFOGADASHOZ VALO: uj cimet
+ * sosem ebbol kepezunk.
+ */
+export function legacyCategoryTitle(
+  name: string,
+  parentName: string | null,
+): string {
+  return parentName ? `${name} - ${parentName}` : name;
+}
+
+/**
  * A SORREND ELLENORZESE: a szulo MINDIG korabban all, mint a gyereke.
  *
  * MIERT ALLITAS, ES NEM RENDEZES. A letrehozas az elso mely kategorianal
@@ -408,6 +475,30 @@ export function planCategoryImport(
   const staleMapping: string[] = [];
   const conflict: CategoryMappingConflict[] = [];
   const update: CategoryUpdate[] = [];
+  const adopt: CategoryAdopt[] = [];
+  const adoptAmbiguous: string[] = [];
+
+  /*
+   * AZ ORKOBEFOGADAS JELOLTJEI: az IDEGEN `external_id`-s kategoriak, nev + szulo
+   * szerint indexelve. Idegen = van `external_id`-ja, de nem a MI fankbol valo.
+   * A `null` external_id-t SZANDEKOSAN nem vesszuk ide: az a gyari bemutato
+   * kategoria (lasd `parseCategoryTsv`), es egy nev-egyezes nem bizonyitja,
+   * hogy az a miénk.
+   */
+  const sajatAzonositok = new Set(rows.map((sor) => sor.ourId));
+  type Jelolt = ExistingCategory & { externalId: string };
+  const jeloltek = new Map<string, Jelolt[]>();
+  for (const cat of existing) {
+    if (!cat.externalId || sajatAzonositok.has(cat.externalId)) continue;
+    const jelolt: Jelolt = { ...cat, externalId: cat.externalId };
+    const kulcs = JSON.stringify([cat.parentId, cat.name]);
+    const lista = jeloltek.get(kulcs);
+    if (lista) lista.push(jelolt);
+    else jeloltek.set(kulcs, [jelolt]);
+  }
+  /** Sor -> Medusa-azonosito, MINDEN allapotban, ahol a sor Medusa-oldala ismert. */
+  const feloldott = new Map<string, string>();
+  const lefoglalt = new Set<string>();
 
   /*
    * EGYSZER SZAMOLJUK KI, es a TELJES sorhalmazon -- nem soronkent. Egy
@@ -439,6 +530,30 @@ export function planCategoryImport(
     if (handle || name) update.push({ ourId, medusaId, handle, name });
   };
 
+  /**
+   * AZ ORKOBEFOGADAS KERDESE: van-e EGYETLEN idegen kategoria, amelyik a regi
+   * nev-keplet es a szulo-utvonal szerint ez a sor. A szulonek MAR FELOLDOTTNAK
+   * kell lennie (rows szulo-eloszor sorrendben jon), kulonben nincs mihez
+   * kotni az utvonalat, es a sor a megszokott modon letrejon.
+   */
+  const orokbefogadas = (
+    sor: CategoryRow,
+    szuloNev: string | null,
+  ): "nincs" | "tobb" | Jelolt => {
+    const szuloMedusa = sor.parentOurId
+      ? (feloldott.get(sor.parentOurId) ?? undefined)
+      : null;
+    if (szuloMedusa === undefined) return "nincs";
+    const talalat = (
+      jeloltek.get(
+        JSON.stringify([szuloMedusa, legacyCategoryTitle(sor.name, szuloNev)]),
+      ) ?? []
+    ).filter((cat) => !lefoglalt.has(cat.id));
+    if (talalat.length === 0) return "nincs";
+    const egyetlen = talalat[0];
+    return talalat.length === 1 && egyetlen ? egyetlen : "tobb";
+  };
+
   for (const sor of rows) {
     const aMedusaban = medusaIdMiAzonositonkra.get(sor.ourId) ?? null;
     const aSorunk = sorunk.get(sor.ourId) ?? null;
@@ -451,6 +566,7 @@ export function planCategoryImport(
 
     if (aMedusaban && aSorunk) {
       if (aSorunk === aMedusaban) {
+        feloldott.set(sor.ourId, aMedusaban);
         skip.push(sor.ourId);
         frissitendo(sor.ourId, aMedusaban, cim);
       } else
@@ -463,9 +579,37 @@ export function planCategoryImport(
     }
 
     if (aMedusaban) {
+      feloldott.set(sor.ourId, aMedusaban);
       mapOnly.push({ ourId: sor.ourId, medusaId: aMedusaban });
       frissitendo(sor.ourId, aMedusaban, cim);
       continue;
+    }
+
+    if (!aSorunk) {
+      const szuloNev = sor.parentOurId
+        ? (nevek.get(sor.parentOurId) ?? null)
+        : null;
+      const jelolt = orokbefogadas(sor, szuloNev);
+      if (jelolt === "tobb") {
+        adoptAmbiguous.push(sor.ourId);
+        continue;
+      }
+      if (jelolt !== "nincs") {
+        const kellCim = categoryHandle(cim);
+        lefoglalt.add(jelolt.id);
+        feloldott.set(sor.ourId, jelolt.id);
+        adopt.push({
+          ourId: sor.ourId,
+          medusaId: jelolt.id,
+          externalId: { from: jelolt.externalId, to: sor.ourId },
+          handle:
+            jelolt.handle === kellCim
+              ? null
+              : { from: jelolt.handle, to: kellCim },
+          name: jelolt.name === cim ? null : { from: jelolt.name, to: cim },
+        });
+        continue;
+      }
     }
 
     if (aSorunk) staleMapping.push(sor.ourId);
@@ -475,5 +619,14 @@ export function planCategoryImport(
       parentOurId: sor.parentOurId,
     });
   }
-  return { create, skip, mapOnly, staleMapping, conflict, update };
+  return {
+    create,
+    skip,
+    mapOnly,
+    staleMapping,
+    conflict,
+    update,
+    adopt,
+    adoptAmbiguous,
+  };
 }

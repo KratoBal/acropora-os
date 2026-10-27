@@ -69,6 +69,12 @@ function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
       if (!sor) throw new Error(`nincs ilyen kategoria: ${id}`);
       if (patch.handle !== undefined) sor.handle = patch.handle;
       if (patch.name !== undefined) sor.name = patch.name;
+      /**
+       * A DUPLA AZ AZONOSITOT IS TAROLJA: enelkul a masodik futas ugyanazt
+       * latna, mint az elso, es az "ujrafuttatva nem csinal semmit" allitas
+       * nem tudna elbukni.
+       */
+      if ("external_id" in patch) sor.external_id = patch.external_id;
       return sor;
     },
     // eslint-disable-next-line @typescript-eslint/require-await
@@ -478,5 +484,122 @@ describe("a kategóriafa betöltése", () => {
     );
     assert.equal(report.lostWords.length, 1);
     assert.match(report.lostWords[0]!, /"\+"/);
+  });
+
+  /**
+   * AZ ORKOBEFOGADAS VEGREHAJTASA. A terv-teszt megmondja, MIT fogad orokbe; hogy
+   * a szolgaltatas egyetlen keresben, az azonositoval egyutt kuldi-e ki, es
+   * hogy a lekepezes-sor megszuletik-e, azt csak a dupla mutatja.
+   */
+  describe("az örökbefogadás futása", () => {
+    const REGI: MedusaCategoryRow[] = [
+      {
+        id: "pcat_gy",
+        name: "Termékek",
+        external_id: "regi_1",
+        parent_category_id: null,
+        is_active: true,
+        handle: "termékek",
+      },
+      {
+        id: "pcat_hal",
+        name: "Halak - Termékek",
+        external_id: "regi_2",
+        parent_category_id: "pcat_gy",
+        is_active: true,
+        handle: "halak---termékek",
+      },
+    ];
+
+    it("egyetlen keresben kuldi az azonositot, a nevet es a cimet, es nem hoz letre", async () => {
+      const { client, letrehozva, frissitve } = medusaDupla(
+        REGI.map((r) => ({ ...r })),
+      );
+      const { links, hivasok } = taroloDupla();
+      const report = await new MedusaCategoryImportService(links).run(
+        client,
+        FA,
+        MOST,
+      );
+
+      assert.deepEqual(letrehozva, []);
+      assert.deepEqual(frissitve, [
+        {
+          id: "pcat_gy",
+          patch: { external_id: "cat_gyoker", handle: "termekek" },
+        },
+        {
+          id: "pcat_hal",
+          patch: { external_id: "cat_hal", name: "Halak", handle: "halak" },
+        },
+      ]);
+      assert.equal(report.adopted.length, 2);
+      assert.deepEqual(
+        hivasok.map((h) => h.par),
+        [
+          ["cat_gyoker", "pcat_gy"],
+          ["cat_hal", "pcat_hal"],
+        ],
+      );
+      // A visszaolvasas a Medusat kerdezi ujra: mindket kategoria mar a mienk.
+      assert.equal(report.verification.carryingOurId, 2);
+      assert.equal(report.verification.mappingRowsHere, 2);
+    });
+
+    it("ujrafuttatva mar nem fogad orokbe, nem hoz letre, nem ir", async () => {
+      const { client, frissitve, letrehozva } = medusaDupla(
+        REGI.map((r) => ({ ...r })),
+      );
+      const { links } = taroloDupla();
+      const service = new MedusaCategoryImportService(links);
+      await service.run(client, FA, MOST);
+      const elso = frissitve.length;
+      const masodik = await service.run(client, FA, MOST);
+
+      assert.equal(masodik.adopted.length, 0);
+      assert.equal(masodik.skipped, 2);
+      assert.deepEqual(letrehozva, []);
+      assert.equal(frissitve.length, elso);
+    });
+
+    it("az orokbefogadott szulo alatt az uj gyerek a MEGLEVO szulo azonositojat kapja", async () => {
+      const fa: OurCategoryNode[] = [
+        ...FA,
+        { id: "cat_uj", parentId: "cat_hal", name: "Újdonság" },
+      ];
+      const { client, letrehozva } = medusaDupla(REGI.map((r) => ({ ...r })));
+      const { links } = taroloDupla();
+      await new MedusaCategoryImportService(links).run(client, fa, MOST);
+
+      assert.equal(letrehozva.length, 1);
+      assert.equal(letrehozva[0]?.parent_category_id, "pcat_hal");
+    });
+
+    it("kettos talalatnal semmit nem ir, es a gyerekeit is megallitja", async () => {
+      const ketszer = [
+        ...REGI.map((r) => ({ ...r })),
+        { ...REGI[1]!, id: "pcat_hal_masodik", external_id: "regi_9" },
+      ];
+      const { client, letrehozva, frissitve } = medusaDupla(ketszer);
+      const { links } = taroloDupla();
+      const fa: OurCategoryNode[] = [
+        ...FA,
+        { id: "cat_uj", parentId: "cat_hal", name: "Újdonság" },
+      ];
+      const report = await new MedusaCategoryImportService(links).run(
+        client,
+        fa,
+        MOST,
+      );
+
+      assert.deepEqual(report.adoptAmbiguous, ["cat_hal"]);
+      assert.deepEqual(report.blockedByConflict, ["cat_uj"]);
+      assert.deepEqual(letrehozva, []);
+      // Csak a gyoker kerult sorra.
+      assert.deepEqual(
+        frissitve.map((f) => f.id),
+        ["pcat_gy"],
+      );
+    });
   });
 });
