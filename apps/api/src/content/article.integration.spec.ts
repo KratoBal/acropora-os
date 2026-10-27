@@ -404,6 +404,36 @@ describe(
       );
     });
 
+    it("ARTICLE-INT-DIFF: a comparison reads this article's revision and its body, never another article's revision", async () => {
+      const id = await item("ARTICLE");
+      assert.equal(
+        await articles.save(id, body({ slug: `${prefix}diff-a` }), actor),
+        "ok",
+      );
+      for (const [from, to] of [
+        ["DRAFTING", "AWAITING_REVIEW"],
+        ["AWAITING_REVIEW", "AWAITING_APPROVAL"],
+        ["AWAITING_APPROVAL", "READY_TO_SEND"],
+      ])
+        assert.equal(await move(id, from!, to!), true, `${from} -> ${to}`);
+      const revisionId = (await articles.detail(id))!.approvedRevision!.id;
+
+      const own = await articles.snapshot(id, revisionId);
+      assert.equal(own?.side.kind, "revision");
+      assert.equal(own?.snapshot.bodyHtml, "<p>Első szöveg</p>");
+      const current = await articles.snapshot(id, "current");
+      assert.equal(current?.side.kind, "current");
+      assert.equal(current?.snapshot.title, `${prefix}ARTICLE`);
+
+      const other = await item("ARTICLE");
+      assert.equal(await articles.snapshot(other, revisionId), null);
+      assert.equal(
+        await articles.snapshot(other, "current"),
+        null,
+        "no body yet",
+      );
+    });
+
     it("ARTICLE-INT-IMAGE: an image's bytes come back unchanged by id, and the same file is found by its hash", async () => {
       const contentId = await item("ARTICLE");
       const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 255, 7]);

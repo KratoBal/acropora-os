@@ -37,6 +37,7 @@ import {
 import { contentApi } from "@/lib/api/content";
 import { productApi } from "@/lib/api/products";
 
+import { ArticleRevisions } from "./article-revision-diff";
 import { CONTENT_STATE_LABELS } from "./content-labels";
 
 /**
@@ -933,24 +934,15 @@ export function ArticleEditorPage({ contentId }: { contentId: string }) {
             </label>
           </section>
 
-          {article?.revisions.length ? (
-            <section className="space-y-1">
-              <h2 className="text-sm font-semibold text-dusk-800">
-                Jóváhagyott változatok
-              </h2>
-              <ul className="space-y-0.5 text-sm text-dusk-600">
-                {article.revisions.map((revision) => (
-                  <li key={revision.id}>
-                    {dateTime(revision.approvedAt)}
-                    {revision.id === article.publishedRevision?.id
-                      ? " · ez látszik"
-                      : revision.id === article.approvedRevision?.id
-                        ? " · jóváhagyva, még nem közzétéve"
-                        : ""}
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {article ? (
+            <ArticleRevisions
+              token={token}
+              contentId={contentId}
+              revisions={article.revisions}
+              approvedRevisionId={article.approvedRevision?.id ?? null}
+              publishedRevisionId={article.publishedRevision?.id ?? null}
+              dirty={dirty}
+            />
           ) : null}
         </div>
 

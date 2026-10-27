@@ -2,6 +2,7 @@ import type {
   ArticleBodyInput,
   ArticleDetail,
   ArticleEditorData,
+  ArticleRevisionDiff,
   ContentChannel,
   ContentDetail,
   ContentListResponse,
@@ -179,6 +180,18 @@ export const contentApi = {
       `/content/${encodeURIComponent(id)}/article`,
       token,
       { signal },
+    );
+  },
+
+  /**
+   * Two versions of the article compared: `from` and `to` are an approved
+   * revision's id or "current" (the saved body being edited).
+   */
+  articleDiff(token: string, id: string, from: string, to: string) {
+    const query = new URLSearchParams({ from, to });
+    return apiRequest<ArticleRevisionDiff>(
+      `/content/${encodeURIComponent(id)}/article/diff?${query.toString()}`,
+      token,
     );
   },
 
