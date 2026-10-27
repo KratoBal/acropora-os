@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { BrandDetail, BrandListResponse, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BrandEditorPage } from "./brand-editor-page";
@@ -33,6 +39,8 @@ vi.mock("@/components/auth/auth-provider", () => ({
   }),
 }));
 vi.mock("@/lib/api/brands", () => ({ brandsApi: api }));
+const homepage = vi.hoisted(() => ({ uploadImage: vi.fn() }));
+vi.mock("@/lib/api/homepage-content", () => ({ homepageContentApi: homepage }));
 
 const owner: Session = {
   id: "s",
@@ -157,6 +165,68 @@ describe("Brand management UI", () => {
       expect.stringContaining("brandCreated=b1"),
     );
   });
+  /*
+    THE LOGO UPLOAD (kezdolap-marka-sav, 2026-10-27). What turns these red: the
+    upload offered where the home page editor is not served (production: the
+    endpoint is a 404); the uploaded address not landing in the URL field, so
+    the save would not store it; a failed upload not said.
+  */
+  it("offers the logo upload only where the home page editor is served, and the address goes into the save", async () => {
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Használat és források");
+    expect(screen.queryByLabelText("Logó feltöltése")).toBeNull();
+    cleanup();
+
+    state.session = {
+      ...owner,
+      navigation: [{ id: "homepage-content", surfaces: ["web"] }],
+    } as Session;
+    homepage.uploadImage.mockResolvedValue({
+      url: "https://shop.example/static/logo.png",
+    });
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Használat és források");
+    const file = new File(["png"], "logo.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Logó feltöltése"), {
+      target: { files: [file] },
+    });
+    await waitFor(() =>
+      expect(homepage.uploadImage).toHaveBeenCalledWith("token", file),
+    );
+    expect(await screen.findByAltText("A márka logója")).toHaveAttribute(
+      "src",
+      "https://shop.example/static/logo.png",
+    );
+    fireEvent.click(screen.getByText("Változások mentése"));
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        "token",
+        "b1",
+        expect.objectContaining({
+          logoUrl: "https://shop.example/static/logo.png",
+        }),
+      ),
+    );
+  });
+
+  it("says so when the logo upload fails", async () => {
+    state.session = {
+      ...owner,
+      navigation: [{ id: "homepage-content", surfaces: ["web"] }],
+    } as Session;
+    homepage.uploadImage.mockRejectedValue(
+      new Error("A webshopba küldés ki van kapcsolva."),
+    );
+    render(<BrandEditorPage brandId="b1" />);
+    await screen.findByText("Használat és források");
+    fireEvent.change(screen.getByLabelText("Logó feltöltése"), {
+      target: { files: [new File(["x"], "x.png", { type: "image/png" })] },
+    });
+    expect(
+      await screen.findByText("A webshopba küldés ki van kapcsolva."),
+    ).toBeInTheDocument();
+  });
+
   it("loads and saves an edit with concurrency token", async () => {
     render(<BrandEditorPage brandId="b1" />);
     await screen.findByText("Használat és források");
