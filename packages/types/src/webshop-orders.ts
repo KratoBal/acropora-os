@@ -109,6 +109,15 @@ export const WEBSHOP_ORDER_STAGE_LABELS: Record<WebshopOrderStage, string> = {
 /** A díjbekérő fizetési határideje napokban (Balázs, 2026-10-06 16:32 UTC). */
 export const WEBSHOP_PROFORMA_DUE_DAYS = 8;
 
+/**
+ * „Nincs díjbekérő” jelzés: ennyi nap után áll be egy előre utalásos rendelésnél,
+ * amelyhez díjbekérőt nem állítottak ki (acrobot, 2026-10-27 17:01, barracuda
+ * kérdésére). NEM a 8 nap: ha senki nem állított ki díjbekérőt, a 8 napos
+ * fizetési határidő el sem indult, tehát nyolc napot várni azt jelentené, hogy a
+ * vevő a rendelés után tíz-tizenegy napig sem kap fizetési felszólítást.
+ */
+export const WEBSHOP_PROFORMA_MISSING_AFTER_DAYS = 2;
+
 export interface WebshopOrderProforma {
   id: string;
   status: "DRAFT" | "ISSUING" | "ISSUED" | "ISSUE_FAILED";
@@ -240,6 +249,13 @@ export interface WebshopOrderListItem {
    * újraküldhető.
    */
   proformaExpired: boolean;
+  /**
+   * „Nincs díjbekérő” (commerce-audit-p1, P1/6, acrobot 2026-10-27): egy előre
+   * utalásos rendelés két napja áll, a pénz nem jött meg, és díjbekérőt SOHA
+   * nem állítottak ki hozzá (nincs mit lejárttá jelölni, ezért a „Lejárt
+   * díjbekérő” sem jelez). Csak jelzés: a rendszer semmit nem zár.
+   */
+  proformaMissing: boolean;
   /** Az előre utalás pénze megjött (bb3a6bd5): a listán „Kifizetve”. */
   transferReceived: boolean;
   status: {

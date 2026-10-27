@@ -525,6 +525,13 @@ export function WebshopOrdersListPage() {
             <span className="block text-xs font-medium text-pilot-red-700">
               Lejárt díjbekérő
             </span>
+          ) : item.proformaMissing ? (
+            <span
+              className="block text-xs font-medium text-pilot-amber-700"
+              data-testid="nincs-dijbekero"
+            >
+              Nincs díjbekérő
+            </span>
           ) : null}
         </span>
       ),

@@ -285,6 +285,81 @@ describe("the expired proforma on the list", () => {
   });
 });
 
+describe("the proforma that was never issued, on the list (P1/6)", () => {
+  /*
+    „NINCS DÍJBEKÉRŐ”. MI PIROSÍT: ha az előre utalásos, két napja álló, díjbekérő
+    nélküli rendelés néma marad; ha egy kiállított díjbekérős rendelés is jelölődik
+    (azt a „Lejárt díjbekérő” kezeli); ha egy fiatal rendelés, egy másik fizetési
+    módú rendelés vagy egy végállapotú jelölődik; ha a beérkezett utalás mellett
+    is áll.
+  */
+  const pay = (provider: string, status: string) => ({
+    provider_id: provider,
+    status,
+    amount: 1000,
+    captured_amount: null,
+    refunded_amount: null,
+    hold_expires_at: null,
+  });
+  const transfer = (
+    n: number,
+    over: Partial<MedusaOrderOverviewRow> = {},
+  ): MedusaOrderOverviewRow => ({
+    ...order(n),
+    created_at: "2026-09-20T10:00:00.000Z",
+    payment: pay("pp_acropora_transfer", "pending"),
+    ...over,
+  });
+
+  it("marks only the old, unpaid transfer order without an issued proforma", async () => {
+    proformasNow.map = new Map<string, unknown>([
+      [
+        "order_2",
+        {
+          id: "doc_2",
+          status: "ISSUED",
+          number: "D-2",
+          dueDate: new Date("2026-10-30T10:00:00.000Z"),
+          emailStatus: "SENT",
+        },
+      ],
+    ]);
+    receiptsNow.map = new Map<string, unknown>([["order_6", { id: "r" }]]);
+    try {
+      const result = await service([
+        transfer(1),
+        transfer(2),
+        transfer(3, { created_at: "2026-10-04T13:00:00.000Z" }),
+        transfer(4, {
+          payment: pay("pp_stripe_stripe", "authorized"),
+        }),
+        transfer(5, {
+          business_status: {
+            code: "closed_unsuccessfully",
+            label: null,
+            changed_at: "2026-10-04T11:00:00.000Z",
+          },
+        }),
+        transfer(6),
+      ]).orders.list({ view: "all" }, NOW);
+      assert.deepEqual(
+        result.items.map((item) => [item.id, item.proformaMissing]).sort(),
+        [
+          ["order_1", true],
+          ["order_2", false],
+          ["order_3", false],
+          ["order_4", false],
+          ["order_5", false],
+          ["order_6", false],
+        ],
+      );
+    } finally {
+      proformasNow.map = new Map();
+      receiptsNow.map = new Map();
+    }
+  });
+});
+
 describe("a received transfer on the list", () => {
   /*
     „KIFIZETVE” (bb3a6bd5). MI PIROSÍT: a beérkezett utalás nem jelölődik; a
