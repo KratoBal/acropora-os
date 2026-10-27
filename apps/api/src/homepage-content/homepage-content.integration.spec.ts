@@ -250,5 +250,59 @@ describe(
       });
       assert.equal(cleared, 1);
     });
+
+    it("HOMEPAGE-INT-BRANDS: the strip's brand ids keep their order, a save without them keeps them, and the details say which brand is shown", async () => {
+      const tag = randomUUID().slice(0, 8);
+      const [on, off] = await Promise.all(
+        ["be", "ki"].map((nev) =>
+          prisma.brand.create({
+            data: {
+              name: `Sav ${nev} ${tag}`,
+              normalizedName: `sav ${nev} ${tag}`,
+              slug: `sav-${nev}-${tag}`,
+              logoUrl: nev === "be" ? "https://cdn.example/logo.png" : null,
+              isActive: nev === "be",
+            },
+          }),
+        ),
+      );
+      try {
+        await repo.save(
+          key,
+          { texts: {}, slides: null, brandIds: [off!.id, on!.id] },
+          userId,
+        );
+        await repo.save(key, { texts: {}, slides: null }, userId);
+        assert.deepEqual((await repo.find(key))?.featuredBrandIds, [
+          off!.id,
+          on!.id,
+        ]);
+        const details = await repo.brandsByIds([on!.id, off!.id, "nincs"]);
+        assert.deepEqual(
+          details
+            .map((b) => [b.slug, b.shown, b.logoUrl])
+            .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+          [
+            [`sav-be-${tag}`, true, "https://cdn.example/logo.png"],
+            [`sav-ki-${tag}`, false, null],
+          ],
+        );
+        await repo.save(
+          key,
+          { texts: {}, slides: null, brandIds: null },
+          userId,
+        );
+        assert.equal(
+          await prisma.homepageContent.count({
+            where: { key, featuredBrandIds: { equals: Prisma.DbNull } },
+          }),
+          1,
+        );
+      } finally {
+        await prisma.brand.deleteMany({
+          where: { id: { in: [on!.id, off!.id] } },
+        });
+      }
+    });
   },
 );

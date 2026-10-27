@@ -1722,6 +1722,10 @@ model HomepageContent {
   /// A lablec (Balazs, 2026-10-26): bemutatkozas (teljes profilu HTML),
   /// link-oszlopok, kozossegi linkek, also sor. NULL: a kirakat sajat lablece.
   footer            Json?
+  /// A markak logosavja (Balazs, 2026-10-27): `Brand.id` lista sorrendben,
+  /// tetszoleges hosszal. NULL: nincs beallitva, a kirakat a nevek sorat mutatja.
+  /// A vetites a lathato (aktiv, nem archivalt) markak slug-jait kuldi.
+  featuredBrandIds  Json?
   /// A hirlevel-sor a lablec folott (Balazs, 2026-10-27, kirakat-lablec-kep):
   /// `{ enabled, title, text, consentText, button }`. NULL: a kirakat sajat
   /// sora (bekapcsolva, a regi bolt szovegeivel).

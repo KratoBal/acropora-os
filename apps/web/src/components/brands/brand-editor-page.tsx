@@ -12,7 +12,12 @@ import {
   Skeleton,
   Textarea,
 } from "@acropora/ui";
-import { hasPermission, PERMISSIONS, type BrandDetail } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  servedNavigationFeatures,
+  type BrandDetail,
+} from "@acropora/types";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
@@ -20,6 +25,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { ApiError } from "@/lib/api/client";
 import { brandsApi } from "@/lib/api/brands";
+import { homepageContentApi } from "@/lib/api/homepage-content";
 
 export function BrandEditorPage({ brandId }: { brandId?: string }) {
   const { session } = useAuth();
@@ -51,6 +57,32 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
   const token = session?.token ?? "";
+  /*
+    THE LOGO UPLOAD (kezdolap-marka-sav, 2026-10-27) goes to the web shop's file
+    storage through the home page editor's image endpoint, so it is offered only
+    where that editor is served (the test shop; production answers 404). The
+    answer is an address, written into the URL field; the save stores it.
+  */
+  const canUpload = servedNavigationFeatures(session?.navigation).has(
+    "homepage-content",
+  );
+  const [uploading, setUploading] = useState(false);
+  const uploadLogo = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      setLogoUrl((await homepageContentApi.uploadImage(token, file)).url);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A logó feltöltése sikertelen.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
   const load = async () => {
     if (!brandId || !session) return;
     setLoading(true);
@@ -251,6 +283,38 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                   onChange={(event) => setLogoUrl(event.target.value)}
                 />
               </FormField>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="A márka logója"
+                  className="h-12 w-32 rounded bg-white object-contain p-1 ring-1 ring-dusk-200"
+                />
+              ) : null}
+              {canUpload ? (
+                <label className="text-sm">
+                  <span className="sr-only">Logó feltöltése</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-label="Logó feltöltése"
+                    disabled={uploading}
+                    onChange={(event) => {
+                      void uploadLogo(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+              ) : null}
+              {uploading ? (
+                <span className="text-sm text-dusk-500">Feltöltés…</span>
+              ) : canUpload ? (
+                <span className="text-xs text-dusk-500">
+                  PNG, JPEG vagy WebP, legfeljebb 8 MB. A kezdőlap logósávja
+                  fekete-fehéren mutatja, egér alatt színesen.
+                </span>
+              ) : null}
             </div>
           </div>
         </Card>

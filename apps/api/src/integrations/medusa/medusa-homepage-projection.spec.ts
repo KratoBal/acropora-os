@@ -259,6 +259,7 @@ describe("projectHomepageContent", () => {
         content: async () => content(),
         switchedOn: async () => true,
         featured: async () => [],
+        brands: async () => null,
       },
       true,
     );
@@ -276,6 +277,7 @@ describe("projectHomepageContent", () => {
             content: async () => content(),
             switchedOn: async () => true,
             featured: async () => [],
+            brands: async () => null,
           },
           true,
         )
@@ -292,6 +294,7 @@ describe("projectHomepageContent", () => {
             content: async () => content(),
             switchedOn: async () => true,
             featured: async () => [],
+            brands: async () => null,
           },
           false,
         )
@@ -309,6 +312,7 @@ describe("projectHomepageContent", () => {
         content: async () => null,
         switchedOn: async () => true,
         featured: async () => [],
+        brands: async () => null,
       },
       true,
     );
@@ -325,6 +329,7 @@ describe("the featured band", () => {
     content: async () => stored,
     switchedOn: async () => true,
     featured: async () => ids,
+    brands: async () => null,
   });
 
   it("sends the shop's own handles of the marked products, in order, and leaves out a product the shop lost", async () => {
@@ -464,5 +469,65 @@ describe("projectHomepageContentInRound", () => {
         await projectHomepageContentInRound(env, source(true)),
         false,
       );
+  });
+});
+
+/*
+  THE LOGO STRIP'S BRANDS (Balázs, 2026-10-27; commerce #575). What turns these
+  red: the key sent while the OS never set a list (a shop without #575 would
+  refuse the whole record); the order not kept; a set list not compared, so a
+  changed strip never reaches the shop; an emptied list not sent.
+*/
+describe("the logo strip's brands", () => {
+  const source = (brands: string[] | null) => ({
+    content: async () => content(),
+    switchedOn: async () => true,
+    featured: async () => [],
+    brands: async () => brands,
+  });
+
+  it("a list never set is not sent at all", async () => {
+    assert.equal("featured_brand_handles" in homepageRecord(content()), false);
+    const { client, writes } = fakeClient(null);
+    await projectHomepageContent(client, source(null), true);
+    assert.equal("featured_brand_handles" in (writes[0] ?? {}), false);
+  });
+
+  it("a set list is sent in order, and a change of order or an emptied list is a difference", async () => {
+    const { client, writes } = fakeClient(null);
+    await projectHomepageContent(client, source(["triton", "d-d"]), true);
+    assert.deepEqual(writes[0]?.featured_brand_handles, ["triton", "d-d"]);
+    const sent = homepageRecord(content(), [], ["triton", "d-d"]);
+    assert.equal(
+      homepageRecordDiffers(
+        sent,
+        homepageRecord(content(), [], ["d-d", "triton"]),
+      ),
+      true,
+    );
+    assert.equal(
+      homepageRecordDiffers(sent, homepageRecord(content(), [], [])),
+      true,
+    );
+    assert.equal(
+      homepageRecordDiffers(
+        sent,
+        homepageRecord(content(), [], ["triton", "d-d"]),
+      ),
+      false,
+    );
+    // the shop never had the list: a set one is a difference
+    assert.equal(homepageRecordDiffers(homepageRecord(content()), sent), true);
+  });
+
+  it("an unchanged strip is not written again", async () => {
+    const same = fakeClient(homepageRecord(content(), [], ["triton"]));
+    const out = await projectHomepageContent(
+      same.client,
+      source(["triton"]),
+      true,
+    );
+    assert.equal(out.status, "unchanged");
+    assert.equal(same.writes.length, 0);
   });
 });

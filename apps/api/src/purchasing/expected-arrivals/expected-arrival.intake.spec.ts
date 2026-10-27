@@ -10,6 +10,7 @@ import {
   invoiceFiles,
   isCiiXml,
   isPaymentReminder,
+  keepsUnreadFile,
   placeDocument,
   supplierIdByTaxKey,
   type PlacedDocument,
@@ -398,5 +399,41 @@ describe("isPaymentReminder", () => {
       mail(null, "FA00009139.pdf"),
     ])
       assert.equal(isPaymentReminder(invoice), false, invoice.subject ?? "");
+  });
+});
+
+// What must fail: another issuer's Exact Online invoice kept with its bytes
+// (every PDF from that address no adapter knows), or a watched supplier's
+// unreadable PDF dropped because the rule reached past the shared address.
+describe("keepsUnreadFile", () => {
+  const shared = ["no-reply@exact.com"];
+
+  it("drops only a PDF no adapter recognises from a shared platform", () => {
+    assert.equal(
+      keepsUnreadFile("no-reply@exact.com", "PDF_LAYOUT_UNKNOWN", shared),
+      false,
+    );
+    assert.equal(
+      keepsUnreadFile(" No-Reply@Exact.com ", "PDF_LAYOUT_UNKNOWN", shared),
+      false,
+    );
+  });
+
+  it("keeps an adapter's refusal from the shared platform: the adapter knew it", () => {
+    for (const code of ["CREDIT_NOTE", "PROFORMA", "FILE_UNSUPPORTED"])
+      assert.equal(keepsUnreadFile("no-reply@exact.com", code, shared), true);
+  });
+
+  it("keeps an unrecognised PDF from any other sender, as before", () => {
+    for (const sender of [
+      "info@dejongmarinelife.nl",
+      "contact@aquarioom.com",
+      null,
+    ])
+      assert.equal(
+        keepsUnreadFile(sender, "PDF_LAYOUT_UNKNOWN", shared),
+        true,
+        String(sender),
+      );
   });
 });

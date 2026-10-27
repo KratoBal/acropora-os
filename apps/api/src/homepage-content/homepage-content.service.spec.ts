@@ -24,6 +24,19 @@ import {
   but "nothing set" (empty texts, null slides); a null slides list turning into
   an empty list on the way out (that would mean "no hero" in the shop).
 */
+/** The brands the fake store knows; `cmb3` is switched off. */
+const BRANDS = [
+  {
+    id: "cmb1",
+    name: "Triton",
+    slug: "triton",
+    logoUrl: "https://x/t.png",
+    shown: true,
+  },
+  { id: "cmb2", name: "D-D", slug: "d-d", logoUrl: null, shown: true },
+  { id: "cmb3", name: "Régi", slug: "regi", logoUrl: null, shown: false },
+];
+
 /** The test OS: the environment allows writing to the shop. */
 const ALLOWED: NodeJS.ProcessEnv = { MEDUSA_PROJECT_HOMEPAGE_CONTENT: "true" };
 
@@ -59,6 +72,10 @@ function setup(
           input.blocks !== undefined ? input.blocks : (row?.blocks ?? null),
         footer:
           input.footer !== undefined ? input.footer : (row?.footer ?? null),
+        featuredBrandIds:
+          input.brandIds !== undefined
+            ? input.brandIds
+            : (row?.featuredBrandIds ?? null),
         newsletter:
           input.newsletter !== undefined
             ? input.newsletter
@@ -96,6 +113,8 @@ function setup(
       marked.add(productId);
       return "ok";
     },
+    brandsByIds: async (ids) =>
+      BRANDS.filter((b) => ids.includes(b.id)).map((b) => ({ ...b })),
     setProjection: async (key, enabled) => {
       row = {
         key,
@@ -134,6 +153,8 @@ describe("HomepageContentService", () => {
       slides: null,
       blocks: null,
       footer: null,
+      brandIds: null,
+      brands: [],
       newsletter: null,
       imageHosts: [],
       storefrontUrl: null,
@@ -276,6 +297,55 @@ describe("HomepageContentService", () => {
   intro stored with script or an event attribute (the storefront draws it as
   HTML on every page); a hand-edited row that lost a block hiding it.
 */
+/*
+  THE LOGO STRIP'S BRANDS (Balázs, 2026-10-27). What turns these red: a save
+  without the list wiping it; an unknown brand id stored (a hole nobody sees in
+  the editor); the details not in the list's order; a switched-off brand
+  dropped from the editor (it keeps its place and comes back when switched on).
+*/
+describe("HomepageContentService: the logo strip's brands", () => {
+  it("stores the list in order, answers the details in that order, and a save without it keeps it", async () => {
+    const { service } = setup(async () => "sent");
+    const first = await service.save(
+      { texts: {}, slides: null, brandIds: ["cmb3", "cmb1", "cmb2"] },
+      "u-1",
+    );
+    assert.deepEqual(first.content.brandIds, ["cmb3", "cmb1", "cmb2"]);
+    assert.deepEqual(
+      first.content.brands.map((b) => [b.slug, b.shown]),
+      [
+        ["regi", false],
+        ["triton", true],
+        ["d-d", true],
+      ],
+    );
+    const kept = await service.save(
+      { texts: { "mit.cim": "Új" }, slides: null },
+      "u-1",
+    );
+    assert.deepEqual(kept.content.brandIds, ["cmb3", "cmb1", "cmb2"]);
+    assert.deepEqual((await service.get()).brands.length, 3);
+    const cleared = await service.save(
+      { texts: {}, slides: null, brandIds: null },
+      "u-1",
+    );
+    assert.equal(cleared.content.brandIds, null);
+    assert.deepEqual(cleared.content.brands, []);
+  });
+
+  it("refuses an unknown brand before the store", async () => {
+    const { service, saved } = setup(async () => "sent");
+    await assert.rejects(
+      service.save(
+        { texts: {}, slides: null, brandIds: ["cmb1", "nincs"] },
+        "u-1",
+      ),
+      /ismeretlen márka \(nincs\)/,
+    );
+    assert.equal(saved.length, 0);
+  });
+});
+
 describe("HomepageContentService: blocks and footer", () => {
   const blocks = [
     { key: "boltunk", visible: true },

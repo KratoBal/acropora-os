@@ -1,6 +1,7 @@
 import {
   isShopHref,
   type HomepageBlock,
+  type HomepageBrand,
   type HomepageFooter,
   type HomepageNewsletter,
   type HomepageSlide,
@@ -15,6 +16,9 @@ import {
  * The record is the commerce `homepage_content` shape (snake_case), the same
  * one the projection writes. `featured_handles` is NOT in it: the editor knows
  * product ids, not the shop's handles, so the storefront keeps the saved band.
+ * `featured_brand_handles` IS in it, when the list is set: a brand's handle is
+ * its slug, which the editor knows (a switched-off brand is left out, as the
+ * projection leaves it out).
  */
 export const PREVIEW_PROTOCOL_VERSION = 1;
 export const PREVIEW_PATH = "/hu/kezdolap-elonezet";
@@ -37,6 +41,7 @@ export interface PreviewRecord {
     social: HomepageFooter["social"];
     bottom_text: string;
   } | null;
+  featured_brand_handles?: string[];
   /**
    * The newsletter row, ONLY when set: the storefront refuses a record with a
    * key it does not know, and one that predates the row (commerce #577) would
@@ -78,6 +83,7 @@ export function previewRecord(content: {
   slides: HomepageSlide[] | null;
   blocks: HomepageBlock[] | null;
   footer: HomepageFooter | null;
+  brands?: readonly HomepageBrand[] | null;
   newsletter?: HomepageNewsletter | null;
 }): PreviewRecord {
   return {
@@ -92,6 +98,14 @@ export function previewRecord(content: {
           bottom_text: content.footer.bottomText,
         }
       : null,
+    // like the projection: a list never set is not sent
+    ...(content.brands
+      ? {
+          featured_brand_handles: content.brands
+            .filter((brand) => brand.shown)
+            .map((brand) => brand.slug),
+        }
+      : {}),
     ...(content.newsletter
       ? {
           newsletter: {

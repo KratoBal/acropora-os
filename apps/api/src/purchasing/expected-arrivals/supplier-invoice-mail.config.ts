@@ -20,7 +20,9 @@
  * sender only narrows the query, so a new PDF supplier is wired in one place,
  * its adapter. A supplier whose invoice is an XML e-invoice needs no adapter
  * (the CII reader is supplier-independent): its sender is listed in
- * `XML_INVOICE_SENDERS` below.
+ * `XML_INVOICE_SENDERS` below. A shared invoicing platform's address (Exact
+ * Online) names no supplier at all: it is listed in
+ * `SHARED_INVOICE_PLATFORM_SENDERS`.
  */
 
 export type SupplierInvoiceMailSwitch =
@@ -80,6 +82,22 @@ export function supplierInvoiceMailIntervalMinutes(
  *                                     (6 of 6, April to August 2026)
  */
 export const XML_INVOICE_SENDERS: readonly string[] = ["info@coralsands.de"];
+
+/**
+ * SHARED INVOICING PLATFORM SENDERS: a service that mails EVERY issuer's
+ * invoices from one address, so the address does not name the supplier.
+ *   Exact Online   no-reply@exact.com   De Jong Marinelife since 2026-10
+ *                                       (invoice 26009990, 2026-10-26; the
+ *                                       De Jong adapter reads it, 38 of 38
+ *                                       lines, the lines' sum = the net total)
+ * The adapter is chosen by the file's content, as for every sender. A PDF
+ * from here that no adapter recognises is another issuer's invoice: the
+ * intake keeps neither the document nor its bytes, only the mail with its
+ * reason (`keepsUnreadFile`).
+ */
+export const SHARED_INVOICE_PLATFORM_SENDERS: readonly string[] = [
+  "no-reply@exact.com",
+];
 
 /** The sender addresses to watch: the adapters' own, plus the configured extra ones. */
 export function supplierInvoiceMailSenders(

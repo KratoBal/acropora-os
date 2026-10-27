@@ -156,6 +156,33 @@ describe("HomepageContentEditorPage", () => {
     expect(await field("Mit keresel ma?: Címsor")).toBeTruthy();
   });
 
+  it("HP-ED-BRANDS: the logo strip is part of the save, in the edited order; a never-set list is not sent", async () => {
+    const brand = (id: string, shown = true) => ({
+      id,
+      name: `Márka ${id}`,
+      slug: `marka-${id}`,
+      logoUrl: null,
+      shown,
+    });
+    api.get.mockResolvedValue(
+      stored({
+        brandIds: ["b1", "b2", "b3"],
+        brands: [brand("b1"), brand("b2", false), brand("b3")],
+      }),
+    );
+    render(<HomepageContentEditorPage />);
+    await open("Márkák");
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: /^Márka b3 áthelyezése/ }),
+      { key: "ArrowUp" },
+    );
+    save();
+    await waitFor(() => expect(api.save).toHaveBeenCalled());
+    expect(sent().brandIds).toEqual(["b1", "b3", "b2"]);
+    // the block's own texts stay editable under the list
+    expect(await field("Márkák: Felirat")).toBeTruthy();
+  });
+
   it("HP-ED-FULL: a save sends EVERY earlier override, not only the edited key", async () => {
     api.get.mockResolvedValue(
       stored({ texts: { "mit.cim": "Régi felülírás" } }),

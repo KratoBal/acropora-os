@@ -445,3 +445,51 @@ describe("the formatted short texts", () => {
     assert.ok(!looksLikeShortHtml("<script>x</script>"));
   });
 });
+
+/*
+  THE LOGO STRIP'S BRANDS (Balázs, 2026-10-27). What turns these red: an editor
+  that does not send the list wiping it (absent must stay absent); the order not
+  kept (the order is the strip's); a brand listed twice; something that is not
+  a plain id (a slug with a hyphen, markup, a number); a list over the cap.
+*/
+describe("parseHomepageContentInput: brandIds", () => {
+  const parse = (extra: Record<string, unknown>) =>
+    parseHomepageContentInput({ texts: {}, slides: null, ...extra });
+
+  it("absent stays absent, null and a list are kept in order", () => {
+    const absent = parse({});
+    assert.ok(absent.ok);
+    assert.equal("brandIds" in absent.value, false);
+    const none = parse({ brandIds: null });
+    assert.ok(none.ok);
+    assert.equal(none.value.brandIds, null);
+    const empty = parse({ brandIds: [] });
+    assert.ok(empty.ok);
+    assert.deepEqual(empty.value.brandIds, []);
+    const list = parse({ brandIds: ["cmb2", "cmb1", "cmb3"] });
+    assert.ok(list.ok);
+    assert.deepEqual(list.value.brandIds, ["cmb2", "cmb1", "cmb3"]);
+    // no design cap: well past the product band's twelve
+    const many = parse({
+      brandIds: Array.from({ length: 60 }, (_, i) => `b${i}`),
+    });
+    assert.ok(many.ok);
+  });
+
+  it("refuses a doubled brand, a bad id, a non-list and a list over the cap", () => {
+    for (const bad of [
+      ["cmb1", "cmb1"],
+      ["fauna-marin"],
+      ["<b>"],
+      [""],
+      [5],
+      "cmb1",
+      Array.from({ length: 501 }, (_, i) => `b${i}`),
+    ])
+      assert.equal(
+        parse({ brandIds: bad }).ok,
+        false,
+        JSON.stringify(bad).slice(0, 60),
+      );
+  });
+});

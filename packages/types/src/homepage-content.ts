@@ -1144,13 +1144,39 @@ export interface HomepageContentInput {
   blocks?: HomepageBlock[] | null;
   /** `null`: the storefront's own footer. Absent in a save: unchanged. */
   footer?: HomepageFooter | null;
+  /**
+   * THE LOGO STRIP'S BRANDS (Balázs, 2026-10-27): `Brand` ids in display
+   * order, any number of them. `null`: not set, the storefront keeps its row of
+   * brand names. Absent in a save: unchanged.
+   */
+  brandIds?: string[] | null;
   /** `null`: the storefront's own newsletter row. Absent in a save: unchanged. */
   newsletter?: HomepageNewsletter | null;
+}
+
+/** A brand of the logo strip, as the editor shows it. */
+export interface HomepageBrand {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  /**
+   * Active and not archived: only such a brand gets a shop page, so only such
+   * a brand goes to the strip. A switched-off brand keeps its place in the
+   * list and comes back when it is switched on again.
+   */
+  shown: boolean;
 }
 
 export interface HomepageContent extends HomepageContentInput {
   blocks: HomepageBlock[] | null;
   footer: HomepageFooter | null;
+  brandIds: string[] | null;
+  /**
+   * The listed brands that still exist, in the list's order. A brand deleted
+   * since the save is missing here (and from the strip).
+   */
+  brands: HomepageBrand[];
   newsletter: HomepageNewsletter | null;
   /**
    * The image hosts a full-profile text may show (`RICH_TEXT_IMAGE_HOSTS`):
@@ -1181,6 +1207,8 @@ export interface HomepageContent extends HomepageContentInput {
 }
 
 export const HOMEPAGE_LIMITS = {
+  /** A sanity bound, not a design limit (the OS has about 200 brands); the shop's cap is 500. */
+  brands: 500,
   textKeys: 400,
   textValue: 2000,
   slides: 5,
@@ -1388,6 +1416,29 @@ function parseSlide(
       imageAlt,
     },
   };
+}
+
+/** Brand ids: each once, a plain id (a cuid), the list order is the strip's order. */
+function parseBrandIds(
+  value: unknown,
+): { ok: true; value: string[] | null } | { ok: false; message: string } {
+  if (value === null) return { ok: true, value: null };
+  if (!Array.isArray(value))
+    return { ok: false, message: "brandIds: null or a list" };
+  if (value.length > HOMEPAGE_LIMITS.brands)
+    return {
+      ok: false,
+      message: `brandIds: at most ${HOMEPAGE_LIMITS.brands}`,
+    };
+  const seen = new Set<string>();
+  for (const [index, id] of value.entries()) {
+    if (typeof id !== "string" || !/^[a-z0-9]{1,64}$/.test(id))
+      return { ok: false, message: `brandIds[${index}]: a brand id` };
+    if (seen.has(id))
+      return { ok: false, message: `brandIds[${index}]: listed twice` };
+    seen.add(id);
+  }
+  return { ok: true, value: [...(value as string[])] };
 }
 
 /** Every block exactly once, nothing else; the list order is the page order. */
@@ -1609,7 +1660,14 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
     return { ok: false, message: "the content is an object" };
   const stray = Object.keys(body).find(
     (key) =>
-      !["texts", "slides", "blocks", "footer", "newsletter"].includes(key),
+      ![
+        "texts",
+        "slides",
+        "blocks",
+        "footer",
+        "brandIds",
+        "newsletter",
+      ].includes(key),
   );
   if (stray) return { ok: false, message: `unknown field ${stray}` };
   if (!isRecord(body.texts)) return { ok: false, message: "texts: an object" };
@@ -1639,9 +1697,16 @@ export function parseHomepageContentInput(body: unknown): HomepageContentParse {
       };
     texts[key] = value;
   }
-  /* ABSENT blocks / footer / newsletter: the save leaves the stored value as it is. */
-  const extra: Pick<HomepageContentInput, "blocks" | "footer" | "newsletter"> =
-    {};
+  /* ABSENT blocks / footer / brandIds / newsletter: the save leaves the stored value as it is. */
+  const extra: Pick<
+    HomepageContentInput,
+    "blocks" | "footer" | "brandIds" | "newsletter"
+  > = {};
+  if ("brandIds" in body) {
+    const brandIds = parseBrandIds(body.brandIds);
+    if (!brandIds.ok) return brandIds;
+    extra.brandIds = brandIds.value;
+  }
   if ("blocks" in body) {
     const blocks = parseBlocks(body.blocks);
     if (!blocks.ok) return blocks;

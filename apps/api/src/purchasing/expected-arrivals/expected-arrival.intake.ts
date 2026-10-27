@@ -184,6 +184,24 @@ export function adapterSenders(
   return adapters.flatMap((adapter) => adapter.senders ?? []);
 }
 
+/**
+ * DOES A FILE THE READER REFUSED STAY KEPT (as a FAILED document, with its
+ * bytes)? Yes, except a PDF no adapter recognises from a shared invoicing
+ * platform (`SHARED_INVOICE_PLATFORM_SENDERS`, Exact Online): that address
+ * sends every issuer's invoices, so such a PDF is another issuer's, not a
+ * watched supplier's that failed. Any other refusal (a credit note, a
+ * proforma) means an adapter did recognise it, and it is kept as before.
+ */
+export function keepsUnreadFile(
+  sender: string | null,
+  errorCode: string,
+  sharedSenders: readonly string[],
+): boolean {
+  if (errorCode !== "PDF_LAYOUT_UNKNOWN") return true;
+  const address = sender?.trim().toLowerCase();
+  return !address || !sharedSenders.includes(address);
+}
+
 /** An attachment of a supplier mail, as the client hands it over. */
 export interface MailFile {
   fileName: string;

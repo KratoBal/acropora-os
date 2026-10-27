@@ -1569,6 +1569,7 @@ export {
 export type {
   HomepageBlock,
   HomepageBlockKey,
+  HomepageBrand,
   HomepageContent,
   HomepageContentInput,
   HomepageFooter,
