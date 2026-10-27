@@ -41,6 +41,14 @@ const KEPT_RUNS = 20;
  *
  * ONE RUN AT A TIME, across the kinds: the brand links read what the backfill
  * writes, and two writers on the same rows would make both summaries wrong.
+ * The lock is this process's memory, so it holds for ONE API instance (the
+ * test OS runs one). With more instances two runs could start at once, and
+ * the lock would have to move to the database.
+ *
+ * AN APPLY RECOMPUTES: the commands plan again when they write, so the plan
+ * run is what the confirmation SHOWS, not what the apply is bound to. If the
+ * data changed since the plan, the apply's own summary says so (barracuda,
+ * #1915); the page shows the two side by side.
  */
 @Injectable()
 export class CatalogActionsService {

@@ -8,7 +8,7 @@ import {
 import type { CatalogActionRun, CatalogActionsResponse } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CatalogActionsPanel } from "./catalog-actions-panel";
+import { APPLY_RECOMPUTES, CatalogActionsPanel } from "./catalog-actions-panel";
 
 /*
   THE BRANDS PAGE CATALOG BUTTONS (kezdolap-marka-sav-os). What turns this red:
@@ -140,13 +140,56 @@ describe("CatalogActionsPanel", () => {
     expect(api.apply).not.toHaveBeenCalled();
     fireEvent.click(
       within(dialog).getByRole("button", {
-        name: "Végrehajtás a próba szerint",
+        name: "Végrehajtás",
       }),
     );
     await waitFor(() =>
       expect(api.apply).toHaveBeenCalledWith("t", "brand-backfill", "plan-7"),
     );
     await within(backfill).findByText("Végrehajtás: fut");
+    // the plan stays in view next to the running apply
+    expect(
+      within(backfill).getByLabelText("A próba összesítője"),
+    ).toHaveTextContent("Márkát kapna: 683 termék");
+  });
+
+  it("the confirmation does not promise the plan's set: the apply recomputes", async () => {
+    api.overview.mockResolvedValue(enabled(run({ id: "plan-7" })));
+    render(<CatalogActionsPanel token="t" />);
+    const backfill = await screen.findByRole("region", {
+      name: "Márkák a termékekre",
+    });
+    fireEvent.click(
+      within(backfill).getByRole("button", { name: "Végrehajtás" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(APPLY_RECOMPUTES);
+    expect(dialog).not.toHaveTextContent(/a próba szerint/i);
+  });
+
+  it("after a reload, a finished apply is shown with the summary of the plan it was confirmed from", async () => {
+    api.overview.mockResolvedValue(
+      enabled(
+        run({
+          id: "apply-1",
+          mode: "apply",
+          planRunId: "plan-7",
+          output: "Termék, amire márka került: 681\n",
+        }),
+      ),
+    );
+    api.run.mockResolvedValue(run({ id: "plan-7" }));
+    render(<CatalogActionsPanel token="t" />);
+    const backfill = await screen.findByRole("region", {
+      name: "Márkák a termékekre",
+    });
+    expect(
+      await within(backfill).findByLabelText("A próba összesítője"),
+    ).toHaveTextContent("Márkát kapna: 683 termék");
+    expect(
+      within(backfill).getByLabelText("A végrehajtás összesítője"),
+    ).toHaveTextContent("Termék, amire márka került: 681");
+    expect(api.run).toHaveBeenCalledWith("t", "plan-7", expect.anything());
   });
 
   it("while a run is running, no other run can be started, and the run is asked about again", async () => {
