@@ -9,23 +9,14 @@ import type {
   ArticleTaxonOption,
 } from "@acropora/types";
 
+import { ArticleCitationRepository } from "../knowledge-base/articles/article-citation.repository.js";
 import { VocabularyRepository } from "../knowledge-base/vocabulary/vocabulary.repository.js";
 import { labelOf } from "../knowledge-base/vocabulary/vocabulary-versions.js";
 import type { ArticleSnapshot } from "./article-diff.js";
+import { ARTICLE_EDITABLE_STATES } from "./article-states.js";
 import type { ContentState } from "./content-state.js";
 
-/**
- * THE STATES IN WHICH AN ARTICLE BODY MAY CHANGE: the author's and the
- * reviewer's. From `AWAITING_APPROVAL` on the text is under (or past) the
- * approver's eye, and a change there would reach the public unapproved; to
- * change it, the item goes back to `AWAITING_REVISION` first (an existing move).
- */
-export const ARTICLE_EDITABLE_STATES: readonly ContentState[] = [
-  "IDEA",
-  "DRAFTING",
-  "AWAITING_REVIEW",
-  "AWAITING_REVISION",
-];
+export { ARTICLE_EDITABLE_STATES };
 
 /** Why a move on an article cannot happen; the service answers 409 with it. */
 export class ArticleStepError extends Error {}
@@ -121,6 +112,14 @@ export async function applyArticleStep(
       throw new ArticleStepError(
         "A cikknek még nincs törzse: jóváhagyás előtt írd meg a cikket.",
       );
+    // A KNOWLEDGE ARTICLE IS APPROVED ONLY CLEAN (plan v4, 9.2 S5): every
+    // sentence cited, every citation valid, every warning answered. Read in
+    // the move's own transaction, from the text being approved.
+    const blocked = await new ArticleCitationRepository().approvalBlock(
+      tx,
+      input.contentId,
+    );
+    if (blocked) throw new ArticleStepError(blocked);
     const snapshot = {
       title: item.title,
       excerpt: body.excerpt,

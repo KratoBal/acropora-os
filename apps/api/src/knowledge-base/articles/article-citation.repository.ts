@@ -8,7 +8,7 @@ import {
   type CitedConclusion,
 } from "@acropora/knowledge-base";
 
-import { ARTICLE_EDITABLE_STATES } from "../../content/article.repository.js";
+import { ARTICLE_EDITABLE_STATES } from "../../content/article-states.js";
 import { citedClaims } from "../claims/claim-store.repository.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
@@ -180,6 +180,32 @@ export class ArticleCitationRepository {
       },
       rows,
     };
+  }
+
+  /**
+   * Why a knowledge article may not be approved now, or null. An article
+   * without any citation row is no knowledge article, and its approval is
+   * none of this check's business; one with citations needs a clean report.
+   * Runs in the approval's own transaction (`applyArticleStep`).
+   */
+  async approvalBlock(tx: Tx, contentId: string): Promise<string | null> {
+    if ((await tx.articleCitation.count({ where: { contentId } })) === 0)
+      return null;
+    const { report } = await this.build(tx, contentId);
+    if (report.clean) return null;
+    const { counts } = report;
+    const parts = [
+      counts.uncited ? `${counts.uncited} hivatkozás nélküli mondat` : null,
+      counts.invalid ? `${counts.invalid} hibás hivatkozás` : null,
+      counts.unansweredWarnings
+        ? `${counts.unansweredWarnings} megválaszolatlan figyelmeztetés`
+        : null,
+      report.blockers.includes("VOCABULARY_NOT_APPROVED")
+        ? "a szótár nincs jóváhagyva"
+        : null,
+      counts.sentences === 0 ? "a cikknek nincs mondata" : null,
+    ].filter((p): p is string => p !== null);
+    return `A cikk hivatkozás-ellenőrzése nem tiszta (${parts.join(", ")}), ezért nem hagyható jóvá. A Hivatkozások panelen rendezd, és küldd újra jóváhagyásra.`;
   }
 
   async report(contentId: string): Promise<ArticleCitationReport> {
