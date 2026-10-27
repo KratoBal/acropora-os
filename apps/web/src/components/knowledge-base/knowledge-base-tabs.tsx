@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   KNOWLEDGE_BASE_PATH,
   KNOWLEDGE_CLAIMS_PATH,
+  KNOWLEDGE_CONCLUSIONS_PATH,
   KNOWLEDGE_SOURCES_PATH,
   KNOWLEDGE_STORE_PATH,
   KNOWLEDGE_VOCABULARY_PATH,
@@ -23,6 +24,7 @@ const KNOWLEDGE_TABS: ReadonlyArray<{ href: string; label: string }> = [
   { href: KNOWLEDGE_SOURCES_PATH, label: "Források" },
   { href: KNOWLEDGE_CLAIMS_PATH, label: "Kiolvasás" },
   { href: KNOWLEDGE_STORE_PATH, label: "Állítás-tár" },
+  { href: KNOWLEDGE_CONCLUSIONS_PATH, label: "Következtetések" },
   { href: KNOWLEDGE_VOCABULARY_PATH, label: "Szótár" },
 ];
 
