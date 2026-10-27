@@ -47,6 +47,7 @@ import {
   distinctSorted,
   factsOf,
   inView,
+  proformaMissingOf,
   sortItems,
   toListItem,
 } from "./webshop-orders.rules.js";
@@ -447,6 +448,15 @@ export class WebshopOrdersService {
           proformaExpiredOf(proformas.get(row.id), now),
           receipts.has(row.id) || !!externals.get(row.id)?.paid,
           externals.get(row.id)?.number ?? null,
+          proformaMissingOf({
+            providerId: row.payment?.provider_id ?? null,
+            statusCode: row.business_status.code,
+            createdAt: row.created_at,
+            proformaStatus: proformas.get(row.id)?.status,
+            transferReceived:
+              receipts.has(row.id) || !!externals.get(row.id)?.paid,
+            now,
+          }),
         ),
         now,
         hours,
