@@ -369,6 +369,15 @@ export {
   USER_ROLES,
   ASSIGNABLE_ROLES,
 } from "./auth.js";
+export { CATALOG_ACTION_KINDS } from "./catalog-actions.js";
+export type {
+  CatalogActionKind,
+  CatalogActionMode,
+  CatalogActionRun,
+  CatalogActionRunStatus,
+  CatalogActionView,
+  CatalogActionsResponse,
+} from "./catalog-actions.js";
 export {
   isNavigationEntryVisible,
   navigationEntry,

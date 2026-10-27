@@ -21,6 +21,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { brandsApi } from "@/lib/api/brands";
+import { CatalogActionsPanel } from "./catalog-actions-panel";
 
 export function BrandListPage() {
   const { session } = useAuth();
@@ -36,6 +37,10 @@ export function BrandListPage() {
   );
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
+  );
+  // the catalog operations are a settings-level action (as the Medusa connection)
+  const canRunCatalogActions = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
   );
   const token = session?.token ?? "";
   const query = useMemo(() => {
@@ -123,6 +128,7 @@ export function BrandListPage() {
           </div>
         }
       />
+      {canRunCatalogActions ? <CatalogActionsPanel token={token} /> : null}
       {error ? (
         <Alert
           variant="danger"

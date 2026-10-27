@@ -1,0 +1,47 @@
+/**
+ * ONE-OFF CATALOG OPERATIONS STARTED FROM THE OS (kezdolap-marka-sav-os).
+ *
+ * Each kind is an existing command-line operation (`unas:brand-backfill`,
+ * `medusa:brand-links`), run by the API with the same code path. A run is
+ * either a PLAN (reads, writes nothing) or an APPLY, and an apply is accepted
+ * only after a successful plan of the same kind.
+ */
+export const CATALOG_ACTION_KINDS = ["brand-backfill", "brand-links"] as const;
+export type CatalogActionKind = (typeof CATALOG_ACTION_KINDS)[number];
+
+export type CatalogActionMode = "plan" | "apply";
+export type CatalogActionRunStatus = "running" | "succeeded" | "failed";
+
+export interface CatalogActionRun {
+  id: string;
+  kind: CatalogActionKind;
+  mode: CatalogActionMode;
+  status: CatalogActionRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  actorUserId: string;
+  /** The command's exit code; null while running or when it threw. */
+  exitCode: number | null;
+  /** Everything the command printed, in order. */
+  output: string;
+  /** The thrown error's message, when the command did not return. */
+  error: string | null;
+  /** For an apply: the plan it was confirmed from. */
+  planRunId: string | null;
+  /** For a plan: the apply that has used it (a plan confirms one apply). */
+  appliedByRunId: string | null;
+}
+
+export interface CatalogActionView {
+  kind: CatalogActionKind;
+  title: string;
+  description: string;
+  /** The most recent run of this kind, if any since the API started. */
+  lastRun: CatalogActionRun | null;
+}
+
+export interface CatalogActionsResponse {
+  /** False where the environment does not allow these operations (production). */
+  enabled: boolean;
+  actions: CatalogActionView[];
+}

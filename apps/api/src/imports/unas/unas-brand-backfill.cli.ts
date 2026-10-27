@@ -307,18 +307,30 @@ async function applyPlan(
   }
 }
 
+/**
+ * The database-backed dependencies, shared by this command and the OS admin
+ * button (`catalog-actions`), so the two run the same code path.
+ */
+export const brandBackfillDependencies: Parameters<
+  typeof runBrandBackfillCli
+>[2] = {
+  rows: backfillRows,
+  brands: existingBrands,
+  actorExists: async (actorId: string) =>
+    (await prisma.user.count({ where: { id: actorId } })) === 1,
+  apply: applyPlan,
+};
+
 async function main(): Promise<void> {
   const out: CliOutput = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   };
-  process.exitCode = await runBrandBackfillCli(process.argv.slice(2), out, {
-    rows: backfillRows,
-    brands: existingBrands,
-    actorExists: async (actorId: string) =>
-      (await prisma.user.count({ where: { id: actorId } })) === 1,
-    apply: applyPlan,
-  });
+  process.exitCode = await runBrandBackfillCli(
+    process.argv.slice(2),
+    out,
+    brandBackfillDependencies,
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
