@@ -177,6 +177,20 @@ describe("T13 through the gate: each error class dropped, its correct pair (the 
     });
 });
 
+describe("T10: no dose from the scientific layer", () => {
+  it("a dose added to a cited sentence drops it, with its own reason", () => {
+    const dosed = BASE.replace(
+      " [[claim:c1sci]].",
+      ", ezért napi 5 ml adalék kell 100 literenként [[claim:c1sci]].",
+    );
+    assert.notEqual(dosed, BASE);
+    dropped(dosed, "QUANTITY_UNRECOGNISED");
+  });
+  it("an unmarked dose sentence is dropped", () => {
+    dropped("Napi 5 ml foszfátmegkötő kell 100 literenként.", "UNMARKED");
+  });
+});
+
 describe("T5: the layer phrase", () => {
   it("a cited claim's layer phrase is required", () => {
     dropped(BASE.replace("Kutatás szerint egy", "Egy"), "LAYER_PHRASE_MISSING");
