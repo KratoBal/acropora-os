@@ -57,8 +57,6 @@ export interface AppNavigationGroup {
   flattenWhenAlone?: boolean;
   /** Alapból nyitva áll (az Áttekintés: a számlálói ott élnek). */
   defaultOpen?: boolean;
-  /** Elválasztó vonal a csoport fölött (a Beállítások, a lista végén). */
-  separated?: boolean;
 }
 
 export type AppNavigationEntry = AppNavigationItem | AppNavigationGroup;
@@ -139,7 +137,7 @@ export const KNOWLEDGE_STORE_PATH = "/tudasbazis/allitasok";
   (útvonal, azonosító, felirat) a költözés előttivel megegyezik, a csoportok
   és a sorrend pedig Balázs listája.
 */
-export const mainNavigation: AppNavigationGroup[] = [
+const mainNavigationGroups: AppNavigationGroup[] = [
   {
     // Az első menü alapból nyitva: a feladatok és az olvasatlan üzenetek
     // számlálója itt él, és egy összecsukott fejléc elrejtené.
@@ -508,7 +506,6 @@ export const mainNavigation: AppNavigationGroup[] = [
     // (Balázs, 2026-10-26 13:05 UTC), itt nem duplázódnak.
     label: "Beállítások",
     icon: "settings",
-    separated: true,
     children: [
       {
         href: "/beallitasok",
@@ -585,6 +582,68 @@ export const mainNavigation: AppNavigationGroup[] = [
     ],
   },
 ];
+
+/** A felül rögzített főmenü: az Áttekintés a Kedvencek alatt, az ABC előtt áll. */
+export const PINNED_NAVIGATION_LABEL = "Áttekintés";
+
+/** A Kedvencek menü felirata; az Áttekintés FÖLÖTT áll, és csak elemmel látszik. */
+export const FAVORITES_NAVIGATION_LABEL = "Kedvencek";
+
+/**
+ * A FŐMENÜK ABC SORRENDBEN (Balázs, 2026-10-27, msg 1564543075383115838): az
+ * Áttekintés felül marad, a többi magyar ábécé szerint (`localeCompare` "hu":
+ * az ékezetes betű a párja mellett áll, nem a lista végén). A sorrendet ez a
+ * függvény adja, nem a fenti tömb sora, így egy új főmenü sem kerülhet rossz
+ * helyre. Az almenük sorrendje NEM változik: az a munka menete (hibajegy,
+ * munkalap, igazolás, számla), nem ábécé.
+ */
+export function inMainMenuOrder(
+  groups: readonly AppNavigationGroup[],
+): AppNavigationGroup[] {
+  const pinned = groups.filter(
+    (group) => group.label === PINNED_NAVIGATION_LABEL,
+  );
+  const rest = groups
+    .filter((group) => group.label !== PINNED_NAVIGATION_LABEL)
+    .sort((a, b) => a.label.localeCompare(b.label, "hu"));
+  return [...pinned, ...rest];
+}
+
+export const mainNavigation: AppNavigationGroup[] =
+  inMainMenuOrder(mainNavigationGroups);
+
+/**
+ * A KEDVENCEK MENÜ: a felhasználó megjelölt útvonalai a megjelölés sorrendjében,
+ * csak azok, amik ma menüpontok ÉS amiket a hívó látni enged (`canAccess`: ugyanaz
+ * a láthatósági szabály, mint a főmenüé). Ami már nem menüpont vagy nem látható,
+ * az nem jelenik meg, de a tárolt sor megmarad: ha a menüpont visszajön, a
+ * kedvenc is.
+ *
+ * Üres lista esetén `null`: a menü csak akkor látszik, ha van benne elem. A
+ * tételek UGYANAZOK az objektumok, mint a főmenüben, tehát a jelvény, az
+ * aktív-jelölés és a jogosultság nem külön másolat.
+ */
+export function favoritesGroup(
+  hrefs: readonly string[],
+  canAccess: (item: AppNavigationItem) => boolean,
+): AppNavigationGroup | null {
+  const byHref = new Map(allNavigationPages.map((item) => [item.href, item]));
+  const seen = new Set<string>();
+  const children: AppNavigationItem[] = [];
+  for (const href of hrefs) {
+    const item = byHref.get(href);
+    if (!item || seen.has(href) || !canAccess(item)) continue;
+    seen.add(href);
+    children.push(item);
+  }
+  if (children.length === 0) return null;
+  return {
+    label: FAVORITES_NAVIGATION_LABEL,
+    icon: "star",
+    defaultOpen: true,
+    children,
+  };
+}
 
 /**
  * Whether this entry is the one the reader is on.

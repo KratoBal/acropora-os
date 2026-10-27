@@ -28,6 +28,7 @@ import { UnasImportModule } from "./imports/unas/unas-import.module.js";
 import { AiChatModule } from "./integrations/ai-chat/ai-chat.module.js";
 import { AiUserContextModule } from "./integrations/ai/ai-user-context.module.js";
 import { AiProductSearchModule } from "./integrations/ai-product-search/ai-product-search.module.js";
+import { FavoritesModule } from "./favorites/favorites.module.js";
 import { NavigationCountersModule } from "./navigation/navigation-counters.module.js";
 import { WebshopMailModule } from "./integrations/webshop-mail/webshop-mail.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
@@ -98,6 +99,7 @@ import { MortalityModule } from "./mortality/mortality.module.js";
     AiUserContextModule,
     AiProductSearchModule,
     NavigationCountersModule,
+    FavoritesModule,
     WebshopMailModule,
     AiChatModule,
     MedusaModule,

@@ -1028,6 +1028,8 @@ export type {
   AssetCategory,
   AssetCategoryListResponse,
 } from "./asset-category.js";
+export { FAVORITE_LIMITS, isFavoriteHref } from "./favorite.js";
+export type { FavoriteListResponse } from "./favorite.js";
 export { normalizeAssetFunctionName } from "./asset-function.js";
 export type {
   AssetFunction,

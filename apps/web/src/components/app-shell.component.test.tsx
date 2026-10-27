@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import {
@@ -39,6 +40,13 @@ const counters = vi.hoisted(() => ({
 vi.mock("@/lib/api/navigation-counters", () => ({
   navigationCountersApi: { counters: counters.fetch },
 }));
+// the favourites (Kedvencek): no network in a test
+const favoritesApiMock = vi.hoisted(() => ({
+  list: vi.fn().mockResolvedValue({ items: [] }),
+  add: vi.fn(),
+  remove: vi.fn(),
+}));
+vi.mock("@/lib/api/favorites", () => ({ favoritesApi: favoritesApiMock }));
 vi.mock("./auth/user-menu", () => ({
   UserMenu: () => <div>Felhasználói menü</div>,
 }));
@@ -74,6 +82,7 @@ describe("AppShell settings navigation", () => {
       worksheets: 0,
       "material-requests-pending": 0,
     });
+    favoritesApiMock.list.mockReset().mockResolvedValue({ items: [] });
     auth.session = ownerSession;
     navigation.pathname = "/";
   });
@@ -501,14 +510,14 @@ describe("AppShell the nine main menus", () => {
 
     expect(headings()).toEqual([
       "Áttekintés",
-      "Szerviz",
-      "Értékesítés",
-      "Webshop",
-      "Raktár és beszerzés",
-      "Pénzügy",
       "Akvarisztika",
-      "Tartalom és tudás",
       "Beállítások",
+      "Értékesítés",
+      "Pénzügy",
+      "Raktár és beszerzés",
+      "Szerviz",
+      "Tartalom és tudás",
+      "Webshop",
     ]);
   });
 
@@ -898,5 +907,156 @@ describe("AppShell menu numbers", () => {
         "140 nekem kiosztott, új vagy folyamatban lévő munkalap",
       ),
     ).toHaveTextContent("99+");
+  });
+});
+
+/*
+  A KEDVENCEK (Balázs, 2026-10-27, msg 1564543075383115838): a csillag gomb
+  "Kedvencekbe" felirattal minden menüpont képernyőjén, a megjelölt oldal az
+  Áttekintés FÖLÖTTI Kedvencek menüben. MI PIROSÍT: a gomb hiányzik egy menüpont
+  oldaláról, vagy megjelenik olyan oldalon, ami nem menüpont; a kattintás nem a
+  szervernek szól, vagy a csillag a mentés eredménye nélkül marad bejelölve; a
+  Kedvencek menü üres listánál is áll, vagy nem az Áttekintés fölött; a
+  láthatatlan menüpont kedvencként megjelenik.
+*/
+describe("AppShell favourites", () => {
+  beforeEach(() => {
+    favoritesApiMock.list.mockReset().mockResolvedValue({ items: [] });
+    favoritesApiMock.add.mockReset().mockResolvedValue({ items: [] });
+    favoritesApiMock.remove.mockReset().mockResolvedValue({ items: [] });
+    auth.session = ownerSession;
+    navigation.pathname = "/akvariumok";
+  });
+
+  const headings = () =>
+    within(screen.getByRole("navigation", { name: "Fő navigáció" }))
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+
+  /** The star is live once the list has arrived (see `useFavorites`). */
+  const pressStar = async () => {
+    const star = screen.getByRole("button", { name: "Kedvencekbe" });
+    await waitFor(() => expect(star).toBeEnabled());
+    fireEvent.click(star);
+  };
+
+  it("has the star on every menu page, labelled Kedvencekbe", () => {
+    for (const page of allNavigationPages.filter((item) =>
+      isNavigationEntryVisible(item.entryId, ownerSession.user),
+    )) {
+      navigation.pathname = page.href;
+      const { unmount } = render(<AppShell>Oldaltartalom</AppShell>);
+      expect(
+        screen.getByRole("button", { name: "Kedvencekbe" }),
+        page.href,
+      ).toHaveAttribute("aria-pressed", "false");
+      unmount();
+    }
+  });
+
+  it("has no star on a page that is not a menu page", () => {
+    navigation.pathname = "/nincs-ilyen-oldal";
+    render(<AppShell>Oldaltartalom</AppShell>);
+    expect(screen.queryByRole("button", { name: "Kedvencekbe" })).toBeNull();
+  });
+
+  it("keeps the star off until the list has arrived, so a late list cannot undo a press", async () => {
+    let arrive: (value: { items: string[] }) => void = () => {};
+    favoritesApiMock.list.mockReturnValue(
+      new Promise((resolve) => {
+        arrive = resolve;
+      }),
+    );
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    const star = screen.getByRole("button", { name: "Kedvencekbe" });
+    expect(star).toBeDisabled();
+    fireEvent.click(star);
+    expect(favoritesApiMock.add).not.toHaveBeenCalled();
+
+    arrive({ items: ["/akvariumok"] });
+    await waitFor(() => expect(star).toBeEnabled());
+    expect(star).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows no Kedvencek menu while nothing is marked", async () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await waitFor(() => expect(favoritesApiMock.list).toHaveBeenCalled());
+    expect(headings()).not.toContain("Kedvencek");
+  });
+
+  it("saves the mark on the server, fills the star, and lists the page above Áttekintés", async () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    await pressStar();
+
+    // a mentés a kattintások sorába áll, ezért egy mikrofeladattal később indul
+    await waitFor(() =>
+      expect(favoritesApiMock.add).toHaveBeenCalledWith(
+        "owner-token",
+        "/akvariumok",
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Kedvencekbe" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const list = headings();
+    expect(list.slice(0, 2)).toEqual(["Kedvencek", "Áttekintés"]);
+    const favorites = within(
+      screen.getByRole("navigation", { name: "Fő navigáció" }),
+    ).getByRole("button", { name: "Kedvencek" });
+    expect(favorites).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("takes it out again on the second press, and the menu goes with the last one", async () => {
+    favoritesApiMock.list.mockResolvedValue({ items: ["/akvariumok"] });
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await waitFor(() => expect(headings()[0]).toBe("Kedvencek"));
+    expect(screen.getByRole("button", { name: "Kedvencekbe" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await pressStar();
+
+    await waitFor(() =>
+      expect(favoritesApiMock.remove).toHaveBeenCalledWith(
+        "owner-token",
+        "/akvariumok",
+      ),
+    );
+    expect(headings()).not.toContain("Kedvencek");
+  });
+
+  it("puts back what the server holds when the save fails, and says so", async () => {
+    favoritesApiMock.add.mockRejectedValue(new Error("down"));
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    await pressStar();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nem sikerült menteni.",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Kedvencekbe" }),
+      ).toHaveAttribute("aria-pressed", "false"),
+    );
+    expect(headings()).not.toContain("Kedvencek");
+  });
+
+  it("keeps a favourite out of the menu when the user may not see that page", async () => {
+    // the service role does not see the QR-kód nyomtatás (settings.manage)
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "SERVICE" },
+    };
+    favoritesApiMock.list.mockResolvedValue({
+      items: ["/beallitasok/matricak"],
+    });
+    render(<AppShell>Oldaltartalom</AppShell>);
+    await waitFor(() => expect(favoritesApiMock.list).toHaveBeenCalled());
+    expect(headings()).not.toContain("Kedvencek");
   });
 });

@@ -41,6 +41,7 @@ export type IconName =
   | "service"
   | "settings"
   | "shield"
+  | "star"
   | "store"
   | "truck"
   | "users"
@@ -137,6 +138,9 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
           <path d="M3 7h18v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7ZM3 11h18" />
           <path d="M8 15c2-2 4-2 6 0-2 2-4 2-6 0Zm6 0 2-2v4l-2-2Z" />
         </>
+      )}
+      {name === "star" && (
+        <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9L12 3.5Z" />
       )}
       {name === "droplet" && (
         <path d="M12 3c3.5 4 6 7.4 6 10.5a6 6 0 1 1-12 0C6 10.4 8.5 7 12 3Z" />
