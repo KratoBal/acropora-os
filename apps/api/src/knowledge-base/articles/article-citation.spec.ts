@@ -12,6 +12,7 @@ import {
   type ArticleCitationStore,
 } from "./article-citation.controller.js";
 import {
+  approvalBlockMessage,
   articleText,
   parseAnswerInput,
   parseCitationInput,
@@ -107,6 +108,35 @@ describe("parseAnswerInput", () => {
       parseAnswerInput({ codes: ["not a code"], reason: "ok" }).ok,
       false,
     );
+  });
+});
+
+describe("approvalBlockMessage", () => {
+  const counts = {
+    sentences: 3,
+    uncited: 1,
+    invalid: 0,
+    unansweredWarnings: 2,
+    orphaned: 0,
+  };
+
+  it("names each count that blocks", () => {
+    assert.match(
+      approvalBlockMessage({ counts, blockers: [] }),
+      /\(1 hivatkozás nélküli mondat, 2 megválaszolatlan figyelmeztetés\)/,
+    );
+  });
+
+  it("names a blocker it does not know, never an empty list", () => {
+    const message = approvalBlockMessage({
+      counts: { ...counts, uncited: 0, unansweredWarnings: 0 },
+      blockers: ["VOCABULARY_SOMETHING_NEW"],
+    });
+    assert.match(
+      message,
+      /\(a szótár-ellenőrzés nem futhat \(VOCABULARY_SOMETHING_NEW\)\)/,
+    );
+    assert.doesNotMatch(message, /\(\)/);
   });
 });
 

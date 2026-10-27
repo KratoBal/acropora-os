@@ -405,6 +405,83 @@ describe(
       );
     });
 
+    it("KB-CIT-KNOWLEDGE: the first citation makes a knowledge article for good; with every citation removed it is still gated and still not published", async () => {
+      const id = await article("DRAFTING", "<p>Szakmai mondat.</p>");
+      const before = await prisma.articleBody.findUniqueOrThrow({
+        where: { contentId: id },
+        select: { knowledgeSince: true },
+      });
+      assert.equal(before.knowledgeSince, null);
+      const added = await citations.add(
+        id,
+        { sentence: "Szakmai mondat.", kind: "NOT_TECHNICAL", reason: "teszt" },
+        userId,
+      );
+      const marked = await prisma.articleBody.findUniqueOrThrow({
+        where: { contentId: id },
+        select: { knowledgeSince: true },
+      });
+      assert.ok(marked.knowledgeSince);
+      await citations.remove(id, added.targets[0]!.id, userId);
+      const still = await prisma.articleBody.findUniqueOrThrow({
+        where: { contentId: id },
+        select: { knowledgeSince: true },
+      });
+      assert.deepEqual(still.knowledgeSince, marked.knowledgeSince);
+      assert.equal(
+        await prisma.articleCitation.count({ where: { contentId: id } }),
+        0,
+      );
+
+      // no citation left: the gate reads every sentence as uncited
+      await prisma.contentItem.update({
+        where: { id },
+        data: { state: "AWAITING_APPROVAL" },
+      });
+      await assert.rejects(
+        content.moveState({
+          id,
+          from: "AWAITING_APPROVAL" as never,
+          to: "READY_TO_SEND" as never,
+          actorUserId: userId,
+        }),
+        (error: unknown) =>
+          error instanceof ArticleStepError &&
+          /2 hivatkozás nélküli mondat/.test(error.message),
+      );
+
+      // and an approved revision put there by hand is still not published
+      const revision = await prisma.articleRevision.create({
+        data: {
+          contentId: id,
+          title: "Mennyi foszfát ideális?",
+          excerpt: "",
+          bodyHtml: "<p>Szakmai mondat.</p>",
+          noindex: false,
+          contentHash: "x",
+          approvedById: userId,
+        },
+      });
+      await prisma.articleBody.update({
+        where: { contentId: id },
+        data: { approvedRevisionId: revision.id },
+      });
+      await prisma.contentItem.update({
+        where: { id },
+        data: { state: "READY_TO_SEND" },
+      });
+      await assert.rejects(
+        content.moveState({
+          id,
+          from: "READY_TO_SEND" as never,
+          to: "SENT" as never,
+          actorUserId: userId,
+        }),
+        (error: unknown) =>
+          error instanceof ArticleStepError && /tudáscikk/.test(error.message),
+      );
+    });
+
     it("KB-CIT-PILOT: an article that cites the knowledge base is not published in the pilot", async () => {
       const id = await article("DRAFTING", "<p>Mondat.</p>");
       await citations.add(

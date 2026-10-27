@@ -9,7 +9,10 @@ import type {
   ArticleTaxonOption,
 } from "@acropora/types";
 
-import { ArticleCitationRepository } from "../knowledge-base/articles/article-citation.repository.js";
+import {
+  ArticleCitationRepository,
+  isKnowledgeArticle,
+} from "../knowledge-base/articles/article-citation.repository.js";
 import { VocabularyRepository } from "../knowledge-base/vocabulary/vocabulary.repository.js";
 import { labelOf } from "../knowledge-base/vocabulary/vocabulary-versions.js";
 import type { ArticleSnapshot } from "./article-diff.js";
@@ -154,17 +157,13 @@ export async function applyArticleStep(
       throw new ArticleStepError(
         "A cikknek nincs jóváhagyott változata, ezért nem publikálható.",
       );
-    // THE RESEARCH PILOT PUBLISHES NOTHING (plan v4, 9.2 S5): an article with
-    // any citation row, a not-technical mark included, is under the knowledge
-    // base's check, and its first public release is Balázs's own decision
-    // after the copyright check (13., 6.).
-    if (
-      (await tx.articleCitation.count({
-        where: { contentId: input.contentId },
-      })) > 0
-    )
+    // THE RESEARCH PILOT PUBLISHES NOTHING (plan v4, 9.2 S5): a knowledge
+    // article (marked by its first citation, a not-technical mark included,
+    // and never unmarked) is under the knowledge base's check, and its first
+    // public release is Balázs's own decision after the copyright check (13., 6.).
+    if (await isKnowledgeArticle(tx, input.contentId))
       throw new ArticleStepError(
-        "Ez a cikk a kutatási tudástár hivatkozás-ellenőrzése alatt áll (hivatkozás vagy nem szakmai jelölés van rajta), ezért a pilotban nem publikálható: az első közzététel Balázs külön döntése, a szerzői jogi ellenőrzés után.",
+        "Ez a cikk tudáscikk (a kutatási tudástárra hivatkozik, vagy hivatkozott), ezért a pilotban nem publikálható: az első közzététel Balázs külön döntése, a szerzői jogi ellenőrzés után.",
       );
     await tx.articleBody.update({
       where: { contentId: input.contentId },
