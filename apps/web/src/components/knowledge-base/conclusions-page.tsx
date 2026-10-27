@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  ConfirmDialog,
   PilotBadge,
   PilotButton,
   PilotCard,
@@ -71,6 +72,7 @@ export function ConclusionsPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pick, setPick] = useState("");
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -440,17 +442,7 @@ export function ConclusionsPage() {
                     variant="secondary"
                     size="action"
                     disabled={busy || !withdrawReason.trim()}
-                    onClick={() =>
-                      write(
-                        () =>
-                          knowledgeBaseApi.withdrawConclusion(
-                            token,
-                            current.id,
-                            withdrawReason.trim(),
-                          ),
-                        () => setWithdrawReason(""),
-                      )
-                    }
+                    onClick={() => setConfirmWithdraw(true)}
                   >
                     Visszavonás
                   </PilotButton>
@@ -465,6 +457,34 @@ export function ConclusionsPage() {
           )}
         </PilotCard>
       </div>
+      <ConfirmDialog
+        open={confirmWithdraw && current !== null}
+        title="Visszavonod ezt a következtetést?"
+        consequence={
+          current && current.citationCount > 0
+            ? `${current.citationCount} cikk-mondat hivatkozik rá: a visszavonás után mindegyik hibás hivatkozás lesz, és a cikk nem hagyható jóvá, amíg át nem írják.`
+            : "Egyetlen cikk-mondat sem hivatkozik rá; a következtetés a listában visszavonva marad, az okkal együtt."
+        }
+        recovery="A visszavont következtetés nem állítható vissza: a javítás egy új következtetés, ugyanazokra az állításokra."
+        confirmLabel="Visszavonás"
+        busy={busy}
+        onConfirm={() => {
+          if (!current) return;
+          write(
+            () =>
+              knowledgeBaseApi.withdrawConclusion(
+                token,
+                current.id,
+                withdrawReason.trim(),
+              ),
+            () => {
+              setWithdrawReason("");
+              setConfirmWithdraw(false);
+            },
+          );
+        }}
+        onCancel={() => setConfirmWithdraw(false)}
+      />
       <KnowledgeLayerLegend />
     </PilotThemeRoot>
   );
