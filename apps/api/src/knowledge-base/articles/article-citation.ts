@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { normaliseSentence, type CitationKind } from "@acropora/knowledge-base";
+import {
+  normaliseSentence,
+  type CitationKind,
+  type CitationReport,
+} from "@acropora/knowledge-base";
 import { richHtmlToText } from "@acropora/rich-text";
 
 import type { Parsed } from "../sources/source-screening.js";
@@ -122,4 +126,31 @@ export function articleText(article: {
 /** The key a stored sentence is matched by. */
 export function sentenceHash(sentence: string): string {
   return createHash("sha256").update(normaliseSentence(sentence)).digest("hex");
+}
+
+/**
+ * Why a knowledge article's report blocks its approval, in the editor's
+ * words. Every blocker is named: one the message does not know reads as "the
+ * vocabulary check cannot run", never as an empty list (barracuda on #1925).
+ */
+export function approvalBlockMessage(
+  report: Pick<CitationReport, "counts" | "blockers">,
+): string {
+  const { counts } = report;
+  const other = report.blockers.filter((b) => b !== "VOCABULARY_NOT_APPROVED");
+  const parts = [
+    counts.uncited ? `${counts.uncited} hivatkozás nélküli mondat` : null,
+    counts.invalid ? `${counts.invalid} hibás hivatkozás` : null,
+    counts.unansweredWarnings
+      ? `${counts.unansweredWarnings} megválaszolatlan figyelmeztetés`
+      : null,
+    report.blockers.includes("VOCABULARY_NOT_APPROVED")
+      ? "a szótár nincs jóváhagyva"
+      : null,
+    other.length
+      ? `a szótár-ellenőrzés nem futhat (${other.join(", ")})`
+      : null,
+    counts.sentences === 0 ? "a cikknek nincs mondata" : null,
+  ].filter((p): p is string => p !== null);
+  return `A cikk hivatkozás-ellenőrzése nem tiszta (${parts.join(", ")}), ezért nem hagyható jóvá. A Hivatkozások panelen rendezd, és küldd újra jóváhagyásra.`;
 }

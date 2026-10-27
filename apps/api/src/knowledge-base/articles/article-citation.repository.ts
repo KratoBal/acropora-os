@@ -12,6 +12,7 @@ import { ARTICLE_EDITABLE_STATES } from "../../content/article-states.js";
 import { citedClaims } from "../claims/claim-store.repository.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
+  approvalBlockMessage,
   articleText,
   sentenceHash,
   type AnswerInput,
@@ -118,6 +119,23 @@ async function citedConclusions(
 }
 
 /**
+ * WHETHER AN ARTICLE IS A KNOWLEDGE ARTICLE: marked once (`knowledgeSince`,
+ * set by its first citation and never cleared), or carrying a citation row
+ * (an article cited before the mark existed). The approval gate and the
+ * pilot's publishing refusal both read this, never the citation count alone.
+ */
+export async function isKnowledgeArticle(
+  tx: Tx | typeof prisma,
+  contentId: string,
+): Promise<boolean> {
+  const body = await tx.articleBody.findUnique({
+    where: { contentId },
+    select: { knowledgeSince: true, _count: { select: { citations: true } } },
+  });
+  return Boolean(body && (body.knowledgeSince || body._count.citations > 0));
+}
+
+/**
  * AN ARTICLE'S CITATIONS (S5): the report over the current text, and the
  * writes. Citations change only while the body may (`ARTICLE_EDITABLE_STATES`):
  * what the approver saw checked is what stays checked. Every write leaves an
@@ -189,23 +207,9 @@ export class ArticleCitationRepository {
    * Runs in the approval's own transaction (`applyArticleStep`).
    */
   async approvalBlock(tx: Tx, contentId: string): Promise<string | null> {
-    if ((await tx.articleCitation.count({ where: { contentId } })) === 0)
-      return null;
+    if (!(await isKnowledgeArticle(tx, contentId))) return null;
     const { report } = await this.build(tx, contentId);
-    if (report.clean) return null;
-    const { counts } = report;
-    const parts = [
-      counts.uncited ? `${counts.uncited} hivatkozás nélküli mondat` : null,
-      counts.invalid ? `${counts.invalid} hibás hivatkozás` : null,
-      counts.unansweredWarnings
-        ? `${counts.unansweredWarnings} megválaszolatlan figyelmeztetés`
-        : null,
-      report.blockers.includes("VOCABULARY_NOT_APPROVED")
-        ? "a szótár nincs jóváhagyva"
-        : null,
-      counts.sentences === 0 ? "a cikknek nincs mondata" : null,
-    ].filter((p): p is string => p !== null);
-    return `A cikk hivatkozás-ellenőrzése nem tiszta (${parts.join(", ")}), ezért nem hagyható jóvá. A Hivatkozások panelen rendezd, és küldd újra jóváhagyásra.`;
+    return report.clean ? null : approvalBlockMessage(report);
   }
 
   async report(contentId: string): Promise<ArticleCitationReport> {
@@ -276,6 +280,11 @@ export class ArticleCitationRepository {
           },
           select: { id: true },
         }));
+        // the first citation makes it a knowledge article, for good
+        await tx.articleBody.updateMany({
+          where: { contentId, knowledgeSince: null },
+          data: { knowledgeSince: new Date() },
+        });
       } catch (error) {
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&

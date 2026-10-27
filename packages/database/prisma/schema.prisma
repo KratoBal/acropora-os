@@ -8008,6 +8008,11 @@ model ArticleBody {
   publishedRevision   ArticleRevision?  @relation("ArticlePublished", fields: [publishedRevisionId], references: [id], onDelete: SetNull)
   /// Az első publikálás ideje (a cikk dátuma).
   publishedAt         DateTime?
+  /// TUDÁSCIKK ÓTA (S5, acrobot 37001, 37006): az első hivatkozás állítja be, és
+  /// semmilyen kódút nem veszi vissza. A jóváhagyási kapu és a pilot SENT-tiltása
+  /// erre szól, nem a hivatkozás-sorok létezésére: aki minden hivatkozást kivesz
+  /// egy tudáscikkből, az hivatkozás nélküli mondatokat kap, nem kiutat.
+  knowledgeSince      DateTime?
   updatedById         String?
   revisions           ArticleRevision[] @relation("ArticleRevisions")
   products            ArticleProduct[]
