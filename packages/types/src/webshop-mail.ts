@@ -106,6 +106,13 @@ type WebshopTemplateFacts =
   | {
       readonly template: "order-placed";
       readonly orders: readonly WebshopPlacedOrder[];
+      /**
+       * The version of the legal documents the customer accepted at checkout
+       * (commerce `aszf_elfogadas.verzio`), P0 #2: the legal part of the
+       * confirmation is that version's (`webshop-legal.ts`). Missing or null:
+       * no legal part, as before.
+       */
+      readonly legal_version?: string | null;
     }
   | {
       readonly template: (typeof WEBSHOP_STATUS_TEMPLATES)[number];
@@ -646,6 +653,7 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
     ...SAMPLE_COMMON,
     template: "order-placed",
     orders: [{ ...SAMPLE_ORDER, pickup: false }],
+    legal_version: "unas-shop-2026-09-29",
   },
   "order-status-confirmed": {
     ...SAMPLE_COMMON,
@@ -889,7 +897,11 @@ function parseTemplateFacts(
       });
       if (!orders.length)
         throw new FactsError("facts.orders: legalább egy rendelés kell");
-      return { template, orders };
+      return {
+        template,
+        orders,
+        legal_version: strOrNull(f.legal_version, "facts.legal_version"),
+      };
     }
     case "order-status-confirmed":
     case "order-status-out_for_delivery":

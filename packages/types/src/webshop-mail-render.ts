@@ -23,6 +23,7 @@ import {
   mailTemplateEventVariables,
   renderMailTemplate,
 } from "./mail-template.js";
+import { webshopLegalPart } from "./webshop-legal.js";
 import {
   SHOP_NAME,
   WEBSHOP_MAIL_KEYS,
@@ -107,10 +108,24 @@ export function renderWebshopMail(
         : `A(z) ${key} sablonban ismeretlen változó áll: ${names(body.unknown)}.`,
     };
 
+  /*
+    THE LEGAL PART IS THE RENDERER'S, NOT THE TEMPLATE'S (P0 #2): a template an
+    editor has changed must not be able to drop the terms, the withdrawal
+    information or the company's data. It follows the template's body, in the
+    version the customer accepted; an unknown version holds the mail.
+  */
+  const legal =
+    facts.template === "order-placed"
+      ? webshopLegalPart(facts.legal_version)
+      : null;
+  if (legal && !legal.ok) return { ok: false, reason: legal.reason };
+
   return {
     ok: true,
     subject: subject.text.replace(/[\r\n]+/g, " ").trim(),
-    html: webshopMailDocument(steps.forEmail(body.html)),
-    text: `${body.text}\n\n${SHOP_NAME}`,
+    html: webshopMailDocument(
+      steps.forEmail(body.html) + (legal ? legal.html : ""),
+    ),
+    text: `${body.text}${legal ? `\n\n${legal.text}` : ""}\n\n${SHOP_NAME}`,
   };
 }

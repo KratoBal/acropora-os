@@ -107,4 +107,29 @@ describe("WebshopMailController.render", () => {
           "A(z) WEBSHOP_ORDER_CLOSED sablonban ismeretlen változó áll: {{nincs_ilyen}}.",
     );
   });
+
+  /*
+    P0 #2: a legal version the OS does not know holds the mail with a 422 (the
+    shop raises it, does not retry), and the known one renders with the legal
+    part. MI PIROSIT: ha az ismeretlen verzioju level kimenne; ha az ismert
+    verzio nem jutna el a rendereleshez.
+  */
+  it("422: an order confirmation naming a legal version the OS does not know", async () => {
+    const asked = request("order-placed");
+    asked.facts.legal_version = "regi-bolt-2020";
+    await assert.rejects(
+      controller(null).render(asked),
+      (e: unknown) =>
+        e instanceof UnprocessableEntityException &&
+        /regi-bolt-2020/.test(e.message),
+    );
+  });
+
+  it("the order confirmation with a known legal version carries the legal part", async () => {
+    const asked = request("order-placed");
+    asked.facts.legal_version = "unas-shop-2026-09-29";
+    const mail = await controller(null).render(asked);
+    assert.match(mail.html, /Jogi tájékoztatók/);
+    assert.match(mail.text, /AZ ELADÓ ADATAI/);
+  });
 });
