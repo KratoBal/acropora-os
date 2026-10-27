@@ -26,6 +26,7 @@ import {
   documentContent,
   invoiceFiles,
   isPaymentReminder,
+  keepsUnreadFile,
   placeDocument,
   supplierIdByTaxKey,
 } from "./expected-arrival.intake.js";
@@ -39,6 +40,7 @@ import {
   supplierInvoiceMailIntervalMinutes,
   supplierInvoiceMailQuery,
   supplierInvoiceMailSenders,
+  SHARED_INVOICE_PLATFORM_SENDERS,
   XML_INVOICE_SENDERS,
   supplierInvoiceMailSwitch,
 } from "./supplier-invoice-mail.config.js";
@@ -48,6 +50,8 @@ export const SUPPLIER_INVOICE_MAIL_ENV = Symbol("SUPPLIER_INVOICE_MAIL_ENV");
 
 const ACTIVE_KEY = "SUPPLIER_INVOICE_MAIL_SYNC";
 const STALE_RUN_AFTER_MS = 30 * 60_000;
+/** A PDF from a shared invoicing platform that no adapter recognises: not kept. */
+const SHARED_SENDER_UNKNOWN_PDF = "SHARED_SENDER_UNKNOWN_PDF";
 
 /** Where a PDF went, or the code it failed with. */
 type IngestOutcome =
@@ -75,8 +79,12 @@ type Counts = {
  *      (P-026) on every line and keeps the answers, so the editor opens with
  *      them.
  * A PDF that cannot be read is kept as FAILED with its code: nothing is
- * guessed. A mail that could not be fetched is not recorded, so the next run
- * tries it again. Nothing here books anything: booking stays a person's act.
+ * guessed. The one exception is a shared invoicing platform's PDF that no
+ * adapter recognises (`keepsUnreadFile`): another issuer's invoice, so
+ * neither it nor its bytes is kept; the mail is, with the reason, so it is
+ * not fetched again. A mail that could not be fetched is not recorded, so
+ * the next run tries it again. Nothing here books anything: booking stays a
+ * person's act.
  */
 @Injectable()
 export class ExpectedArrivalIntakeService {
@@ -93,8 +101,13 @@ export class ExpectedArrivalIntakeService {
 
   senders(): string[] {
     return supplierInvoiceMailSenders(
-      // the PDF adapters name theirs; an XML e-invoice sender has no adapter
-      [...adapterSenders(this.reader.adapters), ...XML_INVOICE_SENDERS],
+      // the PDF adapters name theirs; an XML e-invoice sender has no adapter;
+      // a shared platform's address names no supplier
+      [
+        ...adapterSenders(this.reader.adapters),
+        ...XML_INVOICE_SENDERS,
+        ...SHARED_INVOICE_PLATFORM_SENDERS,
+      ],
       this.environment,
     );
   }
@@ -160,6 +173,8 @@ export class ExpectedArrivalIntakeService {
       failedCount: 0,
       reminderCount: 0,
     };
+    // not a failure, and not kept: only logged, and the mail's reason says it
+    let notKept = 0;
     try {
       const ids = await this.mail.listMessageIds(query);
       counts.messagesSeen = ids.length;
@@ -196,6 +211,7 @@ export class ExpectedArrivalIntakeService {
           : files.length
             ? null
             : "NO_PDF";
+        let notKeptHere = 0;
         for (const file of files) {
           const outcome = await this.ingest(message, file);
           // a late correction is read and shown; an older version is not new
@@ -203,6 +219,7 @@ export class ExpectedArrivalIntakeService {
             counts.documentsRead++;
           else if (outcome === "DUPLICATE" || outcome === "SUPERSEDED")
             counts.duplicateCount++;
+          else if (outcome === SHARED_SENDER_UNKNOWN_PDF) notKeptHere++;
           else {
             counts.failedCount++;
             errorCode = outcome;
@@ -214,11 +231,17 @@ export class ExpectedArrivalIntakeService {
             sender: message.sender,
             receivedAt: message.receivedAt,
             subject: message.subject,
-            documentCount: files.length,
-            errorCode,
+            documentCount: files.length - notKeptHere,
+            errorCode:
+              errorCode ?? (notKeptHere ? SHARED_SENDER_UNKNOWN_PDF : null),
           },
         });
+        notKept += notKeptHere;
       }
+      if (notKept)
+        this.logger.log(
+          `${notKept} PDF(s) from a shared invoicing platform matched no adapter; not kept`,
+        );
       return summary(
         await prisma.supplierInvoiceMailSyncRun.update({
           where: { id: runId },
@@ -250,7 +273,8 @@ export class ExpectedArrivalIntakeService {
 
   /**
    * One PDF of one mail. Returns where it went (READ, DUPLICATE, SUPERSEDED,
-   * LATE_CORRECTION), or the code it failed with.
+   * LATE_CORRECTION), the code it failed with, or SHARED_SENDER_UNKNOWN_PDF
+   * when it is not kept (`keepsUnreadFile`).
    * Exported for the test through the class; the database calls are Prisma's.
    */
   async ingest(
@@ -292,6 +316,14 @@ export class ExpectedArrivalIntakeService {
       });
     } catch (error) {
       if (!(error instanceof SupplierInvoiceImportError)) throw error;
+      if (
+        !keepsUnreadFile(
+          message.sender,
+          error.code,
+          SHARED_INVOICE_PLATFORM_SENDERS,
+        )
+      )
+        return SHARED_SENDER_UNKNOWN_PDF;
       await prisma.incomingSupplierDocument.create({
         data: { ...base, status: "FAILED", errorCode: error.code },
       });

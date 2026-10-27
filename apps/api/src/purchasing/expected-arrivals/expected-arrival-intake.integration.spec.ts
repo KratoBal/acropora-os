@@ -337,11 +337,15 @@ describe(
       assert.equal(recorded, 4);
 
       const status = await intake.status();
-      // the adapter's sender, and the XML e-invoice sender that has no
-      // adapter to name it (XML_INVOICE_SENDERS, CoralSands)
+      // the adapter's sender, the XML e-invoice sender that has no adapter
+      // to name it (XML_INVOICE_SENDERS, CoralSands), and the shared
+      // invoicing platform (SHARED_INVOICE_PLATFORM_SENDERS, Exact Online)
       assert.deepEqual(
         [status.canRunNow, status.senders],
-        [true, ["contact@aquarioom.com", "info@coralsands.de"]],
+        [
+          true,
+          ["contact@aquarioom.com", "info@coralsands.de", "no-reply@exact.com"],
+        ],
       );
       assert.equal(status.lastScheduledRun?.trigger, "SCHEDULED");
     });
@@ -507,6 +511,60 @@ describe(
         documents.map((d) => [d.fileName, d.status]),
         [["X-Rechnung RE66912.xml", "READ"]],
       );
+    });
+
+    /*
+      EXACT ONLINE (2026-10-27): De Jong sends from no-reply@exact.com, the
+      address every Exact user's invoices come from. The invoice is read by
+      its content; a PDF no adapter recognises is another issuer's.
+      MI PIROSIT: a document (or its bytes) kept for the unknown PDF, the
+      unknown PDF counted as a failure, its mail fetched again on the next
+      run, or the De Jong invoice not read because of the sender.
+    */
+    it("from Exact Online: the invoice an adapter reads is READ; another issuer's PDF is not kept, and not fetched again", async () => {
+      readings.set(
+        `exact-dejong ${suffix}`,
+        doc({ documentKind: "INVOICE", invoiceNumber: "26009990" }),
+      );
+      const exact = (n: number, tag: string): SupplierInvoiceMail => ({
+        ...mail(n, tag),
+        sender: "no-reply@exact.com",
+      });
+      messages.set(id(10), exact(10, "exact-dejong"));
+      // the "unknown" bytes: the reader throws PDF_LAYOUT_UNKNOWN for them
+      messages.set(id(11), exact(11, "unknown"));
+
+      const run = await intake.sync("MANUAL");
+      // the one failure is still the unreachable mail (id 5)
+      assert.deepEqual(
+        [run.documentsRead, run.duplicateCount, run.failedCount],
+        [1, 0, 1],
+      );
+      const documents = await prisma.incomingSupplierDocument.findMany({
+        where: { gmailMessageId: { in: [id(10), id(11)] } },
+        select: { gmailMessageId: true, status: true },
+      });
+      assert.deepEqual(
+        documents.map((d) => [d.gmailMessageId, d.status]),
+        [[id(10), "READ"]],
+      );
+      const messageRows = await prisma.supplierInvoiceMailMessage.findMany({
+        where: { gmailMessageId: { in: [id(10), id(11)] } },
+        select: { gmailMessageId: true, errorCode: true, documentCount: true },
+        orderBy: { gmailMessageId: "asc" },
+      });
+      assert.deepEqual(messageRows, [
+        { gmailMessageId: id(10), errorCode: null, documentCount: 1 },
+        {
+          gmailMessageId: id(11),
+          errorCode: "SHARED_SENDER_UNKNOWN_PDF",
+          documentCount: 0,
+        },
+      ]);
+
+      fetched.length = 0;
+      await intake.sync("MANUAL");
+      assert.deepEqual(fetched, [id(5)]);
     });
   },
 );
