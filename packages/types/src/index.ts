@@ -1605,6 +1605,7 @@ export type {
 } from "./homepage-content.js";
 export {
   ARTICLE_CHANNELS,
+  ARTICLE_DIFF_FIELDS,
   ARTICLE_LIMITS,
   ARTICLE_SLUG,
   ARTICLE_TAXON_KEY,
@@ -1615,7 +1616,12 @@ export type {
   ArticleBodyParse,
   ArticleChannel,
   ArticleDetail,
+  ArticleDiffBlock,
+  ArticleDiffField,
+  ArticleDiffSegment,
+  ArticleDiffSide,
   ArticleEditorData,
+  ArticleRevisionDiff,
   ArticleRevisionSummary,
   ArticleTaxonOption,
 } from "./article.js";

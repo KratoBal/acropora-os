@@ -59,6 +59,55 @@ export interface ArticleRevisionSummary {
   contentHash: string;
 }
 
+/** One side of a comparison: an approved revision, or the body being edited. */
+export type ArticleDiffSide =
+  | { kind: "revision"; id: string; approvedAt: string }
+  | { kind: "current"; updatedAt: string };
+
+/** A run of words inside a changed paragraph. */
+export interface ArticleDiffSegment {
+  kind: "same" | "added" | "removed";
+  text: string;
+}
+
+/**
+ * One paragraph (block of the plain text) in the comparison. A removed block
+ * followed by an added one is shown as one CHANGED block, with the words that
+ * differ marked.
+ */
+export type ArticleDiffBlock =
+  | { kind: "same" | "added" | "removed"; text: string }
+  | { kind: "changed"; segments: ArticleDiffSegment[] };
+
+/** The public fields beside the body that a comparison names when they differ. */
+export const ARTICLE_DIFF_FIELDS = [
+  "title",
+  "excerpt",
+  "byline",
+  "seoTitle",
+  "metaDescription",
+  "coverImageUrl",
+  "coverImageAlt",
+  "ogImageUrl",
+  "channels",
+  "noindex",
+] as const;
+export type ArticleDiffField = (typeof ARTICLE_DIFF_FIELDS)[number];
+
+/**
+ * TWO VERSIONS OF AN ARTICLE SIDE BY SIDE (research plan v4, 9.2 S5: "két
+ * egymás utáni változat különbsége megjeleníthető"): the fields that differ,
+ * and the body paragraph by paragraph.
+ */
+export interface ArticleRevisionDiff {
+  from: ArticleDiffSide;
+  to: ArticleDiffSide;
+  fields: { field: ArticleDiffField; before: string; after: string }[];
+  body: ArticleDiffBlock[];
+  /** Whether the two sides hold the same text and fields. */
+  identical: boolean;
+}
+
 export interface ArticleDetail extends Omit<ArticleBodyInput, "productIds"> {
   contentId: string;
   products: { productId: string; name: string; sortOrder: number }[];

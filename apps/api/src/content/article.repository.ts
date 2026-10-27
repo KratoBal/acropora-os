@@ -4,12 +4,14 @@ import { prisma, type Prisma } from "@acropora/database";
 import type {
   ArticleBodyInput,
   ArticleDetail,
+  ArticleDiffSide,
   ArticleRevisionSummary,
   ArticleTaxonOption,
 } from "@acropora/types";
 
 import { VocabularyRepository } from "../knowledge-base/vocabulary/vocabulary.repository.js";
 import { labelOf } from "../knowledge-base/vocabulary/vocabulary-versions.js";
+import type { ArticleSnapshot } from "./article-diff.js";
 import type { ContentState } from "./content-state.js";
 
 /**
@@ -233,6 +235,43 @@ export class ArticleRepository {
   async countProducts(ids: readonly string[]): Promise<number> {
     if (!ids.length) return 0;
     return prisma.product.count({ where: { id: { in: [...ids] } } });
+  }
+
+  /**
+   * One side of a comparison: an approved revision of THIS article, or the
+   * body being edited ("current"). `null` when there is no such side: no
+   * body, or a revision of another article.
+   */
+  async snapshot(
+    contentId: string,
+    ref: string,
+  ): Promise<{ side: ArticleDiffSide; snapshot: ArticleSnapshot } | null> {
+    if (ref === "current") {
+      const item = await prisma.contentItem.findUnique({
+        where: { id: contentId },
+        select: { title: true, article: true },
+      });
+      if (!item?.article) return null;
+      return {
+        side: {
+          kind: "current",
+          updatedAt: item.article.updatedAt.toISOString(),
+        },
+        snapshot: { title: item.title, ...item.article },
+      };
+    }
+    const revision = await prisma.articleRevision.findFirst({
+      where: { id: ref, contentId },
+    });
+    if (!revision) return null;
+    return {
+      side: {
+        kind: "revision",
+        id: revision.id,
+        approvedAt: revision.approvedAt.toISOString(),
+      },
+      snapshot: revision,
+    };
   }
 
   /** Whether this item is an article whose body may change now. */
