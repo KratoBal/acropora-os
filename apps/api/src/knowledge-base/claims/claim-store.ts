@@ -1,7 +1,9 @@
 import {
+  CLAIM_LAYERS,
   computeAgreement,
   deriveEvidenceLevel,
   type Applicability,
+  type ClaimLayer,
   type ClaimScope,
   type Direction,
   type Environment,
@@ -23,13 +25,8 @@ import { labelOf } from "../vocabulary/vocabulary-versions.js";
  * editor verified. The evidence level is derived too (`deriveEvidenceLevel`),
  * never stored. Pure: no database, no clock.
  */
-export const CLAIM_LAYERS = [
-  "SCIENTIFIC",
-  "HOBBY_EXPERIENCE",
-  "MANUFACTURER",
-  "OWN_CONCLUSION",
-] as const;
-export type ClaimLayer = (typeof CLAIM_LAYERS)[number];
+// The layers live with the answer gate, which needs a phrase for each.
+export { CLAIM_LAYERS, type ClaimLayer };
 
 export class ClaimStoreInputError extends Error {
   constructor(
