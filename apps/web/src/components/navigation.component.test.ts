@@ -155,12 +155,13 @@ describe("navigation", () => {
   /*
     A KILENC FŐMENÜ (Balázs, 2026-10-26 16:48 UTC, "mehet", msg
     1564319716133314735; feladat os-menu-kilenc-fomenu): a csoportok, a tagjaik
-    és a sorrend pontosan az ő listája. Egy sor egy csoport: a csoport neve, utána
+    és a sorrend pontosan az ő listája; a Beállítások KIVÉTEL, mindig utolsó
+    (Balázs, 2026-10-28 19:44 UTC, feladat os-menu-beallitasok-utolso). Egy sor egy csoport: a csoport neve, utána
     a tételek feliratai sorrendben. MI PIROSÍT: bármelyik tétel más csoportba
     kerül, kimarad, vagy a sorrendje elmozdul. A jogosultság más állításokban áll
     (a halmaz-változatlanság, a szerepenkénti összevetés).
   */
-  it("has the nine main menus in alphabetical order, Áttekintés first, with their pages in the order Balázs listed", () => {
+  it("has the nine main menus in alphabetical order, Áttekintés first and Beállítások last, with their pages in the order Balázs listed", () => {
     expect(
       mainNavigation.map((entry) => [
         entry.label,
@@ -171,20 +172,6 @@ describe("navigation", () => {
       [
         "Akvarisztika",
         ["Akváriumok", "Kalkulátorok", "ICP", "Elhullási napló"],
-      ],
-      [
-        "Beállítások",
-        [
-          "Általános",
-          "Felhasználók",
-          "NAV",
-          "Számlázz.hu kapcsolat",
-          "Mértékegységek",
-          "Eszköz-kategóriák",
-          "Eszköz-funkciók",
-          "Ajánlat szövegrészletek",
-          "Ajánlatsablonok",
-        ],
       ],
       ["Értékesítés", ["POS", "Árajánlatok", "Partnerek", "Szerződések"]],
       [
@@ -228,6 +215,20 @@ describe("navigation", () => {
           "Válogatások",
           "Márkák",
           "Webshop beállítások",
+        ],
+      ],
+      [
+        "Beállítások",
+        [
+          "Általános",
+          "Felhasználók",
+          "NAV",
+          "Számlázz.hu kapcsolat",
+          "Mértékegységek",
+          "Eszköz-kategóriák",
+          "Eszköz-funkciók",
+          "Ajánlat szövegrészletek",
+          "Ajánlatsablonok",
         ],
       ],
     ]);
@@ -277,6 +278,27 @@ describe("navigation", () => {
       ]);
     });
 
+    it("puts Beállítások last wherever it stands, the rest stays in ABC order", () => {
+      for (const input of [
+        ["Beállítások", "Zeta", "Alma", "Áttekintés"],
+        ["Zeta", "Beállítások", "Alma", "Áttekintés"],
+        ["Zeta", "Alma", "Áttekintés", "Beállítások"],
+      ])
+        expect(
+          inMainMenuOrder(input.map((label) => entry(label))).map(
+            (group) => group.label,
+          ),
+        ).toEqual(["Áttekintés", "Alma", "Zeta", "Beállítások"]);
+    });
+
+    it("works without Áttekintés or Beállítások in the list", () => {
+      expect(
+        inMainMenuOrder([entry("Zeta"), entry("Alma")]).map(
+          (group) => group.label,
+        ),
+      ).toEqual(["Alma", "Zeta"]);
+    });
+
     it("does not touch the order of the pages inside a menu", () => {
       const [only] = inMainMenuOrder([
         entry("Szerviz", "munka", "anyag", "hiba"),
@@ -288,9 +310,11 @@ describe("navigation", () => {
       ]);
     });
 
-    it("the real menu is already in that order (Áttekintés pinned)", () => {
-      const rest = mainNavigation.slice(1).map((group) => group.label);
-      expect(mainNavigation[0]?.label).toBe("Áttekintés");
+    it("the real menu is already in that order (Áttekintés pinned, Beállítások last)", () => {
+      const labels = mainNavigation.map((group) => group.label);
+      expect(labels[0]).toBe("Áttekintés");
+      expect(labels.at(-1)).toBe("Beállítások");
+      const rest = labels.slice(1, -1);
       expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b, "hu")));
     });
   });

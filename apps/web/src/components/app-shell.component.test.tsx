@@ -505,19 +505,19 @@ describe("AppShell the nine main menus", () => {
       .getAllByRole("button")
       .map((button) => button.textContent);
 
-  it("draws the nine headings in the listed order", () => {
+  it("draws the nine headings in the listed order, Beállítások last", () => {
     render(<AppShell>Oldaltartalom</AppShell>);
 
     expect(headings()).toEqual([
       "Áttekintés",
       "Akvarisztika",
-      "Beállítások",
       "Értékesítés",
       "Pénzügy",
       "Raktár és beszerzés",
       "Szerviz",
       "Tartalom és tudás",
       "Webshop",
+      "Beállítások",
     ]);
   });
 
