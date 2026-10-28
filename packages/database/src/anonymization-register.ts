@@ -1738,6 +1738,14 @@ export const ANONYMIZATION_REGISTER: Readonly<
     reasoning: "freeText",
     withdrawnReason: "freeText",
   },
+  // T3 gold set (research S7): the frozen claim ids, and the editor's missed claims.
+  KnowledgeGoldSource: {
+    claimIds: "identifier",
+  },
+  KnowledgeGoldMissedClaim: {
+    text: "freeText",
+    locator: "business",
+  },
   KnowledgeResearchDraft: {
     question: "freeText",
     sources: "business",

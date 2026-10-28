@@ -921,6 +921,10 @@ model User {
   approvedConclusions    KnowledgeConclusion[]         @relation("KnowledgeConclusionApprovedBy")
   createdCitations       ArticleCitation[]             @relation("ArticleCitationCreatedBy")
   answeredCitations      ArticleCitation[]             @relation("ArticleCitationAnsweredBy")
+  /// Kutatási tudástár (S7, T3): az arany-készlet rögzítése és a kimaradt állítások.
+  frozenGoldSources      KnowledgeGoldSource[]         @relation("KnowledgeGoldSourceFrozenBy")
+  checkedGoldSources     KnowledgeGoldSource[]         @relation("KnowledgeGoldSourceCheckedBy")
+  missedGoldClaims       KnowledgeGoldMissedClaim[]    @relation("KnowledgeGoldMissedClaimCreatedBy")
   email                  String                        @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
@@ -10863,6 +10867,7 @@ model KnowledgeSource {
 
   versions KnowledgeSourceVersion[]
   anchors  KnowledgeFieldAnchor[]
+  gold     KnowledgeGoldSource?
 
   @@index([kind])
   @@index([discoveryRunId])
@@ -11202,6 +11207,48 @@ model KnowledgeConclusionClaim {
 
   @@id([conclusionId, claimId])
   @@index([claimId])
+}
+
+/// T3 ARANY-KÉSZLET (terv v4, 10. pont, T3): egy forrás, amelynek gépi kiolvasását a
+/// szerkesztő soronként bírálja. A rögzítéskor a forrás gépi állításai is rögzülnek
+/// (`claimIds`), hogy egy későbbi kiolvasás ne cserélje ki a mért sorokat. A pontosságot
+/// a meglévő mezőnkénti döntések adják (`KnowledgeFieldAnchor.decision`); a teljességhez
+/// a szerkesztő itt rögzíti a kimaradt állításokat, és kimondja, hogy a forrás kész.
+model KnowledgeGoldSource {
+  id                      String          @id @default(cuid())
+  sourceId                String          @unique
+  source                  KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  /// A forrás gépi állításai a rögzítés pillanatában (KnowledgeClaim.id).
+  claimIds                String[]
+  /// A készleten belüli sorrend (1-től).
+  position                Int
+  frozenById              String
+  frozenBy                User            @relation("KnowledgeGoldSourceFrozenBy", fields: [frozenById], references: [id], onDelete: Restrict)
+  frozenAt                DateTime        @default(now())
+  /// A szerkesztő kimondta: a forrásban több kimaradt állítás nincs. NULL: még nem.
+  completenessCheckedById String?
+  completenessCheckedBy   User?           @relation("KnowledgeGoldSourceCheckedBy", fields: [completenessCheckedById], references: [id], onDelete: Restrict)
+  completenessCheckedAt   DateTime?
+
+  missed KnowledgeGoldMissedClaim[]
+
+  @@unique([position])
+}
+
+/// Egy állítás, ami a forrásban áll, és a gépi kiolvasás nem hozta (a T3 teljessége).
+model KnowledgeGoldMissedClaim {
+  id           String              @id @default(cuid())
+  goldSourceId String
+  goldSource   KnowledgeGoldSource @relation(fields: [goldSourceId], references: [id], onDelete: Restrict)
+  /// Az állítás a szerkesztő szavaival.
+  text         String              @db.VarChar(500)
+  /// Hol áll a forrásban (oldal, szakasz, táblázat); NULL: nem adta meg.
+  locator      String?             @db.VarChar(128)
+  createdById  String
+  createdBy    User                @relation("KnowledgeGoldMissedClaimCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime            @default(now())
+
+  @@index([goldSourceId])
 }
 
 enum ArticleCitationKind {

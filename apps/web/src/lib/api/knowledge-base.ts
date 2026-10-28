@@ -468,6 +468,109 @@ const overviewPath = "/knowledge-base/overview";
 const vocabularyBase = "/knowledge-base/vocabulary";
 const researchDraftsBase = "/knowledge-base/research-drafts";
 
+/**
+ * T3 ARANY-KÉSZLET (terv v4, 10. pont): a rögzített tíz forrás gépi
+ * állításai soronként, a szerkesztő mezőnkénti döntéseiből számolt ítélettel.
+ * Az API: `apps/api/src/knowledge-base/gold-set`.
+ */
+export type GoldRowVerdict = "PENDING" | "CORRECT" | "WRONG" | "OUT";
+export type GoldOutReason =
+  "REEXTRACTED" | "DISPUTED" | "SUPERSEDED" | "MISSING";
+export type GoldAnchorDecision =
+  "PENDING" | "ACCEPTED" | "CORRECTED" | "REJECTED";
+export type GoldScoreProblem =
+  | "NOT_FROZEN"
+  | "SOURCE_COUNT"
+  | "PENDING_ROWS"
+  | "TOO_FEW_SCORED"
+  | "COMPLETENESS_OPEN"
+  | "GOLD_TOO_SMALL";
+export type GoldScoreFailure = "PRECISION" | "CRITICAL_ERRORS" | "COMPLETENESS";
+
+export interface GoldRow {
+  claimId: string;
+  status: string | null;
+  passage: { text: string; locator: string } | null;
+  fields: {
+    field: string;
+    value: string | null;
+    correctedValue: string | null;
+    decision: GoldAnchorDecision;
+  }[];
+  judgement: {
+    verdict: GoldRowVerdict;
+    errors: string[];
+    critical: boolean;
+    questions: string[];
+    outReason: GoldOutReason | null;
+    found: boolean;
+  };
+}
+
+export interface GoldSource {
+  sourceId: string;
+  position: number;
+  title: string;
+  year: number | null;
+  doi: string | null;
+  rows: GoldRow[];
+  missed: {
+    id: string;
+    text: string;
+    locator: string | null;
+    createdAt: string;
+  }[];
+  completenessCheckedAt: string | null;
+}
+
+export interface GoldScore {
+  rows: {
+    total: number;
+    pending: number;
+    correct: number;
+    wrong: number;
+    out: number;
+  };
+  precision: {
+    scored: number;
+    correct: number;
+    wrong: number;
+    critical: number;
+    maxErrors: number;
+    wilsonLower: number | null;
+  };
+  completeness: {
+    found: number;
+    missed: number;
+    gold: number;
+    minFound: number;
+    wilsonLower: number | null;
+    sourcesChecked: number;
+  };
+  verdict: "NOT_READY" | "PASS" | "FAIL";
+  problems: GoldScoreProblem[];
+  failures: GoldScoreFailure[];
+}
+
+export interface GoldSet {
+  frozen: boolean;
+  frozenAt: string | null;
+  sources: GoldSource[];
+  proposal: {
+    sources: {
+      sourceId: string;
+      title: string;
+      year: number | null;
+      claims: number;
+    }[];
+    claims: number;
+    enough: boolean;
+  } | null;
+  score: GoldScore;
+}
+
+const goldSetBase = "/knowledge-base/gold-set";
+
 export const knowledgeBaseApi = {
   overview(token: string, signal?: AbortSignal) {
     return apiRequest<KnowledgeOverview>(overviewPath, token, { signal });
@@ -667,6 +770,40 @@ export const knowledgeBaseApi = {
       researchDraftsBase,
       token,
       { method: "POST", body: JSON.stringify({ question }) },
+    );
+  },
+  goldSet(token: string, signal?: AbortSignal) {
+    return apiRequest<GoldSet>(goldSetBase, token, { signal });
+  },
+  freezeGoldSet(token: string, sourceIds: string[]) {
+    return apiRequest<GoldSet>(`${goldSetBase}/freeze`, token, {
+      method: "POST",
+      body: JSON.stringify({ sourceIds }),
+    });
+  },
+  addGoldMissed(
+    token: string,
+    sourceId: string,
+    input: { text: string; locator: string | null },
+  ) {
+    return apiRequest<GoldSet>(
+      `${goldSetBase}/sources/${encodeURIComponent(sourceId)}/missed`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  removeGoldMissed(token: string, missedId: string) {
+    return apiRequest<GoldSet>(
+      `${goldSetBase}/missed/${encodeURIComponent(missedId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  setGoldCompleteness(token: string, sourceId: string, checked: boolean) {
+    return apiRequest<GoldSet>(
+      `${goldSetBase}/sources/${encodeURIComponent(sourceId)}/completeness`,
+      token,
+      { method: "POST", body: JSON.stringify({ checked }) },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {
