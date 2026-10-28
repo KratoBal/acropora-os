@@ -81,6 +81,7 @@ const STATE: VocabularyState = {
   draft: {
     version: 2,
     fingerprint: "f".repeat(64),
+    newShadows: [],
     changes: [
       {
         kind: "TAXON",
@@ -221,6 +222,33 @@ describe("Szakmai szótárak", () => {
         "f".repeat(64),
       ),
     );
+  });
+
+  it("a tervezet új átfedését a jóváhagyás előtt kiírja; ha nincs, nem", async () => {
+    api.vocabulary.mockResolvedValue({
+      ...STATE,
+      draft: {
+        ...STATE.draft!,
+        newShadows: [
+          {
+            kind: "EFFECT",
+            key: "GROWTH",
+            form: "korallnövekedés",
+            shadows: { kind: "TAXON", key: "CORAL", form: "korall" },
+          },
+        ],
+      },
+    });
+    render(<VocabularyPage />);
+    const list = await screen.findByRole("list", { name: "Új átfedések" });
+    expect(list.textContent).toContain("„korallnövekedés” (");
+    expect(list.textContent).toContain("Korall");
+  });
+
+  it("átfedés nélkül nincs figyelmeztetés", async () => {
+    render(<VocabularyPage />);
+    await screen.findByText("Taxonómia · fa-nézet");
+    expect(screen.queryByRole("list", { name: "Új átfedések" })).toBeNull();
   });
 
   it("a MANAGER olvas, de nem szerkeszt és nem hagy jóvá", async () => {

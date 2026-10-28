@@ -164,6 +164,17 @@ export interface VocabularyChange {
   fields: string[];
 }
 
+export interface VocabularyShadow {
+  kind: "TAXON" | "ENVIRONMENT" | "EFFECT";
+  key: string;
+  form: string;
+  shadows: {
+    kind: "TAXON" | "ENVIRONMENT" | "EFFECT";
+    key: string;
+    form: string;
+  };
+}
+
 export interface VocabularyState {
   approved: {
     version: number;
@@ -176,6 +187,12 @@ export interface VocabularyState {
     changes: VocabularyChange[];
     /** Sent back on approval: the draft exactly as the approver saw it. */
     fingerprint: string;
+    /**
+     * Cross-kind pairs the draft adds: a longer form of one kind takes a word
+     * from another kind's form, so that kind's check does not fire on it.
+     * null: the draft does not build.
+     */
+    newShadows: VocabularyShadow[] | null;
   } | null;
   entries: VocabularyEntry[];
 }

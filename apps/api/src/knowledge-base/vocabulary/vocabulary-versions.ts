@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import {
   VOCABULARY_V1_ROWS,
   buildVocabulary,
+  crossKindShadows,
   normaliseText,
   splitWords,
+  type KindShadow,
   type Vocabulary,
   type VocabularyKind,
   type VocabularyRow,
@@ -152,6 +154,29 @@ export function draftFingerprint(rows: readonly VocabularyRow[]): string {
           : 0,
     );
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+/**
+ * The cross-kind pairs the draft ADDS (a longer form of one kind taking a word
+ * from another kind's form, `crossKindShadows`): on such a word the shorter
+ * kind's check does not fire, so the approver sees them before approving
+ * (barracuda, #1938 review). null: the draft does not build, so they cannot
+ * be computed; the approval refuses such a draft anyway.
+ */
+export function addedShadows(
+  approved: readonly VocabularyRow[],
+  draft: readonly VocabularyRow[],
+): KindShadow[] | null {
+  const id = (x: KindShadow) =>
+    `${x.kind}/${x.key}/${x.form}>${x.shadows.kind}/${x.shadows.key}/${x.shadows.form}`;
+  let drafted: KindShadow[];
+  try {
+    drafted = crossKindShadows(editorsWorkingCopy(draft));
+  } catch {
+    return null;
+  }
+  const before = new Set(crossKindShadows(buildVocabulary(approved)).map(id));
+  return drafted.filter((x) => !before.has(id(x)));
 }
 
 export interface RowChange {
