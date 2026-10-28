@@ -18,6 +18,10 @@ import {
 import { KnowledgeDiscoveryController } from "./discovery/discovery-run.controller.js";
 import { KnowledgeDiscoveryService } from "./discovery/discovery-run.service.js";
 import { KnowledgeExtractionController } from "./extraction/extraction.controller.js";
+import {
+  GoldSetController,
+  GoldSetService,
+} from "./gold-set/gold-set.controller.js";
 import { KnowledgeExtractionService } from "./extraction/extraction.service.js";
 import {
   ConclusionController,
@@ -57,6 +61,7 @@ import {
     KnowledgeAnswerController,
     ResearchDraftController,
     KnowledgeReferenceController,
+    GoldSetController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -71,6 +76,7 @@ import {
     KnowledgeAnswerService,
     ResearchDraftService,
     KnowledgeReferenceService,
+    GoldSetService,
   ],
 })
 export class KnowledgeBaseModule {}

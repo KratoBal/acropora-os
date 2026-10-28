@@ -125,6 +125,7 @@ export const KNOWLEDGE_VOCABULARY_PATH = "/tudasbazis/szotar";
 export const KNOWLEDGE_STORE_PATH = "/tudasbazis/allitasok";
 export const KNOWLEDGE_CONCLUSIONS_PATH = "/tudasbazis/kovetkeztetesek";
 export const KNOWLEDGE_RESEARCH_PATH = "/tudasbazis/ai-proba";
+export const KNOWLEDGE_GOLD_SET_PATH = "/tudasbazis/arany-keszlet";
 
 /*
   A KILENC FŐMENÜ (Balázs, 2026-10-26 16:48 UTC, "mehet", Acropora OS szál, msg
