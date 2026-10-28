@@ -99,10 +99,27 @@ export function parseQuestion(body: unknown): {
   return { question, subject: subject as Subject };
 }
 
+/**
+ * Why there is no answer (acrobot 37096 and 37098: a stage call sent five
+ * claims, the AI chose none, and nothing in the answer said so):
+ *   NOTHING_TO_SEND  no claim of the package could be stated, the AI was not called;
+ *   AI_REFUSED, AI_UNAVAILABLE  the AI service's guard refused, or it did not answer;
+ *   AI_CHOSE_NONE  the AI answered and named no claim (only fixed sentences, or none);
+ *   DROPPED  it named claims, and none of them passed the OS's check or the gate.
+ */
+export type NotAnswered =
+  | "NOTHING_TO_SEND"
+  | "AI_REFUSED"
+  | "AI_UNAVAILABLE"
+  | "AI_CHOSE_NONE"
+  | "DROPPED";
+
 export interface KnowledgeAnswer {
   /** What the reader gets. */
   answer: string;
   answered: boolean;
+  /** null when answered. */
+  notAnswered: NotAnswered | null;
   /** The gate's verdict per sentence, for the log and the editor's view. */
   sentences: GateSentence[];
   package: {
@@ -113,6 +130,8 @@ export interface KnowledgeAnswer {
     notStated: { id: string; failure: StatementFailure }[];
     /** Stated claims not sent because a CONTRADICTS partner could not be stated. */
     unpaired: string[];
+    /** The claims sent to the AI, in the package's order: what it could choose from. */
+    sent: string[];
   };
   /** Partners added for T6. */
   completed: string[];
@@ -191,12 +210,19 @@ export async function answerQuestion(input: {
       truncated: pkg.truncated,
       notStated,
       unpaired,
+      sent: stated.map((c) => c.id),
     },
     gateVersion: ANSWER_GATE_VERSION,
   };
   const empty = (ai: KnowledgeAnswer["ai"]): KnowledgeAnswer => ({
     answer: ANSWER_NO_KNOWLEDGE_SENTENCE,
     answered: false,
+    notAnswered:
+      ai.kind === "REFUSED"
+        ? "AI_REFUSED"
+        : ai.kind === "UNAVAILABLE"
+          ? "AI_UNAVAILABLE"
+          : "NOTHING_TO_SEND",
     sentences: [],
     completed: [],
     aiDropped: [],
@@ -267,6 +293,11 @@ export async function answerQuestion(input: {
   return {
     answer: gate.text,
     answered: gate.answered,
+    notAnswered: gate.answered
+      ? null
+      : ai.sentences.some((s) => s.claimId !== null)
+        ? "DROPPED"
+        : "AI_CHOSE_NONE",
     sentences: gate.sentences,
     completed,
     aiDropped,
