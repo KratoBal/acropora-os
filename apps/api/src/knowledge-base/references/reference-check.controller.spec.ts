@@ -35,7 +35,7 @@ function service(over: Partial<ReferenceServiceDeps> = {}) {
   const urls: string[] = [];
   const deps: ReferenceServiceDeps = {
     env: { KNOWLEDGE_DISCOVERY: "on" },
-    sources: async () => ({ checkable: [SOURCE], withoutId: 2 }),
+    sources: async () => ({ checkable: [SOURCE], withoutId: ["s8", "s9"] }),
     busy: async () => false,
     fetch: async (url) => {
       urls.push(url);
@@ -60,6 +60,7 @@ describe("the reference check behind a call", () => {
     assert.equal(r.met, true);
     assert.equal(r.resolved, 1);
     assert.equal(r.withoutIdentifier, 2);
+    assert.deepEqual(r.withoutIdentifierIds, ["s8", "s9"]);
     assert.equal(r.requests, 1);
     assert.match(urls[0]!, /api\.crossref\.org\/works\/10\.5555\/kitalalt/);
   });
@@ -76,7 +77,7 @@ describe("the reference check behind a call", () => {
   it("refuses nothing to check, and more than the synchronous cap", async () => {
     await assert.rejects(
       service({
-        sources: async () => ({ checkable: [], withoutId: 0 }),
+        sources: async () => ({ checkable: [], withoutId: [] }),
       }).svc.check(),
       BadRequestException,
     );
@@ -85,7 +86,7 @@ describe("the reference check behind a call", () => {
       id: `s${i}`,
     }));
     const { svc, urls } = service({
-      sources: async () => ({ checkable: many, withoutId: 0 }),
+      sources: async () => ({ checkable: many, withoutId: [] }),
     });
     await assert.rejects(svc.check(), BadRequestException);
     assert.equal(urls.length, 0);

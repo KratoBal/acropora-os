@@ -44,7 +44,7 @@ export const MAX_SYNC_SOURCES = 60;
 
 export interface ReferenceServiceDeps {
   env: NodeJS.ProcessEnv;
-  sources: () => Promise<{ checkable: ReferenceSource[]; withoutId: number }>;
+  sources: () => Promise<{ checkable: ReferenceSource[]; withoutId: string[] }>;
   /** A discovery run or a mode B draft is running: the budget is in use. */
   busy: () => Promise<boolean>;
   fetch: ApiFetch;
@@ -75,7 +75,12 @@ export class KnowledgeReferenceService {
   }
 
   async check(): Promise<
-    ReferenceReport & { withoutIdentifier: number; requests: number }
+    ReferenceReport & {
+      withoutIdentifier: number;
+      /** The INCLUDED sources with neither a DOI nor a PMID: ids only, for the editor. */
+      withoutIdentifierIds: string[];
+      requests: number;
+    }
   > {
     if (this.deps.env[DISCOVERY_SWITCH_ENV] !== "on")
       throw new ForbiddenException(
@@ -113,7 +118,8 @@ export class KnowledgeReferenceService {
     });
     return {
       ...report,
-      withoutIdentifier: withoutId,
+      withoutIdentifier: withoutId.length,
+      withoutIdentifierIds: withoutId,
       requests: client.requestCount,
     };
   }
