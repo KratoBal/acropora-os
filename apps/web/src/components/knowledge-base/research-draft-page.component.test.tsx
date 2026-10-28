@@ -128,6 +128,7 @@ const detail = (
   report: {
     queries: ["phosphate coral calcification"],
     summaryDroppedHere: ["UNMARKED"],
+    summaryMarkersMoved: 2,
     summaryDroppedByAi: [],
   },
   ...over,
@@ -181,6 +182,9 @@ describe("ResearchDraftPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText("1 mondat: nincs állítás-hivatkozás a mondat végén"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 helyen a pont után álló jelölőt/),
     ).toBeInTheDocument();
   });
 

@@ -134,6 +134,8 @@ export interface DraftReport {
   claimsSent: number;
   summaryKept?: number;
   summaryDroppedByAi: string[];
+  /** How many places the AI side's guard moved markers to the sentence before them; absent when it did not say. */
+  summaryMarkersMoved?: number;
   summaryDroppedHere: SummaryDrop[];
 }
 
@@ -547,6 +549,7 @@ export async function runResearchDraft(
   }
   report.summaryKept = s.kept;
   report.summaryDroppedByAi = s.dropped;
+  if (s.markersMoved !== null) report.summaryMarkersMoved = s.markersMoved;
   const own = checkSummary(s.summary, sent);
   report.summaryDroppedHere = own.dropped;
   if (!own.kept) return fail("SUMMARY_EMPTY");

@@ -433,6 +433,8 @@ export interface ResearchDraftReport {
   summaryKept?: number;
   summaryDroppedByAi?: string[];
   summaryDroppedHere?: string[];
+  /** Places where the AI side moved markers written after a period to the sentence before them. */
+  summaryMarkersMoved?: number;
 }
 
 export interface ResearchDraftDetail extends ResearchDraftRow {

@@ -92,6 +92,7 @@ function asker(
           summary: `A meszesedés 18 százalékkal csökkent 2 µmol/l foszfát mellett [[claim:${claims[0]!.id}]].`,
           kept: 1,
           dropped: [],
+          markersMoved: 1,
           writtenBy: "fake research-summary/v1",
         }
       );
@@ -378,6 +379,8 @@ describe("mode B: the chain from a question to a research draft", () => {
     );
     assert.equal(r.status, "DRAFT", JSON.stringify(r.report));
     assert.equal(r.summaryModel, "fake research-summary/v1");
+    // the AI side's count of moved markers reaches the editor's report
+    assert.equal(r.report.summaryMarkersMoved, 1);
     assert.match(r.summary!, /\[\[claim:c1\]\]\.$/);
     // the search: Europe PMC only, open access only, in the title and the abstract (not the full
     // text, where an abstract book matches every word), no abstract asked for
@@ -492,6 +495,7 @@ describe("mode B: the chain from a question to a research draft", () => {
         summary: "Napi 5 ml foszfátmentesítő ajánlott [[claim:c1]].",
         kept: 1,
         dropped: [],
+        markersMoved: null,
         writtenBy: "w",
       }),
     });
@@ -505,6 +509,8 @@ describe("mode B: the chain from a question to a research draft", () => {
       ["FAILED", "SUMMARY_EMPTY", null, 1],
     );
     assert.deepEqual(r.report.summaryDroppedHere, ["NUMBER_NOT_IN_CLAIMS"]);
+    // the AI side did not say: no count, rather than a zero
+    assert.equal(r.report.summaryMarkersMoved, undefined);
   });
 });
 
@@ -609,6 +615,7 @@ describe("the AI answers as the OS reads them", () => {
         summary: "s",
         kept: 2,
         dropped: [{ index: 1, drop: "UNMARKED" }],
+        markersMoved: 3,
         writtenBy: "m",
       }),
       {
@@ -616,9 +623,18 @@ describe("the AI answers as the OS reads them", () => {
         summary: "s",
         kept: 2,
         dropped: ["UNMARKED"],
+        markersMoved: 3,
         writtenBy: "m",
       },
     );
+    // an AI side that does not say, or says nonsense, is not a zero
+    for (const markersMoved of [undefined, -1, 1.5, "2"])
+      assert.equal(
+        (summaryOf({ summary: "s", markersMoved }) as { markersMoved: unknown })
+          .markersMoved,
+        null,
+        String(markersMoved),
+      );
     assert.equal(summaryOf({ kept: 1 }).kind, "UNAVAILABLE");
   });
 

@@ -601,6 +601,13 @@ function DraftView({
             ))}
           </ul>
         ) : null}
+        {report.summaryMarkersMoved ? (
+          <p className="text-xs text-pilot-grey-600">
+            {report.summaryMarkersMoved} helyen a pont után álló jelölőt a gép
+            az előző mondathoz kötötte: ezeknél nézd meg, valóban azt a mondatot
+            támasztja-e alá.
+          </p>
+        ) : null}
         {report.queries?.length ? (
           <p className="text-xs text-pilot-grey-500">
             Keresőkifejezések: {report.queries.join(" · ")}
