@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { recogniseSentence } from "./sentence-parts.js";
+import { crossKindShadows, recogniseSentence } from "./sentence-parts.js";
 import {
   VOCABULARY_V1_ROWS,
   VocabularyError,
@@ -163,6 +163,40 @@ describe("recognition through the draft", () => {
     assert.deepEqual(recogniseSentence("A korall a zátonyon nőtt.", v).taxa, [
       "CORAL",
     ]);
+  });
+
+  it("version 1 has exactly these three cross-kind pairs: a new one must go in knowingly", () => {
+    const pairs = crossKindShadows(v).map(
+      (x) =>
+        `${x.kind}/${x.key} "${x.form}" > ${x.shadows.kind}/${x.shadows.key} "${x.shadows.form}"`,
+    );
+    assert.deepEqual(pairs, [
+      'TAXON/STONY_CORAL "zátonyépítő korall" > ENVIRONMENT/FIELD "zátony"',
+      'ENVIRONMENT/FIELD "korallzátony" > TAXON/CORAL "korall"',
+      'ENVIRONMENT/HOME_AQUARIUM "sps-akvárium" > TAXON/SPS "sps"',
+    ]);
+    // and each pair is what the recogniser does on the word
+    assert.deepEqual(
+      recogniseSentence("A zátonyépítő korallok nőttek.", v).environments,
+      [],
+    );
+  });
+  it("a new row that begins with another kind's form shows up as a pair", () => {
+    const rows = [
+      ...VOCABULARY_V1_ROWS,
+      {
+        ...VOCABULARY_V1_ROWS.find((r) => r.kind === "EFFECT")!,
+        key: "CORAL_GROWTH",
+        forms: ["korallnövekedés"],
+      },
+    ];
+    const added = crossKindShadows(buildVocabulary(rows)).filter(
+      (x) => x.key === "CORAL_GROWTH",
+    );
+    assert.deepEqual(
+      added.map((x) => x.shadows.key),
+      ["CORAL"],
+    );
   });
 
   it("a stem-final a/e lengthens before a suffix (Acroporák, milleporán)", () => {

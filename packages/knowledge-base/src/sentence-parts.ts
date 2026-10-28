@@ -108,6 +108,53 @@ export function matchTerms<T extends Term>(
 
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)];
 
+/** A form of one kind that reads a word another kind's shorter form would also read. */
+export interface KindShadow {
+  kind: "TAXON" | "ENVIRONMENT" | "EFFECT";
+  key: string;
+  form: string;
+  /** The shorter form that loses the word (`unshadowed` below). */
+  shadows: { kind: KindShadow["kind"]; key: string; form: string };
+}
+
+/**
+ * Every pair where a longer form of one kind takes a word from a one-word
+ * form of another kind ("korallzátony" takes "korall" from the CORAL taxon).
+ * On such a word the shorter kind is not recognised, so its row of the check
+ * does not fire there: a vocabulary row that makes a new pair must go in
+ * knowingly (barracuda, #1938 review). The approver's screen lists the pairs
+ * a draft adds.
+ */
+export function crossKindShadows(vocabulary: Vocabulary): KindShadow[] {
+  const kinds: [KindShadow["kind"], readonly Term[]][] = [
+    ["TAXON", vocabulary.taxa],
+    ["ENVIRONMENT", vocabulary.environments],
+    ["EFFECT", vocabulary.effects],
+  ];
+  const out: KindShadow[] = [];
+  for (const [kind, terms] of kinds)
+    for (const term of terms)
+      for (const form of term.forms) {
+        const text = form.join(" ");
+        for (const [otherKind, others] of kinds) {
+          if (otherKind === kind) continue;
+          for (const other of others)
+            for (const short of other.forms) {
+              if (short.length !== 1 || short[0]!.length >= text.length)
+                continue;
+              if (form.some((w) => wordMatches(short[0]!, w, other.exact)))
+                out.push({
+                  kind,
+                  key: term.key,
+                  form: text,
+                  shadows: { kind: otherKind, key: other.key, form: short[0]! },
+                });
+            }
+        }
+      }
+  return out;
+}
+
 /**
  * The matches not shadowed by a longer form of ANOTHER kind on the same words.
  * Stems match as prefixes, so one word can be read by two kinds:

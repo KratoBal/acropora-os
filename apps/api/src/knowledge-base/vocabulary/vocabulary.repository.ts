@@ -1,6 +1,7 @@
 import { Prisma, prisma } from "@acropora/database";
 import {
   recogniseSentence,
+  type KindShadow,
   type SentenceParts,
   type Vocabulary,
   type VocabularyKind,
@@ -9,6 +10,7 @@ import {
 
 import {
   VocabularyInputError,
+  addedShadows,
   approvedVocabulary,
   checkedRows,
   diffRows,
@@ -65,6 +67,8 @@ export interface VocabularyState {
     changes: RowChange[];
     /** What the approver sends back: the draft exactly as they saw it. */
     fingerprint: string;
+    /** Cross-kind pairs the draft adds; null when the draft does not build. */
+    newShadows: KindShadow[] | null;
   } | null;
   /** The rows the editor works on: the draft's, or the approved ones. */
   entries: VocabularyEntryView[];
@@ -137,6 +141,7 @@ export class VocabularyRepository {
             version: v.draft.version,
             changes: diffRows(v.approved.rows, v.draft.rows),
             fingerprint: draftFingerprint(v.draft.rows),
+            newShadows: addedShadows(v.approved.rows, v.draft.rows),
           }
         : null,
       entries: workingRows(v).map(view),
