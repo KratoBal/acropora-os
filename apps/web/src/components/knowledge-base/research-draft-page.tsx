@@ -72,6 +72,8 @@ export const FAILURE_TEXT: Record<string, string> = {
   NO_SOURCES: "A keresés nem talált nyílt hozzáférésű forrást.",
   NO_OPEN_FULL_TEXT:
     "A talált források egyikének sem volt olvasható nyílt teljes szövege.",
+  NO_RELEVANT_TITLE:
+    "A talált források egyikének a címében sem szerepel a keresés egyetlen szava sem (vagy absztrakt-kötet), ezért egyiket sem olvastuk.",
   NO_CLAIMS:
     "A kiolvasott szövegekből egyetlen állítás sem ment át az ellenőrzésen, ezért összefoglaló sem készült.",
   AI_SUMMARY_UNAVAILABLE:
@@ -93,6 +95,9 @@ export function failureText(report: ResearchDraftReport): string {
 /** A source's `read`: READ, or why it was not read. */
 export const READ_LABELS: Record<string, string> = {
   READ: "Kiolvasva",
+  ABSTRACT_BOOK: "Absztrakt-kötet: nem olvastuk",
+  NO_QUERY_TERM_IN_TITLE:
+    "A címében nincs a keresés szavai közül: nem olvastuk",
   RETRACTED: "Visszavont mű: nem olvastuk",
   RETRACTION_UNCHECKED:
     "A visszavonás-ellenőrzés (Crossref) nem érte el: nem olvastuk",

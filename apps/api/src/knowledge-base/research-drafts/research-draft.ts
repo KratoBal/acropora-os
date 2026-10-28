@@ -26,7 +26,8 @@ import type {
  *   2. the S2 discovery, database-free, on Europe PMC's open-access works only,
  *      with a small request budget; no abstract is asked for (B7);
  *   3. the open full texts (Europe PMC JATS) of the first sources that have
- *      one, through the S3 reading and the OS's own claim check, IN MEMORY:
+ *      one, in the draft's reading order (no abstract book, the title's
+ *      words against the search's), through the S3 reading and the OS's own claim check, IN MEMORY:
  *      nothing goes to KnowledgeClaim or KnowledgePassage. A retracted work is
  *      not read, and neither is one whose DOI the Crossref check did not reach;
  *   4. a summary written ONLY from those checked candidate claims (AI
@@ -57,6 +58,7 @@ export type DraftFailure =
   | "NO_QUERIES"
   | "NO_SOURCES"
   | "NO_OPEN_FULL_TEXT"
+  | "NO_RELEVANT_TITLE"
   | "NO_CLAIMS"
   | "AI_SUMMARY_UNAVAILABLE"
   | "AI_SUMMARY_REFUSED"
@@ -72,7 +74,10 @@ export interface DraftSource {
   venue: string | null;
   url: string | null;
   licence: string;
-  /** READ, or why not: RETRACTED, RETRACTION_UNCHECKED, NO_OPEN_FULL_TEXT, a fetch or AI code, NOT_TRIED. */
+  /**
+   * READ, or why not: ABSTRACT_BOOK, NO_QUERY_TERM_IN_TITLE, RETRACTED, RETRACTION_UNCHECKED,
+   * NO_OPEN_FULL_TEXT, a fetch or AI code, NOT_TRIED.
+   */
   read: string;
   claims: number;
   /**
@@ -196,6 +201,58 @@ const refusedOnlyTheQuery = (result: DiscoveryResult) => {
   const why = result.unavailable.EUROPE_PMC;
   return why === undefined || (/^HTTP_4\d\d$/.test(why) && why !== "HTTP_429");
 };
+
+/**
+ * THE READING ORDER. The discovery's order is Europe PMC's relevance, and on the full text a
+ * conference's abstract book ranks first: it holds every word somewhere (acrobot's two stage runs,
+ * 2026-10-28, 37189 and 37198, read the same symposium and two gerontology abstract books, while
+ * the coral works stayed NOT_TRIED). So the draft reads by its own count instead: an abstract book
+ * is never read, and the rest go by how many of the search expressions' words their title carries;
+ * a title with none of them is not read. A count, not a parse: the key is a word's first six
+ * letters, a plural's s dropped ("corals" and "coral", "aquaria" and "aquarium" meet).
+ */
+const ABSTRACT_BOOK =
+  /\b(?:abstracts?|symposium|congress|conference|meeting|proceedings)\b/iu;
+const QUERY_WORDS_SKIPPED = new Set([
+  "and",
+  "or",
+  "not",
+  "the",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "to",
+  "by",
+  "at",
+  "from",
+  "an",
+]);
+const termKey = (word: string) => {
+  const w = word.toLowerCase();
+  return (w.length > 4 ? w.replace(/s$/u, "") : w).slice(0, 6);
+};
+const wordsOf = (text: string) => text.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+export function queryTerms(queries: readonly string[]): Set<string> {
+  return new Set(
+    queries
+      .flatMap(wordsOf)
+      .filter((w) => w.length >= 3 && !QUERY_WORDS_SKIPPED.has(w.toLowerCase()))
+      .map(termKey),
+  );
+}
+
+/** -1 for an abstract book, else the number of distinct query terms the title carries. */
+export function titleScore(title: string, terms: ReadonlySet<string>): number {
+  if (ABSTRACT_BOOK.test(title)) return -1;
+  return new Set(
+    wordsOf(title)
+      .map(termKey)
+      .filter((k) => terms.has(k)),
+  ).size;
+}
 
 const retracted = (c: SourceCandidate, result: DiscoveryResult) =>
   c.versionSignals.some((v) => v.versionKind === "RETRACTION") ||
@@ -389,12 +446,12 @@ export async function runResearchDraft(
   };
   if (!found.candidates.length) return fail("NO_SOURCES");
 
-  // 3. the open full texts, read in memory
+  // 3. the open full texts, read in memory, in the draft's own order (THE READING ORDER above);
+  // the sources stay in the discovery's order, and a claim names its source by that index
   const checked = new Set(found.checkedDois);
-  let read = 0;
-  let tried = 0;
-  for (const c of found.candidates) {
-    const source: DraftSource = {
+  const terms = queryTerms(q.queries);
+  for (const c of found.candidates)
+    sources.push({
       doi: c.doi,
       pmcid: c.pmcid,
       pmid: c.pmid,
@@ -407,8 +464,22 @@ export async function runResearchDraft(
       read: "NOT_TRIED",
       claims: 0,
       retractionUnchecked: !c.doi,
-    };
-    sources.push(source);
+    });
+  const order = found.candidates
+    .map((c, index) => ({ c, index, score: titleScore(c.title, terms) }))
+    .sort((a, b) => b.score - a.score); // stable: a tie keeps Europe PMC's order
+  let read = 0;
+  let tried = 0;
+  for (const { c, index, score } of order) {
+    const source = sources[index]!;
+    if (score < 0) {
+      source.read = "ABSTRACT_BOOK";
+      continue;
+    }
+    if (score === 0) {
+      source.read = "NO_QUERY_TERM_IN_TITLE";
+      continue;
+    }
     if (read >= MAX_SOURCES_READ || tried >= MAX_SOURCES_TRIED) continue;
     if (retracted(c, found)) {
       source.read = "RETRACTED";
@@ -446,11 +517,16 @@ export async function runResearchDraft(
       candidateClaims.push({
         ...claim,
         id: `c${candidateClaims.length + 1}`,
-        source: sources.length - 1,
+        source: index,
       });
   }
   report.claims = candidateClaims.length;
-  if (read === 0) return fail("NO_OPEN_FULL_TEXT");
+  if (read === 0)
+    return fail(
+      order.some((o) => o.score > 0)
+        ? "NO_OPEN_FULL_TEXT"
+        : "NO_RELEVANT_TITLE",
+    );
   if (!candidateClaims.length) return fail("NO_CLAIMS");
 
   // 4. the summary from the checked claims only, checked again here

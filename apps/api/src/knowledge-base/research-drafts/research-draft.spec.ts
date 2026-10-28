@@ -47,7 +47,9 @@ import {
   checkSummary,
   discoveryInputFor,
   parseResearchQuestion,
+  queryTerms,
   runResearchDraft,
+  titleScore,
   type DraftDeps,
   type DraftResult,
 } from "./research-draft.js";
@@ -161,7 +163,16 @@ const okRoutes = (
 ): [string, ScriptedAnswer][] => [
   [
     `${EUROPE_PMC_BASE}/search`,
-    { status: 200, body: europePmcList([europePmcResult(result)]) },
+    {
+      status: 200,
+      body: europePmcList([
+        // a title with the search's words: the reading order reads it
+        europePmcResult({
+          title: "Phosphate and coral calcification",
+          ...result,
+        }),
+      ]),
+    },
   ],
   [
     CROSSREF_BASE,
@@ -208,6 +219,98 @@ describe("mode B: the title-and-abstract search and its fallback", () => {
         net.asked.filter((u) => !u.includes("fullTextXML")).length,
       );
     });
+});
+
+describe("mode B: the reading order", () => {
+  it("counts the search's words in a title, and marks an abstract book", () => {
+    const terms = queryTerms([
+      "phosphate concentration AND SPS coral aquarium",
+      "small polyp stony corals AND reef tank",
+    ]);
+    assert.equal(titleScore("Corals in aquaria under phosphate", terms), 3);
+    assert.equal(
+      titleScore("The biology and economics of coral growth.", terms),
+      1,
+    );
+    assert.equal(titleScore("MALDI efficiency of metabolites", terms), 0);
+    // a plural meets its singular: the search says "coral", the title "Corals"
+    assert.equal(titleScore("Stony Corals", queryTerms(["coral"])), 1);
+    // the words AND, OR and the like are not terms
+    assert.equal(titleScore("And or not", terms), 0);
+    for (const book of [
+      "Program Abstracts from The GSA 2021 Annual Scientific Meeting",
+      "XVI International Symposium on Marine Natural Products",
+      "Abstracts of the 7th World Parkinson Congress.",
+    ])
+      assert.equal(titleScore(book, terms), -1, book);
+  });
+
+  it("skips the abstract book and the unrelated title, and reads the best title first", async () => {
+    const { ask } = asker();
+    const net = network([
+      [
+        `${EUROPE_PMC_BASE}/search`,
+        {
+          status: 200,
+          body: europePmcList([
+            europePmcResult({
+              id: "1",
+              pmid: "1",
+              pmcid: "PMC1",
+              doi: "10.5555/book.1",
+              title:
+                "Program Abstracts from The GSA 2020 Annual Scientific Meeting: phosphate and coral",
+            }),
+            // one search word in the title: read, but after the work with three
+            europePmcResult({
+              id: "3",
+              pmid: "3",
+              pmcid: "PMC3",
+              doi: "10.5555/coral.3",
+              title: "Coral larval proteomics",
+            }),
+            europePmcResult({ title: "Phosphate and coral calcification" }),
+            europePmcResult({
+              id: "2",
+              pmid: "2",
+              pmcid: "PMC2",
+              doi: "10.5555/other.2",
+              title: "MALDI efficiency of metabolites",
+            }),
+          ]),
+        },
+      ],
+      ...okRoutes().slice(1),
+    ]);
+    const r = await runResearchDraft(
+      "Mennyi foszfát árt az Acroporának?",
+      "label",
+      chainDeps(ask, net),
+    );
+    assert.equal(r.status, "DRAFT", JSON.stringify(r.report));
+    // read by the count, not by Europe PMC's order: the three-word title first
+    assert.deepEqual(net.texts, ["PMC9001", "PMC3"]);
+    const reads = r.sources.map((s) => s.read);
+    assert.equal(reads[0], "ABSTRACT_BOOK");
+    assert.equal(reads[2], "READ");
+    assert.equal(reads[3], "NO_QUERY_TERM_IN_TITLE");
+    // the claim names its source by the discovery's index, not the reading order's
+    assert.equal(r.candidateClaims[0]!.source, 2);
+  });
+
+  it("fails as NO_RELEVANT_TITLE when no title carries a search word", async () => {
+    const { ask } = asker();
+    const net = network(okRoutes({ title: "MALDI efficiency of metabolites" }));
+    const r = await runResearchDraft(
+      "Mennyi foszfát árt az Acroporának?",
+      "label",
+      chainDeps(ask, net),
+    );
+    assert.equal(r.status, "FAILED");
+    assert.equal(r.reason, "NO_RELEVANT_TITLE");
+    assert.deepEqual(net.texts, []);
+    assert.equal(r.sources[0]!.read, "NO_QUERY_TERM_IN_TITLE");
+  });
 });
 
 describe("mode B: one request budget for both searches", () => {
