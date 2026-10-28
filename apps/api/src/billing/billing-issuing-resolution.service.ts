@@ -118,6 +118,14 @@ export class BillingIssuingResolutionService {
     id: string,
     user: AuthenticatedUser,
   ): Promise<BillingIssuingCheck> {
+    this.requireLive();
+    const head = await this.documents.find(id);
+    if (
+      head &&
+      isOwnRow(head) &&
+      (head.status === "ISSUED" || head.status === "DRAFT")
+    )
+      return this.probe(head, user);
     const evaluation = await this.evaluate(id);
     await this.repository.audit({
       actorUserId: user.id,
@@ -126,6 +134,95 @@ export class BillingIssuingResolutionService {
       metadata: this.checkMetadata(evaluation),
     });
     return evaluation.check;
+  }
+
+  /**
+   * A LEKÉRDEZÉS MÉRÉSE NEM ISSUING SOROKON (acrobot kérése, 10-28: az első éles
+   * olvasáshoz nincs ISSUING sor). CSAK OLVAS, és semmilyen javaslatot nem ad:
+   *   - kiállított saját sor: a külső azonosítójára a Számlázz.hu a SAJÁT számát
+   *     kell adja (ez a "talált" eset);
+   *   - vázlat: a Számlázz.hu nem ismerheti az azonosítót, a hibakód 7 jön
+   *     (ez a "nincs találat" eset).
+   * A végrehajtás ezt nem fogadja el (a `resolve` csak ISSUING sort ír).
+   */
+  private async probe(
+    row: NonNullable<Awaited<ReturnType<BillingDocumentsRepository["find"]>>>,
+    user: AuthenticatedUser,
+  ): Promise<BillingIssuingCheck> {
+    let agentKey: string;
+    try {
+      agentKey = (await this.credentials.resolve()).agentKey;
+    } catch (error) {
+      if (error instanceof SzamlazzConnectionError)
+        throw new ConflictException(
+          "A Számlázz.hu kapcsolat nincs beállítva (Beállítások > Számlázz.hu).",
+        );
+      throw error;
+    }
+    const lookup = await this.query(agentKey, {
+      by: "externalId",
+      value: row.id,
+    });
+    const issued = row.status === "ISSUED";
+    let reason: string;
+    let outcome: "FOUND" | "NOT_FOUND" | "UNKNOWN" = "UNKNOWN";
+    if (lookup.outcome === "FOUND") {
+      outcome = "FOUND";
+      reason =
+        issued && lookup.invoiceNumber === row.invoiceNumber
+          ? `Próba: a Számlázz.hu megtalálta a kiállított bizonylatot a külső azonosítójával, a saját számával (${lookup.invoiceNumber}): a lekérdezés működik.`
+          : `Próba: ELLENTMONDÁS, a Számlázz.hu a(z) ${lookup.invoiceNumber} számot adja erre az azonosítóra, ami nem egyezik a ${issued ? "tárolt számmal" : "vázlattal (vázlathoz nem lehet bizonylat)"}.`;
+    } else if (lookup.outcome === "NOT_FOUND") {
+      outcome = "NOT_FOUND";
+      reason = issued
+        ? "Próba: ELLENTMONDÁS, a Számlázz.hu nem találja a kiállított bizonylatot a külső azonosítójával (hibakód 7): a lekérdezés vagy az azonosító nem működik, a 7-es hibakód nem hihető."
+        : "Próba: a Számlázz.hu nem ismeri a vázlat azonosítóját (hibakód 7), ahogy egy sosem kiállított vázlatnál várható.";
+    } else {
+      reason =
+        "Próba: a Számlázz.hu válasza nem érkezett meg, hibakódot adott, vagy nem érthető.";
+    }
+    await this.repository.audit({
+      actorUserId: user.id,
+      invoiceId: row.id,
+      action: ISSUING_AUDIT.check,
+      metadata: {
+        probe: true,
+        status: row.status,
+        szamlazzOutcome: lookup.outcome,
+        ...(lookup.outcome === "FOUND"
+          ? {
+              szamlazzInvoiceNumber: lookup.invoiceNumber,
+              szamlazzKindCode: lookup.kindCode,
+              szamlazzGrossTotal: lookup.grossTotal,
+            }
+          : {}),
+        ...(lookup.outcome === "ERROR" ? { errorCode: lookup.errorCode } : {}),
+      },
+    });
+    return {
+      documentId: row.id,
+      kind: null,
+      probe: true,
+      lookup: outcome,
+      action: "NONE",
+      invoiceNumber: null,
+      reason,
+      expectedUpdatedAt: row.updatedAt.toISOString(),
+      ageMinutes: Math.max(
+        0,
+        Math.floor((Date.now() - row.updatedAt.getTime()) / 60_000),
+      ),
+    };
+  }
+
+  private requireLive(): void {
+    const mode = billingIssueMode(this.environment);
+    if (mode !== "live")
+      throw new ConflictException(
+        mode === "conflict"
+          ? "A kiállítás beállítása ellentmondásos: a valódi kiállítás és az álszámlázó egyszerre van bekapcsolva."
+          : "Az ellenőrzés csak a valódi Számlázz.hu-kapcsolattal megy: ezen a szerveren nincs bekapcsolva.",
+      );
   }
 
   async resolve(
@@ -275,13 +372,7 @@ export class BillingIssuingResolutionService {
   }
 
   private async evaluate(id: string): Promise<Evaluation> {
-    const mode = billingIssueMode(this.environment);
-    if (mode !== "live")
-      throw new ConflictException(
-        mode === "conflict"
-          ? "A kiállítás beállítása ellentmondásos: a valódi kiállítás és az álszámlázó egyszerre van bekapcsolva."
-          : "Az ellenőrzés csak a valódi Számlázz.hu-kapcsolattal megy: ezen a szerveren nincs bekapcsolva.",
-      );
+    this.requireLive();
     const row = await this.documents.find(id);
     if (!row) throw new NotFoundException("A bizonylat nem található.");
     if (!isOwnRow(row))
