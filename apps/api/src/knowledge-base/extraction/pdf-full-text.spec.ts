@@ -260,13 +260,16 @@ describe("the address guard, at connect time (a local server, a name resolved by
 });
 
 describe("a public address", () => {
-  it("refuses loopback, link-local, RFC 1918, CGNAT, multicast, ULA and mapped private addresses", () => {
+  it("refuses loopback, link-local, RFC 1918, CGNAT, multicast, ULA, site-local, and private IPv4 inside IPv6 in every form", () => {
     for (const ok of [
       "93.184.216.34",
       "100.63.255.255",
       "100.128.0.1",
       "172.32.0.1",
       "2a00:1450:4001::1",
+      // the same forms carrying a public IPv4 address stay public
+      "::ffff:5db8:d822",
+      "64:ff9b::5db8:d822",
     ])
       assert.equal(publicAddress(ok), true, ok);
     for (const bad of [
@@ -285,6 +288,15 @@ describe("a public address", () => {
       "fc00::1",
       "fe80::1",
       "::ffff:10.0.0.1",
+      // barracuda, #1951: the other ways an IPv6 address carries a private IPv4 one
+      "::ffff:7f00:1", // mapped, hex
+      "0:0:0:0:0:ffff:a00:1", // mapped, written out
+      "::7f00:1", // the old IPv4-compatible form
+      "::a9fe:a9fe", // compatible 169.254.169.254
+      "64:ff9b::7f00:1", // NAT64 to loopback
+      "64:ff9b::6440:1", // NAT64 to the tailnet range
+      "64:ff9b:1::1", // local-use NAT64
+      "fec0::1", // the deprecated site-local
       "nem cim",
     ])
       assert.equal(publicAddress(bad), false, bad);
