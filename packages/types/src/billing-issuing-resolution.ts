@@ -41,7 +41,14 @@ export type BillingIssuingLookup = (typeof BILLING_ISSUING_LOOKUPS)[number];
 /** `POST /billing/documents/:id/issuing-check` válasza: új állapotot nem ír. */
 export interface BillingIssuingCheck {
   documentId: string;
-  kind: BillingIssuingKind;
+  /** A besorolás; PRÓBÁNÁL (`probe`) nincs, mert a sor nem ISSUING-ben áll. */
+  kind: BillingIssuingKind | null;
+  /**
+   * PRÓBA: a lekérdezés működésének mérése nem ISSUING sorokon (kiállított
+   * sor: a Számlázz.hu megtalálja-e a saját számával; vázlat: a "nincs ilyen
+   * azonosító" 7-es hibakód jön-e). Mindig `action: NONE`, nem írható át.
+   */
+  probe?: boolean;
   lookup: BillingIssuingLookup;
   action: BillingIssuingAction;
   /** A javasolt akció száma (RECORD_ISSUED): a Számlázz.hu által visszaadott szám. */
