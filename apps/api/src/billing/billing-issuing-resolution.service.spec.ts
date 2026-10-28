@@ -347,10 +347,9 @@ describe("ellenőrzés (check): csak olvas", () => {
     assert.equal((await service.check("doc-1", USER)).action, "BACK_TO_DRAFT");
   });
 
-  it("nem kezdi el: nem ISSUING, nem saját sor, nem éles mód", async () => {
+  it("nem kezdi el: se ISSUING, se próbázható állapot; nem saját sor; nem éles mód", async () => {
     for (const options of [
-      { over: { status: "DRAFT" } },
-      { over: { status: "ISSUED" } },
+      { over: { status: "ISSUE_FAILED" } },
       { over: { source: "OTHER" } },
       { env: {} },
       { env: { SZAMLAZZ_AGENT_MODE: "stub" } },
@@ -502,5 +501,122 @@ describe("végrehajtás (resolve): újra lekérdez, egyezést vár", () => {
         ConflictException,
       );
     assert.equal(calls.recorded.length + calls.drafts.length, 0);
+  });
+});
+
+describe("PRÓBA: a lekérdezés mérése nem ISSUING soron (csak olvas, nem javasol)", () => {
+  const issued = { status: "ISSUED", invoiceNumber: "E-TST-2026-7" };
+
+  it("kiállított sor: a Számlázz.hu a saját számát adja -> a lekérdezés működik, javaslat nincs", async () => {
+    const { service, calls } = setup({
+      over: issued,
+      answers: { "doc-1": FOUND_XML("E-TST-2026-7") },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.probe, true);
+    assert.equal(check.kind, null);
+    assert.equal(check.lookup, "FOUND");
+    assert.equal(check.action, "NONE");
+    assert.equal(check.invoiceNumber, null);
+    assert.match(check.reason, /a lekérdezés működik/);
+    assert.deepEqual(calls.queries, ["doc-1"]);
+    // csak a nyom kerül az AuditLogba, állapot-írás nincs
+    assert.equal(calls.audits.length, 1);
+    assert.match(JSON.stringify(calls.audits[0]!.metadata), /"probe":true/);
+    assert.doesNotMatch(
+      JSON.stringify(calls.audits[0]!.metadata),
+      /Titkos|Fő utca|vevo@/,
+    );
+    assert.equal(calls.recorded.length + calls.drafts.length, 0);
+  });
+
+  it("kiállított sor, de a Számlázz.hu 7-est ad -> ELLENTMONDÁS, a 7-es nem hihető", async () => {
+    const { service } = setup({
+      over: issued,
+      answers: { "doc-1": NOT_FOUND_XML },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.lookup, "NOT_FOUND");
+    assert.match(check.reason, /ELLENTMONDÁS/);
+    assert.equal(check.action, "NONE");
+  });
+
+  it("kiállított sor, más számmal -> ELLENTMONDÁS", async () => {
+    const { service } = setup({
+      over: issued,
+      answers: { "doc-1": FOUND_XML("E-MAS-9") },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.lookup, "FOUND");
+    assert.match(check.reason, /ELLENTMONDÁS/);
+  });
+
+  it("vázlat: a 7-es hibakód a várt (sosem kiállított azonosító)", async () => {
+    const { service } = setup({
+      over: { status: "DRAFT" },
+      answers: { "doc-1": NOT_FOUND_XML },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.lookup, "NOT_FOUND");
+    assert.equal(check.action, "NONE");
+    assert.match(check.reason, /hibakód 7.*várható/);
+    assert.doesNotMatch(check.reason, /ELLENTMONDÁS/);
+  });
+
+  it("vázlat, amire a Számlázz.hu számot ad -> ELLENTMONDÁS", async () => {
+    const { service } = setup({
+      over: { status: "DRAFT" },
+      answers: { "doc-1": FOUND_XML("E-TST-2026-7") },
+    });
+    assert.match((await service.check("doc-1", USER)).reason, /ELLENTMONDÁS/);
+  });
+
+  it("időtúllépés -> nem tudjuk", async () => {
+    const { service } = setup({
+      over: issued,
+      answers: { "doc-1": new Error("ETIMEDOUT") },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.lookup, "UNKNOWN");
+    assert.equal(check.action, "NONE");
+  });
+
+  it("a próba is csak éles módban, és csak saját ISSUED/DRAFT soron megy", async () => {
+    for (const options of [
+      { over: issued, env: {} },
+      { over: issued, env: { SZAMLAZZ_AGENT_MODE: "stub" } },
+      { over: { ...issued, source: "OTHER" } },
+      { over: { status: "ISSUE_FAILED" } },
+    ])
+      await assert.rejects(
+        setup({
+          answers: { "doc-1": FOUND_XML("E-TST-2026-7") },
+          ...options,
+        }).service.check("doc-1", USER),
+        ConflictException,
+        JSON.stringify(options),
+      );
+  });
+
+  it("a végrehajtás próba-soron 409: csak ISSUING sort ír", async () => {
+    for (const over of [issued, { status: "DRAFT" }]) {
+      const { service, calls } = setup({
+        over,
+        answers: { "doc-1": FOUND_XML("E-TST-2026-7") },
+      });
+      await assert.rejects(
+        service.resolve(
+          "doc-1",
+          {
+            expectedUpdatedAt: UPDATED_AT.toISOString(),
+            action: "RECORD_ISSUED",
+            invoiceNumber: "E-TST-2026-7",
+          },
+          USER,
+        ),
+        ConflictException,
+      );
+      assert.equal(calls.recorded.length + calls.drafts.length, 0);
+    }
   });
 });
