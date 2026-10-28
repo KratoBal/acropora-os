@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import { runReferenceCli } from "./reference-check.cli.js";
 import {
   checkReferences,
+  MAX_SHOWN_TITLE,
   readCrossrefWork,
   readEuropePmcHit,
+  shownTitle,
   titleKey,
   titlesMatch,
   type ReferenceSource,
@@ -150,6 +152,47 @@ describe("a Crossref answer", () => {
   });
 });
 
+describe("the titles of a TITLE_DIFFERS result (acrobot 37276)", () => {
+  it("a Crossref title mismatch carries both titles and the subtitle", () => {
+    const r = readCrossrefWork(
+      SOURCE,
+      SOURCE.doi!,
+      crossref({ title: ["Egészen más cikk"], subtitle: ["a nitrátról"] }),
+    );
+    assert.deepEqual(r.titles, {
+      stored: "Kitalált foszfát-dúsítás és az <i>Acropora</i> kalcifikációja",
+      registry: "Egészen más cikk",
+      registrySubtitle: "a nitrátról",
+    });
+  });
+  it("a Europe PMC title mismatch carries both titles", () => {
+    const r = readEuropePmcHit(SOURCE, "11111111", europePmc({ title: "Más" }));
+    assert.equal(r.titles?.registry, "Más");
+    assert.equal(r.titles?.registrySubtitle, null);
+  });
+  it("no titles for a resolved one, nor for a DOI mismatch alone", () => {
+    assert.equal(
+      "titles" in readCrossrefWork(SOURCE, SOURCE.doi!, crossref()),
+      false,
+    );
+    assert.equal(
+      "titles" in
+        readCrossrefWork(
+          SOURCE,
+          SOURCE.doi!,
+          crossref({ DOI: "10.5555/masik" }),
+        ),
+      false,
+    );
+  });
+  it("a shown title has no control characters and is cut", () => {
+    assert.equal(shownTitle("Cím\u0000 \u202Eés\n  alcím"), "Cím és alcím");
+    assert.equal(shownTitle("x".repeat(400))!.length, MAX_SHOWN_TITLE);
+    assert.equal(shownTitle(42), null);
+    assert.equal(shownTitle("  "), null);
+  });
+});
+
 describe("a Europe PMC answer", () => {
   it("the same PMID and title: RESOLVED", () => {
     assert.equal(
@@ -263,6 +306,28 @@ describe("the run", () => {
       out.stdout,
       /NOT_FOUND DOI 10\.5555\/kitalalt\.2001\.1 \(forrás s1\): HTTP_404/,
     );
+  });
+  it("the JSON names both titles of a mismatch; the text report still names none", async () => {
+    const other: [string, number, unknown][] = [
+      [
+        "api.crossref.org",
+        200,
+        crossref({ title: ["Egészen más cikk a nitrátról"] }),
+      ],
+      ["europepmc", 200, europePmc()],
+    ];
+    const json = output();
+    await runReferenceCli(
+      ["--json"],
+      json.sink,
+      deps(registry(other).fetch, [SOURCE]),
+    );
+    const doi = JSON.parse(json.out.stdout).results[0];
+    assert.equal(doi.titles.registry, "Egészen más cikk a nitrátról");
+    const text = output();
+    await runReferenceCli([], text.sink, deps(registry(other).fetch, [SOURCE]));
+    assert.equal(text.out.stdout.includes("nitrát"), false);
+    assert.equal(text.out.stdout.includes("kalcifik"), false);
   });
   it("another work behind the DOI fails the run", async () => {
     const reg = registry([
