@@ -54,7 +54,8 @@ ALTER TABLE "KnowledgeGoldMissedClaim" ADD CONSTRAINT "KnowledgeGoldMissedClaim_
 ALTER TABLE "KnowledgeGoldMissedClaim" ADD CONSTRAINT "KnowledgeGoldMissedClaim_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 
--- a keszlet sorrendje 1-tol (az egyediseg a semaban all: KnowledgeGoldSource_position_key)
+-- a keszlet sorrendje 1-tol, es egy hely egyszer
+CREATE UNIQUE INDEX "KnowledgeGoldSource_position_key" ON "KnowledgeGoldSource"("position");
 ALTER TABLE "KnowledgeGoldSource" ADD CONSTRAINT "KnowledgeGoldSource_position_check" CHECK ("position" >= 1);
 
 -- a "kesz" kimondasa: ki es mikor, egyutt vagy egyik sem

@@ -333,7 +333,7 @@ describe(
       ]);
     });
 
-    it("the CHECKs hold against a direct write", async () => {
+    it("the CHECKs and the unique position hold against a direct write", async () => {
       const gold = await prisma.knowledgeGoldSource.findUniqueOrThrow({
         where: { sourceId: sourceIds[1]! },
         select: { id: true },
@@ -342,6 +342,13 @@ describe(
         prisma.knowledgeGoldSource.update({
           where: { id: gold.id },
           data: { completenessCheckedAt: new Date() },
+        }),
+      );
+      // one place once: the unique index on position
+      await assert.rejects(
+        prisma.knowledgeGoldSource.update({
+          where: { id: gold.id },
+          data: { position: 1 },
         }),
       );
       await assert.rejects(
