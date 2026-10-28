@@ -456,6 +456,29 @@ export async function fetchOpenPdf(
   }
 }
 
+/**
+ * A word a PDF broke at a line end with a hyphen is joined back: "phos-" and
+ * "phate" give "phosphate". Measured on stage (acrobot 37543, the refusal
+ * detail of acropora-ai-agent #57): of nine refused passages of one PDF, seven
+ * left the text where the source had the hyphen and the passage went on with
+ * the word's next letter; the model writes the word whole. Only a lowercase
+ * letter, a hyphen at the line's end and a lowercase letter starting the next
+ * line: "Ca-" before "Mg" or "pH-" before "8" stay. A compound broken right at
+ * its own hyphen ("phosphate-" / "limited") is joined too; that loss is the
+ * price, and the verbatim check (unchanged) refuses such a passage as before.
+ * The joined line goes on as one line; every other line break stays a newline.
+ */
+export function joinLineEndHyphens(lines: readonly string[]): string {
+  const out: string[] = [];
+  for (const line of lines) {
+    const prev = out.at(-1);
+    if (prev !== undefined && /\p{Ll}-$/u.test(prev) && /^\p{Ll}/u.test(line))
+      out[out.length - 1] = prev.slice(0, -1) + line;
+    else out.push(line);
+  }
+  return out.join("\n");
+}
+
 /** A heading line the references list starts with: from it on, nothing is read. */
 const REFERENCES_HEADING =
   /^\s*(?:\d+\.?\s*)?(?:references|literature cited|bibliography|references and notes)\s*$/i;
@@ -500,7 +523,7 @@ export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
       const kept = (cut >= 0 ? lines.slice(0, cut) : lines)
         .map((l) => l.replace(/\s+/g, " ").trim())
         .filter(Boolean);
-      const text = kept.join("\n");
+      const text = joinLineEndHyphens(kept);
       if (text)
         sections.push({ locator: `p. ${n}`.slice(0, MAX_LOCATOR), text });
       if (cut >= 0) break;
