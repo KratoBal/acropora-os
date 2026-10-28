@@ -37,6 +37,7 @@ export type StatementFailure =
   | "TERM_NOT_IN_VOCABULARY"
   | "NO_CERTAINTY_PHRASE"
   | "QUANTITY_NOT_WRITABLE"
+  | "TRANSFER_NOT_WRITABLE"
   | "BUILT_SENTENCE_FAILS_GATE";
 
 export type StatementResult =
@@ -91,10 +92,30 @@ const the = (word: string) =>
 const capital = (s: string) =>
   s.charAt(0).toLocaleUpperCase("hu-HU") + s.slice(1);
 
+/**
+ * The scope phrases a statement carries when the question asks about a
+ * population the evidence does not cover (plan 10, T8): field or lab data for
+ * an aquarium question, coarser data for a narrower taxon. Both are phrases of
+ * the approved vocabulary, so the gate reads them as it reads any sentence.
+ */
+export interface StatementTransfer {
+  /** ", akváriumra csak korlátozottan" after the setting. */
+  toAquarium: boolean;
+  /** The evidence is a genus or a group, the question asks about something within it. */
+  coarserData: boolean;
+}
+
+export const TRANSFER_TO_AQUARIUM_PHRASE = "akváriumra csak korlátozottan";
+const COARSER_PHRASE = {
+  GENUS: "nemzetség-szintű adat alapján",
+  GROUP: "csoportszintű adat alapján",
+} as const;
+
 export function claimStatement(input: {
   claim: PackageClaim;
   quantity: OriginalQuantity | null;
   vocabulary: Vocabulary;
+  transfer?: StatementTransfer;
 }): StatementResult {
   const { claim, vocabulary } = input;
   const { scope } = claim;
@@ -171,9 +192,33 @@ export function claimStatement(input: {
     amount = ` ${text} ${input.quantity?.basis === "P" ? "foszfor" : "foszfát"} mellett`;
   }
 
+  const transfer = input.transfer ?? { toAquarium: false, coarserData: false };
+  // the coarsest rank of the evidence names the phrase: a group, else a genus
+  const ranks = scope.taxa.map(
+    (key) => vocabulary.taxa.find((t) => t.key === key)?.extra.rank,
+  );
+  const coarser = !transfer.coarserData
+    ? ""
+    : ranks.includes("GROUP")
+      ? `${COARSER_PHRASE.GROUP} `
+      : ranks.includes("GENUS")
+        ? `${COARSER_PHRASE.GENUS} `
+        : null;
+  if (coarser === null)
+    return fail(
+      "TRANSFER_NOT_WRITABLE",
+      "coarser data asked for, and the evidence names no genus or group",
+    );
+  if (transfer.toAquarium && environments.length === 0)
+    return fail(
+      "TRANSFER_NOT_WRITABLE",
+      "a transfer to an aquarium asked for, and the evidence names no setting",
+    );
   const setting = [
-    environments.length ? ` ${environments.join(" és ")} környezetben` : "",
-    taxa.length ? ` ${taxa.join(" és ")} esetén` : "",
+    environments.length
+      ? ` ${environments.join(" és ")} környezetben${transfer.toAquarium ? `, ${TRANSFER_TO_AQUARIUM_PHRASE}` : ""}`
+      : "",
+    taxa.length ? ` ${coarser}${taxa.join(" és ")} esetén` : "",
   ]
     .filter(Boolean)
     .join(",");

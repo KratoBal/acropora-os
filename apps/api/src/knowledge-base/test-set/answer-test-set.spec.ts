@@ -41,8 +41,8 @@ describe("the API groups on the real functions", () => {
     );
     assert.equal(report.met, true);
     assert.deepEqual(
-      report.groups.slice(-2).map((g) => g.group),
-      ["T2", "T6"],
+      report.groups.slice(-3).map((g) => g.group),
+      ["T2", "T6", "T8"],
     );
   });
   it("every case id is unique", () => {
@@ -114,6 +114,28 @@ describe("calibration: taking a rule out turns its group red", () => {
       "T6",
     );
     assert.equal(g.mustNotApply.passed, g.mustNotApply.total);
+  });
+  it("T8: the question's population not read", async () => {
+    const g = await red(
+      {
+        answerQuestion: (input) => answerQuestion({ ...input, question: "?" }),
+      },
+      "T8",
+    );
+    assert.equal(g.mustApply.passed, 0);
+  });
+  it("T8: a population read into every question", async () => {
+    const g = await red(
+      {
+        answerQuestion: (input) =>
+          answerQuestion({
+            ...input,
+            question: `${input.question} Az akváriumban az Acropora millepora?`,
+          }),
+      },
+      "T8",
+    );
+    assert.ok(g.mustNotApply.passed < g.mustNotApply.total);
   });
   it("T6: a completion applied without the link", async () => {
     const g = await red(

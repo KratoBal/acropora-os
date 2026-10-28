@@ -5,13 +5,17 @@ import {
   buildAnswerPackage,
   claimStatement,
   gateAnswer,
+  isAncestor,
   normaliseSentence,
+  recogniseSentence,
   type AnswerPackage,
   type GateSentence,
   type OriginalQuantity,
+  type PackageClaim,
   type PackageCandidate,
   type PackageExclusion,
   type StatementFailure,
+  type StatementTransfer,
   type Vocabulary,
 } from "@acropora/knowledge-base";
 
@@ -22,6 +26,17 @@ import {
  *   1. the package: VERIFIED claims on the topic with verbatim-verified
  *      evidence on a live source (`buildAnswerPackage`). Until a usage policy
  *      exists every claim is released for AI_INTERNAL only, never AI_PUBLIC;
+ *   1b. the question's population (T8): its taxa and settings, recognised
+ *      through the vocabulary. Field or lab data for an aquarium question is
+ *      stated with the transfer phrase, or stays out when the editor ruled the
+ *      transfer out or has not decided it; genus or group data for a narrower
+ *      question gets the coarser-data phrase; a claim on another taxon than
+ *      the one asked about stays out (acrobot 37230, option B). A claim
+ *      the editor ruled out for an aquarium, or on another taxon, does not
+ *      keep its CONTRADICTS partner out: someone said it is not about the
+ *      population asked. An UNDECIDED one does: nobody said so, it is the
+ *      same taxon and effect, only its transfer is open, so the pair stays
+ *      out together as any pair with a side not stated (barracuda, #1942);
  *   2. each claim as one sentence the gate accepts (`claimStatement`); a claim
  *      that cannot be stated stays out, with its reason, and so does every
  *      claim whose CONTRADICTS partner among the candidates cannot be stated:
@@ -130,6 +145,8 @@ export interface KnowledgeAnswer {
     notStated: { id: string; failure: StatementFailure }[];
     /** Stated claims not sent because a CONTRADICTS partner could not be stated. */
     unpaired: string[];
+    /** Claims that do not fit the question's population (T8), with the reason. */
+    notForQuestion: { id: string; reason: QuestionMismatch }[];
     /** The claims sent to the AI, in the package's order: what it could choose from. */
     sent: string[];
   };
@@ -146,6 +163,50 @@ export interface KnowledgeAnswer {
 }
 
 export type AiDrop = "NOT_FIXED" | "NOT_SENT" | "NOT_VERBATIM";
+
+export type QuestionMismatch =
+  "TRANSFER_NOT_APPLICABLE" | "TRANSFER_UNDECIDED" | "OTHER_TAXON";
+
+const LAB_OR_FIELD = new Set(["FIELD", "LAB", "MESOCOSM"]);
+const AQUARIUM = new Set(["HOME_AQUARIUM", "PUBLIC_AQUARIUM"]);
+
+/**
+ * How a claim fits the population the question asks about (plan 10, T8). A
+ * question that names no setting or taxon asks about none: no transfer.
+ */
+export function questionFit(
+  question: { taxa: readonly string[]; environments: readonly string[] },
+  claim: PackageClaim,
+  vocabulary: Vocabulary,
+):
+  | { ok: true; transfer: StatementTransfer }
+  | { ok: false; reason: QuestionMismatch } {
+  const { scope } = claim;
+  let toAquarium = false;
+  if (
+    question.environments.some((e) => AQUARIUM.has(e)) &&
+    scope.environments.length > 0 &&
+    scope.environments.every((e) => LAB_OR_FIELD.has(e))
+  ) {
+    if (scope.homeReefApplicability === null)
+      return { ok: false, reason: "TRANSFER_UNDECIDED" };
+    if (scope.homeReefApplicability === "NOT_APPLICABLE")
+      return { ok: false, reason: "TRANSFER_NOT_APPLICABLE" };
+    // the editor's DIRECT is a decided transfer: no "korlátozottan"
+    toAquarium = scope.homeReefApplicability !== "DIRECT";
+  }
+  let coarserData = false;
+  if (question.taxa.length > 0)
+    for (const t of scope.taxa) {
+      const fits = question.taxa.some(
+        (q) => q === t || isAncestor(vocabulary, q, t),
+      );
+      const broader = question.taxa.some((q) => isAncestor(vocabulary, t, q));
+      if (broader) coarserData = true;
+      else if (!fits) return { ok: false, reason: "OTHER_TAXON" };
+    }
+  return { ok: true, transfer: { toAquarium, coarserData } };
+}
 
 const FIXED = new Set(ANSWER_FIXED_SENTENCES.map(normaliseSentence));
 const SENTENCE_END = /([.!?…]+["”»)]?)?$/u;
@@ -170,13 +231,21 @@ export async function answerQuestion(input: {
     (id) => byId.get(id)?.contradicts ?? [],
     ANSWER_PACKAGE_LIMIT,
   );
+  const population = recogniseSentence(input.question, input.vocabulary);
   const statements = new Map<string, string>();
   const notStated: KnowledgeAnswer["package"]["notStated"] = [];
+  const notForQuestion: KnowledgeAnswer["package"]["notForQuestion"] = [];
   for (const claim of pkg.claims) {
+    const fit = questionFit(population, claim, input.vocabulary);
+    if (!fit.ok) {
+      notForQuestion.push({ id: claim.id, reason: fit.reason });
+      continue;
+    }
     const r = claimStatement({
       claim,
       quantity: byId.get(claim.id)?.quantity ?? null,
       vocabulary: input.vocabulary,
+      transfer: fit.transfer,
     });
     if (r.ok) statements.set(claim.id, r.statement);
     else notStated.push({ id: claim.id, failure: r.failure });
@@ -185,12 +254,21 @@ export async function answerQuestion(input: {
   // every partner among the candidates stated (to a fixed point, since
   // dropping one may unpair another)
   const unpaired: string[] = [];
+  const outOfQuestion = new Set(
+    notForQuestion
+      .filter((n) => n.reason !== "TRANSFER_UNDECIDED")
+      .map((n) => n.id),
+  );
   for (let changed = true; changed;) {
     changed = false;
     for (const id of [...statements.keys()])
       if (
         (byId.get(id)?.contradicts ?? []).some(
-          (p) => p !== id && byId.has(p) && !statements.has(p),
+          (p) =>
+            p !== id &&
+            byId.has(p) &&
+            !outOfQuestion.has(p) &&
+            !statements.has(p),
         )
       ) {
         statements.delete(id);
@@ -210,6 +288,7 @@ export async function answerQuestion(input: {
       truncated: pkg.truncated,
       notStated,
       unpaired,
+      notForQuestion,
       sent: stated.map((c) => c.id),
     },
     gateVersion: ANSWER_GATE_VERSION,

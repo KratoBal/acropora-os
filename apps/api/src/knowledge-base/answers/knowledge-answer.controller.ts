@@ -98,6 +98,7 @@ export class KnowledgeAnswerService {
       sent: result.package.sent.length,
       notStated: result.package.notStated.map((n) => n.failure),
       unpaired: result.package.unpaired.length,
+      notForQuestion: result.package.notForQuestion.map((n) => n.reason),
       aiDropped: result.aiDropped.map((d) => d.reason),
       ai: result.ai.kind,
       aiRefused: result.ai.kind === "ANSWER" ? result.ai.refused : [],

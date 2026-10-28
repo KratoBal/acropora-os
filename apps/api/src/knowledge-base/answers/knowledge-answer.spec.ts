@@ -12,6 +12,7 @@ import {
   buildAnswerPackage,
   claimStatement,
   gateAnswer,
+  recogniseSentence,
   vocabularyV1,
   type ClaimScope,
 } from "@acropora/knowledge-base";
@@ -25,6 +26,7 @@ import {
   answerQuestion,
   keepPairs,
   parseQuestion,
+  questionFit,
   type AiAnswer,
   type AiAnswerRequest,
   type AnswerCandidate,
@@ -81,11 +83,22 @@ const C2 = candidate({
   quantity: { min: "0.03", max: "0.1", unit: "mg/l", basis: "PO4" },
   contradicts: ["c1"],
 });
+const QUESTION = "Mennyi foszfát jó egy SPS-akváriumban?";
+// the statement as the OS builds it for QUESTION: an aquarium question, so
+// field data carries the transfer phrase (T8)
 const statementOf = (c: AnswerCandidate) => {
+  const claim = { ...c, citation: c.citation ?? "" };
+  const fit = questionFit(
+    recogniseSentence(QUESTION, vocabulary),
+    claim,
+    vocabulary,
+  );
+  assert.ok(fit.ok);
   const r = claimStatement({
-    claim: { ...c, citation: c.citation ?? "" },
+    claim,
     quantity: c.quantity,
     vocabulary,
+    transfer: fit.transfer,
   });
   assert.ok(r.ok, r.ok ? "" : r.detail);
   return r.statement;
@@ -113,7 +126,7 @@ const select = (...ids: string[]) =>
   }));
 const run = (candidates: AnswerCandidate[], ai: ReturnType<typeof fakeAi>) =>
   answerQuestion({
-    question: "Mennyi foszfát jó egy SPS-akváriumban?",
+    question: QUESTION,
     subject: "PHOSPHATE",
     candidates,
     vocabulary,
@@ -391,6 +404,43 @@ describe("mode A: the answer", () => {
         ai.kind === "REFUSED" ? "AI_REFUSED" : "AI_UNAVAILABLE",
       );
     }
+  });
+});
+
+describe("T8 meets T6: a partner out for the question (barracuda, #1942)", () => {
+  // an aquarium claim, and a field study contradicting it
+  const aquarium = candidate({
+    id: "aq",
+    layer: "HOBBY_EXPERIENCE",
+    scope: { ...HIGH, homeReefApplicability: "DIRECT" },
+    citation: "Holmes-Farley, 2002",
+    quantity: { min: "0.03", max: "0.1", unit: "mg/l", basis: "PO4" },
+    contradicts: ["field"],
+  });
+  const field = (homeReefApplicability: "NOT_APPLICABLE" | null) =>
+    candidate({
+      id: "field",
+      scope: { ...LOW, homeReefApplicability },
+      contradicts: ["aq"],
+    });
+
+  it("an undecided transfer keeps its partner out: nobody said it is about another population", async () => {
+    const r = await run([aquarium, field(null)], select("aq"));
+    assert.deepEqual(r.package.notForQuestion, [
+      { id: "field", reason: "TRANSFER_UNDECIDED" },
+    ]);
+    assert.deepEqual(r.package.unpaired, ["aq"]);
+    assert.deepEqual(r.package.sent, []);
+    assert.equal(r.answered, false);
+  });
+  it("a transfer the editor ruled out does not: the aquarium claim goes out alone", async () => {
+    const r = await run([aquarium, field("NOT_APPLICABLE")], select("aq"));
+    assert.deepEqual(r.package.notForQuestion, [
+      { id: "field", reason: "TRANSFER_NOT_APPLICABLE" },
+    ]);
+    assert.deepEqual(r.package.unpaired, []);
+    assert.deepEqual(r.package.sent, ["aq"]);
+    assert.equal(r.answered, true);
   });
 });
 
