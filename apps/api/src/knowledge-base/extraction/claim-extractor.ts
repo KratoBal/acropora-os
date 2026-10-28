@@ -44,9 +44,14 @@ export interface ClaimExtractor {
 }
 
 const CODE = /^[A-Z_]{1,40}$/;
-/** The AI service's `whereItLeaves` form, and nothing else: no text gets through. */
+/**
+ * The AI service's `whereItLeaves` form, and nothing else: no text gets
+ * through. Since acropora-ai-agent #57 the source's code point may follow
+ * ("passage 22/87 U+0073 src U+0064"): a PDF's line-end hyphen shows as
+ * "src U+002D" where the passage goes on with a letter.
+ */
 export const REFUSAL_DETAIL =
-  /^[A-Za-z]{1,24} \d{1,7}\/\d{1,7} (?:U\+[0-9A-F]{4,6}|-)$/;
+  /^[A-Za-z]{1,24} \d{1,7}\/\d{1,7} (?:U\+[0-9A-F]{4,6}|-)(?: src (?:U\+[0-9A-F]{4,6}|-))?$/;
 const EXTRACTED_BY = /^[\w.:/ -]{1,128}$/;
 
 /** The answer's body as the AI service sends it; anything else is UNAVAILABLE. */
