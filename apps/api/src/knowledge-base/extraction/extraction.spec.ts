@@ -429,6 +429,24 @@ describe("the OS's own check of the AI's claims", () => {
       kind: "REFUSED",
       refusal: "UNKNOWN_REFUSAL",
     });
+    // why the answer was not JSON (acropora-ai-agent #58): counts and a code
+    // point are kept, a text where they should be is not
+    assert.deepEqual(
+      claimAnswerOf({ refusal: "NOT_JSON", detail: "parse 26/32 U+0007" }),
+      { kind: "REFUSED", refusal: "NOT_JSON", detail: "parse 26/32 U+0007" },
+    );
+    assert.deepEqual(
+      claimAnswerOf({ refusal: "NOT_JSON", detail: "truncated 31877/31877 -" }),
+      {
+        kind: "REFUSED",
+        refusal: "NOT_JSON",
+        detail: "truncated 31877/31877 -",
+      },
+    );
+    assert.deepEqual(
+      claimAnswerOf({ refusal: "NOT_JSON", detail: 'Here it is: {"claims"' }),
+      { kind: "REFUSED", refusal: "NOT_JSON" },
+    );
     assert.equal(claimAnswerOf({}).kind, "UNAVAILABLE");
     const a = claimAnswerOf({
       claims: [],
@@ -639,6 +657,27 @@ describe("extracting one source", () => {
       ["SKIPPED", "AI_REFUSED"],
     );
     assert.ok(!d.calls.some((c) => c.startsWith("save:")));
+  });
+
+  it("a whole answer refused with a detail: the skipped source's outcome says why (acropora-ai-agent #58)", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({
+          kind: "REFUSED",
+          refusal: "NOT_JSON",
+          detail: "truncated 31877/31877 -",
+        }),
+      },
+    });
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.reason, "AI_REFUSED");
+    assert.ok(outcome.refusalDetails.length >= 1);
+    assert.ok(
+      outcome.refusalDetails.every(
+        (r) => r === "NOT_JSON: truncated 31877/31877 -",
+      ),
+      outcome.refusalDetails.join(" | "),
+    );
   });
 
   it("an answer with no claim still stores (the text's hash), so the AI is not paid twice", async () => {

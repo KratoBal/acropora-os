@@ -277,6 +277,9 @@ async function readSectionClaims(
     }
     if (answer.kind === "REFUSED") {
       count(outcome.refusedClaims, `AI_${answer.refusal}`);
+      // why a whole answer was refused: kept even when no call answered
+      if (answer.detail && outcome.refusalDetails.length < MAX_REFUSAL_DETAILS)
+        outcome.refusalDetails.push(`${answer.refusal}: ${answer.detail}`);
       continue;
     }
     answered += 1;
