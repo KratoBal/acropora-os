@@ -11,6 +11,9 @@ import type { AuthenticatedUser } from "@acropora/types";
 import {
   GOLD_SOURCE_COUNT,
   judgeRow,
+  judgeSourceRow,
+  placeClaims,
+  sampleClaims,
   parseCompleteness,
   parseFreezeInput,
   parseMissedClaim,
@@ -20,7 +23,9 @@ import {
   GoldSetInputError,
   type GoldClaimField,
   type GoldClaimInput,
+  type GoldSourceField,
   type GoldSourceScoreInput,
+  type SourceRowJudgement,
   type RowJudgement,
 } from "./gold-set.js";
 import { GoldSetService, type GoldSetStore } from "./gold-set.controller.js";
@@ -130,16 +135,25 @@ const rows = (
 ];
 
 /** Ten sources; the rows and the missed claims go on the first one. */
+const RIGHT_SOURCE: SourceRowJudgement = {
+  verdict: "CORRECT",
+  errors: [],
+  questions: [],
+  levelChanged: false,
+};
+
 const sheet = (
   first: RowJudgement[],
   missed = 0,
   checked = true,
+  sourceRows: SourceRowJudgement[] = [],
 ): GoldSourceScoreInput[] =>
   Array.from({ length: GOLD_SOURCE_COUNT }, (_, i) => ({
     sourceId: `s${i}`,
     rows: i === 0 ? first : [],
     missed: i === 0 ? missed : 0,
     completenessChecked: checked,
+    sourceRow: sourceRows[i] ?? RIGHT_SOURCE,
   }));
 
 describe("T3 score: the plan's thresholds", () => {
@@ -211,37 +225,87 @@ describe("T3 proposal", () => {
     claims,
   });
 
-  it("takes the ten sources with the most machine claims, then the newest, then the id", () => {
+  it("takes the eight sources with the most machine claims, then the newest, then the id; at most six from one", () => {
     const candidates = [
-      ...Array.from({ length: 11 }, (_, i) => src(`a${i}`, 3)),
-      src("big", 9),
+      ...Array.from({ length: 11 }, (_, i) => src(`a${i}`, 4)),
+      src("big", 12),
       src("none", 0),
-      src("new", 3, 2024),
+      src("new", 4, 2024),
     ];
     const proposal = proposeGoldSet(candidates);
-    assert.equal(proposal.sources.length, 10);
+    assert.equal(proposal.sources.length, 8);
     assert.deepEqual(
-      proposal.sources.slice(0, 3).map((s) => s.sourceId),
-      ["big", "new", "a0"],
+      proposal.sources.slice(0, 3).map((s) => [s.sourceId, s.inSet]),
+      [
+        ["big", 6],
+        ["new", 4],
+        ["a0", 4],
+      ],
     );
-    assert.equal(proposal.claims, 9 + 3 * 9);
+    assert.equal(proposal.claims, 6 + 4 * 7);
+    assert.deepEqual(proposal.required, {
+      sources: 8,
+      claims: 30,
+      perSource: 6,
+    });
     assert.equal(proposal.enough, true);
   });
 
-  it("is not enough below ten sources or thirty claims", () => {
+  it("the stage's eight sources (acrobot 37360): 12, 12, 7, 4, 4, 4, 1, 1 give 32", () => {
+    const proposal = proposeGoldSet(
+      [12, 12, 7, 4, 4, 4, 1, 1].map((n, i) => src(`t${i}`, n)),
+    );
+    assert.equal(proposal.claims, 32);
+    assert.equal(proposal.enough, true);
+  });
+
+  it("is not enough below eight sources or thirty claims in the set", () => {
     assert.equal(proposeGoldSet([src("one", 40)]).enough, false);
+    // eight sources of three: 24 claims, below thirty
     assert.equal(
-      proposeGoldSet(Array.from({ length: 10 }, (_, i) => src(`b${i}`, 2)))
+      proposeGoldSet(Array.from({ length: 8 }, (_, i) => src(`b${i}`, 3)))
         .enough,
       false,
     );
   });
 });
 
-describe("T3 input", () => {
-  const ten = Array.from({ length: 10 }, (_, i) => `s${i}`);
+describe("T3 sample of one source", () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
 
-  it("freezes exactly ten distinct source ids", () => {
+  it("takes all up to six, above it an even spread from the first, the same every time", () => {
+    assert.deepEqual(sampleClaims(ids(4)), ids(4));
+    assert.deepEqual(sampleClaims(ids(6)), ids(6));
+    assert.deepEqual(sampleClaims(ids(12)), [
+      "c0",
+      "c2",
+      "c4",
+      "c6",
+      "c8",
+      "c10",
+    ]);
+    assert.deepEqual(sampleClaims(ids(12)), sampleClaims(ids(12)));
+    assert.equal(new Set(sampleClaims(ids(7))).size, 6);
+  });
+});
+
+describe("T3 placement", () => {
+  it("a claim on two sources counts once, at its first evidence row's source", () => {
+    const placed = placeClaims([
+      { claimId: "c1", sourceId: "a" },
+      { claimId: "c2", sourceId: "a" },
+      { claimId: "c1", sourceId: "b" },
+      { claimId: "c3", sourceId: "b" },
+    ]);
+    assert.deepEqual(placed.get("a"), ["c1", "c2"]);
+    assert.deepEqual(placed.get("b"), ["c3"]);
+  });
+});
+
+describe("T3 input", () => {
+  const ten = Array.from({ length: GOLD_SOURCE_COUNT }, (_, i) => `s${i}`);
+
+  it("freezes exactly the set's count of distinct source ids", () => {
     assert.deepEqual(parseFreezeInput({ sourceIds: ten }), ten);
     const code = (body: unknown) => {
       try {
@@ -316,13 +380,13 @@ describe("T3 service", () => {
 
   it("a write goes to the store with the user and returns the whole sheet", async () => {
     const { svc, calls } = service();
-    const ten = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const ten = Array.from({ length: GOLD_SOURCE_COUNT }, (_, i) => `s${i}`);
     assert.equal(await svc.freeze({ sourceIds: ten }, user), view);
     await svc.addMissed("s1", { text: "kimaradt" }, user);
     await svc.removeMissed("m1", user);
     await svc.setCompleteness("s1", { checked: false }, user);
     assert.deepEqual(calls, [
-      "freeze 10 u1",
+      "freeze 8 u1",
       "missed s1 kimaradt u1",
       "remove m1 u1",
       "complete s1 false u1",
@@ -342,7 +406,12 @@ describe("T3 service", () => {
   it("a conflict is a 409 and a missing row a 404", async () => {
     await assert.rejects(
       service(new GoldSetConflict("ALREADY_FROZEN", "x")).svc.freeze(
-        { sourceIds: Array.from({ length: 10 }, (_, i) => `s${i}`) },
+        {
+          sourceIds: Array.from(
+            { length: GOLD_SOURCE_COUNT },
+            (_, i) => `s${i}`,
+          ),
+        },
         user,
       ),
       ConflictException,
@@ -351,5 +420,125 @@ describe("T3 service", () => {
       service(new GoldSetNotFound("x")).svc.removeMissed("m1", user),
       NotFoundException,
     );
+  });
+});
+
+const study = (
+  field: string,
+  decision: GoldSourceField["decision"],
+  machineValue: string | null,
+  correctedValue: string | null = null,
+): GoldSourceField => ({ field, decision, machineValue, correctedValue });
+
+describe("T3b source row: the study fields, apart from the 27 of 30", () => {
+  const lab = (
+    decision: GoldSourceField["decision"],
+    corrected: string | null = null,
+    over: { controlled?: boolean | null; sampleSizes?: (number | null)[] } = {},
+  ) =>
+    judgeSourceRow({
+      fields: [
+        study("studyType", decision, "CONTROLLED_LAB", corrected),
+        study("measurementMethod", "ACCEPTED", "PHOTOMETER"),
+      ],
+      controlled: over.controlled ?? true,
+      sampleSizes: over.sampleSizes ?? [12],
+    });
+
+  it("accepted study fields are correct; a pending one waits; none is NONE", () => {
+    assert.equal(lab("ACCEPTED").verdict, "CORRECT");
+    assert.equal(lab("PENDING").verdict, "PENDING");
+    assert.equal(
+      judgeSourceRow({ fields: [], controlled: null, sampleSizes: [] }).verdict,
+      "NONE",
+    );
+  });
+
+  it("a study type corrected to another tier moves the level; to the same tier it does not", () => {
+    // a controlled lab with 12 colonies is SINGLE_EXPERIMENT; a field survey is OBSERVATIONAL
+    const moved = lab("CORRECTED", "FIELD_OBSERVATIONAL");
+    assert.equal(moved.verdict, "WRONG");
+    assert.deepEqual(moved.errors, ["studyType"]);
+    assert.equal(moved.levelChanged, true);
+    // a mesocosm is experimental too: the same tier, a wrong field, no level change
+    const same = lab("CORRECTED", "MESOCOSM");
+    assert.equal(same.verdict, "WRONG");
+    assert.equal(same.levelChanged, false);
+  });
+
+  it("the tier reads the source's control and the claims' sample sizes", () => {
+    // without a control the lab is OBSERVATIONAL already: a survey changes nothing
+    assert.equal(
+      lab("CORRECTED", "FIELD_OBSERVATIONAL", { controlled: false })
+        .levelChanged,
+      false,
+    );
+    // one claim with too few replicates, one with enough: the second moves
+    assert.equal(
+      lab("CORRECTED", "FIELD_OBSERVATIONAL", { sampleSizes: [2, 12] })
+        .levelChanged,
+      true,
+    );
+    // rejected: no study type at all is no tier, which is a change
+    assert.equal(lab("REJECTED").levelChanged, true);
+  });
+
+  it("a study field on several anchors is one error", () => {
+    const row = judgeSourceRow({
+      fields: [
+        study("studyType", "REJECTED", "CONTROLLED_LAB"),
+        study("studyType", "REJECTED", "CONTROLLED_LAB"),
+      ],
+      controlled: true,
+      sampleSizes: [12],
+    });
+    assert.deepEqual(row.errors, ["studyType"]);
+  });
+
+  it("a wrong measurement method is an error but moves no level", () => {
+    const row = judgeSourceRow({
+      fields: [
+        study("studyType", "ACCEPTED", "CONTROLLED_LAB"),
+        study(
+          "measurementMethod",
+          "CORRECTED",
+          "PHOTOMETER",
+          "COLORIMETRIC_KIT",
+        ),
+      ],
+      controlled: true,
+      sampleSizes: [12],
+    });
+    assert.deepEqual(row.errors, ["measurementMethod"]);
+    assert.equal(row.levelChanged, false);
+  });
+
+  it("the score counts them apart: one wrong field passes, two fail, a level change fails", () => {
+    const wrongField: SourceRowJudgement = {
+      verdict: "WRONG",
+      errors: ["measurementMethod"],
+      questions: [],
+      levelChanged: false,
+    };
+    const one = scoreGoldSet(sheet(rows(30), 0, true, [wrongField]));
+    assert.equal(one.verdict, "PASS");
+    assert.equal(one.sourceFields.verdict, "PASS");
+    assert.equal(one.sourceFields.wrongFields, 1);
+    const two = scoreGoldSet(
+      sheet(rows(30), 0, true, [wrongField, wrongField]),
+    );
+    assert.equal(two.sourceFields.verdict, "FAIL");
+    // the claims' verdict does not move with it
+    assert.equal(two.verdict, "PASS");
+    const level = scoreGoldSet(
+      sheet(rows(30), 0, true, [{ ...wrongField, levelChanged: true }]),
+    );
+    assert.equal(level.sourceFields.verdict, "FAIL");
+    assert.equal(level.sourceFields.levelChanged, 1);
+    const waiting = scoreGoldSet(
+      sheet(rows(30), 0, true, [{ ...RIGHT_SOURCE, verdict: "PENDING" }]),
+    );
+    assert.equal(waiting.sourceFields.verdict, "NOT_READY");
+    assert.equal(scoreGoldSet([]).sourceFields.verdict, "NOT_READY");
   });
 });

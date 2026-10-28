@@ -1,8 +1,16 @@
+import {
+  STUDY_TYPES,
+  designTier,
+  type StudyType,
+} from "@acropora/knowledge-base";
+
 /**
  * THE T3 GOLD SET (plan v4, section 10, T3; research-t3-jelolt-keszlet).
  *
- * The extraction is the machine's, the judgement the editor's: ten sources
- * are frozen with their machine claims, and the editor reviews every row in
+ * The extraction is the machine's, the judgement the editor's: eight sources
+ * are frozen with at most six machine claims each (acrobot 37360: the stage
+ * extraction gives eight sources, and a source with twelve claims must not be
+ * a third of the set), and the editor reviews every row in
  * the claim review already in use (field by field). Precision asks nothing
  * new: a row is read from the decisions the review stored. For completeness
  * the editor records, per source, the claims the machine did not bring,
@@ -20,17 +28,26 @@
  * - anything else (withdrawn by a re-extraction, DISPUTED by a retraction,
  *   SUPERSEDED, or gone): OUT of the score, shown with its reason.
  * Not errors, shown apart: an editor's QUESTION (the machine proposed no
- * value the vocabulary holds, so it asserted none), and the source's own
- * study fields (they belong to the source, not to one claim).
+ * value the vocabulary holds, so it asserted none). The source's own study
+ * fields belong to the source, not to one claim: they are the SOURCE ROW
+ * (T3b), one per source and counted apart (see `judgeSourceRow`).
  *
  * Score (plan 10): precision at least 27 of 30 (at most 3 errors, scaled to
  * the rows scored) with zero value, unit or basis errors; completeness at
  * least 21 of 30 (the machine's real claims among the real claims plus the
- * missed ones). The sample is small, so the 95% Wilson lower bound is shown
+ * missed ones). A capped source's other machine claims are in neither side:
+ * a missed claim is one NO machine claim of the source brought, so the
+ * measured completeness can only be lower than the true one (the safe side). The sample is small, so the 95% Wilson lower bound is shown
  * with each rate. Pure: no database, no clock.
  */
 
-export const GOLD_SOURCE_COUNT = 10;
+/**
+ * acrobot 37360 (2026-10-28, the plan's survey records it): eight sources, at
+ * most six claims from one, at least thirty in all. The plan said ten sources;
+ * the stage extraction has eight with machine claims.
+ */
+export const GOLD_SOURCE_COUNT = 8;
+export const GOLD_MAX_CLAIMS_PER_SOURCE = 6;
 export const GOLD_MIN_CLAIMS = 30;
 /** Plan 10: at most 3 errors in 30 rows, at least 21 of 30 found. */
 export const PRECISION_MAX_ERRORS_PER_30 = 3;
@@ -76,6 +93,95 @@ export interface RowJudgement {
 }
 
 export const CRITICAL_FIELD = "quantity";
+
+/**
+ * T3b, THE SOURCE ROW (acrobot 37343, 37355): the source's study fields feed
+ * the evidence level and with it the answer's strength phrase, and no other
+ * test group measures them. One row per source, judged from the same stored
+ * field decisions, counted APART from the 27 of 30. `controlled` is not here:
+ * it has no anchor and no editor's decision yet (a schema step, taken only if
+ * the first round shows a `controlled` error would move a level).
+ */
+export const SOURCE_ROW_FIELDS = ["studyType", "measurementMethod"] as const;
+/** At most one wrong study field over the set's sources, and none that moves a level. */
+export const SOURCE_FIELDS_MAX_ERRORS = 1;
+
+export interface GoldSourceField extends GoldClaimField {
+  /** The editor's value, CORRECTED only. */
+  correctedValue: string | null;
+}
+
+export interface SourceRowInput {
+  fields: readonly GoldSourceField[];
+  /** The source's `controlled`, as stored (rule 1 reads it). */
+  controlled: boolean | null;
+  /** The sample sizes of the source's frozen claims; null: not reported. */
+  sampleSizes: readonly (number | null)[];
+}
+
+export interface SourceRowJudgement {
+  /** NONE: the extraction left no study field on the source. */
+  verdict: "PENDING" | "CORRECT" | "WRONG" | "NONE";
+  errors: string[];
+  questions: string[];
+  /**
+   * A wrong study type that moves a claim's design tier (rule 1 of the
+   * evidence level, recomputed with the machine's and the editor's value):
+   * the rule table decides it, not the editor.
+   */
+  levelChanged: boolean;
+}
+
+const studyTypeOf = (value: string | null): StudyType | null =>
+  value !== null && (STUDY_TYPES as readonly string[]).includes(value)
+    ? (value as StudyType)
+    : null;
+
+export function judgeSourceRow(input: SourceRowInput): SourceRowJudgement {
+  const fields = input.fields.filter((f) =>
+    (SOURCE_ROW_FIELDS as readonly string[]).includes(f.field),
+  );
+  const questions = fields
+    .filter((f) => f.machineValue === null)
+    .map((f) => f.field);
+  if (!fields.length)
+    return { verdict: "NONE", errors: [], questions, levelChanged: false };
+  if (fields.some((f) => f.decision === "PENDING"))
+    return { verdict: "PENDING", errors: [], questions, levelChanged: false };
+  const wrong = fields.filter(
+    (f) =>
+      f.machineValue !== null &&
+      (f.decision === "CORRECTED" || f.decision === "REJECTED"),
+  );
+  const sizes = input.sampleSizes.length ? input.sampleSizes : [null];
+  const levelChanged = wrong
+    .filter((f) => f.field === "studyType")
+    .some((f) => {
+      const editors = f.decision === "CORRECTED" ? f.correctedValue : null;
+      return sizes.some(
+        (sampleSize) =>
+          designTier({
+            sourceId: "",
+            studyType: studyTypeOf(f.machineValue),
+            controlled: input.controlled,
+            sampleSize,
+          }) !==
+          designTier({
+            sourceId: "",
+            studyType: studyTypeOf(editors),
+            controlled: input.controlled,
+            sampleSize,
+          }),
+      );
+    });
+  return {
+    verdict: wrong.length ? "WRONG" : "CORRECT",
+    // one field, one error: a study field may stand on several anchors
+    errors: [...new Set(wrong.map((f) => f.field))],
+    questions,
+    levelChanged,
+  };
+}
 
 export function judgeRow(claim: GoldClaimInput): RowJudgement {
   const questions = claim.fields
@@ -143,6 +249,7 @@ export interface GoldSourceScoreInput {
   rows: readonly RowJudgement[];
   missed: number;
   completenessChecked: boolean;
+  sourceRow: SourceRowJudgement;
 }
 
 export type ScoreProblem =
@@ -186,6 +293,18 @@ export interface GoldScore {
   verdict: "NOT_READY" | "PASS" | "FAIL";
   problems: ScoreProblem[];
   failures: ScoreFailure[];
+  /** T3b, apart from the verdict above: the sources' study fields. */
+  sourceFields: {
+    pending: number;
+    correct: number;
+    wrong: number;
+    none: number;
+    wrongFields: number;
+    maxErrors: number;
+    levelChanged: number;
+    /** NOT_READY while a source row waits or the set is not frozen. */
+    verdict: "NOT_READY" | "PASS" | "FAIL";
+  };
 }
 
 export function scoreGoldSet(
@@ -250,7 +369,71 @@ export function scoreGoldSet(
     verdict: problems.length ? "NOT_READY" : failures.length ? "FAIL" : "PASS",
     problems,
     failures: problems.length ? [] : failures,
+    sourceFields: scoreSourceRows(sources.map((s) => s.sourceRow)),
   };
+}
+
+function scoreSourceRows(
+  rows: readonly SourceRowJudgement[],
+): GoldScore["sourceFields"] {
+  const count = (v: SourceRowJudgement["verdict"]) =>
+    rows.filter((r) => r.verdict === v).length;
+  const pending = count("PENDING");
+  const wrongFields = rows.reduce((n, r) => n + r.errors.length, 0);
+  const levelChanged = rows.filter((r) => r.levelChanged).length;
+  return {
+    pending,
+    correct: count("CORRECT"),
+    wrong: count("WRONG"),
+    none: count("NONE"),
+    wrongFields,
+    maxErrors: SOURCE_FIELDS_MAX_ERRORS,
+    levelChanged,
+    verdict:
+      !rows.length || pending
+        ? "NOT_READY"
+        : wrongFields > SOURCE_FIELDS_MAX_ERRORS || levelChanged > 0
+          ? "FAIL"
+          : "PASS",
+  };
+}
+
+/**
+ * Which source each machine claim counts at: its first evidence row's (in
+ * the order given), once. A claim with machine evidence on two sources would
+ * otherwise be two rows of the set (barracuda, #1948).
+ */
+export function placeClaims(
+  rows: readonly { claimId: string; sourceId: string }[],
+): Map<string, string[]> {
+  const bySource = new Map<string, string[]>();
+  const placed = new Set<string>();
+  for (const row of rows) {
+    if (placed.has(row.claimId)) continue;
+    placed.add(row.claimId);
+    bySource.set(row.sourceId, [
+      ...(bySource.get(row.sourceId) ?? []),
+      row.claimId,
+    ]);
+  }
+  return bySource;
+}
+
+/**
+ * The claims of one source that go into the set: all of them up to the cap,
+ * above it an even spread over the extraction order (the first, then every
+ * n-th), so a long paper is not judged on its first section only. The same
+ * list gives the same sample every time; nothing here is random.
+ */
+export function sampleClaims(
+  ids: readonly string[],
+  max = GOLD_MAX_CLAIMS_PER_SOURCE,
+): string[] {
+  if (ids.length <= max) return [...ids];
+  return Array.from(
+    { length: max },
+    (_, i) => ids[Math.floor((i * ids.length) / max)]!,
+  );
 }
 
 export interface ProposalSource {
@@ -262,9 +445,13 @@ export interface ProposalSource {
 }
 
 export interface GoldProposal {
-  sources: ProposalSource[];
+  /** `inSet`: the source's claims the set takes (at most the cap). */
+  sources: (ProposalSource & { inSet: number })[];
+  /** The claims the set takes, over all its sources. */
   claims: number;
-  /** Ten sources and at least thirty claims: it can be frozen as it is. */
+  /** What a frozen set needs, for the screen to say. */
+  required: { sources: number; claims: number; perSource: number };
+  /** Enough sources and claims: it can be frozen as it is. */
   enough: boolean;
 }
 
@@ -285,11 +472,20 @@ export function proposeGoldSet(
         (b.year ?? -1) - (a.year ?? -1) ||
         (a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0),
     )
-    .slice(0, GOLD_SOURCE_COUNT);
-  const claims = sources.reduce((n, s) => n + s.claims, 0);
+    .slice(0, GOLD_SOURCE_COUNT)
+    .map((s) => ({
+      ...s,
+      inSet: Math.min(s.claims, GOLD_MAX_CLAIMS_PER_SOURCE),
+    }));
+  const claims = sources.reduce((n, s) => n + s.inSet, 0);
   return {
     sources,
     claims,
+    required: {
+      sources: GOLD_SOURCE_COUNT,
+      claims: GOLD_MIN_CLAIMS,
+      perSource: GOLD_MAX_CLAIMS_PER_SOURCE,
+    },
     enough: sources.length === GOLD_SOURCE_COUNT && claims >= GOLD_MIN_CLAIMS,
   };
 }
