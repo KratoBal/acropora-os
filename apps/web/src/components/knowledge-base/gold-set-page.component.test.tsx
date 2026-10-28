@@ -76,6 +76,16 @@ const score = (over: Partial<GoldSet["score"]> = {}): GoldSet["score"] => ({
   verdict: "NOT_READY",
   problems: ["PENDING_ROWS", "TOO_FEW_SCORED", "COMPLETENESS_OPEN"],
   failures: [],
+  sourceFields: {
+    pending: 0,
+    correct: 0,
+    wrong: 1,
+    none: 0,
+    wrongFields: 1,
+    maxErrors: 1,
+    levelChanged: 1,
+    verdict: "FAIL",
+  },
   ...over,
 });
 
@@ -129,6 +139,23 @@ const source = (over: Partial<GoldSource> = {}): GoldSource => ({
     },
   ],
   completenessCheckedAt: null,
+  notInSet: 6,
+  sourceRow: {
+    fields: [
+      {
+        field: "studyType",
+        value: "CONTROLLED_LAB",
+        correctedValue: null,
+        decision: "REJECTED",
+      },
+    ],
+    judgement: {
+      verdict: "WRONG",
+      errors: ["studyType"],
+      questions: [],
+      levelChanged: true,
+    },
+  },
   ...over,
 });
 
@@ -146,13 +173,15 @@ const proposal = (enough: boolean): GoldSet => ({
   frozenAt: null,
   sources: [],
   proposal: {
-    sources: Array.from({ length: enough ? 10 : 2 }, (_, i) => ({
+    sources: Array.from({ length: enough ? 8 : 2 }, (_, i) => ({
       sourceId: `p${i}`,
       title: `Javasolt cikk ${i}`,
       year: 2020,
-      claims: enough ? 3 : 4,
+      claims: i === 0 ? 12 : 4,
+      inSet: i === 0 ? 6 : 4,
     })),
-    claims: enough ? 30 : 8,
+    claims: enough ? 34 : 10,
+    required: { sources: 8, claims: 30, perSource: 6 },
     enough,
   },
   score: score({ problems: ["NOT_FROZEN"], verdict: "NOT_READY" }),
@@ -261,7 +290,7 @@ describe("GoldSetPage", () => {
     await waitFor(() =>
       expect(api.freezeGoldSet).toHaveBeenCalledWith(
         "token-1",
-        Array.from({ length: 10 }, (_, i) => `p${i}`),
+        Array.from({ length: 8 }, (_, i) => `p${i}`),
       ),
     );
   });
@@ -288,6 +317,29 @@ describe("GoldSetPage", () => {
         name: "Ebben a forrásban nincs több kimaradt állítás",
       }),
     ).toBeNull();
+  });
+
+  it("T3b: the source row and its score apart, with the level change named; the capped source says what is not in the set", async () => {
+    render(<GoldSetPage />);
+    const studyRow = await screen.findByLabelText("Vizsgálati mezők");
+    expect(
+      within(studyRow).getByText(
+        /Vizsgálattípus · a bizonyítéki szintet megváltoztatja/,
+      ),
+    ).toBeTruthy();
+    const apart = screen.getByRole("region", {
+      name: "Forrás vizsgálati mezői",
+    });
+    expect(within(apart).getByText("Nem felel meg")).toBeTruthy();
+    expect(
+      screen.getByText(/A forrás további 6 gépi állítása nincs a készletben/),
+    ).toBeTruthy();
+  });
+
+  it("the proposal says how many of a source's claims go into the set", async () => {
+    api.goldSet.mockResolvedValue(proposal(true));
+    render(<GoldSetPage />);
+    expect(await screen.findByText("6 a 12 állításból")).toBeTruthy();
   });
 
   it("asks nothing without the right", async () => {

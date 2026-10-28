@@ -100,8 +100,10 @@ describe(
           },
         })
       ).id;
-      for (let i = 0; i < 10; i++)
-        sourceIds.push(await extractedSource(`s${i}`, 3));
+      // seven sources of four claims, and one of eight the set takes six of
+      for (let i = 0; i < 7; i++)
+        sourceIds.push(await extractedSource(`s${i}`, 4));
+      sourceIds.push(await extractedSource("s7", 8));
       excludedSourceId = await extractedSource("x", 3, false);
     });
 
@@ -165,15 +167,17 @@ describe(
     /** Every claim field and pending source field accepted, the questions rejected, then the overrides. */
     const decisions = (
       r: ClaimReview,
-      over: (field: string) => FieldDecision["decision"] | null = () => null,
+      over: (
+        field: string,
+        owner: "CLAIM" | "SOURCE",
+      ) => FieldDecision["decision"] | null = () => null,
     ): FieldDecision[] =>
       r.fields
         .filter((f) => f.owner === "CLAIM" || f.decision === "PENDING")
         .map((f) => ({
           anchorId: f.anchorId,
           decision:
-            (f.owner === "CLAIM" ? over(f.field) : null) ??
-            (f.value === null ? "REJECT" : "ACCEPT"),
+            over(f.field, f.owner) ?? (f.value === null ? "REJECT" : "ACCEPT"),
         }));
 
     const row = (view: GoldSetView, claimId: string) =>
@@ -186,9 +190,16 @@ describe(
       const ours = view.proposal.sources.filter((s) =>
         sourceIds.includes(s.sourceId),
       );
-      // other included sources may stand in the database; ours hold three each
+      // other included sources may stand in the database; ours hold four
+      // each, the eight-claim one gives six to the set
       assert.ok(ours.length > 0);
-      assert.ok(ours.every((s) => s.claims === 3));
+      assert.ok(
+        ours.every((s) =>
+          s.sourceId === sourceIds[7]
+            ? s.claims === 8 && s.inSet === 6
+            : s.claims === 4 && s.inSet === 4,
+        ),
+      );
       assert.equal(
         view.proposal.sources.some((s) => s.sourceId === excludedSourceId),
         false,
@@ -210,7 +221,7 @@ describe(
       );
     });
 
-    it("the freeze pins the ten sources with their thirty claims, once, with its AuditLog row", async () => {
+    it("the freeze pins the eight sources with at most six claims each, once, with its AuditLog row", async () => {
       await repository.freeze(sourceIds, userId);
       const view = await repository.view();
       assert.equal(view.frozen, true);
@@ -218,8 +229,13 @@ describe(
         view.sources.map((s) => s.sourceId),
         sourceIds,
       );
-      assert.equal(view.score.rows.total, 30);
-      assert.equal(view.score.rows.pending, 30);
+      // 7 x 4 + 6 of the eight: at most six from one source
+      assert.equal(view.score.rows.total, 34);
+      assert.equal(view.score.rows.pending, 34);
+      const capped = view.sources[7]!;
+      assert.equal(capped.rows.length, 6);
+      assert.equal(capped.notInSet, 2);
+      assert.equal(view.sources[0]!.notInSet, 0);
       assert.equal(view.score.verdict, "NOT_READY");
       assert.ok(view.score.problems.includes("PENDING_ROWS"));
       assert.equal(
@@ -279,6 +295,74 @@ describe(
       assert.equal(row(view, reextracted!).judgement.outReason, "REEXTRACTED");
       assert.equal(view.score.precision.critical, 1);
       assert.equal(view.score.rows.out, 1);
+    });
+
+    it("T3b: the source row reads the study fields' stored decisions, counted apart", async () => {
+      const before = await repository.view();
+      // the first review above accepted source 0's study fields with its claim
+      assert.equal(before.sources[0]!.sourceRow.judgement.verdict, "CORRECT");
+      assert.equal(before.sources[2]!.sourceRow.judgement.verdict, "PENDING");
+      const claimId = before.sources[2]!.rows[0]!.claimId;
+      await review.save(
+        claimId,
+        {
+          decisions: decisions(await review.detail(claimId), (f, owner) =>
+            owner === "SOURCE" && f === "studyType" ? "REJECT" : null,
+          ),
+          applicability: null,
+        },
+        userId,
+      );
+      const view = await repository.view();
+      const row = view.sources[2]!.sourceRow;
+      assert.ok(row.fields.some((f) => f.field === "studyType"));
+      assert.equal(row.judgement.verdict, "WRONG");
+      assert.deepEqual(row.judgement.errors, ["studyType"]);
+      // no study type is no design tier: the level moves
+      assert.equal(row.judgement.levelChanged, true);
+      assert.equal(view.score.sourceFields.wrongFields, 1);
+      assert.equal(view.score.sourceFields.levelChanged, 1);
+    });
+
+    it("a second evidence row's field decisions count in the row (barracuda, #1948)", async () => {
+      const claimId = (await repository.view()).sources[3]!.rows[0]!.claimId;
+      await review.save(
+        claimId,
+        {
+          decisions: decisions(await review.detail(claimId)),
+          applicability: null,
+        },
+        userId,
+      );
+      assert.equal(
+        row(await repository.view(), claimId).judgement.verdict,
+        "CORRECT",
+      );
+      // a second evidence row, on another source's machine passage, whose
+      // field the editor corrected
+      const passage = await prisma.knowledgePassage.findFirstOrThrow({
+        where: { sourceVersion: { sourceId: sourceIds[4]! } },
+        select: { id: true },
+      });
+      const evidence = await prisma.knowledgeClaimEvidence.create({
+        data: { claimId, passageId: passage.id, stance: "SUPPORTS" },
+        select: { id: true },
+      });
+      await prisma.knowledgeFieldAnchor.create({
+        data: {
+          claimEvidenceId: evidence.id,
+          field: "effect",
+          passageId: passage.id,
+          normalizedValue: "CALCIFICATION",
+          correctedValue: "SKELETAL_DENSITY",
+          decision: "CORRECTED",
+          decidedById: userId,
+          decidedAt: new Date(),
+        },
+      });
+      const judged = row(await repository.view(), claimId).judgement;
+      assert.equal(judged.verdict, "WRONG");
+      assert.deepEqual(judged.errors, ["effect"]);
     });
 
     it("missed claims and the completeness mark: a checked source takes no more, each write is logged", async () => {

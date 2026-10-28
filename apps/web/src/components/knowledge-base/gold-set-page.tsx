@@ -41,6 +41,10 @@ import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
  * állítások, és a pontszám a terv küszöbeivel. Parancssor nem kell hozzá.
  *
  * Figma-keret nincs: a Kiolvasás és a Következtetések elemeiből épül.
+ *
+ * T3b (acrobot 37343): forrásonként egy forrás-sor is áll, a vizsgálattípus
+ * és a mérési módszer tárolt döntéseiből, KÜLÖN számolva a 27/30-tól. A
+ * „kontroll” mezőt ez a kör nem méri: ahhoz még nincs szerkesztői döntés.
  */
 const VERDICT: Record<
   GoldRowVerdict,
@@ -242,8 +246,8 @@ export function GoldSetPage() {
 
       <ConfirmDialog
         open={confirmFreeze && Boolean(goldSet?.proposal)}
-        title="Rögzíted ezt a tíz forrást a T3 készletnek?"
-        consequence={`A tíz forrás és a ${goldSet?.proposal?.claims ?? 0} gépi állításuk lesz a mérés alapja; egy későbbi kiolvasás nem cseréli ki a sorokat.`}
+        title={`Rögzíted ezt a ${goldSet?.proposal?.sources.length ?? 0} forrást a T3 készletnek?`}
+        consequence={`A forrásokból ${goldSet?.proposal?.claims ?? 0} gépi állítás lesz a mérés alapja (forrásonként legfeljebb ${goldSet?.proposal?.required.perSource ?? 0}); egy későbbi kiolvasás nem cseréli ki a sorokat.`}
         recovery="A rögzítés a felületen nem vonható vissza."
         confirmLabel="Rögzítés"
         busy={busy}
@@ -279,13 +283,15 @@ function ProposalCard({
       </h2>
       <p className="text-[15px] text-pilot-grey-800">
         A befogadott források közül azok, amelyekből a legtöbb gépi állítás
-        készült: {proposal.sources.length} forrás, {proposal.claims} állítás.
+        készült: {proposal.sources.length} forrás, a készletbe {proposal.claims}{" "}
+        állítás kerül (egy forrásból legfeljebb {proposal.required.perSource}, a
+        kiolvasás sorrendjében egyenletesen válogatva).
       </p>
       {proposal.enough ? null : (
         <Alert
           variant="info"
           title="Ebből még nem áll össze a készlet"
-          description="A T3 tíz forrást és legalább 30 gépi állítást kér. Több befogadott, kiolvasott forrás kell hozzá."
+          description={`A T3 ${proposal.required.sources} forrást és legalább ${proposal.required.claims} gépi állítást kér. Több befogadott, kiolvasott forrás kell hozzá.`}
         />
       )}
       {proposal.sources.length ? (
@@ -302,7 +308,9 @@ function ProposalCard({
                 ) : null}
               </span>
               <span className="whitespace-nowrap text-sm text-pilot-grey-600">
-                {s.claims} állítás
+                {s.inSet === s.claims
+                  ? `${s.claims} állítás`
+                  : `${s.inSet} a ${s.claims} állításból`}
               </span>
             </li>
           ))}
@@ -390,7 +398,45 @@ function ScoreCard({ score, sources }: { score: GoldScore; sources: number }) {
           ))}
         </ul>
       ) : null}
+      <SourceFieldsScore score={score.sourceFields} />
     </PilotCard>
+  );
+}
+
+function SourceFieldsScore({ score }: { score: GoldScore["sourceFields"] }) {
+  return (
+    <section
+      aria-label="Forrás vizsgálati mezői"
+      className="space-y-2 border-t border-pilot-grey-200 pt-4"
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="text-base font-semibold text-pilot-grey-900">
+          Forrás vizsgálati mezői (külön számolva)
+        </h3>
+        <PilotBadge
+          variant={
+            score.verdict === "PASS"
+              ? "success"
+              : score.verdict === "FAIL"
+                ? "danger"
+                : "amber"
+          }
+        >
+          {score.verdict === "PASS"
+            ? "Megfelel"
+            : score.verdict === "FAIL"
+              ? "Nem felel meg"
+              : "Folyamatban"}
+        </PilotBadge>
+      </div>
+      <p className="text-sm text-pilot-grey-700">
+        Hibás mező {score.wrongFields}, megengedett {score.maxErrors} ·
+        bizonyítéki szintet változtató hiba {score.levelChanged}, megengedett 0
+        · vár {score.pending} forrás. A vizsgálattípus és a mérési módszer
+        számít bele; a kontroll mezőt ez a kör nem méri. Hogy egy hiba
+        változtat-e a szinten, azt a szabálytábla újraszámolása dönti el.
+      </p>
+    </section>
   );
 }
 
@@ -429,7 +475,16 @@ function SourceCard({
         <p className="text-sm text-pilot-grey-600">
           {[source.year, source.doi].filter(Boolean).join(" · ")}
         </p>
+        {source.notInSet > 0 ? (
+          <p className="text-sm text-pilot-grey-700">
+            A forrás további {source.notInSet} gépi állítása nincs a készletben
+            (forrásonként legfeljebb hat került be). Kimaradt állításnak csak
+            azt vedd fel, amit a gép ebből a forrásból egyáltalán nem hozott.
+          </p>
+        ) : null}
       </div>
+
+      <SourceRowItem row={source.sourceRow} />
 
       <ol className="space-y-3" aria-label="Gépi állítások">
         {source.rows.map((row, i) => (
@@ -556,6 +611,57 @@ function SourceCard({
         onCancel={() => setRemoving(null)}
       />
     </PilotCard>
+  );
+}
+
+const SOURCE_ROW_VERDICT: Record<
+  GoldSource["sourceRow"]["judgement"]["verdict"],
+  { label: string; variant: "amber" | "success" | "danger" | "grey" }
+> = {
+  PENDING: { label: "Bírálatra vár", variant: "amber" },
+  CORRECT: { label: "Helyes", variant: "success" },
+  WRONG: { label: "Hibás", variant: "danger" },
+  NONE: { label: "Nincs gépi vizsgálati mező", variant: "grey" },
+};
+
+function SourceRowItem({ row }: { row: GoldSource["sourceRow"] }) {
+  const v = SOURCE_ROW_VERDICT[row.judgement.verdict];
+  return (
+    <div
+      aria-label="Vizsgálati mezők"
+      className="space-y-2 rounded-lg bg-pilot-grey-50 p-3"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-pilot-grey-700">
+          Vizsgálati mezők
+        </span>
+        <PilotBadge variant={v.variant}>{v.label}</PilotBadge>
+        {row.judgement.verdict === "WRONG" ? (
+          <span className="text-sm text-pilot-grey-800">
+            {row.judgement.errors.map((e) => FIELD_LABELS[e] ?? e).join(", ")}
+            {row.judgement.levelChanged
+              ? " · a bizonyítéki szintet megváltoztatja"
+              : ""}
+          </span>
+        ) : null}
+      </div>
+      {row.fields.length ? (
+        <ul className="flex flex-wrap gap-2" aria-label="Forrás-mezők">
+          {row.fields.map((f, i) => (
+            <li key={`${f.field}-${i}`} className="text-sm">
+              <span className="font-semibold">
+                {FIELD_LABELS[f.field] ?? f.field}:
+              </span>{" "}
+              {f.value ?? "kérdés"}
+              {f.correctedValue ? ` → ${f.correctedValue}` : ""}{" "}
+              <span className="text-pilot-grey-500">
+                ({DECISIONS[f.decision]})
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

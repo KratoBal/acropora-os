@@ -1,16 +1,22 @@
 import { Prisma, prisma } from "@acropora/database";
 
 import {
+  GOLD_MAX_CLAIMS_PER_SOURCE,
   GOLD_MIN_CLAIMS,
   MAX_MISSED_PER_SOURCE,
+  SOURCE_ROW_FIELDS,
   judgeRow,
+  judgeSourceRow,
+  placeClaims,
   proposeGoldSet,
+  sampleClaims,
   scoreGoldSet,
   type AnchorDecision,
   type GoldProposal,
   type GoldScore,
   type MissedClaimInput,
   type RowJudgement,
+  type SourceRowJudgement,
 } from "./gold-set.js";
 
 export interface GoldRowView {
@@ -41,6 +47,13 @@ export interface GoldSourceView {
     createdAt: Date;
   }[];
   completenessCheckedAt: Date | null;
+  /** The source's machine claims the set did not take (the cap): reviewed nowhere here. */
+  notInSet: number;
+  /** T3b: the source's study fields and their verdict, counted apart. */
+  sourceRow: {
+    fields: GoldRowView["fields"];
+    judgement: SourceRowJudgement;
+  };
 }
 
 export interface GoldSetView {
@@ -125,15 +138,14 @@ async function scorableClaims(
       .filter((e) => e.claim.status === "WITHDRAWN")
       .map((e) => e.claimId),
   );
-  const bySource = new Map<string, string[]>();
-  for (const e of evidence) {
-    if (e.claim.status === "WITHDRAWN" && !withdrawn.has(e.claimId)) continue;
-    const sourceId = e.passage.sourceVersion.sourceId;
-    const list = bySource.get(sourceId) ?? [];
-    if (!list.includes(e.claimId)) list.push(e.claimId);
-    bySource.set(sourceId, list);
-  }
-  return bySource;
+  return placeClaims(
+    evidence
+      .filter((e) => e.claim.status !== "WITHDRAWN" || withdrawn.has(e.claimId))
+      .map((e) => ({
+        claimId: e.claimId,
+        sourceId: e.passage.sourceVersion.sourceId,
+      })),
+  );
 }
 
 const ROW_SELECT = {
@@ -142,6 +154,7 @@ const ROW_SELECT = {
   evidence: {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
+      sampleSize: true,
       passage: { select: { text: true, locator: true } },
       anchors: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -162,7 +175,9 @@ const GOLD_SELECT = {
   claimIds: true,
   frozenAt: true,
   completenessCheckedAt: true,
-  source: { select: { title: true, year: true, doi: true } },
+  source: {
+    select: { title: true, year: true, doi: true, controlled: true },
+  },
   missed: {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, text: true, locator: true, createdAt: true },
@@ -198,20 +213,66 @@ export class GoldSetRepository {
         select: ROW_SELECT,
       });
       const byId = new Map(claims.map((c) => [c.id, c]));
+      const studyAnchors = await tx.knowledgeFieldAnchor.findMany({
+        where: {
+          sourceId: { in: gold.map((g) => g.sourceId) },
+          field: { in: [...SOURCE_ROW_FIELDS] },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          sourceId: true,
+          field: true,
+          normalizedValue: true,
+          correctedValue: true,
+          decision: true,
+        },
+      });
       const withdrawn = await editorWithdrawn(
         tx,
         claims.filter((c) => c.status === "WITHDRAWN").map((c) => c.id),
       );
-      const sources: GoldSourceView[] = gold.map((g) => ({
-        sourceId: g.sourceId,
-        position: g.position,
-        title: g.source.title,
-        year: g.source.year,
-        doi: g.source.doi,
-        rows: g.claimIds.map((id) => rowOf(id, byId.get(id), withdrawn)),
-        missed: g.missed,
-        completenessCheckedAt: g.completenessCheckedAt,
-      }));
+      const scorable = await scorableClaims(
+        tx,
+        gold.map((g) => g.sourceId),
+      );
+      const sources: GoldSourceView[] = gold.map((g) => {
+        const fields = studyAnchors
+          .filter((a) => a.sourceId === g.sourceId)
+          .map((a) => ({
+            field: a.field,
+            value: a.normalizedValue,
+            correctedValue: a.correctedValue,
+            decision: a.decision as AnchorDecision,
+          }));
+        return {
+          sourceId: g.sourceId,
+          position: g.position,
+          title: g.source.title,
+          year: g.source.year,
+          doi: g.source.doi,
+          rows: g.claimIds.map((id) => rowOf(id, byId.get(id), withdrawn)),
+          missed: g.missed,
+          completenessCheckedAt: g.completenessCheckedAt,
+          notInSet: (scorable.get(g.sourceId) ?? []).filter(
+            (id) => !g.claimIds.includes(id),
+          ).length,
+          sourceRow: {
+            fields,
+            judgement: judgeSourceRow({
+              fields: fields.map((f) => ({
+                field: f.field,
+                machineValue: f.value,
+                correctedValue: f.correctedValue,
+                decision: f.decision,
+              })),
+              controlled: g.source.controlled,
+              sampleSizes: g.claimIds.flatMap(
+                (id) => byId.get(id)?.evidence.map((e) => e.sampleSize) ?? [],
+              ),
+            }),
+          },
+        };
+      });
       return {
         frozen: true,
         frozenAt: gold[0]!.frozenAt,
@@ -223,6 +284,7 @@ export class GoldSetRepository {
             rows: s.rows.map((r) => r.judgement),
             missed: s.missed.length,
             completenessChecked: s.completenessCheckedAt !== null,
+            sourceRow: s.sourceRow.judgement,
           })),
         ),
       };
@@ -271,7 +333,11 @@ export class GoldSetRepository {
             "NOT_INCLUDED",
             `not an included source: ${notIncluded.join(", ")}`,
           );
-        const claims = await scorableClaims(tx, sourceIds);
+        const all = await scorableClaims(tx, sourceIds);
+        // at most six from one source, an even spread over the extraction order
+        const claims = new Map(
+          sourceIds.map((id) => [id, sampleClaims(all.get(id) ?? [])]),
+        );
         const empty = sourceIds.filter((id) => !claims.get(id)?.length);
         if (empty.length)
           throw new GoldSetConflict(
@@ -285,7 +351,7 @@ export class GoldSetRepository {
         if (total < GOLD_MIN_CLAIMS)
           throw new GoldSetConflict(
             "TOO_FEW_CLAIMS",
-            `the sources hold ${total} machine claims, the gold set needs ${GOLD_MIN_CLAIMS}`,
+            `the sources give ${total} machine claims to the set (at most ${GOLD_MAX_CLAIMS_PER_SOURCE} from one), the gold set needs ${GOLD_MIN_CLAIMS}`,
           );
         const frozenAt = new Date();
         await tx.knowledgeGoldSource.createMany({
@@ -308,6 +374,7 @@ export class GoldSetRepository {
                 sources: sourceIds.map((id) => ({
                   sourceId: id,
                   claimIds: claims.get(id)!,
+                  notInSet: (all.get(id)?.length ?? 0) - claims.get(id)!.length,
                 })),
                 claims: total,
               },
@@ -445,12 +512,15 @@ function rowOf(
   withdrawn: ReadonlySet<string>,
 ): GoldRowView {
   const evidence = claim?.evidence[0];
-  const fields = (evidence?.anchors ?? []).map((a) => ({
-    field: a.field,
-    value: a.normalizedValue,
-    correctedValue: a.correctedValue,
-    decision: a.decision as AnchorDecision,
-  }));
+  // every evidence row's fields: a second row's decisions count too (barracuda, #1948)
+  const fields = (claim?.evidence ?? [])
+    .flatMap((e) => e.anchors)
+    .map((a) => ({
+      field: a.field,
+      value: a.normalizedValue,
+      correctedValue: a.correctedValue,
+      decision: a.decision as AnchorDecision,
+    }));
   return {
     claimId,
     status: claim?.status ?? null,

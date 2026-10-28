@@ -521,6 +521,18 @@ export interface GoldSource {
     createdAt: string;
   }[];
   completenessCheckedAt: string | null;
+  /** The source's machine claims the set did not take (at most six from one). */
+  notInSet: number;
+  /** T3b: the source's study fields, counted apart from the claim rows. */
+  sourceRow: {
+    fields: GoldRow["fields"];
+    judgement: {
+      verdict: "PENDING" | "CORRECT" | "WRONG" | "NONE";
+      errors: string[];
+      questions: string[];
+      levelChanged: boolean;
+    };
+  };
 }
 
 export interface GoldScore {
@@ -550,6 +562,16 @@ export interface GoldScore {
   verdict: "NOT_READY" | "PASS" | "FAIL";
   problems: GoldScoreProblem[];
   failures: GoldScoreFailure[];
+  sourceFields: {
+    pending: number;
+    correct: number;
+    wrong: number;
+    none: number;
+    wrongFields: number;
+    maxErrors: number;
+    levelChanged: number;
+    verdict: "NOT_READY" | "PASS" | "FAIL";
+  };
 }
 
 export interface GoldSet {
@@ -562,8 +584,10 @@ export interface GoldSet {
       title: string;
       year: number | null;
       claims: number;
+      inSet: number;
     }[];
     claims: number;
+    required: { sources: number; claims: number; perSource: number };
     enough: boolean;
   } | null;
   score: GoldScore;
