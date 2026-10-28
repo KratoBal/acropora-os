@@ -613,6 +613,8 @@ export interface MedusaOrderAttentionItem {
   pickup_cart_id: string;
   since: string;
   minutes: number;
+  /** Valaki leállította az ismételt megpróbálást (commerce #607); régi webshop: hiányzik. */
+  retry_stopped?: { at: string; reason: string; by: string | null } | null;
 }
 
 export interface MedusaOrderAttention {

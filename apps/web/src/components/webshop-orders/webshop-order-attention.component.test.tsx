@@ -24,6 +24,7 @@ const RESPONSE: WebshopOrderAttentionResponse = {
       displayId: 57,
       since: "2026-10-27T15:00:00.000Z",
       waiting: 60,
+      retryStopped: null,
     },
     {
       kind: "pickup_missing",
@@ -31,6 +32,7 @@ const RESPONSE: WebshopOrderAttentionResponse = {
       displayId: null,
       since: "2026-10-27T14:00:00.000Z",
       waiting: 120,
+      retryStopped: null,
     },
   ],
 };
@@ -99,6 +101,57 @@ describe("WebshopOrderAttention", () => {
     expect(await screen.findByTestId("figyelem-nem-elerheto")).toBeTruthy();
   });
 
+  /*
+    A LEÁLLÍTOTT PRÓBÁLKOZÁS NEM ZÁRJA A BEJEGYZÉST (acrobot, 2026-10-27 20:51
+    UTC): a kártyán a zárolás még állhat, a feloldás emberi döntés. A sor ott
+    marad, és kimondja a leállítást, az indokot és a napot.
+  */
+  it("keeps an order whose retry was stopped on the list and says who stopped it why and when", async () => {
+    api.attention.mockResolvedValue({
+      available: true,
+      count: 2,
+      items: [
+        {
+          ...RESPONSE.items[0]!,
+          retryStopped: {
+            at: "2026-10-27T13:00:00.000Z",
+            reason: "a vevő lemondta az élő állatot",
+            by: "user_1",
+          },
+        },
+        RESPONSE.items[1]!,
+      ],
+    });
+    render(<WebshopOrderAttention token="t" />);
+    const rows = await screen.findAllByTestId("figyelem-sor");
+    expect(rows).toHaveLength(2);
+    const stopped = within(rows[0]!).getByTestId("figyelem-leallitva");
+    expect(stopped.textContent).toContain("leállítva");
+    expect(stopped.textContent).toContain("2026. 10. 27.");
+    expect(stopped.textContent).toContain("a vevő lemondta az élő állatot");
+    expect(stopped.textContent).toContain("emberi döntés");
+    expect(rows[0]!.getAttribute("data-retry-stopped")).toBe("true");
+    // the running one carries no such line
+    expect(within(rows[1]!).queryByTestId("figyelem-leallitva")).toBeNull();
+    expect(rows[1]!.getAttribute("data-retry-stopped")).toBeNull();
+  });
+
+  it("a stopped order with no readable date or no reason still says it was stopped", async () => {
+    api.attention.mockResolvedValue({
+      available: true,
+      count: 1,
+      items: [
+        {
+          ...RESPONSE.items[0]!,
+          retryStopped: { at: "", reason: "", by: null },
+        },
+      ],
+    });
+    render(<WebshopOrderAttention token="t" />);
+    const stopped = await screen.findByTestId("figyelem-leallitva");
+    expect(stopped.textContent).toContain("Az ismételt próbálkozás leállítva.");
+  });
+
   it("does not ask without a token", async () => {
     render(<WebshopOrderAttention token="" />);
     expect(api.attention).not.toHaveBeenCalled();
@@ -112,6 +165,7 @@ describe("WebshopOrderAttention", () => {
         displayId: null,
         since: "x",
         waiting,
+        retryStopped: null,
       });
     expect(pickup(45)).toBe("45 perce");
     expect(pickup(60)).toBe("1 órája");

@@ -849,6 +849,13 @@ export interface WebshopOrderAttentionItem {
   since: string;
   /** Mennyi ideje vár, percben. */
   waiting: number;
+  /**
+   * Valaki leállította a hiányzó rendelés ismételt megpróbálását (a webshopban,
+   * `POST /admin/order-attention/pickup-skip`). A bejegyzés ettől NEM tűnik el:
+   * a kártyán a zárolás még állhat, a feloldása vagy visszatérítése emberi
+   * döntés. `by` a webshop admin-azonosítója. `null`: a próbálkozás fut.
+   */
+  retryStopped: { at: string; reason: string; by: string | null } | null;
 }
 
 export interface WebshopOrderAttentionResponse {
