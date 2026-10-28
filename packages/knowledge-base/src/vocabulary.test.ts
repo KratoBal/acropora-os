@@ -152,6 +152,19 @@ describe("recognition through the draft", () => {
     assert.deepEqual(p.verbDirections, ["INCREASE"]);
   });
 
+  it("a word read by two kinds belongs to the longer form (korallzátony, sps-akvárium)", () => {
+    const reef = recogniseSentence("A korallzátonyon az Acropora nőtt.", v);
+    assert.deepEqual(reef.taxa, ["ACROPORA"]);
+    assert.deepEqual(reef.environments, ["FIELD"]);
+    const tank = recogniseSentence("Az sps-akváriumban a növekedés nőtt.", v);
+    assert.deepEqual(tank.taxa, []);
+    assert.deepEqual(tank.environments, ["HOME_AQUARIUM"]);
+    // the shorter form standing as its own word is still read
+    assert.deepEqual(recogniseSentence("A korall a zátonyon nőtt.", v).taxa, [
+      "CORAL",
+    ]);
+  });
+
   it("a stem-final a/e lengthens before a suffix (Acroporák, milleporán)", () => {
     assert.deepEqual(recogniseSentence("Az Acroporák kalcifikációja", v).taxa, [
       "ACROPORA",

@@ -54,6 +54,8 @@ interface Match<T extends Term> {
   term: T;
   start: number;
   length: number;
+  /** Characters of the matched form: which of two overlapping matches is longer. */
+  chars: number;
 }
 
 // Hungarian lengthens a stem-final a/e before a suffix: "Acropora" ->
@@ -97,7 +99,7 @@ export function matchTerms<T extends Term>(
           best = { term, start: i, length: form.length, chars };
       }
     if (best !== null) {
-      matches.push({ term: best.term, start: best.start, length: best.length });
+      matches.push(best);
       i += best.length;
     } else i += 1;
   }
@@ -105,6 +107,30 @@ export function matchTerms<T extends Term>(
 }
 
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)];
+
+/**
+ * The matches not shadowed by a longer form of ANOTHER kind on the same words.
+ * Stems match as prefixes, so one word can be read by two kinds:
+ * "korallzátonyon" is the FIELD environment "korallzátony", and its first six
+ * letters are the CORAL taxon "korall"; "sps-akvárium" is a home aquarium,
+ * and its "sps" is not a taxon of the sentence. The longer form is the word;
+ * the shorter is only its beginning (found by the research test set, T13
+ * TAXON: a correct sentence on reef data was dropped as a generalisation).
+ */
+function unshadowed<T extends Term>(
+  own: readonly Match<T>[],
+  others: readonly Match<Term>[],
+): Match<T>[] {
+  return own.filter(
+    (m) =>
+      !others.some(
+        (o) =>
+          o.start < m.start + m.length &&
+          m.start < o.start + o.length &&
+          o.chars > m.chars,
+      ),
+  );
+}
 
 // Number forms: a decimal comma or point. Three digits after the separator
 // with a non-zero integer part ("1,500") may be a thousands group, so it is
@@ -162,6 +188,13 @@ export function recogniseSentence(
   const words = splitWords(lower);
   const keys = <T extends Term>(terms: readonly T[]) =>
     unique(matchTerms(words, terms).map((m) => m.term.key));
+  const taxonMatches = matchTerms(words, vocabulary.taxa);
+  const environmentMatches = matchTerms(words, vocabulary.environments);
+  const effectMatches = matchTerms(words, vocabulary.effects);
+  const nounKeys = <T extends Term>(
+    own: readonly Match<T>[],
+    ...others: readonly Match<Term>[][]
+  ) => unique(unshadowed(own, others.flat()).map((m) => m.term.key));
 
   // Negation: one negator directly before a verb ("nem csökkentette", "nincs
   // hatással"), in a sentence without a subordinate clause, negates the
@@ -230,9 +263,9 @@ export function recogniseSentence(
   }
 
   return {
-    taxa: keys(vocabulary.taxa),
-    environments: keys(vocabulary.environments),
-    effects: keys(vocabulary.effects),
+    taxa: nounKeys(taxonMatches, environmentMatches, effectMatches),
+    environments: nounKeys(environmentMatches, taxonMatches, effectMatches),
+    effects: nounKeys(effectMatches, taxonMatches, environmentMatches),
     verbDirections: unique(verbMatches.map((m) => m.term.extra.direction)),
     negation,
     negationReason,
