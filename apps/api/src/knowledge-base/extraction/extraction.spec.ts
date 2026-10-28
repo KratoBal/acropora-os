@@ -388,6 +388,27 @@ describe("the OS's own check of the AI's claims", () => {
     assert.deepEqual(c.sampleSize, { value: 12, unit: "bcoloniesb" });
   });
 
+  it("the AI service's refusal detail is kept in its counts-and-code form, nothing else gets through", () => {
+    const a = claimAnswerOf({
+      claims: [],
+      refusedClaims: [
+        { refusal: "PASSAGE_NOT_IN_TEXT", detail: "passage 22/87 U+0073" },
+        { refusal: "PASSAGE_NOT_IN_TEXT", detail: "passage 87/87 -" },
+        // a text where the counts should be: dropped, the code still counted
+        { refusal: "PASSAGE_NOT_IN_TEXT", detail: "Calcification decreased" },
+        { refusal: "TOO_MANY_CLAIMS", detail: "41" },
+        { refusal: "<b>", detail: "passage 1/2 U+0041" },
+      ],
+      extractedBy: "m claim-extraction/v3",
+    });
+    assert.ok(a.kind === "ANSWER");
+    assert.deepEqual(a.refusalDetails, [
+      "PASSAGE_NOT_IN_TEXT: passage 22/87 U+0073",
+      "PASSAGE_NOT_IN_TEXT: passage 87/87 -",
+    ]);
+    assert.equal(a.refusedClaims.length, 5);
+  });
+
   it("the AI answer's shape: a refusal, or a claim list; anything else unavailable", () => {
     assert.deepEqual(claimAnswerOf({ refusal: "NOT_JSON", extractedBy: "x" }), {
       kind: "REFUSED",
@@ -407,6 +428,7 @@ describe("the OS's own check of the AI's claims", () => {
       kind: "ANSWER",
       claims: [],
       refusedClaims: ["PASSAGE_NOT_IN_TEXT"],
+      refusalDetails: [],
       extractedBy: "gpt-5.1 claim-extraction/v1",
     });
   });
@@ -456,6 +478,7 @@ describe("extracting one source", () => {
             kind: "ANSWER",
             claims: [aiClaim()],
             refusedClaims: [],
+            refusalDetails: [],
             extractedBy: "m claim-extraction/v1",
           };
         },
@@ -504,6 +527,7 @@ describe("extracting one source", () => {
             }),
           ],
           refusedClaims: [],
+          refusalDetails: [],
           extractedBy: "m claim-extraction/v1",
         }),
       },
@@ -613,6 +637,7 @@ describe("extracting one source", () => {
           kind: "ANSWER",
           claims: [],
           refusedClaims: [],
+          refusalDetails: [],
           extractedBy: "m",
         }),
       },
@@ -664,6 +689,7 @@ describe("extracting one source", () => {
             kind: "ANSWER",
             claims: [quoted],
             refusedClaims: [],
+            refusalDetails: [],
             extractedBy: "m claim-extraction/v1",
           }),
         },
@@ -695,6 +721,33 @@ describe("extracting one source", () => {
     const outcome = await extractSource("src1", true, d.value);
     assert.deepEqual([outcome.status, outcome.reason], ["SKIPPED", "NOT_PDF"]);
     assert.ok(!d.calls.some((c) => c.startsWith("ai:")));
+  });
+
+  it("the run keeps the AI's refusal details per source, at most twenty", async () => {
+    const d = deps({
+      extractor: {
+        extract: async () => ({
+          kind: "ANSWER",
+          claims: [aiClaim()],
+          refusedClaims: Array.from(
+            { length: 25 },
+            () => "PASSAGE_NOT_IN_TEXT",
+          ),
+          refusalDetails: Array.from(
+            { length: 25 },
+            (_, i) => `PASSAGE_NOT_IN_TEXT: passage ${i}/90 U+002D`,
+          ),
+          extractedBy: "m claim-extraction/v1",
+        }),
+      },
+    });
+    const outcome = await extractSource("src1", false, d.value);
+    assert.equal(outcome.refusedClaims.AI_PASSAGE_NOT_IN_TEXT, 25);
+    assert.equal(outcome.refusalDetails.length, 20);
+    assert.equal(
+      outcome.refusalDetails[0],
+      "PASSAGE_NOT_IN_TEXT: passage 0/90 U+002D",
+    );
   });
 
   it("Europe PMC with no open text, and an AI that never answers: skipped with the reason", async () => {

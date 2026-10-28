@@ -25,6 +25,13 @@ export type ClaimExtractorAnswer =
       claims: unknown[];
       /** The AI side's own refusals, as codes (counted, not shown as text). */
       refusedClaims: string[];
+      /**
+       * Where a refused passage or anchor left the text, as the AI service
+       * measured it (acropora-ai-agent #44's form): "PASSAGE_NOT_IN_TEXT:
+       * passage 22/87 U+0073", the matching length, the length and the first
+       * code point that differed. Counts and a code point, never the text.
+       */
+      refusalDetails: string[];
       /** The model and prompt version, for `KnowledgePassage.extractedBy`. */
       extractedBy: string;
     }
@@ -37,6 +44,9 @@ export interface ClaimExtractor {
 }
 
 const CODE = /^[A-Z_]{1,40}$/;
+/** The AI service's `whereItLeaves` form, and nothing else: no text gets through. */
+export const REFUSAL_DETAIL =
+  /^[A-Za-z]{1,24} \d{1,7}\/\d{1,7} (?:U\+[0-9A-F]{4,6}|-)$/;
 const EXTRACTED_BY = /^[\w.:/ -]{1,128}$/;
 
 /** The answer's body as the AI service sends it; anything else is UNAVAILABLE. */
@@ -55,15 +65,25 @@ export function claimAnswerOf(body: unknown): ClaimExtractorAnswer {
     typeof b.extractedBy === "string" && EXTRACTED_BY.test(b.extractedBy)
       ? b.extractedBy
       : "unknown";
+  const refused: unknown[] = Array.isArray(b.refusedClaims)
+    ? b.refusedClaims
+    : [];
   return {
     kind: "ANSWER",
     claims: b.claims,
-    refusedClaims: (Array.isArray(b.refusedClaims) ? b.refusedClaims : []).map(
-      (r) => {
-        const code = (r as Record<string, unknown>)?.refusal;
-        return typeof code === "string" && CODE.test(code) ? code : "UNKNOWN";
-      },
-    ),
+    refusedClaims: refused.map((r) => {
+      const code = (r as Record<string, unknown>)?.refusal;
+      return typeof code === "string" && CODE.test(code) ? code : "UNKNOWN";
+    }),
+    refusalDetails: refused.flatMap((r) => {
+      const { refusal, detail } = (r ?? {}) as Record<string, unknown>;
+      return typeof refusal === "string" &&
+        CODE.test(refusal) &&
+        typeof detail === "string" &&
+        REFUSAL_DETAIL.test(detail)
+        ? [`${refusal}: ${detail}`]
+        : [];
+    }),
     extractedBy,
   };
 }

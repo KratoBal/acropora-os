@@ -49,6 +49,8 @@ export const EUROPE_PMC_FULL_TEXT = (pmcid: string) =>
   `https://www.ebi.ac.uk/europepmc/webservices/rest/${encodeURIComponent(pmcid)}/fullTextXML`;
 export const MAX_SOURCES_PER_RUN = 5;
 export const MAX_CHUNKS_PER_SOURCE = 6;
+/** The AI side's refusal details a source's outcome keeps (counts and a code point each). */
+export const MAX_REFUSAL_DETAILS = 20;
 export const MAX_FULL_TEXT_BYTES = 5_000_000;
 export const FULL_TEXT_TIMEOUT_MS = 30_000;
 
@@ -111,6 +113,13 @@ export interface SourceOutcome {
   questions: number;
   /** Claims dropped whole, here or by the AI service, by code. */
   refusedClaims: Record<string, number>;
+  /**
+   * The AI service's own measure of where a refused passage left the text
+   * ("PASSAGE_NOT_IN_TEXT: passage 22/87 U+0073"), at most
+   * `MAX_REFUSAL_DETAILS`: to tell a model's rewording from a text the
+   * reader broke (a PDF's line-end hyphen), without the text.
+   */
+  refusalDetails: string[];
   /** Fields dropped, by code. */
   refusedFields: Record<string, number>;
   claimsCreated: number;
@@ -162,6 +171,7 @@ export function emptyOutcome(sourceId: string): SourceOutcome {
     fields: 0,
     questions: 0,
     refusedClaims: {},
+    refusalDetails: [],
     refusedFields: {},
     claimsCreated: 0,
     claimsWithdrawn: 0,
@@ -273,6 +283,9 @@ async function readSectionClaims(
     extractedBy = answer.extractedBy;
     for (const code of answer.refusedClaims)
       count(outcome.refusedClaims, `AI_${code}`);
+    for (const detail of answer.refusalDetails ?? [])
+      if (outcome.refusalDetails.length < MAX_REFUSAL_DETAILS)
+        outcome.refusalDetails.push(detail);
     // the OS checks against ALL sections: a field's anchor may stand in another one
     const result = checkClaims(answer.claims, sections, deps.vocabulary);
     for (const code of result.refusedClaims) count(outcome.refusedClaims, code);

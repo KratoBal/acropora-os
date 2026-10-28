@@ -12,6 +12,7 @@ import { CATALOG_ACTION_KINDS, type CatalogActionKind } from "@acropora/types";
 
 import {
   CATALOG_ACTION_RUNNERS,
+  runCategoriesAction,
   type CatalogActionRunner,
 } from "./catalog-actions.runners.js";
 import {
@@ -136,7 +137,7 @@ describe("a plan run", () => {
 
   it("an unknown kind is 404", () => {
     const { s, calls } = service(ON);
-    assert.throws(() => s.plan("categories", "u1"), NotFoundException);
+    assert.throws(() => s.plan("vegleges-torles", "u1"), NotFoundException);
     assert.deepEqual(calls, []);
   });
 
@@ -244,5 +245,59 @@ describe("the operations are the existing commands", () => {
       CATALOG_ACTION_RUNNERS.map((r) => r.kind),
       [...CATALOG_ACTION_KINDS],
     );
+  });
+
+  it("the categories are the third operation, with a title and a description that names what is kept", () => {
+    const runner = CATALOG_ACTION_RUNNERS.find((r) => r.kind === "categories");
+    assert.ok(runner);
+    assert.ok(runner.title.length > 0);
+    assert.match(runner.description, /termék-hozzárendelésük megmarad/);
+    assert.match(runner.description, /régi azonosítót tételesen kiírja/);
+  });
+});
+
+/*
+  THE CATEGORIES COMMAND'S ARGUMENTS (#1910): a plan passes NO argument (the
+  command's default is the plan, it writes nothing), an apply passes exactly
+  `--apply`. What turns this red: a plan that passes `--apply` (the button
+  "Próba" would load 219 categories); an apply that does not (the button
+  "Végrehajtás" would only plan); the exit code lost on the way.
+*/
+describe("the categories operation", () => {
+  const out = { stdout() {}, stderr() {} };
+  const dependencies = ((o: unknown) => ({ marker: o })) as never;
+
+  async function calledWith(apply: boolean, exit = 0) {
+    const seen: { argv: readonly string[]; deps: unknown }[] = [];
+    const code = await runCategoriesAction(
+      apply,
+      out,
+      (async (argv: readonly string[], _out: unknown, deps: unknown) => {
+        seen.push({ argv, deps });
+        return exit;
+      }) as never,
+      dependencies,
+    );
+    return { seen, code };
+  }
+
+  it("a plan passes no argument, so the command only plans", async () => {
+    const { seen } = await calledWith(false);
+    assert.deepEqual(seen[0]!.argv, []);
+  });
+
+  it("an apply passes exactly --apply", async () => {
+    const { seen } = await calledWith(true);
+    assert.deepEqual(seen[0]!.argv, ["--apply"]);
+  });
+
+  it("the command's own exit code comes back, 2 (conflicts to look at) included", async () => {
+    assert.equal((await calledWith(true, 2)).code, 2);
+    assert.equal((await calledWith(false, 0)).code, 0);
+  });
+
+  it("the dependencies are built from the same output the run collects", async () => {
+    const { seen } = await calledWith(true);
+    assert.deepEqual(seen[0]!.deps, { marker: out });
   });
 });
