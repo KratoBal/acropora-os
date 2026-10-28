@@ -394,6 +394,16 @@ describe("the OS's own check of the AI's claims", () => {
       refusedClaims: [
         { refusal: "PASSAGE_NOT_IN_TEXT", detail: "passage 22/87 U+0073" },
         { refusal: "PASSAGE_NOT_IN_TEXT", detail: "passage 87/87 -" },
+        // acropora-ai-agent #57: the source's code point after it
+        {
+          refusal: "PASSAGE_NOT_IN_TEXT",
+          detail: "passage 44/87 U+0070 src U+002D",
+        },
+        // anything after the form is still dropped
+        {
+          refusal: "PASSAGE_NOT_IN_TEXT",
+          detail: "passage 44/87 U+0070 src U+002D phos- phate",
+        },
         // a text where the counts should be: dropped, the code still counted
         { refusal: "PASSAGE_NOT_IN_TEXT", detail: "Calcification decreased" },
         { refusal: "TOO_MANY_CLAIMS", detail: "41" },
@@ -405,8 +415,9 @@ describe("the OS's own check of the AI's claims", () => {
     assert.deepEqual(a.refusalDetails, [
       "PASSAGE_NOT_IN_TEXT: passage 22/87 U+0073",
       "PASSAGE_NOT_IN_TEXT: passage 87/87 -",
+      "PASSAGE_NOT_IN_TEXT: passage 44/87 U+0070 src U+002D",
     ]);
-    assert.equal(a.refusedClaims.length, 5);
+    assert.equal(a.refusedClaims.length, 7);
   });
 
   it("the AI answer's shape: a refusal, or a claim list; anything else unavailable", () => {
