@@ -100,10 +100,12 @@ describe(
           },
         })
       ).id;
-      // seven sources of four claims, and one of eight the set takes six of
+      // nine sources of three claims, and one of eight the set takes three of
       for (let i = 0; i < 7; i++)
-        sourceIds.push(await extractedSource(`s${i}`, 4));
+        sourceIds.push(await extractedSource(`s${i}`, 3));
       sourceIds.push(await extractedSource("s7", 8));
+      for (let i = 8; i < 10; i++)
+        sourceIds.push(await extractedSource(`s${i}`, 3));
       excludedSourceId = await extractedSource("x", 3, false);
     });
 
@@ -190,14 +192,14 @@ describe(
       const ours = view.proposal.sources.filter((s) =>
         sourceIds.includes(s.sourceId),
       );
-      // other included sources may stand in the database; ours hold four
-      // each, the eight-claim one gives six to the set
+      // other included sources may stand in the database; ours hold three
+      // each, the eight-claim one gives three to the set
       assert.ok(ours.length > 0);
       assert.ok(
         ours.every((s) =>
           s.sourceId === sourceIds[7]
-            ? s.claims === 8 && s.inSet === 6
-            : s.claims === 4 && s.inSet === 4,
+            ? s.claims === 8 && s.inSet === 3
+            : s.claims === 3 && s.inSet === 3,
         ),
       );
       assert.equal(
@@ -221,7 +223,7 @@ describe(
       );
     });
 
-    it("the freeze pins the eight sources with at most six claims each, once, with its AuditLog row", async () => {
+    it("the freeze pins the ten sources with at most three claims each, once, with its AuditLog row", async () => {
       await repository.freeze(sourceIds, userId);
       const view = await repository.view();
       assert.equal(view.frozen, true);
@@ -229,12 +231,12 @@ describe(
         view.sources.map((s) => s.sourceId),
         sourceIds,
       );
-      // 7 x 4 + 6 of the eight: at most six from one source
-      assert.equal(view.score.rows.total, 34);
-      assert.equal(view.score.rows.pending, 34);
+      // 9 x 3 + 3 of the eight: at most three from one source
+      assert.equal(view.score.rows.total, 30);
+      assert.equal(view.score.rows.pending, 30);
       const capped = view.sources[7]!;
-      assert.equal(capped.rows.length, 6);
-      assert.equal(capped.notInSet, 2);
+      assert.equal(capped.rows.length, 3);
+      assert.equal(capped.notInSet, 5);
       assert.equal(view.sources[0]!.notInSet, 0);
       assert.equal(view.score.verdict, "NOT_READY");
       assert.ok(view.score.problems.includes("PENDING_ROWS"));

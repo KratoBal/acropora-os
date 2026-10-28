@@ -478,8 +478,8 @@ function SourceCard({
         {source.notInSet > 0 ? (
           <p className="text-sm text-pilot-grey-700">
             A forrás további {source.notInSet} gépi állítása nincs a készletben
-            (forrásonként legfeljebb hat került be). Kimaradt állításnak csak
-            azt vedd fel, amit a gép ebből a forrásból egyáltalán nem hozott.
+            (a forrásonkénti felső határ miatt). Kimaradt állításnak csak azt
+            vedd fel, amit a gép ebből a forrásból egyáltalán nem hozott.
           </p>
         ) : null}
       </div>
