@@ -20,8 +20,12 @@ import type { ScholarlyClient } from "../discovery/scholarly-client.js";
  *
  * A refused API (5xx, timeout, a 429 past the retries) is UNREACHABLE: the
  * identifier is not measured, and the run does not meet the threshold by
- * leaving it out. Titles are compared, never printed: they are third-party
- * text and stay data in the table.
+ * leaving it out. Titles are compared, and printed in ONE case only: a
+ * TITLE_DIFFERS result carries both titles (`titles`), because without them
+ * nobody can tell a wrong DOI from a title written two ways, and the fleet
+ * cannot reach Crossref itself (acrobot 37276, the first stage run). They go
+ * to the JSON answer of the internal check, cut and without control
+ * characters; the text report and the log keep to codes.
  */
 
 export interface ReferenceSource {
@@ -44,6 +48,30 @@ export interface ReferenceResult {
   reasons: string[];
   /** The registry's year differs from the source's (a note: online and print years differ). */
   yearDiffers: boolean;
+  /** TITLE_DIFFERS only: what was compared, so a wrong DOI can be told from a spelling. */
+  titles?: ReferenceTitles;
+}
+
+export interface ReferenceTitles {
+  stored: string;
+  registry: string | null;
+  registrySubtitle: string | null;
+}
+
+/** A shown title's cut: a title, not a page of text. */
+export const MAX_SHOWN_TITLE = 300;
+
+/** Third-party text shown as data: no control characters, whitespace squashed, cut. */
+export function shownTitle(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const clean = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!clean) return null;
+  return clean.length > MAX_SHOWN_TITLE
+    ? `${clean.slice(0, MAX_SHOWN_TITLE - 1)}…`
+    : clean;
 }
 
 export interface ReferenceReport {
@@ -102,7 +130,7 @@ export function readCrossrefWork(
   source: ReferenceSource,
   doi: string,
   json: unknown,
-): Pick<ReferenceResult, "verdict" | "reasons" | "yearDiffers"> {
+): Pick<ReferenceResult, "verdict" | "reasons" | "yearDiffers" | "titles"> {
   const message = isRecord(json) ? json.message : null;
   if (!isRecord(message))
     return {
@@ -131,6 +159,15 @@ export function readCrossrefWork(
     verdict: reasons.length ? "OTHER_WORK" : "RESOLVED",
     reasons,
     yearDiffers: year !== null && source.year !== null && year !== source.year,
+    ...(reasons.includes("TITLE_DIFFERS")
+      ? {
+          titles: {
+            stored: shownTitle(source.title) ?? "",
+            registry: shownTitle(title),
+            registrySubtitle: shownTitle(subtitle),
+          },
+        }
+      : {}),
   };
 }
 
@@ -139,7 +176,7 @@ export function readEuropePmcHit(
   source: ReferenceSource,
   pmid: string,
   json: unknown,
-): Pick<ReferenceResult, "verdict" | "reasons" | "yearDiffers"> {
+): Pick<ReferenceResult, "verdict" | "reasons" | "yearDiffers" | "titles"> {
   const list =
     isRecord(json) && isRecord(json.resultList) ? json.resultList.result : null;
   const hits = Array.isArray(list) ? list.filter(isRecord) : [];
@@ -162,6 +199,15 @@ export function readEuropePmcHit(
     reasons,
     yearDiffers:
       Number.isInteger(year) && source.year !== null && year !== source.year,
+    ...(reasons.includes("TITLE_DIFFERS")
+      ? {
+          titles: {
+            stored: shownTitle(source.title) ?? "",
+            registry: shownTitle(hit.title),
+            registrySubtitle: null,
+          },
+        }
+      : {}),
   };
 }
 
