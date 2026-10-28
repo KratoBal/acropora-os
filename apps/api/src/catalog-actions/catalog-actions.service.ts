@@ -80,8 +80,12 @@ export class CatalogActionsService {
 
   overview(): CatalogActionsResponse {
     if (!this.enabled()) return { enabled: false, actions: [] };
+    const host = checkMedusaHost(this.environment);
     return {
       enabled: true,
+      hostGuard: host.ok
+        ? { allowed: true, host: host.host, message: null }
+        : { allowed: false, host: host.host, message: host.message },
       actions: this.runners.map((runner) => ({
         kind: runner.kind,
         title: runner.title,

@@ -28,7 +28,9 @@
 export const CATALOG_ACTION_MEDUSA_HOSTS_ENV = "CATALOG_ACTION_MEDUSA_HOSTS";
 
 export type MedusaHostCheck =
-  { ok: true; host: string } | { ok: false; message: string };
+  | { ok: true; host: string }
+  /** `host`: the host name found in the address, when there is one, so whoever sets the list can read it. */
+  | { ok: false; message: string; host: string | null };
 
 const HOST_NAME = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/;
 
@@ -48,26 +50,38 @@ export function allowedMedusaHosts(raw: string | undefined): string[] {
     .filter((host) => host.length > 0 && HOST_NAME.test(host));
 }
 
+/** The host name of `MEDUSA_ADMIN_URL`, or null when it is missing or not a URL. */
+function foundHost(env: NodeJS.ProcessEnv): string | null {
+  const url = env.MEDUSA_ADMIN_URL;
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/\.$/, "") || null;
+  } catch {
+    return null;
+  }
+}
+
 export function checkMedusaHost(env: NodeJS.ProcessEnv): MedusaHostCheck {
+  const host = foundHost(env);
   const refuse = (reason: string): MedusaHostCheck => ({
     ok: false,
     message: `A katalógus-művelet nem indul: ${reason}`,
+    host,
   });
 
   const allowed = allowedMedusaHosts(env[CATALOG_ACTION_MEDUSA_HOSTS_ENV]);
+  // the host is named here too: the first thing whoever sets the list needs is
+  // the name to put in it (acrobot, 2026-10-28 12:05 UTC)
   if (allowed.length === 0)
     return refuse(
-      `a ${CATALOG_ACTION_MEDUSA_HOSTS_ENV} nincs beállítva vagy nem tartalmaz érvényes hosztnevet, ezért egyetlen Medusa sem engedélyezett.`,
+      `a ${CATALOG_ACTION_MEDUSA_HOSTS_ENV} nincs beállítva vagy nem tartalmaz érvényes hosztnevet, ezért egyetlen Medusa sem engedélyezett.${
+        host ? ` A Medusa-cím hosztja: ${host}.` : ""
+      }`,
     );
 
-  const url = env.MEDUSA_ADMIN_URL;
-  if (!url) return refuse("a MEDUSA_ADMIN_URL nincs beállítva.");
-  let host: string;
-  try {
-    host = new URL(url).hostname.toLowerCase().replace(/\.$/, "");
-  } catch {
-    return refuse("a MEDUSA_ADMIN_URL nem érvényes cím.");
-  }
+  if (!env.MEDUSA_ADMIN_URL)
+    return refuse("a MEDUSA_ADMIN_URL nincs beállítva.");
+  if (!host) return refuse("a MEDUSA_ADMIN_URL nem érvényes cím.");
 
   if (!allowed.includes(host))
     return refuse(

@@ -64,6 +64,30 @@ describe("the Medusa host check", () => {
     }
   });
 
+  // acrobot, 2026-10-28 12:05 UTC: the first thing whoever sets the list needs
+  // is the host name to put in it, also when the list is empty
+  it("every refusal that has an address names its host, and only the host", () => {
+    for (const hosts of [undefined, "", "other.test"]) {
+      const result = checkMedusaHost(
+        env("https://found.test:9000/secret/path?key=1", hosts),
+      );
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.host, "found.test");
+        assert.match(result.message, /found\.test/);
+        assert.doesNotMatch(result.message, /secret|key=1|9000/);
+      }
+    }
+  });
+
+  it("a refusal with no usable address has no host", () => {
+    for (const url of [undefined, "", "nem cim"]) {
+      const result = checkMedusaHost(env(url, "a.test"));
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.host, null);
+    }
+  });
+
   it("an empty or missing list is refused AS A MISSING SETTING, not as an unlisted host", () => {
     for (const hosts of [undefined, "", " , ", "*"]) {
       const result = checkMedusaHost(env("https://a.test", hosts));

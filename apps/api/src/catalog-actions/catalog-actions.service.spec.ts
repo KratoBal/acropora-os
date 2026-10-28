@@ -439,6 +439,32 @@ describe("the Medusa host guard", () => {
     assert.equal(calls.filter((c) => c.apply).length, 1);
   });
 
+  // acrobot, 2026-10-28 12:05 UTC: the status call must name the host found, so
+  // whoever sets the list can read it after the deploy
+  it("the overview tells whether the host is allowed and names the host found", () => {
+    const allowed = service(ON).s.overview();
+    assert.deepEqual(allowed.hostGuard, {
+      allowed: true,
+      host: "medusa-teszt.example.test",
+      message: null,
+    });
+    const blocked = service({
+      CATALOG_ADMIN_ACTIONS_ENABLED: "true",
+      MEDUSA_ADMIN_URL: "https://found.test/admin?key=1",
+    }).s.overview();
+    assert.equal(blocked.enabled, true);
+    assert.equal(blocked.hostGuard?.allowed, false);
+    assert.equal(blocked.hostGuard?.host, "found.test");
+    assert.match(blocked.hostGuard?.message ?? "", /found\.test/);
+    assert.doesNotMatch(blocked.hostGuard?.message ?? "", /key=1|admin/);
+    // the overview still lists the actions: the page shows why, not nothing
+    assert.equal(blocked.actions.length, CATALOG_ACTION_KINDS.length);
+  });
+
+  it("the overview of a disabled switch carries no host information at all", () => {
+    assert.deepEqual(service({}).s.overview(), { enabled: false, actions: [] });
+  });
+
   it("the switch comes first: off, the answer is still 404, not a refusal about the host", () => {
     const { s } = service({});
     assert.throws(() => s.plan("categories", "u1"), NotFoundException);

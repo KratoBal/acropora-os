@@ -81,6 +81,8 @@ function statusBadge(run: CatalogActionRun) {
  */
 export function CatalogActionsPanel({ token }: { token: string }) {
   const [actions, setActions] = useState<CatalogActionView[] | null>(null);
+  // the Medusa host guard (second guard): why the buttons would be refused
+  const [hostBlock, setHostBlock] = useState<string | null>(null);
   const [runs, setRuns] = useState<
     Partial<Record<CatalogActionKind, CatalogActionRun>>
   >({});
@@ -99,6 +101,11 @@ export function CatalogActionsPanel({ token }: { token: string }) {
       .then((view) => {
         if (!view.enabled) return;
         setActions(view.actions);
+        setHostBlock(
+          view.hostGuard && !view.hostGuard.allowed
+            ? (view.hostGuard.message ?? "A Medusa-cím nem engedélyezett.")
+            : null,
+        );
         const latest: Partial<Record<CatalogActionKind, CatalogActionRun>> = {};
         for (const action of view.actions)
           if (action.lastRun) latest[action.kind] = action.lastRun;
@@ -177,6 +184,13 @@ export function CatalogActionsPanel({ token }: { token: string }) {
       {error ? (
         <Alert variant="danger" title="Hiba" description={error} />
       ) : null}
+      {hostBlock ? (
+        <Alert
+          variant="info"
+          title="A műveletek ezen a Medusán nem engedélyezettek"
+          description={hostBlock}
+        />
+      ) : null}
       {(actions ?? []).map((action) => {
         const run = runs[action.kind];
         const canApply =
@@ -197,7 +211,7 @@ export function CatalogActionsPanel({ token }: { token: string }) {
               <div className="flex gap-2">
                 <Button
                   variant="secondary"
-                  disabled={busy || Boolean(running)}
+                  disabled={busy || Boolean(running) || Boolean(hostBlock)}
                   onClick={() =>
                     void start(() => catalogActionsApi.plan(token, action.kind))
                   }
@@ -205,7 +219,9 @@ export function CatalogActionsPanel({ token }: { token: string }) {
                   Próba
                 </Button>
                 <Button
-                  disabled={busy || Boolean(running) || !canApply}
+                  disabled={
+                    busy || Boolean(running) || Boolean(hostBlock) || !canApply
+                  }
                   onClick={() => setConfirming(action.kind)}
                 >
                   Végrehajtás
