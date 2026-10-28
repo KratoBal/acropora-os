@@ -7,6 +7,7 @@ import { PDF_PAGES, pdfOf } from "./extraction-test-fixtures.js";
 import {
   MAX_PDF_BYTES,
   MAX_PDF_REDIRECTS,
+  MAX_ROBOTS_REDIRECTS,
   NOT_PUBLIC_ADDRESS,
   fetchOpenPdf,
   guardedFetch,
@@ -96,6 +97,65 @@ describe("fetching the open PDF", () => {
       reason: "ROBOTS_UNREADABLE",
     });
     assert.deepEqual(down.asked, [ROBOTS]);
+  });
+
+  it("a robots.txt that redirects is followed, and the last answer counts (RFC 9309; doi.org, hal.science)", async () => {
+    const bytes = await pdfOf(PDF_PAGES);
+    // hal.science's shape: 302 to a path on the same host
+    const moved = network({
+      [ROBOTS]: { status: 302, headers: { location: "/robots" } },
+      "https://kiado.example.org/robots": {
+        status: 200,
+        body: "User-agent: *\nAllow: /",
+      },
+      [PDF]: { status: 200, body: bytes },
+    });
+    assert.ok((await fetchOpenPdf(PDF, moved.fetch)).ok);
+    // doi.org's shape: 301 to another host, whose rule disallows the path
+    const elsewhere = network({
+      [ROBOTS]: {
+        status: 301,
+        headers: { location: "https://www.kiado.example.org/robots.txt" },
+      },
+      "https://www.kiado.example.org/robots.txt": {
+        status: 200,
+        body: "User-agent: *\nDisallow: /cikk",
+      },
+    });
+    assert.deepEqual(await fetchOpenPdf(PDF, elsewhere.fetch), {
+      ok: false,
+      reason: "ROBOTS_DISALLOWED",
+    });
+    assert.equal(elsewhere.asked.includes(PDF), false);
+  });
+
+  it("a robots.txt redirect past five, or to a non-public URL, is unreadable; a 403 stays a refusal", async () => {
+    const chain: Record<string, Answer> = {};
+    for (let i = 0; i <= MAX_ROBOTS_REDIRECTS; i += 1)
+      chain[i === 0 ? ROBOTS : `https://kiado.example.org/r${i}`] = {
+        status: 302,
+        headers: { location: `https://kiado.example.org/r${i + 1}` },
+      };
+    assert.deepEqual(await fetchOpenPdf(PDF, network(chain).fetch), {
+      ok: false,
+      reason: "ROBOTS_UNREADABLE",
+    });
+    const inward = network({
+      [ROBOTS]: {
+        status: 302,
+        headers: { location: "http://10.0.0.5/robots.txt" },
+      },
+    });
+    assert.deepEqual(await fetchOpenPdf(PDF, inward.fetch), {
+      ok: false,
+      reason: "ROBOTS_UNREADABLE",
+    });
+    assert.deepEqual(inward.asked, [ROBOTS]);
+    const closed = network({ [ROBOTS]: { status: 403 } });
+    assert.deepEqual(await fetchOpenPdf(PDF, closed.fetch), {
+      ok: false,
+      reason: "ROBOTS_DISALLOWED",
+    });
   });
 
   it("follows a public redirect, not one to a local address, and not too many", async () => {
