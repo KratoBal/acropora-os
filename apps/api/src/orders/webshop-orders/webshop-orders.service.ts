@@ -120,6 +120,7 @@ export class WebshopOrdersService {
           displayId: item.display_id ?? null,
           since: item.since,
           waiting: item.minutes,
+          retryStopped: item.retry_stopped ?? null,
         }),
       );
       return { available: true, count: items.length, items };

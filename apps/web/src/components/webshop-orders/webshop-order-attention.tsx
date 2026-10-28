@@ -34,6 +34,18 @@ export function waitingText(item: WebshopOrderAttentionItem): string {
   return `${Math.floor(hours / 24)} napja`;
 }
 
+/** A leállítás napja magyar alakban; érvénytelen vagy hiányzó időnél üres. */
+export function stoppedDateText(at: string): string {
+  const date = new Date(at);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleDateString("hu-HU", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+}
+
 export function WebshopOrderAttention({ token }: { token: string }) {
   const [data, setData] = useState<WebshopOrderAttentionResponse | null>(null);
 
@@ -89,6 +101,7 @@ export function WebshopOrderAttention({ token }: { token: string }) {
             key={`${item.kind}-${item.orderId ?? item.since}`}
             data-testid="figyelem-sor"
             data-kind={item.kind}
+            data-retry-stopped={item.retryStopped ? "true" : undefined}
           >
             {item.orderId ? (
               <Link
@@ -103,6 +116,19 @@ export function WebshopOrderAttention({ token }: { token: string }) {
               </span>
             )}
             : {KIND_TEXT[item.kind]}, {waitingText(item)}
+            {item.retryStopped ? (
+              <span data-testid="figyelem-leallitva">
+                {" "}
+                Az ismételt próbálkozás leállítva
+                {stoppedDateText(item.retryStopped.at)
+                  ? ` (${stoppedDateText(item.retryStopped.at)})`
+                  : ""}
+                {item.retryStopped.reason
+                  ? `: ${item.retryStopped.reason}`
+                  : ""}
+                . A kártyás zárolás feloldása vagy visszatérítése emberi döntés.
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

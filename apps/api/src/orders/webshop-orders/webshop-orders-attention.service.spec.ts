@@ -90,6 +90,7 @@ describe("WebshopOrdersService.attention", () => {
         displayId: 57,
         since: "2026-10-27T15:00:00.000Z",
         waiting: 60,
+        retryStopped: null,
       },
       {
         kind: "pickup_missing",
@@ -97,8 +98,32 @@ describe("WebshopOrdersService.attention", () => {
         displayId: null,
         since: "2026-10-27T14:00:00.000Z",
         waiting: 120,
+        retryStopped: null,
       },
     ]);
+  });
+
+  it("carries the mark of a stopped retry through, and an older webshop without the field gives null", async () => {
+    const mark = {
+      at: "2026-10-27T13:00:00.000Z",
+      reason: "customer cancelled",
+      by: "user_1",
+    };
+    const result = await service({
+      body: {
+        generated_at: "x",
+        count: 2,
+        items: [
+          { ...ATTENTION.items[0]!, retry_stopped: mark },
+          { ...ATTENTION.items[1]!, retry_stopped: null },
+        ],
+      },
+    }).attention();
+    assert.deepEqual(result.items[0]!.retryStopped, mark);
+    assert.equal(result.items[1]!.retryStopped, null);
+    // ATTENTION's items have no retry_stopped field at all: an older webshop
+    const older = await service({}).attention();
+    assert.equal(older.items[0]!.retryStopped, null);
   });
 
   it("an empty list from the webshop is available and empty: nothing needs attention", async () => {
