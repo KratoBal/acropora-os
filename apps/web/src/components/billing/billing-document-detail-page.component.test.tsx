@@ -1118,7 +1118,7 @@ describe("copying an issued document into a new draft", () => {
 
 describe("a document waiting for checking (ISSUING)", () => {
   it("offers the check to the finance right and says what it does", async () => {
-    api.detail.mockResolvedValue(detail({ status: "ISSUING", pdf: null }));
+    api.detail.mockResolvedValue(detail({ status: "ISSUING" }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     expect(
       await screen.findByText("A kiállítás ellenőrzésre vár"),
@@ -1131,7 +1131,7 @@ describe("a document waiting for checking (ISSUING)", () => {
 
   it("without the finance right it only says it waits", async () => {
     auth.role = "SALES" as UserRole;
-    api.detail.mockResolvedValue(detail({ status: "ISSUING", pdf: null }));
+    api.detail.mockResolvedValue(detail({ status: "ISSUING" }));
     render(<BillingDocumentDetailPage documentId="doc-1" />);
     expect(
       await screen.findByText("A kiállítás ellenőrzésre vár"),
