@@ -43,6 +43,8 @@ import { MAX_LOCATOR, type TextSection } from "./jats-text.js";
  * - the body is counted WHILE it is read and the read stops past the cap
  *   (20 MB for the PDF, 512 KB for robots.txt), with or without a
  *   content-length;
+ * - a landing page that names its PDF (`citation_pdf_url`) is followed to it
+ *   once, through the same checks;
  * - the host's robots.txt is read first, its redirects followed (at most
  *   five, RFC 9309): a disallowed path is not fetched; an unreadable
  *   robots.txt is not taken as permission.
@@ -352,6 +354,28 @@ async function readRobots(
   );
 }
 
+/**
+ * The PDF a landing page names for itself: Highwire's `citation_pdf_url`
+ * meta tag (HAL, OJS journals and most publishers carry it). Measured on the
+ * stage's NOT_PDF sources (acrobot 37499): two HAL links and one doi.org
+ * link resolve to a real PDF this way. Relative URLs are resolved against
+ * the page; `&amp;` is the only entity a URL needs. Null when there is none.
+ */
+export function citationPdfUrl(html: Uint8Array, page: URL): string | null {
+  const text = new TextDecoder("utf-8").decode(html);
+  for (const tag of text.match(/<meta\b[^>]*>/gi) ?? []) {
+    if (!/\bname\s*=\s*["']citation_pdf_url["']/i.test(tag)) continue;
+    const content = /\bcontent\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1];
+    if (!content) continue;
+    try {
+      return new URL(content.trim().replace(/&amp;/g, "&"), page).toString();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 const isPdf = (bytes: Uint8Array) =>
   bytes.byteLength >= 5 &&
   new TextDecoder("latin1").decode(bytes.subarray(0, 5)) === "%PDF-";
@@ -364,6 +388,8 @@ export async function fetchOpenPdf(
   let target = publicHttpUrl(url);
   if (!target) return { ok: false, reason: "NOT_PUBLIC_URL" };
   const robots = new Map<string, Awaited<ReturnType<typeof readRobots>>>();
+  // a landing page's own PDF link is followed once, through the same checks
+  let fromLanding = false;
   for (let hops = 0; ; hops += 1) {
     let rules = robots.get(target.host);
     if (!rules) {
@@ -411,8 +437,17 @@ export async function fetchOpenPdf(
     }
     const bytes = await readCapped(response, MAX_PDF_BYTES);
     if (!bytes) return { ok: false, reason: "TOO_LARGE" };
-    // a landing page or a login wall is not a PDF, whatever its header says
-    if (!isPdf(bytes)) return { ok: false, reason: "NOT_PDF" };
+    // a landing page or a login wall is not a PDF, whatever its header says;
+    // a landing page that names its PDF is followed to it, once
+    if (!isPdf(bytes)) {
+      const named = fromLanding ? null : citationPdfUrl(bytes, target);
+      if (!named) return { ok: false, reason: "NOT_PDF" };
+      const next = publicHttpUrl(named);
+      if (!next) return { ok: false, reason: "NOT_PUBLIC_URL" };
+      fromLanding = true;
+      target = next;
+      continue;
+    }
     return {
       ok: true,
       bytes,
