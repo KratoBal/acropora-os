@@ -280,7 +280,7 @@ function registry(routes: [string, number, unknown][]): {
 const deps = (
   fetch: ApiFetch,
   checkable: ReferenceSource[],
-  withoutId = 0,
+  withoutId: string[] = [],
 ) => ({
   sources: async () => ({ checkable, withoutId }),
   fetch,
@@ -308,7 +308,11 @@ describe("the run", () => {
     const reg = registry(GOOD);
     const { out, sink } = output();
     assert.equal(
-      await runReferenceCli([], sink, deps(reg.fetch, [SOURCE], 3)),
+      await runReferenceCli(
+        [],
+        sink,
+        deps(reg.fetch, [SOURCE], ["s7", "s8", "s9"]),
+      ),
       0,
     );
     assert.equal(reg.urls.length, 2);
@@ -319,7 +323,7 @@ describe("the run", () => {
     );
     assert.match(
       out.stdout,
-      /Azonosító nélküli befogadott forrás \(nem mérhető\): 3/,
+      /Azonosító nélküli befogadott forrás \(nem mérhető\): 3 \(s7, s8, s9\)/,
     );
     // the output names identifiers and codes, never a title
     assert.equal(out.stdout.includes("kalcifik"), false);
@@ -393,11 +397,12 @@ describe("the run", () => {
     await runReferenceCli(
       ["--json"],
       sink,
-      deps(registry(GOOD).fetch, [SOURCE], 1),
+      deps(registry(GOOD).fetch, [SOURCE], ["s9"]),
     );
     const r = JSON.parse(out.stdout);
     assert.equal(r.met, true);
     assert.equal(r.withoutIdentifier, 1);
+    assert.deepEqual(r.withoutIdentifierIds, ["s9"]);
     assert.deepEqual(
       r.results.map((x: { kind: string }) => x.kind),
       ["DOI", "PMID"],

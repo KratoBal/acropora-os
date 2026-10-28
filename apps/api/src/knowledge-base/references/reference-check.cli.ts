@@ -29,7 +29,7 @@ import { includedReferenceSources } from "./reference-check.repository.js";
 export const MAX_SOURCES = 500;
 
 export interface ReferenceCliDeps {
-  sources: () => Promise<{ checkable: ReferenceSource[]; withoutId: number }>;
+  sources: () => Promise<{ checkable: ReferenceSource[]; withoutId: string[] }>;
   fetch: ApiFetch;
   sleep: (ms: number) => Promise<void>;
   now: () => Date;
@@ -61,8 +61,8 @@ export async function runReferenceCli(
   const report = await checkReferences(checkable, client);
   out.stdout(
     argv.includes("--json")
-      ? `${JSON.stringify({ ...report, withoutIdentifier: withoutId })}\n`
-      : `${referenceReportText(report)}Azonosító nélküli befogadott forrás (nem mérhető): ${withoutId}\nKérések: ${client.requestCount}\n`,
+      ? `${JSON.stringify({ ...report, withoutIdentifier: withoutId.length, withoutIdentifierIds: withoutId })}\n`
+      : `${referenceReportText(report)}Azonosító nélküli befogadott forrás (nem mérhető): ${withoutId.length}${withoutId.length ? ` (${withoutId.join(", ")})` : ""}\nKérések: ${client.requestCount}\n`,
   );
   if (report.results.some((r) => r.verdict === "UNREACHABLE")) return 4;
   return report.met ? 0 : 3;
