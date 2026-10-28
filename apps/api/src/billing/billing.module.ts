@@ -11,12 +11,15 @@ import { BillingDocumentAdvanceController } from "./billing-document-advance.con
 import { BillingDocumentFinalController } from "./billing-document-final.controller.js";
 import { BillingDocumentCopyController } from "./billing-document-copy.controller.js";
 import { BillingDocumentIssueController } from "./billing-document-issue.controller.js";
+import { BillingDocumentIssuingResolutionController } from "./billing-document-issuing-resolution.controller.js";
 import { BillingDocumentStornoController } from "./billing-document-storno.controller.js";
 import { BillingDocumentStornoPdfService } from "./billing-document-storno-pdf.service.js";
 import { BillingDocumentStornoService } from "./billing-document-storno.service.js";
 import { BillingDocumentIssueRepository } from "./billing-document-issue.repository.js";
 import { BillingDocumentIssueService } from "./billing-document-issue.service.js";
 import { BillingDocumentPreviewService } from "./billing-document-preview.service.js";
+import { BillingIssuingResolutionRepository } from "./billing-issuing-resolution.repository.js";
+import { BillingIssuingResolutionService } from "./billing-issuing-resolution.service.js";
 import { BillingDocumentListRepository } from "./billing-document-list.repository.js";
 import { BillingDocumentPdfService } from "./billing-document-pdf.service.js";
 import { BillingDocumentReadController } from "./billing-document-read.controller.js";
@@ -44,6 +47,7 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     OutgoingPackageController,
     BillingDocumentsController,
     BillingDocumentIssueController,
+    BillingDocumentIssuingResolutionController,
     BillingDocumentStornoController,
     BillingDocumentAdvanceController,
     BillingDocumentCopyController,
@@ -58,6 +62,8 @@ import { ExternalInvoicePdfScheduler } from "./external-invoice-pdf.scheduler.js
     BillingDocumentIssueRepository,
     BillingDocumentIssueService,
     BillingDocumentPreviewService,
+    BillingIssuingResolutionRepository,
+    BillingIssuingResolutionService,
     BillingDocumentStornoService,
     BillingDocumentStornoPdfService,
     BillingDocumentStockRepository,

@@ -1,3 +1,8 @@
+import {
+  BILLING_ISSUING_KINDS,
+  type BillingIssuingKind,
+} from "@acropora/types";
+
 /**
  * A KIÁLLÍTÁS VÉSZÁLLAPOTAI: MELY KIMENŐ BIZONYLAT ÁLL ISSUING-BEN, ÉS MIÉRT (kártya 38e9271d, acrobot
  * 2026-10-26: "előbb mérés, csak valós esetre épül feloldás"). CSAK OLVAS, tiszta függvények.
@@ -15,15 +20,8 @@
  *   - OTHER           ismeretlen szöveg
  * A "létezik" két fajtánál a szám is megvan, ezért ott a feloldás egyértelmű; a többinél a Számlázz.hu a forrás.
  */
-export const ISSUING_KINDS = [
-  "RECORDING_FAILED",
-  "STRAY_PREVIEW",
-  "NO_REPLY",
-  "UNCLEAR_REPLY",
-  "NO_NOTE",
-  "OTHER",
-] as const;
-export type IssuingKind = (typeof ISSUING_KINDS)[number];
+export const ISSUING_KINDS = BILLING_ISSUING_KINDS;
+export type IssuingKind = BillingIssuingKind;
 
 export interface StuckRow {
   id: string;
