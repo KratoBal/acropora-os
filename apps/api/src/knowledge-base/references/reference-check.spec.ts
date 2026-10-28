@@ -58,22 +58,45 @@ describe("titles", () => {
     );
     assert.ok(titlesMatch("A foszfát hatása.", "a foszfat hatasa"));
   });
-  it("a long enough beginning is the same title (a subtitle left out); a short one is not", () => {
+  it("a title without its subtitle is the same title, at a subtitle boundary only", () => {
+    const full = "Phosphate enrichment and coral calcification: a field test";
     assert.ok(
-      titlesMatch(
-        "Phosphate enrichment and coral calcification",
-        "Phosphate enrichment and coral calcification: a field test",
-      ),
+      titlesMatch("Phosphate enrichment and coral calcification", full),
     );
-    assert.equal(
-      titlesMatch("Coral", "Coral calcification under phosphate"),
-      false,
+    assert.ok(
+      titlesMatch(full, "Phosphate enrichment and coral calcification"),
     );
+    assert.ok(titlesMatch("Coral growth", "Coral growth – a review"));
+    assert.ok(titlesMatch("Coral growth", "Coral growth. A review of tanks"));
     assert.equal(
       titlesMatch("Phosphate and corals", "Nitrate and corals"),
       false,
     );
     assert.equal(titlesMatch("", ""), false);
+  });
+  it("a series part, a numbered phase or a longer sequel is another work (barracuda, #1939)", () => {
+    const pairs: [string, string][] = [
+      [
+        "Nutrient dynamics on coral reefs. Part I",
+        "Nutrient dynamics on coral reefs. Part II",
+      ],
+      [
+        "Coral nutrition experiments, Part 1",
+        "Coral nutrition experiments, Part 10",
+      ],
+      [
+        "Reef phosphate monitoring Phase 1",
+        "Reef phosphate monitoring Phase 12",
+      ],
+      [
+        "Effects of phosphate on coral calcification",
+        "Effects of phosphate on coral calcification in Acropora under elevated temperature",
+      ],
+    ];
+    for (const [a, b] of pairs) {
+      assert.equal(titlesMatch(a, b), false, `${a} / ${b}`);
+      assert.equal(titlesMatch(b, a), false, `${b} / ${a}`);
+    }
   });
 });
 

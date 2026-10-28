@@ -65,19 +65,27 @@ export function titleKey(title: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-/** The shorter key must be this long before a prefix counts as the same title. */
-export const MIN_PREFIX_KEY = 20;
+/**
+ * Where a subtitle may begin in a raw title: a colon, a spaced dash, or a
+ * full stop and a space, with text after it.
+ */
+const SUBTITLE_BOUNDARY = /(?::|\s[-–—]|\.)\s+(?=\S)/gu;
 
 /**
- * The same title: equal keys, or one the other's beginning (a subtitle the
- * other side left out), when the shorter is at least MIN_PREFIX_KEY long.
+ * The same title: equal keys, or the shorter one is the longer one up to a
+ * SUBTITLE boundary (the side that left the subtitle out). A plain prefix is
+ * not enough: "... reefs. Part I" is the beginning of "... reefs. Part II",
+ * "Part 1" of "Part 10", and a short title of its longer sequel (barracuda,
+ * #1939 review).
  */
 export function titlesMatch(a: string, b: string): boolean {
   const [x, y] = [titleKey(a), titleKey(b)];
   if (!x || !y) return false;
   if (x === y) return true;
-  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  return short.length >= MIN_PREFIX_KEY && long.startsWith(short);
+  const [short, longRaw] = x.length <= y.length ? [x, b] : [y, a];
+  for (const m of longRaw.matchAll(SUBTITLE_BOUNDARY))
+    if (titleKey(longRaw.slice(0, m.index)) === short) return true;
+  return false;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
