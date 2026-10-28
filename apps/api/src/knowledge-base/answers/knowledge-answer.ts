@@ -31,9 +31,12 @@ import {
  *      stated with the transfer phrase, or stays out when the editor ruled the
  *      transfer out or has not decided it; genus or group data for a narrower
  *      question gets the coarser-data phrase; a claim on another taxon than
- *      the one asked about stays out (acrobot 37230, option B). Such a claim
- *      does not keep its CONTRADICTS partner out either: it does not speak
- *      about the population asked;
+ *      the one asked about stays out (acrobot 37230, option B). A claim
+ *      the editor ruled out for an aquarium, or on another taxon, does not
+ *      keep its CONTRADICTS partner out: someone said it is not about the
+ *      population asked. An UNDECIDED one does: nobody said so, it is the
+ *      same taxon and effect, only its transfer is open, so the pair stays
+ *      out together as any pair with a side not stated (barracuda, #1942);
  *   2. each claim as one sentence the gate accepts (`claimStatement`); a claim
  *      that cannot be stated stays out, with its reason, and so does every
  *      claim whose CONTRADICTS partner among the candidates cannot be stated:
@@ -251,7 +254,11 @@ export async function answerQuestion(input: {
   // every partner among the candidates stated (to a fixed point, since
   // dropping one may unpair another)
   const unpaired: string[] = [];
-  const outOfQuestion = new Set(notForQuestion.map((n) => n.id));
+  const outOfQuestion = new Set(
+    notForQuestion
+      .filter((n) => n.reason !== "TRANSFER_UNDECIDED")
+      .map((n) => n.id),
+  );
   for (let changed = true; changed;) {
     changed = false;
     for (const id of [...statements.keys()])
