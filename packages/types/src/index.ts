@@ -137,6 +137,19 @@ export type {
 } from "./billing-payment-state.js";
 export type { BillingProductPrice } from "./billing-product-price.js";
 export {
+  BILLING_ISSUING_ACTIONS,
+  BILLING_ISSUING_KINDS,
+  BILLING_ISSUING_LOOKUPS,
+  BILLING_ISSUING_MIN_AGE_MINUTES,
+} from "./billing-issuing-resolution.js";
+export type {
+  BillingIssuingAction,
+  BillingIssuingCheck,
+  BillingIssuingKind,
+  BillingIssuingLookup,
+  BillingIssuingResolveInput,
+} from "./billing-issuing-resolution.js";
+export {
   BILLING_DOCUMENT_STATUS_LABELS,
   BILLING_EMAIL_STATUS_LABELS,
 } from "./billing-document-labels.js";

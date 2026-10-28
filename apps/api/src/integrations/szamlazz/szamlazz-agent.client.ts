@@ -71,12 +71,24 @@ export interface SzamlazzAgentStornoClient {
   stornoInvoice(xml: string): Promise<SzamlazzAgentResponse>;
 }
 
+/**
+ * Egy meglévő bizonylat adatainak lekérdezése (`xmlszamlaxml`). Mezőnév a
+ * docs.szamlazz.hu/agent/querying_xml/request oldalról: action-szamla_agent_xml
+ * (letöltve 2026-10-28). A siker válasza NEM `xmlszamlavalasz`, hanem egy teljes
+ * `szamla` dokumentum, ezért ez a nyers törzset adja, és az elemzés a hívóé
+ * (billing-szamlazz-query.ts). Csak olvas.
+ */
+export interface SzamlazzAgentQueryClient {
+  queryDocument(xml: string): Promise<string>;
+}
+
 export class HttpSzamlazzAgentClient
   implements
     SzamlazzAgentClient,
     SzamlazzAgentPaymentClient,
     SzamlazzAgentPdfClient,
-    SzamlazzAgentStornoClient
+    SzamlazzAgentStornoClient,
+    SzamlazzAgentQueryClient
 {
   constructor(
     private readonly url: string = SZAMLAZZ_AGENT_URL,
@@ -99,11 +111,25 @@ export class HttpSzamlazzAgentClient
     return this.post("action-szamla_agent_pdf", "pdf.xml", xml);
   }
 
+  queryDocument(xml: string): Promise<string> {
+    return this.postRaw("action-szamla_agent_xml", "query.xml", xml);
+  }
+
   private async post(
     field: string,
     fileName: string,
     xml: string,
   ): Promise<SzamlazzAgentResponse> {
+    return parseSzamlazzAgentXmlResponse(
+      await this.postRaw(field, fileName, xml),
+    );
+  }
+
+  private async postRaw(
+    field: string,
+    fileName: string,
+    xml: string,
+  ): Promise<string> {
     const form = new FormData();
     form.append(field, new Blob([xml], { type: "text/xml" }), fileName);
     const response = await this.fetchImpl(this.url, {
@@ -112,6 +138,6 @@ export class HttpSzamlazzAgentClient
     });
     const body = await response.text();
     if (!response.ok) throw new SzamlazzAgentHttpError(response.status, body);
-    return parseSzamlazzAgentXmlResponse(body);
+    return body;
   }
 }
