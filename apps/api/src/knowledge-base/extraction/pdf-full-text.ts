@@ -479,6 +479,60 @@ export function joinLineEndHyphens(lines: readonly string[]): string {
   return out.join("\n");
 }
 
+/** How far a manuscript's line number may jump (a skipped equation line). */
+const LINE_NUMBER_STEP = 3;
+
+/**
+ * A MANUSCRIPT'S LINE NUMBERS ARE TAKEN OUT. An author's manuscript (HAL)
+ * numbers its lines, and the text layer ends every line with the number:
+ * "measured in four tropical 9". The model quotes without it, the source
+ * leaves at the digit; measured on stage, 14 of 15 refused passages of two
+ * HAL PDFs left there (acrobot 37543, 37551). The number also stands between
+ * a line-end hyphen and the next line, so the word is not joined.
+ *
+ * Decided for the whole document, not line by line: only when at least half
+ * of its lines end with a number one to `LINE_NUMBER_STEP` above the last one
+ * taken, the run starting at 1 to `LINE_NUMBER_STEP` (two HAL PDFs: 65 and
+ * 78 per cent; seven others: at most 0.7; a numbering that starts again on
+ * every page is not taken, and was not seen). Then a
+ * line's last number is taken only when it goes on that run, a line holding
+ * just a run number goes, and so does a bare number standing first or last on
+ * a page (the page number). A number in the text that is not the next line
+ * number stays; one that happens to be is lost (not seen on the two PDFs).
+ */
+export function stripLineNumbers(
+  pages: readonly (readonly string[])[],
+): string[][] {
+  const NUMBER = /(?:^|\s)(\d{1,4})$/;
+  const pass = (strip: boolean) => {
+    let last = 0;
+    let onRun = 0;
+    const out = pages.map((lines) =>
+      lines.flatMap((line, i) => {
+        const match = NUMBER.exec(line);
+        const n = match ? Number(match[1]) : NaN;
+        const bare = match !== null && match[0].trim() === line;
+        // the page number first: on a page's edge it is not a line number
+        if (bare && (i === 0 || i === lines.length - 1))
+          return strip ? [] : [line];
+        if (n > last && n <= last + LINE_NUMBER_STEP) {
+          last = n;
+          onRun += 1;
+          if (!strip) return [line];
+          const rest = line.slice(0, match!.index).trimEnd();
+          return rest ? [rest] : [];
+        }
+        return [line];
+      }),
+    );
+    return { out, onRun };
+  };
+  const total = pages.reduce((n, lines) => n + lines.length, 0);
+  if (pass(false).onRun * 2 < total || total === 0)
+    return pages.map((lines) => [...lines]);
+  return pass(true).out;
+}
+
 /** A heading line the references list starts with: from it on, nothing is read. */
 const REFERENCES_HEADING =
   /^\s*(?:\d+\.?\s*)?(?:references|literature cited|bibliography|references and notes)\s*$/i;
@@ -491,7 +545,8 @@ export interface PdfSections {
 
 /**
  * The PDF's text layer, one section per page (`p. 3`), lines as pdfjs marks
- * them, the references list and what follows it left out. A scanned PDF has
+ * them, a manuscript's line numbers taken out (`stripLineNumbers`), the
+ * references list and what follows it left out. A scanned PDF has
  * no text layer and gives no section.
  */
 export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
@@ -506,6 +561,8 @@ export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
     const document = await task.promise;
     pagesDropped = Math.max(0, document.numPages - MAX_PDF_PAGES);
     const pages = Math.min(document.numPages, MAX_PDF_PAGES);
+    // every page first: whether the lines are numbered is the document's question
+    const read: string[][] = [];
     for (let n = 1; n <= pages; n += 1) {
       const content = await (await document.getPage(n)).getTextContent();
       let line = "";
@@ -519,13 +576,15 @@ export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
         } else if (item.str && !line.endsWith(" ")) line += " ";
       }
       if (line) lines.push(line);
+      read.push(
+        lines.map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean),
+      );
+    }
+    for (const [i, lines] of stripLineNumbers(read).entries()) {
       const cut = lines.findIndex((l) => REFERENCES_HEADING.test(l));
-      const kept = (cut >= 0 ? lines.slice(0, cut) : lines)
-        .map((l) => l.replace(/\s+/g, " ").trim())
-        .filter(Boolean);
-      const text = joinLineEndHyphens(kept);
+      const text = joinLineEndHyphens(cut >= 0 ? lines.slice(0, cut) : lines);
       if (text)
-        sections.push({ locator: `p. ${n}`.slice(0, MAX_LOCATOR), text });
+        sections.push({ locator: `p. ${i + 1}`.slice(0, MAX_LOCATOR), text });
       if (cut >= 0) break;
     }
   } finally {
