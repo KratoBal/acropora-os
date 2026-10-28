@@ -59,6 +59,17 @@ export const SOURCE_EVIDENCE_TYPE: Readonly<
 };
 
 /**
+ * ONE PAGE, ONE KEY, for both page checks (barracuda, #1821): the run reads a
+ * final page once per product, and the auto-accept rule sends a page another
+ * product shares to a person. Without fragment, query, case and trailing
+ * slash: a UNAS link with `?utm_source=` is the clean page (#1810). A wider
+ * match is the safe side in both: one read fewer, or one more for a person.
+ */
+export function pageKey(url: string): string {
+  return url.split("#")[0]!.split("?")[0]!.toLowerCase().replace(/\/+$/, "");
+}
+
+/**
  * A site's base domain from a URL or bare host: lower case, no `www.`.
  * `null` for anything that is not a plain public http(s) host.
  */

@@ -29,6 +29,7 @@ import {
   SOURCE_EVIDENCE_TYPE,
   baseDomainOf,
   manufacturerSites,
+  pageKey,
   sourceUrlProblem,
   type EnrichmentSourceKind,
 } from "./enrichment-sources.js";
@@ -332,12 +333,19 @@ export function sourcesFor(
   if (facts.unasManufacturerUrl && baseDomainOf(facts.unasManufacturerUrl))
     all.push({ kind: "MANUFACTURER", url: facts.unasManufacturerUrl });
   const seen = new Set<string>();
-  return all.filter((source) => {
+  const unique = all.filter((source) => {
     const key = `${source.kind} ${source.url}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  // the manufacturer's pages first (barracuda, #1821): when a supplier link
+  // and a manufacturer link lead to one final page, the page is read once, and
+  // it is read as the manufacturer's
+  return [
+    ...unique.filter((source) => source.kind === "MANUFACTURER"),
+    ...unique.filter((source) => source.kind !== "MANUFACTURER"),
+  ];
 }
 
 async function checkProduct(
@@ -400,8 +408,8 @@ async function checkProduct(
       });
       continue;
     }
-    const pageKey = page.url.split("#")[0]!.replace(/\/+$/, "");
-    if (readPages.has(pageKey)) {
+    const key = pageKey(page.url);
+    if (readPages.has(key)) {
       fetches.push({
         sourceKind: source.kind,
         url: page.url,
@@ -413,7 +421,7 @@ async function checkProduct(
       });
       continue;
     }
-    readPages.add(pageKey);
+    readPages.add(key);
     const structured = extractPageStatement(page.html);
     // marine-aquatics.eu states its data in labelled rows, not JSON-LD.
     // bulkreefsupply.com states its barcode only in a labelled table.

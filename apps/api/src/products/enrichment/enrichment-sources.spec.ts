@@ -5,6 +5,7 @@ import {
   baseDomainOf,
   brandSitesFromCategories,
   manufacturerSites,
+  pageKey,
   sourceUrlProblem,
 } from "./enrichment-sources.js";
 
@@ -204,5 +205,20 @@ describe("a négy engedélyezett forrás, és semmi más", () => {
       "gyarto.example.invalid",
     );
     assert.equal(baseDomainOf("ftp://x.example.invalid"), null);
+  });
+});
+
+// barracuda, #1821: one key for the run's read-once check and the rule's shared-page check
+describe("egy lap, egy kulcs", () => {
+  it("fragment, query, kis- és nagybetű, záró perjel nélkül", () => {
+    const key = pageKey("https://gyarto.example.invalid/p/mg-plus/");
+    for (const url of [
+      "https://gyarto.example.invalid/p/mg-plus",
+      "https://Gyarto.example.invalid/P/Mg-Plus//",
+      "https://gyarto.example.invalid/p/mg-plus/?utm_source=unas",
+      "https://gyarto.example.invalid/p/mg-plus#adagolas",
+    ])
+      assert.equal(pageKey(url), key, url);
+    assert.notEqual(pageKey("https://gyarto.example.invalid/p/ca-plus"), key);
   });
 });
