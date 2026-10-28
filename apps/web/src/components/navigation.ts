@@ -589,6 +589,9 @@ const mainNavigationGroups: AppNavigationGroup[] = [
 /** A felül rögzített főmenü: az Áttekintés a Kedvencek alatt, az ABC előtt áll. */
 export const PINNED_NAVIGATION_LABEL = "Áttekintés";
 
+/** A mindig utolsó főmenü (Balázs, 2026-10-28 19:44 UTC): az ABC-sorrendbe nem tartozik bele. */
+export const LAST_NAVIGATION_LABEL = "Beállítások";
+
 /** A Kedvencek menü felirata; az Áttekintés FÖLÖTT áll, és csak elemmel látszik. */
 export const FAVORITES_NAVIGATION_LABEL = "Kedvencek";
 
@@ -597,7 +600,8 @@ export const FAVORITES_NAVIGATION_LABEL = "Kedvencek";
  * Áttekintés felül marad, a többi magyar ábécé szerint (`localeCompare` "hu":
  * az ékezetes betű a párja mellett áll, nem a lista végén). A sorrendet ez a
  * függvény adja, nem a fenti tömb sora, így egy új főmenü sem kerülhet rossz
- * helyre. Az almenük sorrendje NEM változik: az a munka menete (hibajegy,
+ * helyre. A Beállítások KIVÉTEL (Balázs, 2026-10-28 19:44 UTC): mindig az utolsó,
+ * az ábécé szerinti helye helyett. Az almenük sorrendje NEM változik: az a munka menete (hibajegy,
  * munkalap, igazolás, számla), nem ábécé.
  */
 export function inMainMenuOrder(
@@ -606,10 +610,15 @@ export function inMainMenuOrder(
   const pinned = groups.filter(
     (group) => group.label === PINNED_NAVIGATION_LABEL,
   );
+  const last = groups.filter((group) => group.label === LAST_NAVIGATION_LABEL);
   const rest = groups
-    .filter((group) => group.label !== PINNED_NAVIGATION_LABEL)
+    .filter(
+      (group) =>
+        group.label !== PINNED_NAVIGATION_LABEL &&
+        group.label !== LAST_NAVIGATION_LABEL,
+    )
     .sort((a, b) => a.label.localeCompare(b.label, "hu"));
-  return [...pinned, ...rest];
+  return [...pinned, ...rest, ...last];
 }
 
 export const mainNavigation: AppNavigationGroup[] =
