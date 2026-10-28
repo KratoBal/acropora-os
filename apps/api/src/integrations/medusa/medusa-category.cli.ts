@@ -237,19 +237,32 @@ export async function runCategoryCli(
   }
 }
 
+/**
+ * A PARANCS SAJAT FUGGOSEGEI, ugyanazok, amiket a parancssor ad (a katalogus-
+ * muveletek gombja is ezt hasznalja, `catalog-actions.runners.ts`): a tarolt
+ * hitelesito adat, az OS kategoriafaja, a leképezés-tár, az ora.
+ */
+export function categoryCliDependencies(out: CliOutput) {
+  return {
+    client: () => medusaClientForProjection(storedCredentialProvider(), out),
+    tree: ourCategoryTree,
+    service: () =>
+      new MedusaCategoryImportService(new MedusaCategoryLinkRepository()),
+    now: () => new Date(),
+  };
+}
+
 /* c8 ignore start -- a belépési pont: a mérhető rész a `runCategoryCli`. */
 async function main(): Promise<void> {
   const out: CliOutput = {
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   };
-  const code = await runCategoryCli(process.argv.slice(2), out, {
-    client: () => medusaClientForProjection(storedCredentialProvider(), out),
-    tree: ourCategoryTree,
-    service: () =>
-      new MedusaCategoryImportService(new MedusaCategoryLinkRepository()),
-    now: () => new Date(),
-  });
+  const code = await runCategoryCli(
+    process.argv.slice(2),
+    out,
+    categoryCliDependencies(out),
+  );
   process.exitCode = code;
 }
 
