@@ -7,6 +7,7 @@ import {
   type Polarity,
   type TestSetReport,
   type Vocabulary,
+  recogniseSentence,
 } from "@acropora/knowledge-base";
 
 import { checkClaims } from "../extraction/claim-check.js";
@@ -31,11 +32,19 @@ import {
  *   T2  a passage, and every field anchor, is stored only if it is in the
  *       text the OS downloaded, letter for letter (whitespace aside);
  *   T6  where the package holds a CONTRADICTS pair, the answer carries both
- *       sides whichever one the AI chose; without the link, nothing is added.
+ *       sides whichever one the AI chose; without the link, nothing is added;
+ *   T8  a claim whose population differs from the question's carries the
+ *       fixed phrase (field or lab data for an aquarium: the transfer phrase;
+ *       genus or group data for a narrower taxon: the coarser-data phrase), or
+ *       stays out (a transfer the editor ruled out or did not decide; another
+ *       taxon, acrobot 37230 option B). Its pairs: the same claims where the
+ *       population does not differ carry no phrase. The AI is a fake that
+ *       chooses everything sent, so this measures the OS's statements, not the
+ *       model's choice.
  *
  * T9 (a retracted source's claim stays out of the answer) needs the
- * repository and runs in knowledge-answer.integration.spec.ts. T7 and the AI's
- * part of T8 measure what the model chooses: they belong to the stage run.
+ * repository and runs in knowledge-answer.integration.spec.ts. T7 measures
+ * what the model chooses: it belongs to the stage run.
  *
  * Pure apart from the injected functions; the AI is a fake that chooses the
  * claims the case names.
@@ -76,7 +85,23 @@ export interface ContradictionCase {
   criterion: string;
 }
 
-export type ApiCase = PassageCase | AnchorCase | ContradictionCase;
+export interface PopulationCase {
+  kind: "POPULATION";
+  id: string;
+  group: "T8";
+  polarity: Polarity;
+  question: string;
+  /** The claim's scope, over the field experiment on Acropora. */
+  scope: Partial<ClaimScope>;
+  /** cited with the phrase (must-apply) or without it (must-not-apply); or not in the answer. */
+  expect:
+    | { cited: true; phrase: "TRANSFER_TO_AQUARIUM" | "COARSER_DATA" }
+    | { cited: false };
+  criterion: string;
+}
+
+export type ApiCase =
+  PassageCase | AnchorCase | ContradictionCase | PopulationCase;
 
 const passage = (
   polarity: Polarity,
@@ -236,11 +261,158 @@ const T6_CASES: readonly ContradictionCase[] = [
   },
 ];
 
-export const API_TEST_SET: readonly ApiCase[] = [...T2_CASES, ...T6_CASES];
+const AQUARIUM_Q = "Mennyi foszfát jó egy SPS-akváriumban?";
+const ACROPORA_Q = "Mennyi foszfát jó az Acroporának?";
+const NO_SETTING_Q = "Hogyan hat a foszfát a kalcifikációra?";
+
+const population = (
+  polarity: Polarity,
+  id: string,
+  question: string,
+  scope: Partial<ClaimScope>,
+  expect: PopulationCase["expect"],
+  criterion: string,
+): PopulationCase => ({
+  kind: "POPULATION",
+  id,
+  group: "T8",
+  polarity,
+  question,
+  scope,
+  expect,
+  criterion,
+});
+const WITH = (phrase: "TRANSFER_TO_AQUARIUM" | "COARSER_DATA") => ({
+  cited: true as const,
+  phrase,
+});
+const OUT = { cited: false as const };
+
+const T8_CASES: readonly PopulationCase[] = [
+  population(
+    "must-apply",
+    "t8-field-aquarium",
+    AQUARIUM_Q,
+    {},
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "reef data, limited transfer, for an aquarium question",
+  ),
+  population(
+    "must-apply",
+    "t8-lab-aquarium",
+    AQUARIUM_Q,
+    { environments: ["LAB"], homeReefApplicability: "ANALOGOUS" },
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "lab data, analogous transfer",
+  ),
+  population(
+    "must-apply",
+    "t8-mesocosm-public",
+    "Mennyi foszfát jó egy közakváriumban?",
+    { environments: ["MESOCOSM"] },
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "mesocosm data for a public aquarium",
+  ),
+  population(
+    "must-apply",
+    "t8-not-applicable",
+    AQUARIUM_Q,
+    { homeReefApplicability: "NOT_APPLICABLE" },
+    OUT,
+    "a transfer the editor ruled out stays out",
+  ),
+  population(
+    "must-apply",
+    "t8-undecided",
+    AQUARIUM_Q,
+    { homeReefApplicability: null },
+    OUT,
+    "an undecided transfer stays out",
+  ),
+  population(
+    "must-apply",
+    "t8-group-data",
+    ACROPORA_Q,
+    { taxa: ["SPS"] },
+    WITH("COARSER_DATA"),
+    "SPS data for an Acropora question",
+  ),
+  population(
+    "must-apply",
+    "t8-genus-data",
+    "Mennyi foszfát jó az Acropora millepora számára?",
+    {},
+    WITH("COARSER_DATA"),
+    "genus data for a species question",
+  ),
+  population(
+    "must-apply",
+    "t8-other-taxon",
+    ACROPORA_Q,
+    { taxa: ["MONTIPORA"] },
+    OUT,
+    "Montipora data for an Acropora question stays out",
+  ),
+  population(
+    "must-not-apply",
+    "t8-no-setting",
+    NO_SETTING_Q,
+    {},
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "reef data for a question naming no setting: no transfer phrase",
+  ),
+  population(
+    "must-not-apply",
+    "t8-aquarium-claim",
+    AQUARIUM_Q,
+    { environments: ["HOME_AQUARIUM"], homeReefApplicability: "DIRECT" },
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "aquarium data for an aquarium question: no phrase",
+  ),
+  population(
+    "must-not-apply",
+    "t8-direct",
+    AQUARIUM_Q,
+    { homeReefApplicability: "DIRECT" },
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "a transfer the editor decided as direct: no phrase",
+  ),
+  population(
+    "must-not-apply",
+    "t8-same-taxon",
+    ACROPORA_Q,
+    {},
+    WITH("COARSER_DATA"),
+    "Acropora data for an Acropora question: no phrase",
+  ),
+  population(
+    "must-not-apply",
+    "t8-narrower-data",
+    ACROPORA_Q,
+    { taxa: ["ACROPORA_MILLEPORA"] },
+    WITH("COARSER_DATA"),
+    "species data within the genus asked: no phrase",
+  ),
+  population(
+    "must-not-apply",
+    "t8-not-applicable-no-setting",
+    NO_SETTING_Q,
+    { homeReefApplicability: "NOT_APPLICABLE" },
+    WITH("TRANSFER_TO_AQUARIUM"),
+    "ruled out for an aquarium, and the question asks about none: answered, no phrase",
+  ),
+];
+
+export const API_TEST_SET: readonly ApiCase[] = [
+  ...T2_CASES,
+  ...T6_CASES,
+  ...T8_CASES,
+];
 
 export const API_THRESHOLDS: Readonly<Record<ApiCase["group"], string>> = {
   T2: "100% verbatim stored, every changed one refused",
   T6: "100%",
+  T8: "100%",
 };
 
 // The two claims of T6: a field experiment and a hobby report that disagree.
@@ -361,6 +533,40 @@ async function runCase(
           got,
         )
       : result(kept.length === 1 && inOneSection(kept[0]!.text), got);
+  }
+
+  if (c.kind === "POPULATION") {
+    const [c1] = pairOf(false);
+    const r = await deps.answerQuestion({
+      question: c.question,
+      subject: "PHOSPHATE",
+      candidates: [{ ...c1!, scope: { ...c1!.scope, ...c.scope } }],
+      vocabulary,
+      ask: async (req) => ({
+        kind: "ANSWER",
+        sentences: req.claims.map((x) => ({
+          claimId: x.id,
+          text: x.statement,
+        })),
+        refused: [],
+        answeredBy: "test-set fake",
+      }),
+    });
+    const cited = r.sentences.find(
+      (s) => s.status === "CITED" && s.claimIds.includes("c1"),
+    );
+    const phrases = cited
+      ? recogniseSentence(cited.sentence, vocabulary).scopePhrases
+      : [];
+    const got = cited
+      ? `cited, phrases [${phrases.join(", ")}]`
+      : `not cited, notForQuestion [${r.package.notForQuestion.map((n) => n.reason).join(", ")}]`;
+    if (!c.expect.cited) return result(cited === undefined, got);
+    const carries = phrases.includes(c.expect.phrase);
+    return result(
+      cited !== undefined && (c.polarity === "must-apply" ? carries : !carries),
+      got,
+    );
   }
 
   const asked: AiAnswerRequest[] = [];

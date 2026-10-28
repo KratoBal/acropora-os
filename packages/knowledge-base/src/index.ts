@@ -107,9 +107,14 @@ export type {
   PackageClaim,
   PackageExclusion,
 } from "./answer-gate.js";
-export { claimStatement, writtenNumber } from "./claim-statement.js";
+export {
+  TRANSFER_TO_AQUARIUM_PHRASE,
+  claimStatement,
+  writtenNumber,
+} from "./claim-statement.js";
 export type {
   OriginalQuantity,
+  StatementTransfer,
   StatementFailure,
   StatementResult,
 } from "./claim-statement.js";

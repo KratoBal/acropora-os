@@ -6,6 +6,7 @@ import {
   claimStatement,
   writtenNumber,
   type OriginalQuantity,
+  type StatementTransfer,
 } from "./claim-statement.js";
 import type { ClaimScope } from "./compare.js";
 import { vocabularyV1 } from "./vocabulary.js";
@@ -39,6 +40,7 @@ function build(
   over: Partial<PackageClaim> = {},
   scope: Partial<ClaimScope> = {},
   quantity: OriginalQuantity | null = MICROMOLAR,
+  transfer?: StatementTransfer,
 ) {
   const claim: PackageClaim = {
     id: "k1",
@@ -47,7 +49,12 @@ function build(
     ...over,
     scope: { ...FIELD_DECREASE, ...scope },
   };
-  return claimStatement({ claim, quantity, vocabulary });
+  return claimStatement({
+    claim,
+    quantity,
+    vocabulary,
+    ...(transfer ? { transfer } : {}),
+  });
 }
 function statement(...args: Parameters<typeof build>): string {
   const r = build(...args);
@@ -176,6 +183,51 @@ describe("the statement", () => {
       ),
       / legfeljebb 1 µmol\/l foszfát mellett /,
     );
+  });
+});
+
+describe("the transfer phrases (T8)", () => {
+  const AQUARIUM = { toAquarium: true, coarserData: false };
+  const COARSER = { toAquarium: false, coarserData: true };
+  it("field data for an aquarium question carries the transfer phrase", () => {
+    assert.equal(
+      statement({}, {}, MICROMOLAR, AQUARIUM),
+      "Kutatás szerint, egy kísérletben zátony környezetben, akváriumra csak korlátozottan, Acropora esetén 0,3–1 µmol/l foszfát mellett a kalcifikáció csökken.",
+    );
+  });
+  it("genus or group data for a narrower question carries the coarser-data phrase", () => {
+    assert.equal(
+      statement({}, {}, MICROMOLAR, COARSER),
+      "Kutatás szerint, egy kísérletben zátony környezetben, nemzetség-szintű adat alapján Acropora esetén 0,3–1 µmol/l foszfát mellett a kalcifikáció csökken.",
+    );
+    assert.match(
+      statement({}, { taxa: ["SPS"] }, MICROMOLAR, COARSER),
+      /, csoportszintű adat alapján SPS esetén /u,
+    );
+  });
+  it("without a transfer, the statement is unchanged", () => {
+    assert.equal(
+      statement({}, {}, MICROMOLAR, { toAquarium: false, coarserData: false }),
+      statement(),
+    );
+  });
+  it("a transfer the editor ruled out or did not decide fails the builder's own gate check", () => {
+    for (const homeReefApplicability of ["NOT_APPLICABLE", null] as const) {
+      const r = build({}, { homeReefApplicability }, MICROMOLAR, AQUARIUM);
+      assert.ok(!r.ok);
+      assert.equal(r.failure, "BUILT_SENTENCE_FAILS_GATE");
+    }
+  });
+  it("a transfer the evidence cannot carry is not written", () => {
+    const species = build(
+      {},
+      { taxa: ["ACROPORA_MILLEPORA"] },
+      MICROMOLAR,
+      COARSER,
+    );
+    assert.ok(!species.ok && species.failure === "TRANSFER_NOT_WRITABLE");
+    const nowhere = build({}, { environments: [] }, MICROMOLAR, AQUARIUM);
+    assert.ok(!nowhere.ok && nowhere.failure === "TRANSFER_NOT_WRITABLE");
   });
 });
 

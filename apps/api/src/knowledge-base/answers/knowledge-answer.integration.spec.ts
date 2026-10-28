@@ -91,7 +91,12 @@ describe(
               anchorId: f.anchorId,
               decision: f.value === null ? "REJECT" : "ACCEPT",
             })),
-          applicability: null,
+          // the editor decides the lab data's transfer to an aquarium: the
+          // question below asks about one (T8: undecided stays out)
+          applicability: {
+            value: "LIMITED",
+            reason: "laborkísérlet, akváriumra csak korlátozottan",
+          },
         },
         userId,
       );
