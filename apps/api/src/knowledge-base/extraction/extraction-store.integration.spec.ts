@@ -126,6 +126,7 @@ describe(
       assert.deepEqual(await store.source(sourceId), {
         id: sourceId,
         pmcid: `PMC${suffix}`,
+        oaUrl: null,
         retracted: false,
         // not screened yet: the run would skip it (NOT_INCLUDED)
         included: false,

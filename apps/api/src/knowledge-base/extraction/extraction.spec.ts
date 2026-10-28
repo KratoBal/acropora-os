@@ -11,7 +11,13 @@ import {
 } from "./claim-check.js";
 import { claimAnswerOf } from "./claim-extractor.js";
 import { extractSource, type ExtractionDeps } from "./extraction-run.js";
-import { JATS, PASSAGE, aiClaim } from "./extraction-test-fixtures.js";
+import {
+  JATS,
+  PASSAGE,
+  PDF_PAGES,
+  aiClaim,
+  pdfOf,
+} from "./extraction-test-fixtures.js";
 import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
 
 /**
@@ -417,6 +423,7 @@ describe("extracting one source", () => {
         source: async (id: string) => ({
           id,
           pmcid: "PMC1",
+          oaUrl: null,
           retracted: false,
           included: true,
           alreadyExtracted: false,
@@ -522,7 +529,7 @@ describe("extracting one source", () => {
     assert.ok(!d.calls.some((c) => c.startsWith("save:")));
   });
 
-  it("skips, before any request: not included, retracted, already extracted, no PMCID, not found", async () => {
+  it("skips, before any request: not included, retracted, already extracted, no PMCID and no open link, not found", async () => {
     for (const [source, reason] of [
       [{ included: false }, "NOT_INCLUDED"],
       [{ retracted: true }, "RETRACTED"],
@@ -627,6 +634,67 @@ describe("extracting one source", () => {
     });
     const outcome = await extractSource("src1", false, many.value);
     assert.deepEqual([outcome.calls, outcome.chunksDropped], [6, 2]);
+  });
+
+  it("no PMCID, an open link: the PDF's text layer goes through the same check and store", async () => {
+    const bytes = await pdfOf(PDF_PAGES);
+    const pdf = "https://kiado.example.org/cikk.pdf";
+    // the AI quotes the text it is sent (its passage and anchors), and pdfjs
+    // gives the micro sign as the Greek mu; the unit is a key of its closed list
+    const mu = (t: string) => t.replace(/\u00B5/g, "\u03BC");
+    const claim = aiClaim() as {
+      passage: { text: string };
+      fields: { anchor: string }[];
+      questions: { anchor: string }[];
+    };
+    const quoted = {
+      ...claim,
+      passage: { ...claim.passage, text: mu(claim.passage.text) },
+      fields: claim.fields.map((f) => ({ ...f, anchor: mu(f.anchor) })),
+      questions: claim.questions.map((q) => ({ ...q, anchor: mu(q.anchor) })),
+    };
+    const d = deps(
+      {
+        fetch: async (url) =>
+          url === pdf
+            ? new Response(bytes, { status: 200 })
+            : new Response(null, { status: 404 }),
+        extractor: {
+          extract: async () => ({
+            kind: "ANSWER",
+            claims: [quoted],
+            refusedClaims: [],
+            extractedBy: "m claim-extraction/v1",
+          }),
+        },
+      },
+      { pmcid: null, oaUrl: pdf },
+    );
+    const outcome = await extractSource("src1", true, d.value);
+    assert.equal(outcome.status, "EXTRACTED");
+    assert.equal(outcome.fullText, "PDF");
+    assert.equal(outcome.sections, 2);
+    // the same claim as from the JATS: every anchor found verbatim in the PDF's text
+    assert.deepEqual(
+      [outcome.claims, outcome.fields, outcome.questions],
+      [1, 9, 1],
+    );
+    assert.ok(d.calls.includes("save:1:m claim-extraction/v1:64"));
+  });
+
+  it("an open link that is no PDF: skipped with the reason, no AI call", async () => {
+    const d = deps(
+      {
+        fetch: async (url) =>
+          url.endsWith("/robots.txt")
+            ? new Response(null, { status: 404 })
+            : new Response("<html>landing</html>", { status: 200 }),
+      },
+      { pmcid: null, oaUrl: "https://kiado.example.org/cikk" },
+    );
+    const outcome = await extractSource("src1", true, d.value);
+    assert.deepEqual([outcome.status, outcome.reason], ["SKIPPED", "NOT_PDF"]);
+    assert.ok(!d.calls.some((c) => c.startsWith("ai:")));
   });
 
   it("Europe PMC with no open text, and an AI that never answers: skipped with the reason", async () => {

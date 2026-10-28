@@ -24,6 +24,8 @@ import { SOURCE_FIELDS, type CheckedClaim } from "./claim-check.js";
 export interface SourceForExtraction {
   id: string;
   pmcid: string | null;
+  /** The open-access link (OpenAlex's PDF before its landing page): read when there is no PMCID. */
+  oaUrl: string | null;
   retracted: boolean;
   /**
    * The editor included it at screening (S4 Forrásszűrés). Only an included
@@ -118,6 +120,7 @@ export class PrismaExtractionStore implements ExtractionStore {
       select: {
         id: true,
         pmcid: true,
+        oaUrl: true,
         screeningStatus: true,
         retractionCheckedAt: true,
         versions: { select: { versionKind: true, contentHash: true } },
@@ -127,6 +130,7 @@ export class PrismaExtractionStore implements ExtractionStore {
     return {
       id: row.id,
       pmcid: row.pmcid,
+      oaUrl: row.oaUrl,
       retracted: row.versions.some((v) => v.versionKind === "RETRACTION"),
       included: row.screeningStatus === "INCLUDED",
       alreadyExtracted: row.versions.some(

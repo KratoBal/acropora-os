@@ -96,3 +96,36 @@ export function aiClaim(over: Record<string, unknown> = {}) {
     ...over,
   };
 }
+
+/**
+ * The same invented paper as an open PDF with a text layer: the methods and
+ * results on page 1, the references on page 2 (left out by the reader).
+ */
+export const PDF_PAGES: string[][] = [
+  [
+    "Colonies of Acropora millepora (n = 12) were kept in laboratory tanks at 26 °C for 8 weeks.",
+    "Phosphate was measured with an autoanalyzer.",
+    PASSAGE,
+    "Porites lutea colonies were not tested.",
+  ],
+  [
+    "Calcification fell further at 4 µM phosphate in the second trial.",
+    "References",
+    "Kitalált Hivatkozás (2001) a reference list line.",
+  ],
+];
+
+export async function pdfOf(
+  pages: readonly string[][],
+): Promise<Uint8Array<ArrayBuffer>> {
+  const { PDFDocument, StandardFonts } = await import("pdf-lib");
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (const lines of pages) {
+    const page = doc.addPage([1200, 800]);
+    lines.forEach((line, i) =>
+      page.drawText(line, { x: 20, y: 760 - i * 20, size: 10, font }),
+    );
+  }
+  return new Uint8Array(await doc.save());
+}

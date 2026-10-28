@@ -9,7 +9,13 @@ import {
 import type { ClaimExtractor } from "./claim-extractor.js";
 import type { ExtractionStore } from "./extraction-store.js";
 import { sha256 } from "./extraction-store.js";
-import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
+import {
+  chunkSections,
+  chunkText,
+  jatsSections,
+  type TextSection,
+} from "./jats-text.js";
+import { fetchOpenPdf, pdfSections, type PdfFetch } from "./pdf-full-text.js";
 
 /**
  * THE CLAIM EXTRACTION OF A FEW SOURCES (plan v4, 9.2 S3).
@@ -22,9 +28,15 @@ import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
  * did not include it at screening (NOT_INCLUDED: pending or excluded); it has a
  * RETRACTION version (nothing is built on a retracted work); it was already
  * extracted (its full-text hash is set, claims or not: the store writes it
- * even when nothing was found, so the AI is not paid twice for one text); it has no PMCID or Europe PMC holds no open full text for it
- * (NO_OPEN_FULL_TEXT: a closed work needs the editor's manual PDF, which is
- * the S4 editor screen's job, not this slice's).
+ * even when nothing was found, so the AI is not paid twice for one text); it
+ * has neither a PMCID nor an open-access link (NO_OPEN_FULL_TEXT: a closed
+ * work needs the editor's manual PDF, the S4 editor screen's job).
+ *
+ * Without a PMCID the open-access link is read as a PDF (`pdf-full-text.ts`:
+ * its text layer, a section per page; research-kepes-kiolvasas, acrobot
+ * 37378). The rest of the chain is the same: the chunks, the AI calls, the
+ * OS's own check against the text read, the source's own findings. The
+ * outcome names which text it was (`fullText`).
  *
  * A source the Crossref retraction check never covered (no DOI) is read, and
  * the outcome says so (`retractionUnchecked`); chunks past the limit are
@@ -48,6 +60,7 @@ export type TextFetch = (
   init: {
     method: "GET";
     headers: Record<string, string>;
+    redirect?: "manual";
     signal: AbortSignal;
   },
 ) => Promise<Response>;
@@ -108,6 +121,10 @@ export interface SourceOutcome {
   chunksDropped: number;
   /** The Crossref retraction check never ran on this source (no DOI). */
   retractionUnchecked: boolean;
+  /** Which full text was read: Europe PMC's JATS, the open PDF's text layer, or none. */
+  fullText: "JATS" | "PDF" | null;
+  /** PDF only: pages past the page cap, not read. */
+  pagesDropped: number;
 }
 
 export interface ExtractionDeps {
@@ -149,12 +166,27 @@ export function emptyOutcome(sourceId: string): SourceOutcome {
     claimsWithdrawn: 0,
     chunksDropped: 0,
     retractionUnchecked: false,
+    fullText: null,
+    pagesDropped: 0,
   };
 }
 
 export type FullTextReading =
-  | { ok: true; xml: string; claims: CheckedClaim[]; extractedBy: string }
+  | {
+      ok: true;
+      /** sha256 of the text read (the JATS, or the PDF's bytes). */
+      contentHash: string;
+      claims: CheckedClaim[];
+      extractedBy: string;
+    }
   | { ok: false; reason: string };
+
+interface ReadDeps {
+  extractor: ClaimExtractor;
+  fetch: TextFetch;
+  vocabulary: Vocabulary;
+  maxChunks?: number;
+}
 
 /**
  * One open full text read and checked, nothing stored: the download, the
@@ -166,17 +198,45 @@ export type FullTextReading =
 export async function readFullTextClaims(
   pmcid: string,
   outcome: SourceOutcome,
-  deps: {
-    extractor: ClaimExtractor;
-    fetch: TextFetch;
-    vocabulary: Vocabulary;
-    maxChunks?: number;
-  },
+  deps: ReadDeps,
 ): Promise<FullTextReading> {
-  const maxChunks = deps.maxChunks ?? MAX_CHUNKS_PER_SOURCE;
   const text = await fetchFullText(pmcid, deps.fetch);
   if (!text.ok) return text;
-  const sections = jatsSections(text.xml);
+  outcome.fullText = "JATS";
+  return readSectionClaims(
+    jatsSections(text.xml),
+    sha256(text.xml),
+    outcome,
+    deps,
+  );
+}
+
+/** The same reading on an open PDF's text layer (no PMCID, an open-access link). */
+export async function readPdfClaims(
+  url: string,
+  outcome: SourceOutcome,
+  deps: ReadDeps,
+): Promise<FullTextReading> {
+  const pdf = await fetchOpenPdf(url, deps.fetch as PdfFetch);
+  if (!pdf.ok) return pdf;
+  outcome.fullText = "PDF";
+  let read: Awaited<ReturnType<typeof pdfSections>>;
+  try {
+    read = await pdfSections(pdf.bytes);
+  } catch {
+    return { ok: false, reason: "PDF_UNREADABLE" };
+  }
+  outcome.pagesDropped = read.pagesDropped;
+  return readSectionClaims(read.sections, pdf.contentHash, outcome, deps);
+}
+
+async function readSectionClaims(
+  sections: readonly TextSection[],
+  contentHash: string,
+  outcome: SourceOutcome,
+  deps: ReadDeps,
+): Promise<FullTextReading> {
+  const maxChunks = deps.maxChunks ?? MAX_CHUNKS_PER_SOURCE;
   outcome.sections = sections.length;
   if (!sections.length) return { ok: false, reason: "NO_SECTIONS" };
 
@@ -241,7 +301,7 @@ export async function readFullTextClaims(
     0,
   );
   outcome.claims = checked.length;
-  return { ok: true, xml: text.xml, claims: checked, extractedBy };
+  return { ok: true, contentHash, claims: checked, extractedBy };
 }
 
 export async function extractSource(
@@ -258,13 +318,15 @@ export async function extractSource(
   if (source.alreadyExtracted && !deps.reextract)
     return skip("ALREADY_EXTRACTED");
   outcome.retractionUnchecked = source.retractionUnchecked;
-  if (!source.pmcid) return skip("NO_OPEN_FULL_TEXT");
-  const read = await readFullTextClaims(source.pmcid, outcome, deps);
+  if (!source.pmcid && !source.oaUrl) return skip("NO_OPEN_FULL_TEXT");
+  const read = source.pmcid
+    ? await readFullTextClaims(source.pmcid, outcome, deps)
+    : await readPdfClaims(source.oaUrl!, outcome, deps);
   if (!read.ok) return skip(read.reason);
   if (!apply) return { ...outcome, status: "PREVIEWED" };
   const saved = await deps.store.saveSource({
     sourceId,
-    contentHash: sha256(read.xml),
+    contentHash: read.contentHash,
     extractedBy: read.extractedBy,
     claims: read.claims,
     verifiedAt: deps.now(),
