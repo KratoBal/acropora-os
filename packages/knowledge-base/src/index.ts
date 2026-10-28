@@ -36,8 +36,9 @@ export type {
   VocabularyKind,
   VocabularyRow,
 } from "./vocabulary.js";
-export { recogniseSentence } from "./sentence-parts.js";
+export { crossKindShadows, recogniseSentence } from "./sentence-parts.js";
 export type {
+  KindShadow,
   NegationState,
   RecognisedQuantity,
   SentenceParts,

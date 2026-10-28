@@ -8,6 +8,7 @@ import {
 
 import {
   VocabularyInputError,
+  addedShadows,
   approvedVocabulary,
   checkedRows,
   diffRows,
@@ -286,6 +287,52 @@ describe("a new entry", () => {
     assert.equal(
       code(() => parseEntryEdit({}, growth, v1)),
       "NOTHING_TO_CHANGE",
+    );
+  });
+});
+
+describe("the cross-kind pairs a draft adds (barracuda, #1938 review)", () => {
+  const draft = (extra: VocabularyRow[]) => [
+    ...VOCABULARY_V1_ROWS.map((r) => ({
+      ...r,
+      status: "DRAFT" as const,
+      version: 2,
+    })),
+    ...extra,
+  ];
+  const effect = (key: string, forms: string[]): VocabularyRow => ({
+    kind: "EFFECT",
+    key,
+    forms,
+    status: "DRAFT",
+    version: 2,
+  });
+  it("none for a copy of the approved version: its own pairs are not new", () => {
+    assert.deepEqual(addedShadows(VOCABULARY_V1_ROWS, draft([])), []);
+  });
+  it("names the pair a new row makes", () => {
+    const added = addedShadows(
+      VOCABULARY_V1_ROWS,
+      draft([effect("CORAL_GROWTH", ["korallnövekedés"])]),
+    );
+    assert.deepEqual(
+      added?.map((x) => [x.key, x.form, x.shadows.key, x.shadows.form]),
+      [["CORAL_GROWTH", "korallnövekedés", "CORAL", "korall"]],
+    );
+  });
+  it("a row without such a word adds none", () => {
+    assert.deepEqual(
+      addedShadows(
+        VOCABULARY_V1_ROWS,
+        draft([effect("TISSUE_LOSS", ["szövetvesztés"])]),
+      ),
+      [],
+    );
+  });
+  it("null when the draft does not build", () => {
+    assert.equal(
+      addedShadows(VOCABULARY_V1_ROWS, draft([effect("GROWTH", ["más alak"])])),
+      null,
     );
   });
 });
