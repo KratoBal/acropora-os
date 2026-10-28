@@ -181,6 +181,34 @@ describe("recognition through the draft", () => {
       [],
     );
   });
+  it("a multi-word form taken by a longer one of another kind shows up too, as the recogniser loses it (barracuda, #1941)", () => {
+    const rows = [
+      ...VOCABULARY_V1_ROWS,
+      {
+        ...VOCABULARY_V1_ROWS.find((r) => r.kind === "EFFECT")!,
+        key: "SMALL_POLYP_GROWTH",
+        forms: ["kis polipú kőkorall-növekedés"],
+      },
+    ];
+    const vocabulary = buildVocabulary(rows);
+    const added = crossKindShadows(vocabulary).filter(
+      (x) => x.key === "SMALL_POLYP_GROWTH",
+    );
+    assert.deepEqual(
+      added.map((x) => [x.shadows.key, x.shadows.form]),
+      [
+        ["STONY_CORAL", "kőkorall"],
+        ["SPS", "kis polipú kőkorall"],
+      ],
+    );
+    const parts = recogniseSentence(
+      "A kis polipú kőkorall-növekedés nőtt.",
+      vocabulary,
+    );
+    assert.deepEqual(parts.taxa, []);
+    assert.deepEqual(parts.effects, ["SMALL_POLYP_GROWTH"]);
+  });
+
   it("a new row that begins with another kind's form shows up as a pair", () => {
     const rows = [
       ...VOCABULARY_V1_ROWS,
