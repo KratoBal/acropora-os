@@ -474,6 +474,32 @@ describe("the AI answers as the OS reads them", () => {
     assert.equal(queriesOf(null).kind, "UNAVAILABLE");
   });
 
+  it("queries: an expression that would leave its wrapper is dropped", () => {
+    const q = queriesOf({
+      queries: [
+        'phosphate AND (coral OR "stony coral")',
+        "x)) OR (y",
+        // balanced in count, but it closes the field before it opens again
+        "phosphate) OR (coral",
+        "(phosphate coral",
+        'phosphate "coral',
+        '"coral (stony)" phosphate',
+      ],
+      refused: [],
+      writtenBy: "m research-queries/v1",
+    });
+    assert.equal(q.kind, "QUERIES");
+    if (q.kind !== "QUERIES") return;
+    assert.deepEqual(q.queries, ['phosphate AND (coral OR "stony coral")']);
+    assert.deepEqual(q.refused, [
+      "BAD_QUERY",
+      "BAD_QUERY",
+      "BAD_QUERY",
+      "BAD_QUERY",
+      "BAD_QUERY",
+    ]);
+  });
+
   it("summary: the text, the counts and the dropped codes", () => {
     assert.deepEqual(
       summaryOf({

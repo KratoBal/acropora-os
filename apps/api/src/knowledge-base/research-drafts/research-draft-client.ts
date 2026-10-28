@@ -26,6 +26,25 @@ const WRITTEN_BY = /^[\w.:/ -]{1,128}$/;
 const QUERY = /^[A-Za-z0-9 "()-]{3,200}$/;
 export const MAX_QUERIES = 3;
 
+/**
+ * The expression is wrapped (`(TITLE_ABS:(q)) AND OPEN_ACCESS:y`): an unbalanced parenthesis would
+ * close the field early and bind the open-access filter to one branch only (`x)) OR (y`), and an odd
+ * quotation mark would take the rest of the wrapper into a phrase (barracuda on #1934). A parenthesis
+ * inside a phrase is refused too: the guard counts, it does not parse.
+ */
+export function balancedQuery(q: string): boolean {
+  let depth = 0;
+  for (const ch of q) {
+    if (ch === "(") depth += 1;
+    else if (ch === ")" && --depth < 0) return false;
+  }
+  return (
+    depth === 0 &&
+    (q.match(/"/g)?.length ?? 0) % 2 === 0 &&
+    !/"[^"]*[()][^"]*"/.test(q)
+  );
+}
+
 export type Unavailable = { kind: "UNAVAILABLE"; reason: string };
 export type Refused = { kind: "REFUSED"; refusal: string; writtenBy: string };
 
@@ -97,6 +116,7 @@ export function queriesOf(body: unknown): QueriesAnswer {
     if (
       typeof q === "string" &&
       QUERY.test(q) &&
+      balancedQuery(q) &&
       queries.length < MAX_QUERIES &&
       !queries.includes(q)
     )
