@@ -8,11 +8,7 @@ import { vocabularyV1 } from "@acropora/knowledge-base";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../../auth/decorators/require-permissions.decorator.js";
-import {
-  CROSSREF_BASE,
-  EUROPE_PMC_BASE,
-  runDiscovery,
-} from "../discovery/discovery-run.js";
+import { CROSSREF_BASE, EUROPE_PMC_BASE } from "../discovery/discovery-run.js";
 import {
   crossrefList,
   europePmcList,
@@ -41,12 +37,15 @@ import {
   type SummaryClaimInput,
 } from "./research-draft-client.js";
 import {
+  budgetedDiscovery,
   ResearchDraftController,
   ResearchDraftService,
   type ResearchDraftDeps,
 } from "./research-draft.controller.js";
 import {
+  DRAFT_REQUEST_LIMIT,
   checkSummary,
+  discoveryInputFor,
   parseResearchQuestion,
   runResearchDraft,
   type DraftDeps,
@@ -134,15 +133,19 @@ function chainDeps(
   net: ReturnType<typeof network>,
 ): DraftDeps {
   const clock = fakeClock();
-  const client = new ScholarlyClient({
-    fetch: net.fetch,
-    sleep: clock.sleep,
-    now: clock.now,
-    requestLimit: 30,
-  });
   return {
     ask,
-    discover: (input) => runDiscovery(input, { client, now: clock.now }),
+    // the service's own composition: a client per search, one budget
+    discover: budgetedDiscovery(
+      (requestLimit) =>
+        new ScholarlyClient({
+          fetch: net.fetch,
+          sleep: clock.sleep,
+          now: clock.now,
+          requestLimit,
+        }),
+      clock.now,
+    ),
     read: (pmcid, outcome) =>
       readFullTextClaims(pmcid, outcome, {
         extractor,
@@ -169,6 +172,98 @@ const okRoutes = (
   ],
 ];
 
+/** The Europe PMC search in the title-and-abstract form only (the first route that matches wins). */
+const TITLE_ABS_SEARCH = `${EUROPE_PMC_BASE}/search?query=${encodeURIComponent("(TITLE_ABS:")}`;
+
+describe("mode B: the title-and-abstract search and its fallback", () => {
+  for (const [name, answer] of [
+    ["finds nothing", { status: 200, body: europePmcList([]) }],
+    [
+      "is refused (a field Europe PMC does not know)",
+      { status: 400, body: {} },
+    ],
+  ] as [string, ScriptedAnswer][])
+    it(`searches the full text once more, as before, when the title and abstract ${name}`, async () => {
+      const { ask } = asker();
+      const net = network([[TITLE_ABS_SEARCH, answer], ...okRoutes()]);
+      const r = await runResearchDraft(
+        "Mennyi foszfát árt az Acroporának?",
+        "label",
+        chainDeps(ask, net),
+      );
+      assert.equal(r.status, "DRAFT", JSON.stringify(r.report));
+      const searches = net.asked
+        .filter((u) => u.startsWith(`${EUROPE_PMC_BASE}/search`))
+        .map((u) => new URL(u).searchParams.get("query"));
+      assert.deepEqual(searches, [
+        "(TITLE_ABS:(phosphate coral calcification)) AND OPEN_ACCESS:y",
+        "(phosphate coral calcification) AND OPEN_ACCESS:y",
+      ]);
+      assert.equal(r.report.discovery?.fieldScope, "FULLTEXT_FALLBACK");
+      assert.equal(r.report.discovery?.titleAbstract?.found, 0);
+      assert.equal(r.report.discovery?.found, 1);
+      // one client, one budget: the count holds both searches
+      assert.equal(
+        r.report.discovery?.requestCount,
+        net.asked.filter((u) => !u.includes("fullTextXML")).length,
+      );
+    });
+});
+
+describe("mode B: one request budget for both searches", () => {
+  it("gives the second search's client only what the first one left", async () => {
+    const net = network([
+      [TITLE_ABS_SEARCH, { status: 200, body: europePmcList([]) }],
+      ...okRoutes(),
+    ]);
+    const clock = fakeClock();
+    const limits: number[] = [];
+    const discover = budgetedDiscovery((requestLimit) => {
+      limits.push(requestLimit);
+      return new ScholarlyClient({
+        fetch: net.fetch,
+        sleep: clock.sleep,
+        now: clock.now,
+        requestLimit,
+      });
+    }, clock.now);
+    const first = await discover(
+      discoveryInputFor("label", ["phosphate coral"]),
+    );
+    await discover(
+      discoveryInputFor("label", ["phosphate coral"], "FULLTEXT_FALLBACK"),
+    );
+    assert.ok(first.requestCount > 0);
+    assert.deepEqual(limits, [
+      DRAFT_REQUEST_LIMIT,
+      DRAFT_REQUEST_LIMIT - first.requestCount,
+    ]);
+  });
+});
+
+describe("mode B: no fallback past an API that is down", () => {
+  it("does not ask Europe PMC again after a 5xx on the title-and-abstract search", async () => {
+    const { ask } = asker();
+    const net = network([
+      [TITLE_ABS_SEARCH, { status: 503, body: {} }],
+      ...okRoutes(),
+    ]);
+    const r = await runResearchDraft(
+      "Mennyi foszfát árt az Acroporának?",
+      "label",
+      chainDeps(ask, net),
+    );
+    assert.equal(r.status, "FAILED");
+    assert.equal(r.reason, "NO_SOURCES");
+    assert.equal(
+      net.asked.filter((u) => u.startsWith(`${EUROPE_PMC_BASE}/search`)).length,
+      1,
+    );
+    assert.equal(r.report.discovery?.fieldScope, "TITLE_ABS");
+    assert.equal(r.report.discovery?.unavailable.EUROPE_PMC, "HTTP_503");
+  });
+});
+
 describe("mode B: the chain from a question to a research draft", () => {
   it("reads the open full text in memory and writes a summary from its checked claims only", async () => {
     const { ask, calls } = asker();
@@ -181,16 +276,16 @@ describe("mode B: the chain from a question to a research draft", () => {
     assert.equal(r.status, "DRAFT", JSON.stringify(r.report));
     assert.equal(r.summaryModel, "fake research-summary/v1");
     assert.match(r.summary!, /\[\[claim:c1\]\]\.$/);
-    // the search: Europe PMC only, open access only, no abstract asked for
-    assert.ok(
-      net.asked.some(
-        (u) =>
-          u.startsWith(`${EUROPE_PMC_BASE}/search`) &&
-          decodeURIComponent(u).includes(
-            "(phosphate coral calcification) AND OPEN_ACCESS:y",
-          ),
-      ),
-    );
+    // the search: Europe PMC only, open access only, in the title and the abstract (not the full
+    // text, where an abstract book matches every word), no abstract asked for
+    const searches = net.asked
+      .filter((u) => u.startsWith(`${EUROPE_PMC_BASE}/search`))
+      .map((u) => new URL(u).searchParams.get("query"));
+    assert.deepEqual(searches, [
+      "(TITLE_ABS:(phosphate coral calcification)) AND OPEN_ACCESS:y",
+    ]);
+    assert.equal(r.report.discovery?.fieldScope, "TITLE_ABS");
+    assert.equal(r.report.discovery?.titleAbstract, undefined);
     assert.ok(!net.asked.some((u) => u.includes("api.openalex.org")));
     assert.deepEqual(net.texts, ["PMC9001"]);
     // the claim as the OS checked it, with its source; the summary call got fields, the verbatim passage and a reference

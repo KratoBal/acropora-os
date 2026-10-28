@@ -110,6 +110,10 @@ export interface DraftReport {
     requestCount: number;
     found: number;
     unavailable: Record<string, string>;
+    /** Where the search looked: the title and abstract, or the full text after they found nothing. */
+    fieldScope: FieldScope;
+    /** On a fallback: what the title-and-abstract search said before it. */
+    titleAbstract?: { found: number; unavailable: Record<string, string> };
   };
   read: Pick<
     SourceOutcome,
@@ -157,22 +161,41 @@ export function parseResearchQuestion(body: unknown): string {
   return question;
 }
 
-/** The discovery's input for the question's search expressions: Europe PMC, open access only. */
+/**
+ * The discovery's input for the question's search expressions: Europe PMC, open access only, and
+ * in the title and the abstract only. Without a field Europe PMC searches the open full text, and a
+ * conference's abstract book holds every word somewhere: acrobot's stage run (2026-10-28, 37189)
+ * read two gerontology abstract books and a natural-products symposium first, while the coral works
+ * stayed NOT_TRIED. The field narrows the search on Europe PMC's side; no abstract is asked for (B7).
+ * FULLTEXT_FALLBACK is the search as it was before, for when the field finds nothing.
+ */
+export type FieldScope = "TITLE_ABS" | "FULLTEXT_FALLBACK";
+
 export function discoveryInputFor(
   label: string,
   queries: string[],
+  scope: FieldScope = "TITLE_ABS",
 ): DiscoveryInput {
   return {
     label,
     openalex: [],
     europePmc: queries.map((q) => ({
-      query: `(${q}) AND OPEN_ACCESS:y`,
+      query:
+        scope === "TITLE_ABS"
+          ? `(TITLE_ABS:(${q})) AND OPEN_ACCESS:y`
+          : `(${q}) AND OPEN_ACCESS:y`,
       maxResults: RESULTS_PER_QUERY,
     })),
     dois: [],
     citations: [],
   };
 }
+
+/** Europe PMC answered, or refused this query only (a 4xx other than 429): not an API that is down. */
+const refusedOnlyTheQuery = (result: DiscoveryResult) => {
+  const why = result.unavailable.EUROPE_PMC;
+  return why === undefined || (/^HTTP_4\d\d$/.test(why) && why !== "HTTP_429");
+};
 
 const retracted = (c: SourceCandidate, result: DiscoveryResult) =>
   c.versionSignals.some((v) => v.versionKind === "RETRACTION") ||
@@ -331,13 +354,38 @@ export async function runResearchDraft(
   report.queriesRefused = q.refused;
   if (!q.queries.length) return fail("NO_QUERIES");
 
-  // 2. the discovery, nothing stored
-  const found = await deps.discover(discoveryInputFor(label, q.queries));
+  // 2. the discovery, nothing stored. The TITLE_ABS field was not measured from here (the fleet has
+  // no route to ebi.ac.uk): if Europe PMC answers it with nothing, or refuses the query itself (a
+  // 4xx), the search runs once more on the full text, as it did before, and the report says which
+  // one ran (acrobot, 37191). An API that is down (5xx, timeout, a 429 outlasting its retries) is
+  // not asked again: that is the client's rule, and the fallback keeps it.
+  const first = await deps.discover(discoveryInputFor(label, q.queries));
+  let found = first;
+  let fieldScope: FieldScope = "TITLE_ABS";
+  if (!first.candidates.length && refusedOnlyTheQuery(first)) {
+    fieldScope = "FULLTEXT_FALLBACK";
+    found = await deps.discover(
+      discoveryInputFor(label, q.queries, fieldScope),
+    );
+  }
   report.discovery = {
     status: found.status,
-    requestCount: found.requestCount,
+    // each search reports its own client's count; the budget they share is the caller's
+    requestCount:
+      found === first
+        ? first.requestCount
+        : first.requestCount + found.requestCount,
     found: found.candidates.length,
     unavailable: found.unavailable as Record<string, string>,
+    fieldScope,
+    ...(found === first
+      ? {}
+      : {
+          titleAbstract: {
+            found: 0,
+            unavailable: first.unavailable as Record<string, string>,
+          },
+        }),
   };
   if (!found.candidates.length) return fail("NO_SOURCES");
 
