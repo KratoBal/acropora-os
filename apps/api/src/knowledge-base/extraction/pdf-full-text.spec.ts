@@ -253,6 +253,64 @@ describe("fetching the open PDF", () => {
     assert.ok(pulls <= 3, String(pulls));
   });
 
+  it("a landing page that names its PDF (citation_pdf_url) is followed to it, once, through the same checks", async () => {
+    const bytes = await pdfOf(PDF_PAGES);
+    const landing = (meta: string) =>
+      `<html><head><meta name="citation_title" content="x"><meta content="${meta}" name="citation_pdf_url"></head></html>`;
+    // HAL's shape: a relative /document path on the same host, with &amp;
+    const hal = network({
+      [ROBOTS]: { status: 404 },
+      [PDF]: { status: 200, body: landing("/hal-01/document?a=1&amp;b=2") },
+      "https://kiado.example.org/hal-01/document?a=1&b=2": {
+        status: 200,
+        body: bytes,
+      },
+    });
+    assert.ok((await fetchOpenPdf(PDF, hal.fetch)).ok);
+    // another host: its own robots.txt first
+    const other = network({
+      [ROBOTS]: { status: 404 },
+      [PDF]: {
+        status: 200,
+        body: landing("https://journal.example.org/download/12/pdf"),
+      },
+      "https://journal.example.org/robots.txt": {
+        status: 200,
+        body: "User-agent: *\nDisallow: /download",
+      },
+    });
+    assert.deepEqual(await fetchOpenPdf(PDF, other.fetch), {
+      ok: false,
+      reason: "ROBOTS_DISALLOWED",
+    });
+    // a landing page that names another landing page: followed once only
+    const loop = network({
+      [ROBOTS]: { status: 404 },
+      [PDF]: { status: 200, body: landing("/masik") },
+      "https://kiado.example.org/masik": {
+        status: 200,
+        body: landing("/harmadik"),
+      },
+    });
+    assert.deepEqual(await fetchOpenPdf(PDF, loop.fetch), {
+      ok: false,
+      reason: "NOT_PDF",
+    });
+    assert.equal(
+      loop.asked.includes("https://kiado.example.org/harmadik"),
+      false,
+    );
+    // a named PDF on a non-public URL is not fetched
+    const inward = network({
+      [ROBOTS]: { status: 404 },
+      [PDF]: { status: 200, body: landing("http://10.0.0.5/x.pdf") },
+    });
+    assert.deepEqual(await fetchOpenPdf(PDF, inward.fetch), {
+      ok: false,
+      reason: "NOT_PUBLIC_URL",
+    });
+  });
+
   it("a landing page with a PDF header is not a PDF", async () => {
     const n = network({
       [ROBOTS]: { status: 404 },
