@@ -28,6 +28,10 @@ import {
   KnowledgeOverviewService,
 } from "./overview/knowledge-overview.controller.js";
 import {
+  KnowledgeReferenceController,
+  KnowledgeReferenceService,
+} from "./references/reference-check.controller.js";
+import {
   ResearchDraftController,
   ResearchDraftService,
 } from "./research-drafts/research-draft.controller.js";
@@ -52,6 +56,7 @@ import {
     ArticleCitationController,
     KnowledgeAnswerController,
     ResearchDraftController,
+    KnowledgeReferenceController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -65,6 +70,7 @@ import {
     ArticleCitationService,
     KnowledgeAnswerService,
     ResearchDraftService,
+    KnowledgeReferenceService,
   ],
 })
 export class KnowledgeBaseModule {}
