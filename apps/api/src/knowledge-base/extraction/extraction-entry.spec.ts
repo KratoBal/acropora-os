@@ -84,6 +84,7 @@ function fakes(alreadyExtracted = false) {
       kind: "ANSWER",
       claims: [aiClaim()],
       refusedClaims: [],
+      refusalDetails: [],
       extractedBy: "m claim-extraction/v1",
     }),
   };

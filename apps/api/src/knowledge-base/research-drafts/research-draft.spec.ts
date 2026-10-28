@@ -107,6 +107,7 @@ const extractor: ClaimExtractor = {
       kind: "ANSWER",
       claims: [aiClaim()],
       refusedClaims: [],
+      refusalDetails: [],
       extractedBy: "fake claim-extraction/v1",
     };
   },
