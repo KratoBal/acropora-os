@@ -68,10 +68,7 @@ describe("titles", () => {
     const registry =
       "Nitrogen source type modulates heat stress response in coral symbiont (<i>Cladocopium  goreaui</i> )";
     assert.ok(titlesMatch(stored, registry));
-    assert.ok(
-      titlesMatch("A &amp;lt;i&amp;gt;x", "A x"),
-      "doubly escaped",
-    );
+    assert.ok(titlesMatch("A &amp;lt;i&amp;gt;x", "A x"), "doubly escaped");
     assert.ok(titlesMatch("Ca&#178;&#x207A; uptake", "Ca²⁺ uptake"));
   });
   it("markup: entities decoded, only tag-shaped text left out", () => {
