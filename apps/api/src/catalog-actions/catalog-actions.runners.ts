@@ -5,6 +5,10 @@ import {
   runBrandBackfillCli,
 } from "../imports/unas/unas-brand-backfill.cli.js";
 import { runBrandLinkCli } from "../integrations/medusa/medusa-brand-link.cli.js";
+import {
+  categoryCliDependencies,
+  runCategoryCli,
+} from "../integrations/medusa/medusa-category.cli.js";
 
 /** Where a command writes; the run collects both streams into one text. */
 export interface CatalogActionOutput {
@@ -27,8 +31,24 @@ export interface CatalogActionRunner {
 /**
  * THE OPERATIONS, each the existing command's own function with the same
  * arguments the command line would pass. Nothing of the commands' logic is
- * repeated here: a new kind (the categories, #1910) is one more entry.
+ * repeated here: a new kind is one more entry (the categories, #1910, are the
+ * third).
  */
+/**
+ * The categories' command with the arguments the command line would pass: a
+ * plan is NO argument (the command's default writes nothing), an apply is
+ * `--apply`. The command and its dependencies are parameters so the mapping is
+ * measurable without a Medusa.
+ */
+export function runCategoriesAction(
+  apply: boolean,
+  out: CatalogActionOutput,
+  run: typeof runCategoryCli = runCategoryCli,
+  dependencies: typeof categoryCliDependencies = categoryCliDependencies,
+): Promise<number> {
+  return run(apply ? ["--apply"] : [], out, dependencies(out));
+}
+
 export const CATALOG_ACTION_RUNNERS: readonly CatalogActionRunner[] = [
   {
     kind: "brand-backfill",
@@ -49,6 +69,13 @@ export const CATALOG_ACTION_RUNNERS: readonly CatalogActionRunner[] = [
       "A márkás termékek márkáját és a márka adatait kiírja a teszt webshop márka-moduljába, a termék törzsének írása nélkül.",
     run: (apply, _actorUserId, out) =>
       runBrandLinkCli(apply ? ["--apply"] : [], out),
+  },
+  {
+    kind: "categories",
+    title: "Kategóriák a teszt webshopban (örökbefogadás)",
+    description:
+      "A teszt webshop kategóriái közül a régebbi, idegen azonosítójú, azonos nevű és szülőjű kategóriák megkapják a mi azonosítónkat, nevünket és webcímünket (a termék-hozzárendelésük megmarad); ami nincs meg, létrejön. A próba kimenete a régi azonosítót tételesen kiírja. A termékeket nem érinti.",
+    run: (apply, _actorUserId, out) => runCategoriesAction(apply, out),
   },
 ];
 

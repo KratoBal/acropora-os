@@ -44,6 +44,7 @@ function run(overrides: Partial<CatalogActionRun>): CatalogActionRun {
 
 function enabled(
   lastRun: CatalogActionRun | null = null,
+  categoriesRun: CatalogActionRun | null = null,
 ): CatalogActionsResponse {
   return {
     enabled: true,
@@ -59,6 +60,12 @@ function enabled(
         title: "Márka-kötések átvitele",
         description: "links",
         lastRun: null,
+      },
+      {
+        kind: "categories",
+        title: "Kategóriák a teszt webshopban",
+        description: "categories",
+        lastRun: categoriesRun,
       },
     ],
   };
@@ -151,6 +158,37 @@ describe("CatalogActionsPanel", () => {
     expect(
       within(backfill).getByLabelText("A próba összesítője"),
     ).toHaveTextContent("Márkát kapna: 683 termék");
+  });
+
+  /*
+    THE CATEGORIES' CONFIRMATION (#1910) NAMES ITS OWN CONSEQUENCE and the one
+    trace the apply leaves out: the old id lives only in the plan's output.
+    A kind without its text would get the generic "A művelet ír."
+  */
+  it("the categories' confirmation names the adoption and tells to save the plan's output", async () => {
+    api.overview.mockResolvedValue(
+      enabled(
+        null,
+        run({
+          id: "plan-cat",
+          kind: "categories",
+          output: "Örökbefogadás: 219\n",
+        }),
+      ),
+    );
+    render(<CatalogActionsPanel token="t" />);
+    const categories = await screen.findByRole("region", {
+      name: "Kategóriák a teszt webshopban",
+    });
+    fireEvent.click(
+      within(categories).getByRole("button", { name: "Végrehajtás" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("megkapják a mi azonosítónkat");
+    expect(dialog).toHaveTextContent("mentsd el a végrehajtás előtt");
+    expect(dialog).toHaveTextContent("az Ellenőrzés sort nézd meg");
+    expect(dialog).not.toHaveTextContent("A művelet ír.");
+    expect(api.apply).not.toHaveBeenCalled();
   });
 
   it("the confirmation does not promise the plan's set: the apply recomputes", async () => {

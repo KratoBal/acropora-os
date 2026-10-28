@@ -39,6 +39,12 @@ const APPLY_TEXT: Partial<
     recovery:
       "Egy újabb futás az OS mostani állapotára írja vissza a kötéseket; egy archivált márka kötése ilyenkor törlődik.",
   },
+  categories: {
+    consequence:
+      "A teszt webshop meglévő kategóriái (azonos név, azonos szülő) megkapják a mi azonosítónkat, a rövid nevet és a webcímet; a termék-hozzárendelésük megmarad. Ami még nincs meg, létrejön. A régi azonosító csak a próba kimenetében marad meg: mentsd el a végrehajtás előtt.",
+    recovery:
+      "Nincs gombos visszavonás: a kategória neve és webcíme a webshop adminban kézzel visszaírható, a régi azonosító a próba kimenetéből olvasható. Az első végrehajtás után az Ellenőrzés sort nézd meg; a második futás csak akkor, ha az teljes.",
+  },
 };
 const GENERIC_APPLY_TEXT = {
   consequence: "A művelet ír.",
