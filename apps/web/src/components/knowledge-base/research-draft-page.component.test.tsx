@@ -196,6 +196,10 @@ describe("ResearchDraftPage", () => {
             read: "NOT_TRIED",
             retractionUnchecked: true,
           }),
+          source({
+            title: "Program Abstracts",
+            read: "ABSTRACT_BOOK",
+          }),
         ],
       }),
     );
@@ -207,6 +211,9 @@ describe("ResearchDraftPage", () => {
     ).toHaveAttribute("href", "https://europepmc.org/article/PMC/PMC1");
     expect(screen.queryByRole("link", { name: "No DOI work" })).toBeNull();
     expect(screen.getByText("Nem került sorra")).toBeInTheDocument();
+    expect(
+      screen.getByText("Absztrakt-kötet: nem olvastuk"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Nincs DOI: a visszavonást csak/),
     ).toBeInTheDocument();
