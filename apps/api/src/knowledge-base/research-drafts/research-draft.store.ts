@@ -1,5 +1,6 @@
 import { Prisma, prisma } from "@acropora/database";
 
+import { STALE_AFTER_MS } from "../discovery/discovery-run.js";
 import type { DraftResult } from "./research-draft.js";
 
 /**
@@ -20,16 +21,24 @@ export class DraftAlreadyRunning extends Error {
 }
 
 /**
- * A research draft RUNNING: the discovery and the extraction do not start beside it (barracuda on
- * #1930: the draft waited for them, they did not wait for the draft; all three share the keyless
- * scholarly budget and the AI).
+ * A research draft RUNNING with a fresh heartbeat: the discovery and the extraction do not start
+ * beside it (barracuda on #1930: the draft waited for them, they did not wait for the draft; all
+ * three share the keyless scholarly budget and the AI). A RUNNING row whose process died (an api
+ * restart, a stage deploy) does not count: its heartbeat is older than STALE_AFTER_MS, the same
+ * line abandonStale draws, so it never blocks them (barracuda on #1932).
  */
-export async function researchDraftRunning(): Promise<boolean> {
-  return (
-    (await prisma.knowledgeResearchDraft.count({
-      where: { status: "RUNNING" },
-    })) > 0
-  );
+export async function researchDraftRunning(now = new Date()): Promise<boolean> {
+  const since = new Date(now.getTime() - STALE_AFTER_MS);
+  const fresh = await prisma.knowledgeResearchDraft.count({
+    where: {
+      status: "RUNNING",
+      OR: [
+        { heartbeatAt: { gte: since } },
+        { heartbeatAt: null, createdAt: { gte: since } },
+      ],
+    },
+  });
+  return fresh > 0;
 }
 
 export interface DraftRow {
