@@ -35,8 +35,12 @@ export type ClaimExtractorAnswer =
       /** The model and prompt version, for `KnowledgePassage.extractedBy`. */
       extractedBy: string;
     }
-  /** The AI service's guard refused the whole answer. */
-  | { kind: "REFUSED"; refusal: string }
+  /**
+   * The AI service's guard refused the whole answer. `detail`, in the same
+   * form as `refusalDetails`, says why an answer was not JSON (acropora-ai-
+   * agent #58): "parse 18234/18240 U+0022" or "truncated 31877/31877 -".
+   */
+  | { kind: "REFUSED"; refusal: string; detail?: string }
   | { kind: "UNAVAILABLE"; reason: string };
 
 export interface ClaimExtractor {
@@ -63,6 +67,9 @@ export function claimAnswerOf(body: unknown): ClaimExtractorAnswer {
     return {
       kind: "REFUSED",
       refusal: CODE.test(b.refusal) ? b.refusal : "UNKNOWN_REFUSAL",
+      ...(typeof b.detail === "string" && REFUSAL_DETAIL.test(b.detail)
+        ? { detail: b.detail }
+        : {}),
     };
   if (!Array.isArray(b.claims))
     return { kind: "UNAVAILABLE", reason: "no claim list" };
