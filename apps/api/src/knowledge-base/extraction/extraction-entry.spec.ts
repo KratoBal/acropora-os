@@ -396,6 +396,15 @@ describe("the extraction endpoint", () => {
     );
   });
 
+  it("a mode B research draft running is a 409: it shares the AI and Europe PMC (barracuda on #1930)", async () => {
+    const t = service({ draftRunning: async () => true });
+    assert.equal(
+      await status(t.svc.start({ sourceIds: [SRC] }, USER)),
+      HttpStatus.CONFLICT,
+    );
+    assert.ok(!t.calls.some((c) => c.startsWith("start:")), t.calls.join(" "));
+  });
+
   it("every route needs knowledge.research.run, and the start answers 202", () => {
     const proto = KnowledgeExtractionController.prototype;
     for (const handler of [proto.start, proto.list, proto.get])

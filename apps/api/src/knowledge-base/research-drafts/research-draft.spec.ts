@@ -239,6 +239,26 @@ describe("mode B: the chain from a question to a research draft", () => {
     );
   });
 
+  it("a work with no DOI is read, marked: the Crossref check never covered it (barracuda on #1930)", async () => {
+    const net = network(okRoutes({ doi: undefined }));
+    const r = await runResearchDraft("k", "l", chainDeps(asker().ask, net));
+    assert.equal(r.status, "DRAFT", JSON.stringify(r.report));
+    assert.deepEqual(
+      [
+        r.sources[0]!.doi,
+        r.sources[0]!.read,
+        r.sources[0]!.retractionUnchecked,
+      ],
+      [null, "READ", true],
+    );
+    const withDoi = await runResearchDraft(
+      "k",
+      "l",
+      chainDeps(asker().ask, network(okRoutes())),
+    );
+    assert.equal(withDoi.sources[0]!.retractionUnchecked, false);
+  });
+
   it("does not read a retracted work, nor one whose DOI the Crossref check did not reach", async () => {
     const retracted = network(
       okRoutes({ pubTypeList: { pubType: ["Retracted Publication"] } }),

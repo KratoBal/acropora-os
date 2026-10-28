@@ -75,6 +75,12 @@ export interface DraftSource {
   /** READ, or why not: RETRACTED, RETRACTION_UNCHECKED, NO_OPEN_FULL_TEXT, a fetch or AI code, NOT_TRIED. */
   read: string;
   claims: number;
+  /**
+   * No DOI, so the Crossref retraction check never covered it; only the API's own signals did. Read
+   * anyway, as the S3 extraction reads such a source, and marked so the editor's screen can say so
+   * (barracuda on #1930).
+   */
+  retractionUnchecked: boolean;
 }
 
 export interface DraftClaim extends CheckedClaim {
@@ -352,6 +358,7 @@ export async function runResearchDraft(
       licence: c.licence,
       read: "NOT_TRIED",
       claims: 0,
+      retractionUnchecked: !c.doi,
     };
     sources.push(source);
     if (read >= MAX_SOURCES_READ || tried >= MAX_SOURCES_TRIED) continue;

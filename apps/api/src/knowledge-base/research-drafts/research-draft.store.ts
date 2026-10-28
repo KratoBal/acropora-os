@@ -19,6 +19,19 @@ export class DraftAlreadyRunning extends Error {
   }
 }
 
+/**
+ * A research draft RUNNING: the discovery and the extraction do not start beside it (barracuda on
+ * #1930: the draft waited for them, they did not wait for the draft; all three share the keyless
+ * scholarly budget and the AI).
+ */
+export async function researchDraftRunning(): Promise<boolean> {
+  return (
+    (await prisma.knowledgeResearchDraft.count({
+      where: { status: "RUNNING" },
+    })) > 0
+  );
+}
+
 export interface DraftRow {
   id: string;
   question: string;

@@ -35,6 +35,7 @@ const result = (over: Partial<DraftResult> = {}): DraftResult => ({
       url: null,
       licence: "CC_BY",
       read: "READ",
+      retractionUnchecked: false,
       claims: 1,
     },
   ],
