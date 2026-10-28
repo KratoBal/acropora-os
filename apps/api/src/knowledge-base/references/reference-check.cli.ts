@@ -11,6 +11,7 @@ import {
   referenceReportText,
   type ReferenceSource,
 } from "./reference-check.js";
+import { includedReferenceSources } from "./reference-check.repository.js";
 
 /**
  * T1 OF THE RESEARCH TEST SET, BY HAND, ON THE STAGE API (plan v4, 10; S7):
@@ -76,29 +77,7 @@ async function main(): Promise<void> {
       stderr: (t) => process.stderr.write(t),
     },
     {
-      sources: async () => {
-        const included = { screeningStatus: "INCLUDED" as const };
-        const [checkable, withoutId] = await Promise.all([
-          prisma.knowledgeSource.findMany({
-            where: {
-              ...included,
-              OR: [{ doi: { not: null } }, { pmid: { not: null } }],
-            },
-            select: {
-              id: true,
-              doi: true,
-              pmid: true,
-              title: true,
-              year: true,
-            },
-            orderBy: { id: "asc" },
-          }),
-          prisma.knowledgeSource.count({
-            where: { ...included, doi: null, pmid: null },
-          }),
-        ]);
-        return { checkable, withoutId };
-      },
+      sources: includedReferenceSources,
       fetch: (url, init) => fetch(url, init),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       now: () => new Date(),
