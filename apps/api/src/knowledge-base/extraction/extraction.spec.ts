@@ -655,7 +655,7 @@ describe("extracting one source", () => {
     };
     const d = deps(
       {
-        fetch: async (url) =>
+        pdfFetch: async (url) =>
           url === pdf
             ? new Response(bytes, { status: 200 })
             : new Response(null, { status: 404 }),
@@ -685,7 +685,7 @@ describe("extracting one source", () => {
   it("an open link that is no PDF: skipped with the reason, no AI call", async () => {
     const d = deps(
       {
-        fetch: async (url) =>
+        pdfFetch: async (url) =>
           url.endsWith("/robots.txt")
             ? new Response(null, { status: 404 })
             : new Response("<html>landing</html>", { status: 200 }),

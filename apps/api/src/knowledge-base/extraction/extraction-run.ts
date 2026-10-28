@@ -60,7 +60,6 @@ export type TextFetch = (
   init: {
     method: "GET";
     headers: Record<string, string>;
-    redirect?: "manual";
     signal: AbortSignal;
   },
 ) => Promise<Response>;
@@ -133,6 +132,8 @@ export interface ExtractionDeps {
   fetch: TextFetch;
   vocabulary: Vocabulary;
   now: () => Date;
+  /** The open PDF's fetch: the address-guarded one by default. */
+  pdfFetch?: PdfFetch;
   /** The stored run, when there is one: its row must still be RUNNING to store. */
   runId?: string;
   /**
@@ -186,6 +187,8 @@ interface ReadDeps {
   fetch: TextFetch;
   vocabulary: Vocabulary;
   maxChunks?: number;
+  /** The open PDF's fetch: the address-guarded one by default (tests give their own). */
+  pdfFetch?: PdfFetch;
 }
 
 /**
@@ -217,7 +220,8 @@ export async function readPdfClaims(
   outcome: SourceOutcome,
   deps: ReadDeps,
 ): Promise<FullTextReading> {
-  const pdf = await fetchOpenPdf(url, deps.fetch as PdfFetch);
+  // never the general fetch: a third party's link goes through the address guard
+  const pdf = await fetchOpenPdf(url, deps.pdfFetch);
   if (!pdf.ok) return pdf;
   outcome.fullText = "PDF";
   let read: Awaited<ReturnType<typeof pdfSections>>;

@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { after, before, describe, it } from "node:test";
 
 import { PDF_PAGES, pdfOf } from "./extraction-test-fixtures.js";
 import {
+  MAX_PDF_BYTES,
   MAX_PDF_REDIRECTS,
+  NOT_PUBLIC_ADDRESS,
   fetchOpenPdf,
+  guardedFetch,
   pdfSections,
+  publicAddress,
   publicHttpUrl,
+  type HostLookup,
   type PdfFetch,
 } from "./pdf-full-text.js";
 
@@ -126,6 +133,66 @@ describe("fetching the open PDF", () => {
     });
   });
 
+  it("the address guard's refusal is NOT_PUBLIC_ADDRESS, on the robots.txt and on the PDF alike", async () => {
+    const refuse: PdfFetch = async () => {
+      throw Object.assign(new TypeError("fetch failed"), {
+        cause: { code: NOT_PUBLIC_ADDRESS },
+      });
+    };
+    assert.deepEqual(await fetchOpenPdf(PDF, refuse), {
+      ok: false,
+      reason: NOT_PUBLIC_ADDRESS,
+    });
+    // a redirect to a name that resolves privately: refused at its robots.txt
+    const n = network({
+      [ROBOTS]: { status: 404 },
+      [PDF]: {
+        status: 302,
+        headers: { location: "https://belso.example.org/x.pdf" },
+      },
+    });
+    const guarded: PdfFetch = async (url, init) => {
+      if (url.startsWith("https://belso.example.org/"))
+        throw Object.assign(new Error("guard"), { code: NOT_PUBLIC_ADDRESS });
+      return n.fetch(url, init);
+    };
+    assert.deepEqual(await fetchOpenPdf(PDF, guarded), {
+      ok: false,
+      reason: NOT_PUBLIC_ADDRESS,
+    });
+  });
+
+  it("a body past the cap without a content-length: TOO_LARGE, and the read stops there (barracuda, #1951)", async () => {
+    const chunk = new Uint8Array(1_000_000).fill(37);
+    let pulls = 0;
+    const endless = () =>
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(chunk);
+        },
+      });
+    const n = network({ [ROBOTS]: { status: 404 } });
+    const big: PdfFetch = async (url, init) =>
+      url === PDF
+        ? new Response(endless(), { status: 200 })
+        : n.fetch(url, init);
+    assert.deepEqual(await fetchOpenPdf(PDF, big), {
+      ok: false,
+      reason: "TOO_LARGE",
+    });
+    assert.ok(pulls <= MAX_PDF_BYTES / chunk.byteLength + 3, String(pulls));
+    // the robots.txt under its own cap, 512 KB
+    pulls = 0;
+    const bigRobots: PdfFetch = async (url) =>
+      new Response(endless(), { status: url === ROBOTS ? 200 : 404 });
+    assert.deepEqual(await fetchOpenPdf(PDF, bigRobots), {
+      ok: false,
+      reason: "ROBOTS_UNREADABLE",
+    });
+    assert.ok(pulls <= 3, String(pulls));
+  });
+
   it("a landing page with a PDF header is not a PDF", async () => {
     const n = network({
       [ROBOTS]: { status: 404 },
@@ -139,6 +206,88 @@ describe("fetching the open PDF", () => {
       ok: false,
       reason: "NOT_PDF",
     });
+  });
+});
+
+describe("the address guard, at connect time (a local server, a name resolved by the test)", () => {
+  let port = 0;
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests += 1;
+    res.end("%PDF-1.4 kitalalt");
+  });
+  before(
+    () =>
+      new Promise<void>((done) =>
+        server.listen(0, "127.0.0.1", () => {
+          port = (server.address() as AddressInfo).port;
+          done();
+        }),
+      ),
+  );
+  after(() => new Promise<void>((done) => server.close(() => done())));
+
+  const to =
+    (address: string): HostLookup =>
+    async () => [{ address, family: address.includes(":") ? 6 : 4 }];
+  const get = (fetch: PdfFetch) =>
+    fetch(`http://kiado.example.org:${port}/x.pdf`, {
+      method: "GET",
+      headers: {},
+      redirect: "manual",
+      signal: AbortSignal.timeout(5_000),
+    });
+
+  it("a public name resolving to loopback or the tailnet range: refused before the connection opens", async () => {
+    for (const address of ["127.0.0.1", "100.64.1.2", "::ffff:127.0.0.1"]) {
+      await assert.rejects(
+        get(guardedFetch({ resolve: to(address) })),
+        (e: { code?: string }) => e.code === NOT_PUBLIC_ADDRESS,
+        address,
+      );
+    }
+    assert.equal(requests, 0);
+  });
+
+  it("the same request with the guard let through reaches the server: the refusal is the guard's", async () => {
+    const response = await get(
+      guardedFetch({ resolve: to("127.0.0.1"), isPublic: () => true }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "%PDF-1.4 kitalalt");
+    assert.equal(requests, 1);
+  });
+});
+
+describe("a public address", () => {
+  it("refuses loopback, link-local, RFC 1918, CGNAT, multicast, ULA and mapped private addresses", () => {
+    for (const ok of [
+      "93.184.216.34",
+      "100.63.255.255",
+      "100.128.0.1",
+      "172.32.0.1",
+      "2a00:1450:4001::1",
+    ])
+      assert.equal(publicAddress(ok), true, ok);
+    for (const bad of [
+      "127.0.0.1",
+      "0.0.0.0",
+      "10.0.0.1",
+      "169.254.169.254",
+      "172.16.0.1",
+      "172.31.255.255",
+      "192.168.0.1",
+      "100.64.0.1",
+      "100.127.255.255",
+      "224.0.0.1",
+      "::1",
+      "::",
+      "fc00::1",
+      "fe80::1",
+      "::ffff:10.0.0.1",
+      "nem cim",
+    ])
+      assert.equal(publicAddress(bad), false, bad);
   });
 });
 
