@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@acropora/database";
+import type { BillingDocumentType } from "@acropora/types";
 
 import type {
   BuyerSnapshot,
@@ -25,6 +26,16 @@ export const ISSUING_AUDIT = {
   backToDraft: "BILLING_ISSUING_BACK_TO_DRAFT",
 } as const;
 
+/** A pozitív kontroll alanyának szűrője: kiállított, saját, számmal bíró, AZONOS TÍPUSÚ sor. */
+export function controlWhere(documentType: BillingDocumentType) {
+  return {
+    ...OWN_ROWS,
+    status: "ISSUED",
+    documentType,
+    invoiceNumber: { not: null },
+  } satisfies Prisma.InvoiceWhereInput;
+}
+
 @Injectable()
 export class BillingIssuingResolutionRepository {
   private readonly database = prisma;
@@ -48,21 +59,21 @@ export class BillingIssuingResolutionRepository {
   }
 
   /**
-   * A POZITÍV KONTROLL ALANYA: a legutóbb kiállított saját bizonylat, amelyet
-   * a kiállítási út a külső azonosítójával (`szamlaKulsoAzon = Invoice.id`)
-   * küldött. Ha nincs, a "nincs ilyen azonosító" válasz nem igazolható.
+   * A POZITÍV KONTROLL ALANYA: a legutóbb kiállított saját bizonylat AZONOS
+   * TÍPUSBÓL, amelyet a kiállítási út a külső azonosítójával
+   * (`szamlaKulsoAzon = Invoice.id`) küldött. A típus kötelező (barracuda,
+   * #1961): ha a lekérdezés pl. a díjbekérőt külső azonosítóra nem találná
+   * meg, egy számlán zöld kontroll nem igazolná a beragadt díjbekérő "nincs
+   * ilyen azonosító" válaszát. Ha az adott típusból nincs kiállított sor,
+   * nincs kontroll, és a 7-es hibakód nem igazolható.
    */
-  latestIssuedForControl(): Promise<{
+  latestIssuedForControl(documentType: BillingDocumentType): Promise<{
     id: string;
     invoiceNumber: string;
   } | null> {
     return this.database.invoice
       .findFirst({
-        where: {
-          ...OWN_ROWS,
-          status: "ISSUED",
-          invoiceNumber: { not: null },
-        },
+        where: controlWhere(documentType),
         orderBy: [{ issueDate: "desc" }, { id: "desc" }],
         select: { id: true, invoiceNumber: true },
       })

@@ -23,8 +23,8 @@ import { BillingIssuingResolutionService } from "./billing-issuing-resolution.se
  * A KIVEZETŐ ÚT SZOLGÁLTATÁSA, HAMIS SZÁMLÁZZ.HU-VAL. A feltételes írásokat a
  * valódi adatbázis méri (integrációs spec); ez azt, hogy a szolgáltatás a
  * tényekből a helyes javaslatot adja, a végrehajtás MÉG EGYSZER lekérdez, és
- * a kliens nem kap kiállító felületet (a hamis kliensnek NINCS
- * `generateInvoice`-e: egy ilyen hívás TypeError-ral buknék).
+ * a kliens kiállító metódusa (`generateInvoice`) eldobja a futást, ha
+ * az osztály bármikor hívná.
  *
  * Mi pirosít: írás az ellenőrzésnél; végrehajtás a friss lekérdezés
  * egyeztetése nélkül; DRAFT pozitív kontroll nélkül; a Számlázz.hu válaszából
@@ -126,11 +126,14 @@ function setup(
     /** A külső azonosítóra (doc-1, ctl-1) vagy számlaszámra adott válasz. */
     answers?: Record<string, Answer>;
     control?: { id: string; invoiceNumber: string } | null;
+    /** A kontroll bizonylat típusa; a hamis repository csak ilyet ad (alap: INVOICE). */
+    controlType?: string;
     writeOk?: boolean;
   } = {},
 ) {
   const calls = {
     queries: [] as string[],
+    controlRequests: [] as string[],
     queryXml: [] as string[],
     audits: [] as Array<{ action: string; metadata: unknown }>,
     recorded: [] as Array<Record<string, unknown>>,
@@ -148,10 +151,14 @@ function setup(
     audit: async (input: { action: string; metadata: unknown }) => {
       calls.audits.push(input);
     },
-    latestIssuedForControl: async () =>
-      options.control === undefined
+    latestIssuedForControl: async (documentType: string) => {
+      calls.controlRequests.push(documentType);
+      // a valódi repository típus szerint szűr: ilyen típusú sor nincs, nincs kontroll
+      if (documentType !== (options.controlType ?? "INVOICE")) return null;
+      return options.control === undefined
         ? { id: "ctl-1", invoiceNumber: "E-CTL-1" }
-        : options.control,
+        : options.control;
+    },
     recordIssued: async (input: Record<string, unknown>) => {
       calls.recorded.push(input);
       return options.writeOk ?? true;
@@ -181,7 +188,10 @@ function setup(
     },
   } as unknown as BillingDocumentStockRepository;
   const client = {
-    // NINCS generateInvoice: a kiállító hívás ezen az úton nem létezhet
+    // a futásidejű kliensnek VAN kiállító metódusa: ha az osztály valaha hívná, a teszt itt bukik
+    generateInvoice: async () => {
+      throw new Error("a kivezető út kiállító hívást indított");
+    },
     queryDocument: async (xml: string) => {
       const key =
         /<(?:szamlaKulsoAzon|szamlaszam)>([^<]*)</.exec(xml)?.[1] ?? "";
@@ -316,6 +326,27 @@ describe("ellenőrzés (check): csak olvas", () => {
     assert.doesNotMatch(calls.queryXml[0]!, /szamlaKulsoAzon/);
   });
 
+  it("a kontroll AZONOS TÍPUSÚ bizonylat kell legyen: beragadt díjbekérőhöz csak számla van -> nem tudjuk", async () => {
+    const { service, calls } = setup({
+      over: { documentType: "PROFORMA" },
+      controlType: "INVOICE",
+      answers: { "doc-1": NOT_FOUND_XML, "ctl-1": FOUND_XML("E-CTL-1") },
+    });
+    const check = await service.check("doc-1", USER);
+    assert.equal(check.action, "NONE");
+    assert.deepEqual(calls.controlRequests, ["PROFORMA"]);
+    assert.deepEqual(calls.queries, ["doc-1"]);
+  });
+
+  it("azonos típusú kontrollal a beragadt díjbekérő DRAFT javaslatot kap", async () => {
+    const { service } = setup({
+      over: { documentType: "PROFORMA" },
+      controlType: "PROFORMA",
+      answers: { "doc-1": NOT_FOUND_XML, "ctl-1": FOUND_XML("E-CTL-1") },
+    });
+    assert.equal((await service.check("doc-1", USER)).action, "BACK_TO_DRAFT");
+  });
+
   it("nem kezdi el: nem ISSUING, nem saját sor, nem éles mód", async () => {
     for (const options of [
       { over: { status: "DRAFT" } },
@@ -424,6 +455,21 @@ describe("végrehajtás (resolve): újra lekérdez, egyezést vár", () => {
     assert.equal(calls.drafts.length, 1);
     assert.match(JSON.stringify(calls.drafts[0]!.auditMetadata), /ETIMEDOUT/);
     assert.equal(calls.recorded.length, 0);
+  });
+
+  it("BACK_TO_DRAFT: a hiányzó invoiceNumber (undefined) ugyanaz, mint a null", async () => {
+    const { service, calls } = setup({
+      answers: { "doc-1": NOT_FOUND_XML, "ctl-1": FOUND_XML("E-CTL-1") },
+    });
+    await service.resolve(
+      "doc-1",
+      {
+        expectedUpdatedAt: UPDATED_AT.toISOString(),
+        action: "BACK_TO_DRAFT",
+      } as unknown as Parameters<typeof service.resolve>[1],
+      USER,
+    );
+    assert.equal(calls.drafts.length, 1);
   });
 
   it("a feltételes írás nem sikerült (a sor közben megváltozott) -> 409, nincs utómunka", async () => {

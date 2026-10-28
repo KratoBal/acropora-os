@@ -7,7 +7,10 @@ import { after, before, describe, it } from "node:test";
 
 import { ConflictException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
-import type { AuthenticatedUser } from "@acropora/types";
+import {
+  BILLING_DOCUMENT_TYPES,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import type { SzamlazzCredentialProvider } from "../integrations/szamlazz/szamlazz-credential.provider.js";
@@ -76,10 +79,13 @@ describe(
     /** Mit válaszol a hamis Számlázz.hu a kulcsra; az ismeretlen kulcs a kiállított sorokat követi. */
     const answers = new Map<string, string>();
     let issueCount = 0;
+    /** MINDEN kiállító hívás, az időtúllépésesek is: a kivezető út ezt nem növelheti. */
+    let generateCalls = 0;
     let timeout = false;
 
     const client = {
       generateInvoice: async () => {
+        generateCalls++;
         if (timeout) throw new Error("ETIMEDOUT");
         issueCount++;
         return {
@@ -245,6 +251,7 @@ describe(
 
     it("bizonyított nincs-szám: DRAFT, az AuditLog ugyanott, a második megerősítés 409", async () => {
       const stuck = await stuckRow();
+      const generateBefore = generateCalls;
       answers.set(stuck.id, NOT_FOUND_XML);
       const check = await service.check(stuck.id, user);
       assert.equal(check.action, "BACK_TO_DRAFT");
@@ -279,10 +286,13 @@ describe(
         () => service.resolve(stuck.id, input, user),
         ConflictException,
       );
+      // a kivezető út egyetlen kiállító hívást sem indított
+      assert.equal(generateCalls, generateBefore);
     });
 
     it("a Számlázz.hu igazolta a bizonylatot: ISSUED a visszaadott számmal és a küldött összegekkel", async () => {
       const stuck = await stuckRow();
+      const generateBefore = generateCalls;
       answers.set(
         stuck.id,
         foundXml(`${PREFIX}-2026-77`, await grossOf(stuck.id)),
@@ -320,6 +330,21 @@ describe(
         },
       });
       assert.equal(recorded, 1);
+      assert.equal(generateCalls, generateBefore);
+    });
+
+    it("a pozitív kontroll alanya mindig a kért típusú, kiállított saját sor", async () => {
+      for (const type of BILLING_DOCUMENT_TYPES) {
+        const control = await resolutionRepository.latestIssuedForControl(type);
+        if (!control) continue;
+        const row = await prisma.invoice.findUniqueOrThrow({
+          where: { id: control.id },
+          select: { documentType: true, status: true },
+        });
+        assert.deepEqual([row.documentType, row.status], [type, "ISSUED"]);
+      }
+      // a suite saját kiállított sora INVOICE: ilyen típusból van kontroll
+      assert.ok(await resolutionRepository.latestIssuedForControl("INVOICE"));
     });
 
     it("a közben megváltozott sor nem íródik át: a feltétel az adatbázisban is áll", async () => {

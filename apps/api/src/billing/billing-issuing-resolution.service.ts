@@ -78,9 +78,15 @@ interface Evaluation {
  *   resolve  a megerősített javaslattal jön, a szerver MÉG EGYSZER lekérdez
  *            (a kliens szavát nem hiszi el), egyezést vár, és feltételesen ír.
  *
- * A KIÁLLÍTÓ HÍVÁS ITT SEHOL NINCS: ez az osztály nem kapja meg a
- * `generateInvoice`-t, csak a lekérdező és a PDF-letöltő felületet. Dupla
- * kiállítás tehát szerkezetileg kizárt; a kockázat az volt, hogy egy hamis
+ * A KIÁLLÍTÓ HÍVÁS ITT SEHOL NINCS, DE A KIZÁRÁS A TÍPUSÉ, NEM A FUTÁSIDEJŰ
+ * OBJEKTUMÉ (barracuda, #1961): a `QueryClient` típus csak a lekérdező és a
+ * PDF-letöltő metódust engedi, a beinjektált futásidejű kliens viszont
+ * ugyanaz a `HttpSzamlazzAgentClient`, aminek van `generateInvoice`-a. Amit
+ * ez tartja: az osztály kódja sehol nem hívja (a tesztben a hamis kliens
+ * `generateInvoice`-a eldobja a futást), és az integrációs spec megméri, hogy
+ * az ellenőrzés és a végrehajtás előtt és után a kiállító hívások száma
+ * egyezik. Dupla kiállítás ellen a fő védelem a döntés: a kockázat az volt,
+ * hogy egy hamis
  * "nincs szám" DRAFT-ba teszi a sort, és a kiállítás gombja másodikat állít
  * ki. Ezért a DRAFT-hoz a döntés (billing-issuing-resolution.ts) pozitív
  * kontrollt, kort és érvényes 7-es hibakódot kér.
@@ -132,7 +138,7 @@ export class BillingIssuingResolutionService {
     if (
       check.expectedUpdatedAt !== input.expectedUpdatedAt ||
       decision.action !== input.action ||
-      decision.invoiceNumber !== input.invoiceNumber
+      decision.invoiceNumber !== (input.invoiceNumber ?? null)
     )
       throw new ConflictException(
         "Az ellenőrzés óta változott a bizonylat vagy a Számlázz.hu válasza: futtasd újra az ellenőrzést, és azt erősítsd meg.",
@@ -371,7 +377,8 @@ export class BillingIssuingResolutionService {
       classified.kind !== "RECORDING_FAILED" &&
       classified.kind !== "STRAY_PREVIEW"
     ) {
-      const control = await this.repository.latestIssuedForControl();
+      const control =
+        await this.repository.latestIssuedForControl(documentType);
       if (control) {
         const controlResult = await this.query(agentKey, {
           by: "externalId",
