@@ -334,7 +334,7 @@ export class GoldSetRepository {
             `not an included source: ${notIncluded.join(", ")}`,
           );
         const all = await scorableClaims(tx, sourceIds);
-        // at most three from one source, an even spread over the extraction order
+        // at most four from one source, an even spread over the extraction order
         const claims = new Map(
           sourceIds.map((id) => [id, sampleClaims(all.get(id) ?? [])]),
         );

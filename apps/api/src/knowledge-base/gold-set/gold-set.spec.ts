@@ -225,7 +225,7 @@ describe("T3 proposal", () => {
     claims,
   });
 
-  it("takes the ten sources with the most machine claims, then the newest, then the id; at most three from one", () => {
+  it("takes the ten sources with the most machine claims, then the newest, then the id; at most four from one", () => {
     const candidates = [
       ...Array.from({ length: 11 }, (_, i) => src(`a${i}`, 4)),
       src("big", 12),
@@ -237,33 +237,46 @@ describe("T3 proposal", () => {
     assert.deepEqual(
       proposal.sources.slice(0, 3).map((s) => [s.sourceId, s.inSet]),
       [
-        ["big", 3],
-        ["new", 3],
-        ["a0", 3],
+        ["big", 4],
+        ["new", 4],
+        ["a0", 4],
       ],
     );
-    assert.equal(proposal.claims, 30);
+    assert.equal(proposal.claims, 40);
     assert.deepEqual(proposal.required, {
       sources: 10,
       claims: 30,
-      perSource: 3,
+      perSource: 4,
     });
     assert.equal(proposal.enough, true);
   });
 
-  it("the stage after the PDF path (acrobot 37410): fifteen sources give ten of three, thirty", () => {
+  it("the stage after the PDF path (acrobot 37410): fifteen sources give ten of four, forty", () => {
     const proposal = proposeGoldSet(
       [12, 12, 7, 4, 4, 4, 1, 1, 10, 6, 5, 5, 3, 3, 1].map((n, i) =>
         src(`t${i}`, n),
       ),
     );
     assert.equal(proposal.sources.length, 10);
-    assert.equal(proposal.claims, 30);
+    assert.equal(proposal.claims, 40);
     assert.equal(proposal.enough, true);
   });
 
+  it("a source with fewer than four is not filled up from another: ten of two and eight of four give 36", () => {
+    const proposal = proposeGoldSet([
+      ...Array.from({ length: 8 }, (_, i) => src(`f${i}`, 9)),
+      src("small1", 2),
+      src("small2", 2),
+    ]);
+    assert.deepEqual(
+      proposal.sources.map((s) => s.inSet),
+      [4, 4, 4, 4, 4, 4, 4, 4, 2, 2],
+    );
+    assert.equal(proposal.claims, 36);
+  });
+
   it("is not enough below ten sources or thirty claims in the set", () => {
-    // nine sources of four: 27 claims, and one source short
+    // nine sources of four: 36 claims, but one source short
     assert.equal(
       proposeGoldSet(Array.from({ length: 9 }, (_, i) => src(`c${i}`, 4)))
         .enough,
@@ -281,12 +294,12 @@ describe("T3 proposal", () => {
 describe("T3 sample of one source", () => {
   const ids = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
 
-  it("takes all up to three, above it an even spread from the first, the same every time", () => {
-    assert.deepEqual(sampleClaims(ids(2)), ids(2));
+  it("takes all up to four, above it an even spread from the first, the same every time", () => {
     assert.deepEqual(sampleClaims(ids(3)), ids(3));
-    assert.deepEqual(sampleClaims(ids(12)), ["c0", "c4", "c8"]);
+    assert.deepEqual(sampleClaims(ids(4)), ids(4));
+    assert.deepEqual(sampleClaims(ids(12)), ["c0", "c3", "c6", "c9"]);
     assert.deepEqual(sampleClaims(ids(12)), sampleClaims(ids(12)));
-    assert.equal(new Set(sampleClaims(ids(4))).size, 3);
+    assert.equal(new Set(sampleClaims(ids(5))).size, 4);
   });
 });
 

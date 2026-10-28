@@ -100,7 +100,7 @@ describe(
           },
         })
       ).id;
-      // nine sources of three claims, and one of eight the set takes three of
+      // nine sources of three claims, and one of eight the set takes four of
       for (let i = 0; i < 7; i++)
         sourceIds.push(await extractedSource(`s${i}`, 3));
       sourceIds.push(await extractedSource("s7", 8));
@@ -193,12 +193,12 @@ describe(
         sourceIds.includes(s.sourceId),
       );
       // other included sources may stand in the database; ours hold three
-      // each, the eight-claim one gives three to the set
+      // each, the eight-claim one gives four to the set
       assert.ok(ours.length > 0);
       assert.ok(
         ours.every((s) =>
           s.sourceId === sourceIds[7]
-            ? s.claims === 8 && s.inSet === 3
+            ? s.claims === 8 && s.inSet === 4
             : s.claims === 3 && s.inSet === 3,
         ),
       );
@@ -223,7 +223,7 @@ describe(
       );
     });
 
-    it("the freeze pins the ten sources with at most three claims each, once, with its AuditLog row", async () => {
+    it("the freeze pins the ten sources with at most four claims each, once, with its AuditLog row", async () => {
       await repository.freeze(sourceIds, userId);
       const view = await repository.view();
       assert.equal(view.frozen, true);
@@ -231,12 +231,12 @@ describe(
         view.sources.map((s) => s.sourceId),
         sourceIds,
       );
-      // 9 x 3 + 3 of the eight: at most three from one source
-      assert.equal(view.score.rows.total, 30);
-      assert.equal(view.score.rows.pending, 30);
+      // 9 x 3 + 4 of the eight: at most four from one source
+      assert.equal(view.score.rows.total, 31);
+      assert.equal(view.score.rows.pending, 31);
       const capped = view.sources[7]!;
-      assert.equal(capped.rows.length, 3);
-      assert.equal(capped.notInSet, 5);
+      assert.equal(capped.rows.length, 4);
+      assert.equal(capped.notInSet, 4);
       assert.equal(view.sources[0]!.notInSet, 0);
       assert.equal(view.score.verdict, "NOT_READY");
       assert.ok(view.score.problems.includes("PENDING_ROWS"));

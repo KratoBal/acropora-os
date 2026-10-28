@@ -8,9 +8,11 @@ import {
  * THE T3 GOLD SET (plan v4, section 10, T3; research-t3-jelolt-keszlet).
  *
  * The extraction is the machine's, the judgement the editor's: ten sources
- * are frozen with at most three machine claims each (acrobot 37410: the plan's
- * own shape, thirty rows from ten sources, once the PDF path gave fifteen
- * sources with machine claims), and the editor reviews every row in
+ * are frozen with at most four machine claims each (acrobot 37410, 37446: the
+ * plan's ten sources once the PDF path gave fifteen with machine claims, and
+ * room above thirty rows so that a row lost later, withdrawn by a
+ * re-extraction or discarded whole, does not leave the one-time set short),
+ * and the editor reviews every row in
  * the claim review already in use (field by field). Precision asks nothing
  * new: a row is read from the decisions the review stored. For completeness
  * the editor records, per source, the claims the machine did not bring,
@@ -42,12 +44,14 @@ import {
  */
 
 /**
- * acrobot 37410 (2026-10-28): back to the plan's shape, ten sources and at
- * most three claims from one, thirty in all (37360's eight sources of six was
- * the stage before the PDF path; fifteen sources have machine claims now).
+ * acrobot 37410 and 37446 (2026-10-28): ten sources, at most four claims from
+ * one (a cap, never filled up from another source), at least thirty in all;
+ * the thresholds scale with the rows scored. Four, not three: thirty rows
+ * exactly would have no room for a row lost after the one-time freeze
+ * (barracuda, #1954).
  */
 export const GOLD_SOURCE_COUNT = 10;
-export const GOLD_MAX_CLAIMS_PER_SOURCE = 3;
+export const GOLD_MAX_CLAIMS_PER_SOURCE = 4;
 export const GOLD_MIN_CLAIMS = 30;
 /** Plan 10: at most 3 errors in 30 rows, at least 21 of 30 found. */
 export const PRECISION_MAX_ERRORS_PER_30 = 3;
