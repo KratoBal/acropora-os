@@ -11,6 +11,7 @@ import {
   NOT_PUBLIC_ADDRESS,
   fetchOpenPdf,
   guardedFetch,
+  joinLineEndHyphens,
   pdfSections,
   publicAddress,
   publicHttpUrl,
@@ -418,6 +419,38 @@ describe("a public address", () => {
       "nem cim",
     ])
       assert.equal(publicAddress(bad), false, bad);
+  });
+});
+
+describe("a word broken at a line end", () => {
+  it("is joined back when a lowercase letter, the hyphen and a lowercase start meet; otherwise left", () => {
+    assert.equal(
+      joinLineEndHyphens([
+        "at 2 µM phos-",
+        "phate the colonies",
+        "Ca-",
+        "Mg ratio, pH-",
+        "8 and an end-",
+      ]),
+      "at 2 µM phosphate the colonies\nCa-\nMg ratio, pH-\n8 and an end-",
+    );
+    // a hyphen inside a line is never touched; two in a row join in turn
+    assert.equal(
+      joinLineEndHyphens(["well-known cal-", "cifi-", "cation"]),
+      "well-known calcification",
+    );
+  });
+
+  it("the PDF's text layer gives the joined word (acrobot 37543: the source had the hyphen where the passage went on)", async () => {
+    const { sections } = await pdfSections(
+      await pdfOf([
+        ["Calcification fell at 2 µM phos-", "phate in the tanks."],
+      ]),
+    );
+    assert.ok(
+      sections[0]!.text.includes("phosphate in the tanks."),
+      sections[0]!.text,
+    );
   });
 });
 
