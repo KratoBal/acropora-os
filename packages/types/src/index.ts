@@ -389,6 +389,7 @@ export type {
   CatalogActionRun,
   CatalogActionRunStatus,
   CatalogActionView,
+  CatalogActionsHostGuard,
   CatalogActionsResponse,
 } from "./catalog-actions.js";
 export {
