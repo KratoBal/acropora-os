@@ -14,6 +14,7 @@ import {
   joinLineEndHyphens,
   pdfSections,
   publicAddress,
+  stripLineNumbers,
   publicHttpUrl,
   type HostLookup,
   type PdfFetch,
@@ -451,6 +452,84 @@ describe("a word broken at a line end", () => {
       sections[0]!.text.includes("phosphate in the tanks."),
       sections[0]!.text,
     );
+  });
+});
+
+// Lines of a HAL author manuscript (6ly007j, CC BY 4.0) as its text layer
+// gives them: a page number first, every line ending with its line number.
+// The numbers are renumbered to one run from 1, as a manuscript starts it
+// (a run that does not start at 1 to 3 is not taken); the words are the
+// manuscript's. "error of 5 5": the text's number, then the line's.
+const MANUSCRIPT: string[][] = [
+  [
+    "2",
+    "Abstract 1",
+    "Extracellular alkaline phosphatase activity (APA) was measured in four tropical 2",
+    "( Stylophora pistillata, Pocillopora damicornis , Pavona cactus , Galaxea fascicularis ) and two 3",
+    "Mediterranean ( Oculina patagonica, Cladocora caespitosa ) symbiotic coral species, both in 4",
+  ],
+  [
+    "3",
+    "cell density and chlorophyll content. All data are expressed as the mean ± standard error of 5 5",
+    "replicates. The software GraphPad Prism (version 5.0) was used to perform linear regressions 6",
+    "µ mol photons m -2 s -1 in a symbiotic coral (Fig. 3) while it did not increase with light in a non- 7",
+    "9",
+    "symbiotic one. APA was also 6.4 times higher in bleached than in symbiotic colonies (Fig. 5), 10",
+  ],
+];
+
+// Lines of a journal PDF without line numbers (6990016): a table's "Period"
+// rows count 1 to 4 and a sentence ends with a number. Nothing here is a
+// line number, and nothing is taken.
+const NOT_NUMBERED: string[][] = [
+  [
+    "growth rates (mg d –1 ) for each treatment over the 4",
+    "Period 1",
+    "Period 2",
+    "Period 3",
+    "Period 4",
+    "Control 148 90 96",
+    "N 84 41 147",
+    "P 63 43 148",
+    "N-P 45 39 186",
+    "CO2 34 69 165",
+    "N-CO2 31 43 136",
+    "Percent of Period 1",
+  ],
+];
+
+describe("a manuscript's line numbers", () => {
+  it("are taken out, the page number too; a number in the text stays (acrobot 37551, 37552)", () => {
+    assert.deepEqual(stripLineNumbers(MANUSCRIPT), [
+      [
+        "Abstract",
+        "Extracellular alkaline phosphatase activity (APA) was measured in four tropical",
+        "( Stylophora pistillata, Pocillopora damicornis , Pavona cactus , Galaxea fascicularis ) and two",
+        "Mediterranean ( Oculina patagonica, Cladocora caespitosa ) symbiotic coral species, both in",
+      ],
+      [
+        "cell density and chlorophyll content. All data are expressed as the mean ± standard error of 5",
+        "replicates. The software GraphPad Prism (version 5.0) was used to perform linear regressions",
+        "µ mol photons m -2 s -1 in a symbiotic coral (Fig. 3) while it did not increase with light in a non-",
+        "symbiotic one. APA was also 6.4 times higher in bleached than in symbiotic colonies (Fig. 5),",
+      ],
+    ]);
+  });
+
+  it("a document whose lines are not numbered is left as it is, a counting table and a closing number too", () => {
+    assert.deepEqual(stripLineNumbers(NOT_NUMBERED), NOT_NUMBERED);
+  });
+
+  it("the PDF's text layer: no line number, and the hyphen before one is joined", async () => {
+    const { sections } = await pdfSections(await pdfOf(MANUSCRIPT));
+    const text = sections.map((s) => s.text).join("\n");
+    assert.ok(
+      text.includes("measured in four tropical\n( Stylophora pistillata"),
+      text,
+    );
+    assert.ok(text.includes("in a nonsymbiotic one."), text);
+    assert.ok(text.includes("standard error of 5\nreplicates."), text);
+    assert.equal(/ \d{2}$/m.test(text), false, text);
   });
 });
 
