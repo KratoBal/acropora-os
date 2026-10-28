@@ -368,10 +368,86 @@ export interface KnowledgeConclusion {
   updatedAt: string;
 }
 
+/** A research draft as the list shows it (S6 mode B). */
+export interface ResearchDraftRow {
+  id: string;
+  question: string;
+  status: "RUNNING" | "DRAFT" | "FAILED";
+  summaryModel: string | null;
+  createdById: string;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/** A source the draft found, read or not (`read` says why not). */
+export interface ResearchDraftSource {
+  doi: string | null;
+  pmcid: string | null;
+  pmid: string | null;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string | null;
+  url: string | null;
+  licence: string;
+  read: string;
+  claims: number;
+  /** No DOI: the Crossref retraction check never covered it. */
+  retractionUnchecked: boolean;
+}
+
+/** A checked candidate claim, held only in the draft: never a KnowledgeClaim. */
+export interface ResearchDraftClaim {
+  /** The marker in the summary: c1, c2, ... */
+  id: string;
+  /** Index into the draft's sources. */
+  source: number;
+  passage: { text: string; locator: string };
+  species: string | null;
+  environment: string | null;
+  effect: string | null;
+  direction: string | null;
+  quantity: {
+    min: number | null;
+    max: number | null;
+    unit: string;
+    basis: "PO4" | "P" | null;
+  } | null;
+  studyType: string | null;
+  measurementMethod: string | null;
+  sampleSize: { value: number; unit: string | null } | null;
+  uncertainty: string | null;
+  conditions: string | null;
+}
+
+export interface ResearchDraftReport {
+  /** Why a draft FAILED inside the chain. */
+  reason?: string;
+  /** Why it FAILED outside it: STALE_RUNNING, or an error's name. */
+  error?: string;
+  queries?: string[];
+  queriesRefused?: string[];
+  discovery?: { found: number };
+  claims?: number;
+  claimsSent?: number;
+  summaryKept?: number;
+  summaryDroppedByAi?: string[];
+  summaryDroppedHere?: string[];
+}
+
+export interface ResearchDraftDetail extends ResearchDraftRow {
+  summary: string | null;
+  /** Empty while RUNNING, and on a draft failed before the chain wrote them. */
+  sources: ResearchDraftSource[];
+  candidateClaims: ResearchDraftClaim[];
+  report: ResearchDraftReport;
+}
+
 const base = "/knowledge-base/sources";
 const claimsBase = "/knowledge-base/claims";
 const overviewPath = "/knowledge-base/overview";
 const vocabularyBase = "/knowledge-base/vocabulary";
+const researchDraftsBase = "/knowledge-base/research-drafts";
 
 export const knowledgeBaseApi = {
   overview(token: string, signal?: AbortSignal) {
@@ -552,6 +628,26 @@ export const knowledgeBaseApi = {
       `/knowledge-base/conclusions/${encodeURIComponent(id)}/withdraw`,
       token,
       { method: "POST", body: JSON.stringify({ reason }) },
+    );
+  },
+  researchDrafts(token: string, signal?: AbortSignal) {
+    return apiRequest<ResearchDraftRow[]>(researchDraftsBase, token, {
+      signal,
+    });
+  },
+  researchDraft(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<ResearchDraftDetail>(
+      `${researchDraftsBase}/${encodeURIComponent(id)}`,
+      token,
+      { signal },
+    );
+  },
+  /** 202: the chain runs for minutes; the row is read back with `researchDraft`. */
+  startResearchDraft(token: string, question: string) {
+    return apiRequest<{ id: string; status: "RUNNING" }>(
+      researchDraftsBase,
+      token,
+      { method: "POST", body: JSON.stringify({ question }) },
     );
   },
   screeningSummary(token: string, signal?: AbortSignal) {
