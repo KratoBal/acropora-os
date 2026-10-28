@@ -24,6 +24,7 @@ import {
 } from "./knowledge-answer.controller.js";
 import {
   answerQuestion,
+  diagnoseQuestion,
   keepPairs,
   parseQuestion,
   questionFit,
@@ -444,6 +445,117 @@ describe("T8 meets T6: a partner out for the question (barracuda, #1942)", () =>
   });
 });
 
+describe("the diagnosis: the package without the AI (acrobot 37290)", () => {
+  const diagnose = (candidates: AnswerCandidate[], question = QUESTION) =>
+    diagnoseQuestion({
+      question,
+      subject: "PHOSPHATE",
+      candidates,
+      vocabulary,
+    });
+
+  it("is what the answer sends: the same claims, statements and partners", async () => {
+    const ai = select("c1");
+    const answered = await run([C1, C2], ai);
+    const d = diagnose([C1, C2]);
+    assert.deepEqual(d.request, ai.calls[0]!.claims);
+    assert.deepEqual(d.package, answered.package);
+    assert.equal(d.notAnswered, null);
+    assert.deepEqual(d.unpairedBy, []);
+  });
+
+  it("names the population the question was read as (T8)", () => {
+    const d = diagnose([C1]);
+    const parts = recogniseSentence(QUESTION, vocabulary);
+    assert.deepEqual(d.population, {
+      taxa: parts.taxa,
+      environments: parts.environments,
+    });
+    // the case only means something if the question is read as an aquarium one
+    assert.ok(
+      d.population.environments.length > 0,
+      JSON.stringify(d.population),
+    );
+  });
+
+  it("barracuda #1942: an aquarium question with an undecided transfer is NOTHING_TO_SEND, and says which partner kept the valid claim out", () => {
+    const aquarium = candidate({
+      id: "aq",
+      layer: "HOBBY_EXPERIENCE",
+      scope: { ...HIGH, homeReefApplicability: "DIRECT" },
+      quantity: { min: "0.03", max: "0.1", unit: "mg/l", basis: "PO4" },
+      contradicts: ["field"],
+    });
+    const field = candidate({
+      id: "field",
+      scope: { ...LOW, homeReefApplicability: null },
+      contradicts: ["aq"],
+    });
+    const d = diagnose([aquarium, field]);
+    assert.equal(d.notAnswered, "NOTHING_TO_SEND");
+    assert.deepEqual(d.request, []);
+    assert.deepEqual(d.unpairedBy, [
+      {
+        id: "aq",
+        partners: [{ id: "field", blocked: { kind: "TRANSFER_UNDECIDED" } }],
+      },
+    ]);
+  });
+
+  it("barracuda #1940: a valid claim unpaired by a partner that cannot be stated, or did not qualify for the package", () => {
+    const unwritable = {
+      ...C2,
+      quantity: { min: "0.03", max: "0.1", unit: "mg/l", basis: null },
+    };
+    assert.deepEqual(diagnose([C1, unwritable]).unpairedBy, [
+      {
+        id: "c1",
+        partners: [
+          {
+            id: "c2",
+            blocked: { kind: "NOT_STATED", failure: "QUANTITY_NOT_WRITABLE" },
+          },
+        ],
+      },
+    ]);
+    // a VERIFIED partner without verbatim evidence is out of the package, and
+    // still keeps its stated partner out: the diagnosis shows it
+    const noEvidence = { ...C2, verbatimSupport: 0 };
+    const d = diagnose([C1, noEvidence]);
+    assert.deepEqual(d.unpairedBy, [
+      {
+        id: "c1",
+        partners: [
+          {
+            id: "c2",
+            blocked: { kind: "EXCLUDED", reasons: ["NO_VERBATIM_EVIDENCE"] },
+          },
+        ],
+      },
+    ]);
+    assert.equal(d.notAnswered, "NOTHING_TO_SEND");
+  });
+
+  it("a partner out for another population does not unpair, and is not listed as a blocker", () => {
+    const otherTaxon = candidate({
+      id: "c2",
+      scope: { ...LOW, taxa: ["MONTIPORA"] },
+      contradicts: ["c1"],
+    });
+    const d = diagnose(
+      [C1, otherTaxon],
+      "Mennyi foszfát jó egy Acropora-akváriumban?",
+    );
+    assert.deepEqual(d.package.notForQuestion, [
+      { id: "c2", reason: "OTHER_TAXON" },
+    ]);
+    assert.deepEqual(
+      [d.package.sent, d.package.unpaired, d.unpairedBy],
+      [["c1"], [], []],
+    );
+  });
+});
+
 describe("the package limit keeps contradicting partners together", () => {
   const weak = { ...LOW, evidenceLevel: "SINGLE_REPORT" as const };
   const strong = { ...LOW, evidenceLevel: "CONSISTENT_EXPERIMENTS" as const };
@@ -599,6 +711,28 @@ describe("the service", () => {
         question: "x",
         subject: "NITRATE",
       }),
+      BadRequestException,
+    );
+  });
+  it("diagnoses without an AI path, never calling one, and refuses without the switch", async () => {
+    const ai = select("c1");
+    const d = await new KnowledgeAnswerService(deps({ ask: null })).diagnose({
+      question: "Mennyi foszfát?",
+    });
+    assert.deepEqual(d.package.sent, ["c1"]);
+    const withAi = await new KnowledgeAnswerService(
+      deps({ ask: ai.ask }),
+    ).diagnose({
+      question: "Mennyi foszfát?",
+    });
+    assert.deepEqual(withAi.package.sent, ["c1"]);
+    assert.equal(ai.calls.length, 0);
+    await assert.rejects(
+      new KnowledgeAnswerService(deps({ env: {} })).diagnose({ question: "x" }),
+      ForbiddenException,
+    );
+    await assert.rejects(
+      new KnowledgeAnswerService(deps()).diagnose({ question: " " }),
       BadRequestException,
     );
   });

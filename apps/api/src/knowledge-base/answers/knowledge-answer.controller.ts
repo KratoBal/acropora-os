@@ -24,10 +24,12 @@ import {
 } from "./knowledge-answer-client.js";
 import {
   answerQuestion,
+  diagnoseQuestion,
   KnowledgeAnswerInputError,
   parseQuestion,
   type AnswerCandidate,
   type KnowledgeAnswer,
+  type KnowledgeAnswerDiagnosis,
   type Subject,
 } from "./knowledge-answer.js";
 import { KnowledgeAnswerRepository } from "./knowledge-answer.repository.js";
@@ -62,33 +64,13 @@ export class KnowledgeAnswerService {
   }
 
   async answer(body: unknown): Promise<KnowledgeAnswer> {
-    const { env, ask } = this.deps;
-    if (env[DISCOVERY_SWITCH_ENV] !== "on")
-      throw new ForbiddenException(
-        `A kutatási tudástár ki van kapcsolva (${DISCOVERY_SWITCH_ENV}).`,
-      );
+    const { ask } = this.deps;
+    this.requireSwitch();
     if (!ask)
       throw new ServiceUnavailableException(
         `Nincs AI-válaszoló beállítva (${AI_KNOWLEDGE_ANSWER_PATH_ENV}).`,
       );
-    let parsed: ReturnType<typeof parseQuestion>;
-    try {
-      parsed = parseQuestion(body);
-    } catch (error) {
-      if (error instanceof KnowledgeAnswerInputError)
-        throw new BadRequestException(error.message);
-      throw error;
-    }
-    const [candidates, vocabulary] = await Promise.all([
-      this.deps.candidates(parsed.subject),
-      this.deps.approvedVocabulary(),
-    ]);
-    const result = await answerQuestion({
-      ...parsed,
-      candidates,
-      vocabulary,
-      ask,
-    });
+    const result = await answerQuestion({ ...(await this.load(body)), ask });
     // the reasons, never the question or the answer text (plan 7, step 5: the reason goes to the log)
     this.logger.log({
       msg: "knowledge answer gated",
@@ -110,6 +92,38 @@ export class KnowledgeAnswerService {
     });
     return result;
   }
+
+  /**
+   * The package without the model call: no AI path needed, nothing called,
+   * nothing stored.
+   */
+  async diagnose(body: unknown): Promise<KnowledgeAnswerDiagnosis> {
+    this.requireSwitch();
+    return diagnoseQuestion(await this.load(body));
+  }
+
+  private requireSwitch() {
+    if (this.deps.env[DISCOVERY_SWITCH_ENV] !== "on")
+      throw new ForbiddenException(
+        `A kutatási tudástár ki van kapcsolva (${DISCOVERY_SWITCH_ENV}).`,
+      );
+  }
+
+  private async load(body: unknown) {
+    let parsed: ReturnType<typeof parseQuestion>;
+    try {
+      parsed = parseQuestion(body);
+    } catch (error) {
+      if (error instanceof KnowledgeAnswerInputError)
+        throw new BadRequestException(error.message);
+      throw error;
+    }
+    const [candidates, vocabulary] = await Promise.all([
+      this.deps.candidates(parsed.subject),
+      this.deps.approvedVocabulary(),
+    ]);
+    return { ...parsed, candidates, vocabulary };
+  }
 }
 
 /**
@@ -126,5 +140,17 @@ export class KnowledgeAnswerController {
   @RequirePermissions(PERMISSIONS.KNOWLEDGE_VIEW)
   answer(@Body() body: unknown) {
     return this.answers.answer(body);
+  }
+
+  /**
+   * The same question's package without the AI (acrobot 37290): a separate
+   * route, not a flag on the one above, so a missing or mistyped flag can
+   * never turn a diagnosis into a model call.
+   */
+  @Post("diagnosis")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_VIEW)
+  diagnose(@Body() body: unknown) {
+    return this.answers.diagnose(body);
   }
 }

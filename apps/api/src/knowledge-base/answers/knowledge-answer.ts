@@ -213,13 +213,19 @@ const SENTENCE_END = /([.!?…]+["”»)]?)?$/u;
 const marked = (statement: string, id: string) =>
   statement.replace(SENTENCE_END, (end) => ` [[claim:${id}]]${end || "."}`);
 
-export async function answerQuestion(input: {
+interface PackageInput {
   question: string;
   subject: Subject;
   candidates: readonly AnswerCandidate[];
   vocabulary: Vocabulary;
-  ask: (request: AiAnswerRequest) => Promise<AiAnswer>;
-}): Promise<KnowledgeAnswer> {
+}
+
+/**
+ * Steps 1 to 2: what the AI would get for this question, and why every other
+ * claim of the topic does not go. Shared by the answer and the diagnosis, so
+ * the two cannot drift apart.
+ */
+function preparePackage(input: PackageInput) {
   const byId = new Map(input.candidates.map((c) => [c.id, c]));
   const pkg = keepPairs(
     buildAnswerPackage({
@@ -293,6 +299,97 @@ export async function answerQuestion(input: {
     },
     gateVersion: ANSWER_GATE_VERSION,
   };
+  const request: AiAnswerRequest = {
+    question: input.question,
+    claims: stated.map((c) => ({
+      id: c.id,
+      statement: statements.get(c.id)!,
+      contradicts: partners(c.id),
+    })),
+    fixedSentences: [...ANSWER_FIXED_SENTENCES],
+  };
+  return { byId, population, statements, stated, partners, base, request };
+}
+
+/**
+ * The package for a question without the model call (acrobot 37290): what
+ * would be sent, with each statement, and why the rest stays out. No `ask`
+ * reaches this function, so it cannot call the AI however it is invoked.
+ */
+export interface KnowledgeAnswerDiagnosis {
+  /** The population recognised in the question (T8). */
+  population: { taxa: string[]; environments: string[] };
+  package: KnowledgeAnswer["package"];
+  /**
+   * For each unpaired claim, the CONTRADICTS partners that kept it out and
+   * why each of them did not go (barracuda on #1940: a valid claim out as
+   * unpaired is only explainable with its partner's reason).
+   */
+  unpairedBy: {
+    id: string;
+    partners: { id: string; blocked: PartnerBlock }[];
+  }[];
+  /** The claims as the AI would get them; empty when nothing would be sent. */
+  request: AiAnswerRequest["claims"];
+  /** NOTHING_TO_SEND when the answer would not call the AI, otherwise null. */
+  notAnswered: "NOTHING_TO_SEND" | null;
+  gateVersion: string;
+}
+
+/** Why a CONTRADICTS partner among the candidates was not sent. */
+export type PartnerBlock =
+  | { kind: "EXCLUDED"; reasons: PackageExclusion[] }
+  | { kind: "TRUNCATED" }
+  | { kind: "NOT_STATED"; failure: StatementFailure }
+  | { kind: "TRANSFER_UNDECIDED" }
+  | { kind: "UNPAIRED" };
+
+export function diagnoseQuestion(
+  input: PackageInput,
+): KnowledgeAnswerDiagnosis {
+  const { byId, population, base, request } = preparePackage(input);
+  const pkg = base.package;
+  const sent = new Set(pkg.sent);
+  // the same partners the unpairing loop in preparePackage waits for: a
+  // candidate, not out for the question, not sent
+  const blockOf = (id: string): PartnerBlock | null => {
+    const excluded = pkg.excluded.find((e) => e.id === id);
+    if (excluded) return { kind: "EXCLUDED", reasons: excluded.reasons };
+    const failure = pkg.notStated.find((n) => n.id === id)?.failure;
+    if (failure) return { kind: "NOT_STATED", failure };
+    const mismatch = pkg.notForQuestion.find((n) => n.id === id)?.reason;
+    if (mismatch === "TRANSFER_UNDECIDED") return { kind: mismatch };
+    if (mismatch) return null;
+    if (pkg.unpaired.includes(id)) return { kind: "UNPAIRED" };
+    return { kind: "TRUNCATED" };
+  };
+  const unpairedBy = pkg.unpaired.map((id) => ({
+    id,
+    partners: (byId.get(id)?.contradicts ?? []).flatMap((p) => {
+      if (p === id || !byId.has(p) || sent.has(p)) return [];
+      const blocked = blockOf(p);
+      return blocked === null ? [] : [{ id: p, blocked }];
+    }),
+  }));
+  return {
+    population: {
+      taxa: [...population.taxa],
+      environments: [...population.environments],
+    },
+    package: pkg,
+    unpairedBy,
+    request: request.claims,
+    notAnswered: request.claims.length === 0 ? "NOTHING_TO_SEND" : null,
+    gateVersion: base.gateVersion,
+  };
+}
+
+export async function answerQuestion(
+  input: PackageInput & {
+    ask: (request: AiAnswerRequest) => Promise<AiAnswer>;
+  },
+): Promise<KnowledgeAnswer> {
+  const { statements, stated, partners, base, request } = preparePackage(input);
   const empty = (ai: KnowledgeAnswer["ai"]): KnowledgeAnswer => ({
     answer: ANSWER_NO_KNOWLEDGE_SENTENCE,
     answered: false,
@@ -312,15 +409,7 @@ export async function answerQuestion(input: {
   // nothing to answer from: no model call, no cost
   if (stated.length === 0) return empty({ kind: "NOT_CALLED" });
 
-  const ai = await input.ask({
-    question: input.question,
-    claims: stated.map((c) => ({
-      id: c.id,
-      statement: statements.get(c.id)!,
-      contradicts: partners(c.id),
-    })),
-    fixedSentences: [...ANSWER_FIXED_SENTENCES],
-  });
+  const ai = await input.ask(request);
   if (ai.kind !== "ANSWER") return empty(ai);
 
   // the OS's own check first, so a dropped sentence's claim can still come
