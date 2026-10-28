@@ -5,6 +5,7 @@ import { NotFoundException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
 import { parseRunInput } from "../enrichment/enrichment-run.cli.js";
+import { pageKey } from "../enrichment/enrichment-sources.js";
 import type { ProductService } from "../product.service.js";
 import {
   AUTO_ACCEPT_RULE,
@@ -130,11 +131,6 @@ async function latestResult(
         evidence: Array.isArray(row.evidence) ? (row.evidence as never) : [],
       }
     : null;
-}
-
-/** A page as the shared-page check compares it: no query, fragment, case or trailing slash. */
-function pageKey(url: string): string {
-  return url.split("#")[0]!.split("?")[0]!.toLowerCase().replace(/\/+$/, "");
 }
 
 /**

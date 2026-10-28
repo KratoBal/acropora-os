@@ -425,6 +425,60 @@ describe("egy kézi futás, árnyékban", () => {
     assert.equal(guidanceField.status, "VERIFIED");
   });
 
+  // barracuda, #1821: a supplier link ahead of the manufacturer's, to the same
+  // page with a query: one key for both checks, and the manufacturer reads it
+  it("beszállítói és gyártói link ugyanarra a lapra: a gyártói olvas, a query nem választ szét", async () => {
+    const asked: unknown[] = [];
+    const guidance = "Az adagolás a heti magnézium-mérés alapján történik";
+    const page = {
+      status: 200,
+      body: `<html><body><p>${guidance}</p></body></html>`,
+    };
+    const { checks } = await run(
+      [
+        {
+          productId: "p-1",
+          sources: [
+            {
+              kind: "SUPPLIER",
+              supplierId: "s-1",
+              url: `${MAKER}/P/1/?utm_source=bolt`,
+            },
+            { kind: "MANUFACTURER", url: `${MAKER}/p/1` },
+          ],
+        },
+      ],
+      { [`${MAKER}/P/1/?utm_source=bolt`]: page, [`${MAKER}/p/1`]: page },
+      {
+        // the maker's site is known through its UNAS link (the same page)
+        facts: { "p-1": facts({ unasManufacturerUrl: `${MAKER}/p/1` }) },
+        suppliers: { "s-1": MAKER },
+        dosingExtractor: {
+          extract: async (input) => {
+            asked.push(input);
+            return {
+              kind: "ANSWER",
+              mode: "TEST_DEPENDENT",
+              dose: null,
+              tests: ["MAGNEZIUM"],
+              guidance,
+              excerpt: guidance,
+              reason: "",
+            };
+          },
+        },
+      },
+    );
+    assert.equal(asked.length, 1);
+    assert.deepEqual(
+      checks[0]!.fetches.map((f) => [f.sourceKind, f.outcome, f.reason]),
+      [
+        ["MANUFACTURER", "FETCHED", "NO_STRUCTURED_DATA"],
+        ["SUPPLIER", "REFUSED", "SAME_PAGE_ALREADY_READ"],
+      ],
+    );
+  });
+
   // barracuda, #1805: the description's dose (#1800) and an AI "no data" contradict
   it("a leírás adagja mellett az AI nincs-adata nem lesz állapot", async () => {
     const { checks } = await run(
