@@ -60,6 +60,11 @@ export type SummaryAnswer =
       kept: number;
       /** The AI side's dropped sentences, by code. */
       dropped: string[];
+      /**
+       * Places where the AI side's guard moved markers written after a period before it (acropora-ai-agent
+       * #55, #56): each binds them to the sentence before. Null when the AI side does not say.
+       */
+      markersMoved: number | null;
       writtenBy: string;
     }
   | Refused
@@ -143,6 +148,10 @@ export function summaryOf(body: unknown): SummaryAnswer {
     summary: b.summary,
     kept: typeof b.kept === "number" ? b.kept : 0,
     dropped: codes(b.dropped, "drop"),
+    markersMoved:
+      Number.isSafeInteger(b.markersMoved) && (b.markersMoved as number) >= 0
+        ? (b.markersMoved as number)
+        : null,
     writtenBy: writtenBy(b),
   };
 }
