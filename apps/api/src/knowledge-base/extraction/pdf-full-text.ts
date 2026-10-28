@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import http from "node:http";
 import https from "node:https";
-import { isIP, type LookupFunction } from "node:net";
+import { BlockList, isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -35,9 +35,11 @@ import { MAX_LOCATOR, type TextSection } from "./jats-text.js";
  *   the request's own lookup (`guardedFetch`): the connection opens on the
  *   address that was checked, so a name that answers public once and private
  *   the next time (DNS rebinding) gets no second resolution to slip through.
- *   Refused: 0/8, 10/8, 100.64/10 (CGNAT, the tailnet), 127/8, 169.254/16,
- *   172.16/12, 192.0.0/24, 192.168/16, 224/4 and above, ::, ::1, fc00::/7,
- *   fe80::/10, ff00::/8, and IPv4-mapped IPv6 of any of these;
+ *   Refused (`NOT_PUBLIC`, a BlockList): 0/8, 10/8, 100.64/10 (CGNAT, the
+ *   tailnet), 127/8, 169.254/16, 172.16/12, 192.0.0/24, 192.168/16, 224/3,
+ *   ::, ::1, 64:ff9b:1::/48, fc00::/7, fe80::/10, fec0::/10, ff00::/8, and
+ *   any of the IPv4 ranges carried in an IPv6 address: mapped (dotted or
+ *   hex), the old IPv4-compatible form, or NAT64 64:ff9b::/96;
  * - the body is counted WHILE it is read and the read stops past the cap
  *   (20 MB for the PDF, 512 KB for robots.txt), with or without a
  *   content-length;
@@ -74,38 +76,87 @@ export const systemLookup: HostLookup = (host) =>
     ),
   );
 
-const ipv4 = (address: string): number[] | null => {
-  const parts = address.split(".").map(Number);
-  return parts.length === 4 && parts.every((n) => n >= 0 && n <= 255)
-    ? parts
+/**
+ * The addresses a third party's link must not reach (barracuda and acrobot,
+ * #1951). Node's BlockList also matches an IPv4-mapped IPv6 address (dotted
+ * or hex, `::ffff:7f00:1`) against the IPv4 rules.
+ */
+const NOT_PUBLIC = new BlockList();
+for (const [subnet, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10], // CGNAT, the tailnet
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16], // link-local, cloud metadata
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24], // IETF protocol assignments
+  ["192.168.0.0", 16],
+  ["224.0.0.0", 3], // multicast and reserved, to 255.255.255.255
+] as const)
+  NOT_PUBLIC.addSubnet(subnet, prefix, "ipv4");
+for (const [subnet, prefix] of [
+  ["::", 128],
+  ["::1", 128],
+  ["64:ff9b:1::", 48], // local-use NAT64
+  ["fc00::", 7], // unique local
+  ["fe80::", 10], // link-local
+  ["fec0::", 10], // the deprecated site-local
+  ["ff00::", 8], // multicast
+] as const)
+  NOT_PUBLIC.addSubnet(subnet, prefix, "ipv6");
+
+/** An IPv6 address as its eight 16-bit groups, or null. */
+function hextets(address: string): number[] | null {
+  let text = address.toLowerCase();
+  // a dotted IPv4 tail ("::ffff:1.2.3.4") as two groups
+  const dotted = /^(.*:)(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(2).map(Number) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    text = `${dotted[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0;
+  const groups = [...head, ...Array<string>(fill).fill("0"), ...tail];
+  if (groups.length !== 8) return null;
+  const values = groups.map((g) => parseInt(g, 16));
+  return values.every((v) => Number.isInteger(v) && v >= 0 && v <= 0xffff)
+    ? values
     : null;
-};
+}
+
+/**
+ * The IPv4 address an IPv6 one carries in its last 32 bits, where the prefix
+ * says it does: the old IPv4-compatible ::/96 and the NAT64 64:ff9b::/96.
+ * (The IPv4-mapped ::ffff:0:0/96 is BlockList's own.)
+ */
+function embeddedIpv4(groups: number[]): string | null {
+  const zeros = (from: number, to: number) =>
+    groups.slice(from, to).every((g) => g === 0);
+  const compatible = zeros(0, 6);
+  const nat64 = groups[0] === 0x64 && groups[1] === 0xff9b && zeros(2, 6);
+  if (!compatible && !nat64) return null;
+  const [hi, lo] = [groups[6]!, groups[7]!];
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
 
 /** A public unicast address, or not: private, local, shared and special ranges are not. */
 export function publicAddress(address: string): boolean {
   const kind = isIP(address);
-  if (kind === 4) {
-    const [a, b, c] = ipv4(address)!;
-    if (a === 0 || a === 10 || a === 127) return false;
-    if (a === 169 && b === 254) return false; // link-local, cloud metadata
-    if (a === 172 && b! >= 16 && b! <= 31) return false; // RFC 1918
-    if (a === 192 && b === 168) return false; // RFC 1918
-    if (a === 100 && b! >= 64 && b! <= 127) return false; // CGNAT, the tailnet
-    if (a === 192 && b === 0 && c === 0) return false; // IETF protocol assignments
-    if (a! >= 224) return false; // multicast and reserved
-    return true;
-  }
-  if (kind === 6) {
-    const v6 = address.toLowerCase();
-    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(v6);
-    if (mapped) return publicAddress(mapped[1]!);
-    if (v6 === "::" || v6 === "::1") return false;
-    if (/^f[cd]/.test(v6)) return false; // unique local fc00::/7
-    if (/^fe[89ab]/.test(v6)) return false; // link-local fe80::/10
-    if (/^ff/.test(v6)) return false; // multicast
-    return true;
-  }
-  return false;
+  if (kind === 4) return !NOT_PUBLIC.check(address, "ipv4");
+  if (kind !== 6) return false;
+  if (NOT_PUBLIC.check(address, "ipv6")) return false;
+  const groups = hextets(address);
+  if (!groups) return false;
+  const inner = embeddedIpv4(groups);
+  return inner === null || !NOT_PUBLIC.check(inner, "ipv4");
 }
 
 /**
