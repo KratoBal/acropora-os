@@ -36,8 +36,9 @@ export type {
   VocabularyKind,
   VocabularyRow,
 } from "./vocabulary.js";
-export { recogniseSentence } from "./sentence-parts.js";
+export { crossKindShadows, recogniseSentence } from "./sentence-parts.js";
 export type {
+  KindShadow,
   NegationState,
   RecognisedQuantity,
   SentenceParts,
@@ -113,3 +114,15 @@ export type {
   StatementFailure,
   StatementResult,
 } from "./claim-statement.js";
+export {
+  TEST_SET_VERSION,
+  formatTestSetReport,
+  runTestSet,
+  summariseGroup,
+} from "./test-set.js";
+export type {
+  CaseResult,
+  GroupResult,
+  Polarity,
+  TestSetReport,
+} from "./test-set.js";

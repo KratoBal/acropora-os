@@ -620,6 +620,32 @@ export function VocabularyPage() {
                         </li>
                       ))}
                     </ul>
+                    {state.draft.newShadows === null ? (
+                      <p className="text-sm text-pilot-red-700">
+                        A tervezet nem állítható össze szótárrá, ezért az
+                        átfedések nem számolhatók.
+                      </p>
+                    ) : state.draft.newShadows.length ? (
+                      <div className="space-y-1 rounded-md bg-pilot-amber-50 p-3 text-sm">
+                        <p className="font-semibold text-pilot-grey-900">
+                          Új átfedés: ezeken a szavakon a rövidebb alak nem
+                          ismerhető fel, tehát az ellenőrzése sem fut
+                        </p>
+                        <ul aria-label="Új átfedések" className="space-y-1">
+                          {state.draft.newShadows.map((x) => (
+                            <li
+                              key={`${x.kind}/${x.key}/${x.form}/${x.shadows.key}/${x.shadows.form}`}
+                            >
+                              „{x.form}” ({KIND_LABELS[x.kind] ?? x.kind}:{" "}
+                              {labelOf(x.kind, x.key)}) elveszi a(z) „
+                              {x.shadows.form}” alakot (
+                              {KIND_LABELS[x.shadows.kind] ?? x.shadows.kind}:{" "}
+                              {labelOf(x.shadows.kind, x.shadows.key)})
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                     {canApprove ? (
                       <div className="flex justify-end">
                         <PilotButton

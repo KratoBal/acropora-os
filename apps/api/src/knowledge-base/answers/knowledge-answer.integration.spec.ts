@@ -275,7 +275,7 @@ describe(
       assert.deepEqual(r.completed, [bId]);
     });
 
-    it("a retracted source takes the verbatim support away", async () => {
+    it("T9: a retracted source takes the verbatim support away, and its claim out of the answer", async () => {
       const source = await prisma.knowledgeSource.findFirstOrThrow({
         where: { doi: `${DOI_PREFIX}${suffix}-b` },
         select: { id: true },
@@ -287,11 +287,38 @@ describe(
           detectedVia: "MANUAL",
         },
       });
-      const b = (await repository.candidates("PHOSPHATE")).find(
-        (c) => c.id === bId,
-      )!;
+      const candidates = await repository.candidates("PHOSPHATE");
+      const b = candidates.find((c) => c.id === bId)!;
       assert.equal(b.verbatimSupport, 0);
       assert.equal(b.citation, null);
+      // a contradiction through a retracted source no longer counts, as for
+      // the evidence level: its partner is not kept out as "one side alone"
+      const a = candidates.find((c) => c.id === aId)!;
+      assert.deepEqual(a.contradicts, []);
+
+      // the answer, with an AI that chooses every claim it was sent
+      const r = await answerQuestion({
+        question: "Mennyi foszfát jó egy SPS-akváriumban?",
+        subject: "PHOSPHATE",
+        candidates,
+        vocabulary: vocabularyV1(),
+        ask: async (req) => ({
+          kind: "ANSWER",
+          sentences: req.claims.map((c) => ({
+            claimId: c.id,
+            text: c.statement,
+          })),
+          refused: [],
+          answeredBy: "fake",
+        }),
+      });
+      assert.equal(r.package.sent.includes(bId), false);
+      assert.equal(
+        r.sentences.some((s) => s.claimIds.includes(bId)),
+        false,
+      );
+      assert.ok(r.package.sent.includes(aId), JSON.stringify(r.package));
+      assert.equal(r.answered, true, JSON.stringify(r.sentences));
     });
   },
 );
