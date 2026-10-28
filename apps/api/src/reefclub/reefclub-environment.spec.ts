@@ -59,6 +59,8 @@ const NOT_SECRET_INTERNAL_NAMES = new Set([
   "BILLING_ISSUE_ENABLED",
   // the test-only switch for the Brands page catalog buttons: a boolean, not a secret
   "CATALOG_ADMIN_ACTIONS_ENABLED",
+  // the catalog buttons' allowed Medusa host names (second guard): host names, not a secret
+  "CATALOG_ACTION_MEDUSA_HOSTS",
   // the daily PDF catch-up switches (booleans, #1819 and the cmfx letter fill)
   "EXTERNAL_INVOICE_MAIL_PDF_SCHEDULE",
   "EXTERNAL_INVOICE_PDF_SCHEDULE",
