@@ -85,12 +85,57 @@ export interface ReferenceReport {
 
 /** Letters and digits only, lower case, without diacritics: how two titles are compared. */
 export function titleKey(title: string): string {
-  return title
+  return withoutMarkup(title)
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
-    .replace(/<[^>]*>/gu, " ")
     .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+/** HTML entities decoded: named (the common ones), decimal and hex. An unknown one stays as written. */
+export function decodeEntities(text: string): string {
+  return text.replace(
+    /&(#x[0-9a-f]{1,6}|#[0-9]{1,7}|[a-z]{2,8});/giu,
+    (whole, body: string) => {
+      const code =
+        body[0] !== "#"
+          ? null
+          : body[1] === "x" || body[1] === "X"
+            ? parseInt(body.slice(2), 16)
+            : parseInt(body.slice(1), 10);
+      if (code !== null)
+        return code > 0 && code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : whole;
+      return NAMED_ENTITIES[body.toLowerCase()] ?? whole;
+    },
+  );
+}
+
+/**
+ * A title as text: entities decoded (twice at most, for a doubly escaped
+ * "&amp;lt;i&amp;gt;"), then tags left out. The first stage run had the same
+ * work stored as "&lt;i&gt;Cladocopium&lt;/i&gt;" and served by Crossref as
+ * "<i>Cladocopium</i>" (acrobot 37282). Only a tag-shaped "<" goes: a
+ * "P < 0.05" in a title stays.
+ */
+export function withoutMarkup(title: string): string {
+  let text = title;
+  for (let i = 0; i < 2; i++) {
+    const decoded = decodeEntities(text);
+    if (decoded === text) break;
+    text = decoded;
+  }
+  return text.replace(/<\/?[a-z][a-z0-9]*(?:\s[^<>]*)?\/?>/giu, " ");
 }
 
 /**

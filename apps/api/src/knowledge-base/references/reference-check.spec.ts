@@ -8,8 +8,10 @@ import {
   readCrossrefWork,
   readEuropePmcHit,
   shownTitle,
+  decodeEntities,
   titleKey,
   titlesMatch,
+  withoutMarkup,
   type ReferenceSource,
 } from "./reference-check.js";
 import type { ApiFetch } from "../discovery/scholarly-client.js";
@@ -59,6 +61,36 @@ describe("titles", () => {
       "azacroporaesafoszfat",
     );
     assert.ok(titlesMatch("A foszfát hatása.", "a foszfat hatasa"));
+  });
+  it("markup written as entities or as tags is the same title (the first stage run, acrobot 37282)", () => {
+    const stored =
+      "Nitrogen source type modulates heat stress response in coral symbiont (&lt;i&gt;Cladocopium goreaui&lt;/i&gt;)";
+    const registry =
+      "Nitrogen source type modulates heat stress response in coral symbiont (<i>Cladocopium  goreaui</i> )";
+    assert.ok(titlesMatch(stored, registry));
+    assert.ok(
+      titlesMatch("A &amp;lt;i&amp;gt;x", "A x"),
+      "doubly escaped",
+    );
+    assert.ok(titlesMatch("Ca&#178;&#x207A; uptake", "Ca²⁺ uptake"));
+  });
+  it("markup: entities decoded, only tag-shaped text left out", () => {
+    assert.equal(
+      decodeEntities("&lt;i&gt; &#65;&#x42; &unknown; &#0;"),
+      "<i> AB &unknown; &#0;",
+    );
+    assert.equal(
+      withoutMarkup("<i>Acropora</i> <sup>2</sup>")
+        .replace(/\s+/gu, " ")
+        .trim(),
+      "Acropora 2",
+    );
+    // a comparison sign is text, not a tag
+    assert.equal(
+      titleKey("Growth at P < 0.05 and > 2 µM"),
+      titleKey("Growth at P 0.05 and 2 µM"),
+    );
+    assert.equal(titlesMatch("Growth at P < 0.05", "Growth at P"), false);
   });
   it("a title without its subtitle is the same title, at a subtitle boundary only", () => {
     const full = "Phosphate enrichment and coral calcification: a field test";
