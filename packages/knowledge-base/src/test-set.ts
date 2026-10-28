@@ -819,14 +819,48 @@ export interface CaseResult {
 }
 
 export interface GroupResult {
-  group: TestGroup;
-  errorClass: T13Class | null;
+  /** A group of this set, or of another set built on the same report (the API's). */
+  group: string;
+  errorClass: string | null;
   threshold: string;
   mustApply: { total: number; passed: number };
   mustNotApply: { total: number; passed: number };
   failed: CaseResult[];
-  /** Every case passed, and a T13 class has its minimum number of planted cases. */
+  /** Every case passed, and each polarity has its minimum number of cases. */
   met: boolean;
+}
+
+/**
+ * One group's line of the report. A group without a case on either side
+ * measures nothing, so it is not met; nor is one below `minPerPolarity`.
+ */
+export function summariseGroup(
+  group: string,
+  errorClass: string | null,
+  threshold: string,
+  results: readonly CaseResult[],
+  minPerPolarity = 1,
+): GroupResult {
+  const count = (polarity: Polarity) => {
+    const of = results.filter((r) => r.polarity === polarity);
+    return { total: of.length, passed: of.filter((r) => r.passed).length };
+  };
+  const mustApply = count("must-apply");
+  const mustNotApply = count("must-not-apply");
+  const failed = results.filter((r) => !r.passed);
+  const min = Math.max(1, minPerPolarity);
+  return {
+    group,
+    errorClass,
+    threshold,
+    mustApply,
+    mustNotApply,
+    failed,
+    met:
+      failed.length === 0 &&
+      mustApply.total >= min &&
+      mustNotApply.total >= min,
+  };
 }
 
 export interface TestSetReport {
@@ -898,35 +932,17 @@ export function runTestSet(
   for (const c of cases)
     if (!keys.some((k) => k.group === c.group && k.errorClass === c.errorClass))
       keys.push({ group: c.group, errorClass: c.errorClass });
-  const groups = keys.map(({ group, errorClass }): GroupResult => {
-    const results = cases
-      .filter((c) => c.group === group && c.errorClass === errorClass)
-      .map((c) => runCase(c, d));
-    const count = (polarity: Polarity) => {
-      const of = results.filter((r) => r.polarity === polarity);
-      return { total: of.length, passed: of.filter((r) => r.passed).length };
-    };
-    const mustApply = count("must-apply");
-    const mustNotApply = count("must-not-apply");
-    const failed = results.filter((r) => !r.passed);
-    const enough =
-      group !== "T13" ||
-      (mustApply.total >= T13_MIN_CASES && mustNotApply.total >= T13_MIN_CASES);
-    return {
+  const groups = keys.map(({ group, errorClass }) =>
+    summariseGroup(
       group,
       errorClass,
-      threshold: THRESHOLDS[group],
-      mustApply,
-      mustNotApply,
-      failed,
-      // a group without a pair on either side measures nothing
-      met:
-        failed.length === 0 &&
-        mustApply.total > 0 &&
-        mustNotApply.total > 0 &&
-        enough,
-    };
-  });
+      THRESHOLDS[group],
+      cases
+        .filter((c) => c.group === group && c.errorClass === errorClass)
+        .map((c) => runCase(c, d)),
+      group === "T13" ? T13_MIN_CASES : 1,
+    ),
+  );
   return {
     version: TEST_SET_VERSION,
     gateVersion: ANSWER_GATE_VERSION,

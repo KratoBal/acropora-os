@@ -89,11 +89,26 @@ export function candidateOf(
   const cited = [...new Set(verbatim.map((e) => sourceOf(e).id))].flatMap(
     (id) => (sources.has(id) ? [sources.get(id)!] : []),
   );
+  // the evidence level's rule (levelOf, barracuda #1867): only a VERIFIED
+  // claim contradicts, and only through a source not retracted. A partner
+  // whose every source is retracted would otherwise keep this claim out as
+  // "one side alone" (the test set's T9, measured: a valid claim vanished
+  // with its retracted partner)
   const contradicts = [
     ...c.relationsFrom.map((r) => ({ kind: r.kind, other: r.toClaim })),
     ...c.relationsTo.map((r) => ({ kind: r.kind, other: r.fromClaim })),
   ]
-    .filter((r) => r.kind === "CONTRADICTS" && r.other.status === "VERIFIED")
+    .filter(
+      (r) =>
+        r.kind === "CONTRADICTS" &&
+        r.other.status === "VERIFIED" &&
+        r.other.evidence.some(
+          (e) =>
+            !e.passage.sourceVersion.source.versions.some(
+              (v) => v.versionKind === "RETRACTION",
+            ),
+        ),
+    )
     .map((r) => r.other.id);
   return {
     id: c.id,
