@@ -9,6 +9,7 @@ import type { DraftResult } from "./research-draft.js";
 import {
   DraftAlreadyRunning,
   PrismaDraftStore,
+  researchDraftRunning,
 } from "./research-draft.store.js";
 
 /**
@@ -35,6 +36,7 @@ const result = (over: Partial<DraftResult> = {}): DraftResult => ({
       url: null,
       licence: "CC_BY",
       read: "READ",
+      retractionUnchecked: false,
       claims: 1,
     },
   ],
@@ -165,6 +167,29 @@ describe(
         }),
         /KnowledgeResearchDraft_draft_has_summary|check constraint/i,
       );
+    });
+
+    it("only a RUNNING draft with a fresh heartbeat holds the discovery and the extraction back (barracuda on #1932)", async () => {
+      // a process that died under its draft: RUNNING, its heartbeat an hour old
+      const old = new Date(Date.now() - 60 * 60_000);
+      const dead = await store.start({
+        question: "Beragadt",
+        createdById: userId,
+        startedAt: old,
+      });
+      assert.equal(await researchDraftRunning(), false);
+      await prisma.knowledgeResearchDraft.update({
+        where: { id: dead },
+        data: { status: "FAILED", finishedAt: new Date() },
+      });
+      const live = await store.start({
+        question: "Él",
+        createdById: userId,
+        startedAt: new Date(),
+      });
+      assert.equal(await researchDraftRunning(), true);
+      await store.finish(live, result(), new Date());
+      assert.equal(await researchDraftRunning(), false);
     });
 
     it("a RUNNING row silent too long is failed; a row finished meanwhile is not overwritten", async () => {

@@ -19,6 +19,7 @@ import {
   everyInterval,
 } from "../discovery/discovery-run.js";
 import { RunAlreadyRunning } from "../discovery/discovery-run.store.js";
+import { researchDraftRunning } from "../research-drafts/research-draft.store.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import { claimExtractorFromEnv } from "./claim-extractor.js";
 import { parseSourceIds } from "./extraction.cli.js";
@@ -42,6 +43,8 @@ export const LIST_LIMIT = 20;
 export type ExtractionServiceDeps = Omit<ExtractionCliDeps, "actorExists"> & {
   /** The approved vocabulary at the run's start (S5: it lives in the database). */
   approvedVocabulary?: () => Promise<Vocabulary>;
+  /** A mode B research draft running (it shares the AI and Europe PMC); absent: none. */
+  draftRunning?: () => Promise<boolean>;
 };
 
 @Injectable()
@@ -63,6 +66,7 @@ export class KnowledgeExtractionService {
       vocabulary: vocabularyV1(),
       approvedVocabulary: () => new VocabularyRepository().approvedVocabulary(),
       now: () => new Date(),
+      draftRunning: researchDraftRunning,
     };
   }
 
@@ -93,6 +97,10 @@ export class KnowledgeExtractionService {
     if (this.inFlight.size)
       throw new ConflictException(
         "Már fut egy kiolvasás; egyszerre egy futhat.",
+      );
+    if (await this.deps.draftRunning?.())
+      throw new ConflictException(
+        "Fut egy kutatási tervezet; a kiolvasás utána indítható.",
       );
     let runId: string;
     try {

@@ -159,6 +159,13 @@ describe("starting a discovery over HTTP", () => {
     await u.svc.inFlight.get("run-1");
   });
 
+  it("a mode B research draft running is a 409 too: they share the keyless budget (barracuda on #1930)", async () => {
+    const t = service({ draftRunning: async () => true });
+    assert.equal(await status(t.svc.start(BODY, USER)), HttpStatus.CONFLICT);
+    assert.ok(!t.calls.some((c) => c.startsWith("start:")));
+    assert.equal(t.network.asked.length, 0);
+  });
+
   it("the database's one-RUNNING index refusing the insert is a 409 too (two api instances)", async () => {
     const t = service();
     const store = (t.svc as unknown as { deps: DiscoveryServiceDeps }).deps

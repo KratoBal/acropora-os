@@ -28,6 +28,7 @@ import {
   type DiscoveryStore,
   RunAlreadyRunning,
 } from "./discovery-run.store.js";
+import { researchDraftRunning } from "../research-drafts/research-draft.store.js";
 import { ScholarlyClient, type ApiFetch } from "./scholarly-client.js";
 
 /**
@@ -61,6 +62,8 @@ export interface DiscoveryServiceDeps {
   now: () => Date;
   /** Runs `beat` every `ms` until the returned stop is called. */
   every?: (beat: () => void, ms: number) => () => void;
+  /** A mode B research draft running (it shares the keyless budget); absent: none. */
+  draftRunning?: () => Promise<boolean>;
 }
 
 @Injectable()
@@ -81,6 +84,7 @@ export class KnowledgeDiscoveryService {
       fetch: (url, init) => fetch(url, init),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       now: () => new Date(),
+      draftRunning: researchDraftRunning,
     };
   }
 
@@ -116,6 +120,10 @@ export class KnowledgeDiscoveryService {
     if (running || this.inFlight.size)
       throw new ConflictException(
         `Már fut egy felderítés${running ? ` (${running.id})` : ""}; egyszerre egy futhat.`,
+      );
+    if (await this.deps.draftRunning?.())
+      throw new ConflictException(
+        "Fut egy kutatási tervezet; a felderítés utána indítható.",
       );
 
     let runId: string;
