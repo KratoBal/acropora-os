@@ -225,7 +225,7 @@ describe("T3 proposal", () => {
     claims,
   });
 
-  it("takes the eight sources with the most machine claims, then the newest, then the id; at most six from one", () => {
+  it("takes the ten sources with the most machine claims, then the newest, then the id; at most four from one", () => {
     const candidates = [
       ...Array.from({ length: 11 }, (_, i) => src(`a${i}`, 4)),
       src("big", 12),
@@ -233,37 +233,58 @@ describe("T3 proposal", () => {
       src("new", 4, 2024),
     ];
     const proposal = proposeGoldSet(candidates);
-    assert.equal(proposal.sources.length, 8);
+    assert.equal(proposal.sources.length, 10);
     assert.deepEqual(
       proposal.sources.slice(0, 3).map((s) => [s.sourceId, s.inSet]),
       [
-        ["big", 6],
+        ["big", 4],
         ["new", 4],
         ["a0", 4],
       ],
     );
-    assert.equal(proposal.claims, 6 + 4 * 7);
+    assert.equal(proposal.claims, 40);
     assert.deepEqual(proposal.required, {
-      sources: 8,
+      sources: 10,
       claims: 30,
-      perSource: 6,
+      perSource: 4,
     });
     assert.equal(proposal.enough, true);
   });
 
-  it("the stage's eight sources (acrobot 37360): 12, 12, 7, 4, 4, 4, 1, 1 give 32", () => {
+  it("the stage after the PDF path (acrobot 37410): fifteen sources give ten of four, forty", () => {
     const proposal = proposeGoldSet(
-      [12, 12, 7, 4, 4, 4, 1, 1].map((n, i) => src(`t${i}`, n)),
+      [12, 12, 7, 4, 4, 4, 1, 1, 10, 6, 5, 5, 3, 3, 1].map((n, i) =>
+        src(`t${i}`, n),
+      ),
     );
-    assert.equal(proposal.claims, 32);
+    assert.equal(proposal.sources.length, 10);
+    assert.equal(proposal.claims, 40);
     assert.equal(proposal.enough, true);
   });
 
-  it("is not enough below eight sources or thirty claims in the set", () => {
-    assert.equal(proposeGoldSet([src("one", 40)]).enough, false);
-    // eight sources of three: 24 claims, below thirty
+  it("a source with fewer than four is not filled up from another: ten of two and eight of four give 36", () => {
+    const proposal = proposeGoldSet([
+      ...Array.from({ length: 8 }, (_, i) => src(`f${i}`, 9)),
+      src("small1", 2),
+      src("small2", 2),
+    ]);
+    assert.deepEqual(
+      proposal.sources.map((s) => s.inSet),
+      [4, 4, 4, 4, 4, 4, 4, 4, 2, 2],
+    );
+    assert.equal(proposal.claims, 36);
+  });
+
+  it("is not enough below ten sources or thirty claims in the set", () => {
+    // nine sources of four: 36 claims, but one source short
     assert.equal(
-      proposeGoldSet(Array.from({ length: 8 }, (_, i) => src(`b${i}`, 3)))
+      proposeGoldSet(Array.from({ length: 9 }, (_, i) => src(`c${i}`, 4)))
+        .enough,
+      false,
+    );
+    // ten sources of two: 20 claims, below thirty
+    assert.equal(
+      proposeGoldSet(Array.from({ length: 10 }, (_, i) => src(`b${i}`, 2)))
         .enough,
       false,
     );
@@ -273,19 +294,12 @@ describe("T3 proposal", () => {
 describe("T3 sample of one source", () => {
   const ids = (n: number) => Array.from({ length: n }, (_, i) => `c${i}`);
 
-  it("takes all up to six, above it an even spread from the first, the same every time", () => {
+  it("takes all up to four, above it an even spread from the first, the same every time", () => {
+    assert.deepEqual(sampleClaims(ids(3)), ids(3));
     assert.deepEqual(sampleClaims(ids(4)), ids(4));
-    assert.deepEqual(sampleClaims(ids(6)), ids(6));
-    assert.deepEqual(sampleClaims(ids(12)), [
-      "c0",
-      "c2",
-      "c4",
-      "c6",
-      "c8",
-      "c10",
-    ]);
+    assert.deepEqual(sampleClaims(ids(12)), ["c0", "c3", "c6", "c9"]);
     assert.deepEqual(sampleClaims(ids(12)), sampleClaims(ids(12)));
-    assert.equal(new Set(sampleClaims(ids(7))).size, 6);
+    assert.equal(new Set(sampleClaims(ids(5))).size, 4);
   });
 });
 
@@ -386,7 +400,7 @@ describe("T3 service", () => {
     await svc.removeMissed("m1", user);
     await svc.setCompleteness("s1", { checked: false }, user);
     assert.deepEqual(calls, [
-      "freeze 8 u1",
+      `freeze ${GOLD_SOURCE_COUNT} u1`,
       "missed s1 kimaradt u1",
       "remove m1 u1",
       "complete s1 false u1",
