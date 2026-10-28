@@ -1,6 +1,10 @@
 "use client";
 import { PilotBadge, PilotLinkTabs } from "@acropora/ui";
-import { isNavigationEntryVisible } from "@acropora/types";
+import {
+  hasPermission,
+  isNavigationEntryVisible,
+  PERMISSIONS,
+} from "@acropora/types";
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -8,6 +12,7 @@ import {
   KNOWLEDGE_BASE_PATH,
   KNOWLEDGE_CLAIMS_PATH,
   KNOWLEDGE_CONCLUSIONS_PATH,
+  KNOWLEDGE_RESEARCH_PATH,
   KNOWLEDGE_SOURCES_PATH,
   KNOWLEDGE_STORE_PATH,
   KNOWLEDGE_VOCABULARY_PATH,
@@ -19,20 +24,33 @@ import {
  * egy fül, ami nem visz sehova, rosszabb a hiányánál. Egy fülnél nincs mit
  * váltani, ezért akkor a sor nem rajzolódik (a Beszerzés mintája).
  */
-const KNOWLEDGE_TABS: ReadonlyArray<{ href: string; label: string }> = [
+const KNOWLEDGE_TABS: ReadonlyArray<{
+  href: string;
+  label: string;
+  /** A tab whose screen needs more than knowledge.view. */
+  permission?: (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+}> = [
   { href: KNOWLEDGE_BASE_PATH, label: "Áttekintő" },
   { href: KNOWLEDGE_SOURCES_PATH, label: "Források" },
   { href: KNOWLEDGE_CLAIMS_PATH, label: "Kiolvasás" },
   { href: KNOWLEDGE_STORE_PATH, label: "Állítás-tár" },
   { href: KNOWLEDGE_CONCLUSIONS_PATH, label: "Következtetések" },
   { href: KNOWLEDGE_VOCABULARY_PATH, label: "Szótár" },
+  // every research-draft endpoint asks knowledge.manage
+  {
+    href: KNOWLEDGE_RESEARCH_PATH,
+    label: "AI próba",
+    permission: PERMISSIONS.KNOWLEDGE_MANAGE,
+  },
 ];
 
 export function KnowledgeBaseTabs({ active }: { active: string }) {
   const { session } = useAuth();
-  const tabs = KNOWLEDGE_TABS.filter(() =>
+  const tabs = KNOWLEDGE_TABS.filter((tab) =>
     Boolean(
-      session && isNavigationEntryVisible("knowledge-base", session.user),
+      session &&
+      isNavigationEntryVisible("knowledge-base", session.user) &&
+      (!tab.permission || hasPermission(session.user, tab.permission)),
     ),
   ).map((tab) => ({ ...tab, active: tab.href === active }));
   if (tabs.length < 2) return null;

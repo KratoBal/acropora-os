@@ -55,13 +55,13 @@ export const FIELD_LABELS: Record<string, string> = {
   conditions: "Feltételek",
 };
 
-const DIRECTION_LABELS: Record<string, string> = {
+export const DIRECTION_LABELS: Record<string, string> = {
   INCREASE: "Növekszik",
   DECREASE: "Csökken",
   NONE: "Nincs hatás",
 };
 
-const METHOD_LABELS: Record<string, string> = {
+export const METHOD_LABELS: Record<string, string> = {
   COLORIMETRIC_KIT: "Színreakciós teszt",
   PHOTOMETER: "Fotométer",
   LAB_SPECTROPHOTOMETRY: "Laboratóriumi spektrofotometria",
