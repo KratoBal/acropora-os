@@ -26,6 +26,8 @@ import {
   STALE_AFTER_MS,
   everyInterval,
   runDiscovery,
+  type DiscoveryInput,
+  type DiscoveryResult,
 } from "../discovery/discovery-run.js";
 import {
   ScholarlyClient,
@@ -63,6 +65,26 @@ import {
 } from "./research-draft.store.js";
 
 export const RESEARCH_DRAFT_DEPS = Symbol("KNOWLEDGE_RESEARCH_DRAFT_DEPS");
+
+/**
+ * The draft's searches, each with its own client and one request budget between them. A client
+ * closes an API for the rest of its run on a refusal; with one client for both, a 400 on the
+ * title-and-abstract field would have closed Europe PMC before the full-text fallback could ask.
+ */
+export function budgetedDiscovery(
+  newClient: (requestLimit: number) => ScholarlyClient,
+  now: () => Date,
+): (input: DiscoveryInput) => Promise<DiscoveryResult> {
+  let used = 0;
+  return async (input) => {
+    const client = newClient(Math.max(0, DRAFT_REQUEST_LIMIT - used));
+    try {
+      return await runDiscovery(input, { client, now });
+    } finally {
+      used += client.requestCount;
+    }
+  };
+}
 export const LIST_LIMIT = 20;
 
 export interface ResearchDraftDeps {
@@ -162,16 +184,19 @@ export class ResearchDraftService {
     const work = (async () => {
       // the version approved when the draft starts: an approval mid-run does not split it
       const vocabulary = await this.deps.approvedVocabulary();
-      const client = new ScholarlyClient({
-        fetch: this.deps.fetch,
-        sleep: this.deps.sleep,
-        now: this.deps.now,
-        requestLimit: DRAFT_REQUEST_LIMIT,
-      });
+      const discover = budgetedDiscovery(
+        (requestLimit) =>
+          new ScholarlyClient({
+            fetch: this.deps.fetch,
+            sleep: this.deps.sleep,
+            now: this.deps.now,
+            requestLimit,
+          }),
+        this.deps.now,
+      );
       const result = await runResearchDraft(question, `research-draft ${id}`, {
         ask,
-        discover: (input) =>
-          runDiscovery(input, { client, now: this.deps.now }),
+        discover,
         read: (pmcid, outcome) =>
           readFullTextClaims(pmcid, outcome, {
             extractor,
