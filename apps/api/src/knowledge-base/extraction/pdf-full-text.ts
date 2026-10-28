@@ -43,14 +43,17 @@ import { MAX_LOCATOR, type TextSection } from "./jats-text.js";
  * - the body is counted WHILE it is read and the read stops past the cap
  *   (20 MB for the PDF, 512 KB for robots.txt), with or without a
  *   content-length;
- * - the host's robots.txt is read first: a disallowed path is not fetched; an
- *   unreadable or redirecting robots.txt is not taken as permission.
+ * - the host's robots.txt is read first, its redirects followed (at most
+ *   five, RFC 9309): a disallowed path is not fetched; an unreadable
+ *   robots.txt is not taken as permission.
  */
 export const MAX_PDF_BYTES = 20_000_000;
 export const MAX_PDF_PAGES = 60;
 export const MAX_PDF_REDIRECTS = 3;
 export const PDF_TIMEOUT_MS = 30_000;
 export const MAX_ROBOTS_BYTES = 512_000;
+/** RFC 9309: a crawler follows at least five redirects of a robots.txt. */
+export const MAX_ROBOTS_REDIRECTS = 5;
 /** The product token our robots.txt reading looks for, next to `*`. */
 export const RESEARCH_ROBOTS_TOKEN = "AcroporaOS-Research";
 /** The guard's error code: the host resolved to an address that is not public. */
@@ -305,25 +308,42 @@ async function readRobots(
   target: URL,
   fetch: PdfFetch,
 ): Promise<RobotsRules | "UNREADABLE" | typeof NOT_PUBLIC_ADDRESS> {
+  let url = new URL("/robots.txt", target);
   let response: Response;
-  try {
-    response = await fetch(new URL("/robots.txt", target).toString(), {
-      method: "GET",
-      headers: { "User-Agent": DISCOVERY_USER_AGENT, Accept: "text/plain" },
-      redirect: "manual",
-      signal: AbortSignal.timeout(PDF_TIMEOUT_MS),
-    });
-  } catch (error) {
-    return failureOf(error) === NOT_PUBLIC_ADDRESS
-      ? NOT_PUBLIC_ADDRESS
-      : "UNREADABLE";
+  // RFC 9309 2.3.1.2: at least five redirects are followed, the last answer
+  // counts (doi.org and hal.science redirect theirs; measured 2026-10-28,
+  // acrobot 37413). Each step goes through the same address guard.
+  for (let hops = 0; ; hops += 1) {
+    try {
+      response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { "User-Agent": DISCOVERY_USER_AGENT, Accept: "text/plain" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(PDF_TIMEOUT_MS),
+      });
+    } catch (error) {
+      return failureOf(error) === NOT_PUBLIC_ADDRESS
+        ? NOT_PUBLIC_ADDRESS
+        : "UNREADABLE";
+    }
+    if (response.status < 300 || response.status >= 400) break;
+    await response.body?.cancel();
+    const location = response.headers.get("location");
+    if (!location || hops >= MAX_ROBOTS_REDIRECTS) return "UNREADABLE";
+    const next = publicHttpUrl(new URL(location, url).toString());
+    if (!next) return "UNREADABLE";
+    url = next;
   }
   const status = response.status;
-  // a robots.txt that redirects is not followed: the host's rule is not guessed
-  if (status >= 300 && status < 400) return "UNREADABLE";
+  // RFC 9309 would read a 401 or 403 as "no rules", but a site that closes even
+  // its robots.txt to us most likely does not want us either, and the gain is
+  // small: here it stays a refusal (acrobot 37414).
   if (status === 401 || status === 403) return DISALLOW_ALL;
   if (status === 429 || status >= 500) return "UNREADABLE";
-  if (status >= 400) return ALLOW_ALL;
+  if (status >= 400) {
+    await response.body?.cancel();
+    return ALLOW_ALL;
+  }
   const bytes = await readCapped(response, MAX_ROBOTS_BYTES);
   if (!bytes) return "UNREADABLE";
   return parseRobots(
