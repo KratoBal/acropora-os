@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -16,6 +17,7 @@ import type {
   CatalogActionsResponse,
 } from "@acropora/types";
 
+import { checkMedusaHost } from "./catalog-actions.host-guard.js";
 import {
   CATALOG_ACTION_RUNNERS,
   CATALOG_ACTION_RUNNERS_TOKEN,
@@ -78,8 +80,12 @@ export class CatalogActionsService {
 
   overview(): CatalogActionsResponse {
     if (!this.enabled()) return { enabled: false, actions: [] };
+    const host = checkMedusaHost(this.environment);
     return {
       enabled: true,
+      hostGuard: host.ok
+        ? { allowed: true, host: host.host, message: null }
+        : { allowed: false, host: host.host, message: host.message },
       actions: this.runners.map((runner) => ({
         kind: runner.kind,
         title: runner.title,
@@ -163,6 +169,10 @@ export class CatalogActionsService {
     actorUserId: string,
     planRunId: string | null,
   ): CatalogActionRun {
+    // the second guard: only a Medusa on the environment's list, plan and apply alike
+    const host = checkMedusaHost(this.environment);
+    if (!host.ok) throw new ForbiddenException(host.message);
+
     const running = [...this.runs.values()].find((r) => r.status === "running");
     if (running)
       throw new ConflictException(

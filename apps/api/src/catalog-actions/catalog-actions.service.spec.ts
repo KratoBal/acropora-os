@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
 import { CATALOG_ACTION_KINDS, type CatalogActionKind } from "@acropora/types";
@@ -26,7 +27,12 @@ import {
   would write); an apply accepted without a fresh, successful, unused plan of
   the same kind; two runs at once; a failure that reads as success.
 */
-const ON = { CATALOG_ADMIN_ACTIONS_ENABLED: "true" };
+const ON = {
+  CATALOG_ADMIN_ACTIONS_ENABLED: "true",
+  // the second guard (host list): the test Medusa is the only one allowed
+  MEDUSA_ADMIN_URL: "https://medusa-teszt.example.test/",
+  CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test",
+};
 
 interface Call {
   kind: CatalogActionKind;
@@ -299,5 +305,168 @@ describe("the categories operation", () => {
   it("the dependencies are built from the same output the run collects", async () => {
     const { seen } = await calledWith(true);
     assert.deepEqual(seen[0]!.deps, { marker: out });
+  });
+});
+
+/*
+  THE SECOND GUARD (barracuda's note on #1957): the operations run only against
+  a Medusa whose host is on CATALOG_ACTION_MEDUSA_HOSTS. What turns this red: a
+  plan or an apply that starts against a host that is not on the list (the
+  category button would write to the live shop); an empty list that allows
+  everything; a wildcard or a user-info trick that passes; a changed address
+  after the plan that the apply does not notice; a refused apply that spends
+  its plan.
+*/
+describe("the Medusa host guard", () => {
+  const base = { CATALOG_ADMIN_ACTIONS_ENABLED: "true" };
+
+  for (const [label, env] of [
+    [
+      "no list at all",
+      { ...base, MEDUSA_ADMIN_URL: "https://medusa-teszt.example.test" },
+    ],
+    [
+      "an empty list",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: " , ",
+        MEDUSA_ADMIN_URL: "https://medusa-teszt.example.test",
+      },
+    ],
+    [
+      "only a wildcard",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: "*",
+        MEDUSA_ADMIN_URL: "https://medusa-teszt.example.test",
+      },
+    ],
+    [
+      "a list but no Medusa address",
+      { ...base, CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test" },
+    ],
+    [
+      "an address that is not a URL",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test",
+        MEDUSA_ADMIN_URL: "nem cim",
+      },
+    ],
+    [
+      "a host that is not on the list",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test",
+        MEDUSA_ADMIN_URL: "https://medusa-elo.example.test",
+      },
+    ],
+    [
+      "a user-info trick on the allowed name",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test",
+        MEDUSA_ADMIN_URL:
+          "https://medusa-teszt.example.test@medusa-elo.example.test",
+      },
+    ],
+    [
+      "a longer name that only starts like the allowed one",
+      {
+        ...base,
+        CATALOG_ACTION_MEDUSA_HOSTS: "medusa-teszt.example.test",
+        MEDUSA_ADMIN_URL: "https://medusa-teszt.example.test.evil.test",
+      },
+    ],
+  ] as const) {
+    it(`refuses a plan with ${label}, and nothing runs`, () => {
+      const { s, calls } = service(env);
+      for (const kind of CATALOG_ACTION_KINDS)
+        assert.throws(() => s.plan(kind, "u1"), ForbiddenException);
+      assert.deepEqual(calls, []);
+    });
+  }
+
+  it("the refusal says what is missing, without any address that is not the host's name", () => {
+    const { s } = service({
+      ...base,
+      CATALOG_ACTION_MEDUSA_HOSTS: "a.test",
+      MEDUSA_ADMIN_URL: "https://b.test/secret/path?key=1",
+    });
+    assert.throws(
+      () => s.plan("categories", "u1"),
+      (error: Error) =>
+        /nincs az engedélyezett listán/.test(error.message) &&
+        error.message.includes("b.test") &&
+        !error.message.includes("secret") &&
+        !error.message.includes("key=1"),
+    );
+  });
+
+  it("the host name is compared in lower case, without a trailing dot, a port or a scheme in the list", async () => {
+    const { s, calls } = service({
+      ...base,
+      CATALOG_ACTION_MEDUSA_HOSTS:
+        " https://Medusa-Teszt.example.test:9000/x , other.test ",
+      MEDUSA_ADMIN_URL: "https://MEDUSA-TESZT.example.test.:9000/admin",
+    });
+    await s.settled(s.plan("categories", "u1").id);
+    assert.equal(calls.length, 1);
+  });
+
+  it("the guard covers every kind, plan and apply", async () => {
+    const { s, calls } = service(ON);
+    for (const kind of CATALOG_ACTION_KINDS) {
+      const plan = await s.settled(s.plan(kind, "u1").id);
+      await s.settled(s.apply(kind, plan.id, "u1").id);
+    }
+    assert.equal(calls.length, CATALOG_ACTION_KINDS.length * 2);
+  });
+
+  it("an address changed after the plan is caught at the apply, and the plan is not spent", async () => {
+    const env: NodeJS.ProcessEnv = { ...ON };
+    const { s, calls } = service(env);
+    const plan = await s.settled(s.plan("categories", "u1").id);
+    env.MEDUSA_ADMIN_URL = "https://medusa-elo.example.test";
+    assert.throws(
+      () => s.apply("categories", plan.id, "u1"),
+      ForbiddenException,
+    );
+    assert.equal(calls.filter((c) => c.apply).length, 0);
+    // the address is put back: the same plan still confirms the apply
+    env.MEDUSA_ADMIN_URL = ON.MEDUSA_ADMIN_URL;
+    await s.settled(s.apply("categories", plan.id, "u1").id);
+    assert.equal(calls.filter((c) => c.apply).length, 1);
+  });
+
+  // acrobot, 2026-10-28 12:05 UTC: the status call must name the host found, so
+  // whoever sets the list can read it after the deploy
+  it("the overview tells whether the host is allowed and names the host found", () => {
+    const allowed = service(ON).s.overview();
+    assert.deepEqual(allowed.hostGuard, {
+      allowed: true,
+      host: "medusa-teszt.example.test",
+      message: null,
+    });
+    const blocked = service({
+      CATALOG_ADMIN_ACTIONS_ENABLED: "true",
+      MEDUSA_ADMIN_URL: "https://found.test/admin?key=1",
+    }).s.overview();
+    assert.equal(blocked.enabled, true);
+    assert.equal(blocked.hostGuard?.allowed, false);
+    assert.equal(blocked.hostGuard?.host, "found.test");
+    assert.match(blocked.hostGuard?.message ?? "", /found\.test/);
+    assert.doesNotMatch(blocked.hostGuard?.message ?? "", /key=1|admin/);
+    // the overview still lists the actions: the page shows why, not nothing
+    assert.equal(blocked.actions.length, CATALOG_ACTION_KINDS.length);
+  });
+
+  it("the overview of a disabled switch carries no host information at all", () => {
+    assert.deepEqual(service({}).s.overview(), { enabled: false, actions: [] });
+  });
+
+  it("the switch comes first: off, the answer is still 404, not a refusal about the host", () => {
+    const { s } = service({});
+    assert.throws(() => s.plan("categories", "u1"), NotFoundException);
   });
 });

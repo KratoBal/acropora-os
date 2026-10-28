@@ -44,8 +44,22 @@ export interface CatalogActionView {
   lastRun: CatalogActionRun | null;
 }
 
+/**
+ * THE SECOND GUARD'S STATE (the Medusa host list): whether the operations may
+ * run against the Medusa this OS points at. `host` is the host NAME found in
+ * `MEDUSA_ADMIN_URL` (never the rest of the address), `null` when there is none
+ * or it is not a URL. `message` says why not, in Hungarian; `null` when allowed.
+ */
+export interface CatalogActionsHostGuard {
+  allowed: boolean;
+  host: string | null;
+  message: string | null;
+}
+
 export interface CatalogActionsResponse {
   /** False where the environment does not allow these operations (production). */
   enabled: boolean;
   actions: CatalogActionView[];
+  /** Present when `enabled`. */
+  hostGuard?: CatalogActionsHostGuard;
 }

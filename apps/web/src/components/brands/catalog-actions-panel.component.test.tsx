@@ -78,6 +78,54 @@ beforeEach(() => {
 });
 
 describe("CatalogActionsPanel", () => {
+  /*
+    THE SECOND GUARD'S NOTICE (acrobot, 2026-10-28): where the server says the
+    Medusa host is not allowed, the page says why (naming the host) and does not
+    offer buttons the server would refuse.
+  */
+  it("says why the buttons are off when the Medusa host is not allowed, naming the host, and disables them", async () => {
+    api.overview.mockResolvedValue({
+      ...enabled(run({ id: "plan-9" })),
+      hostGuard: {
+        allowed: false,
+        host: "found.test",
+        message:
+          "A katalógus-művelet nem indul: a Medusa-cím hosztja (found.test) nincs az engedélyezett listán.",
+      },
+    });
+    render(<CatalogActionsPanel token="t" />);
+    const notice = await screen.findByText(
+      "A műveletek ezen a Medusán nem engedélyezettek",
+    );
+    expect(notice.closest("[role]")).toHaveTextContent("found.test");
+    const backfill = await screen.findByRole("region", {
+      name: "Márkák a termékekre",
+    });
+    expect(
+      within(backfill).getByRole("button", { name: "Próba" }),
+    ).toBeDisabled();
+    expect(
+      within(backfill).getByRole("button", { name: "Végrehajtás" }),
+    ).toBeDisabled();
+  });
+
+  it("an allowed host shows no notice and keeps the buttons", async () => {
+    api.overview.mockResolvedValue({
+      ...enabled(run({ id: "plan-9" })),
+      hostGuard: { allowed: true, host: "ok.test", message: null },
+    });
+    render(<CatalogActionsPanel token="t" />);
+    const backfill = await screen.findByRole("region", {
+      name: "Márkák a termékekre",
+    });
+    expect(
+      screen.queryByText("A műveletek ezen a Medusán nem engedélyezettek"),
+    ).toBeNull();
+    expect(
+      within(backfill).getByRole("button", { name: "Próba" }),
+    ).toBeEnabled();
+  });
+
   it("renders nothing where the server says the operations do not exist", async () => {
     api.overview.mockResolvedValue({ enabled: false, actions: [] });
     const { container } = render(<CatalogActionsPanel token="t" />);
