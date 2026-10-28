@@ -118,8 +118,12 @@ export interface KindShadow {
 }
 
 /**
- * Every pair where a longer form of one kind takes a word from a one-word
- * form of another kind ("korallzátony" takes "korall" from the CORAL taxon).
+ * Every pair where a longer form of one kind takes the words of a shorter
+ * form of another kind ("korallzátony" takes "korall" from the CORAL taxon),
+ * the shorter one of any length, read on consecutive words of the longer one
+ * (barracuda, #1941: a multi-word form loses its words in the recogniser too).
+ * A shorter form reaching past the longer one's words depends on the
+ * sentence around it, so it is not listed.
  * On such a word the shorter kind is not recognised, so its row of the check
  * does not fire there: a vocabulary row that makes a new pair must go in
  * knowingly (barracuda, #1938 review). The approver's screen lists the pairs
@@ -140,14 +144,20 @@ export function crossKindShadows(vocabulary: Vocabulary): KindShadow[] {
           if (otherKind === kind) continue;
           for (const other of others)
             for (const short of other.forms) {
-              if (short.length !== 1 || short[0]!.length >= text.length)
-                continue;
-              if (form.some((w) => wordMatches(short[0]!, w, other.exact)))
+              const shortText = short.join(" ");
+              if (shortText.length >= text.length) continue;
+              // the shorter form read on consecutive words of the longer one
+              let inside = false;
+              for (let k = 0; k + short.length <= form.length && !inside; k++)
+                inside = short.every((sw, j) =>
+                  wordMatches(sw, form[k + j]!, other.exact),
+                );
+              if (inside)
                 out.push({
                   kind,
                   key: term.key,
                   form: text,
-                  shadows: { kind: otherKind, key: other.key, form: short[0]! },
+                  shadows: { kind: otherKind, key: other.key, form: shortText },
                 });
             }
         }
