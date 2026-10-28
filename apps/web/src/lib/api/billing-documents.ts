@@ -1,5 +1,7 @@
 import type {
   BillingDocumentDetail,
+  BillingIssuingCheck,
+  BillingIssuingResolveInput,
   BillingDocumentDraftInput,
   BillingDocumentEmailInput,
   BillingDocumentListResponse,
@@ -355,6 +357,33 @@ export const billingDocumentsApi = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expectedUpdatedAt }),
+      },
+    );
+  },
+  /**
+   * A KIÁLLÍTÁS VÉSZÁLLAPOTÁBÓL KIVEZETŐ ÚT, 1. LÉPÉS (`finance.manage`): a
+   * szerver lekérdezi a Számlázz.hu-t (csak olvas), és javaslatot ad. Állapotot
+   * nem ír.
+   */
+  issuingCheck(token: string, id: string) {
+    return apiRequest<BillingIssuingCheck>(
+      `/billing/documents/${encodeURIComponent(id)}/issuing-check`,
+      token,
+      { method: "POST" },
+    );
+  },
+  /**
+   * 2. LÉPÉS: az ellenőrzés javaslatának megerősítése. A szerver újra
+   * lekérdez, és csak ugyanarra a javaslatra ír (egyébként 409).
+   */
+  issuingResolve(token: string, id: string, input: BillingIssuingResolveInput) {
+    return apiRequest<BillingDocumentDetail>(
+      `/billing/documents/${encodeURIComponent(id)}/issuing-resolve`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
       },
     );
   },

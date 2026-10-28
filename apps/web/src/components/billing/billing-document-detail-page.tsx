@@ -44,6 +44,7 @@ import {
   type BillingEmailDraft,
 } from "./billing-document-email-drawer";
 import { BillingDocumentStatus } from "./billing-document-status";
+import { BillingIssuingCheckPanel } from "./billing-issuing-check";
 import {
   BillingCancellationNotice,
   BillingStornoButton,
@@ -105,6 +106,9 @@ export function BillingDocumentDetailPage({
   );
   const canIssue = Boolean(
     session && hasPermission(session.user, PERMISSIONS.BILLING_ISSUE),
+  );
+  const canManageFinance = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.FINANCE_MANAGE),
   );
   const [finalBusy, setFinalBusy] = useState(false);
   const [finalError, setFinalError] = useState<string | null>(null);
@@ -387,6 +391,12 @@ export function BillingDocumentDetailPage({
         </div>
       </header>
 
+      <BillingIssuingCheckPanel
+        detail={detail}
+        token={token}
+        canManage={canManageFinance}
+        onDone={setDetail}
+      />
       {/* újrapróbált, megint elutasított sztornónál a friss hiba áll a tárolt
           helyén, nem két piros sáv (barracuda, #1676) */}
       {detail.cancellation &&

@@ -36,6 +36,8 @@ const api = vi.hoisted(() => ({
   copy: vi.fn(),
   storno: vi.fn(),
   stornoPdf: vi.fn(),
+  issuingCheck: vi.fn(),
+  issuingResolve: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 /*
@@ -1111,5 +1113,38 @@ describe("copying an issued document into a new draft", () => {
       "A bizonylatnak nincs partnere.",
     );
     expect(navigation.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("a document waiting for checking (ISSUING)", () => {
+  it("offers the check to the finance right and says what it does", async () => {
+    api.detail.mockResolvedValue(detail({ status: "ISSUING", pdf: null }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText("A kiállítás ellenőrzésre vár"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Kiállítás ellenőrzése" }),
+    ).toBeEnabled();
+    expect(api.issuingCheck).not.toHaveBeenCalled();
+  });
+
+  it("without the finance right it only says it waits", async () => {
+    auth.role = "SALES" as UserRole;
+    api.detail.mockResolvedValue(detail({ status: "ISSUING", pdf: null }));
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    expect(
+      await screen.findByText("A kiállítás ellenőrzésre vár"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Kiállítás ellenőrzése" }),
+    ).toBeNull();
+  });
+
+  it("an issued document shows no such panel", async () => {
+    api.detail.mockResolvedValue(detail());
+    render(<BillingDocumentDetailPage documentId="doc-1" />);
+    await screen.findByRole("button", { name: "PDF letöltése" });
+    expect(screen.queryByText("A kiállítás ellenőrzésre vár")).toBeNull();
   });
 });
