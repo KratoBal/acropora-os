@@ -10806,6 +10806,10 @@ enum KnowledgeVocabularyStatus {
 /// szándékosan: nincs olyan állapot, amiből jóváhagyott tudás lenne.
 enum KnowledgeResearchDraftStatus {
   DRAFT
+  /// S6 B mód: a lánc fut (kérdés -> keresés -> kiolvasás -> összefoglaló); egyszerre egy.
+  RUNNING
+  /// A lánc nem jutott összefoglalóig; az ok a report-ban, a talált források és jelölt állítások megmaradnak.
+  FAILED
 }
 
 /// Egy mű: cikk, könyvfejezet, gyártói lap, fórum-szál, saját mérési sorozat.
@@ -11139,16 +11143,23 @@ model KnowledgeResearchDraft {
   sources         Json                         @default("[]")
   /// Jelölt állítások; az átvétel csak a szerkesztő kézi rögzítésével, a normál úton.
   candidateClaims Json                         @default("[]")
-  /// Külső forrásokból írt modell-szöveg; a felület ekként jelöli.
-  summary         String
-  /// A szöveget író modell és prompt verziója: a jelölés alapja, ezért kötelező.
-  summaryModel    String                       @db.VarChar(128)
+  /// Külső forrásokból írt modell-szöveg; a felület ekként jelöli. NULL csak RUNNING és FAILED soron
+  /// (CHECK a migrációban: DRAFT sor nem lehet összefoglaló és modell nélkül).
+  summary         String?
+  /// A szöveget író modell és prompt verziója: a jelölés alapja, DRAFT soron kötelező.
+  summaryModel    String?                      @db.VarChar(128)
   status          KnowledgeResearchDraftStatus @default(DRAFT)
+  /// A lánc menete kódokkal és számokkal (lekérdezések, felderítés, kiolvasás, kiszűrt mondatok), szöveg nélkül.
+  report          Json                         @default("{}")
   createdById     String
   createdBy       User                         @relation("KnowledgeResearchDraftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   createdAt       DateTime                     @default(now())
+  /// A futó folyamat percenként frissíti; a régi szívverésű RUNNING sor FAILED lesz a következő indításnál.
+  heartbeatAt     DateTime?
+  finishedAt      DateTime?
 
   @@index([createdById])
+  @@index([status])
 }
 
 enum KnowledgeConclusionStatus {

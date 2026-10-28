@@ -1744,6 +1744,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     candidateClaims: "business",
     summary: "business",
     summaryModel: "business",
+    // S6 mode B: the chain's codes and counts, no text
+    report: "business",
   },
   // Source discovery runs (S2): the queries, URLs and counts of a literature
   // search, no customer data.

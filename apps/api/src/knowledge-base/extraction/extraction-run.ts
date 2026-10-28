@@ -131,12 +131,9 @@ const count = (into: Record<string, number>, code: string) => {
   into[code] = (into[code] ?? 0) + 1;
 };
 
-export async function extractSource(
-  sourceId: string,
-  apply: boolean,
-  deps: ExtractionDeps,
-): Promise<SourceOutcome> {
-  const outcome: SourceOutcome = {
+/** A source's outcome before anything happened to it. */
+export function emptyOutcome(sourceId: string): SourceOutcome {
+  return {
     sourceId,
     status: "SKIPPED",
     reason: null,
@@ -153,20 +150,35 @@ export async function extractSource(
     chunksDropped: 0,
     retractionUnchecked: false,
   };
-  const skip = (reason: string) => ({ ...outcome, reason });
-  const source = await deps.store.source(sourceId);
-  if (!source) return skip("NOT_FOUND");
-  if (!source.included) return skip("NOT_INCLUDED");
-  if (source.retracted) return skip("RETRACTED");
-  if (source.alreadyExtracted && !deps.reextract)
-    return skip("ALREADY_EXTRACTED");
-  outcome.retractionUnchecked = source.retractionUnchecked;
-  if (!source.pmcid) return skip("NO_OPEN_FULL_TEXT");
-  const text = await fetchFullText(source.pmcid, deps.fetch);
-  if (!text.ok) return skip(text.reason);
+}
+
+export type FullTextReading =
+  | { ok: true; xml: string; claims: CheckedClaim[]; extractedBy: string }
+  | { ok: false; reason: string };
+
+/**
+ * One open full text read and checked, nothing stored: the download, the
+ * sections, one AI call per chunk (at most `maxChunks`), the OS's own check
+ * of every claim against all sections, and the source's own findings. The
+ * counts go into `outcome`. The S3 run stores what this returns; the mode B
+ * research draft (S6) keeps it in memory only.
+ */
+export async function readFullTextClaims(
+  pmcid: string,
+  outcome: SourceOutcome,
+  deps: {
+    extractor: ClaimExtractor;
+    fetch: TextFetch;
+    vocabulary: Vocabulary;
+    maxChunks?: number;
+  },
+): Promise<FullTextReading> {
+  const maxChunks = deps.maxChunks ?? MAX_CHUNKS_PER_SOURCE;
+  const text = await fetchFullText(pmcid, deps.fetch);
+  if (!text.ok) return text;
   const sections = jatsSections(text.xml);
   outcome.sections = sections.length;
-  if (!sections.length) return skip("NO_SECTIONS");
+  if (!sections.length) return { ok: false, reason: "NO_SECTIONS" };
 
   const vocabularyKeys = {
     taxa: deps.vocabulary.taxa.map((t) => t.key),
@@ -177,8 +189,8 @@ export async function extractSource(
   let extractedBy = "unknown";
   let answered = 0;
   const chunks = chunkSections(sections);
-  outcome.chunksDropped = Math.max(0, chunks.length - MAX_CHUNKS_PER_SOURCE);
-  for (const chunk of chunks.slice(0, MAX_CHUNKS_PER_SOURCE)) {
+  outcome.chunksDropped = Math.max(0, chunks.length - maxChunks);
+  for (const chunk of chunks.slice(0, maxChunks)) {
     outcome.calls += 1;
     const answer = await deps.extractor.extract({
       sourceText: chunkText(chunk),
@@ -202,23 +214,19 @@ export async function extractSource(
     for (const code of result.refusedClaims) count(outcome.refusedClaims, code);
     for (const claim of result.claims) {
       for (const r of claim.refused) count(outcome.refusedFields, r.refusal);
-      outcome.fields += claim.anchors.filter(
-        (a) => a.proposed === undefined,
-      ).length;
-      outcome.questions += claim.anchors.filter(
-        (a) => a.proposed !== undefined,
-      ).length;
       checked.push(claim);
     }
   }
   // a text no call answered is not "extracted": its hash is not written, it can be read again
   if (answered === 0)
-    return skip(
-      outcome.calls ===
+    return {
+      ok: false,
+      reason:
+        outcome.calls ===
         Object.values(outcome.unavailable).reduce((a, b) => a + b, 0)
-        ? "AI_UNAVAILABLE"
-        : "AI_REFUSED",
-    );
+          ? "AI_UNAVAILABLE"
+          : "AI_REFUSED",
+    };
   // only this source's own findings, its study fields once (acrobot 35808)
   const own = keepOwnFindings(checked, deps.vocabulary);
   for (const code of own.refusedClaims) count(outcome.refusedClaims, code);
@@ -233,12 +241,32 @@ export async function extractSource(
     0,
   );
   outcome.claims = checked.length;
+  return { ok: true, xml: text.xml, claims: checked, extractedBy };
+}
+
+export async function extractSource(
+  sourceId: string,
+  apply: boolean,
+  deps: ExtractionDeps,
+): Promise<SourceOutcome> {
+  const outcome = emptyOutcome(sourceId);
+  const skip = (reason: string) => ({ ...outcome, reason });
+  const source = await deps.store.source(sourceId);
+  if (!source) return skip("NOT_FOUND");
+  if (!source.included) return skip("NOT_INCLUDED");
+  if (source.retracted) return skip("RETRACTED");
+  if (source.alreadyExtracted && !deps.reextract)
+    return skip("ALREADY_EXTRACTED");
+  outcome.retractionUnchecked = source.retractionUnchecked;
+  if (!source.pmcid) return skip("NO_OPEN_FULL_TEXT");
+  const read = await readFullTextClaims(source.pmcid, outcome, deps);
+  if (!read.ok) return skip(read.reason);
   if (!apply) return { ...outcome, status: "PREVIEWED" };
   const saved = await deps.store.saveSource({
     sourceId,
-    contentHash: sha256(text.xml),
-    extractedBy,
-    claims: checked,
+    contentHash: sha256(read.xml),
+    extractedBy: read.extractedBy,
+    claims: read.claims,
     verifiedAt: deps.now(),
     ...(deps.runId ? { runId: deps.runId } : {}),
     ...(deps.reextract?.actorUserId
