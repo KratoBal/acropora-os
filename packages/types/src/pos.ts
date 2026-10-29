@@ -1,4 +1,4 @@
-export type PosPaymentMethod = "CASH" | "CARD" | "TRANSFER";
+export type PosPaymentMethod = "CASH" | "CARD" | "TRANSFER" | "CASH_DESK";
 
 export type SalesOrderLineSyncStatus = "PENDING" | "OK" | "FAILED";
 

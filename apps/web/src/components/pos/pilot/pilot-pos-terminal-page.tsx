@@ -125,9 +125,10 @@ export function getCartStockWarnings(
 }
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
-  CASH: "Készpénz",
+  CASH: "Pénztárgép",
   CARD: "Kártya",
   TRANSFER: "Utalás",
+  CASH_DESK: "Kassza",
 };
 /**
  * A "SZÁMLÁZÁS" AZ "UTALÁS" HELYÉN (kártya cdc2771b, Balázs 2026-10-08): nem
@@ -136,10 +137,15 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
  */
 type CheckoutChoice = PosPaymentMethod | "INVOICE";
 const CHECKOUT_OPTIONS: { label: string; value: CheckoutChoice }[] = [
-  { label: "Készpénz", value: "CASH" },
+  { label: "Pénztárgép", value: "CASH" },
   { label: "Kártya", value: "CARD" },
   { label: "Számlázás", value: "INVOICE" },
 ];
+/** A három gomb alatt, teljes szélességben: a pénztárgépen nem átmenő készpénz. */
+const CASH_DESK_OPTION: { label: string; value: CheckoutChoice } = {
+  label: "Kassza",
+  value: "CASH_DESK",
+};
 
 function formatHuf(value: number): string {
   return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
@@ -532,6 +538,26 @@ export function PilotPosTerminalPage() {
     }
     router.push(
       `/penzugy/szamlazas/uj?${POS_INVOICE_HANDOFF_PARAM}=${encodeURIComponent(key)}`,
+    );
+  };
+  const renderCheckoutOption = ({
+    label,
+    value,
+  }: {
+    label: string;
+    value: CheckoutChoice;
+  }) => {
+    const selected = value === paymentMethod;
+    return (
+      <button
+        key={label}
+        type="button"
+        aria-pressed={selected}
+        onClick={() => setPaymentMethod(value)}
+        className={`h-12 cursor-pointer rounded-lg py-2.5 text-[11px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
+      >
+        {label}
+      </button>
     );
   };
   const invoicing = paymentMethod === "INVOICE";
@@ -971,20 +997,10 @@ export function PilotPosTerminalPage() {
                 <div
                   className={`grid ${checkoutOptions.length === 3 ? "grid-cols-3" : "grid-cols-2"} gap-2 text-[11px] font-semibold`}
                 >
-                  {checkoutOptions.map(({ label, value }) => {
-                    const selected = value === paymentMethod;
-                    return (
-                      <button
-                        key={label}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => setPaymentMethod(value)}
-                        className={`h-12 cursor-pointer rounded-lg py-2.5 text-[11px] font-semibold ring-1 transition-colors ${selected ? "bg-pilot-aqua-600 text-white ring-pilot-aqua-600" : "bg-white text-pilot-grey-900 ring-pilot-grey-200 hover:bg-pilot-grey-50"}`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                  {checkoutOptions.map(renderCheckoutOption)}
+                </div>
+                <div className="mt-2 grid grid-cols-1 text-[11px] font-semibold">
+                  {renderCheckoutOption(CASH_DESK_OPTION)}
                 </div>
               </div>
               {stockWarnings.length > 0 ? (

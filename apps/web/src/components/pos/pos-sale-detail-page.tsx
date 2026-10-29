@@ -23,9 +23,10 @@ import { useReturnTo } from "@/components/navigation-history";
 import { posApi } from "@/lib/api/pos";
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
-  CASH: "Készpénz",
+  CASH: "Pénztárgép",
   CARD: "Kártya",
   TRANSFER: "Utalás",
+  CASH_DESK: "Kassza",
 };
 
 function formatHuf(value: string): string {

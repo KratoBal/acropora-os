@@ -135,6 +135,32 @@ describe("PilotPosSaleDetailPage", () => {
     expect(screen.getByText("5%")).toBeInTheDocument();
   });
 
+  /**
+   * TASK pos-penztargep-kassza: a CASH eladás felirata "Pénztárgép" (a régi
+   * "Készpénz" már nem jelenhet meg), a CASH_DESK-é "Kassza". MI PIROSÍT: ha a
+   * címketérkép nem ismerné a CASH_DESK-et (üres felirat), vagy a CASH
+   * felirata visszaállna.
+   */
+  it("a fizetési mód felirata: CASH Pénztárgép, CASH_DESK Kassza", async () => {
+    api.getSale.mockResolvedValue(saleDetail);
+    const first = render(
+      createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }),
+    );
+    expect((await screen.findAllByText("Pénztárgép")).length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByText("Készpénz")).toBeNull();
+    first.unmount();
+
+    api.getSale.mockResolvedValue({
+      ...saleDetail,
+      paymentMethod: "CASH_DESK",
+    });
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+    expect((await screen.findAllByText("Kassza")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Pénztárgép")).toBeNull();
+  });
+
   it("API-hibát jelenít meg", async () => {
     api.getSale.mockRejectedValue(
       new Error("Az eladás betöltése nem sikerült."),

@@ -276,10 +276,16 @@ enum InventoryCountLineSyncStatus {
 }
 
 /// A pénztári (POS) eladás kiegyenlítésének módja.
+///
+/// CASH a pénztárgépen átmenő készpénz (a felületen "Pénztárgép"); az értéke
+/// maradt, a meglévő eladások nem változnak. CASH_DESK a kasszába kerülő
+/// készpénz, ami NEM megy át a pénztárgépen (felület: "Kassza"), ezért
+/// statisztikában is külön sor.
 enum PosPaymentMethod {
   CASH
   CARD
   TRANSFER
+  CASH_DESK
 }
 
 /// Soronkénti UNAS setStock push kimenetele egy POS eladás után.

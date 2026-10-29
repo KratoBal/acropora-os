@@ -288,6 +288,78 @@ describe("PilotPosTerminalPage", () => {
   });
 
   /**
+   * TASK pos-penztargep-kassza (Balázs): a CASH érték felirata "Pénztárgép",
+   * és a három gomb alatt teljes szélességű "Kassza" gomb van, ami saját
+   * fizetési módot (CASH_DESK) küld. MI PIROSÍT: ha a Kassza gomb CASH-t
+   * küldene (a statisztikában összeolvadna a pénztárgéppel), ha az alapértelmezett
+   * fizetés nem CASH maradna, vagy ha a gomb a három gomb rácsában állna.
+   */
+  it("a Pénztárgép az alapértelmezés (CASH), a Kassza külön sorban a három gomb alatt", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    api.createSale.mockResolvedValue(saleResult());
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    const cashButton = screen.getByRole("button", { name: "Pénztárgép" });
+    const deskButton = screen.getByRole("button", { name: "Kassza" });
+    expect(cashButton).toHaveAttribute("aria-pressed", "true");
+    expect(deskButton).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("button", { name: "Készpénz" })).toBeNull();
+    // teljes szélességű, külön sorban a három gomb alatt
+    expect(deskButton.parentElement).not.toBe(cashButton.parentElement);
+    expect(deskButton.parentElement?.className).toContain("grid-cols-1");
+    expect(
+      cashButton.parentElement?.compareDocumentPosition(
+        deskButton.parentElement!,
+      ),
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
+    await waitFor(() =>
+      expect(api.createSale).toHaveBeenLastCalledWith(
+        "token-OWNER",
+        expect.objectContaining({ paymentMethod: "CASH" }),
+      ),
+    );
+  });
+
+  it("a Kassza gomb kiválasztva CASH_DESK-et küld a fizetésnél", async () => {
+    api.searchProducts.mockResolvedValue([searchResult]);
+    api.createSale.mockResolvedValue(saleResult());
+
+    render(createElement(PilotPosTerminalPage));
+    fireEvent.change(screen.getByRole("textbox", { name: "Termék keresése" }), {
+      target: { value: "reef" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    const deskButton = screen.getByRole("button", { name: "Kassza" });
+    fireEvent.click(deskButton);
+    expect(deskButton).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Pénztárgép" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Fizetés/ }));
+    await waitFor(() =>
+      expect(api.createSale).toHaveBeenCalledWith(
+        "token-OWNER",
+        expect.objectContaining({ paymentMethod: "CASH_DESK" }),
+      ),
+    );
+  });
+
+  /**
    * KÁRTYA cdc2771b (Balázs, 2026-10-08): az "Utalás" helyén "Számlázás" áll.
    * Nem rögzít eladást (a kiállított számla mozgatja a készletet), hanem a
    * kosarat a munkamenet-tárba teszi, és az Új számla oldalra visz a kulcsával.
@@ -601,7 +673,9 @@ describe("PilotPosTerminalPage", () => {
     auth.session = sessionWithRole("WAREHOUSE");
     render(createElement(PilotPosTerminalPage));
 
-    const cashButton = await screen.findByRole("button", { name: "Készpénz" });
+    const cashButton = await screen.findByRole("button", {
+      name: "Pénztárgép",
+    });
     expect(
       screen.queryByRole("button", { name: "Számlázás" }),
     ).not.toBeInTheDocument();
@@ -634,7 +708,7 @@ describe("PilotPosTerminalPage", () => {
       container.querySelector(".bg-pilot-grey-100.p-0\\.5"),
     ).not.toBeInTheDocument();
 
-    const cashButton = screen.getByRole("button", { name: "Készpénz" });
+    const cashButton = screen.getByRole("button", { name: "Pénztárgép" });
     expect(cashButton.className).toContain("py-2.5");
     expect(cashButton.className).toContain("bg-pilot-aqua-600");
 
