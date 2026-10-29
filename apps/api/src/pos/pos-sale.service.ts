@@ -8,12 +8,15 @@ import {
   POS_MANUAL_LINE_SKU,
   POS_MANUAL_VAT_RATES,
   type CreatePosSaleInput,
+  type PosPaymentSummaryResponse,
   type PosSaleDetail,
   type PosSaleListResponse,
   type PosSaleResult,
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import type { PosPaymentSummaryQueryDto } from "./dto/pos-payment-summary-query.dto.js";
+import { budapestDay, daysBetween } from "./pos-payment-summary.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import {
   PosSaleRepository,
@@ -35,6 +38,33 @@ export class PosSaleService {
 
   list(query: PosSaleListQueryDto): Promise<PosSaleListResponse> {
     return this.sales.list(query);
+  }
+
+  /** Longest range one summary call answers (about three months). */
+  static readonly SUMMARY_MAX_DAYS = 93;
+
+  paymentSummary(
+    query: PosPaymentSummaryQueryDto,
+    now: Date = new Date(),
+  ): Promise<PosPaymentSummaryResponse> {
+    const today = budapestDay(now);
+    const to = query.to ?? today;
+    const from = query.from ?? to;
+    for (const day of [from, to]) {
+      // `2026-02-31` matches the DTO pattern but is not a day.
+      if (new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) !== day) {
+        throw new BadRequestException("Érvénytelen dátum.");
+      }
+    }
+    if (from > to) {
+      throw new BadRequestException("A kezdő nap nem lehet a záró nap után.");
+    }
+    if (daysBetween(from, to).length > PosSaleService.SUMMARY_MAX_DAYS) {
+      throw new BadRequestException(
+        `Legfeljebb ${PosSaleService.SUMMARY_MAX_DAYS} nap kérdezhető le egyszerre.`,
+      );
+    }
+    return this.sales.paymentSummary(from, to);
   }
 
   async getDetail(id: string): Promise<PosSaleDetail> {

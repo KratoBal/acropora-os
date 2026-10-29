@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   PosPaymentMethod,
+  PosPaymentSummaryResponse,
   PosSaleDetail,
   PosSaleListResponse,
   PosSaleStockWarning,
@@ -20,6 +21,10 @@ import { isUnasMasteredVariant } from "../products/catalog-authority.js";
 import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
 import { retryOnTakenCode } from "../common/unique-code.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
+import {
+  summarizePosPayments,
+  type PosPaymentRow,
+} from "./pos-payment-summary.js";
 import {
   toPosSaleDetail,
   toPosSaleListItem,
@@ -115,6 +120,17 @@ export interface PosSaleTransaction extends InventoryMovementDatabase {
   };
 }
 
+/// The summary reads three columns of the completed POS sales; typed apart
+/// from the list query so a double cannot answer one with the other's shape.
+export interface PosPaymentRowsQuery {
+  where: {
+    channel: "POS";
+    status: "COMPLETED";
+    createdAt: { gte: Date; lt: Date };
+  };
+  select: { createdAt: true; paymentMethod: true; totalGross: true };
+}
+
 export interface PosSaleDatabase extends WarehouseLookupDatabase {
   productVariant: {
     findMany(args: unknown): Promise<
@@ -144,6 +160,7 @@ export interface PosSaleDatabase extends WarehouseLookupDatabase {
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
   salesOrder: {
+    findMany(args: PosPaymentRowsQuery): Promise<PosPaymentRow[]>;
     findMany(args: unknown): Promise<SalesOrderListWithRelations[]>;
     findUnique(args: unknown): Promise<SalesOrderWithRelations | null>;
     count(args: unknown): Promise<number>;
@@ -497,6 +514,30 @@ export class PosSaleRepository extends Repository {
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
     };
+  }
+
+  /**
+   * Completed POS sales per Budapest day and payment method. The read is
+   * padded by a day on each side (instants), because the day boundaries are
+   * decided in Budapest time by `summarizePosPayments`, not by the database.
+   */
+  async paymentSummary(
+    from: string,
+    to: string,
+  ): Promise<PosPaymentSummaryResponse> {
+    const day = 86_400_000;
+    const rows = await this.saleDatabase.salesOrder.findMany({
+      where: {
+        channel: "POS",
+        status: "COMPLETED",
+        createdAt: {
+          gte: new Date(Date.parse(`${from}T00:00:00Z`) - day),
+          lt: new Date(Date.parse(`${to}T00:00:00Z`) + 2 * day),
+        },
+      },
+      select: { createdAt: true, paymentMethod: true, totalGross: true },
+    });
+    return summarizePosPayments(from, to, rows);
   }
 
   async findById(id: string): Promise<PosSaleDetail | null> {

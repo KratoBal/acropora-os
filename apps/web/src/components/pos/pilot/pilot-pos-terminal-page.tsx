@@ -590,6 +590,15 @@ export function PilotPosTerminalPage() {
           Keresés, kosár és fizetés egy képernyőn. A készlet az Acropora OS-ből
           jön.
         </p>
+        {canView ? (
+          <button
+            type="button"
+            onClick={() => router.push("/pos/osszesito")}
+            className="mt-3 text-[11px] font-semibold text-pilot-aqua-700 hover:underline"
+          >
+            Összesítő fizetési módonként
+          </button>
+        ) : null}
       </div>
 
       {lastResult ? (

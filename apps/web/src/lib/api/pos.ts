@@ -1,6 +1,7 @@
 import type {
   CreatePosSaleInput,
   PosProductSearchResult,
+  PosPaymentSummaryResponse,
   PosSaleDetail,
   PosSaleListResponse,
   PosSaleResult,
@@ -43,6 +44,13 @@ export const posApi = {
   listSales(token: string, query: PosSaleListQuery) {
     return apiRequest<PosSaleListResponse>(
       `/pos/sales?${listQueryString(query)}`,
+      token,
+    );
+  },
+  paymentSummary(token: string, query: { from: string; to: string }) {
+    const params = new URLSearchParams({ from: query.from, to: query.to });
+    return apiRequest<PosPaymentSummaryResponse>(
+      `/pos/summary?${params.toString()}`,
       token,
     );
   },
