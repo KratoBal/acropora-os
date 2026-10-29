@@ -23,9 +23,10 @@ import {
 /** Canonical Figma sale detail 434:797; API and sync state semantics retained. */
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
-  CASH: "Készpénz",
+  CASH: "Pénztárgép",
   CARD: "Kártya",
   TRANSFER: "Utalás",
+  CASH_DESK: "Kassza",
 };
 
 function formatHuf(value: string): string {

@@ -38,9 +38,10 @@ interface CartLine {
 }
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
-  CASH: "Készpénz",
+  CASH: "Pénztárgép",
   CARD: "Kártya",
   TRANSFER: "Utalás",
+  CASH_DESK: "Kassza",
 };
 
 function formatHuf(value: number): string {
@@ -502,9 +503,10 @@ export function PosTerminalPage() {
                   }
                   aria-label="Fizetési mód"
                 >
-                  <option value="CASH">Készpénz</option>
+                  <option value="CASH">Pénztárgép</option>
                   <option value="CARD">Kártya</option>
                   <option value="TRANSFER">Utalás</option>
+                  <option value="CASH_DESK">Kassza</option>
                 </Select>
               </div>
 

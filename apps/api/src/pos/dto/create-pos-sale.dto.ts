@@ -15,7 +15,7 @@ import {
 } from "class-validator";
 import { POS_MANUAL_VAT_RATES } from "@acropora/types";
 
-const POS_PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER"] as const;
+const POS_PAYMENT_METHODS = ["CASH", "CARD", "TRANSFER", "CASH_DESK"] as const;
 
 export class CreatePosSaleLineDto {
   // VAGY termék, VAGY kézi tétel (hétfői lista M3); hogy pontosan az egyik
