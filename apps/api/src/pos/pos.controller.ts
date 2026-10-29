@@ -4,6 +4,7 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreatePosSaleDto } from "./dto/create-pos-sale.dto.js";
+import { PosPaymentSummaryQueryDto } from "./dto/pos-payment-summary-query.dto.js";
 import { PosProductSearchQueryDto } from "./dto/pos-product-search-query.dto.js";
 import { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import { PosProductSearchService } from "./pos-product-search.service.js";
@@ -26,6 +27,12 @@ export class PosController {
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   listSales(@Query() query: PosSaleListQueryDto) {
     return this.sales.list(query);
+  }
+
+  @Get("summary")
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  paymentSummary(@Query() query: PosPaymentSummaryQueryDto) {
+    return this.sales.paymentSummary(query);
   }
 
   @Get("sales/:id")

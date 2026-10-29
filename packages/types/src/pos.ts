@@ -122,3 +122,31 @@ export interface PosSaleResult {
   successCount: number;
   failedCount: number;
 }
+
+/// POS összesítő: fizetési módonként. `UNKNOWN`: a fizetési mód nélküli régi
+/// eladások (a `SalesOrder.paymentMethod` oszlop nullable).
+export type PosPaymentSummaryKey = PosPaymentMethod | "UNKNOWN";
+
+export interface PosPaymentSummaryCell {
+  count: number;
+  /** Decimal string, gross HUF. */
+  totalGross: string;
+}
+
+export interface PosPaymentSummaryDay {
+  /** Budapest calendar day, `YYYY-MM-DD`. */
+  date: string;
+  byMethod: Partial<Record<PosPaymentSummaryKey, PosPaymentSummaryCell>>;
+  total: PosPaymentSummaryCell;
+}
+
+export interface PosPaymentSummaryResponse {
+  /** The requested days, inclusive, `YYYY-MM-DD`. */
+  from: string;
+  to: string;
+  /** Columns to show, in display order. */
+  methods: PosPaymentSummaryKey[];
+  /** Oldest day first; days without a sale are present with zeros. */
+  days: PosPaymentSummaryDay[];
+  totals: Omit<PosPaymentSummaryDay, "date">;
+}
