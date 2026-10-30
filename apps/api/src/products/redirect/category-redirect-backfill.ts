@@ -68,6 +68,8 @@ export interface CategoryRedirectReport {
   paths: number;
   categories: number;
   created: number;
+  /** Az új szabályok soronként (barracuda 38327 a): a szárazfutás után végigolvasható. */
+  createdRules: { source: string; destination: string }[];
   unchanged: number;
   repointed: number;
   /** Egy út, amihez már van MÁS célú szabály: nem írtuk felül. */
@@ -127,6 +129,7 @@ export async function planCategoryRedirectBackfill(
     paths: paths.length,
     categories: categories.length,
     created: 0,
+    createdRules: [],
     unchanged: 0,
     repointed: 0,
     conflicts: [],
@@ -250,7 +253,10 @@ export async function planCategoryRedirectBackfill(
           existing: eredmeny.existingDestination,
           wanted: destination,
         });
-      else report.created += 1;
+      else {
+        report.created += 1;
+        report.createdRules.push({ source, destination });
+      }
     } catch (error) {
       if (!(error instanceof RedirectError)) throw error;
       report.refused.push({
@@ -275,6 +281,7 @@ export function describeCategoryRedirectBackfill(
     `Ismeretlen UNAS-azonosito (nincs szabaly): ${r.unknownId.length}; ketertelmu (nincs szabaly): ${r.ambiguous.length}`,
     `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
     `Invarians (aktiv cel, ami forras): ${r.invariantViolations.length}`,
+    ...r.createdRules.map((c) => `  uj: ${c.source} -> ${c.destination}`),
     ...r.unknownId.map((s) => `  ismeretlen azonosito: ${s}`),
     ...r.ambiguous.map(
       (a) => `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}`,
