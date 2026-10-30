@@ -5,9 +5,9 @@ import { prisma } from "@acropora/database";
 
 import {
   describeCategoryRedirectBackfill,
-  planCategoryRedirectBackfill,
   type CategoryHandleForm,
 } from "./category-redirect-backfill.js";
+import { planCategoryRedirectsFromDb } from "./category-redirect-backfill.load.js";
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -66,36 +66,7 @@ export async function main(
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "" && !line.startsWith("#"));
-  const [categories, unasRefs, meglevo] = await Promise.all([
-    db.category.findMany({
-      orderBy: { id: "asc" },
-      select: { id: true, name: true, parentId: true },
-    }),
-    db.externalReference.findMany({
-      where: { system: "UNAS", entityType: "Category" },
-      select: { entityId: true, externalId: true },
-    }),
-    db.urlRedirect.findMany({
-      select: {
-        id: true,
-        sourcePath: true,
-        destinationPath: true,
-        isActive: true,
-      },
-    }),
-  ]);
-  const unasId = new Map(unasRefs.map((r) => [r.entityId, r.externalId]));
-  const { store, report } = await planCategoryRedirectBackfill(
-    paths,
-    categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      parentId: c.parentId,
-      unasId: unasId.get(c.id) ?? null,
-    })),
-    meglevo,
-    { form },
-  );
+  const { store, report } = await planCategoryRedirectsFromDb(db, paths, form);
   out.stdout(describeCategoryRedirectBackfill(report, form));
   if (!apply) {
     out.stdout("SZARAZFUTAS: semmi nem irodott. Alkalmazas: --apply\n");

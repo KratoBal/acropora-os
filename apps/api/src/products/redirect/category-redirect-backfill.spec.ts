@@ -222,6 +222,11 @@ describe("a parancs", () => {
     assert.equal(code, 0);
     assert.deepEqual(writes, []);
     assert.match(o.text(), /Uj szabaly: 1/);
+    // minden új szabály soronként is kiírva (a szárazfutás után végigolvasható)
+    assert.match(
+      o.text(),
+      /  uj: \/sct\/111\/Eledelek -> \/hu\/categories\/eledelek\n/,
+    );
     assert.match(o.text(), /SZARAZFUTAS: semmi nem irodott/);
   });
 
