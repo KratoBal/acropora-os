@@ -113,7 +113,9 @@ export function bankSlot(row: {
  *    hozza), nem "fogyaszt" el egy másik sor: a fájlban a hely második sora valódi második
  *    fizetés, ha a hely többi tranzakcióját a fájl más sorai birtokolják;
  *  - egy tranzakciót egy köteg legfeljebb egy sora fogyaszt el.
- * A harmadik sor csak akkor fut, ha a hívó megadja a már ismert kulcsok tulajdonosait
+ * A harmadik sor CSAK a CSV-nél fut (a CSV-kulcs a sor tartalmából számolódik, ezért változhat; a Számlázz.hu
+ * azonosítója a fizetés saját azonosítója, egy új azonosító új fizetés: a három azonos Alza-fizetésből a
+ * továbbítás harmadik azonosítója új tranzakció, a CSV még csak kettőt hozott). Csak akkor fut, ha a hívó megadja a már ismert kulcsok tulajdonosait
  * (`knownOwners`: kulcs -> tranzakció) és a sorok könyvelési napját; enélkül a régi viselkedés áll.
  *
  * A bemenet sorrendjében dönt, és a saját döntéseit is látja: egy köteg két
@@ -167,7 +169,9 @@ export function planBankRows(
       return { kind: "CLAIM", transactionId: free.id } as const;
     }
     const rowDay = day(row.bookingDate);
-    if (knownOwners && rowDay) {
+    // CSAK a tartalomból számolt kulcsú forrásnál (CSV): a Számlázz.hu azonosítója a fizetés SAJÁT azonosítója, egy új
+    // azonosító mindig új fizetés (a 72 órás újraküldés ugyanazt az azonosítót hozza), azt a hely nem olvaszthatja be
+    if (knownOwners && rowDay && row.source === "CSV") {
       const same = list.find(
         (tx) =>
           tx.earlier &&

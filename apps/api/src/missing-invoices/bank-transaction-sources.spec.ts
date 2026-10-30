@@ -222,6 +222,18 @@ describe("planBankRows: the same payment under a new key", () => {
     );
   });
 
+  it("a Számlázz.hu új azonosítója mindig új fizetés (a kulcsa nem a tartalmából jön): CREATE, nem SKIP", () => {
+    assert.deepEqual(
+      planBankRows(
+        [withBooking({ source: "SZAMLAZZ", sourceKey: "szamlazz:990003" })],
+        new Set(),
+        [earlier("t1", ["CSV", "SZAMLAZZ"])],
+        OWNERS,
+      ).map((a) => a.kind),
+      ["CREATE"],
+    );
+  });
+
   it("a másik forrás szabad tranzakciója előbbre való: CLAIM, nem SKIP", () => {
     assert.deepEqual(
       planBankRows(
