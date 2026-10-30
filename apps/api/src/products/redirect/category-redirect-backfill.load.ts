@@ -6,6 +6,7 @@ import {
   describeCategoryRedirectBackfill,
   planCategoryRedirectBackfill,
   type CategoryHandleForm,
+  type MedusaCategoryRef,
 } from "./category-redirect-backfill.js";
 
 /**
@@ -23,6 +24,7 @@ export async function planCategoryRedirectsFromDb(
   db: CategoryBackfillDb,
   paths: readonly string[],
   form: CategoryHandleForm,
+  medusa?: readonly MedusaCategoryRef[],
 ) {
   const [categories, unasRefs, meglevo] = await Promise.all([
     db.category.findMany({
@@ -52,7 +54,7 @@ export async function planCategoryRedirectsFromDb(
       unasId: unasId.get(c.id) ?? null,
     })),
     meglevo,
-    { form },
+    { form, medusa },
   );
 }
 

@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import { categoryHandle } from "../../integrations/medusa/medusa-category-handle.js";
 import {
   categoryHandles,
+  normalizeMedusaCategories,
   planCategoryRedirectBackfill,
   type CategoryForRedirect,
+  type MedusaCategoryRef,
 } from "./category-redirect-backfill.js";
 import { main } from "./category-redirect-backfill.cli.js";
 
@@ -259,5 +261,164 @@ describe("a parancs", () => {
       ),
       1,
     );
+  });
+});
+
+/**
+ * A `medusa` KÉPLET: a cél a kirakat TÉNYLEGES handle-je, név és szülő-útvonal szerint párosítva (acrobot
+ * 2026-10-30: a szárazfutás 176 céljából 173 404 volt, mert a számolt handle ékezet nélküli és egy
+ * kötőjeles, a teszt Medusa mai handle-jei viszont `eledelek---termékek` alakúak). MI PIROSIT: a cél a
+ * számolt alak; egy kétszer előforduló név rossz szülő alá köt; egy " - "-t tartalmazó tiszta név
+ * csonkul; a Medusában nem létező kategóriához szabály íródik.
+ */
+describe("the medusa form: the shop's real handle", () => {
+  // a mai teszt Medusa: nyers kebabCase(cím), ékezettel és három kötőjellel
+  const mai: MedusaCategoryRef[] = [
+    { handle: "termékek", name: "Termékek", parent: null },
+    {
+      handle: "eledelek---termékek",
+      name: "Eledelek - Termékek",
+      parent: "termékek",
+    },
+    {
+      handle: "koralltápok---eledelek",
+      name: "Koralltápok - Eledelek",
+      parent: "eledelek---termékek",
+    },
+    {
+      handle: "aquaforest---koralltápok",
+      name: "Aquaforest - Koralltápok",
+      parent: "koralltápok---eledelek",
+    },
+    {
+      handle: "szűrők---termékek",
+      name: "Szűrők - Termékek",
+      parent: "termékek",
+    },
+    {
+      handle: "aquaforest---szűrők",
+      name: "Aquaforest - Szűrők",
+      parent: "szűrők---termékek",
+    },
+    {
+      handle: "triton---termékek",
+      name: "Triton - Termékek",
+      parent: "termékek",
+    },
+  ];
+  // az átvétel (adopt) után: tiszta nevek, a szülő csak ütközésnél a címben
+  const utan: MedusaCategoryRef[] = [
+    { handle: "termekek", name: "Termékek", parent: null },
+    { handle: "eledelek", name: "Eledelek", parent: "termekek" },
+    { handle: "koralltapok", name: "Koralltápok", parent: "eledelek" },
+    {
+      handle: "aquaforest-koralltapok",
+      name: "Aquaforest - Koralltápok",
+      parent: "koralltapok",
+    },
+    { handle: "szurok", name: "Szűrők", parent: "termekek" },
+    {
+      handle: "aquaforest-szurok",
+      name: "Aquaforest - Szűrők",
+      parent: "szurok",
+    },
+    { handle: "triton", name: "Triton", parent: "termekek" },
+  ];
+  const medusa = async (paths: string[], list: MedusaCategoryRef[]) =>
+    planCategoryRedirectBackfill(paths, fa, [], {
+      form: "medusa",
+      medusa: list,
+    });
+
+  it("a mai (nyers, ékezetes, háromkötőjeles) handle a cél, nem a számolt", async () => {
+    const { store, report } = await medusa(
+      [
+        "/sct/111/Eledelek",
+        "/spl/390588/Aquaforest",
+        "/spl/444/Aquaforest",
+        "/Triton",
+      ],
+      mai,
+    );
+    assert.deepEqual(sorok(store), [
+      "/Triton -> /hu/categories/triton---termékek",
+      "/sct/111/Eledelek -> /hu/categories/eledelek---termékek",
+      "/spl/390588/Aquaforest -> /hu/categories/aquaforest---koralltápok",
+      "/spl/444/Aquaforest -> /hu/categories/aquaforest---szűrők",
+    ]);
+    assert.deepEqual(report.noMedusaCategory, []);
+  });
+
+  it("az átvétel utáni tiszta nevekkel is ugyanaz a párosítás: a kétszer előforduló név a saját szülőjéhez köt", async () => {
+    const { store } = await medusa(
+      ["/sct/111/Eledelek", "/spl/390588/Aquaforest", "/spl/444/Aquaforest"],
+      utan,
+    );
+    assert.deepEqual(sorok(store), [
+      "/sct/111/Eledelek -> /hu/categories/eledelek",
+      "/spl/390588/Aquaforest -> /hu/categories/aquaforest-koralltapok",
+      "/spl/444/Aquaforest -> /hu/categories/aquaforest-szurok",
+    ]);
+  });
+
+  it("egy kötőjeles tiszta név ép marad (nem a szülő nevével végződik)", () => {
+    const rks: CategoryForRedirect[] = [
+      { id: "r", unasId: "1", name: "Termékek", parentId: null },
+      {
+        id: "c",
+        unasId: "2",
+        name: "RKS - Fogyáshoz igazított nyomelem rendszer",
+        parentId: "r",
+      },
+    ];
+    const h = categoryHandles(rks, "medusa", [
+      { handle: "termekek", name: "Termékek", parent: null },
+      {
+        handle: "rks-fogyashoz",
+        name: "RKS - Fogyáshoz igazított nyomelem rendszer",
+        parent: "termekek",
+      },
+    ]);
+    assert.equal(h.get("c"), "rks-fogyashoz");
+  });
+
+  it("a Medusában nem létező kategóriához NEM íródik szabály, a jelentés listázza", async () => {
+    const { store, report } = await medusa(
+      ["/sct/111/Eledelek", "/sct/555/Triton"],
+      mai.filter((m) => m.handle !== "triton---termékek"),
+    );
+    assert.deepEqual(sorok(store), [
+      "/sct/111/Eledelek -> /hu/categories/eledelek---termékek",
+    ]);
+    assert.deepEqual(report.noMedusaCategory, ["/sct/555/Triton"]);
+  });
+
+  it("a Medusa nyers válasza (id, parent_category_id) és a tömör lista ugyanazt adja", () => {
+    const nyers = {
+      product_categories: [
+        {
+          id: "pcat_1",
+          handle: "termékek",
+          name: "Termékek",
+          parent_category_id: null,
+        },
+        {
+          id: "pcat_2",
+          handle: "eledelek---termékek",
+          name: "Eledelek - Termékek",
+          parent_category_id: "pcat_1",
+        },
+      ],
+    };
+    assert.deepEqual(normalizeMedusaCategories(nyers), [
+      { handle: "termékek", name: "Termékek", parent: null },
+      {
+        handle: "eledelek---termékek",
+        name: "Eledelek - Termékek",
+        parent: "termékek",
+      },
+    ]);
+    assert.deepEqual(normalizeMedusaCategories(mai), mai);
+    assert.throws(() => normalizeMedusaCategories({ nincs: 1 }));
   });
 });

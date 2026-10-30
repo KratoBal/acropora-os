@@ -191,4 +191,46 @@ describe("CategoryRedirectBackfillService", () => {
     assert.equal(dupla.created.length, 0);
     assert.ok(!dupla.writes.includes("createMany"));
   });
+
+  it("a medusa képlet a kirakat tényleges kategóriáit kéri: lista nélkül 400, listával a valódi handle; más lista más lenyomat", async () => {
+    const f = fake();
+    await assert.rejects(
+      service(f).run({ paths: PATHS, form: "medusa" }, "u1"),
+      BadRequestException,
+    );
+    const a = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "medusa",
+        medusaCategories: [
+          { handle: "termékek", name: "Termékek", parent: null },
+          {
+            handle: "eledelek---termékek",
+            name: "Eledelek - Termékek",
+            parent: "termékek",
+          },
+        ],
+      },
+      "u1",
+    );
+    assert.deepEqual(a.report.createdRules, [
+      {
+        source: "/sct/111/Eledelek",
+        destination: "/hu/categories/eledelek---termékek",
+      },
+    ]);
+    const b = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "medusa",
+        medusaCategories: [
+          { handle: "termekek", name: "Termékek", parent: null },
+          { handle: "eledelek", name: "Eledelek", parent: "termekek" },
+        ],
+      },
+      "u1",
+    );
+    assert.notEqual(a.planHash, b.planHash);
+    assert.deepEqual(f.writes, []);
+  });
 });
