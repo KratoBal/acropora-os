@@ -133,7 +133,7 @@ export class BankStatementImportRepository {
 
       const known = await transaction.bankTransactionSourceKey.findMany({
         where: { key: { in: input.rows.map((r) => r.sourceKey) } },
-        select: { key: true },
+        select: { key: true, bankTransactionId: true },
       });
       const days = [
         ...new Set(
@@ -169,6 +169,7 @@ export class BankStatementImportRepository {
         currency: c.currency,
         valueDate: c.valueDate ?? c.bookingDate,
         counterpartyAccount: c.counterpartyAccount,
+        bookingDate: c.bookingDate,
         sources: c.sourceKeys.map((k) => k.source as BankSource),
       }));
 
@@ -176,6 +177,7 @@ export class BankStatementImportRepository {
         input.rows,
         new Set(known.map((k) => k.key)),
         existing,
+        new Map(known.map((k) => [k.key, k.bankTransactionId])),
       );
       let createdCount = 0;
       let claimedCount = 0;
