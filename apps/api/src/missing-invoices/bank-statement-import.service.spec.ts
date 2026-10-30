@@ -30,7 +30,11 @@ describe("BankStatementImportService, pending card lines", () => {
     const repository = {
       importRows: async (input: { rows: unknown[]; rejectedCount: number }) => {
         imported.push(input.rows.length, input.rejectedCount);
-        return { importId: "imp-1", createdCount: input.rows.length };
+        return {
+          importId: "imp-1",
+          createdCount: input.rows.length,
+          reexportedCount: 0,
+        };
       },
     } as unknown as BankStatementImportRepository;
     return { service: new BankStatementImportService(repository), imported };
@@ -64,6 +68,30 @@ describe("BankStatementImportService, pending card lines", () => {
       (error: unknown) =>
         error instanceof BadRequestException &&
         /csak függő kártyás tétel/.test(error.message),
+    );
+  });
+});
+
+/*
+  A "MÁS KÖZLEMÉNNYEL ÚJRA JÖTT" KÜLÖN SZÁM A FELTÖLTÉS VÁLASZÁBAN (task bank-dupla-import, acrobot 38406). MI PIROSÍT:
+  ha az újraexportként felismert sor csak a kihagyottak közé olvad, és a válasz nem nevezi meg.
+*/
+describe("BankStatementImportService, the re-exported lines", () => {
+  it("names the lines recognised as a re-export under a new key apart from the skipped ones", async () => {
+    const repository = {
+      importRows: async () => ({
+        importId: "imp-2",
+        createdCount: 0,
+        reexportedCount: 1,
+      }),
+    } as unknown as BankStatementImportRepository;
+    const result = await new BankStatementImportService(repository).import(
+      file([BOOKED]),
+      USER,
+    );
+    assert.deepEqual(
+      [result.createdCount, result.skippedCount, result.reexportedCount],
+      [0, 1, 1],
     );
   });
 });

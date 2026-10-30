@@ -48,6 +48,9 @@ export function MissingInvoicesImportResult({
           <p className="mt-1 break-words text-pilot-grey-700">
             {result.fileName}: {result.rowCount} sor olvasva,{" "}
             {result.createdCount} új, {result.skippedCount} már megvolt
+            {result.reexportedCount > 0
+              ? ` (ebből ${result.reexportedCount} más közleménnyel újra jött: ugyanaz a fizetés, nem új tétel)`
+              : ""}
             {failed ? `, ${result.rejectedCount} elutasítva` : ""}.
           </p>
         </div>

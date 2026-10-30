@@ -156,7 +156,11 @@ export class InvoiceCollectionRepository {
       ? (
           await Promise.all([
             this.database.bankTransaction.count({
-              where: { direction: "DEBIT", createdAt: since },
+              where: {
+                direction: "DEBIT",
+                createdAt: since,
+                duplicateMarkedAt: null,
+              },
             }),
             this.database.navIncomingInvoice.count({
               where: { createdAt: since },
@@ -348,7 +352,8 @@ export class InvoiceCollectionRepository {
    */
   async debitNarratives(): Promise<string[]> {
     const rows = await this.database.bankTransaction.findMany({
-      where: { direction: "DEBIT" },
+      // a duplikátumnak jelölt sor nem köt számlát (task bank-dupla-import)
+      where: { direction: "DEBIT", duplicateMarkedAt: null },
       select: { narrative: true },
     });
     return rows.map((row) => row.narrative);
@@ -362,6 +367,7 @@ export class InvoiceCollectionRepository {
     const rows = await this.database.bankTransaction.findMany({
       where: {
         direction: "DEBIT",
+        duplicateMarkedAt: null,
         transactionType: { contains: "KÁRTY", mode: "insensitive" },
         counterpartyName: { not: null },
       },

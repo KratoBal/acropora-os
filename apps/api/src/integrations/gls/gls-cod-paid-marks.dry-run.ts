@@ -109,6 +109,7 @@ export async function loadGlsTransfers(from: string): Promise<
     const credits = await prisma.bankTransaction.findMany({
       where: {
         direction: "CREDIT",
+        duplicateMarkedAt: null,
         bookingDate: report.transferDate,
         narrative: { startsWith: codNarrativePrefix(transferDate) },
       },

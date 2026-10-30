@@ -14,6 +14,8 @@ import {
   ACROPORA_COMPANY,
   type AuthenticatedUser,
   type MissingInvoiceAction,
+  type MissingInvoiceDuplicateResult,
+  type MissingInvoiceDuplicatesResponse,
   type MissingInvoiceItemDetail,
   type SupplierInvoiceImportResult,
   type MissingInvoiceItem,
@@ -533,6 +535,78 @@ export class MissingInvoicesService {
       { marked },
     );
     return this.item(id);
+  }
+
+  /**
+   * DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import, Balázs 2026-10-30): a kezelő egy sort az ugyanazon fizetés második
+   * példányának jelöl (az import dupla tétele). A jelölt sor kiesik a hiányzók és az összegzések közül, a sor MARAD
+   * (az import a kulcsait látja, ezért egy újrafeltöltés nem hozza vissza), és a jelölés visszavonható. Ahol a sor
+   * dokumentumhoz van párosítva, 409: előbb a párosítást kell visszavonni (különben a dokumentum árván maradna).
+   * Ismételt azonos kérés semmit nem változtat; minden változás auditnaplót hagy.
+   */
+  async markDuplicate(
+    id: string,
+    marked: boolean,
+    duplicateOfId: string | null | undefined,
+    user: AuthenticatedUser,
+  ): Promise<MissingInvoiceDuplicateResult> {
+    const row = await this.repository.bankTransactionForDuplicate(id);
+    if (!row) throw new NotFoundException("A banki tétel nem található.");
+    const is = row.duplicateMarkedAt !== null;
+    if (is === marked) return { id, duplicate: marked };
+    if (marked) {
+      if (row._count.matches > 0)
+        throw new ConflictException(
+          "A tétel számlához van párosítva: előbb vedd vissza a párosítást, utána jelölhető duplikátumnak.",
+        );
+      if (duplicateOfId) {
+        if (duplicateOfId === id)
+          throw new BadRequestException("A tétel nem lehet a saját párja.");
+        if (!(await this.repository.bankTransactionForDuplicate(duplicateOfId)))
+          throw new BadRequestException("A megadott pár-tétel nem található.");
+      }
+    }
+    await this.repository.annotate(
+      id,
+      user.id,
+      marked
+        ? "missing-invoices.duplicate-marked"
+        : "missing-invoices.duplicate-cleared",
+      marked
+        ? {
+            duplicateMarkedAt: new Date(),
+            duplicateMarkedByUserId: user.id,
+            duplicateOfId: duplicateOfId ?? null,
+          }
+        : {
+            duplicateMarkedAt: null,
+            duplicateMarkedByUserId: null,
+            duplicateOfId: null,
+          },
+      { marked, duplicateOfId: marked ? (duplicateOfId ?? null) : null },
+    );
+    return { id, duplicate: marked };
+  }
+
+  /** A duplikátumnak jelölt sorok (egy hónapban, ha megadott): a visszavonáshoz. */
+  async duplicates(
+    month: string | null,
+  ): Promise<MissingInvoiceDuplicatesResponse> {
+    if (month !== null && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+      throw new BadRequestException("A hónap alakja ÉÉÉÉ-HH.");
+    const rows = await this.repository.duplicates(month);
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        bookingDate: row.bookingDate.toISOString().slice(0, 10),
+        amount: row.amount.toFixed(row.currency === "HUF" ? 0 : 2),
+        currency: row.currency,
+        partner: row.counterpartyName,
+        narrative: row.narrative,
+        markedAt: row.duplicateMarkedAt!.toISOString(),
+        duplicateOfId: row.duplicateOfId,
+      })),
+    };
   }
 
   /**

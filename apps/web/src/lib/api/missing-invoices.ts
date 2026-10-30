@@ -2,6 +2,8 @@ import type {
   BankStatementImportResult,
   InvoiceCollectionItemsResponse,
   InvoiceCollectionSuggestionsResponse,
+  MissingInvoiceDuplicateResult,
+  MissingInvoiceDuplicatesResponse,
   MissingInvoiceJevSuggestion,
 } from "@acropora/types";
 import type {
@@ -186,6 +188,29 @@ export const missingInvoicesApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category }),
       },
+    );
+  },
+  /**
+   * DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import): a tétel az ugyanazon fizetés második példánya; a hiányzók és az
+   * összegzések kihagyják, `marked: false` visszavonja. Számlához párosított tételen a szerver 409-et ad.
+   */
+  markDuplicate(token: string, id: string, marked: boolean) {
+    return apiRequest<MissingInvoiceDuplicateResult>(
+      `${base}/items/${encodeURIComponent(id)}/duplicate`,
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marked }),
+      },
+    );
+  },
+  /** A duplikátumnak jelölt tételek egy hónapban: a visszavonáshoz. */
+  duplicates(token: string, month: string, signal?: AbortSignal) {
+    return apiRequest<MissingInvoiceDuplicatesResponse>(
+      `${base}/duplicates?month=${encodeURIComponent(month)}`,
+      token,
+      { signal },
     );
   },
   paperOriginal(token: string, id: string, marked: boolean) {

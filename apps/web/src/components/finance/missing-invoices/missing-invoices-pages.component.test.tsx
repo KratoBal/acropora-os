@@ -45,6 +45,8 @@ const api = vi.hoisted(() => ({
   comment: vi.fn(),
   category: vi.fn(),
   paperOriginal: vi.fn(),
+  markDuplicate: vi.fn(),
+  duplicates: vi.fn(),
   uploadDocument: vi.fn(),
   missingXlsx: vi.fn(),
   accountantPackage: vi.fn(),
@@ -169,6 +171,7 @@ const IMPORT_RESULT = {
   rejectedCount: 12,
   pending: [],
   pendingCount: 0,
+  reexportedCount: 0,
   accounts: [{ accountNumber: "11773016-11111111", currency: "HUF" }],
   months: ["2026-08", "2026-09"],
 };
@@ -537,6 +540,94 @@ describe("MissingInvoicesMonthPage", () => {
         "debit-1",
         true,
       ),
+    );
+  });
+
+  /*
+    DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import). MI PIROSÍT: ha a gomb számlához párosított tételen is állna; ha a
+    kérdés nélkül hívná a szervert; ha a jelölés után a drawer nyitva maradna vagy a hónap nem töltődne újra; ha a
+    jelölt tételek listája nem látszana, vagy a visszavonás nem a saját hívását használná.
+  */
+  it("a duplicate mark asks first, then calls the server, closes the drawer and reloads the month and the list", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-09");
+    api.duplicates.mockResolvedValue({ items: [] });
+    api.markDuplicate.mockResolvedValue({ id: "debit-1", duplicate: true });
+    render(<MissingInvoicesMonthPage month="2026-09" />);
+    const dialog = await openFirstRow();
+    const monthCalls = api.month.mock.calls.length;
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: "Duplikátum" }),
+    );
+    // a kérdés előbb: a szerver még nem hívódott
+    expect(api.markDuplicate).not.toHaveBeenCalled();
+    // a kérdés megerősítő gombja ugyanezt a szót viseli: az újonnan megnyílt az utolsó
+    await screen.findByText("Duplikátumnak jelölöd ezt a tételt?");
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Duplikátum" }).at(-1)!,
+    );
+    await waitFor(() =>
+      expect(api.markDuplicate).toHaveBeenCalledWith(
+        "token-1",
+        "debit-1",
+        true,
+      ),
+    );
+    await waitFor(() =>
+      expect(api.month.mock.calls.length).toBeGreaterThan(monthCalls),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /OPENAI/ }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("the duplicate button is not offered on a line paired to an invoice, nor to a viewer", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-09");
+    api.duplicates.mockResolvedValue({ items: [] });
+    api.month.mockResolvedValue(
+      monthDetail({ items: [item({ state: "FOUND" })] }),
+    );
+    api.item.mockResolvedValue(
+      itemDetail({
+        state: "FOUND",
+        document: { id: "doc-1", number: "INV-1", source: "NAV" },
+        matchedBy: "RULE",
+      }),
+    );
+    render(<MissingInvoicesMonthPage month="2026-09" />);
+    const dialog = await openFirstRow();
+    await within(dialog).findByText(/Párosított számla/);
+    expect(
+      within(dialog).queryByRole("button", { name: "Duplikátum" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("the marked lines are listed with a restore button that calls its own endpoint", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-09");
+    api.duplicates.mockResolvedValue({
+      items: [
+        {
+          id: "t9",
+          bookingDate: "2026-09-12",
+          amount: "1186.80",
+          currency: "EUR",
+          partner: "Aquarioom",
+          narrative: "CM9266 0,0 CMCIFR2A",
+          markedAt: "2026-10-30T09:00:00.000Z",
+          duplicateOfId: null,
+        },
+      ],
+    });
+    api.markDuplicate.mockResolvedValue({ id: "t9", duplicate: false });
+    render(<MissingInvoicesMonthPage month="2026-09" />);
+    const card = await screen.findByTestId("missing-duplicates");
+    expect(within(card).getByText(/Aquarioom/)).toBeInTheDocument();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Jelölés visszavonása" }),
+    );
+    await waitFor(() =>
+      expect(api.markDuplicate).toHaveBeenCalledWith("token-1", "t9", false),
     );
   });
 

@@ -139,6 +139,7 @@ export async function loadFoxpostSettlements(from: string): Promise<
     const credits = await prisma.bankTransaction.findMany({
       where: {
         direction: "CREDIT",
+        duplicateMarkedAt: null,
         // the code with its trailing space: `FOXPOST 26H3` is not `26H35`
         narrative: { contains: `${foxpostNarrativeMark(code)} ` },
       },

@@ -70,6 +70,7 @@ export async function loadTransferPairing(): Promise<TransferPairingRow[]> {
   const credits = await prisma.bankTransaction.findMany({
     where: {
       direction: "CREDIT",
+      duplicateMarkedAt: null,
       bookingDate: { gte: since },
       matches: { none: {} },
     },

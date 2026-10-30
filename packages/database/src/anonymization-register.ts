@@ -1393,6 +1393,8 @@ export const ANONYMIZATION_REGISTER: Readonly<
     comment: "freeText",
     categoryOverride: "business",
     paperOriginalByUserId: "identifier",
+    duplicateMarkedByUserId: "identifier",
+    duplicateOfId: "identifier",
   },
   BankTransactionMatch: {
     documentSource: "business",

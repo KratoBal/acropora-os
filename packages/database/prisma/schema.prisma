@@ -8874,6 +8874,14 @@ model BankTransaction {
   categoryOverride      String?
   paperOriginalAt       DateTime?
   paperOriginalByUserId String?
+  /// DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import, acrobot 38352): a kezelő egy sort ugyanazon fizetés második
+  /// példányának jelöl (az import dupla tétele). A jelölt sort a Hiányzó számlák listái és összegzései, a
+  /// párosítások és a banki felismerők kihagyják; az import a sort továbbra is látja (a forrás-kulcsait hordozza,
+  /// ezért egy újrafeltöltés nem hozza vissza). Törlés nincs: a jelölés visszavonható (a három mező nullára áll),
+  /// és minden jelölés, visszavonás auditnaplót hagy. `duplicateOfId`: melyik sor a pár (nem kötelező).
+  duplicateMarkedAt       DateTime?
+  duplicateMarkedByUserId String?
+  duplicateOfId           String?
   createdAt             DateTime                 @default(now())
 
   bankAccount BankAccount                @relation(fields: [bankAccountId], references: [id])

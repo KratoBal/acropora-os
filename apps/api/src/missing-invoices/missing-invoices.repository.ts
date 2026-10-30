@@ -281,7 +281,8 @@ export class MissingInvoicesRepository {
    */
   credits() {
     return this.database.bankTransaction.findMany({
-      where: { direction: "CREDIT" },
+      // a duplikátumnak jelölt sor nem jóváírás (task bank-dupla-import)
+      where: { direction: "CREDIT", duplicateMarkedAt: null },
       orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
       select: {
         id: true,
@@ -296,7 +297,9 @@ export class MissingInvoicesRepository {
 
   debits(where: Prisma.BankTransactionWhereInput = {}) {
     return this.database.bankTransaction.findMany({
-      where: { direction: "DEBIT", ...where },
+      // a duplikátumnak jelölt sor nem terhelés: a hiányzók és az összegzések kihagyják (task bank-dupla-import);
+      // a hívó `where`-je ezt nem írhatja felül
+      where: { ...where, direction: "DEBIT", duplicateMarkedAt: null },
       orderBy: [{ bookingDate: "asc" }, { id: "asc" }],
       select: {
         id: true,
@@ -408,6 +411,43 @@ export class MissingInvoicesRepository {
           data,
         }),
     );
+  }
+
+  /** Egy sor a jelöléshez: a jelölés állapota és hány dokumentumhoz van párosítva. */
+  bankTransactionForDuplicate(id: string) {
+    return this.database.bankTransaction.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        duplicateMarkedAt: true,
+        _count: { select: { matches: true } },
+      },
+    });
+  }
+
+  /** A duplikátumnak jelölt sorok (egy hónapban, ha megadott): a visszavonáshoz. */
+  duplicates(month: string | null) {
+    const from = month ? new Date(`${month}-01T00:00:00Z`) : null;
+    const to = from
+      ? new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1))
+      : null;
+    return this.database.bankTransaction.findMany({
+      where: {
+        duplicateMarkedAt: { not: null },
+        ...(from && to ? { bookingDate: { gte: from, lt: to } } : {}),
+      },
+      orderBy: [{ bookingDate: "desc" }, { id: "asc" }],
+      select: {
+        id: true,
+        amount: true,
+        currency: true,
+        bookingDate: true,
+        counterpartyName: true,
+        narrative: true,
+        duplicateMarkedAt: true,
+        duplicateOfId: true,
+      },
+    });
   }
 
   /** Mely (bankszámla, hónap) párhoz van importált sor: a „Kivonat hiányzik” alapja. */
