@@ -9,9 +9,15 @@ on:
   # es a "nem mert semmit" a piros. Enelkul minden meres-kor egy "Run failed"
   # levelet kuld, amit kivulrol nem lehet megkulonboztetni egy elromlott
   # fejlesztestol -- a targyat a GitHub irja, es semmilyen cimke nem irja at.
+  # PUSH: ONLY main (task os-ci-parhuzamos, 2026-10-29). A PR branch already runs the same
+  # workflow as `pull_request`, four seconds after its push run: two identical runs per commit,
+  # measured on 26 push and 25 pull_request runs of 2026-10-28, which doubled the runner load and
+  # added no wall-clock. main keeps its push run: the deploy executor reads `verify` on the merge
+  # commit (src/deploy-executor/rules.ts in the fleet repo, prod-auto). The `meres/**` branches
+  # were the only exclusion and are not main, so they stay out (their workflow is `meres.yml`).
   push:
-    branches-ignore:
-      - "meres/**"
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -23,72 +29,26 @@ env:
   API_URL: http://127.0.0.1:3001
 
 jobs:
-  verify:
+  # VERIFY RUNS AS THREE PARALLEL JOBS, AND `verify` IS THEIR VERDICT (task os-ci-parhuzamos, 2026-10-29).
+  # One job ran them in a row: unit 7.5 + DB integration 4.7 + static 2.9 minutes (medians of 12 runs,
+  # 2026-10-28), a verify median of 18.4. Apart, the longest branch decides. Every job sets the workspace up
+  # the same way (.github/actions/ci-setup) and runs the secret scan before its own gates.
+  #
+  # THE CHECK NAME `verify` STAYS, AND IT IS LOAD-BEARING: the fleet's deploy executor requires a check run
+  # named `verify` (requiredChecks) on the PR head and, for prod, on the merge commit. It is now the last job
+  # below, green only when all three are. The three new names are verify-static, verify-unit and verify-db.
+  verify-static:
+    # Secret scan, Figma map, typecheck, mobile gates, formatting, production build. No database.
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: acropora_ci
-          POSTGRES_USER: acropora
-          POSTGRES_PASSWORD: acropora
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U acropora -d acropora_ci"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.34.5
+      - name: Set up the workspace
+        uses: ./.github/actions/ci-setup
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install mobile dependencies
-        run: npm --prefix apps/mobile ci --ignore-scripts --no-audit --no-fund
-
-      - name: Generate Prisma Client
-        run: pnpm prisma:generate
-
-      - name: Deploy migrations to empty PostgreSQL
-        run: pnpm prisma:deploy
-
-      - name: Seed development reference data
-        run: pnpm prisma:seed
-
-      # `pnpm lint` is gone, and not only from this file. In all six
-      # workspace packages `lint` was `tsc --noEmit` - the very command
-      # `pnpm typecheck` runs - so the job did the work twice, and the two
-      # names promised two checks while one happened. Mobile's ESLint is the
-      # only real linter in the repository and it is NOT reachable that way:
-      # `pnpm-workspace.yaml` excludes `apps/mobile` from the workspace, so
-      # `turbo run lint` never included it. `pnpm mobile:lint` below is how it
-      # runs, and how it always ran.
       # A titok-kereses ELOL all, es nem sorrendi izles: a tobbi kapu egy hibat
       # mutat meg, ez egy VISSZAVONHATATLAN esemenyt elozne meg.
       #
@@ -103,6 +63,14 @@ jobs:
       - name: Figma map check
         run: node scripts/figma-map-check.mjs
 
+      # `pnpm lint` is gone, and not only from this file. In all six
+      # workspace packages `lint` was `tsc --noEmit` - the very command
+      # `pnpm typecheck` runs - so the job did the work twice, and the two
+      # names promised two checks while one happened. Mobile's ESLint is the
+      # only real linter in the repository and it is NOT reachable that way:
+      # `pnpm-workspace.yaml` excludes `apps/mobile` from the workspace, so
+      # `turbo run lint` never included it. `pnpm mobile:lint` below is how it
+      # runs, and how it always ran.
       - name: Static verification
         run: |
           pnpm typecheck
@@ -148,8 +116,119 @@ jobs:
             exit 1
           }
 
+      - name: Production build
+        run: pnpm build
+
+  verify-unit:
+    # The workspace tests, against the same migrated and seeded PostgreSQL and Redis they always had.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up the workspace
+        uses: ./.github/actions/ci-setup
+
+      # A titok-kereses ELOL all, es nem sorrendi izles: a tobbi kapu egy hibat
+      # mutat meg, ez egy VISSZAVONHATATLAN esemenyt elozne meg.
+      #
+      # Ugyanazt a szkriptet futtatja, mint a pre-commit hook, csak a TELJES
+      # fara. A hook kihagyhato es nem mindenhol letezik, tehat ez a hiteles fele.
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Seed development reference data
+        run: pnpm prisma:seed
+
       - name: Unit and workspace tests
         run: pnpm test
+
+  verify-db:
+    # The database integration suites with their gates, the release evidence row, the health smoke test.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up the workspace
+        uses: ./.github/actions/ci-setup
+
+      # A titok-kereses ELOL all, es nem sorrendi izles: a tobbi kapu egy hibat
+      # mutat meg, ez egy VISSZAVONHATATLAN esemenyt elozne meg.
+      #
+      # Ugyanazt a szkriptet futtatja, mint a pre-commit hook, csak a TELJES
+      # fara. A hook kihagyhato es nem mindenhol letezik, tehat ez a hiteles fele.
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Seed development reference data
+        run: pnpm prisma:seed
+
+      # THE WORKSPACE PACKAGES THE API IMPORTS, BUILT HERE (os-ci-parhuzamos, #1971 first run). In the one
+      # verify job `pnpm test` ran first, and turbo built every package's dist/ for it (`^build`); the
+      # integration step only found them. Apart, this job has no `pnpm test`, and all 158 integration specs
+      # failed with ERR_MODULE_NOT_FOUND on @acropora/database/dist/index.js. `^...`: the API's
+      # dependencies only, not the API itself (its specs compile with tsconfig.test.json).
+      - name: Build the API's workspace packages
+        run: pnpm exec turbo run build --filter='@acropora/api^...'
 
       - name: Capture release evidence start time
         if: always()
@@ -322,8 +401,26 @@ jobs:
       - name: Health HTTP smoke test
         run: pnpm --filter @acropora/api test:smoke
 
-      - name: Production build
-        run: pnpm build
+  verify:
+    # The verdict of the three, under the name the deploy executor requires. `always()`: a failed or
+    # cancelled job above must still produce a red `verify`, never a skipped one (a skipped required
+    # check reads as missing, not as failed, and the executor's message would then name the wrong cause).
+    needs: [verify-static, verify-unit, verify-db]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All three verify jobs succeeded
+        env:
+          STATIC: ${{ needs.verify-static.result }}
+          UNIT: ${{ needs.verify-unit.result }}
+          DB: ${{ needs.verify-db.result }}
+        run: |
+          echo "verify-static: $STATIC, verify-unit: $UNIT, verify-db: $DB"
+          [ "$STATIC" = success ] && [ "$UNIT" = success ] && [ "$DB" = success ] || {
+            echo "::error::verify is red: every one of verify-static, verify-unit and verify-db must succeed" >&2
+            exit 1
+          }
 
   # Security Baseline B32: the lockfiles' known vulnerabilities, including what never reaches
   # an image (the mobile app, build and dev dependencies; the images themselves are scanned in

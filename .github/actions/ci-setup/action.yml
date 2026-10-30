@@ -1,0 +1,31 @@
+name: CI workspace setup
+description: >-
+  The setup every verify job of ci.yml shares (task os-ci-parhuzamos, 2026-10-29): pnpm, Node.js, the
+  workspace and the mobile dependencies, and the Prisma client. One place, so the three parallel jobs
+  cannot drift apart. The database steps (migrate, seed) stay in the jobs that have a database.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10.34.5
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Install mobile dependencies
+      shell: bash
+      run: npm --prefix apps/mobile ci --ignore-scripts --no-audit --no-fund
+
+    - name: Generate Prisma Client
+      shell: bash
+      run: pnpm prisma:generate

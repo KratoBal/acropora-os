@@ -1249,8 +1249,8 @@ lehetetlen. A checkpoint 7 raw pg-driveres advisory-lock bizonyítéka
 VÁLTOZATLANUL NEM helyettesíti ezt - lásd a felhasználó saját, e
 checkpointhoz fűzött minősítését. Mindkét teszt VALÓDI, generált
 Prisma-klienssel, GitHub Actions CI-ban vagy egy ellenőrzött fejlesztői
-gépen futtatandó le - ehhez a meglévő `ci.yml` `verify` job-ja már eleve
-tartalmazza a szükséges lépéseket (`pnpm --filter @acropora/api
+gépen futtatandó le - ehhez a meglévő `ci.yml` `verify-db` job-ja (2026-10-29
+előtt a `verify`) már eleve tartalmazza a szükséges lépéseket (`pnpm --filter @acropora/api
 test:integration`, ami lefuttatja a 76d8c80 tesztet valódi
 `postgres:16-alpine`-on).
 
@@ -1265,7 +1265,8 @@ töltve ki - lásd `ci.yml` "Record release evidence" lépését. A
 `record-release-evidence.ts` mind a négyet KÖTELEZŐVÉ tette (nincs
 alapértelmezett érték egyikhez sem sem).
 
-A jelenlegi folyamat pontos leírása: a `verify` job saját, egyszer
+A jelenlegi folyamat pontos leírása: a `verify-db` job (2026-10-29 előtt a
+`verify`, ezért a régebbi sorok `jobName` mezője `verify`) saját, egyszer
 használatos `postgres:16-alpine` service konténerében fut a teszt, majd a
 "Record release evidence" lépés ugyanabba az egyszer használatos
 adatbázisba ír egy sort - a job végén ez az adatbázis megsemmisül. Ez a
