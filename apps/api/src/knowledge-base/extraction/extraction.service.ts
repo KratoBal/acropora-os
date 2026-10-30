@@ -24,6 +24,7 @@ import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import { claimExtractorFromEnv } from "./claim-extractor.js";
 import { parseSourceIds } from "./extraction.cli.js";
 import { extractSource, type SourceOutcome } from "./extraction-run.js";
+import { isPdf, MAX_PDF_BYTES } from "./pdf-full-text.js";
 import {
   PrismaExtractionStore,
   type ExtractionRunDetail,
@@ -74,7 +75,41 @@ export class KnowledgeExtractionService {
     body: unknown,
     user: AuthenticatedUser,
   ): Promise<{ id: string; status: "RUNNING" }> {
-    const { env, store, extractor } = this.deps;
+    this.ready();
+    const ids = parseSourceIds(
+      (body as Record<string, unknown> | null)?.sourceIds,
+    );
+    // read an already extracted source again, withdrawing its unreviewed claims
+    const reextract =
+      (body as Record<string, unknown> | null)?.reextract === true;
+    if (typeof ids === "string") throw new BadRequestException(ids);
+    return this.launch(ids, user, { reextract });
+  }
+
+  /**
+   * THE EDITOR'S MANUAL PDF (research-kezi-pdf): one source, its uploaded PDF read instead of any open text, in a run of
+   * its own (the same switch, permission and one-at-a-time rule). The bytes live only in this run's memory.
+   */
+  async startManualPdf(
+    sourceId: string,
+    pdf: Uint8Array | undefined,
+    reextract: boolean,
+    user: AuthenticatedUser,
+  ): Promise<{ id: string; status: "RUNNING" }> {
+    this.ready();
+    const ids = parseSourceIds([sourceId]);
+    if (typeof ids === "string") throw new BadRequestException(ids);
+    if (!pdf?.byteLength)
+      throw new BadRequestException("A feltöltendő PDF kötelező.");
+    if (pdf.byteLength > MAX_PDF_BYTES)
+      throw new BadRequestException("A PDF túl nagy (legfeljebb 20 MB).");
+    if (!isPdf(pdf))
+      throw new BadRequestException("A feltöltött fájl nem PDF.");
+    return this.launch(ids, user, { reextract, manualPdf: pdf });
+  }
+
+  private ready(): void {
+    const { env, extractor } = this.deps;
     if (env[DISCOVERY_SWITCH_ENV] !== "on")
       throw new ForbiddenException(
         `A kutatási tudástár ki van kapcsolva (${DISCOVERY_SWITCH_ENV}).`,
@@ -83,13 +118,16 @@ export class KnowledgeExtractionService {
       throw new ServiceUnavailableException(
         "Nincs AI-kiolvasó beállítva (ACROPORA_AI_CLAIM_EXTRACTION_PATH).",
       );
-    const ids = parseSourceIds(
-      (body as Record<string, unknown> | null)?.sourceIds,
-    );
-    // read an already extracted source again, withdrawing its unreviewed claims
-    const reextract =
-      (body as Record<string, unknown> | null)?.reextract === true;
-    if (typeof ids === "string") throw new BadRequestException(ids);
+  }
+
+  private async launch(
+    ids: string[],
+    user: AuthenticatedUser,
+    opts: { reextract: boolean; manualPdf?: Uint8Array },
+  ): Promise<{ id: string; status: "RUNNING" }> {
+    const { store } = this.deps;
+    const extractor = this.deps.extractor!;
+    const { reextract } = opts;
 
     await store.abandonStale(
       new Date(this.deps.now().getTime() - STALE_AFTER_MS),
@@ -135,6 +173,7 @@ export class KnowledgeExtractionService {
             now: this.deps.now,
             runId,
             ...(reextract ? { reextract: { actorUserId: user.id } } : {}),
+            ...(opts.manualPdf ? { manualPdf: opts.manualPdf } : {}),
           }),
         );
       await store.finishRun(

@@ -33,6 +33,8 @@ export interface SourceRow {
   corrected: boolean;
   /** The Crossref retraction check never ran on it (no DOI). */
   retractionUnchecked: boolean;
+  /** The source's text was read once (its ORIGINAL version has a full-text hash): no manual PDF is taken then (research-kezi-pdf). */
+  fullTextRead: boolean;
   screening: {
     status: ScreeningStatus;
     reason: ExclusionReason | null;
@@ -98,7 +100,7 @@ const SELECT = {
   screeningNote: true,
   screenedAt: true,
   screenedBy: { select: { id: true, displayName: true } },
-  versions: { select: { versionKind: true } },
+  versions: { select: { versionKind: true, contentHash: true } },
 } as const;
 
 type Selected = Prisma.KnowledgeSourceGetPayload<{ select: typeof SELECT }>;
@@ -131,6 +133,9 @@ function row(s: Selected): SourceRow {
       ),
     ),
     retractionUnchecked: s.retractionCheckedAt === null,
+    fullTextRead: s.versions.some(
+      (v) => v.versionKind === "ORIGINAL" && v.contentHash !== null,
+    ),
     screening: {
       status: s.screeningStatus as ScreeningStatus,
       reason: (s.exclusionReason as ExclusionReason | null) ?? null,
