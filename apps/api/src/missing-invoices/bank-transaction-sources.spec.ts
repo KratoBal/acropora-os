@@ -121,3 +121,116 @@ describe("planBankRows: one payment from two sources", () => {
     assert.equal(feed({ amount: D("23810.0000") }), "CLAIM");
   });
 });
+
+/**
+ * UGYANAZ A FIZETÉS, MÁS KÖZLEMÉNNYEL, MÁS KULCCSAL (Aquarioom 2026-10-12, mérve acrobot
+ * 2026-10-30). MI PIROSIT: a közlemény-eltérő újraexport új tranzakciót hoz (dupla); egy valódi
+ * második fizetés (más könyvelési nap, vagy a fájl más sora birtokolja a meglévőt, vagy a
+ * kötegben most létrejött) elnyelődik; a régi hívás (tulajdonosok nélkül) megváltozik.
+ */
+describe("planBankRows: the same payment under a new key", () => {
+  const BOOKED = day("2026-09-10");
+  const withBooking = (overrides: Partial<IncomingBankRow> = {}) =>
+    row({ bookingDate: BOOKED, ...overrides });
+  const earlier = (
+    id: string,
+    sources: ExistingBankTransaction["sources"] = ["CSV"],
+    overrides: Partial<ExistingBankTransaction> = {},
+  ) => tx(id, sources, { bookingDate: BOOKED, ...overrides });
+  const OWNERS = new Map<string, string>();
+
+  it("a másik exportban más közleménnyel jövő sor (új kulcs) ugyanaz a fizetés: SKIP, nem új tranzakció", () => {
+    assert.deepEqual(
+      planBankRows(
+        [withBooking({ sourceKey: "csv-new" })],
+        new Set(),
+        [earlier("t1")],
+        OWNERS,
+      ),
+      [{ kind: "SKIP", reason: "SAME_PAYMENT_NEW_KEY" }],
+    );
+  });
+
+  it("a régi hívás (tulajdonosok nélkül) a régi viselkedés: CREATE", () => {
+    assert.deepEqual(
+      planBankRows([withBooking({ sourceKey: "csv-new" })], new Set(), [
+        earlier("t1"),
+      ]).map((a) => a.kind),
+      ["CREATE"],
+    );
+  });
+
+  it("más könyvelési napon az azonos hely VALÓDI második fizetés (azonnali utalás): CREATE", () => {
+    assert.deepEqual(
+      planBankRows(
+        [withBooking({ sourceKey: "csv-new", bookingDate: day("2026-09-12") })],
+        new Set(),
+        [earlier("t1")],
+        OWNERS,
+      ).map((a) => a.kind),
+      ["CREATE"],
+    );
+  });
+
+  it("a fájl egyik sora a meglévőt már birtokolja (ismert kulcs), a másik ismeretlen: az valódi második fizetés", () => {
+    const plan = planBankRows(
+      [
+        withBooking({ sourceKey: "csv-known" }),
+        withBooking({ sourceKey: "csv-new" }),
+      ],
+      new Set(["csv-known"]),
+      [earlier("t1")],
+      new Map([["csv-known", "t1"]]),
+    );
+    assert.deepEqual(plan, [
+      { kind: "SKIP", reason: "SAME_SOURCE_KEY" },
+      { kind: "CREATE" },
+    ]);
+  });
+
+  it("három meglévő, négy ismeretlen kulcsú sor: három újraexport (SKIP), egy új (CREATE); egy tranzakciót egy sor fogyaszt el", () => {
+    const plan = planBankRows(
+      [1, 2, 3, 4].map((n) => withBooking({ sourceKey: `csv-n${n}` })),
+      new Set(),
+      [earlier("t1"), earlier("t2"), earlier("t3")],
+      OWNERS,
+    );
+    assert.deepEqual(
+      plan.map((a) => (a.kind === "SKIP" ? a.reason : a.kind)),
+      [
+        "SAME_PAYMENT_NEW_KEY",
+        "SAME_PAYMENT_NEW_KEY",
+        "SAME_PAYMENT_NEW_KEY",
+        "CREATE",
+      ],
+    );
+  });
+
+  it("két azonos fizetés EGY fájlban, első feltöltés: két külön tranzakció (a kötegben létrejött nem fogyasztható)", () => {
+    const plan = planBankRows(
+      [
+        withBooking({ sourceKey: "csv-a" }),
+        withBooking({ sourceKey: "csv-b" }),
+      ],
+      new Set(),
+      [],
+      OWNERS,
+    );
+    assert.deepEqual(
+      plan.map((a) => a.kind),
+      ["CREATE", "CREATE"],
+    );
+  });
+
+  it("a másik forrás szabad tranzakciója előbbre való: CLAIM, nem SKIP", () => {
+    assert.deepEqual(
+      planBankRows(
+        [withBooking({ sourceKey: "csv-new" })],
+        new Set(),
+        [earlier("t1", ["SZAMLAZZ"])],
+        OWNERS,
+      ),
+      [{ kind: "CLAIM", transactionId: "t1" }],
+    );
+  });
+});

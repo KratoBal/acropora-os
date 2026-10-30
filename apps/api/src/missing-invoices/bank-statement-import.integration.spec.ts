@@ -150,4 +150,48 @@ describe("a havi kivonat feltöltése", { skip: gate.mode === "skip" }, () => {
       9,
     );
   });
+  it("the same payment in a later export with a different narrative is the same payment, not a duplicate; a real second payment on another booking day is kept", async () => {
+    // Aquarioom 2026-10-12 (acrobot 2026-10-30): the narrative is part of the CSV key, the later export
+    // carried the truncated text for the same payment
+    const withNarrative = (
+      booking: string,
+      value: string,
+      amount: number,
+      narrative: string,
+    ) =>
+      `"${ACCOUNT}";T;-${amount};EUR;${booking};${value};"HU00 1111";"";"Aquarioom";"${narrative}";;;ÁTUTALÁS;;`;
+    const long = file("export-okt-1.csv", [
+      withNarrative(
+        "20261012",
+        "20261012",
+        1186,
+        "CM9266 0,0 CMCIFR2A 5 Bellevue-67260 SARRE 939,67 EUR",
+      ),
+    ]);
+    const first = await service.import(long, USER);
+    assert.deepEqual([first.createdCount, first.skippedCount], [1, 0]);
+
+    // the later export: the same payment, a truncated narrative -> a new key, the same place and booking day
+    const truncated = file("export-okt-2.csv", [
+      withNarrative("20261012", "20261012", 1186, "CM9266 0,0 CMCIFR2A"),
+    ]);
+    const second = await service.import(truncated, USER);
+    assert.deepEqual([second.createdCount, second.skippedCount], [0, 1]);
+    // uploading the truncated file again changes nothing either
+    const again = await service.import(truncated, USER);
+    assert.deepEqual([again.createdCount, again.skippedCount], [0, 1]);
+
+    // a payment of the same place booked on ANOTHER day is a second payment
+    const other = file("export-okt-3.csv", [
+      withNarrative("20261014", "20261012", 1186, "CM9266 0,0 CMCIFR2A"),
+    ]);
+    const third = await service.import(other, USER);
+    assert.deepEqual([third.createdCount, third.skippedCount], [1, 0]);
+    assert.equal(
+      await prisma.bankTransaction.count({
+        where: { bankAccount: { accountNumber: ACCOUNT }, currency: "EUR" },
+      }),
+      2,
+    );
+  });
 });
