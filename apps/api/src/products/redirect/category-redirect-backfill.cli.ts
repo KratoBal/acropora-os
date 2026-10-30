@@ -9,6 +9,12 @@ import {
   type CategoryHandleForm,
 } from "./category-redirect-backfill.js";
 
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 /**
  * A KATEGÓRIA-ÁTIRÁNYÍTÁS PARANCSA (commerce audit P1, régi UNAS-linkek). Alapból
  * SZÁRAZFUTÁS: kiírja a jelentést, és nem ír. `--apply` mellett a memóriabeli futás
@@ -27,7 +33,7 @@ export async function main(
   },
   db = prisma,
   readPaths: (file: string) => Promise<string> = (file) =>
-    readFile(file === "-" ? 0 : file, "utf8"),
+    file === "-" ? readStdin() : readFile(file, "utf8"),
 ): Promise<number> {
   let file: string | null = null;
   let form: CategoryHandleForm = "current";
