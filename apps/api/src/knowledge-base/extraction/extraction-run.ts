@@ -15,7 +15,15 @@ import {
   jatsSections,
   type TextSection,
 } from "./jats-text.js";
-import { fetchOpenPdf, pdfSections, type PdfFetch } from "./pdf-full-text.js";
+import { createHash } from "node:crypto";
+
+import {
+  fetchOpenPdf,
+  isPdf,
+  MAX_PDF_BYTES,
+  pdfSections,
+  type PdfFetch,
+} from "./pdf-full-text.js";
 
 /**
  * THE CLAIM EXTRACTION OF A FEW SOURCES (plan v4, 9.2 S3).
@@ -30,7 +38,16 @@ import { fetchOpenPdf, pdfSections, type PdfFetch } from "./pdf-full-text.js";
  * extracted (its full-text hash is set, claims or not: the store writes it
  * even when nothing was found, so the AI is not paid twice for one text); it
  * has neither a PMCID nor an open-access link (NO_OPEN_FULL_TEXT: a closed
- * work needs the editor's manual PDF, the S4 editor screen's job).
+ * work needs the editor's manual PDF, below).
+ *
+ * THE EDITOR'S MANUAL PDF (task research-kezi-pdf; plan v4, 9.2 S3: "zárt
+ * műhöz kézi PDF-feltöltés a szerkesztőnek"). The editor uploads the work's PDF
+ * (`deps.manualPdf`); its text layer is read exactly as an open PDF's, and the
+ * PDF is not kept: its sha256 is the source's content hash (plan J3). ONE TEXT
+ * PER SOURCE: the manual PDF is the source's ORIGINAL text, so it is taken only
+ * for a source not yet extracted, or as a re-extraction (barracuda, #1838: two
+ * texts sharing the one "already extracted" mark would make it mean the wrong
+ * one). The automatic run never reads a closed work, so it cannot overwrite it.
  *
  * Without a PMCID the open-access link is read as a PDF (`pdf-full-text.ts`:
  * its text layer, a section per page; research-kepes-kiolvasas, acrobot
@@ -129,8 +146,8 @@ export interface SourceOutcome {
   chunksDropped: number;
   /** The Crossref retraction check never ran on this source (no DOI). */
   retractionUnchecked: boolean;
-  /** Which full text was read: Europe PMC's JATS, the open PDF's text layer, or none. */
-  fullText: "JATS" | "PDF" | null;
+  /** Which full text was read: Europe PMC's JATS, the open PDF's text layer, the editor's PDF, or none. */
+  fullText: "JATS" | "PDF" | "MANUAL_PDF" | null;
   /** PDF only: pages past the page cap, not read. */
   pagesDropped: number;
 }
@@ -152,6 +169,8 @@ export interface ExtractionDeps {
    * same transaction, in this actor's name. A reviewed (VERIFIED) claim stays.
    */
   reextract?: { actorUserId: string | null };
+  /** The editor's uploaded PDF (research-kezi-pdf): read instead of any open text, never kept. */
+  manualPdf?: Uint8Array;
 }
 
 const count = (into: Record<string, number>, code: string) => {
@@ -242,6 +261,27 @@ export async function readPdfClaims(
   }
   outcome.pagesDropped = read.pagesDropped;
   return readSectionClaims(read.sections, pdf.contentHash, outcome, deps);
+}
+
+/** The editor's PDF, read as an open PDF's text layer; the bytes are not kept, their sha256 is. */
+export async function readManualPdfClaims(
+  bytes: Uint8Array,
+  outcome: SourceOutcome,
+  deps: ReadDeps,
+): Promise<FullTextReading> {
+  if (bytes.byteLength > MAX_PDF_BYTES)
+    return { ok: false, reason: "TOO_LARGE" };
+  if (!isPdf(bytes)) return { ok: false, reason: "NOT_PDF" };
+  outcome.fullText = "MANUAL_PDF";
+  let read: Awaited<ReturnType<typeof pdfSections>>;
+  try {
+    read = await pdfSections(bytes);
+  } catch {
+    return { ok: false, reason: "PDF_UNREADABLE" };
+  }
+  outcome.pagesDropped = read.pagesDropped;
+  const contentHash = createHash("sha256").update(bytes).digest("hex");
+  return readSectionClaims(read.sections, contentHash, outcome, deps);
 }
 
 async function readSectionClaims(
@@ -338,10 +378,13 @@ export async function extractSource(
   if (source.alreadyExtracted && !deps.reextract)
     return skip("ALREADY_EXTRACTED");
   outcome.retractionUnchecked = source.retractionUnchecked;
-  if (!source.pmcid && !source.oaUrl) return skip("NO_OPEN_FULL_TEXT");
-  const read = source.pmcid
-    ? await readFullTextClaims(source.pmcid, outcome, deps)
-    : await readPdfClaims(source.oaUrl!, outcome, deps);
+  if (!deps.manualPdf && !source.pmcid && !source.oaUrl)
+    return skip("NO_OPEN_FULL_TEXT");
+  const read = deps.manualPdf
+    ? await readManualPdfClaims(deps.manualPdf, outcome, deps)
+    : source.pmcid
+      ? await readFullTextClaims(source.pmcid, outcome, deps)
+      : await readPdfClaims(source.oaUrl!, outcome, deps);
   if (!read.ok) return skip(read.reason);
   if (!apply) return { ...outcome, status: "PREVIEWED" };
   const saved = await deps.store.saveSource({

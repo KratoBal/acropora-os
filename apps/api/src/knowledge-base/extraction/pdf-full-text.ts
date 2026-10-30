@@ -376,7 +376,8 @@ export function citationPdfUrl(html: Uint8Array, page: URL): string | null {
   return null;
 }
 
-const isPdf = (bytes: Uint8Array) =>
+/** A PDF by its first bytes, whatever a header or a file name says. */
+export const isPdf = (bytes: Uint8Array) =>
   bytes.byteLength >= 5 &&
   new TextDecoder("latin1").decode(bytes.subarray(0, 5)) === "%PDF-";
 

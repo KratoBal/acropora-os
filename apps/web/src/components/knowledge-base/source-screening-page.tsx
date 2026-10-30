@@ -135,6 +135,10 @@ export function SourceScreeningPage() {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_VIEW),
   );
+  // the editor's manual PDF starts an extraction run: the run's own permission (research-kezi-pdf)
+  const canReadPdf = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_RESEARCH_RUN),
+  );
   const canDecide = Boolean(
     session && hasPermission(session.user, PERMISSIONS.KNOWLEDGE_MANAGE),
   );
@@ -426,6 +430,8 @@ export function SourceScreeningPage() {
                 selected={index === selected}
                 onSelect={() => setSelected(index)}
                 canDecide={canDecide}
+                canReadPdf={canReadPdf}
+                token={token}
                 busy={busy !== null}
                 excluding={excluding === row.id}
                 reason={reason}
@@ -484,11 +490,73 @@ function SummaryItem({
   );
 }
 
+/**
+ * THE EDITOR'S PDF OF A WORK WITH NO OPEN TEXT (research-kezi-pdf; plan v4, S3). Offered on an included source whose text
+ * was never read; the upload starts an extraction run of its own, and the claims come on the Kiolvasás tab. The PDF is read
+ * and dropped: only its fingerprint stays.
+ */
+function ManualPdfUpload({
+  sourceId,
+  token,
+}: {
+  sourceId: string;
+  token: string;
+}) {
+  const [state, setState] = useState<{
+    kind: "idle" | "busy" | "ok" | "error";
+    text?: string;
+  }>({ kind: "idle" });
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 pt-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <label className="text-[13px] font-semibold text-pilot-grey-700">
+        Kézi PDF a kiolvasáshoz
+        <input
+          type="file"
+          accept="application/pdf"
+          className="ml-2 text-[13px]"
+          disabled={state.kind === "busy" || state.kind === "ok"}
+          data-testid={`manual-pdf-${sourceId}`}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setState({ kind: "busy" });
+            try {
+              await knowledgeBaseApi.uploadManualPdf(token, sourceId, file);
+              setState({
+                kind: "ok",
+                text: "A kiolvasás elindult; az állítások a Kiolvasás fülön jelennek meg.",
+              });
+            } catch (caught) {
+              setState({
+                kind: "error",
+                text: (caught as Error)?.message ?? "A feltöltés nem sikerült.",
+              });
+            }
+          }}
+        />
+      </label>
+      {state.text ? (
+        <span
+          role="status"
+          className={`text-[13px] ${state.kind === "error" ? "text-pilot-red-700" : "text-pilot-grey-600"}`}
+        >
+          {state.text}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function SourceItem(props: {
   row: KnowledgeSourceRow;
   selected: boolean;
   onSelect: () => void;
   canDecide: boolean;
+  canReadPdf: boolean;
+  token: string;
   busy: boolean;
   excluding: boolean;
   reason: ExclusionReason;
@@ -568,6 +636,12 @@ function SourceItem(props: {
             <p className="text-[13px] italic text-pilot-grey-500">
               „{row.screening.note}”
             </p>
+          ) : null}
+          {props.canReadPdf &&
+          row.screening.status === "INCLUDED" &&
+          !row.retracted &&
+          !row.fullTextRead ? (
+            <ManualPdfUpload sourceId={row.id} token={props.token} />
           ) : null}
         </div>
         {props.canDecide ? (

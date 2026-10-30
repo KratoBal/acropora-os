@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 
 import { vocabularyV1 } from "@acropora/knowledge-base";
@@ -19,6 +20,7 @@ import {
   pdfOf,
 } from "./extraction-test-fixtures.js";
 import { chunkSections, chunkText, jatsSections } from "./jats-text.js";
+import { MAX_PDF_BYTES } from "./pdf-full-text.js";
 
 /**
  * THE OS SIDE OF THE CLAIM EXTRACTION (S3). WHAT TURNS IT RED: a passage or
@@ -756,6 +758,102 @@ describe("extracting one source", () => {
       [1, 9, 1],
     );
     assert.ok(d.calls.includes("save:1:m claim-extraction/v1:64"));
+  });
+
+  // research-kezi-pdf: the editor's PDF for a closed work, read as an open PDF is, never fetched, never kept
+  describe("the editor's manual PDF", () => {
+    const mu = (t: string) => t.replace(/\u00B5/g, "\u03BC");
+    const quotedClaim = () => {
+      const claim = aiClaim() as {
+        passage: { text: string };
+        fields: { anchor: string }[];
+        questions: { anchor: string }[];
+      };
+      return {
+        ...claim,
+        passage: { ...claim.passage, text: mu(claim.passage.text) },
+        fields: claim.fields.map((f) => ({ ...f, anchor: mu(f.anchor) })),
+        questions: claim.questions.map((q) => ({ ...q, anchor: mu(q.anchor) })),
+      };
+    };
+    const answering = {
+      extractor: {
+        extract: async () => ({
+          kind: "ANSWER" as const,
+          claims: [quotedClaim()],
+          refusedClaims: [],
+          refusalDetails: [],
+          extractedBy: "m claim-extraction/v1",
+        }),
+      },
+    };
+    const closed = { pmcid: null, oaUrl: null };
+
+    it("a closed work: the uploaded PDF goes through the same check and store, its hash is the bytes' sha256, nothing is fetched", async () => {
+      const bytes = await pdfOf(PDF_PAGES);
+      let savedHash = "";
+      const d = deps({ ...answering, manualPdf: bytes }, closed);
+      const save = d.value.store.saveSource.bind(d.value.store);
+      d.value.store.saveSource = async (input) => {
+        savedHash = input.contentHash;
+        return save(input);
+      };
+      const outcome = await extractSource("src1", true, d.value);
+      assert.deepEqual(
+        [outcome.status, outcome.fullText],
+        ["EXTRACTED", "MANUAL_PDF"],
+      );
+      assert.deepEqual(
+        [outcome.claims, outcome.fields, outcome.questions],
+        [1, 9, 1],
+      );
+      assert.equal(savedHash, createHash("sha256").update(bytes).digest("hex"));
+      assert.ok(!d.calls.some((c) => c.startsWith("get:")), "nothing fetched");
+    });
+
+    it("one text per source: an extracted source takes no PDF, unless it is a re-extraction", async () => {
+      const bytes = await pdfOf(PDF_PAGES);
+      const once = deps(
+        { ...answering, manualPdf: bytes },
+        { ...closed, alreadyExtracted: true },
+      );
+      const skipped = await extractSource("src1", true, once.value);
+      assert.deepEqual(
+        [skipped.status, skipped.reason],
+        ["SKIPPED", "ALREADY_EXTRACTED"],
+      );
+      assert.ok(!once.calls.some((c) => c.startsWith("save:")));
+      const again = deps(
+        { ...answering, manualPdf: bytes, reextract: { actorUserId: "u1" } },
+        { ...closed, alreadyExtracted: true },
+      );
+      const read = await extractSource("src1", true, again.value);
+      assert.equal(read.status, "EXTRACTED");
+      assert.ok(again.calls.some((c) => c.endsWith(":replace=u1")));
+    });
+
+    it("not a PDF, too large, retracted or not included: skipped with the reason, no AI call", async () => {
+      const cases: [Uint8Array, Record<string, unknown>, string][] = [
+        [new TextEncoder().encode("<html>nem pdf</html>"), closed, "NOT_PDF"],
+        [new Uint8Array(MAX_PDF_BYTES + 1), closed, "TOO_LARGE"],
+        [await pdfOf(PDF_PAGES), { ...closed, retracted: true }, "RETRACTED"],
+        [
+          await pdfOf(PDF_PAGES),
+          { ...closed, included: false },
+          "NOT_INCLUDED",
+        ],
+      ];
+      for (const [bytes, source, reason] of cases) {
+        const d = deps({ manualPdf: bytes }, source);
+        const outcome = await extractSource("src1", true, d.value);
+        assert.deepEqual(
+          [outcome.status, outcome.reason],
+          ["SKIPPED", reason],
+          reason,
+        );
+        assert.ok(!d.calls.some((c) => c.startsWith("ai:")), reason);
+      }
+    });
   });
 
   it("an open link that is no PDF: skipped with the reason, no AI call", async () => {

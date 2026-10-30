@@ -25,6 +25,8 @@ export interface KnowledgeSourceRow {
   retracted: boolean;
   corrected: boolean;
   retractionUnchecked: boolean;
+  /** the source's text was read once: a manual PDF is not offered (research-kezi-pdf) */
+  fullTextRead: boolean;
   screening: {
     status: ScreeningStatus;
     reason: ExclusionReason | null;
@@ -596,6 +598,16 @@ export interface GoldSet {
 const goldSetBase = "/knowledge-base/gold-set";
 
 export const knowledgeBaseApi = {
+  /** The editor's PDF of a closed work (research-kezi-pdf): read in an extraction run of its own, the PDF not kept. */
+  uploadManualPdf(token: string, sourceId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    return apiRequest<{ id: string; status: "RUNNING" }>(
+      `/knowledge-base/extraction-runs/manual-pdf/${encodeURIComponent(sourceId)}`,
+      token,
+      { method: "POST", body: form },
+    );
+  },
   overview(token: string, signal?: AbortSignal) {
     return apiRequest<KnowledgeOverview>(overviewPath, token, { signal });
   },

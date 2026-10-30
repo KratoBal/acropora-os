@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   sources: vi.fn(),
   screeningSummary: vi.fn(),
   screen: vi.fn(),
+  uploadManualPdf: vi.fn(),
 }));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
@@ -70,6 +71,7 @@ const source = (
   retracted: false,
   corrected: false,
   retractionUnchecked: false,
+  fullTextRead: false,
   screening: {
     status: "PENDING",
     reason: null,
@@ -240,5 +242,76 @@ describe("Forrásszűrés", () => {
         }),
       ),
     ).toBe("év nélkül · Kísérlet · Teljes szöveg nélkül");
+  });
+});
+
+// research-kezi-pdf: an included source whose text was never read takes the editor's PDF
+describe("Kézi PDF", () => {
+  const included = (id: string, over: Partial<KnowledgeSourceRow> = {}) =>
+    source(id, {
+      screening: {
+        status: "INCLUDED",
+        reason: null,
+        note: null,
+        by: null,
+        at: null,
+      },
+      ...over,
+    });
+  const list = (items: KnowledgeSourceRow[]) =>
+    api.sources.mockResolvedValue({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 25,
+    });
+
+  it("an included, unread source: the PDF goes up, and the screen says the reading started", async () => {
+    list([included("s1")]);
+    api.uploadManualPdf.mockResolvedValue({ id: "run1", status: "RUNNING" });
+    render(<SourceScreeningPage />);
+    const input = (await screen.findByTestId(
+      "manual-pdf-s1",
+    )) as HTMLInputElement;
+    const file = new File(["%PDF-1.4"], "cikk.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() =>
+      expect(api.uploadManualPdf).toHaveBeenCalledWith("token-1", "s1", file),
+    );
+    expect(await screen.findByText(/A kiolvasás elindult/)).toBeTruthy();
+  });
+
+  it("not offered for a read, a retracted or a pending source", async () => {
+    list([
+      included("s1", { fullTextRead: true }),
+      included("s2", { retracted: true }),
+      source("s3"),
+    ]);
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    expect(screen.queryByTestId(/^manual-pdf-/)).toBeNull();
+  });
+
+  it("not offered without the extraction run's permission", async () => {
+    auth.role = "MANAGER";
+    list([included("s1")]);
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    expect(screen.queryByTestId("manual-pdf-s1")).toBeNull();
+  });
+
+  it("a refused upload is said, in the API's words", async () => {
+    list([included("s1")]);
+    api.uploadManualPdf.mockRejectedValue(
+      new Error("A feltöltött fájl nem PDF."),
+    );
+    render(<SourceScreeningPage />);
+    const input = (await screen.findByTestId(
+      "manual-pdf-s1",
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "x.pdf")] } });
+    expect(await screen.findByText("A feltöltött fájl nem PDF.")).toBeTruthy();
   });
 });
