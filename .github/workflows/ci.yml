@@ -222,6 +222,14 @@ jobs:
       - name: Seed development reference data
         run: pnpm prisma:seed
 
+      # THE WORKSPACE PACKAGES THE API IMPORTS, BUILT HERE (os-ci-parhuzamos, #1971 first run). In the one
+      # verify job `pnpm test` ran first, and turbo built every package's dist/ for it (`^build`); the
+      # integration step only found them. Apart, this job has no `pnpm test`, and all 158 integration specs
+      # failed with ERR_MODULE_NOT_FOUND on @acropora/database/dist/index.js. `^...`: the API's
+      # dependencies only, not the API itself (its specs compile with tsconfig.test.json).
+      - name: Build the API's workspace packages
+        run: pnpm exec turbo run build --filter='@acropora/api^...'
+
       - name: Capture release evidence start time
         if: always()
         run: |
