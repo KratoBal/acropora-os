@@ -19,6 +19,16 @@ import { lockRedirectWrites } from "./redirect.repository.js";
 
 export const CATEGORY_BACKFILL_DB = Symbol("CATEGORY_BACKFILL_DB");
 
+/**
+ * A tranzakció időkorlátja: benne van a teljes betöltés (minden kategória és minden meglévő
+ * átirányítás, ma több ezer sor), a tervezés és az írás. A Prisma alapértéke 5 mp, efölött
+ * "transaction already closed" lenne, a hiba okának látszata nélkül (barracuda #1972 a).
+ */
+export const TRANSACTION_OPTIONS = {
+  timeout: 60_000,
+  maxWait: 10_000,
+} as const;
+
 export interface CategoryRedirectBackfillResult {
   applied: boolean;
   planHash: string;
@@ -53,14 +63,33 @@ export class CategoryRedirectBackfillService {
     input: {
       paths: string[];
       form: CategoryHandleForm;
+      medusaCategories?: {
+        handle: string;
+        name: string;
+        parent?: string | null;
+      }[];
       apply?: boolean;
       planHash?: string;
     },
     userId: string,
   ): Promise<CategoryRedirectBackfillResult> {
     const { paths, form } = input;
+    const medusa = input.medusaCategories?.map((m) => ({
+      handle: m.handle,
+      name: m.name,
+      parent: m.parent ?? null,
+    }));
+    if (form === "medusa" && !medusa?.length)
+      throw new BadRequestException(
+        "form medusa needs medusaCategories (the shop's real categories: handle, name, parent)",
+      );
     if (!input.apply) {
-      const plan = await planCategoryRedirectsFromDb(this.db, paths, form);
+      const plan = await planCategoryRedirectsFromDb(
+        this.db,
+        paths,
+        form,
+        medusa,
+      );
       return {
         applied: false,
         planHash: categoryRedirectPlanHash(form, plan),
@@ -75,7 +104,7 @@ export class CategoryRedirectBackfillService {
     const planHash = input.planHash;
     return this.db.$transaction(async (tx: Prisma.TransactionClient) => {
       await lockRedirectWrites(tx);
-      const plan = await planCategoryRedirectsFromDb(tx, paths, form);
+      const plan = await planCategoryRedirectsFromDb(tx, paths, form, medusa);
       if (categoryRedirectPlanHash(form, plan) !== planHash)
         throw new ConflictException(
           "the plan is not the one the dry run returned (the data, the list or the form changed): run the dry run again",
@@ -105,6 +134,6 @@ export class CategoryRedirectBackfillService {
         },
       });
       return { applied: true, planHash, form, report };
-    });
+    }, TRANSACTION_OPTIONS);
   }
 }

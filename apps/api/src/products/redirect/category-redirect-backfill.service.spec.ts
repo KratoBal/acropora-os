@@ -26,6 +26,7 @@ function fake(categories: CategoryForRedirect[] = fa) {
   const created: unknown[] = [];
   const audit: unknown[] = [];
   let tx = false;
+  const options: unknown[] = [];
   const base = {
     category: {
       findMany: async () =>
@@ -62,7 +63,11 @@ function fake(categories: CategoryForRedirect[] = fa) {
   };
   const db = {
     ...base,
-    $transaction: async (fn: (t: typeof base) => Promise<unknown>) => {
+    $transaction: async (
+      fn: (t: typeof base) => Promise<unknown>,
+      opts?: unknown,
+    ) => {
+      options.push(opts);
       tx = true;
       try {
         return await fn(base);
@@ -71,7 +76,7 @@ function fake(categories: CategoryForRedirect[] = fa) {
       }
     },
   };
-  return { db, writes, created, audit, inTx: () => tx };
+  return { db, writes, created, audit, options, inTx: () => tx };
 }
 
 const service = (f: ReturnType<typeof fake>) =>
@@ -127,6 +132,8 @@ describe("CategoryRedirectBackfillService", () => {
       "u1",
     );
     assert.equal(r.applied, true);
+    // az írás tranzakciója nem a Prisma 5 mp-es alapértékével fut (a teljes betöltés benne van)
+    assert.deepEqual(f.options, [{ timeout: 60_000, maxWait: 10_000 }]);
     assert.deepEqual(f.writes, ["lock", "createMany", "auditLog"]);
     assert.equal(f.created.length, 1);
     assert.deepEqual(f.audit[0], {
@@ -183,5 +190,47 @@ describe("CategoryRedirectBackfillService", () => {
     );
     assert.equal(dupla.created.length, 0);
     assert.ok(!dupla.writes.includes("createMany"));
+  });
+
+  it("a medusa képlet a kirakat tényleges kategóriáit kéri: lista nélkül 400, listával a valódi handle; más lista más lenyomat", async () => {
+    const f = fake();
+    await assert.rejects(
+      service(f).run({ paths: PATHS, form: "medusa" }, "u1"),
+      BadRequestException,
+    );
+    const a = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "medusa",
+        medusaCategories: [
+          { handle: "termékek", name: "Termékek", parent: null },
+          {
+            handle: "eledelek---termékek",
+            name: "Eledelek - Termékek",
+            parent: "termékek",
+          },
+        ],
+      },
+      "u1",
+    );
+    assert.deepEqual(a.report.createdRules, [
+      {
+        source: "/sct/111/Eledelek",
+        destination: "/hu/categories/eledelek---termékek",
+      },
+    ]);
+    const b = await service(f).run(
+      {
+        paths: ["/sct/111/Eledelek"],
+        form: "medusa",
+        medusaCategories: [
+          { handle: "termekek", name: "Termékek", parent: null },
+          { handle: "eledelek", name: "Eledelek", parent: "termekek" },
+        ],
+      },
+      "u1",
+    );
+    assert.notEqual(a.planHash, b.planHash);
+    assert.deepEqual(f.writes, []);
   });
 });

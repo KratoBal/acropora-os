@@ -5,7 +5,9 @@ import { prisma } from "@acropora/database";
 
 import {
   describeCategoryRedirectBackfill,
+  normalizeMedusaCategories,
   type CategoryHandleForm,
+  type MedusaCategoryRef,
 } from "./category-redirect-backfill.js";
 import { planCategoryRedirectsFromDb } from "./category-redirect-backfill.load.js";
 
@@ -22,7 +24,9 @@ async function readStdin(): Promise<string> {
  * mutat, az `--apply` nem ír.
  *
  *   --paths <fájl>   a régi bolt útjai, soronként egy (a sitemap); `#` sor kimarad; `-`: a standard bemenet
- *   --form current|legacy   a kategória-cím képlete (alap: current); lásd a tervezőt
+ *   --form current|legacy|medusa   a kategória-cím képlete (alap: current); lásd a tervezőt
+ *   --medusa <fájl>  a `medusa` képlethez: a kirakat kategóriái JSON-ban (a /store/product-categories válasza
+ *                    vagy a tömör {handle, name, parent} lista)
  *   --apply
  */
 export async function main(
@@ -37,21 +41,23 @@ export async function main(
 ): Promise<number> {
   let file: string | null = null;
   let form: CategoryHandleForm = "current";
+  let medusaFile: string | null = null;
   let apply = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!;
     if (a === "--apply") apply = true;
     else if (a === "--paths") file = args[++i] ?? null;
+    else if (a === "--medusa") medusaFile = args[++i] ?? null;
     else if (a === "--form") {
       const v = args[++i];
-      if (v !== "current" && v !== "legacy") {
-        out.stderr("A --form értéke current vagy legacy lehet.\n");
+      if (v !== "current" && v !== "legacy" && v !== "medusa") {
+        out.stderr("A --form értéke current, legacy vagy medusa lehet.\n");
         return 1;
       }
       form = v;
     } else {
       out.stderr(
-        `Ismeretlen kapcsolo: ${a} (--paths <fajl>, --form current|legacy, --apply)\n`,
+        `Ismeretlen kapcsolo: ${a} (--paths <fajl>, --form current|legacy|medusa, --medusa <fajl>, --apply)\n`,
       );
       return 1;
     }
@@ -66,7 +72,22 @@ export async function main(
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "" && !line.startsWith("#"));
-  const { store, report } = await planCategoryRedirectsFromDb(db, paths, form);
+  let medusa: MedusaCategoryRef[] | undefined;
+  if (form === "medusa") {
+    if (!medusaFile) {
+      out.stderr(
+        "A --form medusa mellé --medusa <fajl> kell (a kirakat kategoriai).\n",
+      );
+      return 1;
+    }
+    medusa = normalizeMedusaCategories(JSON.parse(await readPaths(medusaFile)));
+  }
+  const { store, report } = await planCategoryRedirectsFromDb(
+    db,
+    paths,
+    form,
+    medusa,
+  );
   out.stdout(describeCategoryRedirectBackfill(report, form));
   if (!apply) {
     out.stdout("SZARAZFUTAS: semmi nem irodott. Alkalmazas: --apply\n");
