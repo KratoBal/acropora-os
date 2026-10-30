@@ -10,6 +10,7 @@ const RESULT: BankStatementImportResult = {
   rowCount: 43,
   createdCount: 43,
   skippedCount: 0,
+  reexportedCount: 0,
   rejected: [],
   rejectedCount: 0,
   pending: [

@@ -12,6 +12,11 @@ export interface BankStatementImportResult {
   /** Ennyi sor lett új; a többi már korábbi feltöltésből megvolt. */
   createdCount: number;
   skippedCount: number;
+  /**
+   * A kihagyottak közül ennyit ismert fel a rendszer ugyanazon fizetés újraexportjaként MÁS közleménnyel (új kulccsal):
+   * ezek nem a pontosan ismert sorok. Ha egy valódi fizetés mégis elnyelődne, itt látszik (task bank-dupla-import).
+   */
+  reexportedCount: number;
   /** Az olvashatatlan sorok (az első tíz), sorszámmal és okkal. */
   rejected: { line: number; reason: string }[];
   rejectedCount: number;
@@ -300,6 +305,37 @@ export interface MissingInvoiceCategoryInput {
 }
 export interface MissingInvoicePaperOriginalInput {
   marked: boolean;
+}
+/**
+ * DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import): egy bank-sor az ugyanazon fizetés második példánya
+ * (az import dupla tétele). `PUT /missing-invoices/items/:id/duplicate`. A jelölt sort a Hiányzó számlák
+ * listái és összegzései kihagyják; a jelölés visszavonható.
+ */
+export interface MissingInvoiceDuplicateInput {
+  marked: boolean;
+  /** Melyik sor a pár (nem kötelező; ugyanazon fizetés másik sora). */
+  duplicateOfId?: string | null;
+}
+export interface MissingInvoiceDuplicateResult {
+  id: string;
+  duplicate: boolean;
+}
+/** Egy duplikátumnak jelölt sor a visszavonáshoz. */
+export interface MissingInvoiceDuplicateItem {
+  id: string;
+  /** `ÉÉÉÉ-HH-NN` */
+  bookingDate: string;
+  amount: string;
+  currency: string;
+  partner: string | null;
+  narrative: string;
+  /** Mikor jelölték (ISO). */
+  markedAt: string;
+  /** A pár (ugyanazon fizetés másik sora), ha megadták. */
+  duplicateOfId: string | null;
+}
+export interface MissingInvoiceDuplicatesResponse {
+  items: MissingInvoiceDuplicateItem[];
 }
 export interface MissingInvoicePayeeInput {
   payee: "COMPANY" | "NOT_COMPANY";

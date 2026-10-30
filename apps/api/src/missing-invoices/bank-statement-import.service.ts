@@ -38,13 +38,14 @@ export class BankStatementImportService {
             ? `A fájlban csak függő kártyás tétel van (${parsed.pending.length}): a bank még nem könyvelte őket, a következő kivonatban jönnek.`
             : "A fájl üres.",
       );
-    const { importId, createdCount } = await this.repository.importRows({
-      fileName: file.originalname,
-      sha256: createHash("sha256").update(file.buffer).digest("hex"),
-      rows: parsed.rows,
-      rejectedCount: parsed.rejected.length,
-      userId: user.id,
-    });
+    const { importId, createdCount, reexportedCount } =
+      await this.repository.importRows({
+        fileName: file.originalname,
+        sha256: createHash("sha256").update(file.buffer).digest("hex"),
+        rows: parsed.rows,
+        rejectedCount: parsed.rejected.length,
+        userId: user.id,
+      });
     const accounts = new Map<string, string>();
     for (const row of parsed.rows)
       if (!accounts.has(row.accountNumber))
@@ -55,6 +56,7 @@ export class BankStatementImportService {
       rowCount: parsed.rows.length,
       createdCount,
       skippedCount: parsed.rows.length - createdCount,
+      reexportedCount,
       rejected: parsed.rejected.slice(0, 10),
       rejectedCount: parsed.rejected.length,
       pending: parsed.pending

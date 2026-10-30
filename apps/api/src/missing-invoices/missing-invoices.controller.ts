@@ -29,6 +29,7 @@ import {
   MissingInvoiceCategoryDto,
   MissingInvoiceCommentDto,
   MissingInvoiceMatchDto,
+  MissingInvoiceDuplicateDto,
   MissingInvoicePaperOriginalDto,
   MissingInvoicePayeeDto,
   MissingInvoiceUploadDto,
@@ -166,6 +167,32 @@ export class MissingInvoicesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.missing.paperOriginal(id, input.marked, user);
+  }
+
+  /**
+   * DUPLIKÁTUM-JELÖLÉS (task bank-dupla-import): a tétel az ugyanazon fizetés második példánya; a hiányzók és az
+   * összegzések kihagyják, a jelölés visszavonható (`marked: false`). Számlához párosított tételen 409.
+   */
+  @Put("items/:id/duplicate")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  markDuplicate(
+    @Param("id") id: string,
+    @Body() input: MissingInvoiceDuplicateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.missing.markDuplicate(
+      id,
+      input.marked,
+      input.duplicateOfId,
+      user,
+    );
+  }
+
+  /** A duplikátumnak jelölt tételek (egy hónapban, ha megadott): a visszavonáshoz. */
+  @Get("duplicates")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  duplicates(@Query("month") month?: string) {
+    return this.missing.duplicates(month ?? null);
   }
 
   @Put("items/:id/documents/:documentId/payee")

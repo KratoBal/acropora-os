@@ -4,6 +4,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type BankStatementImportResult,
+  type MissingInvoiceDuplicateItem,
 } from "@acropora/types";
 import { ConfirmDialog, Icon } from "@acropora/ui";
 import Link from "next/link";
@@ -26,6 +27,7 @@ import {
   MissingInvoicesDrawer,
   type ChargeDetailExtras,
 } from "./missing-invoices-drawer";
+import { MissingInvoicesDuplicates } from "./missing-invoices-duplicates";
 import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
 import {
   CHARGE_TABS,
@@ -113,6 +115,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   const [saving, setSaving] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  // a duplikátumnak jelölt tételek (task bank-dupla-import): a kérdés, a lista és a futó visszavonás
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+  const [duplicates, setDuplicates] = useState<MissingInvoiceDuplicateItem[]>(
+    [],
+  );
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -266,6 +274,60 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     }
   };
 
+  /** A duplikátumnak jelölt tételek ebben a hónapban; csak `finance.manage`-zel kérhető (a szerver is ezt kéri). */
+  const loadDuplicates = useCallback(async () => {
+    if (!canManage || !token) return;
+    try {
+      setDuplicates((await missingInvoicesApi.duplicates(token, month)).items);
+    } catch {
+      // a lista csak a visszavonáshoz kell: egy hiba nem állítja meg az oldalt
+      setDuplicates([]);
+    }
+  }, [canManage, month, token]);
+
+  useEffect(() => {
+    void loadDuplicates();
+  }, [loadDuplicates]);
+
+  /** A megnyitott tétel duplikátumnak jelölése (a kérdés után): a drawer bezárul, a hónap és a lista újratölt. */
+  const markDuplicate = async () => {
+    if (!open) return;
+    setBusy("duplicate");
+    setDrawerError(null);
+    try {
+      await missingInvoicesApi.markDuplicate(token, open.id, true);
+      setConfirmDuplicate(false);
+      closeDrawer();
+      setNotice(null);
+      await Promise.all([load(), loadDuplicates()]);
+    } catch (cause) {
+      setConfirmDuplicate(false);
+      // a 409 mondata is ide jön (számlához párosított tétel)
+      setDrawerError(
+        cause instanceof Error ? cause.message : "A jelölés nem sikerült.",
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const restoreDuplicate = async (id: string) => {
+    setRestoringId(id);
+    setNotice(null);
+    try {
+      await missingInvoicesApi.markDuplicate(token, id, false);
+      await Promise.all([load(), loadDuplicates()]);
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error
+          ? cause.message
+          : "A jelölés visszavonása nem sikerült.",
+      );
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const saveNote = async () => {
     if (!open) return;
     setSaving(true);
@@ -389,6 +451,12 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         }
         exporting={exporting}
       />
+      <MissingInvoicesDuplicates
+        items={duplicates}
+        busyId={restoringId}
+        canManage={canManage}
+        onRestore={(id) => void restoreDuplicate(id)}
+      />
       <input
         ref={statementInput}
         type="file"
@@ -435,6 +503,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
             missingInvoicesApi.paperOriginal(token, open.id, marked),
           )
         }
+        onDuplicate={() => setConfirmDuplicate(true)}
         onPayee={(documentId, payee) =>
           open &&
           void mutate(`payee:${documentId}`, () =>
@@ -453,6 +522,20 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         A KÉZI PÁROSÍTÁS VISSZAVONÁSA EGY DÖNTÉST SZÜNTET MEG, ezért a közös
         kérdés előzi meg (a repó szabálya: minden törlő hívás előtt).
       */}
+      {/*
+        A DUPLIKÁTUM-JELÖLÉS DÖNTÉS, ezért kérdés előzi meg (a repó szabálya): a tétel kiesik a hiányzók és az
+        összegzések közül. Nem törlés: a lista alján visszavonható.
+      */}
+      <ConfirmDialog
+        open={confirmDuplicate}
+        title="Duplikátumnak jelölöd ezt a tételt?"
+        consequence="A tétel az ugyanazon fizetés második példánya, ezért kimarad a hiányzók és az összegzések közül (a hónap számai csökkennek vele)."
+        recovery="A tétel nem törlődik: az oldal alján a Duplikátumnak jelölt tételek között megtalálod, és a jelölést onnan visszavonhatod."
+        confirmLabel="Duplikátum"
+        busy={busy === "duplicate"}
+        onConfirm={() => void markDuplicate()}
+        onCancel={() => setConfirmDuplicate(false)}
+      />
       <ConfirmDialog
         open={confirmUnpair}
         title="A kézi párosítás visszavonása"

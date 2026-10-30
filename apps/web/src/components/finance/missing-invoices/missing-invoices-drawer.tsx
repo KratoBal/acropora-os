@@ -67,6 +67,7 @@ export function MissingInvoicesDrawer({
   busy,
   onUpload,
   onPaperOriginal,
+  onDuplicate,
   onPayee,
   note,
   onNote,
@@ -103,6 +104,11 @@ export function MissingInvoicesDrawer({
    * Eredeti hiányzik így Megvan lesz. Csak párosított számlánál kérdés.
    */
   onPaperOriginal?: (marked: boolean) => void;
+  /**
+   * DUPLIKÁTUM (task bank-dupla-import): a tétel az ugyanazon fizetés második példánya (az import dupla tétele). A
+   * gomb csak számlához NEM párosított tételen áll; a kérdés és a visszavonás a hívó dolga.
+   */
+  onDuplicate?: () => void;
   /**
    * A VEVŐ KÉZI JELÖLÉSE (acrobot 25633, `PUT …/documents/:id/payee`): a
    * beszkennelt számla vevője nem olvasható, a kezelő mondja meg.
@@ -270,6 +276,26 @@ export function MissingInvoicesDrawer({
           {!row.document && paperCheckbox ? (
             <section className="rounded-xl px-4 py-3 text-sm ring-1 ring-pilot-grey-200">
               {paperCheckbox}
+            </section>
+          ) : null}
+
+          {!row.document && canManage && onDuplicate ? (
+            <section className="rounded-xl px-4 py-3 text-sm ring-1 ring-pilot-grey-200">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="min-w-0 flex-1 text-pilot-grey-700">
+                  Ugyanaz a fizetés kétszer szerepel a bankban? A második
+                  példányt duplikátumnak jelölheted: kimarad a hiányzók és az
+                  összegzések közül, és a jelölés visszavonható.
+                </p>
+                <PilotButton
+                  variant="secondary"
+                  size="action"
+                  disabled={busy !== null}
+                  onClick={onDuplicate}
+                >
+                  {busy === "duplicate" ? "Jelölés…" : "Duplikátum"}
+                </PilotButton>
+              </div>
             </section>
           ) : null}
 

@@ -3,6 +3,7 @@ import {
   type MissingInvoiceCategory,
   type MissingInvoiceCategoryInput,
   type MissingInvoiceCommentInput,
+  type MissingInvoiceDuplicateInput,
   type MissingInvoiceMatchInput,
   type MissingInvoicePaperOriginalInput,
   type MissingInvoicePayeeInput,
@@ -10,6 +11,7 @@ import {
 import {
   IsBoolean,
   IsIn,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
@@ -35,6 +37,15 @@ export class MissingInvoiceCategoryDto implements MissingInvoiceCategoryInput {
 
 export class MissingInvoicePaperOriginalDto implements MissingInvoicePaperOriginalInput {
   @IsBoolean() marked!: boolean;
+}
+
+export class MissingInvoiceDuplicateDto implements MissingInvoiceDuplicateInput {
+  @IsBoolean() marked!: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  duplicateOfId?: string | null;
 }
 
 export class MissingInvoicePayeeDto implements MissingInvoicePayeeInput {

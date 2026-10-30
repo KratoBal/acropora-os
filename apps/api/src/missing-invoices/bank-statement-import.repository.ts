@@ -26,6 +26,8 @@ export interface IngestResult {
   createdCount: number;
   /** Egy másik forrásból már bent lévő tranzakció, amit ez a forrás most lefoglalt. */
   claimedCount: number;
+  /** Ugyanazon fizetés újraexportja más közleménnyel (új kulccsal): kihagyva, nem új tranzakció. */
+  reexportedCount: number;
 }
 
 /**
@@ -49,7 +51,11 @@ export class BankStatementImportRepository {
     rows: readonly OtpStatementRow[];
     rejectedCount: number;
     userId: string;
-  }): Promise<{ importId: string; createdCount: number }> {
+  }): Promise<{
+    importId: string;
+    createdCount: number;
+    reexportedCount: number;
+  }> {
     const result = await this.ingest({
       fileName: input.fileName,
       sha256: input.sha256,
@@ -72,7 +78,11 @@ export class BankStatementImportRepository {
         transactionType: row.transactionType,
       })),
     });
-    return { importId: result.importId, createdCount: result.createdCount };
+    return {
+      importId: result.importId,
+      createdCount: result.createdCount,
+      reexportedCount: result.reexportedCount,
+    };
   }
 
   /** A saját bankszámláink, normalizált számmal: a továbbítás csak ezekre írhat. */
@@ -181,6 +191,9 @@ export class BankStatementImportRepository {
       );
       let createdCount = 0;
       let claimedCount = 0;
+      const reexportedCount = plan.filter(
+        (a) => a.kind === "SKIP" && a.reason === "SAME_PAYMENT_NEW_KEY",
+      ).length;
       for (let i = 0; i < input.rows.length; i++) {
         const row = input.rows[i]!;
         const action = plan[i]!;
@@ -222,7 +235,12 @@ export class BankStatementImportRepository {
         where: { id: record.id },
         data: { createdCount, skippedCount: input.rows.length - createdCount },
       });
-      return { importId: record.id, createdCount, claimedCount };
+      return {
+        importId: record.id,
+        createdCount,
+        claimedCount,
+        reexportedCount,
+      };
     });
   }
 }
