@@ -53,7 +53,53 @@ import {
  * Alapból SZÁRAZFUTÁS, és a `writeRedirect` a termékekkel azonos őrökkel fut
  * (lánc, kör, kisbetűs ütközés, idegen cél).
  */
-export type CategoryHandleForm = "current" | "legacy";
+export type CategoryHandleForm = "current" | "legacy" | "medusa";
+
+/**
+ * A MEDUSA TÉNYLEGES KATEGÓRIÁJA (a kirakat `/store/product-categories` listájából): a `handle` az,
+ * amit a kirakat szolgál. `parent`: a szülő handle-je (gyökér: null).
+ */
+export interface MedusaCategoryRef {
+  handle: string;
+  name: string;
+  parent: string | null;
+}
+
+/**
+ * A lista bemenete két alakban jöhet: a tömör ({handle, name, parent}) és a Medusa nyers válaszáé
+ * ({id, handle, name, parent_category_id}); az utóbbit a szülő azonosítóból handle-re fordítja.
+ */
+export function normalizeMedusaCategories(raw: unknown): MedusaCategoryRef[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw &&
+        typeof raw === "object" &&
+        Array.isArray(
+          (raw as { product_categories?: unknown }).product_categories,
+        )
+      ? (raw as { product_categories: unknown[] }).product_categories
+      : null;
+  if (!list)
+    throw new Error("a Medusa-kategóriák listája hiányzik vagy nem lista");
+  const rows = list as Record<string, unknown>[];
+  const handleById = new Map<string, string>();
+  for (const r of rows)
+    if (typeof r.id === "string" && typeof r.handle === "string")
+      handleById.set(r.id, r.handle);
+  return rows.map((r) => {
+    if (typeof r.handle !== "string" || typeof r.name !== "string")
+      throw new Error("a Medusa-kategóriának handle és name mezője kell");
+    const parent =
+      typeof r.parent === "string"
+        ? r.parent
+        : typeof r.parent_category_id === "string"
+          ? (handleById.get(r.parent_category_id) ?? null)
+          : null;
+    if (typeof r.parent_category_id === "string" && parent === null)
+      throw new Error(`a(z) ${r.handle} kategória szülője nincs a listában`);
+    return { handle: r.handle, name: r.name, parent };
+  });
+}
 
 export interface CategoryForRedirect {
   /** Az OS `Category.id`-je. */
@@ -83,6 +129,8 @@ export interface CategoryRedirectReport {
   skipped: number;
   /** Két kategória ugyanazt a handle-t kapná: a cél nem egyedi, egyik sem íródik. */
   handleCollisions: string[];
+  /** `medusa` képletnél: az út kategóriájához nincs (vagy kettő) Medusa-kategória, nincs szabály. */
+  noMedusaCategory: string[];
   invariantViolations: RedirectRule[];
 }
 
@@ -91,11 +139,20 @@ interface Resolved {
   handle: string;
 }
 
-/** A kategóriák handle-je: a Medusába kerülő számítás ugyanaz, a `form` választja a címképletet. */
+/**
+ * A kategóriák handle-je. `current` és `legacy`: a Medusába kerülő számítás ugyanaz, a képlet a
+ * címet választja. `medusa`: a kirakat TÉNYLEGES handle-je, a Medusa-kategória nevéből és szülőjéből
+ * párosítva (a mai teszt Medusa kategóriái a nyers `kebabCase(cím)` handle-t hordják: ékezettel és
+ * három kötőjellel, `eledelek---termékek`, amit sem a `current`, sem a `legacy` nem ad vissza; az
+ * átvétel (adopt) előtt csak a `medusa` alak mutat élő oldalra). Nem párosítható kategória
+ * (nincs, vagy kettő illik) NINCS a térképben.
+ */
 export function categoryHandles(
   categories: readonly CategoryForRedirect[],
   form: CategoryHandleForm,
+  medusa?: readonly MedusaCategoryRef[],
 ): Map<string, string> {
+  if (form === "medusa") return medusaHandles(categories, medusa ?? []);
   const rows = categoryRowsFromOurTree(
     categories.map((c) => ({ id: c.id, parentId: c.parentId, name: c.name })),
   );
@@ -113,6 +170,63 @@ export function categoryHandles(
   return out;
 }
 
+/** Egy kategória nevei a gyökértől: az összevetés kulcsa (név és szülő-útvonal EGYÜTT, mint az átvételnél). */
+const pathKey = (names: readonly string[]) =>
+  names.map((n) => n.trim().toLowerCase()).join(" > ");
+
+function medusaHandles(
+  categories: readonly CategoryForRedirect[],
+  medusa: readonly MedusaCategoryRef[],
+): Map<string, string> {
+  const byHandle = new Map(medusa.map((m) => [m.handle, m]));
+  // a Medusa-kategória NEVE a cím (`{név} - {szülő}` vagy csak a név, a képlettől függően): a tiszta
+  // nevet a szülő tiszta nevének lecsípésével kapjuk, és CSAK ha a cím azzal végződik (egy tiszta név,
+  // ami maga tartalmaz " - "-t, ép marad: "RKS - Fogyáshoz igazított nyomelem rendszer")
+  const plainCache = new Map<string, string>();
+  const plainOf = (m: MedusaCategoryRef, guard = 0): string => {
+    const cached = plainCache.get(m.handle);
+    if (cached !== undefined) return cached;
+    let plain = m.name;
+    const parent = m.parent && guard < 64 ? byHandle.get(m.parent) : undefined;
+    if (parent) {
+      const suffix = ` - ${plainOf(parent, guard + 1)}`;
+      if (m.name.endsWith(suffix)) plain = m.name.slice(0, -suffix.length);
+    }
+    plainCache.set(m.handle, plain);
+    return plain;
+  };
+  const medusaPath = (m: MedusaCategoryRef): string[] => {
+    const out: string[] = [];
+    let cur: MedusaCategoryRef | undefined = m;
+    for (let guard = 0; cur && guard < 64; guard++) {
+      out.unshift(plainOf(cur));
+      cur = cur.parent ? byHandle.get(cur.parent) : undefined;
+    }
+    return out;
+  };
+  const medusaByPath = new Map<string, MedusaCategoryRef[]>();
+  for (const m of medusa) {
+    const k = pathKey(medusaPath(m));
+    medusaByPath.set(k, [...(medusaByPath.get(k) ?? []), m]);
+  }
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const ourPath = (c: CategoryForRedirect): string[] => {
+    const out: string[] = [];
+    let cur: CategoryForRedirect | undefined = c;
+    for (let guard = 0; cur && guard < 64; guard++) {
+      out.unshift(cur.name);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return out;
+  };
+  const out = new Map<string, string>();
+  for (const c of categories) {
+    const hits = medusaByPath.get(pathKey(ourPath(c))) ?? [];
+    if (hits.length === 1) out.set(c.id, hits[0]!.handle);
+  }
+  return out;
+}
+
 const ID_UTAK = /^\/(?:spl|sct)\/([^/]+)(?:\/.*)?$/i;
 
 /** Egy szegmens összevetési alakja: ugyanaz a webcím-képzés, mint a handle-nél, nagybetű nélkül. */
@@ -122,7 +236,10 @@ export async function planCategoryRedirectBackfill(
   paths: readonly string[],
   categories: readonly CategoryForRedirect[],
   existing: readonly RedirectRule[],
-  options: { form: CategoryHandleForm } = { form: "current" },
+  options: {
+    form: CategoryHandleForm;
+    medusa?: readonly MedusaCategoryRef[];
+  } = { form: "current" },
 ): Promise<{ store: MemoryRedirectStore; report: CategoryRedirectReport }> {
   const store = new MemoryRedirectStore(existing);
   const report: CategoryRedirectReport = {
@@ -138,9 +255,10 @@ export async function planCategoryRedirectBackfill(
     ambiguous: [],
     skipped: 0,
     handleCollisions: [],
+    noMedusaCategory: [],
     invariantViolations: [],
   };
-  const handles = categoryHandles(categories, options.form);
+  const handles = categoryHandles(categories, options.form, options.medusa);
   // egy handle csak egy kategóriáé lehet: ütközésnél egyik sem kap szabályt (a cél nem egyértelmű)
   const handleOwners = new Map<string, string[]>();
   for (const [id, handle] of handles)
@@ -175,12 +293,13 @@ export async function planCategoryRedirectBackfill(
 
   const resolve = (
     source: string,
-  ): Resolved | "unknown" | CategoryForRedirect[] | null => {
+  ): Resolved | "unknown" | "no-medusa" | CategoryForRedirect[] | null => {
     const idMatch = ID_UTAK.exec(source);
     if (idMatch) {
       const cat = byUnasId.get(idMatch[1]!);
       if (!cat) return "unknown";
-      return { id: cat.id, handle: handles.get(cat.id)! };
+      const handle = handles.get(cat.id);
+      return handle ? { id: cat.id, handle } : "no-medusa";
     }
     const segs = source.split("/").filter(Boolean).map(szegmens);
     if (segs.length === 0 || segs.some((s) => s === "")) return null;
@@ -199,7 +318,8 @@ export async function planCategoryRedirectBackfill(
     if (candidates.length === 0) return null;
     if (candidates.length === 1) {
       const c = candidates[0]!;
-      return { id: c.id, handle: handles.get(c.id)! };
+      const handle = handles.get(c.id);
+      return handle ? { id: c.id, handle } : "no-medusa";
     }
     return candidates;
   };
@@ -222,10 +342,16 @@ export async function planCategoryRedirectBackfill(
       report.unknownId.push(source);
       continue;
     }
+    if (found === "no-medusa") {
+      report.noMedusaCategory.push(source);
+      continue;
+    }
     if (Array.isArray(found)) {
       report.ambiguous.push({
         source,
-        candidates: found.map((c) => handles.get(c.id)!).sort(),
+        candidates: found
+          .map((c) => handles.get(c.id) ?? `(nincs Medusa: ${c.name})`)
+          .sort(),
       });
       continue;
     }
@@ -275,14 +401,15 @@ export function describeCategoryRedirectBackfill(
   form: CategoryHandleForm,
 ): string {
   return [
-    `Cimkeplet: ${form === "legacy" ? "regi ({nev} - {szulo} minden nem gyokeren)" : "dontott (a szulo csak utkozeskor)"}`,
+    `Cimkeplet: ${form === "legacy" ? "regi ({nev} - {szulo} minden nem gyokeren)" : form === "medusa" ? "a Medusa tenyleges handle-je (nev es szulo-utvonal szerint parositva)" : "dontott (a szulo csak utkozeskor)"}`,
     `Utak: ${r.paths}; kategoria: ${r.categories}; nem kategoria-szeru (termek, blog, statikus lap): ${r.skipped}`,
     `Uj szabaly: ${r.created}; valtozatlan: ${r.unchanged}; atirt korabbi cel (lanc-osszevonas): ${r.repointed}`,
-    `Ismeretlen UNAS-azonosito (nincs szabaly): ${r.unknownId.length}; ketertelmu (nincs szabaly): ${r.ambiguous.length}`,
+    `Ismeretlen UNAS-azonosito (nincs szabaly): ${r.unknownId.length}; ketertelmu (nincs szabaly): ${r.ambiguous.length}; nincs hozza Medusa-kategoria (nincs szabaly): ${r.noMedusaCategory.length}`,
     `Elteroen mar meglevo (nem irtuk felul): ${r.conflicts.length}; elutasitva: ${r.refused.length}; kozos handle: ${r.handleCollisions.length}`,
     `Invarians (aktiv cel, ami forras): ${r.invariantViolations.length}`,
     ...r.createdRules.map((c) => `  uj: ${c.source} -> ${c.destination}`),
     ...r.unknownId.map((s) => `  ismeretlen azonosito: ${s}`),
+    ...r.noMedusaCategory.map((s) => `  nincs Medusa-kategoria: ${s}`),
     ...r.ambiguous.map(
       (a) => `  ketertelmu: ${a.source} -> ${a.candidates.join(" | ")}`,
     ),
