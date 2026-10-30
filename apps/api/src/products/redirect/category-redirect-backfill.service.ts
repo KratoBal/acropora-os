@@ -19,6 +19,16 @@ import { lockRedirectWrites } from "./redirect.repository.js";
 
 export const CATEGORY_BACKFILL_DB = Symbol("CATEGORY_BACKFILL_DB");
 
+/**
+ * A tranzakció időkorlátja: benne van a teljes betöltés (minden kategória és minden meglévő
+ * átirányítás, ma több ezer sor), a tervezés és az írás. A Prisma alapértéke 5 mp, efölött
+ * "transaction already closed" lenne, a hiba okának látszata nélkül (barracuda #1972 a).
+ */
+export const TRANSACTION_OPTIONS = {
+  timeout: 60_000,
+  maxWait: 10_000,
+} as const;
+
 export interface CategoryRedirectBackfillResult {
   applied: boolean;
   planHash: string;
@@ -105,6 +115,6 @@ export class CategoryRedirectBackfillService {
         },
       });
       return { applied: true, planHash, form, report };
-    });
+    }, TRANSACTION_OPTIONS);
   }
 }
