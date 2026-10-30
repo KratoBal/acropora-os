@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { prisma } from "@acropora/database";
 
 import { CatalogOptionsController } from "./catalog-options.controller.js";
 import { ProductBarcodeController } from "./product-barcode.controller.js";
@@ -28,6 +29,11 @@ import { ProductController } from "./product.controller.js";
 import { ProductRepository } from "./product.repository.js";
 import { PRODUCT_ENVIRONMENT, ProductService } from "./product.service.js";
 
+import { CategoryRedirectBackfillController } from "./redirect/category-redirect-backfill.controller.js";
+import {
+  CATEGORY_BACKFILL_DB,
+  CategoryRedirectBackfillService,
+} from "./redirect/category-redirect-backfill.service.js";
 import { UrlRedirectController } from "./redirect/url-redirect.controller.js";
 import {
   REDIRECT_TRANSACTOR,
@@ -57,6 +63,7 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     AttributeController,
     WebshopSlugController,
     UrlRedirectController,
+    CategoryRedirectBackfillController,
   ],
   providers: [
     DoseEffectsService,
@@ -78,6 +85,8 @@ import { DoseProjectionService } from "./dose-effects/dose-projection.service.js
     { provide: WEBSHOP_SLUG_STORE, useClass: PrismaWebshopSlugStore },
     UrlRedirectService,
     { provide: REDIRECT_TRANSACTOR, useValue: prismaRedirectTransactor },
+    CategoryRedirectBackfillService,
+    { provide: CATEGORY_BACKFILL_DB, useValue: prisma },
   ],
   exports: [ProductService, ProductExtensionService, ProductBarcodeRepository],
 })
