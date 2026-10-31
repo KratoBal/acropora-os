@@ -2,11 +2,16 @@ import type { Vocabulary } from "@acropora/knowledge-base";
 
 import { DISCOVERY_USER_AGENT } from "../discovery/scholarly-client.js";
 import {
+  SOURCE_FIELDS,
   checkClaims,
   keepOwnFindings,
   type CheckedClaim,
 } from "./claim-check.js";
-import type { ClaimExtractor } from "./claim-extractor.js";
+import { imageTiles } from "../../common/image-tiles.js";
+import type {
+  ClaimExtractor,
+  FigureClaimExtractor,
+} from "./claim-extractor.js";
 import type { ExtractionStore } from "./extraction-store.js";
 import { sha256 } from "./extraction-store.js";
 import {
@@ -16,6 +21,13 @@ import {
   type TextSection,
 } from "./jats-text.js";
 import { createHash } from "node:crypto";
+import {
+  captionNamesPhosphate,
+  figureCaptionLocator,
+  figureImageLocator,
+  jatsFigures,
+} from "./jats-figures.js";
+import { fetchPmcFigureImage } from "./pmc-figure-image.js";
 
 import {
   fetchOpenPdf,
@@ -150,6 +162,29 @@ export interface SourceOutcome {
   fullText: "JATS" | "PDF" | "MANUAL_PDF" | null;
   /** PDF only: pages past the page cap, not read. */
   pagesDropped: number;
+  /** The figures' image reading (research-kepes-ut); null: not run. */
+  figures: FigureOutcome | null;
+}
+
+/**
+ * THE FIGURES OF ONE SOURCE, counted (research-kepes-ut): counts and codes,
+ * like the rest of the outcome, never a caption or a transcript.
+ */
+export interface FigureOutcome {
+  /** Figures whose caption names the subject. */
+  candidates: number;
+  /** Past `MAX_FIGURES_PER_SOURCE`, not read. */
+  dropped: number;
+  /** A figure not read, by reason (image fetch, tiling, AI). */
+  skipped: Record<string, number>;
+  calls: number;
+  tiles: number;
+  /** Claims kept from the figures, and of them those whose passage is a tile's transcript. */
+  claims: number;
+  fromImage: number;
+  refusedClaims: Record<string, number>;
+  refusedFields: Record<string, number>;
+  refusalDetails: string[];
 }
 
 export interface ExtractionDeps {
@@ -171,6 +206,8 @@ export interface ExtractionDeps {
   reextract?: { actorUserId: string | null };
   /** The editor's uploaded PDF (research-kezi-pdf): read instead of any open text, never kept. */
   manualPdf?: Uint8Array;
+  /** The figures' image reading (research-kepes-ut); absent: the text only. */
+  figureExtractor?: FigureClaimExtractor | null;
 }
 
 const count = (into: Record<string, number>, code: string) => {
@@ -198,6 +235,7 @@ export function emptyOutcome(sourceId: string): SourceOutcome {
     retractionUnchecked: false,
     fullText: null,
     pagesDropped: 0,
+    figures: null,
   };
 }
 
@@ -208,6 +246,8 @@ export type FullTextReading =
       contentHash: string;
       claims: CheckedClaim[];
       extractedBy: string;
+      /** The locators of text no download holds (a figure's transcript): stored as not verified. */
+      unverifiedLocators?: string[];
     }
   | { ok: false; reason: string };
 
@@ -218,6 +258,7 @@ interface ReadDeps {
   maxChunks?: number;
   /** The open PDF's fetch: the address-guarded one by default (tests give their own). */
   pdfFetch?: PdfFetch;
+  figureExtractor?: FigureClaimExtractor | null;
 }
 
 /**
@@ -235,12 +276,194 @@ export async function readFullTextClaims(
   const text = await fetchFullText(pmcid, deps.fetch);
   if (!text.ok) return text;
   outcome.fullText = "JATS";
-  return readSectionClaims(
-    jatsSections(text.xml),
+  const sections = jatsSections(text.xml);
+  const read = await readSectionClaims(
+    sections,
     sha256(text.xml),
     outcome,
     deps,
   );
+  // the figures only on a text that was read: a source no call answered stays unread
+  if (!read.ok || !deps.figureExtractor) return read;
+  const figures = await readFigureClaims(
+    pmcid,
+    text.xml,
+    sections,
+    outcome,
+    deps as ReadDeps & { figureExtractor: FigureClaimExtractor },
+  );
+  const claims = [...read.claims, ...figures.claims];
+  outcome.claims = claims.length;
+  outcome.fields = claims.reduce(
+    (n, c) => n + c.anchors.filter((a) => a.proposed === undefined).length,
+    0,
+  );
+  outcome.questions = claims.reduce(
+    (n, c) => n + c.anchors.filter((a) => a.proposed !== undefined).length,
+    0,
+  );
+  return { ...read, claims, unverifiedLocators: figures.unverifiedLocators };
+}
+
+export const MAX_FIGURES_PER_SOURCE = 6;
+/**
+ * A tile's byte cap here, under the AI service's (8 MiB a tile, 24 MiB a call):
+ * four tiles of 6 MiB fit both (barracuda, #1978 review). A chart's PNG is far
+ * smaller; a photo-like figure falls back to a baseline JPEG.
+ */
+export const FIGURE_TILE_MAX_BYTES = 6 * 1024 * 1024;
+
+/**
+ * THE FIGURES WHOSE CAPTION NAMES THE SUBJECT, READ FROM THEIR IMAGE
+ * (research-kepes-ut, slice 3). Per figure: its image from the PMC open-access
+ * dataset, the tiles (`image-tiles.ts`), one AI call with the caption and the
+ * tiles, and the OS's own check of every claim against the paper's sections,
+ * the caption and the AI's transcripts, one per tile.
+ *
+ * WHAT IS VERIFIED AND WHAT IS NOT. A passage or anchor that stands in the
+ * paper's text or its caption is a downloaded text, verified as any other. One
+ * that stands only in a transcript is the model's reading of the image: its
+ * locator ("Figure 3, image tile 2/4") is returned in `unverifiedLocators`, and
+ * the store keeps it with `verifiedVerbatimAt` NULL. The answer gate refuses a
+ * claim with no verified passage (NO_VERBATIM_EVIDENCE), so such a claim waits
+ * for the editor and is not answered from.
+ *
+ * The OS does not take the AI's `origin` on trust; it locates every text itself
+ * and applies the same rule (acropora-ai-agent #59): an anchor in a transcript
+ * is kept only on a claim whose passage is that very tile's, so a verified
+ * claim never carries a number only the image reading holds
+ * (ANCHOR_ACROSS_PARTS). The study's own fields (study type, measurement
+ * method) are the text's, never a figure's (SOURCE_FIELD_FROM_FIGURE). A
+ * claim whose passage stands in the paper's sections is the text call's to
+ * find (a caption inside a section is read there too): it is dropped as a
+ * twin (PASSAGE_IN_TEXT). What is left is what only the figure holds: a
+ * caption outside the sections (a `<floats-group>`), or the image.
+ */
+export async function readFigureClaims(
+  pmcid: string,
+  xml: string,
+  sections: readonly TextSection[],
+  outcome: SourceOutcome,
+  deps: ReadDeps & { figureExtractor: FigureClaimExtractor },
+): Promise<{ claims: CheckedClaim[]; unverifiedLocators: string[] }> {
+  const figures = jatsFigures(xml).filter((f) =>
+    captionNamesPhosphate(f.caption),
+  );
+  const fo: FigureOutcome = {
+    candidates: figures.length,
+    dropped: Math.max(0, figures.length - MAX_FIGURES_PER_SOURCE),
+    skipped: {},
+    calls: 0,
+    tiles: 0,
+    claims: 0,
+    fromImage: 0,
+    refusedClaims: {},
+    refusedFields: {},
+    refusalDetails: [],
+  };
+  outcome.figures = fo;
+  const vocabularyKeys = {
+    taxa: deps.vocabulary.taxa.map((t) => t.key),
+    environments: deps.vocabulary.environments.map((t) => t.key),
+    effects: deps.vocabulary.effects.map((t) => t.key),
+  };
+  const checked: CheckedClaim[] = [];
+  const unverifiedLocators: string[] = [];
+  const inText = new Set(sections.map((s) => s.locator));
+  for (const figure of figures.slice(0, MAX_FIGURES_PER_SOURCE)) {
+    const image = await fetchPmcFigureImage(pmcid, figure.href, deps.fetch);
+    if (!image.ok) {
+      count(fo.skipped, `IMAGE_${image.reason}`);
+      continue;
+    }
+    const tiling = await imageTiles(image.bytes, {
+      maxBytes: FIGURE_TILE_MAX_BYTES,
+    });
+    if (!tiling.ok) {
+      count(fo.skipped, `TILES_${tiling.reason}`);
+      continue;
+    }
+    fo.calls += 1;
+    fo.tiles += tiling.tiles.length;
+    const answer = await deps.figureExtractor.extract({
+      subject: "PHOSPHATE",
+      vocabulary: vocabularyKeys,
+      figure: figure.label,
+      caption: figure.caption,
+      images: tiling.tiles.map((t) => ({
+        contentType: t.contentType,
+        bytes: t.bytes,
+      })),
+    });
+    if (answer.kind === "UNAVAILABLE") {
+      count(fo.skipped, `AI_UNAVAILABLE`);
+      count(outcome.unavailable, answer.reason);
+      continue;
+    }
+    if (answer.kind === "REFUSED") {
+      count(fo.refusedClaims, `AI_${answer.refusal}`);
+      if (answer.detail && fo.refusalDetails.length < MAX_REFUSAL_DETAILS)
+        fo.refusalDetails.push(`${answer.refusal}: ${answer.detail}`);
+      continue;
+    }
+    for (const code of answer.refusedClaims)
+      count(fo.refusedClaims, `AI_${code}`);
+    for (const detail of answer.refusalDetails ?? [])
+      if (fo.refusalDetails.length < MAX_REFUSAL_DETAILS)
+        fo.refusalDetails.push(detail);
+    const imageSections = answer.transcripts.map((text, i) => ({
+      locator: figureImageLocator(figure.label, i + 1, tiling.tiles.length),
+      text,
+    }));
+    const imageLocators = new Set(imageSections.map((s) => s.locator));
+    unverifiedLocators.push(...imageLocators);
+    // the paper's own text first: a passage it holds is located, and verified, there
+    const result = checkClaims(
+      answer.claims,
+      [
+        ...sections,
+        { locator: figureCaptionLocator(figure.label), text: figure.caption },
+        ...imageSections,
+      ],
+      deps.vocabulary,
+    );
+    for (const code of result.refusedClaims) count(fo.refusedClaims, code);
+    for (const claim of result.claims) {
+      // the paper's own text is the text call's: a figure claim there would be a twin
+      if (inText.has(claim.passage.locator)) {
+        count(fo.refusedClaims, "PASSAGE_IN_TEXT");
+        continue;
+      }
+      const ownTile = imageLocators.has(claim.passage.locator)
+        ? claim.passage.locator
+        : null;
+      const kept = claim.anchors.filter(
+        (a) =>
+          (!imageLocators.has(a.locator) || a.locator === ownTile) &&
+          !SOURCE_FIELDS.includes(a.field),
+      );
+      for (const a of claim.anchors) {
+        if (kept.includes(a)) continue;
+        const refusal = SOURCE_FIELDS.includes(a.field)
+          ? "SOURCE_FIELD_FROM_FIGURE"
+          : "ANCHOR_ACROSS_PARTS";
+        claim.refused.push({ field: a.field, refusal });
+        // the column goes with its anchor (keepOwnFindings does the same)
+        (claim as unknown as Record<string, unknown>)[a.field] = null;
+      }
+      claim.anchors = kept;
+      for (const r of claim.refused) count(fo.refusedFields, r.refusal);
+      checked.push({ ...claim, extractedBy: answer.extractedBy });
+    }
+  }
+  const own = keepOwnFindings(checked, deps.vocabulary);
+  for (const code of own.refusedClaims) count(fo.refusedClaims, code);
+  for (const code of own.refusedFields) count(fo.refusedFields, code);
+  fo.claims = own.claims.length;
+  fo.fromImage = own.claims.filter((c) =>
+    unverifiedLocators.includes(c.passage.locator),
+  ).length;
+  return { claims: own.claims, unverifiedLocators };
 }
 
 /** The same reading on an open PDF's text layer (no PMCID, an open-access link). */
@@ -396,6 +619,9 @@ export async function extractSource(
     ...(deps.runId ? { runId: deps.runId } : {}),
     ...(deps.reextract?.actorUserId
       ? { replaceCandidatesBy: deps.reextract.actorUserId }
+      : {}),
+    ...(read.unverifiedLocators?.length
+      ? { unverifiedLocators: read.unverifiedLocators }
       : {}),
   });
   return {

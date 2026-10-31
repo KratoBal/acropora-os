@@ -21,7 +21,11 @@ import {
 import { RunAlreadyRunning } from "../discovery/discovery-run.store.js";
 import { researchDraftRunning } from "../research-drafts/research-draft.store.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
-import { claimExtractorFromEnv } from "./claim-extractor.js";
+import {
+  claimExtractorFromEnv,
+  figureExtractorFromEnv,
+  type FigureClaimExtractor,
+} from "./claim-extractor.js";
 import { parseSourceIds } from "./extraction.cli.js";
 import { extractSource, type SourceOutcome } from "./extraction-run.js";
 import { isPdf, MAX_PDF_BYTES } from "./pdf-full-text.js";
@@ -46,6 +50,11 @@ export type ExtractionServiceDeps = Omit<ExtractionCliDeps, "actorExists"> & {
   approvedVocabulary?: () => Promise<Vocabulary>;
   /** A mode B research draft running (it shares the AI and Europe PMC); absent: none. */
   draftRunning?: () => Promise<boolean>;
+  /**
+   * The figures' image reading (research-kepes-ut): on only with
+   * ACROPORA_AI_FIGURE_EXTRACTION_PATH set; absent or null, the text only.
+   */
+  figureExtractor?: FigureClaimExtractor | null;
 };
 
 @Injectable()
@@ -63,6 +72,7 @@ export class KnowledgeExtractionService {
       env: process.env,
       store: new PrismaExtractionStore(),
       extractor: claimExtractorFromEnv(process.env),
+      figureExtractor: figureExtractorFromEnv(process.env),
       fetch: (url, init) => fetch(url, init),
       vocabulary: vocabularyV1(),
       approvedVocabulary: () => new VocabularyRepository().approvedVocabulary(),
@@ -174,6 +184,9 @@ export class KnowledgeExtractionService {
             runId,
             ...(reextract ? { reextract: { actorUserId: user.id } } : {}),
             ...(opts.manualPdf ? { manualPdf: opts.manualPdf } : {}),
+            ...(this.deps.figureExtractor
+              ? { figureExtractor: this.deps.figureExtractor }
+              : {}),
           }),
         );
       await store.finishRun(

@@ -145,3 +145,111 @@ export function claimExtractorFromEnv(
     ? new HttpClaimExtractor(config.baseUrl, config.token, path)
     : null;
 }
+
+/**
+ * THE AI SERVICE'S FIGURE CLAIM EXTRACTION (acropora-ai-agent
+ * `POST /v1/figure-claim-extractions`, #59; research-kepes-ut): one figure,
+ * its caption and its image tiles. The answer is the text answer's shape,
+ * plus one transcript per tile (the text printed in it, as the model reads
+ * it) and each claim's origin. `claim-check.ts` reads every claim again, here
+ * against the paper's sections, the caption and these transcripts; a passage
+ * or an anchor that stands only in a transcript is the model's word, and is
+ * stored as not verified verbatim.
+ */
+export const AI_FIGURE_EXTRACTION_PATH_ENV =
+  "ACROPORA_AI_FIGURE_EXTRACTION_PATH";
+/** The figure call's image tiles: PNG or JPEG bytes, in reading order. */
+export interface FigureExtractionInput {
+  subject: "PHOSPHATE";
+  vocabulary: { taxa: string[]; environments: string[]; effects: string[] };
+  figure: string;
+  caption: string;
+  images: { contentType: "image/png" | "image/jpeg"; bytes: Uint8Array }[];
+}
+export type FigureExtractorAnswer =
+  | (Extract<ClaimExtractorAnswer, { kind: "ANSWER" }> & {
+      transcripts: string[];
+    })
+  | Exclude<ClaimExtractorAnswer, { kind: "ANSWER" }>;
+export interface FigureClaimExtractor {
+  extract(input: FigureExtractionInput): Promise<FigureExtractorAnswer>;
+}
+/** A transcript at most (the AI service's own cap, 6 000, with room). */
+export const MAX_TRANSCRIPT = 8_000;
+
+/** The figure answer's body; a transcript list of another length is UNAVAILABLE. */
+export function figureAnswerOf(
+  body: unknown,
+  tiles: number,
+): FigureExtractorAnswer {
+  const answer = claimAnswerOf(body);
+  if (answer.kind !== "ANSWER") return answer;
+  const transcripts = (body as Record<string, unknown>).transcripts;
+  if (
+    !Array.isArray(transcripts) ||
+    transcripts.length !== tiles ||
+    !transcripts.every(
+      (t) => typeof t === "string" && t.length <= MAX_TRANSCRIPT,
+    )
+  )
+    return { kind: "UNAVAILABLE", reason: "no transcripts" };
+  return { ...answer, transcripts: transcripts as string[] };
+}
+
+export class HttpFigureClaimExtractor implements FigureClaimExtractor {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token: string,
+    private readonly path: string,
+  ) {}
+
+  async extract(input: FigureExtractionInput): Promise<FigureExtractorAnswer> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.baseUrl}/${this.path.replace(/^\/+/, "")}`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            subject: input.subject,
+            vocabulary: input.vocabulary,
+            figure: input.figure,
+            caption: input.caption,
+            images: input.images.map((i) => ({
+              contentType: i.contentType,
+              data: Buffer.from(i.bytes).toString("base64"),
+            })),
+          }),
+          signal: AbortSignal.timeout(AI_CHAT_TIMEOUT_MS),
+        },
+      );
+    } catch (error) {
+      return {
+        kind: "UNAVAILABLE",
+        reason:
+          (error as Error)?.name === "TimeoutError" ? "timeout" : "unreachable",
+      };
+    }
+    if (!response.ok)
+      return { kind: "UNAVAILABLE", reason: `HTTP ${response.status}` };
+    return figureAnswerOf(
+      await response.json().catch(() => null),
+      input.images.length,
+    );
+  }
+}
+
+/** The figure extractor from the environment, or `null`: no path, no figure reading. */
+export function figureExtractorFromEnv(
+  environment: NodeJS.ProcessEnv,
+): FigureClaimExtractor | null {
+  const path = environment[AI_FIGURE_EXTRACTION_PATH_ENV]?.trim();
+  const config = aiChatConfig(environment);
+  return path && config
+    ? new HttpFigureClaimExtractor(config.baseUrl, config.token, path)
+    : null;
+}
