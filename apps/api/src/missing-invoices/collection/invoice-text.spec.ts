@@ -741,6 +741,79 @@ describe("the number from an underscore-joined file name (2026-10-06)", () => {
   });
 });
 
+// task szamla-fajlnev-kotojel (acrobot 39130): two uploads of 2026-10-30 went to review without a number. The texts below
+// are made up in the shape of such an online service's invoice: the number stands as a word, without its "Invoice-" prefix.
+describe("the number from a hyphen-joined file name (2026-10-30)", () => {
+  it("takes the run of the name that stands in the text as a word", () => {
+    assert.deepEqual(
+      readInvoiceText(
+        ["Számla", "TT8G4RBM-0007 | 2026-10-30", "Összesen 15 900 Ft"],
+        {
+          fileName: "Invoice-TT8G4RBM-0007.pdf",
+        },
+      ),
+      {
+        invoiceNumber: "TT8G4RBM-0007",
+        numberFrom: "FILE_NAME",
+        supplierTaxNumber: null,
+      },
+    );
+  });
+
+  it("a second download's -2 is not part of the number, even with a year after the number in the text", () => {
+    // squeezed together, the text reads ...OHCYTT2R00132026...: the -2 run would match there, a word does not
+    assert.equal(
+      readInvoiceText(
+        ["Receipt", "OHCYTT2R-0013 | 2026-10-30", "Total 180.00 EUR"],
+        {
+          fileName: "Invoice-OHCYTT2R-0013-2.pdf",
+        },
+      ).invoiceNumber,
+      "OHCYTT2R-0013",
+    );
+  });
+
+  it("a single part still counts when it is the number, and a date-shaped name gives none", () => {
+    assert.equal(
+      readInvoiceText(["Nr 12345", "Total 1 000 Ft"], {
+        fileName: "Invoice-12345.pdf",
+      }).invoiceNumber,
+      "12345",
+    );
+    assert.equal(
+      readInvoiceText(["Kelt: 2026-10-30", "Összesen 1 000 Ft"], {
+        fileName: "Szamla-2026-10-30.pdf",
+      }).invoiceNumber,
+      null,
+    );
+  });
+
+  it("a piece of a date is no number, even when the text has it as a word; a year-led number still is", () => {
+    assert.equal(
+      readInvoiceText(
+        ["Időszak: 2026-07", "Kelt: 07-31", "Összesen 1 000 Ft"],
+        { fileName: "Szamla_2026-07-31.pdf" },
+      ).invoiceNumber,
+      null,
+    );
+    assert.equal(
+      readInvoiceText(["Számla 2026-00123", "Összesen 1 000 Ft"], {
+        fileName: "SZLA-2026-00123.pdf",
+      }).invoiceNumber,
+      "2026-00123",
+    );
+  });
+
+  it("a run that is not a word of the text is no number", () => {
+    assert.equal(
+      readInvoiceText(["Számla", "Összesen 15 900 Ft"], {
+        fileName: "Invoice-TT8G4RBM-0007.pdf",
+      }).invoiceNumber,
+      null,
+    );
+  });
+});
+
 describe("table cells and customer ids (FleetCor, 2026-10-04)", () => {
   const FLEETCOR = [
     "Ügyfélazonosító szám | HU00008659 | ACROPORA KFT. | Számla - Eredeti példány",
