@@ -63,10 +63,27 @@ function decode(text: string): string {
   );
 }
 
+/**
+ * A formula in two forms is read in one. JATS may carry it as MathML AND as
+ * TeX inside one `<alternatives>`; stripped bare, both stood in the text, and
+ * a model quoting the readable "±" left a text that read "\pm" (measured on
+ * stage, research-kepes-ut: a refusal detail "U+00B1 src U+005C"; 37 such
+ * formulas in 2 of the 24 stage JATS). The MathML stays, the TeX goes; a TeX
+ * formula without MathML beside it stays as it is.
+ */
+const oneFormula = (fragment: string) =>
+  fragment.replace(
+    /<alternatives\b[^>]*>[\s\S]*?<\/alternatives>/gi,
+    (block) =>
+      /<mml:math\b/i.test(block)
+        ? block.replace(/<tex-math\b[\s\S]*?<\/tex-math>/gi, "")
+        : block,
+  );
+
 /** A JATS fragment as plain text, line by line. */
 export function jatsText(fragment: string): string {
   return decode(
-    fragment
+    oneFormula(fragment)
       .replace(/<(graphic|inline-graphic|media)\b[^>]*?\/>/gi, "")
       .replace(/<(graphic|inline-graphic|media)\b[\s\S]*?<\/\1>/gi, "")
       .replace(
