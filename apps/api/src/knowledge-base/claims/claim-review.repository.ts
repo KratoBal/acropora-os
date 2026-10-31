@@ -7,6 +7,7 @@ import {
 } from "@acropora/knowledge-base";
 
 import type { FieldName } from "../extraction/claim-check.js";
+import { isReadingLocator } from "../extraction/jats-figures.js";
 import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import {
   editorsWorkingCopy,
@@ -68,6 +69,13 @@ export interface ClaimReview {
     retractionUnchecked: boolean;
   };
   passage: { text: string; locator: string };
+  /**
+   * The passage is a figure reading ("read off image"): the editor accepts it
+   * only after comparing it with the image (`imageCompared`).
+   */
+  readOff: boolean;
+  /** When the editor compared it with the image; null if not (yet). */
+  imageComparedAt: string | null;
   fields: ReviewField[];
   quantity: {
     min: string | null;
@@ -142,6 +150,7 @@ const CLAIM_SELECT = {
       conditions: true,
       homeReefApplicability: true,
       applicabilityReason: true,
+      imageComparedAt: true,
       anchors: {
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: ANCHOR_SELECT,
@@ -352,6 +361,8 @@ export class ClaimReviewRepository {
           text: evidence.passage.text,
           locator: evidence.passage.locator,
         },
+        readOff: isReadingLocator(evidence.passage.locator),
+        imageComparedAt: evidence.imageComparedAt?.toISOString() ?? null,
         fields,
         quantity: claim.originalUnit
           ? {
@@ -400,6 +411,14 @@ export class ClaimReviewRepository {
         throw new ReviewInputError(
           "RETRACTED_SOURCE",
           "the source was retracted: a claim on it can only be discarded",
+        );
+      // a figure reading is the model's word on a curve: accepted only by an
+      // editor who held it against the image (Balázs, 2026-10-31 13:27 UTC)
+      const readOff = isReadingLocator(evidence.passage.locator);
+      if (readOff && !input.imageCompared)
+        throw new ReviewInputError(
+          "IMAGE_NOT_COMPARED",
+          "a claim read off a figure is accepted only after comparing it with the image",
         );
       const before = columnsOf(claim, anchors);
       // a question answered with a new key: the draft vocabulary gets it, and
@@ -500,6 +519,9 @@ export class ClaimReviewRepository {
                 applicabilityDecidedAt: now,
               }
             : {}),
+          ...(readOff
+            ? { imageComparedById: actorUserId, imageComparedAt: now }
+            : {}),
         },
       });
       if (Object.keys(plan.source).length > 0)
@@ -520,6 +542,7 @@ export class ClaimReviewRepository {
               ...plan.claim,
               source: plan.source,
               applicability: input.applicability,
+              ...(readOff ? { imageCompared: true } : {}),
             },
             decisions: plan.anchors.map((a) => ({
               anchorId: a.id,

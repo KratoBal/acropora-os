@@ -118,6 +118,8 @@ export function reviewErrorText(message: string): string {
     return "A forrást visszavonták: erre az állításra nem épülhet semmi, csak elvethető.";
   if (/effect and the direction/.test(message))
     return "A hatás és az irány nem maradhat el. Ha valamelyik hibás, az állítást vesd el.";
+  if (/comparing it with the image/.test(message))
+    return "Ábráról leolvasott állítás csak az ábrával való összevetés után fogadható el.";
   return message;
 }
 
@@ -213,6 +215,7 @@ export function ClaimReviewPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [applicability, setApplicability] = useState<Applicability | "">("");
   const [applicabilityReason, setApplicabilityReason] = useState("");
+  const [imageCompared, setImageCompared] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [discardReason, setDiscardReason] = useState("");
 
@@ -251,6 +254,7 @@ export function ClaimReviewPage() {
     setSaveError(null);
     setDiscarding(false);
     setDiscardReason("");
+    setImageCompared(false);
     knowledgeBaseApi
       .claimReview(token, currentId, controller.signal)
       .then((r) => {
@@ -281,6 +285,7 @@ export function ClaimReviewPage() {
     !review.source.retracted &&
     pendingCount === 0 &&
     !applicabilityIncomplete &&
+    (!review.readOff || imageCompared) &&
     !busy;
 
   const decide = (anchorId: string, d: LocalDecision) => {
@@ -317,6 +322,7 @@ export function ClaimReviewPage() {
           applicability === ""
             ? null
             : { value: applicability, reason: applicabilityReason.trim() },
+        ...(review.readOff ? { imageCompared } : {}),
       });
       await afterWrite();
     } catch (caught) {
@@ -502,6 +508,35 @@ export function ClaimReviewPage() {
                   </label>
                 ) : null}
               </div>
+
+              {review.readOff ? (
+                <div
+                  aria-label="Ábráról leolvasva"
+                  className="space-y-2 rounded-md bg-pilot-accent-warm-soft p-3 text-sm text-pilot-grey-900"
+                >
+                  <p>
+                    Ez az állítás ábráról leolvasott: az irányt és az értéket a
+                    modell olvasta le a görbéről, szó szerint nem igazolható.
+                    Elfogadva válaszban is megjelenhet, „ábráról leolvasva”
+                    jelöléssel.
+                  </p>
+                  <label className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={imageCompared}
+                      disabled={!canDecide}
+                      onChange={(event) =>
+                        setImageCompared(event.target.checked)
+                      }
+                    />
+                    <span>
+                      Az ábrával összevetettem: az irány és a közelítő érték az
+                      ábrán is így áll.
+                    </span>
+                  </label>
+                </div>
+              ) : null}
 
               {saveError ? (
                 <Alert

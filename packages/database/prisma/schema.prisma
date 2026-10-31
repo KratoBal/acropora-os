@@ -917,6 +917,7 @@ model User {
   /// Kutatási tudástár (S1): szerkesztői döntések és a mélykutatás tervezetei.
   decidedApplicability   KnowledgeClaimEvidence[]      @relation("KnowledgeApplicabilityDecidedBy")
   decidedFieldAnchors    KnowledgeFieldAnchor[]        @relation("KnowledgeFieldAnchorDecidedBy")
+  imageComparedEvidence  KnowledgeClaimEvidence[]      @relation("KnowledgeEvidenceImageComparedBy")
   screenedSources        KnowledgeSource[]             @relation("KnowledgeSourceScreenedBy")
   approvedVocabulary     KnowledgeVocabularyEntry[]    @relation("KnowledgeVocabularyApprovedBy")
   researchDrafts         KnowledgeResearchDraft[]      @relation("KnowledgeResearchDraftCreatedBy")
@@ -10996,6 +10997,12 @@ model KnowledgeClaimEvidence {
   applicabilityDecidedById String?
   applicabilityDecidedBy   User?                   @relation("KnowledgeApplicabilityDecidedBy", fields: [applicabilityDecidedById], references: [id], onDelete: Restrict)
   applicabilityDecidedAt   DateTime?
+  /// Ábrával összevetve (research-diagram-irany): a szerkesztő a képpel
+  /// összevetve fogadta el ezt az ábráról leolvasott bizonyítékot. Csak így
+  /// számít válasz-támogatásnak egy szó szerint nem igazolható leolvasás.
+  imageComparedById        String?
+  imageComparedBy          User?                   @relation("KnowledgeEvidenceImageComparedBy", fields: [imageComparedById], references: [id], onDelete: Restrict)
+  imageComparedAt          DateTime?
   createdAt                DateTime                @default(now())
 
   anchors KnowledgeFieldAnchor[]

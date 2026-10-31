@@ -93,6 +93,8 @@ const REVIEW: ClaimReview = {
     retractionUnchecked: false,
   },
   passage: { text: PASSAGE, locator: "Results" },
+  readOff: false,
+  imageComparedAt: null,
   fields: [
     field(
       "a1",
@@ -205,6 +207,37 @@ describe("Állítás ellenőrzése", () => {
       }),
     );
     await waitFor(() => expect(api.reviewQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("ábráról leolvasott állítás: csak az ábrával való összevetés megerősítése után menthető, és a megerősítés is elmegy", async () => {
+    api.claimReview.mockResolvedValue({
+      ...REVIEW,
+      passage: { text: PASSAGE, locator: "Figure 2, read off image" },
+      readOff: true,
+    });
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    const box = screen.getByLabelText("Ábráról leolvasva");
+    expect(box.textContent).toContain("szó szerint nem igazolható");
+    await decideAll();
+    expect(saveButton().disabled).toBe(true);
+    fireEvent.click(within(box).getByRole("checkbox"));
+    expect(saveButton().disabled).toBe(false);
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(api.saveClaimReview).toHaveBeenCalled());
+    expect(api.saveClaimReview.mock.calls[0]?.[2].imageCompared).toBe(true);
+  });
+
+  it("nyomtatott szövegre épülő állításnál nincs összevetés-mező, és a mentés nem küldi", async () => {
+    render(<ClaimReviewPage />);
+    await screen.findByText("Kitalált foszfát-kísérlet");
+    expect(screen.queryByLabelText("Ábráról leolvasva")).toBeNull();
+    await decideAll();
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(api.saveClaimReview).toHaveBeenCalled());
+    expect("imageCompared" in api.saveClaimReview.mock.calls[0]![2]).toBe(
+      false,
+    );
   });
 
   it("javítás: a kérdés egy ismert fajra, a mennyiség új számra; a javított érték megy el", async () => {
@@ -425,6 +458,13 @@ describe("Állítás ellenőrzése", () => {
   it("a mennyiség és a hibaüzenet szövege", () => {
     expect(quantityLabel("0.5", "2", "mg/l", "PO4")).toBe("0,5–2 mg/l PO₄");
     expect(quantityLabel(null, 2, "ppm", "P")).toBe("legfeljebb 2 ppm P");
+    expect(
+      reviewErrorText(
+        "a claim read off a figure is accepted only after comparing it with the image",
+      ),
+    ).toBe(
+      "Ábráról leolvasott állítás csak az ábrával való összevetés után fogadható el.",
+    );
     expect(reviewErrorText("species: NOT_A_KNOWN_ANCHORED_VALUE")).toBe(
       "Faj: ezt az értéket a horgony szövege nem nevezi meg, vagy nincs a szótárban.",
     );

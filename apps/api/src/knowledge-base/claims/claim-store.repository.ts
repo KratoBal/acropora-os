@@ -137,6 +137,7 @@ const EVIDENCE_SELECT = {
   conditions: true,
   homeReefApplicability: true,
   applicabilityReason: true,
+  imageComparedAt: true,
   passage: {
     select: {
       text: true,

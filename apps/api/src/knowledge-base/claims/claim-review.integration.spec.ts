@@ -20,6 +20,8 @@ import {
   type ClaimReview,
 } from "./claim-review.repository.js";
 import { ClaimStoreRepository } from "./claim-store.repository.js";
+import { KnowledgeAnswerRepository } from "../answers/knowledge-answer.repository.js";
+import { READ_OFF_MARK } from "./claim-store.js";
 
 /**
  * THE CLAIM REVIEW ON A DATABASE (S4, Figma 3:137): the claim the S3 store
@@ -459,6 +461,93 @@ describe(
         { decision: "ACCEPTED", decidedById: userId, decidedAt: new Date() },
         question.anchorId,
       );
+    });
+
+    /** A fresh extracted claim whose passage is made a figure reading. */
+    async function readOffClaim(tag: string): Promise<string> {
+      const id = await extractedClaim(tag);
+      const evidence = await prisma.knowledgeClaimEvidence.findFirstOrThrow({
+        where: { claimId: id },
+        select: { passageId: true },
+      });
+      await prisma.knowledgePassage.update({
+        where: { id: evidence.passageId },
+        data: {
+          locator: "Figure 2, read off image tile 1/2",
+          verifiedVerbatimAt: null,
+        },
+      });
+      return id;
+    }
+
+    it("READ-OFF-REVIEW: a claim read off a figure is verified only with the image compared, stored with its editor, and only then answered from, marked", async () => {
+      const readId = await readOffClaim("f");
+      const review = await repository.detail(readId);
+      assert.equal(review.readOff, true);
+      assert.equal(review.imageComparedAt, null);
+      assert.equal((await repository.detail(claimId)).readOff, false);
+
+      for (const imageCompared of [undefined, false])
+        await assert.rejects(
+          repository.save(
+            readId,
+            {
+              decisions: decisions(review),
+              applicability: null,
+              imageCompared,
+            },
+            userId,
+          ),
+          (e: unknown) =>
+            e instanceof ReviewInputError && e.code === "IMAGE_NOT_COMPARED",
+        );
+      assert.equal((await repository.detail(readId)).status, "CANDIDATE");
+
+      const saved = await repository.save(
+        readId,
+        {
+          decisions: decisions(review),
+          applicability: null,
+          imageCompared: true,
+        },
+        userId,
+      );
+      assert.equal(saved.status, "VERIFIED");
+      assert.ok(saved.imageComparedAt);
+      const evidence = await prisma.knowledgeClaimEvidence.findFirstOrThrow({
+        where: { claimId: readId },
+        select: { imageComparedById: true, imageComparedAt: true },
+      });
+      assert.equal(evidence.imageComparedById, userId);
+      const log = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: readId, action: "KNOWLEDGE_CLAIM_REVIEWED" },
+        select: { metadata: true },
+      });
+      assert.equal(
+        (log.metadata as { after: { imageCompared?: boolean } }).after
+          .imageCompared,
+        true,
+      );
+
+      // a reading VERIFIED without the comparison (a direct write) stays out
+      const uncompared = await readOffClaim("g");
+      await prisma.knowledgeClaim.update({
+        where: { id: uncompared },
+        data: { status: "VERIFIED" },
+      });
+      const candidates = await new KnowledgeAnswerRepository().candidates(
+        "PHOSPHATE",
+      );
+      const read = candidates.find((c) => c.id === readId)!;
+      assert.equal(read.verbatimSupport, 1);
+      assert.ok(read.citation?.endsWith(`, ${READ_OFF_MARK}`), read.citation!);
+      assert.equal(
+        candidates.find((c) => c.id === uncompared)!.verbatimSupport,
+        0,
+      );
+      const printed = candidates.find((c) => c.id === claimId)!;
+      assert.equal(printed.verbatimSupport, 1);
+      assert.equal(printed.citation?.includes(READ_OFF_MARK), false);
     });
 
     it("a claim on a retracted source cannot be verified, only discarded; an unchecked source says so", async () => {
