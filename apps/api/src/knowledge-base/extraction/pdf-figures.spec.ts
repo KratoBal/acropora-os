@@ -186,6 +186,7 @@ describe("readManualPdfClaims with the figures", () => {
         refusalDetails: [],
         extractedBy: "gpt-5.1 figure-claim-extraction/v1",
         transcripts: input.images.map((_, i) => (i === 3 ? transcript : "")),
+        readings: input.images.map(() => ""),
       };
     },
   });

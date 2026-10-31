@@ -26,6 +26,7 @@ import {
   captionNamesPhosphate,
   figureCaptionLocator,
   figureImageLocator,
+  figureReadingLocator,
   jatsFigures,
 } from "./jats-figures.js";
 import { fetchPmcFigureImage } from "./pmc-figure-image.js";
@@ -194,9 +195,16 @@ export interface FigureOutcome {
    */
   aiClaims: number;
   transcriptChars: number;
-  /** Claims kept from the figures, and of them those whose passage is a tile's transcript. */
+  /** The characters of its readings (research-diagram-irany). */
+  readingChars: number;
+  /**
+   * Claims kept from the figures; of them those whose passage is not verified
+   * (a tile's transcript or a reading), and of those the readings: a trend
+   * or an approximate value read off the marks.
+   */
   claims: number;
   fromImage: number;
+  readOff: number;
   refusedClaims: Record<string, number>;
   refusedFields: Record<string, number>;
   refusalDetails: string[];
@@ -352,6 +360,16 @@ export const FIGURE_TILE_MAX_BYTES = 6 * 1024 * 1024;
  * claim with no verified passage (NO_VERBATIM_EVIDENCE), so such a claim waits
  * for the editor and is not answered from.
  *
+ * A TREND READ OFF THE MARKS (research-diagram-irany; Balázs, 2026-10-31
+ * 13:27 UTC, Discord 1566081261058134150). The AI may also send a reading per
+ * tile: the direction a curve shows, an approximate value off an axis, in its
+ * own words. A claim resting on it is stored like a transcript claim, not
+ * verified, under its own locator ("Figure 3, read off image tile 2/4"), so
+ * the gate excludes it the same way and the editor sees what it is. It may
+ * anchor on its reading and its own tile's printed text; no other claim may
+ * anchor on a reading (ANCHOR_ACROSS_PARTS), so a read-off value never sits
+ * on a claim whose passage is verified.
+ *
  * The OS does not take the AI's `origin` on trust; it locates every text itself
  * and applies the same rule (acropora-ai-agent #59): an anchor in a transcript
  * is kept only on a claim whose passage is that very tile's, so a verified
@@ -461,8 +479,10 @@ async function readFigures(
     tiles: 0,
     aiClaims: 0,
     transcriptChars: 0,
+    readingChars: 0,
     claims: 0,
     fromImage: 0,
+    readOff: 0,
     refusedClaims: {},
     refusedFields: {},
     refusalDetails: [],
@@ -475,6 +495,7 @@ async function readFigures(
   };
   const checked: CheckedClaim[] = [];
   const unverifiedLocators: string[] = [];
+  const readOffLocators: string[] = [];
   const inText = new Set(sections.map((s) => s.locator));
   for (const figure of figures.slice(0, MAX_FIGURES_PER_SOURCE)) {
     if (!figure.caption.trim()) {
@@ -522,6 +543,7 @@ async function readFigures(
     }
     fo.aiClaims += answer.claims.length;
     fo.transcriptChars += answer.transcripts.reduce((n, x) => n + x.length, 0);
+    fo.readingChars += answer.readings.reduce((n, x) => n + x.length, 0);
     for (const code of answer.refusedClaims)
       count(fo.refusedClaims, `AI_${code}`);
     for (const detail of answer.refusalDetails ?? [])
@@ -532,7 +554,24 @@ async function readFigures(
       text,
     }));
     const imageLocators = new Set(imageSections.map((s) => s.locator));
-    unverifiedLocators.push(...imageLocators);
+    // a reading's tile: its claim may rest on that tile's printed text too
+    const readingTile = new Map<string, string>();
+    const readingSections = answer.readings.flatMap((text, i) => {
+      if (!text.trim()) return [];
+      const locator = figureReadingLocator(
+        figure.where,
+        i + 1,
+        tiling.tiles.length,
+      );
+      readingTile.set(
+        locator,
+        figureImageLocator(figure.where, i + 1, tiling.tiles.length),
+      );
+      return [{ locator, text }];
+    });
+    const modelWords = new Set([...imageLocators, ...readingTile.keys()]);
+    unverifiedLocators.push(...modelWords);
+    readOffLocators.push(...readingTile.keys());
     // the paper's own text first: a passage it holds is located, and verified, there
     const result = checkClaims(
       answer.claims,
@@ -540,6 +579,8 @@ async function readFigures(
         ...sections,
         { locator: figureCaptionLocator(figure.where), text: figure.caption },
         ...imageSections,
+        // last: printed text a reading repeats is located as printed text
+        ...readingSections,
       ],
       deps.vocabulary,
     );
@@ -550,12 +591,19 @@ async function readFigures(
         count(fo.refusedClaims, "PASSAGE_IN_TEXT");
         continue;
       }
-      const ownTile = imageLocators.has(claim.passage.locator)
-        ? claim.passage.locator
-        : null;
+      // the model's words a claim may rest on: a transcript claim its own
+      // tile's; a reading claim its own reading and that tile's transcript;
+      // a claim on verified text none, so a read-off direction or value never
+      // rides on a claim the answer gate would let through
+      const ownWords = new Set<string>();
+      if (imageLocators.has(claim.passage.locator))
+        ownWords.add(claim.passage.locator);
+      const tileOfReading = readingTile.get(claim.passage.locator);
+      if (tileOfReading !== undefined)
+        ownWords.add(claim.passage.locator).add(tileOfReading);
       const kept = claim.anchors.filter(
         (a) =>
-          (!imageLocators.has(a.locator) || a.locator === ownTile) &&
+          (!modelWords.has(a.locator) || ownWords.has(a.locator)) &&
           !SOURCE_FIELDS.includes(a.field),
       );
       for (const a of claim.anchors) {
@@ -578,6 +626,9 @@ async function readFigures(
   fo.claims = own.claims.length;
   fo.fromImage = own.claims.filter((c) =>
     unverifiedLocators.includes(c.passage.locator),
+  ).length;
+  fo.readOff = own.claims.filter((c) =>
+    readOffLocators.includes(c.passage.locator),
   ).length;
   return { claims: own.claims, unverifiedLocators };
 }

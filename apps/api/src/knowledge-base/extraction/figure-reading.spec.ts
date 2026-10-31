@@ -20,6 +20,7 @@ import { aiClaim, JATS } from "./extraction-test-fixtures.js";
 import {
   captionNamesPhosphate,
   figureImageLocator,
+  figureReadingLocator,
   jatsFigures,
 } from "./jats-figures.js";
 import {
@@ -36,7 +37,10 @@ import {
  * stored as verified; a verified claim carrying a number only the transcript
  * holds; the study's own fields taken from a figure; the AI's own word on
  * where a passage stands trusted; a figure reading without its switch; an
- * image that is not a PNG or JPEG decoded. Invented text, a generated image.
+ * image that is not a PNG or JPEG decoded; a trend read off the marks stored
+ * without its own "read off" locator, as verified, or riding as an anchor on
+ * a claim of another part (research-diagram-irany). Invented text, a
+ * generated image.
  */
 const vocabulary = vocabularyV1();
 
@@ -54,6 +58,9 @@ const XML = JATS.replace(
 );
 const CAPTION = "Phosphate series.\n" + CAPTION_TEXT;
 const TRANSCRIPT = "PO4 (µM) | 0 | 0.5 | 2 |\nCalcification fell at 2 µM PO4";
+/** The model's own words on the curve: nothing printed says this. */
+const READING =
+  "Calcification falls steadily as phosphate rises and is lowest at about 0.5 µM phosphate.";
 
 async function pngOf(width: number, height: number): Promise<Uint8Array> {
   const { default: sharp } = await import("sharp");
@@ -102,6 +109,7 @@ const textExtractor: ClaimExtractor = {
 function figureExtractor(
   claims: unknown[],
   seen: FigureExtractionInput[] = [],
+  readings: string[] = [""],
 ): FigureClaimExtractor {
   return {
     extract: async (input): Promise<FigureExtractorAnswer> => {
@@ -113,6 +121,7 @@ function figureExtractor(
         refusalDetails: [],
         extractedBy: "gpt-5.1 figure-claim-extraction/v1",
         transcripts: [TRANSCRIPT],
+        readings,
       };
     },
   };
@@ -214,6 +223,26 @@ describe("the figure answer from the AI service", () => {
       reason: "no transcripts",
     });
     assert.equal(figureAnswerOf(body, 1).kind, "UNAVAILABLE");
+  });
+
+  it("no readings is an AI service from before them (nothing read off); a reading list of the wrong length is UNAVAILABLE", () => {
+    const body = {
+      claims: [],
+      refusedClaims: [],
+      extractedBy: "x",
+      transcripts: ["a"],
+    };
+    const before = figureAnswerOf(body, 1);
+    assert.ok(before.kind === "ANSWER");
+    assert.deepEqual(before.readings, [""]);
+    const read = figureAnswerOf({ ...body, readings: [READING] }, 1);
+    assert.ok(read.kind === "ANSWER");
+    assert.deepEqual(read.readings, [READING]);
+    for (const readings of [[], [READING, ""], "x", [7]])
+      assert.deepEqual(figureAnswerOf({ ...body, readings }, 1), {
+        kind: "UNAVAILABLE",
+        reason: "no readings",
+      });
   });
 });
 
@@ -353,8 +382,10 @@ describe("readFullTextClaims with the figures", () => {
         // three claims sent, the transcript as given
         aiClaims: 3,
         transcriptChars: TRANSCRIPT.length,
+        readingChars: 0,
         claims: 2,
         fromImage: 1,
+        readOff: 0,
         refusalDetails: [],
         refusedFields: undefined,
         refusedClaims: undefined,
@@ -364,6 +395,133 @@ describe("readFullTextClaims with the figures", () => {
     assert.equal(outcome.figures!.refusedClaims.PASSAGE_IN_TEXT, 1);
     assert.equal(outcome.figures!.refusedFields.ANCHOR_ACROSS_PARTS, 1);
     assert.equal(outcome.claims, 3);
+  });
+
+  it("FIGURE-READ-OFF: a trend read off the marks is a claim of its own, unverified under its own locator; no other claim takes its words", async () => {
+    const readOff = [
+      // the reading: a direction and an approximate value no printed text states
+      figureClaim(READING, [
+        {
+          field: "effect",
+          value: "CALCIFICATION",
+          anchor: "Calcification falls steadily",
+        },
+        {
+          field: "direction",
+          value: "DECREASE",
+          anchor: "falls steadily as phosphate rises",
+        },
+        {
+          field: "quantity",
+          min: 0.5,
+          max: 0.5,
+          unit: "µmol/l",
+          basis: null,
+          anchor: "about 0.5 µM phosphate",
+        },
+        // the caption: downloaded text, so a reading claim may rest on it
+        {
+          field: "species",
+          value: "ACROPORA_MILLEPORA",
+          anchor: "Calcification of Acropora millepora",
+        },
+      ]),
+      // the caption (verified): a read-off value must not ride on it
+      figureClaim(CAPTION_TEXT, [
+        {
+          field: "direction",
+          value: "DECREASE",
+          anchor: "decreased at higher phosphate",
+        },
+        {
+          field: "species",
+          value: "ACROPORA_MILLEPORA",
+          anchor: "Calcification of Acropora millepora",
+        },
+        {
+          field: "quantity",
+          min: 0.5,
+          max: 0.5,
+          unit: "µmol/l",
+          basis: null,
+          anchor: "about 0.5 µM phosphate",
+        },
+      ]),
+      // the transcript (printed text, unverified): not the reading's words either
+      figureClaim("Calcification fell at 2 µM PO4", [
+        {
+          field: "effect",
+          value: "CALCIFICATION",
+          anchor: "Calcification fell",
+        },
+        {
+          field: "direction",
+          value: "DECREASE",
+          anchor: "falls steadily as phosphate rises",
+        },
+        {
+          field: "species",
+          value: "ACROPORA_MILLEPORA",
+          anchor: "Calcification of Acropora millepora",
+        },
+      ]),
+    ];
+    const outcome = emptyOutcome("s1");
+    const read = await readFullTextClaims("PMC123", outcome, {
+      extractor: textExtractor,
+      figureExtractor: figureExtractor(readOff, [], [READING]),
+      fetch: fakeFetch(await pngOf(756, 266), []),
+      vocabulary,
+    });
+    assert.ok(read.ok);
+    const imageLocator = figureImageLocator("Figure 1", 1, 1);
+    const readingLocator = figureReadingLocator("Figure 1", 1, 1);
+    assert.equal(readingLocator, "Figure 1, read off image");
+    // both the model's parts are stored unverified: the gate's NO_VERBATIM_EVIDENCE
+    assert.deepEqual(read.unverifiedLocators, [imageLocator, readingLocator]);
+
+    const [, onReading, onCaption, onTranscript] = read.claims;
+    assert.equal(onReading!.passage.locator, readingLocator);
+    assert.equal(onReading!.direction, "DECREASE");
+    assert.equal(onReading!.quantity?.min, 0.5);
+    assert.equal(onReading!.species, "ACROPORA_MILLEPORA");
+    assert.deepEqual(
+      onReading!.anchors.map((a) => [a.field, a.locator]),
+      [
+        ["effect", readingLocator],
+        ["direction", readingLocator],
+        ["quantity", readingLocator],
+        ["species", "Figure 1, caption"],
+      ],
+    );
+
+    assert.equal(onCaption!.passage.locator, "Figure 1, caption");
+    assert.equal(
+      onCaption!.quantity,
+      null,
+      "a read-off value on a verified claim",
+    );
+    assert.equal(onCaption!.direction, "DECREASE");
+    assert.deepEqual(
+      onCaption!.refused.filter((r) => r.refusal === "ANCHOR_ACROSS_PARTS"),
+      [{ field: "quantity", refusal: "ANCHOR_ACROSS_PARTS" }],
+    );
+
+    assert.equal(onTranscript!.passage.locator, imageLocator);
+    assert.equal(
+      onTranscript!.direction,
+      null,
+      "a read-off direction on a transcript claim",
+    );
+    assert.deepEqual(
+      onTranscript!.refused.filter((r) => r.refusal === "ANCHOR_ACROSS_PARTS"),
+      [{ field: "direction", refusal: "ANCHOR_ACROSS_PARTS" }],
+    );
+
+    assert.equal(outcome.figures!.readingChars, READING.length);
+    assert.equal(outcome.figures!.claims, 3);
+    assert.equal(outcome.figures!.fromImage, 2);
+    assert.equal(outcome.figures!.readOff, 1);
   });
 
   it("without the figure extractor nothing of the figures runs, and the outcome says so", async () => {
