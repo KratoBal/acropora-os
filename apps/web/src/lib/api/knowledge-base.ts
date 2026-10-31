@@ -54,6 +54,14 @@ export interface ScreeningSummary {
   excludedByReason: Record<ExclusionReason, number>;
 }
 
+export interface StudyTypeInput {
+  studyType: string;
+  /** true: a control group is reported; left out: not said. */
+  controlled?: boolean;
+  /** Where the type is read from: required. */
+  note: string;
+}
+
 export type ScreeningDecisionInput =
   | { decision: "INCLUDE"; note?: string }
   | { decision: "EXCLUDE"; reason: ExclusionReason; note?: string }
@@ -855,6 +863,14 @@ export const knowledgeBaseApi = {
   screen(token: string, sourceId: string, input: ScreeningDecisionInput) {
     return apiRequest<KnowledgeSourceRow>(
       `${base}/${encodeURIComponent(sourceId)}/screening`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /** The study type of an included source no anchor classifies (research-diagram-irany). */
+  classifySource(token: string, sourceId: string, input: StudyTypeInput) {
+    return apiRequest<KnowledgeSourceRow>(
+      `${base}/${encodeURIComponent(sourceId)}/study-type`,
       token,
       { method: "POST", body: JSON.stringify(input) },
     );

@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -30,6 +31,7 @@ const api = vi.hoisted(() => ({
   screeningSummary: vi.fn(),
   screen: vi.fn(),
   uploadManualPdf: vi.fn(),
+  classifySource: vi.fn(),
 }));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
@@ -313,5 +315,75 @@ describe("Kézi PDF", () => {
     )) as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(["x"], "x.pdf")] } });
     expect(await screen.findByText("A feltöltött fájl nem PDF.")).toBeTruthy();
+  });
+});
+
+// research-diagram-irany: an included source no anchor classifies gets its study type from the editor
+describe("Vizsgálati típus", () => {
+  const included = (id: string, over: Partial<KnowledgeSourceRow> = {}) =>
+    source(id, {
+      screening: {
+        status: "INCLUDED",
+        reason: null,
+        note: null,
+        by: null,
+        at: null,
+      },
+      ...over,
+    });
+  const list = (items: KnowledgeSourceRow[]) =>
+    api.sources.mockResolvedValue({
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: 25,
+    });
+
+  it("an included source without a type: the type and the note are required, they go with the control group, then the list reloads", async () => {
+    list([included("s1")]);
+    api.classifySource.mockResolvedValue(
+      included("s1", { studyType: "CONTROLLED_LAB" }),
+    );
+    render(<SourceScreeningPage />);
+    const box = await screen.findByLabelText("Vizsgálati típus");
+    const save = within(box).getByRole("button", {
+      name: "Típus mentése",
+    }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(box).getByLabelText("Vizsgálati típus megadása"), {
+      target: { value: "CONTROLLED_LAB" },
+    });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(box).getByLabelText("Honnan derül ki"), {
+      target: { value: "Methods: tank experiment" },
+    });
+    fireEvent.click(within(box).getByRole("checkbox"));
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() =>
+      expect(api.classifySource).toHaveBeenCalledWith("token-1", "s1", {
+        studyType: "CONTROLLED_LAB",
+        controlled: true,
+        note: "Methods: tank experiment",
+      }),
+    );
+    await waitFor(() => expect(api.sources).toHaveBeenCalledTimes(2));
+  });
+
+  it("no form for a typed, a pending or a retracted source, nor for a reader without knowledge.manage", async () => {
+    list([
+      included("s1", { studyType: "REVIEW" }),
+      source("s2"),
+      included("s3", { retracted: true }),
+    ]);
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s1");
+    expect(screen.queryByLabelText("Vizsgálati típus")).toBeNull();
+    cleanup();
+    auth.role = "MANAGER";
+    list([included("s4")]);
+    render(<SourceScreeningPage />);
+    await screen.findByText("Kitalált cikk s4");
+    expect(screen.queryByLabelText("Vizsgálati típus")).toBeNull();
   });
 });

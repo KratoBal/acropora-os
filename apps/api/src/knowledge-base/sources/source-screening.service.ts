@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -10,8 +11,10 @@ import type { AuthenticatedUser } from "@acropora/types";
 import {
   parseScreeningDecision,
   parseSourceListQuery,
+  parseStudyTypeDecision,
 } from "./source-screening.js";
 import {
+  SourceClassifyRefused,
   SourceNotFound,
   SourceScreeningRepository,
   type ScreeningSummary,
@@ -26,7 +29,7 @@ export const SOURCE_SCREENING_REPOSITORY = Symbol(
 
 export type SourceScreeningStore = Pick<
   SourceScreeningRepository,
-  "list" | "summary" | "decide"
+  "list" | "summary" | "decide" | "classify"
 >;
 
 @Injectable()
@@ -63,6 +66,24 @@ export class SourceScreeningService {
     } catch (error) {
       if (error instanceof SourceNotFound)
         throw new NotFoundException("Nincs ilyen forrás.");
+      throw error;
+    }
+  }
+
+  async classify(
+    sourceId: string,
+    body: unknown,
+    user: AuthenticatedUser,
+  ): Promise<SourceRow> {
+    const parsed = parseStudyTypeDecision(body);
+    if (!parsed.ok) throw new BadRequestException(parsed.problems);
+    try {
+      return await this.repository.classify(sourceId, parsed.value, user.id);
+    } catch (error) {
+      if (error instanceof SourceNotFound)
+        throw new NotFoundException("Nincs ilyen forrás.");
+      if (error instanceof SourceClassifyRefused)
+        throw new ConflictException(error.message);
       throw error;
     }
   }

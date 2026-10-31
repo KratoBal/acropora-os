@@ -449,6 +449,7 @@ export function SourceScreeningPage() {
                   })
                 }
                 onReset={() => void decide(row, { decision: "RESET" })}
+                onClassified={() => void load()}
               />
             ))}
           </div>
@@ -550,6 +551,99 @@ function ManualPdfUpload({
   );
 }
 
+/**
+ * THE STUDY TYPE OF A SOURCE NO ANCHOR CLASSIFIES (research-diagram-irany). A claim's evidence level comes from its
+ * source's study type; without one, none of its claims can be answered from (NO_EVIDENCE_LEVEL). Usually a claim's
+ * review sets it from a study-type anchor; this is for a source whose text gave none. The note says where it is read
+ * from, and goes to the log.
+ */
+function StudyTypeForm({
+  sourceId,
+  token,
+  onClassified,
+}: {
+  sourceId: string;
+  token: string;
+  onClassified: () => void;
+}) {
+  const [studyType, setStudyType] = useState("");
+  const [controlled, setControlled] = useState(false);
+  const [note, setNote] = useState("");
+  const [state, setState] = useState<{
+    kind: "idle" | "busy" | "error";
+    text?: string;
+  }>({ kind: "idle" });
+  const ready = studyType !== "" && note.trim() !== "" && state.kind !== "busy";
+  return (
+    <div
+      aria-label="Vizsgálati típus"
+      className="space-y-2 rounded-md bg-pilot-accent-warm-soft p-3 text-[13px] text-pilot-grey-900"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p>
+        A forrásnak nincs vizsgálati típusa, ezért az állításai nem kerülhetnek
+        válaszba. Add meg a forrás alapján.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <PilotSelect
+          aria-label="Vizsgálati típus megadása"
+          value={studyType}
+          onChange={(v) => setStudyType(v)}
+        >
+          <option value="">Válassz típust</option>
+          {Object.entries(STUDY_LABELS).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </PilotSelect>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={controlled}
+            onChange={(e) => setControlled(e.target.checked)}
+          />
+          <span>Van kontrollcsoport</span>
+        </label>
+        <PilotInput
+          aria-label="Honnan derül ki"
+          value={note}
+          onChange={setNote}
+          placeholder="Honnan derül ki (pl. Methods)"
+        />
+        <PilotButton
+          variant="secondary"
+          disabled={!ready}
+          onClick={async () => {
+            setState({ kind: "busy" });
+            try {
+              await knowledgeBaseApi.classifySource(token, sourceId, {
+                studyType,
+                ...(controlled ? { controlled: true } : {}),
+                note: note.trim(),
+              });
+              setState({ kind: "idle" });
+              onClassified();
+            } catch (caught) {
+              setState({
+                kind: "error",
+                text: (caught as Error)?.message ?? "A mentés nem sikerült.",
+              });
+            }
+          }}
+        >
+          Típus mentése
+        </PilotButton>
+      </div>
+      {state.text ? (
+        <p role="status" className="text-pilot-red-700">
+          {state.text}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function SourceItem(props: {
   row: KnowledgeSourceRow;
   selected: boolean;
@@ -568,6 +662,7 @@ function SourceItem(props: {
   onCancelExclude: () => void;
   onConfirmExclude: () => void;
   onReset: () => void;
+  onClassified: () => void;
 }) {
   const { row } = props;
   const pending = row.screening.status === "PENDING";
@@ -642,6 +737,16 @@ function SourceItem(props: {
           !row.retracted &&
           !row.fullTextRead ? (
             <ManualPdfUpload sourceId={row.id} token={props.token} />
+          ) : null}
+          {props.canDecide &&
+          row.screening.status === "INCLUDED" &&
+          !row.retracted &&
+          row.studyType === null ? (
+            <StudyTypeForm
+              sourceId={row.id}
+              token={props.token}
+              onClassified={props.onClassified}
+            />
           ) : null}
         </div>
         {props.canDecide ? (

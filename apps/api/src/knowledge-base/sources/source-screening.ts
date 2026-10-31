@@ -9,6 +9,8 @@
  * Pure: the query and the body are read here, in words, and nothing is
  * guessed. The repository and the controller do the rest.
  */
+import { STUDY_TYPES, type StudyType } from "@acropora/knowledge-base";
+
 export const SCREENING_STATUSES = ["PENDING", "INCLUDED", "EXCLUDED"] as const;
 export type ScreeningStatus = (typeof SCREENING_STATUSES)[number];
 
@@ -163,4 +165,51 @@ export function parseScreeningDecision(
         problems: ["decision: INCLUDE, EXCLUDE vagy RESET."],
       };
   }
+}
+
+/**
+ * THE EDITOR'S CLASSIFICATION OF A SOURCE WITHOUT AN ANCHOR (research-diagram-
+ * irany; acrobot 39340). A claim's evidence level comes from its source's
+ * study type, and that type is set only by an editor deciding a study-type
+ * anchor in a claim's review. A source whose text call anchored none (stage
+ * 2026-10-31: yk5i9vij, 24 claims, no source anchor) can never be classified,
+ * so none of its claims reaches an answer (NO_EVIDENCE_LEVEL). Here the editor
+ * names the type, says why, and may say whether a control group is reported.
+ */
+export interface StudyTypeDecision {
+  studyType: StudyType;
+  /** true: a control group is reported; null: not said (never "false" by default). */
+  controlled: boolean | null;
+  note: string;
+}
+
+/** The body: `{ studyType, controlled?, note }`; the note says what the editor read it from. */
+export function parseStudyTypeDecision(
+  body: unknown,
+): Parsed<StudyTypeDecision> {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const problems: string[] = [];
+  const studyType = b.studyType;
+  if (
+    typeof studyType !== "string" ||
+    !(STUDY_TYPES as readonly string[]).includes(studyType)
+  )
+    problems.push(`studyType: egy ezek közül: ${STUDY_TYPES.join(", ")}.`);
+  const controlled = b.controlled ?? null;
+  if (controlled !== null && typeof controlled !== "boolean")
+    problems.push("controlled: true, false vagy üres.");
+  const note = typeof b.note === "string" ? b.note.trim() : "";
+  if (!note || note.length > MAX_NOTE)
+    problems.push(
+      `note: kötelező (honnan derül ki a típus), legfeljebb ${MAX_NOTE} karakter.`,
+    );
+  if (problems.length) return { ok: false, problems };
+  return {
+    ok: true,
+    value: {
+      studyType: studyType as StudyType,
+      controlled: controlled as boolean | null,
+      note,
+    },
+  };
 }
