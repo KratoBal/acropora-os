@@ -14,6 +14,7 @@ import {
 import { JATS, aiClaim } from "../extraction/extraction-test-fixtures.js";
 import { jatsSections } from "../extraction/jats-text.js";
 import { ClaimReviewRepository } from "./claim-review.repository.js";
+import { READ_OFF_MARK } from "./claim-store.js";
 import {
   ClaimStoreNotFound,
   ClaimStoreRepository,
@@ -280,6 +281,46 @@ describe(
       for (const anchor of evidence!.anchors) {
         assert.ok(["ACCEPTED", "CORRECTED"].includes(anchor.decision));
         assert.notEqual(anchor.value, null);
+      }
+    });
+
+    it("a claim resting on a figure's reading says so in its title and quantity, also as a relation's other side", async () => {
+      const evidence = await prisma.knowledgeClaimEvidence.findFirstOrThrow({
+        where: { claimId: candidateId },
+        select: { passageId: true, passage: { select: { locator: true } } },
+      });
+      const printed = await store.detail(candidateId);
+      assert.ok(printed.quantity, "the fixture claim has a quantity");
+      assert.equal(printed.title.includes(READ_OFF_MARK), false, printed.title);
+      await prisma.knowledgePassage.update({
+        where: { id: evidence.passageId },
+        data: { locator: "Figure 1, read off image tile 2/4" },
+      });
+      await prisma.knowledgeClaimRelation.create({
+        data: { fromClaimId: candidateId, toClaimId: aId, kind: "CONTRADICTS" },
+      });
+      try {
+        const read = await store.detail(candidateId);
+        assert.equal(read.title, `${printed.title} (${READ_OFF_MARK})`);
+        assert.equal(read.quantity, `${printed.quantity} (${READ_OFF_MARK})`);
+        // the earlier test's b -> a relation stands too: by id, not by place
+        const other = (await store.detail(aId)).relationsTo.find(
+          (r) => r.claim.id === candidateId,
+        );
+        assert.equal(other?.claim.title, read.title);
+        // the claim on printed text is not marked
+        assert.equal(
+          (await store.detail(aId)).title.includes(READ_OFF_MARK),
+          false,
+        );
+      } finally {
+        await prisma.knowledgeClaimRelation.deleteMany({
+          where: { fromClaimId: candidateId },
+        });
+        await prisma.knowledgePassage.update({
+          where: { id: evidence.passageId },
+          data: { locator: evidence.passage.locator },
+        });
       }
     });
 

@@ -101,20 +101,40 @@ export function quantityLabel(q: QuantityColumns): string | null {
 }
 
 /**
+ * What a claim read off a figure says next to its values (research-diagram-
+ * irany; barracuda's note on #1983): its direction and quantity are the
+ * model's reading of a curve, approximate, and a surface that shows the value
+ * without the passage ("read off image") would make it look printed.
+ */
+export const READ_OFF_MARK = "ábráról leolvasva";
+
+/**
  * The claim's title, built from its normalized fields: "Kalcifikáció:
  * csökken, 1–3 µmol/l PO₄ mellett". A claim without an effect cannot be
- * verified (the review refuses it), so the fallback only names the gap.
+ * verified (the review refuses it), so the fallback only names the gap. A
+ * claim read off a figure says so at the end.
  */
 export function claimTitle(
   effect: string | null,
   direction: string | null,
   quantity: QuantityColumns,
   labels: Labels,
+  readOff = false,
 ): string {
   const head = effect ? labels("EFFECT", effect) : "Hatás nélkül";
   const verb = direction ? (DIRECTION_WORDS[direction] ?? direction) : null;
   const q = quantityLabel(quantity);
-  return `${head}${verb ? `: ${verb}` : ""}${q ? `, ${q} mellett` : ""}`;
+  const mark = readOff && (verb || q) ? ` (${READ_OFF_MARK})` : "";
+  return `${head}${verb ? `: ${verb}` : ""}${q ? `, ${q} mellett` : ""}${mark}`;
+}
+
+/** The quantity's label, marked when it was read off a figure. */
+export function claimQuantityLabel(
+  quantity: QuantityColumns,
+  readOff = false,
+): string | null {
+  const q = quantityLabel(quantity);
+  return q && readOff ? `${q} (${READ_OFF_MARK})` : q;
 }
 
 /** One evidence row as the level reads it. */
