@@ -413,7 +413,8 @@ export class ClaimReviewRepository {
           "the source was retracted: a claim on it can only be discarded",
         );
       // a figure reading is the model's word on a curve: accepted only by an
-      // editor who held it against the image (Balázs, 2026-10-31 13:27 UTC)
+      // editor who held it against the image (Balázs, 2026-10-31 13:27 UTC,
+      // Discord 1566081261058134150, on the question 1566005500053823603)
       const readOff = isReadingLocator(evidence.passage.locator);
       if (readOff && !input.imageCompared)
         throw new ReviewInputError(

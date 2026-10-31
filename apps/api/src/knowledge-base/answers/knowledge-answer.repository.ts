@@ -92,8 +92,11 @@ export function candidateOf(
   );
   // the support an answer may stand on: a passage verified against the
   // downloaded text, or a figure reading an editor accepted against the image
-  // (research-diagram-irany; Balázs, 2026-10-31 13:27 UTC). A reading nobody
-  // compared stays out (NO_VERBATIM_EVIDENCE).
+  // (research-diagram-irany). Balázs's "Javasolhatja", 2026-10-31 13:27 UTC
+  // (Discord 1566081261058134150), answered the question 1566005500053823603,
+  // which named this path: only after an editor's approval against the image,
+  // into an answer or an article (acrobot's memory 2548, 2550). A reading
+  // nobody compared stays out (NO_VERBATIM_EVIDENCE).
   const imageCompared = (e: (typeof live)[number]) =>
     isReadingLocator(e.passage.locator) && e.imageComparedAt !== null;
   const verbatim = live.filter(
