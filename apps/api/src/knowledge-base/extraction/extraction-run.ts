@@ -186,6 +186,14 @@ export interface FigureOutcome {
   skipped: Record<string, number>;
   calls: number;
   tiles: number;
+  /**
+   * What the AI sent back before the OS's check: its claims, and the
+   * characters of its transcripts (measured on stage 2026-10-31: 18 calls, 0
+   * claims kept, and the report could not tell a model that read nothing from
+   * one whose every claim was dropped).
+   */
+  aiClaims: number;
+  transcriptChars: number;
   /** Claims kept from the figures, and of them those whose passage is a tile's transcript. */
   claims: number;
   fromImage: number;
@@ -451,6 +459,8 @@ async function readFigures(
     skipped: {},
     calls: 0,
     tiles: 0,
+    aiClaims: 0,
+    transcriptChars: 0,
     claims: 0,
     fromImage: 0,
     refusedClaims: {},
@@ -510,6 +520,8 @@ async function readFigures(
         fo.refusalDetails.push(`${answer.refusal}: ${answer.detail}`);
       continue;
     }
+    fo.aiClaims += answer.claims.length;
+    fo.transcriptChars += answer.transcripts.reduce((n, x) => n + x.length, 0);
     for (const code of answer.refusedClaims)
       count(fo.refusedClaims, `AI_${code}`);
     for (const detail of answer.refusalDetails ?? [])

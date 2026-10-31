@@ -350,6 +350,9 @@ describe("readFullTextClaims with the figures", () => {
         skipped: {},
         calls: 1,
         tiles: 1,
+        // three claims sent, the transcript as given
+        aiClaims: 3,
+        transcriptChars: TRANSCRIPT.length,
         claims: 2,
         fromImage: 1,
         refusalDetails: [],
