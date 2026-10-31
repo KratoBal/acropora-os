@@ -174,6 +174,12 @@ export type FigureExtractorAnswer =
 export interface FigureClaimExtractor {
   extract(input: FigureExtractionInput): Promise<FigureExtractorAnswer>;
 }
+/**
+ * A caption at most: the AI service's own cap (acropora-ai-agent #59, 400
+ * past it). Checked before the image is fetched, so a too long caption is
+ * counted by its own reason, not as an unavailable AI (barracuda, #1979).
+ */
+export const MAX_FIGURE_CAPTION = 4_000;
 /** A transcript at most (the AI service's own cap, 6 000, with room). */
 export const MAX_TRANSCRIPT = 8_000;
 
