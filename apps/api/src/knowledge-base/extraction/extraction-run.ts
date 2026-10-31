@@ -8,9 +8,10 @@ import {
   type CheckedClaim,
 } from "./claim-check.js";
 import { imageTiles } from "../../common/image-tiles.js";
-import type {
-  ClaimExtractor,
-  FigureClaimExtractor,
+import {
+  MAX_FIGURE_CAPTION,
+  type ClaimExtractor,
+  type FigureClaimExtractor,
 } from "./claim-extractor.js";
 import type { ExtractionStore } from "./extraction-store.js";
 import { sha256 } from "./extraction-store.js";
@@ -466,6 +467,14 @@ async function readFigures(
   const unverifiedLocators: string[] = [];
   const inText = new Set(sections.map((s) => s.locator));
   for (const figure of figures.slice(0, MAX_FIGURES_PER_SOURCE)) {
+    if (!figure.caption.trim()) {
+      count(fo.skipped, "CAPTION_EMPTY");
+      continue;
+    }
+    if (figure.caption.length > MAX_FIGURE_CAPTION) {
+      count(fo.skipped, "CAPTION_TOO_LONG");
+      continue;
+    }
     const image = await figure.image();
     if (!image.ok) {
       count(fo.skipped, `IMAGE_${image.reason}`);

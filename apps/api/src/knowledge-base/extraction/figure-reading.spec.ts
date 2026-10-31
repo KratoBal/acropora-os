@@ -9,7 +9,7 @@ import type {
   FigureExtractionInput,
   FigureExtractorAnswer,
 } from "./claim-extractor.js";
-import { figureAnswerOf } from "./claim-extractor.js";
+import { figureAnswerOf, MAX_FIGURE_CAPTION } from "./claim-extractor.js";
 import {
   emptyOutcome,
   FIGURE_TILE_MAX_BYTES,
@@ -394,5 +394,27 @@ describe("readFullTextClaims with the figures", () => {
     assert.equal(read.claims.length, 1);
     assert.deepEqual(outcome.figures!.skipped, { IMAGE_NOT_PNG_OR_JPEG: 1 });
     assert.equal(outcome.figures!.calls, 0);
+  });
+
+  it("a caption past the AI's cap is skipped by its own reason, before any image is fetched", async () => {
+    const outcome = emptyOutcome("s1");
+    const asked: string[] = [];
+    const long = XML.replace(
+      CAPTION_TEXT,
+      `${CAPTION_TEXT} ${"x".repeat(MAX_FIGURE_CAPTION)}`,
+    );
+    const fetch: TextFetch = async (url, init) =>
+      url.includes("europepmc")
+        ? new Response(long, { status: 200 })
+        : fakeFetch(await pngOf(300, 300), asked)(url, init);
+    const read = await readFullTextClaims("PMC123", outcome, {
+      extractor: textExtractor,
+      figureExtractor: figureExtractor(claims),
+      fetch,
+      vocabulary,
+    });
+    assert.ok(read.ok);
+    assert.deepEqual(outcome.figures!.skipped, { CAPTION_TOO_LONG: 1 });
+    assert.deepEqual(asked, []);
   });
 });
