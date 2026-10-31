@@ -67,6 +67,17 @@ describe("the JATS text, by section", () => {
     assert.equal(citesAnotherWork(cited), true);
   });
 
+  it("a formula in MathML and TeX is read once, as MathML; a TeX-only formula stays (research-kepes-ut)", () => {
+    const xml = `<article><body><sec><title>Results</title>
+<p>Growth was <inline-formula><alternatives><mml:math><mml:mn>2</mml:mn><mml:mo>±</mml:mo><mml:mn>0.3</mml:mn></mml:math><tex-math id="t1">\\documentclass{minimal}\\begin{document}$2\\pm 0.3$\\end{document}</tex-math><inline-graphic xlink:href="eq1.gif"/></alternatives></inline-formula> mm.</p>
+<p>Only TeX: <inline-formula><alternatives><tex-math>$x^2$</tex-math></alternatives></inline-formula>.</p>
+</sec></body></article>`;
+    const text = jatsSections(xml)[0]!.text;
+    assert.match(text, /Growth was 2±0\.3 mm\./);
+    assert.doesNotMatch(text, /\\pm|documentclass/);
+    assert.match(text, /Only TeX: \$x\^2\$\./);
+  });
+
   it("chunks pack whole sections, and split a long one at line breaks", () => {
     const sections = jatsSections(JATS);
     assert.equal(chunkSections(sections).length, 1);
