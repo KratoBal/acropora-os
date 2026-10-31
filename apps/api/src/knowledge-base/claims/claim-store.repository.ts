@@ -7,15 +7,16 @@ import type {
   StudyType,
 } from "@acropora/knowledge-base";
 
+import { isReadingLocator } from "../extraction/jats-figures.js";
 import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import { workingRows } from "../vocabulary/vocabulary-versions.js";
 import { VocabularyRepository } from "../vocabulary/vocabulary.repository.js";
 import {
   claimEvidenceLevel,
+  claimQuantityLabel,
   claimScope,
   claimTitle,
   labelsFrom,
-  quantityLabel,
   type ClaimLayer,
   type Labels,
   type LevelRow,
@@ -169,6 +170,8 @@ const CONTRA_SELECT = {
     select: {
       passage: {
         select: {
+          // the related claim's title says whether it was read off a figure
+          locator: true,
           sourceVersion: {
             select: {
               sourceId: true,
@@ -261,9 +264,17 @@ function quantityOf(c: Core) {
   };
 }
 
-function titleOf(c: Core, labels: Labels) {
-  return claimTitle(c.effect, c.direction, quantityOf(c), labels);
+function titleOf(c: Core, labels: Labels, readOff: boolean) {
+  return claimTitle(c.effect, c.direction, quantityOf(c), labels, readOff);
 }
+
+/**
+ * Whether the claim rests on a figure's reading (`read off image`): only such
+ * a claim can hold a direction or quantity read off a curve, since the
+ * extraction never lets a reading's words anchor another claim's field.
+ */
+const readOffOf = (c: { evidence: { passage: { locator: string } }[] }) =>
+  c.evidence.some((e) => isReadingLocator(e.passage.locator));
 
 export function sourceOf(e: Evidence) {
   return e.passage.sourceVersion.source;
@@ -312,12 +323,12 @@ function coreOf(c: ListClaim, labels: Labels) {
     id: c.id,
     layer: c.layer,
     status: c.status,
-    title: titleOf(c, labels),
+    title: titleOf(c, labels, readOffOf(c)),
     effect: c.effect
       ? { key: c.effect, label: labels("EFFECT", c.effect) }
       : null,
     direction: c.direction,
-    quantity: quantityLabel(quantityOf(c)),
+    quantity: claimQuantityLabel(quantityOf(c), readOffOf(c)),
     species: [...new Set(c.evidence.flatMap((e) => e.species))].map((key) => ({
       key,
       label: labels("TAXON", key),
@@ -444,12 +455,16 @@ export class ClaimStoreRepository {
     });
     if (!c) throw new ClaimStoreNotFound(claimId);
     const labels = await this.labels();
-    const relation = (kind: string, note: string | null, other: Core) => ({
+    const relation = (
+      kind: string,
+      note: string | null,
+      other: Core & Parameters<typeof readOffOf>[0],
+    ) => ({
       kind,
       note,
       claim: {
         id: other.id,
-        title: titleOf(other, labels),
+        title: titleOf(other, labels, readOffOf(other)),
         status: other.status,
         layer: other.layer,
       },

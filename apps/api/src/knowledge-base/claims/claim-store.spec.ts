@@ -8,10 +8,12 @@ import { ClaimStoreService } from "./claim-store.controller.js";
 import {
   ClaimStoreInputError,
   claimEvidenceLevel,
+  claimQuantityLabel,
   claimTitle,
   labelsFrom,
   parseLayer,
   quantityLabel,
+  READ_OFF_MARK,
   type LevelRow,
 } from "./claim-store.js";
 import { ClaimStoreNotFound } from "./claim-store.repository.js";
@@ -109,6 +111,25 @@ describe("claim store: quantity and title", () => {
       claimTitle("MICROBIOMECOMPOSITION", "NONE", noQuantity, labels),
       "Mikrobiom-összetétel: nem változik",
     );
+  });
+
+  it("a claim read off a figure says so next to its values, never on a title with none (research-diagram-irany)", () => {
+    const q = { min: "0.5", max: "0.5", unit: "µmol/l", basis: null } as const;
+    assert.equal(READ_OFF_MARK, "ábráról leolvasva");
+    assert.equal(
+      claimTitle("CALCIFICATION", "DECREASE", q, labels, true),
+      `${claimTitle("CALCIFICATION", "DECREASE", q, labels)} (ábráról leolvasva)`,
+    );
+    assert.equal(
+      claimTitle("CALCIFICATION", null, noQuantity, labels, true),
+      claimTitle("CALCIFICATION", null, noQuantity, labels),
+    );
+    assert.equal(
+      claimQuantityLabel(q, true),
+      `${quantityLabel(q)} (ábráról leolvasva)`,
+    );
+    assert.equal(claimQuantityLabel(q), quantityLabel(q));
+    assert.equal(claimQuantityLabel(noQuantity, true), null);
   });
 });
 

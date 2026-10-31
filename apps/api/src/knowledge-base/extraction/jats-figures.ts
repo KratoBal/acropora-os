@@ -80,3 +80,6 @@ export const figureReadingLocator = (label: string, tile: number, of: number) =>
     ? `${label}, read off image tile ${tile}/${of}`
     : `${label}, read off image`
   ).slice(0, MAX_LOCATOR);
+/** Whether a passage's locator is a reading's (`figureReadingLocator`). */
+export const isReadingLocator = (locator: string) =>
+  /, read off image(?: tile \d+\/\d+)?$/.test(locator);

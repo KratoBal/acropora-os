@@ -21,6 +21,7 @@ import {
   captionNamesPhosphate,
   figureImageLocator,
   figureReadingLocator,
+  isReadingLocator,
   jatsFigures,
 } from "./jats-figures.js";
 import {
@@ -477,6 +478,12 @@ describe("readFullTextClaims with the figures", () => {
     const imageLocator = figureImageLocator("Figure 1", 1, 1);
     const readingLocator = figureReadingLocator("Figure 1", 1, 1);
     assert.equal(readingLocator, "Figure 1, read off image");
+    // the store's mark reads the locator: every reading's, and no other part's
+    assert.ok(isReadingLocator(readingLocator));
+    assert.ok(isReadingLocator(figureReadingLocator("Fig. 2, p. 3", 4, 4)));
+    assert.equal(isReadingLocator(imageLocator), false);
+    assert.equal(isReadingLocator("Figure 1, caption"), false);
+    assert.equal(isReadingLocator("Results"), false);
     // both the model's parts are stored unverified: the gate's NO_VERBATIM_EVIDENCE
     assert.deepEqual(read.unverifiedLocators, [imageLocator, readingLocator]);
 
