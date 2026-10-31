@@ -69,3 +69,14 @@ export const figureImageLocator = (label: string, tile: number, of: number) =>
     0,
     MAX_LOCATOR,
   );
+/**
+ * The model's READING of one tile: a trend or an approximate value it read off
+ * the marks, in its own words (research-diagram-irany). The locator says so
+ * on every surface that shows the passage, and it is never a tile's locator:
+ * the editor sees "read off" before comparing it with the figure.
+ */
+export const figureReadingLocator = (label: string, tile: number, of: number) =>
+  (of > 1
+    ? `${label}, read off image tile ${tile}/${of}`
+    : `${label}, read off image`
+  ).slice(0, MAX_LOCATOR);

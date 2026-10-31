@@ -184,10 +184,12 @@ export function claimExtractorFromEnv(
  * `POST /v1/figure-claim-extractions`, #59; research-kepes-ut): one figure,
  * its caption and its image tiles. The answer is the text answer's shape,
  * plus one transcript per tile (the text printed in it, as the model reads
- * it) and each claim's origin. `claim-check.ts` reads every claim again, here
- * against the paper's sections, the caption and these transcripts; a passage
- * or an anchor that stands only in a transcript is the model's word, and is
- * stored as not verified verbatim.
+ * it), one reading per tile (a trend or an approximate value it read off the
+ * marks, research-diagram-irany; "" for none) and each claim's origin.
+ * `claim-check.ts` reads every claim again, here against the paper's
+ * sections, the caption, these transcripts and readings; a passage or an
+ * anchor that stands only in a transcript or a reading is the model's word,
+ * and is stored as not verified verbatim.
  */
 export const AI_FIGURE_EXTRACTION_PATH_ENV =
   "ACROPORA_AI_FIGURE_EXTRACTION_PATH";
@@ -202,6 +204,8 @@ export interface FigureExtractionInput {
 export type FigureExtractorAnswer =
   | (Extract<ClaimExtractorAnswer, { kind: "ANSWER" }> & {
       transcripts: string[];
+      /** One per tile; "" where the model read nothing off the marks. */
+      readings: string[];
     })
   | Exclude<ClaimExtractorAnswer, { kind: "ANSWER" }>;
 export interface FigureClaimExtractor {
@@ -215,8 +219,14 @@ export interface FigureClaimExtractor {
 export const MAX_FIGURE_CAPTION = 4_000;
 /** A transcript at most (the AI service's own cap, 6 000, with room). */
 export const MAX_TRANSCRIPT = 8_000;
+/** A reading at most (the AI service's own cap, 2 000, with room). */
+export const MAX_READING = 3_000;
 
-/** The figure answer's body; a transcript list of another length is UNAVAILABLE. */
+/**
+ * The figure answer's body; a transcript or reading list of another length is
+ * UNAVAILABLE. No readings at all is an AI service from before them
+ * (figure-claim-extraction/v2): nothing was read off, not a broken answer.
+ */
 export function figureAnswerOf(
   body: unknown,
   tiles: number,
@@ -232,7 +242,19 @@ export function figureAnswerOf(
     )
   )
     return { kind: "UNAVAILABLE", reason: "no transcripts" };
-  return { ...answer, transcripts: transcripts as string[] };
+  const readings =
+    (body as Record<string, unknown>).readings ?? transcripts.map(() => "");
+  if (
+    !Array.isArray(readings) ||
+    readings.length !== tiles ||
+    !readings.every((t) => typeof t === "string" && t.length <= MAX_READING)
+  )
+    return { kind: "UNAVAILABLE", reason: "no readings" };
+  return {
+    ...answer,
+    transcripts: transcripts as string[],
+    readings: readings as string[],
+  };
 }
 
 export class HttpFigureClaimExtractor implements FigureClaimExtractor {
