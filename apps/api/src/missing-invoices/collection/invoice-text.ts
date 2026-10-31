@@ -572,6 +572,23 @@ export function looksLikeProformaLetter(
   );
 }
 
+/** A year and a month, or a month and a day: a piece of a date, never a number (`2026-07`, `07-31`). */
+const PARTIAL_DATE =
+  /^(?:(?:19|20)\d{2}-(?:0?[1-9]|1[0-2])|(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01]))$/;
+
+/**
+ * A hyphen-joined name's contiguous runs of parts, longest first, without the whole (it is tried as it is) and without a
+ * piece of a date: `Szamla_2026-07-31.pdf` must not give `2026-07` when the text has a period of that month.
+ */
+function hyphenRuns(token: string): string[] {
+  const parts = token.split("-").filter(Boolean);
+  const runs: string[] = [];
+  for (let size = parts.length - 1; size >= 1; size -= 1)
+    for (let start = 0; start + size <= parts.length; start += 1)
+      runs.push(parts.slice(start, start + size).join("-"));
+  return runs.filter((run) => !PARTIAL_DATE.test(run));
+}
+
 export function readInvoiceText(
   lines: readonly string[],
   hints: InvoiceTextHints = {},
@@ -651,23 +668,46 @@ export function readInvoiceText(
     egy szövegben is így álló `INV_20261` a számla saját alakja. A dátum soha
     nem a szám: egy `Szamla_2026-07-31.pdf` kelte a szövegben is ott áll.
   */
-  const fromName = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
+  /*
+    A KÖTŐJELES NÉV DARAB-SOROZATAI IS JELÖLTEK (mérve 2026-10-30, két feltöltés:
+    `Invoice-TT8G4RBM-0007.pdf`, `Invoice-OHCYTT2R-0013-2.pdf`; acrobot 39130).
+    Az egész név a szövegben nem áll, a számla saját száma (`TT8G4RBM-0007`) igen;
+    a `-2` egy második letöltés jele. A darab-sorozatok a leghosszabbtól jönnek,
+    hogy a `TT8G4RBM-0007` megelőzze a `TT8G4RBM`-et. Ezekre SZIGORÚBB a feltétel:
+    a szöveg egy egész szavával egyezzen, ne az összefűzött szöveg egy részével
+    (ott a `OHCYTT2R-0013-2` a szám után álló `2026`-tal hamisan egyezne).
+  */
+  const words = new Set(
+    lines.flatMap((line) =>
+      line
+        .split(/[\s|]+/)
+        .map((word) => compactNumber(word))
+        .filter(Boolean),
+    ),
+  );
+  const candidates = `${hints.fileName ?? ""} ${hints.subject ?? ""}`
     .split(/[^A-Za-z0-9/_-]+/)
     .flatMap((token) =>
       token.includes("_") ? [token, ...token.split("_")] : [token],
     )
     .map((token) => token.replace(/^[-_/]+|[-_/]+$/g, ""))
-    .find(
-      (token) =>
-        token.length >= 5 &&
-        /\d/.test(token) &&
-        !DATE_SHAPE.test(token) &&
-        !COMPACT_DATE.test(token) &&
-        !BANK_ACCOUNT.test(token) &&
-        !looksLikeTaxNumber(token) &&
-        !customers.has(compactNumber(token)) &&
-        compactText.includes(compactNumber(token)),
-    );
+    .flatMap((token) => [
+      { token, whole: false },
+      ...hyphenRuns(token).map((run) => ({ token: run, whole: true })),
+    ]);
+  const fromName = candidates.find(
+    ({ token, whole }) =>
+      token.length >= 5 &&
+      /\d/.test(token) &&
+      !DATE_SHAPE.test(token) &&
+      !COMPACT_DATE.test(token) &&
+      !BANK_ACCOUNT.test(token) &&
+      !looksLikeTaxNumber(token) &&
+      !customers.has(compactNumber(token)) &&
+      (whole
+        ? words.has(compactNumber(token))
+        : compactText.includes(compactNumber(token))),
+  )?.token;
   return fromName ? reading(fromName, "FILE_NAME") : reading(null, null);
 }
 
