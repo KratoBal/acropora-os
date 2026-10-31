@@ -131,6 +131,8 @@ export interface CheckedClaim {
   conditions: string | null;
   anchors: CheckedAnchor[];
   refused: { field: string; refusal: string }[];
+  /** The reading that found it, when not the source's text call (a figure's). */
+  extractedBy?: string;
 }
 
 export interface CheckResult {

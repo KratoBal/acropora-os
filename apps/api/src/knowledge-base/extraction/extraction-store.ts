@@ -78,6 +78,12 @@ export interface ExtractionStore {
     runId?: string;
     /** Re-extraction: withdraw the source's CANDIDATE claims first, in this user's name. */
     replaceCandidatesBy?: string;
+    /**
+     * Locators of text no download holds: a figure's transcript, the model's
+     * reading of an image (research-kepes-ut). A passage there is stored with
+     * `verifiedVerbatimAt` NULL.
+     */
+    unverifiedLocators?: readonly string[];
   }): Promise<SavedSource>;
   startRun(input: {
     sourceIds: string[];
@@ -148,7 +154,9 @@ export class PrismaExtractionStore implements ExtractionStore {
     verifiedAt: Date;
     runId?: string;
     replaceCandidatesBy?: string;
+    unverifiedLocators?: readonly string[];
   }): Promise<SavedSource> {
+    const unverified = new Set(input.unverifiedLocators ?? []);
     return prisma.$transaction(
       async (tx) => {
         if (input.runId) {
@@ -188,7 +196,11 @@ export class PrismaExtractionStore implements ExtractionStore {
           : 0;
 
         const passageIds = new Map<string, string>();
-        const passageFor = async (text: string, locator: string) => {
+        const passageFor = async (
+          text: string,
+          locator: string,
+          extractedBy = input.extractedBy,
+        ) => {
           const textHash = sha256(text);
           const key = `${locator}\u0000${textHash}`;
           const known = passageIds.get(key);
@@ -212,8 +224,11 @@ export class PrismaExtractionStore implements ExtractionStore {
                   locator,
                   text,
                   textHash,
-                  verifiedVerbatimAt: input.verifiedAt,
-                  extractedBy: input.extractedBy,
+                  // a figure's transcript is the model's reading: nothing verified it
+                  verifiedVerbatimAt: unverified.has(locator)
+                    ? null
+                    : input.verifiedAt,
+                  extractedBy,
                 },
                 select: { id: true },
               })
@@ -229,7 +244,11 @@ export class PrismaExtractionStore implements ExtractionStore {
           claimsWithdrawn: withdrawn,
         };
         for (const c of input.claims) {
-          const passageId = await passageFor(c.passage.text, c.passage.locator);
+          const passageId = await passageFor(
+            c.passage.text,
+            c.passage.locator,
+            c.extractedBy,
+          );
           const claim = await tx.knowledgeClaim.create({
             data: {
               layer: "SCIENTIFIC",
@@ -261,7 +280,11 @@ export class PrismaExtractionStore implements ExtractionStore {
             select: { id: true },
           });
           for (const a of c.anchors) {
-            const anchorPassage = await passageFor(a.text, a.locator);
+            const anchorPassage = await passageFor(
+              a.text,
+              a.locator,
+              c.extractedBy,
+            );
             const onSource = SOURCE_FIELDS.includes(a.field);
             await tx.knowledgeFieldAnchor.create({
               data: {

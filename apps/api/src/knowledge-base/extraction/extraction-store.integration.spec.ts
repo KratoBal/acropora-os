@@ -14,6 +14,8 @@ import { checkClaims } from "./claim-check.js";
 import { PrismaExtractionStore, sha256 } from "./extraction-store.js";
 import { JATS, PASSAGE, aiClaim } from "./extraction-test-fixtures.js";
 import { jatsSections } from "./jats-text.js";
+import { buildAnswerPackage } from "@acropora/knowledge-base";
+import { KnowledgeAnswerRepository } from "../answers/knowledge-answer.repository.js";
 
 /**
  * THE EXTRACTION STORE ON A DATABASE (S3 acceptance): every stored passage
@@ -382,6 +384,128 @@ describe(
         claimsWithdrawn: 0,
       });
       assert.equal((await store.source(other.id))?.alreadyExtracted, true);
+    });
+
+    it("a figure's transcript passage is stored NOT verified, with the figure call's version, and the answer gate keeps it out (research-kepes-ut)", async () => {
+      const figure = await prisma.knowledgeSource.create({
+        data: {
+          kind: "PEER_REVIEWED",
+          doi: `${DOI_PREFIX}${suffix}-figure`,
+          title: "Kitalált ábrás cikk",
+          authors: [{ name: "Kitalált Kutató" }],
+          year: 2020,
+          discoveredVia: "MANUAL",
+          retractionCheckedAt: new Date(),
+          screeningStatus: "INCLUDED",
+          screenedById: userId,
+          screenedAt: new Date(),
+          versions: {
+            create: { versionKind: "ORIGINAL", detectedVia: "MANUAL" },
+          },
+        },
+      });
+      const caption = {
+        locator: "Figure 1, caption",
+        text: "Calcification of Acropora millepora decreased at higher phosphate levels.",
+      };
+      const image = {
+        locator: "Figure 1, image",
+        text: "Calcification fell at 2 µM PO4",
+      };
+      const { claims } = checkClaims(
+        [
+          {
+            passage: { text: image.text, locator: "x" },
+            fields: [
+              {
+                field: "effect",
+                value: "CALCIFICATION",
+                anchor: "Calcification fell",
+              },
+              {
+                field: "direction",
+                value: "DECREASE",
+                anchor: "Calcification fell",
+              },
+              {
+                field: "species",
+                value: "ACROPORA_MILLEPORA",
+                anchor: "Calcification of Acropora millepora",
+              },
+              {
+                field: "quantity",
+                min: 2,
+                max: 2,
+                unit: "µmol/l",
+                basis: null,
+                anchor: "2 µM PO4",
+              },
+            ],
+          },
+        ],
+        [...jatsSections(JATS), caption, image],
+        vocabularyV1(),
+      );
+      assert.equal(claims.length, 1);
+      const verifiedAt = new Date("2026-10-31T09:00:00Z");
+      await store.saveSource({
+        sourceId: figure.id,
+        contentHash: sha256(`${JATS}-figure`),
+        extractedBy: "gpt-5.1 claim-extraction/v3",
+        claims: claims.map((c) => ({
+          ...c,
+          extractedBy: "gpt-5.1 figure-claim-extraction/v1",
+        })),
+        verifiedAt,
+        unverifiedLocators: [image.locator],
+      });
+      const passages = await prisma.knowledgePassage.findMany({
+        where: { sourceVersion: { sourceId: figure.id } },
+        select: { locator: true, verifiedVerbatimAt: true, extractedBy: true },
+        orderBy: { locator: "asc" },
+      });
+      // the caption is downloaded text: its anchor is verified; the transcript
+      // (the passage and its own anchors) is the model's reading: nothing verified it
+      assert.deepEqual(
+        [...new Set(passages.map((p) => p.locator))],
+        [caption.locator, image.locator],
+      );
+      for (const p of passages)
+        assert.deepEqual(
+          [p.verifiedVerbatimAt, p.extractedBy],
+          [
+            p.locator === image.locator ? null : verifiedAt,
+            "gpt-5.1 figure-claim-extraction/v1",
+          ],
+          p.locator,
+        );
+
+      // EXPECTED, and said here (acrobot 39165): even once an editor marks it
+      // VERIFIED, a claim whose only evidence is a transcript has no verbatim
+      // support, and the answer gate keeps it out (NO_VERBATIM_EVIDENCE)
+      const evidence = await prisma.knowledgeClaimEvidence.findFirstOrThrow({
+        where: { passage: { sourceVersion: { sourceId: figure.id } } },
+        select: { claimId: true },
+      });
+      await prisma.knowledgeClaim.update({
+        where: { id: evidence.claimId },
+        data: { status: "VERIFIED" },
+      });
+      const candidate = (
+        await new KnowledgeAnswerRepository().candidates("PHOSPHATE")
+      ).find((c) => c.id === evidence.claimId);
+      assert.equal(candidate?.verbatimSupport, 0);
+      const pack = buildAnswerPackage({
+        candidates: [candidate!],
+        subject: "PHOSPHATE",
+        audience: "AI_INTERNAL",
+        limit: 5,
+      });
+      assert.ok(
+        pack.excluded
+          .find((e) => e.id === evidence.claimId)
+          ?.reasons.includes("NO_VERBATIM_EVIDENCE"),
+      );
     });
 
     it("re-extraction: the unreviewed claims are withdrawn with their pending fields, a reviewed one stays, one AuditLog row (acrobot 35808)", async () => {
