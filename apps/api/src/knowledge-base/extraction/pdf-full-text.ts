@@ -542,6 +542,13 @@ export interface PdfSections {
   sections: TextSection[];
   /** Pages past `MAX_PDF_PAGES`, not read. */
   pagesDropped: number;
+  /**
+   * The pages after the references heading, the same way: never read for
+   * claims, only for figure captions, because a manuscript puts its figures
+   * at the end (measured on stage: one PDF's two phosphate figures are on
+   * pages 21 and 22, after its references; research-kepes-ut).
+   */
+  afterReferences: TextSection[];
 }
 
 /**
@@ -557,6 +564,7 @@ export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
     useSystemFonts: true,
   });
   const sections: TextSection[] = [];
+  const afterReferences: TextSection[] = [];
   let pagesDropped = 0;
   try {
     const document = await task.promise;
@@ -581,15 +589,22 @@ export async function pdfSections(bytes: Uint8Array): Promise<PdfSections> {
         lines.map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean),
       );
     }
+    let referencesFrom = -1;
     for (const [i, lines] of stripLineNumbers(read).entries()) {
+      const locator = `p. ${i + 1}`.slice(0, MAX_LOCATOR);
+      if (referencesFrom >= 0) {
+        const text = joinLineEndHyphens(lines);
+        if (text) afterReferences.push({ locator, text });
+        continue;
+      }
       const cut = lines.findIndex((l) => REFERENCES_HEADING.test(l));
       const text = joinLineEndHyphens(cut >= 0 ? lines.slice(0, cut) : lines);
-      if (text)
-        sections.push({ locator: `p. ${i + 1}`.slice(0, MAX_LOCATOR), text });
-      if (cut >= 0) break;
+      if (text) sections.push({ locator, text });
+      // the rest of the heading's own page is the references list: no figure page
+      if (cut >= 0) referencesFrom = i;
     }
   } finally {
     await task.destroy();
   }
-  return { sections, pagesDropped };
+  return { sections, pagesDropped, afterReferences };
 }

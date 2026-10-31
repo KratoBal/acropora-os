@@ -28,6 +28,11 @@ import {
   jatsFigures,
 } from "./jats-figures.js";
 import { fetchPmcFigureImage } from "./pmc-figure-image.js";
+import {
+  MAX_FIGURE_PAGES,
+  pdfPhosphateFigures,
+  renderPdfPages,
+} from "./pdf-figures.js";
 
 import {
   fetchOpenPdf,
@@ -35,6 +40,7 @@ import {
   MAX_PDF_BYTES,
   pdfSections,
   type PdfFetch,
+  type PdfSections,
 } from "./pdf-full-text.js";
 
 /**
@@ -285,13 +291,22 @@ export async function readFullTextClaims(
   );
   // the figures only on a text that was read: a source no call answered stays unread
   if (!read.ok || !deps.figureExtractor) return read;
-  const figures = await readFigureClaims(
-    pmcid,
-    text.xml,
-    sections,
+  return withFigures(
+    read,
+    await readFigureClaims(pmcid, text.xml, sections, outcome, {
+      ...deps,
+      figureExtractor: deps.figureExtractor,
+    }),
     outcome,
-    deps as ReadDeps & { figureExtractor: FigureClaimExtractor },
   );
+}
+
+/** The text's claims and the figures' together, the outcome's counts over both. */
+function withFigures(
+  read: Extract<FullTextReading, { ok: true }>,
+  figures: FigureReading,
+  outcome: SourceOutcome,
+): FullTextReading {
   const claims = [...read.claims, ...figures.claims];
   outcome.claims = claims.length;
   outcome.fields = claims.reduce(
@@ -345,10 +360,90 @@ export async function readFigureClaims(
   sections: readonly TextSection[],
   outcome: SourceOutcome,
   deps: ReadDeps & { figureExtractor: FigureClaimExtractor },
-): Promise<{ claims: CheckedClaim[]; unverifiedLocators: string[] }> {
+): Promise<FigureReading> {
   const figures = jatsFigures(xml).filter((f) =>
     captionNamesPhosphate(f.caption),
   );
+  return readFigures(
+    figures.map((f) => ({
+      label: f.label,
+      where: f.label,
+      caption: f.caption,
+      image: () => fetchPmcFigureImage(pmcid, f.href, deps.fetch),
+    })),
+    sections,
+    outcome,
+    deps,
+  );
+}
+
+/**
+ * The same reading on a PDF's figures (slice 4): the captions from the page
+ * sections, the image the rendered page (`pdf-figures.ts`), each page drawn
+ * once however many figures it holds. A caption stands in its page's section,
+ * so a claim on it is the text call's twin; what is left is the image's.
+ */
+export async function readPdfFigureClaims(
+  bytes: Uint8Array,
+  read: PdfSections,
+  outcome: SourceOutcome,
+  deps: ReadDeps & { figureExtractor: FigureClaimExtractor },
+): Promise<FigureReading> {
+  // the captions also after the references (a manuscript's figure pages); the
+  // claims are still checked against the read sections, plus the caption
+  const sections = read.sections;
+  const figures = pdfPhosphateFigures([
+    ...read.sections,
+    ...read.afterReferences,
+  ]);
+  const pages = [...new Set(figures.map((f) => f.page))].slice(
+    0,
+    MAX_FIGURE_PAGES,
+  );
+  const rendered = pages.length
+    ? await renderPdfPages(bytes, pages)
+    : new Map();
+  return readFigures(
+    figures.map((f) => ({
+      label: f.label,
+      where: `${f.label}, p. ${f.page}`,
+      caption: f.caption,
+      image: async () =>
+        rendered.has(f.page)
+          ? { ok: true as const, bytes: rendered.get(f.page)! }
+          : {
+              ok: false as const,
+              reason: pages.includes(f.page) ? "NOT_RENDERED" : "PAGE_CAP",
+            },
+    })),
+    sections,
+    outcome,
+    deps,
+  );
+}
+
+/** One figure to read: what names it, where it stands, and its image when asked. */
+interface FigureToRead {
+  label: string;
+  /** The locators' base: the label, and for a PDF its page. */
+  where: string;
+  caption: string;
+  image: () => Promise<
+    { ok: true; bytes: Uint8Array } | { ok: false; reason: string }
+  >;
+}
+
+interface FigureReading {
+  claims: CheckedClaim[];
+  unverifiedLocators: string[];
+}
+
+async function readFigures(
+  figures: readonly FigureToRead[],
+  sections: readonly TextSection[],
+  outcome: SourceOutcome,
+  deps: ReadDeps & { figureExtractor: FigureClaimExtractor },
+): Promise<FigureReading> {
   const fo: FigureOutcome = {
     candidates: figures.length,
     dropped: Math.max(0, figures.length - MAX_FIGURES_PER_SOURCE),
@@ -371,7 +466,7 @@ export async function readFigureClaims(
   const unverifiedLocators: string[] = [];
   const inText = new Set(sections.map((s) => s.locator));
   for (const figure of figures.slice(0, MAX_FIGURES_PER_SOURCE)) {
-    const image = await fetchPmcFigureImage(pmcid, figure.href, deps.fetch);
+    const image = await figure.image();
     if (!image.ok) {
       count(fo.skipped, `IMAGE_${image.reason}`);
       continue;
@@ -412,7 +507,7 @@ export async function readFigureClaims(
       if (fo.refusalDetails.length < MAX_REFUSAL_DETAILS)
         fo.refusalDetails.push(detail);
     const imageSections = answer.transcripts.map((text, i) => ({
-      locator: figureImageLocator(figure.label, i + 1, tiling.tiles.length),
+      locator: figureImageLocator(figure.where, i + 1, tiling.tiles.length),
       text,
     }));
     const imageLocators = new Set(imageSections.map((s) => s.locator));
@@ -422,7 +517,7 @@ export async function readFigureClaims(
       answer.claims,
       [
         ...sections,
-        { locator: figureCaptionLocator(figure.label), text: figure.caption },
+        { locator: figureCaptionLocator(figure.where), text: figure.caption },
         ...imageSections,
       ],
       deps.vocabulary,
@@ -483,7 +578,21 @@ export async function readPdfClaims(
     return { ok: false, reason: "PDF_UNREADABLE" };
   }
   outcome.pagesDropped = read.pagesDropped;
-  return readSectionClaims(read.sections, pdf.contentHash, outcome, deps);
+  const claims = await readSectionClaims(
+    read.sections,
+    pdf.contentHash,
+    outcome,
+    deps,
+  );
+  if (!claims.ok || !deps.figureExtractor) return claims;
+  return withFigures(
+    claims,
+    await readPdfFigureClaims(pdf.bytes, read, outcome, {
+      ...deps,
+      figureExtractor: deps.figureExtractor,
+    }),
+    outcome,
+  );
 }
 
 /** The editor's PDF, read as an open PDF's text layer; the bytes are not kept, their sha256 is. */
@@ -504,7 +613,21 @@ export async function readManualPdfClaims(
   }
   outcome.pagesDropped = read.pagesDropped;
   const contentHash = createHash("sha256").update(bytes).digest("hex");
-  return readSectionClaims(read.sections, contentHash, outcome, deps);
+  const claims = await readSectionClaims(
+    read.sections,
+    contentHash,
+    outcome,
+    deps,
+  );
+  if (!claims.ok || !deps.figureExtractor) return claims;
+  return withFigures(
+    claims,
+    await readPdfFigureClaims(bytes, read, outcome, {
+      ...deps,
+      figureExtractor: deps.figureExtractor,
+    }),
+    outcome,
+  );
 }
 
 async function readSectionClaims(
