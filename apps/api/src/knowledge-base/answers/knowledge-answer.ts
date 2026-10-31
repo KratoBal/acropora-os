@@ -24,7 +24,9 @@ import {
  * answered from accepted knowledge only, internal surface, stage.
  *
  *   1. the package: VERIFIED claims on the topic with verbatim-verified
- *      evidence on a live source (`buildAnswerPackage`). Until a usage policy
+ *      evidence on a live source, or a figure reading an editor accepted
+ *      against the image, cited as read off (`buildAnswerPackage`,
+ *      `candidateOf`). Until a usage policy
  *      exists every claim is released for AI_INTERNAL only, never AI_PUBLIC;
  *   1b. the question's population (T8): its taxa and settings, recognised
  *      through the vocabulary. Field or lab data for an aquarium question is

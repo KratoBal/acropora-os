@@ -305,7 +305,11 @@ export interface PackageCandidate {
   subject: string;
   status: string;
   scope: ClaimScope;
-  /** Supporting evidence rows on a verbatim-verified passage of a source not retracted. */
+  /**
+   * Supporting evidence rows on a verbatim-verified passage of a source not
+   * retracted; a figure reading counts only once an editor accepted it
+   * against the image (research-diagram-irany), and the caller decides that.
+   */
   verbatimSupport: number;
   /** The uses the claim is released for. Until a usage policy exists the caller decides, and says so. */
   uses: readonly AnswerAudience[];

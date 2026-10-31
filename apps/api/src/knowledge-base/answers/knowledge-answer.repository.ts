@@ -4,7 +4,7 @@ import type {
   ClaimLayer,
   Environment,
 } from "@acropora/knowledge-base";
-import { claimScope } from "../claims/claim-store.js";
+import { claimScope, READ_OFF_MARK } from "../claims/claim-store.js";
 import {
   LIST_SELECT,
   levelOf,
@@ -12,6 +12,7 @@ import {
   sourceRef,
   type ListClaim,
 } from "../claims/claim-store.repository.js";
+import { isReadingLocator } from "../extraction/jats-figures.js";
 import { CLAIM_ON_INCLUDED_SOURCE } from "../included-source.js";
 import type { AnswerCandidate, Subject } from "./knowledge-answer.js";
 
@@ -78,6 +79,10 @@ export function citationOf(sources: readonly CitedSource[]): string | null {
   return rest > 0 ? `${shown.join("; ")} és további ${rest}` : shown.join("; ");
 }
 
+/** "Koop és mtsai, 2001, ábráról leolvasva": a value read off a figure says so. */
+export const withReadOffMark = (citation: string | null) =>
+  citation === null ? null : `${citation}, ${READ_OFF_MARK}`;
+
 export function candidateOf(
   c: ListClaim & { subject: string },
   sources: ReadonlyMap<string, CitedSource>,
@@ -85,7 +90,18 @@ export function candidateOf(
   const live = c.evidence.filter(
     (e) => e.stance === "SUPPORTS" && !sourceRef(sourceOf(e)).retracted,
   );
-  const verbatim = live.filter((e) => e.passage.verifiedVerbatimAt !== null);
+  // the support an answer may stand on: a passage verified against the
+  // downloaded text, or a figure reading an editor accepted against the image
+  // (research-diagram-irany). Balázs's "Javasolhatja", 2026-10-31 13:27 UTC
+  // (Discord 1566081261058134150), answered the question 1566005500053823603,
+  // which named this path: only after an editor's approval against the image,
+  // into an answer or an article (acrobot's memory 2548, 2550). A reading
+  // nobody compared stays out (NO_VERBATIM_EVIDENCE).
+  const imageCompared = (e: (typeof live)[number]) =>
+    isReadingLocator(e.passage.locator) && e.imageComparedAt !== null;
+  const verbatim = live.filter(
+    (e) => e.passage.verifiedVerbatimAt !== null || imageCompared(e),
+  );
   const cited = [...new Set(verbatim.map((e) => sourceOf(e).id))].flatMap(
     (id) => (sources.has(id) ? [sources.get(id)!] : []),
   );
@@ -133,7 +149,10 @@ export function candidateOf(
     // no usage policy yet: the pilot releases a VERIFIED claim for the
     // internal surface only, never AI_PUBLIC (plan 7 (e); PR #1928)
     uses: ["AI_INTERNAL"],
-    citation: citationOf(cited),
+    // the reader sees where the value comes from, as the claim store does
+    citation: verbatim.some(imageCompared)
+      ? withReadOffMark(citationOf(cited))
+      : citationOf(cited),
     quantity:
       c.originalUnit === null
         ? null

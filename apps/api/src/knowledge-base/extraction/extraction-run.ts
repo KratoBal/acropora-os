@@ -365,7 +365,9 @@ export const FIGURE_TILE_MAX_BYTES = 6 * 1024 * 1024;
  * tile: the direction a curve shows, an approximate value off an axis, in its
  * own words. A claim resting on it is stored like a transcript claim, not
  * verified, under its own locator ("Figure 3, read off image tile 2/4"), so
- * the gate excludes it the same way and the editor sees what it is. It may
+ * the gate excludes it the same way and the editor sees what it is, until an
+ * editor accepts it against the image (the review's `imageCompared`): then it
+ * is answered from, cited as read off. It may
  * anchor on its reading and its own tile's printed text; no other claim may
  * anchor on a reading (ANCHOR_ACROSS_PARTS), so a read-off value never sits
  * on a claim whose passage is verified.

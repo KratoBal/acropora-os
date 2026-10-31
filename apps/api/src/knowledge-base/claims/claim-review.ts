@@ -66,6 +66,12 @@ export const ADDABLE_FIELDS: Record<string, "TAXON" | "EFFECT"> = {
 export interface ReviewInput {
   decisions: FieldDecision[];
   applicability: { value: Applicability; reason: string } | null;
+  /**
+   * The editor compared a figure reading with the image (research-diagram-
+   * irany; Balázs, 2026-10-31): required to accept a claim read off a figure,
+   * and what lets it into an answer.
+   */
+  imageCompared?: boolean;
 }
 
 export class ReviewInputError extends Error {
@@ -133,7 +139,16 @@ export function parseReviewInput(body: unknown): ReviewInput {
       );
     applicability = { value: a.value as Applicability, reason };
   }
-  return { decisions, applicability };
+  if (
+    body.imageCompared !== undefined &&
+    typeof body.imageCompared !== "boolean"
+  )
+    throw new ReviewInputError("BAD_BODY", "imageCompared: true or false");
+  return {
+    decisions,
+    applicability,
+    imageCompared: body.imageCompared === true,
+  };
 }
 
 export function parseDiscardReason(body: unknown): string {

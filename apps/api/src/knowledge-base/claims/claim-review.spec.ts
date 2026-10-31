@@ -364,8 +364,29 @@ describe("claim review: the request", () => {
           value: "LIMITED",
           reason: "laborban, nem akváriumban",
         },
+        imageCompared: false,
       },
     );
+  });
+
+  it("the image comparison: only a true says it happened; anything but a boolean is refused (research-diagram-irany)", () => {
+    const body = { decisions: [{ anchorId: "a", decision: "ACCEPT" }] };
+    assert.equal(parseReviewInput(body).imageCompared, false);
+    assert.equal(
+      parseReviewInput({ ...body, imageCompared: true }).imageCompared,
+      true,
+    );
+    assert.equal(
+      parseReviewInput({ ...body, imageCompared: false }).imageCompared,
+      false,
+    );
+    for (const imageCompared of ["true", 1, null, {}])
+      assert.equal(
+        refusal(() => parseReviewInput({ ...body, imageCompared })).split(
+          ":",
+        )[0],
+        "BAD_BODY",
+      );
   });
 
   it("refuses a malformed body, a duplicate, a correction without value, a reasonless applicability", () => {

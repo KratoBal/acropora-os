@@ -114,6 +114,9 @@ export interface ClaimReview {
     retractionUnchecked: boolean;
   };
   passage: { text: string; locator: string };
+  /** A figure reading ("read off image"): accepted only after comparing it with the image. */
+  readOff: boolean;
+  imageComparedAt: string | null;
   fields: ClaimReviewField[];
   quantity: {
     min: string | null;
@@ -219,6 +222,8 @@ export interface VocabularyProbe {
 export interface ClaimReviewInput {
   decisions: ClaimFieldDecision[];
   applicability: { value: Applicability; reason: string } | null;
+  /** The editor compared the figure reading with the image. */
+  imageCompared?: boolean;
 }
 
 export type ClaimLayer =
