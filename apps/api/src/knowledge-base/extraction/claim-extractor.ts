@@ -100,6 +100,36 @@ export function claimAnswerOf(body: unknown): ClaimExtractorAnswer {
   };
 }
 
+/** An identifier the AI service passes on from the provider (acropora-ai-agent #64). */
+const PROVIDER_ID = /^[A-Za-z0-9_.[\]]{1,64}$/;
+
+/**
+ * "HTTP 502", and when the AI service's answer names the provider's own
+ * codes, those after it: "HTTP 502 provider 400 invalid_request_error
+ * invalid_value input". On stage (2026-10-31) every claim call answered 502,
+ * and why stood only in the AI service's log, which the fleet cannot read.
+ * Identifiers only, checked again here; never a message.
+ */
+export async function unavailableReason(response: Response): Promise<string> {
+  const base = `HTTP ${response.status}`;
+  const body = (await response.json().catch(() => null)) as {
+    provider?: Record<string, unknown>;
+  } | null;
+  const p = body?.provider;
+  if (!p || typeof p !== "object") return base;
+  const parts = [
+    typeof p.status === "number" && Number.isInteger(p.status)
+      ? String(p.status)
+      : null,
+    ...["type", "code", "param"].map((k) =>
+      typeof p[k] === "string" && PROVIDER_ID.test(p[k] as string)
+        ? (p[k] as string)
+        : null,
+    ),
+  ].filter((x): x is string => x !== null);
+  return parts.length ? `${base} provider ${parts.join(" ")}` : base;
+}
+
 export class HttpClaimExtractor implements ClaimExtractor {
   constructor(
     private readonly baseUrl: string,
@@ -130,7 +160,10 @@ export class HttpClaimExtractor implements ClaimExtractor {
       };
     }
     if (!response.ok)
-      return { kind: "UNAVAILABLE", reason: `HTTP ${response.status}` };
+      return {
+        kind: "UNAVAILABLE",
+        reason: await unavailableReason(response),
+      };
     return claimAnswerOf(await response.json().catch(() => null));
   }
 }
@@ -241,7 +274,10 @@ export class HttpFigureClaimExtractor implements FigureClaimExtractor {
       };
     }
     if (!response.ok)
-      return { kind: "UNAVAILABLE", reason: `HTTP ${response.status}` };
+      return {
+        kind: "UNAVAILABLE",
+        reason: await unavailableReason(response),
+      };
     return figureAnswerOf(
       await response.json().catch(() => null),
       input.images.length,
