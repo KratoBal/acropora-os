@@ -1020,6 +1020,7 @@ export const ANONYMIZATION_REGISTER: Readonly<
     referenceCode: "identifier",
     recipientName: "personName",
     parcelBarcode: "parcelNumber",
+    webshopOrderId: "identifier",
     invoiceNumber: "identifier",
     errorCode: "business",
   },

@@ -4,7 +4,7 @@ export type FoxpostSettlementStatus =
 export type FoxpostSettlementLineStatus =
   "MATCHED" | "ORDER_NOT_FOUND" | "INVOICE_NOT_FOUND";
 
-export type FoxpostResolutionSource = "LOCAL" | "UNAS" | "MANUAL";
+export type FoxpostResolutionSource = "LOCAL" | "UNAS" | "MANUAL" | "WEBSHOP";
 
 export interface FoxpostSettlementLine {
   id: string;
@@ -15,6 +15,8 @@ export interface FoxpostSettlementLine {
   parcelBarcode?: string;
   collectedAmount: string;
   salesOrderId?: string;
+  /** Set when the reference is a webshop (Medusa) order number. */
+  webshopOrderId?: string;
   invoiceId?: string;
   invoiceNumber?: string;
   resolutionSource?: FoxpostResolutionSource;

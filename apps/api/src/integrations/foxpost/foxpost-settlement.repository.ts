@@ -156,6 +156,7 @@ function toDetail(row: SettlementDetailRow): FoxpostSettlementDetail {
       parcelBarcode: line.parcelBarcode ?? undefined,
       collectedAmount: line.collectedAmount.toString(),
       salesOrderId: line.salesOrderId ?? undefined,
+      webshopOrderId: line.webshopOrderId ?? undefined,
       invoiceId: line.invoiceId ?? undefined,
       invoiceNumber: line.invoiceNumber ?? undefined,
       resolutionSource: line.resolutionSource ?? undefined,
@@ -194,9 +195,10 @@ export interface FoxpostResolvedLineInput {
   parcelBarcode: string | null;
   collectedAmount: number;
   salesOrderId: string | null;
+  webshopOrderId?: string | null;
   invoiceId: string | null;
   invoiceNumber: string | null;
-  resolutionSource: "LOCAL" | "UNAS" | "MANUAL" | null;
+  resolutionSource: "LOCAL" | "UNAS" | "MANUAL" | "WEBSHOP" | null;
   status: "MATCHED" | "ORDER_NOT_FOUND" | "INVOICE_NOT_FOUND";
   errorCode: string | null;
   manualApprovedByUserId?: string | null;
@@ -209,6 +211,18 @@ export interface FoxpostManualLineResolution {
   invoiceNumber: string;
   manualApprovedByUserId: string | null;
   manualApprovedAt: Date;
+}
+
+/**
+ * What a reference that is a webshop order number points to. `webshopOrderIds`
+ * has every distinct order the Foxpost parcels with that reference belong to
+ * (one in practice: the reference is the order's display id); `invoices` are
+ * the LIVE outgoing invoices of those orders.
+ */
+export interface WebshopOrderResolution {
+  referenceCode: string;
+  webshopOrderIds: string[];
+  invoices: Array<{ id: string; invoiceNumber: string }>;
 }
 
 export interface LocalOrderResolution {
@@ -500,6 +514,67 @@ export class FoxpostSettlementRepository extends Repository {
     });
   }
 
+  /**
+   * A Foxpost reference that is a webshop order number. The parcel we create
+   * for a webshop order carries the order's display id as its reference
+   * (`shipmentReference`), so the settlement row finds the order through
+   * `WebshopParcel` (any status: a cancelled and re-created parcel keeps the
+   * reference), and the order's invoice through the billing source link.
+   *
+   * LIVE invoice: an issued, outgoing `INVOICE` of the order that no issued (or
+   * in-flight) storno points at. More than one is returned as is, never picked
+   * from here.
+   */
+  async resolveWebshop(
+    referenceCodes: readonly string[],
+  ): Promise<WebshopOrderResolution[]> {
+    if (!referenceCodes.length) return [];
+    const parcels = await prisma.webshopParcel.findMany({
+      where: {
+        carrier: "foxpost",
+        reference: { in: [...new Set(referenceCodes)] },
+      },
+      select: { reference: true, commerceOrderId: true },
+    });
+    if (!parcels.length) return [];
+    const orderIds = [...new Set(parcels.map((p) => p.commerceOrderId))];
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        sourceType: "WEBSHOP_ORDER",
+        sourceId: { in: orderIds },
+        direction: "OUTBOUND",
+        documentType: "INVOICE",
+        status: "ISSUED",
+        invoiceNumber: { not: null },
+        // a storno that is issued, or still being issued (outcome unknown), takes
+        // the invoice out: the line goes to the manual approval, not to a guess
+        correctionInvoices: {
+          none: {
+            documentType: "STORNO",
+            status: { in: ["ISSUED", "ISSUING"] },
+          },
+        },
+      },
+      select: { id: true, sourceId: true, invoiceNumber: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    const ordersByReference = new Map<string, Set<string>>();
+    for (const parcel of parcels) {
+      const orders = ordersByReference.get(parcel.reference) ?? new Set();
+      orders.add(parcel.commerceOrderId);
+      ordersByReference.set(parcel.reference, orders);
+    }
+    return [...ordersByReference].map(([referenceCode, orders]) => ({
+      referenceCode,
+      webshopOrderIds: [...orders],
+      invoices: invoices.flatMap((invoice) =>
+        invoice.sourceId && orders.has(invoice.sourceId)
+          ? [{ id: invoice.id, invoiceNumber: invoice.invoiceNumber! }]
+          : [],
+      ),
+    }));
+  }
+
   async list(
     query: FoxpostSettlementListQueryDto,
   ): Promise<FoxpostSettlementListResponse> {
@@ -587,6 +662,7 @@ export class FoxpostSettlementRepository extends Repository {
         },
         data: {
           salesOrderId: null,
+          webshopOrderId: null,
           invoiceId: null,
           invoiceNumber: input.invoiceNumber,
           resolutionSource: "MANUAL",

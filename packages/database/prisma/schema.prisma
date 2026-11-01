@@ -126,6 +126,8 @@ enum FoxpostResolutionSource {
   LOCAL
   UNAS
   MANUAL
+  /// The reference is a Medusa (webshop) order number: parcel -> webshop order -> its invoice.
+  WEBSHOP
 }
 
 enum FoxpostSyncRunStatus {
@@ -7020,6 +7022,9 @@ model FoxpostSettlementLine {
   parcelBarcode          String?
   collectedAmount        Decimal                     @db.Decimal(19, 4)
   salesOrderId           String?
+  /// The Medusa order id when the reference is a webshop order number. No foreign
+  /// key: the webshop order is not stored in this database (see WebshopParcel).
+  webshopOrderId         String?                     @db.VarChar(64)
   invoiceId              String?
   invoiceNumber          String?
   resolutionSource       FoxpostResolutionSource?
@@ -7039,6 +7044,7 @@ model FoxpostSettlementLine {
   @@index([referenceCode])
   @@index([status])
   @@index([salesOrderId])
+  @@index([webshopOrderId])
   @@index([invoiceId])
   @@index([manualApprovedByUserId, manualApprovedAt])
 }

@@ -63,6 +63,7 @@ describe("FoxpostSettlementService", () => {
     };
     const repository = {
       outboundInvoicesByNumber: async () => [],
+      resolveWebshop: async () => [],
       createRun: async () => "run-1",
       hasMessage: async () => false,
       createPending: async () => "settlement-1",
@@ -301,6 +302,7 @@ describe("FoxpostSettlementService", () => {
         pdf: Buffer.from("pdf"),
       }),
       resolveLocal: async () => [],
+      resolveWebshop: async () => [],
       manualLineResolutions: async () => [],
       saveProcessingResult: async (
         _id: string,
@@ -424,6 +426,148 @@ describe("FoxpostSettlementService", () => {
     assert.equal(result.createdCount, 0);
   });
 
+  describe("references that are webshop order numbers", () => {
+    type WebshopResolution = {
+      referenceCode: string;
+      webshopOrderIds: string[];
+      invoices: Array<{ id: string; invoiceNumber: string }>;
+    };
+    function service(webshop: WebshopResolution[], unasKeys: string[] = []) {
+      const asked: string[][] = [];
+      const repository = {
+        resolveLocal: async () => [],
+        outboundInvoicesByNumber: async () => [],
+        resolveWebshop: async (references: readonly string[]) => {
+          asked.push([...references]);
+          return webshop.filter((row) =>
+            references.includes(row.referenceCode),
+          );
+        },
+      } as unknown as FoxpostSettlementRepository;
+      const instance = new FoxpostSettlementService(
+        {} as FoxpostGmailClient,
+        {} as FoxpostSettlementParser,
+        repository,
+        {} as FoxpostMonthlyReportXlsx,
+        { getToken: async () => "unas-token" } as UnasAuthService,
+        {
+          getOrderByKey: async (_token: string, key: string) => {
+            unasKeys.push(key);
+            return null;
+          },
+        } as unknown as UnasApiClient,
+      );
+      return {
+        asked,
+        resolve: (lines: unknown[]) =>
+          (
+            instance as unknown as {
+              resolveLines(
+                lines: unknown[],
+              ): Promise<Array<Record<string, unknown>>>;
+            }
+          ).resolveLines(lines),
+      };
+    }
+    const line = (referenceCode: string, sourceRowNumber = 1) => ({
+      sourceRowNumber,
+      referenceCode,
+      transactionDate: new Date("2026-11-03T00:00:00.000Z"),
+      recipientName: null,
+      parcelBarcode: "CLFOX0000000001",
+      collectedAmount: 12_000,
+    });
+
+    it("matches the Medusa order number to the webshop order and its issued invoice, without a UNAS call", async () => {
+      const unasKeys: string[] = [];
+      const { resolve } = service(
+        [
+          {
+            referenceCode: "611",
+            webshopOrderIds: ["order_01JWEBSHOP611"],
+            invoices: [{ id: "invoice-611", invoiceNumber: "ACRW-2026/00611" }],
+          },
+        ],
+        unasKeys,
+      );
+      const [row] = await resolve([line("611")]);
+      assert.equal(row?.status, "MATCHED");
+      assert.equal(row?.resolutionSource, "WEBSHOP");
+      assert.equal(row?.webshopOrderId, "order_01JWEBSHOP611");
+      assert.equal(row?.invoiceId, "invoice-611");
+      assert.equal(row?.invoiceNumber, "ACRW-2026/00611");
+      assert.equal(row?.salesOrderId, null);
+      assert.equal(row?.errorCode, null);
+      assert.deepEqual(unasKeys, []);
+    });
+
+    it("keeps the order link and asks for review when the webshop order has no issued invoice yet", async () => {
+      const unasKeys: string[] = [];
+      const { resolve } = service(
+        [{ referenceCode: "612", webshopOrderIds: ["order_B"], invoices: [] }],
+        unasKeys,
+      );
+      const [row] = await resolve([line("612")]);
+      assert.equal(row?.status, "INVOICE_NOT_FOUND");
+      assert.equal(row?.webshopOrderId, "order_B");
+      assert.equal(row?.invoiceNumber, null);
+      assert.equal(row?.resolutionSource, null);
+      assert.equal(row?.errorCode, "FOXPOST_WEBSHOP_INVOICE_NOT_FOUND");
+      assert.deepEqual(unasKeys, []);
+    });
+
+    it("does not guess when the reference names two webshop orders or two live invoices", async () => {
+      const { resolve } = service([
+        {
+          referenceCode: "613",
+          webshopOrderIds: ["order_C1", "order_C2"],
+          invoices: [{ id: "i-1", invoiceNumber: "ACRW-2026/00001" }],
+        },
+        {
+          referenceCode: "614",
+          webshopOrderIds: ["order_D"],
+          invoices: [
+            { id: "i-2", invoiceNumber: "ACRW-2026/00002" },
+            { id: "i-3", invoiceNumber: "ACRW-2026/00003" },
+          ],
+        },
+      ]);
+      const rows = await resolve([line("613", 1), line("614", 2)]);
+      assert.deepEqual(
+        rows.map((row) => [
+          row.status,
+          row.webshopOrderId,
+          row.invoiceNumber,
+          row.errorCode,
+        ]),
+        [
+          [
+            "ORDER_NOT_FOUND",
+            null,
+            null,
+            "FOXPOST_WEBSHOP_REFERENCE_AMBIGUOUS",
+          ],
+          [
+            "INVOICE_NOT_FOUND",
+            "order_D",
+            null,
+            "FOXPOST_WEBSHOP_INVOICE_AMBIGUOUS",
+          ],
+        ],
+      );
+    });
+
+    it("looks up only the references no UNAS order or invoice number claimed, and still falls back to UNAS for the rest", async () => {
+      const unasKeys: string[] = [];
+      const { asked, resolve } = service([], unasKeys);
+      const [row] = await resolve([line("47679-279201")]);
+      assert.deepEqual(asked, [["47679-279201"]]);
+      assert.equal(row?.status, "ORDER_NOT_FOUND");
+      assert.equal(row?.webshopOrderId ?? null, null);
+      assert.deepEqual(unasKeys, ["47679-279201"]);
+    });
+  });
+
   describe("references that are invoice numbers", () => {
     function service(
       existing: string[],
@@ -432,6 +576,7 @@ describe("FoxpostSettlementService", () => {
     ) {
       const repository = {
         resolveLocal: async () => [],
+        resolveWebshop: async () => [],
         outboundInvoicesByNumber: async (numbers: readonly string[]) =>
           numbers
             .filter((number) => existing.includes(number))
