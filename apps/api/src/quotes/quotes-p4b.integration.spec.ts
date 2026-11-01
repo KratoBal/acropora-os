@@ -472,7 +472,13 @@ describe(
       assert.deepEqual([old.status, events], [404, 1], "PUBLISH-REVOKES-LINK");
     });
 
-    it("one caller's yes is limited: the sixth in a minute is a 429", async () => {
+    it("one caller's yes is limited: the sixth in a minute is a 429", async (t) => {
+      // The limiter's window is the wall-clock minute (IpRateLimiter, fixed
+      // window): six requests that straddle a minute boundary start a new
+      // window, and the sixth got a 404 instead of the 429 (#1989 CI,
+      // 2026-11-01, card 66d81912). The clock is held still for the six, so
+      // all of them fall in one window; only Date is mocked, the timers run.
+      t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
       const statuses: number[] = [];
       for (let i = 0; i < 6; i += 1)
         statuses.push(
