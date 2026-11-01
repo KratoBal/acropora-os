@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   T12_CONCLUSION_CASES,
   T12_KINDS,
+  T12_UNLISTED_KINDS,
   conclusionInputs,
   formatConclusionScore,
   scoreConclusions,
@@ -176,6 +177,53 @@ describe("T12 conclusion review: the score", () => {
           { ref, flagged: false },
         ]),
       /two verdicts/u,
+    );
+  });
+});
+
+describe("T12 conclusion review: the kinds the check list does not name", () => {
+  const { key } = conclusionInputs(vocabulary);
+  const unlistedIds = new Set(
+    cases
+      .filter((c) => T12_UNLISTED_KINDS.includes(c.plantedKind))
+      .map((c) => c.id),
+  );
+  const answer = (flag: (id: string) => boolean): ConclusionVerdict[] =>
+    Object.entries(key).map(([ref, id]) => ({ ref, flagged: flag(id) }));
+
+  it("at least one unlisted kind, with its pair, among the cases", () => {
+    assert.ok(T12_UNLISTED_KINDS.length >= 1);
+    for (const kind of T12_UNLISTED_KINDS)
+      assert.deepEqual(
+        cases.filter((c) => c.plantedKind === kind).map((c) => c.polarity),
+        ["must-apply", "must-not-apply"],
+      );
+  });
+
+  it("counted out on their own line: a model that finds only the named kinds shows it there", () => {
+    const s = scoreConclusions(
+      key,
+      answer((id) => id.endsWith("-planted") && !unlistedIds.has(id)),
+    );
+    assert.deepEqual(
+      [s.unlisted.plantedFlagged, s.unlisted.plantedTotal],
+      [0, T12_UNLISTED_KINDS.length],
+    );
+    assert.equal(s.plantedFlagged, planted.length - T12_UNLISTED_KINDS.length);
+    assert.match(
+      formatConclusionScore(s),
+      new RegExp(
+        `kinds the check list does not name \\(LONGER_TERM\\): planted flagged 0/${T12_UNLISTED_KINDS.length}, correct pair flagged 0/${T12_UNLISTED_KINDS.length}`,
+        "u",
+      ),
+    );
+    const all = scoreConclusions(
+      key,
+      answer((id) => id.endsWith("-planted") || unlistedIds.has(id)),
+    );
+    assert.deepEqual(
+      [all.unlisted.plantedFlagged, all.unlisted.correctFlagged],
+      [T12_UNLISTED_KINDS.length, T12_UNLISTED_KINDS.length],
     );
   });
 });
