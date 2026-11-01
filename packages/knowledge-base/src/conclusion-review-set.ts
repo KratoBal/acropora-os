@@ -107,7 +107,7 @@ export const T12_CONCLUSION_CASES: readonly ConclusionCase[] = [
     "STRONGER_CERTAINTY",
     "t12-certainty",
     `Egy zátonyon végzett kísérlet bizonyítja, hogy ${RANGE} csökken az Acropora kalcifikációja.`,
-    `${C1}; ezt eddig egyetlen kísérlet mutatta.`,
+    `${C1}; ezt egy kísérlet mutatta.`,
     "one experiment stated as proof",
   ),
   ...conclusionPair(
@@ -121,14 +121,14 @@ export const T12_CONCLUSION_CASES: readonly ConclusionCase[] = [
     "OTHER_ENVIRONMENT",
     "t12-environment",
     `Egy kísérlet szerint otthoni akváriumban is ${RANGE} csökkenhet az Acropora kalcifikációja.`,
-    `${C1}; akváriumra ez csak korlátozottan vihető át.`,
+    `${C1}; akváriumra ez az állítás nem szól.`,
     "a reef experiment stated for the home aquarium without the transfer",
   ),
   ...conclusionPair(
     "VALUE_OUTSIDE_RANGE",
     "t12-range",
     "Egy zátonyon végzett kísérlet szerint 0,2 mg/l PO4 feletti foszfát mellett csökkenhet az Acropora kalcifikációja.",
-    `${C1}; e tartományon kívül a kísérlet nem mért.`,
+    `${C1}; e tartományon kívülről az állítás nem szól.`,
     "an effect stated above the measured range",
   ),
   ...conclusionPair(
@@ -142,7 +142,7 @@ export const T12_CONCLUSION_CASES: readonly ConclusionCase[] = [
     "BROADER_EFFECT",
     "t12-effect",
     `Egy zátonyon végzett kísérlet szerint ${RANGE} romlik az Acropora egészsége.`,
-    `${C1}; más élettani hatásról a kísérlet nem szól.`,
+    `${C1}; más élettani hatásról az állítás nem szól.`,
     "a calcification result stated as the coral's health",
   ),
   ...conclusionPair(
