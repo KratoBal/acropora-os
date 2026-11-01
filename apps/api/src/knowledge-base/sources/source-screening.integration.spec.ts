@@ -291,7 +291,7 @@ describe(
         );
     });
 
-    it("CLASSIFY: an included source no anchor classifies gets its type by the editor, logged; a set type, a pending anchor, a source not included are refused", async () => {
+    it("CLASSIFY: an included source no anchor classifies gets its type by the editor, logged; a set type, a pending anchor, a source not included or retracted are refused", async () => {
       const included = {
         screeningStatus: "INCLUDED" as const,
         screenedById: userId,
@@ -315,6 +315,12 @@ describe(
         studyType: "FIELD_OBSERVATIONAL",
       });
       const pending = await make("cls-pending", {});
+      const retracted = await make("cls-retracted", {
+        ...included,
+        versions: {
+          create: [{ versionKind: "RETRACTION", detectedVia: "MANUAL" }],
+        },
+      });
       const anchored = await make("cls-anchor", {
         ...included,
         versions: {
@@ -380,24 +386,25 @@ describe(
       assert.equal(await refusal(classified), "ALREADY_CLASSIFIED");
       assert.equal(await refusal(pending), "NOT_INCLUDED");
       assert.equal(await refusal(anchored), "PENDING_ANCHOR");
+      assert.equal(await refusal(retracted), "RETRACTED");
       // nothing of the refused ones moved, and only the one row was logged
       assert.deepEqual(
         (
           await prisma.knowledgeSource.findMany({
-            where: { id: { in: [classified, pending, anchored] } },
+            where: { id: { in: [classified, pending, anchored, retracted] } },
             select: { studyType: true },
             orderBy: { id: "asc" },
           })
         )
           .map((s) => s.studyType)
           .sort(),
-        ["FIELD_OBSERVATIONAL", null, null].sort(),
+        ["FIELD_OBSERVATIONAL", null, null, null].sort(),
       );
       assert.equal(
         await prisma.auditLog.count({
           where: {
             action: "KNOWLEDGE_SOURCE_CLASSIFIED",
-            entityId: { in: [bare, classified, pending, anchored] },
+            entityId: { in: [bare, classified, pending, anchored, retracted] },
           },
         }),
         1,
