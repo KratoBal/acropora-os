@@ -7,9 +7,15 @@ import { gateAnswer, type GateReason } from "./answer-gate.js";
 import {
   T13_CLASSES,
   T13_MIN_CASES,
+  T13_RELATED_EFFECT_CASES,
   TEST_SET,
+  flagInputs,
+  formatFlagScore,
   formatTestSetReport,
+  gateFlagCases,
   runTestSet,
+  scoreFlags,
+  type FlagVerdict,
   type GroupResult,
   type TestCase,
   type TestSetReport,
@@ -248,5 +254,197 @@ describe("the runner's own rules", () => {
     assert.equal(g.failed.length, 0);
     assert.equal(g.met, false);
     assert.equal(runTestSet(vocabulary, {}, []).met, false);
+  });
+});
+
+describe("the fifth T13 class: a related but other effect", () => {
+  const cases = T13_RELATED_EFFECT_CASES;
+  const planted = cases.filter((c) => c.polarity === "must-apply");
+  const correct = cases.filter((c) => c.polarity === "must-not-apply");
+
+  it(`has at least ${T13_MIN_CASES} planted cases, each with its correct pair, ids unique across the set`, () => {
+    assert.ok(planted.length >= T13_MIN_CASES);
+    assert.equal(correct.length, planted.length);
+    for (const c of planted)
+      assert.ok(
+        correct.some((x) => x.id === c.id.replace(/-planted$/u, "-correct")),
+        c.id,
+      );
+    const ids = [...TEST_SET.map((c) => c.id), ...cases.map((c) => c.id)];
+    assert.equal(new Set(ids).size, ids.length);
+  });
+
+  it("every case passes the gate: one that is dropped has been taken over by a rule and belongs to a machine class", () => {
+    assert.deepEqual(
+      gateFlagCases(vocabulary)
+        .filter((r) => !r.passes)
+        .map((r) => `${r.id}: ${r.got}`),
+      [],
+    );
+  });
+
+  it("is not in the machine set, and runTestSet does not report it", () => {
+    assert.ok(
+      !TEST_SET.some((c) => c.errorClass === ("RELATED_EFFECT" as never)),
+    );
+    assert.ok(
+      !runTestSet(vocabulary).groups.some(
+        (g) => g.errorClass === "RELATED_EFFECT",
+      ),
+    );
+  });
+
+  it("the second model's input names no case and no polarity, and carries no marker", () => {
+    const { inputs, key } = flagInputs(vocabulary);
+    assert.equal(inputs.length, cases.length);
+    assert.deepEqual(
+      Object.keys(key),
+      inputs.map((i) => i.ref),
+    );
+    assert.deepEqual(
+      new Set(Object.values(key)),
+      new Set(cases.map((c) => c.id)),
+    );
+    for (const i of inputs) {
+      const seen = JSON.stringify(i);
+      assert.doesNotMatch(seen, /planted|correct|must-|claim:|\[\[/u, seen);
+      assert.equal(Object.keys(i).sort().join(), "claim,ref,sentence");
+    }
+    const calc = inputs.find((i) => i.sentence.includes("vázporozitását"));
+    assert.deepEqual(calc?.claim, {
+      effect: "CALCIFICATION",
+      effectLabel: "kalcifikáció",
+      direction: "DECREASE",
+      taxa: ["ACROPORA"],
+    });
+  });
+
+  it("a planted case and its correct pair do not stand side by side in the input", () => {
+    const { inputs, key } = flagInputs(vocabulary);
+    const pairOf = (ref: string) =>
+      key[ref]!.replace(/-(planted|correct)$/u, "");
+    const adjacent = inputs
+      .slice(1)
+      .filter((x, i) => pairOf(x.ref) === pairOf(inputs[i]!.ref)).length;
+    // sorted by sentence, a pair shares its opening words: measured 2 of 7
+    // adjacent (polyp extension, porosity), the other five split
+    assert.ok(adjacent <= 2, `${adjacent} of ${planted.length} pairs adjacent`);
+  });
+
+  const { key } = flagInputs(vocabulary);
+  const answer = (flag: (id: string) => boolean): FlagVerdict[] =>
+    Object.entries(key).map(([ref, id]) => ({ ref, flagged: flag(id) }));
+  const isPlanted = (id: string) => id.endsWith("-planted");
+
+  it("scores a model that flags exactly the planted cases: no manual review", (t) => {
+    const s = scoreFlags(key, answer(isPlanted));
+    t.diagnostic(formatFlagScore(s));
+    assert.equal(s.plantedFlagged, planted.length);
+    assert.equal(s.plantedTotal, planted.length);
+    assert.equal(s.correctFlagged, 0);
+    assert.equal(s.correctTotal, correct.length);
+    assert.equal(s.manualReview, false);
+  });
+
+  it("one planted case not flagged sends the class to manual review, and is named", () => {
+    const missed = planted[2]!.id;
+    const s = scoreFlags(
+      key,
+      answer((id) => isPlanted(id) && id !== missed),
+    );
+    assert.equal(s.plantedFlagged, planted.length - 1);
+    assert.deepEqual(s.plantedMissed, [missed]);
+    assert.equal(s.manualReview, true);
+  });
+
+  it("silence accepts nothing: a model that answers nothing flags nothing, and the class goes to manual review", () => {
+    const s = scoreFlags(key, []);
+    assert.equal(s.plantedFlagged, 0);
+    assert.equal(s.unanswered.length, cases.length);
+    assert.equal(s.manualReview, true);
+  });
+
+  it("a model that flags everything is not a pass: every correct pair is counted against it", () => {
+    const s = scoreFlags(
+      key,
+      answer(() => true),
+    );
+    assert.equal(s.manualReview, false);
+    assert.equal(s.correctFlagged, correct.length);
+    assert.match(
+      formatFlagScore(s),
+      new RegExp(
+        `correct pair flagged ${correct.length}/${correct.length}`,
+        "u",
+      ),
+    );
+  });
+
+  it("an answer of another set throws: an unknown ref, or two verdicts on one ref", () => {
+    assert.throws(
+      () => scoreFlags(key, [{ ref: "f99", flagged: true }]),
+      /unknown ref/u,
+    );
+    const ref = Object.keys(key)[0]!;
+    assert.throws(
+      () =>
+        scoreFlags(key, [
+          { ref, flagged: true },
+          { ref, flagged: false },
+        ]),
+      /two verdicts/u,
+    );
+  });
+
+  it("calibration: a planted text swapped for its correct pair still passes the gate, and the score sees the miss", () => {
+    // the planted case now says the same effect: the gate cannot tell, the
+    // pass check stays green, and only the flag score catches it
+    const swapped = cases.map((c) =>
+      c.id === "related-porosity-planted"
+        ? {
+            ...c,
+            text: cases.find((x) => x.id === "related-porosity-correct")!.text,
+          }
+        : c,
+    );
+    assert.ok(
+      gateFlagCases(vocabulary, undefined, swapped).every((r) => r.passes),
+    );
+    const { inputs, key: k } = flagInputs(vocabulary, swapped);
+    // a model that flags what differs from the claim's effect flags neither copy
+    const verdicts = inputs.map((i) => ({
+      ref: i.ref,
+      flagged:
+        !inputs.some((o) => o.ref !== i.ref && o.sentence === i.sentence) &&
+        isPlanted(k[i.ref]!),
+    }));
+    const s = scoreFlags(k, verdicts, swapped);
+    assert.deepEqual(s.plantedMissed, ["related-porosity-planted"]);
+    assert.equal(s.manualReview, true);
+  });
+
+  it("calibration: a gate that drops one case is caught by the pass check", () => {
+    const victim = cases[0]!.id;
+    const victimText = cases[0]!.text;
+    const broken: typeof gateAnswer = (input) => {
+      const r = gateAnswer(input);
+      if (input.text !== victimText) return r;
+      return {
+        ...r,
+        sentences: r.sentences.map((s) => ({
+          ...s,
+          status: "DROPPED" as const,
+          reasons: [
+            { code: "EFFECT_MISMATCH", claimId: null, row: null, detail: "" },
+          ],
+        })),
+      };
+    };
+    assert.deepEqual(
+      gateFlagCases(vocabulary, broken)
+        .filter((r) => !r.passes)
+        .map((r) => r.id),
+      [victim],
+    );
   });
 });

@@ -120,13 +120,23 @@ export type {
   StatementResult,
 } from "./claim-statement.js";
 export {
+  T13_FLAG_CLASS,
+  T13_RELATED_EFFECT_CASES,
   TEST_SET_VERSION,
+  flagInputs,
+  formatFlagScore,
   formatTestSetReport,
+  gateFlagCases,
   runTestSet,
+  scoreFlags,
   summariseGroup,
 } from "./test-set.js";
 export type {
   CaseResult,
+  FlagCase,
+  FlagInput,
+  FlagScore,
+  FlagVerdict,
   GroupResult,
   Polarity,
   TestSetReport,
