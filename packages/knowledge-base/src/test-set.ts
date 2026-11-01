@@ -16,10 +16,12 @@
  * row) would hide that the row under test never fired.
  *
  * In this file (no network, no database): T4 units, T5 layer phrases, T10 no
- * dose, T11 the gate's five cases, and the machine classes of T13. Not here:
- * T1 (DOI resolution needs the network), T2 and T6-T9 (the API's answer
- * path), T3 and T12 and the fifth T13 class (the editor's gold set and the
- * second model).
+ * dose, T11 the gate's five cases, the machine classes of T13, and the
+ * fifth T13 class as cases, the second model's input and the score of its
+ * flags (no run: the model is called by the fleet-side runner, not from
+ * here). Not here: T1 (DOI resolution needs the network), T2 and T6-T9 (the
+ * API's answer path), T3 and T12 (the editor's gold set and the second
+ * model).
  *
  * Nothing here scores with a model. Pure: no database, no clock.
  */
@@ -964,5 +966,292 @@ export function formatTestSetReport(report: TestSetReport): string {
     );
     for (const f of g.failed) lines.push(`  ${f.id} (${f.polarity}): ${f.got}`);
   }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// THE FIFTH T13 CLASS: A RELATED BUT OTHER EFFECT (plan 10 T13, 7a 3.-4.)
+//
+// No rule decides whether a sentence speaks of the same effect as its claim
+// (calcification and skeletal porosity are related, not the same). A second
+// model may only FLAG such a sentence: a flag sends it to the editor, silence
+// accepts nothing. So these cases are not in TEST_SET and runTestSet does not
+// touch them; the fleet-side runner hands `flagInputs` to the model and scores
+// its answer with `scoreFlags`.
+//
+// What the gate already catches is not in this class: another effect word
+// (vázsűrűség, növekedés) is EFFECT_MISMATCH, a related effect outside the
+// vocabulary alone (vázvastagság, fluoreszcencia) is EFFECT_NOT_STATED. What
+// is left, and planted here, is a sentence that ALSO names the claim's effect
+// word, but states another effect beside it or through it. Every case passes
+// the gate (`gateFlagCases`): one that is ever dropped has been taken over by
+// a rule, and belongs to a machine class.
+
+export const T13_FLAG_CLASS = "RELATED_EFFECT" as const;
+
+export const T13_FLAG_THRESHOLD =
+  "the flag rate counted out; any planted case not flagged sends the class to manual review";
+
+/**
+ * One sentence for the second model. must-apply: planted, it must be
+ * flagged; must-not-apply: its correct pair (the same effect in other
+ * words), it must not be.
+ */
+export interface FlagCase {
+  kind: "FLAG";
+  id: string;
+  group: "T13";
+  errorClass: typeof T13_FLAG_CLASS;
+  polarity: Polarity;
+  /** Verbatim, with its `[[claim:<id>]]` marker. */
+  text: string;
+  /** The ids of FIXTURE_CLAIMS handed over; the default package when absent. */
+  package?: readonly string[];
+  criterion: string;
+}
+
+function flagPair(
+  id: string,
+  planted: string,
+  correct: string,
+  criterion: string,
+  pack?: readonly string[],
+): FlagCase[] {
+  const flagCase = (polarity: Polarity, suffix: string, text: string) => ({
+    kind: "FLAG" as const,
+    id: `${id}-${suffix}`,
+    group: "T13" as const,
+    errorClass: T13_FLAG_CLASS,
+    polarity,
+    text,
+    criterion:
+      polarity === "must-apply"
+        ? `flagged: ${criterion}`
+        : `its correct pair is not flagged: ${criterion}`,
+    ...(pack ? { package: pack } : {}),
+  });
+  return [
+    flagCase("must-apply", "planted", planted),
+    flagCase("must-not-apply", "correct", correct),
+  ];
+}
+
+const CALC = "kalcifikációját";
+const COLOR = "színezetét";
+
+export const T13_RELATED_EFFECT_CASES: readonly FlagCase[] = [
+  ...flagPair(
+    "related-linear-extension",
+    base(CALC, "kalcifikációját és lineáris kiterjedését"),
+    base(CALC, "meszesedését"),
+    "linear extension stated beside calcification",
+  ),
+  ...flagPair(
+    "related-porosity",
+    base(CALC, "kalcifikációját és vázporozitását"),
+    base(CALC, "mészvázépítését"),
+    "skeletal porosity stated beside calcification",
+  ),
+  ...flagPair(
+    "related-thickness",
+    base(CALC, "kalcifikáció után mért vázvastagságát"),
+    base(CALC, "meszesedésének ütemét"),
+    "skeletal thickness stated through calcification",
+  ),
+  ...flagPair(
+    "related-polyp-extension",
+    base(CALC, "kalcifikációt kísérő polipnyitottságát"),
+    base(CALC, "kalcifikációs rátáját"),
+    "polyp extension stated through calcification",
+  ),
+  ...flagPair(
+    "related-energy-reserve",
+    base(CALC, "kalcifikációhoz szükséges energiatartalékát"),
+    BASE,
+    "the energy reserve stated through calcification",
+  ),
+  ...flagPair(
+    "related-fluorescence",
+    base(COLOR, "színezetét és fluoreszcenciáját", HOBBY),
+    base(COLOR, "színintenzitását", HOBBY),
+    "fluorescence stated beside coloration",
+  ),
+  ...flagPair(
+    "related-pigment",
+    base(COLOR, "színezetéért felelős pigmentjeinek mennyiségét", HOBBY),
+    base(COLOR, "színezetének erősségét", HOBBY),
+    "the pigment content stated through coloration",
+  ),
+];
+
+/** What the gate says of each flag case: every one must be CITED. */
+export function gateFlagCases(
+  vocabulary: Vocabulary,
+  gate: typeof gateAnswer = gateAnswer,
+  cases: readonly FlagCase[] = T13_RELATED_EFFECT_CASES,
+): { id: string; got: string; passes: boolean }[] {
+  return cases.map((c) => {
+    const ids = new Set(c.package ?? DEFAULT_PACKAGE);
+    const r = gate({
+      text: c.text,
+      package: FIXTURE_CLAIMS.filter((claim) => ids.has(claim.id)),
+      vocabulary,
+    });
+    const statuses = r.sentences.map(
+      (s) =>
+        `${s.status}${s.reasons.length ? ` [${s.reasons.map((x) => x.code).join(", ")}]` : ""}`,
+    );
+    return {
+      id: c.id,
+      got: statuses.join(" | "),
+      passes: r.sentences.length === 1 && r.sentences[0]!.status === "CITED",
+    };
+  });
+}
+
+/**
+ * One item for the second model. It sees neither the case id nor the
+ * polarity: `ref` is the position in the set sorted by sentence, so a planted
+ * case and its pair do not stand side by side. The sentence carries no
+ * marker; the claim is given by its fields.
+ */
+export interface FlagInput {
+  ref: string;
+  sentence: string;
+  claim: {
+    effect: string;
+    /** The vocabulary's first form of the effect, as the sentence would name it. */
+    effectLabel: string;
+    direction: string;
+    taxa: readonly string[];
+  };
+}
+
+const MARKER_IN_TEXT = /\s*\[\[claim:([A-Za-z0-9_-]{1,64})\]\]/gu;
+
+/** The second model's input, and the key that maps each ref back to its case. */
+export function flagInputs(
+  vocabulary: Vocabulary,
+  cases: readonly FlagCase[] = T13_RELATED_EFFECT_CASES,
+): { inputs: FlagInput[]; key: Readonly<Record<string, string>> } {
+  const items = cases.map((c) => {
+    const claimIds = [...c.text.matchAll(MARKER_IN_TEXT)].map((m) => m[1]!);
+    if (claimIds.length !== 1)
+      throw new Error(
+        `test set: ${c.id} cites ${claimIds.length} claims, a flag case cites one`,
+      );
+    const claim = FIXTURE_CLAIMS.find((x) => x.id === claimIds[0]);
+    if (!claim) throw new Error(`test set: ${c.id} cites an unknown claim`);
+    const { direction } = claim.scope;
+    const effect = vocabulary.effects.find((t) => t.key === claim.scope.effect);
+    if (!effect || !direction)
+      throw new Error(
+        `test set: ${c.id} needs a claim with an effect in the vocabulary and a direction`,
+      );
+    return {
+      id: c.id,
+      sentence: c.text.replace(MARKER_IN_TEXT, ""),
+      claim: {
+        effect: effect.key,
+        effectLabel: effect.forms[0]!.join(" "),
+        direction,
+        taxa: claim.scope.taxa,
+      },
+    };
+  });
+  items.sort((a, b) =>
+    a.sentence < b.sentence ? -1 : a.sentence > b.sentence ? 1 : 0,
+  );
+  const key: Record<string, string> = {};
+  const inputs = items.map(({ id, ...item }, i) => {
+    const ref = `f${String(i + 1).padStart(2, "0")}`;
+    key[ref] = id;
+    return { ref, ...item };
+  });
+  return { inputs, key };
+}
+
+/** The second model's answer on one item. */
+export interface FlagVerdict {
+  ref: string;
+  flagged: boolean;
+}
+
+export interface FlagScore {
+  errorClass: typeof T13_FLAG_CLASS;
+  threshold: string;
+  plantedFlagged: number;
+  plantedTotal: number;
+  correctFlagged: number;
+  correctTotal: number;
+  /** Planted cases not flagged, by case id. A missing verdict is silence: not flagged. */
+  plantedMissed: string[];
+  /** Correct pairs flagged, by case id: work for the editor, not an error. */
+  correctFlaggedIds: string[];
+  /** Refs the model gave no verdict on. */
+  unanswered: string[];
+  /** Plan 10 T13: any planted case not flagged sends every item of the class to the editor. */
+  manualReview: boolean;
+}
+
+/**
+ * Scores the flags. Silence accepts nothing (plan 7a, 3.): an item without a
+ * verdict counts as not flagged. A verdict on a ref outside the key, or two
+ * verdicts on one ref, means the answer is of another set, and throws.
+ */
+export function scoreFlags(
+  key: Readonly<Record<string, string>>,
+  verdicts: readonly FlagVerdict[],
+  cases: readonly FlagCase[] = T13_RELATED_EFFECT_CASES,
+): FlagScore {
+  const flagged = new Map<string, boolean>();
+  for (const v of verdicts) {
+    if (!(v.ref in key)) throw new Error(`flag score: unknown ref ${v.ref}`);
+    if (flagged.has(v.ref))
+      throw new Error(`flag score: two verdicts on ${v.ref}`);
+    flagged.set(v.ref, v.flagged);
+  }
+  const byId = new Map(cases.map((c) => [c.id, c]));
+  const planted: string[] = [];
+  const correct: string[] = [];
+  const plantedMissed: string[] = [];
+  const correctFlaggedIds: string[] = [];
+  const unanswered: string[] = [];
+  for (const [ref, id] of Object.entries(key)) {
+    const c = byId.get(id);
+    if (!c) throw new Error(`flag score: the key names ${id}, not in the set`);
+    const f = flagged.get(ref);
+    if (f === undefined) unanswered.push(ref);
+    if (c.polarity === "must-apply") {
+      planted.push(id);
+      if (f !== true) plantedMissed.push(id);
+    } else {
+      correct.push(id);
+      if (f === true) correctFlaggedIds.push(id);
+    }
+  }
+  return {
+    errorClass: T13_FLAG_CLASS,
+    threshold: T13_FLAG_THRESHOLD,
+    plantedFlagged: planted.length - plantedMissed.length,
+    plantedTotal: planted.length,
+    correctFlagged: correctFlaggedIds.length,
+    correctTotal: correct.length,
+    plantedMissed,
+    correctFlaggedIds,
+    unanswered,
+    manualReview: planted.length === 0 || plantedMissed.length > 0,
+  };
+}
+
+/** The flag score as one report line, failures listed under it. */
+export function formatFlagScore(s: FlagScore): string {
+  const lines = [
+    `T13 ${s.errorClass}: planted flagged ${s.plantedFlagged}/${s.plantedTotal}, correct pair flagged ${s.correctFlagged}/${s.correctTotal} -> ${s.manualReview ? "MANUAL REVIEW" : "every planted case flagged"} (${s.threshold})`,
+  ];
+  for (const id of s.plantedMissed) lines.push(`  ${id}: not flagged`);
+  for (const id of s.correctFlaggedIds) lines.push(`  ${id}: flagged`);
+  if (s.unanswered.length)
+    lines.push(`  no verdict: ${s.unanswered.join(", ")}`);
   return lines.join("\n");
 }
