@@ -30,8 +30,9 @@ async function removeLeftovers() {
   ha egy olvasásnál elbukott elszámolás csendben kimaradna;
   ha a 99H3 elszámoláshoz a 99H35 jóváírása is jönne (a kód utáni szóköz); ha
   a sor rendelésszáma vagy számlaszáma nem hozná a hozzá tartozó kimenő
-  számlát; ha a még nem újravetített (null) számla ismert kifizetésűnek
-  számítana.
+  számlát; ha a webshop-sor a feloldott számla számát nem vinné magával, vagy
+  a számláját nem hozná; ha a még nem újravetített (null) számla ismert
+  kifizetésűnek számítana.
 */
 describe(
   "the Foxpost paid marks dry run reads",
@@ -93,13 +94,26 @@ describe(
             create: [
               ["99999-000001", 7000],
               [`${MARK}/0002`, 5000],
-            ].map(([referenceCode, amount], index) => ({
-              sourceRowNumber: index + 1,
-              referenceCode: referenceCode as string,
-              transactionDate: new Date("2099-09-16T00:00:00Z"),
-              collectedAmount: D(amount as number),
-              status: "ORDER_NOT_FOUND" as const,
-            })),
+            ]
+              .map(([referenceCode, amount], index) => ({
+                sourceRowNumber: index + 1,
+                referenceCode: referenceCode as string,
+                transactionDate: new Date("2099-09-16T00:00:00Z"),
+                collectedAmount: D(amount as number),
+                status: "ORDER_NOT_FOUND" as const,
+              }))
+              .concat([
+                // a webshop order: the bare order number, resolved to its invoice
+                {
+                  sourceRowNumber: 3,
+                  referenceCode: "99001",
+                  transactionDate: new Date("2099-09-16T00:00:00Z"),
+                  collectedAmount: D(3000),
+                  status: "MATCHED" as const,
+                  resolutionSource: "WEBSHOP",
+                  invoiceNumber: `${MARK}/0003`,
+                } as never,
+              ]),
           },
         },
       });
@@ -147,6 +161,14 @@ describe(
         });
       await document("9981", `${MARK}/0001`, "99999-000001", 7000, false);
       await document("9982", `${MARK}/0002`, null, 5000, null);
+      // the invoice of a webshop order: its order number is NOT the bare "99001"
+      await document(
+        "9983",
+        `${MARK}/0003`,
+        "Webshop rendelés #99001",
+        3000,
+        false,
+      );
     });
 
     after(async () => {
@@ -181,7 +203,15 @@ describe(
         [
           [`${MARK}/0001`, "99999-000001"],
           [`${MARK}/0002`, null],
+          [`${MARK}/0003`, "Webshop rendelés #99001"],
         ],
+      );
+      // the webshop line carries the number it was resolved to, for the decision
+      assert.deepEqual(
+        loaded.settlement.lines
+          .filter((l) => l.referenceCode === "99001")
+          .map((l) => [l.resolutionSource, l.invoiceNumber]),
+        [["WEBSHOP", `${MARK}/0003`]],
       );
       assert.deepEqual(
         [`${MARK}/0001`, `${MARK}/0002`].map(

@@ -73,12 +73,29 @@ export async function loadFoxpostSettlements(from: string): Promise<
       transferredAmount: true,
       lines: {
         orderBy: { sourceRowNumber: "asc" },
-        select: { referenceCode: true, collectedAmount: true },
+        select: {
+          referenceCode: true,
+          collectedAmount: true,
+          resolutionSource: true,
+          invoiceNumber: true,
+        },
       },
     },
   });
   const references = [
     ...new Set(settlements.flatMap((s) => s.lines.map((l) => l.referenceCode))),
+  ];
+  // a webshop line is found by the invoice number it was resolved to
+  const webshopInvoiceNumbers = [
+    ...new Set(
+      settlements.flatMap((s) =>
+        s.lines.flatMap((l) =>
+          l.resolutionSource === "WEBSHOP" && l.invoiceNumber
+            ? [l.invoiceNumber]
+            : [],
+        ),
+      ),
+    ),
   ];
   const rows = await prisma.externalBillingDocument.findMany({
     where: {
@@ -86,7 +103,7 @@ export async function loadFoxpostSettlements(from: string): Promise<
       source: "SZAMLAZZ",
       OR: [
         { orderNumber: { in: references } },
-        { documentNumber: { in: references } },
+        { documentNumber: { in: [...references, ...webshopInvoiceNumbers] } },
       ],
     },
     select: {
