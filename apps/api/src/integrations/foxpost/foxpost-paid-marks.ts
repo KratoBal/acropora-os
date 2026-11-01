@@ -24,8 +24,9 @@ import {
  *   3. exactly one bank credit names the settlement (`FOXPOST 26H38 W0166840`,
  *      measured on the statements) and is exactly the transferred sum.
  *
- * A line's reference is the webshop order number (`47679-279201`) or, rarely,
- * an invoice number. It resolves to our invoice through the forwarded outgoing
+ * A line's reference is the UNAS order number (`47679-279201`) or, rarely,
+ * an invoice number; a line the settlement reader resolved to a Medusa webshop
+ * order (`resolutionSource = WEBSHOP`) names its invoice by the stored number. It resolves to our invoice through the forwarded outgoing
  * invoices (`ExternalBillingDocument.orderNumber`, murena #1377; barracuda
  * 15/15). Only a LIVE invoice counts (not cancelled, positive gross): an order
  * whose invoice was cancelled has a storno pair (47679-279201: 00483 + and
@@ -46,6 +47,12 @@ export interface FoxpostSettlementInput {
   readonly lines: readonly {
     readonly referenceCode: string;
     readonly collectedAmount: Prisma.Decimal;
+    /**
+     * How the settlement reader resolved the line. `WEBSHOP`: the reference is a
+     * webshop order number and `invoiceNumber` is that order's invoice.
+     */
+    readonly resolutionSource?: string | null;
+    readonly invoiceNumber?: string | null;
   }[];
 }
 
@@ -151,11 +158,25 @@ export function decideFoxpostSettlement(input: {
   const skipped: { reference: string; reason: FoxpostSkip }[] = [];
   const collected = new Map<string, Prisma.Decimal>();
   for (const line of settlement.lines) {
-    const named = input.candidates.filter(
-      (c) =>
-        c.orderNumber === line.referenceCode ||
-        c.invoiceNumber === line.referenceCode,
-    );
+    /*
+      A WEBSHOP-SOR a feloldott számla számával keres, nem a referenciával: a
+      referencia a puszta rendelésszám ("611"), a számla rendelésszáma viszont
+      "Webshop rendelés #611", tehát a rendelésszám-egyezés soha nem találná meg,
+      egy véletlenül "611" rendelésszámú MÁS számlát viszont igen. Feloldott
+      számla nélkül a sor NOT_FOUND, nem esik vissza a rendelésszám-egyezésre.
+    */
+    const named =
+      line.resolutionSource === "WEBSHOP"
+        ? input.candidates.filter(
+            (c) =>
+              line.invoiceNumber != null &&
+              c.invoiceNumber === line.invoiceNumber,
+          )
+        : input.candidates.filter(
+            (c) =>
+              c.orderNumber === line.referenceCode ||
+              c.invoiceNumber === line.referenceCode,
+          );
     const live = named.filter((c) => !c.cancelled && c.grossAmount.gt(0));
     if (live.length !== 1) {
       skipped.push({

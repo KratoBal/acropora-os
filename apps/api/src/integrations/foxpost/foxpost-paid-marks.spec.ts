@@ -322,3 +322,112 @@ describe("foxpostPaidMarkInputs", () => {
     );
   });
 });
+
+/*
+  A WEBSHOP (MEDUSA) RENDELÉS UTÁNVÉTES CSOMAGJA (os-foxpost-elszamolas-webshop-ref,
+  2. rész). A sor referenciája a puszta rendelésszám ("611"), a Számlázz.hu-n viszont
+  a számla rendelésszáma "Webshop rendelés #611" (webshop-order-invoice.rules.ts), tehát
+  a rendelésszám-egyezés SOHA nem találná meg. A feloldás (#1996) a sorba már beírta a
+  számla számát: a jelölő azt használja. MI PIROSÍT: ha a sor a rendelésszám-egyezéssel
+  próbálkozna; ha egy véletlenül "611" rendelésszámú MÁS számlát megtalálna; ha a
+  feloldás óta sztornózott számlára jelölés menne; ha egy kézzel jóváhagyott sor a
+  webshop-ágra kerülne.
+*/
+describe("decideFoxpostSettlement: webshop order lines", () => {
+  const webshopLine = (
+    referenceCode: string,
+    amount: number,
+    invoiceNumber: string | null,
+    resolutionSource: string | null = "WEBSHOP",
+  ) => ({
+    ...line(referenceCode, amount),
+    resolutionSource,
+    invoiceNumber,
+  });
+  const transfer = {
+    id: "bt-26h44",
+    amount: D(32000 - 4500),
+    bookingDate: "2026-11-05",
+  };
+  const decide = (
+    lines: FoxpostSettlementInput["lines"],
+    candidates: FoxpostCandidateInvoice[],
+    invoices: ReadonlyMap<string, OutgoingInvoiceInput>,
+  ) =>
+    decideFoxpostSettlement({
+      settlement: settlement(lines, 4500, { settlementCode: "26H44" }),
+      credits: [transfer],
+      candidates,
+      invoices,
+    });
+
+  it("marks the invoice the settlement line was resolved to, though its order number is 'Webshop rendelés #611'", () => {
+    const decision = decide(
+      [webshopLine("611", 32000, "ACRW-2026/00611")],
+      [candidate("ACRW-2026/00611", "Webshop rendelés #611", 32000)],
+      new Map([["ACRW-2026/00611", invoice(32000)]]),
+    );
+    assert.ok(decision.markable);
+    assert.deepEqual(
+      decision.marks.map((m) => [m.invoiceNumber, m.amount, m.date, m.note]),
+      [["ACRW-2026/00611", "32000", "2026-11-05", "Foxpost utánvét, 26H44"]],
+    );
+    assert.deepEqual(decision.skipped, []);
+  });
+
+  it("uses only the resolved invoice number: another invoice that happens to have order number '611' is not taken", () => {
+    const decision = decide(
+      [webshopLine("611", 32000, "ACRW-2026/00611")],
+      [
+        candidate("ACRW-2026/00611", "Webshop rendelés #611", 32000),
+        candidate("ACRW-2026/00099", "611", 32000),
+      ],
+      new Map([
+        ["ACRW-2026/00611", invoice(32000)],
+        ["ACRW-2026/00099", invoice(32000)],
+      ]),
+    );
+    assert.ok(decision.markable);
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["ACRW-2026/00611"],
+    );
+  });
+
+  it("skips, with the reason, a line whose invoice was cancelled since, is not forwarded yet, or was never resolved", () => {
+    const decision = decide(
+      [
+        webshopLine("611", 10000, "ACRW-2026/00611"),
+        webshopLine("612", 10000, "ACRW-2026/00612"),
+        webshopLine("613", 12000, null),
+      ],
+      [
+        candidate("ACRW-2026/00611", "Webshop rendelés #611", 10000, true),
+        candidate("ACRW-2026/00099", "613", 12000),
+      ],
+      new Map([
+        ["ACRW-2026/00611", invoice(10000, { cancelled: true })],
+        ["ACRW-2026/00099", invoice(12000)],
+      ]),
+    );
+    assert.ok(decision.markable);
+    assert.deepEqual(decision.marks, []);
+    assert.deepEqual(
+      decision.skipped.map((s) => `${s.reference}:${s.reason}`),
+      ["611:NO_LIVE_INVOICE", "612:NOT_FOUND", "613:NOT_FOUND"],
+    );
+  });
+
+  it("a manually approved line keeps the old path: the reference names the invoice, not the stored number", () => {
+    const decision = decide(
+      [webshopLine("ACRW-2026/00475", 32000, "ACRW-2026/00475", "MANUAL")],
+      [candidate("ACRW-2026/00475", null, 32000)],
+      new Map([["ACRW-2026/00475", invoice(32000)]]),
+    );
+    assert.ok(decision.markable);
+    assert.deepEqual(
+      decision.marks.map((m) => m.invoiceNumber),
+      ["ACRW-2026/00475"],
+    );
+  });
+});
