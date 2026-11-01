@@ -319,16 +319,27 @@ describe("the fifth T13 class: a related but other effect", () => {
     });
   });
 
-  it("a planted case and its correct pair do not stand side by side in the input", () => {
+  it("the input is shuffled: neither the pairs nor the planted cases stand together", () => {
     const { inputs, key } = flagInputs(vocabulary);
     const pairOf = (ref: string) =>
       key[ref]!.replace(/-(planted|correct)$/u, "");
     const adjacent = inputs
       .slice(1)
       .filter((x, i) => pairOf(x.ref) === pairOf(inputs[i]!.ref)).length;
-    // sorted by sentence, a pair shares its opening words: measured 2 of 7
-    // adjacent (polyp extension, porosity), the other five split
-    assert.ok(adjacent <= 2, `${adjacent} of ${planted.length} pairs adjacent`);
+    // a fixed shuffle (a hash of the case id): measured 1 pair of 7 adjacent
+    // (polyp extension)
+    assert.ok(adjacent <= 1, `${adjacent} of ${planted.length} pairs adjacent`);
+    // sorted by sentence, the planted calcification cases stood in one block;
+    // the longest run of planted cases in a row is measured at 2
+    let run = 0;
+    let longest = 0;
+    for (const i of inputs) {
+      run = key[i.ref]!.endsWith("-planted") ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    assert.ok(longest <= 2, `${longest} planted cases in a row`);
+    // the same order on every call
+    assert.deepEqual(flagInputs(vocabulary).key, key);
   });
 
   const { key } = flagInputs(vocabulary);

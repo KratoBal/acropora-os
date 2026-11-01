@@ -1111,8 +1111,8 @@ export function gateFlagCases(
 
 /**
  * One item for the second model. It sees neither the case id nor the
- * polarity: `ref` is the position in the set sorted by sentence, so a planted
- * case and its pair do not stand side by side. The sentence carries no
+ * polarity: `ref` is the position in a fixed shuffle of the set (by a hash of
+ * the case id), so neither the pairs nor the planted cases stand together. The sentence carries no
  * marker; the claim is given by its fields.
  */
 export interface FlagInput {
@@ -1125,6 +1125,21 @@ export interface FlagInput {
     direction: string;
     taxa: readonly string[];
   };
+}
+
+/**
+ * The input's order: FNV-1a of the case id, a fixed shuffle. Sorted by
+ * sentence, the shared template let the varying phrase decide, and the
+ * planted calcification sentences ("kalcifikáció...") stood in one block
+ * (barracuda, #1989 review).
+ */
+function orderKey(id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
 }
 
 const MARKER_IN_TEXT = /\s*\[\[claim:([A-Za-z0-9_-]{1,64})\]\]/gu;
@@ -1159,8 +1174,8 @@ export function flagInputs(
       },
     };
   });
-  items.sort((a, b) =>
-    a.sentence < b.sentence ? -1 : a.sentence > b.sentence ? 1 : 0,
+  items.sort(
+    (a, b) => orderKey(a.id) - orderKey(b.id) || (a.id < b.id ? -1 : 1),
   );
   const key: Record<string, string> = {};
   const inputs = items.map(({ id, ...item }, i) => {
