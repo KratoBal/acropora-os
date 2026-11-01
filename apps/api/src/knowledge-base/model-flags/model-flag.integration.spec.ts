@@ -319,6 +319,77 @@ describe(
       assert.notEqual(again.targetHash, before);
     });
 
+    it("an item that no longer waits takes no flag, even with its current digest", async () => {
+      const item = (await ours())!;
+      await prisma.knowledgeClaim.update({
+        where: { id: claimId },
+        data: { status: "VERIFIED" },
+      });
+      try {
+        const r = await repository.write(
+          run("r3", [{ targetHash: item.targetHash, flagged: true }]),
+          userId,
+          vocabulary,
+        );
+        assert.deepEqual(
+          { written: r.written, reasons: r.rejected.map((x) => x.reason) },
+          { written: 0, reasons: ["NOT_PENDING"] },
+        );
+      } finally {
+        await prisma.knowledgeClaim.update({
+          where: { id: claimId },
+          data: { status: "CANDIDATE" },
+        });
+      }
+    });
+
+    it("two writes of the same run at once: one row, the other is already written, no error", async () => {
+      const item = (await ours())!;
+      // both writes read the empty run before either inserts: the race is
+      // certain, not left to the scheduler (the retry's read passes through)
+      let arrived = 0;
+      let release!: () => void;
+      const bothRead = new Promise<void>((r) => (release = r));
+      const raced = new ModelFlagRepository(async () => {
+        arrived += 1;
+        if (arrived === 2) release();
+        if (arrived <= 2) await bothRead;
+      });
+      const one = () =>
+        raced.write(
+          run("r4", [{ targetHash: item.targetHash, flagged: false }]),
+          userId,
+          vocabulary,
+        );
+      const results = await Promise.allSettled([one(), one()]);
+      assert.equal(arrived, 3, "two first reads and one retry");
+      assert.deepEqual(
+        results.map((r) => r.status),
+        ["fulfilled", "fulfilled"],
+        JSON.stringify(
+          results.map((r) =>
+            r.status === "rejected" ? String(r.reason).slice(0, 200) : "ok",
+          ),
+        ),
+      );
+      const done = results.flatMap((r) =>
+        r.status === "fulfilled" ? [r.value] : [],
+      );
+      assert.deepEqual(
+        [
+          done.reduce((n, r) => n + r.written, 0),
+          done.reduce((n, r) => n + r.alreadyWritten, 0),
+        ],
+        [1, 1],
+      );
+      assert.equal(
+        await prisma.knowledgeModelFlag.count({
+          where: { runId: `r4-${suffix}`, targetId: claimId },
+        }),
+        1,
+      );
+    });
+
     it("the database keeps one verdict per item in a run", async () => {
       const row = await prisma.knowledgeModelFlag.findFirstOrThrow({
         where: { targetId: claimId },

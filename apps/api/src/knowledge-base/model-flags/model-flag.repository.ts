@@ -1,4 +1,4 @@
-import { prisma, type Prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 import type { Vocabulary } from "@acropora/knowledge-base";
 
 import { candidateOf } from "../answers/knowledge-answer.repository.js";
@@ -15,6 +15,7 @@ import {
   judgeFlags,
   pendingItems,
   type Built,
+  type CurrentItem,
   type FlagItem,
   type FlagTarget,
   type FlagView,
@@ -28,6 +29,16 @@ type Client = Prisma.TransactionClient | typeof prisma;
 const CLAIM_SELECT = { ...LIST_SELECT, subject: true } as const;
 
 const NO_SOURCES = new Map();
+
+/** The items waiting for a flag, per target: the pending list and the write's check read the same rule. */
+const PENDING_WHERE = {
+  CLAIM: { status: "CANDIDATE" as const, ...CLAIM_ON_INCLUDED_SOURCE },
+  CONCLUSION: { status: "DRAFT" as const },
+} satisfies Record<FlagTarget, object>;
+
+const isUniqueViolation = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  error.code === "P2002";
 
 /** The claim's model input: its scope, and its live, verbatim-verified supporting passages. */
 function claimItem(c: ListClaim & { subject: string }, vocabulary: Vocabulary) {
@@ -87,6 +98,14 @@ function conclusionItem(c: ConclusionRow, vocabulary: Vocabulary) {
  * check, so the digest the fleet got is the digest the write is held to.
  */
 export class ModelFlagRepository {
+  constructor(
+    /**
+     * Runs inside a write after the run's rows are read, before the insert:
+     * the integration spec holds two writes here to make their race certain.
+     */
+    private readonly afterRunRead: () => Promise<void> = async () => {},
+  ) {}
+
   private async built(
     client: Client,
     targetType: FlagTarget,
@@ -139,11 +158,12 @@ export class ModelFlagRepository {
     total: number;
     notOffered: NotOffered[];
   }> {
-    const where =
-      targetType === "CLAIM"
-        ? { status: "CANDIDATE" as const, ...CLAIM_ON_INCLUDED_SOURCE }
-        : { status: "DRAFT" as const };
-    const built = await this.built(prisma, targetType, where, vocabulary);
+    const built = await this.built(
+      prisma,
+      targetType,
+      PENDING_WHERE[targetType],
+      vocabulary,
+    );
     const items = built.flatMap((b) => (b.ok ? [b.item] : []));
     const notOffered = built.flatMap((b) => (b.ok ? [] : [b.notOffered]));
     const stored = await this.storedHashes(
@@ -156,17 +176,37 @@ export class ModelFlagRepository {
 
   /**
    * The write, in one transaction: each flag is checked against the item's
-   * input as it is now; the accepted ones are inserted, and one AuditLog row
-   * names the run, its accepted and its refused items. Nothing is updated or
-   * deleted: a second run on the same item is a new row.
+   * input as it is now and against the pending rule; the accepted ones are
+   * inserted, and one AuditLog row names the run, its accepted and its
+   * refused items. Nothing is updated or deleted: a second run on the same
+   * item is a new row.
+   *
+   * Two writes of the same run and item at once both read an empty run, and
+   * the second insert meets the unique index (barracuda, #1994 review). The
+   * transaction is then gone, so the write is read once more from the start:
+   * the stored row makes it "already written" or "another verdict in the run",
+   * as a retry would, instead of a 500.
    */
   async write(
     input: FlagWrite,
     userId: string,
     vocabulary: Vocabulary,
   ): Promise<FlagWriteResult> {
+    try {
+      return await this.writeOnce(input, userId, vocabulary);
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      return this.writeOnce(input, userId, vocabulary);
+    }
+  }
+
+  private async writeOnce(
+    input: FlagWrite,
+    userId: string,
+    vocabulary: Vocabulary,
+  ): Promise<FlagWriteResult> {
     return prisma.$transaction(async (tx) => {
-      const current = new Map<string, string>();
+      const current = new Map<string, CurrentItem>();
       for (const targetType of ["CLAIM", "CONCLUSION"] as const) {
         const ids = input.flags
           .filter((f) => f.targetType === targetType)
@@ -178,14 +218,30 @@ export class ModelFlagRepository {
           { id: { in: ids } },
           vocabulary,
         );
+        const waiting = new Set(
+          (targetType === "CLAIM"
+            ? await tx.knowledgeClaim.findMany({
+                where: { id: { in: ids }, ...PENDING_WHERE.CLAIM },
+                select: { id: true },
+              })
+            : await tx.knowledgeConclusion.findMany({
+                where: { id: { in: ids }, ...PENDING_WHERE.CONCLUSION },
+                select: { id: true },
+              })
+          ).map((r) => r.id),
+        );
         for (const b of built)
           if (b.ok)
-            current.set(`${targetType}:${b.item.targetId}`, b.item.targetHash);
+            current.set(`${targetType}:${b.item.targetId}`, {
+              hash: b.item.targetHash,
+              pending: waiting.has(b.item.targetId),
+            });
       }
       const inRun = await tx.knowledgeModelFlag.findMany({
         where: { runId: input.runId },
         select: { targetType: true, targetId: true, flagged: true },
       });
+      await this.afterRunRead();
       const judged = judgeFlags(
         input,
         (t, id) => current.get(`${t}:${id}`) ?? null,
