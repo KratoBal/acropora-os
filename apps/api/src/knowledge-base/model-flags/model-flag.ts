@@ -284,7 +284,7 @@ export function parseFlagWrite(body: unknown): Parsed<FlagWrite> {
 }
 
 export type RejectReason =
-  "UNKNOWN_TARGET" | "STALE_HASH" | "OTHER_VERDICT_IN_RUN";
+  "UNKNOWN_TARGET" | "NOT_PENDING" | "STALE_HASH" | "OTHER_VERDICT_IN_RUN";
 
 export interface FlagWriteResult {
   runId: string;
@@ -298,13 +298,22 @@ export interface FlagWriteResult {
   }[];
 }
 
+/** An item as it is now: its current input's digest, and whether it waits for a flag. */
+export interface CurrentItem {
+  hash: string;
+  pending: boolean;
+}
+
 /**
  * Each requested flag against the item's current input and the run's
- * stored rows: write, skip as already written, or refuse with a reason.
+ * stored rows: write, skip as already written, or refuse with a reason. Only
+ * an item that waits for a flag takes one (a VERIFIED claim or an approved
+ * conclusion is past the point the flag is for; barracuda, #1994 review);
+ * a retry of a run already stored stays a no-op even if the item moved on.
  */
 export function judgeFlags(
   write: FlagWrite,
-  currentHash: (t: FlagTarget, id: string) => string | null,
+  current: (t: FlagTarget, id: string) => CurrentItem | null,
   storedInRun: ReadonlyMap<string, boolean>,
 ): {
   toWrite: FlagWrite["flags"];
@@ -323,9 +332,10 @@ export function judgeFlags(
       else reject("OTHER_VERDICT_IN_RUN");
       continue;
     }
-    const hash = currentHash(f.targetType, f.targetId);
-    if (hash === null) reject("UNKNOWN_TARGET");
-    else if (hash !== f.targetHash) reject("STALE_HASH");
+    const now = current(f.targetType, f.targetId);
+    if (now === null) reject("UNKNOWN_TARGET");
+    else if (!now.pending) reject("NOT_PENDING");
+    else if (now.hash !== f.targetHash) reject("STALE_HASH");
     else toWrite.push(f);
   }
   return { toWrite, alreadyWritten, rejected };

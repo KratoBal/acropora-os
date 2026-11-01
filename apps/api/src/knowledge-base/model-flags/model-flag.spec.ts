@@ -276,8 +276,15 @@ describe("judgeFlags", () => {
     targetHash,
     flagged,
   });
+  // c3 is current but no longer waits (verified or approved since)
   const current = (_t: string, id: string) =>
-    ({ c1: "h1", c2: "h2", c3: "h3" })[id] ?? null;
+    (
+      ({
+        c1: { hash: "h1", pending: true },
+        c2: { hash: "h2", pending: true },
+        c3: { hash: "h3", pending: false },
+      }) as Record<string, { hash: string; pending: boolean }>
+    )[id] ?? null;
 
   it("writes a current item, refuses an unknown or edited one", () => {
     const r = judgeFlags(
@@ -293,6 +300,23 @@ describe("judgeFlags", () => {
         { targetType: "CLAIM", targetId: "c2", reason: "STALE_HASH" },
       ],
     });
+  });
+
+  it("refuses an item that no longer waits for a flag, even with its current digest", () => {
+    const r = judgeFlags(
+      write([f("c3", "h3"), f("c1", "h1")]),
+      current,
+      new Map(),
+    );
+    assert.deepEqual(
+      { toWrite: r.toWrite.map((x) => x.targetId), rejected: r.rejected },
+      {
+        toWrite: ["c1"],
+        rejected: [
+          { targetType: "CLAIM", targetId: "c3", reason: "NOT_PENDING" },
+        ],
+      },
+    );
   });
 
   it("a retry of the same run is a no-op; another verdict in the same run is refused", () => {
