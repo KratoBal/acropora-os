@@ -120,6 +120,24 @@ export type {
   StatementResult,
 } from "./claim-statement.js";
 export {
+  FIXTURE_QUANTITIES,
+  T12_CONCLUSION_CASES,
+  T12_KINDS,
+  T12_SHUFFLE_SALT,
+  T12_THRESHOLD,
+  conclusionInputs,
+  formatConclusionScore,
+  scoreConclusions,
+} from "./conclusion-review-set.js";
+export type {
+  ConclusionCase,
+  ConclusionInput,
+  ConclusionScore,
+  ConclusionVerdict,
+  Discrepancy,
+  T12Kind,
+} from "./conclusion-review-set.js";
+export {
   T13_FLAG_CLASS,
   T13_RELATED_EFFECT_CASES,
   TEST_SET_VERSION,
