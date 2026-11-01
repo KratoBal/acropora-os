@@ -40,7 +40,8 @@ import {
  * where a passage stands trusted; a figure reading without its switch; an
  * image that is not a PNG or JPEG decoded; a trend read off the marks stored
  * without its own "read off" locator, as verified, or riding as an anchor on
- * a claim of another part (research-diagram-irany). Invented text, a
+ * a claim of another part (research-diagram-irany); a figure whose caption
+ * cites another work read as the paper's own result. Invented text, a
  * generated image.
  */
 const vocabulary = vocabularyV1();
@@ -584,5 +585,33 @@ describe("readFullTextClaims with the figures", () => {
     assert.ok(read.ok);
     assert.deepEqual(outcome.figures!.skipped, { CAPTION_TOO_LONG: 1 });
     assert.deepEqual(asked, []);
+  });
+
+  it("FIGURE-CITED: a caption that cites another work (a literature summary) is skipped by its reason, before any image or model call", async () => {
+    for (const cite of [
+      "Data compiled from Koop et al. (2001) and others.",
+      "Responses reported in published studies (Tanaka, 2007; Dunn, 2012).",
+      "Compiled from refs [12, 14].",
+    ]) {
+      const outcome = emptyOutcome("s1");
+      const asked: string[] = [];
+      const seen: FigureExtractionInput[] = [];
+      const cited = XML.replace(CAPTION_TEXT, `${CAPTION_TEXT} ${cite}`);
+      const fetch: TextFetch = async (url, init) =>
+        url.includes("europepmc")
+          ? new Response(cited, { status: 200 })
+          : fakeFetch(await pngOf(300, 300), asked)(url, init);
+      const read = await readFullTextClaims("PMC123", outcome, {
+        extractor: textExtractor,
+        figureExtractor: figureExtractor(claims, seen),
+        fetch,
+        vocabulary,
+      });
+      assert.ok(read.ok);
+      assert.deepEqual(outcome.figures!.skipped, { CAPTION_CITES: 1 }, cite);
+      assert.equal(outcome.figures!.calls, 0, cite);
+      assert.deepEqual(seen, [], cite);
+      assert.deepEqual(asked, [], cite);
+    }
   });
 });
