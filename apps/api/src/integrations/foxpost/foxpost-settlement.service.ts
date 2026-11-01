@@ -33,6 +33,7 @@ import {
   FoxpostSettlementRepository,
   type FoxpostResolvedLineInput,
   type LocalOrderResolution,
+  type WebshopOrderResolution,
 } from "./foxpost-settlement.repository.js";
 
 function sha256(buffer: Buffer): string {
@@ -336,10 +337,24 @@ export class FoxpostSettlementService {
         )
       ).map((invoice) => [invoice.invoiceNumber, invoice]),
     );
+    // a reference nobody above claimed may be a webshop (Medusa) order number:
+    // the parcel we created for it carries the display id. Looked up BEFORE
+    // UNAS, so a webshop order never costs a UNAS call that cannot find it
+    const unclaimed = uniqueReferences.filter(
+      (reference) =>
+        !localByReference.has(reference) && !byInvoiceNumber.has(reference),
+    );
+    const byWebshopReference = new Map(
+      (await this.repository.resolveWebshop(unclaimed)).map((row) => [
+        row.referenceCode,
+        row,
+      ]),
+    );
     const needsUnas = uniqueReferences.filter(
       (reference) =>
         !localByReference.get(reference)?.invoiceNumber &&
-        !byInvoiceNumber.has(reference),
+        !byInvoiceNumber.has(reference) &&
+        !byWebshopReference.has(reference),
     );
     const remoteByReference = new Map<
       string,
@@ -399,6 +414,8 @@ export class FoxpostSettlementService {
           status: "MATCHED",
           errorCode: null,
         };
+      const webshop = byWebshopReference.get(line.referenceCode);
+      if (webshop) return this.webshopLine(line, webshop);
       const remote = remoteByReference.get(line.referenceCode);
       if (remote?.invoiceNumber)
         return this.resolvedLine(line, local, remote.invoiceNumber, "UNAS");
@@ -417,6 +434,58 @@ export class FoxpostSettlementService {
             : "FOXPOST_UNAS_ORDER_NOT_FOUND"),
       };
     });
+  }
+
+  /**
+   * A line whose reference is a webshop order number. Two orders for one
+   * reference, or two live invoices for one order, are NOT picked from: the
+   * line stays open for the manual approval, with the cause in the error code.
+   */
+  private webshopLine(
+    line: {
+      sourceRowNumber: number;
+      referenceCode: string;
+      transactionDate: Date;
+      recipientName: string | null;
+      parcelBarcode: string | null;
+      collectedAmount: number;
+    },
+    webshop: WebshopOrderResolution,
+  ): FoxpostResolvedLineInput {
+    const open = {
+      ...line,
+      salesOrderId: null,
+      invoiceId: null,
+      invoiceNumber: null,
+      resolutionSource: null,
+    };
+    if (webshop.webshopOrderIds.length !== 1)
+      return {
+        ...open,
+        webshopOrderId: null,
+        status: "ORDER_NOT_FOUND",
+        errorCode: "FOXPOST_WEBSHOP_REFERENCE_AMBIGUOUS",
+      };
+    const webshopOrderId = webshop.webshopOrderIds[0]!;
+    const [invoice, ...others] = webshop.invoices;
+    if (invoice && !others.length)
+      return {
+        ...open,
+        webshopOrderId,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        resolutionSource: "WEBSHOP",
+        status: "MATCHED",
+        errorCode: null,
+      };
+    return {
+      ...open,
+      webshopOrderId,
+      status: "INVOICE_NOT_FOUND",
+      errorCode: invoice
+        ? "FOXPOST_WEBSHOP_INVOICE_AMBIGUOUS"
+        : "FOXPOST_WEBSHOP_INVOICE_NOT_FOUND",
+    };
   }
 
   private resolvedLine(
