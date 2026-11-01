@@ -926,6 +926,8 @@ model User {
   /// Kutatási tudástár (S5): saját következtetések és a cikk hivatkozásai.
   createdConclusions     KnowledgeConclusion[]         @relation("KnowledgeConclusionCreatedBy")
   approvedConclusions    KnowledgeConclusion[]         @relation("KnowledgeConclusionApprovedBy")
+  /// Kutatási tudástár (S4, 7a 3.): a második modell jelzéseit beíró felhasználó.
+  writtenModelFlags      KnowledgeModelFlag[]          @relation("KnowledgeModelFlagCreatedBy")
   createdCitations       ArticleCitation[]             @relation("ArticleCitationCreatedBy")
   answeredCitations      ArticleCitation[]             @relation("ArticleCitationAnsweredBy")
   /// Kutatási tudástár (S7, T3): az arany-készlet rögzítése és a kimaradt állítások.
@@ -11217,6 +11219,39 @@ model KnowledgeConclusion {
   citations ArticleCitation[]
 
   @@index([status])
+}
+
+/// Mire szól egy második-modell jelzés.
+enum KnowledgeModelFlagTarget {
+  CLAIM
+  CONCLUSION
+}
+
+/// A MÁSODIK MODELL JELZÉSE (terv v4, 7a 3.; S4): egy független modell (a flotta
+/// GPT-futtatója) egy rögzített ellenőrző-listán eltérést keresett egy állításon
+/// vagy egy saját következtetésen. A jelzés a tételt a szerkesztőhöz küldi, a
+/// hallgatás ("nem jelzett") semmit nem fogad el, és egyik sem változtat állapotot.
+/// Csak hozzáfűzés: törlő vagy módosító út nincs. A `targetHash` annak a bemenetnek
+/// a lenyomata, amit a modell látott: ha a tétel azóta változott, a jelzés elavult.
+/// A cél polimorf (állítás vagy következtetés), ezért nincs rá külső kulcs.
+model KnowledgeModelFlag {
+  id           String                   @id @default(cuid())
+  targetType   KnowledgeModelFlagTarget
+  targetId     String                   @db.VarChar(64)
+  targetHash   String                   @db.VarChar(64)
+  /// Ki futtatta (pl. "gpt-runner"); a felület ezt mutatja, nem a beíró fiókot.
+  source       String                   @db.VarChar(40)
+  runId        String                   @db.VarChar(64)
+  /// A modell címkéje, ahogy a futtató megnevezte.
+  model        String                   @db.VarChar(64)
+  promptSha256 String                   @db.VarChar(64)
+  flagged      Boolean
+  createdById  String
+  createdBy    User                     @relation("KnowledgeModelFlagCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt    DateTime                 @default(now())
+
+  @@unique([runId, targetType, targetId])
+  @@index([targetType, targetId, createdAt])
 }
 
 /// A következtetés alapjául szolgáló állítások.

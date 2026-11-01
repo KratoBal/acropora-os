@@ -34,6 +34,7 @@ const api = vi.hoisted(() => ({
   updateConclusion: vi.fn(),
   approveConclusion: vi.fn(),
   withdrawConclusion: vi.fn(),
+  modelFlags: vi.fn(),
 }));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
@@ -84,6 +85,7 @@ beforeEach(() => {
     total: 2,
     layers: {},
   });
+  api.modelFlags.mockResolvedValue({ k1: null });
 });
 
 describe("ConclusionsPage", () => {
@@ -114,6 +116,31 @@ describe("ConclusionsPage", () => {
         claimIds: ["c2"],
       }),
     );
+  });
+
+  it("shows the second model's silence as 'nem jelzett', never as checked", async () => {
+    api.modelFlags.mockResolvedValue({
+      k1: {
+        flagged: false,
+        source: "gpt-runner",
+        runId: "t12-r1",
+        model: "gpt-x",
+        createdAt: "2026-11-01T10:00:00.000Z",
+        current: true,
+      },
+    });
+    render(<ConclusionsPage />);
+    fireEvent.click(await screen.findByText(/foszfátigénye/));
+    const line = await screen.findByTestId("model-flag");
+    expect(api.modelFlags).toHaveBeenCalledWith(
+      "token-1",
+      "CONCLUSION",
+      ["k1"],
+      expect.anything(),
+    );
+    expect(within(line).getByText("nem jelzett")).toBeTruthy();
+    expect(line.textContent).toContain("Ez nem ellenőrzés");
+    expect(line.textContent).not.toContain("Elavult");
   });
 
   it("approves a draft with knowledge.approve", async () => {

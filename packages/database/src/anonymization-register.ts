@@ -1748,6 +1748,15 @@ export const ANONYMIZATION_REGISTER: Readonly<
     text: "freeText",
     locator: "business",
   },
+  // The second model's flags (research S4, 7a 3.): ids and digests, the runner's labels.
+  KnowledgeModelFlag: {
+    targetId: "identifier",
+    targetHash: "identifier",
+    source: "business",
+    runId: "identifier",
+    model: "business",
+    promptSha256: "identifier",
+  },
   KnowledgeResearchDraft: {
     question: "freeText",
     sources: "business",

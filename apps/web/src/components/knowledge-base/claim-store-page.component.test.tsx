@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   claimStore: vi.fn(),
   claimDetail: vi.fn(),
   withdrawClaim: vi.fn(),
+  modelFlags: vi.fn(),
 }));
 vi.mock("@/lib/api/knowledge-base", () => ({ knowledgeBaseApi: api }));
 
@@ -148,6 +149,7 @@ beforeEach(() => {
     layers: LAYERS,
   } satisfies ClaimStoreList);
   api.claimDetail.mockResolvedValue(DETAIL);
+  api.modelFlags.mockResolvedValue({ c1: null });
 });
 
 describe("Állítás-tár", () => {
@@ -240,6 +242,31 @@ describe("Állítás részletei", () => {
     // the effect is shown by its label, never by its raw key
     expect(screen.getByText("Vázsűrűség")).toBeTruthy();
     expect(screen.queryByText("SKELETAL_DENSITY")).toBeNull();
+  });
+
+  it("a független modell jelzése: GPT jelzett, a forrással, soha nem zöld; az elavult jelzés megmondja magát", async () => {
+    api.modelFlags.mockResolvedValue({
+      c1: {
+        flagged: true,
+        source: "gpt-runner",
+        runId: "t13-r1",
+        model: "gpt-x",
+        createdAt: "2026-11-01T10:00:00.000Z",
+        current: false,
+      },
+    });
+    render(<ClaimDetailPage claimId="c1" />);
+    const line = await screen.findByTestId("model-flag");
+    expect(api.modelFlags).toHaveBeenCalledWith(
+      "token-1",
+      "CLAIM",
+      ["c1"],
+      expect.anything(),
+    );
+    expect(within(line).getByText("GPT jelzett")).toBeTruthy();
+    expect(line.textContent).toContain("Forrás: gpt-runner, futás t13-r1");
+    expect(line.textContent).toContain("Elavult");
+    expect(line.textContent).not.toMatch(/ellenőrizve/i);
   });
 
   it("a kapcsolat a másik állításra mutat, irány szerinti felirattal", async () => {

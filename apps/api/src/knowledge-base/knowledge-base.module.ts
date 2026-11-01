@@ -28,6 +28,10 @@ import {
   ConclusionService,
 } from "./conclusions/conclusion.controller.js";
 import {
+  ModelFlagController,
+  ModelFlagService,
+} from "./model-flags/model-flag.controller.js";
+import {
   KnowledgeOverviewController,
   KnowledgeOverviewService,
 } from "./overview/knowledge-overview.controller.js";
@@ -62,6 +66,7 @@ import {
     ResearchDraftController,
     KnowledgeReferenceController,
     GoldSetController,
+    ModelFlagController,
   ],
   providers: [
     KnowledgeDiscoveryService,
@@ -77,6 +82,7 @@ import {
     ResearchDraftService,
     KnowledgeReferenceService,
     GoldSetService,
+    ModelFlagService,
   ],
 })
 export class KnowledgeBaseModule {}
