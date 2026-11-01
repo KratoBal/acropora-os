@@ -125,6 +125,7 @@ export {
   T12_KINDS,
   T12_SHUFFLE_SALT,
   T12_THRESHOLD,
+  T12_UNLISTED_KINDS,
   conclusionInputs,
   formatConclusionScore,
   scoreConclusions,

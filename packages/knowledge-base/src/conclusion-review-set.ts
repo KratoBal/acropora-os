@@ -38,8 +38,18 @@ export const T12_KINDS = [
   "BROADER_EFFECT",
   "UNSUPPORTED_CAUSE",
   "RECOMMENDATION",
+  "LONGER_TERM",
 ] as const;
 export type T12Kind = (typeof T12_KINDS)[number];
+
+/**
+ * The kinds the fleet-side check list (acroveliq `T12_CHECK_LIST`) does NOT
+ * name as an example. The list names the other eight, so their score says
+ * whether the model finds a NAMED kind; these say whether it finds one it was
+ * not told about (barracuda, #334 review; acrobot 39505). The score counts
+ * them out on their own line.
+ */
+export const T12_UNLISTED_KINDS: readonly T12Kind[] = ["LONGER_TERM"];
 
 /**
  * One conclusion for the second model. must-apply: planted, it must be
@@ -160,6 +170,13 @@ export const T12_CONCLUSION_CASES: readonly ConclusionCase[] = [
     `${C1}; adagolási vagy célérték-ajánlás ebből nem következik.`,
     "a target value recommended from one experiment",
   ),
+  ...conclusionPair(
+    "LONGER_TERM",
+    "t12-duration",
+    `Egy zátonyon végzett kísérlet szerint ${RANGE} hosszú távon, éveken át is csökken az Acropora kalcifikációja.`,
+    `${C1}; hogy hosszabb idő alatt is így van-e, arról az állítás nem szól.`,
+    "a result stated for years, beyond what the claim covers",
+  ),
 ];
 
 /**
@@ -176,13 +193,14 @@ export interface ConclusionInput {
 
 /**
  * The shuffle's salt. Unsalted, FNV-1a of these ids stood four planted
- * conclusions in a row; 18 is the first salt, counting from 0, under which no
+ * conclusions in a row; 5 is the first salt, counting from 0, under which no
  * three planted or three correct ones stand in a row and no conclusion stands
- * next to its own pair (measured 2026-11-01; 80 of the first 2000 salts do).
+ * next to its own pair (measured 2026-11-01 on the nine pairs, 57 of the first
+ * 2000 salts do; on the first eight it was 18, which fails on nine).
  * A test pins both properties: a change to the cases that breaks them turns
  * it red, and the salt is picked again the same way.
  */
-export const T12_SHUFFLE_SALT = 18;
+export const T12_SHUFFLE_SALT = 5;
 
 /** FNV-1a of the salted case id: a fixed shuffle, as the T13 flag input. */
 function orderKey(id: string): number {
@@ -255,6 +273,14 @@ export interface ConclusionScore {
   discrepancies: Discrepancy[];
   /** Refs the model gave no verdict on. */
   unanswered: string[];
+  /** The kinds the check list does not name, counted out on their own (included in the totals above too). */
+  unlisted: {
+    kinds: readonly T12Kind[];
+    plantedFlagged: number;
+    plantedTotal: number;
+    correctFlagged: number;
+    correctTotal: number;
+  };
 }
 
 /**
@@ -283,6 +309,13 @@ export function scoreConclusions(
   let correctFlagged = 0;
   const discrepancies: Discrepancy[] = [];
   const unanswered: string[] = [];
+  const unlisted = {
+    kinds: T12_UNLISTED_KINDS,
+    plantedFlagged: 0,
+    plantedTotal: 0,
+    correctFlagged: 0,
+    correctTotal: 0,
+  };
   for (const [ref, id] of Object.entries(key)) {
     const c = byId.get(id);
     if (!c)
@@ -297,6 +330,15 @@ export function scoreConclusions(
     } else {
       correctTotal++;
       if (f === true) correctFlagged++;
+    }
+    if (T12_UNLISTED_KINDS.includes(c.plantedKind)) {
+      if (planted) {
+        unlisted.plantedTotal++;
+        if (f === true) unlisted.plantedFlagged++;
+      } else {
+        unlisted.correctTotal++;
+        if (f === true) unlisted.correctFlagged++;
+      }
     }
     if (planted !== (f === true))
       discrepancies.push({
@@ -314,6 +356,7 @@ export function scoreConclusions(
     correctTotal,
     discrepancies,
     unanswered,
+    unlisted,
   };
 }
 
@@ -322,6 +365,7 @@ export function formatConclusionScore(s: ConclusionScore): string {
   const n = s.discrepancies.length;
   const lines = [
     `T12: planted flagged ${s.plantedFlagged}/${s.plantedTotal}, correct pair flagged ${s.correctFlagged}/${s.correctTotal} -> ${n === 0 ? "no discrepancy" : `${n} discrepanc${n === 1 ? "y" : "ies"}, each for a human decision`} (${s.threshold})`,
+    `T12 kinds the check list does not name (${s.unlisted.kinds.join(", ")}): planted flagged ${s.unlisted.plantedFlagged}/${s.unlisted.plantedTotal}, correct pair flagged ${s.unlisted.correctFlagged}/${s.unlisted.correctTotal}`,
   ];
   for (const d of s.discrepancies)
     lines.push(
