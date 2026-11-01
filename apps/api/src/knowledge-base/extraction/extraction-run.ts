@@ -4,6 +4,7 @@ import { DISCOVERY_USER_AGENT } from "../discovery/scholarly-client.js";
 import {
   SOURCE_FIELDS,
   checkClaims,
+  citesAnotherWork,
   keepOwnFindings,
   type CheckedClaim,
 } from "./claim-check.js";
@@ -506,6 +507,15 @@ async function readFigures(
     }
     if (figure.caption.length > MAX_FIGURE_CAPTION) {
       count(fo.skipped, "CAPTION_TOO_LONG");
+      continue;
+    }
+    // a figure whose caption cites another work shows that work's results
+    // (a literature summary: stage 2026-10-31, yk5i9vij Fig. 1 read as the
+    // paper's own trend). Its reading would be someone else's finding without
+    // the citation that CITED_RESULT reads, so it is not read at all: the
+    // same over-caution as CITED_RESULT, before any image or model call
+    if (citesAnotherWork(figure.caption)) {
+      count(fo.skipped, "CAPTION_CITES");
       continue;
     }
     const image = await figure.image();
