@@ -86,6 +86,7 @@ export class SourceNotFound extends Error {
 /** Why a source cannot be classified by hand: the editor's words for each. */
 export const CLASSIFY_REFUSALS = {
   NOT_INCLUDED: "Csak befogadott forrás sorolható be.",
+  RETRACTED: "Visszavont forrásra nem épülhet semmi: nem sorolható be.",
   ALREADY_CLASSIFIED:
     "A forrásnak már van vizsgálati típusa; egy állítás ellenőrzésénél dől el, nem itt.",
   PENDING_ANCHOR:
@@ -327,11 +328,20 @@ export class SourceScreeningRepository {
       await tx.$queryRaw`SELECT 1 FROM "KnowledgeSource" WHERE "id" = ${sourceId} FOR UPDATE`;
       const before = await tx.knowledgeSource.findUnique({
         where: { id: sourceId },
-        select: { screeningStatus: true, studyType: true, controlled: true },
+        select: {
+          screeningStatus: true,
+          studyType: true,
+          controlled: true,
+          versions: { select: { versionKind: true } },
+        },
       });
       if (!before) throw new SourceNotFound(sourceId);
       if (before.screeningStatus !== "INCLUDED")
         throw new SourceClassifyRefused("NOT_INCLUDED");
+      // the screen hides the form on a retracted work; the server says the same
+      // to a direct call (barracuda on #1986)
+      if (before.versions.some((v) => v.versionKind === "RETRACTION"))
+        throw new SourceClassifyRefused("RETRACTED");
       if (before.studyType !== null)
         throw new SourceClassifyRefused("ALREADY_CLASSIFIED");
       const pending = await tx.knowledgeFieldAnchor.count({

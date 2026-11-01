@@ -247,6 +247,7 @@ describe("the screening service and its routes", () => {
     ]);
     for (const code of [
       "NOT_INCLUDED",
+      "RETRACTED",
       "ALREADY_CLASSIFIED",
       "PENDING_ANCHOR",
     ] as const) {
