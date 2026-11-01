@@ -21,6 +21,7 @@ import {
   type KnowledgeConclusion,
 } from "@/lib/api/knowledge-base";
 import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
+import { ModelFlagBadge } from "./model-flag-badge";
 
 /**
  * SZAKMAI KÖVETKEZTETÉSEK (Research & Knowledge Engine S5; Figma
@@ -30,9 +31,9 @@ import { KnowledgeBaseTabs, KnowledgeLayerLegend } from "./knowledge-base-tabs";
  *
  * A jog a szerveren dől el, a felület csak nem kínál olyat, amit a szerver
  * elutasítana: írás `knowledge.manage`, jóváhagyás és visszavonás
- * `knowledge.approve` (a pilotban Balázs). A terv jobb oldali paneljét, a
- * független modell bírálatát, ez a képernyő nem rajzolja: az az S7 része, és
- * egy üres helye hibának látszana.
+ * `knowledge.approve` (a pilotban Balázs). A független modell bírálatából a
+ * legutóbbi jelzés látszik (`ModelFlagBadge`, 7a 3.): „GPT jelzett” vagy „nem
+ * jelzett”, soha nem zöld, és egyik sem változtat állapotot.
  */
 
 const STATUS_LABELS: Record<KnowledgeConclusion["status"], string> = {
@@ -385,6 +386,11 @@ export function ConclusionsPage() {
                   ))}
                 </ul>
               </div>
+              <ModelFlagBadge
+                token={token}
+                targetType="CONCLUSION"
+                targetId={current.id}
+              />
               <p className="text-sm">
                 <PilotBadge variant={STATUS_VARIANTS[current.status]}>
                   {STATUS_LABELS[current.status]}

@@ -610,6 +610,19 @@ export interface GoldSet {
 
 const goldSetBase = "/knowledge-base/gold-set";
 
+export type ModelFlagTarget = "CLAIM" | "CONCLUSION";
+
+/** The second model's latest flag on one item, as the API gives it. */
+export interface ModelFlagView {
+  flagged: boolean;
+  source: string;
+  runId: string;
+  model: string;
+  createdAt: string;
+  /** False: the item changed since the model read it. */
+  current: boolean;
+}
+
 export const knowledgeBaseApi = {
   /** The editor's PDF of a closed work (research-kezi-pdf): read in an extraction run of its own, the PDF not kept. */
   uploadManualPdf(token: string, sourceId: string, file: File) {
@@ -799,6 +812,20 @@ export const knowledgeBaseApi = {
       `/knowledge-base/conclusions/${encodeURIComponent(id)}/withdraw`,
       token,
       { method: "POST", body: JSON.stringify({ reason }) },
+    );
+  },
+  /** The latest second-model flag per item (S4, 7a 3.); null: no run yet. */
+  modelFlags(
+    token: string,
+    targetType: ModelFlagTarget,
+    ids: readonly string[],
+    signal?: AbortSignal,
+  ) {
+    const q = new URLSearchParams({ targetType, ids: ids.join(",") });
+    return apiRequest<Record<string, ModelFlagView | null>>(
+      `/knowledge-base/model-flags?${q.toString()}`,
+      token,
+      { signal },
     );
   },
   researchDrafts(token: string, signal?: AbortSignal) {

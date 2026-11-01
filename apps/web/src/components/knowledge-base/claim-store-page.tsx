@@ -30,6 +30,7 @@ import {
   KnowledgeBaseTabs,
   KnowledgeLayerLegend,
 } from "./knowledge-base-tabs";
+import { ModelFlagBadge } from "./model-flag-badge";
 import { STUDY_LABELS } from "./source-screening-page";
 
 /**
@@ -371,6 +372,11 @@ export function ClaimDetailPage({ claimId }: { claimId: string }) {
               A cím a normalizált mezőkből képzett, a bizonyíték-szint a
               szabálytáblából levezetett ({data.evidenceLevel.rulesVersion}).
             </p>
+            <ModelFlagBadge
+              token={token}
+              targetType="CLAIM"
+              targetId={claimId}
+            />
           </PilotCard>
 
           {data.status === "VERIFIED" ? (
