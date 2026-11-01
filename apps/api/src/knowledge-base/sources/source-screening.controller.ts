@@ -35,4 +35,15 @@ export class SourceScreeningController {
   ) {
     return this.screening.decide(id, body, user);
   }
+
+  /** The study type of an included source no anchor classifies (research-diagram-irany). */
+  @Post(":id/study-type")
+  @RequirePermissions(PERMISSIONS.KNOWLEDGE_MANAGE)
+  classify(
+    @Param("id") id: string,
+    @Body() body: Record<string, unknown>,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.screening.classify(id, body, user);
+  }
 }

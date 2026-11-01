@@ -6,6 +6,7 @@ import type {
   ScreeningStatus,
   SourceKind,
   SourceListQuery,
+  StudyTypeDecision,
 } from "./source-screening.js";
 
 /**
@@ -79,6 +80,22 @@ export class SourceNotFound extends Error {
   constructor(readonly sourceId: string) {
     super(`knowledge source ${sourceId} not found`);
     this.name = "SourceNotFound";
+  }
+}
+
+/** Why a source cannot be classified by hand: the editor's words for each. */
+export const CLASSIFY_REFUSALS = {
+  NOT_INCLUDED: "Csak befogadott forrás sorolható be.",
+  ALREADY_CLASSIFIED:
+    "A forrásnak már van vizsgálati típusa; egy állítás ellenőrzésénél dől el, nem itt.",
+  PENDING_ANCHOR:
+    "A forrásnak van függő vizsgálati-típus horgonya: azt egy állítás ellenőrzésénél döntsd el, a szöveghellyel együtt.",
+} as const;
+
+export class SourceClassifyRefused extends Error {
+  constructor(readonly code: keyof typeof CLASSIFY_REFUSALS) {
+    super(CLASSIFY_REFUSALS[code]);
+    this.name = "SourceClassifyRefused";
   }
 }
 
@@ -288,6 +305,65 @@ export class SourceScreeningRepository {
               reason: decision.reason,
               note: decision.note,
             },
+          } satisfies Prisma.JsonObject,
+        },
+      });
+      return row(updated);
+    });
+  }
+
+  /**
+   * The study type of an included source no anchor classifies, by the editor,
+   * with a reason, in one transaction with its AuditLog row. Only the gap is
+   * filled: a type already set, or one a pending anchor would set from the
+   * text, is the claim review's to decide (the anchor shows the passage).
+   */
+  async classify(
+    sourceId: string,
+    decision: StudyTypeDecision,
+    actorUserId: string,
+  ): Promise<SourceRow> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "KnowledgeSource" WHERE "id" = ${sourceId} FOR UPDATE`;
+      const before = await tx.knowledgeSource.findUnique({
+        where: { id: sourceId },
+        select: { screeningStatus: true, studyType: true, controlled: true },
+      });
+      if (!before) throw new SourceNotFound(sourceId);
+      if (before.screeningStatus !== "INCLUDED")
+        throw new SourceClassifyRefused("NOT_INCLUDED");
+      if (before.studyType !== null)
+        throw new SourceClassifyRefused("ALREADY_CLASSIFIED");
+      const pending = await tx.knowledgeFieldAnchor.count({
+        where: { sourceId, field: "studyType", decision: "PENDING" },
+      });
+      if (pending > 0) throw new SourceClassifyRefused("PENDING_ANCHOR");
+      const updated = await tx.knowledgeSource.update({
+        where: { id: sourceId },
+        data: {
+          studyType: decision.studyType,
+          ...(decision.controlled === null
+            ? {}
+            : { controlled: decision.controlled }),
+        },
+        select: SELECT,
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: "KNOWLEDGE_SOURCE_CLASSIFIED",
+          entityType: "KnowledgeSource",
+          entityId: sourceId,
+          metadata: {
+            before: {
+              studyType: before.studyType,
+              controlled: before.controlled,
+            },
+            after: {
+              studyType: decision.studyType,
+              controlled: decision.controlled ?? before.controlled,
+            },
+            note: decision.note,
           } satisfies Prisma.JsonObject,
         },
       });

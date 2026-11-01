@@ -9,7 +9,10 @@ import {
   parseSourceListQuery,
   type SourceListQuery,
 } from "./source-screening.js";
-import { SourceScreeningRepository } from "./source-screening.repository.js";
+import {
+  SourceClassifyRefused,
+  SourceScreeningRepository,
+} from "./source-screening.repository.js";
 
 /**
  * SOURCE SCREENING ON A DATABASE (S4 acceptance: every decision writes an
@@ -85,6 +88,10 @@ describe(
       const ours = { doi: { startsWith: DOI_PREFIX } };
       await prisma.auditLog.deleteMany({
         where: { user: { email: { endsWith: `@${EMAIL_DOMAIN}` } } },
+      });
+      await prisma.knowledgeFieldAnchor.deleteMany({ where: { source: ours } });
+      await prisma.knowledgePassage.deleteMany({
+        where: { sourceVersion: { source: ours } },
       });
       await prisma.knowledgeSourceVersion.deleteMany({
         where: { source: ours },
@@ -282,6 +289,119 @@ describe(
           /check constraint|violates/i,
           JSON.stringify(data),
         );
+    });
+
+    it("CLASSIFY: an included source no anchor classifies gets its type by the editor, logged; a set type, a pending anchor, a source not included are refused", async () => {
+      const included = {
+        screeningStatus: "INCLUDED" as const,
+        screenedById: userId,
+        screenedAt: new Date(),
+      };
+      const make = async (key: string, over: Record<string, unknown>) =>
+        (
+          await prisma.knowledgeSource.create({
+            data: {
+              kind: "PEER_REVIEWED",
+              doi: `${DOI_PREFIX}${suffix}-${key}`,
+              title: `Kitalált ${key}`,
+              discoveredVia: "MANUAL",
+              ...over,
+            },
+          })
+        ).id;
+      const bare = await make("cls", included);
+      const classified = await make("cls-set", {
+        ...included,
+        studyType: "FIELD_OBSERVATIONAL",
+      });
+      const pending = await make("cls-pending", {});
+      const anchored = await make("cls-anchor", {
+        ...included,
+        versions: {
+          create: {
+            versionKind: "ORIGINAL",
+            detectedVia: "MANUAL",
+            passages: {
+              create: {
+                locator: "Methods",
+                text: "A tank experiment with a control.",
+                textHash: "kb-scr-int-hash",
+              },
+            },
+          },
+        },
+      });
+      const passage = await prisma.knowledgePassage.findFirstOrThrow({
+        where: { sourceVersion: { sourceId: anchored } },
+        select: { id: true },
+      });
+      await prisma.knowledgeFieldAnchor.create({
+        data: {
+          sourceId: anchored,
+          field: "studyType",
+          passageId: passage.id,
+          normalizedValue: "CONTROLLED_LAB",
+        },
+      });
+
+      const decision = {
+        studyType: "CONTROLLED_LAB" as const,
+        controlled: true,
+        note: "Methods: tank experiment with a control group",
+      };
+      const row = await repo.classify(bare, decision, userId);
+      assert.equal(row.studyType, "CONTROLLED_LAB");
+      const stored = await prisma.knowledgeSource.findUniqueOrThrow({
+        where: { id: bare },
+        select: { studyType: true, controlled: true },
+      });
+      assert.deepEqual(stored, {
+        studyType: "CONTROLLED_LAB",
+        controlled: true,
+      });
+      const log = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: bare, action: "KNOWLEDGE_SOURCE_CLASSIFIED" },
+        select: { userId: true, metadata: true },
+      });
+      assert.equal(log.userId, userId);
+      assert.deepEqual(log.metadata, {
+        before: { studyType: null, controlled: null },
+        after: { studyType: "CONTROLLED_LAB", controlled: true },
+        note: decision.note,
+      });
+
+      const refusal = async (id: string) =>
+        repo.classify(id, decision, userId).then(
+          () => "ACCEPTED",
+          (e: unknown) =>
+            e instanceof SourceClassifyRefused ? e.code : String(e),
+        );
+      assert.equal(await refusal(bare), "ALREADY_CLASSIFIED");
+      assert.equal(await refusal(classified), "ALREADY_CLASSIFIED");
+      assert.equal(await refusal(pending), "NOT_INCLUDED");
+      assert.equal(await refusal(anchored), "PENDING_ANCHOR");
+      // nothing of the refused ones moved, and only the one row was logged
+      assert.deepEqual(
+        (
+          await prisma.knowledgeSource.findMany({
+            where: { id: { in: [classified, pending, anchored] } },
+            select: { studyType: true },
+            orderBy: { id: "asc" },
+          })
+        )
+          .map((s) => s.studyType)
+          .sort(),
+        ["FIELD_OBSERVATIONAL", null, null].sort(),
+      );
+      assert.equal(
+        await prisma.auditLog.count({
+          where: {
+            action: "KNOWLEDGE_SOURCE_CLASSIFIED",
+            entityId: { in: [bare, classified, pending, anchored] },
+          },
+        }),
+        1,
+      );
     });
 
     it("an unknown source is reported as such", async () => {

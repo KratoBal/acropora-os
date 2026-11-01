@@ -14,8 +14,12 @@ import { SourceScreeningController } from "./source-screening.controller.js";
 import {
   parseScreeningDecision,
   parseSourceListQuery,
+  parseStudyTypeDecision,
 } from "./source-screening.js";
-import { SourceNotFound } from "./source-screening.repository.js";
+import {
+  SourceClassifyRefused,
+  SourceNotFound,
+} from "./source-screening.repository.js";
 import {
   SourceScreeningService,
   type SourceScreeningStore,
@@ -123,6 +127,48 @@ describe("the decision's body", () => {
   });
 });
 
+describe("the study type's body (research-diagram-irany)", () => {
+  it("a listed type and a note; the control group is said or left unsaid, never guessed", () => {
+    assert.deepEqual(
+      parseStudyTypeDecision({
+        studyType: "CONTROLLED_LAB",
+        note: "  Methods: tank experiment, three phosphate levels ",
+      }),
+      {
+        ok: true,
+        value: {
+          studyType: "CONTROLLED_LAB",
+          controlled: null,
+          note: "Methods: tank experiment, three phosphate levels",
+        },
+      },
+    );
+    const withControl = parseStudyTypeDecision({
+      studyType: "FIELD_EXPERIMENT",
+      controlled: true,
+      note: "x",
+    });
+    assert.ok(withControl.ok && withControl.value.controlled === true);
+  });
+
+  it("refuses an unknown type, a note left out, a control group not a boolean, all at once", () => {
+    const r = parseStudyTypeDecision({
+      studyType: "EXPERIMENT",
+      controlled: "yes",
+    });
+    assert.equal(r.ok, false);
+    assert.ok(!r.ok);
+    assert.deepEqual(
+      r.problems.map((p) => p.split(":")[0]),
+      ["studyType", "controlled", "note"],
+    );
+    assert.equal(
+      parseStudyTypeDecision({ studyType: "REVIEW", note: "x".repeat(501) }).ok,
+      false,
+    );
+  });
+});
+
 describe("the screening service and its routes", () => {
   const USER = { id: "u-1" } as AuthenticatedUser;
   const status = async (p: Promise<unknown>) =>
@@ -142,6 +188,10 @@ describe("the screening service and its routes", () => {
       },
       decide: async (id, decision, actor) => {
         calls.push(["decide", id, decision, actor]);
+        return {} as never;
+      },
+      classify: async (id, decision, actor) => {
+        calls.push(["classify", id, decision, actor]);
         return {} as never;
       },
       ...over,
@@ -179,6 +229,52 @@ describe("the screening service and its routes", () => {
     );
   });
 
+  it("a classification goes to the store with the caller; a bad body is a 400 before it, a refusal a 409 in the editor's words", async () => {
+    const t = fake();
+    assert.equal(
+      await status(t.svc.classify("s1", { studyType: "REVIEW" }, USER)),
+      HttpStatus.BAD_REQUEST,
+    );
+    assert.deepEqual(t.calls, []);
+    await t.svc.classify("s1", { studyType: "REVIEW", note: "review" }, USER);
+    assert.deepEqual(t.calls, [
+      [
+        "classify",
+        "s1",
+        { studyType: "REVIEW", controlled: null, note: "review" },
+        "u-1",
+      ],
+    ]);
+    for (const code of [
+      "NOT_INCLUDED",
+      "ALREADY_CLASSIFIED",
+      "PENDING_ANCHOR",
+    ] as const) {
+      const refused = fake({
+        classify: async () => {
+          throw new SourceClassifyRefused(code);
+        },
+      });
+      await assert.rejects(
+        refused.svc.classify("s1", { studyType: "REVIEW", note: "x" }, USER),
+        (e: { getStatus?: () => number; message: string }) =>
+          e.getStatus?.() === HttpStatus.CONFLICT &&
+          e.message === new SourceClassifyRefused(code).message,
+      );
+    }
+    const missing = fake({
+      classify: async (id) => {
+        throw new SourceNotFound(id);
+      },
+    });
+    assert.equal(
+      await status(
+        missing.svc.classify("x", { studyType: "REVIEW", note: "x" }, USER),
+      ),
+      HttpStatus.NOT_FOUND,
+    );
+  });
+
   it("reading needs knowledge.view, deciding knowledge.manage", () => {
     const proto = SourceScreeningController.prototype;
     assert.deepEqual(
@@ -191,6 +287,10 @@ describe("the screening service and its routes", () => {
     );
     assert.deepEqual(
       Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, proto.decide),
+      [PERMISSIONS.KNOWLEDGE_MANAGE],
+    );
+    assert.deepEqual(
+      Reflect.getMetadata(REQUIRED_PERMISSIONS_KEY, proto.classify),
       [PERMISSIONS.KNOWLEDGE_MANAGE],
     );
   });
