@@ -1,8 +1,12 @@
 import {
   MISSING_INVOICE_CATEGORIES,
+  MISSING_INVOICE_SORT_DIRECTIONS,
+  MISSING_INVOICE_SORT_FIELDS,
   MISSING_INVOICE_TABS,
   type MissingInvoiceCategory,
   type MissingInvoiceMonthQuery,
+  type MissingInvoiceSortDirection,
+  type MissingInvoiceSortField,
   type MissingInvoiceTab,
 } from "@acropora/types";
 import { Type } from "class-transformer";
@@ -23,4 +27,10 @@ export class MissingInvoiceMonthQueryDto implements MissingInvoiceMonthQuery {
   @Max(100)
   @IsOptional()
   pageSize?: number;
+  @IsIn(MISSING_INVOICE_SORT_FIELDS)
+  @IsOptional()
+  sort?: MissingInvoiceSortField;
+  @IsIn(MISSING_INVOICE_SORT_DIRECTIONS)
+  @IsOptional()
+  direction?: MissingInvoiceSortDirection;
 }

@@ -514,3 +514,58 @@ describe("a paired invoice that is on paper too", () => {
     assert.equal((await PDFDocument.load(pdf)).getPageCount(), 1);
   });
 });
+
+/**
+ * A RENDEZÉS A LAPOZÁS ELŐTT (Balázs, 2026-11-02 12:49 UTC). MI PIROSÍT: ha a
+ * szerver az oldalt vágná, és csak utána rendezne (az 1. oldal nem a legnagyobb
+ * összegeket adná); ha a 2. oldal a rendezés irányát elveszítené.
+ */
+describe("the month list is sorted before it is paged", () => {
+  const amounts = [500, 90000, 1200, 45000, 7, 300000];
+  const build = () =>
+    service({
+      debits: amounts.map((amount, i) =>
+        debit(`2026-08-0${i + 1}`, amount, `Szállító ${i + 1}`),
+      ),
+      documents: [],
+      files: {},
+    }).missing;
+
+  it("the first page holds the largest amounts of the WHOLE set, the second the next ones", async () => {
+    const missing = build();
+    const page = async (n: number) =>
+      (
+        await missing.month("2026-08", {
+          tab: "ALL",
+          sort: "amount",
+          direction: "desc",
+          page: n,
+          pageSize: 2,
+        })
+      ).items.map((i) => i.amount);
+    assert.deepEqual(await page(1), ["300000", "90000"]);
+    assert.deepEqual(await page(2), ["45000", "1200"]);
+    assert.deepEqual(await page(3), ["500", "7"]);
+  });
+
+  it("ascending is the reverse order, and no sort keeps the list's own order", async () => {
+    const missing = build();
+    const ask = async (extra: object) =>
+      (
+        await missing.month("2026-08", {
+          tab: "ALL",
+          page: 1,
+          pageSize: 100,
+          ...extra,
+        })
+      ).items.map((i) => i.amount);
+    const asc = await ask({ sort: "amount", direction: "asc" });
+    assert.deepEqual(asc, ["7", "500", "1200", "45000", "90000", "300000"]);
+    assert.equal((await ask({})).length, 6);
+    assert.deepEqual(
+      (await ask({ sort: "amount" })).slice(),
+      asc,
+      "the direction defaults to ascending",
+    );
+  });
+});

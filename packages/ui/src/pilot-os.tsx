@@ -191,7 +191,18 @@ export interface PilotTableColumn<Row> {
   width?: string;
   /** Számoszlop: jobbra zárva a fejléc ÉS az adat is. */
   align?: "left" | "right";
+  /**
+   * Az oszlop fejlécére kattintva rendezhető (a tábla `sort` és `onSort` tulajdonságával):
+   * a fejléc gombbá válik, és jelzi az állapotát (nyíl, `aria-sort`).
+   */
+  sortable?: boolean;
   cell: (row: Row) => ReactNode;
+}
+
+/** A tábla rendezési állapota: az oszlop azonosítója és az iránya; `null`: nincs rendezés. */
+export interface PilotTableSort {
+  id: string;
+  direction: "asc" | "desc";
 }
 
 /**
@@ -215,6 +226,8 @@ export function PilotDataTable<Row>({
   rowCanActivate,
   rowTestId,
   minWidth = 960,
+  sort,
+  onSort,
 }: {
   columns: readonly PilotTableColumn<Row>[];
   rows: readonly Row[];
@@ -233,6 +246,13 @@ export function PilotDataTable<Row>({
   /** `data-testid` minden sorra (a lapok tesztjei sorokat számolnak). */
   rowTestId?: string;
   minWidth?: number;
+  /**
+   * A rendezett oszlop. A tábla NEM rendez: a rendezés a hívó dolga (a szerver, ha a
+   * lista lapozott), a tábla csak mutatja az állapotot és jelzi a kattintást.
+   */
+  sort?: PilotTableSort | null;
+  /** Egy `sortable` oszlop fejlécére kattintottak; az irányt a hívó váltja. */
+  onSort?: (columnId: string) => void;
 }) {
   const alignClass = (align: PilotTableColumn<Row>["align"]) =>
     align === "right" ? "text-right" : "text-left";
@@ -263,9 +283,49 @@ export function PilotDataTable<Row>({
               <th
                 key={column.id}
                 scope="col"
+                aria-sort={
+                  column.sortable && onSort
+                    ? sort?.id === column.id
+                      ? sort.direction === "desc"
+                        ? "descending"
+                        : "ascending"
+                      : "none"
+                    : undefined
+                }
                 className={`h-[42px] px-4 text-[11px] font-semibold uppercase leading-4 tracking-[0.05em] text-pilot-grey-500 first:pl-5 last:pr-5 ${alignClass(column.align)}`}
               >
-                {column.header}
+                {column.sortable && onSort ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(column.id)}
+                    className={`inline-flex cursor-pointer items-center gap-1 bg-transparent uppercase tracking-[0.05em] hover:text-pilot-grey-800 ${
+                      column.align === "right" ? "flex-row-reverse" : ""
+                    }`}
+                  >
+                    {column.header}
+                    {/*
+                      A JELÖLÉS KÉT DOLGOT MOND: hogy az oszlop RENDEZHETŐ (halvány kettős nyíl),
+                      és ha rendez, hogy MERRE. `aria-hidden`, mert a felolvasó ugyanezt az
+                      `aria-sort` értékből már megkapta.
+                    */}
+                    <span
+                      aria-hidden="true"
+                      className={
+                        sort?.id === column.id
+                          ? "text-pilot-grey-900"
+                          : "text-pilot-grey-500/50"
+                      }
+                    >
+                      {sort?.id === column.id
+                        ? sort.direction === "desc"
+                          ? "↓"
+                          : "↑"
+                        : "⇅"}
+                    </span>
+                  </button>
+                ) : (
+                  column.header
+                )}
               </th>
             ))}
           </tr>

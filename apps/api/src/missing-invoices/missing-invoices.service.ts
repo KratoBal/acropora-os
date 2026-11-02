@@ -50,6 +50,7 @@ import {
 } from "./missing-invoices.repository.js";
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
+import { sortMissingInvoiceItems } from "./missing-invoice-sort.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
 import { notInFeedTest } from "../billing/incoming-billing-documents.js";
 import {
@@ -256,6 +257,12 @@ export class MissingInvoicesService {
             .toLowerCase()
             .includes(q)),
     );
+    // a rendezés a LAPOZÁS ELŐTT, a szűrt teljes halmazon (missing-invoice-sort.ts)
+    const sorted = sortMissingInvoiceItems(
+      filtered,
+      query.sort,
+      query.direction,
+    );
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
     const missingAccounts = this.missingStatementAccounts(computed, month);
@@ -279,7 +286,7 @@ export class MissingInvoicesService {
         noInvoice: count((s) => NO_INVOICE_TILE.has(s)),
         noInvoiceNeeded: count((s) => NO_INVOICE_NEEDED_TILE.has(s)),
       },
-      items: filtered
+      items: sorted
         .slice((page - 1) * pageSize, page * pageSize)
         .map(({ month: _month, accountId: _accountId, ...item }) => item),
       pagination: {

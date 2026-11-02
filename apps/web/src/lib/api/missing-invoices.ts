@@ -5,6 +5,8 @@ import type {
   MissingInvoiceDuplicateResult,
   MissingInvoiceDuplicatesResponse,
   MissingInvoiceJevSuggestion,
+  MissingInvoiceSortDirection,
+  MissingInvoiceSortField,
 } from "@acropora/types";
 import type {
   MissingInvoiceItemDetail,
@@ -39,6 +41,9 @@ export interface MonthQuery {
   accountId: string;
   page: number;
   pageSize: number;
+  /** A rendezés: az oszlop és az irány; a szerver a lapozás előtt rendez. */
+  sort?: MissingInvoiceSortField;
+  direction?: MissingInvoiceSortDirection;
 }
 
 function monthQueryString(query: MonthQuery): string {
@@ -50,6 +55,10 @@ function monthQueryString(query: MonthQuery): string {
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
   if (query.accountId) params.set("accountId", query.accountId);
+  if (query.sort) {
+    params.set("sort", query.sort);
+    params.set("direction", query.direction ?? "asc");
+  }
   return params.toString();
 }
 

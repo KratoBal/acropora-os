@@ -10,6 +10,7 @@ import {
   PilotSelect,
   ServiceListTabs,
   type PilotTableColumn,
+  type PilotTableSort,
 } from "@acropora/ui";
 
 import {
@@ -75,6 +76,8 @@ export function MissingInvoicesMonthDetail({
   pageSize,
   totalPages,
   onPage,
+  sort,
+  onSort,
   onOpenRow,
   error,
   onRetry,
@@ -102,6 +105,9 @@ export function MissingInvoicesMonthDetail({
   pageSize: number;
   totalPages: number;
   onPage: (page: number) => void;
+  /** A rendezett oszlop (`null`: a lista alap sorrendje) és a fejlécre kattintás. */
+  sort?: PilotTableSort | null;
+  onSort?: (columnId: string) => void;
   onOpenRow: (row: ChargeRow) => void;
   error: string | null;
   onRetry: () => void;
@@ -134,6 +140,7 @@ export function MissingInvoicesMonthDetail({
   const columns: PilotTableColumn<ChargeRow>[] = [
     {
       id: "date",
+      sortable: true,
       header: "Dátum",
       width: "108px",
       cell: (row) => (
@@ -144,6 +151,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "partner",
+      sortable: true,
       header: "Partner",
       cell: (row) =>
         row.partner ? (
@@ -159,6 +167,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "category",
+      sortable: true,
       header: "Kategória",
       width: "140px",
       cell: (row) => (
@@ -169,6 +178,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "amount",
+      sortable: true,
       header: "Összeg",
       width: "118px",
       align: "right",
@@ -187,6 +197,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "invoice",
+      sortable: true,
       header: "Számla",
       width: "120px",
       cell: (row) => (
@@ -200,6 +211,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "source",
+      sortable: true,
       header: "Forrás",
       width: "92px",
       cell: (row) => (
@@ -210,6 +222,7 @@ export function MissingInvoicesMonthDetail({
     },
     {
       id: "state",
+      sortable: true,
       header: "Állapot",
       width: "150px",
       cell: (row) => (
@@ -478,6 +491,8 @@ export function MissingInvoicesMonthDetail({
                       columns={columns}
                       rows={rows}
                       rowKey={(row) => row.id}
+                      sort={sort}
+                      onSort={onSort}
                       onRowActivate={onOpenRow}
                       rowLabel={(row) =>
                         `${row.partner ?? "Ismeretlen partner"}, ${formatDay(row.date)}`

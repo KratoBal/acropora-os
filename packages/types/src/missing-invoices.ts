@@ -367,6 +367,41 @@ export interface MissingInvoiceMonthDetail {
   };
 }
 
+/**
+ * A LISTA RENDEZÉSE (Balázs, 2026-11-02 12:49 UTC: „akármelyik szűrésben az
+ * oszlopok nevére kattintva lehessen rendezni”). Az oszlopok a képernyőn: Dátum,
+ * Partner, Kategória, Összeg, Számla, Forrás, Állapot. A szerver rendez, a lapozás
+ * ELŐTT, mert a lista lapozott: a kliens csak a látható oldalt rendezhetné.
+ */
+export const MISSING_INVOICE_SORT_FIELDS = [
+  "date",
+  "partner",
+  "category",
+  "amount",
+  "invoice",
+  "source",
+  "state",
+] as const;
+export type MissingInvoiceSortField =
+  (typeof MISSING_INVOICE_SORT_FIELDS)[number];
+
+export const MISSING_INVOICE_SORT_DIRECTIONS = ["asc", "desc"] as const;
+export type MissingInvoiceSortDirection =
+  (typeof MISSING_INVOICE_SORT_DIRECTIONS)[number];
+
+/** A számla forrásának felirata, közösen (a rendezés a látott szó szerint megy). */
+export const MISSING_INVOICE_SOURCE_LABELS: Readonly<
+  Record<MissingInvoiceDocumentSource, string>
+> = {
+  NAV: "NAV",
+  MAILBOX: "Postafiók",
+  UPLOAD: "Feltöltés",
+  DRIVE: "Drive",
+  SETTLEMENT: "Elszámolás",
+  PREMIUM_NOTICE: "Díjértesítő",
+  SZAMLAZZ: "Számlázz.hu",
+};
+
 export interface MissingInvoiceMonthQuery {
   tab?: MissingInvoiceTab;
   q?: string;
@@ -374,6 +409,10 @@ export interface MissingInvoiceMonthQuery {
   accountId?: string;
   page?: number;
   pageSize?: number;
+  /** Nincs rendezés megadva: az eddigi sorrend marad. */
+  sort?: MissingInvoiceSortField;
+  /** Rendezésnél az alap növekvő. */
+  direction?: MissingInvoiceSortDirection;
 }
 
 /**

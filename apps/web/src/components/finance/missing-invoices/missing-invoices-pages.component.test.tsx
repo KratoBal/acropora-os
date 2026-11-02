@@ -299,6 +299,122 @@ describe("MissingInvoicesMonthPage", () => {
     expect(tabHref).toContain("category=INSURANCE");
   });
 
+  /*
+    A RENDEZÉS (Balázs, 2026-11-02 12:49 UTC: „akármelyik szűrésben az oszlopok
+    nevére kattintva lehessen rendezni”). MI PIROSÍT: ha egy adat-oszlop fejléce nem
+    kattintható, vagy a Művelet oszlopé az; ha az első kattintás nem növekvő, a
+    második nem csökkenő; ha a rendezés nem az URL-ből menne a szervernek (a
+    szerver rendez, a lapozás előtt); ha rendezéskor az oldal nem állna vissza az
+    elsőre; ha a jelölés (aria-sort) nem követné az állapotot; ha a rendezés egy
+    szűrést (fül, kategória) elveszítene.
+  */
+  describe("sorting by the column headers", () => {
+    const sortHrefs = () =>
+      urlNavigation.replace.mock.calls
+        .map(([href]) => href as string)
+        .filter((href) => href.includes("sort="));
+
+    it("every data column sorts, the action column does not", async () => {
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "");
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      for (const name of [
+        "Dátum",
+        "Partner",
+        "Kategória",
+        "Összeg",
+        "Számla",
+        "Forrás",
+        "Állapot",
+      ]) {
+        const header = await screen.findByRole("columnheader", { name });
+        expect(within(header).getByRole("button")).toBeTruthy();
+        expect(header).toHaveAttribute("aria-sort", "none");
+      }
+      const action = screen.getByRole("columnheader", { name: "Művelet" });
+      expect(within(action).queryByRole("button")).toBeNull();
+      expect(action).not.toHaveAttribute("aria-sort");
+    });
+
+    it("the first click sorts ascending from page one, keeping the tab and the filters", async () => {
+      urlNavigation.reset(
+        "/penzugy/hianyzo-szamlak/2026-08",
+        "tab=FOUND&category=INSURANCE&page=3",
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      fireEvent.click(
+        within(
+          await screen.findByRole("columnheader", { name: "Összeg" }),
+        ).getByRole("button"),
+      );
+      const href = sortHrefs().at(-1)!;
+      expect(href).toContain("sort=amount");
+      expect(href).toContain("direction=asc");
+      expect(href).toContain("tab=FOUND");
+      expect(href).toContain("category=INSURANCE");
+      expect(href).not.toContain("page=");
+    });
+
+    it("the second click on the same column turns it descending, another column starts ascending", async () => {
+      urlNavigation.reset(
+        "/penzugy/hianyzo-szamlak/2026-08",
+        "sort=amount&direction=asc",
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      const amount = await screen.findByRole("columnheader", {
+        name: "Összeg",
+      });
+      expect(amount).toHaveAttribute("aria-sort", "ascending");
+      fireEvent.click(within(amount).getByRole("button"));
+      expect(sortHrefs().at(-1)).toContain("direction=desc");
+      expect(sortHrefs().at(-1)).toContain("sort=amount");
+      fireEvent.click(
+        within(screen.getByRole("columnheader", { name: "Dátum" })).getByRole(
+          "button",
+        ),
+      );
+      expect(sortHrefs().at(-1)).toContain("sort=date");
+      expect(sortHrefs().at(-1)).toContain("direction=asc");
+    });
+
+    it("asks the server with the URL's sort and direction, and marks the column", async () => {
+      urlNavigation.reset(
+        "/penzugy/hianyzo-szamlak/2026-08",
+        "tab=FOUND&sort=partner&direction=desc&page=2",
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      await waitFor(() => expect(api.month).toHaveBeenCalled());
+      const [, , query] = api.month.mock.calls[0]!;
+      expect(query).toMatchObject({
+        tab: "FOUND",
+        page: 2,
+        sort: "partner",
+        direction: "desc",
+      });
+      expect(
+        await screen.findByRole("columnheader", { name: "Partner" }),
+      ).toHaveAttribute("aria-sort", "descending");
+    });
+
+    it("without a sort in the URL the server is not asked to sort", async () => {
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "");
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      await waitFor(() => expect(api.month).toHaveBeenCalled());
+      const [, , query] = api.month.mock.calls[0]!;
+      expect(query).not.toHaveProperty("sort");
+      expect(query).not.toHaveProperty("direction");
+    });
+
+    it("a value the server does not know in the URL is ignored", async () => {
+      urlNavigation.reset(
+        "/penzugy/hianyzo-szamlak/2026-08",
+        "sort=password&direction=sideways",
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      await waitFor(() => expect(api.month).toHaveBeenCalled());
+      expect(api.month.mock.calls[0]![2]).not.toHaveProperty("sort");
+    });
+  });
+
   it("the statement upload calls its endpoint, shows the result, and there is no export yet", async () => {
     urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
     api.uploadStatement.mockResolvedValue(IMPORT_RESULT);
