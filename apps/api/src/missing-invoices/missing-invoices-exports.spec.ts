@@ -926,3 +926,83 @@ describe("the accountant package by fulfilment month", () => {
     assert.equal(pages, 2);
   });
 });
+
+/*
+  A SZÁMLÁN ÁLLÓ „PAPÍRON MEGVAN” A PÁROSÍTOTT TERHELÉS TÉTELÉN IS LÁTSZIK
+  (Balázs, 2026-11-02 22:23 UTC): egy korábbi hónapban teljesített, a bejövő
+  számlák során jelölt számla későbbi terhelése nem „hiányzik”, és a jelölés
+  látszik rajta. MI PIROSÍT: ha a számlán álló jelölés nem érné el a terhelés
+  tételét; ha a jelöletlen számla terhelése is papírosnak látszana (kontroll);
+  ha a jelölés a számla másik forrású társáról (összevont jelölt) elveszne.
+*/
+describe("the paper mark of the invoice shows on its paired debit", () => {
+  const items = async (documents: CandidateDocument[]) => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-10", 1000, "Szállító Kft."),
+        debit("2026-08-11", 2000, "Másik Kft."),
+      ],
+      documents,
+      files: {},
+    });
+    const month = await missing.month("2026-08", {
+      tab: "ALL",
+      page: 1,
+      pageSize: 100,
+    });
+    return new Map(month.items.map((item) => [item.partner, item]));
+  };
+
+  it("a marked invoice: the debit is Megvan and shows the mark; the unmarked one does not", async () => {
+    const result = await items([
+      document({ id: "marked", gross: D(1000), paperMarked: true }),
+      document({
+        id: "plain",
+        gross: D(2000),
+        supplierName: "Másik Kft.",
+      }),
+    ]);
+    const marked = result.get("Szállító Kft.")!;
+    const plain = result.get("Másik Kft.")!;
+    assert.deepEqual([marked.state, marked.paperOriginal], ["FOUND", true]);
+    // a jelölés a SZÁMLÁN áll: a terhelésen itt nem vonható vissza
+    assert.equal(marked.paperOriginalMarkedHere, false);
+    assert.deepEqual([plain.state, plain.paperOriginal], ["FOUND", false]);
+  });
+
+  it("a mark on the debit itself is marked here, with or without the invoice's", async () => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-10", 1000, "Szállító Kft.", {
+          paperOriginalAt: new Date(),
+        }),
+      ],
+      documents: [document({ id: "d1", gross: D(1000) })],
+      files: {},
+    });
+    const month = await missing.month("2026-08", {
+      tab: "ALL",
+      page: 1,
+      pageSize: 10,
+    });
+    const item = month.items.find((i) => i.partner === "Szállító Kft.")!;
+    assert.deepEqual(
+      [item.paperOriginal, item.paperOriginalMarkedHere],
+      [true, true],
+    );
+  });
+
+  it("a merged candidate carries the mark of any of its sources", async () => {
+    const result = await items([
+      document({
+        id: "nav-1",
+        source: "NAV",
+        gross: D(1000),
+        hasOriginal: true,
+        aliasIds: ["feed-1"],
+        paperMarked: true,
+      }),
+    ]);
+    assert.equal(result.get("Szállító Kft.")!.paperOriginal, true);
+  });
+});

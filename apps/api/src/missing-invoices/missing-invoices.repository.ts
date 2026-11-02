@@ -252,6 +252,7 @@ export function mergeSameInvoice(
         : primary.kind,
       payee: nav ? ("COMPANY" as const) : primary.payee,
       hasOriginal: group.some((d) => d.hasOriginal),
+      ...(group.some((d) => d.paperMarked) ? { paperMarked: true } : {}),
       ...(group.some((d) => d.cardPaid) ? { cardPaid: true } : {}),
       supplierAccounts: [...new Set(group.flatMap((d) => d.supplierAccounts))],
       identities: [
@@ -661,6 +662,21 @@ export class MissingInvoicesRepository {
             .flatMap((row) => row.sourceDocumentId ?? []),
     );
 
+    // A „PAPÍRON MEGVAN” JELÖLÉS A BEJÖVŐ SZÁMLA SORÁN: a sor forrás-dokumentuma
+    // a feed dokumentuma, így a jelölés a jelöltre kerül (és az összevonáson át a
+    // társaira is), a párosított terhelés tétele pedig örökli
+    const paperMarkedIds = new Set(
+      (
+        await this.database.incomingBillingDocument.findMany({
+          where: {
+            paperOriginalAt: { not: null },
+            sourceDocumentId: { not: null },
+          },
+          select: { sourceDocumentId: true },
+        })
+      ).flatMap((row) => (row.sourceDocumentId ? [row.sourceDocumentId] : [])),
+    );
+
     const accountsByTaxBase = new Map<string, string[]>();
     for (const supplier of suppliers) {
       const base = taxBase(supplier.taxNumber);
@@ -866,6 +882,7 @@ export class MissingInvoicesRepository {
         identities: document.sha256 ? [`sha:${document.sha256}`] : [],
         ...(card?.debitIds?.length ? { cardPaymentIds: card.debitIds } : {}),
         ...(cardPaidIds.has(document.id) ? { cardPaid: true } : {}),
+        ...(paperMarkedIds.has(document.id) ? { paperMarked: true } : {}),
       });
       keys.set(
         document.id,

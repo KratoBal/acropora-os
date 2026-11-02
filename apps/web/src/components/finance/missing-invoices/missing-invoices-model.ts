@@ -110,8 +110,10 @@ export interface ChargeRow {
     receivedOn: string | null;
   } | null;
   comment: string | null;
-  /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303). */
+  /** Az eredeti papíron megvan (kézi jelölés, nautilus #1303; vagy a számlán álló). */
   paperOriginal: boolean;
+  /** A jelölés a terhelésen áll (itt visszavonható); hamis, ha csak a számlán. */
+  paperOriginalMarkedHere: boolean;
 }
 
 /**

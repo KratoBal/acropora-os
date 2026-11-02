@@ -35,6 +35,7 @@ const item = (over: Partial<MissingInvoiceItem> = {}): MissingInvoiceItem => ({
   refund: null,
   comment: null,
   paperOriginal: false,
+  paperOriginalMarkedHere: false,
   ...over,
 });
 const ids = (items: readonly MissingInvoiceItem[]) => items.map((i) => i.id);

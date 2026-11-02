@@ -98,6 +98,7 @@ const item = (
   amountDifference: null,
   refund: null,
   paperOriginal: false,
+  paperOriginalMarkedHere: false,
   ...overrides,
 });
 
@@ -651,7 +652,11 @@ describe("MissingInvoicesMonthPage", () => {
     );
     api.item.mockResolvedValue(itemDetail({ state: "NO_INVOICE" }));
     api.paperOriginal.mockResolvedValue(
-      itemDetail({ state: "FOUND", paperOriginal: true }),
+      itemDetail({
+        state: "FOUND",
+        paperOriginal: true,
+        paperOriginalMarkedHere: true,
+      }),
     );
     render(<MissingInvoicesMonthPage month="2026-09" />);
     const dialog = await openFirstRow();
@@ -791,6 +796,7 @@ describe("MissingInvoicesMonthPage", () => {
       itemDetail({
         state: "FOUND",
         paperOriginal: true,
+        paperOriginalMarkedHere: true,
         document: { id: "nav-1", number: "NAV-2026-1", source: "NAV" },
         matchedBy: "RULE",
       }),
