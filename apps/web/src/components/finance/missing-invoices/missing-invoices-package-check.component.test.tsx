@@ -31,7 +31,7 @@ const row = (id: string, partner: string): ChargeRow => ({
   amount: "56420",
   currency: "HUF",
   original: null,
-  category: "SUPPLIER",
+  category: "DOMESTIC_SUPPLIER",
   categoryRule: "",
   categoryOverridden: false,
   state: "FOUND",
@@ -43,6 +43,7 @@ const row = (id: string, partner: string): ChargeRow => ({
   amountDifference: null,
   refund: null,
   paperOriginal: false,
+  paperOriginalMarkedHere: false,
 });
 
 type Props = Parameters<typeof MissingInvoicesMonthDetail>[0];
