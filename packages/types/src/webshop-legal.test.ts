@@ -20,8 +20,12 @@ import { parseWebshopMailFacts } from "./webshop-mail.js";
   leaving out the seat, the e-mail or the marked gaps.
 */
 describe("the legal versions", () => {
-  it("both versions the checkout records are known, with the four documents in order", () => {
-    for (const version of ["unas-shop-2026-09-29", "fogyasztobarat-JPNFMVH0"]) {
+  it("every version the checkout records is known, with the four documents in order (the test shop's `teszt-mod` too)", () => {
+    for (const version of [
+      "unas-shop-2026-09-29",
+      "fogyasztobarat-JPNFMVH0",
+      "teszt-mod",
+    ]) {
       const known = WEBSHOP_LEGAL_VERSIONS[version];
       assert.ok(known, version);
       assert.deepEqual(
