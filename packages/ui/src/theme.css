@@ -289,10 +289,20 @@ h3 {
   letter-spacing: -0.02em;
 }
 
-button,
-input {
-  font: inherit;
-}
+/**
+ * NINCS ITT `button, input { font: inherit }` -- ES NE IS KERULJON VISSZA.
+ *
+ * 2026-07-19 ota allt itt, reteg (`@layer`) nelkul. A Tailwind v4 osztalyai
+ * az `utilities` retegben elnek, es a reteg nelkuli szabaly MINDEN reteget
+ * legyoz, a szelektor specificitasatol fuggetlenul: a gombok es mezok sajat
+ * `font-*`, `text-*` es `leading-*` osztalya ezert csendben semmit nem tett
+ * (a #2005 stage-merese, 2026-11-02: az aktiv szurogomb `font-bold`-ja
+ * 400-at adott). Az oroklest a Tailwind preflight MAR megadja, a `base`
+ * retegben (`button, input, select, optgroup, textarea { font: inherit }`),
+ * tehat ez a szabaly csak a felulirhatatlansagot tette hozza. Ugyanez a
+ * hibacsalad a partner portal 2026-09-25-i gomb-javitasa
+ * (`apps/partner/src/app/globals.css`).
+ */
 
 ::selection {
   background: #ede8ff;
