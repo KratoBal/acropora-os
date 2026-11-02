@@ -800,6 +800,11 @@ export class MissingInvoicesService {
       ...(document.aliasIds ?? []),
       ...(document.originalId ? [document.originalId] : []),
     ];
+    // A sorokat vevő szerint NEM szűrjük: a Számlázz.hu bejövő feed a cég saját
+    // fiókjáé, a nem a cégre szóló számlát a „nem könyvelendő” jelölés zárja ki
+    // (barracuda, #2002). Ha a feedben mégis más vevőre szóló sor jelenne meg,
+    // ide vevő-szűrő kell (a buyerTaxNumber törzse). Mérve nem volt: a fleet_ro
+    // a buyer-oszlopokat nem látja (2026-11-02).
     const inFeed = inFeedTest(billing.refs);
     const documentsOfItem = (id: string) =>
       computed.outcomes.get(id)?.documents ?? [];
