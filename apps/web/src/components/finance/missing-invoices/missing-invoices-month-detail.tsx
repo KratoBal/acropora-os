@@ -161,9 +161,7 @@ export function MissingInvoicesMonthDetail({
    * sort nyitja meg.
    */
   onAttachPdf?: (
-    target:
-      | MissingInvoicePackageCheckItem
-      | MissingInvoicePackageUnpaidInvoice,
+    target: MissingInvoicePackageCheckItem | MissingInvoicePackageUnpaidInvoice,
     file?: File,
   ) => void;
   /** Annak a sornak az azonosítója, amelynek a PDF-je épp töltődik fel. */

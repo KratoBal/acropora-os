@@ -113,8 +113,8 @@ export function PackageCheckBanner({
         className="rounded-xl bg-pilot-green-50 px-5 py-3 text-sm text-pilot-green-700 ring-1 ring-pilot-grey-200"
       >
         A könyvelői csomagban minden számlának megvan a PDF-je vagy papíron
-        megvan. (Az ellenőrzés a fájl fejlécét nézi: a sérült, nem olvasható PDF-et
-        csak a csomag építése jelzi.)
+        megvan. (Az ellenőrzés a fájl fejlécét nézi: a sérült, nem olvasható
+        PDF-et csak a csomag építése jelzi.)
       </p>
     );
   return (
@@ -129,8 +129,8 @@ export function PackageCheckBanner({
         {unpaidLacking > 0
           ? ` (ebből ${unpaidLacking} még ki nem fizetett számla)`
           : ""}
-        . Az ellenőrzés a fájl fejlécét nézi: a sérült, nem olvasható PDF-et csak
-        a csomag építése jelzi.
+        . Az ellenőrzés a fájl fejlécét nézi: a sérült, nem olvasható PDF-et
+        csak a csomag építése jelzi.
       </p>
       <PilotButton
         variant="secondary"

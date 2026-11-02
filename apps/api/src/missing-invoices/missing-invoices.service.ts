@@ -1083,7 +1083,7 @@ export class MissingInvoicesService {
       if (item.state === "FOUND")
         for (const document of documentsOfItem(item.id)) {
           const numberKey = document.number
-            ? pairingNumberKey(document.number)
+            ? pairingNumberKey(document.number, document.supplierName)
             : null;
           for (const key of [...idsOf(document), numberKey])
             if (key && !itemOfDocument.has(key))
@@ -1092,8 +1092,9 @@ export class MissingInvoicesService {
     const itemOfRow = (row: {
       sourceDocumentId: string | null;
       documentNumber: string;
+      supplierName: string;
     }) => {
-      const numberKey = pairingNumberKey(row.documentNumber);
+      const numberKey = pairingNumberKey(row.documentNumber, row.supplierName);
       return (
         (row.sourceDocumentId
           ? itemOfDocument.get(row.sourceDocumentId)

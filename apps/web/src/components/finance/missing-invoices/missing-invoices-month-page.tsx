@@ -445,7 +445,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   ) => {
     const attach = "attach" in target ? target.attach : null;
     if (attach?.kind === "BANK") {
-      const row = detail?.items.map(toChargeRow).find((r) => r.id === target.id);
+      const row = detail?.items
+        .map(toChargeRow)
+        .find((r) => r.id === target.id);
       if (row) openRow(row);
       return;
     }
@@ -458,7 +460,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
       await Promise.all([load(), loadCheck()]);
     } catch (cause) {
       setNotice(
-        cause instanceof Error ? cause.message : "A PDF csatolása nem sikerült.",
+        cause instanceof Error
+          ? cause.message
+          : "A PDF csatolása nem sikerült.",
       );
     } finally {
       setAttachingId(null);
