@@ -175,7 +175,9 @@ export function BillingExternalDocumentPage({
         description={
           ebiz
             ? "Ez a számla az OTP eBIZ-ben készült, a napi szinkron hozta át. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra."
-            : "Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra, és PDF sincs hozzá."
+            : // the PDF clause follows the stored PDF (the same pdfStorageKey the monthly outgoing
+              // package reads); stated unconditionally, it denied a PDF the package carried (ACRW-2026/00547)
+              `Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra${detail.pdfAvailable ? "." : ", és PDF sincs hozzá."}`
         }
       />
 
