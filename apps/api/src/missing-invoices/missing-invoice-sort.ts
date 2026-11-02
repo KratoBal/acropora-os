@@ -17,9 +17,12 @@ import {
  * összeg” nem a legnagyobb összeg lenne. A szűrt TELJES halmaz sorrendje számít.
  *
  * TÍPUS SZERINT, NEM SZÖVEGKÉNT:
- *  - dátum: a `ÉÉÉÉ-HH-NN` szöveg is időrendben rendez, de dátumként hasonlítjuk;
+ *  - dátum: a `ÉÉÉÉ-HH-NN` alak szövegként is időrendben rendez (a szerver ilyen
+ *    alakban adja), ezért a kulcs maga a szöveg: nincs külön dátum-átalakítás;
  *  - összeg: számként, tizedes pontossággal (`Prisma.Decimal`), nem szövegként
- *    (a „900” nem előzheti meg az „11 000”-et);
+ *    (a „900” nem előzheti meg az „11 000”-et). A PÉNZNEMET NEM VESZI FIGYELEMBE:
+ *    a képernyőn látott számot rendezi (egy 100 EUR a 1 000 HUF elé kerül
+ *    növekvőben); átszámolás nincs (acrobot, 2026-11-02 13:58: elég a látott szám);
  *  - név, kategória, forrás, állapot: magyar ábécé szerint, ékezettel (`hu`
  *    gyűjtő: az „Á” az „A” mellett áll, nem a „Z” után; „Cecília” a „Csaba” előtt,
  *    „Olga” az „Ödön” előtt), a KÉPERNYŐN LÁTOTT felirat szerint (nem az angol
