@@ -78,6 +78,7 @@ function service(input: {
   refs?: { sourceDocumentId: string | null; documentNumber: string }[];
 }) {
   const asked: string[][] = [];
+  const askedHeads: string[][] = [];
   const repository = {
     accounts: async () => [ACCOUNT],
     debits: async () => input.debits,
@@ -100,6 +101,17 @@ function service(input: {
           documentNumber: row.documentNumber,
         })),
     }),
+    originalHeads: async (ids: readonly string[]) => {
+      askedHeads.push([...ids]);
+      return new Map(
+        ids
+          .filter((id) => input.files[id])
+          .map((id) => [
+            id,
+            { fileName: `${id}.pdf`, content: input.files[id]!.slice(0, 5) },
+          ]),
+      );
+    },
     originals: async (ids: readonly string[]) => {
       asked.push([...ids]);
       return new Map(
@@ -116,6 +128,7 @@ function service(input: {
   return {
     missing: new MissingInvoicesService(repository, reader, {}),
     asked,
+    askedHeads,
   };
 }
 
@@ -1024,6 +1037,185 @@ describe("the accountant package by fulfilment month", () => {
     assert.ok(!cover.includes("| Tesla Hungary Kft."), cover);
     assert.ok(!cover.includes("teljesítés napja"), cover);
     assert.equal(pages, 2);
+  });
+
+  /*
+    A HÓNAP LAPJA A CSOMAG SZEMÉVEL (Balázs, 2026-11-02 22:37 UTC: a csomag
+    borítóján „nem PDF”, a Hiányzó számlák lapon ez nem látszott).
+
+    MI PIROSÍT: ha a lap más döntést használna, mint a borító (a darabszámuk
+    eltér); ha a ki nem fizetett számla nem szerepelne a blokkban; ha a
+    kifizetett számla PDF-hiánya nem a terhelés során látszana; ha a lap a
+    teljes fájlokat húzná be (a fejléc elég); ha a papíron meglévő számla
+    hiányzónak látszana; ha a szűrő nem a csomag döntéséből szűrne.
+  */
+  it("the page check and the package cover are ONE decision: the same lacking count, unpaid invoices listed with their PDF status", async () => {
+    const input = {
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({ id: "ok", documentNumber: "KS-OK" }),
+        billingRow({ id: "nopdf", documentNumber: "KS-NOPDF", pdfIds: [] }),
+        billingRow({ id: "xml", documentNumber: "KS-XML", pdfIds: ["xml"] }),
+        billingRow({
+          id: "paper",
+          documentNumber: "KS-PAPER",
+          pdfIds: [],
+          paperOriginalAt: new Date("2026-10-23T00:00:00Z"),
+        }),
+      ],
+      files: {
+        "src-ok": await pdfOfPages(1),
+        xml: new TextEncoder().encode("<Szamla/>"),
+      },
+    };
+    const { missing, asked, askedHeads } = service(input);
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(
+      check.unpaid.map((invoice) => [invoice.number, invoice.pdf]),
+      [
+        ["KS-OK", "ATTACHED"],
+        ["KS-NOPDF", "PDF_MISSING"],
+        ["KS-XML", "NOT_PDF"],
+        ["KS-PAPER", "PAPER"],
+      ],
+    );
+    assert.equal(check.lackingCount, 2);
+    assert.deepEqual(check.items, []);
+    assert.equal(asked.length, 0, "the page reads heads, never the full files");
+    assert.ok(askedHeads.length > 0);
+    // a borító UGYANEZT mondja
+    const { cover } = await coverOf(input);
+    const lackingOnCover = [
+      ...cover.matchAll(/PDF hiányzik|nem PDF, nincs benne|nincs tárolt fájl/g),
+    ].length;
+    assert.equal(lackingOnCover, check.lackingCount, cover);
+    assert.ok(cover.includes("KS-PAPER: papíron megvan"), cover);
+  });
+
+  it("an unreadable PDF is the one thing the page cannot see: the page says it is in the package, the cover says it is unreadable", async () => {
+    const broken = new TextEncoder().encode("%PDF-1.4 this is not a pdf");
+    const input = {
+      debits: [],
+      documents: [],
+      billing: [billingRow({ id: "broken", documentNumber: "KS-BROKEN" })],
+      files: { "src-broken": broken },
+    };
+    const check = await service(input).missing.packageCheck("2026-10");
+    assert.equal(check.unpaid[0]!.pdf, "ATTACHED");
+    assert.equal(check.lackingCount, 0);
+    const { cover } = await coverOf(input);
+    assert.ok(cover.includes("KS-BROKEN: a PDF nem olvasható"), cover);
+  });
+
+  it("a PAID invoice shows on its debit: the missing PDF is attached to the invoice ROW, and it is not in the unpaid block", async () => {
+    const paid = debit("2026-10-05", 56420, "Fluidra Magyarország Kft.");
+    const { missing } = service({
+      debits: [paid],
+      documents: [
+        // a terheléshez a postafiókos példány van párosítva: más azonosító, ugyanaz a szám
+        document({
+          id: "mb-f",
+          number: "KS 26/12407",
+          date: "2026-10-22",
+          gross: D(56420),
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      billing: [
+        billingRow({
+          id: "fluidra",
+          documentNumber: "KS26/12407",
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(check.items, [
+      {
+        id: paid.id,
+        pdf: "PDF_MISSING",
+        attach: { kind: "ROW", id: "fluidra" },
+      },
+    ]);
+    assert.deepEqual(check.unpaid, []);
+    assert.equal(check.lackingCount, 1);
+  });
+
+  it("a debit whose invoice only the bank side knows: the PDF is attached through the debit (BANK), and a stored file means it is in", async () => {
+    const withFile = debit("2026-10-03", 1000, "Szállító Kft.");
+    const noFile = debit("2026-10-04", 2000, "Másik Bt.");
+    const { missing } = service({
+      debits: [withFile, noFile],
+      documents: [
+        document({
+          id: "mb-1",
+          number: "MB-1",
+          date: "2026-10-02",
+          gross: D(1000),
+        }),
+        document({
+          id: "mb-2",
+          number: "MB-2",
+          date: "2026-10-02",
+          gross: D(2000),
+          supplierName: "Másik Bt.",
+        }),
+      ],
+      billing: [],
+      files: { "mb-1": await pdfOfPages(1) },
+    });
+    const check = await missing.packageCheck("2026-10");
+    assert.deepEqual(
+      check.items.map((entry) => [entry.id, entry.pdf, entry.attach.kind]),
+      [
+        [withFile.id, "ATTACHED", "BANK"],
+        [noFile.id, "NO_FILE", "BANK"],
+      ],
+    );
+  });
+
+  it("the month list filters on the package decision before it pages: only the items lacking a PDF", async () => {
+    const good = debit("2026-10-03", 1000, "Szállító Kft.");
+    const bad = debit("2026-10-04", 2000, "Másik Bt.");
+    const { missing } = service({
+      debits: [good, bad],
+      documents: [
+        document({
+          id: "mb-1",
+          number: "MB-1",
+          date: "2026-10-02",
+          gross: D(1000),
+        }),
+        document({
+          id: "mb-2",
+          number: "MB-2",
+          date: "2026-10-02",
+          gross: D(2000),
+          supplierName: "Másik Bt.",
+        }),
+      ],
+      billing: [],
+      files: { "mb-1": await pdfOfPages(1) },
+    });
+    const all = await missing.month("2026-10", {
+      tab: "FOUND",
+      page: 1,
+      pageSize: 25,
+    });
+    assert.equal(all.pagination.totalItems, 2);
+    const lacking = await missing.month("2026-10", {
+      tab: "FOUND",
+      packagePdf: "MISSING",
+      page: 1,
+      pageSize: 25,
+    });
+    assert.deepEqual(
+      lacking.items.map((item) => item.id),
+      [bad.id],
+    );
+    assert.equal(lacking.pagination.totalItems, 1);
   });
 });
 

@@ -266,7 +266,9 @@ export class MissingInvoicesService {
       query.packagePdf === "MISSING"
         ? new Set(
             (await this.packageCheck(month)).items
-              .filter((entry) => MISSING_INVOICE_PACKAGE_PDF_LACKING.has(entry.pdf))
+              .filter((entry) =>
+                MISSING_INVOICE_PACKAGE_PDF_LACKING.has(entry.pdf),
+              )
               .map((entry) => entry.id),
           )
         : null;
@@ -862,7 +864,9 @@ export class MissingInvoicesService {
     const { entries } = await this.packageSelection(month, (ids) =>
       this.repository.originalHeads(ids),
     );
-    const worst = (entry: (typeof entries)[number]): MissingInvoicePackagePdf => {
+    const worst = (
+      entry: (typeof entries)[number],
+    ): MissingInvoicePackagePdf => {
       const outcomes = headOutcomes(entry);
       return (
         PACKAGE_PDF_ORDER.find((candidate) => outcomes.includes(candidate)) ??
@@ -1073,18 +1077,35 @@ export class MissingInvoicesService {
 
     // melyik Megvan terheléshez tartozik egy számla-dokumentum (a kifizetettség
     // és a lap sora innen jön)
+    // (azonosító vagy szám szerint, mint a „papíron megvan” jelölésnél)
     const itemOfDocument = new Map<string, string>();
     for (const item of computed.items)
       if (item.state === "FOUND")
-        for (const document of documentsOfItem(item.id))
-          for (const id of idsOf(document)) itemOfDocument.set(id, item.id);
+        for (const document of documentsOfItem(item.id)) {
+          const numberKey = document.number
+            ? pairingNumberKey(document.number)
+            : null;
+          for (const key of [...idsOf(document), numberKey])
+            if (key && !itemOfDocument.has(key))
+              itemOfDocument.set(key, item.id);
+        }
+    const itemOfRow = (row: {
+      sourceDocumentId: string | null;
+      documentNumber: string;
+    }) => {
+      const numberKey = pairingNumberKey(row.documentNumber);
+      return (
+        (row.sourceDocumentId
+          ? itemOfDocument.get(row.sourceDocumentId)
+          : undefined) ??
+        (numberKey ? itemOfDocument.get(numberKey) : undefined)
+      );
+    };
 
     const entries = [
       ...rows.map((row) => {
         const file = paperRow(row) ? null : fileOfRow(row);
-        const itemId = row.sourceDocumentId
-          ? itemOfDocument.get(row.sourceDocumentId)
-          : undefined;
+        const itemId = itemOfRow(row);
         return {
           bookingDate: dayOf(row.fulfillmentDate ?? row.issueDate),
           partner: row.supplierName,

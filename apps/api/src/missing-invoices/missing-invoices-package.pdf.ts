@@ -127,7 +127,10 @@ export function looksLikePdf(content: Uint8Array): boolean {
  */
 export function headOutcome(
   entry: Pick<AccountantPackageEntry, "paperOriginal">,
-  document: Pick<AccountantPackageEntry["documents"][number], "file" | "missingPdf">,
+  document: Pick<
+    AccountantPackageEntry["documents"][number],
+    "file" | "missingPdf"
+  >,
 ): Exclude<PackageDocumentOutcome, "UNREADABLE"> {
   // A PAPÍRON IS MEGLÉVŐ SZÁMLA PDF-JE NEM KERÜL A CSOMAGBA (Balázs,
   // 2026-11-02 11:21 UTC: a számlát emailben is, papíron is megkapjuk, és
