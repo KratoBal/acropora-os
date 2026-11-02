@@ -524,88 +524,143 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     assert.match(mixed, /BRUTTÓ VÉGÖSSZEG · OPCIÓK NÉLKÜL/);
   });
 
-  /** The brief: the total in bold, and below it the multiplication when the quantity is not 1. */
-  it("an item shows its total, and the multiplication only when the quantity is not 1", async () => {
-    const text = (
-      await readPdfTextLines(
-        (
-          await renderQuotePdf(
-            input([
-              block("SECTION", {
-                title: "A",
-                items: [
-                  item("Egy darab"),
-                  item("Két darab", { quantity: d("2") }),
-                ],
-              }),
-            ]),
-          )
-        ).bytes,
-      )
-    )
+  const textOf = async (
+    blocks: QuotePdfBlock[],
+    over: Partial<QuotePdfInput> = {},
+  ) =>
+    (await readPdfTextLines((await renderQuotePdf(input(blocks, over))).bytes))
       .map((l) => l.text)
       .join(" | ");
-    assert.match(text, /1 db/);
-    assert.doesNotMatch(text, /1 db ×/);
-    assert.match(text, /254 000 Ft/);
-    assert.match(text, /2 db × 127 000 Ft/);
+
+  /**
+   * THE ITEM TABLE (Luca, 2026-11-02, card f5d25e90). What must fail: the four
+   * column headers not readable from the PDF text; a row whose cells run
+   * together under the name (the old layout); a price that does not say whether
+   * it is net or gross; a quantity shown as a multiplication in the cell.
+   */
+  it("an item is one table row: name, quantity with its unit, unit price, line total; the head names the columns", async () => {
+    const text = await textOf([
+      block("SECTION", {
+        title: "A",
+        items: [item("Egy darab"), item("Két darab", { quantity: d("2") })],
+      }),
+    ]);
+    assert.match(text, /Tétel neve Mennyiség Bruttó egységár Bruttó összesen/);
+    assert.match(text, /Egy darab 1 db 127 000 Ft 127 000 Ft/);
+    assert.match(text, /Két darab 2 db 127 000 Ft 254 000 Ft/);
+    assert.doesNotMatch(text, /×/);
   });
 
-  it("with both prices, an item and an option show the net and the gross", async () => {
-    const text = (
-      await readPdfTextLines(
-        (
-          await renderQuotePdf(
-            input(
-              [
-                block("SECTION", { title: "A", items: [item("Tétel")] }),
-                block("OPTIONS", {
-                  items: [item("Opció", { isOptional: true })],
-                }),
-              ],
-              { priceDisplay: "BOTH" },
-            ),
-          )
-        ).bytes,
-      )
-    )
-      .map((l) => l.text)
-      .join(" | ");
-    assert.equal(text.match(/nettó 100 000 Ft/g)?.length, 2, text);
-    assert.equal(text.match(/bruttó 127 000 Ft/g)?.length, 2, text);
+  it("a net quote's table says net in both price headers, and its summary has net, VAT and gross on rows of their own", async () => {
+    const text = await textOf(
+      [
+        block("SECTION", {
+          title: "A",
+          items: [item("Tétel", { quantity: d("2") })],
+        }),
+      ],
+      { priceDisplay: "NET" },
+    );
+    assert.match(text, /Tétel neve Mennyiség Nettó egységár Nettó összesen/);
+    assert.match(text, /Tétel 2 db 100 000 Ft 200 000 Ft/);
+    assert.match(text, /Nettó összeg 200 000 Ft/);
+    assert.match(text, /ÁFA 27% 54 000 Ft/);
+    assert.match(text, /BRUTTÓ VÉGÖSSZEG 254 000 Ft/);
+    assert.doesNotMatch(text, /\+ ÁFA/);
+    assert.doesNotMatch(text, /Bruttó összesen/);
   });
 
-  /** Luca (2026-10-22): a net-only quote ends "1 400 000 Ft + ÁFA", with the net item prices kept. */
-  it("a net quote shows the net lines and a net total with + ÁFA, and no VAT or gross rows", async () => {
-    const text = async (priceDisplay: "NET" | "GROSS") =>
-      (
-        await readPdfTextLines(
-          (
-            await renderQuotePdf(
-              input(
-                [
-                  block("SECTION", {
-                    title: "A",
-                    items: [item("Tétel", { quantity: d("2") })],
-                  }),
-                ],
-                { priceDisplay },
-              ),
-            )
-          ).bytes,
-        )
-      )
-        .map((l) => l.text)
-        .join(" | ");
-    const net = await text("NET");
-    assert.match(net, /NETTÓ VÉGÖSSZEG/);
-    assert.match(net, /200 000 Ft \+ ÁFA/);
-    assert.match(net, /2 db × 100 000 Ft/);
-    assert.doesNotMatch(net, /BRUTTÓ/);
-    assert.doesNotMatch(net, /ÁFA 27%/);
-    const gross = await text("GROSS");
-    assert.match(gross, /BRUTTÓ VÉGÖSSZEG/);
-    assert.doesNotMatch(gross, /\+ ÁFA/);
+  it("with both prices the table has a gross total column as well, for an item and an option", async () => {
+    const text = await textOf(
+      [
+        block("SECTION", { title: "A", items: [item("Tétel")] }),
+        block("OPTIONS", { items: [item("Opció", { isOptional: true })] }),
+      ],
+      { priceDisplay: "BOTH" },
+    );
+    assert.equal(
+      text.match(/Nettó egységár Nettó összesen Bruttó összesen/g)?.length,
+      2,
+      text,
+    );
+    assert.match(text, /Tétel 1 db 100 000 Ft 100 000 Ft 127 000 Ft/);
+    assert.match(text, /Opció 1 db 100 000 Ft 100 000 Ft 127 000 Ft/);
+  });
+
+  /**
+   * LUCA'S SAMPLE (AJ-2026-0005 v1, the zoo's four items): it printed on two
+   * pages, with the summary alone on the second. What must fail: a quote of
+   * four to six items that does not fit one page; a total that is not the sum
+   * of the rows.
+   */
+  it("a quote of four to six items is one page, and the total is the sum of the rows", async () => {
+    const rows = [
+      item("11 W-os UV cső (kétágú)", { unitNetPrice: d("2360") }),
+      item("Eheim 9 W-os UV cső (4ágú)", {
+        quantity: d("5"),
+        unitNetPrice: d("10220"),
+      }),
+      item("Kiszállási díj", { unitNetPrice: d("18000") }),
+      item("Munkadíj", { unit: "óra", unitNetPrice: d("9000") }),
+      item("Tisztítószer", { unitNetPrice: d("4000") }),
+      item("Dokumentáció", { unitNetPrice: d("6000") }),
+    ];
+    const sections = (n: number) => [
+      block("TEXT", {
+        title: "Bevezető",
+        content: doc("Köszönjük megkeresését! Az előzetes felmérésünk alapján."),
+      }),
+      block("SECTION", { title: "Munka leírás", items: rows.slice(0, n) }),
+      block("TERMS", {
+        title: "Feltételek",
+        content: doc(
+          "Fizetés a munka elvégzése után, átutalással.",
+          "Garancia: az elvégzett munkára 6 hónap.",
+        ),
+      }),
+    ];
+    for (const n of [4, 6]) {
+      const rendered = await renderQuotePdf(
+        input(sections(n), { priceDisplay: "NET", customer: {
+          name: "Fővárosi Állat- és Növénykert",
+          lines: ["1146 Budapest, XIV., Állatkerti krt. 6-12"],
+        } }),
+      );
+      assert.equal(rendered.pageCount, 1, `${n} tétel`);
+    }
+    const text = await textOf(sections(4), { priceDisplay: "NET" });
+    assert.match(text, /Nettó összeg 80 460 Ft/);
+    assert.match(text, /ÁFA 27% 21 724 Ft/);
+    assert.match(text, /BRUTTÓ VÉGÖSSZEG 102 184 Ft/);
+  });
+
+  it("the table head comes again on every page the rows run onto", async () => {
+    const many = Array.from({ length: 40 }, (_, i) => item(`Tétel ${i + 1}`));
+    const rendered = await renderQuotePdf(
+      input([block("SECTION", { title: "A", items: many })], {
+        priceDisplay: "NET",
+      }),
+    );
+    assert.ok(rendered.pageCount >= 2);
+    const heads = new Set(await pagesOf(rendered.bytes, "Tétel neve"));
+    for (let page = 1; page <= rendered.pageCount; page += 1) {
+      const hasRows = (await readPdfTextLines(rendered.bytes)).some(
+        (l) => l.pageNumber === page && /^Tétel \d+ /.test(l.text),
+      );
+      if (hasRows) assert.ok(heads.has(page), `a ${page}. oldalon nincs fejléc`);
+    }
+  });
+
+  it("the payment schedule's amounts are shares of the gross total the summary shows, on a net quote too", async () => {
+    const text = await textOf(
+      [block("SECTION", { title: "A", items: [item("Tétel")] })],
+      {
+        priceDisplay: "NET",
+        milestones: [{ label: "Előleg", percent: d("50") }],
+      },
+    );
+    assert.match(text, /BRUTTÓ VÉGÖSSZEG 127 000 Ft/);
+    assert.match(text, /Előleg 50% 63 500 Ft/);
   });
 
   it("an English quote has the English tagline, labels, options band and footer", async () => {
@@ -634,10 +689,11 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       "Valid until: 6 November 2026",
       "OPTIONAL ITEMS",
       "Not included in the total.",
+      "Item Quantity Gross unit price Gross total",
       "Acropora Kft. · MARINE AQUARIUMS · DESIGN · INSTALLATION",
     ])
       assert.ok(text.includes(needle), `${needle}: ${text}`);
-    assert.doesNotMatch(text, /ÁRAJÁNLAT|Érvényes|Nem részei/);
+    assert.doesNotMatch(text, /ÁRAJÁNLAT|Érvényes|Nem részei|Tétel neve/);
   });
 
   it("the money is in Ft, and the design's Noto Sans pair is embedded", async () => {
