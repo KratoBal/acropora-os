@@ -175,20 +175,6 @@ export function formatQuantity(value: Prisma.Decimal): string {
   return value.toString().replace(".", ",");
 }
 
-/** The amount a line shows, per the version's price display. */
-export function itemAmount(
-  item: QuotePdfItem,
-  display: QuotePriceDisplay,
-  currency: string,
-): { main: string; secondary: string | null } {
-  const net = formatQuoteMoney(lineNet(item), currency);
-  const gross = formatQuoteMoney(lineGross(item), currency);
-  if (display === "GROSS") return { main: gross, secondary: null };
-  if (display === "BOTH")
-    return { main: `${net} + ÁFA`, secondary: `bruttó ${gross}` };
-  return { main: `${net} + ÁFA`, secondary: null };
-}
-
 export interface PdfParagraph {
   text: string;
   /** "• " or "1. " for list items */

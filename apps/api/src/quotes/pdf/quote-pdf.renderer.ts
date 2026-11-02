@@ -59,10 +59,45 @@ const CONTINUATION_TOP = 105;
 const BOTTOM = 770;
 const FOOTER_RULE = 784;
 
+/**
+ * THE ITEM TABLE (Luca, 2026-11-02 11:00 UTC, card f5d25e90): one row per item,
+ * the columns Name | Quantity | Net unit price | Net total (the gross columns
+ * on a gross quote, and a gross total column more on a "both" quote). The name
+ * column is the same width on every quote, so a description wraps the same
+ * way whatever the price display.
+ */
 const NAME_X = LEFT + 4;
-const NAME_WIDTH = 336;
-const AMOUNT_X = LEFT + 353;
-const AMOUNT_WIDTH = RIGHT_EDGE - AMOUNT_X - 5;
+const NAME_WIDTH = 208;
+const ROW_HEIGHT = 12;
+const TABLE_HEAD_HEIGHT = 22;
+
+interface Column {
+  x: number;
+  width: number;
+  align: "left" | "right";
+}
+
+/** The right edges are the numbers' alignment: amounts line up on the digit. */
+function tableColumns(display: QuotePdfInput["priceDisplay"]): {
+  quantity: Column;
+  unit: Column;
+  total: Column;
+  grossTotal: Column | null;
+} {
+  if (display === "BOTH")
+    return {
+      quantity: { x: 258, width: 50, align: "left" },
+      unit: { x: 310, width: 72, align: "right" },
+      total: { x: 386, width: 80, align: "right" },
+      grossTotal: { x: 470, width: 76, align: "right" },
+    };
+  return {
+    quantity: { x: 266, width: 60, align: "left" },
+    unit: { x: 330, width: 100, align: "right" },
+    total: { x: 436, width: 110, align: "right" },
+    grossTotal: null,
+  };
+}
 
 const NAVY = "#163249";
 const TEAL = "#1d7085";
@@ -88,12 +123,14 @@ const LABELS = {
     net: "Nettó összeg",
     vat: "ÁFA",
     grossTotal: "BRUTTÓ VÉGÖSSZEG",
-    netTotal: "NETTÓ VÉGÖSSZEG",
     withoutOptions: "OPCIÓK NÉLKÜL",
-    netNote: "Az árak az ÁFA-t nem tartalmazzák.",
-    plusVat: "+ ÁFA",
+    itemName: "Tétel neve",
+    quantity: "Mennyiség",
+    netUnit: "Nettó egységár",
+    netTotalColumn: "Nettó összesen",
+    grossUnit: "Bruttó egységár",
+    grossTotalColumn: "Bruttó összesen",
     schedule: "Fizetési ütemezés",
-    netPrefix: "nettó",
     grossPrefix: "bruttó",
     address: ACROPORA_COMPANY.address,
   },
@@ -109,12 +146,14 @@ const LABELS = {
     net: "Net amount",
     vat: "VAT",
     grossTotal: "GROSS TOTAL",
-    netTotal: "NET TOTAL",
     withoutOptions: "WITHOUT OPTIONS",
-    netNote: "Prices exclude VAT.",
-    plusVat: "+ VAT",
+    itemName: "Item",
+    quantity: "Quantity",
+    netUnit: "Net unit price",
+    netTotalColumn: "Net total",
+    grossUnit: "Gross unit price",
+    grossTotalColumn: "Gross total",
     schedule: "Payment schedule",
-    netPrefix: "net",
     grossPrefix: "gross",
     address: "35 Pesti Gábor Street, H-1106 Budapest",
   },
@@ -281,8 +320,6 @@ const HEADING: TextStyle = { size: 11, color: TEAL, weight: "bold" };
 const PARAGRAPH: TextStyle = { size: 8.6, color: BODY };
 const ITEM_NAME: TextStyle = { size: 9.3, color: NAVY, weight: "bold" };
 const ITEM_DESCRIPTION: TextStyle = { size: 8.35, color: BODY };
-const ITEM_AMOUNT: TextStyle = { size: 10, color: NAVY, weight: "bold" };
-const ITEM_DETAIL: TextStyle = { size: 8, color: MUTED };
 const BAND: TextStyle = { size: 8, color: TEAL, weight: "bold" };
 const SUMMARY_LABEL: TextStyle = { size: 8.7, color: NAVY };
 const SUMMARY_VALUE: TextStyle = { size: 9, color: NAVY };
@@ -308,13 +345,13 @@ export function coverLayout(
   const logoBottom = top + acroporaLogoHeight(logoWidth);
   const tagline = top + 2;
   const title = tagline + 16;
-  const number = title + 30;
+  const number = title + 26;
   return {
     logoBottom,
     tagline,
     title,
     number,
-    rule: Math.max(number + 36, logoBottom + 20),
+    rule: Math.max(number + 30, logoBottom + 16),
   };
 }
 
@@ -333,23 +370,23 @@ function drawFirstHeader(
   text(doc, versionRef(input), textX, at.number, DOC_NUMBER, textWidth);
   rule(doc, at.rule);
 
-  let y = at.rule + 21;
+  let y = at.rule + 16;
   if (input.customer) {
     text(doc, labels.requester, LEFT, y, LABEL, CONTENT_WIDTH);
-    y += 18;
+    y += 14;
     const party = [input.customer.name, ...input.customer.lines].join("\n");
     text(doc, party, LEFT, y, PARTY, CONTENT_WIDTH);
-    y += measure(doc, party, PARTY, CONTENT_WIDTH) + 14;
+    y += measure(doc, party, PARTY, CONTENT_WIDTH) + 10;
   }
   text(doc, labels.subject, LEFT, y, LABEL, CONTENT_WIDTH);
-  y += 17;
+  y += 14;
   text(doc, input.title, LEFT, y, SUBJECT, CONTENT_WIDTH);
-  y += measure(doc, input.title, SUBJECT, CONTENT_WIDTH) + 24;
+  y += measure(doc, input.title, SUBJECT, CONTENT_WIDTH) + 14;
   const validity = `${labels.validUntil} ${formatQuoteLongDay(input.validUntil, input.language)}`;
   text(doc, validity, LEFT, y, VALIDITY, CONTENT_WIDTH);
-  y += measure(doc, validity, VALIDITY, CONTENT_WIDTH) + 15;
+  y += measure(doc, validity, VALIDITY, CONTENT_WIDTH) + 11;
   rule(doc, y);
-  flow.y = y + 19;
+  flow.y = y + 14;
 }
 
 function versionRef(input: QuotePdfInput) {
@@ -384,7 +421,7 @@ function headingHeight(
   title: string,
   style = HEADING,
 ): number {
-  return measure(doc, title.toUpperCase(), style, CONTENT_WIDTH) + 19;
+  return measure(doc, title.toUpperCase(), style, CONTENT_WIDTH) + 15;
 }
 
 function drawHeading(
@@ -397,7 +434,7 @@ function drawHeading(
   text(doc, upper, LEFT, flow.y, style, CONTENT_WIDTH);
   const ruleY = flow.y + measure(doc, upper, style, CONTENT_WIDTH) + 6;
   rule(doc, ruleY);
-  flow.y = ruleY + 13;
+  flow.y = ruleY + 9;
 }
 
 function paragraphHeight(
@@ -429,11 +466,7 @@ function drawParagraphs(
 function headHeight(doc: PDFKit.PDFDocument, block: QuotePdfBlock): number {
   const title = block.title ? headingHeight(doc, block.title) : 0;
   const first = block.items[0];
-  return title + (first ? itemHeadHeight(doc, first) : 0);
-}
-
-function itemHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
-  return Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), 30) + 10;
+  return title + (first ? TABLE_HEAD_HEIGHT + rowHeadHeight(doc, first) : 0);
 }
 
 /**
@@ -475,85 +508,147 @@ function drawText(doc: PDFKit.PDFDocument, flow: Flow, block: QuotePdfBlock) {
     drawHeading(doc, flow, block.title);
   }
   drawParagraphs(doc, flow, paragraphs, PARAGRAPH, LEFT, CONTENT_WIDTH);
-  flow.y += 14;
+  flow.y += 10;
 }
 
 /**
- * THE AMOUNT COLUMN OF AN ITEM (the brief, 2026-10-08): the line total in
- * bold; with "both" a second bold line; then, smaller, the multiplication when
- * the quantity is not 1 ("2 db × 85 000 Ft"), or only the unit ("1 db").
+ * ONE ROW OF THE ITEM TABLE: the name (bold) with its description under it,
+ * and on the name's first line the quantity with its unit, the unit price and
+ * the line total. The price columns say what they are in the header (net or
+ * gross), so the cells carry no "+ ÁFA" or "nettó" any more.
  */
-function amountLines(
+function rowCells(
   item: QuotePdfItem,
   input: QuotePdfInput,
-  labels: Labels,
   prefix: string,
-): Array<{ value: string; style: TextStyle }> {
+): {
+  quantity: string;
+  unit: string;
+  total: string;
+  grossTotal: string | null;
+} {
   const money = (v: Parameters<typeof formatQuoteMoney>[0]) =>
     formatQuoteMoney(v, input.currency);
-  const lines: Array<{ value: string; style: TextStyle }> = [];
-  if (input.priceDisplay === "BOTH") {
-    lines.push({
-      value: `${prefix}${labels.netPrefix} ${money(lineNet(item))}`,
-      style: ITEM_AMOUNT,
-    });
-    lines.push({
-      value: `${prefix}${labels.grossPrefix} ${money(lineGross(item))}`,
-      style: { ...ITEM_AMOUNT, size: 9 },
-    });
-  } else {
-    const amount =
-      input.priceDisplay === "GROSS" ? lineGross(item) : lineNet(item);
-    lines.push({ value: `${prefix}${money(amount)}`, style: ITEM_AMOUNT });
-  }
-  // the multiplication shows the unit price the total is made of
-  const unitPrice =
-    input.priceDisplay === "GROSS"
-      ? lineGross({ ...item, quantity: new Prisma.Decimal(1) })
-      : item.unitNetPrice;
-  lines.push({
-    value: item.quantity.eq(1)
-      ? `${formatQuantity(item.quantity)} ${item.unit}`
-      : `${formatQuantity(item.quantity)} ${item.unit} × ${money(unitPrice)}`,
-    style: ITEM_DETAIL,
-  });
-  return lines;
+  const gross = input.priceDisplay === "GROSS";
+  const unit = gross
+    ? lineGross({ ...item, quantity: new Prisma.Decimal(1) })
+    : item.unitNetPrice;
+  return {
+    quantity: `${formatQuantity(item.quantity)} ${item.unit}`,
+    unit: money(unit),
+    total: `${prefix}${money(gross ? lineGross(item) : lineNet(item))}`,
+    grossTotal:
+      input.priceDisplay === "BOTH"
+        ? `${prefix}${money(lineGross(item))}`
+        : null,
+  };
+}
+
+const HEAD_CELL: TextStyle = { size: 7.6, color: MUTED, weight: "bold" };
+const CELL: TextStyle = { size: 9, color: BODY };
+const CELL_TOTAL: TextStyle = { size: 9.3, color: NAVY, weight: "bold" };
+
+/** The column headers over the rows; they name net or gross, so every price says which. */
+function drawTableHead(
+  doc: PDFKit.PDFDocument,
+  flow: Flow,
+  input: QuotePdfInput,
+  labels: Labels,
+) {
+  const cols = tableColumns(input.priceDisplay);
+  const gross = input.priceDisplay === "GROSS";
+  const y = flow.y;
+  text(doc, labels.itemName, NAME_X, y, HEAD_CELL, NAME_WIDTH);
+  text(
+    doc,
+    labels.quantity,
+    cols.quantity.x,
+    y,
+    HEAD_CELL,
+    cols.quantity.width,
+  );
+  text(
+    doc,
+    gross ? labels.grossUnit : labels.netUnit,
+    cols.unit.x,
+    y,
+    HEAD_CELL,
+    cols.unit.width,
+    "right",
+  );
+  text(
+    doc,
+    gross ? labels.grossTotalColumn : labels.netTotalColumn,
+    cols.total.x,
+    y,
+    HEAD_CELL,
+    cols.total.width,
+    "right",
+  );
+  if (cols.grossTotal)
+    text(
+      doc,
+      labels.grossTotalColumn,
+      cols.grossTotal.x,
+      y,
+      HEAD_CELL,
+      cols.grossTotal.width,
+      "right",
+    );
+  rule(doc, y + 14);
+  flow.y = y + TABLE_HEAD_HEIGHT;
+}
+
+/** The height of a row's first line: what must stay together with the head and the next row. */
+function rowHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
+  return (
+    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) + 14
+  );
 }
 
 function drawItem(
   doc: PDFKit.PDFDocument,
   flow: Flow,
   input: QuotePdfInput,
-  labels: Labels,
   item: QuotePdfItem,
   prefix = "",
 ) {
-  const amounts = amountLines(item, input, labels, prefix);
-  const amountHeight = amounts.reduce(
-    (h, line) => h + measure(doc, line.value, line.style, AMOUNT_WIDTH) + 4,
-    0,
-  );
+  const cols = tableColumns(input.priceDisplay);
+  const cells = rowCells(item, input, prefix);
   const nameHeight = measure(doc, item.name, ITEM_NAME, NAME_WIDTH);
   const paragraphs = richTextParagraphs(item.description);
   const first = paragraphs[0];
-  // name and price together, with the first paragraph of the description
+  // the name and its prices together, with the first paragraph of the description
   flow.ensure(
-    Math.max(nameHeight + 9, amountHeight) +
+    Math.max(nameHeight, ROW_HEIGHT) +
       (first
         ? paragraphHeight(doc, first, ITEM_DESCRIPTION, NAME_WIDTH - 3)
         : 0),
   );
   const top = flow.y;
-  const topPage = flow.page;
   text(doc, item.name, NAME_X, top, ITEM_NAME, NAME_WIDTH);
-  let ay = top;
-  amounts.forEach((line, index) => {
-    text(doc, line.value, AMOUNT_X, ay, line.style, AMOUNT_WIDTH);
-    ay +=
-      measure(doc, line.value, line.style, AMOUNT_WIDTH) +
-      (index === 0 ? 6 : 4);
-  });
-  flow.y = top + nameHeight + 9;
+  text(doc, cells.quantity, cols.quantity.x, top, CELL, cols.quantity.width);
+  text(doc, cells.unit, cols.unit.x, top, CELL, cols.unit.width, "right");
+  text(
+    doc,
+    cells.total,
+    cols.total.x,
+    top,
+    CELL_TOTAL,
+    cols.total.width,
+    "right",
+  );
+  if (cols.grossTotal && cells.grossTotal)
+    text(
+      doc,
+      cells.grossTotal,
+      cols.grossTotal.x,
+      top,
+      CELL_TOTAL,
+      cols.grossTotal.width,
+      "right",
+    );
+  flow.y = top + Math.max(nameHeight, ROW_HEIGHT) + (first ? 3 : 0);
   // the description may continue on the next page, paragraph by paragraph
   drawParagraphs(
     doc,
@@ -563,12 +658,38 @@ function drawItem(
     NAME_X,
     NAME_WIDTH - 3,
   );
-  // the amount column can be the taller one, but only on the page it stands
-  // on: after the description ran on, the positions belong to another page
-  if (flow.page === topPage && flow.y < ay) flow.y = ay;
-  const ruleY = flow.y + 11;
+  const ruleY = flow.y + 5;
   rule(doc, ruleY);
-  flow.y = ruleY + 13;
+  flow.y = ruleY + 8;
+}
+
+/**
+ * THE ROWS OF A TABLE, with the head over the first one and again at the top
+ * of every page the rows run onto (a continued table without its head is a
+ * column of unlabelled numbers).
+ */
+function drawTable(
+  doc: PDFKit.PDFDocument,
+  flow: Flow,
+  input: QuotePdfInput,
+  labels: Labels,
+  items: QuotePdfItem[],
+  prefixOf: (item: QuotePdfItem) => string,
+) {
+  if (!items.length) return;
+  flow.ensure(TABLE_HEAD_HEIGHT + rowHeadHeight(doc, items[0]!));
+  drawTableHead(doc, flow, input, labels);
+  let headPage = flow.page;
+  for (const item of items) {
+    flow.ensure(rowHeadHeight(doc, item));
+    if (flow.page !== headPage) {
+      drawTableHead(doc, flow, input, labels);
+      headPage = flow.page;
+    }
+    drawItem(doc, flow, input, item, prefixOf(item));
+    // a description that ran onto the next page leaves the cursor there: the
+    // next row finds `flow.page` past `headPage` and draws the head first
+  }
 }
 
 function drawSection(
@@ -589,16 +710,17 @@ function drawSection(
         (h, p) => h + paragraphHeight(doc, p, PARAGRAPH, CONTENT_WIDTH),
         0,
       ) +
-      (first ? itemHeadHeight(doc, first) : 0),
+      (first ? TABLE_HEAD_HEIGHT + rowHeadHeight(doc, first) : 0),
   );
   drawHeading(doc, flow, title);
   if (intro.length) {
     drawParagraphs(doc, flow, intro, PARAGRAPH, LEFT, CONTENT_WIDTH);
-    flow.y += 6;
+    flow.y += 4;
   }
-  for (const item of block.items)
-    drawItem(doc, flow, input, labels, item, item.isOptional ? "+" : "");
-  flow.y += 10;
+  drawTable(doc, flow, input, labels, block.items, (item) =>
+    item.isOptional ? "+" : "",
+  );
+  flow.y += 6;
 }
 
 const BAND_HEIGHT = 25;
@@ -612,26 +734,19 @@ function drawOptions(
 ) {
   const title = block.title ?? labels.options;
   const itemHeight = (item: QuotePdfItem) =>
-    Math.max(
-      measure(doc, item.name, ITEM_NAME, NAME_WIDTH) +
-        9 +
-        richTextParagraphs(item.description).reduce(
-          (h, p) =>
-            h + paragraphHeight(doc, p, ITEM_DESCRIPTION, NAME_WIDTH - 3),
-          0,
-        ),
-      amountLines(item, input, labels, "").reduce(
-        (h, line) => h + measure(doc, line.value, line.style, AMOUNT_WIDTH) + 5,
-        0,
-      ),
-    ) + 24;
-  const head = headingHeight(doc, title) + BAND_HEIGHT + 11;
+    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) +
+    richTextParagraphs(item.description).reduce(
+      (h, p) => h + paragraphHeight(doc, p, ITEM_DESCRIPTION, NAME_WIDTH - 3),
+      0,
+    ) +
+    13;
+  const head = headingHeight(doc, title) + BAND_HEIGHT + 9 + TABLE_HEAD_HEIGHT;
   const total = head + block.items.reduce((h, item) => h + itemHeight(item), 0);
   // the whole block together when it fits on one page
   if (total <= BOTTOM - CONTINUATION_TOP) flow.ensure(total);
   else
     flow.ensure(
-      head + (block.items[0] ? itemHeadHeight(doc, block.items[0]) : 0),
+      head + (block.items[0] ? rowHeadHeight(doc, block.items[0]) : 0),
     );
   drawHeading(doc, flow, title);
   doc
@@ -646,19 +761,22 @@ function drawOptions(
     BAND,
     CONTENT_WIDTH - 22,
   );
-  flow.y += BAND_HEIGHT + 11;
-  for (const item of block.items) drawItem(doc, flow, input, labels, item);
-  flow.y += 10;
+  flow.y += BAND_HEIGHT + 9;
+  drawTable(doc, flow, input, labels, block.items, () => "");
+  flow.y += 6;
 }
 
-const SUMMARY_ROW = 27;
-const SUMMARY_PAD = 12;
+const SUMMARY_ROW = 19;
+const SUMMARY_PAD = 10;
 
 /**
- * THE SUMMARY (Figma 18:19): the net amount, the VAT of each rate that occurs,
- * and the total; "without options" only when the quote has options. The box
- * ends where its last row ends (the brief: no empty space at the bottom, a
- * fault of the Figma frame). It never breaks.
+ * THE SUMMARY (Figma 18:19, Luca 2026-11-02): the net amount, the VAT of each
+ * rate that occurs, each on its own row, and the gross total under them, on
+ * every quote whatever the price display (a net quote used to end on "net +
+ * ÁFA" alone; Luca asked for the three amounts, the net table columns now say
+ * which prices are net). "Without options" only when the quote has options.
+ * The box ends where its last row ends (the brief: no empty space at the
+ * bottom, a fault of the Figma frame). It never breaks.
  */
 function drawSummary(
   doc: PDFKit.PDFDocument,
@@ -673,54 +791,42 @@ function drawSummary(
   );
   const money = (v: Parameters<typeof formatQuoteMoney>[0]) =>
     formatQuoteMoney(v, input.currency);
-  const net = input.priceDisplay === "NET";
-  const rows: Array<[string, string]> = net
-    ? []
-    : [
-        [labels.net, money(totals.net)],
-        ...vatByRate(input.blocks).map((r): [string, string] => [
-          `${labels.vat} ${r.rate.toString().replace(".", ",")}%`,
-          money(r.vat),
-        ]),
-      ];
-  const totalLabel = `${net ? labels.netTotal : labels.grossTotal}${hasOptions ? ` · ${labels.withoutOptions}` : ""}`;
-  // a net-only quote reads "1 400 000 Ft + ÁFA": the buyer sees what is still to come
-  const totalValue = net
-    ? `${money(totals.net)} ${labels.plusVat}`
-    : money(totals.gross);
+  const rows: Array<[string, string]> = [
+    [labels.net, money(totals.net)],
+    ...vatByRate(input.blocks).map((r): [string, string] => [
+      `${labels.vat} ${r.rate.toString().replace(".", ",")}%`,
+      money(r.vat),
+    ]),
+  ];
+  const totalLabel = `${labels.grossTotal}${hasOptions ? ` · ${labels.withoutOptions}` : ""}`;
+  const totalValue = money(totals.gross);
   const boxHeight =
     SUMMARY_PAD +
     rows.length * SUMMARY_ROW +
     measure(doc, totalValue, TOTAL_VALUE, 156) +
     SUMMARY_PAD;
-  const note = net ? labels.netNote : null;
   const heading = headingHeight(doc, title ?? labels.summary);
   // the summary never breaks
-  flow.ensure(heading + boxHeight + (note ? 18 : 0));
+  flow.ensure(heading + boxHeight);
   drawHeading(doc, flow, title ?? labels.summary);
   const top = flow.y;
   doc.roundedRect(LEFT, top, CONTENT_WIDTH, boxHeight, 4).fillColor(BOX).fill();
   const labelX = LEFT + 14;
-  const valueX = LEFT + 340;
+  const valueX = LEFT + 330;
   let y = top + SUMMARY_PAD;
   for (const [label, value] of rows) {
     text(doc, label, labelX, y, SUMMARY_LABEL, 300);
-    text(doc, value, valueX, y, SUMMARY_VALUE, 156);
+    text(doc, value, valueX, y, SUMMARY_VALUE, 156, "right");
     y += SUMMARY_ROW;
   }
   text(doc, totalLabel, labelX, y + 1, TOTAL_LABEL, 320);
-  text(doc, totalValue, valueX, y - 1, TOTAL_VALUE, 156);
-  flow.y = top + boxHeight;
-  if (note) {
-    text(doc, note, LEFT, flow.y + 6, ITEM_DETAIL, CONTENT_WIDTH);
-    flow.y += 18;
-  }
-  flow.y += 27;
+  text(doc, totalValue, valueX, y - 1, TOTAL_VALUE, 156, "right");
+  flow.y = top + boxHeight + 20;
 }
 
 /**
  * THE PAYMENT SCHEDULE (Figma 18:29): each milestone with its amount, the
- * share of the total the summary shows (gross, or net on a net quote).
+ * share of the total the summary shows (the gross total).
  */
 function drawMilestones(
   doc: PDFKit.PDFDocument,
@@ -730,24 +836,25 @@ function drawMilestones(
 ) {
   if (!input.milestones.length) return;
   const totals = quoteTotals(input.blocks);
-  const base = input.priceDisplay === "NET" ? totals.net : totals.gross;
+  const base = totals.gross;
   const rows = input.milestones.map((m) => ({
     label: `${m.label} ${m.percent.toString().replace(".", ",")}%`,
-    value: formatQuoteMoney(
+    // the amount says it is gross, like every other price of the PDF (barracuda, #1999)
+    value: `${labels.grossPrefix} ${formatQuoteMoney(
       base.times(m.percent).dividedBy(100),
       input.currency,
-    ),
+    )}`,
   }));
   flow.ensure(
-    headingHeight(doc, labels.schedule, SCHEDULE_HEADING) + rows.length * 30,
+    headingHeight(doc, labels.schedule, SCHEDULE_HEADING) + rows.length * 24,
   );
   drawHeading(doc, flow, labels.schedule, SCHEDULE_HEADING);
   for (const row of rows) {
     text(doc, row.label, LEFT + 6, flow.y, SCHEDULE_LABEL, 335);
     text(doc, row.value, LEFT + 365, flow.y, SCHEDULE_VALUE, 135);
-    flow.y += 30;
+    flow.y += 24;
   }
-  flow.y += 14;
+  flow.y += 10;
 }
 
 /** Figma "PDF / Lábléc / általános" (3:13). */
