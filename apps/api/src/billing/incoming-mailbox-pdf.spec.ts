@@ -33,6 +33,7 @@ const pairing = (
   kind: "INVOICE",
   debits: [{ bookingDate: "2026-09-12", amount: "8890", currency: "HUF" }],
   paidInFull: true,
+  paperOriginal: false,
   document: {
     id: "mail-1",
     source: "MAILBOX",

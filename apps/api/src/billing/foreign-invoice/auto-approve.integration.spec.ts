@@ -68,6 +68,7 @@ const pairing = (
   payee: "COMPANY",
   kind: "INVOICE",
   paidInFull: true,
+  paperOriginal: false,
   debits: [{ bookingDate: "2026-09-22", amount: `-${debit}`, currency: "HUF" }],
   document: document(id, number, gross),
 });
