@@ -831,7 +831,8 @@ describe("MissingInvoicesMonthPage", () => {
     elutasított mentés is bezárná a drawert, és a hibaüzenet elveszne.
   */
   it("the note's Mentés closes the drawer; the list reloads with its own tab, search, category, account and page", async () => {
-    const query = "tab=ALL&q=openai&category=CARD_SUBSCRIPTION&accountId=acc-1&page=2";
+    const query =
+      "tab=ALL&q=openai&category=CARD_SUBSCRIPTION&accountId=acc-1&page=2";
     urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", query);
     api.comment.mockResolvedValue(itemDetail({ comment: "Kérve e-mailben" }));
     render(<MissingInvoicesMonthPage month="2026-08" />);
@@ -844,7 +845,11 @@ describe("MissingInvoicesMonthPage", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(api.comment).toHaveBeenCalledWith("token-1", "debit-1", "Kérve e-mailben");
+    expect(api.comment).toHaveBeenCalledWith(
+      "token-1",
+      "debit-1",
+      "Kérve e-mailben",
+    );
     expect(api.month.mock.calls.length).toBeGreaterThan(monthCalls);
     expect(api.month.mock.calls.at(-1)?.[2]).toMatchObject({
       tab: "ALL",
