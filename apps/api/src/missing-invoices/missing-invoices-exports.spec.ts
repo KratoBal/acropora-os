@@ -610,6 +610,7 @@ describe("the accountant package by fulfilment month", () => {
     currency: "HUF",
     issueDate: new Date("2026-10-22T00:00:00Z"),
     fulfillmentDate: new Date("2026-10-22T00:00:00Z"),
+    paperOriginalAt: null,
     pdfIds: [`src-${overrides.id}`],
     ...overrides,
   });
@@ -815,6 +816,24 @@ describe("the accountant package by fulfilment month", () => {
     assert.ok(!september.cover.includes("4042A0000031808"), september.cover);
     const october = await coverOf(input, "2026-10");
     assert.ok(october.cover.includes("sztornózott vásárlás"), october.cover);
+  });
+
+  it("an UNPAID invoice marked paper-original on its own row: no PDF in the package, papíron megvan, not PDF hiányzik", async () => {
+    const { pages, cover } = await coverOf({
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({
+          id: "paper",
+          documentNumber: "KS26/00099",
+          paperOriginalAt: new Date("2026-10-23T00:00:00Z"),
+        }),
+      ],
+      files: { "src-paper": await pdfOfPages(3) },
+    });
+    assert.equal(pages, 1);
+    assert.ok(cover.includes("KS26/00099: papíron megvan"), cover);
+    assert.ok(!cover.includes("PDF hiányzik"), cover);
   });
 
   it("a cancelled purchase keeps original and credit note in one row, and the row's own copy is not added a second time", async () => {

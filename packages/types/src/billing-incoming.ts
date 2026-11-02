@@ -288,6 +288,20 @@ export interface IncomingDocumentListItem {
    */
   notBookable: boolean;
   /**
+   * „PAPÍRON MEGVAN” (Balázs, 2026-11-02): a számlát papíron is megkapjuk, a
+   * PDF-je nem kerül a könyvelői csomagba, a borítón „papíron megvan” áll.
+   * IGAZ, ha a sort itt jelölték (`paperOriginalMarkedHere`), VAGY a számla
+   * párosított banki terhelését a Hiányzó számlák során jelölték: ugyanaz az
+   * adat, két helyről állítható.
+   */
+  paperOriginal: boolean;
+  /**
+   * A jelölés ITT, a soron áll (kikapcsolható). Hamis, ha csak a párosított
+   * terhelésen áll: azt a Hiányzó számlák során kell visszavonni. Csak a
+   * táblába írt soron jelölhető (a `mailbox:` és `purchase:` előtagún nem).
+   */
+  paperOriginalMarkedHere: boolean;
+  /**
    * Letölthető-e a számla PDF-je: a Számlázz.hu küldte, vagy a begyűjtés hozta
    * (számlaszám és szállítói adószám-törzs szerint párosítva).
    */

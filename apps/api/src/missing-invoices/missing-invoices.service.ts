@@ -131,6 +131,11 @@ export interface DocumentPairing {
    */
   paidInFull: boolean;
   /**
+   * A párosított terhelések valamelyikén „Papíron megvan” jelölés áll (#2000):
+   * a számla bejövő számla sora ezt örökli.
+   */
+  paperOriginal: boolean;
+  /**
    * A párosított dokumentum maga (aliasaival). A „Bejövő számlák” ebből
    * mutatja a feedben NEM szereplő, csak postafiókból ismert számlát
    * (kártya 096607af, acrobot 26716).
@@ -379,6 +384,7 @@ export class MissingInvoicesService {
         kind: document.kind,
         debits: [],
         paidInFull: false,
+        paperOriginal: false,
         document,
       };
       for (const id of ids) result.set(id, pairing);
@@ -394,6 +400,7 @@ export class MissingInvoicesService {
         const pairing = entry(document);
         pairing.paidInFull =
           (pairing.debits.length === 0 || pairing.paidInFull) && inFull;
+        pairing.paperOriginal = pairing.paperOriginal || item.paperOriginal;
         pairing.debits.push({
           bookingDate: item.bookingDate,
           amount: item.amount,
@@ -916,6 +923,7 @@ export class MissingInvoicesService {
         }),
     );
     const paperRow = (row: (typeof rows)[number]) =>
+      row.paperOriginalAt !== null ||
       Boolean(
         row.sourceDocumentId && paperDocumentIds.has(row.sourceDocumentId),
       );

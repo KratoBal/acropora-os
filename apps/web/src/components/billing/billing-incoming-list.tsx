@@ -171,6 +171,15 @@ export const INCOMING_COLUMNS: readonly PilotTableColumn<IncomingDocumentListIte
               currency={item.currency}
             />
           )}
+          {/* „Papíron megvan” (Balázs, 2026-11-02): a PDF nem kerül a csomagba */}
+          {item.paperOriginal ? (
+            <span
+              className="text-xs font-semibold text-pilot-grey-600"
+              data-testid="paper-original-badge"
+            >
+              Papíron megvan
+            </span>
+          ) : null}
         </span>
       ),
     },
