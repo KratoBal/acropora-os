@@ -466,8 +466,8 @@ describe("Tervezet törlése és másolat (5937bdf2)", () => {
     api.detail.mockResolvedValue(draftOnly());
     api.deleteDraft.mockRejectedValue(
       new ApiError(
-        409,
         "Küldött vagy elfogadásra kiadott ajánlat nem törölhető; lemondható.",
+        409,
       ),
     );
     render(<QuoteDetailPage quoteId="q1" />);
