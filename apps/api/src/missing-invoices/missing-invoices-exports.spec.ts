@@ -773,6 +773,50 @@ describe("the accountant package by fulfilment month", () => {
     assert.ok(!cover.includes("PDF hiányzik"), cover);
   });
 
+  it("a cancelled purchase's original fulfilled in September and refunded in October is in the October refund row only", async () => {
+    const input = {
+      debits: [
+        debit("2026-10-21", 85000, "Tesla Inc", {
+          narrative: "2026.10.17 7413124583 Tesla Inc -APPLE",
+        }),
+      ],
+      documents: [
+        document({
+          id: "nav-orig",
+          source: "NAV",
+          number: "4042A0000031808",
+          date: "2026-10-17",
+          gross: D(0),
+          supplierName: "Tesla Hungary Kft.",
+          hasOriginal: false,
+        }),
+        document({
+          id: "cr",
+          number: "CR4042A0000012507",
+          date: "2026-10-18",
+          gross: D(-85000),
+          supplierName: "Tesla Hungary Kft.",
+        }),
+      ],
+      billing: [
+        billingRow({
+          id: "orig",
+          documentNumber: "4042A0000031808",
+          sourceDocumentId: "nav-orig",
+          grossAmount: D(0),
+          supplierName: "Tesla Hungary Kft.",
+          issueDate: new Date("2026-09-30T00:00:00Z"),
+          fulfillmentDate: new Date("2026-09-30T00:00:00Z"),
+        }),
+      ],
+      files: { cr: await pdfOfPages(1) },
+    };
+    const september = await coverOf(input, "2026-09");
+    assert.ok(!september.cover.includes("4042A0000031808"), september.cover);
+    const october = await coverOf(input, "2026-10");
+    assert.ok(october.cover.includes("sztornózott vásárlás"), october.cover);
+  });
+
   it("a cancelled purchase keeps original and credit note in one row, and the row's own copy is not added a second time", async () => {
     const { pages, cover } = await coverOf(
       {
