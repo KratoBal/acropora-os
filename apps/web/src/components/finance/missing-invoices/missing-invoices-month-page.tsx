@@ -5,6 +5,8 @@ import {
   PERMISSIONS,
   type BankStatementImportResult,
   type MissingInvoiceDuplicateItem,
+  type MissingInvoiceSortDirection,
+  type MissingInvoiceSortField,
 } from "@acropora/types";
 import { ConfirmDialog, Icon } from "@acropora/ui";
 import Link from "next/link";
@@ -32,6 +34,7 @@ import { MissingInvoicesImportResult } from "./missing-invoices-import-result";
 import {
   CHARGE_TABS,
   FILTER_CATEGORIES,
+  SORT_FIELD_OF_COLUMN,
   type ChargeCategory,
   type ChargeRow,
   type ChargeTab,
@@ -95,6 +98,20 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   );
   const accountId = params.get("accountId") ?? "";
   const page = urlPage(params);
+  // A RENDEZÉS AZ URL-BEN ÁLL (mint a szűrők): a frissítés és a visszalépés megtartja,
+  // és a szerver rendez, a lapozás előtt (missing-invoice-sort.ts). Egyszerre egy oszlop.
+  const sortField = urlChoice<MissingInvoiceSortField | "">(
+    params,
+    "sort",
+    ["", ...Object.values(SORT_FIELD_OF_COLUMN)],
+    "",
+  );
+  const sortDirection = urlChoice<MissingInvoiceSortDirection>(
+    params,
+    "direction",
+    ["asc", "desc"],
+    "asc",
+  );
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
 
@@ -150,6 +167,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
               accountId,
               page,
               pageSize: PAGE_SIZE,
+              ...(sortField
+                ? { sort: sortField, direction: sortDirection }
+                : {}),
             },
             signal,
           ),
@@ -164,7 +184,17 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         );
       }
     },
-    [accountId, appliedSearch, category, month, page, tab, token],
+    [
+      accountId,
+      appliedSearch,
+      category,
+      month,
+      page,
+      sortDirection,
+      sortField,
+      tab,
+      token,
+    ],
   );
 
   useEffect(() => {
@@ -192,6 +222,19 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     if (patch.category !== undefined) next.category = patch.category || null;
     if (patch.accountId !== undefined) next.accountId = patch.accountId || null;
     if (Object.keys(next).length > 0) update({ ...next, page: null });
+  };
+
+  /**
+   * A FEJLÉCRE KATTINTÁS: az új oszlop növekvőben indul, ugyanarra a másodikra
+   * csökkenőre fordul, a harmadik újra növekvő. Rendezéskor az 1. oldal jön (a
+   * 3. oldalon állva az új sorrend 3. oldala nem az, amit a felhasználó várna).
+   */
+  const sortBy = (columnId: string) => {
+    const field = SORT_FIELD_OF_COLUMN[columnId];
+    if (!field) return;
+    const direction =
+      sortField === field && sortDirection === "asc" ? "desc" : "asc";
+    update({ sort: field, direction, page: null });
   };
 
   const applyItem = (item: MissingInvoiceItemDetail) => {
@@ -433,6 +476,8 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         pageSize={detail?.pagination.pageSize ?? PAGE_SIZE}
         totalPages={detail?.pagination.totalPages ?? 1}
         onPage={(next) => update({ page: next === 1 ? null : String(next) })}
+        sort={sortField ? { id: sortField, direction: sortDirection } : null}
+        onSort={sortBy}
         onOpenRow={openRow}
         error={error}
         onRetry={() => void load()}

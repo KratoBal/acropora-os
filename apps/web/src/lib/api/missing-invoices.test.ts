@@ -133,3 +133,47 @@ describe("missingInvoicesApi.markPayee", () => {
     expect(JSON.parse(String(init.body))).toEqual({ payee: "COMPANY" });
   });
 });
+
+/**
+ * A RENDEZÉS A KÉRÉSBEN (Balázs, 2026-11-02 12:49 UTC). MI PIROSÍT: ha a rendezés
+ * nem menne a szervernek (a lista lapozott: a szerver rendez); ha rendezés nélkül
+ * is menne `sort`; ha az irány nélküli rendezés nem növekvőt kérne.
+ */
+describe("missingInvoicesApi.month sort parameters", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const urlOf = async (extra: object) => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await missingInvoicesApi.month("token-1", "2026-08", {
+      tab: "ALL",
+      q: "",
+      category: "",
+      accountId: "",
+      page: 3,
+      pageSize: 25,
+      ...extra,
+    });
+    return new URL((fetchMock.mock.calls[0] as [string])[0], "http://localhost")
+      .searchParams;
+  };
+
+  it("sends the sort and its direction next to the page", async () => {
+    const params = await urlOf({ sort: "amount", direction: "desc" });
+    expect(params.get("sort")).toBe("amount");
+    expect(params.get("direction")).toBe("desc");
+    expect(params.get("page")).toBe("3");
+  });
+
+  it("a sort without a direction asks for ascending; no sort sends neither", async () => {
+    expect((await urlOf({ sort: "date" })).get("direction")).toBe("asc");
+    const plain = await urlOf({});
+    expect(plain.has("sort")).toBe(false);
+    expect(plain.has("direction")).toBe(false);
+  });
+});

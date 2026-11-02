@@ -114,7 +114,7 @@ export {
   PilotVariableChips,
   PilotTotals,
 } from "./pilot-os";
-export type { PilotTableColumn } from "./pilot-os";
+export type { PilotTableColumn, PilotTableSort } from "./pilot-os";
 export {
   brandMonogram,
   categoryGroupIcon,

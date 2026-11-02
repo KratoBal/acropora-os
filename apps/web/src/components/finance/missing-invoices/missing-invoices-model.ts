@@ -5,10 +5,12 @@ import type {
   MissingInvoiceDocumentSource,
   MissingInvoiceItemState,
   MissingInvoiceMonthStatus,
+  MissingInvoiceSortField,
   MissingInvoiceTab,
 } from "@acropora/types";
 import {
   MISSING_INVOICE_CATEGORY_LABELS,
+  MISSING_INVOICE_SOURCE_LABELS,
   MISSING_INVOICE_STATE_LABELS,
 } from "@acropora/types";
 import type { PilotBadgeVariant } from "@acropora/ui";
@@ -152,14 +154,24 @@ export const MONTH_STATE_BADGES: Record<MonthState, PilotBadgeVariant> = {
   STATEMENT_PARTIAL: "grey",
 };
 
-export const INVOICE_SOURCE_LABELS: Record<InvoiceSource, string> = {
-  NAV: "NAV",
-  MAILBOX: "Postafiók",
-  UPLOAD: "Feltöltés",
-  DRIVE: "Drive",
-  SETTLEMENT: "Elszámolás",
-  PREMIUM_NOTICE: "Díjértesítő",
-  SZAMLAZZ: "Számlázz.hu",
+export const INVOICE_SOURCE_LABELS: Readonly<Record<InvoiceSource, string>> =
+  MISSING_INVOICE_SOURCE_LABELS;
+
+/**
+ * A RENDEZHETŐ OSZLOPOK (Balázs, 2026-11-02 12:49 UTC): minden adat-oszlop, a
+ * táblázat oszlop-azonosítójával, a szerver rendezési mezőjére képezve. A
+ * „Művelet” oszlop (…) nem rendezhető.
+ */
+export const SORT_FIELD_OF_COLUMN: Readonly<
+  Record<string, MissingInvoiceSortField>
+> = {
+  date: "date",
+  partner: "partner",
+  category: "category",
+  amount: "amount",
+  invoice: "invoice",
+  source: "source",
+  state: "state",
 };
 
 /** A kategória felirata, szintén a közös helyről (nautilus #1308). */
