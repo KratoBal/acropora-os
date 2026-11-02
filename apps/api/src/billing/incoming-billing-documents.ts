@@ -250,11 +250,7 @@ export function toIncomingListItem(
     ),
     bankMatch,
     notBookable: row.notBookable,
-    paperOriginal:
-      row.paperOriginalAt !== null ||
-      (row.sourceDocumentId
-        ? (pairings.get(row.sourceDocumentId)?.paperOriginal ?? false)
-        : false),
+    paperOriginal: paperOriginalOfRow(row, pairings),
     paperOriginalMarkedHere: row.paperOriginalAt !== null,
     hasPdf: row.hasPdf || collectedPdf,
   };
@@ -268,6 +264,43 @@ const MAILBOX_ONLY_SOURCES: ReadonlySet<string> = new Set([
 ]);
 const compactNumber = (value: string) =>
   value.replace(/[\s/_-]/g, "").toLowerCase();
+
+/**
+ * A PÁROSÍTÁSOK TÉRKÉPÉNEK SZÁM SZERINTI KULCSA: a „Papíron megvan” jelölés a
+ * terhelésen áll, a bejövő számla sora pedig akkor is ugyanaz a számla, ha a
+ * terheléshez nem az ő forrás-dokumentuma, hanem a postafiókos példánya van
+ * párosítva (más azonosító, ugyanaz a szám). Az előtag miatt nem ütközhet
+ * dokumentum-azonosítóval.
+ */
+const PAIRING_NUMBER_PREFIX = "number:";
+export function pairingNumberKey(documentNumber: string): string | null {
+  const compact = compactNumber(documentNumber);
+  return compact ? `${PAIRING_NUMBER_PREFIX}${compact}` : null;
+}
+
+/**
+ * „PAPÍRON MEGVAN” EGY BEJÖVŐ SZÁMLA-SORRA: a soron tett jelölés VAGY a
+ * párosított terhelésen tett (a sor forrás-dokumentuma szerint, ennek
+ * hiányában a szám szerint). A lista és a könyvelői csomag EZT a döntést
+ * használja (MMXH két számlája, Balázs 2026-11-03 00:03 UTC: a terhelésen
+ * bejelölt jelölés nem jutott el a számla sorához).
+ */
+export function paperOriginalOfRow(
+  row: Pick<
+    IncomingBillingDocument,
+    "paperOriginalAt" | "sourceDocumentId" | "documentNumber"
+  >,
+  pairings: ReadonlyMap<string, Pick<DocumentPairing, "paperOriginal">>,
+): boolean {
+  if (row.paperOriginalAt !== null) return true;
+  if (
+    row.sourceDocumentId &&
+    pairings.get(row.sourceDocumentId)?.paperOriginal
+  )
+    return true;
+  const key = pairingNumberKey(row.documentNumber);
+  return key ? (pairings.get(key)?.paperOriginal ?? false) : false;
+}
 
 /**
  * A CSAK POSTAFIÓKBÓL ISMERT, FIZETETT SZÁMLÁK SORAI (kártya 096607af;

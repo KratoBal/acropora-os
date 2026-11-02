@@ -816,6 +816,33 @@ describe("the accountant package by fulfilment month", () => {
     assert.ok(!cover.includes("PDF hiányzik"), cover);
   });
 
+  it("the paper mark on the DEBIT reaches the invoice row when the debit is paired to the mailbox copy (another id, same number): papíron megvan, not nem PDF", async () => {
+    // MMXH alakja (Balázs, 2026-11-03 00:03 UTC): a terhelés a postafiókos
+    // példányhoz van párosítva, a sor saját forrás-dokumentuma (src-fluidra)
+    // egy nem PDF fájl, és a borító „nem PDF, nincs benne”-t írt
+    const { pages, cover } = await coverOf({
+      debits: [
+        debit("2026-10-05", 56420, "Fluidra Magyarország Kft.", {
+          paperOriginalAt: new Date("2026-10-06T00:00:00Z"),
+        }),
+      ],
+      documents: [
+        document({
+          id: "mb-f",
+          number: "KS 26/12407",
+          date: "2026-10-22",
+          gross: D(56420),
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      billing: [billingRow({ id: "fluidra", documentNumber: "KS26/12407" })],
+      files: { "src-fluidra": new TextEncoder().encode("<Szamla/>") },
+    });
+    assert.equal(pages, 1);
+    assert.ok(cover.includes("KS26/12407: papíron megvan"), cover);
+    assert.ok(!cover.includes("nem PDF"), cover);
+  });
+
   it("a cancelled purchase's original fulfilled in September and refunded in October is in the October refund row only", async () => {
     const input = {
       debits: [

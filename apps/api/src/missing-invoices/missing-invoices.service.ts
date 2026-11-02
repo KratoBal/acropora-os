@@ -55,6 +55,8 @@ import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
 import {
   inFeedTest,
   notInFeedTest,
+  paperOriginalOfRow,
+  pairingNumberKey,
 } from "../billing/incoming-billing-documents.js";
 import {
   packageDataNote,
@@ -388,6 +390,11 @@ export class MissingInvoicesService {
         document,
       };
       for (const id of ids) result.set(id, pairing);
+      // a bejövő számla sora szám szerint is megtalálja (paperOriginalOfRow)
+      const numberKey = document.number
+        ? pairingNumberKey(document.number)
+        : null;
+      if (numberKey && !result.has(numberKey)) result.set(numberKey, pairing);
       return pairing;
     };
     for (const document of computed.documents) entry(document);
@@ -895,11 +902,17 @@ export class MissingInvoicesService {
 
     // a papíron megvan jelölés a párosított terhelésen áll (#2000); a bejövő
     // számla sora a feed dokumentumán keresztül találja meg
-    const paperDocumentIds = new Set(
-      computed.items
-        .filter((item) => item.paperOriginal)
-        .flatMap((item) => documentsOfItem(item.id).flatMap(idsOf)),
-    );
+    // ugyanaz a döntés, mint a Bejövő számlák listán (`paperOriginalOfRow`): a
+    // sor forrás-dokumentuma szerint, ennek hiányában a szám szerint
+    const paperPairings = new Map<string, { paperOriginal: boolean }>();
+    for (const item of computed.items.filter((i) => i.paperOriginal))
+      for (const paperDocument of documentsOfItem(item.id)) {
+        const numberKey = paperDocument.number
+          ? pairingNumberKey(paperDocument.number)
+          : null;
+        for (const key of [...idsOf(paperDocument), numberKey])
+          if (key) paperPairings.set(key, { paperOriginal: true });
+      }
 
     const bankEntries = [
       ...refundItems.map((item) => ({
@@ -924,10 +937,7 @@ export class MissingInvoicesService {
         }),
     );
     const paperRow = (row: (typeof rows)[number]) =>
-      row.paperOriginalAt !== null ||
-      Boolean(
-        row.sourceDocumentId && paperDocumentIds.has(row.sourceDocumentId),
-      );
+      paperOriginalOfRow(row, paperPairings);
 
     // a papíron megvan számla fájlját nem is kérjük le: nem kerül a csomagba
     const files = await this.repository.originals([
