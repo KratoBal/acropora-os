@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type {
   BillingExternalDocumentDetail,
   Session,
@@ -10,7 +10,7 @@ import { BillingExternalDocumentPage } from "./billing-external-document-page";
 
 /**
  * A SZÁMLÁZZ.HU-BÓL KAPOTT KÜLSŐ BIZONYLAT ADATLAPJA (acrobot 25812): ugyanaz a
- * kinézet, csak olvasásra, PDF nélkül.
+ * kinézet, csak olvasásra; a PDF akkor nyitható, ha a letöltés eltárolta.
  */
 vi.mock("next/font/local", () => ({
   default: () => ({ className: "pilot-inter-stub" }),
@@ -21,7 +21,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const api = vi.hoisted(() => ({ externalDetail: vi.fn() }));
+const api = vi.hoisted(() => ({
+  externalDetail: vi.fn(),
+  externalPdf: vi.fn(),
+}));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
@@ -209,6 +212,42 @@ describe("BillingExternalDocumentPage", () => {
         "A név a webshop-rendelésből; a számlán a NAV elrejti.",
       ),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * MI PIROSÍT: ha a tájékoztató sáv a tárolt PDF-től függetlenül azt írná, hogy
+   * „PDF sincs hozzá” (ACRW-2026/00547: a havi kimenő csomagban benne volt), vagy
+   * ha a PDF-es soron nem lehetne megnyitni a fájlt.
+   */
+  it("does not deny a stored PDF, and opens it", async () => {
+    api.externalDetail.mockResolvedValue(detail({ pdfAvailable: true }));
+    api.externalPdf.mockResolvedValue(new Blob(["%PDF-"]));
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    URL.createObjectURL = vi.fn(() => "blob:pdf");
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(
+      await screen.findByText(
+        "Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/PDF sincs/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "PDF megnyitása" }));
+    await waitFor(() =>
+      expect(open).toHaveBeenCalledWith("blob:pdf", "_blank"),
+    );
+    expect(api.externalPdf).toHaveBeenCalledWith("token-1", "ext-1");
+    open.mockRestore();
+  });
+
+  it("keeps saying there is no PDF when none is stored", async () => {
+    api.externalDetail.mockResolvedValue(detail({ pdfAvailable: false }));
+    render(<BillingExternalDocumentPage documentId="ext-1" />);
+    expect(
+      await screen.findByText(
+        "Ez a számla egy másik számlázóban készült, a Számlázz.hu továbbította. Itt nem szerkeszthető, nem sztornózható és nem küldhető újra, és PDF sincs hozzá.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PDF megnyitása" })).toBeNull();
   });
 
   it("says when Számlázz.hu marks it cancelled", async () => {
