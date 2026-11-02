@@ -523,7 +523,12 @@ function rowCells(
   item: QuotePdfItem,
   input: QuotePdfInput,
   prefix: string,
-): { quantity: string; unit: string; total: string; grossTotal: string | null } {
+): {
+  quantity: string;
+  unit: string;
+  total: string;
+  grossTotal: string | null;
+} {
   const money = (v: Parameters<typeof formatQuoteMoney>[0]) =>
     formatQuoteMoney(v, input.currency);
   const gross = input.priceDisplay === "GROSS";
@@ -535,7 +540,9 @@ function rowCells(
     unit: money(unit),
     total: `${prefix}${money(gross ? lineGross(item) : lineNet(item))}`,
     grossTotal:
-      input.priceDisplay === "BOTH" ? `${prefix}${money(lineGross(item))}` : null,
+      input.priceDisplay === "BOTH"
+        ? `${prefix}${money(lineGross(item))}`
+        : null,
   };
 }
 
@@ -554,7 +561,14 @@ function drawTableHead(
   const gross = input.priceDisplay === "GROSS";
   const y = flow.y;
   text(doc, labels.itemName, NAME_X, y, HEAD_CELL, NAME_WIDTH);
-  text(doc, labels.quantity, cols.quantity.x, y, HEAD_CELL, cols.quantity.width);
+  text(
+    doc,
+    labels.quantity,
+    cols.quantity.x,
+    y,
+    HEAD_CELL,
+    cols.quantity.width,
+  );
   text(
     doc,
     gross ? labels.grossUnit : labels.netUnit,
@@ -589,7 +603,9 @@ function drawTableHead(
 
 /** The height of a row's first line: what must stay together with the head and the next row. */
 function rowHeadHeight(doc: PDFKit.PDFDocument, item: QuotePdfItem): number {
-  return Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) + 14;
+  return (
+    Math.max(measure(doc, item.name, ITEM_NAME, NAME_WIDTH), ROW_HEIGHT) + 14
+  );
 }
 
 function drawItem(
@@ -615,7 +631,15 @@ function drawItem(
   text(doc, item.name, NAME_X, top, ITEM_NAME, NAME_WIDTH);
   text(doc, cells.quantity, cols.quantity.x, top, CELL, cols.quantity.width);
   text(doc, cells.unit, cols.unit.x, top, CELL, cols.unit.width, "right");
-  text(doc, cells.total, cols.total.x, top, CELL_TOTAL, cols.total.width, "right");
+  text(
+    doc,
+    cells.total,
+    cols.total.x,
+    top,
+    CELL_TOTAL,
+    cols.total.width,
+    "right",
+  );
   if (cols.grossTotal && cells.grossTotal)
     text(
       doc,

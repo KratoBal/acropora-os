@@ -608,7 +608,9 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     const sections = (n: number) => [
       block("TEXT", {
         title: "Bevezető",
-        content: doc("Köszönjük megkeresését! Az előzetes felmérésünk alapján."),
+        content: doc(
+          "Köszönjük megkeresését! Az előzetes felmérésünk alapján.",
+        ),
       }),
       block("SECTION", { title: "Munka leírás", items: rows.slice(0, n) }),
       block("TERMS", {
@@ -621,10 +623,13 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     ];
     for (const n of [4, 6]) {
       const rendered = await renderQuotePdf(
-        input(sections(n), { priceDisplay: "NET", customer: {
-          name: "Fővárosi Állat- és Növénykert",
-          lines: ["1146 Budapest, XIV., Állatkerti krt. 6-12"],
-        } }),
+        input(sections(n), {
+          priceDisplay: "NET",
+          customer: {
+            name: "Fővárosi Állat- és Növénykert",
+            lines: ["1146 Budapest, XIV., Állatkerti krt. 6-12"],
+          },
+        }),
       );
       assert.equal(rendered.pageCount, 1, `${n} tétel`);
     }
@@ -647,7 +652,8 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       const hasRows = (await readPdfTextLines(rendered.bytes)).some(
         (l) => l.pageNumber === page && /^Tétel \d+ /.test(l.text),
       );
-      if (hasRows) assert.ok(heads.has(page), `a ${page}. oldalon nincs fejléc`);
+      if (hasRows)
+        assert.ok(heads.has(page), `a ${page}. oldalon nincs fejléc`);
     }
   });
 
