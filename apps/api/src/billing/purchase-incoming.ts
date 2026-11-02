@@ -494,6 +494,7 @@ export async function supersedePurchaseRows(
       supplierName: true,
       notBookable: true,
       notBookableAt: true,
+      paperOriginalAt: true,
     },
   });
   const superseded = rows.filter(
@@ -521,6 +522,27 @@ export async function supersedePurchaseRows(
       data: { notBookable: true, notBookableAt: first ?? new Date() },
     });
   }
+  /*
+    A „PAPÍRON MEGVAN” JELÖLÉS IS ÁTMEGY (barracuda, #2004): ugyanaz a helyzet,
+    mint a „nem könyvelendő”-nél. A jelölés a számláról szól; ha a leváltott
+    beszerzési sor jelölt volt, és a jelölés a törléssel elveszne, a számla PDF-je
+    csendben bekerülne a következő könyvelői csomagba. A legkorábbi időt visszük
+    át; a feed sorának saját, már meglévő jelölését nem írjuk felül.
+  */
+  const firstPaper = superseded
+    .map((row) => row.paperOriginalAt)
+    .filter((at): at is Date => at !== null)
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  if (firstPaper) {
+    await transaction.incomingBillingDocument.updateMany({
+      where: {
+        source: "SZAMLAZZ",
+        externalId: feed.externalId,
+        paperOriginalAt: null,
+      },
+      data: { paperOriginalAt: firstPaper },
+    });
+  }
   for (const row of superseded) {
     await transaction.incomingDocumentReading.updateMany({
       where: { incomingBillingDocumentId: row.id },
@@ -536,6 +558,7 @@ export async function supersedePurchaseRows(
           purchaseInvoiceId: row.externalId,
           feedExternalId: feed.externalId,
           ...(row.notBookable ? { notBookableCarriedOver: true } : {}),
+          ...(row.paperOriginalAt ? { paperOriginalCarriedOver: true } : {}),
         },
       },
     });
