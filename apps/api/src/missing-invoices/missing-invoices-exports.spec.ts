@@ -450,3 +450,67 @@ describe("a paper-only item (Aqua-Light, acrobot 25752; murena's export test, 25
       assert.equal(cover.includes("papíron megvan"), marked);
     });
 });
+
+/**
+ * A PAPÍRON IS MEGLÉVŐ SZÁMLA (Balázs, 2026-11-02 11:21 UTC, kártya: Megvan
+ * sorok „Papíron megvan” jelölője). MI PIROSÍT: ha a jelölt, párosított számla
+ * PDF-je mégis a csomagba kerülne (vagy a fájlját akkor is lekérnénk); ha a
+ * tétel a borítóról eltűnne; ha a jeletlen tételé is kimaradna (enélkül egy
+ * mindig üres csomag is zöld volna: ez a kontroll); ha a jelölés visszavonása
+ * nem hozná vissza a PDF-et.
+ */
+describe("a paired invoice that is on paper too", () => {
+  const build = async (paperOriginalAt: Date | null) => {
+    const { missing, asked } = service({
+      debits: [debit("2026-08-03", 1000, "Szállító Kft.", { paperOriginalAt })],
+      documents: [document({ id: "ok", gross: D(1000) })],
+      files: { ok: await pdfOfPages(2) },
+    });
+    const { content } = await missing.accountantPackage("2026-08");
+    return {
+      pages: (await PDFDocument.load(content)).getPageCount(),
+      cover: (await pdfTextLines(new Uint8Array(content))).join("\n"),
+      asked: asked.flat(),
+    };
+  };
+
+  it("unmarked: its PDF is in the package (the control)", async () => {
+    const result = await build(null);
+    assert.equal(result.pages, 1 + 2);
+    assert.ok(result.cover.includes("SZ-ok: csatolva"), result.cover);
+    assert.deepEqual(result.asked, ["ok"]);
+  });
+
+  it("marked: no PDF in the package and no file fetched, the item stays on the cover as paper", async () => {
+    const result = await build(new Date("2026-11-02T10:00:00Z"));
+    assert.equal(result.pages, 1);
+    assert.ok(result.cover.includes("Szállító Kft. | 1 000 HUF"), result.cover);
+    assert.ok(result.cover.includes("SZ-ok: papíron megvan"), result.cover);
+    assert.ok(!result.cover.includes("csatolva"), result.cover);
+    assert.deepEqual(result.asked, []);
+  });
+
+  it("the package builder itself leaves a marked entry's PDF out, even when the file is handed to it", async () => {
+    const { pdf, outcomes } = await buildAccountantPackage({
+      month: "2026-08",
+      company: { name: "Acropora Kft.", taxNumber: "23916229" },
+      entries: [
+        {
+          bookingDate: "2026-08-03",
+          partner: "Szállító Kft.",
+          amount: "1000",
+          currency: "HUF",
+          paperOriginal: true,
+          documents: [
+            {
+              number: "SZ-1",
+              file: { fileName: "a.pdf", content: await pdfOfPages(3) },
+            },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(outcomes, ["PAPER"]);
+    assert.equal((await PDFDocument.load(pdf)).getPageCount(), 1);
+  });
+});
