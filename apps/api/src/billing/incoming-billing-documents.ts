@@ -293,10 +293,7 @@ export function paperOriginalOfRow(
   pairings: ReadonlyMap<string, Pick<DocumentPairing, "paperOriginal">>,
 ): boolean {
   if (row.paperOriginalAt !== null) return true;
-  if (
-    row.sourceDocumentId &&
-    pairings.get(row.sourceDocumentId)?.paperOriginal
-  )
+  if (row.sourceDocumentId && pairings.get(row.sourceDocumentId)?.paperOriginal)
     return true;
   const key = pairingNumberKey(row.documentNumber);
   return key ? (pairings.get(key)?.paperOriginal ?? false) : false;
