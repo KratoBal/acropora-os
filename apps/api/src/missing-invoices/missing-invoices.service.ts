@@ -390,11 +390,6 @@ export class MissingInvoicesService {
         document,
       };
       for (const id of ids) result.set(id, pairing);
-      // a bejövő számla sora szám szerint is megtalálja (paperOriginalOfRow)
-      const numberKey = document.number
-        ? pairingNumberKey(document.number)
-        : null;
-      if (numberKey && !result.has(numberKey)) result.set(numberKey, pairing);
       return pairing;
     };
     for (const document of computed.documents) entry(document);
@@ -415,6 +410,21 @@ export class MissingInvoicesService {
           original: item.original,
         });
       }
+    }
+    // a bejövő számla sora szám ÉS szállító szerint is megtalálja
+    // (paperOriginalOfRow); ha egy kulcshoz két párosítás tartozik, a JELÖLT nyer
+    // (a csomag is minden jelöltet beír, a két felület nem mondhat mást)
+    for (const pairing of new Set(result.values())) {
+      const numberKey = pairing.document.number
+        ? pairingNumberKey(
+            pairing.document.number,
+            pairing.document.supplierName,
+          )
+        : null;
+      if (!numberKey) continue;
+      const existing = result.get(numberKey);
+      if (!existing || (pairing.paperOriginal && !existing.paperOriginal))
+        result.set(numberKey, pairing);
     }
     return result;
   }
@@ -908,7 +918,7 @@ export class MissingInvoicesService {
     for (const item of computed.items.filter((i) => i.paperOriginal))
       for (const paperDocument of documentsOfItem(item.id)) {
         const numberKey = paperDocument.number
-          ? pairingNumberKey(paperDocument.number)
+          ? pairingNumberKey(paperDocument.number, paperDocument.supplierName)
           : null;
         for (const key of [...idsOf(paperDocument), numberKey])
           if (key) paperPairings.set(key, { paperOriginal: true });

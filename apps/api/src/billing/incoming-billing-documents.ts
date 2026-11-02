@@ -14,7 +14,10 @@ import type {
 import { paymentStateOf as sharedPaymentStateOf } from "@acropora/types";
 
 import type { DocumentPairing } from "../missing-invoices/missing-invoices.service.js";
-import { shownNumber } from "../missing-invoices/missing-invoice-matching.js";
+import {
+  normalizeName,
+  shownNumber,
+} from "../missing-invoices/missing-invoice-matching.js";
 import { externalKindLabel as feedKindLabel } from "./billing-document-list.js";
 
 /**
@@ -269,33 +272,45 @@ const compactNumber = (value: string) =>
  * A PÁROSÍTÁSOK TÉRKÉPÉNEK SZÁM SZERINTI KULCSA: a „Papíron megvan” jelölés a
  * terhelésen áll, a bejövő számla sora pedig akkor is ugyanaz a számla, ha a
  * terheléshez nem az ő forrás-dokumentuma, hanem a postafiókos példánya van
- * párosítva (más azonosító, ugyanaz a szám). Az előtag miatt nem ütközhet
+ * párosítva (más azonosító, ugyanaz a szám). A KULCSBAN A SZÁLLÍTÓ IS BENNE
+ * VAN (barracuda, #2013 review): két különböző szállító számlája ugyanarra a
+ * tömörített számra kerülhet (2026/0001 és 2026-0001), és az egyik terhelés
+ * jelölése nem lehet a másik számla „papíron megvan”-ja. A párosítás oldalán
+ * csak a szállító NEVE áll rendelkezésre (az adószám nem), ezért a név a
+ * kulcs; ha a két név nem egyezik, a jelölés NEM megy át (a biztonságos
+ * irány: a PDF a csomagban marad). Az előtag miatt nem ütközhet
  * dokumentum-azonosítóval.
  */
 const PAIRING_NUMBER_PREFIX = "number:";
-export function pairingNumberKey(documentNumber: string): string | null {
+export function pairingNumberKey(
+  documentNumber: string,
+  supplierName: string,
+): string | null {
   const compact = compactNumber(documentNumber);
-  return compact ? `${PAIRING_NUMBER_PREFIX}${compact}` : null;
+  const who = normalizeName(supplierName)
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  return compact && who ? `${PAIRING_NUMBER_PREFIX}${compact}|${who}` : null;
 }
 
 /**
  * „PAPÍRON MEGVAN” EGY BEJÖVŐ SZÁMLA-SORRA: a soron tett jelölés VAGY a
  * párosított terhelésen tett (a sor forrás-dokumentuma szerint, ennek
- * hiányában a szám szerint). A lista és a könyvelői csomag EZT a döntést
- * használja (MMXH két számlája, Balázs 2026-11-03 00:03 UTC: a terhelésen
- * bejelölt jelölés nem jutott el a számla sorához).
+ * hiányában a szám ÉS a szállító neve szerint). A lista és a könyvelői csomag
+ * EZT a döntést használja (MMXH két számlája, Balázs 2026-11-03 00:03 UTC: a
+ * terhelésen bejelölt jelölés nem jutott el a számla sorához).
  */
 export function paperOriginalOfRow(
   row: Pick<
     IncomingBillingDocument,
-    "paperOriginalAt" | "sourceDocumentId" | "documentNumber"
+    "paperOriginalAt" | "sourceDocumentId" | "documentNumber" | "supplierName"
   >,
   pairings: ReadonlyMap<string, Pick<DocumentPairing, "paperOriginal">>,
 ): boolean {
   if (row.paperOriginalAt !== null) return true;
   if (row.sourceDocumentId && pairings.get(row.sourceDocumentId)?.paperOriginal)
     return true;
-  const key = pairingNumberKey(row.documentNumber);
+  const key = pairingNumberKey(row.documentNumber, row.supplierName);
   return key ? (pairings.get(key)?.paperOriginal ?? false) : false;
 }
 

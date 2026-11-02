@@ -16,6 +16,7 @@ import type {
   PackageBillingRow,
 } from "./missing-invoices.repository.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
+import { pairingNumberKey } from "../billing/incoming-billing-documents.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
 const D = (v: number | string) => new Prisma.Decimal(v);
@@ -841,6 +842,78 @@ describe("the accountant package by fulfilment month", () => {
     assert.equal(pages, 1);
     assert.ok(cover.includes("KS26/12407: papíron megvan"), cover);
     assert.ok(!cover.includes("nem PDF"), cover);
+  });
+
+  it("the same compacted number at ANOTHER supplier: the marked debit's paper mark does not drop that supplier's PDF from the package", async () => {
+    // barracuda, #2013 review: 2026/0001 és 2026-0001
+    const { pages, cover } = await coverOf({
+      debits: [
+        debit("2026-10-05", 56420, "Fluidra Magyarország Kft.", {
+          paperOriginalAt: new Date("2026-10-06T00:00:00Z"),
+        }),
+      ],
+      documents: [
+        document({
+          id: "mb-f",
+          number: "2026/0001",
+          date: "2026-10-22",
+          gross: D(56420),
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      billing: [
+        billingRow({
+          id: "other",
+          documentNumber: "2026-0001",
+          supplierName: "Másik Szállító Kft.",
+          sourceDocumentId: "src-other",
+          pdfIds: ["src-other"],
+        }),
+      ],
+      files: { "src-other": await pdfOfPages(1) },
+    });
+    assert.equal(pages, 2, "the other supplier's PDF is in the package");
+    assert.ok(cover.includes("2026-0001: csatolva"), cover);
+    assert.ok(!cover.includes("papíron megvan"), cover);
+  });
+
+  it("documentPairings: one number key, the MARKED pairing wins, so the list agrees with the package", async () => {
+    const unmarked = debit("2026-10-03", 1000, "Szállító Kft.");
+    const marked = debit("2026-10-04", 1000, "Szállító Kft.", {
+      paperOriginalAt: new Date("2026-10-06T00:00:00Z"),
+    });
+    const { missing } = service({
+      debits: [unmarked, marked],
+      documents: [
+        document({
+          id: "a",
+          number: "AB 1",
+          date: "2026-10-02",
+          gross: D(1000),
+        }),
+        document({
+          id: "b",
+          number: "AB-1",
+          date: "2026-10-02",
+          gross: D(1000),
+        }),
+      ],
+      files: {},
+    });
+    const pairings = await missing.documentPairings();
+    const key = pairingNumberKey("AB 1", "Szállító Kft.")!;
+    const byKey = pairings.get(key);
+    const byId = [pairings.get("a"), pairings.get("b")];
+    assert.ok(byKey, "the number key exists");
+    assert.ok(
+      byId.some((p) => p?.paperOriginal),
+      "precondition: one of the two documents is paired to the marked debit",
+    );
+    // ha bármelyik párosítás jelölt, a kulcs a jelöltet adja
+    assert.equal(
+      byKey!.paperOriginal,
+      byId.some((p) => p?.paperOriginal),
+    );
   });
 
   it("a cancelled purchase's original fulfilled in September and refunded in October is in the October refund row only", async () => {

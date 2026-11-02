@@ -246,12 +246,18 @@ describe("bankMatchOf", () => {
   // példányhoz van párosítva (más azonosító, ugyanaz a szám). MI PIROSÍT: ha a
   // jelölés csak a forrás-azonosító szerint érne a sorhoz; ha a számot nem
   // egyeznénk (szóköz, per jel, kisbetű); ha egy MÁS számú terhelés jelölése
-  // átszivárogna; ha a hamis jelölés (false) igazzá válna.
-  it("paper-original by number: the debit's mark reaches the row when the paired copy has another id", () => {
-    const byNumber = (paperOriginal: boolean, number = "KI 2026/77") =>
+  // átszivárogna; ha a hamis jelölés (false) igazzá válna; ha egy MÁS
+  // SZÁLLÍTÓ ugyanazon tömörített számú terhelésének jelölése átszivárogna
+  // (barracuda, #2013 review: 2026/0001 és 2026-0001).
+  it("paper-original by number AND supplier: the debit's mark reaches the row when the paired copy has another id", () => {
+    const byNumber = (
+      paperOriginal: boolean,
+      number = "KI 2026/77",
+      supplier = "Korall Import Kft.",
+    ) =>
       new Map([
         ["mailbox-copy", pairing({ paperOriginal })],
-        [pairingNumberKey(number)!, pairing({ paperOriginal })],
+        [pairingNumberKey(number, supplier)!, pairing({ paperOriginal })],
       ]);
     assert.equal(toIncomingListItem(row(), byNumber(true)).paperOriginal, true);
     assert.equal(
@@ -262,6 +268,12 @@ describe("bankMatchOf", () => {
       toIncomingListItem(row(), byNumber(true, "KI-2026/99")).paperOriginal,
       false,
       "another invoice's number does not carry the mark",
+    );
+    assert.equal(
+      toIncomingListItem(row(), byNumber(true, "KI 2026/77", "Másik Kft."))
+        .paperOriginal,
+      false,
+      "the same compacted number at ANOTHER supplier does not carry the mark",
     );
     assert.equal(
       toIncomingListItem(row(), byNumber(true)).paperOriginalMarkedHere,
