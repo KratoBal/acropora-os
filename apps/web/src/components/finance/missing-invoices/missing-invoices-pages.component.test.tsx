@@ -289,9 +289,17 @@ describe("MissingInvoicesMonthPage", () => {
     expect(found).toHaveAttribute("aria-selected", "true");
     expect(found.className).toContain("bg-pilot-aqua-600");
     expect(found.className).toContain("text-white");
-    expect(
-      screen.getByRole("tab", { name: "Nem párosodott" }).className,
-    ).not.toContain("bg-pilot-aqua-600");
+    // az aktív fül a nem aktív színeit NEM kapja meg (két hover-háttér a CSS sorrendjén múlna; barracuda a #2005-ön)
+    for (const idle of [
+      "hover:bg-pilot-grey-100",
+      "text-pilot-grey-600",
+      "hover:text-pilot-grey-900",
+      "font-medium",
+    ])
+      expect(found.className).not.toContain(idle);
+    const other = screen.getByRole("tab", { name: "Nem párosodott" }).className;
+    expect(other).not.toContain("bg-pilot-aqua-600");
+    expect(other).toContain("hover:bg-pilot-grey-100");
     fireEvent.click(await screen.findByRole("tab", { name: "Nem párosodott" }));
     const tabHref = urlNavigation.replace.mock.calls
       .map(([href]) => href as string)

@@ -206,7 +206,7 @@ export function ServiceListTabs({
             onClick={() => onSelect(tab.key)}
             className={
               pill
-                ? `${sv.pillTab} ${on ? sv.pillTabActive : ""}`
+                ? `${sv.pillTab} ${on ? sv.pillTabActive : sv.pillTabIdle}`
                 : `${sv.tab} ${on ? sv.tabActive : ""}`
             }
           >
