@@ -20,11 +20,14 @@ import { describe, it } from "node:test";
  */
 const THEME = join(process.cwd(), "src", "theme.css");
 
-const FORM_ELEMENT = /(^|[\s,>+~(])(button|input|select|textarea|optgroup)(?![\w-])/;
+const FORM_ELEMENT =
+  /(^|[\s,>+~(])(button|input|select|textarea|optgroup)(?![\w-])/;
 const FONT_PROPERTY = /(^|[;{\s])(font(-[a-z-]+)?|line-height)\s*:/;
 
 /** Top-level `selector { body }` blocks outside any at-rule, comments removed. */
-export function unlayeredRules(css: string): { selector: string; body: string }[] {
+export function unlayeredRules(
+  css: string,
+): { selector: string; body: string }[] {
   const src = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const out: { selector: string; body: string }[] = [];
   let depth = 0;
@@ -42,7 +45,8 @@ export function unlayeredRules(css: string): { selector: string; body: string }[
     } else if (ch === "}") {
       depth--;
       if (depth === 0) {
-        if (!header.startsWith("@")) out.push({ selector: header, body: src.slice(bodyStart, i) });
+        if (!header.startsWith("@"))
+          out.push({ selector: header, body: src.slice(bodyStart, i) });
         start = i + 1;
       }
     } else if (ch === ";" && depth === 0) {
@@ -64,11 +68,30 @@ describe("a közös theme.css form-elemei", () => {
   });
 
   it("a mérő megfogja a réteg nélküli alakot, és átengedi a rétegben állót", () => {
-    assert.deepEqual(unlayeredFormFontRules("button,\ninput {\n  font: inherit;\n}"), ["button, input"]);
-    assert.deepEqual(unlayeredFormFontRules(".x > button { font-weight: 700 }"), [".x > button"]);
-    assert.deepEqual(unlayeredFormFontRules("@layer base { button, input { font: inherit; } }"), []);
-    assert.deepEqual(unlayeredFormFontRules("/* button { font: inherit } */ ::selection { color: red }"), []);
-    assert.deepEqual(unlayeredFormFontRules(".button-like { font-weight: 700 }"), []);
+    assert.deepEqual(
+      unlayeredFormFontRules("button,\ninput {\n  font: inherit;\n}"),
+      ["button, input"],
+    );
+    assert.deepEqual(
+      unlayeredFormFontRules(".x > button { font-weight: 700 }"),
+      [".x > button"],
+    );
+    assert.deepEqual(
+      unlayeredFormFontRules(
+        "@layer base { button, input { font: inherit; } }",
+      ),
+      [],
+    );
+    assert.deepEqual(
+      unlayeredFormFontRules(
+        "/* button { font: inherit } */ ::selection { color: red }",
+      ),
+      [],
+    );
+    assert.deepEqual(
+      unlayeredFormFontRules(".button-like { font-weight: 700 }"),
+      [],
+    );
     assert.deepEqual(unlayeredFormFontRules("button { background: red }"), []);
   });
 });
