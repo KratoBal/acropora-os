@@ -148,26 +148,37 @@ export function MissingInvoicesDrawer({
   const title = row ? (row.partner ?? "Ismeretlen partner") : "";
 
   // a papíros jelölés digitális számla NÉLKÜL is (acrobot 25745, Aqua-Light:
-  // külföldi számla csak papíron, NAV-sor nincs); hibás dokumentumnál nem
+  // külföldi számla csak papíron, NAV-sor nincs); hibás dokumentumnál nem. A
+  // MEGVAN SOROKON IS (Balázs, 2026-11-02 11:21 UTC): a számlát emailben is, papíron is
+  // megkapjuk, és nem nyomtatjuk ki még egyszer; a jelölt sor PDF-je nem kerül a
+  // könyvelői csomagba.
   const paperCheckbox =
     row &&
     onPaperOriginal &&
     (row.state === "ORIGINAL_MISSING" ||
       row.state === "NOT_MATCHED" ||
       row.state === "NO_INVOICE" ||
+      row.state === "FOUND" ||
       row.paperOriginal) ? (
-      <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
-        <input
-          type="checkbox"
-          checked={row.paperOriginal}
-          disabled={!canManage || busy !== null}
-          onChange={(event) => onPaperOriginal(event.target.checked)}
-        />
-        Az eredeti papíron megvan
-        {busy === "paper" ? (
-          <span className="text-xs text-pilot-grey-500">Mentés…</span>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+          <input
+            type="checkbox"
+            checked={row.paperOriginal}
+            disabled={!canManage || busy !== null}
+            onChange={(event) => onPaperOriginal(event.target.checked)}
+          />
+          Az eredeti papíron megvan
+          {busy === "paper" ? (
+            <span className="text-xs text-pilot-grey-500">Mentés…</span>
+          ) : null}
+        </label>
+        {row.state === "FOUND" && row.paperOriginal ? (
+          <p className="text-xs text-pilot-grey-500">
+            A számla PDF-je nem kerül a könyvelői csomagba.
+          </p>
         ) : null}
-      </label>
+      </div>
     ) : null;
 
   return (

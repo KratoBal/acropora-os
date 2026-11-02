@@ -824,12 +824,15 @@ export class MissingInvoicesService {
           document.originalId ?? (document.hasOriginal ? document.id : null),
         ...dataNoteOf(document),
       }));
+    // a papíron is meglévő számla fájlját nem is kérjük le: nem kerül a csomagba
     const files = await this.repository.originals(
-      found.flatMap((item) =>
-        documentsOf(item.id).flatMap((d) =>
-          d.originalId ? [d.originalId] : [],
+      found
+        .filter((item) => !item.paperOriginal)
+        .flatMap((item) =>
+          documentsOf(item.id).flatMap((d) =>
+            d.originalId ? [d.originalId] : [],
+          ),
         ),
-      ),
     );
     const { pdf } = await buildAccountantPackage({
       month,

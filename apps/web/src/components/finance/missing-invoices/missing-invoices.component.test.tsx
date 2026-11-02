@@ -925,11 +925,18 @@ describe("MissingInvoicesDrawer", () => {
     }
   });
 
-  it("no paper-original question on a pairing whose original is already there", () => {
-    render(
+  /*
+    A MEGVAN SOROKON IS (Balázs, 2026-11-02 11:21 UTC): a számlát emailben is,
+    papíron is megkapjuk. Ez a korábbi „nincs papíros kérdés a Megvan soron”
+    teszt megfordítása, szándékosan. MI PIROSÍT: ha a Megvan soron nem jelenne
+    meg a jelölő; ha a jelölés nem a szerver felé menne; ha a jelölt sornál a
+    csomagba nem kerülésről nem szólna a felirat, vagy a jelöletlennél szólna.
+  */
+  it("a Megvan row has the paper-original box, unmarked and marked, and says what the mark does", () => {
+    const props = { ...base(), onPaperOriginal: vi.fn() };
+    const { unmount } = render(
       <MissingInvoicesDrawer
-        {...base()}
-        onPaperOriginal={vi.fn()}
+        {...props}
         row={charge({
           state: "FOUND",
           document: { number: "INV-2026-08177", source: "MAILBOX" },
@@ -938,9 +945,35 @@ describe("MissingInvoicesDrawer", () => {
         })}
       />,
     );
+    const box = screen.getByRole("checkbox", {
+      name: "Az eredeti papíron megvan",
+    });
+    expect(box).not.toBeChecked();
+    expect(screen.queryByText(/nem kerül a könyvelői csomagba/)).toBeNull();
+    fireEvent.click(box);
+    expect(props.onPaperOriginal).toHaveBeenCalledWith(true);
+    unmount();
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "INV-2026-08177", source: "MAILBOX" },
+          matchedBy: "RULE",
+          paperOriginal: true,
+        })}
+      />,
+    );
     expect(
-      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
-    ).toBeNull();
+      screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    ).toBeChecked();
+    expect(
+      screen.getByText("A számla PDF-je nem kerül a könyvelői csomagba."),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    );
+    expect(props.onPaperOriginal).toHaveBeenLastCalledWith(false);
   });
 
   it("several invoices in one payment: all numbers, the missing ones BY NAME, and the difference", () => {

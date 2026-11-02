@@ -145,7 +145,12 @@ export async function buildAccountantPackage(input: {
     }
     for (const document of entry.documents) {
       let outcome: PackageDocumentOutcome;
-      if (!document.file) outcome = entry.paperOriginal ? "PAPER" : "NO_FILE";
+      // A PAPÍRON IS MEGLÉVŐ SZÁMLA PDF-JE NEM KERÜL A CSOMAGBA (Balázs,
+      // 2026-11-02 11:21 UTC: a számlát emailben is, papíron is megkapjuk, és
+      // nem nyomtatjuk ki még egyszer). A tétel a borítón marad, „papíron
+      // megvan”-ként: a könyvelő látja, hogy a számla megvan, és hol.
+      if (entry.paperOriginal) outcome = "PAPER";
+      else if (!document.file) outcome = "NO_FILE";
       else {
         const attached = await attachablePdf(document.file.content);
         outcome = attached.outcome;
