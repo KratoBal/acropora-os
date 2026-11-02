@@ -131,7 +131,6 @@ const LABELS = {
     grossUnit: "Bruttó egységár",
     grossTotalColumn: "Bruttó összesen",
     schedule: "Fizetési ütemezés",
-    netPrefix: "nettó",
     grossPrefix: "bruttó",
     address: ACROPORA_COMPANY.address,
   },
@@ -155,7 +154,6 @@ const LABELS = {
     grossUnit: "Gross unit price",
     grossTotalColumn: "Gross total",
     schedule: "Payment schedule",
-    netPrefix: "net",
     grossPrefix: "gross",
     address: "35 Pesti Gábor Street, H-1106 Budapest",
   },
@@ -689,8 +687,8 @@ function drawTable(
       headPage = flow.page;
     }
     drawItem(doc, flow, input, item, prefixOf(item));
-    // a description that ran onto the next page leaves the cursor there
-    headPage = Math.max(headPage, flow.page);
+    // a description that ran onto the next page leaves the cursor there: the
+    // next row finds `flow.page` past `headPage` and draws the head first
   }
 }
 
@@ -841,10 +839,11 @@ function drawMilestones(
   const base = totals.gross;
   const rows = input.milestones.map((m) => ({
     label: `${m.label} ${m.percent.toString().replace(".", ",")}%`,
-    value: formatQuoteMoney(
+    // the amount says it is gross, like every other price of the PDF (barracuda, #1999)
+    value: `${labels.grossPrefix} ${formatQuoteMoney(
       base.times(m.percent).dividedBy(100),
       input.currency,
-    ),
+    )}`,
   }));
   flow.ensure(
     headingHeight(doc, labels.schedule, SCHEDULE_HEADING) + rows.length * 24,

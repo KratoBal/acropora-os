@@ -423,8 +423,14 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       .map((l) => l.text)
       .join(" | ");
     // each milestone with its share of the gross total (Figma 18:29)
-    assert.match(text, /Előleg 30% \| 38 100 Ft|Előleg 30% 38 100 Ft/);
-    assert.match(text, /Átadáskor 70% \| 88 900 Ft|Átadáskor 70% 88 900 Ft/);
+    assert.match(
+      text,
+      /Előleg 30% \| bruttó 38 100 Ft|Előleg 30% bruttó 38 100 Ft/,
+    );
+    assert.match(
+      text,
+      /Átadáskor 70% \| bruttó 88 900 Ft|Átadáskor 70% bruttó 88 900 Ft/,
+    );
     // and right after the summary, not at the end of the document
     assert.ok(
       text.indexOf("FIZETÉSI ÜTEMEZÉS") > text.indexOf("BRUTTÓ VÉGÖSSZEG"),
@@ -492,7 +498,8 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
         continue;
       ranOn += 1;
       assert.ok(
-        (next.top ?? 0) - (last.top ?? 0) < 45,
+        // the table head is drawn again over the row on the new page (22 points)
+        (next.top ?? 0) - (last.top ?? 0) < 45 + 22,
         `rés ${(next.top ?? 0) - (last.top ?? 0)} (${fill})`,
       );
     }
@@ -657,6 +664,47 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
     }
   });
 
+  /**
+   * A DESCRIPTION THAT RUNS ONTO THE NEXT PAGE (barracuda, #1999): the rows
+   * after it start on that page, and a table without its head there is a
+   * column of unlabelled numbers. What must fail: a row on a page that has no
+   * "Tétel neve" over it.
+   */
+  it("the head is on the page a long description ran onto, over the rows that follow it", async () => {
+    const long = doc(
+      ...Array.from({ length: 70 }, (_, i) => `Leírás sor ${i + 1}`),
+    );
+    const rendered = await renderQuotePdf(
+      input(
+        [
+          block("SECTION", {
+            title: "A",
+            items: [
+              item("Első", { description: long }),
+              item("Utána egy"),
+              item("Utána kettő"),
+            ],
+          }),
+        ],
+        { priceDisplay: "NET" },
+      ),
+    );
+    assert.ok(rendered.pageCount >= 2);
+    const lines = await readPdfTextLines(rendered.bytes);
+    const heads = new Set(
+      lines
+        .filter((l) => l.text.startsWith("Tétel neve"))
+        .map((l) => l.pageNumber),
+    );
+    for (const row of ["Utána egy", "Utána kettő"]) {
+      const at = lines.find((l) => l.text.startsWith(row))!;
+      assert.ok(
+        heads.has(at.pageNumber),
+        `${row}: a ${at.pageNumber}. oldalon nincs fejléc`,
+      );
+    }
+  });
+
   it("the payment schedule's amounts are shares of the gross total the summary shows, on a net quote too", async () => {
     const text = await textOf(
       [block("SECTION", { title: "A", items: [item("Tétel")] })],
@@ -666,7 +714,16 @@ describe("quote PDF rendering (Figma 579:2898 rules)", () => {
       },
     );
     assert.match(text, /BRUTTÓ VÉGÖSSZEG 127 000 Ft/);
-    assert.match(text, /Előleg 50% 63 500 Ft/);
+    // every price says net or gross, the schedule's too (barracuda, #1999)
+    assert.match(text, /Előleg 50% bruttó 63 500 Ft/);
+  });
+
+  it("an English quote's schedule says gross too", async () => {
+    const text = await textOf(
+      [block("SECTION", { title: "A", items: [item("Item")] })],
+      { language: "en", milestones: [{ label: "Deposit", percent: d("50") }] },
+    );
+    assert.match(text, /Deposit 50% gross 63 500 Ft/);
   });
 
   it("an English quote has the English tagline, labels, options band and footer", async () => {
