@@ -170,10 +170,10 @@ export interface ServiceListTab {
 }
 
 /**
- * A „pill” alak a Hiányzó számlák Figma-terve (2026-09-30): az aktív fül
- * halványzöld háttért és sötétzöld, félkövér feliratot kap, ugyanazt, amit
- * az oldalsáv aktív menüpontja. Balázs 2026-10-01: az aláhúzásos alakon nem
- * látszott, melyik fülön áll. A szerviz-listák alapértelmezése nem változik.
+ * A „pill” alak a Hiányzó számlák Figma-terve (2026-09-30). Balázs 2026-10-01: az
+ * aláhúzásos alakon nem látszott, melyik fülön áll; 2026-11-02: a halványzöld
+ * aktív fül sem látszott eléggé, ezért teli zöld, fehér félkövér felirattal
+ * (service-theme.ts pillTabActive). A szerviz-listák alapértelmezése nem változik.
  */
 export function ServiceListTabs({
   tabs,
@@ -206,7 +206,7 @@ export function ServiceListTabs({
             onClick={() => onSelect(tab.key)}
             className={
               pill
-                ? `${sv.pillTab} ${on ? sv.pillTabActive : ""}`
+                ? `${sv.pillTab} ${on ? sv.pillTabActive : sv.pillTabIdle}`
                 : `${sv.tab} ${on ? sv.tabActive : ""}`
             }
           >
