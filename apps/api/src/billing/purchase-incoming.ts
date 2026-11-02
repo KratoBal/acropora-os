@@ -448,6 +448,8 @@ export function purchaseListItem(
       ? { state: "PAIRED", reason: null, debits }
       : { state: "UNPAIRED", reason: null, debits: [] },
     notBookable: false,
+    paperOriginal: false,
+    paperOriginalMarkedHere: false,
     hasPdf: subject.scanIds.length > 0,
   };
 }

@@ -63,6 +63,7 @@ const row = (
   hasPdf: false,
   notBookable: false,
   notBookableAt: null,
+  paperOriginalAt: null,
   createdAt: new Date("2026-10-01T08:00:00Z"),
   updatedAt: new Date("2026-10-01T08:00:00Z"),
   ...over,
@@ -90,6 +91,7 @@ const pairing = (over: Partial<DocumentPairing> = {}): DocumentPairing => ({
   kind: "INVOICE",
   debits: [debit],
   paidInFull: true,
+  paperOriginal: false,
   document: candidate(),
   ...over,
 });
@@ -206,6 +208,37 @@ describe("bankMatchOf", () => {
       [true, "NOT_BOOKABLE"],
     );
     assert.equal(toIncomingListItem(row(), new Map()).notBookable, false);
+  });
+
+  // „Papíron megvan” (Balázs, 2026-11-02). MI PIROSÍT: ha a soron álló jelölés
+  // nem látszana; ha a párosított terhelésen álló (Hiányzó számlák) jelölést a
+  // sor nem örökölné; ha a terheléstől örökölt jelölés „itt jelöltnek” látszana
+  // (azt itt nem lehet visszavonni); ha jelölés nélkül is igaz lenne.
+  it("paper-original: the row's own mark, or the paired debit's, and only the first is marked here", () => {
+    const own = toIncomingListItem(
+      row({ paperOriginalAt: new Date("2026-11-02T20:00:00Z") }),
+      new Map(),
+    );
+    assert.deepEqual(
+      [own.paperOriginal, own.paperOriginalMarkedHere],
+      [true, true],
+    );
+    const fromDebit = toIncomingListItem(
+      row(),
+      new Map([["doc-1", pairing({ paperOriginal: true })]]),
+    );
+    assert.deepEqual(
+      [fromDebit.paperOriginal, fromDebit.paperOriginalMarkedHere],
+      [true, false],
+    );
+    const none = toIncomingListItem(
+      row(),
+      new Map([["doc-1", pairing({ paperOriginal: false })]]),
+    );
+    assert.deepEqual(
+      [none.paperOriginal, none.paperOriginalMarkedHere],
+      [false, false],
+    );
   });
 
   it("paired with the debits, otherwise unpaired", () => {

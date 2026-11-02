@@ -8841,6 +8841,11 @@ model IncomingBillingDocument {
   /// kimutatásokba. A jelölés visszavonható; ki és mikor: az auditnaplóban.
   notBookable              Boolean   @default(false)
   notBookableAt            DateTime?
+  /// „PAPÍRON MEGVAN” (Balázs, Acropora OS szál, 2026-11-02): a számlát papíron is
+  /// megkapjuk, ezért a PDF-je nem kerül a könyvelői csomagba. Kézzel, egyenként jelölt;
+  /// a Hiányzó számlák során álló jelölés (BankTransaction.paperOriginalAt) ugyanezt
+  /// jelenti, a számla párosított terhelésén át. Ki és mikor: az auditnaplóban.
+  paperOriginalAt          DateTime?
   createdAt                DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 

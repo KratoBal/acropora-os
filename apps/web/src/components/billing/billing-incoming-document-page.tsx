@@ -152,6 +152,26 @@ export function BillingIncomingDocumentPage({
     }
   };
 
+  const setPaperOriginal = async (marked: boolean) => {
+    setMarkBusy(true);
+    setMarkError(null);
+    try {
+      setDetail(
+        await billingDocumentsApi.setIncomingPaperOriginal(
+          token,
+          documentId,
+          marked,
+        ),
+      );
+    } catch (cause) {
+      setMarkError(
+        cause instanceof Error ? cause.message : "A jelölés nem menthető.",
+      );
+    } finally {
+      setMarkBusy(false);
+    }
+  };
+
   const attachPdf = async (file: File | undefined) => {
     if (!file) return;
     setAttachBusy(true);
@@ -259,6 +279,34 @@ export function BillingIncomingDocumentPage({
             <span className="rounded-full bg-pilot-red-50 px-2.5 py-1 text-xs font-semibold text-pilot-red-700">
               Sztornózott
             </span>
+          ) : null}
+          {detail.paperOriginal ? (
+            <span
+              data-testid="paper-original-pill"
+              title={
+                detail.paperOriginalMarkedHere
+                  ? undefined
+                  : "A jelölés a párosított terhelésen áll: a Hiányzó számlák között vonható vissza."
+              }
+              className="rounded-full bg-pilot-grey-100 px-2.5 py-1 text-xs font-semibold text-pilot-grey-700"
+            >
+              Papíron megvan
+            </span>
+          ) : null}
+          {canAttach &&
+          (detail.paperOriginalMarkedHere || !detail.paperOriginal) ? (
+            <PilotButton
+              size="regular"
+              variant="secondary"
+              disabled={markBusy}
+              onClick={() =>
+                void setPaperOriginal(!detail.paperOriginalMarkedHere)
+              }
+            >
+              {detail.paperOriginalMarkedHere
+                ? "Mégsem papíron"
+                : "Papíron megvan"}
+            </PilotButton>
           ) : null}
           {canAttach ? (
             <PilotButton

@@ -250,6 +250,12 @@ export function toIncomingListItem(
     ),
     bankMatch,
     notBookable: row.notBookable,
+    paperOriginal:
+      row.paperOriginalAt !== null ||
+      (row.sourceDocumentId
+        ? (pairings.get(row.sourceDocumentId)?.paperOriginal ?? false)
+        : false),
+    paperOriginalMarkedHere: row.paperOriginalAt !== null,
     hasPdf: row.hasPdf || collectedPdf,
   };
 }
@@ -496,6 +502,8 @@ function mailboxListItem(
     paymentConflict: false,
     bankMatch: { state: "PAIRED", reason: null, debits },
     notBookable: false,
+    paperOriginal: pairing.paperOriginal,
+    paperOriginalMarkedHere: false,
     hasPdf: false,
   };
   if (!reading) return item;

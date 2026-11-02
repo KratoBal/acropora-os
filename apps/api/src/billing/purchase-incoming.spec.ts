@@ -384,6 +384,7 @@ describe("supersedePurchaseRows carries the not-bookable mark over", () => {
     supplierName: "Korall Import Kft.",
     notBookable: false,
     notBookableAt: null,
+    paperOriginalAt: null,
     ...over,
   });
   const fake = (rows: unknown[]) => {

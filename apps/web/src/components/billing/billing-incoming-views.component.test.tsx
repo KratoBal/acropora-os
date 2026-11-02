@@ -101,6 +101,8 @@ function incoming(
       ],
     },
     notBookable: false,
+    paperOriginal: false,
+    paperOriginalMarkedHere: false,
     hasPdf: false,
     ...overrides,
   };
@@ -278,6 +280,30 @@ describe("the incoming list", () => {
     expect(marked!.getByText("Nem párosítandó")).toBeInTheDocument();
     expect(plain!.queryByTestId("not-bookable-badge")).toBeNull();
     expect(plain!.getByText("2026. 09. 30.")).toBeInTheDocument();
+  });
+
+  // „Papíron megvan” (Balázs, 2026-11-02). MI PIROSÍT: ha a jelvény a jelölés
+  // nélküli soron is megjelenne; ha a jelölt soron hiányozna.
+  it("a paper-original invoice says Papíron megvan in the payment column; an unmarked one does not", async () => {
+    api.incomingList.mockResolvedValue(
+      page([
+        incoming({
+          id: "in-paper",
+          documentNumber: "PP-2026/1",
+          paperOriginal: true,
+          paperOriginalMarkedHere: false,
+        }),
+        incoming({ id: "in-plain", documentNumber: "PP-2026/2" }),
+      ]),
+    );
+    urlNavigation.reset("/penzugy/szamlazas", "nezet=bejovo");
+    render(<BillingDocumentListPage />);
+    const rows = await screen.findAllByRole("row", { name: /megnyitása$/ });
+    const [paper, plain] = rows.map((row) => within(row));
+    expect(paper!.getByTestId("paper-original-badge")).toHaveTextContent(
+      "Papíron megvan",
+    );
+    expect(plain!.queryByTestId("paper-original-badge")).toBeNull();
   });
 
   /*

@@ -131,6 +131,22 @@ export const billingDocumentsApi = {
       },
     );
   },
+  /**
+   * „PAPÍRON MEGVAN” be- vagy kikapcsolása a soron (Balázs, 2026-11-02). Csak
+   * a táblába írt soron (nem a `mailbox:` és `purchase:` előtagún); a válasz a
+   * frissített adatlap.
+   */
+  setIncomingPaperOriginal(token: string, id: string, marked: boolean) {
+    return apiRequest<IncomingDocumentDetail>(
+      `/billing/incoming-documents/${encodeURIComponent(id)}/paper-original`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marked }),
+      },
+    );
+  },
   incomingDetail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<IncomingDocumentDetail>(
       `/billing/incoming-documents/${encodeURIComponent(id)}`,
