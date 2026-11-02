@@ -17,6 +17,10 @@ export const ASSISTANT_SIDE_EFFECT_GETS = [
     reason: "compute → checkPayees → setPayee",
   },
   {
+    endpoint: "missing-invoices/months/:month/package-check",
+    reason: "compute → checkPayees → setPayee",
+  },
+  {
     endpoint: "missing-invoices/items/:id",
     reason: "compute → checkPayees → setPayee",
   },

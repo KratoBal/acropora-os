@@ -20,6 +20,7 @@ export class MissingInvoiceMonthQueryDto implements MissingInvoiceMonthQuery {
   @IsOptional()
   category?: MissingInvoiceCategory;
   @IsString() @IsOptional() accountId?: string;
+  @IsIn(["MISSING"]) @IsOptional() packagePdf?: "MISSING";
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page?: number;
   @Type(() => Number)
   @IsInt()

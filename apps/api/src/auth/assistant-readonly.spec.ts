@@ -456,6 +456,7 @@ it("lists every audited side-effect GET explicitly, including indirect dashboard
       "missing-invoices/months/:month",
       "missing-invoices/months/:month/accountant-package.pdf",
       "missing-invoices/months/:month/missing.xlsx",
+      "missing-invoices/months/:month/package-check",
     ].sort(),
   );
 });

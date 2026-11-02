@@ -113,6 +113,39 @@ function renderCover(input: {
   });
 }
 
+/** A fájl PDF-fejléccel kezdődik-e (az első öt bájt `%PDF-`). */
+export function looksLikePdf(content: Uint8Array): boolean {
+  return Buffer.from(content.subarray(0, 5)).toString("latin1") === "%PDF-";
+}
+
+/**
+ * EGY SZÁMLA SORSA A CSOMAGBAN, a fájl LAPJAINAK OLVASÁSA NÉLKÜL: ez az EGYETLEN
+ * döntés, amit a csomag PDF-je és a hónap lapja is használ (a lap a fájl első
+ * öt bájtját adja, a csomag a teljeset). `ATTACHED` itt annyit jelent, hogy
+ * a fejléc PDF: hogy a pdf-lib olvassa-e (`UNREADABLE`), csak a csomag építésekor
+ * derül ki (`attachablePdf`), a lap azt nem látja.
+ */
+export function headOutcome(
+  entry: Pick<AccountantPackageEntry, "paperOriginal">,
+  document: Pick<AccountantPackageEntry["documents"][number], "file" | "missingPdf">,
+): Exclude<PackageDocumentOutcome, "UNREADABLE"> {
+  // A PAPÍRON IS MEGLÉVŐ SZÁMLA PDF-JE NEM KERÜL A CSOMAGBA (Balázs,
+  // 2026-11-02 11:21 UTC: a számlát emailben is, papíron is megkapjuk, és
+  // nem nyomtatjuk ki még egyszer). A tétel a borítón marad, „papíron
+  // megvan”-ként: a könyvelő látja, hogy a számla megvan, és hol.
+  if (entry.paperOriginal) return "PAPER";
+  if (!document.file) return document.missingPdf ? "PDF_MISSING" : "NO_FILE";
+  return looksLikePdf(document.file.content) ? "ATTACHED" : "NOT_PDF";
+}
+
+/** Egy csomag-tétel minden számlájának sorsa a fejléc szerint (lásd `headOutcome`). */
+export function headOutcomes(
+  entry: Pick<AccountantPackageEntry, "paperOriginal" | "documents">,
+): Exclude<PackageDocumentOutcome, "UNREADABLE">[] {
+  if (entry.documents.length === 0) return entry.paperOriginal ? ["PAPER"] : [];
+  return entry.documents.map((document) => headOutcome(entry, document));
+}
+
 /**
  * EGY EREDETI CSATOLHATÓ-E: PDF-e, és a pdf-lib olvassa-e. A kimenő csomag is
  * ezt használja (hétfői lista N1).
@@ -121,8 +154,7 @@ export async function attachablePdf(content: Uint8Array): Promise<{
   outcome: "ATTACHED" | "NOT_PDF" | "UNREADABLE";
   pdf?: PDFDocument;
 }> {
-  if (Buffer.from(content.subarray(0, 5)).toString("latin1") !== "%PDF-")
-    return { outcome: "NOT_PDF" };
+  if (!looksLikePdf(content)) return { outcome: "NOT_PDF" };
   /*
     A BETÖLTÉS MAGA NEM ELÉG PRÓBA: egy csonka fájlt a pdf-lib hiba nélkül
     „betölt”, és csak a lapok másolásakor dob, akkor viszont az EGÉSZ
@@ -163,16 +195,9 @@ export async function buildAccountantPackage(input: {
       notes.push(NOTE.PAPER);
     }
     for (const document of entry.documents) {
-      let outcome: PackageDocumentOutcome;
-      // A PAPÍRON IS MEGLÉVŐ SZÁMLA PDF-JE NEM KERÜL A CSOMAGBA (Balázs,
-      // 2026-11-02 11:21 UTC: a számlát emailben is, papíron is megkapjuk, és
-      // nem nyomtatjuk ki még egyszer). A tétel a borítón marad, „papíron
-      // megvan”-ként: a könyvelő látja, hogy a számla megvan, és hol.
-      if (entry.paperOriginal) outcome = "PAPER";
-      else if (!document.file)
-        outcome = document.missingPdf ? "PDF_MISSING" : "NO_FILE";
-      else {
-        const attached = await attachablePdf(document.file.content);
+      let outcome: PackageDocumentOutcome = headOutcome(entry, document);
+      if (outcome === "ATTACHED") {
+        const attached = await attachablePdf(document.file!.content);
         outcome = attached.outcome;
         if (attached.pdf) loaded.push(attached.pdf);
       }

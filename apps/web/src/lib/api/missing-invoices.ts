@@ -5,6 +5,7 @@ import type {
   MissingInvoiceDuplicateResult,
   MissingInvoiceDuplicatesResponse,
   MissingInvoiceJevSuggestion,
+  MissingInvoicePackageCheck,
   MissingInvoiceSortDirection,
   MissingInvoiceSortField,
 } from "@acropora/types";
@@ -39,6 +40,8 @@ export interface MonthQuery {
   q: string;
   category: ChargeCategory | "";
   accountId: string;
+  /** `MISSING`: csak a csomagból PDF nélkül hiányzó tételek (a szerver a lapozás előtt szűr). */
+  packagePdf?: "MISSING";
   page: number;
   pageSize: number;
   /** A rendezés: az oszlop és az irány; a szerver a lapozás előtt rendez. */
@@ -55,6 +58,7 @@ function monthQueryString(query: MonthQuery): string {
   if (query.q) params.set("q", query.q);
   if (query.category) params.set("category", query.category);
   if (query.accountId) params.set("accountId", query.accountId);
+  if (query.packagePdf) params.set("packagePdf", query.packagePdf);
   if (query.sort) {
     params.set("sort", query.sort);
     params.set("direction", query.direction ?? "asc");
@@ -132,6 +136,18 @@ export const missingInvoicesApi = {
   month(token: string, month: string, query: MonthQuery, signal?: AbortSignal) {
     return apiRequest<MissingInvoiceMonthDetail>(
       `${base}/months/${encodeURIComponent(month)}?${monthQueryString(query)}`,
+      token,
+      { signal },
+    );
+  },
+  /**
+   * A HÓNAP LAPJA A KÖNYVELŐI CSOMAG SZEMÉVEL: melyik Megvan tételnek és ki nem
+   * fizetett számlának hiányzik a PDF-je. A szerver a csomag PDF-jével azonos
+   * döntésből számol, a fájlok fejlécét olvasva.
+   */
+  packageCheck(token: string, month: string, signal?: AbortSignal) {
+    return apiRequest<MissingInvoicePackageCheck>(
+      `${base}/months/${encodeURIComponent(month)}/package-check`,
       token,
       { signal },
     );

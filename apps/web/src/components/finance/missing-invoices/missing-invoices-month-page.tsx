@@ -5,6 +5,9 @@ import {
   PERMISSIONS,
   type BankStatementImportResult,
   type MissingInvoiceDuplicateItem,
+  type MissingInvoicePackageCheck,
+  type MissingInvoicePackageCheckItem,
+  type MissingInvoicePackageUnpaidInvoice,
   type MissingInvoiceSortDirection,
   type MissingInvoiceSortField,
 } from "@acropora/types";
@@ -15,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { MISSING_INVOICES_PATH } from "@/components/navigation";
 import { PilotThemeRoot } from "@/components/pilot/pilot-ui";
+import { billingDocumentsApi } from "@/lib/api/billing-documents";
 import {
   missingInvoicesApi,
   type MissingInvoicesExport,
@@ -112,6 +116,8 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     ["asc", "desc"],
     "asc",
   );
+  // „csak a csomagból PDF nélkül hiányzók”: a szerver szűr, a lapozás előtt
+  const packagePdfOnly = params.get("packagePdf") === "MISSING";
   const appliedSearch = params.get("q") ?? "";
   const [search, setSearch] = useState(appliedSearch);
 
@@ -139,6 +145,11 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
   );
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  // A KÖNYVELŐI CSOMAG SZEME: `null` töltés közben, `undefined`, ha nem érhető el
+  const [packageCheck, setPackageCheck] = useState<
+    MissingInvoicePackageCheck | null | undefined
+  >(null);
+  const [attachingId, setAttachingId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(
@@ -165,6 +176,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
               q: appliedSearch,
               category,
               accountId,
+              ...(packagePdfOnly ? { packagePdf: "MISSING" as const } : {}),
               page,
               pageSize: PAGE_SIZE,
               ...(sortField
@@ -189,6 +201,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
       appliedSearch,
       category,
       month,
+      packagePdfOnly,
       page,
       sortDirection,
       sortField,
@@ -203,6 +216,34 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [canView, load]);
+
+  /**
+   * A CSOMAG-ELLENŐRZÉS (Balázs, 2026-11-02 22:37 UTC): a hónap egészére egy
+   * hívás, nem a lapozott listára. Hiba esetén `undefined`: a lap a régi módon
+   * áll, és nem ígér olyat, amit nem mért (a „minden megvan” üzenet ilyenkor a
+   * korábbi, terhelés-alapú).
+   */
+  const loadCheck = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        setPackageCheck(
+          await missingInvoicesApi.packageCheck(token, month, signal),
+        );
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setPackageCheck(undefined);
+      }
+    },
+    [month, token],
+  );
+
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    void loadCheck(controller.signal);
+    return () => controller.abort();
+  }, [canView, loadCheck]);
 
   // A CÉG NEVE a hónaplista hívásából jön (nautilus 25303): a drawer „kérd
   // újra az … nevére” mondata ebből szól, nem egy beégetett névből.
@@ -306,7 +347,7 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     setDrawerError(null);
     try {
       applyItem(await run());
-      await load();
+      await Promise.all([load(), loadCheck()]);
     } catch (cause) {
       // a 409 mondata is ide jön (a számla máshoz van kézzel párosítva)
       setDrawerError(
@@ -392,12 +433,44 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
     }
   };
 
+  /**
+   * PDF CSATOLÁSA A LAPRÓL: a bejövő számla sorára a számlák oldalának
+   * végpontján (`ROW`); a banki terhelés fiókját a már meglévő feltöltés
+   * kezeli, ezért ott a sort nyitjuk meg. A szerver a PDF-es sorra 409-et ad,
+   * a mondata a felső sávba kerül.
+   */
+  const attachPdf = async (
+    target: MissingInvoicePackageCheckItem | MissingInvoicePackageUnpaidInvoice,
+    file?: File,
+  ) => {
+    const attach = "attach" in target ? target.attach : null;
+    if (attach?.kind === "BANK") {
+      const row = detail?.items.map(toChargeRow).find((r) => r.id === target.id);
+      if (row) openRow(row);
+      return;
+    }
+    if (!file) return;
+    const rowId = attach ? attach.id : target.id;
+    setAttachingId(rowId);
+    setNotice(null);
+    try {
+      await billingDocumentsApi.attachIncomingPdf(token, rowId, file);
+      await Promise.all([load(), loadCheck()]);
+    } catch (cause) {
+      setNotice(
+        cause instanceof Error ? cause.message : "A PDF csatolása nem sikerült.",
+      );
+    } finally {
+      setAttachingId(null);
+    }
+  };
+
   const uploadStatement = async (file: File | undefined) => {
     if (!file) return;
     setNotice(null);
     try {
       setImported(await missingInvoicesApi.uploadStatement(token, file));
-      await load();
+      await Promise.all([load(), loadCheck()]);
     } catch (cause) {
       setNotice(
         cause instanceof Error
@@ -498,6 +571,17 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
           void download(() => missingInvoicesApi.outgoingPackage(token, month))
         }
         exporting={exporting}
+        packageCheck={packageCheck}
+        packagePdfOnly={packagePdfOnly}
+        onPackagePdfOnly={(on) =>
+          update({
+            packagePdf: on ? "MISSING" : null,
+            ...(on ? { tab: "FOUND" } : {}),
+            page: null,
+          })
+        }
+        onAttachPdf={(target, file) => void attachPdf(target, file)}
+        attachingId={attachingId}
       />
       <MissingInvoicesDuplicates
         items={duplicates}
