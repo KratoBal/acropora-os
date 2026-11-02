@@ -1184,6 +1184,8 @@ export class MissingInvoicesService {
         paperOriginal:
           debit.paperOriginalAt !== null ||
           outcome.documents.some((d) => d.paperMarked === true),
+        // csak a terhelésé: ez vonható vissza itt (a számláé a Bejövő számlákon)
+        paperOriginalMarkedHere: debit.paperOriginalAt !== null,
       };
     });
     return {

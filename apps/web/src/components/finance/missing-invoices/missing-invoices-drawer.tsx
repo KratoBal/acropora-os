@@ -161,18 +161,33 @@ export function MissingInvoicesDrawer({
       row.state === "FOUND" ||
       row.paperOriginal) ? (
       <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
-          <input
-            type="checkbox"
-            checked={row.paperOriginal}
-            disabled={!canManage || busy !== null}
-            onChange={(event) => onPaperOriginal(event.target.checked)}
-          />
-          Az eredeti papíron megvan
-          {busy === "paper" ? (
-            <span className="text-xs text-pilot-grey-500">Mentés…</span>
-          ) : null}
-        </label>
+        {row.paperOriginal && !row.paperOriginalMarkedHere ? (
+          /*
+            A JELÖLÉS A SZÁMLÁN ÁLL (Balázs, 2026-11-02; barracuda #2008): itt
+            nincs mit kivenni, a négyzet visszaugrana. A visszavonás helye a
+            bejövő számla.
+          */
+          <p
+            className="text-sm text-pilot-grey-800"
+            data-testid="paper-on-invoice"
+          >
+            Az eredeti papíron megvan: a jelölés a számlán áll, és a Bejövő
+            számlák oldalon vonható vissza.
+          </p>
+        ) : (
+          <label className="flex items-center gap-2 text-sm text-pilot-grey-800">
+            <input
+              type="checkbox"
+              checked={row.paperOriginalMarkedHere}
+              disabled={!canManage || busy !== null}
+              onChange={(event) => onPaperOriginal(event.target.checked)}
+            />
+            Az eredeti papíron megvan
+            {busy === "paper" ? (
+              <span className="text-xs text-pilot-grey-500">Mentés…</span>
+            ) : null}
+          </label>
+        )}
         {row.state === "FOUND" && row.paperOriginal ? (
           <p className="text-xs text-pilot-grey-500">
             A számla PDF-je nem kerül a könyvelői csomagba.

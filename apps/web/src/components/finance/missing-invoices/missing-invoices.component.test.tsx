@@ -55,6 +55,7 @@ const charge = (overrides: Partial<ChargeRow> = {}): ChargeRow => ({
   amountDifference: null,
   refund: null,
   paperOriginal: false,
+  paperOriginalMarkedHere: false,
   ...overrides,
 });
 
@@ -783,6 +784,7 @@ describe("MissingInvoicesDrawer", () => {
           document: { number: "NAV-2026-1", source: "NAV" },
           matchedBy: "RULE",
           paperOriginal: true,
+          paperOriginalMarkedHere: true,
         })}
       />,
     );
@@ -961,6 +963,7 @@ describe("MissingInvoicesDrawer", () => {
           document: { number: "INV-2026-08177", source: "MAILBOX" },
           matchedBy: "RULE",
           paperOriginal: true,
+          paperOriginalMarkedHere: true,
         })}
       />,
     );
@@ -974,6 +977,62 @@ describe("MissingInvoicesDrawer", () => {
       screen.getByRole("checkbox", { name: "Az eredeti papíron megvan" }),
     );
     expect(props.onPaperOriginal).toHaveBeenLastCalledWith(false);
+  });
+
+  /*
+    A SZÁMLÁN ÁLLÓ JELÖLÉS A TERHELÉSEN CSAK LÁTSZIK (barracuda, #2008). MI
+    PIROSÍT: ha az örökölt jelölésnél kivehető négyzet állna (a négyzet
+    visszaugrana, mert a terhelés jelölése amúgy is üres); ha a szöveg nem
+    mondaná meg, hol vonható vissza; ha a saját jelölés négyzete nem működne
+    tovább; ha az örökölt jelölés a csomagba nem kerülésről nem szólna.
+  */
+  it("a mark that stands on the invoice shows as text with where to take it back, and offers no box", () => {
+    const props = { ...base(), onPaperOriginal: vi.fn() };
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "KS26/12407", source: "SZAMLAZZ" },
+          matchedBy: "RULE",
+          paperOriginal: true,
+          paperOriginalMarkedHere: false,
+        })}
+      />,
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: "Az eredeti papíron megvan" }),
+    ).toBeNull();
+    expect(screen.getByTestId("paper-on-invoice")).toHaveTextContent(
+      /a jelölés a számlán áll.*Bejövő számlák oldalon vonható vissza/,
+    );
+    expect(
+      screen.getByText("A számla PDF-je nem kerül a könyvelői csomagba."),
+    ).toBeTruthy();
+    expect(props.onPaperOriginal).not.toHaveBeenCalled();
+  });
+
+  it("a mark on the debit itself keeps its box and works, even when the invoice is marked too", () => {
+    const props = { ...base(), onPaperOriginal: vi.fn() };
+    render(
+      <MissingInvoicesDrawer
+        {...props}
+        row={charge({
+          state: "FOUND",
+          document: { number: "KS26/12407", source: "SZAMLAZZ" },
+          matchedBy: "RULE",
+          paperOriginal: true,
+          paperOriginalMarkedHere: true,
+        })}
+      />,
+    );
+    const box = screen.getByRole("checkbox", {
+      name: "Az eredeti papíron megvan",
+    });
+    expect(box).toBeChecked();
+    expect(screen.queryByTestId("paper-on-invoice")).toBeNull();
+    fireEvent.click(box);
+    expect(props.onPaperOriginal).toHaveBeenCalledWith(false);
   });
 
   it("several invoices in one payment: all numbers, the missing ones BY NAME, and the difference", () => {

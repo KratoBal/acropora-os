@@ -66,6 +66,8 @@ export function toChargeRow(item: MissingInvoiceItem): ChargeRow {
     // egy a mezőt még nem ismerő API (a web előbb települ) ne döntse el a sort
     refund: item.refund ?? null,
     paperOriginal: item.paperOriginal,
+    // egy a mezőt még nem ismerő API (a web előbb települ): a jelölés a terhelésé
+    paperOriginalMarkedHere: item.paperOriginalMarkedHere ?? item.paperOriginal,
   };
 }
 

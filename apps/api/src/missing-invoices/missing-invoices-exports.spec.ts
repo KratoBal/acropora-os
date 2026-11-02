@@ -965,7 +965,31 @@ describe("the paper mark of the invoice shows on its paired debit", () => {
     const marked = result.get("Szállító Kft.")!;
     const plain = result.get("Másik Kft.")!;
     assert.deepEqual([marked.state, marked.paperOriginal], ["FOUND", true]);
+    // a jelölés a SZÁMLÁN áll: a terhelésen itt nem vonható vissza
+    assert.equal(marked.paperOriginalMarkedHere, false);
     assert.deepEqual([plain.state, plain.paperOriginal], ["FOUND", false]);
+  });
+
+  it("a mark on the debit itself is marked here, with or without the invoice's", async () => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-10", 1000, "Szállító Kft.", {
+          paperOriginalAt: new Date(),
+        }),
+      ],
+      documents: [document({ id: "d1", gross: D(1000) })],
+      files: {},
+    });
+    const month = await missing.month("2026-08", {
+      tab: "ALL",
+      page: 1,
+      pageSize: 10,
+    });
+    const item = month.items.find((i) => i.partner === "Szállító Kft.")!;
+    assert.deepEqual(
+      [item.paperOriginal, item.paperOriginalMarkedHere],
+      [true, true],
+    );
   });
 
   it("a merged candidate carries the mark of any of its sources", async () => {

@@ -228,8 +228,16 @@ export interface MissingInvoiceItem {
     receivedOn: string | null;
   } | null;
   comment: string | null;
-  /** Kézzel jelölve: az eredeti papíron megvan (acrobot 25322). */
+  /**
+   * Az eredeti papíron megvan (acrobot 25322): a terhelésen álló kézi jelölés,
+   * VAGY a párosított bejövő számlán álló jelölés (Balázs, 2026-11-02).
+   */
   paperOriginal: boolean;
+  /**
+   * A jelölés a TERHELÉSEN áll, tehát itt visszavonható. Hamis, ha csak a
+   * párosított számlán áll: azt a Bejövő számlák oldalon lehet visszavonni.
+   */
+  paperOriginalMarkedHere: boolean;
 }
 
 /** A „Mit kell tenni” szöveg kulcsa, az állapotból. */
