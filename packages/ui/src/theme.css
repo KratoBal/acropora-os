@@ -281,12 +281,20 @@ body {
  * nelkul -- egy `font-display` osztalyt 56 oldalon kellene elhelyezni, es a
  * kimaradt helyek csendben a torzs betujevel maradnanak. Egy elem-szabaly
  * mindet eltalalja, es aki mast akar, felulirja egy osztallyal.
+ *
+ * A `@layer base` teszi igazza az utolso mondatot. 2026-11-03-ig a szabaly
+ * reteg nelkul allt, es a reteg nelkuli szabaly a Tailwind minden retegenel
+ * erosebb, a specificitastol fuggetlenul: a cimek sajat `tracking-*`
+ * osztalya (`tracking-tight` a PageHeader-en, `tracking-[0.17em]` a szerviz
+ * fejlecekben) ezert semmit nem tett, a betukoz mindenhol -0.02em maradt.
  */
-h1,
-h2,
-h3 {
-  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
-  letter-spacing: -0.02em;
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+    letter-spacing: -0.02em;
+  }
 }
 
 /**
