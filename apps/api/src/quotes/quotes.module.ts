@@ -20,6 +20,7 @@ import { QuoteTemplatesController } from "./quote-templates.controller.js";
 import { QuoteSnippetsService } from "./quote-snippets.service.js";
 import { QuoteTemplatesService } from "./quote-templates.service.js";
 import { QuoteVersionEditor } from "./quote-version-editor.js";
+import { QuoteLifecycleService } from "./quote-lifecycle.service.js";
 import { QuotesController } from "./quotes.controller.js";
 import { QuotesRepository } from "./quotes.repository.js";
 import { QuotesService } from "./quotes.service.js";
@@ -47,6 +48,7 @@ import { QuotePublicService } from "./public/quote-public.service.js";
     QuotesRepository,
     QuotesService,
     QuoteVersionEditor,
+    QuoteLifecycleService,
     QuoteCostingService,
     QuoteSnippetsService,
     QuoteTemplatesService,

@@ -8,6 +8,7 @@ import type {
 } from "@acropora/types";
 
 import { expiredWhere } from "./quote-expiry.js";
+import { nextQuoteNumber } from "./quote-number.js";
 import type { TemplateBlock } from "./quote-editor-input.js";
 /** Bounded list projection: newest version summary only; no child collections or JSON. */
 export const QUOTE_LIST_SELECT = {
@@ -212,11 +213,7 @@ export class QuotesRepository {
     },
   ) {
     return prisma.$transaction(async (tx) => {
-      const [seq] = await tx.$queryRaw<Array<{ value: bigint }>>(
-        Prisma.sql`SELECT nextval('"QuoteNumberSequence"') AS value`,
-      );
-      if (!seq) throw new Error("QUOTE_NUMBER_SEQUENCE_FAILED");
-      const quoteNumber = `AJ-${new Intl.DateTimeFormat("en", { timeZone: "Europe/Budapest", year: "numeric" }).format(new Date())}-${seq.value.toString().padStart(4, "0")}`;
+      const quoteNumber = await nextQuoteNumber(tx);
       const row = await tx.quote.create({
         data: {
           quoteNumber,

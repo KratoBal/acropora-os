@@ -50,6 +50,8 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   templates: vi.fn(),
   newVersion: vi.fn(),
+  deleteDraft: vi.fn(),
+  copyAsNew: vi.fn(),
   updateVersion: vi.fn(),
   costing: vi.fn(),
   addBlock: vi.fn(),
@@ -427,6 +429,83 @@ describe("Ajánlat adatlap (569:504)", () => {
     );
     expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q1/szerkesztes");
     expect(screen.queryByRole("button", { name: "Szerkesztés" })).toBeNull();
+  });
+});
+
+/*
+  A TERVEZET TÖRLÉSE ÉS A LEZÁRT AJÁNLAT MÁSOLATA (Luca, kártya 5937bdf2).
+  MI PIROSÍT: ha a Törlés megerősítés nélkül törölne; ha publikált vagy küldött
+  ajánlaton megjelenne a Törlés; ha nyitott ajánlaton megjelenne a másolat; ha
+  a másolat gombja a régi ajánlatra és nem az újra vinne; ha a szerver 409-ét
+  elnyelné.
+*/
+describe("Tervezet törlése és másolat (5937bdf2)", () => {
+  const draftOnly = () =>
+    quote([version({ id: "v1", versionNumber: 1, status: "DRAFT" })], {
+      status: "DRAFT",
+    });
+
+  it("a never-published draft: Törlés asks first, then deletes and goes back to the list", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.deleteDraft.mockResolvedValue({
+      id: "q1",
+      quoteNumber: "AJ-2026-0042",
+    });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Törlés" }));
+    expect(api.deleteDraft).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlés" }));
+    await waitFor(() =>
+      expect(api.deleteDraft).toHaveBeenCalledWith("token-1", "q1"),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok");
+  });
+
+  it("a server refusal is shown and nothing navigates", async () => {
+    api.detail.mockResolvedValue(draftOnly());
+    api.deleteDraft.mockRejectedValue(
+      new ApiError(
+        409,
+        "Küldött vagy elfogadásra kiadott ajánlat nem törölhető; lemondható.",
+      ),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Törlés" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Törlés" }));
+    expect(await screen.findByText(/nem törölhető; lemondható/)).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+  });
+
+  it("a published or sent quote has no Törlés, and an open one has no copy button", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ id: "v1", versionNumber: 1, status: "PUBLISHED" })]),
+    );
+    render(<QuoteDetailPage quoteId="q1" />);
+    await screen.findByRole("button", { name: "Új verzió" });
+    expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Másolat új ajánlatként" }),
+    ).toBeNull();
+  });
+
+  it("a closed quote: Másolat új ajánlatként creates the copy and opens the NEW quote", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ id: "v1", versionNumber: 1, status: "PUBLISHED" })], {
+        status: "CANCELLED",
+      }),
+    );
+    api.copyAsNew.mockResolvedValue({ id: "q9", quoteNumber: "AJ-2026-0099" });
+    render(<QuoteDetailPage quoteId="q1" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Másolat új ajánlatként" }),
+    );
+    await waitFor(() =>
+      expect(api.copyAsNew).toHaveBeenCalledWith("token-1", "q1"),
+    );
+    expect(navigation.push).toHaveBeenCalledWith("/ajanlatok/q9");
+    expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
   });
 });
 
@@ -1238,6 +1317,35 @@ describe("Ajánlat szerkesztő (569:171)", () => {
       target: { value: "SERVICE" },
     });
     expect(screen.queryByLabelText("BOM egységköltség")).toBeNull();
+  });
+});
+
+describe("Tétel-blokk nélküli ajánlat (5937bdf2)", () => {
+  it("no Fejezet or Opciók block: the editor says an item needs one and offers it with one click", async () => {
+    api.detail.mockResolvedValue(
+      quote([
+        version({ id: "v2", versionNumber: 2, status: "DRAFT", blocks: [] }),
+      ]),
+    );
+    api.addBlock.mockResolvedValue(
+      quote([version({ id: "v2", status: "DRAFT" })]),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    const hint = await screen.findByTestId("no-item-block");
+    fireEvent.click(
+      within(hint).getByRole("button", { name: "Fejezet hozzáadása" }),
+    );
+    await waitFor(() => expect(api.addBlock).toHaveBeenCalledTimes(1));
+    expect(api.addBlock.mock.calls[0]![3]).toMatchObject({ kind: "SECTION" });
+  });
+
+  it("with an item block the hint is not shown", async () => {
+    api.detail.mockResolvedValue(
+      quote([version({ id: "v2", versionNumber: 2, status: "DRAFT" })]),
+    );
+    render(<QuoteEditorPage quoteId="q1" />);
+    await screen.findByText("+ Új blokk hozzáadása");
+    expect(screen.queryByTestId("no-item-block")).toBeNull();
   });
 });
 

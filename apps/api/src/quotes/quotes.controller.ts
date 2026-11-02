@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -15,10 +16,14 @@ import {
   QuoteHeaderDto,
   QuoteListQueryDto,
 } from "./dto/quotes.dto.js";
+import { QuoteLifecycleService } from "./quote-lifecycle.service.js";
 import { QuotesService } from "./quotes.service.js";
 @Controller("quotes")
 export class QuotesController {
-  constructor(private readonly service: QuotesService) {}
+  constructor(
+    private readonly service: QuotesService,
+    private readonly lifecycle: QuoteLifecycleService,
+  ) {}
   @Get()
   @RequirePermissions(PERMISSIONS.QUOTES_VIEW)
   list(
@@ -53,5 +58,20 @@ export class QuotesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.update(id, input, user);
+  }
+  /**
+   * DELETE A DRAFT (Luca, card 5937bdf2): only a quote never published or sent;
+   * anything else is a cancellation. See `QuoteLifecycleService.deleteDraft`.
+   */
+  @Delete(":id")
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_MANAGE)
+  deleteDraft(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.lifecycle.deleteDraft(id, user);
+  }
+  /** A closed quote as a new editable quote (`QuoteLifecycleService.copyAsNew`). */
+  @Post(":id/copy")
+  @RequirePermissions(PERMISSIONS.QUOTES_VIEW, PERMISSIONS.QUOTES_MANAGE)
+  copyAsNew(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.lifecycle.copyAsNew(id, user);
   }
 }

@@ -70,6 +70,25 @@ export const quotesApi = {
       signal,
     });
   },
+  /**
+   * Delete a draft that was never published or sent (Luca, 2026-11-02); the
+   * server answers 409 for anything else, which is cancelled, not deleted.
+   */
+  deleteDraft(token: string, quoteId: string) {
+    return apiRequest<{ id: string; quoteNumber: string }>(
+      `/quotes/${id(quoteId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /** A closed quote as a NEW editable quote (new number, DRAFT, deep copy). */
+  copyAsNew(token: string, quoteId: string) {
+    return apiRequest<{ id: string; quoteNumber: string }>(
+      `/quotes/${id(quoteId)}/copy`,
+      token,
+      json("POST", {}),
+    );
+  },
   newVersion(token: string, quoteId: string) {
     return apiRequest<QuoteDetailDto>(
       `/quotes/${id(quoteId)}/versions`,
