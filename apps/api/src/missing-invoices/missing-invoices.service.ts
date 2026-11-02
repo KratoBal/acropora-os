@@ -868,6 +868,10 @@ export class MissingInvoicesService {
       entry: (typeof entries)[number],
     ): MissingInvoicePackagePdf => {
       const outcomes = headOutcomes(entry);
+      // Üres lista: egy tételnek nincs számlája és nincs papíron jelölve. Ilyen
+      // tétel a csomagba nem kerül (a FOUND állapot dokumentumot vagy a papíron
+      // jelölést jelenti), és a borító sem ír ki róla számlasort, tehát a lap
+      // és a borító ugyanazt mondja: nincs mit hiányolni (barracuda, #2014).
       return (
         PACKAGE_PDF_ORDER.find((candidate) => outcomes.includes(candidate)) ??
         "ATTACHED"
