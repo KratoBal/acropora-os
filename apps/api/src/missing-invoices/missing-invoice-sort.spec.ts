@@ -71,6 +71,17 @@ describe("sorting the missing invoices list", () => {
     );
   });
 
+  it("amount: decimals compare as numbers (10.25 before 10.5, where a text or digit-group comparison says the opposite)", () => {
+    const a = item({ amount: "10.5", currency: "EUR" });
+    const b = item({ amount: "10.25", currency: "EUR" });
+    const c = item({ amount: "9.99", currency: "EUR" });
+    assert.deepEqual(ids(sortMissingInvoiceItems([a, b, c], "amount", "asc")), [
+      c.id,
+      b.id,
+      a.id,
+    ]);
+  });
+
   it("partner: Hungarian alphabet with the accents in place (á after a, cs after c, ö after o)", () => {
     const names = [
       "Zsolt Bt.",
