@@ -283,13 +283,15 @@ describe("MissingInvoicesMonthPage", () => {
       pageSize: 25,
     });
     // Balázs 2026-10-01: a Figma szerint az aktív fül zöld kitöltést kap,
-    // különben nem látszik, melyik fülön áll a kezelő
+    // különben nem látszik, melyik fülön áll a kezelő; 2026-11-02 (msg
+    // 1566917720782667828): a halványzöld sem látszott, teli zöld és fehér felirat
     const found = await screen.findByRole("tab", { name: "Megvan" });
     expect(found).toHaveAttribute("aria-selected", "true");
-    expect(found.className).toContain("bg-pilot-aqua-50");
+    expect(found.className).toContain("bg-pilot-aqua-600");
+    expect(found.className).toContain("text-white");
     expect(
       screen.getByRole("tab", { name: "Nem párosodott" }).className,
-    ).not.toContain("bg-pilot-aqua-50");
+    ).not.toContain("bg-pilot-aqua-600");
     fireEvent.click(await screen.findByRole("tab", { name: "Nem párosodott" }));
     const tabHref = urlNavigation.replace.mock.calls
       .map(([href]) => href as string)
@@ -820,6 +822,53 @@ describe("MissingInvoicesMonthPage", () => {
         "Kérve e-mailben",
       ),
     );
+  });
+
+  /*
+    MENTÉS UTÁN VISSZA A LISTÁRA (Balázs 2026-11-02 20:52 UTC, msg 1566918058386137230; task
+    os-hianyzo-szuro-gomb-kiemeles). MI PIROSÍT: ha a drawer a sikeres mentés után nyitva maradna; ha a lista a mentés
+    után más füllel, kereséssel, kategóriával, bankszámlával vagy lappal töltene újra (az URL-ben állnak); ha egy
+    elutasított mentés is bezárná a drawert, és a hibaüzenet elveszne.
+  */
+  it("the note's Mentés closes the drawer; the list reloads with its own tab, search, category, account and page", async () => {
+    const query = "tab=ALL&q=openai&category=CARD_SUBSCRIPTION&accountId=acc-1&page=2";
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", query);
+    api.comment.mockResolvedValue(itemDetail({ comment: "Kérve e-mailben" }));
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    const monthCalls = api.month.mock.calls.length;
+    fireEvent.change(within(dialog).getByLabelText("Megjegyzés"), {
+      target: { value: "Kérve e-mailben" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(api.comment).toHaveBeenCalledWith("token-1", "debit-1", "Kérve e-mailben");
+    expect(api.month.mock.calls.length).toBeGreaterThan(monthCalls);
+    expect(api.month.mock.calls.at(-1)?.[2]).toMatchObject({
+      tab: "ALL",
+      q: "openai",
+      category: "CARD_SUBSCRIPTION",
+      accountId: "acc-1",
+      page: 2,
+    });
+    expect(urlNavigation.search).toBe(query);
+  });
+
+  it("a note the server refuses keeps the drawer open with its message", async () => {
+    urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08");
+    api.comment.mockRejectedValue(new Error("A megjegyzés túl hosszú."));
+    render(<MissingInvoicesMonthPage month="2026-08" />);
+    const dialog = await openFirstRow();
+    fireEvent.change(within(dialog).getByLabelText("Megjegyzés"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Mentés" }));
+    expect(
+      await within(dialog).findByText("A megjegyzés túl hosszú."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   /*

@@ -380,6 +380,9 @@ export function MissingInvoicesMonthPage({ month }: { month: string }) {
         await missingInvoicesApi.comment(token, open.id, note.trim() || null),
       );
       await load();
+      // Balázs 2026-11-02 20:52 UTC (msg 1566918058386137230): mentés után vissza a listára. A lista füle, keresése,
+      // kategóriája, bankszámlája és lapja az URL-ben van, tehát ott áll, ahol volt; hibánál a drawer nyitva marad az üzenettel.
+      closeDrawer();
     } catch (cause) {
       setDrawerError(
         cause instanceof Error ? cause.message : "A megjegyzés nem menthető.",

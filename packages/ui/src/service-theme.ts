@@ -84,8 +84,10 @@ export const sv = {
   pillTabs: "flex items-center gap-1 overflow-x-auto border-b border-line pb-3",
   pillTab:
     "whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-medium text-pilot-grey-600 transition-colors hover:bg-pilot-grey-100 hover:text-pilot-grey-900",
+  // Balázs 2026-11-02 20:51 UTC (msg 1566917720782667828): a halványzöld aktív fül alig látszott; teli zöld, fehér félkövér
+  // felirattal, a repó többi erős zöld vezérlője szerint (bg-pilot-aqua-600 text-white). A pill egyetlen hívója a Hiányzó számlák.
   pillTabActive:
-    "bg-pilot-aqua-50 font-bold text-pilot-aqua-700 hover:bg-pilot-aqua-50 hover:text-pilot-aqua-700",
+    "bg-pilot-aqua-600 font-bold text-white hover:bg-pilot-aqua-600 hover:text-white",
 
   /** `.search` -- a kereso mezo kerete. */
   search:
