@@ -434,6 +434,27 @@ export function QuoteEditorPage({ quoteId }: { quoteId: string }) {
             />
           ))}
 
+          {blocks.some((b) => ITEM_KINDS.has(b.kind)) ? null : (
+            <PilotCard>
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 p-5"
+                data-testid="no-item-block"
+              >
+                <p className="text-sm text-pilot-grey-700">
+                  Tétel felvételéhez előbb kell egy Fejezet (vagy Opciók) blokk:
+                  a tételek ebben állnak.
+                </p>
+                <PilotButton
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => addBlock("SECTION")}
+                >
+                  Fejezet hozzáadása
+                </PilotButton>
+              </div>
+            </PilotCard>
+          )}
+
           <PilotCard>
             <div className="space-y-4 p-5">
               <p className="text-sm font-semibold text-pilot-aqua-700">

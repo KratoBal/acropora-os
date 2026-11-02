@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ConfirmDialog,
   Alert,
   PilotBadge,
   PilotButton,
@@ -90,6 +91,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [quote, setQuote] = useState<QuoteDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -142,6 +144,36 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       router.push(`${QUOTES_PATH}/${quote.id}/szerkesztes`);
     } catch (cause) {
       setError(errorText(cause, "Az új verzió nem nyitható meg."));
+      setBusy(false);
+    }
+  };
+
+  // Luca (card 5937bdf2): a never-published draft can be deleted, a closed
+  // quote can be copied as a new quote. The server decides; these only show
+  // the button where it can work.
+  const neverPublished = quote.versions.every((v) => v.status === "DRAFT");
+  const deletable = quote.status === "DRAFT" && neverPublished;
+  const closed = ["ACCEPTED", "REJECTED", "CANCELLED"].includes(quote.status);
+  const deleteDraft = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await quotesApi.deleteDraft(token, quote.id);
+      router.push(QUOTES_PATH);
+    } catch (cause) {
+      setDeleting(false);
+      setError(errorText(cause, "Az ajánlat nem törölhető."));
+      setBusy(false);
+    }
+  };
+  const copyAsNew = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const copy = await quotesApi.copyAsNew(token, quote.id);
+      router.push(`${QUOTES_PATH}/${copy.id}`);
+    } catch (cause) {
+      setError(errorText(cause, "A másolat nem készült el."));
       setBusy(false);
     }
   };
@@ -226,7 +258,9 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
           </div>
         }
         actions={
-          (editable && (canManage || canRecord)) || canMail ? (
+          (editable && (canManage || canRecord)) ||
+          canMail ||
+          (canManage && (deletable || closed)) ? (
             <div className="flex flex-wrap gap-2">
               {canMail ? (
                 <PilotButton
@@ -271,6 +305,25 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                   onClick={() => setOutcome("accept")}
                 >
                   Elfogadás rögzítése
+                </PilotButton>
+              ) : null}
+              {canManage && closed ? (
+                <PilotButton
+                  size="regular"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void copyAsNew()}
+                >
+                  Másolat új ajánlatként
+                </PilotButton>
+              ) : null}
+              {canManage && deletable ? (
+                <PilotButton
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setDeleting(true)}
+                >
+                  Törlés
                 </PilotButton>
               ) : null}
               {editable && canManage ? (
@@ -385,6 +438,16 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         }}
       />
 
+      <ConfirmDialog
+        open={deleting}
+        title={`${quote.quoteNumber} törlése`}
+        consequence="Az ajánlat tervezete a tartalmával együtt végleg törlődik; a száma nem kerül újra kiadásra."
+        recovery="Csak sosem publikált, sosem kiküldött tervezet törölhető. A törölt ajánlat nem állítható vissza, újra fel kell venni."
+        confirmLabel="Törlés"
+        busy={busy}
+        onConfirm={() => void deleteDraft()}
+        onCancel={() => setDeleting(false)}
+      />
       <QuoteSendDrawer
         token={token}
         quote={quote}

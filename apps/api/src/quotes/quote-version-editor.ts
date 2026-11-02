@@ -159,6 +159,83 @@ async function audit(
   });
 }
 
+/**
+ * The deep copy of a version's content (blocks, items, BOM lines) into another
+ * version; the copy keeps every cost snapshot as it was. Shared by the new
+ * draft version and the copy of a closed quote as a new quote.
+ */
+export async function copyVersionContent(
+  tx: Prisma.TransactionClient,
+  full: Prisma.QuoteVersionGetPayload<{
+    include: {
+      blocks: { include: { items: true } };
+      bomItems: true;
+    };
+  }>,
+  targetVersionId: string,
+) {
+  const itemIds = new Map<string, string>();
+  for (const block of full.blocks) {
+    const newBlock = await tx.quoteBlock.create({
+      data: {
+        versionId: targetVersionId,
+        position: block.position,
+        kind: block.kind,
+        title: block.title,
+        content: block.content ?? Prisma.DbNull,
+        keepWithNext: block.keepWithNext,
+        startOnNewPage: block.startOnNewPage,
+        sourceSnippetId: block.sourceSnippetId,
+      },
+      select: { id: true },
+    });
+    for (const item of block.items) {
+      const newItem = await tx.quoteItem.create({
+        data: {
+          versionId: targetVersionId,
+          blockId: newBlock.id,
+          position: item.position,
+          source: item.source,
+          variantId: item.variantId,
+          name: item.name,
+          description: item.description ?? Prisma.DbNull,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitNetPrice: item.unitNetPrice,
+          vatRatePercent: item.vatRatePercent,
+          isOptional: item.isOptional,
+        },
+        select: { id: true },
+      });
+      itemIds.set(item.id, newItem.id);
+    }
+  }
+  for (const bom of full.bomItems)
+    await tx.quoteBomItem.create({
+      data: {
+        versionId: targetVersionId,
+        quoteItemId: itemIds.get(bom.quoteItemId)!,
+        position: bom.position,
+        kind: bom.kind,
+        variantId: bom.variantId,
+        customName: bom.customName,
+        quantity: bom.quantity,
+        unit: bom.unit,
+        unitCost: bom.unitCost,
+        costCurrency: bom.costCurrency,
+        costOriginal: bom.costOriginal,
+        exchangeRate: bom.exchangeRate,
+        costSource: bom.costSource,
+        costSourceDate: bom.costSourceDate,
+        sourcePurchaseInvoiceLineId: bom.sourcePurchaseInvoiceLineId,
+        supplierId: bom.supplierId,
+        supplierSku: bom.supplierSku,
+        internalNote: bom.internalNote,
+        createdProductVariantId: bom.createdProductVariantId,
+      },
+    });
+}
+
 @Injectable()
 export class QuoteVersionEditor {
   private readonly database = prisma;
@@ -229,66 +306,7 @@ export class QuoteVersionEditor {
         },
         select: { id: true },
       });
-      const itemIds = new Map<string, string>();
-      for (const block of full.blocks) {
-        const newBlock = await tx.quoteBlock.create({
-          data: {
-            versionId: created.id,
-            position: block.position,
-            kind: block.kind,
-            title: block.title,
-            content: block.content ?? Prisma.DbNull,
-            keepWithNext: block.keepWithNext,
-            startOnNewPage: block.startOnNewPage,
-            sourceSnippetId: block.sourceSnippetId,
-          },
-          select: { id: true },
-        });
-        for (const item of block.items) {
-          const newItem = await tx.quoteItem.create({
-            data: {
-              versionId: created.id,
-              blockId: newBlock.id,
-              position: item.position,
-              source: item.source,
-              variantId: item.variantId,
-              name: item.name,
-              description: item.description ?? Prisma.DbNull,
-              quantity: item.quantity,
-              unit: item.unit,
-              unitNetPrice: item.unitNetPrice,
-              vatRatePercent: item.vatRatePercent,
-              isOptional: item.isOptional,
-            },
-            select: { id: true },
-          });
-          itemIds.set(item.id, newItem.id);
-        }
-      }
-      for (const bom of full.bomItems)
-        await tx.quoteBomItem.create({
-          data: {
-            versionId: created.id,
-            quoteItemId: itemIds.get(bom.quoteItemId)!,
-            position: bom.position,
-            kind: bom.kind,
-            variantId: bom.variantId,
-            customName: bom.customName,
-            quantity: bom.quantity,
-            unit: bom.unit,
-            unitCost: bom.unitCost,
-            costCurrency: bom.costCurrency,
-            costOriginal: bom.costOriginal,
-            exchangeRate: bom.exchangeRate,
-            costSource: bom.costSource,
-            costSourceDate: bom.costSourceDate,
-            sourcePurchaseInvoiceLineId: bom.sourcePurchaseInvoiceLineId,
-            supplierId: bom.supplierId,
-            supplierSku: bom.supplierSku,
-            internalNote: bom.internalNote,
-            createdProductVariantId: bom.createdProductVariantId,
-          },
-        });
+      await copyVersionContent(tx, full, created.id);
       await tx.quoteEvent.create({
         data: {
           quoteId,
