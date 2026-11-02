@@ -808,14 +808,20 @@ export class MissingInvoicesService {
     const refundItems = computed.items.filter(
       (item) => item.month === month && item.refund !== null,
     );
-    const refundDocuments = refundItems.flatMap((item) =>
-      documentsOfItem(item.id),
-    );
+    // a sor kizárásához MINDEN hónap sztornózott vásárlása számít: az eredeti
+    // számla teljesítése szeptember lehet, a visszatérítés terhelése október,
+    // és a számla ilyenkor is csak a sztornózott vásárlás sorában szerepel
+    // (barracuda kérdése, #2002)
     const inRefund = inFeedTest(
-      refundDocuments.map((document) => ({
-        sourceDocumentId: document.id,
-        documentNumber: document.number,
-      })),
+      computed.items
+        .filter((item) => item.refund !== null)
+        .flatMap((item) => documentsOfItem(item.id))
+        .flatMap((document) =>
+          idsOf(document).map((id) => ({
+            sourceDocumentId: id,
+            documentNumber: document.number,
+          })),
+        ),
     );
     // 2. a banki oldal többi Megvan-tétele: csak az a dokumentum, amit a
     // bejövő számla sorai nem hoznak, a saját keltének hónapjában
