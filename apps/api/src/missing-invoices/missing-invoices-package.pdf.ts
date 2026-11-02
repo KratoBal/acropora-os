@@ -23,12 +23,17 @@ export interface AccountantPackageEntry {
      * „Ellenőrizendő”, vagy jóváhagyás után az ellenőrzött számok.
      */
     dataNote?: string;
+    /**
+     * A bejövő számla sorához nincs PDF sehonnan (feed, kézi csatolás,
+     * begyűjtés): a borító „PDF hiányzik”-ot ír, nem „nincs tárolt fájl”-t.
+     */
+    missingPdf?: boolean;
   }[];
 }
 
 /** Mi lett egy számlával a csomagban; a borító ezt írja ki mellé. */
 export type PackageDocumentOutcome =
-  "ATTACHED" | "PAPER" | "NOT_PDF" | "UNREADABLE" | "NO_FILE";
+  "ATTACHED" | "PAPER" | "NOT_PDF" | "UNREADABLE" | "NO_FILE" | "PDF_MISSING";
 
 const NOTE: Record<PackageDocumentOutcome, string> = {
   ATTACHED: "csatolva",
@@ -36,6 +41,7 @@ const NOTE: Record<PackageDocumentOutcome, string> = {
   NOT_PDF: "nem PDF, nincs benne",
   UNREADABLE: "a PDF nem olvasható, nincs benne",
   NO_FILE: "nincs tárolt fájl",
+  PDF_MISSING: "PDF hiányzik",
 };
 
 export const MONTHS = [
@@ -81,7 +87,7 @@ function renderCover(input: {
       .text(`${input.company.name}, adószám: ${input.company.taxNumber}`)
       .moveDown();
     if (input.lines.length === 0)
-      doc.text("Ebben a hónapban nincs Megvan állapotú tétel.");
+      doc.text("Ebben a hónapban nincs könyvelendő bejövő számla.");
     for (const { entry, notes } of input.lines) {
       doc
         .fontSize(10)
@@ -150,7 +156,8 @@ export async function buildAccountantPackage(input: {
       // nem nyomtatjuk ki még egyszer). A tétel a borítón marad, „papíron
       // megvan”-ként: a könyvelő látja, hogy a számla megvan, és hol.
       if (entry.paperOriginal) outcome = "PAPER";
-      else if (!document.file) outcome = "NO_FILE";
+      else if (!document.file)
+        outcome = document.missingPdf ? "PDF_MISSING" : "NO_FILE";
       else {
         const attached = await attachablePdf(document.file.content);
         outcome = attached.outcome;

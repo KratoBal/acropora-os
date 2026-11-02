@@ -1,3 +1,8 @@
+import {
+  collectedPdfIds,
+  loadCollectedPdfIndex,
+} from "../billing/incoming-collected-pdf.js";
+import { attachedPdfIds } from "../billing/incoming-pdf-attach.js";
 import { postedPurchaseForArrival } from "../billing/purchase-incoming.js";
 import { InvoiceCollectionRepository } from "./collection/invoice-collection.repository.js";
 import type {
@@ -259,6 +264,21 @@ export function mergeSameInvoice(
 
 /** A Számlázz.hu fizetési módja kártya: „Bankkártya”, „Kártya”, „Card”. */
 export const CARD_METHOD = /k[aá]rty|card/i;
+
+/** Egy bejövő számla a könyvelői csomaghoz, a PDF-jelöltjeivel. */
+export interface PackageBillingRow {
+  id: string;
+  documentNumber: string;
+  supplierName: string;
+  supplierTaxNumber: string | null;
+  sourceDocumentId: string | null;
+  grossAmount: Prisma.Decimal;
+  currency: string;
+  issueDate: Date;
+  fulfillmentDate: Date | null;
+  /** A PDF-et hordozhatő dokumentumok azonosítói, a használat sorrendjében. */
+  pdfIds: string[];
+}
 
 /**
  * A HIÁNYZÓ SZÁMLÁK OLVASÓ OLDALA: a terhelések és a jelölt dokumentumok a
@@ -966,6 +986,79 @@ export class MissingInvoicesRepository {
     return {
       feed,
       readings: new Map(readings.map((row) => [row.documentId, row])),
+    };
+  }
+
+  /**
+   * A KÖNYVELŐI CSOMAG BEJÖVŐ SZÁMLÁI: a hónap minden nem sztornózott és
+   * könyvelendő bejövő számlája a teljesítés napja szerint (teljesítés híján a
+   * kiállítás napja; ugyanaz a hónapkulcs, mint a napi ellenőrzésé), fizetve
+   * vagy sem. A PDF-jelöltek sorrendje ugyanaz, mint a sor letöltésénél: a
+   * feed saját dokumentuma, a kézzel csatolt, a begyűjtött.
+   *
+   * `refs` MINDEN sor (a sztornózott és a nem könyvelendő is, bármely
+   * forrásból): ezzel zárja ki a csomag a banki oldalról azt a dokumentumot,
+   * amit egy sor már hordoz, vagy tudatosan kimarad.
+   */
+  async packageBillingRows(month: string): Promise<{
+    rows: PackageBillingRow[];
+    refs: { sourceDocumentId: string | null; documentNumber: string }[];
+  }> {
+    const [year, monthNumber] = month.split("-").map(Number) as [
+      number,
+      number,
+    ];
+    const range = {
+      gte: new Date(Date.UTC(year, monthNumber - 1, 1)),
+      lt: new Date(Date.UTC(year, monthNumber, 1)),
+    };
+    const [rows, refs] = await Promise.all([
+      this.database.incomingBillingDocument.findMany({
+        where: {
+          cancelled: false,
+          notBookable: false,
+          OR: [
+            { fulfillmentDate: range },
+            { fulfillmentDate: null, issueDate: range },
+          ],
+        },
+        select: {
+          id: true,
+          documentNumber: true,
+          supplierName: true,
+          supplierTaxNumber: true,
+          sourceDocumentId: true,
+          grossAmount: true,
+          currency: true,
+          issueDate: true,
+          fulfillmentDate: true,
+        },
+        orderBy: [{ issueDate: "asc" }, { documentNumber: "asc" }],
+      }),
+      this.database.incomingBillingDocument.findMany({
+        select: { sourceDocumentId: true, documentNumber: true },
+      }),
+    ]);
+    if (rows.length === 0) return { rows: [], refs };
+    const [attached, collected] = await Promise.all([
+      attachedPdfIds(
+        this.database,
+        rows.map((row) => row.id),
+      ),
+      loadCollectedPdfIndex(this.database),
+    ]);
+    return {
+      refs,
+      rows: rows.map((row) => ({
+        ...row,
+        pdfIds: [
+          ...new Set([
+            ...(row.sourceDocumentId ? [row.sourceDocumentId] : []),
+            ...(attached.get(row.id) ?? []),
+            ...collectedPdfIds(row, collected),
+          ]),
+        ],
+      })),
     };
   }
 

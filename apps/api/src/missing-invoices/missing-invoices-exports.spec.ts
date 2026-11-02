@@ -11,7 +11,10 @@ import type { SupplierInvoiceImportService } from "../purchasing/supplier-invoic
 import type { CandidateDocument } from "./missing-invoice-matching.js";
 import { pdfTextLines } from "../purchasing/supplier-invoice-import/pdf-text-lines.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
-import type { MissingInvoicesRepository } from "./missing-invoices.repository.js";
+import type {
+  MissingInvoicesRepository,
+  PackageBillingRow,
+} from "./missing-invoices.repository.js";
 import type { StoredReading } from "../billing/foreign-invoice/reading-values.js";
 import { MissingInvoicesService } from "./missing-invoices.service.js";
 
@@ -68,6 +71,10 @@ function service(input: {
   files: Record<string, Uint8Array>;
   feed?: { sourceDocumentId: string | null; documentNumber: string }[];
   readings?: Map<string, StoredReading>;
+  /** a bejövő számlák sorai (a könyvelői csomag a teljesítés napja szerint) */
+  billing?: PackageBillingRow[];
+  /** minden bejövő számla-sor hivatkozása, a sztornózott és a nem könyvelendő is */
+  refs?: { sourceDocumentId: string | null; documentNumber: string }[];
 }) {
   const asked: string[][] = [];
   const repository = {
@@ -82,6 +89,15 @@ function service(input: {
     packageReadings: async () => ({
       feed: input.feed ?? [],
       readings: input.readings ?? new Map(),
+    }),
+    packageBillingRows: async () => ({
+      rows: input.billing ?? [],
+      refs:
+        input.refs ??
+        (input.billing ?? []).map((row) => ({
+          sourceDocumentId: row.sourceDocumentId,
+          documentNumber: row.documentNumber,
+        })),
     }),
     originals: async (ids: readonly string[]) => {
       asked.push([...ids]);
@@ -567,5 +583,239 @@ describe("the month list is sorted before it is paged", () => {
       asc,
       "the direction defaults to ascending",
     );
+  });
+});
+
+/*
+  A KÖNYVELŐI CSOMAG A TELJESÍTÉS HÓNAPJA SZERINT (Balázs, 2026-11-02 20:12
+  UTC): a hónap MINDEN bejövő számlája benne van, kifizetve vagy sem, és egy
+  számla pontosan egy hónapban.
+
+  MI PIROSÍT: ha a kifizetetlen számla (a Fluidra KS26/12407 alakja: kiállítva
+  és teljesítve 10-22, nincs terhelés) kimaradna; ha a szeptemberi számla, amit
+  októberben fizettek, az októberi csomagban IS szerepelne; ha a PDF nélküli
+  számla nem a „PDF hiányzik” sorral jönne; ha a papíron meglévő számla fájlja
+  bekerülne, vagy „PDF hiányzik”-ot kapna; ha a sorok által már hordott
+  dokumentum a banki oldalról másodszor is megjelenne.
+*/
+describe("the accountant package by fulfilment month", () => {
+  const billingRow = (
+    overrides: Partial<PackageBillingRow> & { id: string },
+  ): PackageBillingRow => ({
+    documentNumber: `KS-${overrides.id}`,
+    supplierName: "Fluidra Magyarország Kft.",
+    supplierTaxNumber: "12345678-2-41",
+    sourceDocumentId: `src-${overrides.id}`,
+    grossAmount: D(56420),
+    currency: "HUF",
+    issueDate: new Date("2026-10-22T00:00:00Z"),
+    fulfillmentDate: new Date("2026-10-22T00:00:00Z"),
+    pdfIds: [`src-${overrides.id}`],
+    ...overrides,
+  });
+  const coverOf = async (
+    input: Parameters<typeof service>[0],
+    month = "2026-10",
+  ) => {
+    const { missing } = service(input);
+    const { content } = await missing.accountantPackage(month);
+    return {
+      pages: (await PDFDocument.load(content)).getPageCount(),
+      cover: (await pdfTextLines(new Uint8Array(content))).join(" "),
+    };
+  };
+
+  it("an UNPAID invoice is in the package with its PDF (no bank debit at all)", async () => {
+    const { pages, cover } = await coverOf({
+      debits: [],
+      documents: [],
+      billing: [billingRow({ id: "fluidra", documentNumber: "KS26/12407" })],
+      files: { "src-fluidra": await pdfOfPages(2) },
+    });
+    assert.equal(pages, 1 + 2);
+    assert.ok(cover.includes("2026-10-22"), cover);
+    assert.ok(cover.includes("Fluidra Magyarország Kft."), cover);
+    assert.ok(cover.includes("56 420 HUF"), cover);
+    assert.ok(cover.includes("KS26/12407: csatolva"), cover);
+  });
+
+  it("an invoice with no PDF from any source is a cover line, PDF hiányzik, with number, supplier and amount", async () => {
+    const { pages, cover } = await coverOf({
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({
+          id: "nopdf",
+          documentNumber: "KS26/00001",
+          grossAmount: D("123.50"),
+          currency: "EUR",
+          pdfIds: [],
+        }),
+      ],
+      files: {},
+    });
+    assert.equal(pages, 1);
+    assert.ok(cover.includes("KS26/00001: PDF hiányzik"), cover);
+    assert.ok(cover.includes("Fluidra Magyarország Kft."), cover);
+    assert.ok(cover.includes("123,50 EUR"), cover);
+    assert.ok(!cover.includes("nincs tárolt fájl"), cover);
+  });
+
+  it("takes the first PDF among the candidates, and a non-PDF file is named on the cover", async () => {
+    const xml = new TextEncoder().encode("<Szamla/>");
+    const withPdf = await coverOf({
+      debits: [],
+      documents: [],
+      billing: [billingRow({ id: "two", pdfIds: ["xml", "pdf"] })],
+      files: { xml, pdf: await pdfOfPages(1) },
+    });
+    assert.equal(withPdf.pages, 2);
+    const onlyXml = await coverOf({
+      debits: [],
+      documents: [],
+      billing: [
+        billingRow({ id: "x", documentNumber: "KS-X", pdfIds: ["xml"] }),
+      ],
+      files: { xml },
+    });
+    assert.equal(onlyXml.pages, 1);
+    assert.ok(
+      onlyXml.cover.includes("KS-X: nem PDF, nincs benne"),
+      onlyXml.cover,
+    );
+  });
+
+  it("a September invoice paid in October is NOT in the October package: the bank side leaves out what a row already brings", async () => {
+    // a feed-sor (szeptember) a dokumentumán át hordozza; a terhelés októberi
+    const { pages, cover } = await coverOf({
+      debits: [debit("2026-10-05", 1000, "Szállító Kft.")],
+      documents: [
+        document({
+          id: "mb-sept",
+          number: "SEPT-1",
+          date: "2026-09-20",
+          gross: D(1000),
+        }),
+      ],
+      billing: [],
+      refs: [{ sourceDocumentId: "mb-sept", documentNumber: "SEPT-1" }],
+      files: { "mb-sept": await pdfOfPages(1) },
+    });
+    assert.equal(pages, 1);
+    assert.ok(!cover.includes("SEPT-1"), cover);
+    assert.ok(!cover.includes("Szállító Kft."), cover);
+  });
+
+  it("an invoice a row carries is on the bank side NOWHERE else: once, with the row's own data", async () => {
+    // ugyanaz a számla szám szerint is egyezik (NAV-sor, a feed-sor másik
+    // azonosítóval): egyszer szerepel
+    const { pages, cover } = await coverOf({
+      debits: [debit("2026-10-05", 56420, "Fluidra Magyarország Kft.")],
+      documents: [
+        document({
+          id: "nav-f",
+          source: "NAV",
+          number: "KS 26/12407",
+          date: "2026-10-22",
+          gross: D(56420),
+          supplierName: "Fluidra Magyarország Kft.",
+          hasOriginal: false,
+        }),
+      ],
+      billing: [billingRow({ id: "fluidra", documentNumber: "KS26/12407" })],
+      files: { "src-fluidra": await pdfOfPages(1) },
+    });
+    assert.equal(pages, 2);
+    assert.equal(cover.split("56 420 HUF").length - 1, 1, cover);
+  });
+
+  it("the mailbox-only invoice stays, in the month of its OWN date, not the payment's", async () => {
+    const input = {
+      debits: [debit("2026-10-03", 1000, "Szállító Kft.")],
+      documents: [
+        document({ id: "mb-sept", number: "MB-1", date: "2026-09-28" }),
+      ],
+      billing: [],
+      files: { "mb-sept": await pdfOfPages(1) },
+    };
+    const october = await coverOf(input, "2026-10");
+    assert.equal(october.pages, 1);
+    assert.ok(!october.cover.includes("MB-1"), october.cover);
+    const september = await coverOf(input, "2026-09");
+    assert.equal(september.pages, 2);
+    assert.ok(september.cover.includes("MB-1: csatolva"), september.cover);
+  });
+
+  it("a paper-original invoice: no PDF in the package, the cover says papíron megvan (not PDF hiányzik)", async () => {
+    const { pages, cover } = await coverOf({
+      debits: [
+        debit("2026-10-05", 56420, "Fluidra Magyarország Kft.", {
+          paperOriginalAt: new Date("2026-10-06T00:00:00Z"),
+        }),
+      ],
+      documents: [
+        document({
+          id: "src-fluidra",
+          source: "SZAMLAZZ",
+          number: "KS26/12407",
+          date: "2026-10-22",
+          gross: D(56420),
+          supplierName: "Fluidra Magyarország Kft.",
+        }),
+      ],
+      billing: [billingRow({ id: "fluidra", documentNumber: "KS26/12407" })],
+      files: { "src-fluidra": await pdfOfPages(3) },
+    });
+    assert.equal(pages, 1);
+    assert.ok(cover.includes("KS26/12407: papíron megvan"), cover);
+    assert.ok(!cover.includes("PDF hiányzik"), cover);
+  });
+
+  it("a cancelled purchase keeps original and credit note in one row, and the row's own copy is not added a second time", async () => {
+    const { pages, cover } = await coverOf(
+      {
+        debits: [
+          debit("2026-10-21", 85000, "Tesla Inc", {
+            narrative: "2026.10.17 7413124583 Tesla Inc -APPLE",
+          }),
+        ],
+        documents: [
+          document({
+            id: "nav-orig",
+            source: "NAV",
+            number: "4042A0000031808",
+            date: "2026-10-17",
+            gross: D(0),
+            supplierName: "Tesla Hungary Kft.",
+            hasOriginal: false,
+          }),
+          document({
+            id: "cr",
+            number: "CR4042A0000012507",
+            date: "2026-10-18",
+            gross: D(-85000),
+            supplierName: "Tesla Hungary Kft.",
+          }),
+        ],
+        // a jóváíró feed-sora is ott áll a bejövő számlák között
+        billing: [
+          billingRow({
+            id: "cr",
+            documentNumber: "CR4042A0000012507",
+            sourceDocumentId: "cr",
+            grossAmount: D(-85000),
+            supplierName: "Tesla Hungary Kft.",
+          }),
+        ],
+        files: { cr: await pdfOfPages(1) },
+      },
+      "2026-10",
+    );
+    assert.ok(cover.includes("sztornózott vásárlás"), cover);
+    // a sor saját példánya (szállítóval, „teljesítés napja” jelöléssel) nincs
+    // ott: csak a sztornózott vásárlás sora
+    assert.ok(!cover.includes("Tesla Hungary Kft."), cover);
+    assert.ok(!cover.includes("teljesítés napja"), cover);
+    assert.equal(pages, 2);
   });
 });
