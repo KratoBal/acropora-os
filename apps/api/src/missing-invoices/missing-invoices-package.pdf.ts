@@ -24,6 +24,12 @@ export interface AccountantPackageEntry {
      */
     dataNote?: string;
     /**
+     * A számlát kiállító cég neve (Balázs, 2026-11-02 21:18 UTC): a banki
+     * közlemény (például „SIMPLEP*dijnet”) nem mondja meg, ki a kiállító. A
+     * borító a számlaszám után írja ki, ha eltér a soron álló partnertől.
+     */
+    issuer?: string;
+    /**
      * A bejövő számla sorához nincs PDF sehonnan (feed, kézi csatolás,
      * begyűjtés): a borító „PDF hiányzik”-ot ír, nem „nincs tárolt fájl”-t.
      */
@@ -43,6 +49,13 @@ const NOTE: Record<PackageDocumentOutcome, string> = {
   NO_FILE: "nincs tárolt fájl",
   PDF_MISSING: "PDF hiányzik",
 };
+
+/** Két név ugyanaz-e a borítón: kis- és nagybetűtől, szóköztől függetlenül. */
+function sameName(a: string, b: string): boolean {
+  const key = (value: string) =>
+    value.replace(/\s+/g, " ").trim().toLowerCase();
+  return key(a) === key(b);
+}
 
 export const MONTHS = [
   "január",
@@ -164,9 +177,13 @@ export async function buildAccountantPackage(input: {
         if (attached.pdf) loaded.push(attached.pdf);
       }
       outcomes.push(outcome);
-      notes.push(`${document.number || "szám nélkül"}: ${NOTE[outcome]}`);
-      if (document.dataNote)
-        notes.push(`${document.number || "szám nélkül"}: ${document.dataNote}`);
+      const label = `${document.number || "szám nélkül"}${
+        document.issuer && !sameName(document.issuer, entry.partner)
+          ? ` (${document.issuer})`
+          : ""
+      }`;
+      notes.push(`${label}: ${NOTE[outcome]}`);
+      if (document.dataNote) notes.push(`${label}: ${document.dataNote}`);
     }
     lines.push({ entry, notes });
   }

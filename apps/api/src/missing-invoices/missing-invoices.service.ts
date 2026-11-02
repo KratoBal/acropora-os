@@ -889,6 +889,7 @@ export class MissingInvoicesService {
         number: shownNumber(document),
         originalId:
           document.originalId ?? (document.hasOriginal ? document.id : null),
+        issuer: document.supplierName,
         ...dataNoteOf(document),
       }));
 
@@ -982,6 +983,7 @@ export class MissingInvoicesService {
         documents: documents.map((d) => ({
           number: shownNumber(d),
           file: (d.originalId && files.get(d.originalId)) || null,
+          ...(d.issuer ? { issuer: d.issuer } : {}),
           ...(d.dataNote ? { dataNote: d.dataNote } : {}),
         })),
       })),

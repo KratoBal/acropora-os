@@ -368,8 +368,8 @@ describe("the accountant package with a cancelled purchase", () => {
     for (const expected of [
       "Tesla Inc | 85 000 HUF",
       "sztornózott vásárlás: az eredeti számla és a jóváíró együtt; a visszatérítés várható (határidő: 2026-09-24)",
-      "4042A0000031808: nincs tárolt fájl",
-      "CR4042A0000012507: csatolva",
+      "4042A0000031808 (Tesla Hungary Kft.): nincs tárolt fájl",
+      "CR4042A0000012507 (Tesla Hungary Kft.): csatolva",
     ])
       assert.ok(cover.includes(expected), `a borítón nincs: ${expected}`);
     assert.ok(!cover.includes("Senki Bt."), "számla nélküli tétel a csomagban");
@@ -428,6 +428,48 @@ describe("buildAccountantPackage", () => {
       "NAV-9: papíron megvan",
     ])
       assert.ok(cover.includes(expected), `a borítón nincs: ${expected}`);
+  });
+});
+
+/*
+  A KIÁLLÍTÓ CÉG NEVE A SZÁMLASZÁM UTÁN (Balázs, 2026-11-02 21:18 UTC): a banki
+  közlemény („SIMPLEP*dijnet”) nem mondja meg, ki állította ki a számlát. MI
+  PIROSÍT: ha a kiállító neve hiányozna a számlaszám után, amikor eltér a soron
+  álló partnertől; ha a névvel azonos kiállító is kiírva ismétlődne; ha a
+  kiállító nélküli dokumentum üres zárójelet kapna.
+*/
+describe("the package names the issuer after the invoice number", () => {
+  const cover = async (supplierName: string, partner: string) => {
+    const { missing } = service({
+      debits: [
+        debit("2026-08-08", 1979, partner, { narrative: "168987SZC26" }),
+      ],
+      documents: [
+        document({
+          id: "dij",
+          number: "168987SZC26",
+          gross: D(1979),
+          supplierName,
+        }),
+      ],
+      files: { dij: await pdfOfPages(1) },
+    });
+    const { content } = await missing.accountantPackage("2026-08");
+    return (await pdfTextLines(new Uint8Array(content))).join(" ");
+  };
+
+  it("a bank text that is not the issuer: the issuer follows the number", async () => {
+    const text = await cover("Dijnet Zrt.", "SIMPLEP*dijnet");
+    assert.ok(text.includes("168987SZC26 (Dijnet Zrt.): csatolva"), text);
+    assert.ok(text.includes("SIMPLEP*dijnet"), text);
+  });
+
+  it("the same name as the partner is not repeated, and no name means no brackets", async () => {
+    const same = await cover("szállító  kft.", "Szállító Kft.");
+    assert.ok(same.includes("168987SZC26: csatolva"), same);
+    const none = await cover("", "SIMPLEP*dijnet");
+    assert.ok(none.includes("168987SZC26: csatolva"), none);
+    assert.ok(!none.includes("()"), none);
   });
 });
 
@@ -879,7 +921,7 @@ describe("the accountant package by fulfilment month", () => {
     assert.ok(cover.includes("sztornózott vásárlás"), cover);
     // a sor saját példánya (szállítóval, „teljesítés napja” jelöléssel) nincs
     // ott: csak a sztornózott vásárlás sora
-    assert.ok(!cover.includes("Tesla Hungary Kft."), cover);
+    assert.ok(!cover.includes("| Tesla Hungary Kft."), cover);
     assert.ok(!cover.includes("teljesítés napja"), cover);
     assert.equal(pages, 2);
   });
