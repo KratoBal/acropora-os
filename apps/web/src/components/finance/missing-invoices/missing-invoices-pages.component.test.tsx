@@ -51,8 +51,13 @@ const api = vi.hoisted(() => ({
   missingXlsx: vi.fn(),
   accountantPackage: vi.fn(),
   outgoingPackage: vi.fn(),
+  packageCheck: vi.fn(),
 }));
 vi.mock("@/lib/api/missing-invoices", () => ({ missingInvoicesApi: api }));
+const billingApi = vi.hoisted(() => ({ attachIncomingPdf: vi.fn() }));
+vi.mock("@/lib/api/billing-documents", () => ({
+  billingDocumentsApi: billingApi,
+}));
 
 const auth = vi.hoisted(() => ({ role: "OWNER" as UserRole }));
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -179,7 +184,8 @@ const IMPORT_RESULT = {
 
 beforeEach(() => {
   auth.role = "OWNER";
-  for (const fn of Object.values(api)) fn.mockReset();
+  for (const fn of [...Object.values(api), ...Object.values(billingApi)])
+    fn.mockReset();
   api.months.mockResolvedValue({
     company: COMPANY,
     months: [
@@ -308,6 +314,128 @@ describe("MissingInvoicesMonthPage", () => {
     expect(tabHref).toBeDefined();
     expect(tabHref).not.toContain("page=");
     expect(tabHref).toContain("category=INSURANCE");
+  });
+
+  /*
+    A CSOMAG SZEME A LAPON (Balázs, 2026-11-02 22:37 UTC). MI PIROSÍT: ha a
+    „csak a PDF nélküliek” szűrő nem az URL-ből és a szervernek menne (a szerver
+    szűr, a lapozás előtt); ha a gomb nem a Megvan fülre és az első oldalra
+    állítana; ha a csomag-ellenőrzés nem a hónap egészére kérdezne; ha a
+    csatolás nem a bejövő számla sorára menne, vagy utána a lista és az
+    ellenőrzés nem töltődne újra; ha egy csatolási hiba a 409 mondata nélkül
+    jelenne meg.
+  */
+  describe("the accountant package check", () => {
+    const check = (lacking = 1) => ({
+      month: "2026-08",
+      lackingCount: lacking,
+      items: [
+        {
+          id: "debit-1",
+          pdf: "PDF_MISSING" as const,
+          attach: { kind: "ROW" as const, id: "row-9" },
+        },
+      ],
+      unpaid: [],
+    });
+
+    it("asks for the whole month, and the filter goes to the URL and to the server", async () => {
+      api.packageCheck.mockResolvedValue(check());
+      urlNavigation.reset(
+        "/penzugy/hianyzo-szamlak/2026-08",
+        "tab=FOUND&packagePdf=MISSING&page=2",
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      await waitFor(() => expect(api.packageCheck).toHaveBeenCalled());
+      expect(api.packageCheck.mock.calls[0]!.slice(0, 2)).toEqual([
+        "token-1",
+        "2026-08",
+      ]);
+      await waitFor(() => expect(api.month).toHaveBeenCalled());
+      expect(api.month.mock.calls[0]![2]).toMatchObject({
+        tab: "FOUND",
+        packagePdf: "MISSING",
+        page: 2,
+      });
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Minden Megvan tétel" }),
+      );
+      const href = urlNavigation.replace.mock.calls
+        .map(([h]) => h as string)
+        .find((h) => !h.includes("packagePdf"));
+      expect(href).toBeDefined();
+      expect(href).not.toContain("page=");
+    });
+
+    it("the filter button sets packagePdf and the Megvan tab, from page one", async () => {
+      api.packageCheck.mockResolvedValue(check());
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "page=3");
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      fireEvent.click(
+        await screen.findByRole("button", { name: "Csak a PDF nélküliek" }),
+      );
+      const href = urlNavigation.replace.mock.calls
+        .map(([h]) => h as string)
+        .find((h) => h.includes("packagePdf=MISSING"));
+      expect(href).toContain("tab=FOUND");
+      expect(href).not.toContain("page=");
+    });
+
+    it("a PDF attached from a row goes to the invoice row, then the list and the check reload", async () => {
+      api.packageCheck.mockResolvedValue(check());
+      billingApi.attachIncomingPdf.mockResolvedValue({});
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "tab=ALL");
+      api.month.mockResolvedValue(
+        monthDetail({ items: [item({ state: "FOUND" })] }),
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      const input = await screen.findByLabelText(/PDF-je/);
+      const file = new File(["%PDF-1.4"], "szamla.pdf", {
+        type: "application/pdf",
+      });
+      fireEvent.change(input, { target: { files: [file] } });
+      await waitFor(() =>
+        expect(billingApi.attachIncomingPdf).toHaveBeenCalledWith(
+          "token-1",
+          "row-9",
+          file,
+        ),
+      );
+      await waitFor(() => expect(api.packageCheck).toHaveBeenCalledTimes(2));
+      expect(api.month.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("a refused attach shows the server's sentence", async () => {
+      api.packageCheck.mockResolvedValue(check());
+      billingApi.attachIncomingPdf.mockRejectedValue(
+        new Error("Ennek a számlának már van PDF-je."),
+      );
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "tab=ALL");
+      api.month.mockResolvedValue(
+        monthDetail({ items: [item({ state: "FOUND" })] }),
+      );
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      const input = await screen.findByLabelText(/PDF-je/);
+      fireEvent.change(input, {
+        target: {
+          files: [new File(["%PDF-1.4"], "a.pdf", { type: "application/pdf" })],
+        },
+      });
+      expect(
+        await screen.findByText("Ennek a számlának már van PDF-je."),
+      ).toBeInTheDocument();
+    });
+
+    it("a check that cannot be had leaves the page as it was (no promise either way)", async () => {
+      api.packageCheck.mockRejectedValue(new Error("502"));
+      urlNavigation.reset("/penzugy/hianyzo-szamlak/2026-08", "");
+      render(<MissingInvoicesMonthPage month="2026-08" />);
+      await waitFor(() => expect(api.packageCheck).toHaveBeenCalled());
+      expect(
+        await screen.findByRole("tab", { name: "Hiányzik" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/könyvelői csomagból hiányzik/)).toBeNull();
+    });
   });
 
   /*

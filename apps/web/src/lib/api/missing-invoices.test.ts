@@ -170,10 +170,35 @@ describe("missingInvoicesApi.month sort parameters", () => {
     expect(params.get("page")).toBe("3");
   });
 
+  it("the package filter is sent only when it is on", async () => {
+    expect((await urlOf({ packagePdf: "MISSING" })).get("packagePdf")).toBe(
+      "MISSING",
+    );
+    expect((await urlOf({})).has("packagePdf")).toBe(false);
+  });
+
   it("a sort without a direction asks for ascending; no sort sends neither", async () => {
     expect((await urlOf({ sort: "date" })).get("direction")).toBe("asc");
     const plain = await urlOf({});
     expect(plain.has("sort")).toBe(false);
     expect(plain.has("direction")).toBe(false);
+  });
+});
+
+describe("missingInvoicesApi.packageCheck", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("asks the month's package check with the bearer token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ month: "2026-10", items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await missingInvoicesApi.packageCheck("token-1", "2026-10");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/missing-invoices/months/2026-10/package-check");
+    expect(JSON.stringify(init.headers)).toContain("token-1");
   });
 });

@@ -1,6 +1,11 @@
 "use client";
 
 import {
+  type MissingInvoicePackageCheck,
+  type MissingInvoicePackageCheckItem,
+  type MissingInvoicePackageUnpaidInvoice,
+} from "@acropora/types";
+import {
   Pagination,
   PilotBadge,
   PilotButton,
@@ -29,6 +34,14 @@ import {
   type ChargeTab,
   type MonthState,
 } from "./missing-invoices-model";
+import {
+  AttachPdfButton,
+  PackageCheckBanner,
+  PackagePdfBadge,
+  PackageUnpaidBlock,
+  canAttachPdf,
+  isPdfLacking,
+} from "./missing-invoices-package-check";
 
 export interface MonthSummary {
   found: number;
@@ -87,6 +100,11 @@ export function MissingInvoicesMonthDetail({
   onDownloadPackage,
   onDownloadOutgoing,
   exporting,
+  packageCheck,
+  packagePdfOnly = false,
+  onPackagePdfOnly,
+  onAttachPdf,
+  attachingId = null,
 }: {
   month: string;
   accounts: BankAccountOption[];
@@ -127,6 +145,27 @@ export function MissingInvoicesMonthDetail({
    */
   onDownloadOutgoing?: () => void;
   exporting: boolean;
+  /**
+   * A KÖNYVELŐI CSOMAG SZEMÉVEL (Balázs, 2026-11-02 22:37 UTC): melyik Megvan
+   * tételnek hiányzik a PDF-je, és melyik bejövő számla nincs még kifizetve.
+   * `null`: még tölt (a „minden megvan” üzenet addig nem jelenik meg);
+   * `undefined`: nincs bekötve vagy nem érhető el, a lap a régi módon áll.
+   */
+  packageCheck?: MissingInvoicePackageCheck | null;
+  /** A „csak a PDF nélküliek” szűrő be van-e kapcsolva (a szerver szűr). */
+  packagePdfOnly?: boolean;
+  onPackagePdfOnly?: (on: boolean) => void;
+  /**
+   * PDF csatolása: a bejövő számla sorára (`ROW`) a számlák oldalának
+   * végpontján; a banki terheléshez (`BANK`) a fiókon át, ezért ott a hívó a
+   * sort nyitja meg.
+   */
+  onAttachPdf?: (
+    target: MissingInvoicePackageCheckItem | MissingInvoicePackageUnpaidInvoice,
+    file?: File,
+  ) => void;
+  /** Annak a sornak az azonosítója, amelynek a PDF-je épp töltődik fel. */
+  attachingId?: string | null;
 }) {
   const title = formatMonth(month);
   const monthName = title.split(" ")[1] ?? title;
@@ -135,6 +174,10 @@ export function MissingInvoicesMonthDetail({
   const withoutStatement = accounts.filter((account) => !account.hasStatement);
   const filtered = Boolean(
     filters.search || filters.category || filters.accountId,
+  );
+
+  const checkOf = new Map(
+    (packageCheck?.items ?? []).map((entry) => [entry.id, entry]),
   );
 
   const columns: PilotTableColumn<ChargeRow>[] = [
@@ -224,12 +267,43 @@ export function MissingInvoicesMonthDetail({
       id: "state",
       sortable: true,
       header: "Állapot",
-      width: "150px",
-      cell: (row) => (
-        <PilotBadge variant={CHARGE_STATE_BADGES[row.state]}>
-          {CHARGE_STATE_LABELS[row.state]}
-        </PilotBadge>
-      ),
+      width: "170px",
+      cell: (row) => {
+        const entry = checkOf.get(row.id);
+        const lacking = entry !== undefined && isPdfLacking(entry.pdf);
+        return (
+          <span className="flex flex-col items-start gap-1">
+            <PilotBadge variant={CHARGE_STATE_BADGES[row.state]}>
+              {CHARGE_STATE_LABELS[row.state]}
+            </PilotBadge>
+            {entry && lacking ? <PackagePdfBadge pdf={entry.pdf} /> : null}
+            {entry &&
+            lacking &&
+            canManage &&
+            canAttachPdf(entry.pdf) &&
+            onAttachPdf ? (
+              // a kattintás nem nyitja meg a sort (a gomb a sor része)
+              <span onClick={(event) => event.stopPropagation()}>
+                {entry.attach.kind === "ROW" ? (
+                  <AttachPdfButton
+                    label={`${row.partner ?? formatDay(row.date)} PDF-je`}
+                    busy={attachingId === entry.attach.id}
+                    onFile={(file) => onAttachPdf(entry, file)}
+                  />
+                ) : (
+                  <PilotButton
+                    variant="secondary"
+                    size="action"
+                    onClick={() => onAttachPdf(entry)}
+                  >
+                    PDF csatolása
+                  </PilotButton>
+                )}
+              </span>
+            ) : null}
+          </span>
+        );
+      },
     },
     {
       id: "action",
@@ -411,7 +485,27 @@ export function MissingInvoicesMonthDetail({
             ))}
           </div>
 
-          {allFound ? (
+          {packageCheck ? (
+            <PackageCheckBanner
+              check={packageCheck}
+              filtered={packagePdfOnly}
+              onFilter={(on) => onPackagePdfOnly?.(on)}
+            />
+          ) : null}
+          {/*
+            „MINDEN MEGVAN” CSAK AKKOR, HA A CSOMAGBÓL SEM HIÁNYZIK SEMMI
+            (Balázs, 2026-11-02 22:37 UTC): a terhelésekhez párosított számla
+            még nem jelenti, hogy a PDF-je a csomagban van. Amíg az ellenőrzés
+            nem érkezett meg, a lap nem ígér készenlétet.
+          */}
+          {allFound && packageCheck === null ? (
+            <p
+              role="status"
+              className="rounded-xl bg-white px-5 py-10 text-sm text-pilot-grey-500 ring-1 ring-pilot-grey-200"
+            >
+              A könyvelői csomag PDF-jeinek ellenőrzése…
+            </p>
+          ) : allFound && (!packageCheck || packageCheck.lackingCount === 0) ? (
             <section className="rounded-xl bg-pilot-green-50 px-6 py-16 text-center ring-1 ring-pilot-grey-200">
               <h2 className="text-xl font-semibold text-pilot-green-700">
                 Minden terheléshez megvan a számla
@@ -516,6 +610,14 @@ export function MissingInvoicesMonthDetail({
               </section>
             </>
           )}
+          {packageCheck ? (
+            <PackageUnpaidBlock
+              invoices={packageCheck.unpaid}
+              canManage={canManage}
+              busyId={attachingId}
+              onAttach={(invoice, file) => onAttachPdf?.(invoice, file)}
+            />
+          ) : null}
         </>
       )}
     </div>

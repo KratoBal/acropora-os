@@ -106,6 +106,18 @@ export class MissingInvoicesController {
     });
   }
 
+  /**
+   * A HÓNAP LAPJA A CSOMAG SZEMÉVEL: melyik Megvan tételnek és melyik ki nem
+   * fizetett bejövő számlának hiányzik a PDF-je. Ugyanabból a döntésből, mint a
+   * csomag PDF-je, a fájlok fejlécével.
+   */
+  @Get("months/:month/package-check")
+  @Header("Cache-Control", "private, no-store")
+  @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
+  packageCheck(@Param("month") month: string) {
+    return this.missing.packageCheck(monthParam(month));
+  }
+
   @Get("items/:id")
   @RequirePermissions(PERMISSIONS.FINANCE_VIEW)
   item(@Param("id") id: string) {

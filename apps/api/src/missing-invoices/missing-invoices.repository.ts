@@ -1112,6 +1112,37 @@ export class MissingInvoicesRepository {
   }
 
   /**
+   * UGYANAZOK A FÁJLOK, mint az `originals`, de csak az ELSŐ ÖT BÁJT: a hónap
+   * lapja a PDF-fejlécet nézi (`%PDF-`), és a teljes tartalmat (több száz
+   * fájl) nem érdemes behúzni egy lap-kéréshez. A kulcsok és a fájlnév
+   * ugyanazok, a `content` rövid.
+   */
+  async originalHeads(
+    ids: readonly string[],
+  ): Promise<Map<string, { fileName: string; content: Uint8Array }>> {
+    if (ids.length === 0) return new Map();
+    const [documents, settlements] = await Promise.all([
+      this.database.$queryRaw<
+        { id: string; fileName: string; head: Uint8Array }[]
+      >`
+        SELECT "id", "fileName", substring("content" from 1 for 5) AS "head"
+        FROM "IncomingSupplierDocument" WHERE "id" = ANY(${[...ids]})`,
+      this.database.$queryRaw<
+        { id: string; fileName: string; head: Uint8Array }[]
+      >`
+        SELECT "id", "pdfFileName" AS "fileName",
+               substring("pdfContent" from 1 for 5) AS "head"
+        FROM "FoxpostSettlement" WHERE "id" = ANY(${[...ids]})`,
+    ]);
+    return new Map(
+      [...documents, ...settlements].map((row) => [
+        row.id,
+        { fileName: row.fileName, content: row.head },
+      ]),
+    );
+  }
+
+  /**
    * A DRAWERBŐL FELTÖLTÖTT SZÁMLA (acrobot 25274): a postafiókkal közös táblába
    * kerül, UPLOAD származással és várható beérkezés NÉLKÜL, tehát a bevételezési
    * láncba nem jut. Ugyanabban a tranzakcióban a terheléshez párosul (kézzel),

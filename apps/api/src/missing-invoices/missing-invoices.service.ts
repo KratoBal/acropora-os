@@ -24,6 +24,9 @@ import {
   type MissingInvoiceMonthQuery,
   type MissingInvoiceMonthsResponse,
   type MissingInvoiceMonthStatus,
+  type MissingInvoicePackageCheck,
+  type MissingInvoicePackagePdf,
+  MISSING_INVOICE_PACKAGE_PDF_LACKING,
 } from "@acropora/types";
 
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -51,7 +54,10 @@ import {
 import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 import { sortMissingInvoiceItems } from "./missing-invoice-sort.js";
-import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
+import {
+  buildAccountantPackage,
+  headOutcomes,
+} from "./missing-invoices-package.pdf.js";
 import {
   inFeedTest,
   notInFeedTest,
@@ -176,6 +182,15 @@ interface Classified {
  * A PÁROSÍTÁS AZ ÖSSZES HÓNAPRA EGYBEN FUT, időrendben: csak így igaz, hogy egy
  * számlát egy terhelés visz, hónapokon át is.
  */
+/** A tétel legrosszabb számlája dönt: a hiányzó előbb, mint a meglévő. */
+const PACKAGE_PDF_ORDER: readonly MissingInvoicePackagePdf[] = [
+  "PDF_MISSING",
+  "NO_FILE",
+  "NOT_PDF",
+  "ATTACHED",
+  "PAPER",
+];
+
 @Injectable()
 export class MissingInvoicesService {
   private readonly logger = new Logger(MissingInvoicesService.name);
@@ -246,8 +261,20 @@ export class MissingInvoicesService {
     const all = computed.items.filter((item) => item.month === month);
     const q = query.q?.trim().toLowerCase();
     const tab = query.tab ?? "MISSING";
+    // a „PDF nélkül” szűrő a csomag döntéséből jön (packageCheck), a lapozás ELŐTT
+    const lacking =
+      query.packagePdf === "MISSING"
+        ? new Set(
+            (await this.packageCheck(month)).items
+              .filter((entry) =>
+                MISSING_INVOICE_PACKAGE_PDF_LACKING.has(entry.pdf),
+              )
+              .map((entry) => entry.id),
+          )
+        : null;
     const filtered = all.filter(
       (item) =>
+        (!lacking || lacking.has(item.id)) &&
         (tab === "ALL" ||
           (tab === "MISSING" && MISSING_STATES.has(item.state)) ||
           (tab === "NOT_MATCHED" && item.state === "NOT_MATCHED") ||
@@ -813,6 +840,84 @@ export class MissingInvoicesService {
   async accountantPackage(
     month: string,
   ): Promise<{ fileName: string; content: Buffer }> {
+    const { entries } = await this.packageSelection(month, (ids) =>
+      this.repository.originals(ids),
+    );
+    const { pdf } = await buildAccountantPackage({
+      month,
+      company: {
+        name: ACROPORA_COMPANY.name,
+        taxNumber: ACROPORA_COMPANY.taxNumberBase,
+      },
+      entries,
+    });
+    return { fileName: `konyveloi-csomag-${month}.pdf`, content: pdf };
+  }
+
+  /**
+   * A HÓNAP LAPJÁNAK CSOMAGELLENŐRZÉSE: ugyanaz a tételválasztás és ugyanaz a
+   * számla-döntés (`headOutcome`), mint a csomag PDF-jében, de a fájloknak csak
+   * az első öt bájtját olvassa. A nem olvasható PDF (pdf-lib) ezért itt nem
+   * látszik: azt csak a csomag építése deríti ki.
+   */
+  async packageCheck(month: string): Promise<MissingInvoicePackageCheck> {
+    const { entries } = await this.packageSelection(month, (ids) =>
+      this.repository.originalHeads(ids),
+    );
+    const worst = (
+      entry: (typeof entries)[number],
+    ): MissingInvoicePackagePdf => {
+      const outcomes = headOutcomes(entry);
+      // Üres lista: egy tételnek nincs számlája és nincs papíron jelölve. Ilyen
+      // tétel a csomagba nem kerül (a FOUND állapot dokumentumot vagy a papíron
+      // jelölést jelenti), és a borító sem ír ki róla számlasort, tehát a lap
+      // és a borító ugyanazt mondja: nincs mit hiányolni (barracuda, #2014).
+      return (
+        PACKAGE_PDF_ORDER.find((candidate) => outcomes.includes(candidate)) ??
+        "ATTACHED"
+      );
+    };
+    const items = entries.flatMap((entry) =>
+      entry.itemIds.map((id) => ({
+        id,
+        pdf: worst(entry),
+        attach: entry.source,
+      })),
+    );
+    const unpaid = entries
+      .filter((entry) => entry.source.kind === "ROW" && !entry.paid)
+      .map((entry) => ({
+        id: entry.source.id,
+        number: entry.documents[0]?.number ?? "",
+        supplier: entry.partner,
+        amount: entry.amount,
+        currency: entry.currency,
+        date: entry.bookingDate,
+        pdf: worst(entry),
+      }));
+    return {
+      month,
+      lackingCount: entries.filter((entry) =>
+        MISSING_INVOICE_PACKAGE_PDF_LACKING.has(worst(entry)),
+      ).length,
+      items,
+      unpaid,
+    };
+  }
+
+  /**
+   * A CSOMAG TÉTELEI: az egyetlen hely, ahol eldől, mi tartozik a hónap
+   * csomagjába. A csomag PDF-je a teljes fájlokkal, a lap az első öt bájttal
+   * hívja (`readFiles`); a tételek azonosak, mert ugyanaz a kód állítja elő.
+   * Minden tétel megmondja, honnan jön (`source`: számla sora vagy banki
+   * terhelés), kifizetett-e, és mely Megvan terhelések tartoznak hozzá.
+   */
+  private async packageSelection(
+    month: string,
+    readFiles: (
+      ids: readonly string[],
+    ) => Promise<Map<string, { fileName: string; content: Uint8Array }>>,
+  ) {
     const [computed, billing] = await Promise.all([
       this.compute(),
       this.repository.packageBillingRows(month),
@@ -950,7 +1055,7 @@ export class MissingInvoicesService {
       paperOriginalOfRow(row, paperPairings);
 
     // a papíron megvan számla fájlját nem is kérjük le: nem kerül a csomagba
-    const files = await this.repository.originals([
+    const files = await readFiles([
       ...bankEntries
         .filter(({ item }) => !item.paperOriginal)
         .flatMap(({ documents }) =>
@@ -974,9 +1079,38 @@ export class MissingInvoicesService {
     const amountOf = (value: Prisma.Decimal, currency: string) =>
       value.toFixed(currency === "HUF" ? 0 : 2);
 
+    // melyik Megvan terheléshez tartozik egy számla-dokumentum (a kifizetettség
+    // és a lap sora innen jön)
+    // (azonosító vagy szám szerint, mint a „papíron megvan” jelölésnél)
+    const itemOfDocument = new Map<string, string>();
+    for (const item of computed.items)
+      if (item.state === "FOUND")
+        for (const document of documentsOfItem(item.id)) {
+          const numberKey = document.number
+            ? pairingNumberKey(document.number, document.supplierName)
+            : null;
+          for (const key of [...idsOf(document), numberKey])
+            if (key && !itemOfDocument.has(key))
+              itemOfDocument.set(key, item.id);
+        }
+    const itemOfRow = (row: {
+      sourceDocumentId: string | null;
+      documentNumber: string;
+      supplierName: string;
+    }) => {
+      const numberKey = pairingNumberKey(row.documentNumber, row.supplierName);
+      return (
+        (row.sourceDocumentId
+          ? itemOfDocument.get(row.sourceDocumentId)
+          : undefined) ??
+        (numberKey ? itemOfDocument.get(numberKey) : undefined)
+      );
+    };
+
     const entries = [
       ...rows.map((row) => {
         const file = paperRow(row) ? null : fileOfRow(row);
+        const itemId = itemOfRow(row);
         return {
           bookingDate: dayOf(row.fulfillmentDate ?? row.issueDate),
           partner: row.supplierName,
@@ -991,6 +1125,9 @@ export class MissingInvoicesService {
               ...(file || paperRow(row) ? {} : { missingPdf: true }),
             },
           ],
+          source: { kind: "ROW" as const, id: row.id },
+          paid: itemId !== undefined,
+          itemIds: itemId ? [itemId] : [],
         };
       }),
       ...bankEntries.map(({ item, label, documents }) => ({
@@ -1006,17 +1143,12 @@ export class MissingInvoicesService {
           ...(d.issuer ? { issuer: d.issuer } : {}),
           ...(d.dataNote ? { dataNote: d.dataNote } : {}),
         })),
+        source: { kind: "BANK" as const, id: item.id },
+        paid: true,
+        itemIds: [item.id],
       })),
     ].sort((a, b) => a.bookingDate.localeCompare(b.bookingDate));
-    const { pdf } = await buildAccountantPackage({
-      month,
-      company: {
-        name: ACROPORA_COMPANY.name,
-        taxNumber: ACROPORA_COMPANY.taxNumberBase,
-      },
-      entries,
-    });
-    return { fileName: `konyveloi-csomag-${month}.pdf`, content: pdf };
+    return { entries };
   }
 
   private missingStatementAccounts(

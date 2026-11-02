@@ -410,7 +410,68 @@ export const MISSING_INVOICE_SOURCE_LABELS: Readonly<
   SZAMLAZZ: "Számlázz.hu",
 };
 
+/**
+ * EGY SZÁMLA SORSA A KÖNYVELŐI CSOMAGBAN, ahogy a hónap lapja látja: ugyanabból
+ * a döntésből, mint a csomag PDF-je. A lap CSAK A FÁJL FEJLÉCÉT nézi (`%PDF-`),
+ * ezért a nem olvasható PDF (UNREADABLE) itt `ATTACHED`: azt csak a csomag
+ * építése deríti ki.
+ */
+export const MISSING_INVOICE_PACKAGE_PDF = [
+  "ATTACHED",
+  "PAPER",
+  "NOT_PDF",
+  "NO_FILE",
+  "PDF_MISSING",
+] as const;
+export type MissingInvoicePackagePdf =
+  (typeof MISSING_INVOICE_PACKAGE_PDF)[number];
+
+/** Amikor a csomagban a számla PDF-je nem szerepel és papíron sem megvan. */
+export const MISSING_INVOICE_PACKAGE_PDF_LACKING: ReadonlySet<MissingInvoicePackagePdf> =
+  new Set(["NOT_PDF", "NO_FILE", "PDF_MISSING"]);
+
+/** A csomagellenőrzés egy sora: a hónap egy Megvan terhelése. */
+export interface MissingInvoicePackageCheckItem {
+  /** A banki terhelés azonosítója (a lista sora). */
+  id: string;
+  pdf: MissingInvoicePackagePdf;
+  /**
+   * Hová csatolható a hiányzó PDF: a bejövő számla sorára (`ROW`, a számlák
+   * oldalának végpontja) vagy a terhelés fiókjába (`BANK`).
+   */
+  attach: { kind: "ROW" | "BANK"; id: string };
+}
+
+/** A hónap ki nem fizetett bejövő számlája a csomag szerint. */
+export interface MissingInvoicePackageUnpaidInvoice {
+  /** A bejövő számla sorának azonosítója (PDF-csatolásra). */
+  id: string;
+  number: string;
+  supplier: string;
+  /** Tizedes szöveg. */
+  amount: string;
+  currency: string;
+  /** A teljesítés napja (híján a kiállításé), `ÉÉÉÉ-HH-NN`. */
+  date: string;
+  pdf: MissingInvoicePackagePdf;
+}
+
+/** `GET /missing-invoices/months/:month/package-check` */
+export interface MissingInvoicePackageCheck {
+  month: string;
+  /**
+   * Hány csomag-tételnek hiányzik a PDF-je (Megvan terhelés és ki nem fizetett
+   * számla együtt): ugyanaz a szám, amit a csomag borítója „PDF hiányzik”,
+   * „nem PDF” és „nincs tárolt fájl” sorként mutat.
+   */
+  lackingCount: number;
+  items: MissingInvoicePackageCheckItem[];
+  unpaid: MissingInvoicePackageUnpaidInvoice[];
+}
+
 export interface MissingInvoiceMonthQuery {
+  /** `MISSING`: csak azok a tételek, amelyeknek a csomagból hiányzik a PDF-je. */
+  packagePdf?: "MISSING";
   tab?: MissingInvoiceTab;
   q?: string;
   category?: MissingInvoiceCategory;
