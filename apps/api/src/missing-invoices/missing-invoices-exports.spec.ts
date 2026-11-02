@@ -707,26 +707,28 @@ describe("the accountant package by fulfilment month", () => {
   });
 
   it("an invoice a row carries is on the bank side NOWHERE else: once, with the row's own data", async () => {
-    // ugyanaz a számla szám szerint is egyezik (NAV-sor, a feed-sor másik
-    // azonosítóval): egyszer szerepel
+    // a postafiókos példány száma szóközzel írt, a feed-soré nem: szám szerint
+    // egyezik, tehát egyszer szerepel (a sor saját adatával)
     const { pages, cover } = await coverOf({
       debits: [debit("2026-10-05", 56420, "Fluidra Magyarország Kft.")],
       documents: [
         document({
-          id: "nav-f",
-          source: "NAV",
+          id: "mb-f",
           number: "KS 26/12407",
           date: "2026-10-22",
           gross: D(56420),
           supplierName: "Fluidra Magyarország Kft.",
-          hasOriginal: false,
         }),
       ],
       billing: [billingRow({ id: "fluidra", documentNumber: "KS26/12407" })],
-      files: { "src-fluidra": await pdfOfPages(1) },
+      files: {
+        "src-fluidra": await pdfOfPages(1),
+        "mb-f": await pdfOfPages(1),
+      },
     });
     assert.equal(pages, 2);
     assert.equal(cover.split("56 420 HUF").length - 1, 1, cover);
+    assert.ok(cover.includes("teljesítés napja"), cover);
   });
 
   it("the mailbox-only invoice stays, in the month of its OWN date, not the payment's", async () => {

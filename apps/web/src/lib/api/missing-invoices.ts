@@ -290,8 +290,8 @@ export const missingInvoicesApi = {
     );
   },
   /**
-   * A könyvelői csomag (PDF): a hónap Megvan-számláinak eredetijei egyben
-   * (nautilus #1308).
+   * A könyvelői csomag (PDF): a hónap bejövő számlái a teljesítés napja
+   * szerint, kifizetve vagy sem, a PDF-jeikkel egyben (nautilus #1308).
    */
   async accountantPackage(
     token: string,
