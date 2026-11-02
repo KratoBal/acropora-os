@@ -30,6 +30,16 @@
         "$TURBO_ROOT$/apps/mobile/src/**",
         "$TURBO_ROOT$/apps/mobile/tsconfig.test.json"
       ]
+    },
+    "@acropora/ui#test": {
+      "dependsOn": ["build", "^build"],
+      "outputs": ["test-dist/**"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/web/src/app/globals.css",
+        "$TURBO_ROOT$/apps/partner/src/app/globals.css",
+        "$TURBO_ROOT$/apps/reefclub/src/app/globals.css"
+      ]
     }
   }
 }
