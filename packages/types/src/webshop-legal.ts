@@ -74,7 +74,8 @@ export interface WebshopLegalVersion {
  * The versions the shop can name. `unas-shop-2026-09-29` is what the checkout
  * records while the Fogyasztóbarát switch is off (the old shop's terms);
  * `fogyasztobarat-JPNFMVH0` is what it records once the switch is on (commerce
- * `ASZF_VERZIO`: `fogyasztobarat-<shop id>`). A new version is a new entry,
+ * `ASZF_VERZIO`: `fogyasztobarat-<shop id>`); `teszt-mod` is what the TEST shop records
+ * in test mode. A new version is a new entry,
  * never an edit of an old one: an order keeps the version it was placed under.
  */
 export const WEBSHOP_LEGAL_VERSIONS: Readonly<
@@ -86,6 +87,16 @@ export const WEBSHOP_LEGAL_VERSIONS: Readonly<
   },
   "fogyasztobarat-JPNFMVH0": {
     label: "a Fogyasztóbarát dokumentumai",
+    blocks: blocksOfVersion(),
+  },
+  // The TEST shop's mode (commerce `LEGAL_GATE_MODE=test`, Balázs 2026-11-02):
+  // Fogyasztóbarát answers only shop.acropora.hu, so the test shop takes orders
+  // without its documents and the record names this version. The blocks are the
+  // same marked placeholders, so a test mail cannot pass for a finished one; the
+  // live shop never records it (the checkout refuses test mode there).
+  "teszt-mod": {
+    label:
+      "teszt kirakat: a jogi dokumentumok az átálláskor a Fogyasztóbarátból jönnek",
     blocks: blocksOfVersion(),
   },
 };
