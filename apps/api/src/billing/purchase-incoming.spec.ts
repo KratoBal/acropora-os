@@ -384,6 +384,7 @@ describe("supersedePurchaseRows carries the not-bookable mark over", () => {
     supplierName: "Korall Import Kft.",
     notBookable: false,
     notBookableAt: null,
+    paperOriginalAt: null,
     ...over,
   });
   const fake = (rows: unknown[]) => {
@@ -420,6 +421,44 @@ describe("supersedePurchaseRows carries the not-bookable mark over", () => {
         data: { notBookable: true, notBookableAt: at },
       },
     ]);
+  });
+
+  // „Papíron megvan” (barracuda, #2004). MI PIROSÍT: ha a jelölés a leváltott
+  // sorral elveszne; ha nem a legkorábbi idő menne át; ha a feed sorának saját
+  // jelölését felülírnánk; ha jelölés nélküli sor is írna.
+  it("a purchase row marked paper-original marks the feed row that replaces it, with the earliest time, never over an existing mark", async () => {
+    const early = new Date("2026-11-02T08:00:00Z");
+    const late = new Date("2026-11-02T10:00:00Z");
+    const { transaction, calls } = fake([
+      purchase({ id: "p-1", paperOriginalAt: late }),
+      purchase({ id: "p-2", externalId: "inv-2", paperOriginalAt: early }),
+    ]);
+    assert.deepEqual(await supersedePurchaseRows(transaction, feed), [
+      "p-1",
+      "p-2",
+    ]);
+    assert.deepEqual(calls.updateMany, [
+      {
+        where: {
+          source: "SZAMLAZZ",
+          externalId: "feed-1",
+          paperOriginalAt: null,
+        },
+        data: { paperOriginalAt: early },
+      },
+    ]);
+  });
+
+  it("both marks on the purchase row both carry over; an unmarked one writes no paper mark", async () => {
+    const at = new Date("2026-11-02T08:00:00Z");
+    const both = fake([
+      purchase({ notBookable: true, notBookableAt: at, paperOriginalAt: at }),
+    ]);
+    await supersedePurchaseRows(both.transaction, feed);
+    assert.equal(both.calls.updateMany.length, 2);
+    const none = fake([purchase()]);
+    await supersedePurchaseRows(none.transaction, feed);
+    assert.equal(none.calls.updateMany.length, 0);
   });
 
   it("an unmarked purchase row, or one of another invoice, leaves the feed row alone", async () => {

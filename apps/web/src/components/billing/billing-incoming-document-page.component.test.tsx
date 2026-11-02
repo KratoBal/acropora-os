@@ -28,6 +28,7 @@ const api = vi.hoisted(() => ({
   incomingPdf: vi.fn(),
   attachIncomingPdf: vi.fn(),
   setIncomingNotBookable: vi.fn(),
+  setIncomingPaperOriginal: vi.fn(),
 }));
 vi.mock("@/lib/api/billing-documents", () => ({ billingDocumentsApi: api }));
 
@@ -82,6 +83,8 @@ const detail = (
     debits: [{ bookingDate: "2026-09-30", amount: "12700", currency: "HUF" }],
   },
   notBookable: false,
+  paperOriginal: false,
+  paperOriginalMarkedHere: false,
   hasPdf: true,
   exchangeBank: null,
   supplier: {
@@ -130,6 +133,7 @@ beforeEach(() => {
   api.incomingDetail.mockReset().mockResolvedValue(detail());
   api.incomingPdf.mockReset().mockResolvedValue(new Blob(["%PDF-1.4"]));
   api.setIncomingNotBookable.mockReset();
+  api.setIncomingPaperOriginal.mockReset();
 });
 
 // MI PIROSÍT: ha a PDF-gomb ott is megjelenne, ahol nem jött PDF; ha a
@@ -313,6 +317,53 @@ describe("BillingIncomingDocumentPage", () => {
       await screen.findByRole("button", { name: "Nem könyvelendő" }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("not-bookable-pill")).toBeNull();
+  });
+
+  // „Papíron megvan” a soron (Balázs, 2026-11-02)
+  it("Papíron megvan marks the row with one click and shows the pill; Mégsem papíron takes it back", async () => {
+    api.setIncomingPaperOriginal
+      .mockResolvedValueOnce(
+        detail({ paperOriginal: true, paperOriginalMarkedHere: true }),
+      )
+      .mockResolvedValueOnce(detail());
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    expect(screen.queryByTestId("paper-original-pill")).toBeNull();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Papíron megvan" }),
+    );
+    await waitFor(() =>
+      expect(api.setIncomingPaperOriginal).toHaveBeenCalledWith(
+        "token-1",
+        "in-1",
+        true,
+      ),
+    );
+    expect(await screen.findByTestId("paper-original-pill")).toHaveTextContent(
+      "Papíron megvan",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Mégsem papíron" }));
+    await waitFor(() =>
+      expect(api.setIncomingPaperOriginal).toHaveBeenLastCalledWith(
+        "token-1",
+        "in-1",
+        false,
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId("paper-original-pill")).toBeNull(),
+    );
+  });
+
+  it("a mark that stands on the paired debit shows the pill but offers no button here", async () => {
+    api.incomingDetail.mockResolvedValue(
+      detail({ paperOriginal: true, paperOriginalMarkedHere: false }),
+    );
+    render(<BillingIncomingDocumentPage documentId="in-1" />);
+    expect(
+      await screen.findByTestId("paper-original-pill"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Papíron megvan" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mégsem papíron" })).toBeNull();
   });
 
   it("a mailbox-only row has no table row to mark: no button", async () => {

@@ -474,6 +474,7 @@ describe(
               { bookingDate: "2026-10-02", amount: "1270", currency: "HUF" },
             ],
             paidInFull: true,
+            paperOriginal: false,
             document: {
               id: scan.id,
               source: "UPLOAD" as const,

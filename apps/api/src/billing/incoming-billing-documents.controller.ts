@@ -32,6 +32,7 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { MissingInvoicesService } from "../missing-invoices/missing-invoices.service.js";
 import { IncomingAssignDocumentDto } from "./dto/incoming-assign-document.dto.js";
 import { IncomingNotBookableDto } from "./dto/incoming-not-bookable.dto.js";
+import { IncomingPaperOriginalDto } from "./dto/incoming-paper-original.dto.js";
 import { IncomingDocumentListQueryDto } from "./dto/incoming-document-list-query.dto.js";
 import { IncomingReviewDto } from "./dto/incoming-review.dto.js";
 import { IncomingReviewService } from "./foreign-invoice/incoming-review.service.js";
@@ -44,6 +45,7 @@ import {
   IncomingRowNotFoundError,
   setIncomingNotBookable,
 } from "./incoming-not-bookable.js";
+import { setIncomingPaperOriginal } from "./incoming-paper-original.js";
 import { loadRelatedDocuments } from "./incoming-related-documents.js";
 import {
   incomingListResponse,
@@ -363,6 +365,34 @@ export class IncomingBillingDocumentsController {
       throw error;
     }
     return this.detail(row.id);
+  }
+
+  /**
+   * „PAPÍRON MEGVAN” be- vagy kikapcsolása a soron (Balázs, 2026-11-02): a
+   * `finance.manage` jogával, mint a „nem könyvelendő”. Csak a táblába írt
+   * soron lehet; a `mailbox:` és `purchase:` előtagú sor 404 (azon a Hiányzó
+   * számlák jelölése áll). Lásd `setIncomingPaperOriginal`.
+   */
+  @Post("incoming-documents/:id/paper-original")
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  async setPaperOriginal(
+    @Param("id") id: string,
+    @Body() input: IncomingPaperOriginalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<IncomingDocumentDetail> {
+    try {
+      await setIncomingPaperOriginal(this.database, {
+        rowId: id,
+        marked: input.marked,
+        userId: user.id,
+      });
+    } catch (error) {
+      if (error instanceof IncomingRowNotFoundError)
+        throw new NotFoundException(error.message);
+      throw error;
+    }
+    return this.detail(id);
   }
 
   /**
