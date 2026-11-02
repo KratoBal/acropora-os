@@ -380,6 +380,34 @@ export function notInFeedTest(
     "id" | "aliasIds" | "number" | "source"
   >,
 ) => boolean {
+  const inFeed = inFeedTest(feed);
+  return (document) =>
+    MAILBOX_ONLY_SOURCES.has(document.source) &&
+    // only the id, the aliases and the number, as before (not the original)
+    !inFeed({
+      id: document.id,
+      aliasIds: document.aliasIds,
+      number: document.number,
+    });
+}
+
+/**
+ * EGY BEJÖVŐ SZÁMLA-SOR MÁR HORDOZZA-E a dokumentumot: a sor forrása a
+ * dokumentum (vagy az aliasa), vagy a száma egyezik. Forrástól független, a
+ * könyvelői csomag ezzel veszi ki a banki oldalról azt, amit a bejövő számla
+ * sora már behoz (egy számla egyszer, egy hónapban szerepel).
+ */
+export function inFeedTest(
+  feed: readonly Pick<
+    IncomingBillingDocument,
+    "sourceDocumentId" | "documentNumber"
+  >[],
+): (
+  document: Pick<
+    DocumentPairing["document"],
+    "id" | "aliasIds" | "originalId" | "number"
+  >,
+) => boolean {
   const feedSources = new Set(
     feed.map((row) => row.sourceDocumentId).filter(Boolean),
   );
@@ -387,12 +415,13 @@ export function notInFeedTest(
     feed.map((row) => compactNumber(row.documentNumber)),
   );
   return (document) =>
-    MAILBOX_ONLY_SOURCES.has(document.source) &&
-    ![document.id, ...(document.aliasIds ?? [])].some((id) =>
-      feedSources.has(id),
-    ) &&
+    [
+      document.id,
+      ...(document.aliasIds ?? []),
+      ...(document.originalId ? [document.originalId] : []),
+    ].some((id) => feedSources.has(id)) ||
     // az olvasatlan feltöltés száma üres: az nem egy feed-sor száma
-    !(document.number && feedNumbers.has(compactNumber(document.number)));
+    Boolean(document.number && feedNumbers.has(compactNumber(document.number)));
 }
 
 /** A csak postafiókos sor azonosítójának előtagja; utána a jelölt dokumentum azonosítója. */

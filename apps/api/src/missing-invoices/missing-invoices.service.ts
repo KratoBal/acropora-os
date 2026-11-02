@@ -52,7 +52,10 @@ import { originalAmountOf } from "./otp-statement.parser.js";
 import { payeeFromText } from "./payee-check.js";
 import { sortMissingInvoiceItems } from "./missing-invoice-sort.js";
 import { buildAccountantPackage } from "./missing-invoices-package.pdf.js";
-import { notInFeedTest } from "../billing/incoming-billing-documents.js";
+import {
+  inFeedTest,
+  notInFeedTest,
+} from "../billing/incoming-billing-documents.js";
 import {
   packageDataNote,
   storedValues,
@@ -765,41 +768,31 @@ export class MissingInvoicesService {
   }
 
   /**
-   * A KÖNYVELŐI CSOMAG: a hónap Megvan-tételeinek eredetijei egy PDF-ben. A
-   * díjbekérő, a nem a cégre szóló és a hiányzó nem Megvan, tehát nem is kerül
-   * bele. Összevont számlánál a fájl az eredetit hordozó forrásé.
+   * A KÖNYVELŐI CSOMAG: a hónap MINDEN bejövő számlája a teljesítés napja
+   * szerint, kifizetve vagy sem (Balázs, 2026-11-02 20:12 UTC; eddig a banki
+   * terhelések hónapja döntött, tehát egy még ki nem fizetett számla nem
+   * szerepelt). Egy számla egyszer, egy hónapban van benne: a szeptemberi
+   * számla, amit októberben fizettek, CSAK a szeptemberi csomagban áll.
    *
-   * A SZTORNÓZOTT VÁSÁRLÁS IS BEKERÜL (acrobot 25981): az eredeti számla ÉS a
-   * jóváíró (az könyvelendő bizonylat), egy sorban, jelölve, hogy összetartoznak,
-   * és mi lett a visszatérítéssel.
+   * KÉT FORRÁSBÓL ÁLL:
+   *  1. a bejövő számlák sorai (nem sztornózott, nem „nem könyvelendő”), a
+   *     PDF-jük bármely útról (feed, kézi csatolás, begyűjtés); ha nincs, a
+   *     borító „PDF hiányzik”-ot ír a számmal, a szállítóval, az összeggel;
+   *  2. a banki oldalról azt, amit a sorok nem hoznak: a sztornózott vásárlás
+   *     (az eredeti számla ÉS a jóváíró együtt, a terhelés hónapjában, mint
+   *     eddig, acrobot 25981) és a csak postafiókból (vagy NAV-ból,
+   *     elszámolásból) ismert, kifizetett számla, a SAJÁT keltének hónapjában.
+   *
+   * A papíron meglévő számla PDF-je kimarad, a borító „papíron megvan”-t ír
+   * (#2000): a jelölés a számla párosított terhelésén áll.
    */
   async accountantPackage(
     month: string,
   ): Promise<{ fileName: string; content: Buffer }> {
-    const computed = await this.compute();
-    const found = computed.items.filter(
-      (item) =>
-        item.month === month &&
-        (item.state === "FOUND" || item.refund !== null),
-    );
-    const labelOf = (item: (typeof found)[number]) =>
-      item.refund
-        ? `sztornózott vásárlás: az eredeti számla és a jóváíró együtt; ${
-            item.refund.receivedOn
-              ? `a visszatérítés megjött (${item.refund.receivedOn})`
-              : item.state === "REFUND_MISSING"
-                ? `a visszatérítés elmaradt (határidő: ${item.refund.due})`
-                : `a visszatérítés várható (határidő: ${item.refund.due})`
-          }`
-        : undefined;
-    /*
-      A CSAK POSTAFIÓKBÓL ISMERT SZÁMLA (kártya e4c3b0fb, acrobot 27599): a PDF
-      marad a csomagban, mint eddig, de a kinyert számok CSAK jóváhagyás után
-      kerülnek a borítóra; addig a tétel „Ellenőrizendő”.
-    */
-    const foundDocuments = found.flatMap(
-      (item) => computed.outcomes.get(item.id)?.documents ?? [],
-    );
+    const [computed, billing] = await Promise.all([
+      this.compute(),
+      this.repository.packageBillingRows(month),
+    ]);
     // az olvasat a fő azonosítón áll, de egy összevont jelöltnél az alias vagy
     // az eredeti is hordozhatja (barracuda visszamérése)
     const idsOf = (document: CandidateDocument) => [
@@ -807,8 +800,57 @@ export class MissingInvoicesService {
       ...(document.aliasIds ?? []),
       ...(document.originalId ? [document.originalId] : []),
     ];
+    const inFeed = inFeedTest(billing.refs);
+    const documentsOfItem = (id: string) =>
+      computed.outcomes.get(id)?.documents ?? [];
+
+    // 1. a sztornózott vásárlások: az eredeti és a jóváíró EGY sorban
+    const refundItems = computed.items.filter(
+      (item) => item.month === month && item.refund !== null,
+    );
+    const refundDocuments = refundItems.flatMap((item) =>
+      documentsOfItem(item.id),
+    );
+    const inRefund = inFeedTest(
+      refundDocuments.map((document) => ({
+        sourceDocumentId: document.id,
+        documentNumber: document.number,
+      })),
+    );
+    // 2. a banki oldal többi Megvan-tétele: csak az a dokumentum, amit a
+    // bejövő számla sorai nem hoznak, a saját keltének hónapjában
+    const bankItems = computed.items.flatMap((item) => {
+      if (item.state !== "FOUND" || item.refund !== null) return [];
+      const all = documentsOfItem(item.id);
+      const documents = all.filter((document) => !inFeed(document));
+      // a számla nélküli, papíron meglévő tételnek nincs saját kelte: a
+      // terhelés napja dönt; ha minden dokumentumát a sorok hozzák, kimarad
+      if (all.length > 0 && documents.length === 0) return [];
+      const date =
+        documents.map((document) => document.date).sort()[0] ??
+        item.bookingDate;
+      return date.slice(0, 7) === month ? [{ item, documents }] : [];
+    });
+
+    const labelOf = (item: (typeof refundItems)[number]) =>
+      `sztornózott vásárlás: az eredeti számla és a jóváíró együtt; ${
+        item.refund!.receivedOn
+          ? `a visszatérítés megjött (${item.refund!.receivedOn})`
+          : item.state === "REFUND_MISSING"
+            ? `a visszatérítés elmaradt (határidő: ${item.refund!.due})`
+            : `a visszatérítés várható (határidő: ${item.refund!.due})`
+      }`;
+    /*
+      A CSAK POSTAFIÓKBÓL ISMERT SZÁMLA (kártya e4c3b0fb, acrobot 27599): a PDF
+      marad a csomagban, mint eddig, de a kinyert számok CSAK jóváhagyás után
+      kerülnek a borítóra; addig a tétel „Ellenőrizendő”.
+    */
+    const bankDocuments = [
+      ...refundItems.flatMap((item) => documentsOfItem(item.id)),
+      ...bankItems.flatMap(({ documents }) => documents),
+    ];
     const { feed, readings } = await this.repository.packageReadings(
-      foundDocuments.flatMap(idsOf),
+      bankDocuments.flatMap(idsOf),
     );
     const mailboxOnly = notInFeedTest(feed);
     const dataNoteOf = (document: CandidateDocument) => {
@@ -824,42 +866,114 @@ export class MissingInvoicesService {
         ),
       };
     };
-    const documentsOf = (id: string) =>
-      (computed.outcomes.get(id)?.documents ?? []).map((document) => ({
+    const shown = (documents: readonly CandidateDocument[]) =>
+      documents.map((document) => ({
         number: shownNumber(document),
         originalId:
           document.originalId ?? (document.hasOriginal ? document.id : null),
         ...dataNoteOf(document),
       }));
-    // a papíron is meglévő számla fájlját nem is kérjük le: nem kerül a csomagba
-    const files = await this.repository.originals(
-      found
-        .filter((item) => !item.paperOriginal)
-        .flatMap((item) =>
-          documentsOf(item.id).flatMap((d) =>
-            d.originalId ? [d.originalId] : [],
-          ),
-        ),
+
+    // a papíron megvan jelölés a párosított terhelésen áll (#2000); a bejövő
+    // számla sora a feed dokumentumán keresztül találja meg
+    const paperDocumentIds = new Set(
+      computed.items
+        .filter((item) => item.paperOriginal)
+        .flatMap((item) => documentsOfItem(item.id).flatMap(idsOf)),
     );
+
+    const bankEntries = [
+      ...refundItems.map((item) => ({
+        item,
+        documents: shown(documentsOfItem(item.id)),
+        label: labelOf(item) as string | undefined,
+      })),
+      ...bankItems.map(({ item, documents }) => ({
+        item,
+        documents: shown(documents),
+        label: "banki terhelés napja" as string | undefined,
+      })),
+    ];
+
+    // a bejövő számla sora, amit a jóváíró vagy az eredeti már hordoz, nem
+    // kerül kétszer a csomagba
+    const rows = billing.rows.filter(
+      (row) =>
+        !inRefund({
+          id: row.sourceDocumentId ?? "",
+          number: row.documentNumber,
+        }),
+    );
+    const paperRow = (row: (typeof rows)[number]) =>
+      Boolean(
+        row.sourceDocumentId && paperDocumentIds.has(row.sourceDocumentId),
+      );
+
+    // a papíron megvan számla fájlját nem is kérjük le: nem kerül a csomagba
+    const files = await this.repository.originals([
+      ...bankEntries
+        .filter(({ item }) => !item.paperOriginal)
+        .flatMap(({ documents }) =>
+          documents.flatMap((d) => (d.originalId ? [d.originalId] : [])),
+        ),
+      ...rows.filter((row) => !paperRow(row)).flatMap((row) => row.pdfIds),
+    ]);
+    const isPdf = (id: string) => {
+      const content = files.get(id)?.content;
+      return (
+        content !== undefined &&
+        Buffer.from(content.subarray(0, 5)).toString("latin1") === "%PDF-"
+      );
+    };
+    const fileOfRow = (row: (typeof rows)[number]) => {
+      // az első PDF, ha egy sincs, az első fájl (a borító megmondja, mi baja)
+      const id = row.pdfIds.find(isPdf) ?? row.pdfIds.find((i) => files.has(i));
+      return (id && files.get(id)) || null;
+    };
+    const dayOf = (date: Date) => date.toISOString().slice(0, 10);
+    const amountOf = (value: Prisma.Decimal, currency: string) =>
+      value.toFixed(currency === "HUF" ? 0 : 2);
+
+    const entries = [
+      ...rows.map((row) => {
+        const file = paperRow(row) ? null : fileOfRow(row);
+        return {
+          bookingDate: dayOf(row.fulfillmentDate ?? row.issueDate),
+          partner: row.supplierName,
+          amount: amountOf(row.grossAmount, row.currency),
+          currency: row.currency,
+          paperOriginal: paperRow(row),
+          label: "teljesítés napja",
+          documents: [
+            {
+              number: row.documentNumber,
+              file,
+              ...(file || paperRow(row) ? {} : { missingPdf: true }),
+            },
+          ],
+        };
+      }),
+      ...bankEntries.map(({ item, label, documents }) => ({
+        bookingDate: item.bookingDate,
+        partner: item.partner ?? "",
+        amount: item.amount,
+        currency: item.currency,
+        paperOriginal: item.paperOriginal,
+        ...(label ? { label } : {}),
+        documents: documents.map((d) => ({
+          number: shownNumber(d),
+          file: (d.originalId && files.get(d.originalId)) || null,
+          ...(d.dataNote ? { dataNote: d.dataNote } : {}),
+        })),
+      })),
+    ].sort((a, b) => a.bookingDate.localeCompare(b.bookingDate));
     const { pdf } = await buildAccountantPackage({
       month,
       company: {
         name: ACROPORA_COMPANY.name,
         taxNumber: ACROPORA_COMPANY.taxNumberBase,
       },
-      entries: found.map((item) => ({
-        bookingDate: item.bookingDate,
-        partner: item.partner ?? "",
-        amount: item.amount,
-        currency: item.currency,
-        paperOriginal: item.paperOriginal,
-        ...(labelOf(item) ? { label: labelOf(item) } : {}),
-        documents: documentsOf(item.id).map((d) => ({
-          number: shownNumber(d),
-          file: (d.originalId && files.get(d.originalId)) || null,
-          ...(d.dataNote ? { dataNote: d.dataNote } : {}),
-        })),
-      })),
+      entries,
     });
     return { fileName: `konyveloi-csomag-${month}.pdf`, content: pdf };
   }
