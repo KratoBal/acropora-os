@@ -60,6 +60,14 @@ export interface CandidateDocument {
    */
   hasOriginal: boolean;
   /**
+   * A „PAPÍRON MEGVAN” JELÖLÉS A SZÁMLÁN ÁLL (Balázs, 2026-11-02): a bejövő
+   * számla során jelölték, tehát a számláról szól, nem egy terhelésről. A
+   * párosított terhelés tétele ezt örökli, akárhányadik hónapban jön a
+   * terhelés (egy októberben teljesített, kifizetetlen számla decemberi
+   * terhelése is „papíron megvan”).
+   */
+  paperMarked?: boolean;
+  /**
    * Amivel a fizetés közleménye a számlára hivatkozhat, ha az nem a száma
    * (például a rendelésszám a Fauna Marin számláján); az 1. szabály nézi.
    */

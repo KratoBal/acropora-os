@@ -1180,7 +1180,10 @@ export class MissingInvoicesService {
             }
           : null,
         comment: debit.comment,
-        paperOriginal: debit.paperOriginalAt !== null,
+        // a terhelésen álló jelölés, vagy a párosított számla soron álló jelölése
+        paperOriginal:
+          debit.paperOriginalAt !== null ||
+          outcome.documents.some((d) => d.paperMarked === true),
       };
     });
     return {
