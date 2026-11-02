@@ -5,10 +5,8 @@
 @import "../../../../packages/ui/src/theme.css";
 @import "../../../../packages/ui/src/figma-theme.css";
 
-textarea,
-select {
-  font: inherit;
-}
+/* No unlayered textarea, select { font: inherit } here: it beat every Tailwind layer, so the fields' own
+   text-* and font-* classes did nothing. Tailwind preflight already sets the inheritance in its base layer. */
 
 body {
   background: var(--color-pilot-grey-50, #f8fafb);

@@ -37,14 +37,14 @@
 @import "../../../../packages/ui/src/figma-theme.css";
 
 /*
-  A KOZOS TEMA CSAK `button, input`-ra allitja a `font: inherit`-et (ugyanugy,
-  mint a webes felulet) -- ez a ket sor a portal SAJAT, korabbi kiterjesztese
-  `textarea`/`select`-re, es itt marad, mert a webes oldalt nem erinti.
+  NINCS ITT `textarea, select { font: inherit }` (2026-11-03). Reteg nelkul
+  allt, es igy a mezok sajat `text-*`, `font-*` es `leading-*` osztalyat
+  legyozte (a reteg nelkuli szabaly minden Tailwind retegnel erosebb). Az
+  oroklest a Tailwind preflight a `base` retegben mar megadja
+  (`button, input, select, optgroup, textarea { font: inherit }`), tehat a
+  szabaly csak a felulirhatatlansagot tette hozza. Ugyanez a javitas a kozos
+  tema `button, input` szabalyan: `packages/ui/src/theme.css`.
 */
-textarea,
-select {
-  font: inherit;
-}
 
 /*
   `@layer base`-BE KOLTOZOTT (SURGOS JAVITAS, 2026-09-25, Balazs elo
