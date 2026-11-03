@@ -8,6 +8,8 @@ import {
   Input,
   PageHeader,
   Pagination,
+  PilotDataTable,
+  type PilotTableColumn,
   Select,
   Skeleton,
 } from "@acropora/ui";
@@ -21,6 +23,47 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { customersApi } from "@/lib/api/customers";
+
+type CustomerRow = CustomerListResponse["items"][number];
+
+// The shared table: on the phone every row is a card with the name as its title.
+const columns: PilotTableColumn<CustomerRow>[] = [
+  {
+    id: "name",
+    header: "Név",
+    cell: (item) => (
+      <span className="font-semibold text-dusk-900">
+        {item.displayName}
+        {item.companyName ? (
+          <span className="block text-xs font-normal text-dusk-500">
+            {item.companyName}
+          </span>
+        ) : null}
+      </span>
+    ),
+  },
+  {
+    id: "partnerCode",
+    header: "Partnerkód",
+    width: "140px",
+    cell: (item) => (
+      <span className="font-mono text-xs text-dusk-600">
+        {item.partnerCode}
+      </span>
+    ),
+  },
+  { id: "address", header: "Cím", cell: (item) => item.address ?? "—" },
+  {
+    id: "source",
+    header: "Forrás",
+    width: "180px",
+    cell: (item) => (
+      <Badge variant={item.source === "UNAS" ? "info" : "neutral"}>
+        {item.source === "UNAS" ? "Webshopos" : "Általunk rögzített"}
+      </Badge>
+    ),
+  },
+];
 
 export function CustomerListPage() {
   const { session } = useAuth();
@@ -176,43 +219,13 @@ export function CustomerListPage() {
                   onPageChange={goToPage}
                 />
               </div>
-              <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
-                  <tr>
-                    <th className="p-3">Partnerkód</th>
-                    <th>Név</th>
-                    <th>Cím</th>
-                    <th>Forrás</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.items.map((item) => (
-                    <tr key={item.id} className="border-b last:border-0">
-                      <td className="p-3 font-mono text-xs text-dusk-600">
-                        {item.partnerCode}
-                      </td>
-                      <td className="font-semibold text-dusk-900">
-                        {item.displayName}
-                        {item.companyName ? (
-                          <div className="text-xs font-normal text-dusk-500">
-                            {item.companyName}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td>{item.address ?? "—"}</td>
-                      <td>
-                        <Badge
-                          variant={item.source === "UNAS" ? "info" : "neutral"}
-                        >
-                          {item.source === "UNAS"
-                            ? "Webshopos"
-                            : "Általunk rögzített"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <PilotDataTable
+                columns={columns}
+                rows={data.items}
+                rowKey={(item) => item.id}
+                rowTestId="customer-row"
+                minWidth={720}
+              />
             </Card>
           ) : (
             <EmptyState
