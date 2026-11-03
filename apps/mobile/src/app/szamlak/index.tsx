@@ -48,13 +48,18 @@ export default function BillingScreen() {
   const canView = user ? getBillingCapabilities(user).billingView : false;
   const [direction, setDirection] = useState<Direction>("outgoing");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   // the request waits for a pause in typing, as on the Üzenetek pickers (barracuda, #2086: one request per keystroke before)
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
-    const timer = setTimeout(() => setDebounced(search.trim()), 250);
+    const timer = setTimeout(() => {
+      setDebounced(search.trim());
+      // the page goes back to the first one together with the search it belongs to (barracuda, #2088): reset on every
+      // keystroke, the old search's first page was requested in the pause
+      setPage(1);
+    }, 250);
     return () => clearTimeout(timer);
   }, [search]);
-  const [page, setPage] = useState(1);
 
   const enabled = canView && status === "authenticated";
   const outgoing = useQuery({
@@ -152,10 +157,7 @@ export default function BillingScreen() {
 
         <TextInput
           value={search}
-          onChangeText={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
+          onChangeText={setSearch}
           placeholder={
             direction === "outgoing"
               ? "Keresés számra vagy vevőre"
@@ -177,7 +179,7 @@ export default function BillingScreen() {
 
         {!query.isPending && !query.isError && rows.length === 0 ? (
           <Text style={styles.empty}>
-            {search.trim()
+            {debounced
               ? "Erre a keresésre nincs számla."
               : direction === "outgoing"
                 ? "Még nincs kimenő bizonylat."

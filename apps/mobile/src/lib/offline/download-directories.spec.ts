@@ -88,6 +88,15 @@ describe("a letöltött fájlok könyvtárai", () => {
       "utf8",
     );
     assert.match(offline, /await forgetDownloadedFiles\(\);/);
+    // ELSŐ lépésként (barracuda, #2088): ha egy későbbi lépés eldob, a letöltött fájlok addigra már törlődtek
+    const lepesek = [...offline.matchAll(/await (forget\w+)\(\);/g)].map(
+      (m) => m[1],
+    );
+    assert.ok(
+      lepesek.length >= 2,
+      `kevés törlő lépést találtam: ${lepesek.join(", ")}`,
+    );
+    assert.equal(lepesek[0], "forgetDownloadedFiles");
     assert.ok(Object.keys(DOWNLOAD_DIRECTORIES).length >= 2);
   });
 });
