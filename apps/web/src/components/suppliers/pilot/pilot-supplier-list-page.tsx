@@ -1,5 +1,13 @@
 "use client";
-import { Alert, EmptyState, Icon, Pagination, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  EmptyState,
+  Icon,
+  Pagination,
+  PilotDataTable,
+  Skeleton,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -18,6 +26,115 @@ import {
   PilotSelect,
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
+
+type SupplierRow = SupplierListResponse["items"][number];
+
+export const SUPPLIER_TABLE_MIN_WIDTH = 950;
+
+/*
+  A PARTNERLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: a partner neve a kártya címe (a Kód oszlop marad az első, ahogy volt), a többi oszlop a
+  felirata mellett.
+
+  The four-character code, not the internal `SZALL-20260731-204153-07DA` identifier: this column is
+  read by people, and it is the one that appears on the worksheet number. A service partner without
+  one is marked rather than left blank: it cannot be offered on a worksheet until it has a code, so
+  the gap is a task somebody has to finish. A partner we only buy from needs no code at all.
+  Both labels (supplier, service) can show at once, because a partner can be both; a partner that
+  is neither shows no label rather than a made-up one.
+*/
+export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
+  {
+    id: "code",
+    header: "Kód",
+    width: "110px",
+    cell: (item) => (
+      <span className="font-mono text-xs text-pilot-grey-900">
+        {item.worksheetPartnerCode ??
+          (item.isService ? (
+            <PilotBadge variant="amber">Nincs kód</PilotBadge>
+          ) : (
+            <span className="text-pilot-grey-300">—</span>
+          ))}
+      </span>
+    ),
+  },
+  {
+    id: "name",
+    header: "Név",
+    width: "280px",
+    phone: "title",
+    cell: (item) => (
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-pilot-grey-900">{item.name}</span>
+          {item.isSupplier ? (
+            <PilotBadge variant="blue">Beszállító</PilotBadge>
+          ) : null}
+          {item.isService ? (
+            <PilotBadge variant="amber">Szerviz</PilotBadge>
+          ) : null}
+        </div>
+        {item.taxNumber ? (
+          <p className="mt-0.5 text-xs text-pilot-grey-400">{item.taxNumber}</p>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "country",
+    header: "Ország",
+    width: "130px",
+    cell: (item) => (
+      <>
+        <p className="font-medium text-pilot-grey-900">{item.country}</p>
+        {item.city ? (
+          <p className="text-xs text-pilot-grey-400">{item.city}</p>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "contact",
+    header: "Ügyintéző",
+    width: "150px",
+    cell: (item) => (
+      <span className="text-pilot-grey-700">
+        {item.contactPersonName ?? (
+          <span className="text-pilot-grey-300">—</span>
+        )}
+      </span>
+    ),
+  },
+  {
+    id: "reach",
+    header: "Elérhetőség",
+    width: "190px",
+    cell: (item) => (
+      <>
+        {item.email ? (
+          <p className="break-all text-xs text-pilot-grey-700">{item.email}</p>
+        ) : null}
+        {item.phone ? (
+          <p className="text-xs text-pilot-grey-500">{item.phone}</p>
+        ) : null}
+        {!item.email && !item.phone ? (
+          <span className="text-pilot-grey-300">—</span>
+        ) : null}
+      </>
+    ),
+  },
+  {
+    id: "status",
+    header: "Státusz",
+    width: "90px",
+    cell: (item) => (
+      <PilotBadge variant={item.isActive ? "teal" : "grey"}>
+        {item.isActive ? "Aktív" : "Inaktív"}
+      </PilotBadge>
+    ),
+  },
+];
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
@@ -209,115 +326,15 @@ export function PilotSupplierListPage() {
           {data ? (
             data.items.length ? (
               <PilotCard className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left text-sm">
-                  <thead className="border-b border-pilot-grey-100">
-                    <tr>
-                      {[
-                        "Kód",
-                        "Név",
-                        "Ország",
-                        "Ügyintéző",
-                        "Elérhetőség",
-                        "Státusz",
-                      ].map((col) => (
-                        <th
-                          key={col}
-                          className="whitespace-nowrap bg-white px-4 py-3 text-xs font-medium uppercase tracking-wide text-pilot-grey-400"
-                        >
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.items.map((item, index) => (
-                      <tr
-                        key={item.id}
-                        onClick={() => router.push(`/partnerek/${item.id}`)}
-                        className={`cursor-pointer border-b border-pilot-grey-50 transition-colors hover:bg-pilot-aqua-50/40 ${
-                          index % 2 === 1 ? "bg-pilot-grey-50/50" : "bg-white"
-                        }`}
-                      >
-                        {/* The four-character code, not the internal
-                            `SZALL-20260731-204153-07DA` identifier: this
-                            column is read by people, and it is the one that
-                            appears on the worksheet number.
-
-                            A service partner without one is marked rather
-                            than left blank. It cannot be offered on a
-                            worksheet until it has a code, so the gap is a
-                            task somebody has to finish, and a blank cell
-                            says nothing about that. A partner we only buy
-                            from needs no code at all. */}
-                        <td className="px-4 py-3 font-mono text-xs text-pilot-grey-900">
-                          {item.worksheetPartnerCode ??
-                            (item.isService ? (
-                              <PilotBadge variant="amber">Nincs kód</PilotBadge>
-                            ) : (
-                              <span className="text-pilot-grey-300">—</span>
-                            ))}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-semibold text-pilot-grey-900">
-                              {item.name}
-                            </span>
-                            {/* Both can show at once, because a partner can
-                                be both, and that is the case worth seeing at
-                                a glance. A partner that is neither shows no
-                                label rather than a made-up one. */}
-                            {item.isSupplier ? (
-                              <PilotBadge variant="blue">Beszállító</PilotBadge>
-                            ) : null}
-                            {item.isService ? (
-                              <PilotBadge variant="amber">Szerviz</PilotBadge>
-                            ) : null}
-                          </div>
-                          {item.taxNumber ? (
-                            <p className="mt-0.5 text-xs text-pilot-grey-400">
-                              {item.taxNumber}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-pilot-grey-900">
-                            {item.country}
-                          </p>
-                          {item.city ? (
-                            <p className="text-xs text-pilot-grey-400">
-                              {item.city}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-pilot-grey-700">
-                          {item.contactPersonName ?? (
-                            <span className="text-pilot-grey-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {item.email ? (
-                            <p className="text-xs text-pilot-grey-700">
-                              {item.email}
-                            </p>
-                          ) : null}
-                          {item.phone ? (
-                            <p className="text-xs text-pilot-grey-500">
-                              {item.phone}
-                            </p>
-                          ) : null}
-                          {!item.email && !item.phone ? (
-                            <span className="text-pilot-grey-300">—</span>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3">
-                          <PilotBadge variant={item.isActive ? "teal" : "grey"}>
-                            {item.isActive ? "Aktív" : "Inaktív"}
-                          </PilotBadge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <PilotDataTable
+                  columns={SUPPLIER_COLUMNS}
+                  rows={data.items}
+                  rowKey={(item) => item.id}
+                  rowTestId="supplier-row"
+                  minWidth={SUPPLIER_TABLE_MIN_WIDTH}
+                  onRowActivate={(item) => router.push(`/partnerek/${item.id}`)}
+                  rowLabel={(item) => `${item.name} megnyitása`}
+                />
                 <div className="flex items-center justify-between border-t border-pilot-grey-100 px-4 py-3">
                   <p className="text-xs text-pilot-grey-400">
                     {data.pagination.totalItems.toLocaleString("hu-HU")}{" "}

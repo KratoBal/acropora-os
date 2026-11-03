@@ -1,5 +1,12 @@
 "use client";
-import { Alert, Icon, Pagination, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  Pagination,
+  PilotDataTable,
+  Skeleton,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -37,6 +44,127 @@ const litersFormatter = new Intl.NumberFormat("hu-HU", {
 
 const OWNERSHIP_OPTIONS = ["Mind", "Saját", "Ügyfél"] as const;
 const WATER_BODY_OPTIONS = ["Mind", "Akvárium", "Tó"] as const;
+
+type AquariumRow = AquariumListResponse["items"][number];
+
+export const AQUARIUM_TABLE_MIN_WIDTH = 1240;
+
+/*
+  AZ AKVÁRIUMLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
+  kártyalistává alakul: az akvárium neve a kártya címe (alatta a száma), a többi oszlop a felirata
+  mellett. Az "Utolsó vízmérés" és a "Liter" nem törhet sorba (a stage-fotón a dátum a kártya szélén
+  levágva állt).
+*/
+export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
+  {
+    id: "name",
+    header: "Név",
+    width: "200px",
+    cell: (item) => (
+      <>
+        <span className="font-medium text-pilot-grey-900">{item.name}</span>
+        <div className="text-xs font-normal text-pilot-grey-500">
+          {item.aquariumNumber}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: "ownership",
+    header: "Tulajdon",
+    width: "120px",
+    cell: (item) => (
+      <PilotBadge variant={item.ownershipType === "OWN" ? "teal" : "grey"}>
+        {ownershipLabel(item)}
+      </PilotBadge>
+    ),
+  },
+  {
+    id: "customer",
+    header: "Ügyfél",
+    width: "170px",
+    cell: (item) => (
+      <span className="text-pilot-grey-500">{item.customerName ?? "—"}</span>
+    ),
+  },
+  {
+    id: "waterBody",
+    header: "Típus",
+    width: "110px",
+    cell: (item) => (
+      <span className="text-pilot-grey-600">
+        {WATER_BODY_LABEL[item.waterBodyType]}
+      </span>
+    ),
+  },
+  {
+    id: "water",
+    header: "Víz",
+    width: "100px",
+    cell: (item) =>
+      item.waterType ? (
+        <span className="text-pilot-grey-600">
+          {WATER_TYPE_LABEL[item.waterType]}
+        </span>
+      ) : (
+        <span className="text-pilot-grey-300">—</span>
+      ),
+  },
+  {
+    id: "liters",
+    header: "Liter",
+    width: "110px",
+    align: "right",
+    nowrap: true,
+    cell: (item) => (
+      <span className="font-mono tabular-nums text-pilot-grey-700">
+        {item.systemVolumeLiters != null
+          ? `${litersFormatter.format(item.systemVolumeLiters)} l`
+          : "—"}
+      </span>
+    ),
+  },
+  {
+    id: "equipment",
+    header: "Berendezések",
+    width: "120px",
+    cell: (item) => (
+      <span className="text-pilot-grey-500">{item.equipmentCount}</span>
+    ),
+  },
+  {
+    id: "maintainers",
+    header: "Karbantartók",
+    width: "140px",
+    cell: (item) => (
+      <div className="flex -space-x-1.5">
+        {item.maintainers.map((maintainer) => (
+          <PilotAvatar
+            key={maintainer.userId}
+            initials={pilotInitials(maintainer.displayName)}
+            color={pilotAvatarColor(maintainer.userId)}
+            size="sm"
+          />
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: "lastMeasured",
+    header: "Utolsó vízmérés",
+    width: "170px",
+    nowrap: true,
+    cell: (item) => (
+      <span className="text-pilot-grey-500">
+        {item.lastMeasuredAt ? (
+          lastMeasuredFormatter.format(new Date(item.lastMeasuredAt))
+        ) : (
+          <span className="italic text-pilot-grey-300">nincs</span>
+        )}
+      </span>
+    ),
+  },
+];
 
 /**
  * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
@@ -286,102 +414,16 @@ export function PilotAquariumListPage() {
             (tengeri/édesvízi) is -- ez az adat eddig csak az adatlapon volt
             elérhető (`AquariumDetail.waterType`), a listaválasz nem hozta.
           */}
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-pilot-grey-100">
-                  {[
-                    "Név",
-                    "Tulajdon",
-                    "Ügyfél",
-                    "Típus",
-                    "Víz",
-                    "Liter",
-                    "Berendezések",
-                    "Karbantartók",
-                    "Utolsó vízmérés",
-                  ].map((col) => (
-                    <th
-                      key={col}
-                      className={`whitespace-nowrap bg-white px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-pilot-grey-400 ${
-                        col === "Liter" ? "text-right" : ""
-                      }`}
-                    >
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((item, index) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => router.push(`/akvariumok/${item.id}`)}
-                    className={`group cursor-pointer border-b border-pilot-grey-100 transition-colors hover:bg-pilot-aqua-50/40 ${
-                      index % 2 === 0 ? "bg-white" : "bg-pilot-grey-50/50"
-                    }`}
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 font-medium text-pilot-grey-900 transition-colors group-hover:text-pilot-aqua-700">
-                      {item.name}
-                      <div className="text-xs font-normal text-pilot-grey-500">
-                        {item.aquariumNumber}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <PilotBadge
-                        variant={item.ownershipType === "OWN" ? "teal" : "grey"}
-                      >
-                        {ownershipLabel(item)}
-                      </PilotBadge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
-                      {item.customerName ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-pilot-grey-600">
-                      {WATER_BODY_LABEL[item.waterBodyType]}
-                    </td>
-                    <td className="px-4 py-3 text-pilot-grey-600">
-                      {item.waterType ? (
-                        WATER_TYPE_LABEL[item.waterType]
-                      ) : (
-                        <span className="text-pilot-grey-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-pilot-grey-700">
-                      {item.systemVolumeLiters != null
-                        ? `${litersFormatter.format(item.systemVolumeLiters)} l`
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center text-pilot-grey-500">
-                      {item.equipmentCount}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex -space-x-1.5">
-                        {item.maintainers.map((maintainer) => (
-                          <PilotAvatar
-                            key={maintainer.userId}
-                            initials={pilotInitials(maintainer.displayName)}
-                            color={pilotAvatarColor(maintainer.userId)}
-                            size="sm"
-                          />
-                        ))}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-pilot-grey-500">
-                      {item.lastMeasuredAt ? (
-                        lastMeasuredFormatter.format(
-                          new Date(item.lastMeasuredAt),
-                        )
-                      ) : (
-                        <span className="italic text-pilot-grey-300">
-                          nincs
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex-1">
+            <PilotDataTable
+              columns={AQUARIUM_COLUMNS}
+              rows={data.items}
+              rowKey={(item) => item.id}
+              rowTestId="aquarium-row"
+              minWidth={AQUARIUM_TABLE_MIN_WIDTH}
+              onRowActivate={(item) => router.push(`/akvariumok/${item.id}`)}
+              rowLabel={(item) => `${item.name} megnyitása`}
+            />
           </div>
           <div className="flex justify-end border-t border-pilot-grey-100 bg-white px-4 py-2">
             <Pagination
