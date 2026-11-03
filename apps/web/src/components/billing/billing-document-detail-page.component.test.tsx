@@ -636,14 +636,6 @@ describe("BillingDocumentDetailPage", () => {
   előlegen is kínálja; jog nélkül is kínálja; a végszámlán nem látszik, mit
   von le a Számlázz.hu.
 */
-/*
-  A SZTORNÓ A RÉSZLETEKEN (számlázási brief, 1. pont). MI PIROSÍT: ha a gomb
-  rossz bizonylaton, jog nélkül vagy egy már sztornózott számlán jelenik meg;
-  ha a megerősítés nem a brief szövege, vagy a Mégsem is küld; ha a szerver
-  oka (409) elvész; ha a sztornó állapotai (kész, Számlázz.hu-n sztornózott,
-  ellenőrzésre vár, elutasított) összemosódnak; ha a sztornó PDF-je helyett a
-  számláé jön.
-*/
 /**
  * „PAPÍRON MEGVAN” A SAJÁT KIÁLLÍTOTT SZÁMLÁN (Balázs, 2026-11-03). MI PIROSÍT: a gomb nem a saját számla
  * végpontját hívja; a válasz után a lap nem mutatja a jelölést; vázlaton is van gomb; a `finance.manage`
@@ -699,6 +691,14 @@ describe("paper original", () => {
   });
 });
 
+/*
+  A SZTORNÓ A RÉSZLETEKEN (számlázási brief, 1. pont). MI PIROSÍT: ha a gomb
+  rossz bizonylaton, jog nélkül vagy egy már sztornózott számlán jelenik meg;
+  ha a megerősítés nem a brief szövege, vagy a Mégsem is küld; ha a szerver
+  oka (409) elvész; ha a sztornó állapotai (kész, Számlázz.hu-n sztornózott,
+  ellenőrzésre vár, elutasított) összemosódnak; ha a sztornó PDF-je helyett a
+  számláé jön.
+*/
 describe("storno", () => {
   const done = {
     source: "OS" as const,
