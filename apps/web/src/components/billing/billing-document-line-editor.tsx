@@ -35,6 +35,23 @@ type LineField =
   | "comment";
 
 /**
+ * A TETELSOROK TELEFONON KARTYAKENT (UI-attekintes, acrobot kepe 2026-11-03: a
+ * 760 px-es tabla a kartyaban levagva jelent meg). A tabla `md` alatt `block`
+ * elemekke alakul, a fo sor ketoszlopos racs, es a mezo-cimkek CSS-bol jonnek
+ * (`data-label`), igy a DOM-ban nincs duplikalt szoveg es a bemenetek cimkei
+ * (`aria-label`) valtozatlanok.
+ */
+const LINE_FIELD_LABELS = {
+  quantity: "Mennyiség",
+  unit: "Egység",
+  unitNet: "Nettó egységár",
+  vatRatePercent: "ÁFA",
+  discountPercent: "Kedvezmény (%)",
+} as const;
+const PHONE_LABEL =
+  "max-md:before:mb-1 max-md:before:block max-md:before:text-xs max-md:before:text-pilot-grey-500 max-md:before:content-[attr(data-label)]";
+
+/**
  * A TÉTELEK (brief 13-14. pont): termék és egyedi tétel ugyanabban a
  * szerkesztőben, minden tétel alatt saját megjegyzéssel.
  *
@@ -221,8 +238,8 @@ export function BillingDocumentLineEditor({
         </p>
       ) : (
         <div className="relative overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
+          <table className="w-full text-sm max-md:block md:min-w-[760px]">
+            <thead className="max-md:sr-only">
               <tr className="bg-pilot-grey-50 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-pilot-grey-500">
                 <th className="px-3 py-2">Tétel</th>
                 <th className="w-20 px-2 py-2">Menny.</th>
@@ -243,10 +260,10 @@ export function BillingDocumentLineEditor({
               return (
                 <tbody
                   key={line.key}
-                  className="border-b border-pilot-grey-100"
+                  className="border-b border-pilot-grey-100 max-md:block"
                 >
-                  <tr className="align-top">
-                    <td className="px-3 py-2">
+                  <tr className="align-top max-md:grid max-md:grid-cols-2 max-md:gap-x-3 max-md:gap-y-2 max-md:p-3">
+                    <td className="px-3 py-2 max-md:col-span-2 max-md:p-0">
                       <PilotInput
                         aria-label={`${index + 1}. tétel megnevezése`}
                         placeholder="Megnevezés"
@@ -301,7 +318,11 @@ export function BillingDocumentLineEditor({
                         ["discountPercent", "kedvezménye (%)", "decimal"],
                       ] as const
                     ).map(([field, noun, mode]) => (
-                      <td key={field} className="px-2 py-2">
+                      <td
+                        key={field}
+                        data-label={LINE_FIELD_LABELS[field]}
+                        className={`px-2 py-2 max-md:p-0 ${PHONE_LABEL}`}
+                      >
                         <PilotInput
                           aria-label={`${label} ${noun}`}
                           inputMode={mode === "decimal" ? "decimal" : "text"}
@@ -312,7 +333,10 @@ export function BillingDocumentLineEditor({
                         />
                       </td>
                     ))}
-                    <td className="px-2 py-2">
+                    <td
+                      data-label="Bruttó"
+                      className={`px-2 py-2 max-md:p-0 ${PHONE_LABEL}`}
+                    >
                       {/* BRUTTÓ IS BEÍRHATÓ (Balázs a stage-en, 2026-09-30):
                           a nettó egységár ebből számolódik vissza. */}
                       <PilotInput
@@ -334,7 +358,7 @@ export function BillingDocumentLineEditor({
                         </p>
                       ) : null}
                     </td>
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 max-md:col-span-2 max-md:p-0 max-md:text-right">
                       <button
                         type="button"
                         aria-label={`${label} törlése`}
@@ -347,9 +371,9 @@ export function BillingDocumentLineEditor({
                     </td>
                   </tr>
                   {line.priceNote ? (
-                    <tr>
+                    <tr className="max-md:block">
                       <td
-                        className="px-3 pb-2 pl-6 text-xs text-pilot-grey-600"
+                        className="px-3 pb-2 pl-6 text-xs text-pilot-grey-600 max-md:block"
                         colSpan={8}
                       >
                         <span role="status">
@@ -359,9 +383,9 @@ export function BillingDocumentLineEditor({
                     </tr>
                   ) : null}
                   {mismatch ? (
-                    <tr>
+                    <tr className="max-md:block">
                       <td
-                        className="px-3 pb-2 pl-6 text-xs text-pilot-amber-700"
+                        className="px-3 pb-2 pl-6 text-xs text-pilot-amber-700 max-md:block"
                         colSpan={8}
                       >
                         <span role="status">
@@ -378,22 +402,25 @@ export function BillingDocumentLineEditor({
                     </tr>
                   ) : null}
                   {computed?.discount ? (
-                    <tr className="text-pilot-grey-600">
-                      <td className="px-3 pb-2 pl-6 text-xs" colSpan={6}>
+                    <tr className="text-pilot-grey-600 max-md:flex max-md:items-baseline max-md:justify-between">
+                      <td
+                        className="px-3 pb-2 pl-6 text-xs max-md:block"
+                        colSpan={6}
+                      >
                         Kedvezmény (
                         {trimDecimal(
                           line.discountPercent.trim().replace(",", "."),
                         )}
                         %), külön negatív sorként a bizonylaton
                       </td>
-                      <td className="px-3 pb-2 text-right text-xs font-semibold tabular-nums">
+                      <td className="px-3 pb-2 text-right text-xs font-semibold tabular-nums max-md:block">
                         {formatMoney(computed.discount.grossAmount, currency)}
                       </td>
                       <td />
                     </tr>
                   ) : null}
-                  <tr className="bg-pilot-grey-50">
-                    <td className="px-3 py-2" colSpan={8}>
+                  <tr className="bg-pilot-grey-50 max-md:block">
+                    <td className="px-3 py-2 max-md:block" colSpan={8}>
                       <div className="flex items-center gap-3">
                         <span className="shrink-0 text-xs text-pilot-grey-500">
                           Megjegyzés
