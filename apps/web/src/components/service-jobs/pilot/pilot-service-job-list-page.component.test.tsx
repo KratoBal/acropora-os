@@ -169,12 +169,27 @@ describe("service-job list state in the URL", () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it("the fixed column widths fit the table minimum", () => {
-    const sum = JOB_COLUMNS.reduce(
+  // The table must not scroll inside its card on a 1280 px laptop: viewport 1280 - sidebar 224 -
+  // 2 x 32 page margin = 992 px of card (at 1440 px it is 1152). The first version summed to 1220
+  // and cut the last column at 1440 px (stage 6f221c3d).
+  const CARD_AT_1280 = 1280 - 224 - 2 * 32;
+  const MIN_FLEXIBLE_COLUMN = 160;
+
+  it("the fixed column widths leave every flexible column its minimum", () => {
+    const fixed = JOB_COLUMNS.filter((c) => c.width);
+    const flexible = JOB_COLUMNS.filter((c) => !c.width);
+    const sum = fixed.reduce(
       (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
       0,
     );
-    expect(sum).toBeLessThanOrEqual(JOB_TABLE_MIN_WIDTH);
+    expect(flexible.map((c) => c.id)).toEqual(["job", "customer"]);
+    expect(sum + flexible.length * MIN_FLEXIBLE_COLUMN).toBeLessThanOrEqual(
+      JOB_TABLE_MIN_WIDTH,
+    );
+  });
+
+  it("the table minimum fits the card of a 1280 px screen, so it does not scroll", () => {
+    expect(JOB_TABLE_MIN_WIDTH).toBeLessThanOrEqual(CARD_AT_1280);
   });
 
   // The list is the shared table: on the phone every row is a card, each cell labelled with its

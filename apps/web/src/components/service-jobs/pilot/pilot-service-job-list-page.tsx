@@ -151,14 +151,19 @@ type JobRow = ServiceJobListResponse["items"][number];
   tábla kártyalistává alakul (a hibajegy címe a kártya címe); a sor végi nyíl csak asztali jelzés.
   A cím tördelődik, a hibajegy száma alatta áll (a terv kétsoros címet rajzol, itt a hosszú cím a
   számot lejjebb tolja, nem fedi el).
+
+  A TÁBLA 1440 PX-EN IS BELEFÉRT A KÁRTYÁBA (acrobot képe, 2026-11-03, stage 6f221c3d: az utolsó
+  oszlop levágva, belső görgetéssel). A rögzített szélességek összege 1220 volt, a kártya 1440 px-en
+  1152 (1440 - 224 oldalsáv - 2 x 32 lapszél), tehát a betűtípustól függetlenül görgetett. Mostantól
+  a Hibajegy és a Partner oszlop kapja a maradékot (nincs rögzített szélességük), a rögzítettek
+  összege 620, a tábla minimuma 980: ez még egy 1280 px-es képernyő 992 px-es kártyájába is belefér.
 */
-export const JOB_TABLE_MIN_WIDTH = 1220;
+export const JOB_TABLE_MIN_WIDTH = 980;
 
 export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "job",
     header: "Hibajegy",
-    width: "300px",
     cell: (item) => (
       <>
         <p className="break-words font-semibold text-pilot-grey-900">
@@ -183,7 +188,6 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "customer",
     header: "Partner / helyszín",
-    width: "260px",
     cell: (item) => (
       <>
         <p className="break-words text-pilot-grey-900">
@@ -198,7 +202,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "assignees",
     header: "Felelős",
-    width: "150px",
+    width: "130px",
     cell: (item) => {
       const names = assigneeNames(item.assignees ?? []);
       return names ? (
@@ -212,7 +216,7 @@ export const JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
     id: "status",
     header: "Állapot",
-    width: "210px",
+    width: "190px",
     cell: (item) => (
       <>
         <PilotBadge variant={STATUS_BADGE_VARIANT[item.status]}>
