@@ -67,4 +67,13 @@ describe("natív <select> a komponensekben", () => {
       NATIV.test(kod(readFileSync(join(UI, "pilot-ui.tsx"), "utf8"))),
     ).toBe(true);
   });
+
+  // A `<Select>` hívás nem natív `<select>` a fájlban, ezért a fenti keresés nem látja:
+  // a /raktar állapot-szűrője emiatt maradt natív kinézetű. A közös elem maga őrzött:
+  // ha a `appearance-none` vagy a nyíl kikerül belőle, mind a 48 hívása natívra vált.
+  it("a form-oldali <Select> saját nyilat rajzol, nem a böngészőét", () => {
+    const forras = kod(readFileSync(join(UI, "select.tsx"), "utf8"));
+    expect(forras).toMatch(/appearance-none/);
+    expect(forras).toMatch(/name="chevron-down"/);
+  });
 });
