@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { urlNavigation } from "@/test/url-navigation";
 
-import { InventoryCountListPage } from "./inventory-count-list-page";
+import {
+  countColumns,
+  INVENTORY_TABLE_MIN_WIDTH,
+  InventoryCountListPage,
+} from "./inventory-count-list-page";
 
 /*
   A LELTÁR-LISTA ÁLLAPOTA AZ URL-BEN (Balázs kérése, 2026-09-30): egy
@@ -72,6 +76,37 @@ describe("InventoryCountListPage -- állapot az URL-ben", () => {
     expect(
       (screen.getByLabelText("Állapot szűrő") as HTMLSelectElement).value,
     ).toBe("DRAFT");
+  });
+
+  // A lista a közös tábla: telefonon minden sor kártya, a cellák a saját oszlopuk feliratát
+  // viselik (a "Megnyitás" gomb oszlopa telefonon kimarad), a sor billentyűvel és kattintásra nyílik.
+  it("minden cella a saját oszlopa feliratát viseli, a sor megnyitja a leltárt", async () => {
+    render(<InventoryCountListPage />);
+    await screen.findByText("LELT-2026-001");
+    const row = screen.getAllByTestId("inventory-count-row")[0]!;
+    expect(
+      [...row.querySelectorAll("td")].map((td) =>
+        td.getAttribute("data-label"),
+      ),
+    ).toEqual([
+      "Leltárszám",
+      "Raktár",
+      "Indította",
+      "Létrehozva",
+      "Tételek",
+      "Állapot",
+      "Művelet",
+    ]);
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(urlNavigation.push).toHaveBeenCalledWith("/raktar/count-1");
+  });
+
+  it("a rögzített oszlopok összege belefér a tábla minimumába", () => {
+    const sum = countColumns(() => undefined).reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(sum).toBeLessThanOrEqual(INVENTORY_TABLE_MIN_WIDTH);
   });
 
   it("a szűrő-váltás az URL-be íródik, és a lapot is nullázza", async () => {
