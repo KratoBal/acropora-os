@@ -22,11 +22,6 @@ import { seoLandingPagesApi } from "@/lib/api/seo-landing-pages";
 
 export const SEO_LANDING_LIST_PATH = "/admin/valogatasok";
 
-/**
- * THE SEO LANDING PAGES (SEO P1-14): each one a curated product list at
- * `/hu/valogatas/{slug}` in the shop. The list shows the address and whether
- * it is published; editing is on the page itself.
- */
 export const SEO_LANDING_TABLE_MIN_WIDTH = 640;
 
 /*
@@ -74,6 +69,11 @@ export const SEO_LANDING_COLUMNS: PilotTableColumn<SeoLandingPage>[] = [
   },
 ];
 
+/**
+ * THE SEO LANDING PAGES (SEO P1-14): each one a curated product list at
+ * `/hu/valogatas/{slug}` in the shop. The list shows the address and whether
+ * it is published; editing is on the page itself.
+ */
 export function SeoLandingListPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";

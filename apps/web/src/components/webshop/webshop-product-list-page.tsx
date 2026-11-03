@@ -36,20 +36,6 @@ function formatStock(value: string | null): string {
   return Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
 }
 
-/**
- * The webshop's own view of the catalogue: the products carried on the shop,
- * with what the shop says about them.
- *
- * Narrowed by the listing, not by publication. A listing row is written for
- * every product the sync carries over; `isPublished` is nobody's to write yet
- * and is false on every row, so filtering on it would empty a shop full of
- * products. The channel's status is shown instead, raw - the repository
- * deliberately keeps that value unmapped, because its meaning is the shop's to
- * define and inventing one here would be a guess on screen.
- *
- * This is not the catalogue editor. /products keeps that job, with the barcode
- * editor and the filters that go with it.
- */
 type ProductRow = ProductListResponse["items"][number];
 
 export const PRODUCT_TABLE_MIN_WIDTH = 880;
@@ -142,6 +128,20 @@ export const PRODUCT_COLUMNS: PilotTableColumn<ProductRow>[] = [
   },
 ];
 
+/**
+ * The webshop's own view of the catalogue: the products carried on the shop,
+ * with what the shop says about them.
+ *
+ * Narrowed by the listing, not by publication. A listing row is written for
+ * every product the sync carries over; `isPublished` is nobody's to write yet
+ * and is false on every row, so filtering on it would empty a shop full of
+ * products. The channel's status is shown instead, raw - the repository
+ * deliberately keeps that value unmapped, because its meaning is the shop's to
+ * define and inventing one here would be a guess on screen.
+ *
+ * This is not the catalogue editor. /products keeps that job, with the barcode
+ * editor and the filters that go with it.
+ */
 export function WebshopProductListPage() {
   const { session } = useAuth();
   const router = useRouter();

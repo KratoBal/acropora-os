@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import type { ProductListResponse, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WebshopProductListPage } from "./webshop-product-list-page";
+import {
+  WebshopProductListPage,
+  PRODUCT_COLUMNS,
+  PRODUCT_TABLE_MIN_WIDTH,
+} from "./webshop-product-list-page";
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -110,6 +114,17 @@ describe("WebshopProductListPage", () => {
       "href",
       "https://shop.example/reef-salt",
     );
+  });
+
+  it("the fixed column widths leave the name at least 150 px of the table minimum", () => {
+    const fixed = PRODUCT_COLUMNS.filter((c) => c.header !== "Név").reduce(
+      (acc, c) => acc + Number(/^(\d+)px$/.exec(c.width ?? "")?.[1]),
+      0,
+    );
+    expect(fixed + 150).toBeLessThanOrEqual(PRODUCT_TABLE_MIN_WIDTH);
+    expect(
+      PRODUCT_COLUMNS.find((c) => c.header === "Név")!.width,
+    ).toBeUndefined();
   });
 
   // The list is the shared table: on the phone every row is a card, each cell labelled with its
