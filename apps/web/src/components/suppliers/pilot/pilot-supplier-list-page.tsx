@@ -27,32 +27,13 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
-/**
- * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
- *
- * Forrás: `exchange/figma-partnerek-make-13/src/PartnersScreen.tsx`
- * `PartnersListPage` (446-672. sor). Az adat, a szűrés, a lapozás és a
- * jogosultság a mai `SupplierListPage`-ből jön VÁLTOZATLANUL (URL-alapú
- * szűrők, debounce-olt keresés) -- csak a kártya-szerkezet és a stílus a
- * tervé, ahogy a brief kéri ("a kártyák és a sorrendjük... nem csak a
- * színek").
- *
- * A TERV "Demo" GOMBJAI (Betöltés/Hiba/Nincs jog kapcsolók) NEM KERÜLTEK
- * ÁT: azok a Make előnézet saját, mock-állapotváltói, nem valódi funkció --
- * a mai kód a VALÓDI betöltési/hiba/jogosultsági állapotot mutatja, ami
- * pontosan ugyanezt a három esetet fedi.
- *
- * EGY PAGINÁCIÓ, NEM KETTŐ: a terv a lapozót csak a táblázat ALATT adja,
- * a korábbi (nem pilot) `SupplierListPage` viszont a kártya tetején ÉS
- * alján is mutatta -- ez utóbbi itt megszűnt, a terv szerint.
- */
 type SupplierRow = SupplierListResponse["items"][number];
 
 export const SUPPLIER_TABLE_MIN_WIDTH = 950;
 
 /*
   A PARTNERLISTA OSZLOPAI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). Telefonon a tábla
-  kártyalistává alakul: a partner neve a kártya címe (a Kód oszlop a második sor), a többi oszlop a
+  kártyalistává alakul: a partner neve a kártya címe (a Kód oszlop marad az első, ahogy volt), a többi oszlop a
   felirata mellett.
 
   The four-character code, not the internal `SZALL-20260731-204153-07DA` identifier: this column is
@@ -63,6 +44,21 @@ export const SUPPLIER_TABLE_MIN_WIDTH = 950;
   is neither shows no label rather than a made-up one.
 */
 export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
+  {
+    id: "code",
+    header: "Kód",
+    width: "110px",
+    cell: (item) => (
+      <span className="font-mono text-xs text-pilot-grey-900">
+        {item.worksheetPartnerCode ??
+          (item.isService ? (
+            <PilotBadge variant="amber">Nincs kód</PilotBadge>
+          ) : (
+            <span className="text-pilot-grey-300">—</span>
+          ))}
+      </span>
+    ),
+  },
   {
     id: "name",
     header: "Név",
@@ -83,21 +79,6 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
           <p className="mt-0.5 text-xs text-pilot-grey-400">{item.taxNumber}</p>
         ) : null}
       </>
-    ),
-  },
-  {
-    id: "code",
-    header: "Kód",
-    width: "110px",
-    cell: (item) => (
-      <span className="font-mono text-xs text-pilot-grey-900">
-        {item.worksheetPartnerCode ??
-          (item.isService ? (
-            <PilotBadge variant="amber">Nincs kód</PilotBadge>
-          ) : (
-            <span className="text-pilot-grey-300">—</span>
-          ))}
-      </span>
     ),
   },
   {
@@ -155,6 +136,25 @@ export const SUPPLIER_COLUMNS: PilotTableColumn<SupplierRow>[] = [
   },
 ];
 
+/**
+ * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
+ *
+ * Forrás: `exchange/figma-partnerek-make-13/src/PartnersScreen.tsx`
+ * `PartnersListPage` (446-672. sor). Az adat, a szűrés, a lapozás és a
+ * jogosultság a mai `SupplierListPage`-ből jön VÁLTOZATLANUL (URL-alapú
+ * szűrők, debounce-olt keresés) -- csak a kártya-szerkezet és a stílus a
+ * tervé, ahogy a brief kéri ("a kártyák és a sorrendjük... nem csak a
+ * színek").
+ *
+ * A TERV "Demo" GOMBJAI (Betöltés/Hiba/Nincs jog kapcsolók) NEM KERÜLTEK
+ * ÁT: azok a Make előnézet saját, mock-állapotváltói, nem valódi funkció --
+ * a mai kód a VALÓDI betöltési/hiba/jogosultsági állapotot mutatja, ami
+ * pontosan ugyanezt a három esetet fedi.
+ *
+ * EGY PAGINÁCIÓ, NEM KETTŐ: a terv a lapozót csak a táblázat ALATT adja,
+ * a korábbi (nem pilot) `SupplierListPage` viszont a kártya tetején ÉS
+ * alján is mutatta -- ez utóbbi itt megszűnt, a terv szerint.
+ */
 export function PilotSupplierListPage() {
   const { session } = useAuth();
   const router = useRouter();

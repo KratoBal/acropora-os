@@ -45,26 +45,6 @@ const litersFormatter = new Intl.NumberFormat("hu-HU", {
 const OWNERSHIP_OPTIONS = ["Mind", "Saját", "Ügyfél"] as const;
 const WATER_BODY_OPTIONS = ["Mind", "Akvárium", "Tó"] as const;
 
-/**
- * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
- *
- * Balázs döntése (2026-09-24 18:14 UTC, Eldöntendő szál, message_id
- * 1552714695515840575), szó szerint: "és a figma lesz a default, leveheted
- * a Mai felület választót és használd a figmat." A korábbi, egymás melletti
- * "mai"/"kísérleti" váltó (`PilotToggle`) és a régi `AquariumListPage`
- * ezért TÖRÖLVE -- ez a komponens az EGYETLEN, ami az `/akvariumok`
- * útvonalon fut.
- *
- * A "KARBANTARTÓK" ÉS "UTOLSÓ VÍZMÉRÉS" OSZLOP MÁR TELJES (acrobot kérése,
- * 2026-09-24 16:19): a lista-végpont (`AquariumSummary`) mostantól
- * soronként adja ezt is, két BATCH-ELT (nem soronkénti) lekérdezéssel --
- * lásd `AquariumsRepository`-ban a `listInclude` fejlécét.
- *
- * A "TÍPUS" SZŰRŐ ÚJ: a mai lista csak tulajdon szerint szűr. A
- * `waterBodyType` viszont MEGLÉVŐ mező minden akváriumon, a szűrés hozzáadása
- * a listaLekérdezéshez ugyanaz a minta, mint az `ownershipType`-nál --- ez
- * NEM kitalált adat, csak egy már létező mezőre írt új szűrő.
- */
 type AquariumRow = AquariumListResponse["items"][number];
 
 export const AQUARIUM_TABLE_MIN_WIDTH = 1240;
@@ -186,6 +166,26 @@ export const AQUARIUM_COLUMNS: PilotTableColumn<AquariumRow>[] = [
   },
 ];
 
+/**
+ * A FIGMA MAKE TERV ÁTÜLTETÉSE -- LISTA KÉPERNYŐ.
+ *
+ * Balázs döntése (2026-09-24 18:14 UTC, Eldöntendő szál, message_id
+ * 1552714695515840575), szó szerint: "és a figma lesz a default, leveheted
+ * a Mai felület választót és használd a figmat." A korábbi, egymás melletti
+ * "mai"/"kísérleti" váltó (`PilotToggle`) és a régi `AquariumListPage`
+ * ezért TÖRÖLVE -- ez a komponens az EGYETLEN, ami az `/akvariumok`
+ * útvonalon fut.
+ *
+ * A "KARBANTARTÓK" ÉS "UTOLSÓ VÍZMÉRÉS" OSZLOP MÁR TELJES (acrobot kérése,
+ * 2026-09-24 16:19): a lista-végpont (`AquariumSummary`) mostantól
+ * soronként adja ezt is, két BATCH-ELT (nem soronkénti) lekérdezéssel --
+ * lásd `AquariumsRepository`-ban a `listInclude` fejlécét.
+ *
+ * A "TÍPUS" SZŰRŐ ÚJ: a mai lista csak tulajdon szerint szűr. A
+ * `waterBodyType` viszont MEGLÉVŐ mező minden akváriumon, a szűrés hozzáadása
+ * a listaLekérdezéshez ugyanaz a minta, mint az `ownershipType`-nál --- ez
+ * NEM kitalált adat, csak egy már létező mezőre írt új szűrő.
+ */
 export function PilotAquariumListPage() {
   const { session } = useAuth();
   const router = useRouter();

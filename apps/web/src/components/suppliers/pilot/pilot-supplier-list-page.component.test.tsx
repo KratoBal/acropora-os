@@ -119,9 +119,6 @@ describe("PilotSupplierListPage paging", () => {
     expect(screen.queryByRole("button", { name: "Új beszállító" })).toBeNull();
   });
 
-  /** The list holds two kinds now, and which one a row is has to be readable
-   * without opening it. Both labels are asserted on one row that carries both,
-   * because that is the case a single-label design would get wrong. */
   // The list is the shared table: on the phone every row is a card, each cell labelled with its
   // column (the partner's name is the card title), and the row still opens the partner.
   it("labels every cell with its column for the phone card view", async () => {
@@ -132,7 +129,7 @@ describe("PilotSupplierListPage paging", () => {
       [...row.querySelectorAll("td")].map((td) =>
         td.getAttribute("data-label"),
       ),
-    ).toEqual(["Név", "Kód", "Ország", "Ügyintéző", "Elérhetőség", "Státusz"]);
+    ).toEqual(["Kód", "Név", "Ország", "Ügyintéző", "Elérhetőség", "Státusz"]);
     expect(row.getAttribute("aria-label")).toContain("megnyitása");
   });
 
@@ -144,6 +141,9 @@ describe("PilotSupplierListPage paging", () => {
     expect(sum).toBeLessThanOrEqual(SUPPLIER_TABLE_MIN_WIDTH);
   });
 
+  /** The list holds two kinds now, and which one a row is has to be readable
+   * without opening it. Both labels are asserted on one row that carries both,
+   * because that is the case a single-label design would get wrong. */
   it("labels each partner with the kinds it actually is", async () => {
     api.list.mockResolvedValue({
       items: [
