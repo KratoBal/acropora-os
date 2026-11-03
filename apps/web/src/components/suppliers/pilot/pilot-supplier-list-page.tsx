@@ -244,10 +244,10 @@ export function PilotSupplierListPage() {
     );
 
   return (
-    <PilotThemeRoot>
+    <PilotThemeRoot bleed>
       <div className="flex min-h-full flex-col">
         <PageHeader
-          className="px-8 pt-6"
+          className="px-4 sm:px-8 pt-6"
           title="Partnerek"
           description="Beszállítói törzsadatok: elérhetőség, bankszámla és kapcsolattartó."
           actions={
@@ -262,7 +262,7 @@ export function PilotSupplierListPage() {
           }
         />
 
-        <div className="flex flex-1 flex-col gap-4 px-8 py-6">
+        <div className="flex flex-1 flex-col gap-4 px-4 sm:px-8 py-6">
           <PilotCard>
             <div className="flex flex-wrap items-center gap-3 p-5">
               <PilotInput
