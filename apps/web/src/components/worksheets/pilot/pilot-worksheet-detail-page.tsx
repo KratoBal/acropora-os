@@ -50,69 +50,6 @@ import {
   PilotThemeRoot,
 } from "@/components/pilot/pilot-ui";
 
-/**
- * A FIGMA MAKE TERV ÁTÜLTETÉSE -- MUNKALAP ADATLAP (8. kör, 2/3 rész).
- *
- * Brief: `exchange/figma-leiras-8-kor-munkalapok-2026-09-25.md`, forrás:
- * `exchange/figma-munkalapok-make-8/src/MunkalapokScreen.tsx`
- * (`MunkalapDetail`, 506-867. sor).
- *
- * === A SZABÁLY, UGYANAZ MINT AZ 1/3-BAN: A ZIP AD ELRENDEZÉST ÉS
- *     KINÉZETET, A MEZŐK/FELTÉTELEK/FEJLÉC-AKCIÓK A MAI KÓDBÓL ===
- *
- * acrobot döntése (2026-09-25 11:43): a bal/jobb oszlopfelosztást a terv
- * adja (mint az Eszközök körnél), a kártyák tartalma és feltételei a mai
- * `worksheet-detail-page.tsx`-ből jönnek.
- *
- * === THE SERVICE REDESIGN (Figma 423:662, Balázs, 2026-10-04) ===
- *
- * The page follows the redesign's two columns, every existing action kept.
- *
- * - LEFT: A munka leírása, Tételek (no price: quantity, how many people,
- *   hours, and the total), the work log (`WorksheetEntries`), the material
- *   requests, the issued sheet with the attachments, and the versions.
- * - RIGHT: Összesítés, Munkalap adatai (now with the assignees' names, as
- *   the design lists them), the assignees' editor, the affected assets,
- *   "Helyszíni lezárás", and the two signature cards.
- * - "HELYSZÍNI LEZÁRÁS" holds the hand-over and the close, which used to sit
- *   in the header. The lines above its buttons are facts, not gates
- *   (decision E7): the close needs a draft and `service.manage`, nothing
- *   else, exactly as the server checks it.
- * - THE ISSUED SHEET AND THE ATTACHMENTS still move together (one
- *   component, see below); the design's place for files is the left column,
- *   so both are there now.
- * - "2 fő dolgozott" is left out (decision E8).
- *
- * === AZ ÖT BEÁGYAZOTT WIDGET KERETE FIGMA-STÍLUST KAPOTT, A BELSEJE NEM
- *     (acrobot 4. pontja) ===
- *
- * `WorksheetEntries`, `WorksheetMaterialRequests`, `WorksheetAssetEditor`,
- * `WorksheetAssigneeEditor`, `WorksheetDocuments` -- mind az öt saját
- * fájljában lett átírva: a korábbi `Card`/`ServicePanel` keret helyett
- * `PilotCard`/`PilotCardHeader`, a belső tartalom (táblák, gombok,
- * feltöltés) VÁLTOZATLAN. Ez ELTÉR az Eszközök/Hibajegyek körök
- * precedensétől (ott a beágyazott alrendszerek TELJES kinézete
- * változatlan maradt) -- ez a kör szándékosan tágabb utasítást kapott.
- * Mivel a régi (nem-pilot) `worksheet-detail-page.tsx` ugyanezeket a
- * fájlokat importálja, az az oldal (útvonal nélkül marad, mint a
- * társai) mostantól szintén Figma-keretes widgeteket mutatna, HA valaha
- * routolnák -- ma nem routolt, tehát ez nem látszik sehol.
- *
- * === EVERY ACTION STAYS, SOME MOVED ===
- *
- * Rejtés/Visszaállítás (`canHide`), Szerkesztés (`canManage && isDraft`) and
- * Folytatás új munkalapon (`canManage && isSigned`) stay in the header; the
- * hand-over (`canManage`) and Kiállítás és lezárás (`canManage && isDraft`)
- * are in "Helyszíni lezárás"; the conditions are unchanged.
- *
- * === A MEGJEGYZÉS MINDIG LÁTHATÓ (Balázs döntése, 2026-09-25 11:09) ===
- *
- * A "Ügyfél döntésének rögzítése" kártyán a Megjegyzés mező NEM
- * feltételes (nem csak "Elutasította"-nál jelenik meg, ahogy a Figma
- * "Indoklás" mezője sugallná) -- a mai web viselkedése marad, ahogy
- * Balázs kimondta.
- */
-
 type WorksheetVersionRow = WorksheetDetail["versions"][number];
 
 export const WORKSHEET_LINE_TABLE_MIN_WIDTH = 640;
@@ -263,6 +200,69 @@ export const WORKSHEET_VERSION_COLUMNS: PilotTableColumn<WorksheetVersionRow>[] 
       ),
     },
   ];
+
+/**
+ * A FIGMA MAKE TERV ÁTÜLTETÉSE -- MUNKALAP ADATLAP (8. kör, 2/3 rész).
+ *
+ * Brief: `exchange/figma-leiras-8-kor-munkalapok-2026-09-25.md`, forrás:
+ * `exchange/figma-munkalapok-make-8/src/MunkalapokScreen.tsx`
+ * (`MunkalapDetail`, 506-867. sor).
+ *
+ * === A SZABÁLY, UGYANAZ MINT AZ 1/3-BAN: A ZIP AD ELRENDEZÉST ÉS
+ *     KINÉZETET, A MEZŐK/FELTÉTELEK/FEJLÉC-AKCIÓK A MAI KÓDBÓL ===
+ *
+ * acrobot döntése (2026-09-25 11:43): a bal/jobb oszlopfelosztást a terv
+ * adja (mint az Eszközök körnél), a kártyák tartalma és feltételei a mai
+ * `worksheet-detail-page.tsx`-ből jönnek.
+ *
+ * === THE SERVICE REDESIGN (Figma 423:662, Balázs, 2026-10-04) ===
+ *
+ * The page follows the redesign's two columns, every existing action kept.
+ *
+ * - LEFT: A munka leírása, Tételek (no price: quantity, how many people,
+ *   hours, and the total), the work log (`WorksheetEntries`), the material
+ *   requests, the issued sheet with the attachments, and the versions.
+ * - RIGHT: Összesítés, Munkalap adatai (now with the assignees' names, as
+ *   the design lists them), the assignees' editor, the affected assets,
+ *   "Helyszíni lezárás", and the two signature cards.
+ * - "HELYSZÍNI LEZÁRÁS" holds the hand-over and the close, which used to sit
+ *   in the header. The lines above its buttons are facts, not gates
+ *   (decision E7): the close needs a draft and `service.manage`, nothing
+ *   else, exactly as the server checks it.
+ * - THE ISSUED SHEET AND THE ATTACHMENTS still move together (one
+ *   component, see below); the design's place for files is the left column,
+ *   so both are there now.
+ * - "2 fő dolgozott" is left out (decision E8).
+ *
+ * === AZ ÖT BEÁGYAZOTT WIDGET KERETE FIGMA-STÍLUST KAPOTT, A BELSEJE NEM
+ *     (acrobot 4. pontja) ===
+ *
+ * `WorksheetEntries`, `WorksheetMaterialRequests`, `WorksheetAssetEditor`,
+ * `WorksheetAssigneeEditor`, `WorksheetDocuments` -- mind az öt saját
+ * fájljában lett átírva: a korábbi `Card`/`ServicePanel` keret helyett
+ * `PilotCard`/`PilotCardHeader`, a belső tartalom (táblák, gombok,
+ * feltöltés) VÁLTOZATLAN. Ez ELTÉR az Eszközök/Hibajegyek körök
+ * precedensétől (ott a beágyazott alrendszerek TELJES kinézete
+ * változatlan maradt) -- ez a kör szándékosan tágabb utasítást kapott.
+ * Mivel a régi (nem-pilot) `worksheet-detail-page.tsx` ugyanezeket a
+ * fájlokat importálja, az az oldal (útvonal nélkül marad, mint a
+ * társai) mostantól szintén Figma-keretes widgeteket mutatna, HA valaha
+ * routolnák -- ma nem routolt, tehát ez nem látszik sehol.
+ *
+ * === EVERY ACTION STAYS, SOME MOVED ===
+ *
+ * Rejtés/Visszaállítás (`canHide`), Szerkesztés (`canManage && isDraft`) and
+ * Folytatás új munkalapon (`canManage && isSigned`) stay in the header; the
+ * hand-over (`canManage`) and Kiállítás és lezárás (`canManage && isDraft`)
+ * are in "Helyszíni lezárás"; the conditions are unchanged.
+ *
+ * === A MEGJEGYZÉS MINDIG LÁTHATÓ (Balázs döntése, 2026-09-25 11:09) ===
+ *
+ * A "Ügyfél döntésének rögzítése" kártyán a Megjegyzés mező NEM
+ * feltételes (nem csak "Elutasította"-nál jelenik meg, ahogy a Figma
+ * "Indoklás" mezője sugallná) -- a mai web viselkedése marad, ahogy
+ * Balázs kimondta.
+ */
 
 export function PilotWorksheetDetailPage({
   worksheetId,
