@@ -1,6 +1,12 @@
 "use client";
 
-import { Alert, Icon, Skeleton } from "@acropora/ui";
+import {
+  Alert,
+  Icon,
+  PilotDataTable,
+  Skeleton,
+  type PilotTableColumn,
+} from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
@@ -46,6 +52,107 @@ function syncBadgeLabel(status: "OK" | "FAILED" | "PENDING"): string {
   if (status === "FAILED") return "Hiba";
   return "Függőben";
 }
+
+type SaleLine = PosSaleDetail["lines"][number];
+
+export const SALE_LINE_TABLE_MIN_WIDTH = 940;
+
+/*
+  AZ ELADÁS TÉTELEI A KÖZÖS TÁBLÁN (UI-áttekintés, 3. csomag, 2026-11-03). A régi tábla nyolc
+  oszlopot nyomott össze százalékos szélességgel, telefonon olvashatatlanul; most telefonon a
+  tétel egy kártya: a cikkszám a címe, a többi oszlop a felirata mellett áll. A szinkron-hiba
+  szövege a jelvény alatt marad, teljes egészében.
+*/
+export const SALE_LINE_COLUMNS: PilotTableColumn<SaleLine>[] = [
+  {
+    id: "sku",
+    header: "Cikkszám",
+    width: "130px",
+    cell: (line) => (
+      <span className="break-all text-[10px] text-pilot-grey-500">
+        {line.sku}
+      </span>
+    ),
+  },
+  {
+    id: "product",
+    header: "Termék",
+    cell: (line) => <span className="font-medium">{line.productName}</span>,
+  },
+  {
+    id: "quantity",
+    header: "Menny.",
+    width: "90px",
+    align: "right",
+    cell: (line) => (
+      <span className="tabular-nums">
+        {line.quantity} {line.unit}
+      </span>
+    ),
+  },
+  {
+    id: "unitNet",
+    header: "Nettó egységár",
+    width: "130px",
+    align: "right",
+    nowrap: true,
+    cell: (line) => (
+      <span className="tabular-nums">{formatHuf(line.unitNet)}</span>
+    ),
+  },
+  {
+    id: "tax",
+    header: "ÁFA",
+    width: "60px",
+    cell: (line) => (
+      <span className="text-pilot-grey-600">{line.taxRate}%</span>
+    ),
+  },
+  {
+    id: "discount",
+    header: "Kedvezmény",
+    width: "100px",
+    align: "right",
+    cell: (line) => (
+      <span className="text-pilot-grey-600">
+        {line.discountPercent ? `${line.discountPercent}%` : "—"}
+      </span>
+    ),
+  },
+  {
+    id: "gross",
+    header: "Bruttó",
+    width: "120px",
+    align: "right",
+    nowrap: true,
+    cell: (line) => (
+      <span className="font-semibold tabular-nums">
+        {formatHuf(line.lineGross)}
+      </span>
+    ),
+  },
+  {
+    id: "sync",
+    header: "UNAS szinkron",
+    width: "130px",
+    cell: (line) => (
+      <div>
+        {line.variantId === null ? (
+          <PilotBadge variant="grey">Kézi tétel</PilotBadge>
+        ) : (
+          <PilotBadge variant={syncBadgeVariant(line.syncStatus)}>
+            {syncBadgeLabel(line.syncStatus)}
+          </PilotBadge>
+        )}
+        {line.syncError ? (
+          <p className="mt-1 break-words text-[10px] text-red-500">
+            {line.syncError}
+          </p>
+        ) : null}
+      </div>
+    ),
+  },
+];
 
 export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
   const { session } = useAuth();
@@ -216,107 +323,14 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
                   </PilotBadge>
                 }
               />
-              <div className="overflow-x-auto px-4">
-                <table className="w-full table-fixed border-collapse text-left text-xs">
-                  <colgroup>
-                    <col className="w-[14%]" />
-                    <col className="w-[27%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[5%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[12%]" />
-                  </colgroup>
-                  <thead>
-                    <tr className="border-b border-pilot-grey-200 text-[10px] font-medium uppercase text-pilot-grey-600">
-                      <th scope="col" className="py-4 pr-2 font-medium">
-                        Cikkszám
-                      </th>
-                      <th scope="col" className="px-2 py-4 font-medium">
-                        Termék
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-2 py-4 text-right font-medium"
-                      >
-                        Menny.
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-2 py-4 text-right font-medium"
-                      >
-                        Nettó egységár
-                      </th>
-                      <th scope="col" className="px-2 py-4 font-medium">
-                        ÁFA
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-2 py-4 text-right font-medium"
-                      >
-                        Kedvezmény
-                      </th>
-                      <th
-                        scope="col"
-                        className="px-2 py-4 text-right font-medium"
-                      >
-                        Bruttó
-                      </th>
-                      <th scope="col" className="py-4 pl-2 font-medium">
-                        UNAS szinkron
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detail.lines.map((line) => (
-                      <tr
-                        key={line.id}
-                        className="border-b border-pilot-grey-100 text-pilot-grey-900"
-                      >
-                        <td className="break-all py-7 pr-2 text-[10px] text-pilot-grey-500">
-                          {line.sku}
-                        </td>
-                        <td className="break-words px-2 py-7 font-medium">
-                          {line.productName}
-                        </td>
-                        <td className="px-2 py-7 text-right tabular-nums">
-                          {line.quantity} {line.unit}
-                        </td>
-                        <td className="px-2 py-7 text-right tabular-nums">
-                          {formatHuf(line.unitNet)}
-                        </td>
-                        <td className="px-2 py-7 text-pilot-grey-600">
-                          {line.taxRate}%
-                        </td>
-                        <td className="px-2 py-7 text-right text-pilot-grey-600">
-                          {line.discountPercent
-                            ? `${line.discountPercent}%`
-                            : "—"}
-                        </td>
-                        <td className="px-2 py-7 text-right font-semibold tabular-nums">
-                          {formatHuf(line.lineGross)}
-                        </td>
-                        <td className="py-7 pl-2">
-                          {line.variantId === null ? (
-                            <PilotBadge variant="grey">Kézi tétel</PilotBadge>
-                          ) : (
-                            <PilotBadge
-                              variant={syncBadgeVariant(line.syncStatus)}
-                            >
-                              {syncBadgeLabel(line.syncStatus)}
-                            </PilotBadge>
-                          )}
-                          {line.syncError ? (
-                            <p className="mt-1 break-words text-[10px] text-red-500">
-                              {line.syncError}
-                            </p>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="px-4">
+                <PilotDataTable
+                  columns={SALE_LINE_COLUMNS}
+                  rows={detail.lines}
+                  rowKey={(line) => line.id}
+                  rowTestId="pos-sale-line-row"
+                  minWidth={SALE_LINE_TABLE_MIN_WIDTH}
+                />
               </div>
               <div className="p-4">
                 <div className="rounded-[10px] bg-pilot-grey-100 p-3">
