@@ -615,6 +615,33 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     assert.equal(transfer.changed, true);
     assert.equal(transfer.product.catalogAuthority, "ACROPORA");
 
+    // THE OWN PRICE'S HISTORY STARTS WITH THE COPY (T4.1-D2): one OWN row per variant whose
+    // price the takeover copied, with the variant's id, written in the takeover's transaction.
+    // The fixture's mirror carries a list price, so the copy happens and this is not vacuous.
+    const copied = await prisma.productVariant.findMany({
+      where: {
+        productId: takenOver.productId,
+        sellingGrossPrice: { not: null },
+      },
+      select: { id: true },
+    });
+    assert.ok(
+      copied.length > 0,
+      "the takeover copied no price: the check below would be vacuous",
+    );
+    const ownRows = await prisma.productPriceHistory.findMany({
+      where: { productId: takenOver.productId, source: "OWN" },
+      select: { variantId: true, grossPrice: true, currency: true },
+    });
+    assert.deepEqual(
+      ownRows.map((r) => r.variantId).sort(),
+      copied.map((v) => v.id).sort(),
+    );
+    for (const row of ownRows) {
+      assert.equal(row.currency, "HUF");
+      assert.ok(row.grossPrice !== null);
+    }
+
     // Somebody edits the name and the description on OUR side. Nothing in
     // the sync knows about this; the webshop keeps sending its own values.
     await prisma.product.update({
