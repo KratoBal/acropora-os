@@ -76,6 +76,12 @@ export const HOME_MODULES: Readonly<Record<TileCode, HomeModule>> = {
     icon: "people-outline",
     route: "/partners",
   },
+  SZ: {
+    title: "Számlák",
+    description: "Kimenő és bejövő számlák, csak olvasásra",
+    icon: "wallet-outline",
+    route: "/szamlak",
+  },
   BE: {
     title: "Beszerzés",
     description: "Szállítói számlák és bevételezés",
@@ -106,6 +112,7 @@ export const MODULE_ORDER: readonly TileCode[] = [
   "PI",
   "RE",
   "PA",
+  "SZ",
   "BE",
   "TE",
   "NAV",

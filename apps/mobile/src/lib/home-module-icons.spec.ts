@@ -69,7 +69,8 @@ describe("a kezdőlap ikonjai", () => {
     // Ten modules, four bottom-bar items and the tile's chevron.
     // 15 since the Üzenetek item joined the bottom bar (card 51d7aba0)
     // 16 since the Piszkozatok module (card 49210cdd)
-    assert.equal(usedIcons().length, 16);
+    // 17 since the Számlák module (card 050e138b)
+    assert.equal(usedIcons().length, 17);
   });
 
   it("minden használt ikonnév létezik az Ionicons készletben", () => {

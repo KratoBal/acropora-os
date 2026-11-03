@@ -367,7 +367,8 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * az Új számla gomb a listán a `billing.create`-hez kötött.
      */
     id: "billing",
-    surfaces: ["web"],
+    // a telefonon is (2026-11-03, kártya 050e138b): csak olvasó lista és adatlap, ugyanazzal a láthatósággal
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.BILLING_VIEW),
   },
   {
