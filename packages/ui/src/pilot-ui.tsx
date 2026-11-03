@@ -1052,9 +1052,15 @@ export function PilotMonthField({
 }) {
   const parts = monthParts(value);
   const [pending, setPending] = useState({ year: "", month: "" });
-  // Egy érvényes érték vezérel; üres értéknél a félig kiválasztott fél marad meg.
-  const year = value ? parts.year : pending.year;
-  const month = value ? parts.month : pending.month;
+  // Egy érvényes érték vezérel; üres értéknél csak a FÉLIG kiválasztott fél marad meg. Egy teljes
+  // pending üres érték mellett azt jelenti, hogy a hívó kívülről törölte az értéket (például egy
+  // szűrő-alaphelyzet): azt nem mutatjuk, különben a mező mást mondana, mint az érték.
+  const half =
+    joinMonth(pending.year, pending.month) === ""
+      ? pending
+      : { year: "", month: "" };
+  const year = value ? parts.year : half.year;
+  const month = value ? parts.month : half.month;
   const years = monthYears((now ?? new Date()).getFullYear(), year);
   const pick = (nextYear: string, nextMonth: string) => {
     setPending({ year: nextYear, month: nextMonth });

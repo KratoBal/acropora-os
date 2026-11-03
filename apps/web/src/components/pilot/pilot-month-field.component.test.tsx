@@ -19,6 +19,9 @@ function Harness({ initial = "" }: { initial?: string }) {
   const [value, setValue] = useState(initial);
   return (
     <>
+      <button type="button" onClick={() => setValue("")}>
+        Alaphelyzet
+      </button>
       <PilotMonthField
         value={value}
         onChange={setValue}
@@ -86,6 +89,18 @@ describe("PilotMonthField", () => {
     expect(out()).toBe("2026-11");
     fireEvent.change(year(), { target: { value: "2024" } });
     expect(out()).toBe("2024-11");
+  });
+
+  it("shows empty selects when the caller resets the value from outside after a full pick", () => {
+    render(<Harness />);
+    fireEvent.change(year(), { target: { value: "2026" } });
+    fireEvent.change(month(), { target: { value: "07" } });
+    expect(out()).toBe("2026-07");
+
+    fireEvent.click(screen.getByRole("button", { name: "Alaphelyzet" }));
+    expect(out()).toBe("");
+    expect(year().value).toBe("");
+    expect(month().value).toBe("");
   });
 
   it("offers a year outside the usual range when the value has one", () => {
