@@ -301,6 +301,34 @@ function serviceFromRole(role: UserRole): ServiceCapabilities {
   };
 }
 
+/**
+ * SZÁMLÁK, CSAK OLVASÁSRA (Balázs, 2026-11-03 17:01 UTC, kártya 050e138b). A szerver `billing.view` joga, ami a
+ * `finance.view`-ból vezetődik le (`packages/types/src/auth.ts`): a szerelő (SERVICE) és a PARTNER_SERVICE nem kapja,
+ * tehát a telefonon az ár és az áfa nála továbbra sem látszik. Saját interfész, mert nem a webshop és nem a szerviz
+ * munkaterülete; a két szerveroldali tükör-őr (`mobile-capability-mirror.spec.ts`, `mobile-capability-values.spec.ts`)
+ * ugyanúgy méri, mint a másik kettőt.
+ */
+export interface BillingCapabilities {
+  billingView: boolean;
+}
+
+export function getBillingCapabilities(
+  subject: CapabilitySubject,
+): BillingCapabilities {
+  if (subject.permissions)
+    return { billingView: subject.permissions.includes("billing.view") };
+  // a szerep táblája: csak régebbi szerver ellen, ami a listát nem küldi
+  const role = subject.role;
+  return {
+    billingView:
+      role === "OWNER" ||
+      role === "ADMIN" ||
+      role === "MANAGER" ||
+      role === "SALES" ||
+      role === "VIEWER",
+  };
+}
+
 export function userRoleLabel(role: UserRole): string {
   const labels: Record<UserRole, string> = {
     OWNER: "Tulajdonos",

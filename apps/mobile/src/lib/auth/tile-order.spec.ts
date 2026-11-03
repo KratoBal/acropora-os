@@ -80,6 +80,8 @@ describe("a csempék sorrendje", () => {
       "PI",
       "RE",
       "PA",
+      // a Számlák a Partnerek után, a képernyő nélküliek előtt (kártya 050e138b, 2026-11-03)
+      "SZ",
       "BE",
       "TE",
       "NAV",
