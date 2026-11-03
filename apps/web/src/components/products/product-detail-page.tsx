@@ -518,7 +518,7 @@ function ProductExtensionEditor({
               mezők üresek.
             </p>
           ) : null}
-          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+          <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
             <div>
               <dt className="text-dusk-400">Beszerzési deviza</dt>
               <dd className="mt-1 text-dusk-700">
@@ -932,16 +932,22 @@ export function ProductDetailPage({ productId }: { productId: string }) {
           {dateTime(product.unasMirror.lastSyncedAt)}
         </PilotDataItem>
         <PilotDataItem label="Nettó ár">
-          {value(product.unasMirror.netPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.netPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem label="Bruttó ár">
-          {value(product.unasMirror.grossPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.grossPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem label="Akciós bruttó ár">
-          {value(product.unasMirror.saleGrossPrice)}{" "}
-          {product.unasMirror.currency ?? ""}
+          {formatMoney(
+            product.unasMirror.saleGrossPrice,
+            product.unasMirror.currency,
+          )}
         </PilotDataItem>
         <PilotDataItem
           label={
