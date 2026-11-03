@@ -1,0 +1,165 @@
+# UI SCREEN CHECK IN CI (card 4cb013c3, T1.1, step 2). A KÉSZ FÁJL, NEM TESZTELT: workflow-fájlt a flotta nem pusholhat,
+# ezt Balázs tölti fel (.github/workflows/ui-screens.yml néven). Előfeltétel: a #2091 beolvadt (a spec és a
+# `ui:screens` script a mainen van).
+#
+# MIT CSINÁL: üres PostgreSQL + Redis, migráció, fejlesztői seed, egy seed-felhasználónak (owner@acropora.local) a futás
+# idejére generált jelszó, API és web build, mindkettő elindul helyben, és a képernyőkép-ellenőrzés a web minden
+# statikus lapját megnyitja 390, 1024 és 1440 px-en. Az artefakt a képek és a summary.tsv (a munkamenet-fájl NEM: az az
+# apps/web/.auth alatt áll, és a futás végén törlődik). A lapnézés nem ír: minden nem GET/HEAD kérést a böngésző
+# megszakít, és az összesítő megnevezi.
+#
+# MIKOR FUT: kézzel (workflow_dispatch), és a main-re érkező pushnál, ha a web vagy a közös UI csomag változott. NEM PR-
+# kapu: Balázs kérése a kevesebb CI-futás (T6.2), és ez a job a build miatt nagyjából 15-20 perc (becslés, nem mérés).
+# A piros itt azt jelenti: egy lap szélesebb a képernyőnél; a képek akkor is feltöltődnek.
+#
+# KOCKÁZATI PONTOK, AMIKET EZ A FÁJL NEM MÉRT (az első futás dönti el):
+#  1. Az API NODE_ENV=test alatt indul (a production indulási ellenőrzései titkokat kérnének). Ha egy modul induláskor
+#     kötelező változót kér (például DOCUMENT_STORE_ROOT), az API nem áll fel, és a health-várakozás 120 mp után bukik.
+#  2. A web `output: "standalone"`; a `next start` erre figyelmeztet, de kiszolgál (a Caparium e2e így fut). Ha mégsem,
+#     a csere: `node apps/web/.next/standalone/apps/web/server.js` a static és a public mappa átmásolásával.
+#  3. Az API címe a web BUILD idején sül be (next.config.ts rewrites): ezért az API_URL a build lépés env-jében áll.
+#  4. A seed csak négy felhasználót és néhány kategóriát hoz: a legtöbb lista üres állapotban fotózódik. A szélesség-
+#     hibák egy része csak adattal jön elő (hosszú név, sok gomb); azokhoz a stage-futás (ui-screens-stage.sh) marad.
+#  5. A 87 lap a seed-tulajdonos jogaival nyílik meg; amit ő nem lát, az "nincs-jog", nem piros.
+name: UI screens
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/ui/**"
+
+concurrency:
+  group: ui-screens-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ui-screens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public
+      REDIS_URL: redis://localhost:6379
+      API_URL: http://127.0.0.1:3001
+      UI_SCREENS_BASE_URL: http://127.0.0.1:3000
+      UI_SCREENS_EMAIL: owner@acropora.local
+      UI_SCREENS_OUT: ${{ github.workspace }}/apps/web/test-results/ui-screens
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up the workspace
+        uses: ./.github/actions/ci-setup
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Seed development reference data
+        run: pnpm prisma:seed
+
+      # a jelszó ebben a futásban születik, fájlba megy (a naplóba nem), és csak ennek az eldobható adatbázisnak a
+      # seed-felhasználóján él; a hash alakja az API-é (apps/api/src/users/password.util.ts: scrypt, "salt:hex", 64 bájt)
+      - name: Give the seed owner a password for this run
+        working-directory: packages/database
+        run: |
+          umask 077
+          # a runner kontextus a job szintű env-ben nem érhető el, ezért itt áll be
+          export UI_SCREENS_PASSWORD_FILE="$RUNNER_TEMP/ui-screens-password"
+          echo "UI_SCREENS_PASSWORD_FILE=$UI_SCREENS_PASSWORD_FILE" >> "$GITHUB_ENV"
+          openssl rand -hex 24 > "$UI_SCREENS_PASSWORD_FILE"
+          node --input-type=module -e '
+            import { randomBytes, scryptSync } from "node:crypto";
+            import { readFileSync } from "node:fs";
+            import { PrismaClient } from "@prisma/client";
+            const password = readFileSync(process.env.UI_SCREENS_PASSWORD_FILE, "utf8").trim();
+            const salt = randomBytes(16).toString("hex");
+            const passwordHash = `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
+            const prisma = new PrismaClient();
+            const user = await prisma.user.update({
+              where: { email: process.env.UI_SCREENS_EMAIL },
+              data: { passwordHash },
+              select: { id: true },
+            });
+            await prisma.$disconnect();
+            console.log(`password set for user ${user.id}`);
+          '
+
+      - name: Build the API and the web
+        run: pnpm exec turbo run build --filter=@acropora/api... --filter=@acropora/web...
+
+      - name: Start the API and the web
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          (cd apps/api && NODE_ENV=test PORT=3001 nohup node dist/main.js > "$RUNNER_TEMP/logs/api.log" 2>&1 &)
+          (cd apps/web && nohup pnpm start > "$RUNNER_TEMP/logs/web.log" 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3001/health > /dev/null && curl -fsS -o /dev/null http://127.0.0.1:3000/login && exit 0
+            sleep 2
+          done
+          echo "the API or the web did not come up in 120 s"
+          tail -50 "$RUNNER_TEMP/logs/api.log"
+          tail -50 "$RUNNER_TEMP/logs/web.log"
+          exit 1
+
+      - name: Install the Playwright browser
+        run: pnpm --filter @acropora/web exec playwright install --with-deps chromium
+
+      - name: Screen check (390, 1024, 1440 px)
+        run: pnpm --filter @acropora/web ui:screens
+
+      - name: Summary
+        if: always()
+        run: |
+          S="$UI_SCREENS_OUT/summary.tsv"
+          [ -f "$S" ] || { echo "no summary"; exit 0; }
+          awk -F'\t' 'NR>1 {n[$6]++} END {for (k in n) print k ": " n[k]}' "$S"
+          awk -F'\t' '$6=="SZELES" {print "SZELES " $1 " " $2 " " $3 " px"}' "$S"
+          awk -F'\t' 'NR>1 && $7!="-" {print "MEGALLITOTT IRAS " $1 " " $2 ": " $7}' "$S"
+
+      - name: Upload the pictures and the summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screens
+          path: |
+            apps/web/test-results/ui-screens/**/*.png
+            apps/web/test-results/ui-screens/summary.tsv
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Server logs on failure
+        if: failure()
+        run: |
+          tail -100 "$RUNNER_TEMP/logs/api.log" || true
+          tail -100 "$RUNNER_TEMP/logs/web.log" || true
