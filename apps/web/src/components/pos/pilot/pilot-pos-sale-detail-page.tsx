@@ -129,7 +129,7 @@ export const SALE_LINE_COLUMNS: PilotTableColumn<SaleLine>[] = [
     nowrap: true,
     cell: (line) => (
       <span className="font-semibold tabular-nums">
-        {formatMoney(line.lineGross, "HUF")}
+        {formatMoney(line.lineGross, "HUF", { fractionDigits: 2 })}
       </span>
     ),
   },
@@ -316,7 +316,9 @@ export function PilotPosSaleDetailPage({ saleId }: { saleId: string }) {
                   <div className="flex items-center justify-between gap-3 border-t border-pilot-grey-200 pt-3">
                     <dt className="text-pilot-grey-600">Bruttó</dt>
                     <dd className="text-[22px] font-semibold text-pilot-grey-900">
-                      {formatMoney(detail.totalGross, "HUF")}
+                      {formatMoney(detail.totalGross, "HUF", {
+                        fractionDigits: 2,
+                      })}
                     </dd>
                   </div>
                 </dl>

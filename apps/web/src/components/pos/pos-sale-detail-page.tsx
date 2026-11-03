@@ -153,7 +153,9 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                 <div className="text-right">
                   <p className="text-dusk-400">Bruttó</p>
                   <p className="text-lg font-bold text-dusk-900">
-                    {formatMoney(detail.totalGross, "HUF")}
+                    {formatMoney(detail.totalGross, "HUF", {
+                      fractionDigits: 2,
+                    })}
                   </p>
                 </div>
               </div>
@@ -207,7 +209,9 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                           : "—"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
-                        {formatMoney(line.lineGross, "HUF")}
+                        {formatMoney(line.lineGross, "HUF", {
+                          fractionDigits: 2,
+                        })}
                       </td>
                       <td className="px-5 py-3">
                         <Badge

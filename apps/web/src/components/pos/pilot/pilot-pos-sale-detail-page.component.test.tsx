@@ -136,11 +136,14 @@ describe("PilotPosSaleDetailPage", () => {
   });
 
   /**
-   * T1.5 (acrobot 41593): the gross is whole forint; the net unit price and the net and VAT
-   * parts keep their fillér with two decimals, so net + VAT still reads as the gross. MI
-   * PIROSÍT: a fillér lekerekítve (787 Ft), vagy a bruttó tizedesekkel (1000,00 Ft).
+   * T1.5: a POS amount reads as stored. The net unit price and the net and VAT parts keep their
+   * fillér, so net + VAT reads as the gross; and the gross keeps it too, because the server
+   * stores the payable gross after the discount without rounding (`pos-sale.service.ts`): a
+   * whole-forint button would show 1000 Ft for a 999,50 Ft charge (barracuda, msg 41657). A
+   * whole amount stays whole. MI PIROSÍT: a fillér lekerekítve (787 Ft, 1000 Ft a 999,50
+   * helyett), vagy egy egész összeg tizedesekkel (1000,00 Ft).
    */
-  it("a nettó és az ÁFA fillérrel, a bruttó egész forinttal", async () => {
+  it("a nettó és az ÁFA fillérrel, az egész bruttó egészként", async () => {
     api.getSale.mockResolvedValue({
       ...saleDetail,
       totalNet: "787.4",
@@ -155,6 +158,22 @@ describe("PilotPosSaleDetailPage", () => {
     expect(screen.getAllByText("787,40 Ft")).toHaveLength(2);
     expect(screen.getByText("212,60 Ft")).toBeInTheDocument();
     expect(screen.getAllByText("1000 Ft")).toHaveLength(2);
+  });
+
+  it("a kedvezmény utáni filléres bruttó fillérrel látszik, nem kerekítve", async () => {
+    api.getSale.mockResolvedValue({
+      ...saleDetail,
+      totalNet: "787",
+      totalTax: "212.5",
+      totalGross: "999.5",
+      lines: [{ ...saleDetail.lines[0]!, unitNet: "787", lineGross: "999.5" }],
+    });
+
+    render(createElement(PilotPosSaleDetailPage, { saleId: "sale-1" }));
+
+    expect(await screen.findByText("Red Sea ReefMat 500")).toBeInTheDocument();
+    expect(screen.getAllByText("999,50 Ft")).toHaveLength(2);
+    expect(screen.queryByText("1000 Ft")).toBeNull();
   });
 
   /**
