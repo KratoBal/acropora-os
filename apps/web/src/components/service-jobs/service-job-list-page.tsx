@@ -47,17 +47,6 @@ import {
   totalForTab,
 } from "./service-job-list-view";
 
-/**
- * A HIBAJEGYEK LISTÁJA, A KÖZÖS SZERVIZ-KÜLSŐVEL.
- *
- * A FEJLÉC, A FÜLEK, A CSEMPÉK, A JELVÉNY ÉS A LÁBLÉC A `components/service/`
- * alól jön, ugyanabból, amit a munkalap- és az eszköz-lista használ. Ez a fájl
- * a saját változatait EL IS DOBTA: három szerviz-lista, egy külső - és a
- * márkaszín egyetlen fájlban áll, nem háromban.
- *
- * AMI ITT MARAD, MERT A HIBAJEGYÉ: hogy melyik fül mit kér a szervertől, és
- * hogy a számok honnan jönnek.
- */
 type JobRow = ServiceJobListResponse["items"][number];
 
 export const MAINTENANCE_JOB_TABLE_MIN_WIDTH = 1040;
@@ -68,8 +57,10 @@ export const MAINTENANCE_JOB_TABLE_MIN_WIDTH = 1040;
 
   A HELYSZÍN TELJES ÚTJA A PARTNER ALATT (Balázs 2026-09-16, a munkalap-listával együtt kérte): enélkül
   ugyanannál a partnernél két jegy megkülönböztethetetlen volt azon a képernyőn, ahol választani kell
-  közülük. NINCS SOR, HA NINCS ÚT: egy "Nincs helyszín" felirat többet állítana, mint amit tudunk.
-  A PARTNER MÁST LÁT, és ez itt is látszik: a belső állapot a jelvényen, a partneré alatta.
+  közülük. NINCS SOR, HA NINCS ÚT: egy "Nincs helyszín" felirat többet állítana, mint amit tudunk,
+  mert a jegynek lehet helyszíne úgy is, hogy az utat nem tudjuk felépíteni.
+  A PARTNER MÁST LÁT, és ez itt is látszik: a belső állapot a jelvényen, a partneré alatta. Enélkül
+  a kezelő nem tudja, mit olvas a másik fél.
 */
 export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   {
@@ -141,6 +132,17 @@ export const MAINTENANCE_JOB_COLUMNS: PilotTableColumn<JobRow>[] = [
   },
 ];
 
+/**
+ * A HIBAJEGYEK LISTÁJA, A KÖZÖS SZERVIZ-KÜLSŐVEL.
+ *
+ * A FEJLÉC, A FÜLEK, A CSEMPÉK, A JELVÉNY ÉS A LÁBLÉC A `components/service/`
+ * alól jön, ugyanabból, amit a munkalap- és az eszköz-lista használ. Ez a fájl
+ * a saját változatait EL IS DOBTA: három szerviz-lista, egy külső - és a
+ * márkaszín egyetlen fájlban áll, nem háromban.
+ *
+ * AMI ITT MARAD, MERT A HIBAJEGYÉ: hogy melyik fül mit kér a szervertől, és
+ * hogy a számok honnan jönnek.
+ */
 export function ServiceJobListPage({
   kind = "REPAIR",
 }: {
