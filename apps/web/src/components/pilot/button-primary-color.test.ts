@@ -22,6 +22,27 @@ function token(css: string, name: string): string | null {
   );
 }
 
+/**
+ * Igaz, ha a (kommentek nélküli) CSS-ben stílusszabály után még `@import` áll:
+ * a böngésző az ilyet eldobja. Az `@import`, `@source` és `@charset` sorok nem szabályok.
+ */
+function importAfterRule(css: string): boolean {
+  const lines = css
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let sawRule = false;
+  for (const line of lines) {
+    if (/^@(import|source|charset)\b/.test(line)) {
+      if (line.startsWith("@import") && sawRule) return true;
+      continue;
+    }
+    sawRule = true;
+  }
+  return false;
+}
+
 describe("az elsődleges gomb színe", () => {
   const theme = read(join(UI, "theme.css"));
   const figma = read(join(UI, "figma-theme.css"));
@@ -39,6 +60,16 @@ describe("az elsődleges gomb színe", () => {
     expect(token(globals, "action-hover")).toBe(token(figma, "pilot-aqua-700"));
     expect(token(globals, "action-ring")).toBe(token(figma, "pilot-aqua-500"));
     expect(token(globals, "action")).not.toBeNull();
+  });
+
+  it("a web felülírása után nem áll @import (önteszt + valódi fájl)", () => {
+    expect(
+      importAfterRule('@import "a";\n:root { --x: 1; }\n@import "b";'),
+    ).toBe(true);
+    expect(
+      importAfterRule('@import "a";\n@import "b";\n:root { --x: 1; }'),
+    ).toBe(false);
+    expect(importAfterRule(globals)).toBe(false);
   });
 
   it("a partner alapértéke (theme.css) a régi dusk szín marad", () => {

@@ -7,6 +7,8 @@
   indoklast (a `@theme` blokk, a betutipus-valtozok es az alap elem-szabalyok).
   Ez a fajl SZANDEKOSAN csak az importot tartja: ha a token EZEN a soron
   keresztul jon, egyetlen fajl modositasa mindket appot eleri.
+  Az egyetlen kivetel a fajl VEGEN allo `:root` felulirasa (gombszin): egy
+  stilusszabaly utan mar nem allhat `@import`, ezert az MINDEN import utan van.
 */
 @import "../../../../packages/ui/src/theme.css";
 
@@ -19,6 +21,9 @@
 */
 @import "../../../../packages/ui/src/figma-theme.css";
 
+/* Sutyerák figurájának rétegei és mozgása (kártya e0780477): a widget saját lapja. */
+@import "../components/assistant/sutyerak-figure.css";
+
 /*
   EGY ELSODLEGES GOMBSZIN AZ OS-BEN (UI-attekintes, 2026-11-03): a kozos `Button` elsodleges valtozata a `theme.css`
   `--color-action*` tokenjein at szinez (itt `:root`, nem `@theme`: a webes fajl SZANDEKOSAN nem tart `@theme` blokkot, lasd `globals-theme.test.ts`; egy rétegen kívüli szabály úgyis felülírja a téma-réteg értékét); a `theme.css` alapertekei a regi (dusk) szint adjak, igy az `apps/partner`
@@ -30,6 +35,3 @@
   --color-action-hover: #0a6359;
   --color-action-ring: #0b9487;
 }
-
-/* Sutyerák figurájának rétegei és mozgása (kártya e0780477): a widget saját lapja. */
-@import "../components/assistant/sutyerak-figure.css";
