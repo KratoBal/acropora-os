@@ -64,6 +64,84 @@ describe("WebshopMailController.render", () => {
     assert.equal(mail.customized, true);
   });
 
+  /*
+    THE LANGUAGE PICKS THE KEY (card d5c6befd). An order without a language is
+    Hungarian and never even asks for the English twin; an English order asks
+    for the twin first.
+  */
+  it("an order without a language is Hungarian and does not ask for the twin", async () => {
+    const asked: string[] = [];
+    const facts = request("order-shipped").facts;
+    delete facts.locale;
+    const mail = await controller(null, asked).render(
+      request("order-shipped", { facts }),
+    );
+    assert.deepEqual(asked, ["WEBSHOP_ORDER_SHIPPED"]);
+    assert.equal(mail.subject, "Feladtuk a csomagodat (#38)");
+  });
+
+  it("an English order renders the English default of the twin key", async () => {
+    const asked: string[] = [];
+    const mail = await controller(null, asked).render(
+      request("order-shipped", {
+        facts: { ...request("order-shipped").facts, locale: "en" },
+      }),
+    );
+    assert.deepEqual(asked, ["WEBSHOP_ORDER_SHIPPED_EN"]);
+    assert.equal(mail.subject, "We have shipped your parcel (#38)");
+    assert.match(mail.html, /<html lang="en">/);
+    assert.equal(mail.customized, false);
+  });
+
+  it("a stored English text wins for the English order, and a stored Hungarian one is not used", async () => {
+    const stored = {
+      subject: "On its way #{{rendeles_szam}}",
+      body: "",
+      bodyHtml: "<p>Hello {{ugyfel_neve}}!</p>",
+    };
+    const onlyEnglish = new WebshopMailController({
+      template: async (id: string) =>
+        id === "WEBSHOP_ORDER_SHIPPED_EN" ? stored : null,
+    } as unknown as TicketMailRepository);
+    const english = await onlyEnglish.render(
+      request("order-shipped", {
+        facts: {
+          ...request("order-shipped").facts,
+          locale: "en",
+          customer_name: "Emese Nagy",
+        },
+      }),
+    );
+    assert.equal(english.subject, "On its way #38");
+    assert.match(english.text, /^Hello Emese Nagy!/);
+    assert.equal(english.customized, true);
+
+    const onlyHungarian = new WebshopMailController({
+      template: async (id: string) =>
+        id === "WEBSHOP_ORDER_SHIPPED" ? stored : null,
+    } as unknown as TicketMailRepository);
+    const fallback = await onlyHungarian.render(
+      request("order-shipped", {
+        facts: { ...request("order-shipped").facts, locale: "en" },
+      }),
+    );
+    assert.equal(fallback.subject, "We have shipped your parcel (#38)");
+    assert.equal(fallback.customized, false);
+  });
+
+  it("400: a language that is neither hu nor en", async () => {
+    await assert.rejects(
+      controller(null).render(
+        request("order-shipped", {
+          facts: { ...request("order-shipped").facts, locale: "de" },
+        }),
+      ),
+      (e: unknown) =>
+        e instanceof BadRequestException &&
+        e.message === "Hibás kérés: facts.locale: hu vagy en kell.",
+    );
+  });
+
   it("400: another facts version", async () => {
     await assert.rejects(
       controller(null).render(request("order-shipped", { facts_version: 2 })),

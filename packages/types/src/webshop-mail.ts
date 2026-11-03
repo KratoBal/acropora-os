@@ -21,7 +21,10 @@
  * 089a1e2, so the defaults say what customers get today.
  */
 import type { MailBlock, MailBlocks } from "./mail-blocks.js";
-import type { MailTemplateValues } from "./mail-template.js";
+import {
+  WEBSHOP_ENGLISH_KEY_SUFFIX,
+  type MailTemplateValues,
+} from "./mail-template.js";
 
 /** BANK_TRANSFER: prepayment by transfer (card bb3a6bd5, commerce #506). */
 export type WebshopPaymentRole =
@@ -97,7 +100,17 @@ export const WEBSHOP_STATUS_TEMPLATES = [
 export interface WebshopMailCommonFacts {
   readonly customer_name?: string | null;
   readonly order_created_at?: string | null;
+  /**
+   * The language the customer ordered in (commerce `storefront_locale`).
+   * Missing means Hungarian: every order before the English storefront, and a
+   * webshop that does not send it yet. It is optional, and `facts_version`
+   * stays 1, so the OS and the webshop can be deployed in either order.
+   */
+  readonly locale?: WebshopMailLocale;
 }
+
+export const WEBSHOP_MAIL_LOCALES = ["hu", "en"] as const;
+export type WebshopMailLocale = (typeof WEBSHOP_MAIL_LOCALES)[number];
 
 /** The facts of one mail, by the webshop's own template name. */
 export type WebshopMailFacts = WebshopMailCommonFacts & WebshopTemplateFacts;
@@ -639,6 +652,7 @@ const SAMPLE_ORDER: WebshopMailOrder = {
 const SAMPLE_COMMON = {
   customer_name: "Kiss Márta",
   order_created_at: "2026-10-05T09:21:00.000Z",
+  locale: "hu" as const,
 };
 
 /**
@@ -755,9 +769,29 @@ export const WEBSHOP_MAIL_SAMPLE_FACTS: Readonly<
   },
 };
 
-/** The webshop template name of an OS key, or `null` for a service key. */
+/** The OS key of a mail in a language: the Hungarian key, or its English twin. */
+export function webshopMailKey(
+  template: WebshopMailTemplate,
+  locale: WebshopMailLocale | undefined,
+): string {
+  const key = WEBSHOP_MAIL_KEYS[template];
+  return locale === "en" ? `${key}${WEBSHOP_ENGLISH_KEY_SUFFIX}` : key;
+}
+
+/** The language an OS key stands for: `en` for an English twin, `hu` otherwise. */
+export function webshopMailLocaleOf(key: string): WebshopMailLocale {
+  return key.endsWith(WEBSHOP_ENGLISH_KEY_SUFFIX) ? "en" : "hu";
+}
+
+/**
+ * The webshop template name of an OS key (an English twin too), or `null` for
+ * a service key.
+ */
 export function webshopMailTemplateOf(key: string): WebshopMailTemplate | null {
-  const entry = Object.entries(WEBSHOP_MAIL_KEYS).find(([, os]) => os === key);
+  const base = key.endsWith(WEBSHOP_ENGLISH_KEY_SUFFIX)
+    ? key.slice(0, -WEBSHOP_ENGLISH_KEY_SUFFIX.length)
+    : key;
+  const entry = Object.entries(WEBSHOP_MAIL_KEYS).find(([, os]) => os === base);
   return entry ? (entry[0] as WebshopMailTemplate) : null;
 }
 
@@ -849,6 +883,13 @@ function order(v: unknown, path: string): WebshopMailOrder {
   };
 }
 
+/** `hu` or `en`; missing is `hu`, anything else is refused (400): a wrong language must not become Hungarian silently. */
+function parseLocale(v: unknown): WebshopMailLocale {
+  if (v === undefined || v === null) return "hu";
+  if (v === "hu" || v === "en") return v;
+  throw new FactsError("facts.locale: hu vagy en kell");
+}
+
 export function isWebshopMailTemplate(v: unknown): v is WebshopMailTemplate {
   return (
     typeof v === "string" &&
@@ -872,6 +913,7 @@ export function parseWebshopMailFacts(
         ...parsed,
         customer_name: strOrNull(f.customer_name, "facts.customer_name"),
         order_created_at: created,
+        locale: parseLocale(f.locale),
       },
     };
   } catch (error) {

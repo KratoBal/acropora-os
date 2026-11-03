@@ -454,7 +454,7 @@ const BILLING_DOCUMENT_VARIABLES = [
  * fogadja el a vegpont) ES a feluletnek (mit ajanljon fel a valaszto). Ket
  * masolat pontosan ott csuszna szet, ahol senki nem nezi.
  */
-export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
+const HUNGARIAN_MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
   {
     id: "WORKSHEET_SIGNED",
     group: "SERVICE",
@@ -800,6 +800,28 @@ export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
     ],
   },
 ] as const;
+
+/**
+ * THE ENGLISH TWIN OF A WEBSHOP MAIL: the same event under the key plus this
+ * suffix (`WEBSHOP_ORDER_PLACED_EN`). A twin is an ordinary event, so storing,
+ * the editor, the variable check and the preview all work on it without a
+ * second mechanism (card d5c6befd). The renderer picks the twin by the
+ * order's language and falls back to the Hungarian mail when the twin has
+ * neither a stored nor a default text (`webshopMailKey`, `webshop-mail.ts`).
+ */
+export const WEBSHOP_ENGLISH_KEY_SUFFIX = "_EN";
+
+export const MAIL_TEMPLATE_EVENTS: readonly MailTemplateEvent[] = [
+  ...HUNGARIAN_MAIL_TEMPLATE_EVENTS,
+  ...HUNGARIAN_MAIL_TEMPLATE_EVENTS.filter((e) => e.group === "WEBSHOP").map(
+    (e) => ({
+      ...e,
+      id: `${e.id}${WEBSHOP_ENGLISH_KEY_SUFFIX}`,
+      name: `${e.name} (angol)`,
+      description: `Az angol nyelvű oldalon rendelőknek. ${e.description}`,
+    }),
+  ),
+];
 
 /**
  * Az esemeny valtozoi, a leirasukkal, a kozos lista sorrendjeben. Ismeretlen

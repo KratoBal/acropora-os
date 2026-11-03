@@ -172,6 +172,7 @@ export {
   MAIL_TEMPLATE_EVENTS,
   MAIL_TEMPLATE_GROUPS,
   MAIL_TEMPLATE_VARIABLES,
+  WEBSHOP_ENGLISH_KEY_SUFFIX,
   isMailTemplateEvent,
   renderMailTemplate,
   renderMailTemplateHtml,
@@ -200,6 +201,7 @@ export {
   SHOP_CONTACT,
   SHOP_NAME,
   WEBSHOP_MAIL_KEYS,
+  WEBSHOP_MAIL_LOCALES,
   WEBSHOP_MAIL_SAMPLE_FACTS,
   WEBSHOP_SPLIT_PAYMENTS,
   WEBSHOP_STATUS_TEMPLATES,
@@ -208,6 +210,8 @@ export {
   isWebshopMailTemplate,
   parseWebshopMailFacts,
   webshopMailContent,
+  webshopMailKey,
+  webshopMailLocaleOf,
   webshopMailTemplateOf,
 } from "./webshop-mail.js";
 export {
@@ -238,6 +242,7 @@ export type {
   WebshopMailContent,
   WebshopMailFacts,
   WebshopMailLine,
+  WebshopMailLocale,
   WebshopMailOrder,
   WebshopMailTemplate,
   WebshopPaymentRole,

@@ -7,7 +7,11 @@ import {
   UnprocessableEntityException,
   UseGuards,
 } from "@nestjs/common";
-import { WEBSHOP_MAIL_KEYS, parseWebshopMailFacts } from "@acropora/types";
+import {
+  WEBSHOP_MAIL_KEYS,
+  parseWebshopMailFacts,
+  webshopMailKey,
+} from "@acropora/types";
 
 import { Public } from "../../auth/decorators/public.decorator.js";
 import { webshopDefaultTemplate } from "../../notifications/mail/webshop-mail.content.js";
@@ -54,13 +58,35 @@ export class WebshopMailController {
     if (!parsed.ok)
       throw new BadRequestException(`Hibás kérés: ${parsed.error}.`);
 
-    const key = WEBSHOP_MAIL_KEYS[parsed.facts.template];
-    const stored = await this.templates.template(key);
-    const template = stored ?? webshopDefaultTemplate(key);
+    /*
+      THE LANGUAGE PICKS THE KEY (card d5c6befd): an English order reads the
+      English twin (`<KEY>_EN`), stored text first, then its English default.
+      With neither, the Hungarian mail is rendered (a missing English text must
+      not hold a customer's mail back), but then the facts are rendered as
+      Hungarian too, so the page language and the words agree.
+    */
+    const lookup = async (key: string) => {
+      const stored = await this.templates.template(key);
+      return { stored, template: stored ?? webshopDefaultTemplate(key) };
+    };
+    const hungarianKey = WEBSHOP_MAIL_KEYS[parsed.facts.template];
+    const englishKey = webshopMailKey(
+      parsed.facts.template,
+      parsed.facts.locale,
+    );
+    const english =
+      englishKey === hungarianKey ? null : await lookup(englishKey);
+    const useEnglish = english !== null && english.template !== null;
+    const key = useEnglish ? englishKey : hungarianKey;
+    const found = useEnglish && english ? english : await lookup(hungarianKey);
+    const facts = useEnglish
+      ? parsed.facts
+      : { ...parsed.facts, locale: "hu" as const };
+    const { stored, template } = found;
     /* every webshop key has a default; a missing one is a code error, a 500 */
     if (!template) throw new Error(`No default template for ${key}`);
 
-    const mail = renderWebshopMail(template, parsed.facts);
+    const mail = renderWebshopMail(template, facts);
     if (!mail.ok) throw new UnprocessableEntityException(mail.reason);
     return {
       subject: mail.subject,

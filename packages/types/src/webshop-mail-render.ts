@@ -29,6 +29,7 @@ import {
   WEBSHOP_MAIL_KEYS,
   webshopMailContent,
   type WebshopMailFacts,
+  type WebshopMailLocale,
 } from "./webshop-mail.js";
 
 export interface WebshopRenderSteps extends MailRenderSteps {
@@ -61,10 +62,13 @@ const names = (list: readonly string[]) =>
  * shop's name at the foot, as the webshop's own frame has it today. The
  * webshop sends it unchanged.
  */
-export function webshopMailDocument(fragment: string): string {
+export function webshopMailDocument(
+  fragment: string,
+  locale: WebshopMailLocale = "hu",
+): string {
   return [
     "<!DOCTYPE html>",
-    '<html lang="hu"><head><meta charset="utf-8"></head>',
+    `<html lang="${locale}"><head><meta charset="utf-8"></head>`,
     '<body style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2937;">',
     fragment,
     `<p style="margin-top:24px;color:#6b7280;font-size:12px;">${SHOP_NAME}</p>`,
@@ -125,6 +129,7 @@ export function renderWebshopMail(
     subject: subject.text.replace(/[\r\n]+/g, " ").trim(),
     html: webshopMailDocument(
       steps.forEmail(body.html) + (legal ? legal.html : ""),
+      facts.locale ?? "hu",
     ),
     text: `${body.text}${legal ? `\n\n${legal.text}` : ""}\n\n${SHOP_NAME}`,
   };

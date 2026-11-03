@@ -12,6 +12,9 @@ import {
   mailForint,
   parseWebshopMailFacts,
   webshopMailContent,
+  webshopMailKey,
+  webshopMailLocaleOf,
+  webshopMailTemplateOf,
   type WebshopMailFacts,
   type WebshopMailOrder,
 } from "./webshop-mail.js";
@@ -23,11 +26,47 @@ const BLOCKS = new Set(
 describe("the webshop events and their derivation", () => {
   it("every webshop template has a WEBSHOP event, and nothing else is one", () => {
     const webshop = MAIL_TEMPLATE_EVENTS.filter((e) => e.group === "WEBSHOP");
+    const keys = Object.values(WEBSHOP_MAIL_KEYS);
     assert.deepEqual(
       webshop.map((e) => e.id).sort(),
-      Object.values(WEBSHOP_MAIL_KEYS).sort(),
+      [...keys, ...keys.map((k) => `${k}_EN`)].sort(),
     );
-    assert.equal(webshop.length, 11);
+    assert.equal(webshop.length, 22);
+  });
+
+  /*
+    THE ENGLISH TWIN IS THE SAME EVENT UNDER ANOTHER KEY (card d5c6befd): the
+    same variables, so a text saved for the twin is checked against exactly
+    what the derivation fills, and the same group, so the editor lists it.
+  */
+  it("every English twin offers exactly the variables of its Hungarian event", () => {
+    for (const key of Object.values(WEBSHOP_MAIL_KEYS)) {
+      const hu = MAIL_TEMPLATE_EVENTS.find((e) => e.id === key);
+      const en = MAIL_TEMPLATE_EVENTS.find((e) => e.id === `${key}_EN`);
+      assert.ok(hu && en, key);
+      assert.deepEqual(en.variables, hu.variables, key);
+      assert.equal(en.group, "WEBSHOP", key);
+    }
+  });
+
+  it("the key of a mail follows the language, and a key names its language and template back", () => {
+    assert.equal(webshopMailKey("order-placed", "hu"), "WEBSHOP_ORDER_PLACED");
+    assert.equal(
+      webshopMailKey("order-placed", undefined),
+      "WEBSHOP_ORDER_PLACED",
+    );
+    assert.equal(
+      webshopMailKey("order-placed", "en"),
+      "WEBSHOP_ORDER_PLACED_EN",
+    );
+    assert.equal(webshopMailLocaleOf("WEBSHOP_REFUND_EN"), "en");
+    assert.equal(webshopMailLocaleOf("WEBSHOP_REFUND"), "hu");
+    assert.equal(
+      webshopMailTemplateOf("WEBSHOP_REFUND_EN"),
+      "payment-refunded",
+    );
+    assert.equal(webshopMailTemplateOf("WEBSHOP_REFUND"), "payment-refunded");
+    assert.equal(webshopMailTemplateOf("QUOTE_SEND_EN"), null);
   });
 
   /*
@@ -301,6 +340,35 @@ describe("parseWebshopMailFacts", () => {
         ok: true,
         facts,
       });
+    }
+  });
+
+  /*
+    THE LANGUAGE IS OPTIONAL AND NEVER GUESSED: missing (an old webshop, an old
+    order) is Hungarian, hu and en are taken, anything else is refused, so a
+    wrong value cannot turn into a Hungarian mail unseen.
+  */
+  it("the language: missing is hu, hu and en are taken, anything else is refused", () => {
+    const base = JSON.parse(
+      JSON.stringify(WEBSHOP_MAIL_SAMPLE_FACTS["order-status-confirmed"]),
+    );
+    delete base.locale;
+    const parse = (locale?: unknown) =>
+      parseWebshopMailFacts("order-status-confirmed", {
+        ...base,
+        ...(locale === undefined ? {} : { locale }),
+      });
+    const localeOf = (locale?: unknown) => {
+      const result = parse(locale);
+      return result.ok ? result.facts.locale : `refused: ${result.error}`;
+    };
+    assert.equal(localeOf(), "hu");
+    assert.equal(localeOf("en"), "en");
+    assert.equal(localeOf("hu"), "hu");
+    for (const bad of ["de", "EN", "en-hu", "", 1, {}]) {
+      const result = parse(bad);
+      assert.equal(result.ok, false, JSON.stringify(bad));
+      assert.match(result.ok ? "" : result.error, /facts\.locale/);
     }
   });
 
